@@ -1,0 +1,103 @@
+# Iteration 3: Pipelines - comprehensive edge cases
+
+# === Basic pipelines ===
+
+=== simple pipe
+echo foo | cat
+---
+(pipeline (command (word "echo") (word "foo")) (command (word "cat")))
+
+=== triple pipe
+echo foo | grep bar | wc -l
+---
+(pipeline (command (word "echo") (word "foo")) (command (word "grep") (word "bar")) (command (word "wc") (word "-l")))
+
+=== quad pipe
+cat file | grep pattern | sort | uniq
+---
+(pipeline (command (word "cat") (word "file")) (command (word "grep") (word "pattern")) (command (word "sort")) (command (word "uniq")))
+
+=== five stage pipe
+ps aux | grep python | awk '{print $2}' | head -5 | xargs echo
+---
+(pipeline (command (word "ps") (word "aux")) (command (word "grep") (word "python")) (command (word "awk") (word "'{print $2}'")) (command (word "head") (word "-5")) (command (word "xargs") (word "echo")))
+
+# === Pipes with paths ===
+
+=== pipe with absolute paths
+/usr/bin/cat file | /usr/bin/grep foo
+---
+(pipeline (command (word "/usr/bin/cat") (word "file")) (command (word "/usr/bin/grep") (word "foo")))
+
+=== pipe with relative paths
+./generate | ./process | ./output
+---
+(pipeline (command (word "./generate")) (command (word "./process")) (command (word "./output")))
+
+# === Pipes with arguments ===
+
+=== pipe with many arguments
+ls -la /tmp | grep -v total | head -n 10
+---
+(pipeline (command (word "ls") (word "-la") (word "/tmp")) (command (word "grep") (word "-v") (word "total")) (command (word "head") (word "-n") (word "10")))
+
+=== pipe with quoted args
+echo "hello world" | grep hello
+---
+(pipeline (command (word "echo") (word "\"hello world\"")) (command (word "grep") (word "hello")))
+
+=== pipe with single quoted args
+echo 'pattern with spaces' | grep 'pattern'
+---
+(pipeline (command (word "echo") (word "'pattern with spaces'")) (command (word "grep") (word "'pattern'")))
+
+=== pipe with mixed quotes
+echo "foo" | grep 'foo' | cat
+---
+(pipeline (command (word "echo") (word "\"foo\"")) (command (word "grep") (word "'foo'")) (command (word "cat")))
+
+# === Pipes with special characters ===
+
+=== pipe with glob patterns
+ls *.txt | wc -l
+---
+(pipeline (command (word "ls") (word "*.txt")) (command (word "wc") (word "-l")))
+
+=== pipe with equals in args
+env | grep PATH=
+---
+(pipeline (command (word "env")) (command (word "grep") (word "PATH=")))
+
+# === Whitespace variations ===
+
+=== pipe no spaces around
+echo foo|cat
+---
+(pipeline (command (word "echo") (word "foo")) (command (word "cat")))
+
+=== pipe space before only
+echo foo |cat
+---
+(pipeline (command (word "echo") (word "foo")) (command (word "cat")))
+
+=== pipe space after only
+echo foo| cat
+---
+(pipeline (command (word "echo") (word "foo")) (command (word "cat")))
+
+=== pipe multiple spaces
+echo foo  |  cat
+---
+(pipeline (command (word "echo") (word "foo")) (command (word "cat")))
+
+# === From tree-sitter-bash ===
+
+=== pipe with head
+cat foo | grep -v bar
+---
+(pipeline (command (word "cat") (word "foo")) (command (word "grep") (word "-v") (word "bar")))
+
+=== pipe to head
+cat baz | head -n 1
+---
+(pipeline (command (word "cat") (word "baz")) (command (word "head") (word "-n") (word "1")))

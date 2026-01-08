@@ -1,0 +1,206 @@
+# Iteration 5: Redirections - comprehensive edge cases
+
+# === Output redirects ===
+
+=== output redirect
+echo foo > file.txt
+---
+(command (word "echo") (word "foo") (redirect ">" (word "file.txt")))
+
+=== output redirect no space before
+echo foo> file.txt
+---
+(command (word "echo") (word "foo") (redirect ">" (word "file.txt")))
+
+=== output redirect no space after
+echo foo >file.txt
+---
+(command (word "echo") (word "foo") (redirect ">" (word "file.txt")))
+
+=== output redirect no spaces
+echo foo>file.txt
+---
+(command (word "echo") (word "foo") (redirect ">" (word "file.txt")))
+
+=== output to dev null
+whoami > /dev/null
+---
+(command (word "whoami") (redirect ">" (word "/dev/null")))
+
+=== output redirect quoted target
+echo foo > "file with spaces.txt"
+---
+(command (word "echo") (word "foo") (redirect ">" (word "\"file with spaces.txt\"")))
+
+# === Append redirects ===
+
+=== append redirect
+echo foo >> file.txt
+---
+(command (word "echo") (word "foo") (redirect ">>" (word "file.txt")))
+
+=== append no spaces
+echo foo>>file.txt
+---
+(command (word "echo") (word "foo") (redirect ">>" (word "file.txt")))
+
+=== append to log
+date >> /var/log/myapp.log
+---
+(command (word "date") (redirect ">>" (word "/var/log/myapp.log")))
+
+# === Input redirects ===
+
+=== input redirect
+cat < file.txt
+---
+(command (word "cat") (redirect "<" (word "file.txt")))
+
+=== input redirect no spaces
+cat<file.txt
+---
+(command (word "cat") (redirect "<" (word "file.txt")))
+
+=== input with arguments
+wc -l < input.txt
+---
+(command (word "wc") (word "-l") (redirect "<" (word "input.txt")))
+
+=== sort from file
+sort < unsorted.txt
+---
+(command (word "sort") (redirect "<" (word "unsorted.txt")))
+
+# === File descriptor redirects ===
+
+=== stderr redirect
+cmd 2> errors.txt
+---
+(command (word "cmd") (redirect "2>" (word "errors.txt")))
+
+=== stderr append
+cmd 2>> errors.txt
+---
+(command (word "cmd") (redirect "2>>" (word "errors.txt")))
+
+=== stderr to dev null
+cmd 2> /dev/null
+---
+(command (word "cmd") (redirect "2>" (word "/dev/null")))
+
+=== stdout and stderr separate
+cmd > out.txt 2> err.txt
+---
+(command (word "cmd") (redirect ">" (word "out.txt")) (redirect "2>" (word "err.txt")))
+
+=== fd3 redirect
+cmd 3> custom.txt
+---
+(command (word "cmd") (redirect "3>" (word "custom.txt")))
+
+=== fd9 redirect
+cmd 9> fd9.txt
+---
+(command (word "cmd") (redirect "9>" (word "fd9.txt")))
+
+# === File descriptor duplication ===
+
+=== stderr to stdout
+cmd 2>&1
+---
+(command (word "cmd") (redirect "2>" (word "&1")))
+
+=== stdout to stderr
+echo error >&2
+---
+(command (word "echo") (word "error") (redirect ">" (word "&2")))
+
+=== stdout and stderr combined
+cmd > out.txt 2>&1
+---
+(command (word "cmd") (redirect ">" (word "out.txt")) (redirect "2>" (word "&1")))
+
+=== stderr first then stdout
+cmd 2>&1 > out.txt
+---
+(command (word "cmd") (redirect "2>" (word "&1")) (redirect ">" (word "out.txt")))
+
+# === Multiple redirects ===
+
+=== input and output
+cmd < in.txt > out.txt
+---
+(command (word "cmd") (redirect "<" (word "in.txt")) (redirect ">" (word "out.txt")))
+
+=== three redirects
+cmd < in.txt > out.txt 2> err.txt
+---
+(command (word "cmd") (redirect "<" (word "in.txt")) (redirect ">" (word "out.txt")) (redirect "2>" (word "err.txt")))
+
+=== redirect before command args
+< input.txt cat
+---
+(command (word "cat") (redirect "<" (word "input.txt")))
+
+=== redirect between args
+cat < input.txt -n
+---
+(command (word "cat") (word "-n") (redirect "<" (word "input.txt")))
+
+# === Here strings ===
+
+=== here string simple
+cat <<< "hello"
+---
+(command (word "cat") (redirect "<<<" (word "\"hello\"")))
+
+=== here string single quoted
+cat <<< 'hello world'
+---
+(command (word "cat") (redirect "<<<" (word "'hello world'")))
+
+=== here string bare word
+cat <<< hello
+---
+(command (word "cat") (redirect "<<<" (word "hello")))
+
+=== here string with fd
+cat 0<<< "hello"
+---
+(command (word "cat") (redirect "0<<<" (word "\"hello\"")))
+
+# === Redirects with special targets ===
+
+=== redirect to path with spaces quoted
+cmd > "/path/with spaces/file.txt"
+---
+(command (word "cmd") (redirect ">" (word "\"/path/with spaces/file.txt\"")))
+
+=== redirect to glob pattern
+cmd > *.log
+---
+(command (word "cmd") (redirect ">" (word "*.log")))
+
+=== redirect to path with dots
+cmd > ../output/file.txt
+---
+(command (word "cmd") (redirect ">" (word "../output/file.txt")))
+
+# === From tree-sitter-bash ===
+
+=== redirect at start
+2>&1 whoami
+---
+(command (word "whoami") (redirect "2>" (word "&1")))
+
+=== redirect stderr to stdout for echo
+echo "foobar" >&2
+---
+(command (word "echo") (word "\"foobar\"") (redirect ">" (word "&2")))
+
+# === Noclobber override (if supported) ===
+
+=== noclobber override
+whoami >| /dev/null
+---
+(command (word "whoami") (redirect ">|" (word "/dev/null")))

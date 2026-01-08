@@ -1,0 +1,221 @@
+# Iteration 1: Words - comprehensive edge cases
+
+# === Basic words ===
+
+=== bare word
+foo
+---
+(command (word "foo"))
+
+=== word with numbers
+foo123
+---
+(command (word "foo123"))
+
+=== word with dash
+foo-bar
+---
+(command (word "foo-bar"))
+
+=== word with underscore
+foo_bar
+---
+(command (word "foo_bar"))
+
+=== word with dot
+foo.bar
+---
+(command (word "foo.bar"))
+
+=== word with slash
+/usr/bin
+---
+(command (word "/usr/bin"))
+
+=== word starting with number
+123abc
+---
+(command (word "123abc"))
+
+=== word all numbers
+12345
+---
+(command (word "12345"))
+
+=== word with equals
+foo=bar
+---
+(command (word "foo=bar"))
+
+=== word with colon
+foo:bar
+---
+(command (word "foo:bar"))
+
+=== word with at sign
+foo@bar
+---
+(command (word "foo@bar"))
+
+=== word with percent
+foo%bar
+---
+(command (word "foo%bar"))
+
+=== word with caret
+foo^bar
+---
+(command (word "foo^bar"))
+
+=== word with plus
+foo+bar
+---
+(command (word "foo+bar"))
+
+=== word with comma
+foo,bar
+---
+(command (word "foo,bar"))
+
+=== word with tilde
+~user
+---
+(command (word "~user"))
+
+=== word with question mark
+foo?
+---
+(command (word "foo?"))
+
+=== word with asterisk
+foo*
+---
+(command (word "foo*"))
+
+=== word with hash inside
+foo#bar
+---
+(command (word "foo#bar"))
+
+=== word with brackets
+foo[0]
+---
+(command (word "foo[0]"))
+
+=== relative path
+./script.sh
+---
+(command (word "./script.sh"))
+
+=== parent path
+../other/file
+---
+(command (word "../other/file"))
+
+=== absolute path with dots
+/foo/../bar/./baz
+---
+(command (word "/foo/../bar/./baz"))
+
+# === Single quoted strings ===
+
+=== single quoted word
+'hello'
+---
+(command (word "'hello'"))
+
+=== single quoted with spaces
+'hello world'
+---
+(command (word "'hello world'"))
+
+=== single quoted with special chars
+'$foo `cmd` \n'
+---
+(command (word "'$foo `cmd` \\n'"))
+
+=== single quoted with double quotes inside
+'say "hello"'
+---
+(command (word "'say \"hello\"'"))
+
+=== single quoted empty
+''
+---
+(command (word "''"))
+
+=== adjacent single quoted
+'foo''bar'
+---
+(command (word "'foo''bar'"))
+
+# === Double quoted strings ===
+
+=== double quoted word
+"hello"
+---
+(command (word "\"hello\""))
+
+=== double quoted with spaces
+"hello world"
+---
+(command (word "\"hello world\""))
+
+=== double quoted empty
+""
+---
+(command (word "\"\""))
+
+=== double quoted with single quotes inside
+"it's fine"
+---
+(command (word "\"it's fine\""))
+
+=== double quoted with escaped quote
+"say \"hello\""
+---
+(command (word "\"say \\\"hello\\\"\""))
+
+=== double quoted with escaped backslash
+"path\\to\\file"
+---
+(command (word "\"path\\\\to\\\\file\""))
+
+=== double quoted with newline escape
+"line1\nline2"
+---
+(command (word "\"line1\\nline2\""))
+
+=== adjacent double quoted
+"foo""bar"
+---
+(command (word "\"foo\"\"bar\""))
+
+# === Mixed quoting ===
+
+=== mixed quotes adjacent
+'single'"double"
+---
+(command (word "'single'\"double\""))
+
+=== unquoted with single quoted
+foo'bar'baz
+---
+(command (word "foo'bar'baz"))
+
+=== unquoted with double quoted
+foo"bar"baz
+---
+(command (word "foo\"bar\"baz"))
+
+=== complex mixed quoting
+foo'bar'"baz"qux
+---
+(command (word "foo'bar'\"baz\"qux"))
+
+# === Empty input ===
+
+=== empty input
+
+---
+(empty)

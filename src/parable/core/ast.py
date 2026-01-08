@@ -506,6 +506,21 @@ class ArithmeticCommand(Node):
 
 
 @dataclass
+class AnsiCQuote(Node):
+    """An ANSI-C quoted string $'...'."""
+
+    content: str
+
+    def __init__(self, content: str):
+        self.kind = "ansi-c"
+        self.content = content
+
+    def to_sexp(self) -> str:
+        escaped = self.content.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+        return f'(ansi-c "{escaped}")'
+
+
+@dataclass
 class ProcessSubstitution(Node):
     """A process substitution <(...) or >(...)."""
 

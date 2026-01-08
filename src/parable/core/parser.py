@@ -1,6 +1,7 @@
 """Recursive descent parser for bash."""
 
 from .ast import (
+    AnsiCQuote,
     Array,
     ArithmeticCommand,
     ArithmeticExpansion,
@@ -217,6 +218,15 @@ class Parser:
             elif ch == "\\" and self.pos + 1 < self.length:
                 chars.append(self.advance())  # backslash
                 chars.append(self.advance())  # escaped char
+
+            # ANSI-C quoting $'...'
+            elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "'":
+                ansi_node, ansi_text = self._parse_ansi_c_quote()
+                if ansi_node:
+                    parts.append(ansi_node)
+                    chars.append(ansi_text)
+                else:
+                    chars.append(self.advance())
 
             # Arithmetic expansion $((...))
             elif (
@@ -727,6 +737,43 @@ class Parser:
 
         text = self.source[start:self.pos]
         return ArithmeticExpansion(content), text
+
+    def _parse_ansi_c_quote(self) -> tuple[Node | None, str]:
+        """Parse ANSI-C quoting $'...'.
+
+        Returns (node, text) where node is the AST node and text is the raw text.
+        Returns (None, "") if not a valid ANSI-C quote.
+        """
+        if self.at_end() or self.peek() != "$":
+            return None, ""
+        if self.pos + 1 >= self.length or self.source[self.pos + 1] != "'":
+            return None, ""
+
+        start = self.pos
+        self.advance()  # consume $
+        self.advance()  # consume opening '
+
+        content_chars = []
+        while not self.at_end():
+            ch = self.peek()
+            if ch == "'":
+                self.advance()  # consume closing '
+                break
+            elif ch == "\\":
+                # Escape sequence - include both backslash and following char in content
+                content_chars.append(self.advance())  # backslash
+                if not self.at_end():
+                    content_chars.append(self.advance())  # escaped char
+            else:
+                content_chars.append(self.advance())
+        else:
+            # Unterminated - reset and return None
+            self.pos = start
+            return None, ""
+
+        text = self.source[start:self.pos]
+        content = "".join(content_chars)
+        return AnsiCQuote(content), text
 
     def _parse_param_expansion(self) -> tuple[Node | None, str]:
         """Parse a parameter expansion starting at $.

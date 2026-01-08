@@ -1,23 +1,39 @@
 # Parable
 
-A recursive descent parser for bash shell scripts.
+A hand-written recursive descent parser for bash. No shortcuts, no regexes, no external dependencies—just pure Python that understands bash the way bash understands bash.
 
 ---
 
-Parable parses bash source code into an abstract syntax tree (AST) for analysis, transformation, or interpretation.
+## Philosophy
+
+Most bash parsers are glorified regex matchers that handle the happy path. Parable is different. Built from the GNU bash manual, the POSIX spec, the bash YACC grammar, and battle-tested against tree-sitter-bash, oilshell, and shfmt test suites. Every test case validated against real bash.
+
+**1,560 test cases.** Every one passes `bash -n` syntax validation.
+
+This includes the entire [tree-sitter-bash corpus](https://github.com/tree-sitter/tree-sitter-bash).
+
+## What It Handles
+
+The dark corners of bash that break other parsers:
+
+- **Parameter expansion**: `${var:-default}`, `${var:+alt}`, `${var%pattern}`, `${!prefix*}`, `${var@Q}`
+- **Nested substitutions**: `echo $(cat <(grep ${pattern:-".*"} "$file"))`
+- **Here documents**: `<<EOF`, `<<-EOF`, `<<<word`, quoted/unquoted delimiters
+- **Process substitution**: `<(cmd)`, `>(cmd)` as arguments or redirects
+- **Arithmetic**: `$(( ))`, `$[ ]` (deprecated), C-style `for ((i=0; i<10; i++))`
+- **Conditionals**: `[[ ]]` with `=~`, `-eq`, pattern matching, `&&`, `||`
+- **Arrays**: `arr=(a b c)`, `${arr[@]}`, `${!arr[@]}`, `${#arr[@]}`
+- **Quoting edge cases**: `$'ansi\nescapes'`, `$"locale"`, adjacent quotes, backslash semantics
+- **Obscure redirects**: `{fd}>file`, `3<&0-`, `&>`, `|&`, `>|`
+- **Coprocesses**: `coproc name { commands; }`
+- **Case fallthrough**: `;&` and `;;&`
+- **Everything else**: functions, subshells, brace groups, pipelines, lists, all the control structures
 
 ## Installation
 
 ```bash
-# Clone the repo
 git clone https://github.com/ldayton/Parable.git
-cd Parable
-
-# Install with uv (recommended)
-uv pip install -e .
-
-# Or with pip
-pip install -e .
+cd Parable && uv pip install -e .
 ```
 
 ## Usage
@@ -25,86 +41,42 @@ pip install -e .
 ```python
 from parable import parse
 
-# Parse a simple command
-nodes = parse("echo hello world")
-print(nodes[0].to_sexp())
-# (command (word "echo") (word "hello") (word "world"))
+# Returns an AST, not string manipulation
+ast = parse("ps aux | grep python | awk '{print $2}'")
 
-# Parse a pipeline
-nodes = parse("cat file.txt | grep pattern | head -5")
-print(nodes[0].to_sexp())
-# (pipeline (command (word "cat") (word "file.txt")) (command (word "grep") (word "pattern")) (command (word "head") (word "-5")))
+# S-expression output for inspection
+print(ast[0].to_sexp())
+# (pipeline
+#   (command (word "ps") (word "aux"))
+#   (command (word "grep") (word "python"))
+#   (command (word "awk") (word "'{print $2}'")))
 
-# Parse control structures
-nodes = parse("if test -f foo; then echo exists; fi")
-print(nodes[0].to_sexp())
-# (if (command (word "test") (word "-f") (word "foo")) (command (word "echo") (word "exists")))
+# Handles the weird stuff
+ast = parse("cat <<'EOF'\nheredoc content\nEOF")
+print(ast[0].to_sexp())
+# (command (word "cat") (heredoc-quoted "EOF" "heredoc content\n"))
 ```
 
-## Supported Syntax
+## Tests
 
-- Simple commands with arguments
-- Pipelines (`cmd1 | cmd2 | cmd3`)
-- Lists with operators (`&&`, `||`, `;`, `&`)
-- Redirections (`>`, `>>`, `<`, `<<`, `<<<`, `>&`, etc.)
-- Subshells (`(commands)`)
-- Brace groups (`{ commands; }`)
-- If statements (`if`/`then`/`elif`/`else`/`fi`)
-- While and until loops
-- For loops (`for var in words; do ...; done`)
-- Case statements (`case word in pattern) ...;; esac`)
-- Quoting (single quotes, double quotes, escapes)
-- Command substitution (`$(...)`)
+```bash
+uv run pytest
+```
+
+28 test modules covering progressively deeper bash semantics. Every input is validated against bash 4.0+ with `bash -n`. The tree-sitter corpus runs as a separate test suite—Parable parses what they parse, but doesn't accept syntax that bash rejects.
 
 ## Project Structure
 
 ```
 src/parable/
-├── __init__.py           # Package exports
+├── __init__.py        # parse() entry point
 └── core/
-    ├── __init__.py
-    ├── ast.py            # AST node definitions
-    ├── errors.py         # Error types
-    └── parser.py         # Recursive descent parser
+    ├── ast.py         # AST node definitions
+    └── parser.py      # Recursive descent parser (~3000 lines)
 
 tests/
-├── conftest.py           # Pytest configuration
-├── 01_words.tests        # Word parsing tests
-├── 02_commands.tests     # Command tests
-├── 03_pipelines.tests    # Pipeline tests
-├── 04_lists.tests        # List operator tests
-├── 05_redirects.tests    # Redirection tests
-├── 06_compound.tests     # Subshell/brace group tests
-├── 07_if.tests           # If statement tests
-├── 08_loops.tests        # Loop tests
-└── 09_case.tests         # Case statement tests
-
-bin/
-└── parable-dump.py       # CLI tool to inspect parse output
-```
-
-## Development
-
-```bash
-# Run tests
-uv run pytest
-
-# Run linter
-uv run ruff check .
-
-# Format code
-uv run ruff format .
-```
-
-## Test Format
-
-Tests use a custom `.tests` format:
-
-```
-=== test name
-input bash code
----
-(expected s-expression)
+├── *.tests            # 1,374 test cases in custom format
+└── corpus/            # 186 tree-sitter-bash corpus tests
 ```
 
 ## License

@@ -280,6 +280,34 @@ class For(Node):
 
 
 @dataclass
+class ForArith(Node):
+    """A C-style for loop: for ((init; cond; incr)); do ... done."""
+
+    init: str
+    cond: str
+    incr: str
+    body: Node
+    redirects: list[Node] = field(default_factory=list)
+
+    def __init__(self, init: str, cond: str, incr: str, body: Node, redirects: list[Node] = None):
+        self.kind = "for-arith"
+        self.init = init
+        self.cond = cond
+        self.incr = incr
+        self.body = body
+        self.redirects = redirects or []
+
+    def to_sexp(self) -> str:
+        def escape(s: str) -> str:
+            return s.replace("\\", "\\\\").replace('"', '\\"')
+
+        parts = [self.body.to_sexp()]
+        parts.extend(r.to_sexp() for r in self.redirects)
+        inner = " ".join(parts)
+        return f'(for-arith "{escape(self.init)}" "{escape(self.cond)}" "{escape(self.incr)}" {inner})'
+
+
+@dataclass
 class Select(Node):
     """A select statement."""
 

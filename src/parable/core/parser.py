@@ -13,6 +13,7 @@ from .ast import (
     Coproc,
     Empty,
     For,
+    ForArith,
     Function,
     HereDoc,
     If,
@@ -1571,8 +1572,8 @@ class Parser:
 
         return Until(condition, body)
 
-    def parse_for(self) -> For | None:
-        """Parse a for loop: for name [in words]; do list; done."""
+    def parse_for(self) -> For | ForArith | None:
+        """Parse a for loop: for name [in words]; do list; done or C-style for ((;;))."""
         self.skip_whitespace()
 
         if self.peek_word() != "for":
@@ -1580,6 +1581,10 @@ class Parser:
 
         self.consume_word("for")
         self.skip_whitespace()
+
+        # Check for C-style for loop: for ((init; cond; incr))
+        if self.peek() == "(" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+            return self._parse_for_arith()
 
         # Parse variable name (bash allows reserved words as variable names in for loops)
         var_name = self.peek_word()
@@ -1640,6 +1645,83 @@ class Parser:
             raise ParseError("Expected 'done' to close for loop", pos=self.pos)
 
         return For(var_name, words, body)
+
+    def _parse_for_arith(self) -> ForArith:
+        """Parse C-style for loop: for ((init; cond; incr)); do list; done."""
+        # We've already consumed 'for' and positioned at '(('
+        self.advance()  # consume first (
+        self.advance()  # consume second (
+
+        # Parse the three expressions separated by semicolons
+        # Each can be empty
+        parts = []
+        current = []
+        paren_depth = 0
+
+        while not self.at_end():
+            ch = self.peek()
+            if ch == "(" :
+                paren_depth += 1
+                current.append(self.advance())
+            elif ch == ")":
+                if paren_depth > 0:
+                    paren_depth -= 1
+                    current.append(self.advance())
+                else:
+                    # Check for closing ))
+                    if self.pos + 1 < self.length and self.source[self.pos + 1] == ")":
+                        # End of ((...))
+                        parts.append("".join(current).strip())
+                        self.advance()  # consume first )
+                        self.advance()  # consume second )
+                        break
+                    else:
+                        current.append(self.advance())
+            elif ch == ";" and paren_depth == 0:
+                parts.append("".join(current).strip())
+                current = []
+                self.advance()  # consume ;
+            else:
+                current.append(self.advance())
+
+        if len(parts) != 3:
+            raise ParseError("Expected three expressions in for ((;;))", pos=self.pos)
+
+        init, cond, incr = parts
+
+        self.skip_whitespace()
+
+        # Handle optional semicolon
+        if not self.at_end() and self.peek() == ";":
+            self.advance()
+
+        self.skip_whitespace_and_newlines()
+
+        # Parse body - either do/done or brace group
+        if self.peek() == "{":
+            body = self.parse_brace_group()
+            if body is None:
+                raise ParseError("Expected brace group body in for loop", pos=self.pos)
+        elif self.consume_word("do"):
+            body = self.parse_list_until({"done"})
+            if body is None:
+                raise ParseError("Expected commands after 'do'", pos=self.pos)
+            self.skip_whitespace_and_newlines()
+            if not self.consume_word("done"):
+                raise ParseError("Expected 'done' to close for loop", pos=self.pos)
+        else:
+            raise ParseError("Expected 'do' or '{' in for loop", pos=self.pos)
+
+        # Parse optional trailing redirections
+        redirects = []
+        while True:
+            self.skip_whitespace()
+            redirect = self.parse_redirect()
+            if redirect is None:
+                break
+            redirects.append(redirect)
+
+        return ForArith(init, cond, incr, body, redirects if redirects else None)
 
     def parse_select(self) -> Select | None:
         """Parse a select statement: select name [in words]; do list; done."""

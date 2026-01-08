@@ -1,0 +1,150 @@
+# Iteration 21: C-style for loop
+
+# === Basic C-style for ===
+
+=== simple C-style for
+for ((i=0; i<10; i++)); do echo $i; done
+---
+(for-arith "i=0" "i<10" "i++" (command (word "echo") (word "$i" (param "i"))))
+
+=== C-style for with spaces
+for (( i = 0 ; i < 10 ; i++ )); do echo $i; done
+---
+(for-arith "i = 0" "i < 10" "i++" (command (word "echo") (word "$i" (param "i"))))
+
+=== C-style for with brace group
+for ((i=0; i<5; i++)); { echo $i; }
+---
+(for-arith "i=0" "i<5" "i++" (brace-group (list (command (word "echo") (word "$i" (param "i"))) (semi))))
+
+# === Empty expressions ===
+
+=== empty init
+for ((; i<10; i++)); do echo $i; done
+---
+(for-arith "" "i<10" "i++" (command (word "echo") (word "$i" (param "i"))))
+
+=== empty condition (infinite loop)
+for ((i=0; ; i++)); do echo $i; break; done
+---
+(for-arith "i=0" "" "i++" (list (command (word "echo") (word "$i" (param "i"))) (semi) (command (word "break"))))
+
+=== empty increment
+for ((i=0; i<10;)); do echo $i; ((i++)); done
+---
+(for-arith "i=0" "i<10" "" (list (command (word "echo") (word "$i" (param "i"))) (semi) (arith-cmd "i++")))
+
+=== all empty (infinite loop)
+for ((;;)); do break; done
+---
+(for-arith "" "" "" (command (word "break")))
+
+# === Complex expressions ===
+
+=== multiple init variables
+for ((i=0, j=10; i<j; i++, j--)); do echo $i $j; done
+---
+(for-arith "i=0, j=10" "i<j" "i++, j--" (command (word "echo") (word "$i" (param "i")) (word "$j" (param "j"))))
+
+=== compound condition
+for ((i=0; i<10 && i%2==0; i++)); do echo $i; done
+---
+(for-arith "i=0" "i<10 && i%2==0" "i++" (command (word "echo") (word "$i" (param "i"))))
+
+=== decrement loop
+for ((i=10; i>0; i--)); do echo $i; done
+---
+(for-arith "i=10" "i>0" "i--" (command (word "echo") (word "$i" (param "i"))))
+
+=== complex arithmetic
+for ((i=1; i<=100; i*=2)); do echo $i; done
+---
+(for-arith "i=1" "i<=100" "i*=2" (command (word "echo") (word "$i" (param "i"))))
+
+# === C-style for in context ===
+
+=== C-style for in list
+for ((i=0; i<3; i++)); do echo $i; done; echo done
+---
+(list (for-arith "i=0" "i<3" "i++" (command (word "echo") (word "$i" (param "i")))) (semi) (command (word "echo") (word "done")))
+
+=== C-style for with redirect
+for ((i=0; i<3; i++)); do echo $i; done > output.txt
+---
+(for-arith "i=0" "i<3" "i++" (command (word "echo") (word "$i" (param "i"))) (redirect ">" (word "output.txt")))
+
+=== time C-style for
+time for ((i=0; i<1000; i++)); do :; done
+---
+(time (for-arith "i=0" "i<1000" "i++" (command (word ":"))))
+
+=== negated C-style for
+! for ((i=0; i<3; i++)); do false; done
+---
+(negation (for-arith "i=0" "i<3" "i++" (command (word "false"))))
+
+# === Brutal edge cases from research ===
+
+=== no semicolon before do
+for ((i=0; i<3; i++)) do echo $i; done
+---
+(for-arith "i=0" "i<3" "i++" (command (word "echo") (word "$i" (param "i"))))
+
+=== nested parens in condition
+for ((i=0; (i<5); i++)); do echo $i; done
+---
+(for-arith "i=0" "(i<5)" "i++" (command (word "echo") (word "$i" (param "i"))))
+
+=== deeply nested parens
+for ((i=0; ((i+1)<10); i++)); do echo $i; done
+---
+(for-arith "i=0" "((i+1)<10)" "i++" (command (word "echo") (word "$i" (param "i"))))
+
+=== ternary in expression
+for ((i=0; i<(a>b?a:b); i++)); do echo $i; done
+---
+(for-arith "i=0" "i<(a>b?a:b)" "i++" (command (word "echo") (word "$i" (param "i"))))
+
+=== bitwise operations
+for ((i=1; i&0xFF; i<<=1)); do echo $i; done
+---
+(for-arith "i=1" "i&0xFF" "i<<=1" (command (word "echo") (word "$i" (param "i"))))
+
+=== with break
+for ((i=0; ; i++)); do if ((i>5)); then break; fi; echo $i; done
+---
+(for-arith "i=0" "" "i++" (list (if (arith-cmd "i>5") (command (word "break"))) (semi) (command (word "echo") (word "$i" (param "i")))))
+
+=== with continue
+for ((i=0; i<10; i++)); do if ((i%2)); then continue; fi; echo $i; done
+---
+(for-arith "i=0" "i<10" "i++" (list (if (arith-cmd "i%2") (command (word "continue"))) (semi) (command (word "echo") (word "$i" (param "i")))))
+
+=== newlines in body with brace
+for ((i=0; i<3; i++)) {
+  echo $i
+}
+---
+(for-arith "i=0" "i<3" "i++" (brace-group (command (word "echo") (word "$i" (param "i")))))
+
+=== pre and post increment
+for ((i=0; i<5; ++i)); do echo $i; done
+---
+(for-arith "i=0" "i<5" "++i" (command (word "echo") (word "$i" (param "i"))))
+
+=== step by 2
+for ((i=0; i<10; i+=2)); do echo $i; done
+---
+(for-arith "i=0" "i<10" "i+=2" (command (word "echo") (word "$i" (param "i"))))
+
+=== nested C-style for
+for ((i=0; i<2; i++)); do for ((j=0; j<2; j++)); do echo $i $j; done; done
+---
+(for-arith "i=0" "i<2" "i++" (for-arith "j=0" "j<2" "j++" (command (word "echo") (word "$i" (param "i")) (word "$j" (param "j")))))
+
+=== C-style for in function
+f() { for ((i=0; i<3; i++)); do echo $i; done; }
+---
+(function "f" (brace-group (list (for-arith "i=0" "i<3" "i++" (command (word "echo") (word "$i" (param "i")))) (semi))))
+
+

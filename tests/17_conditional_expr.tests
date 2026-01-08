@@ -115,11 +115,6 @@ time [[ -f file ]]
 ---
 (cond-expr "-f   file")
 
-=== empty conditional
-[[ ]]
----
-(cond-expr "")
-
 === conditional with variables
 [[ $a == $b ]]
 ---

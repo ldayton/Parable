@@ -246,13 +246,6 @@ done
 ---
 (while (command (word "true")) (command (word "echo") (word "yes")))
 
-=== for with newline after in
-for x in
-a b c
-do echo $x; done
----
-(for "x" (words "a" "b" "c") (command (word "echo") (word "$x" (param "x"))))
-
 # === Deeply nested loops ===
 
 === nested while

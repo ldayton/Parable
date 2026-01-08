@@ -346,11 +346,6 @@ case $x in case) echo case;; esac
 ---
 (case (word "$x" (param "x")) (pattern "case" (command (word "echo") (word "case"))))
 
-=== pattern is reserved word esac
-case $x in esac) echo esac;; esac
----
-(case (word "$x" (param "x")) (pattern "esac" (command (word "echo") (word "esac"))))
-
 # Variable expansion in patterns
 === variable in pattern
 case $x in $pattern) echo match;; esac

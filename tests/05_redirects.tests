@@ -204,3 +204,143 @@ echo "foobar" >&2
 whoami >| /dev/null
 ---
 (command (word "whoami") (redirect ">|" (word "/dev/null")))
+
+# === Combined stdout/stderr redirects (&>) ===
+
+=== combined redirect to dev null
+ls &>/dev/null
+---
+(command (word "ls") (redirect "&>" (word "/dev/null")))
+
+=== combined redirect to file
+cmd &> output.log
+---
+(command (word "cmd") (redirect "&>" (word "output.log")))
+
+=== combined redirect append
+cmd &>> output.log
+---
+(command (word "cmd") (redirect "&>>" (word "output.log")))
+
+# === Combined redirect edge cases ===
+
+=== combined redirect no space
+cmd &>file.log
+---
+(command (word "cmd") (redirect "&>" (word "file.log")))
+
+=== combined append no space
+cmd &>>file.log
+---
+(command (word "cmd") (redirect "&>>" (word "file.log")))
+
+=== alternative combined form
+cmd >& output.log
+---
+(command (word "cmd") (redirect ">&" (word "output.log")))
+
+=== alternative combined no space
+cmd >&output.log
+---
+(command (word "cmd") (redirect ">&" (word "output.log")))
+
+=== combined with other redirect
+cmd &> out.log < in.txt
+---
+(command (word "cmd") (redirect "&>" (word "out.log")) (redirect "<" (word "in.txt")))
+
+=== combined after other redirect
+cmd < in.txt &> out.log
+---
+(command (word "cmd") (redirect "<" (word "in.txt")) (redirect "&>" (word "out.log")))
+
+=== combined before command
+&> log.txt cmd
+---
+(command (word "cmd") (redirect "&>" (word "log.txt")))
+
+# === Close file descriptor ===
+
+=== close stdout
+cmd >&-
+---
+(command (word "cmd") (redirect ">" (word "&-")))
+
+=== close stderr
+cmd 2>&-
+---
+(command (word "cmd") (redirect "2>" (word "&-")))
+
+=== close stdin
+cmd <&-
+---
+(command (word "cmd") (redirect "<" (word "&-")))
+
+=== close fd3
+cmd 3>&-
+---
+(command (word "cmd") (redirect "3>" (word "&-")))
+
+=== close input fd3
+cmd 3<&-
+---
+(command (word "cmd") (redirect "3<" (word "&-")))
+
+=== close after dup
+cmd 3>&1 3>&-
+---
+(command (word "cmd") (redirect "3>" (word "&1")) (redirect "3>" (word "&-")))
+
+# === Move file descriptor (dup and close) ===
+
+=== move fd input
+cmd 3<&0-
+---
+(command (word "cmd") (redirect "3<" (word "&0-")))
+
+=== move fd output
+cmd 3>&1-
+---
+(command (word "cmd") (redirect "3>" (word "&1-")))
+
+# === Mixed brutal patterns ===
+
+=== multiple combined redirects
+cmd &> out1.log 2>&1 &>> out2.log
+---
+(command (word "cmd") (redirect "&>" (word "out1.log")) (redirect "2>" (word "&1")) (redirect "&>>" (word "out2.log")))
+
+=== combined with here string
+cmd &> log.txt <<< "input"
+---
+(command (word "cmd") (redirect "&>" (word "log.txt")) (redirect "<<<" (word "\"input\"")))
+
+=== combined in pipeline
+cmd1 &> /dev/null | cmd2
+---
+(pipeline (command (word "cmd1") (redirect "&>" (word "/dev/null"))) (command (word "cmd2")))
+
+=== combined in list with background
+cmd1 &> log1.txt & cmd2 &> log2.txt
+---
+(list (command (word "cmd1") (redirect "&>" (word "log1.txt"))) (bg) (command (word "cmd2") (redirect "&>" (word "log2.txt"))))
+
+=== combined in and list
+cmd1 &> log1.txt && cmd2 &> log2.txt
+---
+(list (command (word "cmd1") (redirect "&>" (word "log1.txt"))) (and) (command (word "cmd2") (redirect "&>" (word "log2.txt"))))
+
+=== combined with stderr dup
+cmd 2>&1 &> file.log
+---
+(command (word "cmd") (redirect "2>" (word "&1")) (redirect "&>" (word "file.log")))
+
+=== combined in subshell
+(cmd &> log.txt)
+---
+(subshell (command (word "cmd") (redirect "&>" (word "log.txt"))))
+
+=== combined in brace group
+{ cmd &> log.txt; }
+---
+(brace-group (list (command (word "cmd") (redirect "&>" (word "log.txt"))) (semi)))

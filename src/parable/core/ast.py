@@ -172,7 +172,9 @@ class HereDoc(Node):
         self.fd = fd
 
     def to_sexp(self) -> str:
-        escaped_content = self.content.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+        escaped_content = (
+            self.content.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+        )
         if self.quoted:
             kind = "heredoc-quoted"
         elif self.strip_tabs:
@@ -221,7 +223,9 @@ class If(Node):
     else_body: Node | None = None
     redirects: list[Node] = field(default_factory=list)
 
-    def __init__(self, condition: Node, then_body: Node, else_body: Node = None, redirects: list[Node] = None):
+    def __init__(
+        self, condition: Node, then_body: Node, else_body: Node = None, redirects: list[Node] = None
+    ):
         self.kind = "if"
         self.condition = condition
         self.then_body = then_body
@@ -286,7 +290,9 @@ class For(Node):
     body: Node
     redirects: list[Node] = field(default_factory=list)
 
-    def __init__(self, var: str, words: list[Word] | None, body: Node, redirects: list[Node] = None):
+    def __init__(
+        self, var: str, words: list[Word] | None, body: Node, redirects: list[Node] = None
+    ):
         self.kind = "for"
         self.var = var
         self.words = words
@@ -331,7 +337,9 @@ class ForArith(Node):
         parts = [self.body.to_sexp()]
         parts.extend(r.to_sexp() for r in self.redirects)
         inner = " ".join(parts)
-        return f'(for-arith "{escape(self.init)}" "{escape(self.cond)}" "{escape(self.incr)}" {inner})'
+        return (
+            f'(for-arith "{escape(self.init)}" "{escape(self.cond)}" "{escape(self.incr)}" {inner})'
+        )
 
 
 @dataclass
@@ -343,7 +351,9 @@ class Select(Node):
     body: Node
     redirects: list[Node] = field(default_factory=list)
 
-    def __init__(self, var: str, words: list[Word] | None, body: Node, redirects: list[Node] = None):
+    def __init__(
+        self, var: str, words: list[Word] | None, body: Node, redirects: list[Node] = None
+    ):
         self.kind = "select"
         self.var = var
         self.words = words
@@ -357,7 +367,7 @@ class Select(Node):
         parts = []
         if self.words is not None:
             word_strs = " ".join(f'"{escape(w.value)}"' for w in self.words)
-            parts.append(f'(words {word_strs})' if self.words else '(words)')
+            parts.append(f"(words {word_strs})" if self.words else "(words)")
         parts.append(self.body.to_sexp())
         parts.extend(r.to_sexp() for r in self.redirects)
         inner = " ".join(parts)

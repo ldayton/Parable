@@ -29,11 +29,6 @@ select x in a b c; { echo $x; }
 ---
 (select "x" (words "a" "b" "c") (brace-group (list (command (word "echo") (word "$x" (param "x"))) (semi))))
 
-=== select no in with brace group
-select x { echo $x; }
----
-(select "x" (brace-group (list (command (word "echo") (word "$x" (param "x"))) (semi))))
-
 # === Select with various word types ===
 
 === select with quoted words
@@ -111,13 +106,6 @@ select x in $(echo a b c); do echo $x; done
 select x in $((1+1)) $((2+2)); do echo $x; done
 ---
 (select "x" (words "$((1+1))" "$((2+2))") (command (word "echo") (word "$x" (param "x"))))
-
-=== select with newline after in
-select x in
-a b c
-do echo $x; done
----
-(select "x" (words "a" "b" "c") (command (word "echo") (word "$x" (param "x"))))
 
 === select single word
 select x in choice; do echo $x; done

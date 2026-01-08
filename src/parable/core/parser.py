@@ -3,9 +3,9 @@
 from .ast import (
     AnsiCQuote,
     ArithDeprecated,
-    Array,
     ArithmeticCommand,
     ArithmeticExpansion,
+    Array,
     BraceGroup,
     Case,
     CasePattern,
@@ -187,7 +187,9 @@ class Parser:
                         else:
                             chars.append(self.advance())
                     # Handle deprecated arithmetic expansion $[expr]
-                    elif c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "[":
+                    elif (
+                        c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "["
+                    ):
                         arith_node, arith_text = self._parse_deprecated_arithmetic()
                         if arith_node:
                             parts.append(arith_node)
@@ -195,7 +197,9 @@ class Parser:
                         else:
                             chars.append(self.advance())
                     # Handle command substitution $(...)
-                    elif c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                    elif (
+                        c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "("
+                    ):
                         cmdsub_node, cmdsub_text = self._parse_command_substitution()
                         if cmdsub_node:
                             parts.append(cmdsub_node)
@@ -309,7 +313,11 @@ class Parser:
                     break
 
             # Array literal: name=(elements) or name+=(elements)
-            elif ch == "(" and chars and (chars[-1] == "=" or (len(chars) >= 2 and chars[-2:] == ["+", "="])):
+            elif (
+                ch == "("
+                and chars
+                and (chars[-1] == "=" or (len(chars) >= 2 and chars[-2:] == ["+", "="]))
+            ):
                 array_node, array_text = self._parse_array_literal()
                 if array_node:
                     parts.append(array_node)
@@ -478,11 +486,19 @@ class Parser:
                                 self.advance()
                             if not self.at_end():
                                 self.advance()
-                        elif tc == "c" and self._is_word_boundary_before() and self._lookahead_keyword("case"):
+                        elif (
+                            tc == "c"
+                            and self._is_word_boundary_before()
+                            and self._lookahead_keyword("case")
+                        ):
                             # Nested case in lookahead
                             temp_case_depth += 1
                             self._skip_keyword("case")
-                        elif tc == "e" and self._is_word_boundary_before() and self._lookahead_keyword("esac"):
+                        elif (
+                            tc == "e"
+                            and self._is_word_boundary_before()
+                            and self._lookahead_keyword("esac")
+                        ):
                             temp_case_depth -= 1
                             if temp_case_depth == 0:
                                 # All cases are closed
@@ -518,10 +534,10 @@ class Parser:
             self.pos = start
             return None, ""
 
-        content = self.source[content_start:self.pos]
+        content = self.source[content_start : self.pos]
         self.advance()  # consume final )
 
-        text = self.source[start:self.pos]
+        text = self.source[start : self.pos]
 
         # Parse the content as a command list
         sub_parser = Parser(content)
@@ -582,10 +598,10 @@ class Parser:
             self.pos = start
             return None, ""
 
-        content = self.source[content_start:self.pos]
+        content = self.source[content_start : self.pos]
         self.advance()  # consume closing `
 
-        text = self.source[start:self.pos]
+        text = self.source[start : self.pos]
 
         # Parse the content as a command list
         sub_parser = Parser(content)
@@ -659,10 +675,10 @@ class Parser:
             self.pos = start
             return None, ""
 
-        content = self.source[content_start:self.pos]
+        content = self.source[content_start : self.pos]
         self.advance()  # consume final )
 
-        text = self.source[start:self.pos]
+        text = self.source[start : self.pos]
 
         # Parse the content as a command list
         sub_parser = Parser(content)
@@ -711,7 +727,7 @@ class Parser:
             raise ParseError("Expected ) to close array literal", pos=self.pos)
         self.advance()  # consume )
 
-        text = self.source[start:self.pos]
+        text = self.source[start : self.pos]
         return Array(elements), text
 
     def _parse_arithmetic_expansion(self) -> tuple[Node | None, str]:
@@ -760,11 +776,11 @@ class Parser:
             self.pos = start
             return None, ""
 
-        content = self.source[content_start:self.pos]
+        content = self.source[content_start : self.pos]
         self.advance()  # consume first )
         self.advance()  # consume second )
 
-        text = self.source[start:self.pos]
+        text = self.source[start : self.pos]
         return ArithmeticExpansion(content), text
 
     def _parse_deprecated_arithmetic(self) -> tuple[Node | None, str]:
@@ -806,10 +822,10 @@ class Parser:
             self.pos = start
             return None, ""
 
-        content = self.source[content_start:self.pos]
+        content = self.source[content_start : self.pos]
         self.advance()  # consume ]
 
-        text = self.source[start:self.pos]
+        text = self.source[start : self.pos]
         return ArithDeprecated(content), text
 
     def _parse_ansi_c_quote(self) -> tuple[Node | None, str]:
@@ -845,7 +861,7 @@ class Parser:
             self.pos = start
             return None, ""
 
-        text = self.source[start:self.pos]
+        text = self.source[start : self.pos]
         content = "".join(content_chars)
         return AnsiCQuote(content), text
 
@@ -923,7 +939,7 @@ class Parser:
             self.pos = start
             return None, "", []
 
-        text = self.source[start:self.pos]
+        text = self.source[start : self.pos]
         content = "".join(content_chars)
         return LocaleString(content), text, inner_parts
 
@@ -954,7 +970,7 @@ class Parser:
         # Special parameters: ?$!#@*-0-9
         if ch in "?$!#@*-0123456789":
             self.advance()
-            text = self.source[start:self.pos]
+            text = self.source[start : self.pos]
             return ParamExpansion(ch), text
 
         # Variable name [a-zA-Z_][a-zA-Z0-9_]*
@@ -966,8 +982,8 @@ class Parser:
                     self.advance()
                 else:
                     break
-            name = self.source[name_start:self.pos]
-            text = self.source[start:self.pos]
+            name = self.source[name_start : self.pos]
+            text = self.source[start : self.pos]
             return ParamExpansion(name), text
 
         # Not a valid expansion, restore position
@@ -992,7 +1008,7 @@ class Parser:
             param = self._consume_param_name()
             if param and not self.at_end() and self.peek() == "}":
                 self.advance()
-                text = self.source[start:self.pos]
+                text = self.source[start : self.pos]
                 return ParamLength(param), text
             self.pos = start
             return None, ""
@@ -1003,7 +1019,7 @@ class Parser:
             param = self._consume_param_name()
             if param and not self.at_end() and self.peek() == "}":
                 self.advance()
-                text = self.source[start:self.pos]
+                text = self.source[start : self.pos]
                 return ParamIndirect(param), text
             self.pos = start
             return None, ""
@@ -1021,7 +1037,7 @@ class Parser:
         # Check for closing brace (simple expansion)
         if self.peek() == "}":
             self.advance()
-            text = self.source[start:self.pos]
+            text = self.source[start : self.pos]
             return ParamExpansion(param), text
 
         # Parse operator
@@ -1058,7 +1074,7 @@ class Parser:
 
         self.advance()  # consume final }
         arg = "".join(arg_chars)
-        text = self.source[start:self.pos]
+        text = self.source[start : self.pos]
         return ParamExpansion(param, op, arg), text
 
     def _consume_param_name(self) -> str | None:
@@ -1212,6 +1228,22 @@ class Parser:
             self.advance()
 
         ch = self.peek()
+
+        # Handle &> and &>> (redirect both stdout and stderr)
+        if ch == "&" and self.pos + 1 < self.length and self.source[self.pos + 1] == ">":
+            self.advance()  # consume &
+            self.advance()  # consume >
+            if not self.at_end() and self.peek() == ">":
+                self.advance()  # consume second > for &>>
+                op = "&>>"
+            else:
+                op = "&>"
+            self.skip_whitespace()
+            target = self.parse_word()
+            if target is None:
+                raise ParseError(f"Expected target for redirect {op}", pos=self.pos)
+            return Redirect(op, target)
+
         if ch is None or ch not in "<>":
             # Not a redirect, restore position
             self.pos = start
@@ -1253,15 +1285,16 @@ class Parser:
             elif op == ">" and next_ch == "|":
                 self.advance()
                 op = ">|"
-            # Only consume >& or <& as operators if NOT followed by a digit
+            # Only consume >& or <& as operators if NOT followed by a digit or -
             # (>&2 should be > with target &2, not >& with target 2)
+            # (>&- should be > with target &-, not >& with target -)
             elif fd is None and varfd is None and op == ">" and next_ch == "&":
-                # Peek ahead to see if there's a digit after &
-                if self.pos + 1 >= self.length or not self.source[self.pos + 1].isdigit():
+                # Peek ahead to see if there's a digit or - after &
+                if self.pos + 1 >= self.length or self.source[self.pos + 1] not in "0123456789-":
                     self.advance()
                     op = ">&"
             elif fd is None and varfd is None and op == "<" and next_ch == "&":
-                if self.pos + 1 >= self.length or not self.source[self.pos + 1].isdigit():
+                if self.pos + 1 >= self.length or self.source[self.pos + 1] not in "0123456789-":
                     self.advance()
                     op = "<&"
 
@@ -1277,12 +1310,15 @@ class Parser:
 
         self.skip_whitespace()
 
-        # Handle fd duplication targets like &1, &2, &-, &$var
+        # Handle fd duplication targets like &1, &2, &-, &0-, &$var
         if not self.at_end() and self.peek() == "&":
             self.advance()  # consume &
-            # Parse the fd number or - for close
+            # Parse the fd number or - for close, including move syntax like &0-
             if not self.at_end() and (self.peek().isdigit() or self.peek() == "-"):
                 fd_target = self.advance()
+                # Check for move syntax: &N- means duplicate and close (move)
+                if fd_target.isdigit() and not self.at_end() and self.peek() == "-":
+                    fd_target += self.advance()  # consume the trailing -
                 target = Word(f"&{fd_target}")
             else:
                 # Could be &$var or &word - parse word and prepend &
@@ -1439,7 +1475,13 @@ class Parser:
 
         while True:
             self.skip_whitespace()
-            if self.at_end() or self.peek() in "\n|&;()":
+            if self.at_end():
+                break
+            ch = self.peek()
+            # Check for command terminators, but &> and &>> are redirects, not terminators
+            if ch in "\n|;()":
+                break
+            if ch == "&" and not (self.pos + 1 < self.length and self.source[self.pos + 1] == ">"):
                 break
             # } is only a terminator when it's a standalone word (brace group closer)
             # }}} or }foo are regular words
@@ -1524,7 +1566,7 @@ class Parser:
         if self.at_end() or depth != 1:
             raise ParseError("Expected )) to close arithmetic command", pos=self.pos)
 
-        content = self.source[content_start:self.pos]
+        content = self.source[content_start : self.pos]
         self.advance()  # consume first )
         self.advance()  # consume second )
 
@@ -1924,7 +1966,7 @@ class Parser:
 
         while not self.at_end():
             ch = self.peek()
-            if ch == "(" :
+            if ch == "(":
                 paren_depth += 1
                 current.append(self.advance())
             elif ch == ")":
@@ -2251,7 +2293,6 @@ class Parser:
         # Check if next word is a NAME (followed by a command)
         # NAME is uppercase by convention but can be any valid identifier
         name = None
-        saved_pos = self.pos
 
         # Check for compound command first (brace group or subshell)
         ch = self.peek() if not self.at_end() else None
@@ -2290,7 +2331,7 @@ class Parser:
         while not self.at_end() and self.peek() not in METACHAR and self.peek() not in "\"'":
             self.advance()
 
-        potential_name = self.source[word_start:self.pos]
+        potential_name = self.source[word_start : self.pos]
         self.skip_whitespace()
 
         # If there's more after the first word, check if first word is NAME
@@ -2408,7 +2449,7 @@ class Parser:
         while not self.at_end() and self.peek() not in METACHAR and self.peek() not in "\"'()":
             self.advance()
 
-        name = self.source[name_start:self.pos]
+        name = self.source[name_start : self.pos]
         if not name:
             self.pos = saved_pos
             return None
@@ -2712,6 +2753,9 @@ class Parser:
         ch = self.peek()
 
         if ch == "&":
+            # Check if this is &> or &>> (redirect), not background operator
+            if self.pos + 1 < self.length and self.source[self.pos + 1] == ">":
+                return None  # Let redirect parser handle &> and &>>
             self.advance()
             if not self.at_end() and self.peek() == "&":
                 self.advance()

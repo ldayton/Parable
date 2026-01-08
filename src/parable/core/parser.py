@@ -5,6 +5,7 @@ from .ast import (
     Case,
     CasePattern,
     Command,
+    CommandSubstitution,
     Empty,
     For,
     Function,
@@ -122,7 +123,7 @@ class Parser:
         return True
 
     def parse_word(self) -> Word | None:
-        """Parse a word token, detecting parameter expansions."""
+        """Parse a word token, detecting parameter expansions and command substitutions."""
         self.skip_whitespace()
 
         if self.at_end():
@@ -157,15 +158,11 @@ class Parser:
                         chars.append(self.advance())  # escaped char
                     # Handle command substitution $(...)
                     elif c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
-                        chars.append(self.advance())  # $
-                        chars.append(self.advance())  # (
-                        depth = 1
-                        while not self.at_end() and depth > 0:
-                            nc = self.peek()
-                            if nc == "(":
-                                depth += 1
-                            elif nc == ")":
-                                depth -= 1
+                        cmdsub_node, cmdsub_text = self._parse_command_substitution()
+                        if cmdsub_node:
+                            parts.append(cmdsub_node)
+                            chars.append(cmdsub_text)
+                        else:
                             chars.append(self.advance())
                     # Handle parameter expansion inside double quotes
                     elif c == "$":
@@ -175,6 +172,14 @@ class Parser:
                             chars.append(param_text)
                         else:
                             chars.append(self.advance())  # just $
+                    # Handle backtick command substitution
+                    elif c == "`":
+                        cmdsub_node, cmdsub_text = self._parse_backtick_substitution()
+                        if cmdsub_node:
+                            parts.append(cmdsub_node)
+                            chars.append(cmdsub_text)
+                        else:
+                            chars.append(self.advance())
                     else:
                         chars.append(self.advance())
                 if self.at_end():
@@ -186,17 +191,13 @@ class Parser:
                 chars.append(self.advance())  # backslash
                 chars.append(self.advance())  # escaped char
 
-            # Command substitution $(...) - parse as unit
+            # Command substitution $(...)
             elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
-                chars.append(self.advance())  # $
-                chars.append(self.advance())  # (
-                depth = 1
-                while not self.at_end() and depth > 0:
-                    nc = self.peek()
-                    if nc == "(":
-                        depth += 1
-                    elif nc == ")":
-                        depth -= 1
+                cmdsub_node, cmdsub_text = self._parse_command_substitution()
+                if cmdsub_node:
+                    parts.append(cmdsub_node)
+                    chars.append(cmdsub_text)
+                else:
                     chars.append(self.advance())
 
             # Parameter expansion $var or ${...}
@@ -207,6 +208,15 @@ class Parser:
                     chars.append(param_text)
                 else:
                     chars.append(self.advance())  # just $
+
+            # Backtick command substitution
+            elif ch == "`":
+                cmdsub_node, cmdsub_text = self._parse_backtick_substitution()
+                if cmdsub_node:
+                    parts.append(cmdsub_node)
+                    chars.append(cmdsub_text)
+                else:
+                    chars.append(self.advance())
 
             # Metacharacter ends the word
             elif ch in METACHAR:
@@ -220,6 +230,270 @@ class Parser:
             return None
 
         return Word("".join(chars), parts if parts else None)
+
+    def _parse_command_substitution(self) -> tuple[Node | None, str]:
+        """Parse a $(...) command substitution.
+
+        Returns (node, text) where node is CommandSubstitution and text is raw text.
+        """
+        if self.at_end() or self.peek() != "$":
+            return None, ""
+
+        start = self.pos
+        self.advance()  # consume $
+
+        if self.at_end() or self.peek() != "(":
+            self.pos = start
+            return None, ""
+
+        self.advance()  # consume (
+
+        # Find matching closing paren, being aware of:
+        # - Nested $() and plain ()
+        # - Quoted strings
+        # - case statements (where ) after pattern isn't a closer)
+        content_start = self.pos
+        depth = 1
+        case_depth = 0  # Track nested case statements
+
+        while not self.at_end() and depth > 0:
+            c = self.peek()
+
+            # Single-quoted string - no special chars inside
+            if c == "'":
+                self.advance()
+                while not self.at_end() and self.peek() != "'":
+                    self.advance()
+                if not self.at_end():
+                    self.advance()
+                continue
+
+            # Double-quoted string - handle escapes and nested $()
+            if c == '"':
+                self.advance()
+                while not self.at_end() and self.peek() != '"':
+                    if self.peek() == "\\" and self.pos + 1 < self.length:
+                        self.advance()
+                        self.advance()
+                    elif (
+                        self.peek() == "$"
+                        and self.pos + 1 < self.length
+                        and self.source[self.pos + 1] == "("
+                    ):
+                        # Nested $() in double quotes - recurse to find matching )
+                        # Command substitution creates new quoting context
+                        self.advance()  # $
+                        self.advance()  # (
+                        nested_depth = 1
+                        while not self.at_end() and nested_depth > 0:
+                            nc = self.peek()
+                            if nc == "'":
+                                self.advance()
+                                while not self.at_end() and self.peek() != "'":
+                                    self.advance()
+                                if not self.at_end():
+                                    self.advance()
+                            elif nc == '"':
+                                self.advance()
+                                while not self.at_end() and self.peek() != '"':
+                                    if self.peek() == "\\" and self.pos + 1 < self.length:
+                                        self.advance()
+                                    self.advance()
+                                if not self.at_end():
+                                    self.advance()
+                            elif nc == "\\" and self.pos + 1 < self.length:
+                                self.advance()
+                                self.advance()
+                            elif (
+                                nc == "$"
+                                and self.pos + 1 < self.length
+                                and self.source[self.pos + 1] == "("
+                            ):
+                                self.advance()
+                                self.advance()
+                                nested_depth += 1
+                            elif nc == "(":
+                                nested_depth += 1
+                                self.advance()
+                            elif nc == ")":
+                                nested_depth -= 1
+                                if nested_depth > 0:
+                                    self.advance()
+                            else:
+                                self.advance()
+                        if nested_depth == 0:
+                            self.advance()  # consume the closing )
+                    else:
+                        self.advance()
+                if not self.at_end():
+                    self.advance()
+                continue
+
+            # Backslash escape
+            if c == "\\" and self.pos + 1 < self.length:
+                self.advance()
+                self.advance()
+                continue
+
+            # Track case/esac for pattern terminator handling
+            # Check for 'case' keyword (word boundary: preceded by space/newline/start)
+            if c == "c" and self._is_word_boundary_before():
+                if self._lookahead_keyword("case"):
+                    case_depth += 1
+                    self._skip_keyword("case")
+                    continue
+
+            # Check for 'esac' keyword
+            if c == "e" and self._is_word_boundary_before() and case_depth > 0:
+                if self._lookahead_keyword("esac"):
+                    case_depth -= 1
+                    self._skip_keyword("esac")
+                    continue
+
+            # Handle parentheses
+            if c == "(":
+                depth += 1
+            elif c == ")":
+                # In case statement, ) after pattern is a terminator, not a paren
+                # Only decrement depth if we're not in a case pattern position
+                if case_depth > 0 and depth == 1:
+                    # This ) might be a case pattern terminator, not closing the $(
+                    # Look ahead to see if there's still content that needs esac
+                    saved = self.pos
+                    self.advance()  # skip this )
+                    # Scan ahead to see if we find esac that closes our case
+                    # before finding a ) that could close our $(
+                    temp_depth = 0
+                    temp_case_depth = case_depth  # Track nested cases in lookahead
+                    found_esac = False
+                    while not self.at_end():
+                        tc = self.peek()
+                        if tc == "'" or tc == '"':
+                            # Skip quoted strings
+                            q = tc
+                            self.advance()
+                            while not self.at_end() and self.peek() != q:
+                                if q == '"' and self.peek() == "\\":
+                                    self.advance()
+                                self.advance()
+                            if not self.at_end():
+                                self.advance()
+                        elif tc == "c" and self._is_word_boundary_before() and self._lookahead_keyword("case"):
+                            # Nested case in lookahead
+                            temp_case_depth += 1
+                            self._skip_keyword("case")
+                        elif tc == "e" and self._is_word_boundary_before() and self._lookahead_keyword("esac"):
+                            temp_case_depth -= 1
+                            if temp_case_depth == 0:
+                                # All cases are closed
+                                found_esac = True
+                                break
+                            self._skip_keyword("esac")
+                        elif tc == "(":
+                            temp_depth += 1
+                            self.advance()
+                        elif tc == ")":
+                            # In case, ) is a pattern terminator, not a closer
+                            if temp_case_depth > 0:
+                                self.advance()
+                            elif temp_depth > 0:
+                                temp_depth -= 1
+                                self.advance()
+                            else:
+                                # Found a ) that could be our closer
+                                break
+                        else:
+                            self.advance()
+                    self.pos = saved
+                    if found_esac:
+                        # This ) is a case pattern terminator, not our closer
+                        self.advance()
+                        continue
+                depth -= 1
+
+            if depth > 0:
+                self.advance()
+
+        if depth != 0:
+            self.pos = start
+            return None, ""
+
+        content = self.source[content_start:self.pos]
+        self.advance()  # consume final )
+
+        text = self.source[start:self.pos]
+
+        # Parse the content as a command list
+        sub_parser = Parser(content)
+        cmd = sub_parser.parse_list()
+        if cmd is None:
+            cmd = Empty()
+
+        return CommandSubstitution(cmd), text
+
+    def _is_word_boundary_before(self) -> bool:
+        """Check if current position is at a word boundary (preceded by space/newline/start)."""
+        if self.pos == 0:
+            return True
+        prev = self.source[self.pos - 1]
+        return prev in " \t\n;|&<>("
+
+    def _lookahead_keyword(self, keyword: str) -> bool:
+        """Check if keyword appears at current position followed by word boundary."""
+        if self.pos + len(keyword) > self.length:
+            return False
+        if self.source[self.pos : self.pos + len(keyword)] != keyword:
+            return False
+        # Check word boundary after keyword
+        after_pos = self.pos + len(keyword)
+        if after_pos >= self.length:
+            return True
+        after = self.source[after_pos]
+        return after in " \t\n;|&<>()"
+
+    def _skip_keyword(self, keyword: str) -> None:
+        """Skip over a keyword."""
+        for _ in keyword:
+            self.advance()
+
+    def _parse_backtick_substitution(self) -> tuple[Node | None, str]:
+        """Parse a `...` command substitution.
+
+        Returns (node, text) where node is CommandSubstitution and text is raw text.
+        """
+        if self.at_end() or self.peek() != "`":
+            return None, ""
+
+        start = self.pos
+        self.advance()  # consume opening `
+
+        # Find closing backtick (no nesting for backticks)
+        content_start = self.pos
+        while not self.at_end() and self.peek() != "`":
+            c = self.peek()
+            # Handle escaped backtick
+            if c == "\\" and self.pos + 1 < self.length and self.source[self.pos + 1] == "`":
+                self.advance()  # backslash
+                self.advance()  # escaped backtick
+            else:
+                self.advance()
+
+        if self.at_end():
+            self.pos = start
+            return None, ""
+
+        content = self.source[content_start:self.pos]
+        self.advance()  # consume closing `
+
+        text = self.source[start:self.pos]
+
+        # Parse the content as a command list
+        sub_parser = Parser(content)
+        cmd = sub_parser.parse_list()
+        if cmd is None:
+            cmd = Empty()
+
+        return CommandSubstitution(cmd), text
 
     def _parse_param_expansion(self) -> tuple[Node | None, str]:
         """Parse a parameter expansion starting at $.
@@ -1298,6 +1572,7 @@ class Parser:
 
     def parse_list(self) -> Node | None:
         """Parse a command list (pipelines separated by &&, ||, ;, &)."""
+        self.skip_whitespace_and_newlines()
         pipeline = self.parse_pipeline()
         if pipeline is None:
             return None

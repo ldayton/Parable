@@ -27,7 +27,7 @@ class Word(Node):
         self.parts = parts or []
 
     def to_sexp(self) -> str:
-        escaped = self.value.replace("\\", "\\\\").replace('"', '\\"')
+        escaped = self.value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
         if self.parts:
             inner = " ".join(p.to_sexp() for p in self.parts)
             return f'(word "{escaped}" {inner})'
@@ -344,3 +344,17 @@ class ParamIndirect(Node):
     def to_sexp(self) -> str:
         escaped = self.param.replace("\\", "\\\\").replace('"', '\\"')
         return f'(param-indirect "{escaped}")'
+
+
+@dataclass
+class CommandSubstitution(Node):
+    """A command substitution $(...) or `...`."""
+
+    command: Node
+
+    def __init__(self, command: Node):
+        self.kind = "cmdsub"
+        self.command = command
+
+    def to_sexp(self) -> str:
+        return f"(cmdsub {self.command.to_sexp()})"

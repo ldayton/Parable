@@ -276,7 +276,7 @@ if [[ "$x" =~ ^[0-9]+$ ]]; then echo number; fi
 === test with string comparison
 if [ "$(uname)" = "Darwin" ]; then echo mac; fi
 ---
-(if (command (word "[") (word "\"$(uname)\"") (word "=") (word "\"Darwin\"") (word "]")) (command (word "echo") (word "mac")))
+(if (command (word "[") (word "\"$(uname)\"" (cmdsub (command (word "uname")))) (word "=") (word "\"Darwin\"") (word "]")) (command (word "echo") (word "mac")))
 
 === test with numeric comparison
 if [ "$x" -gt 10 ]; then echo big; fi
@@ -332,7 +332,7 @@ if 	 true 	 ; 	 then 	 echo yes 	 ; 	 fi
 === if with command substitution condition
 if test "$(whoami)" = root; then echo root; fi
 ---
-(if (command (word "test") (word "\"$(whoami)\"") (word "=") (word "root")) (command (word "echo") (word "root")))
+(if (command (word "test") (word "\"$(whoami)\"" (cmdsub (command (word "whoami")))) (word "=") (word "root")) (command (word "echo") (word "root")))
 
 === if elif else complete
 if [ -f a ]; then echo a; elif [ -f b ]; then echo b; else echo none; fi

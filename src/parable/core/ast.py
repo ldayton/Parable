@@ -426,3 +426,19 @@ class ArithmeticCommand(Node):
     def to_sexp(self) -> str:
         escaped = self.expression.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
         return f'(arith-cmd "{escaped}")'
+
+
+@dataclass
+class ProcessSubstitution(Node):
+    """A process substitution <(...) or >(...)."""
+
+    direction: str  # "<" for input, ">" for output
+    command: Node
+
+    def __init__(self, direction: str, command: Node):
+        self.kind = "procsub"
+        self.direction = direction
+        self.command = command
+
+    def to_sexp(self) -> str:
+        return f'(procsub "{self.direction}" {self.command.to_sexp()})'

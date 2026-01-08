@@ -20,6 +20,7 @@ from .ast import (
     ParamIndirect,
     ParamLength,
     Pipeline,
+    ProcessSubstitution,
     Redirect,
     Subshell,
     Until,
@@ -247,6 +248,16 @@ class Parser:
                     chars.append(cmdsub_text)
                 else:
                     chars.append(self.advance())
+
+            # Process substitution <(...) or >(...)
+            elif ch in "<>" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                procsub_node, procsub_text = self._parse_process_substitution()
+                if procsub_node:
+                    parts.append(procsub_node)
+                    chars.append(procsub_text)
+                else:
+                    # Not a process substitution, treat as metacharacter
+                    break
 
             # Metacharacter ends the word
             elif ch in METACHAR:
@@ -524,6 +535,83 @@ class Parser:
             cmd = Empty()
 
         return CommandSubstitution(cmd), text
+
+    def _parse_process_substitution(self) -> tuple[Node | None, str]:
+        """Parse a <(...) or >(...) process substitution.
+
+        Returns (node, text) where node is ProcessSubstitution and text is raw text.
+        """
+        if self.at_end() or self.peek() not in "<>":
+            return None, ""
+
+        start = self.pos
+        direction = self.advance()  # consume < or >
+
+        if self.at_end() or self.peek() != "(":
+            self.pos = start
+            return None, ""
+
+        self.advance()  # consume (
+
+        # Find matching ) - track nested parens and handle quotes
+        content_start = self.pos
+        depth = 1
+
+        while not self.at_end() and depth > 0:
+            c = self.peek()
+
+            # Single-quoted string
+            if c == "'":
+                self.advance()
+                while not self.at_end() and self.peek() != "'":
+                    self.advance()
+                if not self.at_end():
+                    self.advance()
+                continue
+
+            # Double-quoted string
+            if c == '"':
+                self.advance()
+                while not self.at_end() and self.peek() != '"':
+                    if self.peek() == "\\" and self.pos + 1 < self.length:
+                        self.advance()
+                    self.advance()
+                if not self.at_end():
+                    self.advance()
+                continue
+
+            # Backslash escape
+            if c == "\\" and self.pos + 1 < self.length:
+                self.advance()
+                self.advance()
+                continue
+
+            # Nested parentheses (including nested process substitutions)
+            if c == "(":
+                depth += 1
+            elif c == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+
+            self.advance()
+
+        if depth != 0:
+            self.pos = start
+            return None, ""
+
+        content = self.source[content_start:self.pos]
+        self.advance()  # consume final )
+
+        text = self.source[start:self.pos]
+
+        # Parse the content as a command list
+        sub_parser = Parser(content)
+        cmd = sub_parser.parse_list()
+        if cmd is None:
+            cmd = Empty()
+
+        return ProcessSubstitution(direction, cmd), text
 
     def _parse_arithmetic_expansion(self) -> tuple[Node | None, str]:
         """Parse a $((...)) arithmetic expansion.
@@ -846,6 +934,13 @@ class Parser:
         ch = self.peek()
         if ch is None or ch not in "<>":
             # Not a redirect, restore position
+            self.pos = start
+            return None
+
+        # Check for process substitution <(...) or >(...) - not a redirect
+        # Only treat as redirect if there's a space before ( or an fd number
+        if fd is None and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+            # This is a process substitution, not a redirect
             self.pos = start
             return None
 

@@ -24,6 +24,7 @@ from .ast import (
     ParamExpansion,
     ParamIndirect,
     ParamLength,
+    PipeBoth,
     Pipeline,
     ProcessSubstitution,
     Redirect,
@@ -2383,7 +2384,7 @@ class Parser:
         return result
 
     def _parse_simple_pipeline(self) -> Node | None:
-        """Parse a simple pipeline (commands separated by |) without time/negation."""
+        """Parse a simple pipeline (commands separated by | or |&) without time/negation."""
         cmd = self.parse_compound_command()
         if cmd is None:
             return None
@@ -2397,8 +2398,20 @@ class Parser:
             # Check it's not ||
             if self.pos + 1 < self.length and self.source[self.pos + 1] == "|":
                 break
+
             self.advance()  # consume |
-            self.skip_whitespace()
+
+            # Check for |& (pipe stderr)
+            is_pipe_both = False
+            if not self.at_end() and self.peek() == "&":
+                self.advance()  # consume &
+                is_pipe_both = True
+
+            self.skip_whitespace_and_newlines()  # Allow command on next line after pipe
+
+            # Add pipe-both marker if this is a |& pipe
+            if is_pipe_both:
+                commands.append(PipeBoth())
 
             cmd = self.parse_compound_command()
             if cmd is None:

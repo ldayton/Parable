@@ -105,6 +105,17 @@ class Operator(Node):
 
 
 @dataclass
+class PipeBoth(Node):
+    """Marker for |& pipe (stdout + stderr)."""
+
+    def __init__(self):
+        self.kind = "pipe-both"
+
+    def to_sexp(self) -> str:
+        return "(pipe-both)"
+
+
+@dataclass
 class Empty(Node):
     """Empty input."""
 

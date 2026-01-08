@@ -442,3 +442,35 @@ class ProcessSubstitution(Node):
 
     def to_sexp(self) -> str:
         return f'(procsub "{self.direction}" {self.command.to_sexp()})'
+
+
+@dataclass
+class Negation(Node):
+    """Pipeline negation with !."""
+
+    pipeline: Node
+
+    def __init__(self, pipeline: Node):
+        self.kind = "negation"
+        self.pipeline = pipeline
+
+    def to_sexp(self) -> str:
+        return f"(negation {self.pipeline.to_sexp()})"
+
+
+@dataclass
+class Time(Node):
+    """Time measurement with time keyword."""
+
+    pipeline: Node
+    posix: bool = False  # -p flag
+
+    def __init__(self, pipeline: Node, posix: bool = False):
+        self.kind = "time"
+        self.pipeline = pipeline
+        self.posix = posix
+
+    def to_sexp(self) -> str:
+        if self.posix:
+            return f'(time {self.pipeline.to_sexp()} "-p")'
+        return f"(time {self.pipeline.to_sexp()})"

@@ -14,6 +14,7 @@ from .ast import (
     HereDoc,
     If,
     List,
+    Negation,
     Node,
     Operator,
     ParamExpansion,
@@ -23,6 +24,7 @@ from .ast import (
     ProcessSubstitution,
     Redirect,
     Subshell,
+    Time,
     Until,
     While,
     Word,
@@ -1885,7 +1887,74 @@ class Parser:
         return self.parse_command()
 
     def parse_pipeline(self) -> Node | None:
-        """Parse a pipeline (commands separated by |)."""
+        """Parse a pipeline (commands separated by |), with optional time/negation prefix."""
+        self.skip_whitespace()
+
+        # Track order of prefixes: "time", "negation", or "time_negation" or "negation_time"
+        prefix_order = None
+        time_posix = False
+
+        # Check for 'time' prefix first
+        if self.peek_word() == "time":
+            self.consume_word("time")
+            prefix_order = "time"
+            self.skip_whitespace()
+            # Check for -p flag
+            if not self.at_end() and self.peek() == "-":
+                saved = self.pos
+                self.advance()
+                if not self.at_end() and self.peek() == "p":
+                    self.advance()
+                    if self.at_end() or self.peek() in " \t\n":
+                        time_posix = True
+                    else:
+                        self.pos = saved
+                else:
+                    self.pos = saved
+            self.skip_whitespace()
+            # Check for ! after time
+            if not self.at_end() and self.peek() == "!":
+                if self.pos + 1 >= self.length or self.source[self.pos + 1] in " \t\n":
+                    self.advance()
+                    prefix_order = "time_negation"
+                    self.skip_whitespace()
+
+        # Check for '!' negation prefix (if no time yet)
+        elif not self.at_end() and self.peek() == "!":
+            if self.pos + 1 >= self.length or self.source[self.pos + 1] in " \t\n":
+                self.advance()
+                self.skip_whitespace()
+                # Recursively parse pipeline to handle ! ! cmd, ! time cmd, etc.
+                inner = self.parse_pipeline()
+                if inner is None:
+                    raise ParseError("Expected command after !", pos=self.pos)
+                return Negation(inner)
+
+        # Parse the actual pipeline
+        result = self._parse_simple_pipeline()
+        if result is None:
+            if prefix_order:
+                raise ParseError("Expected command after time/!", pos=self.pos)
+            return None
+
+        # Wrap based on prefix order
+        if prefix_order == "time":
+            result = Time(result, time_posix)
+        elif prefix_order == "negation":
+            result = Negation(result)
+        elif prefix_order == "time_negation":
+            # time ! cmd -> Time(Negation(cmd))
+            result = Negation(result)
+            result = Time(result, time_posix)
+        elif prefix_order == "negation_time":
+            # ! time cmd -> Negation(Time(cmd))
+            result = Time(result, time_posix)
+            result = Negation(result)
+
+        return result
+
+    def _parse_simple_pipeline(self) -> Node | None:
+        """Parse a simple pipeline (commands separated by |) without time/negation."""
         cmd = self.parse_compound_command()
         if cmd is None:
             return None

@@ -256,7 +256,7 @@ if false; then echo yes; else (echo no); fi
 === if with negation
 if ! test -f file; then echo missing; fi
 ---
-(if (command (word "!") (word "test") (word "-f") (word "file")) (command (word "echo") (word "missing")))
+(if (negation (command (word "test") (word "-f") (word "file"))) (command (word "echo") (word "missing")))
 
 === if with double bracket
 if [[ -f file ]]; then cat file; fi

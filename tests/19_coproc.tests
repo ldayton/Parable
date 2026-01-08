@@ -1,0 +1,150 @@
+# Iteration 19: Coproc (Coprocess)
+
+# === Basic coproc ===
+
+=== simple coproc
+coproc cat
+---
+(coproc (command (word "cat")))
+
+=== coproc with arguments
+coproc cat -n
+---
+(coproc (command (word "cat") (word "-n")))
+
+=== named coproc
+coproc MYCOPROC cat
+---
+(coproc "MYCOPROC" (command (word "cat")))
+
+=== named coproc with args
+coproc READER cat -n file.txt
+---
+(coproc "READER" (command (word "cat") (word "-n") (word "file.txt")))
+
+# === Coproc with compound commands ===
+
+=== coproc with brace group
+coproc { cat; }
+---
+(coproc (brace-group (list (command (word "cat")) (semi))))
+
+=== coproc with subshell
+coproc ( cat )
+---
+(coproc (subshell (command (word "cat"))))
+
+=== named coproc with brace group
+coproc WORKER { while read line; do echo "$line"; done; }
+---
+(coproc "WORKER" (brace-group (list (while (command (word "read") (word "line")) (command (word "echo") (word "\"$line\"" (param "line")))) (semi))))
+
+=== coproc with while loop
+coproc while read x; do echo $x; done
+---
+(coproc (while (command (word "read") (word "x")) (command (word "echo") (word "$x" (param "x")))))
+
+# === Coproc with redirections ===
+
+=== coproc with redirect
+coproc cat > /dev/null
+---
+(coproc (command (word "cat") (redirect ">" (word "/dev/null"))))
+
+=== coproc with input redirect
+coproc cat < input.txt
+---
+(coproc (command (word "cat") (redirect "<" (word "input.txt"))))
+
+=== named coproc with redirect
+coproc PROC cat 2>&1
+---
+(coproc "PROC" (command (word "cat") (redirect "2>" (word "&1"))))
+
+# === Coproc in context ===
+
+=== coproc in list
+coproc cat; echo started
+---
+(list (coproc (command (word "cat"))) (semi) (command (word "echo") (word "started")))
+
+=== coproc with and list
+coproc cat && echo started
+---
+(list (coproc (command (word "cat"))) (and) (command (word "echo") (word "started")))
+
+=== coproc in pipeline is error but parses
+echo foo | coproc cat
+---
+(pipeline (command (word "echo") (word "foo")) (coproc (command (word "cat"))))
+
+# === Brutal edge cases from research ===
+
+=== coproc with pipeline command
+coproc cat | grep foo
+---
+(pipeline (coproc (command (word "cat"))) (command (word "grep") (word "foo")))
+
+=== lowercase coproc name
+coproc myproc cat
+---
+(coproc "myproc" (command (word "cat")))
+
+=== underscore in coproc name
+coproc my_proc cat
+---
+(coproc "my_proc" (command (word "cat")))
+
+=== coproc name with numbers
+coproc proc1 cat
+---
+(coproc "proc1" (command (word "cat")))
+
+=== coproc if compound
+coproc if true; then cat; fi
+---
+(coproc (if (command (word "true")) (command (word "cat"))))
+
+=== named coproc if compound
+coproc MYIF if true; then cat; fi
+---
+(coproc "MYIF" (if (command (word "true")) (command (word "cat"))))
+
+=== coproc for loop
+coproc for x in a b; do echo $x; done
+---
+(coproc (for "x" (words "a" "b") (command (word "echo") (word "$x" (param "x")))))
+
+=== coproc case statement
+coproc case $x in a) cat;; esac
+---
+(coproc (case (word "$x" (param "x")) (pattern "a" (command (word "cat")))))
+
+=== coproc with here doc
+coproc cat <<EOF
+hello
+EOF
+---
+(coproc (command (word "cat") (heredoc "EOF" "hello\n")))
+
+=== coproc backgrounded (unusual but valid syntax)
+coproc cat &
+---
+(list (coproc (command (word "cat"))) (bg))
+
+=== coproc in subshell
+(coproc cat)
+---
+(subshell (coproc (command (word "cat"))))
+
+=== coproc arithmetic command
+coproc (( x++ ))
+---
+(coproc (arith-cmd " x++ "))
+
+=== named coproc with process sub
+coproc READER cat <(echo hello)
+---
+(coproc "READER" (command (word "cat") (word "<(echo hello)" (procsub "<" (command (word "echo") (word "hello"))))))
+
+

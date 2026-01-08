@@ -506,3 +506,21 @@ class Array(Node):
             return "(array)"
         inner = " ".join(e.to_sexp() for e in self.elements)
         return f"(array {inner})"
+
+
+@dataclass
+class Coproc(Node):
+    """A coprocess coproc [NAME] command."""
+
+    command: Node
+    name: str | None = None
+
+    def __init__(self, command: Node, name: str = None):
+        self.kind = "coproc"
+        self.command = command
+        self.name = name
+
+    def to_sexp(self) -> str:
+        if self.name:
+            return f'(coproc "{self.name}" {self.command.to_sexp()})'
+        return f"(coproc {self.command.to_sexp()})"

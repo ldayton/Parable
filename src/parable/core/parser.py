@@ -10,6 +10,7 @@ from .ast import (
     Command,
     CommandSubstitution,
     ConditionalExpr,
+    Coproc,
     Empty,
     For,
     Function,
@@ -49,6 +50,7 @@ RESERVED_WORDS = {
     "esac",
     "in",
     "function",
+    "coproc",
 }
 
 # Metacharacters that break words (unquoted)
@@ -1779,6 +1781,120 @@ class Parser:
 
         return Case(word, patterns)
 
+    def parse_coproc(self) -> Coproc | None:
+        """Parse a coproc statement.
+
+        Forms:
+            coproc command                    # default name COPROC
+            coproc NAME command               # named coprocess
+            coproc compound_command           # with compound command
+            coproc NAME compound_command      # named with compound
+        """
+        self.skip_whitespace()
+        if self.at_end():
+            return None
+
+        if self.peek_word() != "coproc":
+            return None
+
+        self.consume_word("coproc")
+        self.skip_whitespace()
+
+        # Check if next word is a NAME (followed by a command)
+        # NAME is uppercase by convention but can be any valid identifier
+        name = None
+        saved_pos = self.pos
+
+        # Check for compound command first (brace group or subshell)
+        ch = self.peek() if not self.at_end() else None
+        if ch == "{":
+            body = self.parse_brace_group()
+            if body is not None:
+                return Coproc(body, name)
+        if ch == "(":
+            # Check for (( arithmetic command
+            if self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                body = self.parse_arithmetic_command()
+                if body is not None:
+                    return Coproc(body, name)
+            body = self.parse_subshell()
+            if body is not None:
+                return Coproc(body, name)
+
+        # Check for reserved word compounds (while, for, if, etc.)
+        next_word = self.peek_word()
+        if next_word in ("while", "until", "for", "if", "case"):
+            body = self.parse_compound_command()
+            if body is not None:
+                return Coproc(body, name)
+
+        # Could be NAME followed by command, or just a simple command
+        # Try to get the first word
+        first_word = self.peek_word()
+        if first_word is None:
+            raise ParseError("Expected command after coproc", pos=self.pos)
+
+        # Save position and try to parse as NAME + command
+        word_start = self.pos
+        self.skip_whitespace()
+
+        # Consume the first word
+        while not self.at_end() and self.peek() not in METACHAR and self.peek() not in "\"'":
+            self.advance()
+
+        potential_name = self.source[word_start:self.pos]
+        self.skip_whitespace()
+
+        # If there's more after the first word, check if first word is NAME
+        if not self.at_end() and self.peek() not in "\n;|&":
+            # Check if there's an actual command following
+            next_ch = self.peek()
+            if next_ch == "{":
+                # coproc NAME { ... } - first word is NAME
+                name = potential_name
+                body = self.parse_brace_group()
+                if body is not None:
+                    return Coproc(body, name)
+            elif next_ch == "(":
+                # coproc NAME ( ... ) - first word is NAME
+                name = potential_name
+                if self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                    body = self.parse_arithmetic_command()
+                else:
+                    body = self.parse_subshell()
+                if body is not None:
+                    return Coproc(body, name)
+
+            next_word = self.peek_word()
+            # If the next word starts with '-', it's an option to first word (command)
+            # If the next word is a reserved word compound, first word is NAME
+            # Otherwise, if next word looks like a command name, first word is NAME
+            if next_word:
+                if next_word.startswith("-"):
+                    # -n, -x, etc. are options, so first word is command
+                    pass
+                elif next_word in ("while", "until", "for", "if", "case"):
+                    # Reserved compound follows, so first word is NAME
+                    name = potential_name
+                    body = self.parse_compound_command()
+                    if body is not None:
+                        return Coproc(body, name)
+                elif next_word not in RESERVED_WORDS:
+                    # Regular word follows, so first word is NAME
+                    name = potential_name
+                    body = self.parse_command()
+                    if body is not None:
+                        return Coproc(body, name)
+
+        # Otherwise, first word is the start of the simple command
+        # Restore position and parse as simple command
+        self.pos = word_start
+        body = self.parse_command()
+        if body is not None:
+            return Coproc(body, name)
+
+        raise ParseError("Expected command after coproc", pos=self.pos)
+
     def parse_function(self) -> Function | None:
         """Parse a function definition.
 
@@ -2016,6 +2132,10 @@ class Parser:
         # Function definition (function keyword form)
         if word == "function":
             return self.parse_function()
+
+        # Coproc
+        if word == "coproc":
+            return self.parse_coproc()
 
         # Try POSIX function definition (name() form) before simple command
         func = self.parse_function()

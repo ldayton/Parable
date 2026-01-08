@@ -1,9 +1,25 @@
 """Pytest configuration and fixtures for Parable tests."""
 
+import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+
+
+# Find bash 4.0+ for validation
+def _find_bash() -> str | None:
+    for path in ["/opt/homebrew/bin/bash", "/usr/local/bin/bash", "/bin/bash"]:
+        if Path(path).exists():
+            result = subprocess.run([path, "--version"], capture_output=True, text=True)
+            match = re.search(r"version (\d+)", result.stdout)
+            if match and int(match.group(1)) >= 4:
+                return path
+    return None
+
+
+BASH_PATH = _find_bash()
 
 
 @dataclass
@@ -115,9 +131,12 @@ def parse_test_file(filepath: Path) -> list[TestCase]:
 
 
 def pytest_collect_file(parent, file_path):
-    """Collect .tests files as test modules."""
+    """Collect .tests files and tree-sitter corpus files as test modules."""
     if file_path.suffix == ".tests":
         return TestsFile.from_parent(parent, path=file_path)
+    # Tree-sitter corpus files in corpus/ subdirectory
+    if file_path.suffix == ".txt" and "corpus" in file_path.parts:
+        return TreeSitterCorpusFile.from_parent(parent, path=file_path)
     return None
 
 
@@ -194,3 +213,149 @@ class TestFailed(Exception):
         self.actual = actual
         self.error = error
         super().__init__(f"Expected {expected!r}, got {actual!r}")
+
+
+# === Tree-sitter corpus support ===
+
+
+@dataclass
+class TreeSitterTestCase:
+    """A test case from a tree-sitter corpus file."""
+
+    name: str
+    input: str
+    file: str
+    line: int
+
+
+def parse_tree_sitter_corpus(filepath: Path) -> list[TreeSitterTestCase]:
+    """Parse a tree-sitter corpus .txt file.
+
+    Format:
+        ================================================================================
+        Test Name
+        ================================================================================
+
+        input code here
+        (can be multiple lines)
+
+        --------------------------------------------------------------------------------
+
+        (expected parse tree - ignored, different AST format)
+    """
+    tests = []
+    content = filepath.read_text()
+    lines = content.splitlines()
+
+    # Split by separator (80 = signs)
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+
+        # Look for test header (80 = signs)
+        if line == "=" * 80:
+            start_line = i
+            i += 1
+            if i >= len(lines):
+                break
+
+            # Next line is test name
+            name = lines[i].strip()
+            i += 1
+            if i >= len(lines):
+                break
+
+            # Skip second row of = signs
+            if lines[i] == "=" * 80:
+                i += 1
+
+            # Collect input until we hit dashes
+            input_lines = []
+            while i < len(lines):
+                if lines[i].startswith("-" * 3) and all(c == "-" for c in lines[i]):
+                    break
+                input_lines.append(lines[i])
+                i += 1
+
+            # Skip past the expected output section
+            while i < len(lines) and lines[i] != "=" * 80:
+                i += 1
+
+            input_code = "\n".join(input_lines).strip()
+            if input_code:
+                tests.append(
+                    TreeSitterTestCase(
+                        name=name,
+                        input=input_code,
+                        file=str(filepath),
+                        line=start_line + 1,
+                    )
+                )
+        else:
+            i += 1
+
+    return tests
+
+
+class TreeSitterCorpusFile(pytest.File):
+    """A tree-sitter corpus .txt file."""
+
+    def collect(self):
+        """Yield test items from the corpus file."""
+        for test_case in parse_tree_sitter_corpus(self.path):
+            yield TreeSitterTestItem.from_parent(self, name=test_case.name, test_case=test_case)
+
+
+class TreeSitterTestItem(pytest.Item):
+    """A single test from a tree-sitter corpus file."""
+
+    def __init__(self, name, parent, test_case):
+        super().__init__(name, parent)
+        self.test_case = test_case
+
+    def runtest(self):
+        """Validate the input parses correctly."""
+        from parable import parse
+        from parable.core.errors import ParseError
+
+        # First check bash accepts it (with extglob for extended patterns)
+        if BASH_PATH:
+            result = subprocess.run(
+                [BASH_PATH, "-O", "extglob", "-n"],
+                input=self.test_case.input,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                raise TreeSitterTestFailed(
+                    input=self.test_case.input,
+                    error=f"bash -n failed: {result.stderr.strip()}",
+                )
+
+        # Then check our parser accepts it
+        try:
+            parse(self.test_case.input)
+        except ParseError as e:
+            raise TreeSitterTestFailed(
+                input=self.test_case.input,
+                error=f"parse error: {e}",
+            ) from None
+
+    def repr_failure(self, excinfo):
+        """Format test failure output."""
+        if isinstance(excinfo.value, TreeSitterTestFailed):
+            tf = excinfo.value
+            return f"Input: {tf.input!r}\nError: {tf.error}"
+        return super().repr_failure(excinfo)
+
+    def reportinfo(self):
+        return self.path, self.test_case.line, f"{self.path.name}::{self.name}"
+
+
+class TreeSitterTestFailed(Exception):
+    """Raised when a tree-sitter test fails."""
+
+    def __init__(self, input: str, error: str):
+        self.input = input
+        self.error = error
+        super().__init__(error)

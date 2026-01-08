@@ -1013,14 +1013,58 @@ class Parser:
             self.pos = start
             return None, ""
 
-        # ${!param} - indirect
+        # ${!param} or ${!param<op><arg>} - indirect
         if ch == "!":
             self.advance()
             param = self._consume_param_name()
-            if param and not self.at_end() and self.peek() == "}":
-                self.advance()
-                text = self.source[start : self.pos]
-                return ParamIndirect(param), text
+            if param:
+                # Skip optional whitespace before closing brace
+                while not self.at_end() and self.peek() in " \t":
+                    self.advance()
+                if not self.at_end() and self.peek() == "}":
+                    self.advance()
+                    text = self.source[start : self.pos]
+                    return ParamIndirect(param), text
+                # ${!prefix@} and ${!prefix*} are prefix matching (lists variable names)
+                # These are NOT operators - the @/* is part of the indirect form
+                if not self.at_end() and self.peek() in "@*":
+                    suffix = self.advance()
+                    while not self.at_end() and self.peek() in " \t":
+                        self.advance()
+                    if not self.at_end() and self.peek() == "}":
+                        self.advance()
+                        text = self.source[start : self.pos]
+                        return ParamIndirect(param + suffix), text
+                    # Not a valid prefix match, reset
+                    self.pos = start
+                    return None, ""
+                # Check for operator (e.g., ${!##} = indirect of # with # op)
+                op = self._consume_param_operator()
+                if op is not None:
+                    # Parse argument until closing brace
+                    arg_chars = []
+                    depth = 1
+                    while not self.at_end() and depth > 0:
+                        c = self.peek()
+                        if c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
+                            depth += 1
+                            arg_chars.append(self.advance())
+                            arg_chars.append(self.advance())
+                        elif c == "}":
+                            depth -= 1
+                            if depth > 0:
+                                arg_chars.append(self.advance())
+                        elif c == "\\":
+                            arg_chars.append(self.advance())
+                            if not self.at_end():
+                                arg_chars.append(self.advance())
+                        else:
+                            arg_chars.append(self.advance())
+                    if depth == 0:
+                        self.advance()  # consume final }
+                        arg = "".join(arg_chars)
+                        text = self.source[start : self.pos]
+                        return ParamIndirect(param, op, arg), text
             self.pos = start
             return None, ""
 
@@ -1525,7 +1569,16 @@ class Parser:
             raise ParseError("Expected ) to close subshell", pos=self.pos)
         self.advance()  # consume )
 
-        return Subshell(body)
+        # Collect trailing redirects
+        redirects = []
+        while True:
+            self.skip_whitespace()
+            redirect = self.parse_redirect()
+            if redirect is None:
+                break
+            redirects.append(redirect)
+
+        return Subshell(body, redirects if redirects else None)
 
     def parse_arithmetic_command(self) -> ArithmeticCommand | None:
         """Parse an arithmetic command (( expression ))."""
@@ -1599,6 +1652,12 @@ class Parser:
         while not self.at_end() and depth > 0:
             c = self.peek()
 
+            # Escaped character (outside quotes)
+            if c == "\\" and self.pos + 1 < self.length:
+                self.advance()  # consume backslash
+                self.advance()  # consume escaped char
+                continue
+
             # Single-quoted string
             if c == "'":
                 self.advance()
@@ -1671,7 +1730,16 @@ class Parser:
             raise ParseError("Expected } to close brace group", pos=self.pos)
         self.advance()  # consume }
 
-        return BraceGroup(body)
+        # Collect trailing redirects
+        redirects = []
+        while True:
+            self.skip_whitespace()
+            redirect = self.parse_redirect()
+            if redirect is None:
+                break
+            redirects.append(redirect)
+
+        return BraceGroup(body, redirects if redirects else None)
 
     def parse_if(self) -> If | None:
         """Parse an if statement: if list; then list [elif list; then list]* [else list] fi."""
@@ -2422,10 +2490,8 @@ class Parser:
 
             self.skip_whitespace_and_newlines()
 
-            # Parse body (must be a compound command: brace group or subshell)
-            body = self.parse_brace_group()
-            if body is None:
-                body = self.parse_subshell()
+            # Parse body (any compound command)
+            body = self._parse_compound_command()
             if body is None:
                 raise ParseError("Expected function body", pos=self.pos)
 
@@ -2469,14 +2535,53 @@ class Parser:
 
         self.skip_whitespace_and_newlines()
 
-        # Parse body (must be a compound command: brace group or subshell)
-        body = self.parse_brace_group()
-        if body is None:
-            body = self.parse_subshell()
+        # Parse body (any compound command)
+        body = self._parse_compound_command()
         if body is None:
             raise ParseError("Expected function body", pos=self.pos)
 
         return Function(name, body)
+
+    def _parse_compound_command(self) -> Node | None:
+        """Parse any compound command (for function bodies, etc.)."""
+        # Try each compound command type
+        result = self.parse_brace_group()
+        if result:
+            return result
+
+        result = self.parse_subshell()
+        if result:
+            return result
+
+        result = self.parse_conditional_expr()
+        if result:
+            return result
+
+        result = self.parse_if()
+        if result:
+            return result
+
+        result = self.parse_while()
+        if result:
+            return result
+
+        result = self.parse_until()
+        if result:
+            return result
+
+        result = self.parse_for()
+        if result:
+            return result
+
+        result = self.parse_case()
+        if result:
+            return result
+
+        result = self.parse_select()
+        if result:
+            return result
+
+        return None
 
     def parse_list_until(self, stop_words: set[str]) -> Node | None:
         """Parse a list that stops before certain reserved words."""
@@ -2815,14 +2920,20 @@ class Parser:
             # For & at end of list, don't require another command
             if op == "&":
                 self.skip_whitespace()
-                if self.at_end() or self.peek() in "\n)}":
+                if self.at_end() or self.peek() in ")}":
                     break
+                # Newline after & means continue to see if more commands follow
+                if self.peek() == "\n":
+                    continue
 
             # For ; at end of list, don't require another command
             if op == ";":
                 self.skip_whitespace()
-                if self.at_end() or self.peek() in "\n)}":
+                if self.at_end() or self.peek() in ")}":
                     break
+                # Newline after ; means continue to see if more commands follow
+                if self.peek() == "\n":
+                    continue
 
             pipeline = self.parse_pipeline()
             if pipeline is None:

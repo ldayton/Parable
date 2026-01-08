@@ -191,13 +191,19 @@ class Subshell(Node):
     """A subshell ( list )."""
 
     body: Node
+    redirects: list["Redirect | HereDoc"] | None = None
 
-    def __init__(self, body: Node):
+    def __init__(self, body: Node, redirects: list["Redirect | HereDoc"] | None = None):
         self.kind = "subshell"
         self.body = body
+        self.redirects = redirects
 
     def to_sexp(self) -> str:
-        return f"(subshell {self.body.to_sexp()})"
+        result = f"(subshell {self.body.to_sexp()}"
+        if self.redirects:
+            for r in self.redirects:
+                result += f" {r.to_sexp()}"
+        return result + ")"
 
 
 @dataclass
@@ -205,13 +211,19 @@ class BraceGroup(Node):
     """A brace group { list; }."""
 
     body: Node
+    redirects: list["Redirect | HereDoc"] | None = None
 
-    def __init__(self, body: Node):
+    def __init__(self, body: Node, redirects: list["Redirect | HereDoc"] | None = None):
         self.kind = "brace-group"
         self.body = body
+        self.redirects = redirects
 
     def to_sexp(self) -> str:
-        return f"(brace-group {self.body.to_sexp()})"
+        result = f"(brace-group {self.body.to_sexp()}"
+        if self.redirects:
+            for r in self.redirects:
+                result += f" {r.to_sexp()}"
+        return result + ")"
 
 
 @dataclass
@@ -474,16 +486,24 @@ class ParamLength(Node):
 
 @dataclass
 class ParamIndirect(Node):
-    """An indirect parameter expansion ${!var}."""
+    """An indirect parameter expansion ${!var} or ${!var<op><arg>}."""
 
     param: str
+    op: str | None
+    arg: str | None
 
-    def __init__(self, param: str):
+    def __init__(self, param: str, op: str | None = None, arg: str | None = None):
         self.kind = "param-indirect"
         self.param = param
+        self.op = op
+        self.arg = arg
 
     def to_sexp(self) -> str:
         escaped = self.param.replace("\\", "\\\\").replace('"', '\\"')
+        if self.op is not None:
+            escaped_op = self.op.replace("\\", "\\\\").replace('"', '\\"')
+            escaped_arg = (self.arg or "").replace("\\", "\\\\").replace('"', '\\"')
+            return f'(param-indirect "{escaped}" "{escaped_op}" "{escaped_arg}")'
         return f'(param-indirect "{escaped}")'
 
 

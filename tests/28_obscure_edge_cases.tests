@@ -84,7 +84,7 @@ echo ${var: -4:2}
 === prefix matching variables
 echo ${!myprefix_@}
 ---
-(command (word "echo") (word "${!myprefix_@}"))
+(command (word "echo") (word "${!myprefix_@}" (param-indirect "myprefix_@")))
 
 === substitution all occurrences
 echo ${var//foo/bar}

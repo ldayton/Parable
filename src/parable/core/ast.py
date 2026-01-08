@@ -136,6 +136,44 @@ class Redirect(Node):
 
 
 @dataclass
+class HereDoc(Node):
+    """A here document <<DELIM ... DELIM."""
+
+    delimiter: str
+    content: str
+    strip_tabs: bool = False
+    quoted: bool = False
+    fd: int | None = None
+
+    def __init__(
+        self,
+        delimiter: str,
+        content: str,
+        strip_tabs: bool = False,
+        quoted: bool = False,
+        fd: int = None,
+    ):
+        self.kind = "heredoc"
+        self.delimiter = delimiter
+        self.content = content
+        self.strip_tabs = strip_tabs
+        self.quoted = quoted
+        self.fd = fd
+
+    def to_sexp(self) -> str:
+        escaped_content = self.content.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+        if self.quoted:
+            kind = "heredoc-quoted"
+        elif self.strip_tabs:
+            kind = "heredoc-strip"
+        else:
+            kind = "heredoc"
+        if self.fd is not None:
+            return f'({kind} "{self.delimiter}" "{escaped_content}" {self.fd})'
+        return f'({kind} "{self.delimiter}" "{escaped_content}")'
+
+
+@dataclass
 class Subshell(Node):
     """A subshell ( list )."""
 

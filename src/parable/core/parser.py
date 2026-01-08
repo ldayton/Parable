@@ -11,6 +11,7 @@ from .ast import (
     Empty,
     For,
     Function,
+    HereDoc,
     If,
     List,
     Node,
@@ -828,7 +829,7 @@ class Parser:
 
         return None
 
-    def parse_redirect(self) -> Redirect | None:
+    def parse_redirect(self) -> Redirect | HereDoc | None:
         """Parse a redirection operator and target."""
         self.skip_whitespace()
         if self.at_end():
@@ -852,6 +853,7 @@ class Parser:
         op = self.advance()
 
         # Check for multi-char operators
+        strip_tabs = False
         if not self.at_end():
             next_ch = self.peek()
             if op == ">" and next_ch == ">":
@@ -862,6 +864,10 @@ class Parser:
                 if not self.at_end() and self.peek() == "<":
                     self.advance()
                     op = "<<<"
+                elif not self.at_end() and self.peek() == "-":
+                    self.advance()
+                    op = "<<"
+                    strip_tabs = True
                 else:
                     op = "<<"
             # Handle >| (noclobber override)
@@ -879,6 +885,10 @@ class Parser:
                 if self.pos + 1 >= self.length or not self.source[self.pos + 1].isdigit():
                     self.advance()
                     op = "<&"
+
+        # Handle here document
+        if op == "<<":
+            return self._parse_heredoc(fd, strip_tabs)
 
         # Combine fd with operator if present
         if fd is not None:
@@ -905,6 +915,138 @@ class Parser:
             raise ParseError(f"Expected target for redirect {op}", pos=self.pos)
 
         return Redirect(op, target)
+
+    def _parse_heredoc(self, fd: int | None, strip_tabs: bool) -> HereDoc:
+        """Parse a here document <<DELIM ... DELIM."""
+        self.skip_whitespace()
+
+        # Parse the delimiter, handling quoting
+        quoted = False
+        delimiter_chars = []
+
+        # Check for quoting of delimiter
+        if not self.at_end():
+            ch = self.peek()
+            if ch == '"':
+                quoted = True
+                self.advance()
+                while not self.at_end() and self.peek() != '"':
+                    delimiter_chars.append(self.advance())
+                if not self.at_end():
+                    self.advance()  # closing "
+            elif ch == "'":
+                quoted = True
+                self.advance()
+                while not self.at_end() and self.peek() != "'":
+                    delimiter_chars.append(self.advance())
+                if not self.at_end():
+                    self.advance()  # closing '
+            elif ch == "\\":
+                quoted = True
+                self.advance()  # skip backslash
+                # Read unquoted delimiter
+                while not self.at_end() and self.peek() not in " \t\n;|&<>()":
+                    delimiter_chars.append(self.advance())
+            else:
+                # Unquoted delimiter - but check for partial quoting
+                while not self.at_end() and self.peek() not in " \t\n;|&<>()":
+                    ch = self.peek()
+                    if ch == '"':
+                        quoted = True
+                        self.advance()
+                        while not self.at_end() and self.peek() != '"':
+                            delimiter_chars.append(self.advance())
+                        if not self.at_end():
+                            self.advance()
+                    elif ch == "'":
+                        quoted = True
+                        self.advance()
+                        while not self.at_end() and self.peek() != "'":
+                            delimiter_chars.append(self.advance())
+                        if not self.at_end():
+                            self.advance()
+                    elif ch == "\\":
+                        quoted = True
+                        self.advance()
+                        if not self.at_end():
+                            delimiter_chars.append(self.advance())
+                    else:
+                        delimiter_chars.append(self.advance())
+
+        delimiter = "".join(delimiter_chars)
+        if not delimiter:
+            raise ParseError("Expected delimiter for here document", pos=self.pos)
+
+        # Find the end of the current line (command continues until newline)
+        # We need to mark where the heredoc content starts
+        line_end = self.pos
+        while line_end < self.length and self.source[line_end] != "\n":
+            line_end += 1
+
+        # Find heredoc content starting position
+        # If there's already a pending heredoc, this one's content starts after that
+        if hasattr(self, "_pending_heredoc_end") and self._pending_heredoc_end > line_end:
+            content_start = self._pending_heredoc_end
+        elif line_end < self.length:
+            content_start = line_end + 1  # skip the newline
+        else:
+            content_start = self.length
+
+        # Find the delimiter line
+        content_lines = []
+        scan_pos = content_start
+
+        while scan_pos < self.length:
+            # Find end of current line
+            line_start = scan_pos
+            line_end = scan_pos
+            while line_end < self.length and self.source[line_end] != "\n":
+                line_end += 1
+
+            line = self.source[line_start:line_end]
+
+            # Check if this line is the delimiter
+            check_line = line
+            if strip_tabs:
+                check_line = line.lstrip("\t")
+
+            if check_line == delimiter:
+                # Found the end - update parser position past the heredoc
+                # We need to consume the heredoc content from the input
+                # But we can't do that here because we haven't finished parsing the command line
+                # Store the heredoc info and let the command parser handle it
+                break
+
+            # Add line to content
+            if strip_tabs:
+                content_lines.append(line.lstrip("\t"))
+            else:
+                content_lines.append(line)
+
+            # Move past the newline
+            scan_pos = line_end + 1 if line_end < self.length else self.length
+
+        # Join content with newlines
+        if content_lines:
+            content = "\n".join(content_lines) + "\n"
+        else:
+            content = ""
+
+        # Store the position where heredoc content ends so we can skip it later
+        # scan_pos is at the start of the delimiter line, need to move past it
+        heredoc_end = scan_pos
+        while heredoc_end < self.length and self.source[heredoc_end] != "\n":
+            heredoc_end += 1
+        if heredoc_end < self.length:
+            heredoc_end += 1  # past the newline
+
+        # Register this heredoc's end position
+        if not hasattr(self, "_pending_heredoc_end"):
+            self._pending_heredoc_end = heredoc_end
+        else:
+            self._pending_heredoc_end = max(self._pending_heredoc_end, heredoc_end)
+
+        return HereDoc(delimiter, content, strip_tabs, quoted, fd)
 
     def parse_command(self) -> Command | None:
         """Parse a simple command (sequence of words and redirections)."""
@@ -1519,6 +1661,10 @@ class Parser:
             while not self.at_end() and self.peek() == "\n":
                 has_newline = True
                 self.advance()
+                # Skip past any pending heredoc content after newline
+                if hasattr(self, "_pending_heredoc_end") and self._pending_heredoc_end > self.pos:
+                    self.pos = self._pending_heredoc_end
+                    del self._pending_heredoc_end
                 self.skip_whitespace()
 
             op = self.parse_list_operator()
@@ -1717,6 +1863,10 @@ class Parser:
             while not self.at_end() and self.peek() == "\n":
                 has_newline = True
                 self.advance()
+                # Skip past any pending heredoc content after newline
+                if hasattr(self, "_pending_heredoc_end") and self._pending_heredoc_end > self.pos:
+                    self.pos = self._pending_heredoc_end
+                    del self._pending_heredoc_end
                 self.skip_whitespace()
 
             op = self.parse_list_operator()
@@ -1764,9 +1914,13 @@ class Parser:
 
         self.skip_whitespace()
 
-        # Skip trailing newlines
+        # Skip trailing newlines and any pending heredoc content
         while not self.at_end() and self.peek() == "\n":
             self.advance()
+            # Skip past any pending heredoc content after newline
+            if hasattr(self, "_pending_heredoc_end") and self._pending_heredoc_end > self.pos:
+                self.pos = self._pending_heredoc_end
+                del self._pending_heredoc_end
 
         if not self.at_end():
             # There's more content - not yet supported

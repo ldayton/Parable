@@ -522,6 +522,21 @@ class ArithmeticCommand(Node):
 
 
 @dataclass
+class ArithDeprecated(Node):
+    """A deprecated arithmetic expansion $[expr]."""
+
+    expression: str
+
+    def __init__(self, expression: str):
+        self.kind = "arith-deprecated"
+        self.expression = expression
+
+    def to_sexp(self) -> str:
+        escaped = self.expression.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+        return f'(arith-deprecated "{escaped}")'
+
+
+@dataclass
 class AnsiCQuote(Node):
     """An ANSI-C quoted string $'...'."""
 

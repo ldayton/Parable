@@ -2,6 +2,7 @@
 
 from .ast import (
     AnsiCQuote,
+    ArithDeprecated,
     Array,
     ArithmeticCommand,
     ArithmeticExpansion,
@@ -185,6 +186,14 @@ class Parser:
                             chars.append(arith_text)
                         else:
                             chars.append(self.advance())
+                    # Handle deprecated arithmetic expansion $[expr]
+                    elif c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "[":
+                        arith_node, arith_text = self._parse_deprecated_arithmetic()
+                        if arith_node:
+                            parts.append(arith_node)
+                            chars.append(arith_text)
+                        else:
+                            chars.append(self.advance())
                     # Handle command substitution $(...)
                     elif c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
                         cmdsub_node, cmdsub_text = self._parse_command_substitution()
@@ -247,6 +256,15 @@ class Parser:
                 and self.source[self.pos + 2] == "("
             ):
                 arith_node, arith_text = self._parse_arithmetic_expansion()
+                if arith_node:
+                    parts.append(arith_node)
+                    chars.append(arith_text)
+                else:
+                    chars.append(self.advance())
+
+            # Deprecated arithmetic expansion $[expr]
+            elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "[":
+                arith_node, arith_text = self._parse_deprecated_arithmetic()
                 if arith_node:
                     parts.append(arith_node)
                     chars.append(arith_text)
@@ -748,6 +766,51 @@ class Parser:
 
         text = self.source[start:self.pos]
         return ArithmeticExpansion(content), text
+
+    def _parse_deprecated_arithmetic(self) -> tuple[Node | None, str]:
+        """Parse a deprecated $[expr] arithmetic expansion.
+
+        Returns (node, text) where node is ArithDeprecated and text is raw text.
+        """
+        if self.at_end() or self.peek() != "$":
+            return None, ""
+
+        start = self.pos
+
+        # Check for $[
+        if self.pos + 1 >= self.length or self.source[self.pos + 1] != "[":
+            return None, ""
+
+        self.advance()  # consume $
+        self.advance()  # consume [
+
+        # Find matching ] - need to track nested brackets
+        content_start = self.pos
+        depth = 1
+
+        while not self.at_end() and depth > 0:
+            c = self.peek()
+
+            if c == "[":
+                depth += 1
+                self.advance()
+            elif c == "]":
+                depth -= 1
+                if depth == 0:
+                    break
+                self.advance()
+            else:
+                self.advance()
+
+        if self.at_end() or depth != 0:
+            self.pos = start
+            return None, ""
+
+        content = self.source[content_start:self.pos]
+        self.advance()  # consume ]
+
+        text = self.source[start:self.pos]
+        return ArithDeprecated(content), text
 
     def _parse_ansi_c_quote(self) -> tuple[Node | None, str]:
         """Parse ANSI-C quoting $'...'.

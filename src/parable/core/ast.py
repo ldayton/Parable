@@ -521,6 +521,21 @@ class AnsiCQuote(Node):
 
 
 @dataclass
+class LocaleString(Node):
+    """A locale-translated string $"..."."""
+
+    content: str
+
+    def __init__(self, content: str):
+        self.kind = "locale"
+        self.content = content
+
+    def to_sexp(self) -> str:
+        escaped = self.content.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+        return f'(locale "{escaped}")'
+
+
+@dataclass
 class ProcessSubstitution(Node):
     """A process substitution <(...) or >(...)."""
 

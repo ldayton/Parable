@@ -19,6 +19,7 @@ from .ast import (
     HereDoc,
     If,
     List,
+    LocaleString,
     Negation,
     Node,
     Operator,
@@ -225,6 +226,16 @@ class Parser:
                 if ansi_node:
                     parts.append(ansi_node)
                     chars.append(ansi_text)
+                else:
+                    chars.append(self.advance())
+
+            # Locale translation $"..."
+            elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == '"':
+                locale_node, locale_text, inner_parts = self._parse_locale_string()
+                if locale_node:
+                    parts.append(locale_node)
+                    parts.extend(inner_parts)
+                    chars.append(locale_text)
                 else:
                     chars.append(self.advance())
 
@@ -774,6 +785,84 @@ class Parser:
         text = self.source[start:self.pos]
         content = "".join(content_chars)
         return AnsiCQuote(content), text
+
+    def _parse_locale_string(self) -> tuple[Node | None, str, list[Node]]:
+        """Parse locale translation $"...".
+
+        Returns (node, text, inner_parts) where:
+        - node is the LocaleString AST node
+        - text is the raw text including $"..."
+        - inner_parts is a list of expansion nodes found inside
+        Returns (None, "", []) if not a valid locale string.
+        """
+        if self.at_end() or self.peek() != "$":
+            return None, "", []
+        if self.pos + 1 >= self.length or self.source[self.pos + 1] != '"':
+            return None, "", []
+
+        start = self.pos
+        self.advance()  # consume $
+        self.advance()  # consume opening "
+
+        content_chars = []
+        inner_parts = []
+
+        while not self.at_end():
+            ch = self.peek()
+            if ch == '"':
+                self.advance()  # consume closing "
+                break
+            elif ch == "\\" and self.pos + 1 < self.length:
+                # Escape sequence
+                content_chars.append(self.advance())  # backslash
+                content_chars.append(self.advance())  # escaped char
+            # Handle arithmetic expansion $((...))
+            elif (
+                ch == "$"
+                and self.pos + 2 < self.length
+                and self.source[self.pos + 1] == "("
+                and self.source[self.pos + 2] == "("
+            ):
+                arith_node, arith_text = self._parse_arithmetic_expansion()
+                if arith_node:
+                    inner_parts.append(arith_node)
+                    content_chars.append(arith_text)
+                else:
+                    content_chars.append(self.advance())
+            # Handle command substitution $(...)
+            elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                cmdsub_node, cmdsub_text = self._parse_command_substitution()
+                if cmdsub_node:
+                    inner_parts.append(cmdsub_node)
+                    content_chars.append(cmdsub_text)
+                else:
+                    content_chars.append(self.advance())
+            # Handle parameter expansion
+            elif ch == "$":
+                param_node, param_text = self._parse_param_expansion()
+                if param_node:
+                    inner_parts.append(param_node)
+                    content_chars.append(param_text)
+                else:
+                    content_chars.append(self.advance())
+            # Handle backtick command substitution
+            elif ch == "`":
+                cmdsub_node, cmdsub_text = self._parse_backtick_substitution()
+                if cmdsub_node:
+                    inner_parts.append(cmdsub_node)
+                    content_chars.append(cmdsub_text)
+                else:
+                    content_chars.append(self.advance())
+            else:
+                content_chars.append(self.advance())
+        else:
+            # Unterminated - reset and return None
+            self.pos = start
+            return None, "", []
+
+        text = self.source[start:self.pos]
+        content = "".join(content_chars)
+        return LocaleString(content), text, inner_parts
 
     def _parse_param_expansion(self) -> tuple[Node | None, str]:
         """Parse a parameter expansion starting at $.

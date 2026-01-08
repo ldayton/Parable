@@ -343,12 +343,7 @@ echo b
 ---
 (command (word "echo") (word "$(\necho a\necho b\n)" (cmdsub (list (command (word "echo") (word "a")) (semi) (command (word "echo") (word "b"))))))
 
-# Arithmetic-looking constructs (parsed as cmdsub of subshell until arithmetic is implemented)
-# NOTE: $((expr)) is arithmetic expansion, parsed as cmdsub(subshell) for now
-=== arithmetic lookalike
-echo $((1+2))
----
-(command (word "echo") (word "$((1+2))" (cmdsub (subshell (command (word "1+2"))))))
+# NOTE: $((expr)) is now properly parsed as arithmetic expansion (see 13_arithmetic.tests)
 
 # Command substitution with special positional params
 === cmdsub with positional param

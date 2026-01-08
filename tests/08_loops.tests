@@ -452,7 +452,7 @@ if false; then echo no; elif true; then for x in a; do echo $x; done; fi
 (if (command (word "false")) (command (word "echo") (word "no")) (if (command (word "true")) (for "x" (words "a") (command (word "echo") (word "$x" (param "x"))))))
 
 === nested subshells with loops
-((while true; do echo inner; break; done))
+( (while true; do echo inner; break; done) )
 ---
 (subshell (subshell (while (command (word "true")) (list (command (word "echo") (word "inner")) (semi) (command (word "break"))))))
 

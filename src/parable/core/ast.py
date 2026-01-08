@@ -358,3 +358,33 @@ class CommandSubstitution(Node):
 
     def to_sexp(self) -> str:
         return f"(cmdsub {self.command.to_sexp()})"
+
+
+@dataclass
+class ArithmeticExpansion(Node):
+    """An arithmetic expansion $((...))."""
+
+    expression: str
+
+    def __init__(self, expression: str):
+        self.kind = "arith"
+        self.expression = expression
+
+    def to_sexp(self) -> str:
+        escaped = self.expression.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+        return f'(arith "{escaped}")'
+
+
+@dataclass
+class ArithmeticCommand(Node):
+    """An arithmetic command ((...))."""
+
+    expression: str
+
+    def __init__(self, expression: str):
+        self.kind = "arith-cmd"
+        self.expression = expression
+
+    def to_sexp(self) -> str:
+        escaped = self.expression.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+        return f'(arith-cmd "{escaped}")'

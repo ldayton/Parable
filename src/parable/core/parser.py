@@ -1,6 +1,8 @@
 """Recursive descent parser for bash."""
 
 from .ast import (
+    ArithmeticCommand,
+    ArithmeticExpansion,
     BraceGroup,
     Case,
     CasePattern,
@@ -156,6 +158,19 @@ class Parser:
                     if c == "\\" and self.pos + 1 < self.length:
                         chars.append(self.advance())  # backslash
                         chars.append(self.advance())  # escaped char
+                    # Handle arithmetic expansion $((...))
+                    elif (
+                        c == "$"
+                        and self.pos + 2 < self.length
+                        and self.source[self.pos + 1] == "("
+                        and self.source[self.pos + 2] == "("
+                    ):
+                        arith_node, arith_text = self._parse_arithmetic_expansion()
+                        if arith_node:
+                            parts.append(arith_node)
+                            chars.append(arith_text)
+                        else:
+                            chars.append(self.advance())
                     # Handle command substitution $(...)
                     elif c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
                         cmdsub_node, cmdsub_text = self._parse_command_substitution()
@@ -190,6 +205,20 @@ class Parser:
             elif ch == "\\" and self.pos + 1 < self.length:
                 chars.append(self.advance())  # backslash
                 chars.append(self.advance())  # escaped char
+
+            # Arithmetic expansion $((...))
+            elif (
+                ch == "$"
+                and self.pos + 2 < self.length
+                and self.source[self.pos + 1] == "("
+                and self.source[self.pos + 2] == "("
+            ):
+                arith_node, arith_text = self._parse_arithmetic_expansion()
+                if arith_node:
+                    parts.append(arith_node)
+                    chars.append(arith_text)
+                else:
+                    chars.append(self.advance())
 
             # Command substitution $(...)
             elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
@@ -494,6 +523,59 @@ class Parser:
             cmd = Empty()
 
         return CommandSubstitution(cmd), text
+
+    def _parse_arithmetic_expansion(self) -> tuple[Node | None, str]:
+        """Parse a $((...)) arithmetic expansion.
+
+        Returns (node, text) where node is ArithmeticExpansion and text is raw text.
+        """
+        if self.at_end() or self.peek() != "$":
+            return None, ""
+
+        start = self.pos
+
+        # Check for $((
+        if (
+            self.pos + 2 >= self.length
+            or self.source[self.pos + 1] != "("
+            or self.source[self.pos + 2] != "("
+        ):
+            return None, ""
+
+        self.advance()  # consume $
+        self.advance()  # consume first (
+        self.advance()  # consume second (
+
+        # Find matching )) - need to track nested parens
+        content_start = self.pos
+        depth = 1  # We're inside one level of (( already
+
+        while not self.at_end() and depth > 0:
+            c = self.peek()
+
+            if c == "(":
+                depth += 1
+                self.advance()
+            elif c == ")":
+                # Check for ))
+                if depth == 1 and self.pos + 1 < self.length and self.source[self.pos + 1] == ")":
+                    # Found the closing ))
+                    break
+                depth -= 1
+                self.advance()
+            else:
+                self.advance()
+
+        if self.at_end() or depth != 1:
+            self.pos = start
+            return None, ""
+
+        content = self.source[content_start:self.pos]
+        self.advance()  # consume first )
+        self.advance()  # consume second )
+
+        text = self.source[start:self.pos]
+        return ArithmeticExpansion(content), text
 
     def _parse_param_expansion(self) -> tuple[Node | None, str]:
         """Parse a parameter expansion starting at $.
@@ -876,6 +958,51 @@ class Parser:
         self.advance()  # consume )
 
         return Subshell(body)
+
+    def parse_arithmetic_command(self) -> ArithmeticCommand | None:
+        """Parse an arithmetic command (( expression ))."""
+        self.skip_whitespace()
+
+        # Check for ((
+        if (
+            self.at_end()
+            or self.peek() != "("
+            or self.pos + 1 >= self.length
+            or self.source[self.pos + 1] != "("
+        ):
+            return None
+
+        self.advance()  # consume first (
+        self.advance()  # consume second (
+
+        # Find matching )) - track nested parens
+        content_start = self.pos
+        depth = 1
+
+        while not self.at_end() and depth > 0:
+            c = self.peek()
+
+            if c == "(":
+                depth += 1
+                self.advance()
+            elif c == ")":
+                # Check for ))
+                if depth == 1 and self.pos + 1 < self.length and self.source[self.pos + 1] == ")":
+                    # Found the closing ))
+                    break
+                depth -= 1
+                self.advance()
+            else:
+                self.advance()
+
+        if self.at_end() or depth != 1:
+            raise ParseError("Expected )) to close arithmetic command", pos=self.pos)
+
+        content = self.source[content_start:self.pos]
+        self.advance()  # consume first )
+        self.advance()  # consume second )
+
+        return ArithmeticCommand(content)
 
     def parse_brace_group(self) -> BraceGroup | None:
         """Parse a brace group { list }."""
@@ -1465,6 +1592,10 @@ class Parser:
             return None
 
         ch = self.peek()
+
+        # Arithmetic command ((...)) - check before subshell
+        if ch == "(" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+            return self.parse_arithmetic_command()
 
         # Subshell
         if ch == "(":

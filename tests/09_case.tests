@@ -554,11 +554,10 @@ case $(echo foo) in foo) echo match;; esac
 ---
 (case (word "$(echo foo)" (cmdsub (command (word "echo") (word "foo")))) (pattern "foo" (command (word "echo") (word "match"))))
 
-# NOTE: $((1+1)) arithmetic is parsed as cmdsub(subshell) until arithmetic is implemented
 === case word is arithmetic
 case $((1+1)) in 2) echo match;; esac
 ---
-(case (word "$((1+1))" (cmdsub (subshell (command (word "1+1"))))) (pattern "2" (command (word "echo") (word "match"))))
+(case (word "$((1+1))" (arith "1+1")) (pattern "2" (command (word "echo") (word "match"))))
 
 # Combining patterns and bodies
 === alternation with different globs

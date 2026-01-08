@@ -1123,9 +1123,28 @@ class Parser:
 
         start = self.pos
         fd = None
+        varfd = None  # Variable fd like {fd}
 
-        # Check for optional fd number before redirect
-        if self.peek() and self.peek().isdigit():
+        # Check for variable fd {varname} before redirect
+        if self.peek() == "{":
+            saved = self.pos
+            self.advance()  # consume {
+            varname_chars = []
+            while not self.at_end() and self.peek() not in "}<>":
+                ch = self.peek()
+                if ch.isalnum() or ch == "_":
+                    varname_chars.append(self.advance())
+                else:
+                    break
+            if not self.at_end() and self.peek() == "}" and varname_chars:
+                self.advance()  # consume }
+                varfd = "".join(varname_chars)
+            else:
+                # Not a valid variable fd, restore
+                self.pos = saved
+
+        # Check for optional fd number before redirect (if no varfd)
+        if varfd is None and self.peek() and self.peek().isdigit():
             fd = int(self.peek())
             self.advance()
 
@@ -1163,18 +1182,22 @@ class Parser:
                     strip_tabs = True
                 else:
                     op = "<<"
+            # Handle <> (read-write)
+            elif op == "<" and next_ch == ">":
+                self.advance()
+                op = "<>"
             # Handle >| (noclobber override)
             elif op == ">" and next_ch == "|":
                 self.advance()
                 op = ">|"
             # Only consume >& or <& as operators if NOT followed by a digit
             # (>&2 should be > with target &2, not >& with target 2)
-            elif fd is None and op == ">" and next_ch == "&":
+            elif fd is None and varfd is None and op == ">" and next_ch == "&":
                 # Peek ahead to see if there's a digit after &
                 if self.pos + 1 >= self.length or not self.source[self.pos + 1].isdigit():
                     self.advance()
                     op = ">&"
-            elif fd is None and op == "<" and next_ch == "&":
+            elif fd is None and varfd is None and op == "<" and next_ch == "&":
                 if self.pos + 1 >= self.length or not self.source[self.pos + 1].isdigit():
                     self.advance()
                     op = "<&"
@@ -1183,24 +1206,29 @@ class Parser:
         if op == "<<":
             return self._parse_heredoc(fd, strip_tabs)
 
-        # Combine fd with operator if present
-        if fd is not None:
+        # Combine fd or varfd with operator if present
+        if varfd is not None:
+            op = f"{{{varfd}}}{op}"
+        elif fd is not None:
             op = f"{fd}{op}"
 
         self.skip_whitespace()
 
-        # Handle fd duplication targets like &1, &2
+        # Handle fd duplication targets like &1, &2, &-, &$var
         if not self.at_end() and self.peek() == "&":
-            start_target = self.pos
             self.advance()  # consume &
-            # Parse the fd number
-            if not self.at_end() and self.peek().isdigit():
+            # Parse the fd number or - for close
+            if not self.at_end() and (self.peek().isdigit() or self.peek() == "-"):
                 fd_target = self.advance()
                 target = Word(f"&{fd_target}")
             else:
-                # Not a valid fd dup, restore
-                self.pos = start_target
-                target = self.parse_word()
+                # Could be &$var or &word - parse word and prepend &
+                inner_word = self.parse_word()
+                if inner_word is not None:
+                    target = Word(f"&{inner_word.value}")
+                    target.parts = inner_word.parts
+                else:
+                    raise ParseError(f"Expected target for redirect {op}", pos=self.pos)
         else:
             target = self.parse_word()
 
@@ -1615,7 +1643,16 @@ class Parser:
         if not self.consume_word("fi"):
             raise ParseError("Expected 'fi' to close if statement", pos=self.pos)
 
-        return If(condition, then_body, else_body)
+        # Parse optional trailing redirections
+        redirects = []
+        while True:
+            self.skip_whitespace()
+            redirect = self.parse_redirect()
+            if redirect is None:
+                break
+            redirects.append(redirect)
+
+        return If(condition, then_body, else_body, redirects if redirects else None)
 
     def _parse_elif_chain(self) -> If:
         """Parse elif chain (after seeing 'elif' keyword)."""
@@ -1676,7 +1713,16 @@ class Parser:
         if not self.consume_word("done"):
             raise ParseError("Expected 'done' to close while loop", pos=self.pos)
 
-        return While(condition, body)
+        # Parse optional trailing redirections
+        redirects = []
+        while True:
+            self.skip_whitespace()
+            redirect = self.parse_redirect()
+            if redirect is None:
+                break
+            redirects.append(redirect)
+
+        return While(condition, body, redirects if redirects else None)
 
     def parse_until(self) -> Until | None:
         """Parse an until loop: until list; do list; done."""
@@ -1707,7 +1753,16 @@ class Parser:
         if not self.consume_word("done"):
             raise ParseError("Expected 'done' to close until loop", pos=self.pos)
 
-        return Until(condition, body)
+        # Parse optional trailing redirections
+        redirects = []
+        while True:
+            self.skip_whitespace()
+            redirect = self.parse_redirect()
+            if redirect is None:
+                break
+            redirects.append(redirect)
+
+        return Until(condition, body, redirects if redirects else None)
 
     def parse_for(self) -> For | ForArith | None:
         """Parse a for loop: for name [in words]; do list; done or C-style for ((;;))."""
@@ -1781,7 +1836,16 @@ class Parser:
         if not self.consume_word("done"):
             raise ParseError("Expected 'done' to close for loop", pos=self.pos)
 
-        return For(var_name, words, body)
+        # Parse optional trailing redirections
+        redirects = []
+        while True:
+            self.skip_whitespace()
+            redirect = self.parse_redirect()
+            if redirect is None:
+                break
+            redirects.append(redirect)
+
+        return For(var_name, words, body, redirects if redirects else None)
 
     def _parse_for_arith(self) -> ForArith:
         """Parse C-style for loop: for ((init; cond; incr)); do list; done."""

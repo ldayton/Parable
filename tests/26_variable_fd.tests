@@ -1,0 +1,199 @@
+# Iteration 26: Variable fd redirections ({varname}>file)
+
+# === Basic variable fd output ===
+
+=== variable fd output redirect
+exec {fd}>file.txt
+---
+(command (word "exec") (redirect "{fd}>" (word "file.txt")))
+
+=== variable fd append
+exec {fd}>>file.txt
+---
+(command (word "exec") (redirect "{fd}>>" (word "file.txt")))
+
+=== variable fd input
+exec {fd}<file.txt
+---
+(command (word "exec") (redirect "{fd}<" (word "file.txt")))
+
+=== variable fd read-write
+exec {fd}<>file.txt
+---
+(command (word "exec") (redirect "{fd}<>" (word "file.txt")))
+
+# === Variable fd with dup ===
+
+=== variable fd dup output
+exec {fd}>&1
+---
+(command (word "exec") (redirect "{fd}>" (word "&1")))
+
+=== variable fd dup input
+exec {fd}<&0
+---
+(command (word "exec") (redirect "{fd}<" (word "&0")))
+
+=== variable fd close
+exec {fd}>&-
+---
+(command (word "exec") (redirect "{fd}>" (word "&-")))
+
+# === Different variable names ===
+
+=== single letter varname
+exec {f}>file
+---
+(command (word "exec") (redirect "{f}>" (word "file")))
+
+=== uppercase varname
+exec {FD}>file
+---
+(command (word "exec") (redirect "{FD}>" (word "file")))
+
+=== underscore varname
+exec {my_fd}>file
+---
+(command (word "exec") (redirect "{my_fd}>" (word "file")))
+
+=== mixed case varname
+exec {myFd}>file
+---
+(command (word "exec") (redirect "{myFd}>" (word "file")))
+
+# === Spacing variations ===
+
+=== no space before target
+exec {fd}>file
+---
+(command (word "exec") (redirect "{fd}>" (word "file")))
+
+=== space before target
+exec {fd}> file
+---
+(command (word "exec") (redirect "{fd}>" (word "file")))
+
+# === In context ===
+
+=== variable fd in function
+f() { exec {fd}>log; }
+---
+(function "f" (brace-group (list (command (word "exec") (redirect "{fd}>" (word "log"))) (semi))))
+
+=== variable fd in subshell
+(exec {fd}>file)
+---
+(subshell (command (word "exec") (redirect "{fd}>" (word "file"))))
+
+=== multiple variable fds
+exec {in}<input {out}>output
+---
+(command (word "exec") (redirect "{in}<" (word "input")) (redirect "{out}>" (word "output")))
+
+=== variable fd with regular redirect
+exec {fd}>out 2>&1
+---
+(command (word "exec") (redirect "{fd}>" (word "out")) (redirect "2>" (word "&1")))
+
+=== variable fd with quoted target
+exec {fd}>"file name"
+---
+(command (word "exec") (redirect "{fd}>" (word "\"file name\"")))
+
+# === Brutal edge cases ===
+
+=== variable fd noclobber
+exec {fd}>|file
+---
+(command (word "exec") (redirect "{fd}>|" (word "file")))
+
+=== variable fd here string
+cat {fd}<<<text
+---
+(command (word "cat") (redirect "{fd}<<<" (word "text")))
+
+=== variable fd close input
+exec {fd}<&-
+---
+(command (word "exec") (redirect "{fd}<" (word "&-")))
+
+=== long variable name
+exec {very_long_variable_name_for_fd}>file
+---
+(command (word "exec") (redirect "{very_long_variable_name_for_fd}>" (word "file")))
+
+=== variable fd with numbers in name
+exec {fd3}>file
+---
+(command (word "exec") (redirect "{fd3}>" (word "file")))
+
+=== variable fd underscore prefix
+exec {_fd}>file
+---
+(command (word "exec") (redirect "{_fd}>" (word "file")))
+
+=== variable fd in while loop
+while read line; do echo "$line"; done {fd}<file
+---
+(while (command (word "read") (word "line")) (command (word "echo") (word "\"$line\"" (param "line"))) (redirect "{fd}<" (word "file")))
+
+=== variable fd in for loop
+for i in 1 2 3; do echo $i; done {fd}>out
+---
+(for "i" (words "1" "2" "3") (command (word "echo") (word "$i" (param "i"))) (redirect "{fd}>" (word "out")))
+
+=== variable fd in if statement
+if true; then echo yes; fi {fd}>log
+---
+(if (command (word "true")) (command (word "echo") (word "yes")) (redirect "{fd}>" (word "log")))
+
+=== variable fd in pipeline
+cmd1 {fd}>out | cmd2
+---
+(pipeline (command (word "cmd1") (redirect "{fd}>" (word "out"))) (command (word "cmd2")))
+
+=== variable fd with variable expansion target
+exec {fd}>$logfile
+---
+(command (word "exec") (redirect "{fd}>" (word "$logfile" (param "logfile"))))
+
+=== variable fd with command substitution target
+exec {fd}>$(mktemp)
+---
+(command (word "exec") (redirect "{fd}>" (word "$(mktemp)" (cmdsub (command (word "mktemp"))))))
+
+=== variable fd in background
+exec {fd}>file &
+---
+(list (command (word "exec") (redirect "{fd}>" (word "file"))) (bg))
+
+=== variable fd in list
+exec {fd1}>out && exec {fd2}>err
+---
+(list (command (word "exec") (redirect "{fd1}>" (word "out"))) (and) (command (word "exec") (redirect "{fd2}>" (word "err"))))
+
+=== variable fd with process substitution
+diff {fd1}< <(cmd1) {fd2}< <(cmd2)
+---
+(command (word "diff") (redirect "{fd1}<" (word "<(cmd1)" (procsub "<" (command (word "cmd1"))))) (redirect "{fd2}<" (word "<(cmd2)" (procsub "<" (command (word "cmd2"))))))
+
+=== variable fd in case
+case $x in a) exec {fd}>log;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (command (word "exec") (redirect "{fd}>" (word "log")))))
+
+=== variable fd with brace expansion after
+cmd {fd}>file{1,2}
+---
+(command (word "cmd") (redirect "{fd}>" (word "file{1,2}")))
+
+=== multiple variable fds same line different types
+exec {r}<in {w}>out {rw}<>both
+---
+(command (word "exec") (redirect "{r}<" (word "in")) (redirect "{w}>" (word "out")) (redirect "{rw}<>" (word "both")))
+
+=== variable fd dup to another varfd
+exec {fd2}>&$fd1
+---
+(command (word "exec") (redirect "{fd2}>" (word "&$fd1" (param "fd1"))))
+

@@ -219,17 +219,21 @@ class If(Node):
     condition: Node
     then_body: Node
     else_body: Node | None = None
+    redirects: list[Node] = field(default_factory=list)
 
-    def __init__(self, condition: Node, then_body: Node, else_body: Node = None):
+    def __init__(self, condition: Node, then_body: Node, else_body: Node = None, redirects: list[Node] = None):
         self.kind = "if"
         self.condition = condition
         self.then_body = then_body
         self.else_body = else_body
+        self.redirects = redirects or []
 
     def to_sexp(self) -> str:
         result = f"(if {self.condition.to_sexp()} {self.then_body.to_sexp()}"
         if self.else_body:
             result += f" {self.else_body.to_sexp()}"
+        for r in self.redirects:
+            result += f" {r.to_sexp()}"
         return result + ")"
 
 
@@ -239,14 +243,18 @@ class While(Node):
 
     condition: Node
     body: Node
+    redirects: list[Node] = field(default_factory=list)
 
-    def __init__(self, condition: Node, body: Node):
+    def __init__(self, condition: Node, body: Node, redirects: list[Node] = None):
         self.kind = "while"
         self.condition = condition
         self.body = body
+        self.redirects = redirects or []
 
     def to_sexp(self) -> str:
-        return f"(while {self.condition.to_sexp()} {self.body.to_sexp()})"
+        parts = [self.condition.to_sexp(), self.body.to_sexp()]
+        parts.extend(r.to_sexp() for r in self.redirects)
+        return f"(while {' '.join(parts)})"
 
 
 @dataclass
@@ -255,14 +263,18 @@ class Until(Node):
 
     condition: Node
     body: Node
+    redirects: list[Node] = field(default_factory=list)
 
-    def __init__(self, condition: Node, body: Node):
+    def __init__(self, condition: Node, body: Node, redirects: list[Node] = None):
         self.kind = "until"
         self.condition = condition
         self.body = body
+        self.redirects = redirects or []
 
     def to_sexp(self) -> str:
-        return f"(until {self.condition.to_sexp()} {self.body.to_sexp()})"
+        parts = [self.condition.to_sexp(), self.body.to_sexp()]
+        parts.extend(r.to_sexp() for r in self.redirects)
+        return f"(until {' '.join(parts)})"
 
 
 @dataclass
@@ -272,22 +284,26 @@ class For(Node):
     var: str
     words: list[Word] | None
     body: Node
+    redirects: list[Node] = field(default_factory=list)
 
-    def __init__(self, var: str, words: list[Word] | None, body: Node):
+    def __init__(self, var: str, words: list[Word] | None, body: Node, redirects: list[Node] = None):
         self.kind = "for"
         self.var = var
         self.words = words
         self.body = body
+        self.redirects = redirects or []
 
     def to_sexp(self) -> str:
-        if self.words:
-            # Escape quotes in word values
-            def escape(s: str) -> str:
-                return s.replace("\\", "\\\\").replace('"', '\\"')
+        def escape(s: str) -> str:
+            return s.replace("\\", "\\\\").replace('"', '\\"')
 
+        redirect_strs = " ".join(r.to_sexp() for r in self.redirects)
+        suffix = f" {redirect_strs}" if redirect_strs else ""
+
+        if self.words:
             word_strs = " ".join(f'"{escape(w.value)}"' for w in self.words)
-            return f'(for "{self.var}" (words {word_strs}) {self.body.to_sexp()})'
-        return f'(for "{self.var}" {self.body.to_sexp()})'
+            return f'(for "{self.var}" (words {word_strs}) {self.body.to_sexp()}{suffix})'
+        return f'(for "{self.var}" {self.body.to_sexp()}{suffix})'
 
 
 @dataclass

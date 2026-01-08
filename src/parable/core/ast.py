@@ -291,3 +291,56 @@ class Function(Node):
 
     def to_sexp(self) -> str:
         return f'(function "{self.name}" {self.body.to_sexp()})'
+
+
+@dataclass
+class ParamExpansion(Node):
+    """A parameter expansion ${var} or ${var:-default}."""
+
+    param: str
+    op: str | None = None
+    arg: str | None = None
+
+    def __init__(self, param: str, op: str = None, arg: str = None):
+        self.kind = "param"
+        self.param = param
+        self.op = op
+        self.arg = arg
+
+    def to_sexp(self) -> str:
+        escaped_param = self.param.replace("\\", "\\\\").replace('"', '\\"')
+        if self.op is not None:
+            escaped_op = self.op.replace("\\", "\\\\").replace('"', '\\"')
+            escaped_arg = (self.arg or "").replace("\\", "\\\\").replace('"', '\\"')
+            return f'(param "{escaped_param}" "{escaped_op}" "{escaped_arg}")'
+        return f'(param "{escaped_param}")'
+
+
+@dataclass
+class ParamLength(Node):
+    """A parameter length expansion ${#var}."""
+
+    param: str
+
+    def __init__(self, param: str):
+        self.kind = "param-len"
+        self.param = param
+
+    def to_sexp(self) -> str:
+        escaped = self.param.replace("\\", "\\\\").replace('"', '\\"')
+        return f'(param-len "{escaped}")'
+
+
+@dataclass
+class ParamIndirect(Node):
+    """An indirect parameter expansion ${!var}."""
+
+    param: str
+
+    def __init__(self, param: str):
+        self.kind = "param-indirect"
+        self.param = param
+
+    def to_sexp(self) -> str:
+        escaped = self.param.replace("\\", "\\\\").replace('"', '\\"')
+        return f'(param-indirect "{escaped}")'

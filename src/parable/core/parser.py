@@ -12,6 +12,9 @@ from .ast import (
     List,
     Node,
     Operator,
+    ParamExpansion,
+    ParamIndirect,
+    ParamLength,
     Pipeline,
     Redirect,
     Subshell,
@@ -119,7 +122,7 @@ class Parser:
         return True
 
     def parse_word(self) -> Word | None:
-        """Parse a word token."""
+        """Parse a word token, detecting parameter expansions."""
         self.skip_whitespace()
 
         if self.at_end():
@@ -127,11 +130,12 @@ class Parser:
 
         start = self.pos
         chars = []
+        parts = []
 
         while not self.at_end():
             ch = self.peek()
 
-            # Single-quoted string
+            # Single-quoted string - no expansion
             if ch == "'":
                 self.advance()  # consume opening quote
                 chars.append("'")
@@ -141,7 +145,7 @@ class Parser:
                     raise ParseError("Unterminated single quote", pos=start)
                 chars.append(self.advance())  # consume closing quote
 
-            # Double-quoted string
+            # Double-quoted string - expansions happen inside
             elif ch == '"':
                 self.advance()  # consume opening quote
                 chars.append('"')
@@ -151,10 +155,8 @@ class Parser:
                     if c == "\\" and self.pos + 1 < self.length:
                         chars.append(self.advance())  # backslash
                         chars.append(self.advance())  # escaped char
-                    # Handle nested command substitution in double quotes
-                    elif (
-                        c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "("
-                    ):
+                    # Handle command substitution $(...)
+                    elif c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
                         chars.append(self.advance())  # $
                         chars.append(self.advance())  # (
                         depth = 1
@@ -165,11 +167,24 @@ class Parser:
                             elif nc == ")":
                                 depth -= 1
                             chars.append(self.advance())
+                    # Handle parameter expansion inside double quotes
+                    elif c == "$":
+                        param_node, param_text = self._parse_param_expansion()
+                        if param_node:
+                            parts.append(param_node)
+                            chars.append(param_text)
+                        else:
+                            chars.append(self.advance())  # just $
                     else:
                         chars.append(self.advance())
                 if self.at_end():
                     raise ParseError("Unterminated double quote", pos=start)
                 chars.append(self.advance())  # consume closing quote
+
+            # Escape outside quotes
+            elif ch == "\\" and self.pos + 1 < self.length:
+                chars.append(self.advance())  # backslash
+                chars.append(self.advance())  # escaped char
 
             # Command substitution $(...) - parse as unit
             elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
@@ -184,6 +199,15 @@ class Parser:
                         depth -= 1
                     chars.append(self.advance())
 
+            # Parameter expansion $var or ${...}
+            elif ch == "$":
+                param_node, param_text = self._parse_param_expansion()
+                if param_node:
+                    parts.append(param_node)
+                    chars.append(param_text)
+                else:
+                    chars.append(self.advance())  # just $
+
             # Metacharacter ends the word
             elif ch in METACHAR:
                 break
@@ -195,7 +219,258 @@ class Parser:
         if not chars:
             return None
 
-        return Word("".join(chars))
+        return Word("".join(chars), parts if parts else None)
+
+    def _parse_param_expansion(self) -> tuple[Node | None, str]:
+        """Parse a parameter expansion starting at $.
+
+        Returns (node, text) where node is the AST node and text is the raw text.
+        Returns (None, "") if not a valid parameter expansion.
+        """
+        if self.at_end() or self.peek() != "$":
+            return None, ""
+
+        start = self.pos
+        self.advance()  # consume $
+
+        if self.at_end():
+            self.pos = start
+            return None, ""
+
+        ch = self.peek()
+
+        # Braced expansion ${...}
+        if ch == "{":
+            self.advance()  # consume {
+            return self._parse_braced_param(start)
+
+        # Simple expansion $var or $special
+        # Special parameters: ?$!#@*-0-9
+        if ch in "?$!#@*-0123456789":
+            self.advance()
+            text = self.source[start:self.pos]
+            return ParamExpansion(ch), text
+
+        # Variable name [a-zA-Z_][a-zA-Z0-9_]*
+        if ch.isalpha() or ch == "_":
+            name_start = self.pos
+            while not self.at_end():
+                c = self.peek()
+                if c.isalnum() or c == "_":
+                    self.advance()
+                else:
+                    break
+            name = self.source[name_start:self.pos]
+            text = self.source[start:self.pos]
+            return ParamExpansion(name), text
+
+        # Not a valid expansion, restore position
+        self.pos = start
+        return None, ""
+
+    def _parse_braced_param(self, start: int) -> tuple[Node | None, str]:
+        """Parse contents of ${...} after the opening brace.
+
+        start is the position of the $.
+        Returns (node, text).
+        """
+        if self.at_end():
+            self.pos = start
+            return None, ""
+
+        ch = self.peek()
+
+        # ${#param} - length
+        if ch == "#":
+            self.advance()
+            param = self._consume_param_name()
+            if param and not self.at_end() and self.peek() == "}":
+                self.advance()
+                text = self.source[start:self.pos]
+                return ParamLength(param), text
+            self.pos = start
+            return None, ""
+
+        # ${!param} - indirect
+        if ch == "!":
+            self.advance()
+            param = self._consume_param_name()
+            if param and not self.at_end() and self.peek() == "}":
+                self.advance()
+                text = self.source[start:self.pos]
+                return ParamIndirect(param), text
+            self.pos = start
+            return None, ""
+
+        # ${param} or ${param<op><arg>}
+        param = self._consume_param_name()
+        if not param:
+            self.pos = start
+            return None, ""
+
+        if self.at_end():
+            self.pos = start
+            return None, ""
+
+        # Check for closing brace (simple expansion)
+        if self.peek() == "}":
+            self.advance()
+            text = self.source[start:self.pos]
+            return ParamExpansion(param), text
+
+        # Parse operator
+        op = self._consume_param_operator()
+        if op is None:
+            self.pos = start
+            return None, ""
+
+        # Parse argument (everything until closing brace)
+        # Only ${...} increases depth, not plain {
+        arg_chars = []
+        depth = 1
+        while not self.at_end() and depth > 0:
+            c = self.peek()
+            if c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
+                # Nested ${...} - increase depth
+                depth += 1
+                arg_chars.append(self.advance())  # $
+                arg_chars.append(self.advance())  # {
+            elif c == "}":
+                depth -= 1
+                if depth > 0:
+                    arg_chars.append(self.advance())
+            elif c == "\\":
+                arg_chars.append(self.advance())
+                if not self.at_end():
+                    arg_chars.append(self.advance())
+            else:
+                arg_chars.append(self.advance())
+
+        if depth != 0:
+            self.pos = start
+            return None, ""
+
+        self.advance()  # consume final }
+        arg = "".join(arg_chars)
+        text = self.source[start:self.pos]
+        return ParamExpansion(param, op, arg), text
+
+    def _consume_param_name(self) -> str | None:
+        """Consume a parameter name (variable name, special char, or array subscript)."""
+        if self.at_end():
+            return None
+
+        ch = self.peek()
+
+        # Special parameters
+        if ch in "?$!#@*-":
+            self.advance()
+            return ch
+
+        # Digits (positional params)
+        if ch.isdigit():
+            name_chars = []
+            while not self.at_end() and self.peek().isdigit():
+                name_chars.append(self.advance())
+            return "".join(name_chars)
+
+        # Variable name
+        if ch.isalpha() or ch == "_":
+            name_chars = []
+            while not self.at_end():
+                c = self.peek()
+                if c.isalnum() or c == "_":
+                    name_chars.append(self.advance())
+                elif c == "[":
+                    # Array subscript
+                    name_chars.append(self.advance())
+                    while not self.at_end() and self.peek() != "]":
+                        name_chars.append(self.advance())
+                    if not self.at_end() and self.peek() == "]":
+                        name_chars.append(self.advance())
+                    break
+                else:
+                    break
+            return "".join(name_chars) if name_chars else None
+
+        return None
+
+    def _consume_param_operator(self) -> str | None:
+        """Consume a parameter expansion operator."""
+        if self.at_end():
+            return None
+
+        ch = self.peek()
+
+        # Operators with optional colon prefix: :- := :? :+
+        if ch == ":":
+            self.advance()
+            if self.at_end():
+                return ":"
+            next_ch = self.peek()
+            if next_ch in "-=?+":
+                self.advance()
+                return ":" + next_ch
+            # Just : (substring)
+            return ":"
+
+        # Operators without colon: - = ? +
+        if ch in "-=?+":
+            self.advance()
+            return ch
+
+        # Pattern removal: # ## % %%
+        if ch == "#":
+            self.advance()
+            if not self.at_end() and self.peek() == "#":
+                self.advance()
+                return "##"
+            return "#"
+
+        if ch == "%":
+            self.advance()
+            if not self.at_end() and self.peek() == "%":
+                self.advance()
+                return "%%"
+            return "%"
+
+        # Substitution: / // /# /%
+        if ch == "/":
+            self.advance()
+            if not self.at_end():
+                next_ch = self.peek()
+                if next_ch == "/":
+                    self.advance()
+                    return "//"
+                elif next_ch == "#":
+                    self.advance()
+                    return "/#"
+                elif next_ch == "%":
+                    self.advance()
+                    return "/%"
+            return "/"
+
+        # Case modification: ^ ^^ , ,,
+        if ch == "^":
+            self.advance()
+            if not self.at_end() and self.peek() == "^":
+                self.advance()
+                return "^^"
+            return "^"
+
+        if ch == ",":
+            self.advance()
+            if not self.at_end() and self.peek() == ",":
+                self.advance()
+                return ",,"
+            return ","
+
+        # Transformation: @
+        if ch == "@":
+            self.advance()
+            return "@"
+
+        return None
 
     def parse_redirect(self) -> Redirect | None:
         """Parse a redirection operator and target."""

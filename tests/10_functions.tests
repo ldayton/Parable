@@ -264,12 +264,12 @@ f() { echo f; }; echo end
 === function with for loop
 f() { for i in a b c; do echo $i; done; }
 ---
-(function "f" (brace-group (list (for "i" (words "a" "b" "c") (command (word "echo") (word "$i"))) (semi))))
+(function "f" (brace-group (list (for "i" (words "a" "b" "c") (command (word "echo") (word "$i" (param "i")))) (semi))))
 
 === function with case
 f() { case $1 in a) echo a;; esac; }
 ---
-(function "f" (brace-group (list (case (word "$1") (pattern "a" (command (word "echo") (word "a")))) (semi))))
+(function "f" (brace-group (list (case (word "$1" (param "1")) (pattern "a" (command (word "echo") (word "a")))) (semi))))
 
 === function with while
 f() { while true; do echo loop; break; done; }

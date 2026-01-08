@@ -55,7 +55,7 @@ if true; then echo yes; else echo no; fi
 === if else with test
 if [ "$x" = "y" ]; then echo match; else echo nomatch; fi
 ---
-(if (command (word "[") (word "\"$x\"") (word "=") (word "\"y\"") (word "]")) (command (word "echo") (word "match")) (command (word "echo") (word "nomatch")))
+(if (command (word "[") (word "\"$x\"" (param "x")) (word "=") (word "\"y\"") (word "]")) (command (word "echo") (word "match")) (command (word "echo") (word "nomatch")))
 
 === if else with complex bodies
 if test -d dir; then cd dir; ls; else mkdir dir; fi
@@ -266,12 +266,12 @@ if [[ -f file ]]; then cat file; fi
 === double bracket with pattern
 if [[ "$x" == *.txt ]]; then echo text; fi
 ---
-(if (command (word "[[") (word "\"$x\"") (word "==") (word "*.txt") (word "]]")) (command (word "echo") (word "text")))
+(if (command (word "[[") (word "\"$x\"" (param "x")) (word "==") (word "*.txt") (word "]]")) (command (word "echo") (word "text")))
 
 === double bracket regex
 if [[ "$x" =~ ^[0-9]+$ ]]; then echo number; fi
 ---
-(if (command (word "[[") (word "\"$x\"") (word "=~") (word "^[0-9]+$") (word "]]")) (command (word "echo") (word "number")))
+(if (command (word "[[") (word "\"$x\"" (param "x")) (word "=~") (word "^[0-9]+$") (word "]]")) (command (word "echo") (word "number")))
 
 === test with string comparison
 if [ "$(uname)" = "Darwin" ]; then echo mac; fi
@@ -281,7 +281,7 @@ if [ "$(uname)" = "Darwin" ]; then echo mac; fi
 === test with numeric comparison
 if [ "$x" -gt 10 ]; then echo big; fi
 ---
-(if (command (word "[") (word "\"$x\"") (word "-gt") (word "10") (word "]")) (command (word "echo") (word "big")))
+(if (command (word "[") (word "\"$x\"" (param "x")) (word "-gt") (word "10") (word "]")) (command (word "echo") (word "big")))
 
 === test with multiple conditions
 if [ -f file ] && [ -r file ]; then cat file; fi
@@ -425,7 +425,7 @@ if command -v git > /dev/null; then echo found; fi
 === file readable and not empty
 if [ -r "$file" ] && [ -s "$file" ]; then cat "$file"; fi
 ---
-(if (list (command (word "[") (word "-r") (word "\"$file\"") (word "]")) (and) (command (word "[") (word "-s") (word "\"$file\"") (word "]"))) (command (word "cat") (word "\"$file\"")))
+(if (list (command (word "[") (word "-r") (word "\"$file\"" (param "file")) (word "]")) (and) (command (word "[") (word "-s") (word "\"$file\"" (param "file")) (word "]"))) (command (word "cat") (word "\"$file\"" (param "file"))))
 
 === complex elif with pipelines
 if cat a | grep x; then echo ax; elif cat b | grep x; then echo bx; elif cat c | grep x; then echo cx; else echo none; fi

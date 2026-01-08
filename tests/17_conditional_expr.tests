@@ -1,0 +1,217 @@
+# Iteration 17: Conditional Expressions [[ ]]
+
+# === Basic conditional expressions ===
+
+=== simple file test
+[[ -f file ]]
+---
+(cond-expr "-f file")
+
+=== directory test
+[[ -d /tmp ]]
+---
+(cond-expr "-d /tmp")
+
+=== string equality
+[[ "$x" == "yes" ]]
+---
+(cond-expr "\"$x\" == \"yes\"")
+
+=== string inequality
+[[ "$x" != "no" ]]
+---
+(cond-expr "\"$x\" != \"no\"")
+
+=== string pattern match
+[[ "$file" == *.txt ]]
+---
+(cond-expr "\"$file\" == *.txt")
+
+=== regex match
+[[ "$x" =~ ^[0-9]+$ ]]
+---
+(cond-expr "\"$x\" =~ ^[0-9]+$")
+
+=== empty string test
+[[ -z "$var" ]]
+---
+(cond-expr "-z \"$var\"")
+
+=== non-empty string test
+[[ -n "$var" ]]
+---
+(cond-expr "-n \"$var\"")
+
+# === Compound conditions with internal operators ===
+
+=== internal and operator
+[[ -f file && -r file ]]
+---
+(cond-expr "-f file && -r file")
+
+=== internal or operator
+[[ -f file || -d file ]]
+---
+(cond-expr "-f file || -d file")
+
+=== internal negation
+[[ ! -f file ]]
+---
+(cond-expr "! -f file")
+
+=== complex condition
+[[ -f file && ! -d file ]]
+---
+(cond-expr "-f file && ! -d file")
+
+=== multiple operators
+[[ -f a && -f b || -f c ]]
+---
+(cond-expr "-f a && -f b || -f c")
+
+=== parenthesized groups
+[[ ( -f a || -f b ) && -r a ]]
+---
+(cond-expr "( -f a || -f b ) && -r a")
+
+# === Conditional in control flow ===
+
+=== if with conditional
+if [[ -f file ]]; then echo exists; fi
+---
+(if (cond-expr "-f file") (command (word "echo") (word "exists")))
+
+=== while with conditional
+while [[ -f lockfile ]]; do sleep 1; done
+---
+(while (cond-expr "-f lockfile") (command (word "sleep") (word "1")))
+
+=== conditional in list
+[[ -f file ]] && echo exists
+---
+(list (cond-expr "-f file") (and) (command (word "echo") (word "exists")))
+
+=== conditional with or list
+[[ -f file ]] || touch file
+---
+(list (cond-expr "-f file") (or) (command (word "touch") (word "file")))
+
+# === Negation of conditional ===
+
+=== negated conditional
+! [[ -f file ]]
+---
+(negation (cond-expr "-f file"))
+
+=== time conditional
+time [[ -f file ]]
+---
+(time (cond-expr "-f file"))
+
+# === Edge cases ===
+
+=== conditional with spaces
+[[   -f   file   ]]
+---
+(cond-expr "-f   file")
+
+=== empty conditional
+[[ ]]
+---
+(cond-expr "")
+
+=== conditional with variables
+[[ $a == $b ]]
+---
+(cond-expr "$a == $b")
+
+=== conditional with command substitution
+[[ $(whoami) == root ]]
+---
+(cond-expr "$(whoami) == root")
+
+=== conditional with arithmetic
+[[ $((1+1)) -eq 2 ]]
+---
+(cond-expr "$((1+1)) -eq 2")
+
+=== string comparison operators
+[[ "abc" < "def" ]]
+---
+(cond-expr "\"abc\" < \"def\"")
+
+=== greater than comparison
+[[ "def" > "abc" ]]
+---
+(cond-expr "\"def\" > \"abc\"")
+
+# === Additional edge cases from research ===
+
+=== numeric comparison
+[[ $x -eq 10 ]]
+---
+(cond-expr "$x -eq 10")
+
+=== arithmetic in comparison
+[[ $((a+b)) -gt 100 ]]
+---
+(cond-expr "$((a+b)) -gt 100")
+
+=== regex with special chars
+[[ "$path" =~ ^/home/[^/]+/\.config$ ]]
+---
+(cond-expr "\"$path\" =~ ^/home/[^/]+/\\.config$")
+
+=== negated condition with parens
+[[ ! ( -f a && -f b ) ]]
+---
+(cond-expr "! ( -f a && -f b )")
+
+=== multiple nested parens
+[[ ( ( -f a ) ) ]]
+---
+(cond-expr "( ( -f a ) )")
+
+=== string with embedded brackets
+[[ "$x" == "[test]" ]]
+---
+(cond-expr "\"$x\" == \"[test]\"")
+
+=== conditional with newline in quoted string
+[[ "$x" == "line1
+line2" ]]
+---
+(cond-expr "\"$x\" == \"line1\nline2\"")
+
+=== unquoted variable comparison
+[[ $var1 == $var2 ]]
+---
+(cond-expr "$var1 == $var2")
+
+=== wildcard at start
+[[ "$file" == *.log ]]
+---
+(cond-expr "\"$file\" == *.log")
+
+=== wildcard at end
+[[ "$file" == log.* ]]
+---
+(cond-expr "\"$file\" == log.*")
+
+=== case insensitive pattern
+[[ "${str,,}" == hello ]]
+---
+(cond-expr "\"${str,,}\" == hello")
+
+=== conditional in pipeline
+[[ -f file ]] | cat
+---
+(pipeline (cond-expr "-f file") (command (word "cat")))
+
+=== conditional with semicolon after
+[[ -f file ]]; echo done
+---
+(list (cond-expr "-f file") (semi) (command (word "echo") (word "done")))
+
+
+

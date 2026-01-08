@@ -8,6 +8,7 @@ from .ast import (
     CasePattern,
     Command,
     CommandSubstitution,
+    ConditionalExpr,
     Empty,
     For,
     Function,
@@ -1243,6 +1244,83 @@ class Parser:
 
         return ArithmeticCommand(content)
 
+    def parse_conditional_expr(self) -> ConditionalExpr | None:
+        """Parse a conditional expression [[ expression ]]."""
+        self.skip_whitespace()
+
+        # Check for [[
+        if (
+            self.at_end()
+            or self.peek() != "["
+            or self.pos + 1 >= self.length
+            or self.source[self.pos + 1] != "["
+        ):
+            return None
+
+        self.advance()  # consume first [
+        self.advance()  # consume second [
+
+        # Skip whitespace after [[
+        while not self.at_end() and self.peek() in " \t":
+            self.advance()
+
+        # Find matching ]] - track nested [[ ]] and handle quotes
+        content_start = self.pos
+        depth = 1
+
+        while not self.at_end() and depth > 0:
+            c = self.peek()
+
+            # Single-quoted string
+            if c == "'":
+                self.advance()
+                while not self.at_end() and self.peek() != "'":
+                    self.advance()
+                if not self.at_end():
+                    self.advance()
+                continue
+
+            # Double-quoted string
+            if c == '"':
+                self.advance()
+                while not self.at_end() and self.peek() != '"':
+                    if self.peek() == "\\" and self.pos + 1 < self.length:
+                        self.advance()
+                    self.advance()
+                if not self.at_end():
+                    self.advance()
+                continue
+
+            # Nested [[
+            if c == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == "[":
+                depth += 1
+                self.advance()
+                self.advance()
+                continue
+
+            # Check for ]]
+            if c == "]" and self.pos + 1 < self.length and self.source[self.pos + 1] == "]":
+                depth -= 1
+                if depth == 0:
+                    break
+                self.advance()
+                self.advance()
+                continue
+
+            self.advance()
+
+        if self.at_end() or depth != 0:
+            raise ParseError("Expected ]] to close conditional expression", pos=self.pos)
+
+        # Trim trailing whitespace from content
+        content_end = self.pos
+        content = self.source[content_start:content_end].rstrip()
+
+        self.advance()  # consume first ]
+        self.advance()  # consume second ]
+
+        return ConditionalExpr(content)
+
     def parse_brace_group(self) -> BraceGroup | None:
         """Parse a brace group { list }."""
         self.skip_whitespace()
@@ -1850,6 +1928,10 @@ class Parser:
             if result is not None:
                 return result
             # Fall through to simple command if not a brace group
+
+        # Conditional expression [[ ]] - check before reserved words
+        if ch == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == "[":
+            return self.parse_conditional_expr()
 
         # Check for reserved words
         word = self.peek_word()

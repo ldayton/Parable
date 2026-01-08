@@ -261,17 +261,17 @@ if ! test -f file; then echo missing; fi
 === if with double bracket
 if [[ -f file ]]; then cat file; fi
 ---
-(if (command (word "[[") (word "-f") (word "file") (word "]]")) (command (word "cat") (word "file")))
+(if (cond-expr "-f file") (command (word "cat") (word "file")))
 
 === double bracket with pattern
 if [[ "$x" == *.txt ]]; then echo text; fi
 ---
-(if (command (word "[[") (word "\"$x\"" (param "x")) (word "==") (word "*.txt") (word "]]")) (command (word "echo") (word "text")))
+(if (cond-expr "\"$x\" == *.txt") (command (word "echo") (word "text")))
 
 === double bracket regex
 if [[ "$x" =~ ^[0-9]+$ ]]; then echo number; fi
 ---
-(if (command (word "[[") (word "\"$x\"" (param "x")) (word "=~") (word "^[0-9]+$") (word "]]")) (command (word "echo") (word "number")))
+(if (cond-expr "\"$x\" =~ ^[0-9]+$") (command (word "echo") (word "number")))
 
 === test with string comparison
 if [ "$(uname)" = "Darwin" ]; then echo mac; fi
@@ -288,19 +288,15 @@ if [ -f file ] && [ -r file ]; then cat file; fi
 ---
 (if (list (command (word "[") (word "-f") (word "file") (word "]")) (and) (command (word "[") (word "-r") (word "file") (word "]"))) (command (word "cat") (word "file")))
 
-# NOTE: [[ ]] with && and || inside requires special parsing for [[
-# The && and || are currently parsed as list operators
-# These tests document current behavior - proper [[ ]] support is future work
-
 === double bracket with and
 if [[ -f file ]] && [[ -r file ]]; then cat file; fi
 ---
-(if (list (command (word "[[") (word "-f") (word "file") (word "]]")) (and) (command (word "[[") (word "-r") (word "file") (word "]]"))) (command (word "cat") (word "file")))
+(if (list (cond-expr "-f file") (and) (cond-expr "-r file")) (command (word "cat") (word "file")))
 
 === double bracket with or
 if [[ -f a ]] || [[ -f b ]]; then echo found; fi
 ---
-(if (list (command (word "[[") (word "-f") (word "a") (word "]]")) (or) (command (word "[[") (word "-f") (word "b") (word "]]"))) (command (word "echo") (word "found")))
+(if (list (cond-expr "-f a") (or) (cond-expr "-f b")) (command (word "echo") (word "found")))
 
 # NOTE: (( )) arithmetic expressions require special parsing
 # Currently parsed as nested subshells - proper (( )) support is future work

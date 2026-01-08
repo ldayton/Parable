@@ -474,3 +474,18 @@ class Time(Node):
         if self.posix:
             return f'(time {self.pipeline.to_sexp()} "-p")'
         return f"(time {self.pipeline.to_sexp()})"
+
+
+@dataclass
+class ConditionalExpr(Node):
+    """A conditional expression [[ expression ]]."""
+
+    expression: str
+
+    def __init__(self, expression: str):
+        self.kind = "cond-expr"
+        self.expression = expression
+
+    def to_sexp(self) -> str:
+        escaped = self.expression.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+        return f'(cond-expr "{escaped}")'

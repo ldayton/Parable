@@ -587,11 +587,10 @@ for f in *.txt; do test -f "$f" && cat "$f"; done
 ---
 (for "f" (words "*.txt") (list (command (word "test") (word "-f") (word "\"$f\"" (param "f"))) (and) (command (word "cat") (word "\"$f\"" (param "f")))))
 
-# Note: [[ ]] not yet supported - internal && and ! parsed as shell operators (will fix in [[ ]] iteration)
 === complex condition with double bracket
 while [[ -f file && ! -f done ]]; do sleep 1; done
 ---
-(while (list (command (word "[[") (word "-f") (word "file")) (and) (negation (command (word "-f") (word "done") (word "]]")))) (command (word "sleep") (word "1")))
+(while (cond-expr "-f file && ! -f done") (command (word "sleep") (word "1")))
 
 === for over command output
 for user in $(cut -d: -f1 /etc/passwd); do echo $user; done

@@ -1,6 +1,7 @@
 """Recursive descent parser for bash."""
 
 from .ast import (
+    Array,
     ArithmeticCommand,
     ArithmeticExpansion,
     BraceGroup,
@@ -260,6 +261,16 @@ class Parser:
                     chars.append(procsub_text)
                 else:
                     # Not a process substitution, treat as metacharacter
+                    break
+
+            # Array literal: name=(elements) or name+=(elements)
+            elif ch == "(" and chars and (chars[-1] == "=" or (len(chars) >= 2 and chars[-2:] == ["+", "="])):
+                array_node, array_text = self._parse_array_literal()
+                if array_node:
+                    parts.append(array_node)
+                    chars.append(array_text)
+                else:
+                    # Unexpected: ( without matching )
                     break
 
             # Metacharacter ends the word
@@ -615,6 +626,48 @@ class Parser:
             cmd = Empty()
 
         return ProcessSubstitution(direction, cmd), text
+
+    def _parse_array_literal(self) -> tuple[Node | None, str]:
+        """Parse an array literal (word1 word2 ...).
+
+        Returns (node, text) where node is Array and text is raw text.
+        Called when positioned at the opening '(' after '=' or '+='.
+        """
+        if self.at_end() or self.peek() != "(":
+            return None, ""
+
+        start = self.pos
+        self.advance()  # consume (
+
+        elements = []
+
+        while True:
+            # Skip whitespace and newlines between elements
+            while not self.at_end() and self.peek() in " \t\n":
+                self.advance()
+
+            if self.at_end():
+                raise ParseError("Unterminated array literal", pos=start)
+
+            if self.peek() == ")":
+                break
+
+            # Parse an element word
+            word = self.parse_word()
+            if word is None:
+                # Might be a closing paren or error
+                if self.peek() == ")":
+                    break
+                raise ParseError("Expected word in array literal", pos=self.pos)
+
+            elements.append(word)
+
+        if self.at_end() or self.peek() != ")":
+            raise ParseError("Expected ) to close array literal", pos=self.pos)
+        self.advance()  # consume )
+
+        text = self.source[start:self.pos]
+        return Array(elements), text
 
     def _parse_arithmetic_expansion(self) -> tuple[Node | None, str]:
         """Parse a $((...)) arithmetic expansion.
@@ -1777,6 +1830,10 @@ class Parser:
         # We need to peek ahead to see if there's a () after the word
         name = self.peek_word()
         if name is None or name in RESERVED_WORDS:
+            return None
+
+        # Assignment words (containing =) are not function definitions
+        if "=" in name:
             return None
 
         # Save position after the name

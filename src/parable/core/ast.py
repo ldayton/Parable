@@ -489,3 +489,20 @@ class ConditionalExpr(Node):
     def to_sexp(self) -> str:
         escaped = self.expression.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
         return f'(cond-expr "{escaped}")'
+
+
+@dataclass
+class Array(Node):
+    """An array literal (word1 word2 ...)."""
+
+    elements: list[Word]
+
+    def __init__(self, elements: list[Word]):
+        self.kind = "array"
+        self.elements = elements
+
+    def to_sexp(self) -> str:
+        if not self.elements:
+            return "(array)"
+        inner = " ".join(e.to_sexp() for e in self.elements)
+        return f"(array {inner})"

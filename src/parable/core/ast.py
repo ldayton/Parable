@@ -280,6 +280,36 @@ class For(Node):
 
 
 @dataclass
+class Select(Node):
+    """A select statement."""
+
+    var: str
+    words: list[Word] | None
+    body: Node
+    redirects: list[Node] = field(default_factory=list)
+
+    def __init__(self, var: str, words: list[Word] | None, body: Node, redirects: list[Node] = None):
+        self.kind = "select"
+        self.var = var
+        self.words = words
+        self.body = body
+        self.redirects = redirects or []
+
+    def to_sexp(self) -> str:
+        def escape(s: str) -> str:
+            return s.replace("\\", "\\\\").replace('"', '\\"')
+
+        parts = []
+        if self.words is not None:
+            word_strs = " ".join(f'"{escape(w.value)}"' for w in self.words)
+            parts.append(f'(words {word_strs})' if self.words else '(words)')
+        parts.append(self.body.to_sexp())
+        parts.extend(r.to_sexp() for r in self.redirects)
+        inner = " ".join(parts)
+        return f'(select "{self.var}" {inner})'
+
+
+@dataclass
 class Case(Node):
     """A case statement."""
 

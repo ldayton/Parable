@@ -26,6 +26,7 @@ from .ast import (
     Pipeline,
     ProcessSubstitution,
     Redirect,
+    Select,
     Subshell,
     Time,
     Until,
@@ -44,6 +45,7 @@ RESERVED_WORDS = {
     "while",
     "until",
     "for",
+    "select",
     "do",
     "done",
     "case",
@@ -1639,6 +1641,88 @@ class Parser:
 
         return For(var_name, words, body)
 
+    def parse_select(self) -> Select | None:
+        """Parse a select statement: select name [in words]; do list; done."""
+        self.skip_whitespace()
+
+        if self.peek_word() != "select":
+            return None
+
+        self.consume_word("select")
+        self.skip_whitespace()
+
+        # Parse variable name
+        var_name = self.peek_word()
+        if var_name is None:
+            raise ParseError("Expected variable name after 'select'", pos=self.pos)
+        self.consume_word(var_name)
+
+        self.skip_whitespace()
+
+        # Handle optional semicolon before 'in', 'do', or '{'
+        if self.peek() == ";":
+            self.advance()
+        self.skip_whitespace_and_newlines()
+
+        # Check for optional 'in' clause
+        words = None
+        if self.peek_word() == "in":
+            self.consume_word("in")
+            self.skip_whitespace_and_newlines()  # Allow newlines after 'in'
+
+            # Parse words until semicolon, newline, 'do', or '{'
+            words = []
+            while True:
+                self.skip_whitespace()
+                # Check for end of word list
+                if self.at_end():
+                    break
+                if self.peek() in ";\n{":
+                    if self.peek() == ";":
+                        self.advance()  # consume semicolon
+                    break
+                if self.peek_word() == "do":
+                    break
+
+                word = self.parse_word()
+                if word is None:
+                    break
+                words.append(word)
+
+            # Empty word list is allowed for select (unlike for)
+
+        # Skip whitespace before body
+        self.skip_whitespace_and_newlines()
+
+        # Parse body - either do/done or brace group
+        if self.peek() == "{":
+            body = self.parse_brace_group()
+            if body is None:
+                raise ParseError("Expected brace group body in select", pos=self.pos)
+        elif self.consume_word("do"):
+            # Parse body (ends at 'done')
+            body = self.parse_list_until({"done"})
+            if body is None:
+                raise ParseError("Expected commands after 'do'", pos=self.pos)
+
+            # Expect 'done'
+            self.skip_whitespace_and_newlines()
+            if not self.consume_word("done"):
+                raise ParseError("Expected 'done' to close select", pos=self.pos)
+        else:
+            raise ParseError("Expected 'do' or '{' in select", pos=self.pos)
+
+        # Parse optional trailing redirections
+        redirects = []
+        while True:
+            self.skip_whitespace()
+            redirect = self.parse_redirect()
+            if redirect is None:
+                break
+            redirects.append(redirect)
+
+        return Select(var_name, words, body, redirects if redirects else None)
+
     def parse_case(self) -> Case | None:
         """Parse a case statement: case word in pattern) commands;; ... esac."""
         self.skip_whitespace()
@@ -2124,6 +2208,10 @@ class Parser:
         # For loop
         if word == "for":
             return self.parse_for()
+
+        # Select statement
+        if word == "select":
+            return self.parse_select()
 
         # Case statement
         if word == "case":

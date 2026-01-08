@@ -7,6 +7,7 @@ from .ast import (
     Command,
     Empty,
     For,
+    Function,
     If,
     List,
     Node,
@@ -35,6 +36,7 @@ RESERVED_WORDS = {
     "case",
     "esac",
     "in",
+    "function",
 }
 
 # Metacharacters that break words (unquoted)
@@ -337,6 +339,7 @@ class Parser:
             return None
 
         self.advance()  # consume {
+        self.skip_whitespace_and_newlines()
 
         body = self.parse_list()
         if body is None:
@@ -730,6 +733,96 @@ class Parser:
 
         return Case(word, patterns)
 
+    def parse_function(self) -> Function | None:
+        """Parse a function definition.
+
+        Forms:
+            name() compound_command           # POSIX form
+            function name compound_command    # bash form without parens
+            function name() compound_command  # bash form with parens
+        """
+        self.skip_whitespace()
+        if self.at_end():
+            return None
+
+        saved_pos = self.pos
+
+        # Check for 'function' keyword form
+        if self.peek_word() == "function":
+            self.consume_word("function")
+            self.skip_whitespace()
+
+            # Get function name
+            name = self.peek_word()
+            if name is None:
+                self.pos = saved_pos
+                return None
+            self.consume_word(name)
+            self.skip_whitespace()
+
+            # Optional () after name - but only if it's actually ()
+            # and not the start of a subshell body
+            if not self.at_end() and self.peek() == "(":
+                # Check if this is () or start of subshell
+                if self.pos + 1 < self.length and self.source[self.pos + 1] == ")":
+                    self.advance()  # consume (
+                    self.advance()  # consume )
+                # else: the ( is start of subshell body, don't consume
+
+            self.skip_whitespace_and_newlines()
+
+            # Parse body (must be a compound command: brace group or subshell)
+            body = self.parse_brace_group()
+            if body is None:
+                body = self.parse_subshell()
+            if body is None:
+                raise ParseError("Expected function body", pos=self.pos)
+
+            return Function(name, body)
+
+        # Check for POSIX form: name()
+        # We need to peek ahead to see if there's a () after the word
+        name = self.peek_word()
+        if name is None or name in RESERVED_WORDS:
+            return None
+
+        # Save position after the name
+        self.skip_whitespace()
+        name_start = self.pos
+
+        # Consume the name
+        while not self.at_end() and self.peek() not in METACHAR and self.peek() not in "\"'()":
+            self.advance()
+
+        name = self.source[name_start:self.pos]
+        if not name:
+            self.pos = saved_pos
+            return None
+
+        # Check for () - whitespace IS allowed between name and (
+        self.skip_whitespace()
+        if self.at_end() or self.peek() != "(":
+            self.pos = saved_pos
+            return None
+
+        self.advance()  # consume (
+        self.skip_whitespace()
+        if self.at_end() or self.peek() != ")":
+            self.pos = saved_pos
+            return None
+        self.advance()  # consume )
+
+        self.skip_whitespace_and_newlines()
+
+        # Parse body (must be a compound command: brace group or subshell)
+        body = self.parse_brace_group()
+        if body is None:
+            body = self.parse_subshell()
+        if body is None:
+            raise ParseError("Expected function body", pos=self.pos)
+
+        return Function(name, body)
+
     def parse_list_until(self, stop_words: set[str]) -> Node | None:
         """Parse a list that stops before certain reserved words."""
         # Check if we're already at a stop word
@@ -858,6 +951,15 @@ class Parser:
         if word == "case":
             return self.parse_case()
 
+        # Function definition (function keyword form)
+        if word == "function":
+            return self.parse_function()
+
+        # Try POSIX function definition (name() form) before simple command
+        func = self.parse_function()
+        if func is not None:
+            return func
+
         # Simple command
         return self.parse_command()
 
@@ -928,7 +1030,21 @@ class Parser:
         parts = [pipeline]
 
         while True:
+            # Check for newline as implicit command separator
+            self.skip_whitespace()
+            has_newline = False
+            while not self.at_end() and self.peek() == "\n":
+                has_newline = True
+                self.advance()
+                self.skip_whitespace()
+
             op = self.parse_list_operator()
+
+            # Newline acts as implicit semicolon if followed by more commands
+            if op is None and has_newline:
+                if not self.at_end() and self.peek() not in ")}":
+                    op = ";"  # Treat newline as semicolon
+
             if op is None:
                 break
 

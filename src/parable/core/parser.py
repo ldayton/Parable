@@ -1806,6 +1806,36 @@ class Parser:
 
         return Select(var_name, words, body, redirects if redirects else None)
 
+    def _is_case_terminator(self) -> bool:
+        """Check if we're at a case pattern terminator (;;, ;&, or ;;&)."""
+        if self.at_end() or self.peek() != ";":
+            return False
+        if self.pos + 1 >= self.length:
+            return False
+        next_ch = self.source[self.pos + 1]
+        # ;; or ;& or ;;& (which is actually ;;&)
+        return next_ch in ";&"
+
+    def _consume_case_terminator(self) -> str:
+        """Consume and return case pattern terminator (;;, ;&, or ;;&)."""
+        if self.at_end() or self.peek() != ";":
+            return ";;"  # default
+        self.advance()  # consume first ;
+        if self.at_end():
+            return ";;"
+        ch = self.peek()
+        if ch == ";":
+            self.advance()  # consume second ;
+            # Check for ;;&
+            if not self.at_end() and self.peek() == "&":
+                self.advance()  # consume &
+                return ";;&"
+            return ";;"
+        elif ch == "&":
+            self.advance()  # consume &
+            return ";&"
+        return ";;"
+
     def parse_case(self) -> Case | None:
         """Parse a case statement: case word in pattern) commands;; ... esac."""
         self.skip_whitespace()
@@ -1904,42 +1934,30 @@ class Parser:
             if not pattern:
                 raise ParseError("Expected pattern in case statement", pos=self.pos)
 
-            # Parse commands until ;; or esac
+            # Parse commands until ;;, ;&, ;;&, or esac
             # Commands are optional (can have empty body)
             self.skip_whitespace()
 
             body = None
-            # Check for empty body: ;; right after pattern
-            is_empty_body = (
-                not self.at_end()
-                and self.peek() == ";"
-                and self.pos + 1 < self.length
-                and self.source[self.pos + 1] == ";"
-            )
+            # Check for empty body: terminator right after pattern
+            is_empty_body = self._is_case_terminator()
 
             if not is_empty_body:
-                # Skip newlines and check if there's content before ;; or esac
+                # Skip newlines and check if there's content before terminator or esac
                 self.skip_whitespace_and_newlines()
                 if not self.at_end() and self.peek_word() != "esac":
-                    # Check again for ;; after whitespace/newlines
-                    is_at_terminator = (
-                        self.peek() == ";"
-                        and self.pos + 1 < self.length
-                        and self.source[self.pos + 1] == ";"
-                    )
+                    # Check again for terminator after whitespace/newlines
+                    is_at_terminator = self._is_case_terminator()
                     if not is_at_terminator:
                         body = self.parse_list_until({"esac"})
                         self.skip_whitespace()
 
-            # Handle ;; terminator
-            if not self.at_end() and self.peek() == ";":
-                self.advance()
-                if not self.at_end() and self.peek() == ";":
-                    self.advance()  # consume second ;
+            # Handle terminator: ;;, ;&, or ;;&
+            terminator = self._consume_case_terminator()
 
             self.skip_whitespace_and_newlines()
 
-            patterns.append(CasePattern(pattern, body))
+            patterns.append(CasePattern(pattern, body, terminator))
 
         # Expect 'esac'
         self.skip_whitespace_and_newlines()
@@ -2207,11 +2225,11 @@ class Parser:
             # For ; - check if it's a terminator before a stop word (don't include it)
             if op == ";":
                 self.skip_whitespace_and_newlines()
-                # Also check for ;; (case terminator)
+                # Also check for ;;, ;&, or ;;& (case terminators)
                 at_case_terminator = (
                     self.peek() == ";"
                     and self.pos + 1 < self.length
-                    and self.source[self.pos + 1] == ";"
+                    and self.source[self.pos + 1] in ";&"
                 )
                 if (
                     self.at_end()
@@ -2227,13 +2245,13 @@ class Parser:
 
             # Check for stop words before parsing next pipeline
             self.skip_whitespace_and_newlines()
-            # Also check for ;; (case terminator)
+            # Also check for ;;, ;&, or ;;& (case terminators)
             if self.peek_word() in stop_words:
                 break
             if (
                 self.peek() == ";"
                 and self.pos + 1 < self.length
-                and self.source[self.pos + 1] == ";"
+                and self.source[self.pos + 1] in ";&"
             ):
                 break
 
@@ -2445,8 +2463,8 @@ class Parser:
             return None  # single | is pipe, not list operator
 
         if ch == ";":
-            # Don't treat ;; as a single semicolon (it's a case terminator)
-            if self.pos + 1 < self.length and self.source[self.pos + 1] == ";":
+            # Don't treat ;;, ;&, or ;;& as a single semicolon (they're case terminators)
+            if self.pos + 1 < self.length and self.source[self.pos + 1] in ";&":
                 return None
             self.advance()
             return ";"

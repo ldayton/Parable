@@ -1,0 +1,177 @@
+# Iteration 23: Case fallthrough (;& and ;;&)
+
+# === Basic fallthrough ;& ===
+
+=== simple fallthrough
+case $x in a) echo a;& b) echo b;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (command (word "echo") (word "a")) (fallthrough)) (pattern "b" (command (word "echo") (word "b"))))
+
+=== fallthrough to default
+case $x in a) echo a;& *) echo default;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (command (word "echo") (word "a")) (fallthrough)) (pattern "*" (command (word "echo") (word "default"))))
+
+=== multiple fallthrough
+case $x in a) echo a;& b) echo b;& c) echo c;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (command (word "echo") (word "a")) (fallthrough)) (pattern "b" (command (word "echo") (word "b")) (fallthrough)) (pattern "c" (command (word "echo") (word "c"))))
+
+=== fallthrough with empty body
+case $x in a) ;& b) echo b;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (fallthrough)) (pattern "b" (command (word "echo") (word "b"))))
+
+# === Continue pattern testing ;;& ===
+
+=== simple continue test
+case $x in a) echo a;;& b) echo b;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (command (word "echo") (word "a")) (falltest)) (pattern "b" (command (word "echo") (word "b"))))
+
+=== multiple continue test
+case $x in a) echo a;;& b) echo b;;& c) echo c;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (command (word "echo") (word "a")) (falltest)) (pattern "b" (command (word "echo") (word "b")) (falltest)) (pattern "c" (command (word "echo") (word "c"))))
+
+=== continue test with empty body
+case $x in a) ;;& b) echo b;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (falltest)) (pattern "b" (command (word "echo") (word "b"))))
+
+# === Mixed terminators ===
+
+=== fallthrough then normal
+case $x in a) echo a;& b) echo b;; c) echo c;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (command (word "echo") (word "a")) (fallthrough)) (pattern "b" (command (word "echo") (word "b"))) (pattern "c" (command (word "echo") (word "c"))))
+
+=== continue test then normal
+case $x in a) echo a;;& b) echo b;; c) echo c;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (command (word "echo") (word "a")) (falltest)) (pattern "b" (command (word "echo") (word "b"))) (pattern "c" (command (word "echo") (word "c"))))
+
+=== fallthrough then continue test
+case $x in a) echo a;& b) echo b;;& c) echo c;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (command (word "echo") (word "a")) (fallthrough)) (pattern "b" (command (word "echo") (word "b")) (falltest)) (pattern "c" (command (word "echo") (word "c"))))
+
+=== continue test then fallthrough
+case $x in a) echo a;;& b) echo b;& c) echo c;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (command (word "echo") (word "a")) (falltest)) (pattern "b" (command (word "echo") (word "b")) (fallthrough)) (pattern "c" (command (word "echo") (word "c"))))
+
+=== all three terminators mixed
+case $x in a) echo a;; b) echo b;& c) echo c;;& d) echo d;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (command (word "echo") (word "a"))) (pattern "b" (command (word "echo") (word "b")) (fallthrough)) (pattern "c" (command (word "echo") (word "c")) (falltest)) (pattern "d" (command (word "echo") (word "d"))))
+
+# === With complex bodies ===
+
+=== fallthrough with pipeline
+case $x in a) echo a | cat;& b) echo b;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (pipeline (command (word "echo") (word "a")) (command (word "cat"))) (fallthrough)) (pattern "b" (command (word "echo") (word "b"))))
+
+=== fallthrough with list
+case $x in a) echo a && echo b;& c) echo c;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (list (command (word "echo") (word "a")) (and) (command (word "echo") (word "b"))) (fallthrough)) (pattern "c" (command (word "echo") (word "c"))))
+
+=== fallthrough with multiple commands
+case $x in a) echo a; echo b;& c) echo c;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (list (command (word "echo") (word "a")) (semi) (command (word "echo") (word "b"))) (fallthrough)) (pattern "c" (command (word "echo") (word "c"))))
+
+# === With or patterns ===
+
+=== fallthrough with or pattern
+case $x in a|b) echo ab;& c) echo c;; esac
+---
+(case (word "$x" (param "x")) (pattern "a|b" (command (word "echo") (word "ab")) (fallthrough)) (pattern "c" (command (word "echo") (word "c"))))
+
+=== continue test with or pattern
+case $x in a|b) echo ab;;& c|d) echo cd;; esac
+---
+(case (word "$x" (param "x")) (pattern "a|b" (command (word "echo") (word "ab")) (falltest)) (pattern "c|d" (command (word "echo") (word "cd"))))
+
+# === Brutal edge cases ===
+
+=== fallthrough no space
+case $x in a) echo a;&b) echo b;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (command (word "echo") (word "a")) (fallthrough)) (pattern "b" (command (word "echo") (word "b"))))
+
+=== continue test no space
+case $x in a) echo a;;&b) echo b;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (command (word "echo") (word "a")) (falltest)) (pattern "b" (command (word "echo") (word "b"))))
+
+=== fallthrough with newline
+case $x in
+a) echo a
+;&
+b) echo b
+;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (command (word "echo") (word "a")) (fallthrough)) (pattern "b" (command (word "echo") (word "b"))))
+
+=== continue test with newline
+case $x in
+a) echo a
+;;&
+b) echo b
+;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (command (word "echo") (word "a")) (falltest)) (pattern "b" (command (word "echo") (word "b"))))
+
+=== nested case with fallthrough in outer
+case $x in a) case $y in 1) echo 1;; esac;& b) echo b;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (case (word "$y" (param "y")) (pattern "1" (command (word "echo") (word "1")))) (fallthrough)) (pattern "b" (command (word "echo") (word "b"))))
+
+=== nested case with fallthrough in inner
+case $x in a) case $y in 1) echo 1;& 2) echo 2;; esac;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (case (word "$y" (param "y")) (pattern "1" (command (word "echo") (word "1")) (fallthrough)) (pattern "2" (command (word "echo") (word "2"))))))
+
+=== glob patterns with fallthrough
+case $x in *.txt) echo txt;& *.md) echo md;; esac
+---
+(case (word "$x" (param "x")) (pattern "*.txt" (command (word "echo") (word "txt")) (fallthrough)) (pattern "*.md" (command (word "echo") (word "md"))))
+
+=== fallthrough in function
+f() { case $1 in a) echo a;& b) echo b;; esac; }
+---
+(function "f" (brace-group (list (case (word "$1" (param "1")) (pattern "a" (command (word "echo") (word "a")) (fallthrough)) (pattern "b" (command (word "echo") (word "b")))) (semi))))
+
+=== fallthrough with command substitution
+x=$(case $y in a) echo a;& b) echo b;; esac)
+---
+(command (word "x=$(case $y in a) echo a;& b) echo b;; esac)" (cmdsub (case (word "$y" (param "y")) (pattern "a" (command (word "echo") (word "a")) (fallthrough)) (pattern "b" (command (word "echo") (word "b")))))))
+
+=== fallthrough with subshell body
+case $x in a) (echo a);& b) echo b;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (subshell (command (word "echo") (word "a"))) (fallthrough)) (pattern "b" (command (word "echo") (word "b"))))
+
+=== fallthrough with brace group body
+case $x in a) { echo a; };& b) echo b;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (brace-group (list (command (word "echo") (word "a")) (semi))) (fallthrough)) (pattern "b" (command (word "echo") (word "b"))))
+
+=== multiple pattern match test
+case $x in *a*) echo has-a;;& *b*) echo has-b;;& *c*) echo has-c;; esac
+---
+(case (word "$x" (param "x")) (pattern "*a*" (command (word "echo") (word "has-a")) (falltest)) (pattern "*b*" (command (word "echo") (word "has-b")) (falltest)) (pattern "*c*" (command (word "echo") (word "has-c"))))
+
+=== fallthrough chain to falltest
+case $x in a) echo a;& b) echo b;& c) echo c;;& d) echo d;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (command (word "echo") (word "a")) (fallthrough)) (pattern "b" (command (word "echo") (word "b")) (fallthrough)) (pattern "c" (command (word "echo") (word "c")) (falltest)) (pattern "d" (command (word "echo") (word "d"))))
+
+=== default with fallthrough before
+case $x in a) echo a;& *) echo default;; esac
+---
+(case (word "$x" (param "x")) (pattern "a" (command (word "echo") (word "a")) (fallthrough)) (pattern "*" (command (word "echo") (word "default"))))
+

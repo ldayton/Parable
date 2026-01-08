@@ -371,17 +371,25 @@ class CasePattern(Node):
 
     pattern: str
     body: Node | None
+    terminator: str = ";;"  # ";;", ";&", or ";;&"
 
-    def __init__(self, pattern: str, body: Node | None):
+    def __init__(self, pattern: str, body: Node | None, terminator: str = ";;"):
         self.kind = "pattern"
         self.pattern = pattern
         self.body = body
+        self.terminator = terminator
 
     def to_sexp(self) -> str:
         escaped = self.pattern.replace("\\", "\\\\").replace('"', '\\"')
+        parts = [f'(pattern "{escaped}"']
         if self.body:
-            return f'(pattern "{escaped}" {self.body.to_sexp()})'
-        return f'(pattern "{escaped}")'
+            parts.append(f" {self.body.to_sexp()}")
+        if self.terminator == ";&":
+            parts.append(" (fallthrough)")
+        elif self.terminator == ";;&":
+            parts.append(" (falltest)")
+        parts.append(")")
+        return "".join(parts)
 
 
 @dataclass

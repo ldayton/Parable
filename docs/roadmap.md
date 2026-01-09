@@ -2,6 +2,12 @@
 
 Features to make Parable more useful for downstream projects.
 
+## Oils Test Suite Status
+
+Parable is tested against the [Oils](https://www.oilshell.org/) project's bash test corpus. Current status: **5590 passed, 0 failed** (100%).
+
+---
+
 ## Summary
 
 ```

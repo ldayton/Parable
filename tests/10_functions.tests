@@ -6,24 +6,28 @@
 f() { echo hi; }
 ---
 (function "f" (brace-group (command (word "echo") (word "hi"))))
+---
 
 
 === function with subshell body
 f() ( echo hi )
 ---
 (function "f" (subshell (command (word "echo") (word "hi"))))
+---
 
 
 === function no space before parens
 f(){ echo hi; }
 ---
 (function "f" (brace-group (command (word "echo") (word "hi"))))
+---
 
 
 === function with space after parens
 f() { echo hi; }
 ---
 (function "f" (brace-group (command (word "echo") (word "hi"))))
+---
 
 
 === function multi-line body
@@ -32,24 +36,28 @@ f() {
 }
 ---
 (function "f" (brace-group (command (word "echo") (word "hi"))))
+---
 
 
 === function with multiple commands
 f() { echo a; echo b; }
 ---
 (function "f" (brace-group (semi (command (word "echo") (word "a")) (command (word "echo") (word "b")))))
+---
 
 
 === function with pipeline body
 f() { echo hi | cat; }
 ---
 (function "f" (brace-group (pipe (command (word "echo") (word "hi")) (command (word "cat")))))
+---
 
 
 === function with if body
 f() { if true; then echo yes; fi; }
 ---
 (function "f" (brace-group (if (command (word "true")) (command (word "echo") (word "yes")))))
+---
 
 
 # === function keyword form ===
@@ -58,24 +66,28 @@ f() { if true; then echo yes; fi; }
 function f() { echo hi; }
 ---
 (function "f" (brace-group (command (word "echo") (word "hi"))))
+---
 
 
 === function keyword without parens
 function f { echo hi; }
 ---
 (function "f" (brace-group (command (word "echo") (word "hi"))))
+---
 
 
 === function keyword with subshell
 function f() ( echo hi )
 ---
 (function "f" (subshell (command (word "echo") (word "hi"))))
+---
 
 
 === function keyword no parens subshell
 function f ( echo hi )
 ---
 (function "f" (subshell (command (word "echo") (word "hi"))))
+---
 
 
 # === function names ===
@@ -84,24 +96,28 @@ function f ( echo hi )
 _foo() { echo hi; }
 ---
 (function "_foo" (brace-group (command (word "echo") (word "hi"))))
+---
 
 
 === function with number in name
 foo123() { echo hi; }
 ---
 (function "foo123" (brace-group (command (word "echo") (word "hi"))))
+---
 
 
 === function with dash in name
 foo-bar() { echo hi; }
 ---
 (function "foo-bar" (brace-group (command (word "echo") (word "hi"))))
+---
 
 
 === function with dots in name
 foo.bar() { echo hi; }
 ---
 (function "foo.bar" (brace-group (command (word "echo") (word "hi"))))
+---
 
 
 # === functions in context ===
@@ -110,12 +126,14 @@ foo.bar() { echo hi; }
 f() { echo hi; }; f
 ---
 (semi (function "f" (brace-group (command (word "echo") (word "hi")))) (command (word "f")))
+---
 
 
 === function in list
 f() { echo a; } && g() { echo b; }
 ---
 (and (function "f" (brace-group (command (word "echo") (word "a")))) (function "g" (brace-group (command (word "echo") (word "b")))))
+---
 
 
 === multiple function definitions
@@ -124,6 +142,7 @@ g() { echo g; }
 ---
 (function "f" (brace-group (command (word "echo") (word "f"))))
 (function "g" (brace-group (command (word "echo") (word "g"))))
+---
 
 
 # === Brutal edge cases ===
@@ -134,36 +153,42 @@ g() { echo g; }
 foo:bar() { echo hi; }
 ---
 (function "foo:bar" (brace-group (command (word "echo") (word "hi"))))
+---
 
 
 === function name with double colon
 foo::bar() { echo hi; }
 ---
 (function "foo::bar" (brace-group (command (word "echo") (word "hi"))))
+---
 
 
 === function name underscore only
 _() { echo hi; }
 ---
 (function "_" (brace-group (command (word "echo") (word "hi"))))
+---
 
 
 === function name double underscore
 __() { echo hi; }
 ---
 (function "__" (brace-group (command (word "echo") (word "hi"))))
+---
 
 
 === function overriding colon builtin
 :() { echo not noop; }
 ---
 (function ":" (brace-group (command (word "echo") (word "not") (word "noop"))))
+---
 
 
 === function overriding true
 true() { echo fake; }
 ---
 (function "true" (brace-group (command (word "echo") (word "fake"))))
+---
 
 
 # Reserved words as function names (requires function keyword)
@@ -172,36 +197,42 @@ true() { echo fake; }
 function if { echo shadowed; }
 ---
 (function "if" (brace-group (command (word "echo") (word "shadowed"))))
+---
 
 
 === function keyword with reserved word for
 function for { echo shadowed; }
 ---
 (function "for" (brace-group (command (word "echo") (word "shadowed"))))
+---
 
 
 === function keyword with reserved word while
 function while { echo shadowed; }
 ---
 (function "while" (brace-group (command (word "echo") (word "shadowed"))))
+---
 
 
 === function keyword with reserved word case
 function case { echo shadowed; }
 ---
 (function "case" (brace-group (command (word "echo") (word "shadowed"))))
+---
 
 
 === function keyword with reserved word do
 function do { echo shadowed; }
 ---
 (function "do" (brace-group (command (word "echo") (word "shadowed"))))
+---
 
 
 === function keyword with reserved word done
 function done { echo shadowed; }
 ---
 (function "done" (brace-group (command (word "echo") (word "shadowed"))))
+---
 
 
 # Whitespace variations
@@ -211,6 +242,7 @@ f()
 { echo hi; }
 ---
 (function "f" (brace-group (command (word "echo") (word "hi"))))
+---
 
 
 === function keyword newline before brace
@@ -218,18 +250,21 @@ function f
 { echo hi; }
 ---
 (function "f" (brace-group (command (word "echo") (word "hi"))))
+---
 
 
 === function space before parens
 f () { echo hi; }
 ---
 (function "f" (brace-group (command (word "echo") (word "hi"))))
+---
 
 
 === function tabs everywhere
 f	()	{	echo hi;	}
 ---
 (function "f" (brace-group (command (word "echo") (word "hi"))))
+---
 
 
 # Nested functions
@@ -238,12 +273,14 @@ f	()	{	echo hi;	}
 outer() { inner() { echo inner; }; inner; }
 ---
 (function "outer" (brace-group (semi (function "inner" (brace-group (command (word "echo") (word "inner")))) (command (word "inner")))))
+---
 
 
 === deeply nested functions
 a() { b() { c() { echo c; }; c; }; b; }
 ---
 (function "a" (brace-group (semi (function "b" (brace-group (semi (function "c" (brace-group (command (word "echo") (word "c")))) (command (word "c"))))) (command (word "b")))))
+---
 
 
 # Functions in compound commands
@@ -252,24 +289,28 @@ a() { b() { c() { echo c; }; c; }; b; }
 ( f() { echo hi; }; f )
 ---
 (subshell (semi (function "f" (brace-group (command (word "echo") (word "hi")))) (command (word "f"))))
+---
 
 
 === function in brace group
 { f() { echo hi; }; f; }
 ---
 (brace-group (semi (function "f" (brace-group (command (word "echo") (word "hi")))) (command (word "f"))))
+---
 
 
 === function after if
 if true; then f() { echo hi; }; fi
 ---
 (if (command (word "true")) (function "f" (brace-group (command (word "echo") (word "hi")))))
+---
 
 
 === function in while body
 while false; do f() { :; }; done
 ---
 (while (command (word "false")) (function "f" (brace-group (command (word ":")))))
+---
 
 
 # Empty and minimal functions
@@ -278,12 +319,14 @@ while false; do f() { :; }; done
 noop() { :; }
 ---
 (function "noop" (brace-group (command (word ":"))))
+---
 
 
 === empty function with true
 stub() { true; }
 ---
 (function "stub" (brace-group (command (word "true"))))
+---
 
 
 # Chained functions
@@ -292,18 +335,21 @@ stub() { true; }
 a() { :; }; b() { :; }; c() { :; }
 ---
 (semi (semi (function "a" (brace-group (command (word ":")))) (function "b" (brace-group (command (word ":"))))) (function "c" (brace-group (command (word ":")))))
+---
 
 
 === function after command
 echo start; f() { echo f; }
 ---
 (semi (command (word "echo") (word "start")) (function "f" (brace-group (command (word "echo") (word "f")))))
+---
 
 
 === command after function
 f() { echo f; }; echo end
 ---
 (semi (function "f" (brace-group (command (word "echo") (word "f")))) (command (word "echo") (word "end")))
+---
 
 
 # Complex bodies
@@ -312,21 +358,25 @@ f() { echo f; }; echo end
 f() { for i in a b c; do echo $i; done; }
 ---
 (function "f" (brace-group (for (word "i") (in (word "a") (word "b") (word "c")) (command (word "echo") (word "$i")))))
+---
 
 
 === function with case
 f() { case $1 in a) echo a;; esac; }
 ---
 (function "f" (brace-group (case (word "$1") (pattern ((word "a")) (command (word "echo") (word "a"))))))
+---
 
 
 === function with while
 f() { while true; do echo loop; break; done; }
 ---
 (function "f" (brace-group (while (command (word "true")) (semi (command (word "echo") (word "loop")) (command (word "break"))))))
+---
 
 
 === function with nested if
 f() { if a; then if b; then c; fi; fi; }
 ---
 (function "f" (brace-group (if (command (word "a")) (if (command (word "b")) (command (word "c"))))))
+---

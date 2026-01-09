@@ -6,60 +6,70 @@
 echo $(pwd)
 ---
 (command (word "echo") (word "$(pwd)"))
+---
 
 
 === command substitution with args
 echo $(ls -la)
 ---
 (command (word "echo") (word "$(ls -la)"))
+---
 
 
 === command substitution in middle of word
 echo prefix$(pwd)suffix
 ---
 (command (word "echo") (word "prefix$(pwd)suffix"))
+---
 
 
 === command substitution at start
 echo $(echo hi)there
 ---
 (command (word "echo") (word "$(echo hi)there"))
+---
 
 
 === command substitution at end
 echo hello$(echo world)
 ---
 (command (word "echo") (word "hello$(echo world)"))
+---
 
 
 === multiple command substitutions
 echo $(echo a)$(echo b)
 ---
 (command (word "echo") (word "$(echo a)$(echo b)"))
+---
 
 
 === command substitution with pipeline
 echo $(cat file | grep pattern)
 ---
 (command (word "echo") (word "$(cat file | grep pattern)"))
+---
 
 
 === command substitution with list
 echo $(echo a; echo b)
 ---
 (command (word "echo") (word "$(echo a; echo b)"))
+---
 
 
 === nested command substitution
 echo $(echo $(pwd))
 ---
 (command (word "echo") (word "$(echo $(pwd))"))
+---
 
 
 === deeply nested substitution
 echo $(echo $(echo $(pwd)))
 ---
 (command (word "echo") (word "$(echo $(echo $(pwd)))"))
+---
 
 
 # === In double quotes ===
@@ -68,18 +78,21 @@ echo $(echo $(echo $(pwd)))
 echo "$(pwd)"
 ---
 (command (word "echo") (word "\"$(pwd)\""))
+---
 
 
 === command substitution with text in quotes
 echo "Current dir: $(pwd)"
 ---
 (command (word "echo") (word "\"Current dir: $(pwd)\""))
+---
 
 
 === command substitution and variable in quotes
 echo "User $(whoami) at $PWD"
 ---
 (command (word "echo") (word "\"User $(whoami) at $PWD\""))
+---
 
 
 # === Backtick form ===
@@ -88,30 +101,35 @@ echo "User $(whoami) at $PWD"
 echo `pwd`
 ---
 (command (word "echo") (word "`pwd`"))
+---
 
 
 === backtick with args
 echo `ls -la`
 ---
 (command (word "echo") (word "`ls -la`"))
+---
 
 
 === backtick in word
 echo prefix`pwd`suffix
 ---
 (command (word "echo") (word "prefix`pwd`suffix"))
+---
 
 
 === backtick in double quotes
 echo "`pwd`"
 ---
 (command (word "echo") (word "\"`pwd`\""))
+---
 
 
 === backtick with pipeline
 echo `cat file | head -1`
 ---
 (command (word "echo") (word "`cat file | head -1`"))
+---
 
 
 # === Mixed forms ===
@@ -120,12 +138,14 @@ echo `cat file | head -1`
 echo $(pwd) `date`
 ---
 (command (word "echo") (word "$(pwd)") (word "`date`"))
+---
 
 
 === dollar inside backtick
 echo `echo $(pwd)`
 ---
 (command (word "echo") (word "`echo $(pwd)`"))
+---
 
 
 # === With redirections inside ===
@@ -134,12 +154,14 @@ echo `echo $(pwd)`
 echo $(cat < file)
 ---
 (command (word "echo") (word "$(cat < file)"))
+---
 
 
 === command substitution with output redirect
 x=$(cmd > /dev/null)
 ---
 (command (word "x=$(cmd > /dev/null)"))
+---
 
 
 # === With control structures inside ===
@@ -148,18 +170,21 @@ x=$(cmd > /dev/null)
 echo $(if true; then echo yes; fi)
 ---
 (command (word "echo") (word "$(if true; then\n    echo yes;\nfi)"))
+---
 
 
 === command substitution with for
 echo $(for i in a b; do echo $i; done)
 ---
 (command (word "echo") (word "$(for i in a b;\ndo\n    echo $i;\ndone)"))
+---
 
 
 === command substitution with case
 echo $(case $x in a) echo a;; esac)
 ---
 (command (word "echo") (word "$(case $x in a)\n        echo a\n    ;;\nesac)"))
+---
 
 
 # === In assignments ===
@@ -168,12 +193,14 @@ echo $(case $x in a) echo a;; esac)
 foo=$(pwd)
 ---
 (command (word "foo=$(pwd)"))
+---
 
 
 === export with cmdsub
 export PATH=$(pwd):$PATH
 ---
 (command (word "export") (word "PATH=$(pwd):$PATH"))
+---
 
 
 # === Empty and edge cases ===
@@ -182,12 +209,14 @@ export PATH=$(pwd):$PATH
 echo $()
 ---
 (command (word "echo") (word "$()"))
+---
 
 
 === command substitution whitespace only
 echo $(   )
 ---
 (command (word "echo") (word "$()"))
+---
 
 
 === command substitution with newline
@@ -196,6 +225,7 @@ pwd
 )
 ---
 (command (word "echo") (word "$(pwd)"))
+---
 
 
 # === Brutal edge cases ===
@@ -205,54 +235,63 @@ pwd
 echo $( (echo in subshell) )
 ---
 (command (word "echo") (word "$( ( echo in subshell ))"))
+---
 
 
 === brace group inside cmdsub
 echo $( { echo brace; } )
 ---
 (command (word "echo") (word "$({ echo brace; })"))
+---
 
 
 === while inside cmdsub
 echo $(while false; do echo x; done)
 ---
 (command (word "echo") (word "$(while false; do\n    echo x;\ndone)"))
+---
 
 
 === until inside cmdsub
 echo $(until true; do echo x; done)
 ---
 (command (word "echo") (word "$(until true; do\n    echo x;\ndone)"))
+---
 
 
 === function definition inside cmdsub
 echo $(f() { echo hi; }; f)
 ---
 (command (word "echo") (word "$(function f () \n{ \n    echo hi\n}; f)"))
+---
 
 
 === background job in cmdsub
 echo $(echo bg &)
 ---
 (command (word "echo") (word "$(echo bg &)"))
+---
 
 
 === multiple statements in cmdsub
 echo $(echo a; echo b; echo c)
 ---
 (command (word "echo") (word "$(echo a; echo b; echo c)"))
+---
 
 
 === and list inside cmdsub
 echo $(true && echo yes)
 ---
 (command (word "echo") (word "$(true && echo yes)"))
+---
 
 
 === or list inside cmdsub
 echo $(false || echo fallback)
 ---
 (command (word "echo") (word "$(false || echo fallback)"))
+---
 
 
 # Complex case statements inside command substitution
@@ -260,18 +299,21 @@ echo $(false || echo fallback)
 echo $(case $x in a) echo a;; b) echo b;; *) echo default;; esac)
 ---
 (command (word "echo") (word "$(case $x in a)\n        echo a\n    ;;\n    b)\n        echo b\n    ;;\n    *)\n        echo default\n    ;;\nesac)"))
+---
 
 
 === case with or pattern in cmdsub
 echo $(case $x in a|b|c) echo match;; esac)
 ---
 (command (word "echo") (word "$(case $x in a | b | c)\n        echo match\n    ;;\nesac)"))
+---
 
 
 === nested case in cmdsub
 echo $(case $a in x) case $b in y) echo xy;; esac;; esac)
 ---
 (command (word "echo") (word "$(case $a in x)\n        case $b in y)\n                echo xy\n            ;;\n        esac\n    ;;\nesac)"))
+---
 
 
 # Nested if/elif/else inside cmdsub
@@ -279,12 +321,14 @@ echo $(case $a in x) case $b in y) echo xy;; esac;; esac)
 echo $(if true; then echo yes; else echo no; fi)
 ---
 (command (word "echo") (word "$(if true; then\n    echo yes;\nelse\n    echo no;\nfi)"))
+---
 
 
 === elif chain inside cmdsub
 echo $(if false; then echo a; elif true; then echo b; else echo c; fi)
 ---
 (command (word "echo") (word "$(if false; then\n    echo a;\nelse\n    if true; then\n        echo b;\n    else\n        echo c;\n    fi;\nfi)"))
+---
 
 
 # Quotes inside command substitution
@@ -292,24 +336,28 @@ echo $(if false; then echo a; elif true; then echo b; else echo c; fi)
 echo $(echo "hello world")
 ---
 (command (word "echo") (word "$(echo \"hello world\")"))
+---
 
 
 === single quotes inside cmdsub
 echo $(echo 'hello world')
 ---
 (command (word "echo") (word "$(echo 'hello world')"))
+---
 
 
 === mixed quotes inside cmdsub
 echo $(echo "it's" 'a "test"')
 ---
 (command (word "echo") (word "$(echo \"it's\" 'a \"test\"')"))
+---
 
 
 === escaped quotes in cmdsub
 echo $(echo \"quoted\")
 ---
 (command (word "echo") (word "$(echo \\\"quoted\\\")"))
+---
 
 
 # Nested command substitution variations
@@ -317,18 +365,21 @@ echo $(echo \"quoted\")
 echo $(echo $(echo $(echo deep)))
 ---
 (command (word "echo") (word "$(echo $(echo $(echo deep)))"))
+---
 
 
 === cmdsub in middle of other cmdsub
 echo $(echo start $(pwd) end)
 ---
 (command (word "echo") (word "$(echo start $(pwd) end)"))
+---
 
 
 === multiple cmdsubs in one inner command
 echo $(echo $(whoami) at $(pwd))
 ---
 (command (word "echo") (word "$(echo $(whoami) at $(pwd))"))
+---
 
 
 # Backtick edge cases
@@ -336,18 +387,21 @@ echo $(echo $(whoami) at $(pwd))
 echo ``
 ---
 (command (word "echo") (word "``"))
+---
 
 
 === backtick with variable
 echo `echo $HOME`
 ---
 (command (word "echo") (word "`echo $HOME`"))
+---
 
 
 === backtick with quotes
 echo `echo "hello"`
 ---
 (command (word "echo") (word "`echo \"hello\"`"))
+---
 
 
 # File reading shortcut (bash extension)
@@ -355,12 +409,14 @@ echo `echo "hello"`
 echo $(<file.txt)
 ---
 (command (word "echo") (word "$(< file.txt)"))
+---
 
 
 === file reading with path
 echo $(</etc/passwd)
 ---
 (command (word "echo") (word "$(< /etc/passwd)"))
+---
 
 
 # Command substitution as command itself
@@ -368,12 +424,14 @@ echo $(</etc/passwd)
 $(echo echo) hello
 ---
 (command (word "$(echo echo)") (word "hello"))
+---
 
 
 === cmdsub produces pipeline
 $(echo "cat | head") file
 ---
 (command (word "$(echo \"cat | head\")") (word "file"))
+---
 
 
 # Parameter expansion inside command substitution
@@ -381,12 +439,14 @@ $(echo "cat | head") file
 echo $(echo ${foo:-default})
 ---
 (command (word "echo") (word "$(echo ${foo:-default})"))
+---
 
 
 === complex param in cmdsub
 echo $(echo ${x##*/})
 ---
 (command (word "echo") (word "$(echo ${x##*/})"))
+---
 
 
 # Special characters
@@ -394,6 +454,7 @@ echo $(echo ${x##*/})
 echo $(echo a; echo b; echo c;)
 ---
 (command (word "echo") (word "$(echo a; echo b; echo c)"))
+---
 
 
 === cmdsub with newlines and semicolons
@@ -403,6 +464,7 @@ echo b
 )
 ---
 (command (word "echo") (word "$(echo a\necho b)"))
+---
 
 
 # NOTE: $((expr)) is now properly parsed as arithmetic expansion (see 13_arithmetic.tests)
@@ -412,18 +474,21 @@ echo b
 echo $(echo $1)
 ---
 (command (word "echo") (word "$(echo $1)"))
+---
 
 
 === cmdsub with all args
 echo $(echo $@)
 ---
 (command (word "echo") (word "$(echo $@)"))
+---
 
 
 === cmdsub with exit status
 echo $(echo $?)
 ---
 (command (word "echo") (word "$(echo $?)"))
+---
 
 
 # Real-world patterns
@@ -431,21 +496,25 @@ echo $(echo $?)
 dir=$(cd "$(dirname "$0")" && pwd)
 ---
 (command (word "dir=$(cd \"$(dirname \"$0\")\" && pwd)"))
+---
 
 
 === basename pattern
 name=$(basename "$file" .txt)
 ---
 (command (word "name=$(basename \"$file\" .txt)"))
+---
 
 
 === find exec pattern
 files=$(find . -name "*.txt")
 ---
 (command (word "files=$(find . -name \"*.txt\")"))
+---
 
 
 === command -v check
 if cmd=$(command -v git); then echo found; fi
 ---
 (if (command (word "cmd=$(command -v git)")) (command (word "echo") (word "found")))
+---

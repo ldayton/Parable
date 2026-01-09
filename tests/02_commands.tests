@@ -6,42 +6,49 @@
 echo
 ---
 (command (word "echo"))
+---
 
 
 === command with one argument
 echo hello
 ---
 (command (word "echo") (word "hello"))
+---
 
 
 === command with multiple arguments
 echo hello world
 ---
 (command (word "echo") (word "hello") (word "world"))
+---
 
 
 === command with many arguments
 echo a b c d e f g
 ---
 (command (word "echo") (word "a") (word "b") (word "c") (word "d") (word "e") (word "f") (word "g"))
+---
 
 
 === command with quoted argument
 echo "hello world"
 ---
 (command (word "echo") (word "\"hello world\""))
+---
 
 
 === command with single quoted argument
 echo 'hello world'
 ---
 (command (word "echo") (word "'hello world'"))
+---
 
 
 === command with mixed arguments
 echo hello "beautiful world" goodbye
 ---
 (command (word "echo") (word "hello") (word "\"beautiful world\"") (word "goodbye"))
+---
 
 
 # === Path commands ===
@@ -50,30 +57,35 @@ echo hello "beautiful world" goodbye
 /usr/bin/ls
 ---
 (command (word "/usr/bin/ls"))
+---
 
 
 === absolute path with arguments
 /usr/bin/ls -la /tmp
 ---
 (command (word "/usr/bin/ls") (word "-la") (word "/tmp"))
+---
 
 
 === relative path command
 ./script.sh
 ---
 (command (word "./script.sh"))
+---
 
 
 === relative path with arguments
 ./build.sh --release --target=x86
 ---
 (command (word "./build.sh") (word "--release") (word "--target=x86"))
+---
 
 
 === parent directory command
 ../bin/tool
 ---
 (command (word "../bin/tool"))
+---
 
 
 # === Commands with flags ===
@@ -82,42 +94,49 @@ echo hello "beautiful world" goodbye
 ls -l
 ---
 (command (word "ls") (word "-l"))
+---
 
 
 === combined short flags
 ls -la
 ---
 (command (word "ls") (word "-la"))
+---
 
 
 === multiple short flags
 tar -x -v -f archive.tar
 ---
 (command (word "tar") (word "-x") (word "-v") (word "-f") (word "archive.tar"))
+---
 
 
 === long flag
 grep --color
 ---
 (command (word "grep") (word "--color"))
+---
 
 
 === long flag with value
 grep --color=auto
 ---
 (command (word "grep") (word "--color=auto"))
+---
 
 
 === long flag with quoted value
 docker run --name="my container"
 ---
 (command (word "docker") (word "run") (word "--name=\"my container\""))
+---
 
 
 === double dash separator
 rm -- -file-starting-with-dash
 ---
 (command (word "rm") (word "--") (word "-file-starting-with-dash"))
+---
 
 
 # === Commands with special arguments ===
@@ -126,42 +145,49 @@ rm -- -file-starting-with-dash
 ls *.txt
 ---
 (command (word "ls") (word "*.txt"))
+---
 
 
 === question mark glob
 ls file?.txt
 ---
 (command (word "ls") (word "file?.txt"))
+---
 
 
 === bracket glob
 ls file[0-9].txt
 ---
 (command (word "ls") (word "file[0-9].txt"))
+---
 
 
 === brace argument
 echo {a,b,c}
 ---
 (command (word "echo") (word "{a,b,c}"))
+---
 
 
 === range brace
 echo {1..10}
 ---
 (command (word "echo") (word "{1..10}"))
+---
 
 
 === tilde argument
 cd ~
 ---
 (command (word "cd") (word "~"))
+---
 
 
 === tilde user
 cd ~root
 ---
 (command (word "cd") (word "~root"))
+---
 
 
 # === Special word combinations ===
@@ -170,30 +196,35 @@ cd ~root
 grep pattern file=name
 ---
 (command (word "grep") (word "pattern") (word "file=name"))
+---
 
 
 === argument with colon
 echo foo:bar:baz
 ---
 (command (word "echo") (word "foo:bar:baz"))
+---
 
 
 === argument starting with dash
 echo -n hello
 ---
 (command (word "echo") (word "-n") (word "hello"))
+---
 
 
 === numeric argument
 exit 1
 ---
 (command (word "exit") (word "1"))
+---
 
 
 === negative number argument
 expr 5 - 3
 ---
 (command (word "expr") (word "5") (word "-") (word "3"))
+---
 
 
 # === Edge cases from tree-sitter-bash ===
@@ -202,21 +233,25 @@ expr 5 - 3
 echo {o[k]}
 ---
 (command (word "echo") (word "{o[k]}"))
+---
 
 
 === closing braces as argument
 echo }}}
 ---
 (command (word "echo") (word "}}}"))
+---
 
 
 === closing brackets and equals
 echo ]]] ===
 ---
 (command (word "echo") (word "]]]") (word "==="))
+---
 
 
 === words with colons like paths
 echo foo::bar
 ---
 (command (word "echo") (word "foo::bar"))
+---

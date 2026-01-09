@@ -6,60 +6,70 @@
 ! true
 ---
 (negation (command (word "true")))
+---
 
 
 === negation of command with args
 ! grep pattern file
 ---
 (negation (command (word "grep") (word "pattern") (word "file")))
+---
 
 
 === negation of pipeline
 ! cmd1 | cmd2
 ---
 (negation (pipe (command (word "cmd1")) (command (word "cmd2"))))
+---
 
 
 === negation of compound command
 ! { echo hello; }
 ---
 (negation (brace-group (command (word "echo") (word "hello"))))
+---
 
 
 === negation of subshell
 ! (exit 1)
 ---
 (negation (subshell (command (word "exit") (word "1"))))
+---
 
 
 === negation in list
 ! true && echo "was false"
 ---
 (and (negation (command (word "true"))) (command (word "echo") (word "\"was false\"")))
+---
 
 
 === negation in or list
 ! false || echo "was true"
 ---
 (or (negation (command (word "false"))) (command (word "echo") (word "\"was true\"")))
+---
 
 
 === negation of if statement
 ! if true; then false; fi
 ---
 (negation (if (command (word "true")) (command (word "false"))))
+---
 
 
 === negation of while loop
 ! while false; do echo x; done
 ---
 (negation (while (command (word "false")) (command (word "echo") (word "x"))))
+---
 
 
 === negation of for loop
 ! for i in 1; do false; done
 ---
 (negation (for (word "i") (in (word "1")) (command (word "false"))))
+---
 
 
 # === Time keyword ===
@@ -68,30 +78,35 @@
 time sleep 1
 ---
 (time (command (word "sleep") (word "1")))
+---
 
 
 === time with pipeline
 time cmd1 | cmd2
 ---
 (time (pipe (command (word "cmd1")) (command (word "cmd2"))))
+---
 
 
 === time with compound command
 time { echo hello; }
 ---
 (time (brace-group (command (word "echo") (word "hello"))))
+---
 
 
 === time with subshell
 time (sleep 1)
 ---
 (time (subshell (command (word "sleep") (word "1"))))
+---
 
 
 === time with posix flag
 time -p sleep 1
 ---
 (time -p (command (word "sleep") (word "1")))
+---
 
 
 # === Combined negation and time ===
@@ -100,18 +115,21 @@ time -p sleep 1
 time ! false
 ---
 (negation (time (command (word "false"))))
+---
 
 
 === negation of time
 ! time sleep 1
 ---
 (negation (time (command (word "sleep") (word "1"))))
+---
 
 
 === time negation in list
 time ! false && echo done
 ---
 (and (negation (time (command (word "false")))) (command (word "echo") (word "done")))
+---
 
 
 # === Edge cases ===
@@ -120,30 +138,35 @@ time ! false && echo done
 echo !
 ---
 (command (word "echo") (word "!"))
+---
 
 
 === exclamation in middle of command
 echo hello ! world
 ---
 (command (word "echo") (word "hello") (word "!") (word "world"))
+---
 
 
 === time as command name when not first
 echo time
 ---
 (command (word "echo") (word "time"))
+---
 
 
 === negation with redirects
 ! cat < input.txt
 ---
 (negation (command (word "cat") (redirect "<" "input.txt")))
+---
 
 
 === time with redirects
 time cat < input.txt
 ---
 (time (command (word "cat") (redirect "<" "input.txt")))
+---
 
 
 # === Additional edge cases ===
@@ -152,42 +175,49 @@ time cat < input.txt
 ! ! true
 ---
 (command (word "true"))
+---
 
 
 === negation of case statement
 ! case x in x) true;; esac
 ---
 (negation (case (word "x") (pattern ((word "x")) (command (word "true")))))
+---
 
 
 === negation with process substitution
 ! cat <(echo test)
 ---
 (negation (command (word "cat") (word "<(echo test)")))
+---
 
 
 === time with process substitution
 time cat <(seq 1000000)
 ---
 (time (command (word "cat") (word "<(seq 1000000)")))
+---
 
 
 === negation in semicolon list
 ! true; echo after
 ---
 (semi (negation (command (word "true"))) (command (word "echo") (word "after")))
+---
 
 
 === multiple negations in list
 ! true && ! false
 ---
 (and (negation (command (word "true"))) (negation (command (word "false"))))
+---
 
 
 === time of function call
 time myfunc arg1 arg2
 ---
 (time (command (word "myfunc") (word "arg1") (word "arg2")))
+---
 
 
 === negation with here document
@@ -197,6 +227,7 @@ EOF
 ---
 (negation (command (word "cat") (redirect "<<" "content
 ")))
+---
 
 
 === time with here document
@@ -206,15 +237,18 @@ EOF
 ---
 (time (command (word "cat") (redirect "<<" "content
 ")))
+---
 
 
 === exclamation in string is not negation
 echo "! not negation"
 ---
 (command (word "echo") (word "\"! not negation\""))
+---
 
 
 === time in variable is not keyword
 cmd=time; $cmd sleep 1
 ---
 (semi (command (word "cmd=time")) (command (word "$cmd") (word "sleep") (word "1")))
+---

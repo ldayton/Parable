@@ -6,132 +6,154 @@
 coproc cat
 ---
 (coproc "COPROC" (command (word "cat")))
+---
 
 
 === coproc with arguments
 coproc cat -n
 ---
 (coproc "COPROC" (command (word "cat") (word "-n")))
+---
 
 
 === named coproc
 coproc MYCOPROC cat
 ---
 (coproc "COPROC" (command (word "MYCOPROC") (word "cat")))
+---
 
 
 === named coproc with args
 coproc READER cat -n file.txt
 ---
 (coproc "COPROC" (command (word "READER") (word "cat") (word "-n") (word "file.txt")))
+---
 
 
 === coproc with brace group
 coproc { cat; }
 ---
 (coproc "COPROC" (brace-group (command (word "cat"))))
+---
 
 
 === coproc with subshell
 coproc ( cat )
 ---
 (coproc "COPROC" (subshell (command (word "cat"))))
+---
 
 
 === named coproc with brace group
 coproc WORKER { while read line; do echo "$line"; done; }
 ---
 (coproc "WORKER" (brace-group (while (command (word "read") (word "line")) (command (word "echo") (word "\"$line\"")))))
+---
 
 
 === coproc with while loop
 coproc while read x; do echo $x; done
 ---
 (coproc "COPROC" (while (command (word "read") (word "x")) (command (word "echo") (word "$x"))))
+---
 
 
 === coproc with redirect
 coproc cat > /dev/null
 ---
 (coproc "COPROC" (command (word "cat") (redirect ">" "/dev/null")))
+---
 
 
 === coproc with input redirect
 coproc cat < input.txt
 ---
 (coproc "COPROC" (command (word "cat") (redirect "<" "input.txt")))
+---
 
 
 === named coproc with redirect
 coproc PROC cat 2>&1
 ---
 (coproc "COPROC" (command (word "PROC") (word "cat") (redirect ">&" 1)))
+---
 
 
 === coproc in list
 coproc cat; echo started
 ---
 (semi (coproc "COPROC" (command (word "cat"))) (command (word "echo") (word "started")))
+---
 
 
 === coproc with and list
 coproc cat && echo started
 ---
 (and (coproc "COPROC" (command (word "cat"))) (command (word "echo") (word "started")))
+---
 
 
 === coproc in pipeline is error but parses
 echo foo | coproc cat
 ---
 (pipe (command (word "echo") (word "foo")) (coproc "COPROC" (command (word "cat"))))
+---
 
 
 === coproc with pipeline command
 coproc cat | grep foo
 ---
 (pipe (coproc "COPROC" (command (word "cat"))) (command (word "grep") (word "foo")))
+---
 
 
 === lowercase coproc name
 coproc myproc cat
 ---
 (coproc "COPROC" (command (word "myproc") (word "cat")))
+---
 
 
 === underscore in coproc name
 coproc my_proc cat
 ---
 (coproc "COPROC" (command (word "my_proc") (word "cat")))
+---
 
 
 === coproc name with numbers
 coproc proc1 cat
 ---
 (coproc "COPROC" (command (word "proc1") (word "cat")))
+---
 
 
 === coproc if compound
 coproc if true; then cat; fi
 ---
 (coproc "COPROC" (if (command (word "true")) (command (word "cat"))))
+---
 
 
 === named coproc if compound
 coproc MYIF if true; then cat; fi
 ---
 (coproc "MYIF" (if (command (word "true")) (command (word "cat"))))
+---
 
 
 === coproc for loop
 coproc for x in a b; do echo $x; done
 ---
 (coproc "COPROC" (for (word "x") (in (word "a") (word "b")) (command (word "echo") (word "$x"))))
+---
 
 
 === coproc case statement
 coproc case $x in a) cat;; esac
 ---
 (coproc "COPROC" (case (word "$x") (pattern ((word "a")) (command (word "cat")))))
+---
 
 
 === coproc with here doc
@@ -141,27 +163,32 @@ EOF
 ---
 (coproc "COPROC" (command (word "cat") (redirect "<<" "hello
 ")))
+---
 
 
 === coproc backgrounded (unusual but valid syntax)
 coproc cat &
 ---
 (background (coproc "COPROC" (command (word "cat"))))
+---
 
 
 === coproc in subshell
 (coproc cat)
 ---
 (subshell (coproc "COPROC" (command (word "cat"))))
+---
 
 
 === coproc arithmetic command
 coproc (( x++ ))
 ---
 (coproc "COPROC" (arith (word " x++ ")))
+---
 
 
 === named coproc with process sub
 coproc READER cat <(echo hello)
 ---
 (coproc "COPROC" (command (word "READER") (word "cat") (word "<(echo hello)")))
+---

@@ -6,24 +6,28 @@
 echo foo | cat
 ---
 (pipe (command (word "echo") (word "foo")) (command (word "cat")))
+---
 
 
 === triple pipe
 echo foo | grep bar | wc -l
 ---
 (pipe (command (word "echo") (word "foo")) (pipe (command (word "grep") (word "bar")) (command (word "wc") (word "-l"))))
+---
 
 
 === quad pipe
 cat file | grep pattern | sort | uniq
 ---
 (pipe (command (word "cat") (word "file")) (pipe (command (word "grep") (word "pattern")) (pipe (command (word "sort")) (command (word "uniq")))))
+---
 
 
 === five stage pipe
 ps aux | grep python | awk '{print $2}' | head -5 | xargs echo
 ---
 (pipe (command (word "ps") (word "aux")) (pipe (command (word "grep") (word "python")) (pipe (command (word "awk") (word "'{print $2}'")) (pipe (command (word "head") (word "-5")) (command (word "xargs") (word "echo"))))))
+---
 
 
 # === Pipes with paths ===
@@ -32,12 +36,14 @@ ps aux | grep python | awk '{print $2}' | head -5 | xargs echo
 /usr/bin/cat file | /usr/bin/grep foo
 ---
 (pipe (command (word "/usr/bin/cat") (word "file")) (command (word "/usr/bin/grep") (word "foo")))
+---
 
 
 === pipe with relative paths
 ./generate | ./process | ./output
 ---
 (pipe (command (word "./generate")) (pipe (command (word "./process")) (command (word "./output"))))
+---
 
 
 # === Pipes with arguments ===
@@ -46,24 +52,28 @@ ps aux | grep python | awk '{print $2}' | head -5 | xargs echo
 ls -la /tmp | grep -v total | head -n 10
 ---
 (pipe (command (word "ls") (word "-la") (word "/tmp")) (pipe (command (word "grep") (word "-v") (word "total")) (command (word "head") (word "-n") (word "10"))))
+---
 
 
 === pipe with quoted args
 echo "hello world" | grep hello
 ---
 (pipe (command (word "echo") (word "\"hello world\"")) (command (word "grep") (word "hello")))
+---
 
 
 === pipe with single quoted args
 echo 'pattern with spaces' | grep 'pattern'
 ---
 (pipe (command (word "echo") (word "'pattern with spaces'")) (command (word "grep") (word "'pattern'")))
+---
 
 
 === pipe with mixed quotes
 echo "foo" | grep 'foo' | cat
 ---
 (pipe (command (word "echo") (word "\"foo\"")) (pipe (command (word "grep") (word "'foo'")) (command (word "cat"))))
+---
 
 
 # === Pipes with special characters ===
@@ -72,12 +82,14 @@ echo "foo" | grep 'foo' | cat
 ls *.txt | wc -l
 ---
 (pipe (command (word "ls") (word "*.txt")) (command (word "wc") (word "-l")))
+---
 
 
 === pipe with equals in args
 env | grep PATH=
 ---
 (pipe (command (word "env")) (command (word "grep") (word "PATH=")))
+---
 
 
 # === Whitespace variations ===
@@ -86,24 +98,28 @@ env | grep PATH=
 echo foo|cat
 ---
 (pipe (command (word "echo") (word "foo")) (command (word "cat")))
+---
 
 
 === pipe space before only
 echo foo |cat
 ---
 (pipe (command (word "echo") (word "foo")) (command (word "cat")))
+---
 
 
 === pipe space after only
 echo foo| cat
 ---
 (pipe (command (word "echo") (word "foo")) (command (word "cat")))
+---
 
 
 === pipe multiple spaces
 echo foo  |  cat
 ---
 (pipe (command (word "echo") (word "foo")) (command (word "cat")))
+---
 
 
 # === From tree-sitter-bash ===
@@ -112,9 +128,11 @@ echo foo  |  cat
 cat foo | grep -v bar
 ---
 (pipe (command (word "cat") (word "foo")) (command (word "grep") (word "-v") (word "bar")))
+---
 
 
 === pipe to head
 cat baz | head -n 1
 ---
 (pipe (command (word "cat") (word "baz")) (command (word "head") (word "-n") (word "1")))
+---

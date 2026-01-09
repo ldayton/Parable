@@ -6,84 +6,98 @@
 cmd |& cat
 ---
 (pipe (command (word "cmd") (redirect ">&" 1)) (command (word "cat")))
+---
 
 
 === pipe stderr with args
 make 2>&1 |& tee build.log
 ---
 (pipe (command (word "make") (redirect ">&" 1) (redirect ">&" 1)) (command (word "tee") (word "build.log")))
+---
 
 
 === pipe stderr in chain
 cmd1 |& cmd2 |& cmd3
 ---
 (pipe (command (word "cmd1") (redirect ">&" 1)) (pipe (command (word "cmd2") (redirect ">&" 1)) (command (word "cmd3"))))
+---
 
 
 === mixed pipe and pipe stderr
 cmd1 | cmd2 |& cmd3
 ---
 (pipe (command (word "cmd1")) (pipe (command (word "cmd2") (redirect ">&" 1)) (command (word "cmd3"))))
+---
 
 
 === pipe stderr then regular pipe
 cmd1 |& cmd2 | cmd3
 ---
 (pipe (command (word "cmd1") (redirect ">&" 1)) (pipe (command (word "cmd2")) (command (word "cmd3"))))
+---
 
 
 === pipe stderr from subshell
 (cmd) |& cat
 ---
 (pipe (subshell (command (word "cmd"))) (redirect ">&" 1) (command (word "cat")))
+---
 
 
 === pipe stderr from brace group
 { cmd; } |& cat
 ---
 (pipe (brace-group (command (word "cmd"))) (redirect ">&" 1) (command (word "cat")))
+---
 
 
 === pipe stderr with if
 if true; then echo x; fi |& cat
 ---
 (pipe (if (command (word "true")) (command (word "echo") (word "x"))) (redirect ">&" 1) (command (word "cat")))
+---
 
 
 === pipe stderr with while
 while read line; do echo $line; done |& cat
 ---
 (pipe (while (command (word "read") (word "line")) (command (word "echo") (word "$line"))) (redirect ">&" 1) (command (word "cat")))
+---
 
 
 === pipe stderr in list
 cmd |& cat && echo done
 ---
 (and (pipe (command (word "cmd") (redirect ">&" 1)) (command (word "cat"))) (command (word "echo") (word "done")))
+---
 
 
 === pipe stderr with redirect
 cmd |& cat > output.txt
 ---
 (pipe (command (word "cmd") (redirect ">&" 1)) (command (word "cat") (redirect ">" "output.txt")))
+---
 
 
 === negated pipe stderr
 ! cmd |& cat
 ---
 (negation (pipe (command (word "cmd") (redirect ">&" 1)) (command (word "cat"))))
+---
 
 
 === time pipe stderr
 time cmd |& cat
 ---
 (time (pipe (command (word "cmd") (redirect ">&" 1)) (command (word "cat"))))
+---
 
 
 === no spaces around pipe stderr
 cmd|&cat
 ---
 (pipe (command (word "cmd") (redirect ">&" 1)) (command (word "cat")))
+---
 
 
 === pipe stderr newline before command
@@ -91,69 +105,81 @@ cmd |&
 cat
 ---
 (pipe (command (word "cmd") (redirect ">&" 1)) (command (word "cat")))
+---
 
 
 === pipe stderr to subshell
 cmd |& (cat)
 ---
 (pipe (command (word "cmd") (redirect ">&" 1)) (subshell (command (word "cat"))))
+---
 
 
 === pipe stderr to brace group
 cmd |& { cat; }
 ---
 (pipe (command (word "cmd") (redirect ">&" 1)) (brace-group (command (word "cat"))))
+---
 
 
 === pipe stderr with process substitution input
 diff <(cmd1) <(cmd2) |& cat
 ---
 (pipe (command (word "diff") (word "<(cmd1)") (word "<(cmd2)") (redirect ">&" 1)) (command (word "cat")))
+---
 
 
 === pipe stderr to process substitution
 cmd |& tee >(cat)
 ---
 (pipe (command (word "cmd") (redirect ">&" 1)) (command (word "tee") (word ">(cat)")))
+---
 
 
 === backgrounded pipeline with pipe stderr
 cmd |& cat &
 ---
 (background (pipe (command (word "cmd") (redirect ">&" 1)) (command (word "cat"))))
+---
 
 
 === for loop with pipe stderr
 for x in a b; do echo $x; done |& cat
 ---
 (pipe (for (word "x") (in (word "a") (word "b")) (command (word "echo") (word "$x"))) (redirect ">&" 1) (command (word "cat")))
+---
 
 
 === case with pipe stderr
 case x in y) echo z;; esac |& cat
 ---
 (pipe (case (word "x") (pattern ((word "y")) (command (word "echo") (word "z")))) (redirect ">&" 1) (command (word "cat")))
+---
 
 
 === arithmetic command with pipe stderr
 ((x++)) |& cat
 ---
 (pipe (arith (word "x++")) (redirect ">&" 1) (command (word "cat")))
+---
 
 
 === conditional expression with pipe stderr
 [[ -f file ]] |& cat
 ---
 (pipe (cond (cond-unary "-f" (cond-term "file"))) (redirect ">&" 1) (command (word "cat")))
+---
 
 
 === coproc with pipe stderr in body
 coproc { cmd |& cat; }
 ---
 (coproc "COPROC" (brace-group (pipe (command (word "cmd") (redirect ">&" 1)) (command (word "cat")))))
+---
 
 
 === function with pipe stderr in body
 f() { cmd |& cat; }
 ---
 (function "f" (brace-group (pipe (command (word "cmd") (redirect ">&" 1)) (command (word "cat")))))
+---

@@ -6,24 +6,28 @@
 select x in a b c; do echo $x; done
 ---
 (select (word "x") (in (word "a") (word "b") (word "c")) (command (word "echo") (word "$x")))
+---
 
 
 === select without in uses positional params
 select x do echo $x; done
 ---
 (select (word "x") (in (word "\"$@\"")) (command (word "echo") (word "$x")))
+---
 
 
 === select with semicolon after name
 select x; do echo $x; done
 ---
 (select (word "x") (in (word "\"$@\"")) (command (word "echo") (word "$x")))
+---
 
 
 === select with empty word list
 select x in ; do echo $x; done
 ---
 (select (word "x") (in) (command (word "echo") (word "$x")))
+---
 
 
 # === Select with brace group ===
@@ -32,6 +36,7 @@ select x in ; do echo $x; done
 select x in a b c; { echo $x; }
 ---
 (select (word "x") (in (word "a") (word "b") (word "c")) (command (word "echo") (word "$x")))
+---
 
 
 # === Select with various word types ===
@@ -40,24 +45,28 @@ select x in a b c; { echo $x; }
 select f in "file one" "file two"; do cat "$f"; done
 ---
 (select (word "f") (in (word "\"file one\"") (word "\"file two\"")) (command (word "cat") (word "\"$f\"")))
+---
 
 
 === select with variable expansion
 select x in $options; do echo $x; done
 ---
 (select (word "x") (in (word "$options")) (command (word "echo") (word "$x")))
+---
 
 
 === select with glob
 select f in *.txt; do cat $f; done
 ---
 (select (word "f") (in (word "*.txt")) (command (word "cat") (word "$f")))
+---
 
 
 === select with array expansion
 select x in ${arr[@]}; do echo $x; done
 ---
 (select (word "x") (in (word "${arr[@]}")) (command (word "echo") (word "$x")))
+---
 
 
 # === Select with complex body ===
@@ -66,18 +75,21 @@ select x in ${arr[@]}; do echo $x; done
 select x in a b; do echo $x; break; done
 ---
 (select (word "x") (in (word "a") (word "b")) (semi (command (word "echo") (word "$x")) (command (word "break"))))
+---
 
 
 === select with if in body
 select x in a b c; do if [ "$x" = "b" ]; then break; fi; done
 ---
 (select (word "x") (in (word "a") (word "b") (word "c")) (if (command (word "[") (word "\"$x\"") (word "=") (word "\"b\"") (word "]")) (command (word "break"))))
+---
 
 
 === select with case in body
 select opt in quit help; do case $opt in quit) break;; esac; done
 ---
 (select (word "opt") (in (word "quit") (word "help")) (case (word "$opt") (pattern ((word "quit")) (command (word "break")))))
+---
 
 
 # === Select in context ===
@@ -86,12 +98,14 @@ select opt in quit help; do case $opt in quit) break;; esac; done
 select x in a b; do echo $x; done; echo done
 ---
 (semi (select (word "x") (in (word "a") (word "b")) (command (word "echo") (word "$x"))) (command (word "echo") (word "done")))
+---
 
 
 === select with redirect
 select x in a b; do echo $x; done > output.txt
 ---
 (select (word "x") (in (word "a") (word "b")) (command (word "echo") (word "$x"))) (redirect ">" "output.txt")
+---
 
 
 # === Brutal edge cases from research ===
@@ -100,63 +114,74 @@ select x in a b; do echo $x; done > output.txt
 select x in a b; do select y in 1 2; do echo $x $y; done; done
 ---
 (select (word "x") (in (word "a") (word "b")) (select (word "y") (in (word "1") (word "2")) (command (word "echo") (word "$x") (word "$y"))))
+---
 
 
 === select with break 2
 select x in a; do select y in 1; do break 2; done; done
 ---
 (select (word "x") (in (word "a")) (select (word "y") (in (word "1")) (command (word "break") (word "2"))))
+---
 
 
 === select with REPLY variable
 select x in a b; do echo $REPLY; done
 ---
 (select (word "x") (in (word "a") (word "b")) (command (word "echo") (word "$REPLY")))
+---
 
 
 === select with command substitution words
 select x in $(echo a b c); do echo $x; done
 ---
 (select (word "x") (in (word "$(echo a b c)")) (command (word "echo") (word "$x")))
+---
 
 
 === select with arithmetic in words
 select x in $((1+1)) $((2+2)); do echo $x; done
 ---
 (select (word "x") (in (word "$((1+1))") (word "$((2+2))")) (command (word "echo") (word "$x")))
+---
 
 
 === select single word
 select x in choice; do echo $x; done
 ---
 (select (word "x") (in (word "choice")) (command (word "echo") (word "$x")))
+---
 
 
 === select with continue
 select x in a b; do if [ -z "$x" ]; then continue; fi; echo $x; done
 ---
 (select (word "x") (in (word "a") (word "b")) (semi (if (command (word "[") (word "-z") (word "\"$x\"") (word "]")) (command (word "continue"))) (command (word "echo") (word "$x"))))
+---
 
 
 === select in function
 f() { select x in a b; do echo $x; done; }
 ---
 (function "f" (brace-group (select (word "x") (in (word "a") (word "b")) (command (word "echo") (word "$x")))))
+---
 
 
 === select with here string redirect
 select x in a b; do cat; done <<< input
 ---
 (select (word "x") (in (word "a") (word "b")) (command (word "cat"))) (redirect "<<<" "input")
+---
 
 
 === time select
 time select x in a; do break; done
 ---
 (time (select (word "x") (in (word "a")) (command (word "break"))))
+---
 
 
 === negated select
 ! select x in a; do break; done
 ---
 (negation (select (word "x") (in (word "a")) (command (word "break"))))
+---

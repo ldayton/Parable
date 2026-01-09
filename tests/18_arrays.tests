@@ -6,36 +6,42 @@
 arr=(a b c)
 ---
 (command (word "arr=(a b c)"))
+---
 
 
 === array with single element
 arr=(foo)
 ---
 (command (word "arr=(foo)"))
+---
 
 
 === empty array
 arr=()
 ---
 (command (word "arr=()"))
+---
 
 
 === array with quoted elements
 arr=("hello world" "foo bar")
 ---
 (command (word "arr=(\"hello world\" \"foo bar\")"))
+---
 
 
 === array with variable expansion
 arr=($foo $bar)
 ---
 (command (word "arr=($foo $bar)"))
+---
 
 
 === array with command substitution
 arr=($(ls))
 ---
 (command (word "arr=($(ls))"))
+---
 
 
 === array with newlines
@@ -46,237 +52,277 @@ arr=(
 )
 ---
 (command (word "arr=(one two three)"))
+---
 
 
 === array element assignment
 arr[0]=value
 ---
 (command (word "arr[0]=value"))
+---
 
 
 === array element with variable index
 arr[$i]=value
 ---
 (command (word "arr[$i]=value"))
+---
 
 
 === array element with arithmetic index
 arr[i+1]=value
 ---
 (command (word "arr[i+1]=value"))
+---
 
 
 === array element with expansion value
 arr[0]=$foo
 ---
 (command (word "arr[0]=$foo"))
+---
 
 
 === indexed array literal
 arr=([0]=a [1]=b [2]=c)
 ---
 (command (word "arr=([0]=a [1]=b [2]=c)"))
+---
 
 
 === sparse array
 arr=([0]=first [10]=tenth)
 ---
 (command (word "arr=([0]=first [10]=tenth)"))
+---
 
 
 === associative array
 arr=([key1]=val1 [key2]=val2)
 ---
 (command (word "arr=([key1]=val1 [key2]=val2)"))
+---
 
 
 === array append
 arr+=(more)
 ---
 (command (word "arr+=(more)"))
+---
 
 
 === array append multiple
 arr+=(one two three)
 ---
 (command (word "arr+=(one two three)"))
+---
 
 
 === array all elements @
 echo ${arr[@]}
 ---
 (command (word "echo") (word "${arr[@]}"))
+---
 
 
 === array all elements *
 echo ${arr[*]}
 ---
 (command (word "echo") (word "${arr[*]}"))
+---
 
 
 === array single element
 echo ${arr[0]}
 ---
 (command (word "echo") (word "${arr[0]}"))
+---
 
 
 === array length
 echo ${#arr[@]}
 ---
 (command (word "echo") (word "${#arr[@]}"))
+---
 
 
 === array keys
 echo ${!arr[@]}
 ---
 (command (word "echo") (word "${!arr[@]}"))
+---
 
 
 === array slice
 echo ${arr[@]:1:3}
 ---
 (command (word "echo") (word "${arr[@]:1:3}"))
+---
 
 
 === array assignment with command
 arr=(a b); echo ${arr[@]}
 ---
 (semi (command (word "arr=(a b)")) (command (word "echo") (word "${arr[@]}")))
+---
 
 
 === array in for loop
 for i in ${arr[@]}; do echo $i; done
 ---
 (for (word "i") (in (word "${arr[@]}")) (command (word "echo") (word "$i")))
+---
 
 
 === array with redirect
 arr=(a b) > /dev/null
 ---
 (command (word "arr=(a b)") (redirect ">" "/dev/null"))
+---
 
 
 === multiple assignments
 a=1 b=2 arr=(x y)
 ---
 (command (word "a=1") (word "b=2") (word "arr=(x y)"))
+---
 
 
 === assignment then command
 arr=(a b) echo test
 ---
 (command (word "arr=(a b)") (word "echo") (word "test"))
+---
 
 
 === empty string elements
 arr=('' "" empty)
 ---
 (command (word "arr=('' \"\" empty)"))
+---
 
 
 === array with glob pattern
 arr=(*.txt file.*)
 ---
 (command (word "arr=(*.txt file.*)"))
+---
 
 
 === single quoted preserves dollar
 arr=('$literal' '$not_expanded')
 ---
 (command (word "arr=('$literal' '$not_expanded')"))
+---
 
 
 === mixed quoting styles
 arr=("expanded $var" 'literal $var' unquoted)
 ---
 (command (word "arr=(\"expanded $var\" 'literal $var' unquoted)"))
+---
 
 
 === array element with nested expansion
 arr[$(echo 0)]=value
 ---
 (command (word "arr[$(echo 0)]=value"))
+---
 
 
 === indexed assignment with arithmetic
 arr=([1+1]=two [2*2]=four)
 ---
 (command (word "arr=([1+1]=two [2*2]=four)"))
+---
 
 
 === array append empty
 arr+=()
 ---
 (command (word "arr+=()"))
+---
 
 
 === nested command substitution in array
 arr=($(echo $(ls)))
 ---
 (command (word "arr=($(echo $(ls)))"))
+---
 
 
 === array with arithmetic expansion
 arr=($((1+2)) $((3*4)))
 ---
 (command (word "arr=($((1+2)) $((3*4)))"))
+---
 
 
 === array with escaped characters
 arr=(a\ b c\\d)
 ---
 (command (word "arr=(a\\ b c\\\\d)"))
+---
 
 
 === array with process substitution
 arr=(<(cat file))
 ---
 (command (word "arr=(<(cat file))"))
+---
 
 
 === associative key with space
 arr=([foo\ bar]=value)
 ---
 (command (word "arr=([foo\\ bar]=value)"))
+---
 
 
 === negative index assignment
 arr[-1]=last
 ---
 (command (word "arr[-1]=last"))
+---
 
 
 === array with tab separation
 arr=(a	b	c)
 ---
 (command (word "arr=(a b c)"))
+---
 
 
 === multiple arrays in command
 a=(1 2) b=(3 4) cmd
 ---
 (command (word "a=(1 2)") (word "b=(3 4)") (word "cmd"))
+---
 
 
 === array with here string target
 arr=(a b) <<< input
 ---
 (command (word "arr=(a b)") (redirect "<<<" "input"))
+---
 
 
 === underscore array name
 _arr=(x y)
 ---
 (command (word "_arr=(x y)"))
+---
 
 
 === array name with numbers
 arr2=(a b)
 ---
 (command (word "arr2=(a b)"))
+---
 
 
 === complex nested in array
 arr=(${foo:-default} ${#bar})
 ---
 (command (word "arr=(${foo:-default} ${#bar})"))
+---

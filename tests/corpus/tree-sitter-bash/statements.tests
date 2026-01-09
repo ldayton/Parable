@@ -1,0 +1,536 @@
+# Converted from tree-sitter-bash corpus: statements.txt
+
+=== Pipelines
+whoami | cat
+cat foo | grep -v bar
+cat baz | head -n 1
+---
+(pipe (command (word "whoami")) (command (word "cat")))
+(pipe (command (word "cat") (word "foo")) (command (word "grep") (word "-v") (word "bar")))
+(pipe (command (word "cat") (word "baz")) (command (word "head") (word "-n") (word "1")))
+---
+
+=== Lists
+a | b && c && d; d e f || e g
+---
+(semi (and (and (pipe (command (word "a")) (command (word "b"))) (command (word "c"))) (command (word "d"))) (or (command (word "d") (word "e") (word "f")) (command (word "e") (word "g"))))
+---
+
+=== While statements
+while something happens; do
+  echo a
+  echo b
+done
+
+while local name="$1" val="$2"; shift 2; do
+  printf "%s (%s)\n" "$val" "$name"
+done
+---
+(while (command (word "something") (word "happens")) (semi (command (word "echo") (word "a")) (command (word "echo") (word "b"))))
+(while (semi (command (word "local") (word "name=\"$1\"") (word "val=\"$2\"")) (command (word "shift") (word "2"))) (command (word "printf") (word "\"%s (%s)\\n\"") (word "\"$val\"") (word "\"$name\"")))
+---
+
+=== Until statements
+until something happens; do
+  echo a
+  echo b
+done
+---
+(until (command (word "something") (word "happens")) (semi (command (word "echo") (word "a")) (command (word "echo") (word "b"))))
+---
+
+=== While statements with IO redirects
+while read line; do
+  echo $line
+done < <(cat file)
+---
+(while (command (word "read") (word "line")) (command (word "echo") (word "$line"))) (redirect "<" "<(cat file)")
+---
+
+=== For statements
+for a in 1 2 $(seq 5 10); do
+  echo $a
+done
+
+for ARG; do
+  echo $ARG
+  ARG=''
+done
+
+for c in ${=1}; do
+	echo c
+done
+---
+(for (word "a") (in (word "1") (word "2") (word "$(seq 5 10)")) (command (word "echo") (word "$a")))
+(for (word "ARG") (in (word "\"$@\"")) (semi (command (word "echo") (word "$ARG")) (command (word "ARG=''"))))
+(for (word "c") (in (word "${=1}")) (command (word "echo") (word "c")))
+---
+
+=== Select statements
+select choice in X Y $(ls); do
+  echo $choice
+  break
+done
+
+select ARG; do
+  echo $ARG
+  ARG=''
+done
+---
+(select (word "choice") (in (word "X") (word "Y") (word "$(ls)")) (semi (command (word "echo") (word "$choice")) (command (word "break"))))
+(select (word "ARG") (in (word "\"$@\"")) (semi (command (word "echo") (word "$ARG")) (command (word "ARG=''"))))
+---
+
+=== C-style for statements
+for (( c=1; c<=5; c++ ))
+do
+  echo $c
+done
+
+for (( c=1; c<=5; c++ )) {
+	echo $c
+}
+
+for (( ; ; ))
+do
+  echo 'forever'
+done
+
+for ((cx = 0; c = $cx / $pf, c < $wc - $k; )); do
+		echo "$cx"
+done
+
+for (( i = 4;;i--)) ; do echo $i; if (( $i == 0 )); then break; fi; done
+
+# added post-bash-4.2
+for (( i = j = k = 1; i % 9 || (j *= -1, $( ((i%9)) || printf " " >&2; echo 0), k++ <= 10); i += j ))
+do
+printf "$i"
+done
+
+echo
+
+( for (( i = j = k = 1; i % 9 || (j *= -1, $( ((i%9)) || printf " " >&2; echo 0), k++ <= 10); i += j ))
+do
+printf "$i"
+done )
+---
+(arith-for (init (word "c=1")) (test (word "c<=5")) (step (word "c++ ")) (command (word "echo") (word "$c")))
+(arith-for (init (word "c=1")) (test (word "c<=5")) (step (word "c++ ")) (command (word "echo") (word "$c")))
+(arith-for (init (word "1")) (test (word "1")) (step (word "1")) (command (word "echo") (word "'forever'")))
+(arith-for (init (word "cx = 0")) (test (word "c = $cx / $pf, c < $wc - $k")) (step (word "1")) (command (word "echo") (word "\"$cx\"")))
+(arith-for (init (word "i = 4")) (test (word "1")) (step (word "i--")) (semi (command (word "echo") (word "$i")) (if (arith (word " $i == 0 ")) (command (word "break")))))
+(arith-for (init (word "i = j = k = 1")) (test (word "i % 9 || (j *= -1, $( ((i%9)) || printf \" \" 1>&2; echo 0), k++ <= 10)")) (step (word "i += j ")) (command (word "printf") (word "\"$i\"")))
+(command (word "echo"))
+(subshell (arith-for (init (word "i = j = k = 1")) (test (word "i % 9 || (j *= -1, $( ((i%9)) || printf \" \" 1>&2; echo 0), k++ <= 10)")) (step (word "i += j ")) (command (word "printf") (word "\"$i\""))))
+---
+
+=== If statements
+if cat some_file | grep -v ok; then
+  echo one
+elif cat other_file | grep -v ok; then
+  echo two
+else
+  exit
+fi
+---
+(if (pipe (command (word "cat") (word "some_file")) (command (word "grep") (word "-v") (word "ok"))) (command (word "echo") (word "one")) (if (pipe (command (word "cat") (word "other_file")) (command (word "grep") (word "-v") (word "ok"))) (command (word "echo") (word "two")) (command (word "exit"))))
+---
+
+=== If statements with conditional expressions
+if [ "$(uname)" == 'Darwin' ]; then
+  echo one
+fi
+
+if [ a = -d ]; then
+  echo two
+fi
+
+[[ abc == +(a|b|c) ]] && echo 1
+[[ abc != +(a|b|c) ]] && echo 2
+---
+(if (command (word "[") (word "\"$(uname)\"") (word "==") (word "'Darwin'") (word "]")) (command (word "echo") (word "one")))
+(if (command (word "[") (word "a") (word "=") (word "-d") (word "]")) (command (word "echo") (word "two")))
+(and (cond (cond-binary "==" (cond-term "abc") (cond-term "+(a|b|c)"))) (command (word "echo") (word "1")))
+(and (cond (cond-binary "!=" (cond-term "abc") (cond-term "+(a|b|c)"))) (command (word "echo") (word "2")))
+---
+
+=== If statements with negated command
+if ! command -v echo; then
+  echo 'hello'
+fi
+---
+(if (negation (command (word "command") (word "-v") (word "echo"))) (command (word "echo") (word "'hello'")))
+---
+
+=== If statements with command
+if command -v echo; then
+  echo 'hello'
+fi
+---
+(if (command (word "command") (word "-v") (word "echo")) (command (word "echo") (word "'hello'")))
+---
+
+=== If statements with variable assignment by command substitution
+if result=$(echo 'hello'); then
+  echo 'hello'
+fi
+---
+(if (command (word "result=$(echo 'hello')")) (command (word "echo") (word "'hello'")))
+---
+
+=== If statements with negated variable assignment by command substitution
+if ! result=$(echo 'hello'); then
+  echo 'hello'
+fi
+---
+(if (negation (command (word "result=$(echo 'hello')"))) (command (word "echo") (word "'hello'")))
+---
+
+=== If statements with variable assignment
+if foo=1; then
+  echo 'hello'
+fi
+---
+(if (command (word "foo=1")) (command (word "echo") (word "'hello'")))
+---
+
+=== If statements with negated variable assignment
+if ! foo=1; then
+  echo 'hello'
+fi
+---
+(if (negation (command (word "foo=1"))) (command (word "echo") (word "'hello'")))
+---
+
+=== Case statements
+case "opt" in
+  a)
+    echo a
+    ;;
+
+  b)
+    echo b
+    ;&
+
+  c)
+    echo c;;
+esac
+
+case "opt" in
+  (a)
+    echo a
+    ;;
+
+  (b)
+    echo b
+    ;&
+
+  (c)
+    echo c;;
+esac
+
+case "$Z" in
+  ab*|cd*) ef
+esac
+
+case $dest in
+  *.[1357])
+    exit $?
+    ;;
+esac
+
+case x in x) echo meow ;; esac
+
+case foo in
+  bar\ baz) : ;;
+esac
+
+case ${lang} in
+CMakeLists.txt | \
+	cmake_modules | \
+	${PN}.pot) ;;
+*) rm -r ${lang} || die ;;
+esac
+---
+(case (word "\"opt\"") (pattern ((word "a")) (command (word "echo") (word "a"))) (pattern ((word "b")) (command (word "echo") (word "b"))) (pattern ((word "c")) (command (word "echo") (word "c"))))
+(case (word "\"opt\"") (pattern ((word "a")) (command (word "echo") (word "a"))) (pattern ((word "b")) (command (word "echo") (word "b"))) (pattern ((word "c")) (command (word "echo") (word "c"))))
+(case (word "\"$Z\"") (pattern ((word "ab*") (word "cd*")) (command (word "ef"))))
+(case (word "$dest") (pattern ((word "*.[1357]")) (command (word "exit") (word "$?"))))
+(case (word "x") (pattern ((word "x")) (command (word "echo") (word "meow"))))
+(case (word "foo") (pattern ((word "bar\\ baz")) (command (word ":"))))
+(case (word "${lang}") (pattern ((word "CMakeLists.txt") (word "cmake_modules") (word "${PN}.pot")) ()) (pattern ((word "*")) (or (command (word "rm") (word "-r") (word "${lang}")) (command (word "die")))))
+---
+
+=== Test commands
+if [[ "$lsb_dist" != 'Ubuntu' || $(ver_to_int "$lsb_release") < $(ver_to_int '14.04') ]]; then
+	return 1
+fi
+
+[[ ${PV} != $(sed -n -e 's/^Version: //p' "${ED}/usr/$(get_libdir)/pkgconfig/tss2-tcti-tabrmd.pc" || die) ]]
+
+[[ ${f} != */@(default).vim ]]
+
+[[ "${MY_LOCALES}" != *en_US* || a != 2 ]]
+
+[[ $(LC_ALL=C $(tc-getCC) ${LDFLAGS} -Wl,--version 2>/dev/null) != @(LLD|GNU\ ld)* ]]
+
+[[ -f "${EROOT}/usr/share/php/.packagexml/${MY_P}.xml" && \
+	-x "${EROOT}/usr/bin/peardev" ]]
+
+[[ ${test} == @($(IFS='|'; echo "${skip[*]}")) ]]
+
+[[ ${SRC_URI} == */${a}* ]]
+
+[[ a == *_@(LIB|SYMLINK) ]]
+
+[[ ${1} =~ \.(lisp|lsp|cl)$ ]]
+
+[[ a == - ]]
+---
+(if (cond (cond-or (cond-binary "!=" (cond-term ""$lsb_dist"") (cond-term "'Ubuntu'")) (cond-binary "<" (cond-term "$(ver_to_int "$lsb_release")") (cond-term "$(ver_to_int '14.04')")))) (command (word "return") (word "1")))
+(cond (cond-binary "!=" (cond-term "${PV}") (cond-term "$(sed -n -e 's/^Version: //p' "${ED}/usr/$(get_libdir)/pkgconfig/tss2-tcti-tabrmd.pc" || die)")))
+(cond (cond-binary "!=" (cond-term "${f}") (cond-term "*/@(default).vim")))
+(cond (cond-or (cond-binary "!=" (cond-term ""${MY_LOCALES}"") (cond-term "*en_US*")) (cond-binary "!=" (cond-term "a") (cond-term "2"))))
+(cond (cond-binary "!=" (cond-term "$(LC_ALL=C $(tc-getCC) ${LDFLAGS} -Wl,--version 2> /dev/null)") (cond-term "@(LLD|GNU\ ld)*")))
+(cond (cond-and (cond-unary "-f" (cond-term ""${EROOT}/usr/share/php/.packagexml/${MY_P}.xml"")) (cond-unary "-x" (cond-term ""${EROOT}/usr/bin/peardev""))))
+(cond (cond-binary "==" (cond-term "${test}") (cond-term "@($(IFS='|'; echo "${skip[*]}"))")))
+(cond (cond-binary "==" (cond-term "${SRC_URI}") (cond-term "*/${a}*")))
+(cond (cond-binary "==" (cond-term "a") (cond-term "*_@(LIB|SYMLINK)")))
+(cond (cond-binary "=~" (cond-term "${1}") (cond-term "\.(lisp|lsp|cl)$")))
+(cond (cond-binary "==" (cond-term "a") (cond-term "-")))
+---
+
+=== Test commands with ternary
+if (( 1 < 2 ? 1 : 2 )); then
+	return 1
+fi
+---
+(if (arith (word " 1 < 2 ? 1 : 2 ")) (command (word "return") (word "1")))
+---
+
+=== Ternary expressions
+$((n < 10 ? n : 10))
+$(($n < 10 ? $n : 10))
+$((${n} < 10 ? ${n} : 10))
+---
+(command (word "$((n < 10 ? n : 10))"))
+(command (word "$(($n < 10 ? $n : 10))"))
+(command (word "$((${n} < 10 ? ${n} : 10))"))
+---
+
+=== Test commands with regexes
+[[ "35d8b" =~ ^[0-9a-fA-F] ]]
+[[ $CMD =~ (^|;)update_terminal_cwd($|;) ]]
+[[ ! " ${completions[*]} " =~ " $alias_cmd " ]]
+! [[ "$a" =~ ^a|b\ *c|d$ ]]
+[[ "$1" =~ ^${var}${var}*=..* ]]
+[[ "$1" =~ ^\-${var}+ ]]
+[[ ${var1} == *${var2}* ]]
+[[ "$server" =~ [0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3} ]]
+[[ "$primary_wins" =~ ([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}) ]]
+[[ -f ${x} && $(od -t x1 -N 4 "${x}") == *"7f 45 4c 46"* ]]
+[[ ${PV} =~ 99999999$ ]]
+[[ $1 == -- ]]
+[[ " ${REPLACING_VERSIONS} " != *\ ${PVR}\ * ]]
+[[ ${file} == @(*${GENTOO_PATCH_NAME}.tar.xz|*.asc|*.sig) ]]
+[[ $RUBY_TARGETS != *$( eselect ruby show | awk 'NR==2' | tr  -d ' '  )* ]]
+[[ " ${m[0]##*/}" =~ ^(\ ${skip_files[*]/%/.*|\\} ) ]]
+[[ ' boop xyz' =~ ' boop '(.*)$ ]]
+[[ $b = foo* ]]
+---
+(cond (cond-binary "=~" (cond-term ""35d8b"") (cond-term "^[0-9a-fA-F]")))
+(cond (cond-binary "=~" (cond-term "$CMD") (cond-term "(^|;)update_terminal_cwd($|;)")))
+(cond (cond-binary "=~" (cond-term "" ${completions[*]} "") (cond-term "" $alias_cmd "")))
+(negation (cond (cond-binary "=~" (cond-term ""$a"") (cond-term "^a|b\ *c|d$"))))
+(cond (cond-binary "=~" (cond-term ""$1"") (cond-term "^${var}${var}*=..*")))
+(cond (cond-binary "=~" (cond-term ""$1"") (cond-term "^\-${var}+")))
+(cond (cond-binary "==" (cond-term "${var1}") (cond-term "*${var2}*")))
+(cond (cond-binary "=~" (cond-term ""$server"") (cond-term "[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}")))
+(cond (cond-binary "=~" (cond-term ""$primary_wins"") (cond-term "([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})")))
+(cond (cond-and (cond-unary "-f" (cond-term "${x}")) (cond-binary "==" (cond-term "$(od -t x1 -N 4 "${x}")") (cond-term "*"7f 45 4c 46"*"))))
+(cond (cond-binary "=~" (cond-term "${PV}") (cond-term "99999999$")))
+(cond (cond-binary "==" (cond-term "$1") (cond-term "--")))
+(cond (cond-binary "!=" (cond-term "" ${REPLACING_VERSIONS} "") (cond-term "*\ ${PVR}\ *")))
+(cond (cond-binary "==" (cond-term "${file}") (cond-term "@(*${GENTOO_PATCH_NAME}.tar.xz|*.asc|*.sig)")))
+(cond (cond-binary "!=" (cond-term "$RUBY_TARGETS") (cond-term "*$(eselect ruby show | awk 'NR==2' | tr -d ' ')*")))
+(cond (cond-binary "=~" (cond-term "" ${m[0]##*/}"") (cond-term "^(\ ${skip_files[*]/%/.*|\\} )")))
+(cond (cond-binary "=~" (cond-term "' boop xyz'") (cond-term "' boop '(.*)$")))
+(cond (cond-binary "=" (cond-term "$b") (cond-term "foo*")))
+---
+
+=== Test command paren statefulness with a case glob
+[[ ${test} == @($(IFS='|'; echo "${skip[*]}")) ]]
+
+case ${out} in
+*"not supported"*|\
+*"operation not supported"*)
+	;;
+esac
+
+case $1 in
+-o)
+	owner=$2
+	shift
+	;;
+-g) ;;
+esac
+
+[[ a == \"+(?)\" ]]
+---
+(cond (cond-binary "==" (cond-term "${test}") (cond-term "@($(IFS='|'; echo "${skip[*]}"))")))
+(case (word "${out}") (pattern ((word "*\"not supported\"*") (word "*\"operation not supported\"*")) ()))
+(case (word "$1") (pattern ((word "-o")) (semi (command (word "owner=$2")) (command (word "shift")))) (pattern ((word "-g")) ()))
+(cond (cond-binary "==" (cond-term "a") (cond-term "\"+(?)\"")))
+---
+
+=== Subshells
+(
+  ./start-server --port=80
+) &
+
+time ( cd tests && sh run-tests.sh )
+---
+(background (subshell (command (word "./start-server") (word "--port=80"))))
+(time (subshell (and (command (word "cd") (word "tests")) (command (word "sh") (word "run-tests.sh")))))
+---
+
+=== Function definitions
+do_something() {
+  echo ok
+}
+
+run_subshell_command() (
+  true
+)
+
+run_test_command() [[ -e foo ]]
+
+function do_something_else() {
+  a | xargs -I{} find xml/{} -type f
+}
+
+function do_yet_another_thing {
+  echo ok
+} 2>&1
+
+do_nothing() { return 0; }
+
+foo::bar() {
+  echo what
+}
+
+foo::baz() {
+  echo how
+}
+
+assert()
+  if ! $1; then
+    return 1
+  fi
+---
+(function "do_something" (brace-group (command (word "echo") (word "ok"))))
+(function "run_subshell_command" (subshell (command (word "true"))))
+(function "run_test_command" (cond (cond-unary "-e" (cond-term "foo"))))
+(function "do_something_else" (brace-group (pipe (command (word "a")) (command (word "xargs") (word "-I{}") (word "find") (word "xml/{}") (word "-type") (word "f")))))
+(function "do_yet_another_thing" (brace-group (command (word "echo") (word "ok"))) (redirect ">&" 1))
+(function "do_nothing" (brace-group (command (word "return") (word "0"))))
+(function "foo::bar" (brace-group (command (word "echo") (word "what"))))
+(function "foo::baz" (brace-group (command (word "echo") (word "how"))))
+(function "assert" (if (negation (command (word "$1"))) (command (word "return") (word "1"))))
+---
+
+=== Variable declaration: declare & typeset
+declare var1
+typeset -i -r var2=42 var3=10
+---
+(command (word "declare") (word "var1"))
+(command (word "typeset") (word "-i") (word "-r") (word "var2=42") (word "var3=10"))
+---
+
+=== Variable declaration: readonly
+readonly var1
+readonly var2=42
+---
+(command (word "readonly") (word "var1"))
+(command (word "readonly") (word "var2=42"))
+---
+
+=== Variable declaration: local
+local a=42 b
+local -r c
+local var=word1\ word2
+---
+(command (word "local") (word "a=42") (word "b"))
+(command (word "local") (word "-r") (word "c"))
+(command (word "local") (word "var=word1\\ word2"))
+---
+
+=== Variable declaration: export
+export PATH
+export FOOBAR PATH="$PATH:/usr/foobar/bin"
+export $FOO:$BAR
+---
+(command (word "export") (word "PATH"))
+(command (word "export") (word "FOOBAR") (word "PATH=\"$PATH:/usr/foobar/bin\""))
+(command (word "export") (word "$FOO:$BAR"))
+---
+
+=== Variable declaration: command substitution with semi-colon
+_path=$(
+  while statement; do
+    cd ".."
+  done;
+  echo $PWD
+)
+---
+(command (word "_path=$(while statement; do\n    cd \"..\";\ndone; echo $PWD)"))
+---
+
+=== Command substution with $ and backticks
+$(eval echo $`echo ${foo}`)
+---
+(command (word "$(eval echo $`echo ${foo}`)"))
+---
+
+=== Expressions passed to declaration commands
+export "$(echo ${key} | tr [:lower:] [:upper:])=${p_key#*=}"
+---
+(command (word "export") (word "\"$(echo ${key} | tr [:lower:] [:upper:])=${p_key#*=}\""))
+---
+
+=== Unset commands
+unset A
+unset "$variable_name"
+unsetenv -f ONE TWO
+---
+(command (word "unset") (word "A"))
+(command (word "unset") (word "\"$variable_name\""))
+(command (word "unsetenv") (word "-f") (word "ONE") (word "TWO"))
+---
+
+=== Compound statements
+a () {
+    ls || { echo "b"; return 0; }
+    echo c
+}
+
+{ echo "a"
+  echo "b"
+} >&2
+---
+(function "a" (brace-group (semi (or (command (word "ls")) (brace-group (semi (command (word "echo") (word "\"b\"")) (command (word "return") (word "0"))))) (command (word "echo") (word "c")))))
+(brace-group (semi (command (word "echo") (word "\"a\"")) (command (word "echo") (word "\"b\"")))) (redirect ">&" 2)
+---
+
+=== If condition with subshell
+if (echo $BASHPID; true); then echo $BASHPID; fi
+---
+(if (subshell (semi (command (word "echo") (word "$BASHPID")) (command (word "true")))) (command (word "echo") (word "$BASHPID")))
+---
+
+=== While condition with subshell
+while (echo $BASHPID; true); do echo $BASHPID; break; done
+---
+(while (subshell (semi (command (word "echo") (word "$BASHPID")) (command (word "true")))) (semi (command (word "echo") (word "$BASHPID")) (command (word "break"))))
+---

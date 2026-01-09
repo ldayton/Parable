@@ -7,15 +7,18 @@ line
 ---
 (command (word "cat") (redirect "<<" "line
 "))
+---
 
 
 === empty for list
 for x in; do :; done
 ---
 (for (word "x") (in) (command (word ":")))
+---
 
 
 === extglob in word
 echo @(a|b)
 ---
 (command (word "echo") (word "@(a|b)"))
+---

@@ -7,24 +7,28 @@
 echo hi # don't worry
 ---
 (command (word "echo") (word "hi"))
+---
 
 
 === parenthesis in comment
 echo hi # (note)
 ---
 (command (word "echo") (word "hi"))
+---
 
 
 === parenthesis mid-comment
 echo hi # see (foo) for details
 ---
 (command (word "echo") (word "hi"))
+---
 
 
 === comment immediately after hash
 echo hi #(note)
 ---
 (command (word "echo") (word "hi"))
+---
 
 
 # === Comments after compound commands ===
@@ -33,24 +37,28 @@ echo hi #(note)
 if true; then echo; fi  # comment
 ---
 (if (command (word "true")) (command (word "echo")))
+---
 
 
 === comment after done
 while true; do echo; done  # comment
 ---
 (while (command (word "true")) (command (word "echo")))
+---
 
 
 === comment after esac
 case $x in a) echo;; esac  # comment
 ---
 (case (word "$x") (pattern ((word "a")) (command (word "echo"))))
+---
 
 
 === comment after brace group
 { echo; }  # comment
 ---
 (brace-group (command (word "echo")))
+---
 
 
 # === Line continuation after && and || ===
@@ -60,6 +68,7 @@ echo a &&
 echo b
 ---
 (and (command (word "echo") (word "a")) (command (word "echo") (word "b")))
+---
 
 
 === newline after ||
@@ -67,6 +76,7 @@ echo a ||
 echo b
 ---
 (or (command (word "echo") (word "a")) (command (word "echo") (word "b")))
+---
 
 
 === newline after && in test
@@ -74,6 +84,7 @@ echo b
 echo yes
 ---
 (and (cond (cond-binary "==" (cond-term "$x") (cond-term "y"))) (command (word "echo") (word "yes")))
+---
 
 
 === multiple newlines after &&
@@ -82,3 +93,4 @@ echo a &&
 echo b
 ---
 (and (command (word "echo") (word "a")) (command (word "echo") (word "b")))
+---

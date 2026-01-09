@@ -8,30 +8,35 @@
 echo $((42))
 ---
 (command (word "echo") (word "$((42))"))
+---
 
 
 === negative number
 echo $((-5))
 ---
 (command (word "echo") (word "$((-5))"))
+---
 
 
 === hex number
 echo $((0xFF))
 ---
 (command (word "echo") (word "$((0xFF))"))
+---
 
 
 === octal number
 echo $((0777))
 ---
 (command (word "echo") (word "$((0777))"))
+---
 
 
 === binary number
 echo $((2#1010))
 ---
 (command (word "echo") (word "$((2#1010))"))
+---
 
 
 # === Variables ===
@@ -40,24 +45,28 @@ echo $((2#1010))
 echo $((x))
 ---
 (command (word "echo") (word "$((x))"))
+---
 
 
 === variable with dollar
 echo $(($x))
 ---
 (command (word "echo") (word "$(($x))"))
+---
 
 
 === braced variable
 echo $((${x}))
 ---
 (command (word "echo") (word "$((${x}))"))
+---
 
 
 === parameter expansion with default
 echo $((${x:-5}))
 ---
 (command (word "echo") (word "$((${x:-5}))"))
+---
 
 
 # === Binary operators ===
@@ -66,36 +75,42 @@ echo $((${x:-5}))
 echo $((1 + 2))
 ---
 (command (word "echo") (word "$((1 + 2))"))
+---
 
 
 === subtraction
 echo $((5 - 3))
 ---
 (command (word "echo") (word "$((5 - 3))"))
+---
 
 
 === multiplication
 echo $((4 * 3))
 ---
 (command (word "echo") (word "$((4 * 3))"))
+---
 
 
 === division
 echo $((10 / 2))
 ---
 (command (word "echo") (word "$((10 / 2))"))
+---
 
 
 === modulo
 echo $((10 % 3))
 ---
 (command (word "echo") (word "$((10 % 3))"))
+---
 
 
 === exponentiation
 echo $((2 ** 8))
 ---
 (command (word "echo") (word "$((2 ** 8))"))
+---
 
 
 # === Comparison operators ===
@@ -104,36 +119,42 @@ echo $((2 ** 8))
 echo $((1 < 2))
 ---
 (command (word "echo") (word "$((1 < 2))"))
+---
 
 
 === greater than
 echo $((2 > 1))
 ---
 (command (word "echo") (word "$((2 > 1))"))
+---
 
 
 === less or equal
 echo $((1 <= 2))
 ---
 (command (word "echo") (word "$((1 <= 2))"))
+---
 
 
 === greater or equal
 echo $((2 >= 1))
 ---
 (command (word "echo") (word "$((2 >= 1))"))
+---
 
 
 === equality
 echo $((1 == 1))
 ---
 (command (word "echo") (word "$((1 == 1))"))
+---
 
 
 === inequality
 echo $((1 != 2))
 ---
 (command (word "echo") (word "$((1 != 2))"))
+---
 
 
 # === Bitwise operators ===
@@ -142,30 +163,35 @@ echo $((1 != 2))
 echo $((5 & 3))
 ---
 (command (word "echo") (word "$((5 & 3))"))
+---
 
 
 === bitwise or
 echo $((5 | 3))
 ---
 (command (word "echo") (word "$((5 | 3))"))
+---
 
 
 === bitwise xor
 echo $((5 ^ 3))
 ---
 (command (word "echo") (word "$((5 ^ 3))"))
+---
 
 
 === left shift
 echo $((1 << 4))
 ---
 (command (word "echo") (word "$((1 << 4))"))
+---
 
 
 === right shift
 echo $((16 >> 2))
 ---
 (command (word "echo") (word "$((16 >> 2))"))
+---
 
 
 # === Logical operators ===
@@ -174,12 +200,14 @@ echo $((16 >> 2))
 echo $((1 && 1))
 ---
 (command (word "echo") (word "$((1 && 1))"))
+---
 
 
 === logical or
 echo $((0 || 1))
 ---
 (command (word "echo") (word "$((0 || 1))"))
+---
 
 
 # === Unary operators ===
@@ -188,24 +216,28 @@ echo $((0 || 1))
 echo $((!0))
 ---
 (command (word "echo") (word "$((!0))"))
+---
 
 
 === bitwise not
 echo $((~5))
 ---
 (command (word "echo") (word "$((~5))"))
+---
 
 
 === unary plus
 echo $((+5))
 ---
 (command (word "echo") (word "$((+5))"))
+---
 
 
 === unary minus
 echo $((-5))
 ---
 (command (word "echo") (word "$((-5))"))
+---
 
 
 # === Increment/decrement ===
@@ -214,24 +246,28 @@ echo $((-5))
 echo $((++x))
 ---
 (command (word "echo") (word "$((++x))"))
+---
 
 
 === post-increment
 echo $((x++))
 ---
 (command (word "echo") (word "$((x++))"))
+---
 
 
 === pre-decrement
 echo $((--x))
 ---
 (command (word "echo") (word "$((--x))"))
+---
 
 
 === post-decrement
 echo $((x--))
 ---
 (command (word "echo") (word "$((x--))"))
+---
 
 
 # === Assignment operators ===
@@ -240,66 +276,77 @@ echo $((x--))
 echo $((x = 5))
 ---
 (command (word "echo") (word "$((x = 5))"))
+---
 
 
 === add assign
 echo $((x += 5))
 ---
 (command (word "echo") (word "$((x += 5))"))
+---
 
 
 === subtract assign
 echo $((x -= 5))
 ---
 (command (word "echo") (word "$((x -= 5))"))
+---
 
 
 === multiply assign
 echo $((x *= 5))
 ---
 (command (word "echo") (word "$((x *= 5))"))
+---
 
 
 === divide assign
 echo $((x /= 5))
 ---
 (command (word "echo") (word "$((x /= 5))"))
+---
 
 
 === modulo assign
 echo $((x %= 5))
 ---
 (command (word "echo") (word "$((x %= 5))"))
+---
 
 
 === left shift assign
 echo $((x <<= 2))
 ---
 (command (word "echo") (word "$((x <<= 2))"))
+---
 
 
 === right shift assign
 echo $((x >>= 2))
 ---
 (command (word "echo") (word "$((x >>= 2))"))
+---
 
 
 === bitwise and assign
 echo $((x &= 0xFF))
 ---
 (command (word "echo") (word "$((x &= 0xFF))"))
+---
 
 
 === bitwise or assign
 echo $((x |= 0x80))
 ---
 (command (word "echo") (word "$((x |= 0x80))"))
+---
 
 
 === bitwise xor assign
 echo $((x ^= 0x01))
 ---
 (command (word "echo") (word "$((x ^= 0x01))"))
+---
 
 
 # === Ternary operator ===
@@ -308,18 +355,21 @@ echo $((x ^= 0x01))
 echo $((1 ? 10 : 20))
 ---
 (command (word "echo") (word "$((1 ? 10 : 20))"))
+---
 
 
 === ternary false
 echo $((0 ? 10 : 20))
 ---
 (command (word "echo") (word "$((0 ? 10 : 20))"))
+---
 
 
 === ternary with expressions
 echo $((x > 0 ? x : -x))
 ---
 (command (word "echo") (word "$((x > 0 ? x : -x))"))
+---
 
 
 # === Comma operator ===
@@ -328,12 +378,14 @@ echo $((x > 0 ? x : -x))
 echo $((x = 1, y = 2))
 ---
 (command (word "echo") (word "$((x = 1, y = 2))"))
+---
 
 
 === multiple comma
 echo $((a, b, c))
 ---
 (command (word "echo") (word "$((a, b, c))"))
+---
 
 
 # === Grouping ===
@@ -342,12 +394,14 @@ echo $((a, b, c))
 echo $(((1 + 2) * 3))
 ---
 (command (word "echo") (word "$(((1 + 2) * 3))"))
+---
 
 
 === nested parentheses
 echo $((((1 + 2))))
 ---
 (command (word "echo") (word "$((((1 + 2))))"))
+---
 
 
 # === Array subscripts ===
@@ -356,18 +410,21 @@ echo $((((1 + 2))))
 echo $((arr[0]))
 ---
 (command (word "echo") (word "$((arr[0]))"))
+---
 
 
 === array subscript expression
 echo $((arr[i+1]))
 ---
 (command (word "echo") (word "$((arr[i+1]))"))
+---
 
 
 === nested array subscript
 echo $((arr[arr[0]]))
 ---
 (command (word "echo") (word "$((arr[arr[0]]))"))
+---
 
 
 # === Nested expansions (THE MAIN PURPOSE) ===
@@ -376,36 +433,42 @@ echo $((arr[arr[0]]))
 echo $(($(echo 5) + 1))
 ---
 (command (word "echo") (word "$(($(echo 5) + 1))"))
+---
 
 
 === multiple command substitutions
 echo $(($(echo 1) + $(echo 2)))
 ---
 (command (word "echo") (word "$(($(echo 1) + $(echo 2)))"))
+---
 
 
 === command sub with side effect
 result=$((1 + $(echo 2)))
 ---
 (command (word "result=$((1 + $(echo 2)))"))
+---
 
 
 === nested arithmetic in command sub
 echo $(($(echo $((1+2))) + 3))
 ---
 (command (word "echo") (word "$(($(echo $((1+2))) + 3))"))
+---
 
 
 === side effect increment
 echo $((x++))
 ---
 (command (word "echo") (word "$((x++))"))
+---
 
 
 === command sub and increment
 echo $(($(get_val) + x++))
 ---
 (command (word "echo") (word "$(($(get_val) + x++))"))
+---
 
 
 # === Arithmetic command (( )) ===
@@ -414,24 +477,28 @@ echo $(($(get_val) + x++))
 ((x = 5))
 ---
 (arith (word "x = 5"))
+---
 
 
 === arithmetic command increment
 ((x++))
 ---
 (arith (word "x++"))
+---
 
 
 === arithmetic command comparison
 ((x > 0))
 ---
 (arith (word "x > 0"))
+---
 
 
 === arithmetic command with command sub
 ((result = $(get_val)))
 ---
 (arith (word "result = $(get_val)"))
+---
 
 
 # === Operator precedence ===
@@ -440,24 +507,28 @@ echo $(($(get_val) + x++))
 echo $((1 + 2 * 3))
 ---
 (command (word "echo") (word "$((1 + 2 * 3))"))
+---
 
 
 === comparison before logical
 echo $((a > 0 && a < 10))
 ---
 (command (word "echo") (word "$((a > 0 && a < 10))"))
+---
 
 
 === assignment right associative
 echo $((a = b = 5))
 ---
 (command (word "echo") (word "$((a = b = 5))"))
+---
 
 
 === ternary right associative
 echo $((a ? b ? 1 : 2 : 3))
 ---
 (command (word "echo") (word "$((a ? b ? 1 : 2 : 3))"))
+---
 
 
 # === Edge cases ===
@@ -466,36 +537,42 @@ echo $((a ? b ? 1 : 2 : 3))
 echo $(())
 ---
 (command (word "echo") (word "$(())"))
+---
 
 
 === just whitespace
 echo $((   ))
 ---
 (command (word "echo") (word "$((   ))"))
+---
 
 
 === variable with dollar in expression
 echo $(($a + $b))
 ---
 (command (word "echo") (word "$(($a + $b))"))
+---
 
 
 === subtract negative
 echo $((1 - -2))
 ---
 (command (word "echo") (word "$((1 - -2))"))
+---
 
 
 === double negation
 echo $((--x))
 ---
 (command (word "echo") (word "$((--x))"))
+---
 
 
 === negate variable
 echo $((-x))
 ---
 (command (word "echo") (word "$((-x))"))
+---
 
 
 # === Whitespace edge cases ===
@@ -505,6 +582,7 @@ echo $((1 + \
 2))
 ---
 (command (word "echo") (word "$((1 + 2))"))
+---
 
 
 === multiple line continuations
@@ -513,6 +591,7 @@ echo $((1 + \
 3))
 ---
 (command (word "echo") (word "$((1 + 2 + 3))"))
+---
 
 
 # === Increment/decrement edge cases ===
@@ -521,18 +600,21 @@ echo $((1 + \
 echo $((a++ + b))
 ---
 (command (word "echo") (word "$((a++ + b))"))
+---
 
 
 === post-decr minus value
 echo $((a-- - b))
 ---
 (command (word "echo") (word "$((a-- - b))"))
+---
 
 
 === chained increments
 echo $((a++ + ++b))
 ---
 (command (word "echo") (word "$((a++ + ++b))"))
+---
 
 
 # === Unary edge cases ===
@@ -541,21 +623,25 @@ echo $((a++ + ++b))
 echo $((- -5))
 ---
 (command (word "echo") (word "$((- -5))"))
+---
 
 
 === unary plus minus
 echo $((+-5))
 ---
 (command (word "echo") (word "$((+-5))"))
+---
 
 
 === double logical not
 echo $((!!x))
 ---
 (command (word "echo") (word "$((!!x))"))
+---
 
 
 === double bitwise not
 echo $((~~x))
 ---
 (command (word "echo") (word "$((~~x))"))
+---

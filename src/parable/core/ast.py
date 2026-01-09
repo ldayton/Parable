@@ -33,12 +33,12 @@ class Word(Node):
         # Strip $ from ANSI-C quotes $'...' and locale strings $"..."
         value = re.sub(r"\$'", "'", value)
         value = re.sub(r'\$"', '"', value)
+        # Format command substitutions with oracle pretty-printing (before escaping)
+        value = self._format_command_substitutions(value)
         # Escape backslashes for s-expression output (but not in ANSI-C strings)
         if not is_ansi_c:
             value = value.replace("\\", "\\\\")
-        # Format command substitutions with oracle pretty-printing
-        value = self._format_command_substitutions(value)
-        # Escape double quotes (but not inside single-quoted ANSI-C strings)
+        # Escape double quotes and newlines
         escaped = value.replace('"', '\\"').replace("\n", "\\n")
         return f'(word "{escaped}")'
 

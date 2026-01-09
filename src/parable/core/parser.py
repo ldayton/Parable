@@ -6,6 +6,7 @@ from .ast import (
     ArithBinaryOp,
     ArithComma,
     ArithDeprecated,
+    ArithEscape,
     ArithmeticCommand,
     ArithmeticExpansion,
     ArithNumber,
@@ -1358,6 +1359,15 @@ class Parser:
         if c == "`":
             return self._arith_parse_backtick()
 
+        # Escape sequence \X (not line continuation, which is handled in _arith_skip_ws)
+        # Escape covers only the single character after backslash
+        if c == "\\":
+            self._arith_advance()  # consume backslash
+            if self._arith_at_end():
+                raise ParseError("Unexpected end after backslash in arithmetic", pos=self._arith_pos)
+            escaped_char = self._arith_advance()  # consume escaped character
+            return ArithEscape(escaped_char)
+
         # Number or variable
         return self._arith_parse_number_or_var()
 
@@ -2015,6 +2025,17 @@ class Parser:
                             arg_chars.append(self.advance())
                         continue
                     arg_chars.append(self.advance())
+            # Opening brace followed by whitespace - increase depth for matching
+            # (like brace groups). Bare {foo is literal, not balanced.
+            elif (
+                c == "{"
+                and not in_single_quote
+                and not in_double_quote
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] in " \t\n"
+            ):
+                depth += 1
+                arg_chars.append(self.advance())
             # Closing brace - only count if not in quotes
             elif c == "}":
                 if in_single_quote or in_double_quote:
@@ -2475,9 +2496,9 @@ class Parser:
                 break
             if ch == "&" and not (self.pos + 1 < self.length and self.source[self.pos + 1] == ">"):
                 break
-            # } is only a terminator when it's a standalone word (brace group closer)
-            # }}} or }foo are regular words
-            if self.peek() == "}":
+            # } is only a terminator at command position (closing a brace group)
+            # In argument position, } is just a regular word
+            if self.peek() == "}" and not words:
                 # Check if } would be a standalone word (next char is whitespace/meta/EOF)
                 next_pos = self.pos + 1
                 if next_pos >= self.length or self.source[next_pos] in " \t\n|&;()<>":
@@ -3760,19 +3781,47 @@ class Parser:
                     pattern_chars.append(self.advance())  # (
                     extglob_depth += 1
                 elif ch == "[":
-                    # Character class - consume until ]
-                    pattern_chars.append(self.advance())
-                    # Handle [! or [^ at start
-                    if not self.at_end() and self.peek() in "!^":
+                    # Character class - but only if there's a matching ]
+                    # ] must come before ) at same depth (either extglob or pattern)
+                    is_char_class = False
+                    scan_pos = self.pos + 1
+                    scan_depth = 0
+                    # Skip [! or [^ at start
+                    if scan_pos < self.length and self.source[scan_pos] in "!^":
+                        scan_pos += 1
+                    # Skip ] as first char (literal in char class)
+                    if scan_pos < self.length and self.source[scan_pos] == "]":
+                        scan_pos += 1
+                    while scan_pos < self.length:
+                        sc = self.source[scan_pos]
+                        if sc == "]" and scan_depth == 0:
+                            is_char_class = True
+                            break
+                        elif sc == "[":
+                            scan_depth += 1
+                        elif sc == ")" and scan_depth == 0:
+                            # Hit pattern/extglob closer before finding ]
+                            break
+                        elif sc == "|" and scan_depth == 0 and extglob_depth > 0:
+                            # Hit alternation in extglob - ] must be in this branch
+                            break
+                        scan_pos += 1
+                    if is_char_class:
                         pattern_chars.append(self.advance())
-                    # Handle ] as first char (literal)
-                    if not self.at_end() and self.peek() == "]":
+                        # Handle [! or [^ at start
+                        if not self.at_end() and self.peek() in "!^":
+                            pattern_chars.append(self.advance())
+                        # Handle ] as first char (literal)
+                        if not self.at_end() and self.peek() == "]":
+                            pattern_chars.append(self.advance())
+                        # Consume until closing ]
+                        while not self.at_end() and self.peek() != "]":
+                            pattern_chars.append(self.advance())
+                        if not self.at_end():
+                            pattern_chars.append(self.advance())  # ]
+                    else:
+                        # Not a valid char class, treat [ as literal
                         pattern_chars.append(self.advance())
-                    # Consume until closing ]
-                    while not self.at_end() and self.peek() != "]":
-                        pattern_chars.append(self.advance())
-                    if not self.at_end():
-                        pattern_chars.append(self.advance())  # ]
                 elif ch == "'":
                     # Single-quoted string in pattern
                     pattern_chars.append(self.advance())
@@ -4286,19 +4335,15 @@ class Parser:
                 self.advance()
                 self.skip_whitespace()
                 # Recursively parse pipeline to handle ! ! cmd, ! time cmd, etc.
+                # Bare ! (no following command) is valid POSIX - equivalent to false
                 inner = self.parse_pipeline()
-                if inner is None:
-                    raise ParseError("Expected command after !", pos=self.pos)
                 return Negation(inner)
 
         # Parse the actual pipeline
         result = self._parse_simple_pipeline()
-        if result is None:
-            if prefix_order:
-                raise ParseError("Expected command after time/!", pos=self.pos)
-            return None
 
         # Wrap based on prefix order
+        # Note: bare time and time ! are valid (null command timing)
         if prefix_order == "time":
             result = Time(result, time_posix)
         elif prefix_order == "negation":
@@ -4311,6 +4356,9 @@ class Parser:
             # ! time cmd -> Negation(Time(cmd))
             result = Time(result, time_posix)
             result = Negation(result)
+        elif result is None:
+            # No prefix and no pipeline
+            return None
 
         return result
 

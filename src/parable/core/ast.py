@@ -555,6 +555,7 @@ class ArithmeticCommand(Node):
 
 # Arithmetic expression nodes
 
+
 @dataclass
 class ArithNumber(Node):
     """A numeric literal in arithmetic context."""

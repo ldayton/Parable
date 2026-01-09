@@ -12,9 +12,10 @@
 ## Testing
 
 ```bash
-uv run pytest tests/                    # all tests
-uv run pytest tests/01_words.tests      # single module
-uv run pytest -k "heredoc"              # by name pattern
+just test                               # run tests (Python 3.14)
+just test -k "heredoc"                  # by name pattern
+just test tests/01_words.tests          # single module
+just test-all                           # all Python versions (required before committing)
 ```
 
 Tests are validated against `bash -n` to ensure we only accept valid bash.

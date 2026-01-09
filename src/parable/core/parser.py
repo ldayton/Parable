@@ -713,25 +713,31 @@ class Parser:
         start = self.pos
         self.advance()  # consume opening `
 
-        # Find closing backtick (no nesting for backticks)
-        content_start = self.pos
+        # Find closing backtick, processing escape sequences as we go.
+        # In backticks, backslash is special only before $, `, or \ (per bash manual).
+        # \$ -> $, \` -> `, \\ -> \, other \X -> \X (backslash is literal)
+        content_chars = []
         while not self.at_end() and self.peek() != "`":
             c = self.peek()
-            # Handle escaped backtick
-            if c == "\\" and self.pos + 1 < self.length and self.source[self.pos + 1] == "`":
-                self.advance()  # backslash
-                self.advance()  # escaped backtick
+            if c == "\\" and self.pos + 1 < self.length:
+                next_c = self.source[self.pos + 1]
+                if next_c in "$`\\":
+                    # Escape sequence: skip backslash, keep the escaped char
+                    self.advance()  # skip \
+                    content_chars.append(self.advance())
+                else:
+                    # Backslash is literal before other characters
+                    content_chars.append(self.advance())
             else:
-                self.advance()
+                content_chars.append(self.advance())
 
         if self.at_end():
             self.pos = start
             return None, ""
 
-        content = self.source[content_start : self.pos]
         self.advance()  # consume closing `
-
         text = self.source[start : self.pos]
+        content = "".join(content_chars)
 
         # Parse the content as a command list
         sub_parser = Parser(content)
@@ -2327,8 +2333,20 @@ class Parser:
                 # Read unquoted delimiter
                 while not self.at_end() and self.peek() not in " \t\n;|&<>()":
                     delimiter_chars.append(self.advance())
+            elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                # Command substitution as delimiter: $(...)
+                delimiter_chars.append(self.advance())  # $
+                delimiter_chars.append(self.advance())  # (
+                depth = 1
+                while not self.at_end() and depth > 0:
+                    c = self.peek()
+                    if c == "(":
+                        depth += 1
+                    elif c == ")":
+                        depth -= 1
+                    delimiter_chars.append(self.advance())
             else:
-                # Unquoted delimiter - but check for partial quoting
+                # Unquoted delimiter - but check for partial quoting and command subs
                 while not self.at_end() and self.peek() not in " \t\n;|&<>()":
                     ch = self.peek()
                     if ch == '"':
@@ -2349,6 +2367,18 @@ class Parser:
                         quoted = True
                         self.advance()
                         if not self.at_end():
+                            delimiter_chars.append(self.advance())
+                    elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                        # Command substitution embedded in delimiter
+                        delimiter_chars.append(self.advance())  # $
+                        delimiter_chars.append(self.advance())  # (
+                        depth = 1
+                        while not self.at_end() and depth > 0:
+                            c = self.peek()
+                            if c == "(":
+                                depth += 1
+                            elif c == ")":
+                                depth -= 1
                             delimiter_chars.append(self.advance())
                     else:
                         delimiter_chars.append(self.advance())

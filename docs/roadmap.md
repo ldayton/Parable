@@ -4,36 +4,7 @@ Features to make Parable more useful for downstream projects.
 
 ## Oils Test Suite Status
 
-Parable is tested against the [Oils](https://www.oilshell.org/) project's bash test corpus. Current status: **5588 passed, 2 failed**.
-
-### Parser Bugs (2 failures)
-
-| Category | Count | Description |
-|----------|------:|-------------|
-| Escaped quotes in backticks | 1 | Complex quoting: `` `[[ $(echo \\") ]]` `` inside double quotes |
-| Heredoc delimiter | 1 | Command substitution as heredoc delimiter: `<<$(a)` |
-
-### Recently Fixed
-
-- ✅ **Conditional special chars (1 test)**: Unquoted `!` in `[[ ]]` pattern position.
-- ✅ **LHS array parsing (1 test)**: `a[1+2]=3`, `a[x|y]=3` array index expressions.
-- ✅ **Backslash-newline continuation (1 test)**: Line continuation before pipes, etc.
-- ✅ **zsh-like parameter expansion (2 tests)**: `${(M)...}` and similar (bash accepts syntactically).
-- ✅ **KSH command substitution (2 tests)**: `${ echo hi; }` - ksh-style command sub.
-- ✅ **Parenthesis ambiguity (6 tests)**: `((` vs `( (` and `$((` vs `$( (` disambiguation.
-- ✅ **Ternary with assignment (1 test)**: `$((1 ? a=1 : 42))` assignment in ternary branches.
-- ✅ **Variable expansion edge cases (4 tests)**: Quote tracking in `${var}` arguments.
-- ✅ **Quotes in comments (173 tests)**: Comments now properly ignored during lexing.
-- ✅ **Newline after && and || (2 tests)**: Commands can appear on next line.
-- ✅ **Quotes/backticks in arithmetic (10 tests)**: `$(('1'))` and `` $((`cmd`)) `` now parse.
-- ✅ **Redirects after compound commands (5 tests)**: `[[ ]] > file`, `(( )) > file`, `case ... esac > file` work.
-- ✅ **Backticks in conditionals (1 test)**: `` [[ `cmd` = x ]] `` now parses.
-
-### Remaining Issues
-
-1. **Escaped quotes in backticks (1 test)**: Complex nested quoting with `\\"`  inside backticks inside double quotes containing `[[ ]]`. Very obscure edge case.
-
-2. **Heredoc with command sub delimiter (1 test)**: `cat <<$(a)` - using command substitution as heredoc delimiter. Rare pattern.
+Parable is tested against the [Oils](https://www.oilshell.org/) project's bash test corpus. Current status: **5590 passed, 0 failed** (100%).
 
 ---
 

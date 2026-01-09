@@ -32,7 +32,10 @@ class Word(Node):
         # Strip $ from ANSI-C quotes $'...' and locale strings $"..."
         value = re.sub(r"\$'", "'", value)
         value = re.sub(r'\$"', '"', value)
-        escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+        # Double backslash for unknown escapes in ANSI-C strings (e.g., \q -> \\q)
+        # Known escapes: \n \t \r \a \b \f \v \\ \' \" \0 \x \u \U \c \e \E
+        value = re.sub(r"\\([^ntrabfv\\'\"0xuUcEe\\])", r"\\\\\1", value)
+        escaped = value.replace("\n", "\\n")
         return f'(word "{escaped}")'
 
 
@@ -203,8 +206,14 @@ class Redirect(Node):
         # Strip fd prefix from operator (e.g., "2>" -> ">")
         op = self.op.lstrip("0123456789")
         target_val = self.target.value
-        # Strip $ from locale strings $"..."
+        # Strip $ from ANSI-C $'...' and locale strings $"..."
+        target_val = re.sub(r"\$'", "'", target_val)
         target_val = re.sub(r'\$"', '"', target_val)
+        # For here-strings, expand ANSI-C escape sequences
+        if op == "<<<" and target_val.startswith("'") and target_val.endswith("'"):
+            inner = target_val[1:-1]
+            inner = inner.replace("\\n", "\n").replace("\\t", "\t").replace("\\r", "\r")
+            target_val = "'" + inner + "'"
         # For fd duplication, target starts with & (e.g., "&1", "&2", "&-")
         if target_val.startswith("&"):
             # Determine the real operator
@@ -217,8 +226,7 @@ class Redirect(Node):
                 return f'(redirect "{op}" {fd_target})'
             elif target_val == "&-":
                 return f'(redirect ">&-" 0)'
-        escaped = target_val.replace("\\", "\\\\").replace("\n", "\\n")
-        return f'(redirect "{op}" "{escaped}")'
+        return f'(redirect "{op}" "{target_val}")'
 
 
 @dataclass

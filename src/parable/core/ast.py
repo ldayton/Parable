@@ -403,9 +403,10 @@ class If(Node):
         result = f"(if {self.condition.to_sexp()} {self.then_body.to_sexp()}"
         if self.else_body:
             result += f" {self.else_body.to_sexp()}"
+        result += ")"
         for r in self.redirects:
             result += f" {r.to_sexp()}"
-        return result + ")"
+        return result
 
 
 @dataclass
@@ -423,9 +424,10 @@ class While(Node):
         self.redirects = redirects or []
 
     def to_sexp(self) -> str:
-        parts = [self.condition.to_sexp(), self.body.to_sexp()]
-        parts.extend(r.to_sexp() for r in self.redirects)
-        return f"(while {' '.join(parts)})"
+        base = f"(while {self.condition.to_sexp()} {self.body.to_sexp()})"
+        if self.redirects:
+            return base + " " + " ".join(r.to_sexp() for r in self.redirects)
+        return base
 
 
 @dataclass
@@ -443,9 +445,10 @@ class Until(Node):
         self.redirects = redirects or []
 
     def to_sexp(self) -> str:
-        parts = [self.condition.to_sexp(), self.body.to_sexp()]
-        parts.extend(r.to_sexp() for r in self.redirects)
-        return f"(until {' '.join(parts)})"
+        base = f"(until {self.condition.to_sexp()} {self.body.to_sexp()})"
+        if self.redirects:
+            return base + " " + " ".join(r.to_sexp() for r in self.redirects)
+        return base
 
 
 @dataclass
@@ -468,18 +471,17 @@ class For(Node):
 
     def to_sexp(self) -> str:
         # Oracle format: (for (word "var") (in (word "a") ...) body)
-        redirect_strs = " ".join(r.to_sexp() for r in self.redirects)
-        suffix = f" {redirect_strs}" if redirect_strs else ""
+        suffix = " " + " ".join(r.to_sexp() for r in self.redirects) if self.redirects else ""
         var_escaped = self.var.replace("\\", "\\\\").replace('"', '\\"')
         if self.words is None:
             # No 'in' clause - oracle implies (in (word "\"$@\""))
-            return f'(for (word "{var_escaped}") (in (word "\\"$@\\"")) {self.body.to_sexp()}{suffix})'
+            return f'(for (word "{var_escaped}") (in (word "\\"$@\\"")) {self.body.to_sexp()}){suffix}'
         elif len(self.words) == 0:
             # Empty 'in' clause - oracle outputs (in)
-            return f'(for (word "{var_escaped}") (in) {self.body.to_sexp()}{suffix})'
+            return f'(for (word "{var_escaped}") (in) {self.body.to_sexp()}){suffix}'
         else:
             word_strs = " ".join(w.to_sexp() for w in self.words)
-            return f'(for (word "{var_escaped}") (in {word_strs}) {self.body.to_sexp()}{suffix})'
+            return f'(for (word "{var_escaped}") (in {word_strs}) {self.body.to_sexp()}){suffix}'
 
 
 @dataclass
@@ -504,16 +506,14 @@ class ForArith(Node):
         # Oracle format: (arith-for (init (word "x")) (test (word "y")) (step (word "z")) body)
         def escape(s: str) -> str:
             return s.replace("\\", "\\\\").replace('"', '\\"')
-        parts = [self.body.to_sexp()]
-        parts.extend(r.to_sexp() for r in self.redirects)
-        inner = " ".join(parts)
+        suffix = " " + " ".join(r.to_sexp() for r in self.redirects) if self.redirects else ""
         init_val = self.init if self.init else "1"
         cond_val = self.cond if self.cond else "1"
         incr_val = self.incr if self.incr else "1"
         return (
             f'(arith-for (init (word "{escape(init_val)}")) '
             f'(test (word "{escape(cond_val)}")) '
-            f'(step (word "{escape(incr_val)}")) {inner})'
+            f'(step (word "{escape(incr_val)}")) {self.body.to_sexp()}){suffix}'
         )
 
 
@@ -537,8 +537,7 @@ class Select(Node):
 
     def to_sexp(self) -> str:
         # Oracle format: (select (word "var") (in (word "a") ...) body)
-        redirect_strs = " ".join(r.to_sexp() for r in self.redirects)
-        suffix = f" {redirect_strs}" if redirect_strs else ""
+        suffix = " " + " ".join(r.to_sexp() for r in self.redirects) if self.redirects else ""
         var_escaped = self.var.replace("\\", "\\\\").replace('"', '\\"')
         if self.words is not None:
             word_strs = " ".join(w.to_sexp() for w in self.words)
@@ -546,7 +545,7 @@ class Select(Node):
         else:
             # No 'in' clause means implicit "$@"
             in_clause = '(in (word "\\"$@\\""))'
-        return f'(select (word "{var_escaped}") {in_clause} {self.body.to_sexp()}{suffix})'
+        return f'(select (word "{var_escaped}") {in_clause} {self.body.to_sexp()}){suffix}'
 
 
 @dataclass

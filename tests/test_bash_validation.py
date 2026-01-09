@@ -131,7 +131,7 @@ def test_valid_bash_syntax(test_case):
     """Verify that the test input is valid bash syntax."""
     # Build bash command - enable extglob for extglob tests
     cmd = [BASH_PATH]
-    if "extglob" in test_case.file:
+    if "extglob" in test_case.file or "extglob" in test_case.name:
         cmd.extend(["-O", "extglob"])
     cmd.append("-n")
 

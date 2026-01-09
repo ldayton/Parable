@@ -238,3 +238,37 @@ var='*'
 ---
 (command (word "var='*'"))
 
+# === Comments with special characters ===
+# From pure-bash-bible failures
+
+=== comment with parentheses
+# has (parens)
+---
+(comment "# has (parens)")
+
+=== comment with range in parens
+# Loop from 0-100 (no variable support).
+---
+(comment "# Loop from 0-100 (no variable support).")
+
+=== comment with version in parens
+# Bash <4 (discarding empty lines).
+---
+(comment "# Bash <4 (discarding empty lines).")
+
+=== comment with subshell syntax
+# (:;:) is a micro sleep
+---
+(comment "# (:;:) is a micro sleep")
+
+=== comment with percentage in parens
+#            ^----- Elapsed Percentage (0-100).
+---
+(comment "#            ^----- Elapsed Percentage (0-100).")
+
+=== multiline with comment containing parens
+# (substring not in string).
+if true; then echo yes; fi
+---
+(comment "# (substring not in string).") (if (command (word "true")) (command (word "echo") (word "yes")))
+

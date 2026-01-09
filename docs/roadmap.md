@@ -7,7 +7,6 @@ Features to make Parable more useful for downstream projects.
 ```
 Feature                Priority   Effort   Impact         Status
 ────────────────────────────────────────────────────────────────────
-Empty heredoc delim    P1         Low      Low            Bug
 Position tracking      P2         Medium   Very High      Not started
 JSON serialization     P2         Low      High           Not started
 Visitor pattern        P2         Low      High           Not started
@@ -16,23 +15,10 @@ Comments preservation  P3         Medium   Medium         Not started
 Source reconstruction  P3         Medium   Medium         Not started
 ```
 
-- **P1 Correctness:** Required. Without these, tools miss hidden command substitutions.
 - **P2 Usability:** Practical necessities for tool authors.
 - **P3 Nice to have:** Narrower use cases.
 
 ---
-
-## P1: Correctness
-
-These features are required for tools that need complete visibility into bash scripts.
-
-### Empty heredoc delimiter
-
-**Status:** Bug
-
-`cat <<''` fails with "Expected delimiter for here document".
-
-Empty string is a valid heredoc delimiter - the heredoc ends at the first empty line.
 
 ## P2: Usability
 

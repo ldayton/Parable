@@ -5,7 +5,7 @@ cat <<''
 line
 
 ---
-(command (word "cat") (heredoc "" "line\n"))
+(command (word "cat") (heredoc-quoted "" "line\n"))
 
 === empty for list
 for x in; do :; done

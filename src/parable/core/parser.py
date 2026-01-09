@@ -2147,8 +2147,6 @@ class Parser:
                         delimiter_chars.append(self.advance())
 
         delimiter = "".join(delimiter_chars)
-        if not delimiter:
-            raise ParseError("Expected delimiter for here document", pos=self.pos)
 
         # Find the end of the current line (command continues until newline)
         # We need to mark where the heredoc content starts

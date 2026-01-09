@@ -261,17 +261,17 @@ if ! test -f file; then echo missing; fi
 === if with double bracket
 if [[ -f file ]]; then cat file; fi
 ---
-(if (cond-expr "-f file") (command (word "cat") (word "file")))
+(if (cond-expr (unary-test "-f" (word "file"))) (command (word "cat") (word "file")))
 
 === double bracket with pattern
 if [[ "$x" == *.txt ]]; then echo text; fi
 ---
-(if (cond-expr "\"$x\" == *.txt") (command (word "echo") (word "text")))
+(if (cond-expr (binary-test "==" (word "\"$x\"" (param "x")) (word "*.txt"))) (command (word "echo") (word "text")))
 
 === double bracket regex
 if [[ "$x" =~ ^[0-9]+$ ]]; then echo number; fi
 ---
-(if (cond-expr "\"$x\" =~ ^[0-9]+$") (command (word "echo") (word "number")))
+(if (cond-expr (binary-test "=~" (word "\"$x\"" (param "x")) (word "^[0-9]+$"))) (command (word "echo") (word "number")))
 
 === test with string comparison
 if [ "$(uname)" = "Darwin" ]; then echo mac; fi
@@ -291,12 +291,12 @@ if [ -f file ] && [ -r file ]; then cat file; fi
 === double bracket with and
 if [[ -f file ]] && [[ -r file ]]; then cat file; fi
 ---
-(if (list (cond-expr "-f file") (and) (cond-expr "-r file")) (command (word "cat") (word "file")))
+(if (list (cond-expr (unary-test "-f" (word "file"))) (and) (cond-expr (unary-test "-r" (word "file")))) (command (word "cat") (word "file")))
 
 === double bracket with or
 if [[ -f a ]] || [[ -f b ]]; then echo found; fi
 ---
-(if (list (cond-expr "-f a") (or) (cond-expr "-f b")) (command (word "echo") (word "found")))
+(if (list (cond-expr (unary-test "-f" (word "a"))) (or) (cond-expr (unary-test "-f" (word "b")))) (command (word "echo") (word "found")))
 
 # NOTE: (( )) arithmetic expressions require special parsing
 # Currently parsed as nested subshells - proper (( )) support is future work

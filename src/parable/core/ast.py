@@ -28,9 +28,6 @@ class Word(Node):
 
     def to_sexp(self) -> str:
         escaped = self.value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-        if self.parts:
-            inner = " ".join(p.to_sexp() for p in self.parts)
-            return f'(word "{escaped}" {inner})'
         return f'(word "{escaped}")'
 
 

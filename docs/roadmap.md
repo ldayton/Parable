@@ -4,11 +4,42 @@ Features to make Parable more useful for downstream projects.
 
 ## Test Suite Status
 
-Parable is tested against multiple bash test corpora. Current status: **5680 passed, 0 failed** (100%).
+Parable is tested against bash-oracle (GNU Bash 5.3 patched with `--dump-ast`).
 
-- **GNU Bash test corpus:** 78 tests (100% pass)
-- **Oils bash corpus:** 2,495 tests (100% pass)
-- **tree-sitter-bash corpus:** 61 tests (100% pass)
+**Current:** 545 passed, 3663 failed (13% pass rate)
+
+Test corpora:
+- **Oils bash corpus:** 2,495 tests
+- **tree-sitter-bash corpus:** 93 tests
+- **GNU Bash test corpus:** 78 tests
+- **Parable hand-written tests:** 1,542 tests
+
+Total: 4,208 tests (4,201 verified against oracle, 7 skipped due to binary content)
+
+---
+
+## P1: Oracle Alignment
+
+Parable's s-expression output must match bash-oracle exactly. Failure classification:
+
+| Count | % | Issue | Fix |
+|------:|----:|-------|-----|
+| 2403 | 65.6% | `(param ...)` inside words | Remove nested expansion nodes from word output |
+| 410 | 11.2% | Other | Mixed issues |
+| 238 | 6.5% | Arithmetic differences | Match `(arith ...)` format |
+| 143 | 3.9% | Redirect target wrapped in `(word ...)` | Output filename as plain string |
+| 132 | 3.6% | `(cmdsub ...)` inside words | Remove nested expansion nodes from word output |
+| 97 | 2.6% | Heredoc handling | Match heredoc content format |
+| 91 | 2.5% | `[[ ... ]]` conditional expressions | Match `(cond ...)` format |
+| 46 | 1.3% | FD prefix in redirect op (`"2>"` vs `">"`) | Separate fd number from operator |
+| 23 | 0.6% | Function definitions | Match `(function ...)` format |
+| 23 | 0.6% | Process substitution in words | Remove nested expansion nodes |
+| <50 | <2% | Compound, loops, case, background, empty, if | Various |
+
+**High-impact fixes (76% of failures):**
+1. Remove `(param ...)` / `(cmdsub ...)` / `(procsub ...)` from inside `(word ...)` — just output the text
+2. Output redirect targets as plain strings, not `(word ...)`
+3. Separate fd number from redirect operator
 
 ---
 

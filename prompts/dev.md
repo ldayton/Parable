@@ -1,37 +1,40 @@
 # Parable Development
 
-## Working on a Feature
+## Current Goal: Oracle Alignment
 
-1. **Consult reference materials** - read `reference/` docs before starting
-2. **Write failing tests first** - define expected behavior before implementation
-3. **Implement until tests pass** - minimal code to make it work
-4. **Research edge cases** - tree-sitter-bash corpus, real scripts, resources below
-5. **Add edge case tests** - fix any failures
-6. **Commit** - one logical change per commit
+Parable's s-expression output must match bash-oracle (GNU Bash 5.3 with `--dump-ast`).
 
-## Testing
+**Status:** 545 passed, 3663 failed (13%). See `docs/roadmap.md` for failure classification.
+
+## Workflow
+
+1. **Run tests** to see current failures
+2. **Pick a failure category** from roadmap (start with highest-impact)
+3. **Examine failures** - compare Parable output vs expected (oracle output)
+4. **Fix `to_sexp()` methods** in `src/parable/core/ast.py`
+5. **Run tests** to verify fix and check for regressions
+6. **Commit** when a category is fixed or substantially improved
+
+## Commands
 
 ```bash
 just test                               # run tests (Python 3.14)
-just test -k "heredoc"                  # by name pattern
-just test tests/01_words.tests          # single module
+just test -k "redirect"                 # by name pattern
+just test tests/05_redirects.tests      # single file
 just test-all                           # all Python versions (required before committing)
 ```
 
-Tests are validated against `bash -n` to ensure we only accept valid bash.
+## Key Files
 
-## Reference
+- `src/parable/core/ast.py` - AST nodes with `to_sexp()` methods (main edit target)
+- `tests/*.tests` - test files (input + expected oracle output)
+- `tests/testformat.py` - test file parser
+- `tools/bash-oracle/` - oracle binary and verification tools
+- `docs/roadmap.md` - failure classification and priorities
 
-- `reference/` - source materials: bash-parse.y, posix-shell.html, bash-manpage.txt
-- `docs/roadmap.md` - planned features and priorities
+## Top Fixes Needed
 
-## Edge Case Resources
-
-- [Greg's Wiki](https://mywiki.wooledge.org) - BashFAQ, BashPitfalls, BashGuide
-- [Bash Hackers Wiki](https://wiki.bash-hackers.org) - detailed edge cases and undocumented behavior
-- [POSIX Shell spec](https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html) - what's specified vs bash extensions
-- [ShellCheck wiki](https://github.com/koalaman/shellcheck/wiki) - real-world edge cases from linting
-- [tree-sitter-bash corpus](https://github.com/tree-sitter/tree-sitter-bash/tree/master/corpus) - parser test cases
-- [Bash CHANGES](https://git.savannah.gnu.org/cgit/bash.git/tree/CHANGES) - version-specific behavior changes
-- GitHub code search (`language:bash`) - what people actually write
-- [bug-bash mailing list](https://lists.gnu.org/archive/html/bug-bash/) - bug reports with minimal repros
+1. **Words** (69%): Remove `(param ...)`, `(cmdsub ...)`, `(procsub ...)` from inside `(word ...)` — just output text
+2. **Redirects** (5%): Output target as plain string, not `(word ...)`; separate fd from operator
+3. **Arithmetic** (6%): Match `(arith ...)` format
+4. **Conditionals** (3%): Match `(cond ...)` format for `[[ ]]`

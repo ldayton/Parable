@@ -388,6 +388,11 @@ echo $((1--2))
 ---
 (command (word "echo") (word "$((1--2))" (arith (binary-op "-" (number "1") (unary-op "-" (number "2"))))))
 
+=== add positive no space
+echo $((1++2))
+---
+(command (word "echo") (word "$((1++2))" (arith (binary-op "+" (number "1") (unary-op "+" (number "2"))))))
+
 === chained assignment
 echo $((a = b = c = 5))
 ---

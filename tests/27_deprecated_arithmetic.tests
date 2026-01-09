@@ -200,7 +200,7 @@ cat <<< $[1+2]
 === deprecated in array index
 echo ${arr[$[i+1]]}
 ---
-(command (word "echo") (word "${arr[$[i+1]]}" (arith-deprecated "i+1")))
+(command (word "echo") (word "${arr[$[i+1]]}" (param "arr[$[i+1]]")))
 
 === prefix and suffix text
 echo prefix$[1+2]suffix

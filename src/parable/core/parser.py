@@ -218,7 +218,13 @@ class Parser:
                             parts.append(arith_node)
                             chars.append(arith_text)
                         else:
-                            chars.append(self.advance())
+                            # Not arithmetic - try command substitution
+                            cmdsub_node, cmdsub_text = self._parse_command_substitution()
+                            if cmdsub_node:
+                                parts.append(cmdsub_node)
+                                chars.append(cmdsub_text)
+                            else:
+                                chars.append(self.advance())
                     # Handle deprecated arithmetic expansion $[expr]
                     elif (
                         c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "["
@@ -285,7 +291,8 @@ class Parser:
                 else:
                     chars.append(self.advance())
 
-            # Arithmetic expansion $((...))
+            # Arithmetic expansion $((...)) - try before command substitution
+            # If it fails (returns None), fall through to command substitution
             elif (
                 ch == "$"
                 and self.pos + 2 < self.length
@@ -297,7 +304,13 @@ class Parser:
                     parts.append(arith_node)
                     chars.append(arith_text)
                 else:
-                    chars.append(self.advance())
+                    # Not arithmetic (e.g., '$( ( ... ) )' is command sub + subshell)
+                    cmdsub_node, cmdsub_text = self._parse_command_substitution()
+                    if cmdsub_node:
+                        parts.append(cmdsub_node)
+                        chars.append(cmdsub_text)
+                    else:
+                        chars.append(self.advance())
 
             # Deprecated arithmetic expansion $[expr]
             elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "[":
@@ -390,7 +403,9 @@ class Parser:
                             chars.append(self.advance())
                         if not self.at_end():
                             chars.append(self.advance())
-                    elif c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                    elif (
+                        c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "("
+                    ):
                         # $() or $(()) inside extglob
                         chars.append(self.advance())  # $
                         chars.append(self.advance())  # (
@@ -408,7 +423,11 @@ class Parser:
                         else:
                             # $() command sub - count as nested paren
                             extglob_depth += 1
-                    elif c in "@?*+!" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                    elif (
+                        c in "@?*+!"
+                        and self.pos + 1 < self.length
+                        and self.source[self.pos + 1] == "("
+                    ):
                         # Nested extglob
                         chars.append(self.advance())  # @, ?, *, +, or !
                         chars.append(self.advance())  # (
@@ -824,6 +843,8 @@ class Parser:
         """Parse a $((...)) arithmetic expansion with parsed internals.
 
         Returns (node, text) where node is ArithmeticExpansion and text is raw text.
+        Returns (None, "") if this is not arithmetic expansion (e.g., $( ( ... ) )
+        which is command substitution containing a subshell).
         """
         if self.at_end() or self.peek() != "$":
             return None, ""
@@ -843,6 +864,7 @@ class Parser:
         self.advance()  # consume second (
 
         # Find matching )) - need to track nested parens
+        # Must be )) with no space between - ') )' is command sub + subshell
         content_start = self.pos
         depth = 1  # We're inside one level of (( already
 
@@ -858,6 +880,10 @@ class Parser:
                     # Found the closing ))
                     break
                 depth -= 1
+                if depth == 0:
+                    # Closed with ) but next isn't ) - this is $( ( ... ) )
+                    self.pos = start
+                    return None, ""
                 self.advance()
             else:
                 self.advance()
@@ -997,7 +1023,8 @@ class Parser:
         self._arith_skip_ws()
         if self._arith_consume("?"):
             self._arith_skip_ws()
-            if_true = self._arith_parse_ternary()  # right associative
+            # True branch can contain assignment (e.g., 1 ? a=1 : 42)
+            if_true = self._arith_parse_assign()
             self._arith_skip_ws()
             if not self._arith_consume(":"):
                 raise ParseError("Expected ':' in ternary", pos=self._arith_pos)
@@ -1686,7 +1713,13 @@ class Parser:
                     inner_parts.append(arith_node)
                     content_chars.append(arith_text)
                 else:
-                    content_chars.append(self.advance())
+                    # Not arithmetic - try command substitution
+                    cmdsub_node, cmdsub_text = self._parse_command_substitution()
+                    if cmdsub_node:
+                        inner_parts.append(cmdsub_node)
+                        content_chars.append(cmdsub_text)
+                    else:
+                        content_chars.append(self.advance())
             # Handle command substitution $(...)
             elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
                 cmdsub_node, cmdsub_text = self._parse_command_substitution()
@@ -1870,28 +1903,74 @@ class Parser:
         # Parse operator
         op = self._consume_param_operator()
         if op is None:
-            self.pos = start
-            return None, ""
+            # Unknown operator - bash still parses these (fails at runtime)
+            # Treat the current char as the operator
+            op = self.advance()
 
         # Parse argument (everything until closing brace)
-        # Only ${...} increases depth, not plain {
+        # Track quote state and nesting
         arg_chars = []
         depth = 1
+        in_single_quote = False
+        in_double_quote = False
         while not self.at_end() and depth > 0:
             c = self.peek()
-            if c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
-                # Nested ${...} - increase depth
-                depth += 1
-                arg_chars.append(self.advance())  # $
-                arg_chars.append(self.advance())  # {
-            elif c == "}":
-                depth -= 1
-                if depth > 0:
-                    arg_chars.append(self.advance())
-            elif c == "\\":
+            # Single quotes - no escapes, just scan to closing quote
+            if c == "'" and not in_double_quote:
+                if in_single_quote:
+                    in_single_quote = False
+                else:
+                    in_single_quote = True
+                arg_chars.append(self.advance())
+            # Double quotes - toggle state
+            elif c == '"' and not in_single_quote:
+                in_double_quote = not in_double_quote
+                arg_chars.append(self.advance())
+            # Escape - skip next char
+            elif c == "\\" and not in_single_quote:
                 arg_chars.append(self.advance())
                 if not self.at_end():
                     arg_chars.append(self.advance())
+            # Nested ${...} - increase depth (outside single quotes)
+            elif (
+                c == "$"
+                and not in_single_quote
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "{"
+            ):
+                depth += 1
+                arg_chars.append(self.advance())  # $
+                arg_chars.append(self.advance())  # {
+            # Command substitution $(...) - scan to matching )
+            elif (
+                c == "$"
+                and not in_single_quote
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "("
+            ):
+                arg_chars.append(self.advance())  # $
+                arg_chars.append(self.advance())  # (
+                paren_depth = 1
+                while not self.at_end() and paren_depth > 0:
+                    pc = self.peek()
+                    if pc == "(":
+                        paren_depth += 1
+                    elif pc == ")":
+                        paren_depth -= 1
+                    elif pc == "\\":
+                        arg_chars.append(self.advance())
+                        if not self.at_end():
+                            arg_chars.append(self.advance())
+                        continue
+                    arg_chars.append(self.advance())
+            # Closing brace - only count if not in quotes
+            elif c == "}":
+                if in_single_quote or in_double_quote:
+                    arg_chars.append(self.advance())
+                else:
+                    depth -= 1
+                    if depth > 0:
+                        arg_chars.append(self.advance())
             else:
                 arg_chars.append(self.advance())
 
@@ -1931,9 +2010,17 @@ class Parser:
                 if c.isalnum() or c == "_":
                     name_chars.append(self.advance())
                 elif c == "[":
-                    # Array subscript
+                    # Array subscript - track bracket depth
                     name_chars.append(self.advance())
-                    while not self.at_end() and self.peek() != "]":
+                    bracket_depth = 1
+                    while not self.at_end() and bracket_depth > 0:
+                        sc = self.peek()
+                        if sc == "[":
+                            bracket_depth += 1
+                        elif sc == "]":
+                            bracket_depth -= 1
+                            if bracket_depth == 0:
+                                break
                         name_chars.append(self.advance())
                     if not self.at_end() and self.peek() == "]":
                         name_chars.append(self.advance())
@@ -2362,7 +2449,11 @@ class Parser:
         return Subshell(body, redirects if redirects else None)
 
     def parse_arithmetic_command(self) -> ArithmeticCommand | None:
-        """Parse an arithmetic command (( expression )) with parsed internals."""
+        """Parse an arithmetic command (( expression )) with parsed internals.
+
+        Returns None if this is not an arithmetic command (e.g., nested subshells
+        like '( ( x ) )' that close with ') )' instead of '))').
+        """
         self.skip_whitespace()
 
         # Check for ((
@@ -2374,10 +2465,12 @@ class Parser:
         ):
             return None
 
+        saved_pos = self.pos
         self.advance()  # consume first (
         self.advance()  # consume second (
 
         # Find matching )) - track nested parens
+        # Must be )) with no space between - ') )' is nested subshells
         content_start = self.pos
         depth = 1
 
@@ -2388,17 +2481,23 @@ class Parser:
                 depth += 1
                 self.advance()
             elif c == ")":
-                # Check for ))
+                # Check for )) (must be consecutive, no space)
                 if depth == 1 and self.pos + 1 < self.length and self.source[self.pos + 1] == ")":
                     # Found the closing ))
                     break
                 depth -= 1
+                if depth == 0:
+                    # Closed with ) but next isn't ) - this is nested subshells, not arithmetic
+                    self.pos = saved_pos
+                    return None
                 self.advance()
             else:
                 self.advance()
 
         if self.at_end() or depth != 1:
-            raise ParseError("Expected )) to close arithmetic command", pos=self.pos)
+            # Didn't find )) - might be nested subshells or malformed
+            self.pos = saved_pos
+            return None
 
         content = self.source[content_start : self.pos]
         self.advance()  # consume first )
@@ -2735,7 +2834,13 @@ class Parser:
                                 parts.append(arith_node)
                                 chars.append(arith_text)
                             else:
-                                chars.append(self.advance())
+                                # Not arithmetic - try command substitution
+                                cmdsub_node, cmdsub_text = self._parse_command_substitution()
+                                if cmdsub_node:
+                                    parts.append(cmdsub_node)
+                                    chars.append(cmdsub_text)
+                                else:
+                                    chars.append(self.advance())
                         elif self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
                             cmdsub_node, cmdsub_text = self._parse_command_substitution()
                             if cmdsub_node:
@@ -4000,7 +4105,10 @@ class Parser:
 
         # Arithmetic command ((...)) - check before subshell
         if ch == "(" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
-            return self.parse_arithmetic_command()
+            result = self.parse_arithmetic_command()
+            if result is not None:
+                return result
+            # Not arithmetic (e.g., '(( x ) )' is nested subshells) - fall through
 
         # Subshell
         if ch == "(":
@@ -4274,6 +4382,7 @@ class Parser:
             self.advance()
         text = self.source[start : self.pos]
         from .ast import Comment
+
         return Comment(text)
 
     def parse(self) -> list[Node]:

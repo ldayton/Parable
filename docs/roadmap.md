@@ -4,24 +4,24 @@ Features to make Parable more useful for downstream projects.
 
 ## Oils Test Suite Status
 
-Parable is tested against the [Oils](https://www.oilshell.org/) project's bash test corpus. Current status: **2473 passed, 22 failed**.
+Parable is tested against the [Oils](https://www.oilshell.org/) project's bash test corpus. Current status: **5581 passed, 9 failed**.
 
-### Parser Bugs (22 failures)
+### Parser Bugs (9 failures)
 
 | Category | Count | Description |
 |----------|------:|-------------|
-| Parenthesis ambiguity | 6 | `((` disambiguation between arithmetic and subshell |
 | KSH command substitution | 2 | `${ cmd; }` ksh-style command sub not implemented |
-| zsh idioms | 2 | zsh-specific idioms |
-| Variable expansion edge cases | 4 | `${var}` with braces/operators edge cases |
-| Array index parsing | 1 | `a[1+2]=3` LHS array index expressions |
-| Ternary with assignment | 1 | `$((1 ? a=1 : 42))` assignment in ternary |
-| Heredoc delimiter | 1 | Bad command substitution as heredoc delimiter |
+| zsh idioms | 2 | zsh-specific idioms (not bash) |
 | Conditional special chars | 2 | Escaped quotes and special chars in `[[ ]]` |
-| Miscellaneous | 3 | trap DEBUG, builtin cat subshell crash |
+| Array index parsing | 1 | `a[1+2]=3` LHS array index expressions |
+| Heredoc delimiter | 1 | Bad command substitution as heredoc delimiter |
+| Miscellaneous | 1 | trap DEBUG |
 
 ### Recently Fixed
 
+- ✅ **Parenthesis ambiguity (6 tests)**: `((` vs `( (` and `$((` vs `$( (` disambiguation.
+- ✅ **Ternary with assignment (1 test)**: `$((1 ? a=1 : 42))` assignment in ternary branches.
+- ✅ **Variable expansion edge cases (4 tests)**: Quote tracking in `${var}` arguments.
 - ✅ **Quotes in comments (173 tests)**: Comments now properly ignored during lexing.
 - ✅ **Newline after && and || (2 tests)**: Commands can appear on next line.
 - ✅ **Quotes/backticks in arithmetic (10 tests)**: `$(('1'))` and `` $((`cmd`)) `` now parse.
@@ -30,13 +30,9 @@ Parable is tested against the [Oils](https://www.oilshell.org/) project's bash t
 
 ### Remaining Priority Fixes
 
-1. **Parenthesis ambiguity (6 tests)**: `((`...`) )` - arithmetic closing with space before last `)`.
+1. **KSH command substitution (2 tests)**: `${ echo hi; }` - ksh-style command sub (different from `$()`).
 
-2. **Ternary with assignment (1 test)**: `$((1 ? a=1 : 42))` - assignment expressions in ternary branches.
-
-3. **KSH command substitution (2 tests)**: `${ echo hi; }` - ksh-style command sub (different from `$()`).
-
-4. **Variable expansion edge cases (4 tests)**: Complex `${var}` expansions with nested braces.
+2. **Conditional special chars (2 tests)**: Escaped quotes and unquoted special chars in `[[ ]]`.
 
 ---
 

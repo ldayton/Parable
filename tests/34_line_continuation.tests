@@ -1,0 +1,26 @@
+# Line continuation (backslash-newline) tests
+# Backslash-newline should be removed in quoting contexts
+
+=== line continuation in double quotes
+echo "hello \
+world"
+---
+(command (word "echo") (word "\"hello world\""))
+
+=== line continuation in parameter expansion default
+echo ${x:-hello \
+world}
+---
+(command (word "echo") (word "${x:-hello world}" (param "x" ":-" "hello world")))
+
+=== line continuation in locale string
+echo $"hello \
+world"
+---
+(command (word "echo") (word "$\"hello world\"" (locale "hello world")))
+
+=== line continuation in conditional expression
+[[ "hello \
+world" == "hello world" ]]
+---
+(cond-expr (binary-test "==" (word "\"hello world\"") (word "\"hello world\"")))

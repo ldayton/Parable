@@ -67,3 +67,6 @@ dev = [
     "ruff>=0.8.0",
     "pytest>=8.0.0",
 ]
+bench = [
+    "pyperf>=2.9.0",
+]

@@ -60,10 +60,18 @@ print(ast[0].to_sexp())
 ## Tests
 
 ```bash
-uv run pytest
+just test        # Run tests (Python 3.14)
+just test-py312  # Run tests on specific version
+just test-all    # Run tests on all versions (3.10-3.14)
 ```
 
 28 test modules covering progressively deeper bash semantics. Every input is validated against bash 4.0+ with `bash -n`. The tree-sitter corpus runs as a separate test suite—Parable parses what they parse, but doesn't accept syntax that bash rejects.
+
+## Benchmarks
+
+```bash
+just bench  # Run all benchmarks
+```
 
 ## Project Structure
 

@@ -35,7 +35,8 @@ class Word(Node):
         # Double backslash for unknown escapes in ANSI-C strings (e.g., \q -> \\q)
         # Known escapes: \n \t \r \a \b \f \v \\ \' \" \0 \x \u \U \c \e \E
         value = re.sub(r"\\([^ntrabfv\\'\"0xuUcEe\\])", r"\\\\\1", value)
-        escaped = value.replace("\n", "\\n")
+        # Escape double quotes (but not inside single-quoted ANSI-C strings)
+        escaped = value.replace('"', '\\"').replace("\n", "\\n")
         return f'(word "{escaped}")'
 
 
@@ -203,8 +204,9 @@ class Redirect(Node):
 
     def to_sexp(self) -> str:
         import re
-        # Strip fd prefix from operator (e.g., "2>" -> ">")
+        # Strip fd prefix from operator (e.g., "2>" -> ">", "{fd}>" -> ">")
         op = self.op.lstrip("0123456789")
+        op = re.sub(r"^\{[a-zA-Z_][a-zA-Z_0-9]*\}", "", op)
         target_val = self.target.value
         # Strip $ from ANSI-C $'...' and locale strings $"..."
         target_val = re.sub(r"\$'", "'", target_val)

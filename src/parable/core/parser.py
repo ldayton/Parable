@@ -110,7 +110,7 @@ class Parser:
         return ch
 
     def skip_whitespace(self) -> None:
-        """Skip spaces, tabs, and comments (but not newlines)."""
+        """Skip spaces, tabs, comments, and backslash-newline continuations."""
         while not self.at_end():
             ch = self.peek()
             if ch in " \t":
@@ -119,11 +119,15 @@ class Parser:
                 # Skip comment to end of line (but not the newline itself)
                 while not self.at_end() and self.peek() != "\n":
                     self.advance()
+            elif ch == "\\" and self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
+                # Backslash-newline is line continuation - skip both
+                self.advance()
+                self.advance()
             else:
                 break
 
     def skip_whitespace_and_newlines(self) -> None:
-        """Skip spaces, tabs, newlines, and comments."""
+        """Skip spaces, tabs, newlines, comments, and backslash-newline continuations."""
         while not self.at_end():
             ch = self.peek()
             if ch in " \t\n":
@@ -132,6 +136,10 @@ class Parser:
                 # Skip comment to end of line
                 while not self.at_end() and self.peek() != "\n":
                     self.advance()
+            elif ch == "\\" and self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
+                # Backslash-newline is line continuation - skip both
+                self.advance()
+                self.advance()
             else:
                 break
 
@@ -182,9 +190,22 @@ class Parser:
         start = self.pos
         chars = []
         parts = []
+        bracket_depth = 0  # Track [...] for array subscripts
 
         while not self.at_end():
             ch = self.peek()
+
+            # Track bracket depth for array subscripts like a[1+2]=3
+            # Inside brackets, metacharacters like | and ( are literal
+            # Only track [ after we've seen some chars (so [ -f file ] still works)
+            if ch == "[" and chars:
+                bracket_depth += 1
+                chars.append(self.advance())
+                continue
+            if ch == "]" and bracket_depth > 0:
+                bracket_depth -= 1
+                chars.append(self.advance())
+                continue
 
             # Single-quoted string - no expansion
             if ch == "'":
@@ -435,11 +456,11 @@ class Parser:
                     else:
                         chars.append(self.advance())
 
-            # Metacharacter ends the word
-            elif ch in METACHAR:
+            # Metacharacter ends the word (unless inside brackets like a[x|y]=1)
+            elif ch in METACHAR and bracket_depth == 0:
                 break
 
-            # Regular character
+            # Regular character (including metacharacters inside brackets)
             else:
                 chars.append(self.advance())
 
@@ -1887,6 +1908,31 @@ class Parser:
         # ${param} or ${param<op><arg>}
         param = self._consume_param_name()
         if not param:
+            # Unknown syntax like ${(M)...} (zsh) - consume until matching }
+            # Bash accepts these syntactically but fails at runtime
+            depth = 1
+            content_start = self.pos
+            while not self.at_end() and depth > 0:
+                c = self.peek()
+                if c == "{":
+                    depth += 1
+                    self.advance()
+                elif c == "}":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                    self.advance()
+                elif c == "\\":
+                    self.advance()
+                    if not self.at_end():
+                        self.advance()
+                else:
+                    self.advance()
+            if depth == 0:
+                content = self.source[content_start : self.pos]
+                self.advance()  # consume final }
+                text = self.source[start : self.pos]
+                return ParamExpansion(content), text
             self.pos = start
             return None, ""
 
@@ -2757,9 +2803,8 @@ class Parser:
         c = self.peek()
         if c in "()":
             return None
-        # ! alone (followed by space) is negation, but != is a binary operator
-        if c == "!" and self.pos + 1 < self.length and self.source[self.pos + 1] in " \t":
-            return None
+        # Note: ! alone is handled by _parse_cond_term() as negation operator
+        # Here we allow ! as a word so it can be used as pattern in binary tests
         if c == "&" and self.pos + 1 < self.length and self.source[self.pos + 1] == "&":
             return None
         if c == "|" and self.pos + 1 < self.length and self.source[self.pos + 1] == "|":
@@ -4373,16 +4418,16 @@ class Parser:
             return parts[0]
         return List(parts)
 
-    def parse_comment(self) -> "Comment | None":
+    def parse_comment(self) -> Node | None:
         """Parse a comment (# to end of line)."""
+        from .ast import Comment
+
         if self.at_end() or self.peek() != "#":
             return None
         start = self.pos
         while not self.at_end() and self.peek() != "\n":
             self.advance()
         text = self.source[start : self.pos]
-        from .ast import Comment
-
         return Comment(text)
 
     def parse(self) -> list[Node]:

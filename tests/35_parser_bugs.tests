@@ -14,3 +14,8 @@ echo >&20
 exec 3<&10-
 ---
 (command (word "exec") (redirect "3<" (word "&10-")))
+
+=== multi-digit fd with process substitution
+cmd 10< <(echo test)
+---
+(command (word "cmd") (redirect "10<" (word "<(echo test)" (procsub "<" (command (word "echo") (word "test"))))))

@@ -770,6 +770,20 @@ class ArithSubscript(Node):
 
 
 @dataclass
+class ArithEscape(Node):
+    """An escaped character in arithmetic expression."""
+
+    char: str
+
+    def __init__(self, char: str):
+        self.kind = "escape"
+        self.char = char
+
+    def to_sexp(self) -> str:
+        return f'(escape "{self.char}")'
+
+
+@dataclass
 class ArithDeprecated(Node):
     """A deprecated arithmetic expansion $[expr]."""
 

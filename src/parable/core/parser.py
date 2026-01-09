@@ -574,6 +574,83 @@ class Parser:
                 self.advance()
                 continue
 
+            # Comment - skip until newline
+            if c == "#" and self._is_word_boundary_before():
+                while not self.at_end() and self.peek() != "\n":
+                    self.advance()
+                continue
+
+            # Heredoc - skip until delimiter line is found
+            if c == "<" and self.pos + 1 < self.length and self.source[self.pos + 1] == "<":
+                self.advance()  # first <
+                self.advance()  # second <
+                # Check for <<- (strip tabs)
+                if not self.at_end() and self.peek() == "-":
+                    self.advance()
+                # Skip whitespace before delimiter
+                while not self.at_end() and self.peek() in " \t":
+                    self.advance()
+                # Parse delimiter (handle quoting)
+                delimiter_chars = []
+                if not self.at_end():
+                    ch = self.peek()
+                    if ch in "'\"":
+                        quote = self.advance()
+                        while not self.at_end() and self.peek() != quote:
+                            delimiter_chars.append(self.advance())
+                        if not self.at_end():
+                            self.advance()  # closing quote
+                    elif ch == "\\":
+                        self.advance()
+                        # Backslash quotes - first char can be special, then read word
+                        if not self.at_end():
+                            delimiter_chars.append(self.advance())
+                        while not self.at_end() and self.peek() not in " \t\n;|&<>()":
+                            delimiter_chars.append(self.advance())
+                    else:
+                        # Unquoted delimiter with possible embedded quotes
+                        while not self.at_end() and self.peek() not in " \t\n;|&<>()":
+                            ch = self.peek()
+                            if ch in "'\"":
+                                quote = self.advance()
+                                while not self.at_end() and self.peek() != quote:
+                                    delimiter_chars.append(self.advance())
+                                if not self.at_end():
+                                    self.advance()
+                            elif ch == "\\":
+                                self.advance()
+                                if not self.at_end():
+                                    delimiter_chars.append(self.advance())
+                            else:
+                                delimiter_chars.append(self.advance())
+                delimiter = "".join(delimiter_chars)
+                if delimiter:
+                    # Skip to end of current line
+                    while not self.at_end() and self.peek() != "\n":
+                        self.advance()
+                    # Skip newline
+                    if not self.at_end() and self.peek() == "\n":
+                        self.advance()
+                    # Skip lines until we find the delimiter
+                    while not self.at_end():
+                        line_start = self.pos
+                        line_end = self.pos
+                        while line_end < self.length and self.source[line_end] != "\n":
+                            line_end += 1
+                        line = self.source[line_start:line_end]
+                        # Move position to end of line
+                        self.pos = line_end
+                        # Check if this line matches delimiter
+                        if line == delimiter or line.lstrip("\t") == delimiter:
+                            # Skip newline after delimiter
+                            if not self.at_end() and self.peek() == "\n":
+                                self.advance()
+                            break
+                        # Skip newline and continue
+                        if not self.at_end() and self.peek() == "\n":
+                            self.advance()
+                continue
+
             # Track case/esac for pattern terminator handling
             # Check for 'case' keyword (word boundary: preceded by space/newline/start)
             if c == "c" and self._is_word_boundary_before():
@@ -1051,13 +1128,22 @@ class Parser:
         self._arith_skip_ws()
         if self._arith_consume("?"):
             self._arith_skip_ws()
-            # True branch can contain assignment (e.g., 1 ? a=1 : 42)
-            if_true = self._arith_parse_assign()
+            # True branch can be empty (e.g., 4 ? : $A - invalid at runtime, valid syntax)
+            if self._arith_match(":"):
+                if_true = None
+            else:
+                if_true = self._arith_parse_assign()
             self._arith_skip_ws()
-            if not self._arith_consume(":"):
-                raise ParseError("Expected ':' in ternary", pos=self._arith_pos)
-            self._arith_skip_ws()
-            if_false = self._arith_parse_ternary()  # right associative
+            # Check for : (may be missing in malformed expressions like 1 ? 20)
+            if self._arith_consume(":"):
+                self._arith_skip_ws()
+                # False branch can be empty (e.g., 4 ? 20 : - invalid at runtime)
+                if self._arith_at_end() or self._arith_peek() == ")":
+                    if_false = None
+                else:
+                    if_false = self._arith_parse_ternary()
+            else:
+                if_false = None
             return ArithTernary(cond, if_true, if_false)
         return cond
 
@@ -1364,7 +1450,9 @@ class Parser:
         if c == "\\":
             self._arith_advance()  # consume backslash
             if self._arith_at_end():
-                raise ParseError("Unexpected end after backslash in arithmetic", pos=self._arith_pos)
+                raise ParseError(
+                    "Unexpected end after backslash in arithmetic", pos=self._arith_pos
+                )
             escaped_char = self._arith_advance()  # consume escaped character
             return ArithEscape(escaped_char)
 
@@ -2025,6 +2113,18 @@ class Parser:
                             arg_chars.append(self.advance())
                         continue
                     arg_chars.append(self.advance())
+            # Backtick command substitution - scan to matching `
+            elif c == "`" and not in_single_quote:
+                arg_chars.append(self.advance())  # opening `
+                while not self.at_end() and self.peek() != "`":
+                    bc = self.peek()
+                    if bc == "\\" and self.pos + 1 < self.length:
+                        next_c = self.source[self.pos + 1]
+                        if next_c in "$`\\":
+                            arg_chars.append(self.advance())  # backslash
+                    arg_chars.append(self.advance())
+                if not self.at_end():
+                    arg_chars.append(self.advance())  # closing `
             # Opening brace followed by whitespace - increase depth for matching
             # (like brace groups). Bare {foo is literal, not balanced.
             elif (
@@ -2036,10 +2136,19 @@ class Parser:
             ):
                 depth += 1
                 arg_chars.append(self.advance())
-            # Closing brace - only count if not in quotes
+            # Closing brace - handle depth for nested ${...}
             elif c == "}":
-                if in_single_quote or in_double_quote:
+                if in_single_quote:
+                    # Inside single quotes, } is literal
                     arg_chars.append(self.advance())
+                elif in_double_quote:
+                    # Inside double quotes, } can close nested ${...}
+                    if depth > 1:
+                        depth -= 1
+                        arg_chars.append(self.advance())
+                    else:
+                        # Literal } in double quotes (not closing nested)
+                        arg_chars.append(self.advance())
                 else:
                     depth -= 1
                     if depth > 0:

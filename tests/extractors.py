@@ -62,9 +62,7 @@ def parse_tree_sitter_corpus(filepath: Path) -> list[TestCase]:
                 i += 1
 
             # Skip past the expected output section
-            while i < len(lines) and not (
-                len(lines[i]) >= 20 and all(c == "=" for c in lines[i])
-            ):
+            while i < len(lines) and not (len(lines[i]) >= 20 and all(c == "=" for c in lines[i])):
                 i += 1
 
             input_code = "\n".join(input_lines).strip()

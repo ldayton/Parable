@@ -1,4 +1,12 @@
-# Parable
+<div align="center">
+<pre>
+     ////        \\\\                         The wind blows where it wishes,
+      ////              \\\\                          and you hear its sound,
+  --------////  <strong>P A R A B L E</strong>  \\\\--------      but you do not know where it
+        \\\\         ////                         comes from or where it goes.
+     \\\\        ////                                              — John 3:8
+</pre>
+</div>
 
 A hand-written recursive descent parser for bash. No shortcuts, no regexes, no external dependencies—just pure Python that understands bash the way bash understands bash.
 
@@ -8,7 +16,8 @@ A hand-written recursive descent parser for bash. No shortcuts, no regexes, no e
 
 Most bash parsers are glorified regex matchers that handle the happy path. Parable is different. Built from the GNU bash manual, the POSIX spec, the bash YACC grammar, and tested against brutal edge cases from open source test suites.
 
-- **5,590 test cases**
+- **5,680 test cases**
+- **100% pass rate on the GNU Bash test corpus**
 - **100% pass rate on the Oils bash corpus**
 - **100% pass rate on the tree-sitter bash corpus**
 - **Every test validated against `bash -n`**
@@ -93,8 +102,9 @@ src/parable/
 tests/
 ├── *.tests                      # 1,517 test cases in custom format
 └── corpus/
-    ├── tree-sitter-bash/        # 61 tree-sitter bash corpus tests
-    └── oils/                    # 2,495 Oils spec tests (100% pass)
+    ├── gnu-bash/                # GNU Bash test corpus tests
+    ├── tree-sitter-bash/        # tree-sitter bash corpus tests
+    └── oils/                    # Oils spec tests
 ```
 
 ## License

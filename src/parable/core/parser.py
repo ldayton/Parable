@@ -115,9 +115,17 @@ class Parser:
             self.advance()
 
     def skip_whitespace_and_newlines(self) -> None:
-        """Skip spaces, tabs, and newlines."""
-        while not self.at_end() and self.peek() in " \t\n":
-            self.advance()
+        """Skip spaces, tabs, newlines, and comments."""
+        while not self.at_end():
+            ch = self.peek()
+            if ch in " \t\n":
+                self.advance()
+            elif ch == "#":
+                # Skip comment to end of line
+                while not self.at_end() and self.peek() != "\n":
+                    self.advance()
+            else:
+                break
 
     def peek_word(self) -> str | None:
         """Peek at the next word without consuming it."""
@@ -4090,15 +4098,43 @@ class Parser:
             return parts[0]
         return List(parts)
 
+    def parse_comment(self) -> "Comment | None":
+        """Parse a comment (# to end of line)."""
+        if self.at_end() or self.peek() != "#":
+            return None
+        start = self.pos
+        while not self.at_end() and self.peek() != "\n":
+            self.advance()
+        text = self.source[start : self.pos]
+        from .ast import Comment
+        return Comment(text)
+
     def parse(self) -> list[Node]:
         """Parse the entire input."""
         source = self.source.strip()
         if not source:
             return [Empty()]
 
-        result = self.parse_list()
-        if result is None:
-            raise ParseError("Expected command", pos=self.pos)
+        results = []
+
+        # Parse leading comments
+        while True:
+            self.skip_whitespace()
+            # Skip newlines but not comments
+            while not self.at_end() and self.peek() == "\n":
+                self.advance()
+            if self.at_end():
+                break
+            comment = self.parse_comment()
+            if comment:
+                results.append(comment)
+            else:
+                break
+
+        if not self.at_end():
+            result = self.parse_list()
+            if result is not None:
+                results.append(result)
 
         self.skip_whitespace()
 
@@ -4114,7 +4150,10 @@ class Parser:
             # There's more content - not yet supported
             raise ParseError("Parser not fully implemented yet", pos=self.pos)
 
-        return [result]
+        if not results:
+            return [Empty()]
+
+        return results
 
 
 def parse(source: str) -> list[Node]:

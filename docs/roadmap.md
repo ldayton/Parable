@@ -10,6 +10,10 @@ Feature                Priority   Effort   Impact         Status
 [[ ]] parsing          P1         Medium   Very High      ✓ Done
 $(( )) parsing         P1         High     Very High      ✓ Done
 Extglob in case        P1         Low      Medium         ✓ Done
+Extglob in words       P1         Low      Medium         Bug
+Parens in comments     P1         Low      Medium         ✓ Done
+Empty for list         P1         Low      Low            Bug
+Empty heredoc delim    P1         Low      Low            Bug
 Position tracking      P2         Medium   Very High      Not started
 JSON serialization     P2         Low      High           Not started
 Visitor pattern        P2         Low      High           Not started
@@ -85,6 +89,38 @@ The case pattern parser recognizes extended glob syntax (`@(...)`, `?(...)`, `*(
 - Command substitution inside: `@($(cmd))`
 - Arithmetic inside: `@($((1+2)))`
 - Character classes: `@([a-z]*)`
+
+### Extglob patterns in words
+
+**Status:** Bug
+
+`echo @(a|b)` fails with "Parser not fully implemented yet".
+
+Extglob patterns work in case statements but not in regular words/arguments. With `shopt -s extglob`, patterns like `@()`, `?()`, `*()`, `+()` are valid anywhere globs are valid.
+
+### Parentheses in comments
+
+**Status:** ✓ Implemented
+
+`# has (parens)` now parses correctly as a Comment node.
+
+Comments (`#` to end of line) are now parsed as Comment AST nodes instead of being skipped or causing parse errors.
+
+### Empty for list
+
+**Status:** Bug
+
+`for x in; do :; done` fails with "Expected words after 'in'".
+
+Bash allows empty word lists in for loops - the loop simply doesn't execute.
+
+### Empty heredoc delimiter
+
+**Status:** Bug
+
+`cat <<''` fails with "Expected delimiter for here document".
+
+Empty string is a valid heredoc delimiter - the heredoc ends at the first empty line.
 
 ## P2: Usability
 

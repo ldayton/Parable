@@ -127,6 +127,20 @@ class Empty(Node):
 
 
 @dataclass
+class Comment(Node):
+    """A comment (# to end of line)."""
+
+    text: str
+
+    def __init__(self, text: str):
+        self.kind = "comment"
+        self.text = text
+
+    def to_sexp(self) -> str:
+        return f'(comment "{self.text}")'
+
+
+@dataclass
 class Redirect(Node):
     """A redirection."""
 

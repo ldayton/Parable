@@ -1,0 +1,18 @@
+# Parser bugs discovered during audit
+
+=== empty heredoc delimiter
+cat <<''
+line
+
+---
+(command (word "cat") (heredoc "" "line\n"))
+
+=== empty for list
+for x in; do :; done
+---
+(for "x" (command (word ":")))
+
+=== extglob in word
+echo @(a|b)
+---
+(command (word "echo") (word "@(a|b)"))

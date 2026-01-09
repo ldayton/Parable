@@ -25,9 +25,9 @@ from .ast import (
     Command,
     CommandSubstitution,
     CondAnd,
+    ConditionalExpr,
     CondNot,
     CondOr,
-    ConditionalExpr,
     Coproc,
     Empty,
     For,
@@ -867,7 +867,11 @@ class Parser:
             c = self._arith_src[self._arith_pos]
             if c in " \t\n":
                 self._arith_pos += 1
-            elif c == "\\" and self._arith_pos + 1 < self._arith_len and self._arith_src[self._arith_pos + 1] == "\n":
+            elif (
+                c == "\\"
+                and self._arith_pos + 1 < self._arith_len
+                and self._arith_src[self._arith_pos + 1] == "\n"
+            ):
                 # Backslash-newline continuation
                 self._arith_pos += 2
             else:
@@ -1415,7 +1419,9 @@ class Parser:
                     break
             return ArithVar("".join(chars))
 
-        raise ParseError(f"Unexpected character '{c}' in arithmetic expression", pos=self._arith_pos)
+        raise ParseError(
+            f"Unexpected character '{c}' in arithmetic expression", pos=self._arith_pos
+        )
 
     def _parse_deprecated_arithmetic(self) -> tuple[Node | None, str]:
         """Parse a deprecated $[expr] arithmetic expansion.
@@ -1680,7 +1686,11 @@ class Parser:
                     depth = 1
                     while not self.at_end() and depth > 0:
                         c = self.peek()
-                        if c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
+                        if (
+                            c == "$"
+                            and self.pos + 1 < self.length
+                            and self.source[self.pos + 1] == "{"
+                        ):
                             depth += 1
                             arg_chars.append(self.advance())
                             arg_chars.append(self.advance())
@@ -2263,14 +2273,50 @@ class Parser:
 
     # Unary operators for [[ ]] conditionals
     COND_UNARY_OPS = {
-        "-a", "-b", "-c", "-d", "-e", "-f", "-g", "-h", "-k", "-p", "-r", "-s",
-        "-t", "-u", "-w", "-x", "-G", "-L", "-N", "-O", "-S", "-z", "-n", "-o", "-v", "-R",
+        "-a",
+        "-b",
+        "-c",
+        "-d",
+        "-e",
+        "-f",
+        "-g",
+        "-h",
+        "-k",
+        "-p",
+        "-r",
+        "-s",
+        "-t",
+        "-u",
+        "-w",
+        "-x",
+        "-G",
+        "-L",
+        "-N",
+        "-O",
+        "-S",
+        "-z",
+        "-n",
+        "-o",
+        "-v",
+        "-R",
     }
     # Binary operators for [[ ]] conditionals
     COND_BINARY_OPS = {
-        "==", "!=", "=~", "=", "<", ">",
-        "-eq", "-ne", "-lt", "-le", "-gt", "-ge",
-        "-nt", "-ot", "-ef",
+        "==",
+        "!=",
+        "=~",
+        "=",
+        "<",
+        ">",
+        "-eq",
+        "-ne",
+        "-lt",
+        "-le",
+        "-gt",
+        "-ge",
+        "-nt",
+        "-ot",
+        "-ef",
     }
 
     def parse_conditional_expr(self) -> ConditionalExpr | None:
@@ -2315,7 +2361,11 @@ class Parser:
         while not self.at_end():
             if self.peek() in " \t":
                 self.advance()
-            elif self.peek() == "\\" and self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
+            elif (
+                self.peek() == "\\"
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "\n"
+            ):
                 self.advance()  # consume backslash
                 self.advance()  # consume newline
             elif self.peek() == "\n":
@@ -2326,9 +2376,8 @@ class Parser:
 
     def _cond_at_end(self) -> bool:
         """Check if we're at ]] (end of conditional)."""
-        return (
-            self.at_end()
-            or (self.peek() == "]" and self.pos + 1 < self.length and self.source[self.pos + 1] == "]")
+        return self.at_end() or (
+            self.peek() == "]" and self.pos + 1 < self.length and self.source[self.pos + 1] == "]"
         )
 
     def _parse_cond_or(self) -> Node:
@@ -2520,7 +2569,11 @@ class Parser:
                         chars.append(self.advance())
                     elif c == "$":
                         # Handle expansions inside double quotes
-                        if self.pos + 2 < self.length and self.source[self.pos + 1] == "(" and self.source[self.pos + 2] == "(":
+                        if (
+                            self.pos + 2 < self.length
+                            and self.source[self.pos + 1] == "("
+                            and self.source[self.pos + 2] == "("
+                        ):
                             arith_node, arith_text = self._parse_arithmetic_expansion()
                             if arith_node:
                                 parts.append(arith_node)
@@ -2553,7 +2606,12 @@ class Parser:
                 chars.append(self.advance())
 
             # Arithmetic expansion $((...))
-            elif ch == "$" and self.pos + 2 < self.length and self.source[self.pos + 1] == "(" and self.source[self.pos + 2] == "(":
+            elif (
+                ch == "$"
+                and self.pos + 2 < self.length
+                and self.source[self.pos + 1] == "("
+                and self.source[self.pos + 2] == "("
+            ):
                 arith_node, arith_text = self._parse_arithmetic_expansion()
                 if arith_node:
                     parts.append(arith_node)
@@ -2661,7 +2719,11 @@ class Parser:
                         # POSIX class like [:alpha:] inside bracket expression
                         chars.append(self.advance())  # [
                         chars.append(self.advance())  # :
-                        while not self.at_end() and not (self.peek() == ":" and self.pos + 1 < self.length and self.source[self.pos + 1] == "]"):
+                        while not self.at_end() and not (
+                            self.peek() == ":"
+                            and self.pos + 1 < self.length
+                            and self.source[self.pos + 1] == "]"
+                        ):
                             chars.append(self.advance())
                         if not self.at_end():
                             chars.append(self.advance())  # :
@@ -3342,7 +3404,11 @@ class Parser:
                     # Grouping paren inside extglob
                     pattern_chars.append(self.advance())
                     extglob_depth += 1
-                elif ch in "@?*+!" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                elif (
+                    ch in "@?*+!"
+                    and self.pos + 1 < self.length
+                    and self.source[self.pos + 1] == "("
+                ):
                     # Extglob opener: @(, ?(, *(, +(, !(
                     pattern_chars.append(self.advance())  # @, ?, *, +, or !
                     pattern_chars.append(self.advance())  # (

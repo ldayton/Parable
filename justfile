@@ -23,3 +23,7 @@ test-all: test-py310 test-py311 test-py312 test-py313 test-py314
 # Run benchmarks
 bench:
     uv run --group bench python bench/bench_parse.py
+
+# Format and lint
+fmt:
+    uv run ruff check --fix && uv run ruff format

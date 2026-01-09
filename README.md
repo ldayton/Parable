@@ -73,6 +73,12 @@ just test-all    # Run tests on all versions (3.10-3.14)
 just bench  # Run all benchmarks
 ```
 
+## Formatting
+
+```bash
+just fmt  # Format and lint with ruff
+```
+
 ## Project Structure
 
 ```

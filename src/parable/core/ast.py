@@ -64,8 +64,13 @@ class Pipeline(Node):
         self.commands = commands
 
     def to_sexp(self) -> str:
-        inner = " ".join(c.to_sexp() for c in self.commands)
-        return f"(pipeline {inner})"
+        if len(self.commands) == 1:
+            return self.commands[0].to_sexp()
+        # Nest right-associatively: (pipe a (pipe b c))
+        result = self.commands[-1].to_sexp()
+        for cmd in reversed(self.commands[:-1]):
+            result = f"(pipe {cmd.to_sexp()} {result})"
+        return result
 
 
 @dataclass
@@ -79,8 +84,45 @@ class List(Node):
         self.parts = parts
 
     def to_sexp(self) -> str:
-        inner = " ".join(p.to_sexp() for p in self.parts)
-        return f"(list {inner})"
+        # parts = [cmd, op, cmd, op, cmd, ...]
+        # Bash precedence: && and || bind tighter than ; and &
+        parts = list(self.parts)
+        op_names = {"&&": "and", "||": "or", ";": "semi", "&": "background"}
+        # Strip trailing ; (bash ignores it)
+        while len(parts) > 1 and isinstance(parts[-1], Operator) and parts[-1].op == ";":
+            parts = parts[:-1]
+        if len(parts) == 1:
+            return parts[0].to_sexp()
+        # Handle trailing & as unary background operator
+        if isinstance(parts[-1], Operator) and parts[-1].op == "&":
+            inner_parts = parts[:-1]
+            if len(inner_parts) == 1:
+                return f"(background {inner_parts[0].to_sexp()})"
+            inner_list = List(inner_parts)
+            return f"(background {inner_list.to_sexp()})"
+        # Process by precedence: first split on ; and &, then on && and ||
+        return self._to_sexp_with_precedence(parts, op_names)
+
+    def _to_sexp_with_precedence(self, parts: list, op_names: dict) -> str:
+        # Split on low-precedence ops (; &) first
+        low_prec = {";", "&"}
+        # Find rightmost low-precedence operator
+        for i in range(len(parts) - 2, 0, -2):
+            if isinstance(parts[i], Operator) and parts[i].op in low_prec:
+                left = parts[:i]
+                op = parts[i]
+                right = parts[i + 1 :]
+                left_sexp = List(left).to_sexp() if len(left) > 1 else left[0].to_sexp()
+                right_sexp = List(right).to_sexp() if len(right) > 1 else right[0].to_sexp()
+                return f"({op_names[op.op]} {left_sexp} {right_sexp})"
+        # No low-prec ops, process high-prec ops (&&, ||) left-associatively
+        result = parts[0].to_sexp()
+        for i in range(1, len(parts) - 1, 2):
+            op = parts[i]
+            cmd = parts[i + 1]
+            op_name = op_names.get(op.op, op.op)
+            result = f"({op_name} {result} {cmd.to_sexp()})"
+        return result
 
 
 @dataclass

@@ -351,6 +351,63 @@ class Parser:
                     # Unexpected: ( without matching )
                     break
 
+            # Extglob pattern @(), ?(), *(), +(), !()
+            elif ch in "@?*+!" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                chars.append(self.advance())  # @, ?, *, +, or !
+                chars.append(self.advance())  # (
+                extglob_depth = 1
+                while not self.at_end() and extglob_depth > 0:
+                    c = self.peek()
+                    if c == ")":
+                        chars.append(self.advance())
+                        extglob_depth -= 1
+                    elif c == "(":
+                        chars.append(self.advance())
+                        extglob_depth += 1
+                    elif c == "\\":
+                        chars.append(self.advance())
+                        if not self.at_end():
+                            chars.append(self.advance())
+                    elif c == "'":
+                        chars.append(self.advance())
+                        while not self.at_end() and self.peek() != "'":
+                            chars.append(self.advance())
+                        if not self.at_end():
+                            chars.append(self.advance())
+                    elif c == '"':
+                        chars.append(self.advance())
+                        while not self.at_end() and self.peek() != '"':
+                            if self.peek() == "\\" and self.pos + 1 < self.length:
+                                chars.append(self.advance())
+                            chars.append(self.advance())
+                        if not self.at_end():
+                            chars.append(self.advance())
+                    elif c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                        # $() or $(()) inside extglob
+                        chars.append(self.advance())  # $
+                        chars.append(self.advance())  # (
+                        if not self.at_end() and self.peek() == "(":
+                            # $(()) arithmetic
+                            chars.append(self.advance())  # second (
+                            paren_depth = 2
+                            while not self.at_end() and paren_depth > 0:
+                                pc = self.peek()
+                                if pc == "(":
+                                    paren_depth += 1
+                                elif pc == ")":
+                                    paren_depth -= 1
+                                chars.append(self.advance())
+                        else:
+                            # $() command sub - count as nested paren
+                            extglob_depth += 1
+                    elif c in "@?*+!" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                        # Nested extglob
+                        chars.append(self.advance())  # @, ?, *, +, or !
+                        chars.append(self.advance())  # (
+                        extglob_depth += 1
+                    else:
+                        chars.append(self.advance())
+
             # Metacharacter ends the word
             elif ch in METACHAR:
                 break

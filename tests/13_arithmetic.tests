@@ -366,7 +366,7 @@ echo $(((((1+2)))))
 === double negative
 echo $((--5))
 ---
-(command (word "echo") (word "$((--5))" (arith (pre-decr (number "5")))))
+(command (word "echo") (word "$((--5))" (arith (unary-op "-" (unary-op "-" (number "5"))))))
 
 === negate negative
 echo $((-(-5)))

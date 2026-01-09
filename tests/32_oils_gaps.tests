@@ -38,12 +38,12 @@ while true; do echo; done  # comment
 === comment after esac
 case $x in a) echo;; esac  # comment
 ---
-(case (word (simple_expansion "x")) (case_item (word "a") (command (word "echo"))))
+(case (word "$x" (param "x")) (pattern "a" (command (word "echo"))))
 
 === comment after brace group
 { echo; }  # comment
 ---
-(brace_group (command (word "echo")))
+(brace-group (list (command (word "echo")) (semi)))
 
 # === Line continuation after && and || ===
 
@@ -51,23 +51,23 @@ case $x in a) echo;; esac  # comment
 echo a &&
 echo b
 ---
-(and_list (command (word "echo") (word "a")) (command (word "echo") (word "b")))
+(list (command (word "echo") (word "a")) (and) (command (word "echo") (word "b")))
 
 === newline after ||
 echo a ||
 echo b
 ---
-(or_list (command (word "echo") (word "a")) (command (word "echo") (word "b")))
+(list (command (word "echo") (word "a")) (or) (command (word "echo") (word "b")))
 
 === newline after && in test
 [[ $x == y ]] &&
 echo yes
 ---
-(and_list (test_command (binary_expression (word (simple_expansion "x")) "==" (word "y"))) (command (word "echo") (word "yes")))
+(list (cond-expr (binary-test "==" (word "$x" (param "x")) (word "y"))) (and) (command (word "echo") (word "yes")))
 
 === multiple newlines after &&
 echo a &&
 
 echo b
 ---
-(and_list (command (word "echo") (word "a")) (command (word "echo") (word "b")))
+(list (command (word "echo") (word "a")) (and) (command (word "echo") (word "b")))

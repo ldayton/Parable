@@ -110,9 +110,17 @@ class Parser:
         return ch
 
     def skip_whitespace(self) -> None:
-        """Skip spaces and tabs (but not newlines for now)."""
-        while not self.at_end() and self.peek() in " \t":
-            self.advance()
+        """Skip spaces, tabs, and comments (but not newlines)."""
+        while not self.at_end():
+            ch = self.peek()
+            if ch in " \t":
+                self.advance()
+            elif ch == "#":
+                # Skip comment to end of line (but not the newline itself)
+                while not self.at_end() and self.peek() != "\n":
+                    self.advance()
+            else:
+                break
 
     def skip_whitespace_and_newlines(self) -> None:
         """Skip spaces, tabs, newlines, and comments."""
@@ -1280,9 +1288,21 @@ class Parser:
                 raise ParseError("Expected ')' in arithmetic expression", pos=self._arith_pos)
             return expr
 
-        # Parameter expansion ${...} or $var
+        # Parameter expansion ${...} or $var or $(...)
         if c == "$":
             return self._arith_parse_expansion()
+
+        # Single-quoted string - content becomes the number
+        if c == "'":
+            return self._arith_parse_single_quote()
+
+        # Double-quoted string - may contain expansions
+        if c == '"':
+            return self._arith_parse_double_quote()
+
+        # Backtick command substitution
+        if c == "`":
+            return self._arith_parse_backtick()
 
         # Number or variable
         return self._arith_parse_number_or_var()
@@ -1456,6 +1476,60 @@ class Parser:
         if op_str.startswith("/"):
             return ParamExpansion(name, "/", op_str[1:])
         return ParamExpansion(name, "", op_str)
+
+    def _arith_parse_single_quote(self) -> Node:
+        """Parse '...' inside arithmetic - returns content as a number/string."""
+        self._arith_advance()  # consume opening '
+        content_start = self._arith_pos
+        while not self._arith_at_end() and self._arith_peek() != "'":
+            self._arith_advance()
+        content = self._arith_src[content_start : self._arith_pos]
+        if not self._arith_consume("'"):
+            raise ParseError("Unterminated single quote in arithmetic", pos=self._arith_pos)
+        return ArithNumber(content)
+
+    def _arith_parse_double_quote(self) -> Node:
+        """Parse "..." inside arithmetic - may contain expansions."""
+        self._arith_advance()  # consume opening "
+        content_start = self._arith_pos
+        while not self._arith_at_end() and self._arith_peek() != '"':
+            c = self._arith_peek()
+            if c == "\\" and not self._arith_at_end():
+                self._arith_advance()  # skip backslash
+                self._arith_advance()  # skip escaped char
+            else:
+                self._arith_advance()
+        content = self._arith_src[content_start : self._arith_pos]
+        if not self._arith_consume('"'):
+            raise ParseError("Unterminated double quote in arithmetic", pos=self._arith_pos)
+        return ArithNumber(content)
+
+    def _arith_parse_backtick(self) -> Node:
+        """Parse `...` command substitution inside arithmetic."""
+        self._arith_advance()  # consume opening `
+        content_start = self._arith_pos
+        while not self._arith_at_end() and self._arith_peek() != "`":
+            c = self._arith_peek()
+            if c == "\\" and not self._arith_at_end():
+                self._arith_advance()  # skip backslash
+                self._arith_advance()  # skip escaped char
+            else:
+                self._arith_advance()
+        content = self._arith_src[content_start : self._arith_pos]
+        if not self._arith_consume("`"):
+            raise ParseError("Unterminated backtick in arithmetic", pos=self._arith_pos)
+        # Parse the command inside
+        saved_pos = self.pos
+        saved_src = self.source
+        saved_len = self.length
+        self.source = content
+        self.pos = 0
+        self.length = len(content)
+        cmd = self.parse_list()
+        self.source = saved_src
+        self.pos = saved_pos
+        self.length = saved_len
+        return CommandSubstitution(cmd)
 
     def _arith_parse_number_or_var(self) -> Node:
         """Parse a number or variable name."""
@@ -2332,7 +2406,17 @@ class Parser:
 
         # Parse the arithmetic expression
         expr = self._parse_arith_expr(content)
-        return ArithmeticCommand(expr)
+
+        # Collect trailing redirects
+        redirects = []
+        while True:
+            self.skip_whitespace()
+            redirect = self.parse_redirect()
+            if redirect is None:
+                break
+            redirects.append(redirect)
+
+        return ArithmeticCommand(expr, redirects if redirects else None)
 
     # Unary operators for [[ ]] conditionals
     COND_UNARY_OPS = {
@@ -2417,7 +2501,16 @@ class Parser:
         self.advance()  # consume first ]
         self.advance()  # consume second ]
 
-        return ConditionalExpr(body)
+        # Collect trailing redirects
+        redirects = []
+        while True:
+            self.skip_whitespace()
+            redirect = self.parse_redirect()
+            if redirect is None:
+                break
+            redirects.append(redirect)
+
+        return ConditionalExpr(body, redirects if redirects else None)
 
     def _cond_skip_whitespace(self) -> None:
         """Skip whitespace inside [[ ]], including backslash-newline continuation."""
@@ -2706,6 +2799,15 @@ class Parser:
                 if procsub_node:
                     parts.append(procsub_node)
                     chars.append(procsub_text)
+                else:
+                    chars.append(self.advance())
+
+            # Backtick command substitution
+            elif ch == "`":
+                cmdsub_node, cmdsub_text = self._parse_backtick_substitution()
+                if cmdsub_node:
+                    parts.append(cmdsub_node)
+                    chars.append(cmdsub_text)
                 else:
                     chars.append(self.advance())
 
@@ -3543,7 +3645,16 @@ class Parser:
         if not self.consume_word("esac"):
             raise ParseError("Expected 'esac' to close case statement", pos=self.pos)
 
-        return Case(word, patterns)
+        # Collect trailing redirects
+        redirects = []
+        while True:
+            self.skip_whitespace()
+            redirect = self.parse_redirect()
+            if redirect is None:
+                break
+            redirects.append(redirect)
+
+        return Case(word, patterns, redirects if redirects else None)
 
     def parse_coproc(self) -> Coproc | None:
         """Parse a coproc statement.
@@ -4140,6 +4251,10 @@ class Parser:
                 # Newline after ; means continue to see if more commands follow
                 if self.peek() == "\n":
                     continue
+
+            # For && and ||, allow newlines before the next command
+            if op in ("&&", "||"):
+                self.skip_whitespace_and_newlines()
 
             pipeline = self.parse_pipeline()
             if pipeline is None:

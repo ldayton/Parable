@@ -406,14 +406,19 @@ class Case(Node):
 
     word: Word
     patterns: list["CasePattern"]
+    redirects: list[Node]
 
-    def __init__(self, word: Word, patterns: list["CasePattern"]):
+    def __init__(self, word: Word, patterns: list["CasePattern"], redirects: list[Node] = None):
         self.kind = "case"
         self.word = word
         self.patterns = patterns
+        self.redirects = redirects or []
 
     def to_sexp(self) -> str:
         inner = " ".join(p.to_sexp() for p in self.patterns)
+        if self.redirects:
+            redir_str = " ".join(r.to_sexp() for r in self.redirects)
+            return f"(case {self.word.to_sexp()} {inner} {redir_str})"
         return f"(case {self.word.to_sexp()} {inner})"
 
 
@@ -556,14 +561,22 @@ class ArithmeticCommand(Node):
     """An arithmetic command ((...)) with parsed internals."""
 
     expression: "Node | None"  # Parsed arithmetic expression, or None for empty
+    redirects: list[Node]
 
-    def __init__(self, expression: "Node | None"):
+    def __init__(self, expression: "Node | None", redirects: list[Node] = None):
         self.kind = "arith-cmd"
         self.expression = expression
+        self.redirects = redirects or []
 
     def to_sexp(self) -> str:
         if self.expression is None:
+            if self.redirects:
+                inner = " ".join(r.to_sexp() for r in self.redirects)
+                return f"(arith-cmd {inner})"
             return "(arith-cmd)"
+        if self.redirects:
+            inner = " ".join(r.to_sexp() for r in self.redirects)
+            return f"(arith-cmd {self.expression.to_sexp()} {inner})"
         return f"(arith-cmd {self.expression.to_sexp()})"
 
 
@@ -854,15 +867,23 @@ class ConditionalExpr(Node):
     """A conditional expression [[ expression ]]."""
 
     body: "Node | str"  # Parsed node or raw string for backwards compat
+    redirects: list[Node]
 
-    def __init__(self, body: "Node | str"):
+    def __init__(self, body: "Node | str", redirects: list[Node] = None):
         self.kind = "cond-expr"
         self.body = body
+        self.redirects = redirects or []
 
     def to_sexp(self) -> str:
         if isinstance(self.body, str):
             escaped = self.body.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+            if self.redirects:
+                inner = " ".join(r.to_sexp() for r in self.redirects)
+                return f'(cond-expr "{escaped}" {inner})'
             return f'(cond-expr "{escaped}")'
+        if self.redirects:
+            inner = " ".join(r.to_sexp() for r in self.redirects)
+            return f"(cond-expr {self.body.to_sexp()} {inner})"
         return f"(cond-expr {self.body.to_sexp()})"
 
 

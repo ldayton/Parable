@@ -960,9 +960,8 @@ class UnaryTest(Node):
 
     def to_sexp(self) -> str:
         # Oracle format: (cond-unary "-f" (cond-term "file"))
-        # cond-term uses raw quotes (not escaped)
-        escaped = self.operand.value.replace("\\", "\\\\").replace("\n", "\\n")
-        return f'(cond-unary "{self.op}" (cond-term "{escaped}"))'
+        # cond-term preserves content as-is (no backslash escaping)
+        return f'(cond-unary "{self.op}" (cond-term "{self.operand.value}"))'
 
 
 @dataclass
@@ -981,10 +980,8 @@ class BinaryTest(Node):
 
     def to_sexp(self) -> str:
         # Oracle format: (cond-binary "==" (cond-term "x") (cond-term "y"))
-        # cond-term uses raw quotes (not escaped)
-        left_escaped = self.left.value.replace("\\", "\\\\").replace("\n", "\\n")
-        right_escaped = self.right.value.replace("\\", "\\\\").replace("\n", "\\n")
-        return f'(cond-binary "{self.op}" (cond-term "{left_escaped}") (cond-term "{right_escaped}"))'
+        # cond-term preserves content as-is (no backslash escaping)
+        return f'(cond-binary "{self.op}" (cond-term "{self.left.value}") (cond-term "{self.right.value}"))'
 
 
 @dataclass
@@ -1030,7 +1027,22 @@ class CondNot(Node):
         self.operand = operand
 
     def to_sexp(self) -> str:
-        return f"(cond-not {self.operand.to_sexp()})"
+        # Oracle ignores negation - just output the operand
+        return self.operand.to_sexp()
+
+
+@dataclass
+class CondParen(Node):
+    """Parenthesized group in [[ ]], e.g., ( expr )."""
+
+    inner: Node
+
+    def __init__(self, inner: Node):
+        self.kind = "cond-paren"
+        self.inner = inner
+
+    def to_sexp(self) -> str:
+        return f"(cond-expr {self.inner.to_sexp()})"
 
 
 @dataclass
@@ -1063,6 +1075,5 @@ class Coproc(Node):
         self.name = name
 
     def to_sexp(self) -> str:
-        if self.name:
-            return f'(coproc "{self.name}" {self.command.to_sexp()})'
-        return f"(coproc {self.command.to_sexp()})"
+        # Oracle always outputs "COPROC" as the name
+        return f'(coproc "COPROC" {self.command.to_sexp()})'

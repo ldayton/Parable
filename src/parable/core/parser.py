@@ -29,6 +29,7 @@ from .ast import (
     ConditionalExpr,
     CondNot,
     CondOr,
+    CondParen,
     Coproc,
     Empty,
     For,
@@ -2936,7 +2937,7 @@ class Parser:
             if self.at_end() or self.peek() != ")":
                 raise ParseError("Expected ) in conditional expression", pos=self.pos)
             self.advance()  # consume )
-            return inner
+            return CondParen(inner)
 
         # Parse first word
         word1 = self._parse_cond_word()

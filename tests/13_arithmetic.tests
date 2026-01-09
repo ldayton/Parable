@@ -368,6 +368,11 @@ echo $((--5))
 ---
 (command (word "echo") (word "$((--5))" (arith (unary-op "-" (unary-op "-" (number "5"))))))
 
+=== double positive
+echo $((++5))
+---
+(command (word "echo") (word "$((++5))" (arith (unary-op "+" (unary-op "+" (number "5"))))))
+
 === negate negative
 echo $((-(-5)))
 ---

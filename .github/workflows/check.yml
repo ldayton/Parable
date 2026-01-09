@@ -1,0 +1,37 @@
+name: Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+
+      - uses: extractions/setup-just@v2
+
+      - name: Run checks
+        run: just check
+
+      - name: Run benchmarks
+        run: just bench
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs
+          path: |
+            /tmp/parable-test-py3.10.log
+            /tmp/parable-test-py3.11.log
+            /tmp/parable-test-py3.12.log
+            /tmp/parable-test-py3.13.log
+            /tmp/parable-test-py3.14.log
+            /tmp/parable-lint.log
+            /tmp/parable-fmt.log

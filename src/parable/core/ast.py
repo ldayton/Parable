@@ -239,9 +239,8 @@ class HereDoc(Node):
         self.fd = fd
 
     def to_sexp(self) -> str:
-        escaped_content = self.content.replace("\\", "\\\\").replace('"', '\\"')
         op = "<<-" if self.strip_tabs else "<<"
-        return f'(redirect "{op}" "{escaped_content}")'
+        return f'(redirect "{op}" "{self.content}")'
 
 
 @dataclass
@@ -929,16 +928,17 @@ class ConditionalExpr(Node):
         self.redirects = redirects or []
 
     def to_sexp(self) -> str:
+        # Oracle format: (cond ...) not (cond-expr ...)
         if isinstance(self.body, str):
             escaped = self.body.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
             if self.redirects:
                 inner = " ".join(r.to_sexp() for r in self.redirects)
-                return f'(cond-expr "{escaped}" {inner})'
-            return f'(cond-expr "{escaped}")'
+                return f'(cond "{escaped}" {inner})'
+            return f'(cond "{escaped}")'
         if self.redirects:
             inner = " ".join(r.to_sexp() for r in self.redirects)
-            return f"(cond-expr {self.body.to_sexp()} {inner})"
-        return f"(cond-expr {self.body.to_sexp()})"
+            return f"(cond {self.body.to_sexp()} {inner})"
+        return f"(cond {self.body.to_sexp()})"
 
 
 @dataclass
@@ -954,7 +954,10 @@ class UnaryTest(Node):
         self.operand = operand
 
     def to_sexp(self) -> str:
-        return f'(unary-test "{self.op}" {self.operand.to_sexp()})'
+        # Oracle format: (cond-unary "-f" (cond-term "file"))
+        # cond-term uses raw quotes (not escaped)
+        escaped = self.operand.value.replace("\\", "\\\\").replace("\n", "\\n")
+        return f'(cond-unary "{self.op}" (cond-term "{escaped}"))'
 
 
 @dataclass
@@ -972,7 +975,11 @@ class BinaryTest(Node):
         self.right = right
 
     def to_sexp(self) -> str:
-        return f'(binary-test "{self.op}" {self.left.to_sexp()} {self.right.to_sexp()})'
+        # Oracle format: (cond-binary "==" (cond-term "x") (cond-term "y"))
+        # cond-term uses raw quotes (not escaped)
+        left_escaped = self.left.value.replace("\\", "\\\\").replace("\n", "\\n")
+        right_escaped = self.right.value.replace("\\", "\\\\").replace("\n", "\\n")
+        return f'(cond-binary "{self.op}" (cond-term "{left_escaped}") (cond-term "{right_escaped}"))'
 
 
 @dataclass

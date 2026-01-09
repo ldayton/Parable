@@ -369,16 +369,14 @@ class For(Node):
         self.redirects = redirects or []
 
     def to_sexp(self) -> str:
-        def escape(s: str) -> str:
-            return s.replace("\\", "\\\\").replace('"', '\\"')
-
+        # Oracle format: (for (word "var") (in (word "a") ...) body)
         redirect_strs = " ".join(r.to_sexp() for r in self.redirects)
         suffix = f" {redirect_strs}" if redirect_strs else ""
-
+        var_escaped = self.var.replace("\\", "\\\\").replace('"', '\\"')
         if self.words:
-            word_strs = " ".join(f'"{escape(w.value)}"' for w in self.words)
-            return f'(for "{self.var}" (words {word_strs}) {self.body.to_sexp()}{suffix})'
-        return f'(for "{self.var}" {self.body.to_sexp()}{suffix})'
+            word_strs = " ".join(w.to_sexp() for w in self.words)
+            return f'(for (word "{var_escaped}") (in {word_strs}) {self.body.to_sexp()}{suffix})'
+        return f'(for (word "{var_escaped}") {self.body.to_sexp()}{suffix})'
 
 
 @dataclass
@@ -480,8 +478,15 @@ class CasePattern(Node):
         self.terminator = terminator
 
     def to_sexp(self) -> str:
-        escaped = self.pattern.replace("\\", "\\\\").replace('"', '\\"')
-        parts = [f'(pattern "{escaped}"']
+        # Oracle format: (pattern ((word "a") (word "b")) body)
+        # Split pattern by | to get alternatives (simple split, ignoring escapes)
+        alternatives = self.pattern.split("|")
+        word_list = []
+        for alt in alternatives:
+            escaped = alt.replace("\\", "\\\\").replace('"', '\\"')
+            word_list.append(f'(word "{escaped}")')
+        pattern_str = " ".join(word_list)
+        parts = [f"(pattern ({pattern_str})"]
         if self.body:
             parts.append(f" {self.body.to_sexp()}")
         if self.terminator == ";&":

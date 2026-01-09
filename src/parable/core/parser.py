@@ -2,9 +2,21 @@
 
 from .ast import (
     AnsiCQuote,
+    ArithAssign,
+    ArithBinaryOp,
+    ArithComma,
     ArithDeprecated,
     ArithmeticCommand,
     ArithmeticExpansion,
+    ArithNumber,
+    ArithPostDecr,
+    ArithPostIncr,
+    ArithPreDecr,
+    ArithPreIncr,
+    ArithSubscript,
+    ArithTernary,
+    ArithUnaryOp,
+    ArithVar,
     Array,
     BinaryTest,
     BraceGroup,
@@ -736,7 +748,7 @@ class Parser:
         return Array(elements), text
 
     def _parse_arithmetic_expansion(self) -> tuple[Node | None, str]:
-        """Parse a $((...)) arithmetic expansion.
+        """Parse a $((...)) arithmetic expansion with parsed internals.
 
         Returns (node, text) where node is ArithmeticExpansion and text is raw text.
         """
@@ -786,7 +798,624 @@ class Parser:
         self.advance()  # consume second )
 
         text = self.source[start : self.pos]
-        return ArithmeticExpansion(content), text
+
+        # Parse the arithmetic expression
+        expr = self._parse_arith_expr(content)
+        return ArithmeticExpansion(expr), text
+
+    # ========== Arithmetic expression parser ==========
+    # Operator precedence (lowest to highest):
+    # 1. comma (,)
+    # 2. assignment (= += -= *= /= %= <<= >>= &= ^= |=)
+    # 3. ternary (? :)
+    # 4. logical or (||)
+    # 5. logical and (&&)
+    # 6. bitwise or (|)
+    # 7. bitwise xor (^)
+    # 8. bitwise and (&)
+    # 9. equality (== !=)
+    # 10. comparison (< > <= >=)
+    # 11. shift (<< >>)
+    # 12. addition (+ -)
+    # 13. multiplication (* / %)
+    # 14. exponentiation (**)
+    # 15. unary (! ~ + - ++ --)
+    # 16. postfix (++ -- [])
+
+    def _parse_arith_expr(self, content: str) -> Node | None:
+        """Parse an arithmetic expression string into AST nodes."""
+        # Save any existing arith context (for nested parsing)
+        saved_arith_src = getattr(self, "_arith_src", None)
+        saved_arith_pos = getattr(self, "_arith_pos", None)
+        saved_arith_len = getattr(self, "_arith_len", None)
+
+        self._arith_src = content
+        self._arith_pos = 0
+        self._arith_len = len(content)
+        self._arith_skip_ws()
+        if self._arith_at_end():
+            result = None
+        else:
+            result = self._arith_parse_comma()
+
+        # Restore previous arith context
+        if saved_arith_src is not None:
+            self._arith_src = saved_arith_src
+            self._arith_pos = saved_arith_pos
+            self._arith_len = saved_arith_len
+
+        return result
+
+    def _arith_at_end(self) -> bool:
+        return self._arith_pos >= self._arith_len
+
+    def _arith_peek(self, offset: int = 0) -> str:
+        pos = self._arith_pos + offset
+        if pos >= self._arith_len:
+            return ""
+        return self._arith_src[pos]
+
+    def _arith_advance(self) -> str:
+        if self._arith_at_end():
+            return ""
+        c = self._arith_src[self._arith_pos]
+        self._arith_pos += 1
+        return c
+
+    def _arith_skip_ws(self) -> None:
+        while not self._arith_at_end():
+            c = self._arith_src[self._arith_pos]
+            if c in " \t\n":
+                self._arith_pos += 1
+            elif c == "\\" and self._arith_pos + 1 < self._arith_len and self._arith_src[self._arith_pos + 1] == "\n":
+                # Backslash-newline continuation
+                self._arith_pos += 2
+            else:
+                break
+
+    def _arith_match(self, s: str) -> bool:
+        """Check if the next characters match s (without consuming)."""
+        return self._arith_src[self._arith_pos : self._arith_pos + len(s)] == s
+
+    def _arith_consume(self, s: str) -> bool:
+        """If next chars match s, consume them and return True."""
+        if self._arith_match(s):
+            self._arith_pos += len(s)
+            return True
+        return False
+
+    def _arith_parse_comma(self) -> Node:
+        """Parse comma expressions (lowest precedence)."""
+        left = self._arith_parse_assign()
+        while True:
+            self._arith_skip_ws()
+            if self._arith_consume(","):
+                self._arith_skip_ws()
+                right = self._arith_parse_assign()
+                left = ArithComma(left, right)
+            else:
+                break
+        return left
+
+    def _arith_parse_assign(self) -> Node:
+        """Parse assignment expressions (right associative)."""
+        left = self._arith_parse_ternary()
+        self._arith_skip_ws()
+        # Check for assignment operators
+        assign_ops = ["<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "^=", "|=", "="]
+        for op in assign_ops:
+            if self._arith_match(op):
+                # Make sure it's not == or !=
+                if op == "=" and self._arith_peek(1) == "=":
+                    break
+                self._arith_consume(op)
+                self._arith_skip_ws()
+                right = self._arith_parse_assign()  # right associative
+                return ArithAssign(op, left, right)
+        return left
+
+    def _arith_parse_ternary(self) -> Node:
+        """Parse ternary conditional (right associative)."""
+        cond = self._arith_parse_logical_or()
+        self._arith_skip_ws()
+        if self._arith_consume("?"):
+            self._arith_skip_ws()
+            if_true = self._arith_parse_ternary()  # right associative
+            self._arith_skip_ws()
+            if not self._arith_consume(":"):
+                raise ParseError("Expected ':' in ternary", pos=self._arith_pos)
+            self._arith_skip_ws()
+            if_false = self._arith_parse_ternary()  # right associative
+            return ArithTernary(cond, if_true, if_false)
+        return cond
+
+    def _arith_parse_logical_or(self) -> Node:
+        """Parse logical or (||)."""
+        left = self._arith_parse_logical_and()
+        while True:
+            self._arith_skip_ws()
+            if self._arith_match("||"):
+                self._arith_consume("||")
+                self._arith_skip_ws()
+                right = self._arith_parse_logical_and()
+                left = ArithBinaryOp("||", left, right)
+            else:
+                break
+        return left
+
+    def _arith_parse_logical_and(self) -> Node:
+        """Parse logical and (&&)."""
+        left = self._arith_parse_bitwise_or()
+        while True:
+            self._arith_skip_ws()
+            if self._arith_match("&&"):
+                self._arith_consume("&&")
+                self._arith_skip_ws()
+                right = self._arith_parse_bitwise_or()
+                left = ArithBinaryOp("&&", left, right)
+            else:
+                break
+        return left
+
+    def _arith_parse_bitwise_or(self) -> Node:
+        """Parse bitwise or (|)."""
+        left = self._arith_parse_bitwise_xor()
+        while True:
+            self._arith_skip_ws()
+            # Make sure it's not || or |=
+            if self._arith_peek() == "|" and self._arith_peek(1) not in "|=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_bitwise_xor()
+                left = ArithBinaryOp("|", left, right)
+            else:
+                break
+        return left
+
+    def _arith_parse_bitwise_xor(self) -> Node:
+        """Parse bitwise xor (^)."""
+        left = self._arith_parse_bitwise_and()
+        while True:
+            self._arith_skip_ws()
+            # Make sure it's not ^=
+            if self._arith_peek() == "^" and self._arith_peek(1) != "=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_bitwise_and()
+                left = ArithBinaryOp("^", left, right)
+            else:
+                break
+        return left
+
+    def _arith_parse_bitwise_and(self) -> Node:
+        """Parse bitwise and (&)."""
+        left = self._arith_parse_equality()
+        while True:
+            self._arith_skip_ws()
+            # Make sure it's not && or &=
+            if self._arith_peek() == "&" and self._arith_peek(1) not in "&=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_equality()
+                left = ArithBinaryOp("&", left, right)
+            else:
+                break
+        return left
+
+    def _arith_parse_equality(self) -> Node:
+        """Parse equality (== !=)."""
+        left = self._arith_parse_comparison()
+        while True:
+            self._arith_skip_ws()
+            if self._arith_match("=="):
+                self._arith_consume("==")
+                self._arith_skip_ws()
+                right = self._arith_parse_comparison()
+                left = ArithBinaryOp("==", left, right)
+            elif self._arith_match("!="):
+                self._arith_consume("!=")
+                self._arith_skip_ws()
+                right = self._arith_parse_comparison()
+                left = ArithBinaryOp("!=", left, right)
+            else:
+                break
+        return left
+
+    def _arith_parse_comparison(self) -> Node:
+        """Parse comparison (< > <= >=)."""
+        left = self._arith_parse_shift()
+        while True:
+            self._arith_skip_ws()
+            if self._arith_match("<="):
+                self._arith_consume("<=")
+                self._arith_skip_ws()
+                right = self._arith_parse_shift()
+                left = ArithBinaryOp("<=", left, right)
+            elif self._arith_match(">="):
+                self._arith_consume(">=")
+                self._arith_skip_ws()
+                right = self._arith_parse_shift()
+                left = ArithBinaryOp(">=", left, right)
+            elif self._arith_peek() == "<" and self._arith_peek(1) not in "<=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_shift()
+                left = ArithBinaryOp("<", left, right)
+            elif self._arith_peek() == ">" and self._arith_peek(1) not in ">=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_shift()
+                left = ArithBinaryOp(">", left, right)
+            else:
+                break
+        return left
+
+    def _arith_parse_shift(self) -> Node:
+        """Parse shift (<< >>)."""
+        left = self._arith_parse_additive()
+        while True:
+            self._arith_skip_ws()
+            if self._arith_match("<<="):
+                break  # assignment, not shift
+            if self._arith_match(">>="):
+                break  # assignment, not shift
+            if self._arith_match("<<"):
+                self._arith_consume("<<")
+                self._arith_skip_ws()
+                right = self._arith_parse_additive()
+                left = ArithBinaryOp("<<", left, right)
+            elif self._arith_match(">>"):
+                self._arith_consume(">>")
+                self._arith_skip_ws()
+                right = self._arith_parse_additive()
+                left = ArithBinaryOp(">>", left, right)
+            else:
+                break
+        return left
+
+    def _arith_parse_additive(self) -> Node:
+        """Parse addition and subtraction (+ -)."""
+        left = self._arith_parse_multiplicative()
+        while True:
+            self._arith_skip_ws()
+            c = self._arith_peek()
+            c2 = self._arith_peek(1)
+            if c == "+" and c2 not in "+=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_multiplicative()
+                left = ArithBinaryOp("+", left, right)
+            elif c == "-" and c2 not in "-=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_multiplicative()
+                left = ArithBinaryOp("-", left, right)
+            else:
+                break
+        return left
+
+    def _arith_parse_multiplicative(self) -> Node:
+        """Parse multiplication, division, modulo (* / %)."""
+        left = self._arith_parse_exponentiation()
+        while True:
+            self._arith_skip_ws()
+            c = self._arith_peek()
+            c2 = self._arith_peek(1)
+            if c == "*" and c2 not in "*=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_exponentiation()
+                left = ArithBinaryOp("*", left, right)
+            elif c == "/" and c2 != "=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_exponentiation()
+                left = ArithBinaryOp("/", left, right)
+            elif c == "%" and c2 != "=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_exponentiation()
+                left = ArithBinaryOp("%", left, right)
+            else:
+                break
+        return left
+
+    def _arith_parse_exponentiation(self) -> Node:
+        """Parse exponentiation (**) - right associative."""
+        left = self._arith_parse_unary()
+        self._arith_skip_ws()
+        if self._arith_match("**"):
+            self._arith_consume("**")
+            self._arith_skip_ws()
+            right = self._arith_parse_exponentiation()  # right associative
+            return ArithBinaryOp("**", left, right)
+        return left
+
+    def _arith_parse_unary(self) -> Node:
+        """Parse unary operators (! ~ + - ++ --)."""
+        self._arith_skip_ws()
+        # Pre-increment/decrement
+        if self._arith_match("++"):
+            self._arith_consume("++")
+            self._arith_skip_ws()
+            operand = self._arith_parse_unary()
+            return ArithPreIncr(operand)
+        if self._arith_match("--"):
+            self._arith_consume("--")
+            self._arith_skip_ws()
+            operand = self._arith_parse_unary()
+            return ArithPreDecr(operand)
+        # Unary operators
+        c = self._arith_peek()
+        if c == "!":
+            self._arith_advance()
+            self._arith_skip_ws()
+            operand = self._arith_parse_unary()
+            return ArithUnaryOp("!", operand)
+        if c == "~":
+            self._arith_advance()
+            self._arith_skip_ws()
+            operand = self._arith_parse_unary()
+            return ArithUnaryOp("~", operand)
+        if c == "+" and self._arith_peek(1) != "+":
+            self._arith_advance()
+            self._arith_skip_ws()
+            operand = self._arith_parse_unary()
+            return ArithUnaryOp("+", operand)
+        if c == "-" and self._arith_peek(1) != "-":
+            self._arith_advance()
+            self._arith_skip_ws()
+            operand = self._arith_parse_unary()
+            return ArithUnaryOp("-", operand)
+        return self._arith_parse_postfix()
+
+    def _arith_parse_postfix(self) -> Node:
+        """Parse postfix operators (++ -- [])."""
+        left = self._arith_parse_primary()
+        while True:
+            self._arith_skip_ws()
+            if self._arith_match("++"):
+                self._arith_consume("++")
+                left = ArithPostIncr(left)
+            elif self._arith_match("--"):
+                self._arith_consume("--")
+                left = ArithPostDecr(left)
+            elif self._arith_peek() == "[":
+                # Array subscript - but only for variables
+                if isinstance(left, ArithVar):
+                    self._arith_advance()  # consume [
+                    self._arith_skip_ws()
+                    index = self._arith_parse_comma()
+                    self._arith_skip_ws()
+                    if not self._arith_consume("]"):
+                        raise ParseError("Expected ']' in array subscript", pos=self._arith_pos)
+                    left = ArithSubscript(left.name, index)
+                else:
+                    break
+            else:
+                break
+        return left
+
+    def _arith_parse_primary(self) -> Node:
+        """Parse primary expressions (numbers, variables, parens, expansions)."""
+        self._arith_skip_ws()
+        c = self._arith_peek()
+
+        # Parenthesized expression
+        if c == "(":
+            self._arith_advance()
+            self._arith_skip_ws()
+            expr = self._arith_parse_comma()
+            self._arith_skip_ws()
+            if not self._arith_consume(")"):
+                raise ParseError("Expected ')' in arithmetic expression", pos=self._arith_pos)
+            return expr
+
+        # Parameter expansion ${...} or $var
+        if c == "$":
+            return self._arith_parse_expansion()
+
+        # Number or variable
+        return self._arith_parse_number_or_var()
+
+    def _arith_parse_expansion(self) -> Node:
+        """Parse $var, ${...}, or $(...)."""
+        if not self._arith_consume("$"):
+            raise ParseError("Expected '$'", pos=self._arith_pos)
+
+        c = self._arith_peek()
+
+        # Command substitution $(...)
+        if c == "(":
+            return self._arith_parse_cmdsub()
+
+        # Braced parameter ${...}
+        if c == "{":
+            return self._arith_parse_braced_param()
+
+        # Simple $var
+        name_chars = []
+        while not self._arith_at_end():
+            ch = self._arith_peek()
+            if ch.isalnum() or ch == "_":
+                name_chars.append(self._arith_advance())
+            elif ch in "#?@*!$-0123456789" and not name_chars:
+                # Special parameters
+                name_chars.append(self._arith_advance())
+                break
+            else:
+                break
+        if not name_chars:
+            raise ParseError("Expected variable name after $", pos=self._arith_pos)
+        return ParamExpansion("".join(name_chars))
+
+    def _arith_parse_cmdsub(self) -> Node:
+        """Parse $(...) command substitution inside arithmetic."""
+        # We're positioned after $, at (
+        self._arith_advance()  # consume (
+
+        # Check for $(( which is nested arithmetic
+        if self._arith_peek() == "(":
+            self._arith_advance()  # consume second (
+            depth = 1
+            content_start = self._arith_pos
+            while not self._arith_at_end() and depth > 0:
+                ch = self._arith_peek()
+                if ch == "(":
+                    depth += 1
+                    self._arith_advance()
+                elif ch == ")":
+                    if depth == 1 and self._arith_peek(1) == ")":
+                        break
+                    depth -= 1
+                    self._arith_advance()
+                else:
+                    self._arith_advance()
+            content = self._arith_src[content_start : self._arith_pos]
+            self._arith_advance()  # consume first )
+            self._arith_advance()  # consume second )
+            inner_expr = self._parse_arith_expr(content)
+            return ArithmeticExpansion(inner_expr)
+
+        # Regular command substitution
+        depth = 1
+        content_start = self._arith_pos
+        while not self._arith_at_end() and depth > 0:
+            ch = self._arith_peek()
+            if ch == "(":
+                depth += 1
+                self._arith_advance()
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+                self._arith_advance()
+            else:
+                self._arith_advance()
+        content = self._arith_src[content_start : self._arith_pos]
+        self._arith_advance()  # consume )
+
+        # Parse the command inside
+        saved_pos = self.pos
+        saved_src = self.source
+        saved_len = self.length
+        self.source = content
+        self.pos = 0
+        self.length = len(content)
+        cmd = self.parse_list()
+        self.source = saved_src
+        self.pos = saved_pos
+        self.length = saved_len
+
+        return CommandSubstitution(cmd)
+
+    def _arith_parse_braced_param(self) -> Node:
+        """Parse ${...} parameter expansion inside arithmetic."""
+        self._arith_advance()  # consume {
+
+        # Handle indirect ${!var}
+        if self._arith_peek() == "!":
+            self._arith_advance()
+            name_chars = []
+            while not self._arith_at_end() and self._arith_peek() != "}":
+                name_chars.append(self._arith_advance())
+            self._arith_consume("}")
+            return ParamIndirect("".join(name_chars))
+
+        # Handle length ${#var}
+        if self._arith_peek() == "#":
+            self._arith_advance()
+            name_chars = []
+            while not self._arith_at_end() and self._arith_peek() != "}":
+                name_chars.append(self._arith_advance())
+            self._arith_consume("}")
+            return ParamLength("".join(name_chars))
+
+        # Regular ${var} or ${var...}
+        name_chars = []
+        while not self._arith_at_end():
+            ch = self._arith_peek()
+            if ch == "}":
+                self._arith_advance()
+                return ParamExpansion("".join(name_chars))
+            if ch in ":-=+?#%/^,@*[":
+                # Operator follows
+                break
+            name_chars.append(self._arith_advance())
+
+        name = "".join(name_chars)
+
+        # Check for operator
+        op_chars = []
+        depth = 1
+        while not self._arith_at_end() and depth > 0:
+            ch = self._arith_peek()
+            if ch == "{":
+                depth += 1
+                op_chars.append(self._arith_advance())
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+                op_chars.append(self._arith_advance())
+            else:
+                op_chars.append(self._arith_advance())
+        self._arith_consume("}")
+        op_str = "".join(op_chars)
+
+        # Parse the operator
+        if op_str.startswith(":-"):
+            return ParamExpansion(name, ":-", op_str[2:])
+        if op_str.startswith(":="):
+            return ParamExpansion(name, ":=", op_str[2:])
+        if op_str.startswith(":+"):
+            return ParamExpansion(name, ":+", op_str[2:])
+        if op_str.startswith(":?"):
+            return ParamExpansion(name, ":?", op_str[2:])
+        if op_str.startswith(":"):
+            return ParamExpansion(name, ":", op_str[1:])
+        if op_str.startswith("##"):
+            return ParamExpansion(name, "##", op_str[2:])
+        if op_str.startswith("#"):
+            return ParamExpansion(name, "#", op_str[1:])
+        if op_str.startswith("%%"):
+            return ParamExpansion(name, "%%", op_str[2:])
+        if op_str.startswith("%"):
+            return ParamExpansion(name, "%", op_str[1:])
+        if op_str.startswith("//"):
+            return ParamExpansion(name, "//", op_str[2:])
+        if op_str.startswith("/"):
+            return ParamExpansion(name, "/", op_str[1:])
+        return ParamExpansion(name, "", op_str)
+
+    def _arith_parse_number_or_var(self) -> Node:
+        """Parse a number or variable name."""
+        self._arith_skip_ws()
+        chars = []
+        c = self._arith_peek()
+
+        # Check for number (starts with digit or base#)
+        if c.isdigit():
+            # Could be decimal, hex (0x), octal (0), or base#n
+            while not self._arith_at_end():
+                ch = self._arith_peek()
+                if ch.isalnum() or ch in "#_":
+                    chars.append(self._arith_advance())
+                else:
+                    break
+            return ArithNumber("".join(chars))
+
+        # Variable name (starts with letter or _)
+        if c.isalpha() or c == "_":
+            while not self._arith_at_end():
+                ch = self._arith_peek()
+                if ch.isalnum() or ch == "_":
+                    chars.append(self._arith_advance())
+                else:
+                    break
+            return ArithVar("".join(chars))
+
+        raise ParseError(f"Unexpected character '{c}' in arithmetic expression", pos=self._arith_pos)
 
     def _parse_deprecated_arithmetic(self) -> tuple[Node | None, str]:
         """Parse a deprecated $[expr] arithmetic expansion.
@@ -1586,7 +2215,7 @@ class Parser:
         return Subshell(body, redirects if redirects else None)
 
     def parse_arithmetic_command(self) -> ArithmeticCommand | None:
-        """Parse an arithmetic command (( expression ))."""
+        """Parse an arithmetic command (( expression )) with parsed internals."""
         self.skip_whitespace()
 
         # Check for ((
@@ -1628,7 +2257,9 @@ class Parser:
         self.advance()  # consume first )
         self.advance()  # consume second )
 
-        return ArithmeticCommand(content)
+        # Parse the arithmetic expression
+        expr = self._parse_arith_expr(content)
+        return ArithmeticCommand(expr)
 
     # Unary operators for [[ ]] conditionals
     COND_UNARY_OPS = {

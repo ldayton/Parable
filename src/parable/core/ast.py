@@ -523,32 +523,222 @@ class CommandSubstitution(Node):
 
 @dataclass
 class ArithmeticExpansion(Node):
-    """An arithmetic expansion $((...))."""
+    """An arithmetic expansion $((...)) with parsed internals."""
 
-    expression: str
+    expression: "Node | None"  # Parsed arithmetic expression, or None for empty
 
-    def __init__(self, expression: str):
+    def __init__(self, expression: "Node | None"):
         self.kind = "arith"
         self.expression = expression
 
     def to_sexp(self) -> str:
-        escaped = self.expression.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-        return f'(arith "{escaped}")'
+        if self.expression is None:
+            return "(arith)"
+        return f"(arith {self.expression.to_sexp()})"
 
 
 @dataclass
 class ArithmeticCommand(Node):
-    """An arithmetic command ((...))."""
+    """An arithmetic command ((...)) with parsed internals."""
 
-    expression: str
+    expression: "Node | None"  # Parsed arithmetic expression, or None for empty
 
-    def __init__(self, expression: str):
+    def __init__(self, expression: "Node | None"):
         self.kind = "arith-cmd"
         self.expression = expression
 
     def to_sexp(self) -> str:
-        escaped = self.expression.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-        return f'(arith-cmd "{escaped}")'
+        if self.expression is None:
+            return "(arith-cmd)"
+        return f"(arith-cmd {self.expression.to_sexp()})"
+
+
+# Arithmetic expression nodes
+
+@dataclass
+class ArithNumber(Node):
+    """A numeric literal in arithmetic context."""
+
+    value: str  # Raw string (may be hex, octal, base#n)
+
+    def __init__(self, value: str):
+        self.kind = "number"
+        self.value = value
+
+    def to_sexp(self) -> str:
+        return f'(number "{self.value}")'
+
+
+@dataclass
+class ArithVar(Node):
+    """A variable reference in arithmetic context (without $)."""
+
+    name: str
+
+    def __init__(self, name: str):
+        self.kind = "var"
+        self.name = name
+
+    def to_sexp(self) -> str:
+        return f'(var "{self.name}")'
+
+
+@dataclass
+class ArithBinaryOp(Node):
+    """A binary operation in arithmetic."""
+
+    op: str
+    left: Node
+    right: Node
+
+    def __init__(self, op: str, left: Node, right: Node):
+        self.kind = "binary-op"
+        self.op = op
+        self.left = left
+        self.right = right
+
+    def to_sexp(self) -> str:
+        return f'(binary-op "{self.op}" {self.left.to_sexp()} {self.right.to_sexp()})'
+
+
+@dataclass
+class ArithUnaryOp(Node):
+    """A unary operation in arithmetic."""
+
+    op: str
+    operand: Node
+
+    def __init__(self, op: str, operand: Node):
+        self.kind = "unary-op"
+        self.op = op
+        self.operand = operand
+
+    def to_sexp(self) -> str:
+        return f'(unary-op "{self.op}" {self.operand.to_sexp()})'
+
+
+@dataclass
+class ArithPreIncr(Node):
+    """Pre-increment ++var."""
+
+    operand: Node
+
+    def __init__(self, operand: Node):
+        self.kind = "pre-incr"
+        self.operand = operand
+
+    def to_sexp(self) -> str:
+        return f"(pre-incr {self.operand.to_sexp()})"
+
+
+@dataclass
+class ArithPostIncr(Node):
+    """Post-increment var++."""
+
+    operand: Node
+
+    def __init__(self, operand: Node):
+        self.kind = "post-incr"
+        self.operand = operand
+
+    def to_sexp(self) -> str:
+        return f"(post-incr {self.operand.to_sexp()})"
+
+
+@dataclass
+class ArithPreDecr(Node):
+    """Pre-decrement --var."""
+
+    operand: Node
+
+    def __init__(self, operand: Node):
+        self.kind = "pre-decr"
+        self.operand = operand
+
+    def to_sexp(self) -> str:
+        return f"(pre-decr {self.operand.to_sexp()})"
+
+
+@dataclass
+class ArithPostDecr(Node):
+    """Post-decrement var--."""
+
+    operand: Node
+
+    def __init__(self, operand: Node):
+        self.kind = "post-decr"
+        self.operand = operand
+
+    def to_sexp(self) -> str:
+        return f"(post-decr {self.operand.to_sexp()})"
+
+
+@dataclass
+class ArithAssign(Node):
+    """Assignment operation (=, +=, -=, etc.)."""
+
+    op: str
+    target: Node
+    value: Node
+
+    def __init__(self, op: str, target: Node, value: Node):
+        self.kind = "assign"
+        self.op = op
+        self.target = target
+        self.value = value
+
+    def to_sexp(self) -> str:
+        return f'(assign "{self.op}" {self.target.to_sexp()} {self.value.to_sexp()})'
+
+
+@dataclass
+class ArithTernary(Node):
+    """Ternary conditional expr ? expr : expr."""
+
+    condition: Node
+    if_true: Node
+    if_false: Node
+
+    def __init__(self, condition: Node, if_true: Node, if_false: Node):
+        self.kind = "ternary"
+        self.condition = condition
+        self.if_true = if_true
+        self.if_false = if_false
+
+    def to_sexp(self) -> str:
+        return f"(ternary {self.condition.to_sexp()} {self.if_true.to_sexp()} {self.if_false.to_sexp()})"
+
+
+@dataclass
+class ArithComma(Node):
+    """Comma operator expr, expr."""
+
+    left: Node
+    right: Node
+
+    def __init__(self, left: Node, right: Node):
+        self.kind = "comma"
+        self.left = left
+        self.right = right
+
+    def to_sexp(self) -> str:
+        return f"(comma {self.left.to_sexp()} {self.right.to_sexp()})"
+
+
+@dataclass
+class ArithSubscript(Node):
+    """Array subscript arr[expr]."""
+
+    array: str
+    index: Node
+
+    def __init__(self, array: str, index: Node):
+        self.kind = "subscript"
+        self.array = array
+        self.index = index
+
+    def to_sexp(self) -> str:
+        return f'(subscript "{self.array}" {self.index.to_sexp()})'
 
 
 @dataclass

@@ -4446,6 +4446,9 @@ class Parser:
                 # Recursively parse pipeline to handle ! ! cmd, ! time cmd, etc.
                 # Bare ! (no following command) is valid POSIX - equivalent to false
                 inner = self.parse_pipeline()
+                # Double negation cancels out (! ! cmd -> cmd)
+                if isinstance(inner, Negation):
+                    return inner.pipeline
                 return Negation(inner)
 
         # Parse the actual pipeline
@@ -4458,9 +4461,9 @@ class Parser:
         elif prefix_order == "negation":
             result = Negation(result)
         elif prefix_order == "time_negation":
-            # time ! cmd -> Time(Negation(cmd))
-            result = Negation(result)
+            # time ! cmd -> Negation(Time(cmd)) per bash-oracle
             result = Time(result, time_posix)
+            result = Negation(result)
         elif prefix_order == "negation_time":
             # ! time cmd -> Negation(Time(cmd))
             result = Time(result, time_posix)

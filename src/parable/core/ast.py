@@ -27,10 +27,11 @@ class Word(Node):
         self.parts = parts or []
 
     def to_sexp(self) -> str:
+        import re
         value = self.value
         # Strip $ from ANSI-C quotes $'...' and locale strings $"..."
-        if value.startswith("$'") or value.startswith('$"'):
-            value = value[1:]
+        value = re.sub(r"\$'", "'", value)
+        value = re.sub(r'\$"', '"', value)
         escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
         return f'(word "{escaped}")'
 
@@ -198,9 +199,12 @@ class Redirect(Node):
         self.fd = fd
 
     def to_sexp(self) -> str:
+        import re
         # Strip fd prefix from operator (e.g., "2>" -> ">")
         op = self.op.lstrip("0123456789")
         target_val = self.target.value
+        # Strip $ from locale strings $"..."
+        target_val = re.sub(r'\$"', '"', target_val)
         # For fd duplication, target starts with & (e.g., "&1", "&2", "&-")
         if target_val.startswith("&"):
             # Determine the real operator

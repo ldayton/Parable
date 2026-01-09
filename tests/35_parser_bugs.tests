@@ -1,0 +1,11 @@
+# Multi-digit fd in dup redirects
+
+=== input dup multi-digit fd
+read <&10
+---
+(command (word "read") (redirect "<" (word "&10")))
+
+=== output dup multi-digit fd
+echo >&20
+---
+(command (word "echo") (redirect ">" (word "&20")))

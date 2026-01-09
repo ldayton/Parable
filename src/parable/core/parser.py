@@ -3142,9 +3142,6 @@ class Parser:
                     break
                 words.append(word)
 
-            if not words:
-                raise ParseError("Expected words after 'in'", pos=self.pos)
-
         # Skip to 'do'
         self.skip_whitespace_and_newlines()
 

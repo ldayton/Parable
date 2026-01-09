@@ -7,7 +7,6 @@ Features to make Parable more useful for downstream projects.
 ```
 Feature                Priority   Effort   Impact         Status
 ────────────────────────────────────────────────────────────────────
-Empty for list         P1         Low      Low            Bug
 Empty heredoc delim    P1         Low      Low            Bug
 Position tracking      P2         Medium   Very High      Not started
 JSON serialization     P2         Low      High           Not started
@@ -26,14 +25,6 @@ Source reconstruction  P3         Medium   Medium         Not started
 ## P1: Correctness
 
 These features are required for tools that need complete visibility into bash scripts.
-
-### Empty for list
-
-**Status:** Bug
-
-`for x in; do :; done` fails with "Expected words after 'in'".
-
-Bash allows empty word lists in for loops - the loop simply doesn't execute.
 
 ### Empty heredoc delimiter
 

@@ -1,0 +1,73 @@
+# Parser gaps discovered from Oils test suite
+# https://github.com/oilshell/oil
+
+# === Comments with special characters ===
+
+=== single quote in comment
+echo hi # don't worry
+---
+(command (word "echo") (word "hi"))
+
+=== parenthesis in comment
+echo hi # (note)
+---
+(command (word "echo") (word "hi"))
+
+=== parenthesis mid-comment
+echo hi # see (foo) for details
+---
+(command (word "echo") (word "hi"))
+
+=== comment immediately after hash
+echo hi #(note)
+---
+(command (word "echo") (word "hi"))
+
+# === Comments after compound commands ===
+
+=== comment after fi
+if true; then echo; fi  # comment
+---
+(if (command (word "true")) (command (word "echo")))
+
+=== comment after done
+while true; do echo; done  # comment
+---
+(while (command (word "true")) (command (word "echo")))
+
+=== comment after esac
+case $x in a) echo;; esac  # comment
+---
+(case (word (simple_expansion "x")) (case_item (word "a") (command (word "echo"))))
+
+=== comment after brace group
+{ echo; }  # comment
+---
+(brace_group (command (word "echo")))
+
+# === Line continuation after && and || ===
+
+=== newline after &&
+echo a &&
+echo b
+---
+(and_list (command (word "echo") (word "a")) (command (word "echo") (word "b")))
+
+=== newline after ||
+echo a ||
+echo b
+---
+(or_list (command (word "echo") (word "a")) (command (word "echo") (word "b")))
+
+=== newline after && in test
+[[ $x == y ]] &&
+echo yes
+---
+(and_list (test_command (binary_expression (word (simple_expansion "x")) "==" (word "y"))) (command (word "echo") (word "yes")))
+
+=== multiple newlines after &&
+echo a &&
+
+echo b
+---
+(and_list (command (word "echo") (word "a")) (command (word "echo") (word "b")))

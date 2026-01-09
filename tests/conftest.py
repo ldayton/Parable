@@ -8,6 +8,26 @@ from pathlib import Path
 import pytest
 
 
+# === Oils corpus filtering ===
+# All 213 oils test failures are tracked in docs/ROADMAP.md
+# No tests are skipped - failures show as actual test failures
+
+OILS_BANNED_FILES: set[str] = set()
+OILS_SKIP_TESTS: set[str] = set()
+
+
+def oils_skip_reason(filepath: Path, name: str) -> str | None:
+    """Return skip reason if this oils test should be skipped, else None."""
+    if filepath.name in OILS_BANNED_FILES:
+        return f"banned: {filepath.name}"
+
+    key = f"{filepath.name}::{name}"
+    if key in OILS_SKIP_TESTS:
+        return f"covered: {key}"
+
+    return None
+
+
 # Find bash 4.0+ for validation
 def _find_bash() -> str | None:
     for path in ["/opt/homebrew/bin/bash", "/usr/local/bin/bash", "/bin/bash"]:
@@ -312,11 +332,18 @@ class TreeSitterTestItem(pytest.Item):
     def __init__(self, name, parent, test_case):
         super().__init__(name, parent)
         self.test_case = test_case
+        self._is_oils = "corpus/oils" in test_case.file
 
     def runtest(self):
         """Validate the input parses correctly."""
         from parable import parse
         from parable.core.errors import ParseError
+
+        # For oils corpus, check if we should skip
+        if self._is_oils:
+            skip_reason = oils_skip_reason(Path(self.test_case.file), self.test_case.name)
+            if skip_reason:
+                pytest.skip(skip_reason)
 
         # First check bash accepts it (with extglob for extended patterns)
         if BASH_PATH:

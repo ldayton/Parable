@@ -2,6 +2,40 @@
 
 Features to make Parable more useful for downstream projects.
 
+## Oils Test Suite Status
+
+Parable is tested against the [Oils](https://www.oilshell.org/) project's bash test corpus. Current status: **2282 passed, 213 failed**.
+
+### Parser Bugs (213 failures)
+
+| Error Type | Count | Description |
+|------------|------:|-------------|
+| Unterminated single quote | 80 | Quotes inside comments (`# don't`) incorrectly start strings |
+| Parser not fully implemented | 60 | Various unimplemented constructs |
+| Unexpected char in arithmetic | 8 | Quotes/backticks in `$((...))` - valid bash |
+| Expected )) to close arithmetic | 7 | Arithmetic expression edge cases |
+| Unterminated double quote | 5 | Double quotes inside comments |
+| Expected } to close brace group | 5 | Complex brace group constructs |
+| Expected 'fi' to close if | 2 | If statement edge cases |
+| Expected ]] to close conditional | 2 | Conditional expression edge cases |
+| Expected command after &&/\|\| | 2 | Newline after && or \|\| before command |
+| Expected ':' in ternary | 1 | Assignment expressions in ternary branches |
+| Expected operand after == | 1 | Comparison edge case |
+
+### Priority Fixes
+
+1. **Quotes in comments (85 tests)**: The lexer treats `'` and `"` inside comments as starting strings. This is the single biggest issue.
+
+2. **Command substitution in arithmetic (1 test)**: `` $((`echo 1`)) `` is valid bash - backticks should be allowed inside arithmetic.
+
+3. **Newline after && and || (2 tests)**: Commands can appear on the next line after `&&` or `||`.
+
+4. **Redirects after compound commands (multiple tests)**: `[[ ]] > file`, `(( )) > file`, `case ... esac > file` are valid.
+
+5. **Ternary with assignment (1 test)**: `$((1 ? a=1 : 42))` - assignment expressions should work in ternary branches.
+
+---
+
 ## Summary
 
 ```

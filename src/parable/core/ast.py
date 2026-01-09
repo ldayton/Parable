@@ -194,9 +194,10 @@ class Redirect(Node):
         self.fd = fd
 
     def to_sexp(self) -> str:
-        if self.fd is not None:
-            return f'(redirect "{self.fd}{self.op}" {self.target.to_sexp()})'
-        return f'(redirect "{self.op}" {self.target.to_sexp()})'
+        # Target is plain string, not (word ...)
+        target_val = self.target.value
+        escaped = target_val.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+        return f'(redirect "{self.op}" "{escaped}")'
 
 
 @dataclass

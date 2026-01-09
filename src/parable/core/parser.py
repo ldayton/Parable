@@ -4599,7 +4599,9 @@ class Parser:
             if op is None:
                 break
 
-            parts.append(Operator(op))
+            # Don't add duplicate semicolon (e.g., explicit ; followed by newline)
+            if not (op == ";" and parts and isinstance(parts[-1], Operator) and parts[-1].op == ";"):
+                parts.append(Operator(op))
 
             # For & at end of list, don't require another command
             if op == "&":

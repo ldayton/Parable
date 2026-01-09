@@ -354,11 +354,10 @@ class Subshell(Node):
         self.redirects = redirects
 
     def to_sexp(self) -> str:
-        result = f"(subshell {self.body.to_sexp()}"
+        base = f"(subshell {self.body.to_sexp()})"
         if self.redirects:
-            for r in self.redirects:
-                result += f" {r.to_sexp()}"
-        return result + ")"
+            return base + " " + " ".join(r.to_sexp() for r in self.redirects)
+        return base
 
 
 @dataclass
@@ -374,11 +373,10 @@ class BraceGroup(Node):
         self.redirects = redirects
 
     def to_sexp(self) -> str:
-        result = f"(brace-group {self.body.to_sexp()}"
+        base = f"(brace-group {self.body.to_sexp()})"
         if self.redirects:
-            for r in self.redirects:
-                result += f" {r.to_sexp()}"
-        return result + ")"
+            return base + " " + " ".join(r.to_sexp() for r in self.redirects)
+        return base
 
 
 @dataclass
@@ -564,10 +562,10 @@ class Case(Node):
 
     def to_sexp(self) -> str:
         inner = " ".join(p.to_sexp() for p in self.patterns)
+        base = f"(case {self.word.to_sexp()} {inner})"
         if self.redirects:
-            redir_str = " ".join(r.to_sexp() for r in self.redirects)
-            return f"(case {self.word.to_sexp()} {inner} {redir_str})"
-        return f"(case {self.word.to_sexp()} {inner})"
+            return base + " " + " ".join(r.to_sexp() for r in self.redirects)
+        return base
 
 
 @dataclass

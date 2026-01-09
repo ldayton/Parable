@@ -45,7 +45,7 @@ set -o noclobber; echo test >|file
 === high fd number
 exec 99>file
 ---
-(command (word "exec") (word "99") (redirect ">" (word "file")))
+(command (word "exec") (redirect "99>" (word "file")))
 
 === process substitution no space
 cat <(echo hello)
@@ -60,7 +60,7 @@ diff <(cat file1) <(cat file2)
 === multiple high fds
 exec 10>out1 11>out2 12>out3
 ---
-(command (word "exec") (word "10") (word "11") (word "12") (redirect ">" (word "out1")) (redirect ">" (word "out2")) (redirect ">" (word "out3")))
+(command (word "exec") (redirect "10>" (word "out1")) (redirect "11>" (word "out2")) (redirect "12>" (word "out3")))
 
 === indirect expansion
 echo ${!var_name}

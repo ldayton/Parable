@@ -7,6 +7,25 @@ from pathlib import Path
 
 import pytest
 
+# === Oils corpus filtering ===
+# All 213 oils test failures are tracked in docs/ROADMAP.md
+# No tests are skipped - failures show as actual test failures
+
+OILS_BANNED_FILES: set[str] = set()
+OILS_SKIP_TESTS: set[str] = set()
+
+
+def oils_skip_reason(filepath: Path, name: str) -> str | None:
+    """Return skip reason if this oils test should be skipped, else None."""
+    if filepath.name in OILS_BANNED_FILES:
+        return f"banned: {filepath.name}"
+
+    key = f"{filepath.name}::{name}"
+    if key in OILS_SKIP_TESTS:
+        return f"covered: {key}"
+
+    return None
+
 
 # Find bash 4.0+ for validation
 def _find_bash() -> str | None:
@@ -134,8 +153,8 @@ def pytest_collect_file(parent, file_path):
     """Collect .tests files and tree-sitter corpus files as test modules."""
     if file_path.suffix == ".tests":
         return TestsFile.from_parent(parent, path=file_path)
-    # Tree-sitter corpus files in corpus/ subdirectory
-    if file_path.suffix == ".txt" and "corpus" in file_path.parts:
+    # Corpus files in corpus*/ subdirectories (tree-sitter, oils, etc.)
+    if file_path.suffix == ".txt" and any(p.startswith("corpus") for p in file_path.parts):
         return TreeSitterCorpusFile.from_parent(parent, path=file_path)
     return None
 
@@ -247,13 +266,13 @@ def parse_tree_sitter_corpus(filepath: Path) -> list[TreeSitterTestCase]:
     content = filepath.read_text()
     lines = content.splitlines()
 
-    # Split by separator (80 = signs)
+    # Split by separator (line of = signs)
     i = 0
     while i < len(lines):
         line = lines[i]
 
-        # Look for test header (80 = signs)
-        if line == "=" * 80:
+        # Look for test header (line of = signs, at least 20)
+        if len(line) >= 20 and all(c == "=" for c in line):
             start_line = i
             i += 1
             if i >= len(lines):
@@ -266,7 +285,7 @@ def parse_tree_sitter_corpus(filepath: Path) -> list[TreeSitterTestCase]:
                 break
 
             # Skip second row of = signs
-            if lines[i] == "=" * 80:
+            if len(lines[i]) >= 20 and all(c == "=" for c in lines[i]):
                 i += 1
 
             # Collect input until we hit dashes
@@ -278,7 +297,7 @@ def parse_tree_sitter_corpus(filepath: Path) -> list[TreeSitterTestCase]:
                 i += 1
 
             # Skip past the expected output section
-            while i < len(lines) and lines[i] != "=" * 80:
+            while i < len(lines) and not (len(lines[i]) >= 20 and all(c == "=" for c in lines[i])):
                 i += 1
 
             input_code = "\n".join(input_lines).strip()
@@ -312,11 +331,18 @@ class TreeSitterTestItem(pytest.Item):
     def __init__(self, name, parent, test_case):
         super().__init__(name, parent)
         self.test_case = test_case
+        self._is_oils = "corpus/oils" in test_case.file
 
     def runtest(self):
         """Validate the input parses correctly."""
         from parable import parse
         from parable.core.errors import ParseError
+
+        # For oils corpus, check if we should skip
+        if self._is_oils:
+            skip_reason = oils_skip_reason(Path(self.test_case.file), self.test_case.name)
+            if skip_reason:
+                pytest.skip(skip_reason)
 
         # First check bash accepts it (with extglob for extended patterns)
         if BASH_PATH:

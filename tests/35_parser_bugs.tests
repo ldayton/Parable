@@ -9,3 +9,8 @@ read <&10
 echo >&20
 ---
 (command (word "echo") (redirect ">" (word "&20")))
+
+=== fd move multi-digit source
+exec 3<&10-
+---
+(command (word "exec") (redirect "3<" (word "&10-")))

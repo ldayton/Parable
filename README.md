@@ -6,11 +6,9 @@ A hand-written recursive descent parser for bash. No shortcuts, no regexes, no e
 
 ## Philosophy
 
-Most bash parsers are glorified regex matchers that handle the happy path. Parable is different. Built from the GNU bash manual, the POSIX spec, the bash YACC grammar, and tested against the tree-sitter-bash corpus. Every test case validated against real bash.
+Most bash parsers are glorified regex matchers that handle the happy path. Parable is different. Built from the GNU bash manual, the POSIX spec, the bash YACC grammar, and tested against the [tree-sitter-bash](https://github.com/tree-sitter/tree-sitter-bash) and [Oils](https://github.com/oilshell/oil) test suites. Every test case validated against real bash.
 
-**1,561 test cases.** Every one passes `bash -n` syntax validation.
-
-This includes the entire [tree-sitter-bash corpus](https://github.com/tree-sitter/tree-sitter-bash).
+**3,962 test cases.** Every one passes `bash -n` syntax validation.
 
 ## What It Handles
 
@@ -63,7 +61,7 @@ print(ast[0].to_sexp())
 uv run pytest
 ```
 
-28 test modules covering progressively deeper bash semantics. Every input is validated against bash 4.0+ with `bash -n`. The tree-sitter corpus runs as a separate test suite—Parable parses what they parse, but doesn't accept syntax that bash rejects.
+28 test modules covering progressively deeper bash semantics. Every input is validated against bash 4.0+ with `bash -n`. The tree-sitter-bash and Oils corpora run as separate test suites—Parable parses what they parse, but doesn't accept syntax that bash rejects.
 
 ## Project Structure
 
@@ -75,8 +73,10 @@ src/parable/
     └── parser.py      # Recursive descent parser (~3000 lines)
 
 tests/
-├── *.tests            # 1,374 test cases in custom format
-└── corpus/            # 187 tree-sitter-bash corpus tests
+├── *.tests                      # 1,374 test cases in custom format
+└── corpus/
+    ├── tree-sitter-bash/        # 93 tree-sitter-bash corpus tests
+    └── oils/                    # 2,495 Oils spec tests
 ```
 
 ## License

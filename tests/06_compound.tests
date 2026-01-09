@@ -7,35 +7,42 @@
 ---
 (subshell (command (word "echo") (word "foo")))
 
+
 === subshell with multiple commands
 (echo foo; echo bar)
 ---
-(subshell (list (command (word "echo") (word "foo")) (semi) (command (word "echo") (word "bar"))))
+(subshell (semi (command (word "echo") (word "foo")) (command (word "echo") (word "bar"))))
+
 
 === subshell with and
 (cmd1 && cmd2)
 ---
-(subshell (list (command (word "cmd1")) (and) (command (word "cmd2"))))
+(subshell (and (command (word "cmd1")) (command (word "cmd2"))))
+
 
 === subshell with or
 (cmd1 || cmd2)
 ---
-(subshell (list (command (word "cmd1")) (or) (command (word "cmd2"))))
+(subshell (or (command (word "cmd1")) (command (word "cmd2"))))
+
 
 === subshell with pipeline
 (echo foo | cat)
 ---
-(subshell (pipeline (command (word "echo") (word "foo")) (command (word "cat"))))
+(subshell (pipe (command (word "echo") (word "foo")) (command (word "cat"))))
+
 
 === subshell with complex pipeline
 (cat file | grep pattern | head -5)
 ---
-(subshell (pipeline (command (word "cat") (word "file")) (command (word "grep") (word "pattern")) (command (word "head") (word "-5"))))
+(subshell (pipe (command (word "cat") (word "file")) (pipe (command (word "grep") (word "pattern")) (command (word "head") (word "-5")))))
+
 
 === subshell no spaces
 (echo foo)
 ---
 (subshell (command (word "echo") (word "foo")))
+
 
 # === Nested subshells ===
 # Note: (( is arithmetic command, use spaces for nested subshells: ( (cmd) )
@@ -45,153 +52,180 @@
 ---
 (subshell (subshell (command (word "echo") (word "foo"))))
 
+
 === triple nested subshell
 ( ( (echo foo) ) )
 ---
 (subshell (subshell (subshell (command (word "echo") (word "foo")))))
 
+
 === nested subshell with list
 ( (echo a; echo b) )
 ---
-(subshell (subshell (list (command (word "echo") (word "a")) (semi) (command (word "echo") (word "b")))))
+(subshell (subshell (semi (command (word "echo") (word "a")) (command (word "echo") (word "b")))))
+
 
 # === Subshells in pipelines ===
 
 === subshell at pipeline start
 (echo foo) | cat
 ---
-(pipeline (subshell (command (word "echo") (word "foo"))) (command (word "cat")))
+(pipe (subshell (command (word "echo") (word "foo"))) (command (word "cat")))
+
 
 === subshell at pipeline end
 echo foo | (cat)
 ---
-(pipeline (command (word "echo") (word "foo")) (subshell (command (word "cat"))))
+(pipe (command (word "echo") (word "foo")) (subshell (command (word "cat"))))
+
 
 === subshell in middle of pipeline
 echo foo | (grep foo) | wc -l
 ---
-(pipeline (command (word "echo") (word "foo")) (subshell (command (word "grep") (word "foo"))) (command (word "wc") (word "-l")))
+(pipe (command (word "echo") (word "foo")) (pipe (subshell (command (word "grep") (word "foo"))) (command (word "wc") (word "-l"))))
+
 
 === multiple subshells in pipeline
 (echo foo) | (cat) | (wc)
 ---
-(pipeline (subshell (command (word "echo") (word "foo"))) (subshell (command (word "cat"))) (subshell (command (word "wc"))))
+(pipe (subshell (command (word "echo") (word "foo"))) (pipe (subshell (command (word "cat"))) (subshell (command (word "wc")))))
+
 
 # === Subshells in lists ===
 
 === subshell in and list
 (echo foo) && echo bar
 ---
-(list (subshell (command (word "echo") (word "foo"))) (and) (command (word "echo") (word "bar")))
+(and (subshell (command (word "echo") (word "foo"))) (command (word "echo") (word "bar")))
+
 
 === subshell in or list
 (false) || echo fallback
 ---
-(list (subshell (command (word "false"))) (or) (command (word "echo") (word "fallback")))
+(or (subshell (command (word "false"))) (command (word "echo") (word "fallback")))
+
 
 === subshell in background
 (sleep 10) &
 ---
-(list (subshell (command (word "sleep") (word "10"))) (bg))
+(background (subshell (command (word "sleep") (word "10"))))
+
 
 === subshell with cd
 (cd /tmp && ls)
 ---
-(subshell (list (command (word "cd") (word "/tmp")) (and) (command (word "ls"))))
+(subshell (and (command (word "cd") (word "/tmp")) (command (word "ls"))))
+
 
 # === Basic brace groups ===
 
 === simple brace group
 { echo foo; }
 ---
-(brace-group (list (command (word "echo") (word "foo")) (semi)))
+(brace-group (command (word "echo") (word "foo")))
+
 
 === brace group with multiple commands
 { echo foo; echo bar; }
 ---
-(brace-group (list (command (word "echo") (word "foo")) (semi) (command (word "echo") (word "bar")) (semi)))
+(brace-group (semi (command (word "echo") (word "foo")) (command (word "echo") (word "bar"))))
+
 
 === brace group with and
 { cmd1 && cmd2; }
 ---
-(brace-group (list (command (word "cmd1")) (and) (command (word "cmd2")) (semi)))
+(brace-group (and (command (word "cmd1")) (command (word "cmd2"))))
+
 
 === brace group with or
 { cmd1 || cmd2; }
 ---
-(brace-group (list (command (word "cmd1")) (or) (command (word "cmd2")) (semi)))
+(brace-group (or (command (word "cmd1")) (command (word "cmd2"))))
+
 
 === brace group with pipeline
 { echo foo | cat; }
 ---
-(brace-group (list (pipeline (command (word "echo") (word "foo")) (command (word "cat"))) (semi)))
+(brace-group (pipe (command (word "echo") (word "foo")) (command (word "cat"))))
+
 
 === brace group complex list
 { echo a && echo b || echo c; }
 ---
-(brace-group (list (command (word "echo") (word "a")) (and) (command (word "echo") (word "b")) (or) (command (word "echo") (word "c")) (semi)))
+(brace-group (or (and (command (word "echo") (word "a")) (command (word "echo") (word "b"))) (command (word "echo") (word "c"))))
+
 
 # === Nested brace groups ===
 
 === nested brace group
 { { echo foo; }; }
 ---
-(brace-group (list (brace-group (list (command (word "echo") (word "foo")) (semi))) (semi)))
+(brace-group (brace-group (command (word "echo") (word "foo"))))
+
 
 === brace inside subshell
 ({ echo foo; })
 ---
-(subshell (brace-group (list (command (word "echo") (word "foo")) (semi))))
+(subshell (brace-group (command (word "echo") (word "foo"))))
+
 
 === subshell inside brace
 { (echo foo); }
 ---
-(brace-group (list (subshell (command (word "echo") (word "foo"))) (semi)))
+(brace-group (subshell (command (word "echo") (word "foo"))))
+
 
 # === Brace groups in pipelines ===
 
 === brace group in pipeline
 { echo foo; } | cat
 ---
-(pipeline (brace-group (list (command (word "echo") (word "foo")) (semi))) (command (word "cat")))
+(pipe (brace-group (command (word "echo") (word "foo"))) (command (word "cat")))
+
 
 === brace group at end of pipeline
 echo foo | { cat; }
 ---
-(pipeline (command (word "echo") (word "foo")) (brace-group (list (command (word "cat")) (semi))))
+(pipe (command (word "echo") (word "foo")) (brace-group (command (word "cat"))))
+
 
 # === Brace groups in lists ===
 
 === brace group in and list
 { echo foo; } && echo bar
 ---
-(list (brace-group (list (command (word "echo") (word "foo")) (semi))) (and) (command (word "echo") (word "bar")))
+(and (brace-group (command (word "echo") (word "foo"))) (command (word "echo") (word "bar")))
+
 
 === brace group in or list
 { false; } || echo fallback
 ---
-(list (brace-group (list (command (word "false")) (semi))) (or) (command (word "echo") (word "fallback")))
+(or (brace-group (command (word "false"))) (command (word "echo") (word "fallback")))
+
 
 # === From tree-sitter-bash ===
 
 === subshell in background with path
 ( ./start-server --port=80 ) &
 ---
-(list (subshell (command (word "./start-server") (word "--port=80"))) (bg))
+(background (subshell (command (word "./start-server") (word "--port=80"))))
+
 
 === brace with or fallback
 { echo "b"; return 0; }
 ---
-(brace-group (list (command (word "echo") (word "\"b\"")) (semi) (command (word "return") (word "0")) (semi)))
+(brace-group (semi (command (word "echo") (word "\"b\"")) (command (word "return") (word "0"))))
+
 
 # === Complex combinations ===
 
 === subshell and brace mixed
 (echo a) && { echo b; }
 ---
-(list (subshell (command (word "echo") (word "a"))) (and) (brace-group (list (command (word "echo") (word "b")) (semi))))
+(and (subshell (command (word "echo") (word "a"))) (brace-group (command (word "echo") (word "b"))))
+
 
 === pipeline with both types
 { echo a; } | (cat) | { wc; }
 ---
-(pipeline (brace-group (list (command (word "echo") (word "a")) (semi))) (subshell (command (word "cat"))) (brace-group (list (command (word "wc")) (semi))))
+(pipe (brace-group (command (word "echo") (word "a"))) (pipe (subshell (command (word "cat"))) (brace-group (command (word "wc")))))

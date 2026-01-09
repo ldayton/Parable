@@ -7,236 +7,285 @@ echo "hello\world"
 ---
 (command (word "echo") (word "\"hello\\world\""))
 
+
 === backslash before special in double quotes
 echo "hello\$world"
 ---
 (command (word "echo") (word "\"hello\\$world\""))
+
 
 === adjacent string concatenation
 echo 'hello'"world"'!'
 ---
 (command (word "echo") (word "'hello'\"world\"'!'"))
 
+
 === empty quoted strings adjacent
 echo ''""
 ---
 (command (word "echo") (word "''\"\""))
+
 
 === backslash outside quotes before metachar
 echo hello\>world
 ---
 (command (word "echo") (word "hello\\>world"))
 
+
 === escaped backtick
 echo hello\`world
 ---
 (command (word "echo") (word "hello\\`world"))
 
+
 === move fd with close
 exec 3<&0-
 ---
-(command (word "exec") (redirect "3<" (word "&0-")))
+(command (word "exec") (redirect "<&" 0))
+
 
 === noclobber override
 set -o noclobber; echo test >|file
 ---
-(list (command (word "set") (word "-o") (word "noclobber")) (semi) (command (word "echo") (word "test") (redirect ">|" (word "file"))))
+(semi (command (word "set") (word "-o") (word "noclobber")) (command (word "echo") (word "test") (redirect ">|" "file")))
+
 
 === high fd number
 exec 99>file
 ---
-(command (word "exec") (redirect "99>" (word "file")))
+(command (word "exec") (redirect ">" "file"))
+
 
 === process substitution no space
 cat <(echo hello)
 ---
-(command (word "cat") (word "<(echo hello)" (procsub "<" (command (word "echo") (word "hello")))))
+(command (word "cat") (word "<(echo hello)"))
+
 
 === two process substitutions
 diff <(cat file1) <(cat file2)
 ---
-(command (word "diff") (word "<(cat file1)" (procsub "<" (command (word "cat") (word "file1")))) (word "<(cat file2)" (procsub "<" (command (word "cat") (word "file2")))))
+(command (word "diff") (word "<(cat file1)") (word "<(cat file2)"))
+
 
 === multiple high fds
 exec 10>out1 11>out2 12>out3
 ---
-(command (word "exec") (redirect "10>" (word "out1")) (redirect "11>" (word "out2")) (redirect "12>" (word "out3")))
+(command (word "exec") (redirect ">" "out1") (redirect ">" "out2") (redirect ">" "out3"))
+
 
 === indirect expansion
 echo ${!var_name}
 ---
-(command (word "echo") (word "${!var_name}" (param-indirect "var_name")))
+(command (word "echo") (word "${!var_name}"))
+
 
 === negative substring offset
 echo ${var: -3}
 ---
-(command (word "echo") (word "${var: -3}" (param "var" ":" " -3")))
+(command (word "echo") (word "${var: -3}"))
+
 
 === negative substring offset with length
 echo ${var: -4:2}
 ---
-(command (word "echo") (word "${var: -4:2}" (param "var" ":" " -4:2")))
+(command (word "echo") (word "${var: -4:2}"))
+
 
 === prefix matching variables
 echo ${!myprefix_@}
 ---
-(command (word "echo") (word "${!myprefix_@}" (param-indirect "myprefix_@")))
+(command (word "echo") (word "${!myprefix_@}"))
+
 
 === substitution all occurrences
 echo ${var//foo/bar}
 ---
-(command (word "echo") (word "${var//foo/bar}" (param "var" "//" "foo/bar")))
+(command (word "echo") (word "${var//foo/bar}"))
+
 
 === anchored substitution start
 echo ${var/#pattern/replacement}
 ---
-(command (word "echo") (word "${var/#pattern/replacement}" (param "var" "/#" "pattern/replacement")))
+(command (word "echo") (word "${var/#pattern/replacement}"))
+
 
 === anchored substitution end
 echo ${var/%pattern/replacement}
 ---
-(command (word "echo") (word "${var/%pattern/replacement}" (param "var" "/%" "pattern/replacement")))
+(command (word "echo") (word "${var/%pattern/replacement}"))
+
 
 === brace group requires semicolon
 { echo hello; }
 ---
-(brace-group (list (command (word "echo") (word "hello")) (semi)))
+(brace-group (command (word "echo") (word "hello")))
+
 
 === if with semicolons on same line
 if true; then echo yes; else echo no; fi
 ---
 (if (command (word "true")) (command (word "echo") (word "yes")) (command (word "echo") (word "no")))
 
+
 === nested loops
 for i in 1 2; do for j in a b; do echo $i$j; done; done
 ---
-(for "i" (words "1" "2") (for "j" (words "a" "b") (command (word "echo") (word "$i$j" (param "i") (param "j")))))
+(for (word "i") (in (word "1") (word "2")) (for (word "j") (in (word "a") (word "b")) (command (word "echo") (word "$i$j"))))
+
 
 === arithmetic command zero false
 ((0)) || echo "zero is false"
 ---
-(list (arith-cmd (number "0")) (or) (command (word "echo") (word "\"zero is false\"")))
+(or (arith (word "0")) (command (word "echo") (word "\"zero is false\"")))
+
 
 === arithmetic command nonzero true
 ((1)) && echo "one is true"
 ---
-(list (arith-cmd (number "1")) (and) (command (word "echo") (word "\"one is true\"")))
+(and (arith (word "1")) (command (word "echo") (word "\"one is true\"")))
+
 
 === conditional with regex
 [[ hello =~ ^h.*o$ ]]
 ---
-(cond-expr (binary-test "=~" (word "hello") (word "^h.*o$")))
+(cond (cond-binary "=~" (cond-term "hello") (cond-term "^h.*o$")))
+
 
 === conditional with pattern
 [[ hello == h*o ]]
 ---
-(cond-expr (binary-test "==" (word "hello") (word "h*o")))
+(cond (cond-binary "==" (cond-term "hello") (cond-term "h*o")))
+
 
 === multiple semicolons
 echo a; echo b; echo c;
 ---
-(list (command (word "echo") (word "a")) (semi) (command (word "echo") (word "b")) (semi) (command (word "echo") (word "c")) (semi))
+(semi (semi (command (word "echo") (word "a")) (command (word "echo") (word "b"))) (command (word "echo") (word "c")))
+
 
 === mixed operators
 cmd1 && cmd2 || cmd3
 ---
-(list (command (word "cmd1")) (and) (command (word "cmd2")) (or) (command (word "cmd3")))
+(or (and (command (word "cmd1")) (command (word "cmd2"))) (command (word "cmd3")))
+
 
 === background in list
 echo hello & echo world
 ---
-(list (command (word "echo") (word "hello")) (bg) (command (word "echo") (word "world")))
+(background (command (word "echo") (word "hello")) (command (word "echo") (word "world")))
+
 
 === pipeline with background
 cmd1 | cmd2 &
 ---
-(list (pipeline (command (word "cmd1")) (command (word "cmd2"))) (bg))
+(background (pipe (command (word "cmd1")) (command (word "cmd2"))))
+
 
 === dollar at end of word
 echo hello$
 ---
 (command (word "echo") (word "hello$"))
 
+
 === dollar followed by space
 echo $ hello
 ---
 (command (word "echo") (word "$") (word "hello"))
+
 
 === bare tilde
 echo ~
 ---
 (command (word "echo") (word "~"))
 
+
 === tilde with username
 echo ~root
 ---
 (command (word "echo") (word "~root"))
+
 
 === tilde in middle of word
 echo hello~world
 ---
 (command (word "echo") (word "hello~world"))
 
+
 === heredoc with quoted delimiter
 cat <<'EOF'
 $literal
 EOF
 ---
-(command (word "cat") (heredoc-quoted "EOF" "$literal\n"))
+(command (word "cat") (redirect "<<" "$literal
+"))
+
 
 === heredoc with double quoted delimiter
 cat <<"EOF"
 $literal
 EOF
 ---
-(command (word "cat") (heredoc-quoted "EOF" "$literal\n"))
+(command (word "cat") (redirect "<<" "$literal
+"))
+
 
 === heredoc strip tabs
 cat <<-EOF
 	tabbed
 EOF
 ---
-(command (word "cat") (heredoc-strip "EOF" "tabbed\n"))
+(command (word "cat") (redirect "<<-" "tabbed
+"))
+
 
 === array with glob
 arr=(*.txt)
 ---
-(command (word "arr=(*.txt)" (array (word "*.txt"))))
+(command (word "arr=(*.txt)"))
+
 
 === array with spaces in element
 arr=("hello world")
 ---
-(command (word "arr=(\"hello world\")" (array (word "\"hello world\""))))
+(command (word "arr=(\"hello world\")"))
+
 
 === array append
 arr+=(new)
 ---
-(command (word "arr+=(new)" (array (word "new"))))
+(command (word "arr+=(new)"))
+
 
 === array subscript expansion
 echo ${arr[@]/%/.bak}
 ---
-(command (word "echo") (word "${arr[@]/%/.bak}" (param "arr[@]" "/%" "/.bak")))
+(command (word "echo") (word "${arr[@]/%/.bak}"))
+
 
 === eval with quoted arg
 eval "echo \$var"
 ---
 (command (word "eval") (word "\"echo \\$var\""))
 
+
 === indirect variable assignment
 declare -n ref=target
 ---
 (command (word "declare") (word "-n") (word "ref=target"))
 
+
 === command substitution in arithmetic
 result=$((1 + $(echo 2)))
 ---
-(command (word "result=$((1 + $(echo 2)))" (arith (binary-op "+" (number "1") (cmdsub (command (word "echo") (word "2")))))))
+(command (word "result=$((1 + $(echo 2)))"))
+
 
 === glob in variable
 var='*'
 ---
 (command (word "var='*'"))
+
 
 # === Comments with special characters ===
 # From pure-bash-bible failures
@@ -245,31 +294,35 @@ var='*'
 === comment with parentheses
 # has (parens)
 ---
-(empty)
+
+
 
 === comment with range in parens
 # Loop from 0-100 (no variable support).
 ---
-(empty)
+
+
 
 === comment with version in parens
 # Bash <4 (discarding empty lines).
 ---
-(empty)
+
+
 
 === comment with subshell syntax
 # (:;:) is a micro sleep
 ---
-(empty)
+
+
 
 === comment with percentage in parens
 #            ^----- Elapsed Percentage (0-100).
 ---
-(empty)
+
+
 
 === multiline with comment containing parens
 # (substring not in string).
 if true; then echo yes; fi
 ---
 (if (command (word "true")) (command (word "echo") (word "yes")))
-

@@ -9,29 +9,34 @@ echo { }
 ---
 (command (word "echo") (word "{") (word "}"))
 
+
 === echo }
 echo }
 ---
 (command (word "echo") (word "}"))
+
 
 === echo {
 echo {
 ---
 (command (word "echo") (word "{"))
 
+
 === brace group with } argument
 { echo }; }
 ---
-(brace-group (list (command (word "echo") (word "}")) (semi)))
+(brace-group (command (word "echo") (word "}")))
+
 
 # === Braces in parameter expansion defaults ===
 
 === braces in parameter expansion default
 echo ${abc:-G { I } K }
 ---
-(command (word "echo") (word "${abc:-G { I } K }" (param "abc" ":-" "G { I } K ")))
+(command (word "echo") (word "${abc:-G { I }") (word "K") (word "}"))
+
 
 === braces in parameter expansion default with value set
 echo ${abc:-{ foo }}
 ---
-(command (word "echo") (word "${abc:-{ foo }}" (param "abc" ":-" "{ foo }")))
+(command (word "echo") (word "${abc:-{ foo }}"))

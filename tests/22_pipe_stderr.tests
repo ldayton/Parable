@@ -5,131 +5,155 @@
 === simple pipe stderr
 cmd |& cat
 ---
-(pipeline (command (word "cmd")) (pipe-both) (command (word "cat")))
+(pipe (command (word "cmd") (redirect ">&" 1)) (command (word "cat")))
+
 
 === pipe stderr with args
 make 2>&1 |& tee build.log
 ---
-(pipeline (command (word "make") (redirect "2>" (word "&1"))) (pipe-both) (command (word "tee") (word "build.log")))
+(pipe (command (word "make") (redirect ">&" 1) (redirect ">&" 1)) (command (word "tee") (word "build.log")))
+
 
 === pipe stderr in chain
 cmd1 |& cmd2 |& cmd3
 ---
-(pipeline (command (word "cmd1")) (pipe-both) (command (word "cmd2")) (pipe-both) (command (word "cmd3")))
+(pipe (command (word "cmd1") (redirect ">&" 1)) (pipe (command (word "cmd2") (redirect ">&" 1)) (command (word "cmd3"))))
+
 
 === mixed pipe and pipe stderr
 cmd1 | cmd2 |& cmd3
 ---
-(pipeline (command (word "cmd1")) (command (word "cmd2")) (pipe-both) (command (word "cmd3")))
+(pipe (command (word "cmd1")) (pipe (command (word "cmd2") (redirect ">&" 1)) (command (word "cmd3"))))
+
 
 === pipe stderr then regular pipe
 cmd1 |& cmd2 | cmd3
 ---
-(pipeline (command (word "cmd1")) (pipe-both) (command (word "cmd2")) (command (word "cmd3")))
+(pipe (command (word "cmd1") (redirect ">&" 1)) (pipe (command (word "cmd2")) (command (word "cmd3"))))
+
 
 === pipe stderr from subshell
 (cmd) |& cat
 ---
-(pipeline (subshell (command (word "cmd"))) (pipe-both) (command (word "cat")))
+(pipe (subshell (command (word "cmd"))) (redirect ">&" 1) (command (word "cat")))
+
 
 === pipe stderr from brace group
 { cmd; } |& cat
 ---
-(pipeline (brace-group (list (command (word "cmd")) (semi))) (pipe-both) (command (word "cat")))
+(pipe (brace-group (command (word "cmd"))) (redirect ">&" 1) (command (word "cat")))
+
 
 === pipe stderr with if
 if true; then echo x; fi |& cat
 ---
-(pipeline (if (command (word "true")) (command (word "echo") (word "x"))) (pipe-both) (command (word "cat")))
+(pipe (if (command (word "true")) (command (word "echo") (word "x"))) (redirect ">&" 1) (command (word "cat")))
+
 
 === pipe stderr with while
 while read line; do echo $line; done |& cat
 ---
-(pipeline (while (command (word "read") (word "line")) (command (word "echo") (word "$line" (param "line")))) (pipe-both) (command (word "cat")))
+(pipe (while (command (word "read") (word "line")) (command (word "echo") (word "$line"))) (redirect ">&" 1) (command (word "cat")))
+
 
 === pipe stderr in list
 cmd |& cat && echo done
 ---
-(list (pipeline (command (word "cmd")) (pipe-both) (command (word "cat"))) (and) (command (word "echo") (word "done")))
+(and (pipe (command (word "cmd") (redirect ">&" 1)) (command (word "cat"))) (command (word "echo") (word "done")))
+
 
 === pipe stderr with redirect
 cmd |& cat > output.txt
 ---
-(pipeline (command (word "cmd")) (pipe-both) (command (word "cat") (redirect ">" (word "output.txt"))))
+(pipe (command (word "cmd") (redirect ">&" 1)) (command (word "cat") (redirect ">" "output.txt")))
+
 
 === negated pipe stderr
 ! cmd |& cat
 ---
-(negation (pipeline (command (word "cmd")) (pipe-both) (command (word "cat"))))
+(negation (pipe (command (word "cmd") (redirect ">&" 1)) (command (word "cat"))))
+
 
 === time pipe stderr
 time cmd |& cat
 ---
-(time (pipeline (command (word "cmd")) (pipe-both) (command (word "cat"))))
+(time (pipe (command (word "cmd") (redirect ">&" 1)) (command (word "cat"))))
+
 
 === no spaces around pipe stderr
 cmd|&cat
 ---
-(pipeline (command (word "cmd")) (pipe-both) (command (word "cat")))
+(pipe (command (word "cmd") (redirect ">&" 1)) (command (word "cat")))
+
 
 === pipe stderr newline before command
 cmd |&
 cat
 ---
-(pipeline (command (word "cmd")) (pipe-both) (command (word "cat")))
+(pipe (command (word "cmd") (redirect ">&" 1)) (command (word "cat")))
+
 
 === pipe stderr to subshell
 cmd |& (cat)
 ---
-(pipeline (command (word "cmd")) (pipe-both) (subshell (command (word "cat"))))
+(pipe (command (word "cmd") (redirect ">&" 1)) (subshell (command (word "cat"))))
+
 
 === pipe stderr to brace group
 cmd |& { cat; }
 ---
-(pipeline (command (word "cmd")) (pipe-both) (brace-group (list (command (word "cat")) (semi))))
+(pipe (command (word "cmd") (redirect ">&" 1)) (brace-group (command (word "cat"))))
+
 
 === pipe stderr with process substitution input
 diff <(cmd1) <(cmd2) |& cat
 ---
-(pipeline (command (word "diff") (word "<(cmd1)" (procsub "<" (command (word "cmd1")))) (word "<(cmd2)" (procsub "<" (command (word "cmd2"))))) (pipe-both) (command (word "cat")))
+(pipe (command (word "diff") (word "<(cmd1)") (word "<(cmd2)") (redirect ">&" 1)) (command (word "cat")))
+
 
 === pipe stderr to process substitution
 cmd |& tee >(cat)
 ---
-(pipeline (command (word "cmd")) (pipe-both) (command (word "tee") (word ">(cat)" (procsub ">" (command (word "cat"))))))
+(pipe (command (word "cmd") (redirect ">&" 1)) (command (word "tee") (word ">(cat)")))
+
 
 === backgrounded pipeline with pipe stderr
 cmd |& cat &
 ---
-(list (pipeline (command (word "cmd")) (pipe-both) (command (word "cat"))) (bg))
+(background (pipe (command (word "cmd") (redirect ">&" 1)) (command (word "cat"))))
+
 
 === for loop with pipe stderr
 for x in a b; do echo $x; done |& cat
 ---
-(pipeline (for "x" (words "a" "b") (command (word "echo") (word "$x" (param "x")))) (pipe-both) (command (word "cat")))
+(pipe (for (word "x") (in (word "a") (word "b")) (command (word "echo") (word "$x"))) (redirect ">&" 1) (command (word "cat")))
+
 
 === case with pipe stderr
 case x in y) echo z;; esac |& cat
 ---
-(pipeline (case (word "x") (pattern "y" (command (word "echo") (word "z")))) (pipe-both) (command (word "cat")))
+(pipe (case (word "x") (pattern ((word "y")) (command (word "echo") (word "z")))) (redirect ">&" 1) (command (word "cat")))
+
 
 === arithmetic command with pipe stderr
 ((x++)) |& cat
 ---
-(pipeline (arith-cmd (post-incr (var "x"))) (pipe-both) (command (word "cat")))
+(pipe (arith (word "x++")) (redirect ">&" 1) (command (word "cat")))
+
 
 === conditional expression with pipe stderr
 [[ -f file ]] |& cat
 ---
-(pipeline (cond-expr (unary-test "-f" (word "file"))) (pipe-both) (command (word "cat")))
+(pipe (cond (cond-unary "-f" (cond-term "file"))) (redirect ">&" 1) (command (word "cat")))
+
 
 === coproc with pipe stderr in body
 coproc { cmd |& cat; }
 ---
-(coproc (brace-group (list (pipeline (command (word "cmd")) (pipe-both) (command (word "cat"))) (semi))))
+(coproc "COPROC" (brace-group (pipe (command (word "cmd") (redirect ">&" 1)) (command (word "cat")))))
+
 
 === function with pipe stderr in body
 f() { cmd |& cat; }
 ---
-(function "f" (brace-group (list (pipeline (command (word "cmd")) (pipe-both) (command (word "cat"))) (semi))))
-
+(function "f" (brace-group (pipe (command (word "cmd") (redirect ">&" 1)) (command (word "cat")))))

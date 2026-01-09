@@ -5,213 +5,257 @@
 === simple ansi-c quote
 echo $'hello'
 ---
-(command (word "echo") (word "$'hello'" (ansi-c "hello")))
+(command (word "echo") (word "'hello'"))
+
 
 === newline escape
 echo $'line1\nline2'
 ---
-(command (word "echo") (word "$'line1\\nline2'" (ansi-c "line1\\nline2")))
+(command (word "echo") (word "'line1\nline2'"))
+
 
 === tab escape
 echo $'col1\tcol2'
 ---
-(command (word "echo") (word "$'col1\\tcol2'" (ansi-c "col1\\tcol2")))
+(command (word "echo") (word "'col1\tcol2'"))
+
 
 === carriage return
 echo $'text\r'
 ---
-(command (word "echo") (word "$'text\\r'" (ansi-c "text\\r")))
+(command (word "echo") (word "'text
+'"))
+
 
 === backslash escape
 echo $'back\\slash'
 ---
-(command (word "echo") (word "$'back\\\\slash'" (ansi-c "back\\\\slash")))
+(command (word "echo") (word "'back\\slash'"))
+
 
 === single quote escape
 echo $'it\'s'
 ---
-(command (word "echo") (word "$'it\\'s'" (ansi-c "it\\'s")))
+(command (word "echo") (word "'it'\\''s'"))
+
 
 === double quote in ansi-c
 echo $'say "hi"'
 ---
-(command (word "echo") (word "$'say \"hi\"'" (ansi-c "say \"hi\"")))
+(command (word "echo") (word "'say \"hi\"'"))
+
 
 === alert bell
 echo $'beep\a'
 ---
-(command (word "echo") (word "$'beep\\a'" (ansi-c "beep\\a")))
+(command (word "echo") (word "'beep'"))
+
 
 === backspace
 echo $'back\bspace'
 ---
-(command (word "echo") (word "$'back\\bspace'" (ansi-c "back\\bspace")))
+(command (word "echo") (word "'backspace'"))
+
 
 === form feed
 echo $'page\f'
 ---
-(command (word "echo") (word "$'page\\f'" (ansi-c "page\\f")))
+(command (word "echo") (word "'page'"))
+
 
 === vertical tab
 echo $'vert\v'
 ---
-(command (word "echo") (word "$'vert\\v'" (ansi-c "vert\\v")))
+(command (word "echo") (word "'vert'"))
+
 
 # === Hex and octal escapes ===
 
 === hex escape
 echo $'\x41'
 ---
-(command (word "echo") (word "$'\\x41'" (ansi-c "\\x41")))
+(command (word "echo") (word "'A'"))
+
 
 === hex escape lowercase
 echo $'\x0a'
 ---
-(command (word "echo") (word "$'\\x0a'" (ansi-c "\\x0a")))
+(command (word "echo") (word "'\n'"))
+
 
 === octal escape
 echo $'\101'
 ---
-(command (word "echo") (word "$'\\101'" (ansi-c "\\101")))
+(command (word "echo") (word "'A'"))
+
 
 === unicode escape short
 echo $'\u0041'
 ---
-(command (word "echo") (word "$'\\u0041'" (ansi-c "\\u0041")))
+(command (word "echo") (word "'A'"))
+
 
 === unicode escape long
 echo $'\U00000041'
 ---
-(command (word "echo") (word "$'\\U00000041'" (ansi-c "\\U00000041")))
+(command (word "echo") (word "'A'"))
+
 
 # === Multiple escapes ===
 
 === multiple escapes
 echo $'\t\n\r'
 ---
-(command (word "echo") (word "$'\\t\\n\\r'" (ansi-c "\\t\\n\\r")))
+(command (word "echo") (word "'\t\n
+'"))
+
 
 === mixed content
 echo $'hello\nworld\t!'
 ---
-(command (word "echo") (word "$'hello\\nworld\\t!'" (ansi-c "hello\\nworld\\t!")))
+(command (word "echo") (word "'hello\nworld\t!'"))
+
 
 # === In context ===
 
 === ansi-c in assignment
 x=$'hello\nworld'
 ---
-(command (word "x=$'hello\\nworld'" (ansi-c "hello\\nworld")))
+(command (word "x='hello\nworld'"))
+
 
 === ansi-c concatenated
 echo $'part1'"part2"
 ---
-(command (word "echo") (word "$'part1'\"part2\"" (ansi-c "part1")))
+(command (word "echo") (word "'part1'\"part2\""))
+
 
 === ansi-c with regular args
 echo $'first' second $'third'
 ---
-(command (word "echo") (word "$'first'" (ansi-c "first")) (word "second") (word "$'third'" (ansi-c "third")))
+(command (word "echo") (word "'first'") (word "second") (word "'third'"))
+
 
 === ansi-c in array
 arr=($'a\nb' $'c\td')
 ---
-(command (word "arr=($'a\\nb' $'c\\td')" (array (word "$'a\\nb'" (ansi-c "a\\nb")) (word "$'c\\td'" (ansi-c "c\\td")))))
+(command (word "arr=('a\nb' 'c\td')"))
+
 
 === ansi-c in case pattern
 case $x in $'a\n') echo match;; esac
 ---
-(case (word "$x" (param "x")) (pattern "$'a\\n'" (command (word "echo") (word "match"))))
+(case (word "$x") (pattern ((word "'a\n'")) (command (word "echo") (word "match"))))
+
 
 # === Brutal edge cases ===
 
 === empty ansi-c quote
 echo $''
 ---
-(command (word "echo") (word "$''" (ansi-c "")))
+(command (word "echo") (word "''"))
+
 
 === escape character
 echo $'\e[31m'
 ---
-(command (word "echo") (word "$'\\e[31m'" (ansi-c "\\e[31m")))
+(command (word "echo") (word "'[31m'"))
+
 
 === control character cx
 echo $'\cM'
 ---
-(command (word "echo") (word "$'\\cM'" (ansi-c "\\cM")))
+(command (word "echo") (word "'
+'"))
+
 
 === nul character
 echo $'\0'
 ---
-(command (word "echo") (word "$'\\0'" (ansi-c "\\0")))
+(command (word "echo") (word "''"))
+
 
 === double backslash
 echo $'\\\\'
 ---
-(command (word "echo") (word "$'\\\\\\\\'" (ansi-c "\\\\\\\\")))
+(command (word "echo") (word "'\\\\'"))
+
 
 === quote at end
 echo $'test\''
 ---
-(command (word "echo") (word "$'test\\''" (ansi-c "test\\'")))
+(command (word "echo") (word "'test'\\'''"))
+
 
 === multiple quotes
 echo $'it\'s a \'test\''
 ---
-(command (word "echo") (word "$'it\\'s a \\'test\\''" (ansi-c "it\\'s a \\'test\\'")))
+(command (word "echo") (word "'it'\\''s a '\\''test'\\'''"))
+
 
 === ansi-c in redirect
 cat < $'file\nname'
 ---
-(command (word "cat") (redirect "<" (word "$'file\\nname'" (ansi-c "file\\nname"))))
+(command (word "cat") (redirect "<" "'file
+name'"))
+
 
 === ansi-c in here string
 cat <<< $'line1\nline2'
 ---
-(command (word "cat") (redirect "<<<" (word "$'line1\\nline2'" (ansi-c "line1\\nline2"))))
+(command (word "cat") (redirect "<<<" "'line1
+line2'"))
+
 
 === ansi-c as command
 $'echo' hello
 ---
-(command (word "$'echo'" (ansi-c "echo")) (word "hello"))
+(command (word "'echo'") (word "hello"))
+
 
 === unknown escape preserved
 echo $'\q'
 ---
-(command (word "echo") (word "$'\\q'" (ansi-c "\\q")))
+(command (word "echo") (word "'\\q'"))
+
 
 === long hex escape
 echo $'\x48\x65\x6c\x6c\x6f'
 ---
-(command (word "echo") (word "$'\\x48\\x65\\x6c\\x6c\\x6f'" (ansi-c "\\x48\\x65\\x6c\\x6c\\x6f")))
+(command (word "echo") (word "'Hello'"))
+
 
 === ansi-c no space before
 x=$'value'
 ---
-(command (word "x=$'value'" (ansi-c "value")))
+(command (word "x='value'"))
+
 
 === ansi-c in pipeline
 echo $'hello\nworld' | cat
 ---
-(pipeline (command (word "echo") (word "$'hello\\nworld'" (ansi-c "hello\\nworld"))) (command (word "cat")))
+(pipe (command (word "echo") (word "'hello\nworld'")) (command (word "cat")))
+
 
 === ansi-c in subshell
 (echo $'test')
 ---
-(subshell (command (word "echo") (word "$'test'" (ansi-c "test"))))
+(subshell (command (word "echo") (word "'test'")))
+
 
 === ansi-c in function body
 f() { echo $'line\nbreak'; }
 ---
-(function "f" (brace-group (list (command (word "echo") (word "$'line\\nbreak'" (ansi-c "line\\nbreak"))) (semi))))
+(function "f" (brace-group (command (word "echo") (word "'line\nbreak'"))))
+
 
 === consecutive ansi-c quotes
 echo $'a'$'b'
 ---
-(command (word "echo") (word "$'a'$'b'" (ansi-c "a") (ansi-c "b")))
+(command (word "echo") (word "'a''b'"))
+
 
 === ansi-c with regular concatenation
 echo $'start'"middle"'end'
 ---
-(command (word "echo") (word "$'start'\"middle\"'end'" (ansi-c "start")))
-
+(command (word "echo") (word "'start'\"middle\"'end'"))

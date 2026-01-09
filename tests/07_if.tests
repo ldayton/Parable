@@ -8,42 +8,50 @@ if true; then echo yes; fi
 ---
 (if (command (word "true")) (command (word "echo") (word "yes")))
 
+
 === if with test command
 if test -f file; then cat file; fi
 ---
 (if (command (word "test") (word "-f") (word "file")) (command (word "cat") (word "file")))
+
 
 === if with bracket test
 if [ -f file ]; then cat file; fi
 ---
 (if (command (word "[") (word "-f") (word "file") (word "]")) (command (word "cat") (word "file")))
 
+
 === if with pipeline condition
 if echo foo | grep foo; then echo found; fi
 ---
-(if (pipeline (command (word "echo") (word "foo")) (command (word "grep") (word "foo"))) (command (word "echo") (word "found")))
+(if (pipe (command (word "echo") (word "foo")) (command (word "grep") (word "foo"))) (command (word "echo") (word "found")))
+
 
 === if with list condition
 if cmd1 && cmd2; then echo both; fi
 ---
-(if (list (command (word "cmd1")) (and) (command (word "cmd2"))) (command (word "echo") (word "both")))
+(if (and (command (word "cmd1")) (command (word "cmd2"))) (command (word "echo") (word "both")))
+
 
 === if with or condition
 if cmd1 || cmd2; then echo either; fi
 ---
-(if (list (command (word "cmd1")) (or) (command (word "cmd2"))) (command (word "echo") (word "either")))
+(if (or (command (word "cmd1")) (command (word "cmd2"))) (command (word "echo") (word "either")))
+
 
 # === Multiple commands in condition (from tree-sitter-bash) ===
 
 === multiple commands in condition
 if foo; bar; then baz; fi
 ---
-(if (list (command (word "foo")) (semi) (command (word "bar"))) (command (word "baz")))
+(if (semi (command (word "foo")) (command (word "bar"))) (command (word "baz")))
+
 
 === three commands in condition
 if a; b; c; then d; fi
 ---
-(if (list (command (word "a")) (semi) (command (word "b")) (semi) (command (word "c"))) (command (word "d")))
+(if (semi (semi (command (word "a")) (command (word "b"))) (command (word "c"))) (command (word "d")))
+
 
 # === If/else ===
 
@@ -52,20 +60,24 @@ if true; then echo yes; else echo no; fi
 ---
 (if (command (word "true")) (command (word "echo") (word "yes")) (command (word "echo") (word "no")))
 
+
 === if else with test
 if [ "$x" = "y" ]; then echo match; else echo nomatch; fi
 ---
-(if (command (word "[") (word "\"$x\"" (param "x")) (word "=") (word "\"y\"") (word "]")) (command (word "echo") (word "match")) (command (word "echo") (word "nomatch")))
+(if (command (word "[") (word "\"$x\"") (word "=") (word "\"y\"") (word "]")) (command (word "echo") (word "match")) (command (word "echo") (word "nomatch")))
+
 
 === if else with complex bodies
 if test -d dir; then cd dir; ls; else mkdir dir; fi
 ---
-(if (command (word "test") (word "-d") (word "dir")) (list (command (word "cd") (word "dir")) (semi) (command (word "ls"))) (command (word "mkdir") (word "dir")))
+(if (command (word "test") (word "-d") (word "dir")) (semi (command (word "cd") (word "dir")) (command (word "ls"))) (command (word "mkdir") (word "dir")))
+
 
 === if else multiple commands both branches
 if test 1; then echo a; echo b; else echo c; echo d; fi
 ---
-(if (command (word "test") (word "1")) (list (command (word "echo") (word "a")) (semi) (command (word "echo") (word "b"))) (list (command (word "echo") (word "c")) (semi) (command (word "echo") (word "d"))))
+(if (command (word "test") (word "1")) (semi (command (word "echo") (word "a")) (command (word "echo") (word "b"))) (semi (command (word "echo") (word "c")) (command (word "echo") (word "d"))))
+
 
 # === Elif chains ===
 
@@ -74,30 +86,36 @@ if test 1; then echo one; elif test 2; then echo two; fi
 ---
 (if (command (word "test") (word "1")) (command (word "echo") (word "one")) (if (command (word "test") (word "2")) (command (word "echo") (word "two"))))
 
+
 === elif with else
 if test 1; then echo one; elif test 2; then echo two; else echo other; fi
 ---
 (if (command (word "test") (word "1")) (command (word "echo") (word "one")) (if (command (word "test") (word "2")) (command (word "echo") (word "two")) (command (word "echo") (word "other"))))
+
 
 === multiple elif
 if test 1; then echo one; elif test 2; then echo two; elif test 3; then echo three; fi
 ---
 (if (command (word "test") (word "1")) (command (word "echo") (word "one")) (if (command (word "test") (word "2")) (command (word "echo") (word "two")) (if (command (word "test") (word "3")) (command (word "echo") (word "three")))))
 
+
 === multiple elif with else
 if test 1; then echo one; elif test 2; then echo two; elif test 3; then echo three; else echo other; fi
 ---
 (if (command (word "test") (word "1")) (command (word "echo") (word "one")) (if (command (word "test") (word "2")) (command (word "echo") (word "two")) (if (command (word "test") (word "3")) (command (word "echo") (word "three")) (command (word "echo") (word "other")))))
+
 
 === four elif chain
 if a; then echo a; elif b; then echo b; elif c; then echo c; elif d; then echo d; else echo e; fi
 ---
 (if (command (word "a")) (command (word "echo") (word "a")) (if (command (word "b")) (command (word "echo") (word "b")) (if (command (word "c")) (command (word "echo") (word "c")) (if (command (word "d")) (command (word "echo") (word "d")) (command (word "echo") (word "e"))))))
 
+
 === elif with complex conditions
 if cat file | grep a; then echo a; elif cat file | grep b; then echo b; else exit; fi
 ---
-(if (pipeline (command (word "cat") (word "file")) (command (word "grep") (word "a"))) (command (word "echo") (word "a")) (if (pipeline (command (word "cat") (word "file")) (command (word "grep") (word "b"))) (command (word "echo") (word "b")) (command (word "exit"))))
+(if (pipe (command (word "cat") (word "file")) (command (word "grep") (word "a"))) (command (word "echo") (word "a")) (if (pipe (command (word "cat") (word "file")) (command (word "grep") (word "b"))) (command (word "echo") (word "b")) (command (word "exit"))))
+
 
 # === Nested if ===
 
@@ -106,25 +124,30 @@ if test 1; then if test 2; then echo both; fi; fi
 ---
 (if (command (word "test") (word "1")) (if (command (word "test") (word "2")) (command (word "echo") (word "both"))))
 
+
 === nested if in else
 if test 1; then echo one; else if test 2; then echo two; fi; fi
 ---
 (if (command (word "test") (word "1")) (command (word "echo") (word "one")) (if (command (word "test") (word "2")) (command (word "echo") (word "two"))))
+
 
 === deeply nested if
 if a; then if b; then if c; then echo deep; fi; fi; fi
 ---
 (if (command (word "a")) (if (command (word "b")) (if (command (word "c")) (command (word "echo") (word "deep")))))
 
+
 === nested if with elif
 if a; then if b; then echo ab; elif c; then echo ac; fi; fi
 ---
 (if (command (word "a")) (if (command (word "b")) (command (word "echo") (word "ab")) (if (command (word "c")) (command (word "echo") (word "ac")))))
 
+
 === nested if in elif branch
 if a; then echo a; elif b; then if c; then echo bc; fi; fi
 ---
 (if (command (word "a")) (command (word "echo") (word "a")) (if (command (word "b")) (if (command (word "c")) (command (word "echo") (word "bc")))))
+
 
 # === If with newlines (alternative to semicolons) ===
 
@@ -134,6 +157,7 @@ then echo yes; fi
 ---
 (if (command (word "true")) (command (word "echo") (word "yes")))
 
+
 === if with newlines throughout
 if true
 then
@@ -141,6 +165,7 @@ echo yes
 fi
 ---
 (if (command (word "true")) (command (word "echo") (word "yes")))
+
 
 === if else with newlines
 if false
@@ -151,6 +176,7 @@ echo no
 fi
 ---
 (if (command (word "false")) (command (word "echo") (word "yes")) (command (word "echo") (word "no")))
+
 
 === elif with newlines
 if a
@@ -165,6 +191,7 @@ fi
 ---
 (if (command (word "a")) (command (word "echo") (word "a")) (if (command (word "b")) (command (word "echo") (word "b")) (command (word "echo") (word "c"))))
 
+
 === multiline then body
 if true
 then
@@ -173,44 +200,52 @@ echo two
 echo three
 fi
 ---
-(if (command (word "true")) (list (command (word "echo") (word "one")) (semi) (command (word "echo") (word "two")) (semi) (command (word "echo") (word "three"))))
+(if (command (word "true")) (semi (semi (command (word "echo") (word "one")) (command (word "echo") (word "two"))) (command (word "echo") (word "three"))))
+
 
 # === If in pipelines and lists ===
 
 === if in pipeline
 if true; then echo yes; fi | cat
 ---
-(pipeline (if (command (word "true")) (command (word "echo") (word "yes"))) (command (word "cat")))
+(pipe (if (command (word "true")) (command (word "echo") (word "yes"))) (command (word "cat")))
+
 
 === if in and list
 if true; then echo yes; fi && echo done
 ---
-(list (if (command (word "true")) (command (word "echo") (word "yes"))) (and) (command (word "echo") (word "done")))
+(and (if (command (word "true")) (command (word "echo") (word "yes"))) (command (word "echo") (word "done")))
+
 
 === if in or list
 if false; then echo yes; fi || echo fallback
 ---
-(list (if (command (word "false")) (command (word "echo") (word "yes"))) (or) (command (word "echo") (word "fallback")))
+(or (if (command (word "false")) (command (word "echo") (word "yes"))) (command (word "echo") (word "fallback")))
+
 
 === if in background
 if true; then sleep 10; fi &
 ---
-(list (if (command (word "true")) (command (word "sleep") (word "10"))) (bg))
+(background (if (command (word "true")) (command (word "sleep") (word "10"))))
+
 
 === if after semicolon
 echo before; if true; then echo yes; fi
 ---
-(list (command (word "echo") (word "before")) (semi) (if (command (word "true")) (command (word "echo") (word "yes"))))
+(semi (command (word "echo") (word "before")) (if (command (word "true")) (command (word "echo") (word "yes"))))
+
 
 === multiple if in sequence
 if a; then echo a; fi; if b; then echo b; fi
 ---
-(list (if (command (word "a")) (command (word "echo") (word "a"))) (semi) (if (command (word "b")) (command (word "echo") (word "b"))))
+(semi (if (command (word "a")) (command (word "echo") (word "a"))) (if (command (word "b")) (command (word "echo") (word "b"))))
+
 
 === if in complex pipeline
 echo start | if true; then cat; fi | wc -l
 ---
-(pipeline (command (word "echo") (word "start")) (if (command (word "true")) (command (word "cat"))) (command (word "wc") (word "-l")))
+(pipe (command (word "echo") (word "start")) (pipe (if (command (word "true")) (command (word "cat"))) (command (word "wc") (word "-l"))))
+
 
 # === Subshell and brace group in condition ===
 
@@ -219,20 +254,24 @@ if (true); then echo yes; fi
 ---
 (if (subshell (command (word "true"))) (command (word "echo") (word "yes")))
 
+
 === subshell with commands in condition
 if (echo foo; true); then echo yes; fi
 ---
-(if (subshell (list (command (word "echo") (word "foo")) (semi) (command (word "true")))) (command (word "echo") (word "yes")))
+(if (subshell (semi (command (word "echo") (word "foo")) (command (word "true")))) (command (word "echo") (word "yes")))
+
 
 === brace group in condition
 if { true; }; then echo yes; fi
 ---
-(if (brace-group (list (command (word "true")) (semi))) (command (word "echo") (word "yes")))
+(if (brace-group (command (word "true"))) (command (word "echo") (word "yes")))
+
 
 === brace group with multiple commands in condition
 if { cmd1; cmd2; }; then echo yes; fi
 ---
-(if (brace-group (list (command (word "cmd1")) (semi) (command (word "cmd2")) (semi))) (command (word "echo") (word "yes")))
+(if (brace-group (semi (command (word "cmd1")) (command (word "cmd2")))) (command (word "echo") (word "yes")))
+
 
 # === Subshell and brace group in body ===
 
@@ -241,15 +280,18 @@ if true; then (echo in subshell); fi
 ---
 (if (command (word "true")) (subshell (command (word "echo") (word "in") (word "subshell"))))
 
+
 === brace group in then body
 if true; then { echo in brace; }; fi
 ---
-(if (command (word "true")) (brace-group (list (command (word "echo") (word "in") (word "brace")) (semi))))
+(if (command (word "true")) (brace-group (command (word "echo") (word "in") (word "brace"))))
+
 
 === subshell in else body
 if false; then echo yes; else (echo no); fi
 ---
 (if (command (word "false")) (command (word "echo") (word "yes")) (subshell (command (word "echo") (word "no"))))
+
 
 # === Complex conditions ===
 
@@ -258,45 +300,54 @@ if ! test -f file; then echo missing; fi
 ---
 (if (negation (command (word "test") (word "-f") (word "file"))) (command (word "echo") (word "missing")))
 
+
 === if with double bracket
 if [[ -f file ]]; then cat file; fi
 ---
-(if (cond-expr (unary-test "-f" (word "file"))) (command (word "cat") (word "file")))
+(if (cond (cond-unary "-f" (cond-term "file"))) (command (word "cat") (word "file")))
+
 
 === double bracket with pattern
 if [[ "$x" == *.txt ]]; then echo text; fi
 ---
-(if (cond-expr (binary-test "==" (word "\"$x\"" (param "x")) (word "*.txt"))) (command (word "echo") (word "text")))
+(if (cond (cond-binary "==" (cond-term ""$x"") (cond-term "*.txt"))) (command (word "echo") (word "text")))
+
 
 === double bracket regex
 if [[ "$x" =~ ^[0-9]+$ ]]; then echo number; fi
 ---
-(if (cond-expr (binary-test "=~" (word "\"$x\"" (param "x")) (word "^[0-9]+$"))) (command (word "echo") (word "number")))
+(if (cond (cond-binary "=~" (cond-term ""$x"") (cond-term "^[0-9]+$"))) (command (word "echo") (word "number")))
+
 
 === test with string comparison
 if [ "$(uname)" = "Darwin" ]; then echo mac; fi
 ---
-(if (command (word "[") (word "\"$(uname)\"" (cmdsub (command (word "uname")))) (word "=") (word "\"Darwin\"") (word "]")) (command (word "echo") (word "mac")))
+(if (command (word "[") (word "\"$(uname)\"") (word "=") (word "\"Darwin\"") (word "]")) (command (word "echo") (word "mac")))
+
 
 === test with numeric comparison
 if [ "$x" -gt 10 ]; then echo big; fi
 ---
-(if (command (word "[") (word "\"$x\"" (param "x")) (word "-gt") (word "10") (word "]")) (command (word "echo") (word "big")))
+(if (command (word "[") (word "\"$x\"") (word "-gt") (word "10") (word "]")) (command (word "echo") (word "big")))
+
 
 === test with multiple conditions
 if [ -f file ] && [ -r file ]; then cat file; fi
 ---
-(if (list (command (word "[") (word "-f") (word "file") (word "]")) (and) (command (word "[") (word "-r") (word "file") (word "]"))) (command (word "cat") (word "file")))
+(if (and (command (word "[") (word "-f") (word "file") (word "]")) (command (word "[") (word "-r") (word "file") (word "]"))) (command (word "cat") (word "file")))
+
 
 === double bracket with and
 if [[ -f file ]] && [[ -r file ]]; then cat file; fi
 ---
-(if (list (cond-expr (unary-test "-f" (word "file"))) (and) (cond-expr (unary-test "-r" (word "file")))) (command (word "cat") (word "file")))
+(if (and (cond (cond-unary "-f" (cond-term "file"))) (cond (cond-unary "-r" (cond-term "file")))) (command (word "cat") (word "file")))
+
 
 === double bracket with or
 if [[ -f a ]] || [[ -f b ]]; then echo found; fi
 ---
-(if (list (cond-expr (unary-test "-f" (word "a"))) (or) (cond-expr (unary-test "-f" (word "b")))) (command (word "echo") (word "found")))
+(if (or (cond (cond-unary "-f" (cond-term "a"))) (cond (cond-unary "-f" (cond-term "b")))) (command (word "echo") (word "found")))
+
 
 # NOTE: (( )) arithmetic expressions require special parsing
 # Currently parsed as nested subshells - proper (( )) support is future work
@@ -308,42 +359,50 @@ if true;then echo yes;fi
 ---
 (if (command (word "true")) (command (word "echo") (word "yes")))
 
+
 === if extra spaces
 if   true  ;  then   echo yes  ;  fi
 ---
 (if (command (word "true")) (command (word "echo") (word "yes")))
+
 
 === tabs instead of spaces
 if	true;	then	echo yes;	fi
 ---
 (if (command (word "true")) (command (word "echo") (word "yes")))
 
+
 === mixed whitespace
 if 	 true 	 ; 	 then 	 echo yes 	 ; 	 fi
 ---
 (if (command (word "true")) (command (word "echo") (word "yes")))
+
 
 # === From tree-sitter-bash ===
 
 === if with command substitution condition
 if test "$(whoami)" = root; then echo root; fi
 ---
-(if (command (word "test") (word "\"$(whoami)\"" (cmdsub (command (word "whoami")))) (word "=") (word "root")) (command (word "echo") (word "root")))
+(if (command (word "test") (word "\"$(whoami)\"") (word "=") (word "root")) (command (word "echo") (word "root")))
+
 
 === if elif else complete
 if [ -f a ]; then echo a; elif [ -f b ]; then echo b; else echo none; fi
 ---
 (if (command (word "[") (word "-f") (word "a") (word "]")) (command (word "echo") (word "a")) (if (command (word "[") (word "-f") (word "b") (word "]")) (command (word "echo") (word "b")) (command (word "echo") (word "none"))))
 
+
 === if with variable assignment condition
 if foo=1; then echo set; fi
 ---
 (if (command (word "foo=1")) (command (word "echo") (word "set")))
 
+
 === if with result variable simple
 if result=value; then echo got; fi
 ---
 (if (command (word "result=value")) (command (word "echo") (word "got")))
+
 
 # === Special test cases ===
 
@@ -352,20 +411,24 @@ if [ a = -d ]; then echo match; fi
 ---
 (if (command (word "[") (word "a") (word "=") (word "-d") (word "]")) (command (word "echo") (word "match")))
 
+
 === bracket test with spaces in quotes
 if [ "hello world" = "hello world" ]; then echo same; fi
 ---
 (if (command (word "[") (word "\"hello world\"") (word "=") (word "\"hello world\"") (word "]")) (command (word "echo") (word "same")))
+
 
 === test with empty string
 if [ -z "" ]; then echo empty; fi
 ---
 (if (command (word "[") (word "-z") (word "\"\"") (word "]")) (command (word "echo") (word "empty")))
 
+
 === test with non-empty string
 if [ -n "foo" ]; then echo nonempty; fi
 ---
 (if (command (word "[") (word "-n") (word "\"foo\"") (word "]")) (command (word "echo") (word "nonempty")))
+
 
 # === Null command in body ===
 
@@ -374,77 +437,90 @@ if true; then :; fi
 ---
 (if (command (word "true")) (command (word ":")))
 
+
 === empty then with colon and else
 if false; then :; else echo no; fi
 ---
 (if (command (word "false")) (command (word ":")) (command (word "echo") (word "no")))
+
 
 === colon in condition
 if :; then echo always; fi
 ---
 (if (command (word ":")) (command (word "echo") (word "always")))
 
+
 # === If with redirections in body ===
 
 === redirect in then body
 if true; then echo yes > out.txt; fi
 ---
-(if (command (word "true")) (command (word "echo") (word "yes") (redirect ">" (word "out.txt"))))
+(if (command (word "true")) (command (word "echo") (word "yes") (redirect ">" "out.txt")))
+
 
 === redirect in else body
 if false; then echo yes; else echo no > err.txt; fi
 ---
-(if (command (word "false")) (command (word "echo") (word "yes")) (command (word "echo") (word "no") (redirect ">" (word "err.txt"))))
+(if (command (word "false")) (command (word "echo") (word "yes")) (command (word "echo") (word "no") (redirect ">" "err.txt")))
+
 
 === multiple redirects in body
 if true; then cat < in.txt > out.txt; fi
 ---
-(if (command (word "true")) (command (word "cat") (redirect "<" (word "in.txt")) (redirect ">" (word "out.txt"))))
+(if (command (word "true")) (command (word "cat") (redirect "<" "in.txt") (redirect ">" "out.txt")))
+
 
 === pipeline with redirects in body
 if true; then cat file | grep foo > matches.txt; fi
 ---
-(if (command (word "true")) (pipeline (command (word "cat") (word "file")) (command (word "grep") (word "foo") (redirect ">" (word "matches.txt")))))
+(if (command (word "true")) (pipe (command (word "cat") (word "file")) (command (word "grep") (word "foo") (redirect ">" "matches.txt"))))
+
 
 # === Complex real-world examples ===
 
 === git status check
 if git status > /dev/null; then echo repo; fi
 ---
-(if (command (word "git") (word "status") (redirect ">" (word "/dev/null"))) (command (word "echo") (word "repo")))
+(if (command (word "git") (word "status") (redirect ">" "/dev/null")) (command (word "echo") (word "repo")))
+
 
 === command existence check
 if command -v git > /dev/null; then echo found; fi
 ---
-(if (command (word "command") (word "-v") (word "git") (redirect ">" (word "/dev/null"))) (command (word "echo") (word "found")))
+(if (command (word "command") (word "-v") (word "git") (redirect ">" "/dev/null")) (command (word "echo") (word "found")))
+
 
 === file readable and not empty
 if [ -r "$file" ] && [ -s "$file" ]; then cat "$file"; fi
 ---
-(if (list (command (word "[") (word "-r") (word "\"$file\"" (param "file")) (word "]")) (and) (command (word "[") (word "-s") (word "\"$file\"" (param "file")) (word "]"))) (command (word "cat") (word "\"$file\"" (param "file"))))
+(if (and (command (word "[") (word "-r") (word "\"$file\"") (word "]")) (command (word "[") (word "-s") (word "\"$file\"") (word "]"))) (command (word "cat") (word "\"$file\"")))
+
 
 === complex elif with pipelines
 if cat a | grep x; then echo ax; elif cat b | grep x; then echo bx; elif cat c | grep x; then echo cx; else echo none; fi
 ---
-(if (pipeline (command (word "cat") (word "a")) (command (word "grep") (word "x"))) (command (word "echo") (word "ax")) (if (pipeline (command (word "cat") (word "b")) (command (word "grep") (word "x"))) (command (word "echo") (word "bx")) (if (pipeline (command (word "cat") (word "c")) (command (word "grep") (word "x"))) (command (word "echo") (word "cx")) (command (word "echo") (word "none")))))
+(if (pipe (command (word "cat") (word "a")) (command (word "grep") (word "x"))) (command (word "echo") (word "ax")) (if (pipe (command (word "cat") (word "b")) (command (word "grep") (word "x"))) (command (word "echo") (word "bx")) (if (pipe (command (word "cat") (word "c")) (command (word "grep") (word "x"))) (command (word "echo") (word "cx")) (command (word "echo") (word "none")))))
+
 
 === if in subshell
 (if true; then echo yes; fi)
 ---
 (subshell (if (command (word "true")) (command (word "echo") (word "yes"))))
 
+
 === if in brace group
 { if true; then echo yes; fi; }
 ---
-(brace-group (list (if (command (word "true")) (command (word "echo") (word "yes"))) (semi)))
+(brace-group (if (command (word "true")) (command (word "echo") (word "yes"))))
+
 
 === chained if statements with and
 if a; then echo a; fi && if b; then echo b; fi
 ---
-(list (if (command (word "a")) (command (word "echo") (word "a"))) (and) (if (command (word "b")) (command (word "echo") (word "b"))))
+(and (if (command (word "a")) (command (word "echo") (word "a"))) (if (command (word "b")) (command (word "echo") (word "b"))))
+
 
 === if with here string condition
 if cat <<< "test"; then echo yes; fi
 ---
-(if (command (word "cat") (redirect "<<<" (word "\"test\""))) (command (word "echo") (word "yes")))
-
+(if (command (word "cat") (redirect "<<<" ""test"")) (command (word "echo") (word "yes")))

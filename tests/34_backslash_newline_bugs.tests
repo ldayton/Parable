@@ -7,6 +7,7 @@ world"
 ---
 (command (word "echo") (word "\"hello world\""))
 
+
 === backslash-newline in double quotes mid-word
 echo "a\
 b\
@@ -14,17 +15,20 @@ c"
 ---
 (command (word "echo") (word "\"abc\""))
 
+
 === backslash-newline in parameter expansion default
 echo ${x:-hello \
 world}
 ---
-(command (word "echo") (word "${x:-hello world}" (param "x" ":-" "hello world")))
+(command (word "echo") (word "${x:-hello world}"))
+
 
 === backslash-newline in parameter expansion substitution
 echo ${x/foo \
 bar/baz}
 ---
-(command (word "echo") (word "${x/foo bar/baz}" (param "x" "/" "foo bar/baz")))
+(command (word "echo") (word "${x/foo bar/baz}"))
+
 
 # Note: Line continuation does NOT span comments or blank lines in bash.
 # These become separate commands.
@@ -34,7 +38,9 @@ echo a \
 # this comment should be skipped
 b
 ---
-(list (command (word "echo") (word "a")) (semi) (command (word "b")))
+(command (word "echo") (word "a"))
+(command (word "b"))
+
 
 === line continuation across multiple comments
 echo a \
@@ -42,14 +48,18 @@ echo a \
 # comment 2
 b
 ---
-(list (command (word "echo") (word "a")) (semi) (command (word "b")))
+(command (word "echo") (word "a"))
+(command (word "b"))
+
 
 === line continuation across blank line
 echo a \
 
 b
 ---
-(list (command (word "echo") (word "a")) (semi) (command (word "b")))
+(command (word "echo") (word "a"))
+(command (word "b"))
+
 
 === line continuation across comment and blank line
 echo a \
@@ -57,4 +67,5 @@ echo a \
 
 b
 ---
-(list (command (word "echo") (word "a")) (semi) (command (word "b")))
+(command (word "echo") (word "a"))
+(command (word "b"))

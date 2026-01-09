@@ -1,13 +1,13 @@
 # Corpus Origin
 
-Test corpus files from [GNU Bash](https://github.com/bminor/bash) (GitHub mirror).
+Test corpus files from [GNU Bash](https://savannah.gnu.org/projects/bash/).
 
 ## Source
 
-- **Repository**: https://github.com/bminor/bash
+- **Repository**: https://git.savannah.gnu.org/git/bash.git
 - **Path**: `tests/*.tests`
 - **Commit**: 637f5c8696a6adc9b4519f1cd74aa78492266b7f (Bash-5.3 patch 9)
-- **Retrieved**: 2026-01-09
+- **Retrieved**: 2025-01-09
 
 ## Files
 

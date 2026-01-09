@@ -5,230 +5,274 @@
 === simple addition
 echo $[1+2]
 ---
-(command (word "echo") (word "$[1+2]" (arith-deprecated "1+2")))
+(command (word "echo") (word "$[1+2]"))
+
 
 === simple subtraction
 echo $[5-3]
 ---
-(command (word "echo") (word "$[5-3]" (arith-deprecated "5-3")))
+(command (word "echo") (word "$[5-3]"))
+
 
 === multiplication
 echo $[4*5]
 ---
-(command (word "echo") (word "$[4*5]" (arith-deprecated "4*5")))
+(command (word "echo") (word "$[4*5]"))
+
 
 === division
 echo $[10/2]
 ---
-(command (word "echo") (word "$[10/2]" (arith-deprecated "10/2")))
+(command (word "echo") (word "$[10/2]"))
+
 
 === modulo
 echo $[10%3]
 ---
-(command (word "echo") (word "$[10%3]" (arith-deprecated "10%3")))
+(command (word "echo") (word "$[10%3]"))
+
 
 === spaces around operators
 echo $[ 1 + 2 ]
 ---
-(command (word "echo") (word "$[ 1 + 2 ]" (arith-deprecated " 1 + 2 ")))
+(command (word "echo") (word "$[ 1 + 2 ]"))
+
 
 === leading space
 echo $[ 42]
 ---
-(command (word "echo") (word "$[ 42]" (arith-deprecated " 42")))
+(command (word "echo") (word "$[ 42]"))
+
 
 === trailing space
 echo $[42 ]
 ---
-(command (word "echo") (word "$[42 ]" (arith-deprecated "42 ")))
+(command (word "echo") (word "$[42 ]"))
+
 
 === variable reference
 echo $[$x]
 ---
-(command (word "echo") (word "$[$x]" (arith-deprecated "$x")))
+(command (word "echo") (word "$[$x]"))
+
 
 === variable in expression
 echo $[x+1]
 ---
-(command (word "echo") (word "$[x+1]" (arith-deprecated "x+1")))
+(command (word "echo") (word "$[x+1]"))
+
 
 === multiple variables
 echo $[a+b]
 ---
-(command (word "echo") (word "$[a+b]" (arith-deprecated "a+b")))
+(command (word "echo") (word "$[a+b]"))
+
 
 === parenthesized expression
 echo $[(1+2)*3]
 ---
-(command (word "echo") (word "$[(1+2)*3]" (arith-deprecated "(1+2)*3")))
+(command (word "echo") (word "$[(1+2)*3]"))
+
 
 === nested parentheses
 echo $[((a+b)*c)]
 ---
-(command (word "echo") (word "$[((a+b)*c)]" (arith-deprecated "((a+b)*c)")))
+(command (word "echo") (word "$[((a+b)*c)]"))
+
 
 === comparison
 echo $[a>b]
 ---
-(command (word "echo") (word "$[a>b]" (arith-deprecated "a>b")))
+(command (word "echo") (word "$[a>b]"))
+
 
 === ternary
 echo $[a?b:c]
 ---
-(command (word "echo") (word "$[a?b:c]" (arith-deprecated "a?b:c")))
+(command (word "echo") (word "$[a?b:c]"))
+
 
 === in assignment
 x=$[1+2]
 ---
-(command (word "x=$[1+2]" (arith-deprecated "1+2")))
+(command (word "x=$[1+2]"))
+
 
 === in double quotes
 echo "$[1+2]"
 ---
-(command (word "echo") (word "\"$[1+2]\"" (arith-deprecated "1+2")))
+(command (word "echo") (word "\"$[1+2]\""))
+
 
 === concatenated with text
 echo "result: $[1+2]"
 ---
-(command (word "echo") (word "\"result: $[1+2]\"" (arith-deprecated "1+2")))
+(command (word "echo") (word "\"result: $[1+2]\""))
+
 
 === multiple in one word
 echo $[1+2]$[3+4]
 ---
-(command (word "echo") (word "$[1+2]$[3+4]" (arith-deprecated "1+2") (arith-deprecated "3+4")))
+(command (word "echo") (word "$[1+2]$[3+4]"))
+
 
 === mixed with modern arithmetic
 echo $[1+2] $((3+4))
 ---
-(command (word "echo") (word "$[1+2]" (arith-deprecated "1+2")) (word "$((3+4))" (arith (binary-op "+" (number "3") (number "4")))))
+(command (word "echo") (word "$[1+2]") (word "$((3+4))"))
+
 
 === in redirect target
 cat > $[fd]
 ---
-(command (word "cat") (redirect ">" (word "$[fd]" (arith-deprecated "fd"))))
+(command (word "cat") (redirect ">" "$[fd]"))
+
 
 === nested brackets
 echo $[[1+2]*3]
 ---
-(command (word "echo") (word "$[[1+2]*3]" (arith-deprecated "[1+2]*3")))
+(command (word "echo") (word "$[[1+2]*3]"))
+
 
 === empty expression
 echo $[]
 ---
-(command (word "echo") (word "$[]" (arith-deprecated "")))
+(command (word "echo") (word "$[]"))
+
 
 === just a number
 echo $[42]
 ---
-(command (word "echo") (word "$[42]" (arith-deprecated "42")))
+(command (word "echo") (word "$[42]"))
+
 
 === bitwise and
 echo $[a&b]
 ---
-(command (word "echo") (word "$[a&b]" (arith-deprecated "a&b")))
+(command (word "echo") (word "$[a&b]"))
+
 
 === bitwise or
 echo $[a|b]
 ---
-(command (word "echo") (word "$[a|b]" (arith-deprecated "a|b")))
+(command (word "echo") (word "$[a|b]"))
+
 
 === bitwise xor
 echo $[a^b]
 ---
-(command (word "echo") (word "$[a^b]" (arith-deprecated "a^b")))
+(command (word "echo") (word "$[a^b]"))
+
 
 === bitwise not
 echo $[~a]
 ---
-(command (word "echo") (word "$[~a]" (arith-deprecated "~a")))
+(command (word "echo") (word "$[~a]"))
+
 
 === left shift
 echo $[a<<2]
 ---
-(command (word "echo") (word "$[a<<2]" (arith-deprecated "a<<2")))
+(command (word "echo") (word "$[a<<2]"))
+
 
 === right shift
 echo $[a>>2]
 ---
-(command (word "echo") (word "$[a>>2]" (arith-deprecated "a>>2")))
+(command (word "echo") (word "$[a>>2]"))
+
 
 === logical and
 echo $[a&&b]
 ---
-(command (word "echo") (word "$[a&&b]" (arith-deprecated "a&&b")))
+(command (word "echo") (word "$[a&&b]"))
+
 
 === logical or
 echo $[a||b]
 ---
-(command (word "echo") (word "$[a||b]" (arith-deprecated "a||b")))
+(command (word "echo") (word "$[a||b]"))
+
 
 === in pipeline
 echo $[1+2] | cat
 ---
-(pipeline (command (word "echo") (word "$[1+2]" (arith-deprecated "1+2"))) (command (word "cat")))
+(pipe (command (word "echo") (word "$[1+2]")) (command (word "cat")))
+
 
 === in function body
 f() { echo $[x+1]; }
 ---
-(function "f" (brace-group (list (command (word "echo") (word "$[x+1]" (arith-deprecated "x+1"))) (semi))))
+(function "f" (brace-group (command (word "echo") (word "$[x+1]"))))
+
 
 === in if condition
 if [ $[x] -eq 1 ]; then echo yes; fi
 ---
-(if (command (word "[") (word "$[x]" (arith-deprecated "x")) (word "-eq") (word "1") (word "]")) (command (word "echo") (word "yes")))
+(if (command (word "[") (word "$[x]") (word "-eq") (word "1") (word "]")) (command (word "echo") (word "yes")))
+
 
 === in for loop
 for i in $[1] $[2] $[3]; do echo $i; done
 ---
-(for "i" (words "$[1]" "$[2]" "$[3]") (command (word "echo") (word "$i" (param "i"))))
+(for (word "i") (in (word "$[1]") (word "$[2]") (word "$[3]")) (command (word "echo") (word "$i")))
+
 
 === in while condition
 while [ $[x] -lt 10 ]; do x=$[x+1]; done
 ---
-(while (command (word "[") (word "$[x]" (arith-deprecated "x")) (word "-lt") (word "10") (word "]")) (command (word "x=$[x+1]" (arith-deprecated "x+1"))))
+(while (command (word "[") (word "$[x]") (word "-lt") (word "10") (word "]")) (command (word "x=$[x+1]")))
+
 
 === in case word
 case $[x] in 1) echo one;; esac
 ---
-(case (word "$[x]" (arith-deprecated "x")) (pattern "1" (command (word "echo") (word "one"))))
+(case (word "$[x]") (pattern ((word "1")) (command (word "echo") (word "one"))))
+
 
 === deprecated in here string
 cat <<< $[1+2]
 ---
-(command (word "cat") (redirect "<<<" (word "$[1+2]" (arith-deprecated "1+2"))))
+(command (word "cat") (redirect "<<<" "$[1+2]"))
+
 
 === deprecated in array index
 echo ${arr[$[i+1]]}
 ---
-(command (word "echo") (word "${arr[$[i+1]]}" (param "arr[$[i+1]]")))
+(command (word "echo") (word "${arr[$[i+1]]}"))
+
 
 === prefix and suffix text
 echo prefix$[1+2]suffix
 ---
-(command (word "echo") (word "prefix$[1+2]suffix" (arith-deprecated "1+2")))
+(command (word "echo") (word "prefix$[1+2]suffix"))
+
 
 === in subshell
 (echo $[1+2])
 ---
-(subshell (command (word "echo") (word "$[1+2]" (arith-deprecated "1+2"))))
+(subshell (command (word "echo") (word "$[1+2]")))
+
 
 === in brace group
 { echo $[1+2]; }
 ---
-(brace-group (list (command (word "echo") (word "$[1+2]" (arith-deprecated "1+2"))) (semi)))
+(brace-group (command (word "echo") (word "$[1+2]")))
+
 
 === complex nested expression
 echo $[((a+b)*(c-d))/e]
 ---
-(command (word "echo") (word "$[((a+b)*(c-d))/e]" (arith-deprecated "((a+b)*(c-d))/e")))
+(command (word "echo") (word "$[((a+b)*(c-d))/e]"))
+
 
 === assignment operators
 x=$[y+=1]
 ---
-(command (word "x=$[y+=1]" (arith-deprecated "y+=1")))
+(command (word "x=$[y+=1]"))
+
 
 === comma operator
 echo $[a=1,b=2,a+b]
 ---
-(command (word "echo") (word "$[a=1,b=2,a+b]" (arith-deprecated "a=1,b=2,a+b")))
-
+(command (word "echo") (word "$[a=1,b=2,a+b]"))

@@ -6,3 +6,4 @@ __pycache__/
 .DS_Store
 .claude/
 dippy.toml
+tools/bash-oracle/bash-oracle

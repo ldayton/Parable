@@ -7,20 +7,23 @@ world"
 ---
 (command (word "echo") (word "\"hello world\""))
 
+
 === line continuation in parameter expansion default
 echo ${x:-hello \
 world}
 ---
-(command (word "echo") (word "${x:-hello world}" (param "x" ":-" "hello world")))
+(command (word "echo") (word "${x:-hello world}"))
+
 
 === line continuation in locale string
 echo $"hello \
 world"
 ---
-(command (word "echo") (word "$\"hello world\"" (locale "hello world")))
+(command (word "echo") (word "\"hello world\""))
+
 
 === line continuation in conditional expression
 [[ "hello \
 world" == "hello world" ]]
 ---
-(cond-expr (binary-test "==" (word "\"hello world\"") (word "\"hello world\"")))
+(cond (cond-binary "==" (cond-term ""hello world"") (cond-term ""hello world"")))

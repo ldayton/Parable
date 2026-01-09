@@ -5,12 +5,15 @@ cat <<''
 line
 
 ---
-(command (word "cat") (heredoc-quoted "" "line\n"))
+(command (word "cat") (redirect "<<" "line
+"))
+
 
 === empty for list
 for x in; do :; done
 ---
-(for "x" (command (word ":")))
+(for (word "x") (in) (command (word ":")))
+
 
 === extglob in word
 echo @(a|b)

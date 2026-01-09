@@ -5,16 +5,16 @@ Features to make Parable more useful for downstream projects.
 ## Summary
 
 ```
-Feature                Priority   Effort   Impact
-──────────────────────────────────────────────────────────
-[[ ]] parsing          P1         Medium   Very High
-$(( )) parsing         P1         High     Very High
-Position tracking      P2         Medium   Very High
-JSON serialization     P2         Low      High
-Visitor pattern        P2         Low      High
-Error recovery         P3         High     Medium-High
-Comments preservation  P3         Medium   Medium
-Source reconstruction  P3         Medium   Medium
+Feature                Priority   Effort   Impact         Status
+────────────────────────────────────────────────────────────────────
+[[ ]] parsing          P1         Medium   Very High      ✓ Done
+$(( )) parsing         P1         High     Very High      Not started
+Position tracking      P2         Medium   Very High      Not started
+JSON serialization     P2         Low      High           Not started
+Visitor pattern        P2         Low      High           Not started
+Error recovery         P3         High     Medium-High    Not started
+Comments preservation  P3         Medium   Medium         Not started
+Source reconstruction  P3         Medium   Medium         Not started
 ```
 
 - **P1 Correctness:** Required. Without these, tools miss hidden command substitutions.
@@ -29,30 +29,22 @@ These features are required for tools that need complete visibility into bash sc
 
 ### Parse `[[ ]]` conditional internals
 
-**Status:** Not implemented
+**Status:** ✓ Implemented
 
-Currently `[[ -f "$file" && $(cmd) ]]` produces:
+`[[ -f "$file" && $(cmd) ]]` now produces:
 ```
-(cond-expr "-f \"$file\" && $(cmd)")
-```
-
-The `$(cmd)` is invisible to AST walkers. This breaks security scanners, linters, and any tool that needs to find all command substitutions.
-
-**Required output:**
-```
-(cond-expr
-  (and
-    (unary-test "-f" (word "$file" (param-exp "file")))
-    (word "$(cmd)" (cmd-sub (command (word "cmd"))))))
+(cond-expr (cond-and (unary-test "-f" (word "\"$file\"" (param "file"))) (unary-test "-n" (word "$(cmd)" (cmdsub (command (word "cmd")))))))
 ```
 
-**Effort:** Medium (~200 lines)
+Command substitutions, parameter expansions, and arithmetic expansions inside `[[ ]]` are now visible to AST walkers.
 
-**Operators to handle:**
-- Unary: `-e`, `-f`, `-d`, `-r`, `-w`, `-x`, `-s`, `-z`, `-n`, etc.
-- Binary: `==`, `!=`, `=~`, `-eq`, `-ne`, `-lt`, `-gt`, `-le`, `-ge`, `-nt`, `-ot`, `-ef`
+**Implemented operators:**
+- Unary: `-a`, `-b`, `-c`, `-d`, `-e`, `-f`, `-g`, `-h`, `-k`, `-p`, `-r`, `-s`, `-t`, `-u`, `-w`, `-x`, `-G`, `-L`, `-N`, `-O`, `-S`, `-z`, `-n`, `-o`, `-v`, `-R`
+- Binary: `==`, `!=`, `=~`, `=`, `<`, `>`, `-eq`, `-ne`, `-lt`, `-le`, `-gt`, `-ge`, `-nt`, `-ot`, `-ef`
 - Logical: `&&`, `||`, `!`
 - Grouping: `( )`
+- Extended globs: `@(...)`, `?(...)`, `*(...)`, `+(...)`, `!(...)`
+- Regex patterns with grouping parentheses
 
 ### Parse `$(( ))` arithmetic internals
 

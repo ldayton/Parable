@@ -131,12 +131,12 @@ for i in 1 2; do for j in a b; do echo $i$j; done; done
 === conditional with regex
 [[ hello =~ ^h.*o$ ]]
 ---
-(cond-expr "hello =~ ^h.*o$")
+(cond-expr (binary-test "=~" (word "hello") (word "^h.*o$")))
 
 === conditional with pattern
 [[ hello == h*o ]]
 ---
-(cond-expr "hello == h*o")
+(cond-expr (binary-test "==" (word "hello") (word "h*o")))
 
 # === Command chaining edge cases ===
 

@@ -226,8 +226,14 @@ class Parser:
                     c = self.peek()
                     # Handle escape sequences in double quotes
                     if c == "\\" and self.pos + 1 < self.length:
-                        chars.append(self.advance())  # backslash
-                        chars.append(self.advance())  # escaped char
+                        next_c = self.source[self.pos + 1]
+                        if next_c == "\n":
+                            # Line continuation - skip both backslash and newline
+                            self.advance()
+                            self.advance()
+                        else:
+                            chars.append(self.advance())  # backslash
+                            chars.append(self.advance())  # escaped char
                     # Handle arithmetic expansion $((...))
                     elif (
                         c == "$"
@@ -1823,9 +1829,15 @@ class Parser:
                 self.advance()  # consume closing "
                 break
             elif ch == "\\" and self.pos + 1 < self.length:
-                # Escape sequence
-                content_chars.append(self.advance())  # backslash
-                content_chars.append(self.advance())  # escaped char
+                # Escape sequence (line continuation removes both)
+                next_ch = self.source[self.pos + 1]
+                if next_ch == "\n":
+                    # Line continuation - skip both backslash and newline
+                    self.advance()
+                    self.advance()
+                else:
+                    content_chars.append(self.advance())  # backslash
+                    content_chars.append(self.advance())  # escaped char
             # Handle arithmetic expansion $((...))
             elif (
                 ch == "$"
@@ -1876,8 +1888,9 @@ class Parser:
             self.pos = start
             return None, "", []
 
-        text = self.source[start : self.pos]
         content = "".join(content_chars)
+        # Reconstruct text from parsed content (handles line continuation removal)
+        text = '$"' + content + '"'
         return LocaleString(content), text, inner_parts
 
     def _parse_param_expansion(self) -> tuple[Node | None, str]:
@@ -2076,11 +2089,16 @@ class Parser:
             elif c == '"' and not in_single_quote:
                 in_double_quote = not in_double_quote
                 arg_chars.append(self.advance())
-            # Escape - skip next char
+            # Escape - skip next char (line continuation removes both)
             elif c == "\\" and not in_single_quote:
-                arg_chars.append(self.advance())
-                if not self.at_end():
+                if self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
+                    # Line continuation - skip both backslash and newline
+                    self.advance()
+                    self.advance()
+                else:
                     arg_chars.append(self.advance())
+                    if not self.at_end():
+                        arg_chars.append(self.advance())
             # Nested ${...} - increase depth (outside single quotes)
             elif (
                 c == "$"
@@ -2162,7 +2180,8 @@ class Parser:
 
         self.advance()  # consume final }
         arg = "".join(arg_chars)
-        text = self.source[start : self.pos]
+        # Reconstruct text from parsed components (handles line continuation removal)
+        text = "${" + param + op + arg + "}"
         return ParamExpansion(param, op, arg), text
 
     def _consume_param_name(self) -> str | None:
@@ -3029,8 +3048,14 @@ class Parser:
                 while not self.at_end() and self.peek() != '"':
                     c = self.peek()
                     if c == "\\" and self.pos + 1 < self.length:
-                        chars.append(self.advance())
-                        chars.append(self.advance())
+                        next_c = self.source[self.pos + 1]
+                        if next_c == "\n":
+                            # Line continuation - skip both backslash and newline
+                            self.advance()
+                            self.advance()
+                        else:
+                            chars.append(self.advance())
+                            chars.append(self.advance())
                     elif c == "$":
                         # Handle expansions inside double quotes
                         if (

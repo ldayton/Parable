@@ -33,7 +33,7 @@ class Word(Node):
         # Strip $ from ANSI-C quotes $'...' and locale strings $"..."
         value = re.sub(r"\$'", "'", value)
         value = re.sub(r'\$"', '"', value)
-        # Escape backslashes for s-expression output (but not in ANSI-C/locale strings)
+        # Escape backslashes for s-expression output (but not in ANSI-C strings)
         if not is_ansi_c:
             value = value.replace("\\", "\\\\")
         # Format command substitutions with oracle pretty-printing
@@ -247,7 +247,7 @@ class Empty(Node):
         self.kind = "empty"
 
     def to_sexp(self) -> str:
-        return "(empty)"
+        return ""
 
 
 @dataclass

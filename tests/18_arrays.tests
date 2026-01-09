@@ -41,8 +41,6 @@ arr=(
 ---
 (command (word "arr=(\n  one\n  two\n  three\n)" (array (word "one") (word "two") (word "three"))))
 
-# === Indexed array assignment ===
-
 === array element assignment
 arr[0]=value
 ---
@@ -63,8 +61,6 @@ arr[0]=$foo
 ---
 (command (word "arr[0]=$foo" (param "foo")))
 
-# === Indexed compound assignment ===
-
 === indexed array literal
 arr=([0]=a [1]=b [2]=c)
 ---
@@ -80,8 +76,6 @@ arr=([key1]=val1 [key2]=val2)
 ---
 (command (word "arr=([key1]=val1 [key2]=val2)" (array (word "[key1]=val1") (word "[key2]=val2"))))
 
-# === Array append ===
-
 === array append
 arr+=(more)
 ---
@@ -91,8 +85,6 @@ arr+=(more)
 arr+=(one two three)
 ---
 (command (word "arr+=(one two three)" (array (word "one") (word "two") (word "three"))))
-
-# === Array expansion (already works via param expansion) ===
 
 === array all elements @
 echo ${arr[@]}
@@ -124,8 +116,6 @@ echo ${arr[@]:1:3}
 ---
 (command (word "echo") (word "${arr[@]:1:3}" (param "arr[@]" ":" "1:3")))
 
-# === Array in context ===
-
 === array assignment with command
 arr=(a b); echo ${arr[@]}
 ---
@@ -141,8 +131,6 @@ arr=(a b) > /dev/null
 ---
 (command (word "arr=(a b)" (array (word "a") (word "b"))) (redirect ">" (word "/dev/null")))
 
-# === Mixed assignments ===
-
 === multiple assignments
 a=1 b=2 arr=(x y)
 ---
@@ -152,8 +140,6 @@ a=1 b=2 arr=(x y)
 arr=(a b) echo test
 ---
 (command (word "arr=(a b)" (array (word "a") (word "b"))) (word "echo") (word "test"))
-
-# === Brutal edge cases from research ===
 
 === empty string elements
 arr=('' "" empty)
@@ -198,7 +184,7 @@ arr=($(echo $(ls)))
 === array with arithmetic expansion
 arr=($((1+2)) $((3*4)))
 ---
-(command (word "arr=($((1+2)) $((3*4)))" (array (word "$((1+2))" (arith "1+2")) (word "$((3*4))" (arith "3*4")))))
+(command (word "arr=($((1+2)) $((3*4)))" (array (word "$((1+2))" (arith (binary-op "+" (number "1") (number "2")))) (word "$((3*4))" (arith (binary-op "*" (number "3") (number "4")))))))
 
 === array with escaped characters
 arr=(a\ b c\\d)
@@ -249,5 +235,4 @@ arr2=(a b)
 arr=(${foo:-default} ${#bar})
 ---
 (command (word "arr=(${foo:-default} ${#bar})" (array (word "${foo:-default}" (param "foo" ":-" "default")) (word "${#bar}" (param-len "bar")))))
-
 

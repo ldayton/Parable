@@ -27,8 +27,6 @@ case foo in foo) echo match;; esac
 ---
 (case (word "foo") (pattern "foo" (command (word "echo") (word "match"))))
 
-# === Pattern variations ===
-
 === case with glob pattern
 case $x in *.txt) echo text;; esac
 ---
@@ -79,8 +77,6 @@ case $x in 'hello') echo hi;; esac
 ---
 (case (word "$x" (param "x")) (pattern "'hello'" (command (word "echo") (word "hi"))))
 
-# === Empty and simple bodies ===
-
 === case with empty body
 case $x in a) ;; esac
 ---
@@ -95,8 +91,6 @@ case $x in a) :;; esac
 case $x in a) true;; esac
 ---
 (case (word "$x" (param "x")) (pattern "a" (command (word "true"))))
-
-# === Multiple commands in body ===
 
 === case with multiple commands
 case $x in a) echo start; echo end;; esac
@@ -117,8 +111,6 @@ case $x in a) cmd1 && cmd2;; esac
 case $x in a) cmd1 || cmd2;; esac
 ---
 (case (word "$x" (param "x")) (pattern "a" (list (command (word "cmd1")) (or) (command (word "cmd2")))))
-
-# === Newline variations ===
 
 === case with newlines
 case $x in
@@ -157,8 +149,6 @@ esac
 ---
 (case (word "$x" (param "x")) (pattern "a" (list (command (word "echo") (word "start")) (semi) (command (word "echo") (word "end")))))
 
-# === Case with compound commands ===
-
 === case with if in body
 case $x in a) if true; then echo yes; fi;; esac
 ---
@@ -183,8 +173,6 @@ case $x in a) (echo sub);; esac
 case $x in a) { echo brace; };; esac
 ---
 (case (word "$x" (param "x")) (pattern "a" (brace-group (list (command (word "echo") (word "brace")) (semi)))))
-
-# === Case in compound commands ===
 
 === case in subshell
 (case $x in a) echo a;; esac)
@@ -216,14 +204,10 @@ for i in 1; do case $i in 1) echo one;; esac; done
 ---
 (for "i" (words "1") (case (word "$i" (param "i")) (pattern "1" (command (word "echo") (word "one")))))
 
-# === Nested case statements ===
-
 === nested case
 case $x in a) case $y in b) echo ab;; esac;; esac
 ---
 (case (word "$x" (param "x")) (pattern "a" (case (word "$y" (param "y")) (pattern "b" (command (word "echo") (word "ab"))))))
-
-# === Whitespace variations ===
 
 === case no spaces
 case $x in a)echo a;;esac
@@ -239,8 +223,6 @@ case   $x   in   a)   echo a  ;;   esac
 case	$x	in	a)	echo a;;	esac
 ---
 (case (word "$x" (param "x")) (pattern "a" (command (word "echo") (word "a"))))
-
-# === Real-world examples ===
 
 === option parsing
 case $1 in -h|--help) echo "Usage: ...";; -v|--version) echo "1.0";; esac
@@ -262,8 +244,6 @@ case $OSTYPE in linux*) echo "Linux";; darwin*) echo "macOS";; msys*) echo "Wind
 ---
 (case (word "$OSTYPE" (param "OSTYPE")) (pattern "linux*" (command (word "echo") (word "\"Linux\""))) (pattern "darwin*" (command (word "echo") (word "\"macOS\""))) (pattern "msys*" (command (word "echo") (word "\"Windows\""))))
 
-# === Pattern with special characters ===
-
 === pattern with dash
 case $x in --) echo dashdash;; esac
 ---
@@ -284,17 +264,12 @@ case $x in .*) echo hidden;; esac
 ---
 (case (word "$x" (param "x")) (pattern ".*" (command (word "echo") (word "hidden"))))
 
-# === Default pattern without semicolon before esac ===
-
 === final pattern no trailing semicolon
 case $x in a) echo a;; *) echo default
 esac
 ---
 (case (word "$x" (param "x")) (pattern "a" (command (word "echo") (word "a"))) (pattern "*" (command (word "echo") (word "default"))))
 
-# === Brutal edge cases from POSIX and bash documentation ===
-
-# Optional leading ( before pattern (POSIX allows this)
 === pattern with leading paren
 case $x in (a) echo a;; esac
 ---
@@ -310,7 +285,6 @@ case $x in (a|b|c) echo match;; esac
 ---
 (case (word "$x" (param "x")) (pattern "a|b|c" (command (word "echo") (word "match"))))
 
-# Reserved words as patterns
 === pattern is reserved word in
 case $x in in) echo in;; esac
 ---
@@ -346,7 +320,6 @@ case $x in case) echo case;; esac
 ---
 (case (word "$x" (param "x")) (pattern "case" (command (word "echo") (word "case"))))
 
-# Variable expansion in patterns
 === variable in pattern
 case $x in $pattern) echo match;; esac
 ---
@@ -362,7 +335,6 @@ case $x in ${var}) echo match;; esac
 ---
 (case (word "$x" (param "x")) (pattern "${var}" (command (word "echo") (word "match"))))
 
-# Complex glob patterns
 === double star pattern
 case $x in **) echo match;; esac
 ---
@@ -403,7 +375,6 @@ case $x in [abc-]) echo match;; esac
 ---
 (case (word "$x" (param "x")) (pattern "[abc-]" (command (word "echo") (word "match"))))
 
-# Patterns starting with dash
 === pattern starts with dash
 case $x in -*) echo option;; esac
 ---
@@ -419,7 +390,6 @@ case $x in --*) echo long;; esac
 ---
 (case (word "$x" (param "x")) (pattern "--*" (command (word "echo") (word "long"))))
 
-# Many alternations
 === five alternations
 case $x in a|b|c|d|e) echo match;; esac
 ---
@@ -430,7 +400,6 @@ case $x in 0|1|2|3|4|5|6|7|8|9) echo digit;; esac
 ---
 (case (word "$x" (param "x")) (pattern "0|1|2|3|4|5|6|7|8|9" (command (word "echo") (word "digit"))))
 
-# Complex real-world patterns
 === http response codes
 case $code in 2??) echo success;; 3??) echo redirect;; 4??) echo client_error;; 5??) echo server_error;; esac
 ---
@@ -446,13 +415,11 @@ case $path in /*) echo absolute;; ./*) echo relative_dot;; ../*) echo parent;; *
 ---
 (case (word "$path" (param "path")) (pattern "/*" (command (word "echo") (word "absolute"))) (pattern "./*" (command (word "echo") (word "relative_dot"))) (pattern "../*" (command (word "echo") (word "parent"))) (pattern "*" (command (word "echo") (word "relative"))))
 
-# Case with only default
 === only default pattern
 case $x in *) echo always;; esac
 ---
 (case (word "$x" (param "x")) (pattern "*" (command (word "echo") (word "always"))))
 
-# Empty case body with newline
 === empty body with newline
 case $x in
 a)
@@ -461,25 +428,16 @@ esac
 ---
 (case (word "$x" (param "x")) (pattern "a"))
 
-# Multiple empty patterns
 === multiple empty patterns
 case $x in a) ;; b) ;; c) ;; esac
 ---
 (case (word "$x" (param "x")) (pattern "a") (pattern "b") (pattern "c"))
 
-# Deeply nested case
 === triple nested case
 case $a in a) case $b in b) case $c in c) echo abc;; esac;; esac;; esac
 ---
 (case (word "$a" (param "a")) (pattern "a" (case (word "$b" (param "b")) (pattern "b" (case (word "$c" (param "c")) (pattern "c" (command (word "echo") (word "abc"))))))))
 
-# Note: Case in command substitution requires proper $() nesting which is complex
-# Skipping this test as it requires deep command substitution parsing
-
-# Note: Redirects on compound commands (case with redirect) requires additional
-# handling in compound command parsing - this is a future enhancement
-
-# Case with assignments in body
 === case with assignment
 case $x in a) var=value;; esac
 ---
@@ -490,7 +448,6 @@ case $x in a) export VAR=value;; esac
 ---
 (case (word "$x" (param "x")) (pattern "a" (command (word "export") (word "VAR=value"))))
 
-# Pattern matching empty string
 === pattern for empty string
 case $x in "") echo empty;; esac
 ---
@@ -501,7 +458,6 @@ case $x in '') echo empty;; esac
 ---
 (case (word "$x" (param "x")) (pattern "''" (command (word "echo") (word "empty"))))
 
-# Escaped characters in pattern
 === pattern with escaped star
 case $x in \*) echo literal_star;; esac
 ---
@@ -522,7 +478,6 @@ case $x in a\|b) echo literal_pipe;; esac
 ---
 (case (word "$x" (param "x")) (pattern "a\\|b" (command (word "echo") (word "literal_pipe"))))
 
-# Whitespace in patterns
 === pattern with spaces in quotes
 case $x in "a b") echo spaces;; esac
 ---
@@ -533,7 +488,6 @@ case $x in "a	b") echo tab;; esac
 ---
 (case (word "$x" (param "x")) (pattern "\"a	b\"" (command (word "echo") (word "tab"))))
 
-# Case word variations
 === case word is number
 case 42 in 42) echo match;; esac
 ---
@@ -552,9 +506,8 @@ case $(echo foo) in foo) echo match;; esac
 === case word is arithmetic
 case $((1+1)) in 2) echo match;; esac
 ---
-(case (word "$((1+1))" (arith "1+1")) (pattern "2" (command (word "echo") (word "match"))))
+(case (word "$((1+1))" (arith (binary-op "+" (number "1") (number "1")))) (pattern "2" (command (word "echo") (word "match"))))
 
-# Combining patterns and bodies
 === alternation with different globs
 case $x in *.txt|*.TXT|*.Txt) echo text;; esac
 ---
@@ -565,7 +518,6 @@ case $x in start) echo begin; for i in 1 2; do echo $i; done; echo end;; esac
 ---
 (case (word "$x" (param "x")) (pattern "start" (list (command (word "echo") (word "begin")) (semi) (for "i" (words "1" "2") (command (word "echo") (word "$i" (param "i")))) (semi) (command (word "echo") (word "end")))))
 
-# Case following other commands
 === case after semicolon
 echo before; case $x in a) echo a;; esac
 ---
@@ -576,7 +528,6 @@ case $x in a) echo a;; esac &
 ---
 (list (case (word "$x" (param "x")) (pattern "a" (command (word "echo") (word "a")))) (bg))
 
-# From tree-sitter-bash patterns
 === pattern with hash
 case $x in \#*) echo comment;; esac
 ---

@@ -22,8 +22,6 @@ coproc READER cat -n file.txt
 ---
 (coproc "READER" (command (word "cat") (word "-n") (word "file.txt")))
 
-# === Coproc with compound commands ===
-
 === coproc with brace group
 coproc { cat; }
 ---
@@ -44,8 +42,6 @@ coproc while read x; do echo $x; done
 ---
 (coproc (while (command (word "read") (word "x")) (command (word "echo") (word "$x" (param "x")))))
 
-# === Coproc with redirections ===
-
 === coproc with redirect
 coproc cat > /dev/null
 ---
@@ -61,8 +57,6 @@ coproc PROC cat 2>&1
 ---
 (coproc "PROC" (command (word "cat") (redirect "2>" (word "&1"))))
 
-# === Coproc in context ===
-
 === coproc in list
 coproc cat; echo started
 ---
@@ -77,8 +71,6 @@ coproc cat && echo started
 echo foo | coproc cat
 ---
 (pipeline (command (word "echo") (word "foo")) (coproc (command (word "cat"))))
-
-# === Brutal edge cases from research ===
 
 === coproc with pipeline command
 coproc cat | grep foo
@@ -140,11 +132,10 @@ coproc cat &
 === coproc arithmetic command
 coproc (( x++ ))
 ---
-(coproc (arith-cmd " x++ "))
+(coproc (arith-cmd (post-incr (var "x"))))
 
 === named coproc with process sub
 coproc READER cat <(echo hello)
 ---
 (coproc "READER" (command (word "cat") (word "<(echo hello)" (procsub "<" (command (word "echo") (word "hello"))))))
-
 

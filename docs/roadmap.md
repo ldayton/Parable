@@ -8,7 +8,7 @@ Features to make Parable more useful for downstream projects.
 Feature                Priority   Effort   Impact         Status
 ────────────────────────────────────────────────────────────────────
 [[ ]] parsing          P1         Medium   Very High      ✓ Done
-$(( )) parsing         P1         High     Very High      Not started
+$(( )) parsing         P1         High     Very High      ✓ Done
 Position tracking      P2         Medium   Very High      Not started
 JSON serialization     P2         Low      High           Not started
 Visitor pattern        P2         Low      High           Not started
@@ -48,37 +48,29 @@ Command substitutions, parameter expansions, and arithmetic expansions inside `[
 
 ### Parse `$(( ))` arithmetic internals
 
-**Status:** Not implemented
+**Status:** ✓ Implemented
 
-Currently `echo $(( $(get_val) + x++ ))` produces:
+`echo $(( $(get_val) + x++ ))` now produces:
 ```
-(command (word "echo") (word "$(( $(get_val) + x++ ))" (arith " $(get_val) + x++ ")))
-```
-
-The nested `$(get_val)` is buried in a raw string. Side effects (`x++`) are also invisible.
-
-**Required output:**
-```
-(arith
-  (binary-op "+"
-    (cmd-sub (command (word "get_val")))
-    (post-incr (var "x"))))
+(command (word "echo") (word "$(($(get_val) + x++))" (arith (binary-op "+" (cmdsub (command (word "get_val"))) (post-incr (var "x"))))))
 ```
 
-**Effort:** High (~500 lines)
+Command substitutions, parameter expansions, and side effects inside `$(( ))` are now visible to AST walkers.
 
-**Operators to handle:**
+**Implemented operators:**
 - Arithmetic: `+`, `-`, `*`, `/`, `%`, `**`
 - Bitwise: `&`, `|`, `^`, `~`, `<<`, `>>`
 - Comparison: `<`, `>`, `<=`, `>=`, `==`, `!=`
 - Logical: `&&`, `||`, `!`
 - Assignment: `=`, `+=`, `-=`, `*=`, `/=`, `%=`, `<<=`, `>>=`, `&=`, `|=`, `^=`
-- Increment: `++x`, `x++`, `--x`, `x--`
+- Increment/Decrement: `++x`, `x++`, `--x`, `x--`
 - Ternary: `? :`
 - Comma: `,`
 - Grouping: `( )`
 - Array subscript: `arr[expr]`
-- Nested expansions: `$(cmd)`, `${var}`
+- Nested expansions: `$(cmd)`, `${var}`, `$((...))`
+- Numbers: decimal, hex (`0xFF`), octal (`0777`), base-N (`2#1010`)
+- Line continuation: `\<newline>`
 
 ## P2: Usability
 

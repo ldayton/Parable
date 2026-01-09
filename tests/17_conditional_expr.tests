@@ -42,8 +42,6 @@
 ---
 (cond-expr (unary-test "-n" (word "\"$var\"" (param "var"))))
 
-# === Compound conditions with internal operators ===
-
 === internal and operator
 [[ -f file && -r file ]]
 ---
@@ -74,8 +72,6 @@
 ---
 (cond-expr (cond-and (cond-or (unary-test "-f" (word "a")) (unary-test "-f" (word "b"))) (unary-test "-r" (word "a"))))
 
-# === Conditional in control flow ===
-
 === if with conditional
 if [[ -f file ]]; then echo exists; fi
 ---
@@ -96,8 +92,6 @@ while [[ -f lockfile ]]; do sleep 1; done
 ---
 (list (cond-expr (unary-test "-f" (word "file"))) (or) (command (word "touch") (word "file")))
 
-# === Negation of conditional ===
-
 === negated conditional
 ! [[ -f file ]]
 ---
@@ -107,8 +101,6 @@ while [[ -f lockfile ]]; do sleep 1; done
 time [[ -f file ]]
 ---
 (time (cond-expr (unary-test "-f" (word "file"))))
-
-# === Edge cases ===
 
 === conditional with spaces
 [[   -f   file   ]]
@@ -128,7 +120,7 @@ time [[ -f file ]]
 === conditional with arithmetic
 [[ $((1+1)) -eq 2 ]]
 ---
-(cond-expr (binary-test "-eq" (word "$((1+1))" (arith "1+1")) (word "2")))
+(cond-expr (binary-test "-eq" (word "$((1+1))" (arith (binary-op "+" (number "1") (number "1")))) (word "2")))
 
 === string comparison operators
 [[ "abc" < "def" ]]
@@ -140,8 +132,6 @@ time [[ -f file ]]
 ---
 (cond-expr (binary-test ">" (word "\"def\"") (word "\"abc\"")))
 
-# === Additional edge cases from research ===
-
 === numeric comparison
 [[ $x -eq 10 ]]
 ---
@@ -150,7 +140,7 @@ time [[ -f file ]]
 === arithmetic in comparison
 [[ $((a+b)) -gt 100 ]]
 ---
-(cond-expr (binary-test "-gt" (word "$((a+b))" (arith "a+b")) (word "100")))
+(cond-expr (binary-test "-gt" (word "$((a+b))" (arith (binary-op "+" (var "a") (var "b")))) (word "100")))
 
 === regex with special chars
 [[ "$path" =~ ^/home/[^/]+/\.config$ ]]
@@ -208,8 +198,6 @@ line2" ]]
 ---
 (list (cond-expr (unary-test "-f" (word "file"))) (semi) (command (word "echo") (word "done")))
 
-# === Hidden expansions (the main purpose of parsing [[ ]] internals) ===
-
 === hidden command sub in unary
 [[ -f $(get_path) ]]
 ---
@@ -224,8 +212,6 @@ line2" ]]
 [[ -f <(echo test) ]]
 ---
 (cond-expr (unary-test "-f" (word "<(echo test)" (procsub "<" (command (word "echo") (word "test"))))))
-
-# === Regex edge cases ===
 
 === regex with POSIX character class
 [[ $x =~ [[:alpha:]] ]]

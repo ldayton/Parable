@@ -543,8 +543,10 @@ class Select(Node):
         if self.words is not None:
             word_strs = " ".join(w.to_sexp() for w in self.words)
             in_clause = f"(in {word_strs})" if self.words else "(in)"
-            return f'(select (word "{var_escaped}") {in_clause} {self.body.to_sexp()}{suffix})'
-        return f'(select (word "{var_escaped}") {self.body.to_sexp()}{suffix})'
+        else:
+            # No 'in' clause means implicit "$@"
+            in_clause = '(in (word "\\"$@\\""))'
+        return f'(select (word "{var_escaped}") {in_clause} {self.body.to_sexp()}{suffix})'
 
 
 @dataclass

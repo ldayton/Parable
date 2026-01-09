@@ -20,27 +20,6 @@ Total: 4,208 tests (4,201 verified against oracle, 7 skipped due to binary conte
 
 ---
 
-## P1: Oracle Alignment
-
-Parable's s-expression output must match bash-oracle exactly. Failure classification:
-
-| Count | % | Issue | Fix |
-|------:|----:|-------|-----|
-| 279 | 49.4% | Corpus tests (mixed issues) | Various oracle format differences |
-| 35 | 6.2% | Variable fd `{fd}>` | Strip `{fd}` prefix from redirect operator |
-| 31 | 5.5% | Command substitution formatting | Preserve newlines/spacing inside `$(...)` |
-| 26 | 4.6% | Pipe stderr `\|&` | Transform to `(redirect ">&" 1)` on prev cmd |
-| 25 | 4.4% | ANSI-C quoting `$'...'` | Expand escape sequences (`\n` → newline) |
-| 22 | 3.9% | Extglob case patterns | Handle `+(...)`, `*(...)`, etc. in case |
-| 16 | 2.8% | For/select edge cases | Implicit `$@`, brace body unwrapping |
-| 15 | 2.7% | Obscure edge cases | Unusual syntax combinations |
-| 14 | 2.5% | Word edge cases | Empty input, special characters |
-| 8 | 1.4% | Select statements | Redirect placement, brace body |
-| 8 | 1.4% | If statements | Various formatting differences |
-| 93 | 16.5% | Other scattered issues | Misc failures across test files |
-
----
-
 ## Summary
 
 ```

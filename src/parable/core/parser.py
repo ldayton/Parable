@@ -2744,7 +2744,7 @@ class Parser:
                 break
             redirects.append(redirect)
 
-        return ArithmeticCommand(expr, redirects if redirects else None)
+        return ArithmeticCommand(expr, redirects if redirects else None, raw_content=content)
 
     # Unary operators for [[ ]] conditionals
     COND_UNARY_OPS = {

@@ -239,18 +239,9 @@ class HereDoc(Node):
         self.fd = fd
 
     def to_sexp(self) -> str:
-        escaped_content = (
-            self.content.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-        )
-        if self.quoted:
-            kind = "heredoc-quoted"
-        elif self.strip_tabs:
-            kind = "heredoc-strip"
-        else:
-            kind = "heredoc"
-        if self.fd is not None:
-            return f'({kind} "{self.delimiter}" "{escaped_content}" {self.fd})'
-        return f'({kind} "{self.delimiter}" "{escaped_content}")'
+        escaped_content = self.content.replace("\\", "\\\\").replace('"', '\\"')
+        op = "<<-" if self.strip_tabs else "<<"
+        return f'(redirect "{op}" "{escaped_content}")'
 
 
 @dataclass
@@ -615,22 +606,18 @@ class ArithmeticCommand(Node):
 
     expression: "Node | None"  # Parsed arithmetic expression, or None for empty
     redirects: list[Node]
+    raw_content: str  # Raw expression text for oracle-compatible output
 
-    def __init__(self, expression: "Node | None", redirects: list[Node] = None):
+    def __init__(self, expression: "Node | None", redirects: list[Node] = None, raw_content: str = ""):
         self.kind = "arith-cmd"
         self.expression = expression
         self.redirects = redirects or []
+        self.raw_content = raw_content
 
     def to_sexp(self) -> str:
-        if self.expression is None:
-            if self.redirects:
-                inner = " ".join(r.to_sexp() for r in self.redirects)
-                return f"(arith-cmd {inner})"
-            return "(arith-cmd)"
-        if self.redirects:
-            inner = " ".join(r.to_sexp() for r in self.redirects)
-            return f"(arith-cmd {self.expression.to_sexp()} {inner})"
-        return f"(arith-cmd {self.expression.to_sexp()})"
+        # Oracle format: (arith (word "content"))
+        escaped = self.raw_content.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+        return f'(arith (word "{escaped}"))'
 
 
 # Arithmetic expression nodes

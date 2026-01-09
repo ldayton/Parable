@@ -4028,11 +4028,9 @@ class Parser:
     def parse_coproc(self) -> Coproc | None:
         """Parse a coproc statement.
 
-        Forms:
-            coproc command                    # default name COPROC
-            coproc NAME command               # named coprocess
-            coproc compound_command           # with compound command
-            coproc NAME compound_command      # named with compound
+        Oracle behavior:
+        - For compound commands (brace group, if, while, etc.), extract NAME if present
+        - For simple commands, don't extract NAME (treat everything as the command)
         """
         self.skip_whitespace()
         if self.at_end():
@@ -4044,18 +4042,15 @@ class Parser:
         self.consume_word("coproc")
         self.skip_whitespace()
 
-        # Check if next word is a NAME (followed by a command)
-        # NAME is uppercase by convention but can be any valid identifier
         name = None
 
-        # Check for compound command first (brace group or subshell)
+        # Check for compound command directly (no NAME)
         ch = self.peek() if not self.at_end() else None
         if ch == "{":
             body = self.parse_brace_group()
             if body is not None:
                 return Coproc(body, name)
         if ch == "(":
-            # Check for (( arithmetic command
             if self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
                 body = self.parse_arithmetic_command()
                 if body is not None:
@@ -4064,42 +4059,34 @@ class Parser:
             if body is not None:
                 return Coproc(body, name)
 
-        # Check for reserved word compounds (while, for, if, etc.)
+        # Check for reserved word compounds directly
         next_word = self.peek_word()
-        if next_word in ("while", "until", "for", "if", "case"):
+        if next_word in ("while", "until", "for", "if", "case", "select"):
             body = self.parse_compound_command()
             if body is not None:
                 return Coproc(body, name)
 
-        # Could be NAME followed by command, or just a simple command
-        # Try to get the first word
-        first_word = self.peek_word()
-        if first_word is None:
-            raise ParseError("Expected command after coproc", pos=self.pos)
-
-        # Save position and try to parse as NAME + command
+        # Check if first word is NAME followed by compound command
         word_start = self.pos
-        self.skip_whitespace()
+        potential_name = self.peek_word()
+        if potential_name:
+            # Skip past the potential name
+            while not self.at_end() and self.peek() not in METACHAR and self.peek() not in "\"'":
+                self.advance()
+            self.skip_whitespace()
 
-        # Consume the first word
-        while not self.at_end() and self.peek() not in METACHAR and self.peek() not in "\"'":
-            self.advance()
+            # Check what follows
+            ch = self.peek() if not self.at_end() else None
+            next_word = self.peek_word()
 
-        potential_name = self.source[word_start : self.pos]
-        self.skip_whitespace()
-
-        # If there's more after the first word, check if first word is NAME
-        if not self.at_end() and self.peek() not in "\n;|&":
-            # Check if there's an actual command following
-            next_ch = self.peek()
-            if next_ch == "{":
-                # coproc NAME { ... } - first word is NAME
+            if ch == "{":
+                # NAME { ... } - extract name
                 name = potential_name
                 body = self.parse_brace_group()
                 if body is not None:
                     return Coproc(body, name)
-            elif next_ch == "(":
-                # coproc NAME ( ... ) - first word is NAME
+            elif ch == "(":
+                # NAME ( ... ) - extract name
                 name = potential_name
                 if self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
                     body = self.parse_arithmetic_command()
@@ -4107,31 +4094,17 @@ class Parser:
                     body = self.parse_subshell()
                 if body is not None:
                     return Coproc(body, name)
+            elif next_word in ("while", "until", "for", "if", "case", "select"):
+                # NAME followed by reserved compound - extract name
+                name = potential_name
+                body = self.parse_compound_command()
+                if body is not None:
+                    return Coproc(body, name)
 
-            next_word = self.peek_word()
-            # If the next word starts with '-', it's an option to first word (command)
-            # If the next word is a reserved word compound, first word is NAME
-            # Otherwise, if next word looks like a command name, first word is NAME
-            if next_word:
-                if next_word.startswith("-"):
-                    # -n, -x, etc. are options, so first word is command
-                    pass
-                elif next_word in ("while", "until", "for", "if", "case"):
-                    # Reserved compound follows, so first word is NAME
-                    name = potential_name
-                    body = self.parse_compound_command()
-                    if body is not None:
-                        return Coproc(body, name)
-                elif next_word not in RESERVED_WORDS:
-                    # Regular word follows, so first word is NAME
-                    name = potential_name
-                    body = self.parse_command()
-                    if body is not None:
-                        return Coproc(body, name)
+            # Not followed by compound - restore position and parse as simple command
+            self.pos = word_start
 
-        # Otherwise, first word is the start of the simple command
-        # Restore position and parse as simple command
-        self.pos = word_start
+        # Parse as simple command (includes any "NAME" as part of the command)
         body = self.parse_command()
         if body is not None:
             return Coproc(body, name)

@@ -27,7 +27,11 @@ class Word(Node):
         self.parts = parts or []
 
     def to_sexp(self) -> str:
-        escaped = self.value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+        value = self.value
+        # Strip $ from ANSI-C quotes $'...' and locale strings $"..."
+        if value.startswith("$'") or value.startswith('$"'):
+            value = value[1:]
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
         return f'(word "{escaped}")'
 
 
@@ -932,7 +936,7 @@ class Time(Node):
 
     def to_sexp(self) -> str:
         if self.posix:
-            return f'(time {self.pipeline.to_sexp()} "-p")'
+            return f"(time -p {self.pipeline.to_sexp()})"
         return f"(time {self.pipeline.to_sexp()})"
 
 
@@ -1091,5 +1095,6 @@ class Coproc(Node):
         self.name = name
 
     def to_sexp(self) -> str:
-        # Oracle always outputs "COPROC" as the name
-        return f'(coproc "COPROC" {self.command.to_sexp()})'
+        # Use provided name for compound commands, "COPROC" for simple commands
+        name = self.name if self.name else "COPROC"
+        return f'(coproc "{name}" {self.command.to_sexp()})'

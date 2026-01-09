@@ -6,7 +6,7 @@ Features to make Parable more useful for downstream projects.
 
 Parable is tested against bash-oracle (GNU Bash 5.3 patched with `--dump-ast`).
 
-**Current:** 1,583 passed, 2,625 failed (38% pass rate)
+**Current:** 3,607 passed, 601 failed (86% pass rate)
 
 Test corpora:
 - **Oils bash corpus:** 2,495 tests
@@ -24,25 +24,35 @@ Parable's s-expression output must match bash-oracle exactly. Failure classifica
 
 | Count | % | Issue | Fix |
 |------:|----:|-------|-----|
-| 1901 | 73.1% | Semi wrapper for multi-statement lines | Output separate lines, not `(semi ...)` |
-| 278 | 10.7% | Other | Mixed issues |
-| 151 | 5.8% | Case statement differences | Match case pattern/body format |
-| 146 | 5.6% | Function definitions | Match `(function ...)` format |
-| 36 | 1.4% | For loop differences | Various for-loop formatting |
-| 30 | 1.2% | `[[ ... ]]` conditional expressions | Match `(cond ...)` format |
-| 18 | 0.7% | Heredoc handling | Match heredoc content format |
-| 13 | 0.5% | Cmdsub internal formatting | Newline formatting inside `$(...)` |
-| 10 | 0.4% | Coproc statements | Match `(coproc ...)` format |
-| 7 | 0.3% | Time/negation order | Correct nesting of `!` and `time` |
-| 5 | 0.2% | Select statements | Match `(select ...)` format |
+| 313 | 52.1% | Corpus tests (mixed issues) | Various oracle format differences |
+| 41 | 6.8% | ANSI-C quoting `$'...'` | Strip `$` prefix from output |
+| 35 | 5.8% | Variable fd `{fd}>` | Handle fd capture syntax |
+| 31 | 5.2% | Locale strings `$"..."` | Strip `$` prefix from output |
+| 26 | 4.3% | Pipe stderr `\|&` | Transform to `(redirect ">&" 1)` |
+| 22 | 3.7% | Extglob patterns | Handle `+(...)`, `*(...)`, etc. in case |
+| 19 | 3.2% | Command substitution internals | Newline/formatting inside `$(...)` |
+| 17 | 2.8% | Named coproc/select/C-for edge cases | Various compound statement fixes |
+| 7 | 1.2% | Obscure edge cases | Unusual syntax combinations |
+| 4 | 0.7% | Time/negation nesting | Correct `!` and `time` interaction |
+| 86 | 14.3% | Other scattered issues | Misc failures across test files |
 
 **Completed fixes:**
-- ✅ Words now output plain text (no nested `(param ...)`, `(cmdsub ...)`, `(procsub ...)`)
+- ✅ Words output plain text (no nested `(param ...)`, `(cmdsub ...)`, `(procsub ...)`)
 - ✅ Redirect targets output as plain strings
 - ✅ FD number separated from redirect operator
-
-**High-impact fix (73% of failures):**
-1. Multi-statement input on one line should output as separate s-expressions, not wrapped in `(semi ...)`
+- ✅ Top-level statements output as separate s-expressions (not wrapped in `(semi ...)`)
+- ✅ Arithmetic commands use raw content format `(arith (word "..."))`
+- ✅ Conditional expressions use `(cond ...)` with `cond-unary`, `cond-binary`, `cond-term`
+- ✅ Parenthesized conditionals wrapped in `(cond-expr ...)`
+- ✅ Conditional negation `!` dropped from output (oracle ignores it)
+- ✅ For loops use `(for (word "var") (in ...) body)` format
+- ✅ Select uses same format as for loop
+- ✅ Case patterns use `(pattern ((word "a")) body)` format with escaped pipes
+- ✅ C-style for uses `(arith-for (init ...) (test ...) (step ...) body)`
+- ✅ Case fallthrough markers removed from output
+- ✅ Coproc always outputs `"COPROC"` as name
+- ✅ Heredocs output as `(redirect "<<" "content")` with literal newlines
+- ✅ Heredoc backslash-newline continuation handled
 
 ---
 

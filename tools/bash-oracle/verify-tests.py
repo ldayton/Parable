@@ -76,19 +76,21 @@ def main():
                 passed += 1
             else:
                 failed += 1
-                failures.append({
-                    "file": tc.file,
-                    "line": tc.line,
-                    "name": tc.name,
-                    "input": tc.input,
-                    "expected": tc.expected,
-                    "oracle": oracle_output,
-                })
+                failures.append(
+                    {
+                        "file": tc.file,
+                        "line": tc.line,
+                        "name": tc.name,
+                        "input": tc.input,
+                        "expected": tc.expected,
+                        "oracle": oracle_output,
+                    }
+                )
 
     # Print summary
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Verification Results")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"Total:   {total}")
     print(f"Passed:  {passed}")
     print(f"Failed:  {failed}")
@@ -96,9 +98,9 @@ def main():
     print()
 
     if failures:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Failures ({len(failures)}):")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
         for f in failures:
             print(f"{f['file'].name}:{f['line']} - {f['name']}")

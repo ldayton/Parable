@@ -20,7 +20,7 @@ Most bash parsers are glorified regex matchers that handle the happy path. Parab
 - **100% pass rate on the GNU Bash test corpus**
 - **100% pass rate on the Oils bash corpus**
 - **100% pass rate on the tree-sitter bash corpus**
-- **Every test validated against `bash -n`**
+- **Every test validated against real bash 5.2 ASTs**
 
 ## What It Handles
 

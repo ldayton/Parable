@@ -7,6 +7,7 @@ from pathlib import Path
 @dataclass
 class TestCase:
     """A single test case from a .tests file."""
+
     name: str
     input: str
     expected: str
@@ -56,13 +57,15 @@ def parse_test_file(filepath: Path) -> list[TestCase]:
             # Strip trailing blank lines
             while expected_lines and not expected_lines[-1].strip():
                 expected_lines.pop()
-            tests.append(TestCase(
-                name=name,
-                input="\n".join(input_lines),
-                expected="\n".join(expected_lines),
-                file=filepath,
-                line=start_line,
-            ))
+            tests.append(
+                TestCase(
+                    name=name,
+                    input="\n".join(input_lines),
+                    expected="\n".join(expected_lines),
+                    file=filepath,
+                    line=start_line,
+                )
+            )
         else:
             i += 1
     return tests

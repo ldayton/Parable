@@ -110,7 +110,9 @@ def main():
         success, failed = convert_file(corpus_path, output_dir, oracle_path)
         total_success += success
         total_failed += failed
-        print(f"{corpus_path.name}: {success} ok, {failed} failed → {corpus_path.name.replace('.txt', '.tests')}")
+        print(
+            f"{corpus_path.name}: {success} ok, {failed} failed → {corpus_path.name.replace('.txt', '.tests')}"
+        )
     print(f"\nTotal: {total_success} converted, {total_failed} failed")
 
 

@@ -398,14 +398,19 @@ class ForArith(Node):
         self.redirects = redirects or []
 
     def to_sexp(self) -> str:
+        # Oracle format: (arith-for (init (word "x")) (test (word "y")) (step (word "z")) body)
         def escape(s: str) -> str:
             return s.replace("\\", "\\\\").replace('"', '\\"')
-
         parts = [self.body.to_sexp()]
         parts.extend(r.to_sexp() for r in self.redirects)
         inner = " ".join(parts)
+        init_val = self.init if self.init else "1"
+        cond_val = self.cond if self.cond else "1"
+        incr_val = self.incr if self.incr else "1"
         return (
-            f'(for-arith "{escape(self.init)}" "{escape(self.cond)}" "{escape(self.incr)}" {inner})'
+            f'(arith-for (init (word "{escape(init_val)}")) '
+            f'(test (word "{escape(cond_val)}")) '
+            f'(step (word "{escape(incr_val)}")) {inner})'
         )
 
 
@@ -477,11 +482,25 @@ class CasePattern(Node):
 
     def to_sexp(self) -> str:
         # Oracle format: (pattern ((word "a") (word "b")) body)
-        # Split pattern by | to get alternatives (simple split, ignoring escapes)
-        alternatives = self.pattern.split("|")
+        # Split pattern by | respecting escapes
+        alternatives = []
+        current = []
+        i = 0
+        while i < len(self.pattern):
+            if self.pattern[i] == "\\" and i + 1 < len(self.pattern):
+                current.append(self.pattern[i : i + 2])
+                i += 2
+            elif self.pattern[i] == "|":
+                alternatives.append("".join(current))
+                current = []
+                i += 1
+            else:
+                current.append(self.pattern[i])
+                i += 1
+        alternatives.append("".join(current))
         word_list = []
         for alt in alternatives:
-            escaped = alt.replace("\\", "\\\\").replace('"', '\\"')
+            escaped = alt.replace("\\", "\\\\")
             word_list.append(f'(word "{escaped}")')
         pattern_str = " ".join(word_list)
         parts = [f"(pattern ({pattern_str})"]
@@ -489,10 +508,7 @@ class CasePattern(Node):
             parts.append(f" {self.body.to_sexp()}")
         else:
             parts.append(" ()")
-        if self.terminator == ";&":
-            parts.append(" (fallthrough)")
-        elif self.terminator == ";;&":
-            parts.append(" (falltest)")
+        # Oracle doesn't output fallthrough/falltest markers
         parts.append(")")
         return "".join(parts)
 

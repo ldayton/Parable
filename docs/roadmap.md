@@ -6,7 +6,7 @@ Features to make Parable more useful for downstream projects.
 
 Parable is tested against bash-oracle (GNU Bash 5.3 patched with `--dump-ast`).
 
-**Current:** 545 passed, 3663 failed (13% pass rate)
+**Current:** 1,583 passed, 2,625 failed (38% pass rate)
 
 Test corpora:
 - **Oils bash corpus:** 2,495 tests
@@ -24,22 +24,25 @@ Parable's s-expression output must match bash-oracle exactly. Failure classifica
 
 | Count | % | Issue | Fix |
 |------:|----:|-------|-----|
-| 2403 | 65.6% | `(param ...)` inside words | Remove nested expansion nodes from word output |
-| 410 | 11.2% | Other | Mixed issues |
-| 238 | 6.5% | Arithmetic differences | Match `(arith ...)` format |
-| 143 | 3.9% | Redirect target wrapped in `(word ...)` | Output filename as plain string |
-| 132 | 3.6% | `(cmdsub ...)` inside words | Remove nested expansion nodes from word output |
-| 97 | 2.6% | Heredoc handling | Match heredoc content format |
-| 91 | 2.5% | `[[ ... ]]` conditional expressions | Match `(cond ...)` format |
-| 46 | 1.3% | FD prefix in redirect op (`"2>"` vs `">"`) | Separate fd number from operator |
-| 23 | 0.6% | Function definitions | Match `(function ...)` format |
-| 23 | 0.6% | Process substitution in words | Remove nested expansion nodes |
-| <50 | <2% | Compound, loops, case, background, empty, if | Various |
+| 1901 | 73.1% | Semi wrapper for multi-statement lines | Output separate lines, not `(semi ...)` |
+| 278 | 10.7% | Other | Mixed issues |
+| 151 | 5.8% | Case statement differences | Match case pattern/body format |
+| 146 | 5.6% | Function definitions | Match `(function ...)` format |
+| 36 | 1.4% | For loop differences | Various for-loop formatting |
+| 30 | 1.2% | `[[ ... ]]` conditional expressions | Match `(cond ...)` format |
+| 18 | 0.7% | Heredoc handling | Match heredoc content format |
+| 13 | 0.5% | Cmdsub internal formatting | Newline formatting inside `$(...)` |
+| 10 | 0.4% | Coproc statements | Match `(coproc ...)` format |
+| 7 | 0.3% | Time/negation order | Correct nesting of `!` and `time` |
+| 5 | 0.2% | Select statements | Match `(select ...)` format |
 
-**High-impact fixes (76% of failures):**
-1. Remove `(param ...)` / `(cmdsub ...)` / `(procsub ...)` from inside `(word ...)` — just output the text
-2. Output redirect targets as plain strings, not `(word ...)`
-3. Separate fd number from redirect operator
+**Completed fixes:**
+- ✅ Words now output plain text (no nested `(param ...)`, `(cmdsub ...)`, `(procsub ...)`)
+- ✅ Redirect targets output as plain strings
+- ✅ FD number separated from redirect operator
+
+**High-impact fix (73% of failures):**
+1. Multi-statement input on one line should output as separate s-expressions, not wrapped in `(semi ...)`
 
 ---
 

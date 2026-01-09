@@ -428,17 +428,15 @@ class Select(Node):
         self.redirects = redirects or []
 
     def to_sexp(self) -> str:
-        def escape(s: str) -> str:
-            return s.replace("\\", "\\\\").replace('"', '\\"')
-
-        parts = []
+        # Oracle format: (select (word "var") (in (word "a") ...) body)
+        redirect_strs = " ".join(r.to_sexp() for r in self.redirects)
+        suffix = f" {redirect_strs}" if redirect_strs else ""
+        var_escaped = self.var.replace("\\", "\\\\").replace('"', '\\"')
         if self.words is not None:
-            word_strs = " ".join(f'"{escape(w.value)}"' for w in self.words)
-            parts.append(f"(words {word_strs})" if self.words else "(words)")
-        parts.append(self.body.to_sexp())
-        parts.extend(r.to_sexp() for r in self.redirects)
-        inner = " ".join(parts)
-        return f'(select "{self.var}" {inner})'
+            word_strs = " ".join(w.to_sexp() for w in self.words)
+            in_clause = f"(in {word_strs})" if self.words else "(in)"
+            return f'(select (word "{var_escaped}") {in_clause} {self.body.to_sexp()}{suffix})'
+        return f'(select (word "{var_escaped}") {self.body.to_sexp()}{suffix})'
 
 
 @dataclass
@@ -489,6 +487,8 @@ class CasePattern(Node):
         parts = [f"(pattern ({pattern_str})"]
         if self.body:
             parts.append(f" {self.body.to_sexp()}")
+        else:
+            parts.append(" ()")
         if self.terminator == ";&":
             parts.append(" (fallthrough)")
         elif self.terminator == ";;&":

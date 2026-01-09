@@ -180,6 +180,22 @@ class TestItem(pytest.Item):
         from parable import parse
         from parable.core.errors import ParseError
 
+        # Validate with bash -n first
+        if BASH_PATH:
+            result = subprocess.run(
+                [BASH_PATH, "-O", "extglob", "-n"],
+                input=self.test_case.input,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                raise TestFailed(
+                    input=self.test_case.input,
+                    expected=self.test_case.expected,
+                    actual="<bash rejected>",
+                    error=f"bash -n failed: {result.stderr.strip()}",
+                )
+
         try:
             nodes = parse(self.test_case.input)
             if len(nodes) == 1:

@@ -2368,7 +2368,11 @@ class Parser:
                         self.advance()
                         if not self.at_end():
                             delimiter_chars.append(self.advance())
-                    elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                    elif (
+                        ch == "$"
+                        and self.pos + 1 < self.length
+                        and self.source[self.pos + 1] == "("
+                    ):
                         # Command substitution embedded in delimiter
                         delimiter_chars.append(self.advance())  # $
                         delimiter_chars.append(self.advance())  # (

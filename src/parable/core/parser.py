@@ -2,16 +2,32 @@
 
 from .ast import (
     AnsiCQuote,
+    ArithAssign,
+    ArithBinaryOp,
+    ArithComma,
     ArithDeprecated,
     ArithmeticCommand,
     ArithmeticExpansion,
+    ArithNumber,
+    ArithPostDecr,
+    ArithPostIncr,
+    ArithPreDecr,
+    ArithPreIncr,
+    ArithSubscript,
+    ArithTernary,
+    ArithUnaryOp,
+    ArithVar,
     Array,
+    BinaryTest,
     BraceGroup,
     Case,
     CasePattern,
     Command,
     CommandSubstitution,
+    CondAnd,
     ConditionalExpr,
+    CondNot,
+    CondOr,
     Coproc,
     Empty,
     For,
@@ -34,6 +50,7 @@ from .ast import (
     Select,
     Subshell,
     Time,
+    UnaryTest,
     Until,
     While,
     Word,
@@ -98,9 +115,17 @@ class Parser:
             self.advance()
 
     def skip_whitespace_and_newlines(self) -> None:
-        """Skip spaces, tabs, and newlines."""
-        while not self.at_end() and self.peek() in " \t\n":
-            self.advance()
+        """Skip spaces, tabs, newlines, and comments."""
+        while not self.at_end():
+            ch = self.peek()
+            if ch in " \t\n":
+                self.advance()
+            elif ch == "#":
+                # Skip comment to end of line
+                while not self.at_end() and self.peek() != "\n":
+                    self.advance()
+            else:
+                break
 
     def peek_word(self) -> str | None:
         """Peek at the next word without consuming it."""
@@ -325,6 +350,63 @@ class Parser:
                 else:
                     # Unexpected: ( without matching )
                     break
+
+            # Extglob pattern @(), ?(), *(), +(), !()
+            elif ch in "@?*+!" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                chars.append(self.advance())  # @, ?, *, +, or !
+                chars.append(self.advance())  # (
+                extglob_depth = 1
+                while not self.at_end() and extglob_depth > 0:
+                    c = self.peek()
+                    if c == ")":
+                        chars.append(self.advance())
+                        extglob_depth -= 1
+                    elif c == "(":
+                        chars.append(self.advance())
+                        extglob_depth += 1
+                    elif c == "\\":
+                        chars.append(self.advance())
+                        if not self.at_end():
+                            chars.append(self.advance())
+                    elif c == "'":
+                        chars.append(self.advance())
+                        while not self.at_end() and self.peek() != "'":
+                            chars.append(self.advance())
+                        if not self.at_end():
+                            chars.append(self.advance())
+                    elif c == '"':
+                        chars.append(self.advance())
+                        while not self.at_end() and self.peek() != '"':
+                            if self.peek() == "\\" and self.pos + 1 < self.length:
+                                chars.append(self.advance())
+                            chars.append(self.advance())
+                        if not self.at_end():
+                            chars.append(self.advance())
+                    elif c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                        # $() or $(()) inside extglob
+                        chars.append(self.advance())  # $
+                        chars.append(self.advance())  # (
+                        if not self.at_end() and self.peek() == "(":
+                            # $(()) arithmetic
+                            chars.append(self.advance())  # second (
+                            paren_depth = 2
+                            while not self.at_end() and paren_depth > 0:
+                                pc = self.peek()
+                                if pc == "(":
+                                    paren_depth += 1
+                                elif pc == ")":
+                                    paren_depth -= 1
+                                chars.append(self.advance())
+                        else:
+                            # $() command sub - count as nested paren
+                            extglob_depth += 1
+                    elif c in "@?*+!" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                        # Nested extglob
+                        chars.append(self.advance())  # @, ?, *, +, or !
+                        chars.append(self.advance())  # (
+                        extglob_depth += 1
+                    else:
+                        chars.append(self.advance())
 
             # Metacharacter ends the word
             elif ch in METACHAR:
@@ -731,7 +813,7 @@ class Parser:
         return Array(elements), text
 
     def _parse_arithmetic_expansion(self) -> tuple[Node | None, str]:
-        """Parse a $((...)) arithmetic expansion.
+        """Parse a $((...)) arithmetic expansion with parsed internals.
 
         Returns (node, text) where node is ArithmeticExpansion and text is raw text.
         """
@@ -781,7 +863,630 @@ class Parser:
         self.advance()  # consume second )
 
         text = self.source[start : self.pos]
-        return ArithmeticExpansion(content), text
+
+        # Parse the arithmetic expression
+        expr = self._parse_arith_expr(content)
+        return ArithmeticExpansion(expr), text
+
+    # ========== Arithmetic expression parser ==========
+    # Operator precedence (lowest to highest):
+    # 1. comma (,)
+    # 2. assignment (= += -= *= /= %= <<= >>= &= ^= |=)
+    # 3. ternary (? :)
+    # 4. logical or (||)
+    # 5. logical and (&&)
+    # 6. bitwise or (|)
+    # 7. bitwise xor (^)
+    # 8. bitwise and (&)
+    # 9. equality (== !=)
+    # 10. comparison (< > <= >=)
+    # 11. shift (<< >>)
+    # 12. addition (+ -)
+    # 13. multiplication (* / %)
+    # 14. exponentiation (**)
+    # 15. unary (! ~ + - ++ --)
+    # 16. postfix (++ -- [])
+
+    def _parse_arith_expr(self, content: str) -> Node | None:
+        """Parse an arithmetic expression string into AST nodes."""
+        # Save any existing arith context (for nested parsing)
+        saved_arith_src = getattr(self, "_arith_src", None)
+        saved_arith_pos = getattr(self, "_arith_pos", None)
+        saved_arith_len = getattr(self, "_arith_len", None)
+
+        self._arith_src = content
+        self._arith_pos = 0
+        self._arith_len = len(content)
+        self._arith_skip_ws()
+        if self._arith_at_end():
+            result = None
+        else:
+            result = self._arith_parse_comma()
+
+        # Restore previous arith context
+        if saved_arith_src is not None:
+            self._arith_src = saved_arith_src
+            self._arith_pos = saved_arith_pos
+            self._arith_len = saved_arith_len
+
+        return result
+
+    def _arith_at_end(self) -> bool:
+        return self._arith_pos >= self._arith_len
+
+    def _arith_peek(self, offset: int = 0) -> str:
+        pos = self._arith_pos + offset
+        if pos >= self._arith_len:
+            return ""
+        return self._arith_src[pos]
+
+    def _arith_advance(self) -> str:
+        if self._arith_at_end():
+            return ""
+        c = self._arith_src[self._arith_pos]
+        self._arith_pos += 1
+        return c
+
+    def _arith_skip_ws(self) -> None:
+        while not self._arith_at_end():
+            c = self._arith_src[self._arith_pos]
+            if c in " \t\n":
+                self._arith_pos += 1
+            elif (
+                c == "\\"
+                and self._arith_pos + 1 < self._arith_len
+                and self._arith_src[self._arith_pos + 1] == "\n"
+            ):
+                # Backslash-newline continuation
+                self._arith_pos += 2
+            else:
+                break
+
+    def _arith_match(self, s: str) -> bool:
+        """Check if the next characters match s (without consuming)."""
+        return self._arith_src[self._arith_pos : self._arith_pos + len(s)] == s
+
+    def _arith_consume(self, s: str) -> bool:
+        """If next chars match s, consume them and return True."""
+        if self._arith_match(s):
+            self._arith_pos += len(s)
+            return True
+        return False
+
+    def _arith_parse_comma(self) -> Node:
+        """Parse comma expressions (lowest precedence)."""
+        left = self._arith_parse_assign()
+        while True:
+            self._arith_skip_ws()
+            if self._arith_consume(","):
+                self._arith_skip_ws()
+                right = self._arith_parse_assign()
+                left = ArithComma(left, right)
+            else:
+                break
+        return left
+
+    def _arith_parse_assign(self) -> Node:
+        """Parse assignment expressions (right associative)."""
+        left = self._arith_parse_ternary()
+        self._arith_skip_ws()
+        # Check for assignment operators
+        assign_ops = ["<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "^=", "|=", "="]
+        for op in assign_ops:
+            if self._arith_match(op):
+                # Make sure it's not == or !=
+                if op == "=" and self._arith_peek(1) == "=":
+                    break
+                self._arith_consume(op)
+                self._arith_skip_ws()
+                right = self._arith_parse_assign()  # right associative
+                return ArithAssign(op, left, right)
+        return left
+
+    def _arith_parse_ternary(self) -> Node:
+        """Parse ternary conditional (right associative)."""
+        cond = self._arith_parse_logical_or()
+        self._arith_skip_ws()
+        if self._arith_consume("?"):
+            self._arith_skip_ws()
+            if_true = self._arith_parse_ternary()  # right associative
+            self._arith_skip_ws()
+            if not self._arith_consume(":"):
+                raise ParseError("Expected ':' in ternary", pos=self._arith_pos)
+            self._arith_skip_ws()
+            if_false = self._arith_parse_ternary()  # right associative
+            return ArithTernary(cond, if_true, if_false)
+        return cond
+
+    def _arith_parse_logical_or(self) -> Node:
+        """Parse logical or (||)."""
+        left = self._arith_parse_logical_and()
+        while True:
+            self._arith_skip_ws()
+            if self._arith_match("||"):
+                self._arith_consume("||")
+                self._arith_skip_ws()
+                right = self._arith_parse_logical_and()
+                left = ArithBinaryOp("||", left, right)
+            else:
+                break
+        return left
+
+    def _arith_parse_logical_and(self) -> Node:
+        """Parse logical and (&&)."""
+        left = self._arith_parse_bitwise_or()
+        while True:
+            self._arith_skip_ws()
+            if self._arith_match("&&"):
+                self._arith_consume("&&")
+                self._arith_skip_ws()
+                right = self._arith_parse_bitwise_or()
+                left = ArithBinaryOp("&&", left, right)
+            else:
+                break
+        return left
+
+    def _arith_parse_bitwise_or(self) -> Node:
+        """Parse bitwise or (|)."""
+        left = self._arith_parse_bitwise_xor()
+        while True:
+            self._arith_skip_ws()
+            # Make sure it's not || or |=
+            if self._arith_peek() == "|" and self._arith_peek(1) not in "|=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_bitwise_xor()
+                left = ArithBinaryOp("|", left, right)
+            else:
+                break
+        return left
+
+    def _arith_parse_bitwise_xor(self) -> Node:
+        """Parse bitwise xor (^)."""
+        left = self._arith_parse_bitwise_and()
+        while True:
+            self._arith_skip_ws()
+            # Make sure it's not ^=
+            if self._arith_peek() == "^" and self._arith_peek(1) != "=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_bitwise_and()
+                left = ArithBinaryOp("^", left, right)
+            else:
+                break
+        return left
+
+    def _arith_parse_bitwise_and(self) -> Node:
+        """Parse bitwise and (&)."""
+        left = self._arith_parse_equality()
+        while True:
+            self._arith_skip_ws()
+            # Make sure it's not && or &=
+            if self._arith_peek() == "&" and self._arith_peek(1) not in "&=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_equality()
+                left = ArithBinaryOp("&", left, right)
+            else:
+                break
+        return left
+
+    def _arith_parse_equality(self) -> Node:
+        """Parse equality (== !=)."""
+        left = self._arith_parse_comparison()
+        while True:
+            self._arith_skip_ws()
+            if self._arith_match("=="):
+                self._arith_consume("==")
+                self._arith_skip_ws()
+                right = self._arith_parse_comparison()
+                left = ArithBinaryOp("==", left, right)
+            elif self._arith_match("!="):
+                self._arith_consume("!=")
+                self._arith_skip_ws()
+                right = self._arith_parse_comparison()
+                left = ArithBinaryOp("!=", left, right)
+            else:
+                break
+        return left
+
+    def _arith_parse_comparison(self) -> Node:
+        """Parse comparison (< > <= >=)."""
+        left = self._arith_parse_shift()
+        while True:
+            self._arith_skip_ws()
+            if self._arith_match("<="):
+                self._arith_consume("<=")
+                self._arith_skip_ws()
+                right = self._arith_parse_shift()
+                left = ArithBinaryOp("<=", left, right)
+            elif self._arith_match(">="):
+                self._arith_consume(">=")
+                self._arith_skip_ws()
+                right = self._arith_parse_shift()
+                left = ArithBinaryOp(">=", left, right)
+            elif self._arith_peek() == "<" and self._arith_peek(1) not in "<=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_shift()
+                left = ArithBinaryOp("<", left, right)
+            elif self._arith_peek() == ">" and self._arith_peek(1) not in ">=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_shift()
+                left = ArithBinaryOp(">", left, right)
+            else:
+                break
+        return left
+
+    def _arith_parse_shift(self) -> Node:
+        """Parse shift (<< >>)."""
+        left = self._arith_parse_additive()
+        while True:
+            self._arith_skip_ws()
+            if self._arith_match("<<="):
+                break  # assignment, not shift
+            if self._arith_match(">>="):
+                break  # assignment, not shift
+            if self._arith_match("<<"):
+                self._arith_consume("<<")
+                self._arith_skip_ws()
+                right = self._arith_parse_additive()
+                left = ArithBinaryOp("<<", left, right)
+            elif self._arith_match(">>"):
+                self._arith_consume(">>")
+                self._arith_skip_ws()
+                right = self._arith_parse_additive()
+                left = ArithBinaryOp(">>", left, right)
+            else:
+                break
+        return left
+
+    def _arith_parse_additive(self) -> Node:
+        """Parse addition and subtraction (+ -)."""
+        left = self._arith_parse_multiplicative()
+        while True:
+            self._arith_skip_ws()
+            c = self._arith_peek()
+            c2 = self._arith_peek(1)
+            if c == "+" and c2 not in "+=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_multiplicative()
+                left = ArithBinaryOp("+", left, right)
+            elif c == "-" and c2 not in "-=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_multiplicative()
+                left = ArithBinaryOp("-", left, right)
+            else:
+                break
+        return left
+
+    def _arith_parse_multiplicative(self) -> Node:
+        """Parse multiplication, division, modulo (* / %)."""
+        left = self._arith_parse_exponentiation()
+        while True:
+            self._arith_skip_ws()
+            c = self._arith_peek()
+            c2 = self._arith_peek(1)
+            if c == "*" and c2 not in "*=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_exponentiation()
+                left = ArithBinaryOp("*", left, right)
+            elif c == "/" and c2 != "=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_exponentiation()
+                left = ArithBinaryOp("/", left, right)
+            elif c == "%" and c2 != "=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_exponentiation()
+                left = ArithBinaryOp("%", left, right)
+            else:
+                break
+        return left
+
+    def _arith_parse_exponentiation(self) -> Node:
+        """Parse exponentiation (**) - right associative."""
+        left = self._arith_parse_unary()
+        self._arith_skip_ws()
+        if self._arith_match("**"):
+            self._arith_consume("**")
+            self._arith_skip_ws()
+            right = self._arith_parse_exponentiation()  # right associative
+            return ArithBinaryOp("**", left, right)
+        return left
+
+    def _arith_parse_unary(self) -> Node:
+        """Parse unary operators (! ~ + - ++ --)."""
+        self._arith_skip_ws()
+        # Pre-increment/decrement
+        if self._arith_match("++"):
+            self._arith_consume("++")
+            self._arith_skip_ws()
+            operand = self._arith_parse_unary()
+            return ArithPreIncr(operand)
+        if self._arith_match("--"):
+            self._arith_consume("--")
+            self._arith_skip_ws()
+            operand = self._arith_parse_unary()
+            return ArithPreDecr(operand)
+        # Unary operators
+        c = self._arith_peek()
+        if c == "!":
+            self._arith_advance()
+            self._arith_skip_ws()
+            operand = self._arith_parse_unary()
+            return ArithUnaryOp("!", operand)
+        if c == "~":
+            self._arith_advance()
+            self._arith_skip_ws()
+            operand = self._arith_parse_unary()
+            return ArithUnaryOp("~", operand)
+        if c == "+" and self._arith_peek(1) != "+":
+            self._arith_advance()
+            self._arith_skip_ws()
+            operand = self._arith_parse_unary()
+            return ArithUnaryOp("+", operand)
+        if c == "-" and self._arith_peek(1) != "-":
+            self._arith_advance()
+            self._arith_skip_ws()
+            operand = self._arith_parse_unary()
+            return ArithUnaryOp("-", operand)
+        return self._arith_parse_postfix()
+
+    def _arith_parse_postfix(self) -> Node:
+        """Parse postfix operators (++ -- [])."""
+        left = self._arith_parse_primary()
+        while True:
+            self._arith_skip_ws()
+            if self._arith_match("++"):
+                self._arith_consume("++")
+                left = ArithPostIncr(left)
+            elif self._arith_match("--"):
+                self._arith_consume("--")
+                left = ArithPostDecr(left)
+            elif self._arith_peek() == "[":
+                # Array subscript - but only for variables
+                if isinstance(left, ArithVar):
+                    self._arith_advance()  # consume [
+                    self._arith_skip_ws()
+                    index = self._arith_parse_comma()
+                    self._arith_skip_ws()
+                    if not self._arith_consume("]"):
+                        raise ParseError("Expected ']' in array subscript", pos=self._arith_pos)
+                    left = ArithSubscript(left.name, index)
+                else:
+                    break
+            else:
+                break
+        return left
+
+    def _arith_parse_primary(self) -> Node:
+        """Parse primary expressions (numbers, variables, parens, expansions)."""
+        self._arith_skip_ws()
+        c = self._arith_peek()
+
+        # Parenthesized expression
+        if c == "(":
+            self._arith_advance()
+            self._arith_skip_ws()
+            expr = self._arith_parse_comma()
+            self._arith_skip_ws()
+            if not self._arith_consume(")"):
+                raise ParseError("Expected ')' in arithmetic expression", pos=self._arith_pos)
+            return expr
+
+        # Parameter expansion ${...} or $var
+        if c == "$":
+            return self._arith_parse_expansion()
+
+        # Number or variable
+        return self._arith_parse_number_or_var()
+
+    def _arith_parse_expansion(self) -> Node:
+        """Parse $var, ${...}, or $(...)."""
+        if not self._arith_consume("$"):
+            raise ParseError("Expected '$'", pos=self._arith_pos)
+
+        c = self._arith_peek()
+
+        # Command substitution $(...)
+        if c == "(":
+            return self._arith_parse_cmdsub()
+
+        # Braced parameter ${...}
+        if c == "{":
+            return self._arith_parse_braced_param()
+
+        # Simple $var
+        name_chars = []
+        while not self._arith_at_end():
+            ch = self._arith_peek()
+            if ch.isalnum() or ch == "_":
+                name_chars.append(self._arith_advance())
+            elif ch in "#?@*!$-0123456789" and not name_chars:
+                # Special parameters
+                name_chars.append(self._arith_advance())
+                break
+            else:
+                break
+        if not name_chars:
+            raise ParseError("Expected variable name after $", pos=self._arith_pos)
+        return ParamExpansion("".join(name_chars))
+
+    def _arith_parse_cmdsub(self) -> Node:
+        """Parse $(...) command substitution inside arithmetic."""
+        # We're positioned after $, at (
+        self._arith_advance()  # consume (
+
+        # Check for $(( which is nested arithmetic
+        if self._arith_peek() == "(":
+            self._arith_advance()  # consume second (
+            depth = 1
+            content_start = self._arith_pos
+            while not self._arith_at_end() and depth > 0:
+                ch = self._arith_peek()
+                if ch == "(":
+                    depth += 1
+                    self._arith_advance()
+                elif ch == ")":
+                    if depth == 1 and self._arith_peek(1) == ")":
+                        break
+                    depth -= 1
+                    self._arith_advance()
+                else:
+                    self._arith_advance()
+            content = self._arith_src[content_start : self._arith_pos]
+            self._arith_advance()  # consume first )
+            self._arith_advance()  # consume second )
+            inner_expr = self._parse_arith_expr(content)
+            return ArithmeticExpansion(inner_expr)
+
+        # Regular command substitution
+        depth = 1
+        content_start = self._arith_pos
+        while not self._arith_at_end() and depth > 0:
+            ch = self._arith_peek()
+            if ch == "(":
+                depth += 1
+                self._arith_advance()
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+                self._arith_advance()
+            else:
+                self._arith_advance()
+        content = self._arith_src[content_start : self._arith_pos]
+        self._arith_advance()  # consume )
+
+        # Parse the command inside
+        saved_pos = self.pos
+        saved_src = self.source
+        saved_len = self.length
+        self.source = content
+        self.pos = 0
+        self.length = len(content)
+        cmd = self.parse_list()
+        self.source = saved_src
+        self.pos = saved_pos
+        self.length = saved_len
+
+        return CommandSubstitution(cmd)
+
+    def _arith_parse_braced_param(self) -> Node:
+        """Parse ${...} parameter expansion inside arithmetic."""
+        self._arith_advance()  # consume {
+
+        # Handle indirect ${!var}
+        if self._arith_peek() == "!":
+            self._arith_advance()
+            name_chars = []
+            while not self._arith_at_end() and self._arith_peek() != "}":
+                name_chars.append(self._arith_advance())
+            self._arith_consume("}")
+            return ParamIndirect("".join(name_chars))
+
+        # Handle length ${#var}
+        if self._arith_peek() == "#":
+            self._arith_advance()
+            name_chars = []
+            while not self._arith_at_end() and self._arith_peek() != "}":
+                name_chars.append(self._arith_advance())
+            self._arith_consume("}")
+            return ParamLength("".join(name_chars))
+
+        # Regular ${var} or ${var...}
+        name_chars = []
+        while not self._arith_at_end():
+            ch = self._arith_peek()
+            if ch == "}":
+                self._arith_advance()
+                return ParamExpansion("".join(name_chars))
+            if ch in ":-=+?#%/^,@*[":
+                # Operator follows
+                break
+            name_chars.append(self._arith_advance())
+
+        name = "".join(name_chars)
+
+        # Check for operator
+        op_chars = []
+        depth = 1
+        while not self._arith_at_end() and depth > 0:
+            ch = self._arith_peek()
+            if ch == "{":
+                depth += 1
+                op_chars.append(self._arith_advance())
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+                op_chars.append(self._arith_advance())
+            else:
+                op_chars.append(self._arith_advance())
+        self._arith_consume("}")
+        op_str = "".join(op_chars)
+
+        # Parse the operator
+        if op_str.startswith(":-"):
+            return ParamExpansion(name, ":-", op_str[2:])
+        if op_str.startswith(":="):
+            return ParamExpansion(name, ":=", op_str[2:])
+        if op_str.startswith(":+"):
+            return ParamExpansion(name, ":+", op_str[2:])
+        if op_str.startswith(":?"):
+            return ParamExpansion(name, ":?", op_str[2:])
+        if op_str.startswith(":"):
+            return ParamExpansion(name, ":", op_str[1:])
+        if op_str.startswith("##"):
+            return ParamExpansion(name, "##", op_str[2:])
+        if op_str.startswith("#"):
+            return ParamExpansion(name, "#", op_str[1:])
+        if op_str.startswith("%%"):
+            return ParamExpansion(name, "%%", op_str[2:])
+        if op_str.startswith("%"):
+            return ParamExpansion(name, "%", op_str[1:])
+        if op_str.startswith("//"):
+            return ParamExpansion(name, "//", op_str[2:])
+        if op_str.startswith("/"):
+            return ParamExpansion(name, "/", op_str[1:])
+        return ParamExpansion(name, "", op_str)
+
+    def _arith_parse_number_or_var(self) -> Node:
+        """Parse a number or variable name."""
+        self._arith_skip_ws()
+        chars = []
+        c = self._arith_peek()
+
+        # Check for number (starts with digit or base#)
+        if c.isdigit():
+            # Could be decimal, hex (0x), octal (0), or base#n
+            while not self._arith_at_end():
+                ch = self._arith_peek()
+                if ch.isalnum() or ch in "#_":
+                    chars.append(self._arith_advance())
+                else:
+                    break
+            return ArithNumber("".join(chars))
+
+        # Variable name (starts with letter or _)
+        if c.isalpha() or c == "_":
+            while not self._arith_at_end():
+                ch = self._arith_peek()
+                if ch.isalnum() or ch == "_":
+                    chars.append(self._arith_advance())
+                else:
+                    break
+            return ArithVar("".join(chars))
+
+        raise ParseError(
+            f"Unexpected character '{c}' in arithmetic expression", pos=self._arith_pos
+        )
 
     def _parse_deprecated_arithmetic(self) -> tuple[Node | None, str]:
         """Parse a deprecated $[expr] arithmetic expansion.
@@ -1046,7 +1751,11 @@ class Parser:
                     depth = 1
                     while not self.at_end() and depth > 0:
                         c = self.peek()
-                        if c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
+                        if (
+                            c == "$"
+                            and self.pos + 1 < self.length
+                            and self.source[self.pos + 1] == "{"
+                        ):
                             depth += 1
                             arg_chars.append(self.advance())
                             arg_chars.append(self.advance())
@@ -1438,8 +2147,6 @@ class Parser:
                         delimiter_chars.append(self.advance())
 
         delimiter = "".join(delimiter_chars)
-        if not delimiter:
-            raise ParseError("Expected delimiter for here document", pos=self.pos)
 
         # Find the end of the current line (command continues until newline)
         # We need to mark where the heredoc content starts
@@ -1581,7 +2288,7 @@ class Parser:
         return Subshell(body, redirects if redirects else None)
 
     def parse_arithmetic_command(self) -> ArithmeticCommand | None:
-        """Parse an arithmetic command (( expression ))."""
+        """Parse an arithmetic command (( expression )) with parsed internals."""
         self.skip_whitespace()
 
         # Check for ((
@@ -1623,7 +2330,57 @@ class Parser:
         self.advance()  # consume first )
         self.advance()  # consume second )
 
-        return ArithmeticCommand(content)
+        # Parse the arithmetic expression
+        expr = self._parse_arith_expr(content)
+        return ArithmeticCommand(expr)
+
+    # Unary operators for [[ ]] conditionals
+    COND_UNARY_OPS = {
+        "-a",
+        "-b",
+        "-c",
+        "-d",
+        "-e",
+        "-f",
+        "-g",
+        "-h",
+        "-k",
+        "-p",
+        "-r",
+        "-s",
+        "-t",
+        "-u",
+        "-w",
+        "-x",
+        "-G",
+        "-L",
+        "-N",
+        "-O",
+        "-S",
+        "-z",
+        "-n",
+        "-o",
+        "-v",
+        "-R",
+    }
+    # Binary operators for [[ ]] conditionals
+    COND_BINARY_OPS = {
+        "==",
+        "!=",
+        "=~",
+        "=",
+        "<",
+        ">",
+        "-eq",
+        "-ne",
+        "-lt",
+        "-le",
+        "-gt",
+        "-ge",
+        "-nt",
+        "-ot",
+        "-ef",
+    }
 
     def parse_conditional_expr(self) -> ConditionalExpr | None:
         """Parse a conditional expression [[ expression ]]."""
@@ -1641,72 +2398,466 @@ class Parser:
         self.advance()  # consume first [
         self.advance()  # consume second [
 
-        # Skip whitespace after [[
+        # Parse the conditional expression body
+        body = self._parse_cond_or()
+
+        # Skip whitespace before ]]
         while not self.at_end() and self.peek() in " \t":
             self.advance()
 
-        # Find matching ]] - track nested [[ ]] and handle quotes
-        content_start = self.pos
-        depth = 1
-
-        while not self.at_end() and depth > 0:
-            c = self.peek()
-
-            # Escaped character (outside quotes)
-            if c == "\\" and self.pos + 1 < self.length:
-                self.advance()  # consume backslash
-                self.advance()  # consume escaped char
-                continue
-
-            # Single-quoted string
-            if c == "'":
-                self.advance()
-                while not self.at_end() and self.peek() != "'":
-                    self.advance()
-                if not self.at_end():
-                    self.advance()
-                continue
-
-            # Double-quoted string
-            if c == '"':
-                self.advance()
-                while not self.at_end() and self.peek() != '"':
-                    if self.peek() == "\\" and self.pos + 1 < self.length:
-                        self.advance()
-                    self.advance()
-                if not self.at_end():
-                    self.advance()
-                continue
-
-            # Nested [[
-            if c == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == "[":
-                depth += 1
-                self.advance()
-                self.advance()
-                continue
-
-            # Check for ]]
-            if c == "]" and self.pos + 1 < self.length and self.source[self.pos + 1] == "]":
-                depth -= 1
-                if depth == 0:
-                    break
-                self.advance()
-                self.advance()
-                continue
-
-            self.advance()
-
-        if self.at_end() or depth != 0:
+        # Expect ]]
+        if (
+            self.at_end()
+            or self.peek() != "]"
+            or self.pos + 1 >= self.length
+            or self.source[self.pos + 1] != "]"
+        ):
             raise ParseError("Expected ]] to close conditional expression", pos=self.pos)
-
-        # Trim trailing whitespace from content
-        content_end = self.pos
-        content = self.source[content_start:content_end].rstrip()
 
         self.advance()  # consume first ]
         self.advance()  # consume second ]
 
-        return ConditionalExpr(content)
+        return ConditionalExpr(body)
+
+    def _cond_skip_whitespace(self) -> None:
+        """Skip whitespace inside [[ ]], including backslash-newline continuation."""
+        while not self.at_end():
+            if self.peek() in " \t":
+                self.advance()
+            elif (
+                self.peek() == "\\"
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "\n"
+            ):
+                self.advance()  # consume backslash
+                self.advance()  # consume newline
+            elif self.peek() == "\n":
+                # Bare newline is also allowed inside [[ ]]
+                self.advance()
+            else:
+                break
+
+    def _cond_at_end(self) -> bool:
+        """Check if we're at ]] (end of conditional)."""
+        return self.at_end() or (
+            self.peek() == "]" and self.pos + 1 < self.length and self.source[self.pos + 1] == "]"
+        )
+
+    def _parse_cond_or(self) -> Node:
+        """Parse: or_expr = and_expr (|| and_expr)*"""
+        self._cond_skip_whitespace()
+        left = self._parse_cond_and()
+
+        while True:
+            self._cond_skip_whitespace()
+            if self._cond_at_end():
+                break
+            if (
+                self.peek() == "|"
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "|"
+            ):
+                self.advance()  # consume first |
+                self.advance()  # consume second |
+                right = self._parse_cond_and()
+                left = CondOr(left, right)
+            else:
+                break
+
+        return left
+
+    def _parse_cond_and(self) -> Node:
+        """Parse: and_expr = term (&& term)*"""
+        self._cond_skip_whitespace()
+        left = self._parse_cond_term()
+
+        while True:
+            self._cond_skip_whitespace()
+            if self._cond_at_end():
+                break
+            if (
+                self.peek() == "&"
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "&"
+            ):
+                self.advance()  # consume first &
+                self.advance()  # consume second &
+                right = self._parse_cond_term()
+                left = CondAnd(left, right)
+            else:
+                break
+
+        return left
+
+    def _parse_cond_term(self) -> Node:
+        """Parse: term = '!' term | '(' or_expr ')' | unary_test | binary_test | bare_word"""
+        self._cond_skip_whitespace()
+
+        if self._cond_at_end():
+            raise ParseError("Unexpected end of conditional expression", pos=self.pos)
+
+        # Negation: ! term
+        if self.peek() == "!":
+            # Check it's not != operator (need whitespace after !)
+            if self.pos + 1 < self.length and self.source[self.pos + 1] not in " \t":
+                pass  # not negation, fall through to word parsing
+            else:
+                self.advance()  # consume !
+                operand = self._parse_cond_term()
+                return CondNot(operand)
+
+        # Parenthesized group: ( or_expr )
+        if self.peek() == "(":
+            self.advance()  # consume (
+            inner = self._parse_cond_or()
+            self._cond_skip_whitespace()
+            if self.at_end() or self.peek() != ")":
+                raise ParseError("Expected ) in conditional expression", pos=self.pos)
+            self.advance()  # consume )
+            return inner
+
+        # Parse first word
+        word1 = self._parse_cond_word()
+        if word1 is None:
+            raise ParseError("Expected word in conditional expression", pos=self.pos)
+
+        self._cond_skip_whitespace()
+
+        # Check if word1 is a unary operator
+        if word1.value in self.COND_UNARY_OPS:
+            # Unary test: -f file
+            operand = self._parse_cond_word()
+            if operand is None:
+                raise ParseError(f"Expected operand after {word1.value}", pos=self.pos)
+            return UnaryTest(word1.value, operand)
+
+        # Check if next token is a binary operator
+        if not self._cond_at_end() and self.peek() not in "&|)":
+            # Peek at next word to see if it's a binary operator
+            saved_pos = self.pos
+            op_word = self._parse_cond_word()
+            if op_word and op_word.value in self.COND_BINARY_OPS:
+                # Binary test: word1 op word2
+                self._cond_skip_whitespace()
+                # For =~ operator, the RHS is a regex where ( ) are grouping, not conditional grouping
+                if op_word.value == "=~":
+                    word2 = self._parse_cond_regex_word()
+                else:
+                    word2 = self._parse_cond_word()
+                if word2 is None:
+                    raise ParseError(f"Expected operand after {op_word.value}", pos=self.pos)
+                return BinaryTest(op_word.value, word1, word2)
+            else:
+                # Not a binary op, restore position
+                self.pos = saved_pos
+
+        # Bare word: implicit -n test
+        return UnaryTest("-n", word1)
+
+    def _parse_cond_word(self) -> Word | None:
+        """Parse a word inside [[ ]], handling expansions but stopping at conditional operators."""
+        self._cond_skip_whitespace()
+
+        if self._cond_at_end():
+            return None
+
+        # Check for special tokens that aren't words
+        c = self.peek()
+        if c in "()":
+            return None
+        # ! alone (followed by space) is negation, but != is a binary operator
+        if c == "!" and self.pos + 1 < self.length and self.source[self.pos + 1] in " \t":
+            return None
+        if c == "&" and self.pos + 1 < self.length and self.source[self.pos + 1] == "&":
+            return None
+        if c == "|" and self.pos + 1 < self.length and self.source[self.pos + 1] == "|":
+            return None
+
+        start = self.pos
+        chars = []
+        parts = []
+
+        while not self.at_end():
+            ch = self.peek()
+
+            # End of conditional
+            if ch == "]" and self.pos + 1 < self.length and self.source[self.pos + 1] == "]":
+                break
+
+            # Word terminators in conditionals
+            if ch in " \t":
+                break
+            # ( and ) end words unless part of extended glob: @(...), ?(...), *(...), +(...), !(...)
+            if ch == "(":
+                # Check if this is an extended glob (preceded by @, ?, *, +, or !)
+                if chars and chars[-1] in "@?*+!":
+                    # Extended glob - consume the parenthesized content
+                    chars.append(self.advance())  # (
+                    depth = 1
+                    while not self.at_end() and depth > 0:
+                        c = self.peek()
+                        if c == "(":
+                            depth += 1
+                        elif c == ")":
+                            depth -= 1
+                        chars.append(self.advance())
+                    continue
+                else:
+                    break
+            if ch == ")":
+                break
+            if ch == "&" and self.pos + 1 < self.length and self.source[self.pos + 1] == "&":
+                break
+            if ch == "|" and self.pos + 1 < self.length and self.source[self.pos + 1] == "|":
+                break
+
+            # Single-quoted string
+            if ch == "'":
+                self.advance()
+                chars.append("'")
+                while not self.at_end() and self.peek() != "'":
+                    chars.append(self.advance())
+                if self.at_end():
+                    raise ParseError("Unterminated single quote", pos=start)
+                chars.append(self.advance())
+
+            # Double-quoted string
+            elif ch == '"':
+                self.advance()
+                chars.append('"')
+                while not self.at_end() and self.peek() != '"':
+                    c = self.peek()
+                    if c == "\\" and self.pos + 1 < self.length:
+                        chars.append(self.advance())
+                        chars.append(self.advance())
+                    elif c == "$":
+                        # Handle expansions inside double quotes
+                        if (
+                            self.pos + 2 < self.length
+                            and self.source[self.pos + 1] == "("
+                            and self.source[self.pos + 2] == "("
+                        ):
+                            arith_node, arith_text = self._parse_arithmetic_expansion()
+                            if arith_node:
+                                parts.append(arith_node)
+                                chars.append(arith_text)
+                            else:
+                                chars.append(self.advance())
+                        elif self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                            cmdsub_node, cmdsub_text = self._parse_command_substitution()
+                            if cmdsub_node:
+                                parts.append(cmdsub_node)
+                                chars.append(cmdsub_text)
+                            else:
+                                chars.append(self.advance())
+                        else:
+                            param_node, param_text = self._parse_param_expansion()
+                            if param_node:
+                                parts.append(param_node)
+                                chars.append(param_text)
+                            else:
+                                chars.append(self.advance())
+                    else:
+                        chars.append(self.advance())
+                if self.at_end():
+                    raise ParseError("Unterminated double quote", pos=start)
+                chars.append(self.advance())
+
+            # Escape
+            elif ch == "\\" and self.pos + 1 < self.length:
+                chars.append(self.advance())
+                chars.append(self.advance())
+
+            # Arithmetic expansion $((...))
+            elif (
+                ch == "$"
+                and self.pos + 2 < self.length
+                and self.source[self.pos + 1] == "("
+                and self.source[self.pos + 2] == "("
+            ):
+                arith_node, arith_text = self._parse_arithmetic_expansion()
+                if arith_node:
+                    parts.append(arith_node)
+                    chars.append(arith_text)
+                else:
+                    chars.append(self.advance())
+
+            # Command substitution $(...)
+            elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                cmdsub_node, cmdsub_text = self._parse_command_substitution()
+                if cmdsub_node:
+                    parts.append(cmdsub_node)
+                    chars.append(cmdsub_text)
+                else:
+                    chars.append(self.advance())
+
+            # Parameter expansion $var or ${...}
+            elif ch == "$":
+                param_node, param_text = self._parse_param_expansion()
+                if param_node:
+                    parts.append(param_node)
+                    chars.append(param_text)
+                else:
+                    chars.append(self.advance())
+
+            # Process substitution <(...) or >(...)
+            elif ch in "<>" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                procsub_node, procsub_text = self._parse_process_substitution()
+                if procsub_node:
+                    parts.append(procsub_node)
+                    chars.append(procsub_text)
+                else:
+                    chars.append(self.advance())
+
+            # Regular character
+            else:
+                chars.append(self.advance())
+
+        if not chars:
+            return None
+
+        return Word("".join(chars), parts if parts else None)
+
+    def _parse_cond_regex_word(self) -> Word | None:
+        """Parse a regex pattern word in [[ ]], where ( ) are regex grouping, not conditional grouping."""
+        self._cond_skip_whitespace()
+
+        if self._cond_at_end():
+            return None
+
+        start = self.pos
+        chars = []
+        parts = []
+        paren_depth = 0  # Track regex grouping parens - spaces inside don't terminate
+
+        while not self.at_end():
+            ch = self.peek()
+
+            # End of conditional
+            if ch == "]" and self.pos + 1 < self.length and self.source[self.pos + 1] == "]":
+                break
+
+            # Backslash-newline continuation (check before space/escape handling)
+            if ch == "\\" and self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
+                self.advance()  # consume backslash
+                self.advance()  # consume newline
+                continue
+
+            # Escape sequences - consume both characters (including escaped spaces)
+            if ch == "\\" and self.pos + 1 < self.length:
+                chars.append(self.advance())
+                chars.append(self.advance())
+                continue
+
+            # Track regex grouping parentheses
+            if ch == "(":
+                paren_depth += 1
+                chars.append(self.advance())
+                continue
+            if ch == ")":
+                if paren_depth > 0:
+                    paren_depth -= 1
+                    chars.append(self.advance())
+                    continue
+                # Unmatched ) - probably end of pattern
+                break
+
+            # Regex character class [...] - consume until closing ]
+            # Handles [[:alpha:]], [^0-9], []a-z] (] as first char), etc.
+            if ch == "[":
+                chars.append(self.advance())  # consume [
+                # Handle negation [^
+                if not self.at_end() and self.peek() == "^":
+                    chars.append(self.advance())
+                # Handle ] as first char (literal ])
+                if not self.at_end() and self.peek() == "]":
+                    chars.append(self.advance())
+                # Consume until closing ]
+                while not self.at_end():
+                    c = self.peek()
+                    if c == "]":
+                        chars.append(self.advance())
+                        break
+                    if c == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == ":":
+                        # POSIX class like [:alpha:] inside bracket expression
+                        chars.append(self.advance())  # [
+                        chars.append(self.advance())  # :
+                        while not self.at_end() and not (
+                            self.peek() == ":"
+                            and self.pos + 1 < self.length
+                            and self.source[self.pos + 1] == "]"
+                        ):
+                            chars.append(self.advance())
+                        if not self.at_end():
+                            chars.append(self.advance())  # :
+                            chars.append(self.advance())  # ]
+                    else:
+                        chars.append(self.advance())
+                continue
+
+            # Word terminators - space/tab ends the regex (unless inside parens), as do && and ||
+            if ch in " \t\n" and paren_depth == 0:
+                break
+            if ch in " \t\n" and paren_depth > 0:
+                # Space inside regex parens is part of the pattern
+                chars.append(self.advance())
+                continue
+            if ch == "&" and self.pos + 1 < self.length and self.source[self.pos + 1] == "&":
+                break
+            if ch == "|" and self.pos + 1 < self.length and self.source[self.pos + 1] == "|":
+                break
+
+            # Single-quoted string
+            if ch == "'":
+                self.advance()
+                chars.append("'")
+                while not self.at_end() and self.peek() != "'":
+                    chars.append(self.advance())
+                if self.at_end():
+                    raise ParseError("Unterminated single quote", pos=start)
+                chars.append(self.advance())
+                continue
+
+            # Double-quoted string
+            if ch == '"':
+                self.advance()
+                chars.append('"')
+                while not self.at_end() and self.peek() != '"':
+                    c = self.peek()
+                    if c == "\\" and self.pos + 1 < self.length:
+                        chars.append(self.advance())
+                        chars.append(self.advance())
+                    elif c == "$":
+                        param_node, param_text = self._parse_param_expansion()
+                        if param_node:
+                            parts.append(param_node)
+                            chars.append(param_text)
+                        else:
+                            chars.append(self.advance())
+                    else:
+                        chars.append(self.advance())
+                if self.at_end():
+                    raise ParseError("Unterminated double quote", pos=start)
+                chars.append(self.advance())
+                continue
+
+            # Parameter expansion $var or ${...}
+            if ch == "$":
+                param_node, param_text = self._parse_param_expansion()
+                if param_node:
+                    parts.append(param_node)
+                    chars.append(param_text)
+                else:
+                    chars.append(self.advance())
+                continue
+
+            # Regular character (including ( ) which are regex grouping)
+            chars.append(self.advance())
+
+        if not chars:
+            return None
+
+        return Word("".join(chars), parts if parts else None)
 
     def parse_brace_group(self) -> BraceGroup | None:
         """Parse a brace group { list }."""
@@ -1989,9 +3140,6 @@ class Parser:
                     break
                 words.append(word)
 
-            if not words:
-                raise ParseError("Expected words after 'in'", pos=self.pos)
-
         # Skip to 'do'
         self.skip_whitespace_and_newlines()
 
@@ -2273,14 +3421,72 @@ class Parser:
                 self.advance()
                 self.skip_whitespace_and_newlines()
 
-            # Parse pattern (everything until ')')
-            # Pattern can contain | for alternation, quotes, globs, etc.
+            # Parse pattern (everything until ')' at depth 0)
+            # Pattern can contain | for alternation, quotes, globs, extglobs, etc.
+            # Extglob patterns @(), ?(), *(), +(), !() contain nested parens
             pattern_chars = []
+            extglob_depth = 0
             while not self.at_end():
                 ch = self.peek()
                 if ch == ")":
-                    self.advance()  # consume )
-                    break
+                    if extglob_depth > 0:
+                        # Inside extglob, consume the ) and decrement depth
+                        pattern_chars.append(self.advance())
+                        extglob_depth -= 1
+                    else:
+                        # End of pattern
+                        self.advance()
+                        break
+                elif ch == "\\":
+                    # Backslash escape - consume both chars
+                    pattern_chars.append(self.advance())
+                    if not self.at_end():
+                        pattern_chars.append(self.advance())
+                elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                    # $( or $(( - command sub or arithmetic
+                    pattern_chars.append(self.advance())  # $
+                    pattern_chars.append(self.advance())  # (
+                    if not self.at_end() and self.peek() == "(":
+                        # $(( arithmetic - need to find matching ))
+                        pattern_chars.append(self.advance())  # second (
+                        paren_depth = 2
+                        while not self.at_end() and paren_depth > 0:
+                            c = self.peek()
+                            if c == "(":
+                                paren_depth += 1
+                            elif c == ")":
+                                paren_depth -= 1
+                            pattern_chars.append(self.advance())
+                    else:
+                        # $() command sub - track single paren
+                        extglob_depth += 1
+                elif ch == "(" and extglob_depth > 0:
+                    # Grouping paren inside extglob
+                    pattern_chars.append(self.advance())
+                    extglob_depth += 1
+                elif (
+                    ch in "@?*+!"
+                    and self.pos + 1 < self.length
+                    and self.source[self.pos + 1] == "("
+                ):
+                    # Extglob opener: @(, ?(, *(, +(, !(
+                    pattern_chars.append(self.advance())  # @, ?, *, +, or !
+                    pattern_chars.append(self.advance())  # (
+                    extglob_depth += 1
+                elif ch == "[":
+                    # Character class - consume until ]
+                    pattern_chars.append(self.advance())
+                    # Handle [! or [^ at start
+                    if not self.at_end() and self.peek() in "!^":
+                        pattern_chars.append(self.advance())
+                    # Handle ] as first char (literal)
+                    if not self.at_end() and self.peek() == "]":
+                        pattern_chars.append(self.advance())
+                    # Consume until closing ]
+                    while not self.at_end() and self.peek() != "]":
+                        pattern_chars.append(self.advance())
+                    if not self.at_end():
+                        pattern_chars.append(self.advance())  # ]
                 elif ch == "'":
                     # Single-quoted string in pattern
                     pattern_chars.append(self.advance())
@@ -2944,15 +4150,43 @@ class Parser:
             return parts[0]
         return List(parts)
 
+    def parse_comment(self) -> "Comment | None":
+        """Parse a comment (# to end of line)."""
+        if self.at_end() or self.peek() != "#":
+            return None
+        start = self.pos
+        while not self.at_end() and self.peek() != "\n":
+            self.advance()
+        text = self.source[start : self.pos]
+        from .ast import Comment
+        return Comment(text)
+
     def parse(self) -> list[Node]:
         """Parse the entire input."""
         source = self.source.strip()
         if not source:
             return [Empty()]
 
-        result = self.parse_list()
-        if result is None:
-            raise ParseError("Expected command", pos=self.pos)
+        results = []
+
+        # Parse leading comments
+        while True:
+            self.skip_whitespace()
+            # Skip newlines but not comments
+            while not self.at_end() and self.peek() == "\n":
+                self.advance()
+            if self.at_end():
+                break
+            comment = self.parse_comment()
+            if comment:
+                results.append(comment)
+            else:
+                break
+
+        if not self.at_end():
+            result = self.parse_list()
+            if result is not None:
+                results.append(result)
 
         self.skip_whitespace()
 
@@ -2968,7 +4202,10 @@ class Parser:
             # There's more content - not yet supported
             raise ParseError("Parser not fully implemented yet", pos=self.pos)
 
-        return [result]
+        if not results:
+            return [Empty()]
+
+        return results
 
 
 def parse(source: str) -> list[Node]:

@@ -27,8 +27,6 @@ cmd1 |& cmd2 | cmd3
 ---
 (pipeline (command (word "cmd1")) (pipe-both) (command (word "cmd2")) (command (word "cmd3")))
 
-# === Pipe stderr with compound commands ===
-
 === pipe stderr from subshell
 (cmd) |& cat
 ---
@@ -49,8 +47,6 @@ while read line; do echo $line; done |& cat
 ---
 (pipeline (while (command (word "read") (word "line")) (command (word "echo") (word "$line" (param "line")))) (pipe-both) (command (word "cat")))
 
-# === Pipe stderr in context ===
-
 === pipe stderr in list
 cmd |& cat && echo done
 ---
@@ -70,8 +66,6 @@ cmd |& cat > output.txt
 time cmd |& cat
 ---
 (time (pipeline (command (word "cmd")) (pipe-both) (command (word "cat"))))
-
-# === Brutal edge cases ===
 
 === no spaces around pipe stderr
 cmd|&cat
@@ -122,12 +116,12 @@ case x in y) echo z;; esac |& cat
 === arithmetic command with pipe stderr
 ((x++)) |& cat
 ---
-(pipeline (arith-cmd "x++") (pipe-both) (command (word "cat")))
+(pipeline (arith-cmd (post-incr (var "x"))) (pipe-both) (command (word "cat")))
 
 === conditional expression with pipe stderr
 [[ -f file ]] |& cat
 ---
-(pipeline (cond-expr "-f file") (pipe-both) (command (word "cat")))
+(pipeline (cond-expr (unary-test "-f" (word "file"))) (pipe-both) (command (word "cat")))
 
 === coproc with pipe stderr in body
 coproc { cmd |& cat; }

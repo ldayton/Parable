@@ -17,8 +17,6 @@ for ((i=0; i<5; i++)); { echo $i; }
 ---
 (for-arith "i=0" "i<5" "i++" (brace-group (list (command (word "echo") (word "$i" (param "i"))) (semi))))
 
-# === Empty expressions ===
-
 === empty init
 for ((; i<10; i++)); do echo $i; done
 ---
@@ -32,14 +30,12 @@ for ((i=0; ; i++)); do echo $i; break; done
 === empty increment
 for ((i=0; i<10;)); do echo $i; ((i++)); done
 ---
-(for-arith "i=0" "i<10" "" (list (command (word "echo") (word "$i" (param "i"))) (semi) (arith-cmd "i++")))
+(for-arith "i=0" "i<10" "" (list (command (word "echo") (word "$i" (param "i"))) (semi) (arith-cmd (post-incr (var "i")))))
 
 === all empty (infinite loop)
 for ((;;)); do break; done
 ---
 (for-arith "" "" "" (command (word "break")))
-
-# === Complex expressions ===
 
 === multiple init variables
 for ((i=0, j=10; i<j; i++, j--)); do echo $i $j; done
@@ -61,8 +57,6 @@ for ((i=1; i<=100; i*=2)); do echo $i; done
 ---
 (for-arith "i=1" "i<=100" "i*=2" (command (word "echo") (word "$i" (param "i"))))
 
-# === C-style for in context ===
-
 === C-style for in list
 for ((i=0; i<3; i++)); do echo $i; done; echo done
 ---
@@ -82,8 +76,6 @@ time for ((i=0; i<1000; i++)); do :; done
 ! for ((i=0; i<3; i++)); do false; done
 ---
 (negation (for-arith "i=0" "i<3" "i++" (command (word "false"))))
-
-# === Brutal edge cases from research ===
 
 === no semicolon before do
 for ((i=0; i<3; i++)) do echo $i; done
@@ -113,12 +105,12 @@ for ((i=1; i&0xFF; i<<=1)); do echo $i; done
 === with break
 for ((i=0; ; i++)); do if ((i>5)); then break; fi; echo $i; done
 ---
-(for-arith "i=0" "" "i++" (list (if (arith-cmd "i>5") (command (word "break"))) (semi) (command (word "echo") (word "$i" (param "i")))))
+(for-arith "i=0" "" "i++" (list (if (arith-cmd (binary-op ">" (var "i") (number "5"))) (command (word "break"))) (semi) (command (word "echo") (word "$i" (param "i")))))
 
 === with continue
 for ((i=0; i<10; i++)); do if ((i%2)); then continue; fi; echo $i; done
 ---
-(for-arith "i=0" "i<10" "i++" (list (if (arith-cmd "i%2") (command (word "continue"))) (semi) (command (word "echo") (word "$i" (param "i")))))
+(for-arith "i=0" "i<10" "i++" (list (if (arith-cmd (binary-op "%" (var "i") (number "2"))) (command (word "continue"))) (semi) (command (word "echo") (word "$i" (param "i")))))
 
 === newlines in body with brace
 for ((i=0; i<3; i++)) {
@@ -146,5 +138,4 @@ for ((i=0; i<2; i++)); do for ((j=0; j<2; j++)); do echo $i $j; done; done
 f() { for ((i=0; i<3; i++)); do echo $i; done; }
 ---
 (function "f" (brace-group (list (for-arith "i=0" "i<3" "i++" (command (word "echo") (word "$i" (param "i")))) (semi))))
-
 

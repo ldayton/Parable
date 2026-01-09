@@ -17,8 +17,6 @@ diff <(ls dir1) <(ls dir2)
 ---
 (command (word "diff") (word "<(ls dir1)" (procsub "<" (command (word "ls") (word "dir1")))) (word "<(ls dir2)" (procsub "<" (command (word "ls") (word "dir2")))))
 
-# === Process substitution with pipelines ===
-
 === pipeline inside process substitution
 cat <(ls | sort)
 ---
@@ -28,8 +26,6 @@ cat <(ls | sort)
 echo test > >(grep x | tee out.txt)
 ---
 (command (word "echo") (word "test") (redirect ">" (word ">(grep x | tee out.txt)" (procsub ">" (pipeline (command (word "grep") (word "x")) (command (word "tee") (word "out.txt")))))))
-
-# === Process substitution with lists ===
 
 === list inside process substitution
 cat <(echo a; echo b)
@@ -41,8 +37,6 @@ cat <(true && echo yes)
 ---
 (command (word "cat") (word "<(true && echo yes)" (procsub "<" (list (command (word "true")) (and) (command (word "echo") (word "yes"))))))
 
-# === Multiple process substitutions ===
-
 === two input process substitutions
 paste <(seq 5) <(seq 5 10)
 ---
@@ -53,8 +47,6 @@ tee >(cat > a.txt) >(cat > b.txt) < <(echo input)
 ---
 (command (word "tee") (word ">(cat > a.txt)" (procsub ">" (command (word "cat") (redirect ">" (word "a.txt"))))) (word ">(cat > b.txt)" (procsub ">" (command (word "cat") (redirect ">" (word "b.txt"))))) (redirect "<" (word "<(echo input)" (procsub "<" (command (word "echo") (word "input"))))))
 
-# === Process substitution with redirects ===
-
 === process substitution as redirect target
 cat < <(echo hello)
 ---
@@ -64,8 +56,6 @@ cat < <(echo hello)
 exec 3< <(echo data)
 ---
 (command (word "exec") (redirect "3<" (word "<(echo data)" (procsub "<" (command (word "echo") (word "data"))))))
-
-# === Nested structures ===
 
 === command substitution inside process substitution
 cat <(echo $(whoami))
@@ -82,8 +72,6 @@ cat <((echo hello))
 ---
 (command (word "cat") (word "<((echo hello))" (procsub "<" (subshell (command (word "echo") (word "hello"))))))
 
-# === Process substitution in different contexts ===
-
 === process substitution in pipeline
 cat <(echo hello) | grep h
 ---
@@ -98,8 +86,6 @@ cat <(echo a) && echo done
 while true; do cat <(echo hello); done
 ---
 (while (command (word "true")) (command (word "cat") (word "<(echo hello)" (procsub "<" (command (word "echo") (word "hello"))))))
-
-# === Edge cases ===
 
 === process substitution with no space before
 cat<(echo hello)
@@ -119,9 +105,7 @@ cat <(:)
 === process substitution with arithmetic
 cat <(echo $((1+2)))
 ---
-(command (word "cat") (word "<(echo $((1+2)))" (procsub "<" (command (word "echo") (word "$((1+2))" (arith "1+2"))))))
-
-# === Additional edge cases ===
+(command (word "cat") (word "<(echo $((1+2)))" (procsub "<" (command (word "echo") (word "$((1+2))" (arith (binary-op "+" (number "1") (number "2"))))))))
 
 === process substitution with quoted content
 cat <(echo "hello world")
@@ -175,6 +159,4 @@ EOF
 )
 ---
 (command (word "cat") (word "<(cat <<EOF\nhello\nEOF\n)" (procsub "<" (command (word "cat") (heredoc "EOF" "hello\n")))))
-
-
 

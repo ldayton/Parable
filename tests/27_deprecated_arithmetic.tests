@@ -27,8 +27,6 @@ echo $[10%3]
 ---
 (command (word "echo") (word "$[10%3]" (arith-deprecated "10%3")))
 
-# === With spaces ===
-
 === spaces around operators
 echo $[ 1 + 2 ]
 ---
@@ -44,8 +42,6 @@ echo $[42 ]
 ---
 (command (word "echo") (word "$[42 ]" (arith-deprecated "42 ")))
 
-# === With variables ===
-
 === variable reference
 echo $[$x]
 ---
@@ -60,8 +56,6 @@ echo $[x+1]
 echo $[a+b]
 ---
 (command (word "echo") (word "$[a+b]" (arith-deprecated "a+b")))
-
-# === Complex expressions ===
 
 === parenthesized expression
 echo $[(1+2)*3]
@@ -82,8 +76,6 @@ echo $[a>b]
 echo $[a?b:c]
 ---
 (command (word "echo") (word "$[a?b:c]" (arith-deprecated "a?b:c")))
-
-# === In context ===
 
 === in assignment
 x=$[1+2]
@@ -108,14 +100,12 @@ echo $[1+2]$[3+4]
 === mixed with modern arithmetic
 echo $[1+2] $((3+4))
 ---
-(command (word "echo") (word "$[1+2]" (arith-deprecated "1+2")) (word "$((3+4))" (arith "3+4")))
+(command (word "echo") (word "$[1+2]" (arith-deprecated "1+2")) (word "$((3+4))" (arith (binary-op "+" (number "3") (number "4")))))
 
 === in redirect target
 cat > $[fd]
 ---
 (command (word "cat") (redirect ">" (word "$[fd]" (arith-deprecated "fd"))))
-
-# === Brutal edge cases ===
 
 === nested brackets
 echo $[[1+2]*3]

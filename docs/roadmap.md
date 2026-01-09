@@ -5,88 +5,20 @@ Features to make Parable more useful for downstream projects.
 ## Summary
 
 ```
-Feature                Priority   Effort   Impact
-──────────────────────────────────────────────────────────
-[[ ]] parsing          P1         Medium   Very High
-$(( )) parsing         P1         High     Very High
-Position tracking      P2         Medium   Very High
-JSON serialization     P2         Low      High
-Visitor pattern        P2         Low      High
-Error recovery         P3         High     Medium-High
-Comments preservation  P3         Medium   Medium
-Source reconstruction  P3         Medium   Medium
+Feature                Priority   Effort   Impact         Status
+────────────────────────────────────────────────────────────────────
+Position tracking      P2         Medium   Very High      Not started
+JSON serialization     P2         Low      High           Not started
+Visitor pattern        P2         Low      High           Not started
+Error recovery         P3         High     Medium-High    Not started
+Comments preservation  P3         Medium   Medium         Not started
+Source reconstruction  P3         Medium   Medium         Not started
 ```
 
-- **P1 Correctness:** Required. Without these, tools miss hidden command substitutions.
 - **P2 Usability:** Practical necessities for tool authors.
 - **P3 Nice to have:** Narrower use cases.
 
 ---
-
-## P1: Correctness
-
-These features are required for tools that need complete visibility into bash scripts.
-
-### Parse `[[ ]]` conditional internals
-
-**Status:** Not implemented
-
-Currently `[[ -f "$file" && $(cmd) ]]` produces:
-```
-(cond-expr "-f \"$file\" && $(cmd)")
-```
-
-The `$(cmd)` is invisible to AST walkers. This breaks security scanners, linters, and any tool that needs to find all command substitutions.
-
-**Required output:**
-```
-(cond-expr
-  (and
-    (unary-test "-f" (word "$file" (param-exp "file")))
-    (word "$(cmd)" (cmd-sub (command (word "cmd"))))))
-```
-
-**Effort:** Medium (~200 lines)
-
-**Operators to handle:**
-- Unary: `-e`, `-f`, `-d`, `-r`, `-w`, `-x`, `-s`, `-z`, `-n`, etc.
-- Binary: `==`, `!=`, `=~`, `-eq`, `-ne`, `-lt`, `-gt`, `-le`, `-ge`, `-nt`, `-ot`, `-ef`
-- Logical: `&&`, `||`, `!`
-- Grouping: `( )`
-
-### Parse `$(( ))` arithmetic internals
-
-**Status:** Not implemented
-
-Currently `echo $(( $(get_val) + x++ ))` produces:
-```
-(command (word "echo") (word "$(( $(get_val) + x++ ))" (arith " $(get_val) + x++ ")))
-```
-
-The nested `$(get_val)` is buried in a raw string. Side effects (`x++`) are also invisible.
-
-**Required output:**
-```
-(arith
-  (binary-op "+"
-    (cmd-sub (command (word "get_val")))
-    (post-incr (var "x"))))
-```
-
-**Effort:** High (~500 lines)
-
-**Operators to handle:**
-- Arithmetic: `+`, `-`, `*`, `/`, `%`, `**`
-- Bitwise: `&`, `|`, `^`, `~`, `<<`, `>>`
-- Comparison: `<`, `>`, `<=`, `>=`, `==`, `!=`
-- Logical: `&&`, `||`, `!`
-- Assignment: `=`, `+=`, `-=`, `*=`, `/=`, `%=`, `<<=`, `>>=`, `&=`, `|=`, `^=`
-- Increment: `++x`, `x++`, `--x`, `x--`
-- Ternary: `? :`
-- Comma: `,`
-- Grouping: `( )`
-- Array subscript: `arr[expr]`
-- Nested expansions: `$(cmd)`, `${var}`
 
 ## P2: Usability
 
@@ -172,4 +104,3 @@ Reconstruct source from AST: `ast.to_source()`. Required for formatters and refa
 **Effort:** Medium
 
 **Downside:** Either preserve original whitespace (memory cost) or accept lossy reconstruction. Edge cases with heredocs and quotes.
-

@@ -5,208 +5,231 @@
 === simple file test
 [[ -f file ]]
 ---
-(cond-expr "-f file")
+(cond-expr (unary-test "-f" (word "file")))
 
 === directory test
 [[ -d /tmp ]]
 ---
-(cond-expr "-d /tmp")
+(cond-expr (unary-test "-d" (word "/tmp")))
 
 === string equality
 [[ "$x" == "yes" ]]
 ---
-(cond-expr "\"$x\" == \"yes\"")
+(cond-expr (binary-test "==" (word "\"$x\"" (param "x")) (word "\"yes\"")))
 
 === string inequality
 [[ "$x" != "no" ]]
 ---
-(cond-expr "\"$x\" != \"no\"")
+(cond-expr (binary-test "!=" (word "\"$x\"" (param "x")) (word "\"no\"")))
 
 === string pattern match
 [[ "$file" == *.txt ]]
 ---
-(cond-expr "\"$file\" == *.txt")
+(cond-expr (binary-test "==" (word "\"$file\"" (param "file")) (word "*.txt")))
 
 === regex match
 [[ "$x" =~ ^[0-9]+$ ]]
 ---
-(cond-expr "\"$x\" =~ ^[0-9]+$")
+(cond-expr (binary-test "=~" (word "\"$x\"" (param "x")) (word "^[0-9]+$")))
 
 === empty string test
 [[ -z "$var" ]]
 ---
-(cond-expr "-z \"$var\"")
+(cond-expr (unary-test "-z" (word "\"$var\"" (param "var"))))
 
 === non-empty string test
 [[ -n "$var" ]]
 ---
-(cond-expr "-n \"$var\"")
-
-# === Compound conditions with internal operators ===
+(cond-expr (unary-test "-n" (word "\"$var\"" (param "var"))))
 
 === internal and operator
 [[ -f file && -r file ]]
 ---
-(cond-expr "-f file && -r file")
+(cond-expr (cond-and (unary-test "-f" (word "file")) (unary-test "-r" (word "file"))))
 
 === internal or operator
 [[ -f file || -d file ]]
 ---
-(cond-expr "-f file || -d file")
+(cond-expr (cond-or (unary-test "-f" (word "file")) (unary-test "-d" (word "file"))))
 
 === internal negation
 [[ ! -f file ]]
 ---
-(cond-expr "! -f file")
+(cond-expr (cond-not (unary-test "-f" (word "file"))))
 
 === complex condition
 [[ -f file && ! -d file ]]
 ---
-(cond-expr "-f file && ! -d file")
+(cond-expr (cond-and (unary-test "-f" (word "file")) (cond-not (unary-test "-d" (word "file")))))
 
 === multiple operators
 [[ -f a && -f b || -f c ]]
 ---
-(cond-expr "-f a && -f b || -f c")
+(cond-expr (cond-or (cond-and (unary-test "-f" (word "a")) (unary-test "-f" (word "b"))) (unary-test "-f" (word "c"))))
 
 === parenthesized groups
 [[ ( -f a || -f b ) && -r a ]]
 ---
-(cond-expr "( -f a || -f b ) && -r a")
-
-# === Conditional in control flow ===
+(cond-expr (cond-and (cond-or (unary-test "-f" (word "a")) (unary-test "-f" (word "b"))) (unary-test "-r" (word "a"))))
 
 === if with conditional
 if [[ -f file ]]; then echo exists; fi
 ---
-(if (cond-expr "-f file") (command (word "echo") (word "exists")))
+(if (cond-expr (unary-test "-f" (word "file"))) (command (word "echo") (word "exists")))
 
 === while with conditional
 while [[ -f lockfile ]]; do sleep 1; done
 ---
-(while (cond-expr "-f lockfile") (command (word "sleep") (word "1")))
+(while (cond-expr (unary-test "-f" (word "lockfile"))) (command (word "sleep") (word "1")))
 
 === conditional in list
 [[ -f file ]] && echo exists
 ---
-(list (cond-expr "-f file") (and) (command (word "echo") (word "exists")))
+(list (cond-expr (unary-test "-f" (word "file"))) (and) (command (word "echo") (word "exists")))
 
 === conditional with or list
 [[ -f file ]] || touch file
 ---
-(list (cond-expr "-f file") (or) (command (word "touch") (word "file")))
-
-# === Negation of conditional ===
+(list (cond-expr (unary-test "-f" (word "file"))) (or) (command (word "touch") (word "file")))
 
 === negated conditional
 ! [[ -f file ]]
 ---
-(negation (cond-expr "-f file"))
+(negation (cond-expr (unary-test "-f" (word "file"))))
 
 === time conditional
 time [[ -f file ]]
 ---
-(time (cond-expr "-f file"))
-
-# === Edge cases ===
+(time (cond-expr (unary-test "-f" (word "file"))))
 
 === conditional with spaces
 [[   -f   file   ]]
 ---
-(cond-expr "-f   file")
+(cond-expr (unary-test "-f" (word "file")))
 
 === conditional with variables
 [[ $a == $b ]]
 ---
-(cond-expr "$a == $b")
+(cond-expr (binary-test "==" (word "$a" (param "a")) (word "$b" (param "b"))))
 
 === conditional with command substitution
 [[ $(whoami) == root ]]
 ---
-(cond-expr "$(whoami) == root")
+(cond-expr (binary-test "==" (word "$(whoami)" (cmdsub (command (word "whoami")))) (word "root")))
 
 === conditional with arithmetic
 [[ $((1+1)) -eq 2 ]]
 ---
-(cond-expr "$((1+1)) -eq 2")
+(cond-expr (binary-test "-eq" (word "$((1+1))" (arith (binary-op "+" (number "1") (number "1")))) (word "2")))
 
 === string comparison operators
 [[ "abc" < "def" ]]
 ---
-(cond-expr "\"abc\" < \"def\"")
+(cond-expr (binary-test "<" (word "\"abc\"") (word "\"def\"")))
 
 === greater than comparison
 [[ "def" > "abc" ]]
 ---
-(cond-expr "\"def\" > \"abc\"")
-
-# === Additional edge cases from research ===
+(cond-expr (binary-test ">" (word "\"def\"") (word "\"abc\"")))
 
 === numeric comparison
 [[ $x -eq 10 ]]
 ---
-(cond-expr "$x -eq 10")
+(cond-expr (binary-test "-eq" (word "$x" (param "x")) (word "10")))
 
 === arithmetic in comparison
 [[ $((a+b)) -gt 100 ]]
 ---
-(cond-expr "$((a+b)) -gt 100")
+(cond-expr (binary-test "-gt" (word "$((a+b))" (arith (binary-op "+" (var "a") (var "b")))) (word "100")))
 
 === regex with special chars
 [[ "$path" =~ ^/home/[^/]+/\.config$ ]]
 ---
-(cond-expr "\"$path\" =~ ^/home/[^/]+/\\.config$")
+(cond-expr (binary-test "=~" (word "\"$path\"" (param "path")) (word "^/home/[^/]+/\\.config$")))
 
 === negated condition with parens
 [[ ! ( -f a && -f b ) ]]
 ---
-(cond-expr "! ( -f a && -f b )")
+(cond-expr (cond-not (cond-and (unary-test "-f" (word "a")) (unary-test "-f" (word "b")))))
 
 === multiple nested parens
 [[ ( ( -f a ) ) ]]
 ---
-(cond-expr "( ( -f a ) )")
+(cond-expr (unary-test "-f" (word "a")))
 
 === string with embedded brackets
 [[ "$x" == "[test]" ]]
 ---
-(cond-expr "\"$x\" == \"[test]\"")
+(cond-expr (binary-test "==" (word "\"$x\"" (param "x")) (word "\"[test]\"")))
 
 === conditional with newline in quoted string
 [[ "$x" == "line1
 line2" ]]
 ---
-(cond-expr "\"$x\" == \"line1\nline2\"")
+(cond-expr (binary-test "==" (word "\"$x\"" (param "x")) (word "\"line1\nline2\"")))
 
 === unquoted variable comparison
 [[ $var1 == $var2 ]]
 ---
-(cond-expr "$var1 == $var2")
+(cond-expr (binary-test "==" (word "$var1" (param "var1")) (word "$var2" (param "var2"))))
 
 === wildcard at start
 [[ "$file" == *.log ]]
 ---
-(cond-expr "\"$file\" == *.log")
+(cond-expr (binary-test "==" (word "\"$file\"" (param "file")) (word "*.log")))
 
 === wildcard at end
 [[ "$file" == log.* ]]
 ---
-(cond-expr "\"$file\" == log.*")
+(cond-expr (binary-test "==" (word "\"$file\"" (param "file")) (word "log.*")))
 
 === case insensitive pattern
 [[ "${str,,}" == hello ]]
 ---
-(cond-expr "\"${str,,}\" == hello")
+(cond-expr (binary-test "==" (word "\"${str,,}\"" (param "str" ",," "")) (word "hello")))
 
 === conditional in pipeline
 [[ -f file ]] | cat
 ---
-(pipeline (cond-expr "-f file") (command (word "cat")))
+(pipeline (cond-expr (unary-test "-f" (word "file"))) (command (word "cat")))
 
 === conditional with semicolon after
 [[ -f file ]]; echo done
 ---
-(list (cond-expr "-f file") (semi) (command (word "echo") (word "done")))
+(list (cond-expr (unary-test "-f" (word "file"))) (semi) (command (word "echo") (word "done")))
 
+=== hidden command sub in unary
+[[ -f $(get_path) ]]
+---
+(cond-expr (unary-test "-f" (word "$(get_path)" (cmdsub (command (word "get_path"))))))
 
+=== implicit -n for bare word
+[[ $var ]]
+---
+(cond-expr (unary-test "-n" (word "$var" (param "var"))))
+
+=== process substitution in conditional
+[[ -f <(echo test) ]]
+---
+(cond-expr (unary-test "-f" (word "<(echo test)" (procsub "<" (command (word "echo") (word "test"))))))
+
+=== regex with POSIX character class
+[[ $x =~ [[:alpha:]] ]]
+---
+(cond-expr (binary-test "=~" (word "$x" (param "x")) (word "[[:alpha:]]")))
+
+=== regex with multiple POSIX classes
+[[ $x =~ [[:alpha:][:digit:]] ]]
+---
+(cond-expr (binary-test "=~" (word "$x" (param "x")) (word "[[:alpha:][:digit:]]")))
+
+=== regex with negated class
+[[ $x =~ [^[:space:]] ]]
+---
+(cond-expr (binary-test "=~" (word "$x" (param "x")) (word "[^[:space:]]")))
+
+=== regex with literal ] as first char
+[[ $x =~ []a-z] ]]
+---
+(cond-expr (binary-test "=~" (word "$x" (param "x")) (word "[]a-z]")))
 

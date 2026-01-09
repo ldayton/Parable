@@ -32,8 +32,6 @@ echo hello\`world
 ---
 (command (word "echo") (word "hello\\`world"))
 
-# === Redirection edge cases ===
-
 === move fd with close
 exec 3<&0-
 ---
@@ -63,8 +61,6 @@ diff <(cat file1) <(cat file2)
 exec 10>out1 11>out2 12>out3
 ---
 (command (word "exec") (word "10") (word "11") (word "12") (redirect ">" (word "out1")) (redirect ">" (word "out2")) (redirect ">" (word "out3")))
-
-# === Parameter expansion edge cases ===
 
 === indirect expansion
 echo ${!var_name}
@@ -101,8 +97,6 @@ echo ${var/%pattern/replacement}
 ---
 (command (word "echo") (word "${var/%pattern/replacement}" (param "var" "/%" "pattern/replacement")))
 
-# === Compound command edge cases ===
-
 === brace group requires semicolon
 { echo hello; }
 ---
@@ -121,24 +115,22 @@ for i in 1 2; do for j in a b; do echo $i$j; done; done
 === arithmetic command zero false
 ((0)) || echo "zero is false"
 ---
-(list (arith-cmd "0") (or) (command (word "echo") (word "\"zero is false\"")))
+(list (arith-cmd (number "0")) (or) (command (word "echo") (word "\"zero is false\"")))
 
 === arithmetic command nonzero true
 ((1)) && echo "one is true"
 ---
-(list (arith-cmd "1") (and) (command (word "echo") (word "\"one is true\"")))
+(list (arith-cmd (number "1")) (and) (command (word "echo") (word "\"one is true\"")))
 
 === conditional with regex
 [[ hello =~ ^h.*o$ ]]
 ---
-(cond-expr "hello =~ ^h.*o$")
+(cond-expr (binary-test "=~" (word "hello") (word "^h.*o$")))
 
 === conditional with pattern
 [[ hello == h*o ]]
 ---
-(cond-expr "hello == h*o")
-
-# === Command chaining edge cases ===
+(cond-expr (binary-test "==" (word "hello") (word "h*o")))
 
 === multiple semicolons
 echo a; echo b; echo c;
@@ -159,8 +151,6 @@ echo hello & echo world
 cmd1 | cmd2 &
 ---
 (list (pipeline (command (word "cmd1")) (command (word "cmd2"))) (bg))
-
-# === Word splitting edge cases ===
 
 === dollar at end of word
 echo hello$
@@ -187,8 +177,6 @@ echo hello~world
 ---
 (command (word "echo") (word "hello~world"))
 
-# === Here document edge cases ===
-
 === heredoc with quoted delimiter
 cat <<'EOF'
 $literal
@@ -210,8 +198,6 @@ EOF
 ---
 (command (word "cat") (heredoc-strip "EOF" "tabbed\n"))
 
-# === Array edge cases ===
-
 === array with glob
 arr=(*.txt)
 ---
@@ -232,8 +218,6 @@ echo ${arr[@]/%/.bak}
 ---
 (command (word "echo") (word "${arr[@]/%/.bak}" (param "arr[@]" "/%" "/.bak")))
 
-# === Security-relevant patterns ===
-
 === eval with quoted arg
 eval "echo \$var"
 ---
@@ -247,10 +231,44 @@ declare -n ref=target
 === command substitution in arithmetic
 result=$((1 + $(echo 2)))
 ---
-(command (word "result=$((1 + $(echo 2)))" (arith "1 + $(echo 2)")))
+(command (word "result=$((1 + $(echo 2)))" (arith (binary-op "+" (number "1") (cmdsub (command (word "echo") (word "2")))))))
 
 === glob in variable
 var='*'
 ---
 (command (word "var='*'"))
+
+# === Comments with special characters ===
+# From pure-bash-bible failures
+
+=== comment with parentheses
+# has (parens)
+---
+(comment "# has (parens)")
+
+=== comment with range in parens
+# Loop from 0-100 (no variable support).
+---
+(comment "# Loop from 0-100 (no variable support).")
+
+=== comment with version in parens
+# Bash <4 (discarding empty lines).
+---
+(comment "# Bash <4 (discarding empty lines).")
+
+=== comment with subshell syntax
+# (:;:) is a micro sleep
+---
+(comment "# (:;:) is a micro sleep")
+
+=== comment with percentage in parens
+#            ^----- Elapsed Percentage (0-100).
+---
+(comment "#            ^----- Elapsed Percentage (0-100).")
+
+=== multiline with comment containing parens
+# (substring not in string).
+if true; then echo yes; fi
+---
+(comment "# (substring not in string).") (if (command (word "true")) (command (word "echo") (word "yes")))
 

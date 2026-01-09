@@ -583,7 +583,7 @@ for f in *.txt; do test -f "$f" && cat "$f"; done
 === complex condition with double bracket
 while [[ -f file && ! -f done ]]; do sleep 1; done
 ---
-(while (cond-expr "-f file && ! -f done") (command (word "sleep") (word "1")))
+(while (cond-expr (cond-and (unary-test "-f" (word "file")) (cond-not (unary-test "-f" (word "done"))))) (command (word "sleep") (word "1")))
 
 === for over command output
 for user in $(cut -d: -f1 /etc/passwd); do echo $user; done

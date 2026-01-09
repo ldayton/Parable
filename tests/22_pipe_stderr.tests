@@ -127,7 +127,7 @@ case x in y) echo z;; esac |& cat
 === conditional expression with pipe stderr
 [[ -f file ]] |& cat
 ---
-(pipeline (cond-expr "-f file") (pipe-both) (command (word "cat")))
+(pipeline (cond-expr (unary-test "-f" (word "file"))) (pipe-both) (command (word "cat")))
 
 === coproc with pipe stderr in body
 coproc { cmd |& cat; }

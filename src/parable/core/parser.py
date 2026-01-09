@@ -6,11 +6,15 @@ from .ast import (
     ArithmeticCommand,
     ArithmeticExpansion,
     Array,
+    BinaryTest,
     BraceGroup,
     Case,
     CasePattern,
     Command,
     CommandSubstitution,
+    CondAnd,
+    CondNot,
+    CondOr,
     ConditionalExpr,
     Coproc,
     Empty,
@@ -34,6 +38,7 @@ from .ast import (
     Select,
     Subshell,
     Time,
+    UnaryTest,
     Until,
     While,
     Word,
@@ -1625,6 +1630,18 @@ class Parser:
 
         return ArithmeticCommand(content)
 
+    # Unary operators for [[ ]] conditionals
+    COND_UNARY_OPS = {
+        "-a", "-b", "-c", "-d", "-e", "-f", "-g", "-h", "-k", "-p", "-r", "-s",
+        "-t", "-u", "-w", "-x", "-G", "-L", "-N", "-O", "-S", "-z", "-n", "-o", "-v", "-R",
+    }
+    # Binary operators for [[ ]] conditionals
+    COND_BINARY_OPS = {
+        "==", "!=", "=~", "=", "<", ">",
+        "-eq", "-ne", "-lt", "-le", "-gt", "-ge",
+        "-nt", "-ot", "-ef",
+    }
+
     def parse_conditional_expr(self) -> ConditionalExpr | None:
         """Parse a conditional expression [[ expression ]]."""
         self.skip_whitespace()
@@ -1641,72 +1658,421 @@ class Parser:
         self.advance()  # consume first [
         self.advance()  # consume second [
 
-        # Skip whitespace after [[
+        # Parse the conditional expression body
+        body = self._parse_cond_or()
+
+        # Skip whitespace before ]]
         while not self.at_end() and self.peek() in " \t":
             self.advance()
 
-        # Find matching ]] - track nested [[ ]] and handle quotes
-        content_start = self.pos
-        depth = 1
-
-        while not self.at_end() and depth > 0:
-            c = self.peek()
-
-            # Escaped character (outside quotes)
-            if c == "\\" and self.pos + 1 < self.length:
-                self.advance()  # consume backslash
-                self.advance()  # consume escaped char
-                continue
-
-            # Single-quoted string
-            if c == "'":
-                self.advance()
-                while not self.at_end() and self.peek() != "'":
-                    self.advance()
-                if not self.at_end():
-                    self.advance()
-                continue
-
-            # Double-quoted string
-            if c == '"':
-                self.advance()
-                while not self.at_end() and self.peek() != '"':
-                    if self.peek() == "\\" and self.pos + 1 < self.length:
-                        self.advance()
-                    self.advance()
-                if not self.at_end():
-                    self.advance()
-                continue
-
-            # Nested [[
-            if c == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == "[":
-                depth += 1
-                self.advance()
-                self.advance()
-                continue
-
-            # Check for ]]
-            if c == "]" and self.pos + 1 < self.length and self.source[self.pos + 1] == "]":
-                depth -= 1
-                if depth == 0:
-                    break
-                self.advance()
-                self.advance()
-                continue
-
-            self.advance()
-
-        if self.at_end() or depth != 0:
+        # Expect ]]
+        if (
+            self.at_end()
+            or self.peek() != "]"
+            or self.pos + 1 >= self.length
+            or self.source[self.pos + 1] != "]"
+        ):
             raise ParseError("Expected ]] to close conditional expression", pos=self.pos)
-
-        # Trim trailing whitespace from content
-        content_end = self.pos
-        content = self.source[content_start:content_end].rstrip()
 
         self.advance()  # consume first ]
         self.advance()  # consume second ]
 
-        return ConditionalExpr(content)
+        return ConditionalExpr(body)
+
+    def _cond_skip_whitespace(self) -> None:
+        """Skip whitespace inside [[ ]], including backslash-newline continuation."""
+        while not self.at_end():
+            if self.peek() in " \t":
+                self.advance()
+            elif self.peek() == "\\" and self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
+                self.advance()  # consume backslash
+                self.advance()  # consume newline
+            elif self.peek() == "\n":
+                # Bare newline is also allowed inside [[ ]]
+                self.advance()
+            else:
+                break
+
+    def _cond_at_end(self) -> bool:
+        """Check if we're at ]] (end of conditional)."""
+        return (
+            self.at_end()
+            or (self.peek() == "]" and self.pos + 1 < self.length and self.source[self.pos + 1] == "]")
+        )
+
+    def _parse_cond_or(self) -> Node:
+        """Parse: or_expr = and_expr (|| and_expr)*"""
+        self._cond_skip_whitespace()
+        left = self._parse_cond_and()
+
+        while True:
+            self._cond_skip_whitespace()
+            if self._cond_at_end():
+                break
+            if (
+                self.peek() == "|"
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "|"
+            ):
+                self.advance()  # consume first |
+                self.advance()  # consume second |
+                right = self._parse_cond_and()
+                left = CondOr(left, right)
+            else:
+                break
+
+        return left
+
+    def _parse_cond_and(self) -> Node:
+        """Parse: and_expr = term (&& term)*"""
+        self._cond_skip_whitespace()
+        left = self._parse_cond_term()
+
+        while True:
+            self._cond_skip_whitespace()
+            if self._cond_at_end():
+                break
+            if (
+                self.peek() == "&"
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "&"
+            ):
+                self.advance()  # consume first &
+                self.advance()  # consume second &
+                right = self._parse_cond_term()
+                left = CondAnd(left, right)
+            else:
+                break
+
+        return left
+
+    def _parse_cond_term(self) -> Node:
+        """Parse: term = '!' term | '(' or_expr ')' | unary_test | binary_test | bare_word"""
+        self._cond_skip_whitespace()
+
+        if self._cond_at_end():
+            raise ParseError("Unexpected end of conditional expression", pos=self.pos)
+
+        # Negation: ! term
+        if self.peek() == "!":
+            # Check it's not != operator (need whitespace after !)
+            if self.pos + 1 < self.length and self.source[self.pos + 1] not in " \t":
+                pass  # not negation, fall through to word parsing
+            else:
+                self.advance()  # consume !
+                operand = self._parse_cond_term()
+                return CondNot(operand)
+
+        # Parenthesized group: ( or_expr )
+        if self.peek() == "(":
+            self.advance()  # consume (
+            inner = self._parse_cond_or()
+            self._cond_skip_whitespace()
+            if self.at_end() or self.peek() != ")":
+                raise ParseError("Expected ) in conditional expression", pos=self.pos)
+            self.advance()  # consume )
+            return inner
+
+        # Parse first word
+        word1 = self._parse_cond_word()
+        if word1 is None:
+            raise ParseError("Expected word in conditional expression", pos=self.pos)
+
+        self._cond_skip_whitespace()
+
+        # Check if word1 is a unary operator
+        if word1.value in self.COND_UNARY_OPS:
+            # Unary test: -f file
+            operand = self._parse_cond_word()
+            if operand is None:
+                raise ParseError(f"Expected operand after {word1.value}", pos=self.pos)
+            return UnaryTest(word1.value, operand)
+
+        # Check if next token is a binary operator
+        if not self._cond_at_end() and self.peek() not in "&|)":
+            # Peek at next word to see if it's a binary operator
+            saved_pos = self.pos
+            op_word = self._parse_cond_word()
+            if op_word and op_word.value in self.COND_BINARY_OPS:
+                # Binary test: word1 op word2
+                self._cond_skip_whitespace()
+                # For =~ operator, the RHS is a regex where ( ) are grouping, not conditional grouping
+                if op_word.value == "=~":
+                    word2 = self._parse_cond_regex_word()
+                else:
+                    word2 = self._parse_cond_word()
+                if word2 is None:
+                    raise ParseError(f"Expected operand after {op_word.value}", pos=self.pos)
+                return BinaryTest(op_word.value, word1, word2)
+            else:
+                # Not a binary op, restore position
+                self.pos = saved_pos
+
+        # Bare word: implicit -n test
+        return UnaryTest("-n", word1)
+
+    def _parse_cond_word(self) -> Word | None:
+        """Parse a word inside [[ ]], handling expansions but stopping at conditional operators."""
+        self._cond_skip_whitespace()
+
+        if self._cond_at_end():
+            return None
+
+        # Check for special tokens that aren't words
+        c = self.peek()
+        if c in "()":
+            return None
+        # ! alone (followed by space) is negation, but != is a binary operator
+        if c == "!" and self.pos + 1 < self.length and self.source[self.pos + 1] in " \t":
+            return None
+        if c == "&" and self.pos + 1 < self.length and self.source[self.pos + 1] == "&":
+            return None
+        if c == "|" and self.pos + 1 < self.length and self.source[self.pos + 1] == "|":
+            return None
+
+        start = self.pos
+        chars = []
+        parts = []
+
+        while not self.at_end():
+            ch = self.peek()
+
+            # End of conditional
+            if ch == "]" and self.pos + 1 < self.length and self.source[self.pos + 1] == "]":
+                break
+
+            # Word terminators in conditionals
+            if ch in " \t":
+                break
+            # ( and ) end words unless part of extended glob: @(...), ?(...), *(...), +(...), !(...)
+            if ch == "(":
+                # Check if this is an extended glob (preceded by @, ?, *, +, or !)
+                if chars and chars[-1] in "@?*+!":
+                    # Extended glob - consume the parenthesized content
+                    chars.append(self.advance())  # (
+                    depth = 1
+                    while not self.at_end() and depth > 0:
+                        c = self.peek()
+                        if c == "(":
+                            depth += 1
+                        elif c == ")":
+                            depth -= 1
+                        chars.append(self.advance())
+                    continue
+                else:
+                    break
+            if ch == ")":
+                break
+            if ch == "&" and self.pos + 1 < self.length and self.source[self.pos + 1] == "&":
+                break
+            if ch == "|" and self.pos + 1 < self.length and self.source[self.pos + 1] == "|":
+                break
+
+            # Single-quoted string
+            if ch == "'":
+                self.advance()
+                chars.append("'")
+                while not self.at_end() and self.peek() != "'":
+                    chars.append(self.advance())
+                if self.at_end():
+                    raise ParseError("Unterminated single quote", pos=start)
+                chars.append(self.advance())
+
+            # Double-quoted string
+            elif ch == '"':
+                self.advance()
+                chars.append('"')
+                while not self.at_end() and self.peek() != '"':
+                    c = self.peek()
+                    if c == "\\" and self.pos + 1 < self.length:
+                        chars.append(self.advance())
+                        chars.append(self.advance())
+                    elif c == "$":
+                        # Handle expansions inside double quotes
+                        if self.pos + 2 < self.length and self.source[self.pos + 1] == "(" and self.source[self.pos + 2] == "(":
+                            arith_node, arith_text = self._parse_arithmetic_expansion()
+                            if arith_node:
+                                parts.append(arith_node)
+                                chars.append(arith_text)
+                            else:
+                                chars.append(self.advance())
+                        elif self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                            cmdsub_node, cmdsub_text = self._parse_command_substitution()
+                            if cmdsub_node:
+                                parts.append(cmdsub_node)
+                                chars.append(cmdsub_text)
+                            else:
+                                chars.append(self.advance())
+                        else:
+                            param_node, param_text = self._parse_param_expansion()
+                            if param_node:
+                                parts.append(param_node)
+                                chars.append(param_text)
+                            else:
+                                chars.append(self.advance())
+                    else:
+                        chars.append(self.advance())
+                if self.at_end():
+                    raise ParseError("Unterminated double quote", pos=start)
+                chars.append(self.advance())
+
+            # Escape
+            elif ch == "\\" and self.pos + 1 < self.length:
+                chars.append(self.advance())
+                chars.append(self.advance())
+
+            # Arithmetic expansion $((...))
+            elif ch == "$" and self.pos + 2 < self.length and self.source[self.pos + 1] == "(" and self.source[self.pos + 2] == "(":
+                arith_node, arith_text = self._parse_arithmetic_expansion()
+                if arith_node:
+                    parts.append(arith_node)
+                    chars.append(arith_text)
+                else:
+                    chars.append(self.advance())
+
+            # Command substitution $(...)
+            elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                cmdsub_node, cmdsub_text = self._parse_command_substitution()
+                if cmdsub_node:
+                    parts.append(cmdsub_node)
+                    chars.append(cmdsub_text)
+                else:
+                    chars.append(self.advance())
+
+            # Parameter expansion $var or ${...}
+            elif ch == "$":
+                param_node, param_text = self._parse_param_expansion()
+                if param_node:
+                    parts.append(param_node)
+                    chars.append(param_text)
+                else:
+                    chars.append(self.advance())
+
+            # Process substitution <(...) or >(...)
+            elif ch in "<>" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                procsub_node, procsub_text = self._parse_process_substitution()
+                if procsub_node:
+                    parts.append(procsub_node)
+                    chars.append(procsub_text)
+                else:
+                    chars.append(self.advance())
+
+            # Regular character
+            else:
+                chars.append(self.advance())
+
+        if not chars:
+            return None
+
+        return Word("".join(chars), parts if parts else None)
+
+    def _parse_cond_regex_word(self) -> Word | None:
+        """Parse a regex pattern word in [[ ]], where ( ) are regex grouping, not conditional grouping."""
+        self._cond_skip_whitespace()
+
+        if self._cond_at_end():
+            return None
+
+        start = self.pos
+        chars = []
+        parts = []
+        paren_depth = 0  # Track regex grouping parens - spaces inside don't terminate
+
+        while not self.at_end():
+            ch = self.peek()
+
+            # End of conditional
+            if ch == "]" and self.pos + 1 < self.length and self.source[self.pos + 1] == "]":
+                break
+
+            # Backslash-newline continuation (check before space/escape handling)
+            if ch == "\\" and self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
+                self.advance()  # consume backslash
+                self.advance()  # consume newline
+                continue
+
+            # Escape sequences - consume both characters (including escaped spaces)
+            if ch == "\\" and self.pos + 1 < self.length:
+                chars.append(self.advance())
+                chars.append(self.advance())
+                continue
+
+            # Track regex grouping parentheses
+            if ch == "(":
+                paren_depth += 1
+                chars.append(self.advance())
+                continue
+            if ch == ")":
+                if paren_depth > 0:
+                    paren_depth -= 1
+                    chars.append(self.advance())
+                    continue
+                # Unmatched ) - probably end of pattern
+                break
+
+            # Word terminators - space/tab ends the regex (unless inside parens), as do && and ||
+            if ch in " \t\n" and paren_depth == 0:
+                break
+            if ch in " \t\n" and paren_depth > 0:
+                # Space inside regex parens is part of the pattern
+                chars.append(self.advance())
+                continue
+            if ch == "&" and self.pos + 1 < self.length and self.source[self.pos + 1] == "&":
+                break
+            if ch == "|" and self.pos + 1 < self.length and self.source[self.pos + 1] == "|":
+                break
+
+            # Single-quoted string
+            if ch == "'":
+                self.advance()
+                chars.append("'")
+                while not self.at_end() and self.peek() != "'":
+                    chars.append(self.advance())
+                if self.at_end():
+                    raise ParseError("Unterminated single quote", pos=start)
+                chars.append(self.advance())
+                continue
+
+            # Double-quoted string
+            if ch == '"':
+                self.advance()
+                chars.append('"')
+                while not self.at_end() and self.peek() != '"':
+                    c = self.peek()
+                    if c == "\\" and self.pos + 1 < self.length:
+                        chars.append(self.advance())
+                        chars.append(self.advance())
+                    elif c == "$":
+                        param_node, param_text = self._parse_param_expansion()
+                        if param_node:
+                            parts.append(param_node)
+                            chars.append(param_text)
+                        else:
+                            chars.append(self.advance())
+                    else:
+                        chars.append(self.advance())
+                if self.at_end():
+                    raise ParseError("Unterminated double quote", pos=start)
+                chars.append(self.advance())
+                continue
+
+            # Parameter expansion $var or ${...}
+            if ch == "$":
+                param_node, param_text = self._parse_param_expansion()
+                if param_node:
+                    parts.append(param_node)
+                    chars.append(param_text)
+                else:
+                    chars.append(self.advance())
+                continue
+
+            # Regular character (including ( ) which are regex grouping)
+            chars.append(self.advance())
+
+        if not chars:
+            return None
+
+        return Word("".join(chars), parts if parts else None)
 
     def parse_brace_group(self) -> BraceGroup | None:
         """Parse a brace group { list }."""

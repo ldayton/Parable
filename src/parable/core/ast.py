@@ -648,15 +648,97 @@ class Time(Node):
 class ConditionalExpr(Node):
     """A conditional expression [[ expression ]]."""
 
-    expression: str
+    body: "Node | str"  # Parsed node or raw string for backwards compat
 
-    def __init__(self, expression: str):
+    def __init__(self, body: "Node | str"):
         self.kind = "cond-expr"
-        self.expression = expression
+        self.body = body
 
     def to_sexp(self) -> str:
-        escaped = self.expression.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-        return f'(cond-expr "{escaped}")'
+        if isinstance(self.body, str):
+            escaped = self.body.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+            return f'(cond-expr "{escaped}")'
+        return f"(cond-expr {self.body.to_sexp()})"
+
+
+@dataclass
+class UnaryTest(Node):
+    """A unary test in [[ ]], e.g., -f file, -z string."""
+
+    op: str
+    operand: Word
+
+    def __init__(self, op: str, operand: Word):
+        self.kind = "unary-test"
+        self.op = op
+        self.operand = operand
+
+    def to_sexp(self) -> str:
+        return f'(unary-test "{self.op}" {self.operand.to_sexp()})'
+
+
+@dataclass
+class BinaryTest(Node):
+    """A binary test in [[ ]], e.g., $a == $b, file1 -nt file2."""
+
+    op: str
+    left: Word
+    right: Word
+
+    def __init__(self, op: str, left: Word, right: Word):
+        self.kind = "binary-test"
+        self.op = op
+        self.left = left
+        self.right = right
+
+    def to_sexp(self) -> str:
+        return f'(binary-test "{self.op}" {self.left.to_sexp()} {self.right.to_sexp()})'
+
+
+@dataclass
+class CondAnd(Node):
+    """Logical AND in [[ ]], e.g., expr1 && expr2."""
+
+    left: Node
+    right: Node
+
+    def __init__(self, left: Node, right: Node):
+        self.kind = "cond-and"
+        self.left = left
+        self.right = right
+
+    def to_sexp(self) -> str:
+        return f"(cond-and {self.left.to_sexp()} {self.right.to_sexp()})"
+
+
+@dataclass
+class CondOr(Node):
+    """Logical OR in [[ ]], e.g., expr1 || expr2."""
+
+    left: Node
+    right: Node
+
+    def __init__(self, left: Node, right: Node):
+        self.kind = "cond-or"
+        self.left = left
+        self.right = right
+
+    def to_sexp(self) -> str:
+        return f"(cond-or {self.left.to_sexp()} {self.right.to_sexp()})"
+
+
+@dataclass
+class CondNot(Node):
+    """Logical NOT in [[ ]], e.g., ! expr."""
+
+    operand: Node
+
+    def __init__(self, operand: Node):
+        self.kind = "cond-not"
+        self.operand = operand
+
+    def to_sexp(self) -> str:
+        return f"(cond-not {self.operand.to_sexp()})"
 
 
 @dataclass

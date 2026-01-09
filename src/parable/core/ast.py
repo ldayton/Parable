@@ -500,7 +500,7 @@ class CasePattern(Node):
         alternatives.append("".join(current))
         word_list = []
         for alt in alternatives:
-            escaped = alt.replace("\\", "\\\\")
+            escaped = alt.replace("\\", "\\\\").replace('"', '\\"').replace("\t", "\\t")
             word_list.append(f'(word "{escaped}")')
         pattern_str = " ".join(word_list)
         parts = [f"(pattern ({pattern_str})"]

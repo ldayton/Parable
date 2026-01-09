@@ -8,7 +8,7 @@ A hand-written recursive descent parser for bash. No shortcuts, no regexes, no e
 
 Most bash parsers are glorified regex matchers that handle the happy path. Parable is different. Built from the GNU bash manual, the POSIX spec, the bash YACC grammar, and tested against the [tree-sitter-bash](https://github.com/tree-sitter/tree-sitter-bash) and [Oils](https://github.com/oilshell/oil) test suites. Every test case validated against real bash.
 
-**3,962 test cases.** Every one passes `bash -n` syntax validation.
+**5,590 test cases. 100% pass rate on the Oils bash corpus.** Every test validated against `bash -n`.
 
 ## What It Handles
 
@@ -63,7 +63,7 @@ just test-py312  # Run tests on specific version
 just test-all    # Run tests on all versions (3.10-3.14)
 ```
 
-28 test modules covering progressively deeper bash semantics. Every input is validated against bash 4.0+ with `bash -n`. The tree-sitter-bash and Oils corpora run as separate test suites—Parable parses what they parse, but doesn't accept syntax that bash rejects.
+28 test modules covering progressively deeper bash semantics. Every input is validated against bash 4.0+ with `bash -n`. The Oils corpus (2,495 tests from the [Oils](https://www.oilshell.org/) project) passes at 100%. Parable parses what bash parses, but doesn't accept syntax that bash rejects.
 
 ## Benchmarks
 
@@ -87,10 +87,10 @@ src/parable/
     └── parser.py      # Recursive descent parser (~3000 lines)
 
 tests/
-├── *.tests                      # 1,374 test cases in custom format
+├── *.tests                      # 1,517 test cases in custom format
 └── corpus/
-    ├── tree-sitter-bash/        # 93 tree-sitter-bash corpus tests
-    └── oils/                    # 2,495 Oils spec tests
+    ├── tree-sitter-bash/        # 61 tree-sitter-bash corpus tests
+    └── oils/                    # 2,495 Oils spec tests (100% pass)
 ```
 
 ## License

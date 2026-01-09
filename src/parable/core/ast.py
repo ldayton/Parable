@@ -35,9 +35,68 @@ class Word(Node):
         # Double backslash for unknown escapes in ANSI-C strings (e.g., \q -> \\q)
         # Known escapes: \n \t \r \a \b \f \v \\ \' \" \0 \x \u \U \c \e \E
         value = re.sub(r"\\([^ntrabfv\\'\"0xuUcEe\\])", r"\\\\\1", value)
+        # Format command substitutions with oracle pretty-printing
+        value = self._format_command_substitutions(value)
         # Escape double quotes (but not inside single-quoted ANSI-C strings)
         escaped = value.replace('"', '\\"').replace("\n", "\\n")
         return f'(word "{escaped}")'
+
+    def _format_command_substitutions(self, value: str) -> str:
+        """Replace $(...)  content with oracle-formatted AST output."""
+        cmdsub_parts = [p for p in self.parts if isinstance(p, CommandSubstitution)]
+        if not cmdsub_parts:
+            return value
+        result = []
+        i = 0
+        cmdsub_idx = 0
+        while i < len(value):
+            # Check for $( command substitution
+            if value[i : i + 2] == "$(" and cmdsub_idx < len(cmdsub_parts):
+                # Find matching close paren
+                depth = 1
+                j = i + 2
+                in_single = False
+                in_double = False
+                while j < len(value) and depth > 0:
+                    c = value[j]
+                    if c == "\\" and j + 1 < len(value) and not in_single:
+                        j += 2
+                        continue
+                    if c == "'" and not in_double:
+                        in_single = not in_single
+                    elif c == '"' and not in_single:
+                        in_double = not in_double
+                    elif c == "(" and not in_single and not in_double:
+                        depth += 1
+                    elif c == ")" and not in_single and not in_double:
+                        depth -= 1
+                    j += 1
+                # Format this command substitution
+                node = cmdsub_parts[cmdsub_idx]
+                formatted = _format_cmdsub_node(node.command)
+                result.append(f"$({formatted})")
+                cmdsub_idx += 1
+                i = j
+            # Check for backtick command substitution
+            elif value[i] == "`" and cmdsub_idx < len(cmdsub_parts):
+                # Find matching backtick
+                j = i + 1
+                while j < len(value):
+                    if value[j] == "\\" and j + 1 < len(value):
+                        j += 2
+                        continue
+                    if value[j] == "`":
+                        j += 1
+                        break
+                    j += 1
+                # Keep backtick substitutions as-is (oracle doesn't reformat them)
+                result.append(value[i:j])
+                cmdsub_idx += 1
+                i = j
+            else:
+                result.append(value[i])
+                i += 1
+        return "".join(result)
 
 
 @dataclass
@@ -72,11 +131,40 @@ class Pipeline(Node):
     def to_sexp(self) -> str:
         if len(self.commands) == 1:
             return self.commands[0].to_sexp()
+        # Build list of (cmd, needs_pipe_both_redirect) filtering out PipeBoth markers
+        cmds = []
+        for i, cmd in enumerate(self.commands):
+            if isinstance(cmd, PipeBoth):
+                continue
+            # Check if next element is PipeBoth
+            needs_redirect = (i + 1 < len(self.commands) and isinstance(self.commands[i + 1], PipeBoth))
+            cmds.append((cmd, needs_redirect))
+        if len(cmds) == 1:
+            cmd, needs = cmds[0]
+            return self._cmd_sexp(cmd, needs)
         # Nest right-associatively: (pipe a (pipe b c))
-        result = self.commands[-1].to_sexp()
-        for cmd in reversed(self.commands[:-1]):
-            result = f"(pipe {cmd.to_sexp()} {result})"
+        last_cmd, last_needs = cmds[-1]
+        result = self._cmd_sexp(last_cmd, last_needs)
+        for cmd, needs in reversed(cmds[:-1]):
+            if needs and not isinstance(cmd, Command):
+                # Compound command: redirect as sibling in pipe
+                result = f'(pipe {cmd.to_sexp()} (redirect ">&" 1) {result})'
+            else:
+                result = f"(pipe {self._cmd_sexp(cmd, needs)} {result})"
         return result
+
+    def _cmd_sexp(self, cmd: Node, needs_redirect: bool) -> str:
+        """Get s-expression for a command, optionally injecting pipe-both redirect."""
+        if not needs_redirect:
+            return cmd.to_sexp()
+        if isinstance(cmd, Command):
+            # Inject redirect inside command
+            parts = [w.to_sexp() for w in cmd.words]
+            parts.extend(r.to_sexp() for r in cmd.redirects)
+            parts.append('(redirect ">&" 1)')
+            return f"(command {' '.join(parts)})"
+        # Compound command handled by caller
+        return cmd.to_sexp()
 
 
 @dataclass
@@ -228,6 +316,9 @@ class Redirect(Node):
                 return f'(redirect "{op}" {fd_target})'
             elif target_val == "&-":
                 return f'(redirect ">&-" 0)'
+            else:
+                # Variable fd dup like >&$fd - strip the & from target
+                return f'(redirect "{op}" "{target_val[1:]}")'
         return f'(redirect "{op}" "{target_val}")'
 
 
@@ -1112,3 +1203,81 @@ class Coproc(Node):
         # Use provided name for compound commands, "COPROC" for simple commands
         name = self.name if self.name else "COPROC"
         return f'(coproc "{name}" {self.command.to_sexp()})'
+
+
+def _format_cmdsub_node(node: Node, indent: int = 0) -> str:
+    """Format an AST node for command substitution output (oracle pretty-print format)."""
+    sp = " " * indent
+    inner_sp = " " * (indent + 4)
+    if isinstance(node, Empty):
+        return ""
+    if isinstance(node, Command):
+        parts = [w.value for w in node.words]
+        for r in node.redirects:
+            parts.append(_format_redirect(r))
+        return " ".join(parts)
+    if isinstance(node, Pipeline):
+        return " | ".join(_format_cmdsub_node(cmd, indent) for cmd in node.commands)
+    if isinstance(node, List):
+        parts = []
+        for p in node.parts:
+            if isinstance(p, Operator):
+                parts.append(p.op)
+            else:
+                parts.append(_format_cmdsub_node(p, indent))
+        return " ".join(parts)
+    if isinstance(node, If):
+        cond = _format_cmdsub_node(node.condition, indent)
+        then_body = _format_cmdsub_node(node.then_body, indent + 4)
+        result = f"if {cond}; then\n{inner_sp}{then_body};"
+        if node.else_body:
+            else_body = _format_cmdsub_node(node.else_body, indent + 4)
+            result += f"\n{sp}else\n{inner_sp}{else_body};"
+        result += f"\n{sp}fi"
+        return result
+    if isinstance(node, While):
+        cond = _format_cmdsub_node(node.condition, indent)
+        body = _format_cmdsub_node(node.body, indent + 4)
+        return f"while {cond}; do\n{inner_sp}{body};\n{sp}done"
+    if isinstance(node, Until):
+        cond = _format_cmdsub_node(node.condition, indent)
+        body = _format_cmdsub_node(node.body, indent + 4)
+        return f"until {cond}; do\n{inner_sp}{body};\n{sp}done"
+    if isinstance(node, For):
+        var = node.var
+        body = _format_cmdsub_node(node.body, indent + 4)
+        if node.words:
+            words = " ".join(w.value for w in node.words)
+            return f"for {var} in {words};\ndo\n{inner_sp}{body};\n{sp}done"
+        return f"for {var};\ndo\n{inner_sp}{body};\n{sp}done"
+    if isinstance(node, Case):
+        word = node.word.value
+        patterns = []
+        for p in node.patterns:
+            pat = p.pattern.replace("|", " | ")
+            if p.body:
+                body = _format_cmdsub_node(p.body, indent + 8)
+                patterns.append(f"{pat})\n{' ' * (indent + 8)}{body}\n{' ' * (indent + 4)};;")
+            else:
+                patterns.append(f"{pat})\n{' ' * (indent + 4)};;")
+        pattern_str = "\n" + f"\n{' ' * (indent + 4)}".join(patterns)
+        return f"case {word} in{pattern_str}\n{sp}esac"
+    if isinstance(node, Function):
+        name = node.name
+        body = _format_cmdsub_node(node.body, indent + 4)
+        return f"function {name} () \n{{ \n{inner_sp}{body}\n}}"
+    if isinstance(node, Subshell):
+        body = _format_cmdsub_node(node.body, indent)
+        return f"( {body} )"
+    if isinstance(node, BraceGroup):
+        body = _format_cmdsub_node(node.body, indent)
+        return f"{{ {body}; }}"
+    # Fallback: return empty for unknown types
+    return ""
+
+
+def _format_redirect(r: "Redirect | HereDoc") -> str:
+    """Format a redirect for command substitution output."""
+    if isinstance(r, HereDoc):
+        return f"<< {r.delimiter}"
+    return f"{r.op} {r.target.value}"

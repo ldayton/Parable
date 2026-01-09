@@ -29,12 +29,13 @@ class Word(Node):
     def to_sexp(self) -> str:
         import re
         value = self.value
+        is_ansi_c = value.startswith("$'")
         # Strip $ from ANSI-C quotes $'...' and locale strings $"..."
         value = re.sub(r"\$'", "'", value)
         value = re.sub(r'\$"', '"', value)
-        # Double backslash for unknown escapes in ANSI-C strings (e.g., \q -> \\q)
-        # Known escapes: \n \t \r \a \b \f \v \\ \' \" \0 \x \u \U \c \e \E
-        value = re.sub(r"\\([^ntrabfv\\'\"0xuUcEe\\])", r"\\\\\1", value)
+        # Escape backslashes for s-expression output (but not in ANSI-C/locale strings)
+        if not is_ansi_c:
+            value = value.replace("\\", "\\\\")
         # Format command substitutions with oracle pretty-printing
         value = self._format_command_substitutions(value)
         # Escape double quotes (but not inside single-quoted ANSI-C strings)
@@ -57,7 +58,11 @@ class Word(Node):
                 # Format this command substitution
                 node = cmdsub_parts[cmdsub_idx]
                 formatted = _format_cmdsub_node(node.command)
-                result.append(f"$({formatted})")
+                # Add space after $( if content starts with ( to avoid $((
+                if formatted.startswith("("):
+                    result.append(f"$( {formatted})")
+                else:
+                    result.append(f"$({formatted})")
                 cmdsub_idx += 1
                 i = j
             # Check for backtick command substitution
@@ -1348,17 +1353,8 @@ def _find_cmdsub_end(value: str, start: int) -> int:
         elif c == ")":
             # In case patterns, ) after pattern name is not a grouping paren
             if in_case_patterns and case_depth > 0:
-                # Check if this is a case pattern terminator
-                # A ) is a case pattern terminator if we just saw a pattern word
-                # We use a heuristic: if we're in case patterns and this is not
-                # preceded by $, it's likely a pattern terminator
-                # But if depth would go to 0, it's the closing paren of $(
-                if depth > 1:
-                    # This ) might be a case pattern terminator
-                    # Only decrease depth if it looks like a grouping paren
-                    pass  # Skip, treat as pattern terminator
-                else:
-                    depth -= 1
+                # This ) is a case pattern terminator, skip it
+                pass
             else:
                 depth -= 1
         i += 1

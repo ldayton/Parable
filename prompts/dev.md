@@ -4,7 +4,7 @@
 
 Parable's s-expression output must match bash-oracle (GNU Bash 5.3 with `--dump-ast`).
 
-**Status:** 1,583 passed, 2,625 failed (38%). See `docs/roadmap.md` for failure classification.
+See `docs/roadmap.md` for current status and failure classification.
 
 ## Workflow
 
@@ -31,16 +31,3 @@ just test-all                           # all Python versions (required before c
 - `tests/testformat.py` - test file parser
 - `tools/bash-oracle/` - oracle binary and verification tools
 - `docs/roadmap.md` - failure classification and priorities
-
-## Completed Fixes
-
-- ✅ **Words**: Now output plain text (no nested expansion nodes)
-- ✅ **Redirects**: Target as plain string, fd separated from operator
-
-## Top Fixes Needed
-
-1. **Semi wrapper** (73%): Multi-statement input outputs `(semi ...)` but should be separate lines
-2. **Case statements** (6%): Match case pattern/body format
-3. **Functions** (6%): Match `(function ...)` format
-4. **For loops** (1%): Various formatting differences
-5. **Conditionals** (1%): Match `(cond ...)` format for `[[ ]]`

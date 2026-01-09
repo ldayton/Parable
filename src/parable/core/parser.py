@@ -2580,18 +2580,19 @@ class Parser:
 
             # Add line to content
             if strip_tabs:
-                content_lines.append(line.lstrip("\t"))
+                line = line.lstrip("\t")
+            # Handle backslash-newline continuation in unquoted heredocs
+            if not quoted and line.endswith("\\"):
+                # Line continuation - append without the backslash, no newline
+                content_lines.append(line[:-1])
             else:
-                content_lines.append(line)
+                content_lines.append(line + "\n")
 
             # Move past the newline
             scan_pos = line_end + 1 if line_end < self.length else self.length
 
-        # Join content with newlines
-        if content_lines:
-            content = "\n".join(content_lines) + "\n"
-        else:
-            content = ""
+        # Join content (newlines already included per line)
+        content = "".join(content_lines)
 
         # Store the position where heredoc content ends so we can skip it later
         # scan_pos is at the start of the delimiter line, need to move past it

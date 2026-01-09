@@ -3299,14 +3299,68 @@ class Parser:
                 self.advance()
                 self.skip_whitespace_and_newlines()
 
-            # Parse pattern (everything until ')')
-            # Pattern can contain | for alternation, quotes, globs, etc.
+            # Parse pattern (everything until ')' at depth 0)
+            # Pattern can contain | for alternation, quotes, globs, extglobs, etc.
+            # Extglob patterns @(), ?(), *(), +(), !() contain nested parens
             pattern_chars = []
+            extglob_depth = 0
             while not self.at_end():
                 ch = self.peek()
                 if ch == ")":
-                    self.advance()  # consume )
-                    break
+                    if extglob_depth > 0:
+                        # Inside extglob, consume the ) and decrement depth
+                        pattern_chars.append(self.advance())
+                        extglob_depth -= 1
+                    else:
+                        # End of pattern
+                        self.advance()
+                        break
+                elif ch == "\\":
+                    # Backslash escape - consume both chars
+                    pattern_chars.append(self.advance())
+                    if not self.at_end():
+                        pattern_chars.append(self.advance())
+                elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                    # $( or $(( - command sub or arithmetic
+                    pattern_chars.append(self.advance())  # $
+                    pattern_chars.append(self.advance())  # (
+                    if not self.at_end() and self.peek() == "(":
+                        # $(( arithmetic - need to find matching ))
+                        pattern_chars.append(self.advance())  # second (
+                        paren_depth = 2
+                        while not self.at_end() and paren_depth > 0:
+                            c = self.peek()
+                            if c == "(":
+                                paren_depth += 1
+                            elif c == ")":
+                                paren_depth -= 1
+                            pattern_chars.append(self.advance())
+                    else:
+                        # $() command sub - track single paren
+                        extglob_depth += 1
+                elif ch == "(" and extglob_depth > 0:
+                    # Grouping paren inside extglob
+                    pattern_chars.append(self.advance())
+                    extglob_depth += 1
+                elif ch in "@?*+!" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                    # Extglob opener: @(, ?(, *(, +(, !(
+                    pattern_chars.append(self.advance())  # @, ?, *, +, or !
+                    pattern_chars.append(self.advance())  # (
+                    extglob_depth += 1
+                elif ch == "[":
+                    # Character class - consume until ]
+                    pattern_chars.append(self.advance())
+                    # Handle [! or [^ at start
+                    if not self.at_end() and self.peek() in "!^":
+                        pattern_chars.append(self.advance())
+                    # Handle ] as first char (literal)
+                    if not self.at_end() and self.peek() == "]":
+                        pattern_chars.append(self.advance())
+                    # Consume until closing ]
+                    while not self.at_end() and self.peek() != "]":
+                        pattern_chars.append(self.advance())
+                    if not self.at_end():
+                        pattern_chars.append(self.advance())  # ]
                 elif ch == "'":
                     # Single-quoted string in pattern
                     pattern_chars.append(self.advance())

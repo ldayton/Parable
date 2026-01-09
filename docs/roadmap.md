@@ -7,9 +7,6 @@ Features to make Parable more useful for downstream projects.
 ```
 Feature                Priority   Effort   Impact         Status
 ────────────────────────────────────────────────────────────────────
-[[ ]] parsing          P1         Medium   Very High      ✓ Done
-$(( )) parsing         P1         High     Very High      ✓ Done
-Extglob in case        P1         Low      Medium         ✓ Done
 Position tracking      P2         Medium   Very High      Not started
 JSON serialization     P2         Low      High           Not started
 Visitor pattern        P2         Low      High           Not started
@@ -18,73 +15,10 @@ Comments preservation  P3         Medium   Medium         Not started
 Source reconstruction  P3         Medium   Medium         Not started
 ```
 
-- **P1 Correctness:** Required. Without these, tools miss hidden command substitutions.
 - **P2 Usability:** Practical necessities for tool authors.
 - **P3 Nice to have:** Narrower use cases.
 
 ---
-
-## P1: Correctness
-
-These features are required for tools that need complete visibility into bash scripts.
-
-### Parse `[[ ]]` conditional internals
-
-**Status:** ✓ Implemented
-
-`[[ -f "$file" && $(cmd) ]]` now produces:
-```
-(cond-expr (cond-and (unary-test "-f" (word "\"$file\"" (param "file"))) (unary-test "-n" (word "$(cmd)" (cmdsub (command (word "cmd")))))))
-```
-
-Command substitutions, parameter expansions, and arithmetic expansions inside `[[ ]]` are now visible to AST walkers.
-
-**Implemented operators:**
-- Unary: `-a`, `-b`, `-c`, `-d`, `-e`, `-f`, `-g`, `-h`, `-k`, `-p`, `-r`, `-s`, `-t`, `-u`, `-w`, `-x`, `-G`, `-L`, `-N`, `-O`, `-S`, `-z`, `-n`, `-o`, `-v`, `-R`
-- Binary: `==`, `!=`, `=~`, `=`, `<`, `>`, `-eq`, `-ne`, `-lt`, `-le`, `-gt`, `-ge`, `-nt`, `-ot`, `-ef`
-- Logical: `&&`, `||`, `!`
-- Grouping: `( )`
-- Extended globs: `@(...)`, `?(...)`, `*(...)`, `+(...)`, `!(...)`
-- Regex patterns with grouping parentheses
-
-### Parse `$(( ))` arithmetic internals
-
-**Status:** ✓ Implemented
-
-`echo $(( $(get_val) + x++ ))` now produces:
-```
-(command (word "echo") (word "$(($(get_val) + x++))" (arith (binary-op "+" (cmdsub (command (word "get_val"))) (post-incr (var "x"))))))
-```
-
-Command substitutions, parameter expansions, and side effects inside `$(( ))` are now visible to AST walkers.
-
-**Implemented operators:**
-- Arithmetic: `+`, `-`, `*`, `/`, `%`, `**`
-- Bitwise: `&`, `|`, `^`, `~`, `<<`, `>>`
-- Comparison: `<`, `>`, `<=`, `>=`, `==`, `!=`
-- Logical: `&&`, `||`, `!`
-- Assignment: `=`, `+=`, `-=`, `*=`, `/=`, `%=`, `<<=`, `>>=`, `&=`, `|=`, `^=`
-- Increment/Decrement: `++x`, `x++`, `--x`, `x--`
-- Ternary: `? :`
-- Comma: `,`
-- Grouping: `( )`
-- Array subscript: `arr[expr]`
-- Nested expansions: `$(cmd)`, `${var}`, `$((...))`
-- Numbers: decimal, hex (`0xFF`), octal (`0777`), base-N (`2#1010`)
-- Line continuation: `\<newline>`
-
-### Extglob patterns in case statements
-
-**Status:** ✓ Implemented
-
-`case $x in @(a|b)) echo match;; esac` now parses correctly.
-
-The case pattern parser recognizes extended glob syntax (`@(...)`, `?(...)`, `*(...)`, `+(...)`, `!(...)`), including:
-- Nested extglobs: `@(@(a|b))`
-- Grouping parens inside extglob: `@((a|b))`
-- Command substitution inside: `@($(cmd))`
-- Arithmetic inside: `@($((1+2)))`
-- Character classes: `@([a-z]*)`
 
 ## P2: Usability
 
@@ -170,4 +104,3 @@ Reconstruct source from AST: `ast.to_source()`. Required for formatters and refa
 **Effort:** Medium
 
 **Downside:** Either preserve original whitespace (memory cost) or accept lossy reconstruction. Edge cases with heredocs and quotes.
-

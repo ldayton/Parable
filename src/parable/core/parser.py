@@ -115,9 +115,17 @@ class Parser:
             self.advance()
 
     def skip_whitespace_and_newlines(self) -> None:
-        """Skip spaces, tabs, and newlines."""
-        while not self.at_end() and self.peek() in " \t\n":
-            self.advance()
+        """Skip spaces, tabs, newlines, and comments."""
+        while not self.at_end():
+            ch = self.peek()
+            if ch in " \t\n":
+                self.advance()
+            elif ch == "#":
+                # Skip comment to end of line
+                while not self.at_end() and self.peek() != "\n":
+                    self.advance()
+            else:
+                break
 
     def peek_word(self) -> str | None:
         """Peek at the next word without consuming it."""
@@ -342,6 +350,63 @@ class Parser:
                 else:
                     # Unexpected: ( without matching )
                     break
+
+            # Extglob pattern @(), ?(), *(), +(), !()
+            elif ch in "@?*+!" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                chars.append(self.advance())  # @, ?, *, +, or !
+                chars.append(self.advance())  # (
+                extglob_depth = 1
+                while not self.at_end() and extglob_depth > 0:
+                    c = self.peek()
+                    if c == ")":
+                        chars.append(self.advance())
+                        extglob_depth -= 1
+                    elif c == "(":
+                        chars.append(self.advance())
+                        extglob_depth += 1
+                    elif c == "\\":
+                        chars.append(self.advance())
+                        if not self.at_end():
+                            chars.append(self.advance())
+                    elif c == "'":
+                        chars.append(self.advance())
+                        while not self.at_end() and self.peek() != "'":
+                            chars.append(self.advance())
+                        if not self.at_end():
+                            chars.append(self.advance())
+                    elif c == '"':
+                        chars.append(self.advance())
+                        while not self.at_end() and self.peek() != '"':
+                            if self.peek() == "\\" and self.pos + 1 < self.length:
+                                chars.append(self.advance())
+                            chars.append(self.advance())
+                        if not self.at_end():
+                            chars.append(self.advance())
+                    elif c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                        # $() or $(()) inside extglob
+                        chars.append(self.advance())  # $
+                        chars.append(self.advance())  # (
+                        if not self.at_end() and self.peek() == "(":
+                            # $(()) arithmetic
+                            chars.append(self.advance())  # second (
+                            paren_depth = 2
+                            while not self.at_end() and paren_depth > 0:
+                                pc = self.peek()
+                                if pc == "(":
+                                    paren_depth += 1
+                                elif pc == ")":
+                                    paren_depth -= 1
+                                chars.append(self.advance())
+                        else:
+                            # $() command sub - count as nested paren
+                            extglob_depth += 1
+                    elif c in "@?*+!" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                        # Nested extglob
+                        chars.append(self.advance())  # @, ?, *, +, or !
+                        chars.append(self.advance())  # (
+                        extglob_depth += 1
+                    else:
+                        chars.append(self.advance())
 
             # Metacharacter ends the word
             elif ch in METACHAR:
@@ -2082,8 +2147,6 @@ class Parser:
                         delimiter_chars.append(self.advance())
 
         delimiter = "".join(delimiter_chars)
-        if not delimiter:
-            raise ParseError("Expected delimiter for here document", pos=self.pos)
 
         # Find the end of the current line (command continues until newline)
         # We need to mark where the heredoc content starts
@@ -3076,9 +3139,6 @@ class Parser:
                 if word is None:
                     break
                 words.append(word)
-
-            if not words:
-                raise ParseError("Expected words after 'in'", pos=self.pos)
 
         # Skip to 'do'
         self.skip_whitespace_and_newlines()
@@ -4090,15 +4150,43 @@ class Parser:
             return parts[0]
         return List(parts)
 
+    def parse_comment(self) -> "Comment | None":
+        """Parse a comment (# to end of line)."""
+        if self.at_end() or self.peek() != "#":
+            return None
+        start = self.pos
+        while not self.at_end() and self.peek() != "\n":
+            self.advance()
+        text = self.source[start : self.pos]
+        from .ast import Comment
+        return Comment(text)
+
     def parse(self) -> list[Node]:
         """Parse the entire input."""
         source = self.source.strip()
         if not source:
             return [Empty()]
 
-        result = self.parse_list()
-        if result is None:
-            raise ParseError("Expected command", pos=self.pos)
+        results = []
+
+        # Parse leading comments
+        while True:
+            self.skip_whitespace()
+            # Skip newlines but not comments
+            while not self.at_end() and self.peek() == "\n":
+                self.advance()
+            if self.at_end():
+                break
+            comment = self.parse_comment()
+            if comment:
+                results.append(comment)
+            else:
+                break
+
+        if not self.at_end():
+            result = self.parse_list()
+            if result is not None:
+                results.append(result)
 
         self.skip_whitespace()
 
@@ -4114,7 +4202,10 @@ class Parser:
             # There's more content - not yet supported
             raise ParseError("Parser not fully implemented yet", pos=self.pos)
 
-        return [result]
+        if not results:
+            return [Empty()]
+
+        return results
 
 
 def parse(source: str) -> list[Node]:

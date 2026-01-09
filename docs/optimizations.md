@@ -339,6 +339,51 @@ def _consume_param_name(self) -> str:
 - For simple extraction, slicing is both faster and clearer
 
 
+## 9. CPython Internals
+
+Research on CPython performance characteristics relevant to parser optimization.
+
+### Membership Testing
+
+| Pattern | Time | Notes |
+|---------|------|-------|
+| `x in set` | ~100 ns | O(1), constant regardless of size |
+| `x in list` (miss) | ~11 ms | O(n), 100,000x slower than set |
+| `x in {a, b, c}` | ~100 ns | Compiled to `frozenset` constant (3.2+) |
+| `x in "abc"` | O(n) | Linear scan |
+
+Set literals in membership tests are converted to `frozenset` at compile time by the peephole optimizer.
+
+Sources: [switowski.com](https://switowski.com/blog/membership-testing/), [sopython wiki](https://sopython.com/wiki/Peephole_optimisations_for_tuple,_list,_set)
+
+### Local Variable Access
+
+| Opcode | Use | Relative Speed |
+|--------|-----|----------------|
+| LOAD_FAST | Local variables | 1x (fastest) |
+| LOAD_ATTR | `self.x`, `obj.x` | ~2x slower |
+
+Source: [tenthousandmeters.com](https://tenthousandmeters.com/blog/python-behind-the-scenes-5-how-variables-are-implemented-in-cpython/)
+
+### Python 3.11+ Changes
+
+| Pattern | Pre-3.11 | 3.11+ |
+|---------|----------|-------|
+| `_len = len` (builtin alias) | Helps | No longer needed |
+| `_sin = math.sin` (module attr) | Helps | Still helps |
+| `source = self.source` (instance attr) | Helps | Still helps |
+
+Builtins are now auto-specialized. Attribute chains still benefit from aliasing.
+
+Source: [codingconfessions.com](https://blog.codingconfessions.com/p/old-python-performance-trick)
+
+### Function Call Overhead
+
+50-100 ns per call, adds up over millions of iterations.
+
+Sources: [futurelearn](https://www.futurelearn.com/info/courses/python-in-hpc/0/steps/65124), [Gregory Szorc](https://gregoryszorc.com/blog/2019/01/10/what-i've-learned-about-optimizing-python/)
+
+
 ## Summary
 
 | Optimization            | Speedup | Memory | LLM Impact | Recommendation |

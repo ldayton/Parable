@@ -2010,6 +2010,35 @@ class Parser:
                 # Unmatched ) - probably end of pattern
                 break
 
+            # Regex character class [...] - consume until closing ]
+            # Handles [[:alpha:]], [^0-9], []a-z] (] as first char), etc.
+            if ch == "[":
+                chars.append(self.advance())  # consume [
+                # Handle negation [^
+                if not self.at_end() and self.peek() == "^":
+                    chars.append(self.advance())
+                # Handle ] as first char (literal ])
+                if not self.at_end() and self.peek() == "]":
+                    chars.append(self.advance())
+                # Consume until closing ]
+                while not self.at_end():
+                    c = self.peek()
+                    if c == "]":
+                        chars.append(self.advance())
+                        break
+                    if c == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == ":":
+                        # POSIX class like [:alpha:] inside bracket expression
+                        chars.append(self.advance())  # [
+                        chars.append(self.advance())  # :
+                        while not self.at_end() and not (self.peek() == ":" and self.pos + 1 < self.length and self.source[self.pos + 1] == "]"):
+                            chars.append(self.advance())
+                        if not self.at_end():
+                            chars.append(self.advance())  # :
+                            chars.append(self.advance())  # ]
+                    else:
+                        chars.append(self.advance())
+                continue
+
             # Word terminators - space/tab ends the regex (unless inside parens), as do && and ||
             if ch in " \t\n" and paren_depth == 0:
                 break

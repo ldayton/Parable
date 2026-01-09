@@ -225,3 +225,25 @@ line2" ]]
 ---
 (cond-expr (unary-test "-f" (word "<(echo test)" (procsub "<" (command (word "echo") (word "test"))))))
 
+# === Regex edge cases ===
+
+=== regex with POSIX character class
+[[ $x =~ [[:alpha:]] ]]
+---
+(cond-expr (binary-test "=~" (word "$x" (param "x")) (word "[[:alpha:]]")))
+
+=== regex with multiple POSIX classes
+[[ $x =~ [[:alpha:][:digit:]] ]]
+---
+(cond-expr (binary-test "=~" (word "$x" (param "x")) (word "[[:alpha:][:digit:]]")))
+
+=== regex with negated class
+[[ $x =~ [^[:space:]] ]]
+---
+(cond-expr (binary-test "=~" (word "$x" (param "x")) (word "[^[:space:]]")))
+
+=== regex with literal ] as first char
+[[ $x =~ []a-z] ]]
+---
+(cond-expr (binary-test "=~" (word "$x" (param "x")) (word "[]a-z]")))
+

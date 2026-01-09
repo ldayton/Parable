@@ -129,9 +129,15 @@ def get_all_test_cases():
 @pytest.mark.parametrize("test_case", get_all_test_cases())
 def test_valid_bash_syntax(test_case):
     """Verify that the test input is valid bash syntax."""
+    # Build bash command - enable extglob for extglob tests
+    cmd = [BASH_PATH]
+    if "extglob" in test_case.file:
+        cmd.extend(["-O", "extglob"])
+    cmd.append("-n")
+
     # Run bash -n to check syntax without executing
     result = subprocess.run(
-        [BASH_PATH, "-n"],
+        cmd,
         input=test_case.input,
         capture_output=True,
         text=True,

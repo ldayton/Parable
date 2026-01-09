@@ -9,6 +9,7 @@ Feature                Priority   Effort   Impact         Status
 ────────────────────────────────────────────────────────────────────
 [[ ]] parsing          P1         Medium   Very High      ✓ Done
 $(( )) parsing         P1         High     Very High      ✓ Done
+Extglob in case        P1         Low      Medium         ✓ Done
 Position tracking      P2         Medium   Very High      Not started
 JSON serialization     P2         Low      High           Not started
 Visitor pattern        P2         Low      High           Not started
@@ -71,6 +72,19 @@ Command substitutions, parameter expansions, and side effects inside `$(( ))` ar
 - Nested expansions: `$(cmd)`, `${var}`, `$((...))`
 - Numbers: decimal, hex (`0xFF`), octal (`0777`), base-N (`2#1010`)
 - Line continuation: `\<newline>`
+
+### Extglob patterns in case statements
+
+**Status:** ✓ Implemented
+
+`case $x in @(a|b)) echo match;; esac` now parses correctly.
+
+The case pattern parser recognizes extended glob syntax (`@(...)`, `?(...)`, `*(...)`, `+(...)`, `!(...)`), including:
+- Nested extglobs: `@(@(a|b))`
+- Grouping parens inside extglob: `@((a|b))`
+- Command substitution inside: `@($(cmd))`
+- Arithmetic inside: `@($((1+2)))`
+- Character classes: `@([a-z]*)`
 
 ## P2: Usability
 

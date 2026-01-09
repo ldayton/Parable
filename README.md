@@ -6,9 +6,9 @@ A hand-written recursive descent parser for bash. No shortcuts, no regexes, no e
 
 ## Philosophy
 
-Most bash parsers are glorified regex matchers that handle the happy path. Parable is different. Built from the GNU bash manual, the POSIX spec, the bash YACC grammar, and battle-tested against tree-sitter-bash, oilshell, and shfmt test suites. Every test case validated against real bash.
+Most bash parsers are glorified regex matchers that handle the happy path. Parable is different. Built from the GNU bash manual, the POSIX spec, the bash YACC grammar, and tested against the tree-sitter-bash corpus. Every test case validated against real bash.
 
-**1,560 test cases.** Every one passes `bash -n` syntax validation.
+**1,561 test cases.** Every one passes `bash -n` syntax validation.
 
 This includes the entire [tree-sitter-bash corpus](https://github.com/tree-sitter/tree-sitter-bash).
 
@@ -76,7 +76,7 @@ src/parable/
 
 tests/
 ├── *.tests            # 1,374 test cases in custom format
-└── corpus/            # 186 tree-sitter-bash corpus tests
+└── corpus/            # 187 tree-sitter-bash corpus tests
 ```
 
 ## License

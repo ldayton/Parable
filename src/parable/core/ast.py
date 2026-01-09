@@ -52,25 +52,8 @@ class Word(Node):
         while i < len(value):
             # Check for $( command substitution
             if value[i : i + 2] == "$(" and cmdsub_idx < len(cmdsub_parts):
-                # Find matching close paren
-                depth = 1
-                j = i + 2
-                in_single = False
-                in_double = False
-                while j < len(value) and depth > 0:
-                    c = value[j]
-                    if c == "\\" and j + 1 < len(value) and not in_single:
-                        j += 2
-                        continue
-                    if c == "'" and not in_double:
-                        in_single = not in_single
-                    elif c == '"' and not in_single:
-                        in_double = not in_double
-                    elif c == "(" and not in_single and not in_double:
-                        depth += 1
-                    elif c == ")" and not in_single and not in_double:
-                        depth -= 1
-                    j += 1
+                # Find matching close paren using bash-aware matching
+                j = _find_cmdsub_end(value, i + 2)
                 # Format this command substitution
                 node = cmdsub_parts[cmdsub_idx]
                 formatted = _format_cmdsub_node(node.command)
@@ -273,7 +256,8 @@ class Comment(Node):
         self.text = text
 
     def to_sexp(self) -> str:
-        return f'(comment "{self.text}")'
+        # Oracle doesn't output comments
+        return ""
 
 
 @dataclass
@@ -482,10 +466,15 @@ class For(Node):
         redirect_strs = " ".join(r.to_sexp() for r in self.redirects)
         suffix = f" {redirect_strs}" if redirect_strs else ""
         var_escaped = self.var.replace("\\", "\\\\").replace('"', '\\"')
-        if self.words:
+        if self.words is None:
+            # No 'in' clause - oracle implies (in (word "\"$@\""))
+            return f'(for (word "{var_escaped}") (in (word "\\"$@\\"")) {self.body.to_sexp()}{suffix})'
+        elif len(self.words) == 0:
+            # Empty 'in' clause - oracle outputs (in)
+            return f'(for (word "{var_escaped}") (in) {self.body.to_sexp()}{suffix})'
+        else:
             word_strs = " ".join(w.to_sexp() for w in self.words)
             return f'(for (word "{var_escaped}") (in {word_strs}) {self.body.to_sexp()}{suffix})'
-        return f'(for (word "{var_escaped}") {self.body.to_sexp()}{suffix})'
 
 
 @dataclass
@@ -1219,13 +1208,25 @@ def _format_cmdsub_node(node: Node, indent: int = 0) -> str:
     if isinstance(node, Pipeline):
         return " | ".join(_format_cmdsub_node(cmd, indent) for cmd in node.commands)
     if isinstance(node, List):
-        parts = []
-        for p in node.parts:
+        # Join commands with operators, no space before ;, space before &
+        result = []
+        for i, p in enumerate(node.parts):
             if isinstance(p, Operator):
-                parts.append(p.op)
+                if p.op == ";":
+                    result.append(";")
+                elif p.op == "&":
+                    result.append(" &")
+                else:
+                    result.append(f" {p.op}")
             else:
-                parts.append(_format_cmdsub_node(p, indent))
-        return " ".join(parts)
+                if result and not result[-1].endswith((" ", "\n")):
+                    result.append(" ")
+                result.append(_format_cmdsub_node(p, indent))
+        # Strip trailing ;
+        s = "".join(result)
+        while s.endswith(";"):
+            s = s[:-1]
+        return s
     if isinstance(node, If):
         cond = _format_cmdsub_node(node.condition, indent)
         then_body = _format_cmdsub_node(node.then_body, indent + 4)
@@ -1253,24 +1254,31 @@ def _format_cmdsub_node(node: Node, indent: int = 0) -> str:
     if isinstance(node, Case):
         word = node.word.value
         patterns = []
-        for p in node.patterns:
+        for i, p in enumerate(node.patterns):
             pat = p.pattern.replace("|", " | ")
-            if p.body:
-                body = _format_cmdsub_node(p.body, indent + 8)
-                patterns.append(f"{pat})\n{' ' * (indent + 8)}{body}\n{' ' * (indent + 4)};;")
+            body = _format_cmdsub_node(p.body, indent + 8) if p.body else ""
+            if i == 0:
+                # First pattern on same line as 'in'
+                patterns.append(f" {pat})\n{' ' * (indent + 8)}{body}\n{' ' * (indent + 4)};;")
             else:
-                patterns.append(f"{pat})\n{' ' * (indent + 4)};;")
-        pattern_str = "\n" + f"\n{' ' * (indent + 4)}".join(patterns)
+                patterns.append(f"{pat})\n{' ' * (indent + 8)}{body}\n{' ' * (indent + 4)};;")
+        pattern_str = f"\n{' ' * (indent + 4)}".join(patterns)
         return f"case {word} in{pattern_str}\n{sp}esac"
     if isinstance(node, Function):
         name = node.name
-        body = _format_cmdsub_node(node.body, indent + 4)
+        # Get the body content - if it's a BraceGroup, unwrap it
+        if isinstance(node.body, BraceGroup):
+            body = _format_cmdsub_node(node.body.body, indent + 4)
+        else:
+            body = _format_cmdsub_node(node.body, indent + 4)
+        body = body.rstrip(";")  # Strip trailing semicolons
         return f"function {name} () \n{{ \n{inner_sp}{body}\n}}"
     if isinstance(node, Subshell):
         body = _format_cmdsub_node(node.body, indent)
         return f"( {body} )"
     if isinstance(node, BraceGroup):
         body = _format_cmdsub_node(node.body, indent)
+        body = body.rstrip(";")  # Strip trailing semicolons before adding our own
         return f"{{ {body}; }}"
     # Fallback: return empty for unknown types
     return ""
@@ -1281,3 +1289,89 @@ def _format_redirect(r: "Redirect | HereDoc") -> str:
     if isinstance(r, HereDoc):
         return f"<< {r.delimiter}"
     return f"{r.op} {r.target.value}"
+
+
+def _find_cmdsub_end(value: str, start: int) -> int:
+    """Find the end of a $(...) command substitution, handling case statements.
+
+    Starts after the opening $(. Returns position after the closing ).
+    """
+    depth = 1
+    i = start
+    in_single = False
+    in_double = False
+    case_depth = 0  # Track nested case statements
+    in_case_patterns = False  # After 'in' but before first ;; or esac
+    while i < len(value) and depth > 0:
+        c = value[i]
+        # Handle escapes
+        if c == "\\" and i + 1 < len(value) and not in_single:
+            i += 2
+            continue
+        # Handle quotes
+        if c == "'" and not in_double:
+            in_single = not in_single
+            i += 1
+            continue
+        if c == '"' and not in_single:
+            in_double = not in_double
+            i += 1
+            continue
+        if in_single or in_double:
+            i += 1
+            continue
+        # Check for 'case' keyword
+        if value[i : i + 4] == "case" and _is_word_boundary(value, i, 4):
+            case_depth += 1
+            in_case_patterns = False
+            i += 4
+            continue
+        # Check for 'in' keyword (after case)
+        if case_depth > 0 and value[i : i + 2] == "in" and _is_word_boundary(value, i, 2):
+            in_case_patterns = True
+            i += 2
+            continue
+        # Check for 'esac' keyword
+        if value[i : i + 4] == "esac" and _is_word_boundary(value, i, 4):
+            if case_depth > 0:
+                case_depth -= 1
+                in_case_patterns = False
+            i += 4
+            continue
+        # Check for ';;' (end of case pattern, next pattern or esac follows)
+        if value[i : i + 2] == ";;":
+            i += 2
+            continue
+        # Handle parens
+        if c == "(":
+            depth += 1
+        elif c == ")":
+            # In case patterns, ) after pattern name is not a grouping paren
+            if in_case_patterns and case_depth > 0:
+                # Check if this is a case pattern terminator
+                # A ) is a case pattern terminator if we just saw a pattern word
+                # We use a heuristic: if we're in case patterns and this is not
+                # preceded by $, it's likely a pattern terminator
+                # But if depth would go to 0, it's the closing paren of $(
+                if depth > 1:
+                    # This ) might be a case pattern terminator
+                    # Only decrease depth if it looks like a grouping paren
+                    pass  # Skip, treat as pattern terminator
+                else:
+                    depth -= 1
+            else:
+                depth -= 1
+        i += 1
+    return i
+
+
+def _is_word_boundary(s: str, pos: int, word_len: int) -> bool:
+    """Check if the word at pos is a standalone word (not part of larger word)."""
+    # Check character before
+    if pos > 0 and s[pos - 1].isalnum():
+        return False
+    # Check character after
+    end = pos + word_len
+    if end < len(s) and s[end].isalnum():
+        return False
+    return True

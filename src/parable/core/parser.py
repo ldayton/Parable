@@ -3635,15 +3635,16 @@ class Parser:
                 else:
                     # Check for closing ))
                     if self.pos + 1 < self.length and self.source[self.pos + 1] == ")":
-                        # End of ((...))
-                        parts.append("".join(current).strip())
+                        # End of ((...)) - preserve trailing whitespace
+                        parts.append("".join(current).lstrip())
                         self.advance()  # consume first )
                         self.advance()  # consume second )
                         break
                     else:
                         current.append(self.advance())
             elif ch == ";" and paren_depth == 0:
-                parts.append("".join(current).strip())
+                # Preserve trailing whitespace in expressions
+                parts.append("".join(current).lstrip())
                 current = []
                 self.advance()  # consume ;
             else:
@@ -3664,9 +3665,11 @@ class Parser:
 
         # Parse body - either do/done or brace group
         if self.peek() == "{":
-            body = self.parse_brace_group()
-            if body is None:
+            brace = self.parse_brace_group()
+            if brace is None:
                 raise ParseError("Expected brace group body in for loop", pos=self.pos)
+            # Unwrap the brace-group to match oracle output format
+            body = brace.body
         elif self.consume_word("do"):
             body = self.parse_list_until({"done"})
             if body is None:
@@ -3743,9 +3746,11 @@ class Parser:
 
         # Parse body - either do/done or brace group
         if self.peek() == "{":
-            body = self.parse_brace_group()
-            if body is None:
+            brace = self.parse_brace_group()
+            if brace is None:
                 raise ParseError("Expected brace group body in select", pos=self.pos)
+            # Unwrap the brace-group to match oracle output format
+            body = brace.body
         elif self.consume_word("do"):
             # Parse body (ends at 'done')
             body = self.parse_list_until({"done"})

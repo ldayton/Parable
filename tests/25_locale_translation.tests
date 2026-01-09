@@ -17,8 +17,6 @@ echo $""
 ---
 (command (word "echo") (word "$\"\"" (locale "")))
 
-# === With parameter expansion ===
-
 === locale with variable
 echo $"Hello, $name!"
 ---
@@ -34,8 +32,6 @@ echo $"${name:-guest}"
 ---
 (command (word "echo") (word "$\"${name:-guest}\"" (locale "${name:-guest}") (param "name" ":-" "guest")))
 
-# === With command substitution ===
-
 === locale with command substitution
 echo $"Today is $(date)"
 ---
@@ -46,14 +42,10 @@ echo $"Today is `date`"
 ---
 (command (word "echo") (word "$\"Today is `date`\"" (locale "Today is `date`") (cmdsub (command (word "date")))))
 
-# === With arithmetic ===
-
 === locale with arithmetic
 echo $"Result: $((1+2))"
 ---
-(command (word "echo") (word "$\"Result: $((1+2))\"" (locale "Result: $((1+2))") (arith "1+2")))
-
-# === Special characters ===
+(command (word "echo") (word "$\"Result: $((1+2))\"" (locale "Result: $((1+2))") (arith (binary-op "+" (number "1") (number "2")))))
 
 === locale with escaped quote
 echo $"Say \"hi\""
@@ -69,8 +61,6 @@ echo $"path\\to\\file"
 echo $"line1\nline2"
 ---
 (command (word "echo") (word "$\"line1\\nline2\"" (locale "line1\\nline2")))
-
-# === In context ===
 
 === locale in assignment
 msg=$"Welcome"
@@ -96,8 +86,6 @@ echo $"Hello"$"World"
 echo $"translated" "not translated"
 ---
 (command (word "echo") (word "$\"translated\"" (locale "translated")) (word "\"not translated\""))
-
-# === Brutal edge cases ===
 
 === locale in redirect
 cat > $"output"

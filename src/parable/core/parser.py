@@ -4571,9 +4571,17 @@ class Parser:
 
         return None
 
-    def parse_list(self) -> Node | None:
-        """Parse a command list (pipelines separated by &&, ||, ;, &)."""
-        self.skip_whitespace_and_newlines()
+    def parse_list(self, newline_as_separator: bool = True) -> Node | None:
+        """Parse a command list (pipelines separated by &&, ||, ;, &).
+
+        Args:
+            newline_as_separator: If True, treat newlines as implicit semicolons.
+                If False, stop at newlines (for top-level parsing).
+        """
+        if newline_as_separator:
+            self.skip_whitespace_and_newlines()
+        else:
+            self.skip_whitespace()
         pipeline = self.parse_pipeline()
         if pipeline is None:
             return None
@@ -4586,12 +4594,19 @@ class Parser:
             has_newline = False
             while not self.at_end() and self.peek() == "\n":
                 has_newline = True
+                # If not treating newlines as separators, stop here
+                if not newline_as_separator:
+                    break
                 self.advance()
                 # Skip past any pending heredoc content after newline
                 if hasattr(self, "_pending_heredoc_end") and self._pending_heredoc_end > self.pos:
                     self.pos = self._pending_heredoc_end
                     del self._pending_heredoc_end
                 self.skip_whitespace()
+
+            # If we hit a newline and not treating them as separators, stop
+            if has_newline and not newline_as_separator:
+                break
 
             op = self.parse_list_operator()
 
@@ -4670,24 +4685,28 @@ class Parser:
             else:
                 break
 
-        if not self.at_end():
-            result = self.parse_list()
+        # Parse statements separated by newlines as separate top-level nodes
+        while not self.at_end():
+            result = self.parse_list(newline_as_separator=False)
             if result is not None:
                 results.append(result)
 
-        self.skip_whitespace()
+            self.skip_whitespace()
 
-        # Skip trailing newlines and any pending heredoc content
-        while not self.at_end() and self.peek() == "\n":
-            self.advance()
-            # Skip past any pending heredoc content after newline
-            if hasattr(self, "_pending_heredoc_end") and self._pending_heredoc_end > self.pos:
-                self.pos = self._pending_heredoc_end
-                del self._pending_heredoc_end
+            # Skip newlines (and any pending heredoc content) between statements
+            found_newline = False
+            while not self.at_end() and self.peek() == "\n":
+                found_newline = True
+                self.advance()
+                # Skip past any pending heredoc content after newline
+                if hasattr(self, "_pending_heredoc_end") and self._pending_heredoc_end > self.pos:
+                    self.pos = self._pending_heredoc_end
+                    del self._pending_heredoc_end
+                self.skip_whitespace()
 
-        if not self.at_end():
-            # There's more content - not yet supported
-            raise ParseError("Parser not fully implemented yet", pos=self.pos)
+            # If no newline and not at end, we have unparsed content
+            if not found_newline and not self.at_end():
+                raise ParseError("Parser not fully implemented yet", pos=self.pos)
 
         if not results:
             return [Empty()]

@@ -194,10 +194,23 @@ class Redirect(Node):
         self.fd = fd
 
     def to_sexp(self) -> str:
-        # Target is plain string, not (word ...)
+        # Strip fd prefix from operator (e.g., "2>" -> ">")
+        op = self.op.lstrip("0123456789")
         target_val = self.target.value
-        escaped = target_val.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-        return f'(redirect "{self.op}" "{escaped}")'
+        # For fd duplication, target starts with & (e.g., "&1", "&2", "&-")
+        if target_val.startswith("&"):
+            # Determine the real operator
+            if op == ">":
+                op = ">&"
+            elif op == "<":
+                op = "<&"
+            fd_target = target_val[1:].rstrip("-")  # "&1" -> "1", "&1-" -> "1"
+            if fd_target.isdigit():
+                return f'(redirect "{op}" {fd_target})'
+            elif target_val == "&-":
+                return f'(redirect ">&-" 0)'
+        escaped = target_val.replace("\\", "\\\\").replace("\n", "\\n")
+        return f'(redirect "{op}" "{escaped}")'
 
 
 @dataclass

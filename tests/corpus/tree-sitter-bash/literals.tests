@@ -1,0 +1,550 @@
+# Converted from tree-sitter-bash corpus: literals.txt
+
+=== Literal words
+=== =============================================================================
+echo a
+echo a b
+---
+(command (word "===") (word "============================================================================="))
+(command (word "echo") (word "a"))
+(command (word "echo") (word "a") (word "b"))
+---
+
+=== Words with special characters
+=== =============================================================================
+echo {o[k]}
+echo }}}
+echo ]]] ===
+---
+(command (word "===") (word "============================================================================="))
+(command (word "echo") (word "{o[k]}"))
+(command (word "echo") (word "}}}"))
+(command (word "echo") (word "]]]") (word "==="))
+---
+
+=== Simple variable expansions
+=== =============================================================================
+echo $abc
+---
+(command (word "===") (word "============================================================================="))
+(command (word "echo") (word "$abc"))
+---
+
+=== Special variable expansions
+=== =============================================================================
+echo $# $* $@ $!
+---
+(command (word "===") (word "============================================================================="))
+(command (word "echo") (word "$#") (word "$*") (word "$@") (word "$!"))
+---
+
+=== Variable expansions
+=== =============================================================================
+echo ${}
+echo ${#}
+echo ${var1#*#}
+echo ${!abc}
+echo ${abc}
+echo ${abc:-def}
+echo ${abc:+ghi}
+echo ${abc:- }
+echo ${abc:
+}
+echo ${abc,?}
+echo ${abc^^b}
+echo ${abc@U}
+echo ${abc:- -quiet}
+---
+(command (word "===") (word "============================================================================="))
+(command (word "echo") (word "${}"))
+(command (word "echo") (word "${#}"))
+(command (word "echo") (word "${var1#*#}"))
+(command (word "echo") (word "${!abc}"))
+(command (word "echo") (word "${abc}"))
+(command (word "echo") (word "${abc:-def}"))
+(command (word "echo") (word "${abc:+ghi}"))
+(command (word "echo") (word "${abc:- }"))
+(command (word "echo") (word "${abc:\n}"))
+(command (word "echo") (word "${abc,?}"))
+(command (word "echo") (word "${abc^^b}"))
+(command (word "echo") (word "${abc@U}"))
+(command (word "echo") (word "${abc:- -quiet}"))
+---
+
+=== Variable expansions with operators
+=== =============================================================================
+A="${B[0]# }"
+C="${D/#* -E /}"
+F="${G%% *}"
+H="${I#*;}"
+J="${K##*;}"
+L="${M%;*}"
+N="${O%%;*}"
+P="${Q%|*}"
+R="${S%()}"
+T="${U%(}"
+V="${W%)}"
+X="${Y%<}"
+Z="${A#*<B>}"
+C="${D%</E>*}"
+F="${#!}"
+G=${H,,[I]}
+J=${K^^[L]}
+L="${M/'N'*/O}"
+---
+(command (word "===") (word "============================================================================="))
+(command (word "A=\"${B[0]# }\""))
+(command (word "C=\"${D/#* -E /}\""))
+(command (word "F=\"${G%% *}\""))
+(command (word "H=\"${I#*;}\""))
+(command (word "J=\"${K##*;}\""))
+(command (word "L=\"${M%;*}\""))
+(command (word "N=\"${O%%;*}\""))
+(command (word "P=\"${Q%|*}\""))
+(command (word "R=\"${S%()}\""))
+(command (word "T=\"${U%(}\""))
+(command (word "V=\"${W%)}\""))
+(command (word "X=\"${Y%<}\""))
+(command (word "Z=\"${A#*<B>}\""))
+(command (word "C=\"${D%</E>*}\""))
+(command (word "F=\"${#!}\""))
+(command (word "G=${H,,[I]}"))
+(command (word "J=${K^^[L]}"))
+(command (word "L=\"${M/'N'*/O}\""))
+---
+
+=== More Variable expansions with operators
+=== =============================================================================
+${parameter-default}
+${parameter:-default}
+${parameter=default}
+${parameter:=default}
+${parameter+alt_value}
+${parameter:+alt_value}
+${parameter?err_msg}
+${parameter:?err_msg}
+${var%Pattern}
+${var%%Pattern}
+${var:pos}
+${var:pos:len}
+${MATRIX:$(($RANDOM%${#MATRIX})):1}
+${PKG_CONFIG_LIBDIR:-${ESYSROOT}/usr/$(get_libdir)/pkgconfig}
+${ver_str::${#ver_str}-${#not_match}}
+${value#\{sd.cicd.}
+---
+(command (word "===") (word "============================================================================="))
+(command (word "${parameter-default}"))
+(command (word "${parameter:-default}"))
+(command (word "${parameter=default}"))
+(command (word "${parameter:=default}"))
+(command (word "${parameter+alt_value}"))
+(command (word "${parameter:+alt_value}"))
+(command (word "${parameter?err_msg}"))
+(command (word "${parameter:?err_msg}"))
+(command (word "${var%Pattern}"))
+(command (word "${var%%Pattern}"))
+(command (word "${var:pos}"))
+(command (word "${var:pos:len}"))
+(command (word "${MATRIX:$(($RANDOM%${#MATRIX})):1}"))
+(command (word "${PKG_CONFIG_LIBDIR:-${ESYSROOT}/usr/$(get_libdir)/pkgconfig}"))
+(command (word "${ver_str::${#ver_str}-${#not_match}}"))
+(command (word "${value#\\{sd.cicd.}"))
+---
+
+=== Variable expansions in strings
+=== =============================================================================
+A="${A:-$B/c}"
+A="${b=$c/$d}"
+MY_PV="${PV/_pre/$'\x7e'pre}"
+---
+(command (word "===") (word "============================================================================="))
+(command (word "A=\"${A:-$B/c}\""))
+(command (word "A=\"${b=$c/$d}\""))
+(command (word "MY_PV=\"${PV/_pre/'~'pre}\""))
+---
+
+=== Variable expansions with regexes
+=== =============================================================================
+A=${B//:;;/$'\n'}
+
+# escaped space
+C=${D/;\ *;|}
+MOFILES=${LINGUAS// /.po }.po
+MY_P="${PN/aspell/aspell"${ASPELL_VERSION}"}"
+pyc=${pyc//*\/}
+${pv/\.}
+${new_test_cp//"${old_ver_cp}"/}
+${tests_to_run//"${classes}"\/}
+${allarchives// /\\|}
+---
+(command (word "===") (word "============================================================================="))
+(command (word "A=${B//:;;/'\n'}"))
+(command (word "C=${D/;\\ *;|}"))
+(command (word "MOFILES=${LINGUAS// /.po }.po"))
+(command (word "MY_P=\"${PN/aspell/aspell\"${ASPELL_VERSION}\"}\""))
+(command (word "pyc=${pyc//*\\/}"))
+(command (word "${pv/\\.}"))
+(command (word "${new_test_cp//\"${old_ver_cp}\"/}"))
+(command (word "${tests_to_run//\"${classes}\"\\/}"))
+(command (word "${allarchives// /\\\\|}"))
+---
+
+=== Other variable expansion operators
+=== =============================================================================
+cat ${BAR} ${ABC=def} ${GHI:?jkl}
+[ "$a" != "${a#[Bc]}" ]
+---
+(command (word "===") (word "============================================================================="))
+(command (word "cat") (word "${BAR}") (word "${ABC=def}") (word "${GHI:?jkl}"))
+(command (word "[") (word "\"$a\"") (word "!=") (word "\"${a#[Bc]}\"") (word "]"))
+---
+
+=== Variable Expansions: Length
+=== =============================================================================
+${parameter:-1}
+
+${parameter: -1}
+
+${parameter:(-1)}
+
+${matrix:$(($random%${#matrix})):1}
+
+"${_component_to_single:${len}:2}"
+
+"${PN::-1}"
+
+${trarr:$(ver_cut 2):1}
+
+${comp[@]:start:end*2-start}
+---
+(command (word "===") (word "============================================================================="))
+(command (word "${parameter:-1}"))
+(command (word "${parameter: -1}"))
+(command (word "${parameter:(-1)}"))
+(command (word "${matrix:$(($random%${#matrix})):1}"))
+(command (word "\"${_component_to_single:${len}:2}\""))
+(command (word "\"${PN::-1}\""))
+(command (word "${trarr:$(ver_cut 2):1}"))
+(command (word "${comp[@]:start:end*2-start}"))
+---
+
+=== Variable Expansions with operators
+=== =============================================================================
+${parameter-default}
+${parameter- default}
+${!varprefix*}
+${!varprefix@}
+${parameter@U}
+---
+(command (word "===") (word "============================================================================="))
+(command (word "${parameter-default}"))
+(command (word "${parameter- default}"))
+(command (word "${!varprefix*}"))
+(command (word "${!varprefix@}"))
+(command (word "${parameter@U}"))
+---
+
+=== Variable Expansions: Bizarre Cases
+=== =============================================================================
+${!#}
+${!# }
+${!##}
+${!## }
+${!##/}
+# here be dragons
+echo "${kw}? ( ${cond:+${cond}? (} ${baseuri}-${ver}-${kw}.${suff} ${cond:+) })"
+---
+(command (word "===") (word "============================================================================="))
+(command (word "${!#}"))
+(command (word "${!# }"))
+(command (word "${!##}"))
+(command (word "${!## }"))
+(command (word "${!##/}"))
+(command (word "echo") (word "\"${kw}? ( ${cond:+${cond}? (} ${baseuri}-${ver}-${kw}.${suff} ${cond:+) })\""))
+---
+
+=== Variable Expansions: Weird Cases
+=== =============================================================================
+${completions[*]}
+${=1}
+${2?}
+${p_key#*=}
+${abc:- }
+${B[0]# }
+${to_enables[0]##*/}
+exec "${0#-}" --rcfile "${BASH_IT_BASHRC:-${HOME?}/.bashrc}"
+recho "TDEFAULTS = ${selvecs:+-DSELECT_VECS=\"$selvecs\"}"
+local msg="${2:-command '$1' does not exist}"
+${cdir:+#}
+${dict_langs:+;}
+${UTIL_LINUX_LIBC[@]/%/? ( sys-apps/util-linux )}
+${id}${2+ ${2}}
+${BRANDING_GCC_PKGVERSION/(/(Gentoo ${PVR}${extvers}, } # look at that parenthesis!
+some-command ${foo:+--arg <(printf '%s\n' "$foo")}
+---
+(command (word "===") (word "============================================================================="))
+(command (word "${completions[*]}"))
+(command (word "${=1}"))
+(command (word "${2?}"))
+(command (word "${p_key#*=}"))
+(command (word "${abc:- }"))
+(command (word "${B[0]# }"))
+(command (word "${to_enables[0]##*/}"))
+(command (word "exec") (word "\"${0#-}\"") (word "--rcfile") (word "\"${BASH_IT_BASHRC:-${HOME?}/.bashrc}\""))
+(command (word "recho") (word "\"TDEFAULTS = ${selvecs:+-DSELECT_VECS=\\\"$selvecs\\\"}\""))
+(command (word "local") (word "msg=\"${2:-command '$1' does not exist}\""))
+(command (word "${cdir:+#}"))
+(command (word "${dict_langs:+;}"))
+(command (word "${UTIL_LINUX_LIBC[@]/%/? ( sys-apps/util-linux )}"))
+(command (word "${id}${2+ ${2}}"))
+(command (word "${BRANDING_GCC_PKGVERSION/(/(Gentoo ${PVR}${extvers}, }"))
+(command (word "some-command") (word "${foo:+--arg <(printf '%s\\n' \"$foo\")}"))
+---
+
+=== Variable Expansions: Regex
+=== =============================================================================
+A=${B//:;;/$'\n'}
+C="${D/#* -E /}"
+BASH_IT_GIT_URL="${BASH_IT_GIT_URL/git@/https://}"
+10#${command_start##*.}
+echo ${LIB_DEPEND//\[static-libs(+)]}
+${ALL_LLVM_TARGETS[@]/%/(-)?}
+filterdiff -p1 ${paths[@]/#/-i }
+${cflags//-O? /$(get-flag O) }
+curf="${f%'-roff2html'*}.html"
+reff="${f/'-roff2html'*/'-ref'}.html"
+---
+(command (word "===") (word "============================================================================="))
+(command (word "A=${B//:;;/'\n'}"))
+(command (word "C=\"${D/#* -E /}\""))
+(command (word "BASH_IT_GIT_URL=\"${BASH_IT_GIT_URL/git@/https://}\""))
+(command (word "10#${command_start##*.}"))
+(command (word "echo") (word "${LIB_DEPEND//\\[static-libs(+)]}"))
+(command (word "${ALL_LLVM_TARGETS[@]/%/(-)?}"))
+(command (word "filterdiff") (word "-p1") (word "${paths[@]/#/-i }"))
+(command (word "${cflags//-O? /$(get-flag O) }"))
+(command (word "curf=\"${f%'-roff2html'*}.html\""))
+(command (word "reff=\"${f/'-roff2html'*/'-ref'}.html\""))
+---
+
+=== Words ending with '$'
+=== =============================================================================
+grep ^${var}$
+---
+(command (word "===") (word "============================================================================="))
+(command (word "grep") (word "^${var}$"))
+---
+
+=== Command substitutions
+=== =============================================================================
+echo `echo hi`
+echo `echo hi; echo there`
+echo $(echo $(echo hi))
+echo $(< some-file)
+
+# both of these are concatenations!
+echo `echo otherword`word
+echo word`echo otherword`
+---
+(command (word "===") (word "============================================================================="))
+(command (word "echo") (word "`echo hi`"))
+(command (word "echo") (word "`echo hi; echo there`"))
+(command (word "echo") (word "$(echo $(echo hi))"))
+(command (word "echo") (word "$(< some-file)"))
+(command (word "echo") (word "`echo otherword`word"))
+(command (word "echo") (word "word`echo otherword`"))
+---
+
+=== Process substitutions
+=== =============================================================================
+wc -c <(echo abc && echo def)
+wc -c <(echo abc; echo def)
+echo abc > >(wc -c)
+---
+(command (word "===") (word "============================================================================="))
+(command (word "wc") (word "-c") (word "<(echo abc && echo def)"))
+(command (word "wc") (word "-c") (word "<(echo abc; echo def)"))
+(command (word "echo") (word "abc") (redirect ">" ">(wc -c)"))
+---
+
+=== Single quoted strings
+=== =============================================================================
+echo 'a b' 'c d'
+---
+(command (word "===") (word "============================================================================="))
+(command (word "echo") (word "'a b'") (word "'c d'"))
+---
+
+=== Double quoted strings
+=== =============================================================================
+echo "a" "b"
+echo "a ${b} c" "d $e"
+echo "(())"
+---
+(command (word "===") (word "============================================================================="))
+(command (word "echo") (word "\"a\"") (word "\"b\""))
+(command (word "echo") (word "\"a ${b} c\"") (word "\"d $e\""))
+(command (word "echo") (word "\"(())\""))
+---
+
+=== Strings containing command substitutions
+=== =============================================================================
+find "`dirname $file`" -name "$base"'*'
+---
+(command (word "===") (word "============================================================================="))
+(command (word "find") (word "\"`dirname $file`\"") (word "-name") (word "\"$base\"'*'"))
+---
+
+=== Strings containing escape sequence
+=== =============================================================================
+echo "\"The great escape\`\${var}"
+---
+(command (word "===") (word "============================================================================="))
+(command (word "echo") (word "\"\\\"The great escape\\`\\${var}\""))
+---
+
+=== Strings containing special characters
+=== =============================================================================
+echo "s/$/'/"
+echo "#"
+echo "s$"
+---
+(command (word "===") (word "============================================================================="))
+(command (word "echo") (word "\"s/$/'/\""))
+(command (word "echo") (word "\"#\""))
+(command (word "echo") (word "\"s$\""))
+---
+
+=== Strings with ANSI-C quoting
+=== =============================================================================
+echo $'Here\'s Johnny!\r\n'
+---
+(command (word "===") (word "============================================================================="))
+(command (word "echo") (word "'Here'\\''s Johnny!\n'"))
+---
+
+=== Arrays and array expansions
+=== =============================================================================
+a=()
+b=(1 2 3)
+
+echo ${a[@]}
+echo ${#b[@]}
+
+a[$i]=50
+a+=(foo "bar" $(baz))
+
+printf "  %-9s" "${seq0:-(default)}"
+---
+(command (word "===") (word "============================================================================="))
+(command (word "a=()"))
+(command (word "b=(1 2 3)"))
+(command (word "echo") (word "${a[@]}"))
+(command (word "echo") (word "${#b[@]}"))
+(command (word "a[$i]=50"))
+(command (word "a+=(foo \"bar\" $(baz))"))
+(command (word "printf") (word "\"  %-9s\"") (word "\"${seq0:-(default)}\""))
+---
+
+=== Escaped characters in strings
+=== =============================================================================
+echo -ne "\033k$1\033\\" > /dev/stderr
+---
+(command (word "===") (word "============================================================================="))
+(command (word "echo") (word "-ne") (word "\"\\033k$1\\033\\\\\"") (redirect ">" "/dev/stderr"))
+---
+
+=== Words containing bare '#'
+=== =============================================================================
+curl -# localhost #comment without space
+nix build nixpkgs#hello -v # comment with space
+---
+(command (word "===") (word "============================================================================="))
+(command (word "curl") (word "-#") (word "localhost"))
+(command (word "nix") (word "build") (word "nixpkgs#hello") (word "-v"))
+---
+
+=== Words containing # that are not comments
+=== =============================================================================
+echo 'word'#not-comment # a legit comment
+echo $(uname -a)#not-comment # a legit comment
+echo `uname -a`#not-comment # a legit comment
+echo $hey#not-comment # a legit comment
+var=#not-comment # a legit comment
+echo "'$var'" # -> '#not-comment'
+---
+(command (word "===") (word "============================================================================="))
+(command (word "echo") (word "'word'#not-comment"))
+(command (word "echo") (word "$(uname -a)#not-comment"))
+(command (word "echo") (word "`uname -a`#not-comment"))
+(command (word "echo") (word "$hey#not-comment"))
+(command (word "var=#not-comment"))
+(command (word "echo") (word "\"'$var'\""))
+---
+
+=== Multiple variable assignments
+=== =============================================================================
+component_type="${1}" item_name="${2?}"
+---
+(command (word "===") (word "============================================================================="))
+(command (word "component_type=\"${1}\"") (word "item_name=\"${2?}\""))
+---
+
+=== Arithmetic expansions
+=== =============================================================================
+echo $((1 + 2 - 3 * 4 / 5))
+a=$((6 % 7 ** 8 << 9 >> 10 & 11 | 12 ^ 13))
+$(((${1:-${SECONDS}} % 12) + 144))
+((foo=0))
+echo $((bar=1))
+echo $((-1, 1))
+echo $((! -a || ~ +b || ++c || --d))
+echo $((foo-- || bar++))
+(("${MULTIBUILD_VARIANTS}" > 1))
+$(("$(stat --printf '%05a' "${save_file}")" & 07177))
+soft_errors_count=$[soft_errors_count + 1]
+---
+(command (word "===") (word "============================================================================="))
+(command (word "echo") (word "$((1 + 2 - 3 * 4 / 5))"))
+(command (word "a=$((6 % 7 ** 8 << 9 >> 10 & 11 | 12 ^ 13))"))
+(command (word "$(((${1:-${SECONDS}} % 12) + 144))"))
+(arith (word "foo=0"))
+(command (word "echo") (word "$((bar=1))"))
+(command (word "echo") (word "$((-1, 1))"))
+(command (word "echo") (word "$((! -a || ~ +b || ++c || --d))"))
+(command (word "echo") (word "$((foo-- || bar++))"))
+(arith (word "\"${MULTIBUILD_VARIANTS}\" > 1"))
+(command (word "$((\"$(stat --printf '%05a' \"${save_file}\")\" & 07177))"))
+(command (word "soft_errors_count=$[soft_errors_count + 1]"))
+---
+
+=== Concatenation with double backticks
+=== =============================================================================
+main() {
+    local foo="asd"`
+        `"fgh"
+}
+---
+(command (word "===") (word "============================================================================="))
+(function "main" (brace-group (command (word "local") (word "foo=\"asd\"`\n        `\"fgh\""))))
+---
+
+=== Brace expressions and lookalikes
+=== =============================================================================
+echo {1..2}
+echo {0..5}
+echo {0..2 # not a brace expression
+echo }{0..2}
+echo {0..n} # not a brace expression
+echo {0..n..2} # not a brace expression
+echo {0..2}{1..2}
+---
+(command (word "===") (word "============================================================================="))
+(command (word "echo") (word "{1..2}"))
+(command (word "echo") (word "{0..5}"))
+(command (word "echo") (word "{0..2"))
+(command (word "echo") (word "}{0..2}"))
+(command (word "echo") (word "{0..n}"))
+(command (word "echo") (word "{0..n..2}"))
+(command (word "echo") (word "{0..2}{1..2}"))
+---

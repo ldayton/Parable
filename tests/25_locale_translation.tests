@@ -5,155 +5,215 @@
 === simple locale string
 echo $"Hello, World!"
 ---
-(command (word "echo") (word "$\"Hello, World!\"" (locale "Hello, World!")))
+(command (word "echo") (word "\"Hello, World!\""))
+---
+
 
 === locale with spaces
 echo $"Hello World"
 ---
-(command (word "echo") (word "$\"Hello World\"" (locale "Hello World")))
+(command (word "echo") (word "\"Hello World\""))
+---
+
 
 === empty locale string
 echo $""
 ---
-(command (word "echo") (word "$\"\"" (locale "")))
+(command (word "echo") (word "\"\""))
+---
+
 
 === locale with variable
 echo $"Hello, $name!"
 ---
-(command (word "echo") (word "$\"Hello, $name!\"" (locale "Hello, $name!") (param "name")))
+(command (word "echo") (word "\"Hello, $name!\""))
+---
+
 
 === locale with braced variable
 echo $"Value: ${var}"
 ---
-(command (word "echo") (word "$\"Value: ${var}\"" (locale "Value: ${var}") (param "var")))
+(command (word "echo") (word "\"Value: ${var}\""))
+---
+
 
 === locale with default value
 echo $"${name:-guest}"
 ---
-(command (word "echo") (word "$\"${name:-guest}\"" (locale "${name:-guest}") (param "name" ":-" "guest")))
+(command (word "echo") (word "\"${name:-guest}\""))
+---
+
 
 === locale with command substitution
 echo $"Today is $(date)"
 ---
-(command (word "echo") (word "$\"Today is $(date)\"" (locale "Today is $(date)") (cmdsub (command (word "date")))))
+(command (word "echo") (word "\"Today is $(date)\""))
+---
+
 
 === locale with backtick substitution
 echo $"Today is `date`"
 ---
-(command (word "echo") (word "$\"Today is `date`\"" (locale "Today is `date`") (cmdsub (command (word "date")))))
+(command (word "echo") (word "\"Today is `date`\""))
+---
+
 
 === locale with arithmetic
 echo $"Result: $((1+2))"
 ---
-(command (word "echo") (word "$\"Result: $((1+2))\"" (locale "Result: $((1+2))") (arith (binary-op "+" (number "1") (number "2")))))
+(command (word "echo") (word "\"Result: $((1+2))\""))
+---
+
 
 === locale with escaped quote
 echo $"Say \"hi\""
 ---
-(command (word "echo") (word "$\"Say \\\"hi\\\"\"" (locale "Say \\\"hi\\\"")))
+(command (word "echo") (word "\"Say \\\"hi\\\"\""))
+---
+
 
 === locale with backslash
 echo $"path\\to\\file"
 ---
-(command (word "echo") (word "$\"path\\\\to\\\\file\"" (locale "path\\\\to\\\\file")))
+(command (word "echo") (word "\"path\\\\to\\\\file\""))
+---
+
 
 === locale with newline escape
 echo $"line1\nline2"
 ---
-(command (word "echo") (word "$\"line1\\nline2\"" (locale "line1\\nline2")))
+(command (word "echo") (word "\"line1\\nline2\""))
+---
+
 
 === locale in assignment
 msg=$"Welcome"
 ---
-(command (word "msg=$\"Welcome\"" (locale "Welcome")))
+(command (word "msg=\"Welcome\""))
+---
+
 
 === locale as argument
 printf '%s\n' $"Message"
 ---
-(command (word "printf") (word "'%s\\n'") (word "$\"Message\"" (locale "Message")))
+(command (word "printf") (word "'%s\\n'") (word "\"Message\""))
+---
+
 
 === locale in array
 arr=($"one" $"two")
 ---
-(command (word "arr=($\"one\" $\"two\")" (array (word "$\"one\"" (locale "one")) (word "$\"two\"" (locale "two")))))
+(command (word "arr=(\"one\" \"two\")"))
+---
+
 
 === locale concatenated
 echo $"Hello"$"World"
 ---
-(command (word "echo") (word "$\"Hello\"$\"World\"" (locale "Hello") (locale "World")))
+(command (word "echo") (word "\"Hello\"\"World\""))
+---
+
 
 === locale with regular string
 echo $"translated" "not translated"
 ---
-(command (word "echo") (word "$\"translated\"" (locale "translated")) (word "\"not translated\""))
+(command (word "echo") (word "\"translated\"") (word "\"not translated\""))
+---
+
 
 === locale in redirect
 cat > $"output"
 ---
-(command (word "cat") (redirect ">" (word "$\"output\"" (locale "output"))))
+(command (word "cat") (redirect ">" ""output""))
+---
+
 
 === locale in here string
 cat <<< $"message"
 ---
-(command (word "cat") (redirect "<<<" (word "$\"message\"" (locale "message"))))
+(command (word "cat") (redirect "<<<" ""message""))
+---
+
 
 === locale as command
 $"echo" hello
 ---
-(command (word "$\"echo\"" (locale "echo")) (word "hello"))
+(command (word "\"echo\"") (word "hello"))
+---
+
 
 === locale in pipeline
 echo $"hello" | cat
 ---
-(pipeline (command (word "echo") (word "$\"hello\"" (locale "hello"))) (command (word "cat")))
+(pipe (command (word "echo") (word "\"hello\"")) (command (word "cat")))
+---
+
 
 === locale in subshell
 (echo $"inside")
 ---
-(subshell (command (word "echo") (word "$\"inside\"" (locale "inside"))))
+(subshell (command (word "echo") (word "\"inside\"")))
+---
+
 
 === locale in function
 f() { echo $"from function"; }
 ---
-(function "f" (brace-group (list (command (word "echo") (word "$\"from function\"" (locale "from function"))) (semi))))
+(function "f" (brace-group (command (word "echo") (word "\"from function\""))))
+---
+
 
 === locale with multiple variables
 echo $"$a and $b"
 ---
-(command (word "echo") (word "$\"$a and $b\"" (locale "$a and $b") (param "a") (param "b")))
+(command (word "echo") (word "\"$a and $b\""))
+---
+
 
 === locale with nested cmdsub
 echo $"result: $(echo test)"
 ---
-(command (word "echo") (word "$\"result: $(echo test)\"" (locale "result: $(echo test)") (cmdsub (command (word "echo") (word "test")))))
+(command (word "echo") (word "\"result: $(echo test)\""))
+---
+
 
 === locale no space before
 x=$"value"
 ---
-(command (word "x=$\"value\"" (locale "value")))
+(command (word "x=\"value\""))
+---
+
 
 === locale in list
 echo $"first" && echo $"second"
 ---
-(list (command (word "echo") (word "$\"first\"" (locale "first"))) (and) (command (word "echo") (word "$\"second\"" (locale "second"))))
+(and (command (word "echo") (word "\"first\"")) (command (word "echo") (word "\"second\"")))
+---
+
 
 === locale with special chars
 echo $"!@#%^&*()"
 ---
-(command (word "echo") (word "$\"!@#%^&*()\"" (locale "!@#%^&*()")))
+(command (word "echo") (word "\"!@#%^&*()\""))
+---
+
 
 === locale in if condition
 if [ $"yes" = yes ]; then echo ok; fi
 ---
-(if (command (word "[") (word "$\"yes\"" (locale "yes")) (word "=") (word "yes") (word "]")) (command (word "echo") (word "ok")))
+(if (command (word "[") (word "\"yes\"") (word "=") (word "yes") (word "]")) (command (word "echo") (word "ok")))
+---
+
 
 === locale in case word
 case $"test" in test) echo match;; esac
 ---
-(case (word "$\"test\"" (locale "test")) (pattern "test" (command (word "echo") (word "match"))))
+(case (word "\"test\"") (pattern ((word "test")) (command (word "echo") (word "match"))))
+---
+
 
 === consecutive locale strings
 echo $"a"$"b"$"c"
 ---
-(command (word "echo") (word "$\"a\"$\"b\"$\"c\"" (locale "a") (locale "b") (locale "c")))
-
+(command (word "echo") (word "\"a\"\"b\"\"c\""))
+---

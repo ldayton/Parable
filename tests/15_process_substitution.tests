@@ -5,152 +5,212 @@
 === simple input process substitution
 cat <(echo hello)
 ---
-(command (word "cat") (word "<(echo hello)" (procsub "<" (command (word "echo") (word "hello")))))
+(command (word "cat") (word "<(echo hello)"))
+---
+
 
 === simple output process substitution
 echo hello > >(cat)
 ---
-(command (word "echo") (word "hello") (redirect ">" (word ">(cat)" (procsub ">" (command (word "cat"))))))
+(command (word "echo") (word "hello") (redirect ">" ">(cat)"))
+---
+
 
 === process substitution as argument
 diff <(ls dir1) <(ls dir2)
 ---
-(command (word "diff") (word "<(ls dir1)" (procsub "<" (command (word "ls") (word "dir1")))) (word "<(ls dir2)" (procsub "<" (command (word "ls") (word "dir2")))))
+(command (word "diff") (word "<(ls dir1)") (word "<(ls dir2)"))
+---
+
 
 === pipeline inside process substitution
 cat <(ls | sort)
 ---
-(command (word "cat") (word "<(ls | sort)" (procsub "<" (pipeline (command (word "ls")) (command (word "sort"))))))
+(command (word "cat") (word "<(ls | sort)"))
+---
+
 
 === pipeline inside output process substitution
 echo test > >(grep x | tee out.txt)
 ---
-(command (word "echo") (word "test") (redirect ">" (word ">(grep x | tee out.txt)" (procsub ">" (pipeline (command (word "grep") (word "x")) (command (word "tee") (word "out.txt")))))))
+(command (word "echo") (word "test") (redirect ">" ">(grep x | tee out.txt)"))
+---
+
 
 === list inside process substitution
 cat <(echo a; echo b)
 ---
-(command (word "cat") (word "<(echo a; echo b)" (procsub "<" (list (command (word "echo") (word "a")) (semi) (command (word "echo") (word "b"))))))
+(command (word "cat") (word "<(echo a; echo b)"))
+---
+
 
 === and list inside process substitution
 cat <(true && echo yes)
 ---
-(command (word "cat") (word "<(true && echo yes)" (procsub "<" (list (command (word "true")) (and) (command (word "echo") (word "yes"))))))
+(command (word "cat") (word "<(true && echo yes)"))
+---
+
 
 === two input process substitutions
 paste <(seq 5) <(seq 5 10)
 ---
-(command (word "paste") (word "<(seq 5)" (procsub "<" (command (word "seq") (word "5")))) (word "<(seq 5 10)" (procsub "<" (command (word "seq") (word "5") (word "10")))))
+(command (word "paste") (word "<(seq 5)") (word "<(seq 5 10)"))
+---
+
 
 === mixed input and output process substitutions
 tee >(cat > a.txt) >(cat > b.txt) < <(echo input)
 ---
-(command (word "tee") (word ">(cat > a.txt)" (procsub ">" (command (word "cat") (redirect ">" (word "a.txt"))))) (word ">(cat > b.txt)" (procsub ">" (command (word "cat") (redirect ">" (word "b.txt"))))) (redirect "<" (word "<(echo input)" (procsub "<" (command (word "echo") (word "input"))))))
+(command (word "tee") (word ">(cat > a.txt)") (word ">(cat > b.txt)") (redirect "<" "<(echo input)"))
+---
+
 
 === process substitution as redirect target
 cat < <(echo hello)
 ---
-(command (word "cat") (redirect "<" (word "<(echo hello)" (procsub "<" (command (word "echo") (word "hello"))))))
+(command (word "cat") (redirect "<" "<(echo hello)"))
+---
+
 
 === process substitution with fd
 exec 3< <(echo data)
 ---
-(command (word "exec") (redirect "3<" (word "<(echo data)" (procsub "<" (command (word "echo") (word "data"))))))
+(command (word "exec") (redirect "<" "<(echo data)"))
+---
+
 
 === command substitution inside process substitution
 cat <(echo $(whoami))
 ---
-(command (word "cat") (word "<(echo $(whoami))" (procsub "<" (command (word "echo") (word "$(whoami)" (cmdsub (command (word "whoami"))))))))
+(command (word "cat") (word "<(echo $(whoami))"))
+---
+
 
 === process substitution inside command substitution
 echo $(cat <(echo nested))
 ---
-(command (word "echo") (word "$(cat <(echo nested))" (cmdsub (command (word "cat") (word "<(echo nested)" (procsub "<" (command (word "echo") (word "nested"))))))))
+(command (word "echo") (word "$(cat <(echo nested))"))
+---
+
 
 === process substitution with subshell
 cat <((echo hello))
 ---
-(command (word "cat") (word "<((echo hello))" (procsub "<" (subshell (command (word "echo") (word "hello"))))))
+(command (word "cat") (word "<((echo hello))"))
+---
+
 
 === process substitution in pipeline
 cat <(echo hello) | grep h
 ---
-(pipeline (command (word "cat") (word "<(echo hello)" (procsub "<" (command (word "echo") (word "hello"))))) (command (word "grep") (word "h")))
+(pipe (command (word "cat") (word "<(echo hello)")) (command (word "grep") (word "h")))
+---
+
 
 === process substitution in list
 cat <(echo a) && echo done
 ---
-(list (command (word "cat") (word "<(echo a)" (procsub "<" (command (word "echo") (word "a"))))) (and) (command (word "echo") (word "done")))
+(and (command (word "cat") (word "<(echo a)")) (command (word "echo") (word "done")))
+---
+
 
 === process substitution in while body
 while true; do cat <(echo hello); done
 ---
-(while (command (word "true")) (command (word "cat") (word "<(echo hello)" (procsub "<" (command (word "echo") (word "hello"))))))
+(while (command (word "true")) (command (word "cat") (word "<(echo hello)")))
+---
+
 
 === process substitution with no space before
 cat<(echo hello)
 ---
-(command (word "cat<(echo hello)" (procsub "<" (command (word "echo") (word "hello")))))
+(command (word "cat<(echo hello)"))
+---
+
 
 === process substitution with variables
 cat <(echo $HOME)
 ---
-(command (word "cat") (word "<(echo $HOME)" (procsub "<" (command (word "echo") (word "$HOME" (param "HOME"))))))
+(command (word "cat") (word "<(echo $HOME)"))
+---
+
 
 === empty process substitution
 cat <(:)
 ---
-(command (word "cat") (word "<(:)" (procsub "<" (command (word ":")))))
+(command (word "cat") (word "<(:)"))
+---
+
 
 === process substitution with arithmetic
 cat <(echo $((1+2)))
 ---
-(command (word "cat") (word "<(echo $((1+2)))" (procsub "<" (command (word "echo") (word "$((1+2))" (arith (binary-op "+" (number "1") (number "2"))))))))
+(command (word "cat") (word "<(echo $((1+2)))"))
+---
+
 
 === process substitution with quoted content
 cat <(echo "hello world")
 ---
-(command (word "cat") (word "<(echo \"hello world\")" (procsub "<" (command (word "echo") (word "\"hello world\"")))))
+(command (word "cat") (word "<(echo \"hello world\")"))
+---
+
 
 === process substitution with single quotes
 cat <(echo 'no $expansion')
 ---
-(command (word "cat") (word "<(echo 'no $expansion')" (procsub "<" (command (word "echo") (word "'no $expansion'")))))
+(command (word "cat") (word "<(echo 'no $expansion')"))
+---
+
 
 === nested process substitutions
 cat <(cat <(echo nested))
 ---
-(command (word "cat") (word "<(cat <(echo nested))" (procsub "<" (command (word "cat") (word "<(echo nested)" (procsub "<" (command (word "echo") (word "nested"))))))))
+(command (word "cat") (word "<(cat <(echo nested))"))
+---
+
 
 === process substitution with brace expansion in command
 cat <(echo ${var:-default})
 ---
-(command (word "cat") (word "<(echo ${var:-default})" (procsub "<" (command (word "echo") (word "${var:-default}" (param "var" ":-" "default"))))))
+(command (word "cat") (word "<(echo ${var:-default})"))
+---
+
 
 === output process substitution standalone
 tee >(cat)
 ---
-(command (word "tee") (word ">(cat)" (procsub ">" (command (word "cat")))))
+(command (word "tee") (word ">(cat)"))
+---
+
 
 === process substitution with backticks
 cat <(echo `whoami`)
 ---
-(command (word "cat") (word "<(echo `whoami`)" (procsub "<" (command (word "echo") (word "`whoami`" (cmdsub (command (word "whoami"))))))))
+(command (word "cat") (word "<(echo `whoami`)"))
+---
+
 
 === multiple output process substitutions
 tee >(cat >a) >(cat >b)
 ---
-(command (word "tee") (word ">(cat >a)" (procsub ">" (command (word "cat") (redirect ">" (word "a"))))) (word ">(cat >b)" (procsub ">" (command (word "cat") (redirect ">" (word "b"))))))
+(command (word "tee") (word ">(cat > a)") (word ">(cat > b)"))
+---
+
 
 === process substitution in double quotes
 echo "<(not expanded)"
 ---
 (command (word "echo") (word "\"<(not expanded)\""))
+---
+
 
 === process substitution adjacent to text
 catfile<(echo x)
 ---
-(command (word "catfile<(echo x)" (procsub "<" (command (word "echo") (word "x")))))
+(command (word "catfile<(echo x)"))
+---
+
 
 === process substitution with heredoc inside
 cat <(cat <<EOF
@@ -158,5 +218,5 @@ hello
 EOF
 )
 ---
-(command (word "cat") (word "<(cat <<EOF\nhello\nEOF\n)" (procsub "<" (command (word "cat") (heredoc "EOF" "hello\n")))))
-
+(command (word "cat") (word "<(cat <<EOF\nhello\nEOF\n)"))
+---

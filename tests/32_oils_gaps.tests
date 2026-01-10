@@ -7,21 +7,29 @@
 echo hi # don't worry
 ---
 (command (word "echo") (word "hi"))
+---
+
 
 === parenthesis in comment
 echo hi # (note)
 ---
 (command (word "echo") (word "hi"))
+---
+
 
 === parenthesis mid-comment
 echo hi # see (foo) for details
 ---
 (command (word "echo") (word "hi"))
+---
+
 
 === comment immediately after hash
 echo hi #(note)
 ---
 (command (word "echo") (word "hi"))
+---
+
 
 # === Comments after compound commands ===
 
@@ -29,21 +37,29 @@ echo hi #(note)
 if true; then echo; fi  # comment
 ---
 (if (command (word "true")) (command (word "echo")))
+---
+
 
 === comment after done
 while true; do echo; done  # comment
 ---
 (while (command (word "true")) (command (word "echo")))
+---
+
 
 === comment after esac
 case $x in a) echo;; esac  # comment
 ---
-(case (word "$x" (param "x")) (pattern "a" (command (word "echo"))))
+(case (word "$x") (pattern ((word "a")) (command (word "echo"))))
+---
+
 
 === comment after brace group
 { echo; }  # comment
 ---
-(brace-group (list (command (word "echo")) (semi)))
+(brace-group (command (word "echo")))
+---
+
 
 # === Line continuation after && and || ===
 
@@ -51,23 +67,30 @@ case $x in a) echo;; esac  # comment
 echo a &&
 echo b
 ---
-(list (command (word "echo") (word "a")) (and) (command (word "echo") (word "b")))
+(and (command (word "echo") (word "a")) (command (word "echo") (word "b")))
+---
+
 
 === newline after ||
 echo a ||
 echo b
 ---
-(list (command (word "echo") (word "a")) (or) (command (word "echo") (word "b")))
+(or (command (word "echo") (word "a")) (command (word "echo") (word "b")))
+---
+
 
 === newline after && in test
 [[ $x == y ]] &&
 echo yes
 ---
-(list (cond-expr (binary-test "==" (word "$x" (param "x")) (word "y"))) (and) (command (word "echo") (word "yes")))
+(and (cond (cond-binary "==" (cond-term "$x") (cond-term "y"))) (command (word "echo") (word "yes")))
+---
+
 
 === multiple newlines after &&
 echo a &&
 
 echo b
 ---
-(list (command (word "echo") (word "a")) (and) (command (word "echo") (word "b")))
+(and (command (word "echo") (word "a")) (command (word "echo") (word "b")))
+---

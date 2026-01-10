@@ -534,6 +534,8 @@ class Word(Node):
         value = self._expand_all_ansi_c_quotes(self.value)
         # Format command substitutions
         value = self._format_command_substitutions(value)
+        # Bash doubles CTLESC (\x01) characters in output
+        value = value.replace("\x01", "\x01\x01")
         return value.rstrip("\n")
 
 

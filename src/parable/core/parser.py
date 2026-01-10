@@ -4717,7 +4717,7 @@ class Parser:
 
         results = []
 
-        # Parse leading comments
+        # Skip leading comments (bash-oracle doesn't output them)
         while True:
             self.skip_whitespace()
             # Skip newlines but not comments
@@ -4726,10 +4726,9 @@ class Parser:
             if self.at_end():
                 break
             comment = self.parse_comment()
-            if comment:
-                results.append(comment)
-            else:
+            if not comment:
                 break
+            # Don't add to results - bash-oracle doesn't output comments
 
         # Parse statements separated by newlines as separate top-level nodes
         while not self.at_end():

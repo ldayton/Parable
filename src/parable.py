@@ -2648,7 +2648,6 @@ def _str_contains(haystack: str, needle: str) -> bool:
     return haystack.find(needle) != -1
 
 
-
 class Parser:
     """Recursive descent parser for bash."""
 

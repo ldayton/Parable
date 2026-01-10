@@ -224,7 +224,7 @@ def check_file(filepath):
             if isinstance(node.func, ast.Name) and node.func.id == "zip":
                 errors.append((lineno, "zip(): use indexed loop"))
 
-        # in (search) - Compare with In operator (allowed for sets, banned for list/string)
+        # in (list/string) - banned for O(n) search, allowed for O(1) set lookup
         if isinstance(node, ast.Compare):
             for i, op in enumerate(node.ops):
                 if isinstance(op, ast.In):
@@ -243,9 +243,7 @@ def check_file(filepath):
                         or comparator.id.endswith("_sets")
                     )
                     if not (is_set_literal or is_set_call or is_set_name):
-                        errors.append(
-                            (lineno, "in (search): use explicit loop for list/string search")
-                        )
+                        errors.append((lineno, "in (list/string): use explicit loop or .find()"))
 
         # or-default pattern: x or []
         if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.Or):

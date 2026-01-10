@@ -2450,7 +2450,7 @@ function FormatCmdsubNode(node, indent, in_procsub) {
 			}
 			i += 1;
 		}
-		var pattern_str = ("\n" + RepeatStr(" ", indent + 4)).join(patterns);
+		var pattern_str = patterns.join("\n" + RepeatStr(" ", indent + 4));
 		return "case " + word + " in" + pattern_str + "\n" + sp + "esac";
 	}
 	if (node.kind === "function") {

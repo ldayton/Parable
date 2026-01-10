@@ -433,8 +433,9 @@ class JSTranspiler(ast.NodeVisitor):
             # Convert remaining snake_case to camelCase
             if "_" in method:
                 method = self._camel_case(method)
-            # Special case: "".join(lst) -> lst.join("")
-            if method == "join" and isinstance(node.func.value, ast.Constant):
+            # Special case: separator.join(lst) -> lst.join(separator)
+            # In Python, join is a string method; in JS, it's an array method
+            if method == "join" and len(node.args) == 1:
                 sep = self.visit_expr(node.func.value)
                 return f"{args}.join({sep})"
             return f"{obj}.{method}({args})"

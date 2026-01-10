@@ -134,6 +134,11 @@ class Parser:
             ch = self.peek()
             if ch in " \t\n":
                 self.advance()
+                # After advancing past a newline, skip any pending heredoc content
+                if ch == "\n":
+                    if hasattr(self, "_pending_heredoc_end") and self._pending_heredoc_end > self.pos:
+                        self.pos = self._pending_heredoc_end
+                        del self._pending_heredoc_end
             elif ch == "#":
                 # Skip comment to end of line
                 while not self.at_end() and self.peek() != "\n":
@@ -2541,8 +2546,27 @@ class Parser:
 
         # Find the end of the current line (command continues until newline)
         # We need to mark where the heredoc content starts
+        # Must be quote-aware - newlines inside quoted strings don't end the line
         line_end = self.pos
         while line_end < self.length and self.source[line_end] != "\n":
+            ch = self.source[line_end]
+            if ch == "'":
+                # Single-quoted string - skip to closing quote (no escapes)
+                line_end += 1
+                while line_end < self.length and self.source[line_end] != "'":
+                    line_end += 1
+            elif ch == '"':
+                # Double-quoted string - skip to closing quote (with escapes)
+                line_end += 1
+                while line_end < self.length and self.source[line_end] != '"':
+                    if self.source[line_end] == "\\" and line_end + 1 < self.length:
+                        line_end += 2
+                    else:
+                        line_end += 1
+            elif ch == "\\" and line_end + 1 < self.length:
+                # Backslash escape - skip both chars
+                line_end += 2
+                continue
             line_end += 1
 
         # Find heredoc content starting position

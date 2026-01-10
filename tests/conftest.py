@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
-from testformat import TestCase, parse_test_file
+from testformat import parse_test_file
 
 
 def pytest_collect_file(parent, file_path):

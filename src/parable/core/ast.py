@@ -27,7 +27,6 @@ class Word(Node):
         self.parts = parts or []
 
     def to_sexp(self) -> str:
-        import re
         value = self.value
         # Expand ALL $'...' ANSI-C quotes (handles escapes and strips $)
         value = self._expand_all_ansi_c_quotes(value)
@@ -319,7 +318,12 @@ class Word(Node):
                     if inner and "\x01" not in inner:
                         # Check what precedes - default value ops: :- := :+ :? - = + ?
                         prev = "".join(result[-2:]) if len(result) >= 2 else ""
-                        if prev.endswith(":-") or prev.endswith(":=") or prev.endswith(":+") or prev.endswith(":?"):
+                        if (
+                            prev.endswith(":-")
+                            or prev.endswith(":=")
+                            or prev.endswith(":+")
+                            or prev.endswith(":?")
+                        ):
                             expanded = inner
                         elif len(result) >= 1:
                             last = result[-1]
@@ -367,9 +371,10 @@ class Word(Node):
     def _normalize_array_whitespace(self, value: str) -> str:
         """Normalize whitespace inside array assignments: arr=(a  b\tc) -> arr=(a b c)."""
         import re
+
         # Match array assignment pattern: name=( or name+=(
-        match = re.match(r'^([a-zA-Z_][a-zA-Z_0-9]*\+?=)\(', value)
-        if not match or not value.endswith(')'):
+        match = re.match(r"^([a-zA-Z_][a-zA-Z_0-9]*\+?=)\(", value)
+        if not match or not value.endswith(")"):
             return value
         prefix = match.group(1)  # e.g., "arr=" or "arr+="
         # Extract content inside parentheses
@@ -380,9 +385,9 @@ class Word(Node):
         in_whitespace = True  # Start true to skip leading whitespace
         while i < len(inner):
             ch = inner[i]
-            if ch in ' \t\n':
+            if ch in " \t\n":
                 if not in_whitespace and normalized:
-                    normalized.append(' ')
+                    normalized.append(" ")
                     in_whitespace = True
                 i += 1
             elif ch == "'":
@@ -398,7 +403,7 @@ class Word(Node):
                 in_whitespace = False
                 j = i + 1
                 while j < len(inner):
-                    if inner[j] == '\\' and j + 1 < len(inner):
+                    if inner[j] == "\\" and j + 1 < len(inner):
                         j += 2
                     elif inner[j] == '"':
                         break
@@ -406,7 +411,7 @@ class Word(Node):
                         j += 1
                 normalized.append(inner[i : j + 1])
                 i = j + 1
-            elif ch == '\\' and i + 1 < len(inner):
+            elif ch == "\\" and i + 1 < len(inner):
                 # Escape sequence
                 in_whitespace = False
                 normalized.append(inner[i : i + 2])
@@ -416,7 +421,7 @@ class Word(Node):
                 normalized.append(ch)
                 i += 1
         # Strip trailing space
-        result = ''.join(normalized).rstrip(' ')
+        result = "".join(normalized).rstrip(" ")
         return f"{prefix}({result})"
 
     def _strip_arith_line_continuations(self, value: str) -> str:
@@ -502,7 +507,11 @@ class Word(Node):
         procsub_idx = 0
         while i < len(value):
             # Check for $( command substitution (but not $(( arithmetic)
-            if value[i : i + 2] == "$(" and value[i : i + 3] != "$((" and cmdsub_idx < len(cmdsub_parts):
+            if (
+                value[i : i + 2] == "$("
+                and value[i : i + 3] != "$(("
+                and cmdsub_idx < len(cmdsub_parts)
+            ):
                 # Find matching close paren using bash-aware matching
                 j = _find_cmdsub_end(value, i + 2)
                 # Format this command substitution
@@ -561,6 +570,7 @@ class Word(Node):
                     result.append("${ }")
                 else:
                     from parable.core.parser import Parser
+
                     try:
                         parser = Parser(inner.lstrip(" |"))
                         parsed = parser.parse_list()
@@ -626,7 +636,9 @@ class Pipeline(Node):
             if isinstance(cmd, PipeBoth):
                 continue
             # Check if next element is PipeBoth
-            needs_redirect = (i + 1 < len(self.commands) and isinstance(self.commands[i + 1], PipeBoth))
+            needs_redirect = i + 1 < len(self.commands) and isinstance(
+                self.commands[i + 1], PipeBoth
+            )
             cmds.append((cmd, needs_redirect))
         if len(cmds) == 1:
             cmd, needs = cmds[0]
@@ -685,9 +697,7 @@ class List(Node):
                     left = parts[:i]
                     right = parts[i + 1 : -1]  # exclude trailing &
                     left_sexp = List(left).to_sexp() if len(left) > 1 else left[0].to_sexp()
-                    right_sexp = (
-                        List(right).to_sexp() if len(right) > 1 else right[0].to_sexp()
-                    )
+                    right_sexp = List(right).to_sexp() if len(right) > 1 else right[0].to_sexp()
                     return f"(semi {left_sexp} (background {right_sexp}))"
             # No ; or \n found, background the whole list (minus trailing &)
             inner_parts = parts[:-1]
@@ -800,6 +810,7 @@ class Redirect(Node):
 
     def to_sexp(self) -> str:
         import re
+
         # Strip fd prefix from operator (e.g., "2>" -> ">", "{fd}>" -> ">")
         op = self.op.lstrip("0123456789")
         op = re.sub(r"^\{[a-zA-Z_][a-zA-Z_0-9]*\}", "", op)
@@ -819,7 +830,7 @@ class Redirect(Node):
             if fd_target.isdigit():
                 return f'(redirect "{op}" {fd_target})'
             elif target_val == "&-":
-                return f'(redirect ">&-" 0)'
+                return '(redirect ">&-" 0)'
             else:
                 # Variable fd dup like >&$fd or >&$fd- (move) - strip the & and trailing -
                 return f'(redirect "{op}" "{fd_target}")'
@@ -995,7 +1006,9 @@ class For(Node):
         var_escaped = self.var.replace("\\", "\\\\").replace('"', '\\"')
         if self.words is None:
             # No 'in' clause - oracle implies (in (word "\"$@\""))
-            return f'(for (word "{var_escaped}") (in (word "\\"$@\\"")) {self.body.to_sexp()}){suffix}'
+            return (
+                f'(for (word "{var_escaped}") (in (word "\\"$@\\"")) {self.body.to_sexp()}){suffix}'
+            )
         elif len(self.words) == 0:
             # Empty 'in' clause - oracle outputs (in)
             return f'(for (word "{var_escaped}") (in) {self.body.to_sexp()}){suffix}'
@@ -1031,6 +1044,7 @@ class ForArith(Node):
             val = w._strip_locale_string_dollars(val)
             val = val.replace("\\", "\\\\").replace('"', '\\"')
             return val
+
         suffix = " " + " ".join(r.to_sexp() for r in self.redirects) if self.redirects else ""
         init_val = self.init if self.init else "1"
         cond_val = _normalize_fd_redirects(self.cond) if self.cond else "1"
@@ -1367,7 +1381,9 @@ class ArithmeticCommand(Node):
     redirects: list[Node]
     raw_content: str  # Raw expression text for oracle-compatible output
 
-    def __init__(self, expression: "Node | None", redirects: list[Node] = None, raw_content: str = ""):
+    def __init__(
+        self, expression: "Node | None", redirects: list[Node] = None, raw_content: str = ""
+    ):
         self.kind = "arith-cmd"
         self.expression = expression
         self.redirects = redirects or []
@@ -1868,7 +1884,7 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
     if isinstance(node, List):
         # Join commands with operators
         result = []
-        for i, p in enumerate(node.parts):
+        for p in node.parts:
             if isinstance(p, Operator):
                 if p.op == ";":
                     result.append(";")
@@ -1983,10 +1999,11 @@ def _format_redirect(r: "Redirect | HereDoc") -> str:
 def _normalize_fd_redirects(s: str) -> str:
     """Normalize fd redirects in a raw string: >&2 -> 1>&2, <&N -> 0<&N."""
     import re
+
     # Match >&N or <&N not preceded by a digit, add default fd
     # >&N -> 1>&N, <&N -> 0<&N
-    s = re.sub(r'(?<![0-9])>&(\d)', r'1>&\1', s)
-    s = re.sub(r'(?<![0-9])<&(\d)', r'0<&\1', s)
+    s = re.sub(r"(?<![0-9])>&(\d)", r"1>&\1", s)
+    s = re.sub(r"(?<![0-9])<&(\d)", r"0<&\1", s)
     return s
 
 
@@ -2086,11 +2103,9 @@ def _skip_heredoc(value: str, start: int) -> int:
         i += 1
     # Extract delimiter - may be quoted
     delim_start = i
-    quoted = False
     quote_char = None
     if i < len(value) and value[i] in "\"'":
         quote_char = value[i]
-        quoted = True
         i += 1
         delim_start = i
         while i < len(value) and value[i] != quote_char:
@@ -2105,7 +2120,6 @@ def _skip_heredoc(value: str, start: int) -> int:
         while i < len(value) and value[i] not in " \t\n":
             i += 1
         delimiter = value[delim_start:i]
-        quoted = True
     else:
         # Unquoted delimiter
         while i < len(value) and value[i] not in " \t\n":

@@ -65,7 +65,7 @@ def convert_file(corpus_path: Path, output_dir: Path, oracle_path: Path) -> tupl
     """Convert the corpus file to .tests format."""
     content = corpus_path.read_text()
     tests = parse_gnubash_file(content)
-    output_lines = [f"# Converted from GNU Bash test suite"]
+    output_lines = ["# Converted from GNU Bash test suite"]
     output_lines.append("")
     success = 0
     failed = 0

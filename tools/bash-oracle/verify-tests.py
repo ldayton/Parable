@@ -9,7 +9,7 @@ SCRIPT_DIR = Path(__file__).parent
 TESTS_DIR = SCRIPT_DIR.parent.parent / "tests"
 sys.path.insert(0, str(TESTS_DIR))
 
-from testformat import parse_test_file
+from testformat import parse_test_file  # noqa: E402
 
 ORACLE_PATH = SCRIPT_DIR / "bash-oracle"
 
@@ -89,7 +89,7 @@ def main():
 
     # Print summary
     print(f"\n{'=' * 60}")
-    print(f"Verification Results")
+    print("Verification Results")
     print(f"{'=' * 60}")
     print(f"Total:   {total}")
     print(f"Passed:  {passed}")

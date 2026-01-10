@@ -136,7 +136,10 @@ class Parser:
                 self.advance()
                 # After advancing past a newline, skip any pending heredoc content
                 if ch == "\n":
-                    if hasattr(self, "_pending_heredoc_end") and self._pending_heredoc_end > self.pos:
+                    if (
+                        hasattr(self, "_pending_heredoc_end")
+                        and self._pending_heredoc_end > self.pos
+                    ):
                         self.pos = self._pending_heredoc_end
                         del self._pending_heredoc_end
             elif ch == "#":
@@ -2544,11 +2547,7 @@ class Parser:
                         # Regular escape - quotes the next char
                         quoted = True
                         delimiter_chars.append(self.advance())
-            elif (
-                ch == "$"
-                and self.pos + 1 < self.length
-                and self.source[self.pos + 1] == "("
-            ):
+            elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
                 # Command substitution embedded in delimiter
                 delimiter_chars.append(self.advance())  # $
                 delimiter_chars.append(self.advance())  # (
@@ -2999,7 +2998,9 @@ class Parser:
         if not self._cond_at_end() and self.peek() not in "&|)":
             # Handle < and > as binary operators (they terminate words)
             # But not <( or >( which are process substitution
-            if self.peek() in "<>" and not (self.pos + 1 < self.length and self.source[self.pos + 1] == "("):
+            if self.peek() in "<>" and not (
+                self.pos + 1 < self.length and self.source[self.pos + 1] == "("
+            ):
                 op = self.advance()
                 self._cond_skip_whitespace()
                 word2 = self._parse_cond_word()
@@ -4698,7 +4699,9 @@ class Parser:
                 break
 
             # Don't add duplicate semicolon (e.g., explicit ; followed by newline)
-            if not (op == ";" and parts and isinstance(parts[-1], Operator) and parts[-1].op == ";"):
+            if not (
+                op == ";" and parts and isinstance(parts[-1], Operator) and parts[-1].op == ";"
+            ):
                 parts.append(Operator(op))
 
             # For & at end of list, don't require another command

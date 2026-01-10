@@ -837,29 +837,46 @@ class Parser:
         self.advance()  # consume opening `
 
         # Find closing backtick, processing escape sequences as we go.
-        # In backticks, backslash is special only before $, `, or \ (per bash manual).
-        # \$ -> $, \` -> `, \\ -> \, other \X -> \X (backslash is literal)
+        # In backticks, backslash is special only before $, `, \, or newline.
+        # \$ -> $, \` -> `, \\ -> \, \<newline> -> removed (line continuation)
+        # other \X -> \X (backslash is literal)
+        # content_chars: what gets parsed as the inner command
+        # text_chars: what appears in the word representation (with line continuations removed)
         content_chars = []
+        text_chars = ["`"]  # opening backtick
         while not self.at_end() and self.peek() != "`":
             c = self.peek()
             if c == "\\" and self.pos + 1 < self.length:
                 next_c = self.source[self.pos + 1]
-                if next_c in "$`\\":
-                    # Escape sequence: skip backslash, keep the escaped char
+                if next_c == "\n":
+                    # Line continuation: skip both backslash and newline
                     self.advance()  # skip \
-                    content_chars.append(self.advance())
+                    self.advance()  # skip newline
+                    # Don't add to content_chars or text_chars
+                elif next_c in "$`\\":
+                    # Escape sequence: skip backslash in content, keep both in text
+                    self.advance()  # skip \
+                    escaped = self.advance()
+                    content_chars.append(escaped)
+                    text_chars.append("\\")
+                    text_chars.append(escaped)
                 else:
                     # Backslash is literal before other characters
-                    content_chars.append(self.advance())
+                    ch = self.advance()
+                    content_chars.append(ch)
+                    text_chars.append(ch)
             else:
-                content_chars.append(self.advance())
+                ch = self.advance()
+                content_chars.append(ch)
+                text_chars.append(ch)
 
         if self.at_end():
             self.pos = start
             return None, ""
 
         self.advance()  # consume closing `
-        text = self.source[start : self.pos]
+        text_chars.append("`")  # closing backtick
+        text = "".join(text_chars)
         content = "".join(content_chars)
 
         # Parse the content as a command list

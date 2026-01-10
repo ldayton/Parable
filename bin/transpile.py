@@ -420,6 +420,15 @@ class JSTranspiler(ast.NodeVisitor):
                 if len(node.args) == 1:
                     items = self.visit_expr(node.args[0])
                     return f"{obj}.push(...{items})"
+            # Handle endswith/startswith with tuple argument (JS only accepts string)
+            if method == "endswith" and len(node.args) == 1:
+                if isinstance(node.args[0], (ast.Tuple, ast.List)):
+                    checks = [f"{obj}.endsWith({self.visit_expr(elt)})" for elt in node.args[0].elts]
+                    return f"({' || '.join(checks)})"
+            if method == "startswith" and len(node.args) == 1:
+                if isinstance(node.args[0], (ast.Tuple, ast.List)):
+                    checks = [f"{obj}.startsWith({self.visit_expr(elt)})" for elt in node.args[0].elts]
+                    return f"({' || '.join(checks)})"
             method = method_map.get(method, method)
             # Convert remaining snake_case to camelCase
             if "_" in method:
@@ -495,7 +504,22 @@ class JSTranspiler(ast.NodeVisitor):
 
     def visit_expr_BoolOp(self, node: ast.BoolOp) -> str:
         op = " && " if isinstance(node.op, ast.And) else " || "
-        values = [self.visit_expr(v) for v in node.values]
+        # Detect pattern: if x and ...x[...]... where x is used with subscript
+        # In Python, empty list is falsy; in JS, empty array is truthy
+        # Convert first operand to x.length > 0 when subscripted later
+        values = []
+        first_name = None
+        if isinstance(node.op, ast.And) and len(node.values) >= 2:
+            if isinstance(node.values[0], ast.Name):
+                first_name = node.values[0].id
+        for i, v in enumerate(node.values):
+            if i == 0 and first_name:
+                # Check if any later value subscripts this name
+                rest_src = ast.dump(ast.Module(body=[ast.Expr(value=vv) for vv in node.values[1:]]))
+                if f"Name(id='{first_name}'" in rest_src and "Subscript" in rest_src:
+                    values.append(f"{first_name}.length > 0")
+                    continue
+            values.append(self.visit_expr(v))
         return f"({op.join(values)})"
 
     def visit_expr_UnaryOp(self, node: ast.UnaryOp) -> str:

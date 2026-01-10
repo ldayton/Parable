@@ -2349,7 +2349,7 @@ function FormatCmdsubNode(node, indent, in_procsub) {
 				if (p.op === ";") {
 					result.push(";");
 				} else if (p.op === "\n") {
-					if (result && result[result.length - 1] === ";") {
+					if (result.length > 0 && result[result.length - 1] === ";") {
 						continue;
 					}
 					result.push("\n");
@@ -2359,7 +2359,13 @@ function FormatCmdsubNode(node, indent, in_procsub) {
 					result.push(" " + p.op);
 				}
 			} else {
-				if (result && !result[result.length - 1].endsWith([" ", "\n"])) {
+				if (
+					result.length > 0 &&
+					!(
+						result[result.length - 1].endsWith(" ") ||
+						result[result.length - 1].endsWith("\n")
+					)
+				) {
 					result.push(" ");
 				}
 				result.push(FormatCmdsubNode(p, indent));
@@ -6175,7 +6181,7 @@ class Parser {
 				break;
 			}
 			if (ch === "(") {
-				if (chars && IsExtglobPrefix(chars[chars.length - 1])) {
+				if (chars.length > 0 && IsExtglobPrefix(chars[chars.length - 1])) {
 					chars.push(this.advance());
 					var depth = 1;
 					while (!this.atEnd() && depth > 0) {

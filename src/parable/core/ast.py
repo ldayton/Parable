@@ -41,6 +41,8 @@ class Word(Node):
         value = self._strip_arith_line_continuations(value)
         # Double CTLESC (0x01) bytes - bash oracle uses this for quoting control chars
         value = value.replace("\x01", "\x01\x01")
+        # Prefix DEL (0x7f) with CTLESC - bash oracle quotes this control char
+        value = value.replace("\x7f", "\x01\x7f")
         # Escape backslashes for s-expression output
         value = value.replace("\\", "\\\\")
         # Escape double quotes, newlines, and tabs

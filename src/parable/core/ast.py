@@ -30,16 +30,18 @@ class Word(Node):
         import re
         value = self.value
         is_ansi_c = value.startswith("$'")
-        # Strip $ from ANSI-C quotes $'...' and locale strings $"..." (start of word only)
-        value = re.sub(r"^\$'", "'", value)
-        value = re.sub(r'^\$"', '"', value)
+        # Strip $ from ANSI-C quotes $'...' and locale strings $"..."
+        # Match at start or after =, (, ", ', space (but not after regular chars like in "s$")
+        value = re.sub(r"(^|[=(\"' \t])\$'", r"\1'", value)
+        value = re.sub(r"(^|[=(\"' \t])\$\"", r'\1"', value)
         # Expand ANSI-C escape sequences
         if is_ansi_c:
             value = self._expand_ansi_c_escapes(value)
         # Format command substitutions with oracle pretty-printing (before escaping)
         value = self._format_command_substitutions(value)
-        # Escape backslashes for s-expression output
-        value = value.replace("\\", "\\\\")
+        # Escape backslashes for s-expression output (but not in ANSI-C strings - already handled)
+        if not is_ansi_c:
+            value = value.replace("\\", "\\\\")
         # Escape double quotes, newlines, and tabs
         escaped = value.replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
         return f'(word "{escaped}")'

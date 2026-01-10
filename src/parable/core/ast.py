@@ -46,138 +46,130 @@ class Word(Node):
         return f'(word "{escaped}")'
 
     def _expand_ansi_c_escapes(self, value: str) -> str:
-        """Expand ANSI-C escape sequences in $'...' strings."""
+        """Expand ANSI-C escape sequences in $'...' strings.
+
+        Uses bytes internally so \\x escapes can form valid UTF-8 sequences.
+        Invalid UTF-8 is replaced with U+FFFD.
+        """
         if not (value.startswith("'") and value.endswith("'")):
             return value
         inner = value[1:-1]
-        result = []
+        result = bytearray()
         i = 0
         while i < len(inner):
             if inner[i] == "\\" and i + 1 < len(inner):
                 c = inner[i + 1]
                 if c == "a":
-                    result.append("\a")
+                    result.append(0x07)
                     i += 2
                 elif c == "b":
-                    result.append("\b")
+                    result.append(0x08)
                     i += 2
                 elif c in ("e", "E"):
-                    result.append("\x1b")
+                    result.append(0x1B)
                     i += 2
                 elif c == "f":
-                    result.append("\f")
+                    result.append(0x0C)
                     i += 2
                 elif c == "n":
-                    result.append("\n")
+                    result.append(0x0A)
                     i += 2
                 elif c == "r":
-                    result.append("\r")
+                    result.append(0x0D)
                     i += 2
                 elif c == "t":
-                    result.append("\t")
+                    result.append(0x09)
                     i += 2
                 elif c == "v":
-                    result.append("\v")
+                    result.append(0x0B)
                     i += 2
                 elif c == "\\":
-                    result.append("\\")  # Single backslash (will be escaped later)
+                    result.append(0x5C)
                     i += 2
                 elif c == "'":
-                    # Oracle outputs \' as '\'' (shell quoting trick: end quote, escaped quote, start quote)
-                    result.append("'\\''")
+                    # Oracle outputs \' as '\'' (shell quoting trick)
+                    result.extend(b"'\\''")
                     i += 2
                 elif c == '"':
-                    result.append('"')
+                    result.append(0x22)
                     i += 2
                 elif c == "?":
-                    result.append("?")
+                    result.append(0x3F)
                     i += 2
                 elif c == "x":
-                    # Hex escape \xHH (1-2 hex digits)
+                    # Hex escape \xHH (1-2 hex digits) - raw byte
                     j = i + 2
                     while j < len(inner) and j < i + 4 and inner[j] in "0123456789abcdefABCDEF":
                         j += 1
                     if j > i + 2:
                         byte_val = int(inner[i + 2 : j], 16)
-                        if byte_val == 0:
-                            pass  # Skip NUL
-                        elif byte_val < 128:
-                            result.append(chr(byte_val))
-                        else:
-                            # Bytes >= 128 are not valid standalone UTF-8, use replacement char
-                            result.append("\ufffd")
+                        if byte_val != 0:  # Skip NUL
+                            result.append(byte_val)
                         i = j
                     else:
-                        result.append(inner[i])
+                        result.append(ord(inner[i]))
                         i += 1
                 elif c == "u":
-                    # Unicode escape \uHHHH (4 hex digits)
+                    # Unicode escape \uHHHH (4 hex digits) - encode as UTF-8
                     if i + 6 <= len(inner) and all(
                         x in "0123456789abcdefABCDEF" for x in inner[i + 2 : i + 6]
                     ):
-                        result.append(chr(int(inner[i + 2 : i + 6], 16)))
+                        result.extend(chr(int(inner[i + 2 : i + 6], 16)).encode("utf-8"))
                         i += 6
                     else:
-                        result.append(inner[i])
+                        result.append(ord(inner[i]))
                         i += 1
                 elif c == "U":
-                    # Unicode escape \UHHHHHHHH (8 hex digits)
+                    # Unicode escape \UHHHHHHHH (8 hex digits) - encode as UTF-8
                     if i + 10 <= len(inner) and all(
                         x in "0123456789abcdefABCDEF" for x in inner[i + 2 : i + 10]
                     ):
-                        result.append(chr(int(inner[i + 2 : i + 10], 16)))
+                        result.extend(chr(int(inner[i + 2 : i + 10], 16)).encode("utf-8"))
                         i += 10
                     else:
-                        result.append(inner[i])
+                        result.append(ord(inner[i]))
                         i += 1
                 elif c == "c":
                     # Control character \cX - mask with 0x1f
                     if i + 3 <= len(inner):
                         ctrl_char = inner[i + 2]
                         ctrl_val = ord(ctrl_char) & 0x1F
-                        if ctrl_val == 0:
-                            pass  # Skip NUL
-                        else:
-                            result.append(chr(ctrl_val))
+                        if ctrl_val != 0:  # Skip NUL
+                            result.append(ctrl_val)
                         i += 3
                     else:
-                        result.append(inner[i])
+                        result.append(ord(inner[i]))
                         i += 1
                 elif c == "0":
                     # Nul or octal \0 or \0NNN
                     j = i + 2
                     while j < len(inner) and j < i + 5 and inner[j] in "01234567":
                         j += 1
-                    if j == i + 2:
-                        # Just \0 - NUL character, omit from output
-                        pass
-                    else:
-                        char_val = int(inner[i + 1 : j], 8)
-                        if char_val != 0:  # Skip NUL
-                            result.append(chr(char_val))
+                    if j > i + 2:
+                        byte_val = int(inner[i + 1 : j], 8)
+                        if byte_val != 0:  # Skip NUL
+                            result.append(byte_val)
+                    # If just \0, skip NUL
                     i = j
                 elif c in "1234567":
-                    # Octal escape \NNN (1-3 digits)
+                    # Octal escape \NNN (1-3 digits) - raw byte
                     j = i + 1
                     while j < len(inner) and j < i + 4 and inner[j] in "01234567":
                         j += 1
                     byte_val = int(inner[i + 1 : j], 8)
-                    if byte_val == 0:
-                        pass  # Skip NUL
-                    elif byte_val < 128:
-                        result.append(chr(byte_val))
-                    else:
-                        # Bytes >= 128 are not valid standalone UTF-8, use replacement char
-                        result.append("\ufffd")
+                    if byte_val != 0:  # Skip NUL
+                        result.append(byte_val)
                     i = j
                 else:
                     # Unknown escape - preserve as-is
-                    result.append("\\" + c)
+                    result.append(0x5C)
+                    result.append(ord(c))
                     i += 2
             else:
-                result.append(inner[i])
+                result.extend(inner[i].encode("utf-8"))
                 i += 1
-        return "'" + "".join(result) + "'"
+        # Decode as UTF-8, replacing invalid sequences with U+FFFD
+        return "'" + result.decode("utf-8", errors="replace") + "'"
 
     def _expand_all_ansi_c_quotes(self, value: str) -> str:
         """Find and expand ALL $'...' ANSI-C quoted strings in value."""

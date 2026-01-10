@@ -30,9 +30,9 @@ class Word(Node):
         import re
         value = self.value
         is_ansi_c = value.startswith("$'")
-        # Strip $ from ANSI-C quotes $'...' and locale strings $"..."
-        value = re.sub(r"\$'", "'", value)
-        value = re.sub(r'\$"', '"', value)
+        # Strip $ from ANSI-C quotes $'...' and locale strings $"..." (start of word only)
+        value = re.sub(r"^\$'", "'", value)
+        value = re.sub(r'^\$"', '"', value)
         # Format command substitutions with oracle pretty-printing (before escaping)
         value = self._format_command_substitutions(value)
         # Escape backslashes for s-expression output (but not in ANSI-C strings)

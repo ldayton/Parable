@@ -187,8 +187,12 @@ class Parser:
             self.advance()
         return True
 
-    def parse_word(self) -> Word | None:
-        """Parse a word token, detecting parameter expansions and command substitutions."""
+    def parse_word(self, at_command_start: bool = False) -> Word | None:
+        """Parse a word token, detecting parameter expansions and command substitutions.
+
+        at_command_start: When True, preserve spaces inside brackets for array
+        assignments like a[1 + 2]=. When False, spaces break the word.
+        """
         self.skip_whitespace()
 
         if self.at_end():
@@ -205,7 +209,8 @@ class Parser:
             # Track bracket depth for array subscripts like a[1+2]=3
             # Inside brackets, metacharacters like | and ( are literal
             # Only track [ after we've seen some chars (so [ -f file ] still works)
-            if ch == "[" and chars:
+            # Only at command start (array assignments), not in argument position
+            if ch == "[" and chars and at_command_start:
                 bracket_depth += 1
                 chars.append(self.advance())
                 continue
@@ -2673,7 +2678,8 @@ class Parser:
                 continue
 
             # Otherwise parse a word
-            word = self.parse_word()
+            # First word is at command start (array assignments like a[1 + 2]= are allowed)
+            word = self.parse_word(at_command_start=not words)
             if word is None:
                 break
             words.append(word)

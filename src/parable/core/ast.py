@@ -221,10 +221,25 @@ class Word(Node):
         i = 0
         in_single_quote = False
         in_double_quote = False
+        brace_depth = 0  # Track ${...} nesting - inside braces, $'...' is expanded
         while i < len(value):
             ch = value[i]
+            # Track brace depth for parameter expansions
+            if not in_single_quote:
+                if value[i : i + 2] == "${":
+                    brace_depth += 1
+                    result.append("${")
+                    i += 2
+                    continue
+                elif ch == "}" and brace_depth > 0:
+                    brace_depth -= 1
+                    result.append(ch)
+                    i += 1
+                    continue
+            # Inside ${...}, we can expand $'...' even if originally in double quotes
+            effective_in_dquote = in_double_quote and brace_depth == 0
             # Track quote state to avoid matching $' inside regular quotes
-            if ch == "'" and not in_double_quote:
+            if ch == "'" and not effective_in_dquote:
                 # Check if this is start of $'...' ANSI-C string
                 if not in_single_quote and i > 0 and value[i - 1] == "$":
                     # This is handled below when we see $'
@@ -249,7 +264,7 @@ class Word(Node):
                 result.append(ch)
                 result.append(value[i + 1])
                 i += 2
-            elif value[i : i + 2] == "$'" and not in_single_quote and not in_double_quote:
+            elif value[i : i + 2] == "$'" and not in_single_quote and not effective_in_dquote:
                 # ANSI-C quoted string - find matching closing quote
                 j = i + 2
                 while j < len(value):
@@ -385,7 +400,12 @@ class Word(Node):
                     else:
                         arith_content.append(value[i])
                         i += 1
-                result.append("$((" + "".join(arith_content) + "))")
+                if depth == 0:
+                    # Found proper )) closing - this is arithmetic
+                    result.append("$((" + "".join(arith_content) + "))")
+                else:
+                    # Didn't find )) - not arithmetic (likely $( + ( subshell), pass through
+                    result.append(value[start:i])
             else:
                 result.append(value[i])
                 i += 1

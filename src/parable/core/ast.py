@@ -33,6 +33,9 @@ class Word(Node):
         # Strip $ from ANSI-C quotes $'...' and locale strings $"..." (start of word only)
         value = re.sub(r"^\$'", "'", value)
         value = re.sub(r'^\$"', '"', value)
+        # Expand ANSI-C escape sequences
+        if is_ansi_c:
+            value = self._expand_ansi_c_escapes(value)
         # Format command substitutions with oracle pretty-printing (before escaping)
         value = self._format_command_substitutions(value)
         # Escape backslashes for s-expression output (but not in ANSI-C strings)
@@ -41,6 +44,119 @@ class Word(Node):
         # Escape double quotes, newlines, and tabs
         escaped = value.replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
         return f'(word "{escaped}")'
+
+    def _expand_ansi_c_escapes(self, value: str) -> str:
+        """Expand ANSI-C escape sequences in $'...' strings."""
+        if not (value.startswith("'") and value.endswith("'")):
+            return value
+        inner = value[1:-1]
+        result = []
+        i = 0
+        while i < len(inner):
+            if inner[i] == "\\" and i + 1 < len(inner):
+                c = inner[i + 1]
+                if c == "a":
+                    result.append("\a")
+                    i += 2
+                elif c == "b":
+                    result.append("\b")
+                    i += 2
+                elif c in ("e", "E"):
+                    result.append("\x1b")
+                    i += 2
+                elif c == "f":
+                    result.append("\f")
+                    i += 2
+                elif c == "n":
+                    result.append("\n")
+                    i += 2
+                elif c == "r":
+                    result.append("\r")
+                    i += 2
+                elif c == "t":
+                    result.append("\t")
+                    i += 2
+                elif c == "v":
+                    result.append("\v")
+                    i += 2
+                elif c == "\\":
+                    result.append("\\")
+                    i += 2
+                elif c == "'":
+                    # Oracle outputs \' as '\\''
+                    result.append("'\\''")
+                    i += 2
+                elif c == '"':
+                    result.append('"')
+                    i += 2
+                elif c == "?":
+                    result.append("?")
+                    i += 2
+                elif c == "x":
+                    # Hex escape \xHH (1-2 hex digits)
+                    j = i + 2
+                    while j < len(inner) and j < i + 4 and inner[j] in "0123456789abcdefABCDEF":
+                        j += 1
+                    if j > i + 2:
+                        result.append(chr(int(inner[i + 2 : j], 16)))
+                        i = j
+                    else:
+                        result.append(inner[i])
+                        i += 1
+                elif c == "u":
+                    # Unicode escape \uHHHH (4 hex digits)
+                    if i + 6 <= len(inner) and all(
+                        x in "0123456789abcdefABCDEF" for x in inner[i + 2 : i + 6]
+                    ):
+                        result.append(chr(int(inner[i + 2 : i + 6], 16)))
+                        i += 6
+                    else:
+                        result.append(inner[i])
+                        i += 1
+                elif c == "U":
+                    # Unicode escape \UHHHHHHHH (8 hex digits)
+                    if i + 10 <= len(inner) and all(
+                        x in "0123456789abcdefABCDEF" for x in inner[i + 2 : i + 10]
+                    ):
+                        result.append(chr(int(inner[i + 2 : i + 10], 16)))
+                        i += 10
+                    else:
+                        result.append(inner[i])
+                        i += 1
+                elif c == "c":
+                    # Control character \cX
+                    if i + 3 <= len(inner):
+                        ctrl_char = inner[i + 2]
+                        result.append(chr(ord(ctrl_char.upper()) - ord("@")))
+                        i += 3
+                    else:
+                        result.append(inner[i])
+                        i += 1
+                elif c == "0":
+                    # Nul or octal \0 or \0NNN
+                    j = i + 2
+                    while j < len(inner) and j < i + 5 and inner[j] in "01234567":
+                        j += 1
+                    if j == i + 2:
+                        result.append("\0")
+                    else:
+                        result.append(chr(int(inner[i + 1 : j], 8)))
+                    i = j
+                elif c in "1234567":
+                    # Octal escape \NNN (1-3 digits)
+                    j = i + 1
+                    while j < len(inner) and j < i + 4 and inner[j] in "01234567":
+                        j += 1
+                    result.append(chr(int(inner[i + 1 : j], 8)))
+                    i = j
+                else:
+                    # Unknown escape - preserve as-is
+                    result.append("\\" + c)
+                    i += 2
+            else:
+                result.append(inner[i])
+                i += 1
+        return "'" + "".join(result) + "'"
 
     def _format_command_substitutions(self, value: str) -> str:
         """Replace $(...) and >(...) / <(...) with oracle-formatted AST output."""
@@ -1338,11 +1454,12 @@ def _format_cmdsub_node(node: Node, indent: int = 0) -> str:
         for i, p in enumerate(node.patterns):
             pat = p.pattern.replace("|", " | ")
             body = _format_cmdsub_node(p.body, indent + 8) if p.body else ""
+            term = p.terminator  # ;;, ;&, or ;;&
             if i == 0:
                 # First pattern on same line as 'in'
-                patterns.append(f" {pat})\n{' ' * (indent + 8)}{body}\n{' ' * (indent + 4)};;")
+                patterns.append(f" {pat})\n{' ' * (indent + 8)}{body}\n{' ' * (indent + 4)}{term}")
             else:
-                patterns.append(f"{pat})\n{' ' * (indent + 8)}{body}\n{' ' * (indent + 4)};;")
+                patterns.append(f"{pat})\n{' ' * (indent + 8)}{body}\n{' ' * (indent + 4)}{term}")
         pattern_str = f"\n{' ' * (indent + 4)}".join(patterns)
         return f"case {word} in{pattern_str}\n{sp}esac"
     if isinstance(node, Function):

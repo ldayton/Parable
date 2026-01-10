@@ -2340,8 +2340,10 @@ class Parser:
 
         # Check for optional fd number before redirect (if no varfd)
         if varfd is None and self.peek() and self.peek().isdigit():
-            fd = int(self.peek())
-            self.advance()
+            fd_chars = []
+            while not self.at_end() and self.peek().isdigit():
+                fd_chars.append(self.advance())
+            fd = int("".join(fd_chars))
 
         ch = self.peek()
 
@@ -2426,14 +2428,17 @@ class Parser:
 
         self.skip_whitespace()
 
-        # Handle fd duplication targets like &1, &2, &-, &0-, &$var
+        # Handle fd duplication targets like &1, &2, &-, &10-, &$var
         if not self.at_end() and self.peek() == "&":
             self.advance()  # consume &
-            # Parse the fd number or - for close, including move syntax like &0-
+            # Parse the fd number or - for close, including move syntax like &10-
             if not self.at_end() and (self.peek().isdigit() or self.peek() == "-"):
-                fd_target = self.advance()
-                # Check for move syntax: &N- means duplicate and close (move)
-                if fd_target.isdigit() and not self.at_end() and self.peek() == "-":
+                fd_chars = []
+                while not self.at_end() and self.peek().isdigit():
+                    fd_chars.append(self.advance())
+                fd_target = "".join(fd_chars) if fd_chars else ""
+                # Handle just - for close, or N- for move syntax
+                if not self.at_end() and self.peek() == "-":
                     fd_target += self.advance()  # consume the trailing -
                 target = Word(f"&{fd_target}")
             else:

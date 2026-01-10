@@ -39,23 +39,11 @@ class Word(Node):
         value = self._format_command_substitutions(value)
         # Strip line continuations (backslash-newline) from arithmetic expressions
         value = self._strip_arith_line_continuations(value)
-        # Strip unprintable control characters (0x00-0x1f except \t and \n)
-        value = self._strip_control_chars(value)
         # Escape backslashes for s-expression output
         value = value.replace("\\", "\\\\")
         # Escape double quotes, newlines, and tabs
         escaped = value.replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
         return f'(word "{escaped}")'
-
-    def _strip_control_chars(self, value: str) -> str:
-        """Strip unprintable control characters (0x00-0x1f except tab and newline)."""
-        result = []
-        for ch in value:
-            code = ord(ch)
-            if code < 0x20 and code not in (0x09, 0x0A):  # Keep \t and \n
-                continue  # Skip control char
-            result.append(ch)
-        return "".join(result)
 
     def _expand_ansi_c_escapes(self, value: str) -> str:
         """Expand ANSI-C escape sequences in $'...' strings.
@@ -472,8 +460,6 @@ class Word(Node):
         value = self._expand_all_ansi_c_quotes(self.value)
         # Format command substitutions
         value = self._format_command_substitutions(value)
-        # Strip control characters
-        value = self._strip_control_chars(value)
         return value.rstrip("\n")
 
 

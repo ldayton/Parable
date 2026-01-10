@@ -35,9 +35,9 @@ test-all: test-cpy test-pypy
 lock-check:
     uv lock --check 2>&1 | sed -u "s/^/[lock] /" | tee /tmp/{{project}}-lock.log
 
-# Run all checks (tests, lint, format, lock) in parallel
+# Run all checks (tests, lint, format, lock, style) in parallel
 [parallel]
-check: test-all lint fmt lock-check check-dump-ast
+check: test-all lint fmt lock-check check-dump-ast check-style
 
 # Run benchmarks
 bench:
@@ -61,3 +61,7 @@ check-dump-ast:
         echo "[dump-ast] FAIL: expected '$expected', got '$output'" >&2; \
         exit 1; \
     fi
+
+# Check for banned Python constructions
+check-style:
+    python3 bin/check-style.py 2>&1 | sed -u "s/^/[style] /" | tee /tmp/{{project}}-style.log

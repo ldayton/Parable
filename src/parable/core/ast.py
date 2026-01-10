@@ -452,9 +452,9 @@ class List(Node):
         # parts = [cmd, op, cmd, op, cmd, ...]
         # Bash precedence: && and || bind tighter than ; and &
         parts = list(self.parts)
-        op_names = {"&&": "and", "||": "or", ";": "semi", "&": "background"}
-        # Strip trailing ; (bash ignores it)
-        while len(parts) > 1 and isinstance(parts[-1], Operator) and parts[-1].op == ";":
+        op_names = {"&&": "and", "||": "or", ";": "semi", "\n": "semi", "&": "background"}
+        # Strip trailing ; or \n (bash ignores it)
+        while len(parts) > 1 and isinstance(parts[-1], Operator) and parts[-1].op in (";", "\n"):
             parts = parts[:-1]
         if len(parts) == 1:
             return parts[0].to_sexp()
@@ -470,9 +470,9 @@ class List(Node):
 
     def _to_sexp_with_precedence(self, parts: list, op_names: dict) -> str:
         # Process operators by precedence: ; (lowest), then &, then && and ||
-        # Split on ; first (rightmost for left-associativity)
+        # Split on ; or \n first (rightmost for left-associativity)
         for i in range(len(parts) - 2, 0, -2):
-            if isinstance(parts[i], Operator) and parts[i].op == ";":
+            if isinstance(parts[i], Operator) and parts[i].op in (";", "\n"):
                 left = parts[:i]
                 right = parts[i + 1 :]
                 left_sexp = List(left).to_sexp() if len(left) > 1 else left[0].to_sexp()
@@ -1564,12 +1564,14 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
     if isinstance(node, Pipeline):
         return " | ".join(_format_cmdsub_node(cmd, indent) for cmd in node.commands)
     if isinstance(node, List):
-        # Join commands with operators, no space before ;, space before &
+        # Join commands with operators
         result = []
         for i, p in enumerate(node.parts):
             if isinstance(p, Operator):
                 if p.op == ";":
                     result.append(";")
+                elif p.op == "\n":
+                    result.append("\n")
                 elif p.op == "&":
                     result.append(" &")
                 else:
@@ -1578,9 +1580,9 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
                 if result and not result[-1].endswith((" ", "\n")):
                     result.append(" ")
                 result.append(_format_cmdsub_node(p, indent))
-        # Strip trailing ;
+        # Strip trailing ; or newline
         s = "".join(result)
-        while s.endswith(";"):
+        while s.endswith(";") or s.endswith("\n"):
             s = s[:-1]
         return s
     if isinstance(node, If):

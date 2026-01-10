@@ -4298,7 +4298,7 @@ class Parser:
                     and self.peek_word() not in stop_words
                     and self.peek() not in ")}"
                 ):
-                    op = ";"  # Treat newline as semicolon
+                    op = "\n"  # Newline separator (distinct from explicit ;)
 
             if op is None:
                 break
@@ -4609,7 +4609,7 @@ class Parser:
             # Newline acts as implicit semicolon if followed by more commands
             if op is None and has_newline:
                 if not self.at_end() and self.peek() not in ")}":
-                    op = ";"  # Treat newline as semicolon
+                    op = "\n"  # Newline separator (distinct from explicit ;)
 
             if op is None:
                 break

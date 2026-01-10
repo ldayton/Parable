@@ -86,7 +86,7 @@ class Word(Node):
         """
         if not (value.startswith("'") and value.endswith("'")):
             return value
-        inner = value[1:-1]
+        inner = value[1 : len(value) - 1]
         result = bytearray()
         i = 0
         while i < len(inner):
@@ -305,15 +305,21 @@ class Word(Node):
                 # Extract and expand the $'...' sequence
                 ansi_str = value[i:j]  # e.g. $'hello\nworld'
                 # Strip the $ and expand escapes
-                expanded = self._expand_ansi_c_escapes(ansi_str[1:])  # Pass 'hello\nworld'
+                expanded = self._expand_ansi_c_escapes(
+                    ansi_str[1 : len(ansi_str)]
+                )  # Pass 'hello\nworld'
                 # Inside ${...}, strip quotes for default/alternate value operators
                 # but keep them for pattern replacement operators
                 if brace_depth > 0 and expanded.startswith("'") and expanded.endswith("'"):
-                    inner = expanded[1:-1]
+                    inner = expanded[1 : len(expanded) - 1]
                     # Only strip if non-empty, no CTLESC, and after a default value operator
                     if inner and "\x01" not in inner:
                         # Check what precedes - default value ops: :- := :+ :? - = + ?
-                        prev = "".join(result[-2:]) if len(result) >= 2 else ""
+                        prev = (
+                            "".join(result[len(result) - 2 : len(result)])
+                            if len(result) >= 2
+                            else ""
+                        )
                         if (
                             prev.endswith(":-")
                             or prev.endswith(":=")
@@ -322,9 +328,11 @@ class Word(Node):
                         ):
                             expanded = inner
                         elif len(result) >= 1:
-                            last = result[-1]
+                            last = result[len(result) - 1]
                             # Single char operators (not after :), but not /
-                            if last in "-=+?" and (len(result) < 2 or result[-2] != ":"):
+                            if last in "-=+?" and (
+                                len(result) < 2 or result[len(result) - 2] != ":"
+                            ):
                                 expanded = inner
                 result.append(expanded)
                 i = j
@@ -651,9 +659,9 @@ class Pipeline(Node):
             cmd, needs = cmds[0]
             return self._cmd_sexp(cmd, needs)
         # Nest right-associatively: (pipe a (pipe b c))
-        last_cmd, last_needs = cmds[-1]
+        last_cmd, last_needs = cmds[len(cmds) - 1]
         result = self._cmd_sexp(last_cmd, last_needs)
-        for cmd, needs in reversed(cmds[:-1]):
+        for cmd, needs in reversed(cmds[0 : len(cmds) - 1]):
             if needs and cmd.kind != "command":
                 # Compound command: redirect as sibling in pipe
                 result = "(pipe " + cmd.to_sexp() + ' (redirect ">&" 1) ' + result + ")"
@@ -693,23 +701,27 @@ class List(Node):
         parts = list(self.parts)
         op_names = {"&&": "and", "||": "or", ";": "semi", "\n": "semi", "&": "background"}
         # Strip trailing ; or \n (bash ignores it)
-        while len(parts) > 1 and parts[-1].kind == "operator" and parts[-1].op in (";", "\n"):
-            parts = parts[:-1]
+        while (
+            len(parts) > 1
+            and parts[len(parts) - 1].kind == "operator"
+            and parts[len(parts) - 1].op in (";", "\n")
+        ):
+            parts = parts[0 : len(parts) - 1]
         if len(parts) == 1:
             return parts[0].to_sexp()
         # Handle trailing & as unary background operator
         # & only applies to the immediately preceding pipeline, not the whole list
-        if parts[-1].kind == "operator" and parts[-1].op == "&":
+        if parts[len(parts) - 1].kind == "operator" and parts[len(parts) - 1].op == "&":
             # Find rightmost ; or \n to split there
             for i in range(len(parts) - 3, 0, -2):
                 if parts[i].kind == "operator" and parts[i].op in (";", "\n"):
-                    left = parts[:i]
-                    right = parts[i + 1 : -1]  # exclude trailing &
+                    left = parts[0:i]
+                    right = parts[i + 1 : len(parts) - 1]  # exclude trailing &
                     left_sexp = List(left).to_sexp() if len(left) > 1 else left[0].to_sexp()
                     right_sexp = List(right).to_sexp() if len(right) > 1 else right[0].to_sexp()
                     return "(semi " + left_sexp + " (background " + right_sexp + "))"
             # No ; or \n found, background the whole list (minus trailing &)
-            inner_parts = parts[:-1]
+            inner_parts = parts[0 : len(parts) - 1]
             if len(inner_parts) == 1:
                 return "(background " + inner_parts[0].to_sexp() + ")"
             inner_list = List(inner_parts)
@@ -836,7 +848,7 @@ class Redirect(Node):
                 op = ">&"
             elif op == "<":
                 op = "<&"
-            fd_target = target_val[1:].rstrip("-")  # "&1" -> "1", "&1-" -> "1"
+            fd_target = target_val[1 : len(target_val)].rstrip("-")  # "&1" -> "1", "&1-" -> "1"
             if fd_target.isdigit():
                 return '(redirect "' + op + '" ' + fd_target + ")"
             elif target_val == "&-":
@@ -1960,7 +1972,7 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
                     result.append(";")
                 elif p.op == "\n":
                     # Skip newline if it follows a semicolon (redundant separator)
-                    if result and result[-1] == ";":
+                    if result and result[len(result) - 1] == ";":
                         continue
                     result.append("\n")
                 elif p.op == "&":
@@ -1968,13 +1980,13 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
                 else:
                     result.append(" " + p.op)
             else:
-                if result and not result[-1].endswith((" ", "\n")):
+                if result and not result[len(result) - 1].endswith((" ", "\n")):
                     result.append(" ")
                 result.append(_format_cmdsub_node(p, indent))
         # Strip trailing ; or newline
         s = "".join(result)
         while s.endswith(";") or s.endswith("\n"):
-            s = s[:-1]
+            s = s[0 : len(s) - 1]
         return s
     if node.kind == "if":
         cond = _format_cmdsub_node(node.condition, indent)
@@ -2066,7 +2078,7 @@ def _format_redirect(r: "Redirect | HereDoc") -> str:
     if target.startswith("&"):
         # Normalize N<&- to N>&- (close always uses >)
         if target == "&-" and op.endswith("<"):
-            op = op[:-1] + ">"
+            op = op[0 : len(op) - 1] + ">"
         # Add default fd for bare >&N or <&N
         if op == ">":
             op = "1>"

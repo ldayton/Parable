@@ -217,7 +217,7 @@ class Parser:
             # Only BEFORE = sign (key=1],a[1 should not track the [1 part)
             # Only after identifier char (not [[ which is conditional keyword)
             if ch == "[" and chars and at_command_start and not seen_equals:
-                prev_char = chars[-1]
+                prev_char = chars[len(chars) - 1]
                 if prev_char.isalnum() or prev_char in "_]":
                     bracket_depth += 1
                     chars.append(self.advance())
@@ -417,7 +417,10 @@ class Parser:
             elif (
                 ch == "("
                 and chars
-                and (chars[-1] == "=" or (len(chars) >= 2 and chars[-2:] == ["+", "="]))
+                and (
+                    chars[len(chars) - 1] == "="
+                    or (len(chars) >= 2 and chars[len(chars) - 2 : len(chars)] == ["+", "="])
+                )
             ):
                 array_node, array_text = self._parse_array_literal()
                 if array_node:
@@ -1671,27 +1674,27 @@ class Parser:
 
         # Parse the operator
         if op_str.startswith(":-"):
-            return ParamExpansion(name, ":-", op_str[2:])
+            return ParamExpansion(name, ":-", op_str[2 : len(op_str)])
         if op_str.startswith(":="):
-            return ParamExpansion(name, ":=", op_str[2:])
+            return ParamExpansion(name, ":=", op_str[2 : len(op_str)])
         if op_str.startswith(":+"):
-            return ParamExpansion(name, ":+", op_str[2:])
+            return ParamExpansion(name, ":+", op_str[2 : len(op_str)])
         if op_str.startswith(":?"):
-            return ParamExpansion(name, ":?", op_str[2:])
+            return ParamExpansion(name, ":?", op_str[2 : len(op_str)])
         if op_str.startswith(":"):
-            return ParamExpansion(name, ":", op_str[1:])
+            return ParamExpansion(name, ":", op_str[1 : len(op_str)])
         if op_str.startswith("##"):
-            return ParamExpansion(name, "##", op_str[2:])
+            return ParamExpansion(name, "##", op_str[2 : len(op_str)])
         if op_str.startswith("#"):
-            return ParamExpansion(name, "#", op_str[1:])
+            return ParamExpansion(name, "#", op_str[1 : len(op_str)])
         if op_str.startswith("%%"):
-            return ParamExpansion(name, "%%", op_str[2:])
+            return ParamExpansion(name, "%%", op_str[2 : len(op_str)])
         if op_str.startswith("%"):
-            return ParamExpansion(name, "%", op_str[1:])
+            return ParamExpansion(name, "%", op_str[1 : len(op_str)])
         if op_str.startswith("//"):
-            return ParamExpansion(name, "//", op_str[2:])
+            return ParamExpansion(name, "//", op_str[2 : len(op_str)])
         if op_str.startswith("/"):
-            return ParamExpansion(name, "/", op_str[1:])
+            return ParamExpansion(name, "/", op_str[1 : len(op_str)])
         return ParamExpansion(name, "", op_str)
 
     def _arith_parse_single_quote(self) -> Node:
@@ -2616,7 +2619,7 @@ class Parser:
             if not quoted:
                 while line.endswith("\\") and line_end < self.length:
                     # Continue to next line
-                    line = line[:-1]  # Remove backslash
+                    line = line[0 : len(line) - 1]  # Remove backslash
                     line_end += 1  # Skip newline
                     next_line_start = line_end
                     while line_end < self.length and self.source[line_end] != "\n":
@@ -3071,7 +3074,7 @@ class Parser:
             # ( and ) end words unless part of extended glob: @(...), ?(...), *(...), +(...), !(...)
             if ch == "(":
                 # Check if this is an extended glob (preceded by @, ?, *, +, or !)
-                if chars and chars[-1] in "@?*+!":
+                if chars and chars[len(chars) - 1] in "@?*+!":
                     # Extended glob - consume the parenthesized content
                     chars.append(self.advance())  # (
                     depth = 1
@@ -4703,7 +4706,12 @@ class Parser:
                 break
 
             # Don't add duplicate semicolon (e.g., explicit ; followed by newline)
-            if not (op == ";" and parts and parts[-1].kind == "operator" and parts[-1].op == ";"):
+            if not (
+                op == ";"
+                and parts
+                and parts[len(parts) - 1].kind == "operator"
+                and parts[len(parts) - 1].op == ";"
+            ):
                 parts.append(Operator(op))
 
             # For & at end of list, don't require another command

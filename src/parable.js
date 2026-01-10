@@ -1627,15 +1627,15 @@ class CasePattern extends Node {
 			} else if (ch === "[") {
 				var result = ConsumeBracketClass(this.pattern, i, depth);
 				i = result[0];
-				current.push(result[1]);
+				current.push(...result[1]);
 			} else if (ch === "'" && depth === 0) {
 				result = ConsumeSingleQuote(this.pattern, i);
 				i = result[0];
-				current.push(result[1]);
+				current.push(...result[1]);
 			} else if (ch === '"' && depth === 0) {
 				result = ConsumeDoubleQuote(this.pattern, i);
 				i = result[0];
-				current.push(result[1]);
+				current.push(...result[1]);
 			} else if (ch === "|" && depth === 0) {
 				alternatives.push(current.join(""));
 				current = [];

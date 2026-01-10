@@ -8,7 +8,7 @@
 </pre>
 </div>
 
-Parse bash exactly as bash does. Python & JS, zero dependencies, zero imports. This is the only complete bash parser for Python & JS. Extensively validated against bash itself.
+Parse bash exactly as bash does. Python or Javascript, your choice. One file, zero dependencies. This is the only complete bash parser for Python or JS. Extensively validated against bash itself.
 
 ---
 
@@ -18,15 +18,15 @@ Parse bash exactly as bash does. Python & JS, zero dependencies, zero imports. T
 
 **Match bash exactly.** Bash is the oracle. We patched GNU Bash 5.3 with `--dump-ast` to emit its internal parse tree, then test against it. No spec interpretation, no "close enough"—if bash parses it one way, so do we. Bash always tells the truth, even when it's lying.
 
-**Python & JS from one source.** The Python implementation is the source of truth. A custom transpiler produces perfectly readable JavaScript. Both implementations run against the same validation battery.
+**Python & JS from one source.** The Python implementation is the source of truth. A custom transpiler produces perfectly readable Javascript. Both implementations run against the same validation battery.
 
 **Fast as possible.** Recursive descent is inherently slower than table-driven parsing. We pay that cost for clarity, then claw back every microsecond we can.
 
-## JavaScript
+## Javascript
 
-The Python implementation is written in a high-performance subset of Python—no comprehensions, no decorators, no Python-specific idioms that would produce awkward JavaScript. A custom transpiler rewrites this subset into perfectly readable JavaScript: not minified, not obfuscated, but clean code that looks like a human wrote it.
+The Python implementation is written in a high-performance subset of Python—no comprehensions, no decorators, no Python-specific idioms that would produce awkward Javascript. A custom transpiler rewrites this subset into perfectly readable JS: not minified, not obfuscated, not transmogrified, but clean code that looks like a human wrote it.
 
-The JavaScript output is then run against the same validation battery as Python. Same tests, same bash AST comparisons, same edge cases. If Python parses it correctly, so does JS.
+The Javascript output is then run against the same validation battery as Python. Same tests, same bash AST comparisons, same edge cases. If Python parses it correctly, so does JS.
 
 ## Why Parable?
 
@@ -124,7 +124,7 @@ print(ast[0].to_sexp())
 # (command (word "cat") (redirect "<<" "heredoc content\n"))
 ```
 
-### JavaScript
+### Javascript
 
 ```javascript
 import { parse } from './src/parable.js';
@@ -144,7 +144,7 @@ cd Parable && uv pip install -e .
 
 ```bash
 just test      # Run Python tests
-just test-js   # Run JavaScript tests
+just test-js   # Run Javascript tests
 just test-all  # All Python versions (3.10-3.14)
 ```
 
@@ -165,8 +165,7 @@ just lint --fix  # Lint with ruff
 
 ```
 src/parable.py    # Single-file Python parser with AST definitions
-src/parable.js    # Transpiled JavaScript parser (generated)
-bin/transpile.py  # Python-to-JavaScript transpiler
+src/parable.js    # Transpiled Javascript parser
 
 tests/
 ├── *.tests                      # Test cases in custom format

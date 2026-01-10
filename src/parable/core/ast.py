@@ -103,20 +103,38 @@ class Word(Node):
                     result.append(0x3F)
                     i += 2
                 elif c == "x":
-                    # Hex escape \xHH (1-2 hex digits) - raw byte
-                    j = i + 2
-                    while j < len(inner) and j < i + 4 and inner[j] in "0123456789abcdefABCDEF":
-                        j += 1
-                    if j > i + 2:
-                        byte_val = int(inner[i + 2 : j], 16)
+                    # Check for \x{...} brace syntax (bash 5.3+)
+                    if i + 2 < len(inner) and inner[i + 2] == "{":
+                        # Find closing brace or end of hex digits
+                        j = i + 3
+                        while j < len(inner) and inner[j] in "0123456789abcdefABCDEF":
+                            j += 1
+                        hex_str = inner[i + 3 : j]
+                        if j < len(inner) and inner[j] == "}":
+                            j += 1  # consume }
+                        # If no hex digits, treat as NUL (truncates)
+                        if not hex_str:
+                            return "'" + result.decode("utf-8", errors="replace") + "'"
+                        byte_val = int(hex_str, 16) & 0xFF  # Take low byte
                         if byte_val == 0:
-                            # NUL truncates string
                             return "'" + result.decode("utf-8", errors="replace") + "'"
                         self._append_with_ctlesc(result, byte_val)
                         i = j
                     else:
-                        result.append(ord(inner[i]))
-                        i += 1
+                        # Hex escape \xHH (1-2 hex digits) - raw byte
+                        j = i + 2
+                        while j < len(inner) and j < i + 4 and inner[j] in "0123456789abcdefABCDEF":
+                            j += 1
+                        if j > i + 2:
+                            byte_val = int(inner[i + 2 : j], 16)
+                            if byte_val == 0:
+                                # NUL truncates string
+                                return "'" + result.decode("utf-8", errors="replace") + "'"
+                            self._append_with_ctlesc(result, byte_val)
+                            i = j
+                        else:
+                            result.append(ord(inner[i]))
+                            i += 1
                 elif c == "u":
                     # Unicode escape \uHHHH (1-4 hex digits) - encode as UTF-8
                     j = i + 2

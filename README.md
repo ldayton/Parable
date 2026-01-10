@@ -2,25 +2,25 @@
 <pre>
      ////        \\\\                         The wind blows where it wishes,
       ////              \\\\                          and you hear its sound,
-  --------////  <strong>P A R A B L E</strong>  \\\\--------      but you do not know where it
-        \\\\         ////                         comes from or where it goes.
+  --------////  P A R A B L E  \\\\--------      but you do not know where it
+        \\\\         ////                        comes from or where it goes.
      \\\\        ////                                              — John 3:8
 </pre>
 </div>
 
-A hand-written recursive descent parser for bash. No shortcuts, no regexes, no external dependencies—just pure Python that understands bash the way bash understands bash.
+A recursive descent parser for bash in pure Python. 4,700 lines, no dependencies, no compromises.
 
 ---
 
 ## Philosophy
 
-Most bash parsers are glorified regex matchers that handle the happy path. Parable is different. Built from the GNU bash manual, the POSIX spec, the bash YACC grammar, and tested against brutal edge cases from open source test suites.
+**LLM-driven development.** This project is an exercise in maximizing what LLMs can do. A 4,700-line recursive descent parser for one of the ugliest grammars in computing, built and maintained almost entirely through AI assistance—it wouldn't exist without them. When performance and clarity conflict, clarity wins. Verbose beats clever. The code should be readable by both humans and models.
 
-- **5,680 test cases**
-- **100% pass rate on the GNU Bash test corpus**
-- **100% pass rate on the Oils bash corpus**
-- **100% pass rate on the tree-sitter bash corpus**
-- **Every test validated against real bash 5.2 ASTs**
+**Match bash exactly.** Bash is the oracle. We patched GNU Bash 5.3 with `--dump-ast` to emit its internal parse tree, then test against it. No spec interpretation, no "close enough"—if bash parses it one way, so do we. Bash always tells the truth, even when it's lying.
+
+**Pure Python.** One parser file, one AST file. Runs anywhere Python runs.
+
+**Fast as possible.** Recursive descent is inherently slower than table-driven parsing. We pay that cost for clarity, then claw back every microsecond we can.
 
 ## What It Handles
 
@@ -37,14 +37,16 @@ The dark corners of bash that break other parsers:
 - **Obscure redirects**: `{fd}>file`, `3<&0-`, `&>`, `|&`, `>|`
 - **Coprocesses**: `coproc name { commands; }`
 - **Case fallthrough**: `;&` and `;;&`
-- **Everything else**: functions, subshells, brace groups, pipelines, lists, all the control structures
+- **Everything else**: functions, subshells, brace groups, pipelines, lists—the full grammar
 
-## Installation
+## Test Coverage
 
-```bash
-git clone https://github.com/ldayton/Parable.git
-cd Parable && uv pip install -e .
-```
+- **4,208 test cases** across four corpora
+- **Oils bash corpus:** 2,495 tests
+- **GNU Bash test corpus:** 78 tests
+- **tree-sitter-bash corpus:** 93 tests
+- **Parable hand-written tests:** 1,542 tests
+- **Every test validated against real bash 5.3 ASTs**
 
 ## Usage
 
@@ -65,6 +67,13 @@ print(ast[0].to_sexp())
 ast = parse("cat <<'EOF'\nheredoc content\nEOF")
 print(ast[0].to_sexp())
 # (command (word "cat") (heredoc-quoted "EOF" "heredoc content\n"))
+```
+
+## Installation
+
+```bash
+git clone https://github.com/ldayton/Parable.git
+cd Parable && uv pip install -e .
 ```
 
 ## Tests

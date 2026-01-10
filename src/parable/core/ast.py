@@ -281,6 +281,21 @@ class Word(Node):
                 ansi_str = value[i:j]  # e.g. $'hello\nworld'
                 # Strip the $ and expand escapes
                 expanded = self._expand_ansi_c_escapes(ansi_str[1:])  # Pass 'hello\nworld'
+                # Inside ${...}, strip quotes for default/alternate value operators
+                # but keep them for pattern replacement operators
+                if brace_depth > 0 and expanded.startswith("'") and expanded.endswith("'"):
+                    inner = expanded[1:-1]
+                    # Only strip if non-empty, no CTLESC, and after a default value operator
+                    if inner and "\x01" not in inner:
+                        # Check what precedes - default value ops: :- := :+ :? - = + ?
+                        prev = "".join(result[-2:]) if len(result) >= 2 else ""
+                        if prev.endswith(":-") or prev.endswith(":=") or prev.endswith(":+") or prev.endswith(":?"):
+                            expanded = inner
+                        elif len(result) >= 1:
+                            last = result[-1]
+                            # Single char operators (not after :), but not /
+                            if last in "-=+?" and (len(result) < 2 or result[-2] != ":"):
+                                expanded = inner
                 result.append(expanded)
                 i = j
             else:

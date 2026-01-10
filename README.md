@@ -149,10 +149,9 @@ just lint  # Check linting with ruff
 ```
 src/parable/
 ├── __init__.py        # parse() entry point
-└── core/
-    ├── ast.py         # AST node definitions
-    ├── errors.py      # ParseError
-    └── parser.py      # Recursive descent parser
+├── ast.py             # AST node definitions
+├── errors.py          # ParseError
+└── parser.py          # Recursive descent parser
 
 tests/
 ├── *.tests                      # Test cases in custom format

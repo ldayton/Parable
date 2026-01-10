@@ -33,7 +33,7 @@ class TestItem(pytest.Item):
 
     def runtest(self):
         from parable import parse
-        from parable.core.errors import ParseError
+        from parable.errors import ParseError
 
         try:
             nodes = parse(self.test_case.input)

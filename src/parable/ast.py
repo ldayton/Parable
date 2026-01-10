@@ -569,7 +569,7 @@ class Word(Node):
                 if inner.strip() == "":
                     result.append("${ }")
                 else:
-                    from parable.core.parser import Parser
+                    from .parser import Parser
 
                     try:
                         parser = Parser(inner.lstrip(" |"))

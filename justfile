@@ -28,7 +28,7 @@ lock-check:
 
 # Run all checks (tests, lint, format, lock) in parallel
 [parallel]
-check: test-all lint fmt lock-check
+check: test-all lint fmt lock-check check-dump-ast
 
 # Run benchmarks
 bench:
@@ -41,3 +41,14 @@ lint *ARGS:
 # Format (--fix to apply changes)
 fmt *ARGS:
     uv run ruff format {{ if ARGS == "--fix" { "" } else { "--check" } }} 2>&1 | sed -u "s/^/[fmt] /" | tee /tmp/{{project}}-fmt.log
+
+# Verify parable-dump.py works
+check-dump-ast:
+    @output=$(uv run bin/parable-dump.py 'echo hello') && \
+    expected='(command (word "echo") (word "hello"))' && \
+    if [ "$output" = "$expected" ]; then \
+        echo "[dump-ast] OK"; \
+    else \
+        echo "[dump-ast] FAIL: expected '$expected', got '$output'" >&2; \
+        exit 1; \
+    fi

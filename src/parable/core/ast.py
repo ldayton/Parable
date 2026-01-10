@@ -1932,7 +1932,17 @@ def _find_cmdsub_end(value: str, start: int) -> int:
             in_double = not in_double
             i += 1
             continue
-        if in_single or in_double:
+        if in_single:
+            i += 1
+            continue
+        if in_double:
+            # Inside double quotes, $() command substitution is still active
+            if value[i : i + 2] == "$(" and value[i : i + 3] != "$((":
+                # Recursively find end of nested command substitution
+                j = _find_cmdsub_end(value, i + 2)
+                i = j
+                continue
+            # Skip other characters inside double quotes
             i += 1
             continue
         # Check for 'case' keyword

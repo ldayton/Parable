@@ -365,6 +365,10 @@ class Word(Node):
                 i += 1
         return "".join(result)
 
+    def get_cond_formatted_value(self) -> str:
+        """Return value with command substitutions formatted for cond-term output."""
+        return self._format_command_substitutions(self.value)
+
 
 @dataclass
 class Command(Node):
@@ -1445,7 +1449,9 @@ class BinaryTest(Node):
     def to_sexp(self) -> str:
         # Oracle format: (cond-binary "==" (cond-term "x") (cond-term "y"))
         # cond-term preserves content as-is (no backslash escaping)
-        return f'(cond-binary "{self.op}" (cond-term "{self.left.value}") (cond-term "{self.right.value}"))'
+        left_val = self.left.get_cond_formatted_value()
+        right_val = self.right.get_cond_formatted_value()
+        return f'(cond-binary "{self.op}" (cond-term "{left_val}") (cond-term "{right_val}"))'
 
 
 @dataclass

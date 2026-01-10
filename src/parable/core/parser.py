@@ -3283,8 +3283,15 @@ class Parser:
                 chars.append(self.advance())
                 continue
 
-            # Parameter expansion $var or ${...}
+            # Command substitution $(...) or parameter expansion $var or ${...}
             if ch == "$":
+                # Try command substitution first
+                if self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                    cmdsub_node, cmdsub_text = self._parse_command_substitution()
+                    if cmdsub_node:
+                        parts.append(cmdsub_node)
+                        chars.append(cmdsub_text)
+                        continue
                 param_node, param_text = self._parse_param_expansion()
                 if param_node:
                     parts.append(param_node)

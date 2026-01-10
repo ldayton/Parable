@@ -154,7 +154,9 @@ Similar quote-aware scanning loops in `_parse_command_substitution()`, `_parse_h
 |--------|----|-----------------------|---------|
 | State location | Explicit struct fields | Instance fields | Mix of instance + dynamic attrs |
 | Position tracking | Single `pos` | Single `current` | `pos` + parallel `arith_pos` |
+| Lookahead | `tok`, `lit` (current token) | `tokens[current]` | Direct `source[pos]` access |
 | Nesting tracking | `nestLev` counter | Call stack only | Multiple: `paren_depth`, `bracket_depth`, etc. |
+| Mode flags | Implicit in call stack | Implicit in call stack | Explicit `in_*` parameters |
 
 | # | Issue | Severity | Effort |
 |---|-------|----------|--------|
@@ -168,7 +170,9 @@ Similar quote-aware scanning loops in `_parse_command_substitution()`, `_parse_h
 | Aspect | Go | Crafting Interpreters | Parable |
 |--------|----|-----------------------|---------|
 | Node count | ~80 | 21 (Expr) + 9 (Stmt) | 47 |
+| Definition style | Structs | Generated classes | Dataclasses |
 | Visitor pattern | No (type switches) | Yes (`Visitor<R>`) | No |
+| Position info | Explicit `Pos` field | Token reference | Implicit from source |
 | Formatting | Separate printer | `AstPrinter` visitor | `to_sexp()` methods |
 
 | # | Issue | Severity | Effort |
@@ -186,6 +190,7 @@ Similar quote-aware scanning loops in `_parse_command_substitution()`, `_parse_h
 | Parse methods | `funcDecl()` | `function()` | `parse_function_definition()` |
 | Helpers | `got()`, `want()` | `match()`, `consume()` | None |
 | Private | Unexported | Private keyword | `_` prefix |
+| Boolean methods | `is*` | `is*`, `check*` | Mixed |
 
 | # | Issue | Severity | Effort |
 |---|-------|----------|--------|
@@ -204,6 +209,7 @@ Similar quote-aware scanning loops in `_parse_command_substitution()`, `_parse_h
 | Entry point | `Parse(src)` | `new Parser(tokens).parse()` | `Parser(src).parse()` |
 | Options | `Mode` flags | None | None |
 | Error type | `Error` with `Pos` | `ParseError` | `ParseError` |
+| Re-entrancy | New parser per file | New parser per input | Stateful instance |
 
 | # | Issue | Severity | Effort |
 |---|-------|----------|--------|

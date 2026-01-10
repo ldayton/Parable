@@ -756,8 +756,8 @@ class Redirect(Node):
             elif target_val == "&-":
                 return f'(redirect ">&-" 0)'
             else:
-                # Variable fd dup like >&$fd - strip the & from target
-                return f'(redirect "{op}" "{target_val[1:]}")'
+                # Variable fd dup like >&$fd or >&$fd- (move) - strip the & and trailing -
+                return f'(redirect "{op}" "{fd_target}")'
         # Handle case where op is already >& or <& and target is just a digit
         if op in (">&", "<&") and target_val.isdigit():
             return f'(redirect "{op}" {target_val})'

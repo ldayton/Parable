@@ -12,6 +12,8 @@ class JSTranspiler(ast.NodeVisitor):
         self.output = []
         self.in_class_body = False
         self.in_method = False
+        self.class_has_base = False
+        self.declared_vars = set()
 
     def emit(self, text: str):
         self.output.append("    " * self.indent + text)
@@ -34,10 +36,13 @@ class JSTranspiler(ast.NodeVisitor):
         self.emit(f"class {node.name}{extends} {{")
         self.indent += 1
         old_in_class = self.in_class_body
+        old_has_base = self.class_has_base
         self.in_class_body = True
+        self.class_has_base = bool(bases)
         for stmt in node.body:
             self.visit(stmt)
         self.in_class_body = old_in_class
+        self.class_has_base = old_has_base
         self.indent -= 1
         self.emit("}")
         self.emit("")
@@ -46,6 +51,23 @@ class JSTranspiler(ast.NodeVisitor):
         """Rename JS reserved words."""
         reserved = {"var": "variable", "class": "cls", "function": "func", "in": "inVal", "with": "withVal"}
         return reserved.get(name, name)
+
+    def _is_super_call(self, stmt: ast.stmt) -> bool:
+        """Check if statement is a super().__init__() call."""
+        if not isinstance(stmt, ast.Expr):
+            return False
+        call = stmt.value
+        if not isinstance(call, ast.Call):
+            return False
+        if not isinstance(call.func, ast.Attribute):
+            return False
+        if call.func.attr != "__init__":
+            return False
+        if not isinstance(call.func.value, ast.Call):
+            return False
+        if not isinstance(call.func.value.func, ast.Name):
+            return False
+        return call.func.value.func.id == "super"
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
         args = [self._safe_name(a.arg) for a in node.args.args if a.arg != "self"]
@@ -60,12 +82,33 @@ class JSTranspiler(ast.NodeVisitor):
         self.indent += 1
         old_in_class = self.in_class_body
         old_in_method = self.in_method
+        old_declared = self.declared_vars
         self.in_class_body = False
         self.in_method = True
-        for stmt in node.body:
-            self.visit(stmt)
+        # Start with function parameters as declared
+        self.declared_vars = set(a.arg for a in node.args.args if a.arg != "self")
+        # For constructors in subclasses, emit super() first
+        if name == "constructor" and self.class_has_base:
+            # Find and emit super() call first, or add one if missing
+            super_stmt = None
+            other_stmts = []
+            for stmt in node.body:
+                if self._is_super_call(stmt):
+                    super_stmt = stmt
+                else:
+                    other_stmts.append(stmt)
+            if super_stmt:
+                self.visit(super_stmt)
+            else:
+                self.emit("super();")
+            for stmt in other_stmts:
+                self.visit(stmt)
+        else:
+            for stmt in node.body:
+                self.visit(stmt)
         self.in_class_body = old_in_class
         self.in_method = old_in_method
+        self.declared_vars = old_declared
         self.indent -= 1
         self.emit("}")
         self.emit("")
@@ -80,9 +123,13 @@ class JSTranspiler(ast.NodeVisitor):
         target = self.visit_expr(node.targets[0])
         value = self.visit_expr(node.value)
         if isinstance(node.targets[0], ast.Name):
+            var_name = node.targets[0].id
             if self.in_class_body:
                 self.emit(f"{target} = {value};")
+            elif var_name in self.declared_vars:
+                self.emit(f"{target} = {value};")
             else:
+                self.declared_vars.add(var_name)
                 self.emit(f"let {target} = {value};")
         else:
             self.emit(f"{target} = {value};")
@@ -91,9 +138,14 @@ class JSTranspiler(ast.NodeVisitor):
         target = self.visit_expr(node.target)
         if node.value:
             value = self.visit_expr(node.value)
+            var_name = node.target.id if isinstance(node.target, ast.Name) else None
             if self.in_class_body:
                 self.emit(f"{target} = {value};")
+            elif var_name and var_name in self.declared_vars:
+                self.emit(f"{target} = {value};")
             else:
+                if var_name:
+                    self.declared_vars.add(var_name)
                 self.emit(f"let {target} = {value};")
 
     def visit_AugAssign(self, node: ast.AugAssign):
@@ -139,6 +191,9 @@ class JSTranspiler(ast.NodeVisitor):
 
     def visit_For(self, node: ast.For):
         target = self.visit_expr(node.target)
+        # Track loop variable as declared
+        if isinstance(node.target, ast.Name):
+            self.declared_vars.add(node.target.id)
         iter_expr = node.iter
         # Handle range() specially
         if isinstance(iter_expr, ast.Call) and isinstance(iter_expr.func, ast.Name) and iter_expr.func.id == "range":
@@ -149,7 +204,17 @@ class JSTranspiler(ast.NodeVisitor):
                 self.emit(f"for (let {target} = {self.visit_expr(args[0])}; {target} < {self.visit_expr(args[1])}; {target}++) {{")
             else:
                 start, end, step = args
-                self.emit(f"for (let {target} = {self.visit_expr(start)}; {target} < {self.visit_expr(end)}; {target} += {self.visit_expr(step)}) {{")
+                # Check if step is negative for proper comparison and decrement
+                is_negative = False
+                if isinstance(step, ast.UnaryOp) and isinstance(step.op, ast.USub):
+                    is_negative = True
+                elif isinstance(step, ast.Constant) and step.value < 0:
+                    is_negative = True
+                if is_negative:
+                    self.emit(f"for (let {target} = {self.visit_expr(start)}; {target} > {self.visit_expr(end)}; {target}--) {{")
+                else:
+                    step_val = self.visit_expr(step)
+                    self.emit(f"for (let {target} = {self.visit_expr(start)}; {target} < {self.visit_expr(end)}; {target} += {step_val}) {{")
         else:
             self.emit(f"for (const {target} of {self.visit_expr(iter_expr)}) {{")
         self.indent += 1
@@ -199,7 +264,10 @@ class JSTranspiler(ast.NodeVisitor):
         return f"/* TODO: {node.__class__.__name__} */"
 
     def visit_expr_Name(self, node: ast.Name) -> str:
-        mapping = {"True": "true", "False": "false", "None": "null", "self": "this"}
+        mapping = {
+            "True": "true", "False": "false", "None": "null", "self": "this",
+            "Exception": "Error", "NotImplementedError": 'new Error("Not implemented")',
+        }
         name = mapping.get(node.id, node.id)
         return self._safe_name(name)
 
@@ -267,13 +335,17 @@ class JSTranspiler(ast.NodeVisitor):
             if name == "str":
                 return f"String({args})"
             if name == "int":
-                return f"parseInt({args})"
+                return f"parseInt({args}, 10)"
             if name == "ord":
                 return f"{args}.charCodeAt(0)"
             if name == "chr":
                 return f"String.fromCharCode({args})"
             if name == "isinstance":
                 return f"{node.args[0].id} instanceof {self.visit_expr(node.args[1])}"
+            if name == "bytearray":
+                return "[]"
+            if name == "set":
+                return f"new Set({args})"
             return f"{name}({args})"
         return f"{self.visit_expr(node.func)}({args})"
 

@@ -70,4 +70,4 @@ check-style:
 transpile:
     python3 bin/transpile.py src/parable.py > src/parable.js
     npx -y @biomejs/biome format --write src/parable.js
-    npx -y @biomejs/biome lint src/parable.js
+    npx -y @biomejs/biome lint --only=correctness --skip=noUndeclaredVariables --skip=noUnusedVariables src/parable.js

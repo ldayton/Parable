@@ -8,7 +8,7 @@
 </pre>
 </div>
 
-Parse bash exactly as bash does. Pure Python, zero dependencies, zero imports. This is the only complete bash parser for Python. Extensively validated against bash itself.
+Parse bash exactly as bash does. Python & JS, zero dependencies, zero imports. This is the only complete bash parser for Python & JS. Extensively validated against bash itself.
 
 ---
 
@@ -18,9 +18,15 @@ Parse bash exactly as bash does. Pure Python, zero dependencies, zero imports. T
 
 **Match bash exactly.** Bash is the oracle. We patched GNU Bash 5.3 with `--dump-ast` to emit its internal parse tree, then test against it. No spec interpretation, no "close enough"—if bash parses it one way, so do we. Bash always tells the truth, even when it's lying.
 
-**Pure Python.** One file, zero dependencies. Runs anywhere Python runs.
+**Python & JS from one source.** The Python implementation is the source of truth. A custom transpiler produces perfectly readable JavaScript. Both implementations run against the same validation battery.
 
 **Fast as possible.** Recursive descent is inherently slower than table-driven parsing. We pay that cost for clarity, then claw back every microsecond we can.
+
+## JavaScript
+
+The Python implementation is written in a high-performance subset of Python—no comprehensions, no decorators, no Python-specific idioms that would produce awkward JavaScript. A custom transpiler rewrites this subset into perfectly readable JavaScript: not minified, not obfuscated, but clean code that looks like a human wrote it.
+
+The JavaScript output is then run against the same validation battery as Python. Same tests, same bash AST comparisons, same edge cases. If Python parses it correctly, so does JS.
 
 ## Why Parable?
 
@@ -31,13 +37,13 @@ Bash's grammar is notoriously irregular. Existing tools make tradeoffs:
 - **tree-sitter-bash** — Editor-focused, not Python-native. [Many open parsing bugs](https://github.com/tree-sitter/tree-sitter-bash/issues).
 - **mvdan/sh** — Excellent, but Go. Documents [bash-specific caveats](https://github.com/mvdan/sh#caveats).
 
-Parable is the only Python library that parses bash exactly as bash does—tested against bash's own AST. For security and sandboxing, 95% coverage is 100% inadequate.
+Parable is the only Python & JS library that parses bash exactly as bash does—tested against bash's own AST. For security and sandboxing, 95% coverage is 100% inadequate.
 
 **Use cases:**
 - **Security auditing** — Analyze scripts for command injection, dangerous patterns, or policy violations. The construct you can't parse is the one that owns you.
 - **CI/CD analysis** — Understand what shell scripts actually do before running them.
 - **Migration tooling** — Convert bash to other languages with full AST access.
-- **Linting and formatting** — Build bash linters in Python without regex hacks.
+- **Linting and formatting** — Build bash linters in Python & JS without regex hacks.
 
 ## What It Handles 😱
 
@@ -100,6 +106,8 @@ Every test validated against real bash 5.3 ASTs.
 
 ## Usage
 
+### Python
+
 ```python
 from parable import parse
 
@@ -116,6 +124,15 @@ print(ast[0].to_sexp())
 # (command (word "cat") (redirect "<<" "heredoc content\n"))
 ```
 
+### JavaScript
+
+```javascript
+import { parse } from './src/parable.js';
+
+const ast = parse("ps aux | grep python | awk '{print $2}'");
+console.log(ast[0].toSexp());
+```
+
 ## Installation
 
 ```bash
@@ -126,7 +143,9 @@ cd Parable && uv pip install -e .
 ## Tests
 
 ```bash
-just test   # Run tests
+just test      # Run Python tests
+just test-js   # Run JavaScript tests
+just test-all  # All Python versions (3.10-3.14)
 ```
 
 ## Benchmarks
@@ -145,7 +164,9 @@ just lint --fix  # Lint with ruff
 ## Project Structure
 
 ```
-src/parable.py    # Single-file parser with AST definitions
+src/parable.py    # Single-file Python parser with AST definitions
+src/parable.js    # Transpiled JavaScript parser (generated)
+bin/transpile.py  # Python-to-JavaScript transpiler
 
 tests/
 ├── *.tests                      # Test cases in custom format

@@ -5734,7 +5734,7 @@ class Parser {
 		if (this._pending_heredoc_end == null) {
 			this._pending_heredoc_end = heredoc_end;
 		} else {
-			this._pending_heredoc_end = max(this._pending_heredoc_end, heredoc_end);
+			this._pending_heredoc_end = Math.max(this._pending_heredoc_end, heredoc_end);
 		}
 		return new HereDoc(delimiter, content, strip_tabs, quoted, fd);
 	}

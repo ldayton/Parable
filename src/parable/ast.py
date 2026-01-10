@@ -370,13 +370,23 @@ class Word(Node):
 
     def _normalize_array_whitespace(self, value: str) -> str:
         """Normalize whitespace inside array assignments: arr=(a  b\tc) -> arr=(a b c)."""
-        import re
-
         # Match array assignment pattern: name=( or name+=(
-        match = re.match(r"^([a-zA-Z_][a-zA-Z_0-9]*\+?=)\(", value)
-        if not match or not value.endswith(")"):
+        if not value.endswith(")"):
             return value
-        prefix = match.group(1)  # e.g., "arr=" or "arr+="
+        # Parse identifier: starts with letter/underscore, then alnum/underscore
+        i = 0
+        if not (i < len(value) and (value[i].isalpha() or value[i] == "_")):
+            return value
+        i += 1
+        while i < len(value) and (value[i].isalnum() or value[i] == "_"):
+            i += 1
+        # Optional + for +=
+        if i < len(value) and value[i] == "+":
+            i += 1
+        # Must have =(
+        if not (i + 1 < len(value) and value[i] == "=" and value[i + 1] == "("):
+            return value
+        prefix = value[: i + 1]  # e.g., "arr=" or "arr+="
         # Extract content inside parentheses
         inner = value[len(prefix) + 1 : -1]
         # Normalize whitespace while respecting quotes
@@ -809,16 +819,22 @@ class Redirect(Node):
         self.fd = fd
 
     def to_sexp(self) -> str:
-        import re
-
         # Strip fd prefix from operator (e.g., "2>" -> ">", "{fd}>" -> ">")
         op = self.op.lstrip("0123456789")
-        op = re.sub(r"^\{[a-zA-Z_][a-zA-Z_0-9]*\}", "", op)
+        # Strip {varname} prefix if present
+        if op.startswith("{"):
+            j = 1
+            if j < len(op) and (op[j].isalpha() or op[j] == "_"):
+                j += 1
+                while j < len(op) and (op[j].isalnum() or op[j] == "_"):
+                    j += 1
+                if j < len(op) and op[j] == "}":
+                    op = op[j + 1 :]
         target_val = self.target.value
         # Expand ANSI-C $'...' quotes (converts escapes like \n to actual newline)
         target_val = Word(target_val)._expand_all_ansi_c_quotes(target_val)
         # Strip $ from locale strings $"..."
-        target_val = re.sub(r'\$"', '"', target_val)
+        target_val = target_val.replace('$"', '"')
         # For fd duplication, target starts with & (e.g., "&1", "&2", "&-")
         if target_val.startswith("&"):
             # Determine the real operator
@@ -1998,13 +2014,26 @@ def _format_redirect(r: "Redirect | HereDoc") -> str:
 
 def _normalize_fd_redirects(s: str) -> str:
     """Normalize fd redirects in a raw string: >&2 -> 1>&2, <&N -> 0<&N."""
-    import re
-
     # Match >&N or <&N not preceded by a digit, add default fd
-    # >&N -> 1>&N, <&N -> 0<&N
-    s = re.sub(r"(?<![0-9])>&(\d)", r"1>&\1", s)
-    s = re.sub(r"(?<![0-9])<&(\d)", r"0<&\1", s)
-    return s
+    result = []
+    i = 0
+    while i < len(s):
+        # Check for >&N or <&N
+        if i + 2 < len(s) and s[i + 1] == "&" and s[i + 2].isdigit():
+            prev_is_digit = i > 0 and s[i - 1].isdigit()
+            if s[i] == ">" and not prev_is_digit:
+                result.append("1>&")
+                result.append(s[i + 2])
+                i += 3
+                continue
+            elif s[i] == "<" and not prev_is_digit:
+                result.append("0<&")
+                result.append(s[i + 2])
+                i += 3
+                continue
+        result.append(s[i])
+        i += 1
+    return "".join(result)
 
 
 def _find_cmdsub_end(value: str, start: int) -> int:

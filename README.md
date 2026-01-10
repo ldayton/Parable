@@ -22,6 +22,23 @@ A recursive descent parser for bash in pure Python. 4,700 lines, no dependencies
 
 **Fast as possible.** Recursive descent is inherently slower than table-driven parsing. We pay that cost for clarity, then claw back every microsecond we can.
 
+## Why Parable?
+
+Bash's grammar is notoriously irregular. Existing tools make tradeoffs:
+
+- **bashlex** — Incomplete. Fails on [heredocs](https://github.com/idank/bashlex/issues/99), [arrays](https://github.com/idank/bashlex/issues/84), [arithmetic](https://github.com/idank/bashlex/issues/68), and [more](https://github.com/idank/bashlex/issues). Fine for simple scripts, breaks on real ones.
+- **Oils/OSH** — A whole shell, not an embeddable library. Makes [intentional parsing tradeoffs](https://github.com/oils-for-unix/oils/blob/master/doc/known-differences.md) for a cleaner language—fine for their goals, but won't predict what real bash does.
+- **tree-sitter-bash** — Editor-focused, not Python-native. [Many open parsing bugs](https://github.com/tree-sitter/tree-sitter-bash/issues).
+- **mvdan/sh** — Excellent, but Go. Documents [bash-specific caveats](https://github.com/mvdan/sh#caveats).
+
+Parable is the only Python library that parses bash exactly as bash does—tested against bash's own AST. For security and sandboxing, 95% coverage is 100% inadequate.
+
+**Use cases:**
+- **Security auditing** — Analyze scripts for command injection, dangerous patterns, or policy violations. The construct you can't parse is the one that owns you.
+- **CI/CD analysis** — Understand what shell scripts actually do before running them.
+- **Migration tooling** — Convert bash to other languages with full AST access.
+- **Linting and formatting** — Build bash linters in Python without regex hacks.
+
 ## What It Handles 😱
 
 The dark corners of bash that break other parsers:
@@ -61,6 +78,16 @@ case $x in @(foo|bar|?(baz))) echo match;; esac
 ```
 
 The full grammar—parameter expansion, heredocs, process substitution, arithmetic, arrays, conditionals, coprocesses, all of it.
+
+## Security
+
+Parable is designed for tools that need to predict what bash will do. Honest caveats:
+
+- **Tested, not proven.** We validate against bash's AST for thousands of difficult edge cases, but this is not a formal proof. A determined attacker with capable LLMs may find discrepancies.
+- **Validated against bash 5.3.** Core parsing is stable across versions, but edge cases may differ. If your target runs ancient bash (macOS ships 3.2) or relies on version-specific quirks, verify independently.
+- **Bash wasn't built for this.** Even perfect parsing doesn't guarantee predictable execution. `shopt` settings, aliases, and runtime context all affect behavior. True security means containers or VMs.
+
+Parable is the best available tool for static bash analysis—oracle-tested, not spec-interpreted. But for high-stakes security, nothing replaces defense in depth.
 
 ## Test Coverage
 

@@ -630,34 +630,34 @@ class Word extends Node {
 		} else {
 			var expr = node["expression"] !== undefined ? node["expression"] : null;
 			if (expr != null) {
-				result.push(this.CollectCmdsubs(expr));
+				result.push(...this.CollectCmdsubs(expr));
 			}
 		}
 		var left = node["left"] !== undefined ? node["left"] : null;
 		if (left != null) {
-			result.push(this.CollectCmdsubs(left));
+			result.push(...this.CollectCmdsubs(left));
 		}
 		var right = node["right"] !== undefined ? node["right"] : null;
 		if (right != null) {
-			result.push(this.CollectCmdsubs(right));
+			result.push(...this.CollectCmdsubs(right));
 		}
 		var operand = node["operand"] !== undefined ? node["operand"] : null;
 		if (operand != null) {
-			result.push(this.CollectCmdsubs(operand));
+			result.push(...this.CollectCmdsubs(operand));
 		}
 		var condition = node["condition"] !== undefined ? node["condition"] : null;
 		if (condition != null) {
-			result.push(this.CollectCmdsubs(condition));
+			result.push(...this.CollectCmdsubs(condition));
 		}
 		var true_value =
 			node["true_value"] !== undefined ? node["true_value"] : null;
 		if (true_value != null) {
-			result.push(this.CollectCmdsubs(true_value));
+			result.push(...this.CollectCmdsubs(true_value));
 		}
 		var false_value =
 			node["false_value"] !== undefined ? node["false_value"] : null;
 		if (false_value != null) {
-			result.push(this.CollectCmdsubs(false_value));
+			result.push(...this.CollectCmdsubs(false_value));
 		}
 		return result;
 	}

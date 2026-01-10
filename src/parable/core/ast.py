@@ -526,17 +526,21 @@ class Word(Node):
                     j += 1
                 # Parse and format the inner content
                 inner = value[i + 2 : j - 1]  # Content between ${ and }
-                from parable.core.parser import Parser
-                try:
-                    parser = Parser(inner.lstrip(" |"))
-                    parsed = parser.parse_list()
-                    if parsed:
-                        formatted = _format_cmdsub_node(parsed)
-                        result.append(f"{prefix}{formatted}; }}")
-                    else:
+                # Check if content is all whitespace - normalize to single space
+                if inner.strip() == "":
+                    result.append("${ }")
+                else:
+                    from parable.core.parser import Parser
+                    try:
+                        parser = Parser(inner.lstrip(" |"))
+                        parsed = parser.parse_list()
+                        if parsed:
+                            formatted = _format_cmdsub_node(parsed)
+                            result.append(f"{prefix}{formatted}; }}")
+                        else:
+                            result.append("${ }")
+                    except Exception:
                         result.append(value[i:j])
-                except Exception:
-                    result.append(value[i:j])
                 i = j
             else:
                 result.append(value[i])
@@ -1821,7 +1825,11 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
     if isinstance(node, Empty):
         return ""
     if isinstance(node, Command):
-        parts = [w._expand_all_ansi_c_quotes(w.value) for w in node.words]
+        parts = []
+        for w in node.words:
+            val = w._expand_all_ansi_c_quotes(w.value)
+            val = w._format_command_substitutions(val)
+            parts.append(val)
         for r in node.redirects:
             parts.append(_format_redirect(r))
         return " ".join(parts)

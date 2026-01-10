@@ -350,13 +350,13 @@ class Word(Node):
                 cmdsub_idx += 1
                 i = j
             # Check for >( or <( process substitution
-            elif value[i : i + 2] in (">(" , "<(") and procsub_idx < len(procsub_parts):
+            elif value[i : i + 2] in (">(", "<(") and procsub_idx < len(procsub_parts):
                 direction = value[i]
                 # Find matching close paren
                 j = _find_cmdsub_end(value, i + 2)
-                # Format this process substitution
+                # Format this process substitution (with in_procsub=True for no-space subshells)
                 node = procsub_parts[procsub_idx]
-                formatted = _format_cmdsub_node(node.command)
+                formatted = _format_cmdsub_node(node.command, in_procsub=True)
                 result.append(f"{direction}({formatted})")
                 procsub_idx += 1
                 i = j
@@ -1550,7 +1550,7 @@ class Coproc(Node):
         return f'(coproc "{name}" {self.command.to_sexp()})'
 
 
-def _format_cmdsub_node(node: Node, indent: int = 0) -> str:
+def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -> str:
     """Format an AST node for command substitution output (oracle pretty-print format)."""
     sp = " " * indent
     inner_sp = " " * (indent + 4)
@@ -1631,7 +1631,9 @@ def _format_cmdsub_node(node: Node, indent: int = 0) -> str:
         body = body.rstrip(";")  # Strip trailing semicolons
         return f"function {name} () \n{{ \n{inner_sp}{body}\n}}"
     if isinstance(node, Subshell):
-        body = _format_cmdsub_node(node.body, indent)
+        body = _format_cmdsub_node(node.body, indent, in_procsub)
+        if in_procsub:
+            return f"({body})"
         return f"( {body} )"
     if isinstance(node, BraceGroup):
         body = _format_cmdsub_node(node.body, indent)

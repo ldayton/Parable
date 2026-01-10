@@ -35,18 +35,18 @@ def _is_octal_digit(c: str) -> bool:
 
 # ANSI-C escape sequence byte values
 ANSI_C_ESCAPES = {
-    "a": 0x07,   # bell
-    "b": 0x08,   # backspace
-    "e": 0x1B,   # escape
-    "E": 0x1B,   # escape (alt)
-    "f": 0x0C,   # form feed
-    "n": 0x0A,   # newline
-    "r": 0x0D,   # carriage return
-    "t": 0x09,   # tab
-    "v": 0x0B,   # vertical tab
+    "a": 0x07,  # bell
+    "b": 0x08,  # backspace
+    "e": 0x1B,  # escape
+    "E": 0x1B,  # escape (alt)
+    "f": 0x0C,  # form feed
+    "n": 0x0A,  # newline
+    "r": 0x0D,  # carriage return
+    "t": 0x09,  # tab
+    "v": 0x0B,  # vertical tab
     "\\": 0x5C,  # backslash
-    '"': 0x22,   # double quote
-    "?": 0x3F,   # question mark
+    '"': 0x22,  # double quote
+    "?": 0x3F,  # question mark
 }
 
 
@@ -1327,6 +1327,91 @@ class Case(Node):
         return base
 
 
+def _consume_single_quote(s: str, start: int) -> tuple:
+    """Consume '...' from start. Returns (end_index, chars_list)."""
+    chars = ["'"]
+    i = start + 1
+    while i < len(s) and s[i] != "'":
+        chars.append(s[i])
+        i += 1
+    if i < len(s):
+        chars.append(s[i])
+        i += 1
+    return (i, chars)
+
+
+def _consume_double_quote(s: str, start: int) -> tuple:
+    """Consume "..." from start, handling escapes. Returns (end_index, chars_list)."""
+    chars = ['"']
+    i = start + 1
+    while i < len(s) and s[i] != '"':
+        if s[i] == "\\" and i + 1 < len(s):
+            chars.append(s[i])
+            i += 1
+        chars.append(s[i])
+        i += 1
+    if i < len(s):
+        chars.append(s[i])
+        i += 1
+    return (i, chars)
+
+
+def _has_bracket_close(s: str, start: int, depth: int) -> bool:
+    """Check if there's a ] before | or ) at depth 0."""
+    i = start
+    while i < len(s):
+        if s[i] == "]":
+            return True
+        if (s[i] == "|" or s[i] == ")") and depth == 0:
+            return False
+        i += 1
+    return False
+
+
+def _consume_bracket_class(s: str, start: int, depth: int) -> tuple:
+    """Consume [...] bracket expression. Returns (end_index, chars_list, was_bracket)."""
+    # First scan to see if this is a valid bracket expression
+    scan_pos = start + 1
+    # Skip [! or [^ at start
+    if scan_pos < len(s) and (s[scan_pos] == "!" or s[scan_pos] == "^"):
+        scan_pos += 1
+    # Handle ] as first char
+    if scan_pos < len(s) and s[scan_pos] == "]":
+        if _has_bracket_close(s, scan_pos + 1, depth):
+            scan_pos += 1
+    # Scan for closing ]
+    is_bracket = False
+    while scan_pos < len(s):
+        if s[scan_pos] == "]":
+            is_bracket = True
+            break
+        if s[scan_pos] == ")" and depth == 0:
+            break
+        scan_pos += 1
+    if not is_bracket:
+        return (start + 1, ["["], False)
+    # Valid bracket - consume it
+    chars = ["["]
+    i = start + 1
+    # Handle [! or [^
+    if i < len(s) and (s[i] == "!" or s[i] == "^"):
+        chars.append(s[i])
+        i += 1
+    # Handle ] as first char
+    if i < len(s) and s[i] == "]":
+        if _has_bracket_close(s, i + 1, depth):
+            chars.append(s[i])
+            i += 1
+    # Consume until ]
+    while i < len(s) and s[i] != "]":
+        chars.append(s[i])
+        i += 1
+    if i < len(s):
+        chars.append(s[i])
+        i += 1
+    return (i, chars, True)
+
+
 class CasePattern(Node):
     """A pattern clause in a case statement."""
 
@@ -1377,98 +1462,17 @@ class CasePattern(Node):
                 depth -= 1
                 i += 1
             elif ch == "[":
-                # Character class - but only if there's a matching ]
-                # First scan to check if ] exists before ) at same depth
-                scan_pos = i + 1
-                # Skip [! or [^ at start
-                if scan_pos < len(self.pattern) and (
-                    self.pattern[scan_pos] == "!" or self.pattern[scan_pos] == "^"
-                ):
-                    scan_pos += 1
-                # Handle ] as first char - it's literal only if there's more content
-                # [] is a complete (empty) bracket, but []] has literal ] then closing ]
-                if scan_pos < len(self.pattern) and self.pattern[scan_pos] == "]":
-                    # Check if there's another ] after this one (making first ] literal)
-                    # but only within this pattern (stop at | or ) at depth 0)
-                    has_another_close = False
-                    for check_pos in range(scan_pos + 1, len(self.pattern)):
-                        if self.pattern[check_pos] == "]":
-                            has_another_close = True
-                            break
-                        if (
-                            self.pattern[check_pos] == "|" or self.pattern[check_pos] == ")"
-                        ) and depth == 0:
-                            break
-                    if has_another_close:
-                        scan_pos += 1  # Skip first ] as literal
-                is_char_class = False
-                while scan_pos < len(self.pattern):
-                    sc = self.pattern[scan_pos]
-                    if sc == "]":
-                        is_char_class = True
-                        break
-                    elif sc == ")" and depth == 0:
-                        # Hit pattern closer before ]
-                        break
-                    scan_pos += 1
-                if not is_char_class:
-                    # No matching ], treat [ as literal
-                    current.append(ch)
-                    i += 1
-                else:
-                    # Valid character class - consume until ]
-                    current.append(ch)
-                    i += 1
-                    # Handle [! or [^ at start
-                    if i < len(self.pattern) and (self.pattern[i] == "!" or self.pattern[i] == "^"):
-                        current.append(self.pattern[i])
-                        i += 1
-                    # Handle ] as first char - only literal if there's another ]
-                    # within this pattern (before | at depth 0)
-                    if i < len(self.pattern) and self.pattern[i] == "]":
-                        # Check if there's another ] to close (making this one literal)
-                        has_another = False
-                        for check_pos in range(i + 1, len(self.pattern)):
-                            if self.pattern[check_pos] == "]":
-                                has_another = True
-                                break
-                            if (
-                                self.pattern[check_pos] == "|" or self.pattern[check_pos] == ")"
-                            ) and depth == 0:
-                                break
-                        if has_another:
-                            current.append(self.pattern[i])
-                            i += 1
-                    # Consume until closing ]
-                    while i < len(self.pattern) and self.pattern[i] != "]":
-                        current.append(self.pattern[i])
-                        i += 1
-                    if i < len(self.pattern):
-                        current.append(self.pattern[i])  # ]
-                        i += 1
+                result = _consume_bracket_class(self.pattern, i, depth)
+                i = result[0]
+                current.extend(result[1])
             elif ch == "'" and depth == 0:
-                # Single-quoted string - consume until closing '
-                current.append(ch)
-                i += 1
-                while i < len(self.pattern) and self.pattern[i] != "'":
-                    current.append(self.pattern[i])
-                    i += 1
-                if i < len(self.pattern):
-                    current.append(self.pattern[i])  # '
-                    i += 1
+                result = _consume_single_quote(self.pattern, i)
+                i = result[0]
+                current.extend(result[1])
             elif ch == '"' and depth == 0:
-                # Double-quoted string - consume until closing "
-                current.append(ch)
-                i += 1
-                while i < len(self.pattern) and self.pattern[i] != '"':
-                    if self.pattern[i] == "\\" and i + 1 < len(self.pattern):
-                        current.append(self.pattern[i])
-                        i += 1
-                    current.append(self.pattern[i])
-                    i += 1
-                if i < len(self.pattern):
-                    current.append(self.pattern[i])  # "
-                    i += 1
+                result = _consume_double_quote(self.pattern, i)
+                i = result[0]
+                current.extend(result[1])
             elif ch == "|" and depth == 0:
                 alternatives.append("".join(current))
                 current = []

@@ -2986,6 +2986,14 @@ class Parser:
 
         # Check if next token is a binary operator
         if not self._cond_at_end() and self.peek() not in "&|)":
+            # Handle < and > as binary operators (they terminate words)
+            if self.peek() in "<>":
+                op = self.advance()
+                self._cond_skip_whitespace()
+                word2 = self._parse_cond_word()
+                if word2 is None:
+                    raise ParseError(f"Expected operand after {op}", pos=self.pos)
+                return BinaryTest(op, word1, word2)
             # Peek at next word to see if it's a binary operator
             saved_pos = self.pos
             op_word = self._parse_cond_word()
@@ -3038,6 +3046,9 @@ class Parser:
 
             # Word terminators in conditionals
             if ch in " \t":
+                break
+            # < and > are string comparison operators in [[ ]], terminate words
+            if ch in "<>":
                 break
             # ( and ) end words unless part of extended glob: @(...), ?(...), *(...), +(...), !(...)
             if ch == "(":

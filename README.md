@@ -41,10 +41,9 @@ The dark corners of bash that break other parsers:
 
 ## Test Coverage
 
-- **4,208 test cases** across four corpora
+- **GNU Bash test corpus:** 19,370 lines
 - **Oils bash corpus:** 2,495 tests
-- **GNU Bash test corpus:** 78 tests
-- **tree-sitter-bash corpus:** 93 tests
+- **tree-sitter-bash corpus:** 125 tests
 - **Parable hand-written tests:** 1,542 tests
 - **Every test validated against real bash 5.3 ASTs**
 

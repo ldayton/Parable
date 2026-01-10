@@ -316,18 +316,24 @@ class List(Node):
         return self._to_sexp_with_precedence(parts, op_names)
 
     def _to_sexp_with_precedence(self, parts: list, op_names: dict) -> str:
-        # Split on low-precedence ops (; &) first
-        low_prec = {";", "&"}
-        # Find rightmost low-precedence operator
+        # Process operators by precedence: ; (lowest), then &, then && and ||
+        # Split on ; first (rightmost for left-associativity)
         for i in range(len(parts) - 2, 0, -2):
-            if isinstance(parts[i], Operator) and parts[i].op in low_prec:
+            if isinstance(parts[i], Operator) and parts[i].op == ";":
                 left = parts[:i]
-                op = parts[i]
                 right = parts[i + 1 :]
                 left_sexp = List(left).to_sexp() if len(left) > 1 else left[0].to_sexp()
                 right_sexp = List(right).to_sexp() if len(right) > 1 else right[0].to_sexp()
-                return f"({op_names[op.op]} {left_sexp} {right_sexp})"
-        # No low-prec ops, process high-prec ops (&&, ||) left-associatively
+                return f"(semi {left_sexp} {right_sexp})"
+        # Then split on & (rightmost for left-associativity)
+        for i in range(len(parts) - 2, 0, -2):
+            if isinstance(parts[i], Operator) and parts[i].op == "&":
+                left = parts[:i]
+                right = parts[i + 1 :]
+                left_sexp = List(left).to_sexp() if len(left) > 1 else left[0].to_sexp()
+                right_sexp = List(right).to_sexp() if len(right) > 1 else right[0].to_sexp()
+                return f"(background {left_sexp} {right_sexp})"
+        # No ; or &, process high-prec ops (&&, ||) left-associatively
         result = parts[0].to_sexp()
         for i in range(1, len(parts) - 1, 2):
             op = parts[i]

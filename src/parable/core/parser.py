@@ -2872,49 +2872,37 @@ class Parser:
         )
 
     def _parse_cond_or(self) -> Node:
-        """Parse: or_expr = and_expr (|| and_expr)*"""
+        """Parse: or_expr = and_expr (|| or_expr)?  (right-associative)"""
         self._cond_skip_whitespace()
         left = self._parse_cond_and()
-
-        while True:
-            self._cond_skip_whitespace()
-            if self._cond_at_end():
-                break
-            if (
-                self.peek() == "|"
-                and self.pos + 1 < self.length
-                and self.source[self.pos + 1] == "|"
-            ):
-                self.advance()  # consume first |
-                self.advance()  # consume second |
-                right = self._parse_cond_and()
-                left = CondOr(left, right)
-            else:
-                break
-
+        self._cond_skip_whitespace()
+        if (
+            not self._cond_at_end()
+            and self.peek() == "|"
+            and self.pos + 1 < self.length
+            and self.source[self.pos + 1] == "|"
+        ):
+            self.advance()  # consume first |
+            self.advance()  # consume second |
+            right = self._parse_cond_or()  # recursive for right-associativity
+            return CondOr(left, right)
         return left
 
     def _parse_cond_and(self) -> Node:
-        """Parse: and_expr = term (&& term)*"""
+        """Parse: and_expr = term (&& and_expr)?  (right-associative)"""
         self._cond_skip_whitespace()
         left = self._parse_cond_term()
-
-        while True:
-            self._cond_skip_whitespace()
-            if self._cond_at_end():
-                break
-            if (
-                self.peek() == "&"
-                and self.pos + 1 < self.length
-                and self.source[self.pos + 1] == "&"
-            ):
-                self.advance()  # consume first &
-                self.advance()  # consume second &
-                right = self._parse_cond_term()
-                left = CondAnd(left, right)
-            else:
-                break
-
+        self._cond_skip_whitespace()
+        if (
+            not self._cond_at_end()
+            and self.peek() == "&"
+            and self.pos + 1 < self.length
+            and self.source[self.pos + 1] == "&"
+        ):
+            self.advance()  # consume first &
+            self.advance()  # consume second &
+            right = self._parse_cond_and()  # recursive for right-associativity
+            return CondAnd(left, right)
         return left
 
     def _parse_cond_term(self) -> Node:

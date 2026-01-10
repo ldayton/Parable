@@ -1852,6 +1852,8 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
         body = _format_cmdsub_node(node.body, indent)
         body = body.rstrip(";")  # Strip trailing semicolons before adding our own
         return f"{{ {body}; }}"
+    if isinstance(node, ArithmeticCommand):
+        return f"(({node.raw_content}))"
     # Fallback: return empty for unknown types
     return ""
 

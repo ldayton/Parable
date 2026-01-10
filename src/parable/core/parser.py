@@ -4493,6 +4493,30 @@ class Parser:
                 else:
                     self.pos = saved
             self.skip_whitespace()
+            # Check for -- (end of options) - implies -p per bash oracle
+            if not self.at_end() and self.source[self.pos : self.pos + 2] == "--":
+                if self.pos + 2 >= self.length or self.source[self.pos + 2] in " \t\n":
+                    self.advance()
+                    self.advance()
+                    time_posix = True
+                    self.skip_whitespace()
+            # Skip nested time keywords (time time X collapses to time X)
+            while self.peek_word() == "time":
+                self.consume_word("time")
+                self.skip_whitespace()
+                # Check for -p after nested time
+                if not self.at_end() and self.peek() == "-":
+                    saved = self.pos
+                    self.advance()
+                    if not self.at_end() and self.peek() == "p":
+                        self.advance()
+                        if self.at_end() or self.peek() in " \t\n":
+                            time_posix = True
+                        else:
+                            self.pos = saved
+                    else:
+                        self.pos = saved
+                self.skip_whitespace()
             # Check for ! after time
             if not self.at_end() and self.peek() == "!":
                 if self.pos + 1 >= self.length or self.source[self.pos + 1] in " \t\n":
@@ -4508,9 +4532,9 @@ class Parser:
                 # Recursively parse pipeline to handle ! ! cmd, ! time cmd, etc.
                 # Bare ! (no following command) is valid POSIX - equivalent to false
                 inner = self.parse_pipeline()
-                # Double negation cancels out (! ! cmd -> cmd)
+                # Double negation cancels out (! ! cmd -> cmd, ! ! -> empty command)
                 if isinstance(inner, Negation):
-                    return inner.pipeline
+                    return inner.pipeline if inner.pipeline is not None else Command([])
                 return Negation(inner)
 
         # Parse the actual pipeline

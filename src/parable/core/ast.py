@@ -555,7 +555,7 @@ class Command(Node):
         parts = [w.to_sexp() for w in self.words]
         parts.extend(r.to_sexp() for r in self.redirects)
         inner = " ".join(parts)
-        return f"(command {inner})"
+        return "(command)" if not inner else f"(command {inner})"
 
 
 @dataclass
@@ -1581,8 +1581,8 @@ class Negation(Node):
 
     def to_sexp(self) -> str:
         if self.pipeline is None:
-            # Bare "!" with no command
-            return "(negation)"
+            # Bare "!" with no command - oracle shows empty command
+            return "(negation (command))"
         return f"(negation {self.pipeline.to_sexp()})"
 
 
@@ -1600,8 +1600,8 @@ class Time(Node):
 
     def to_sexp(self) -> str:
         if self.pipeline is None:
-            # Bare "time" with no command
-            return "(time -p)" if self.posix else "(time)"
+            # Bare "time" with no command - oracle shows empty command
+            return "(time -p (command))" if self.posix else "(time (command))"
         if self.posix:
             return f"(time -p {self.pipeline.to_sexp()})"
         return f"(time {self.pipeline.to_sexp()})"

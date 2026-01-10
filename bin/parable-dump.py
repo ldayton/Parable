@@ -3,8 +3,7 @@
 
 import sys
 
-from parable import parse
-from parable.errors import ParseError
+from parable import ParseError, parse
 
 
 def main():

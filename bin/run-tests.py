@@ -69,8 +69,7 @@ def normalize(s):
 
 def run_test(test_input, test_expected):
     """Run a single test. Returns (passed, actual, error_msg)."""
-    from parable import parse
-    from parable.errors import ParseError
+    from parable import ParseError, parse
 
     try:
         nodes = parse(test_input)

@@ -7,6 +7,8 @@ Banned constructions:
 
     Construction          Example                   Use instead
     --------------------  ------------------------  --------------------------
+    ** exponentiation     2 ** 3                    pow() or multiplication
+    // floor division     a // b                    int(a / b)
     *args / **kwargs      def f(*args):             explicit parameters
     all                   all(x for x in lst)       explicit loop with early return
     any                   any(x for x in lst)       explicit loop with early return
@@ -17,13 +19,15 @@ Banned constructions:
     await                 await x                   avoid async
     chained comparison    a < b < c                 a < b and b < c
     decorator             @cache                    call wrapper manually
+    del statement         del x                     reassign or let go out of scope
     dict comprehension    {k: v for k, v in ...}    explicit loop
     enumerate             for i, x in enumerate()   manual index counter
     f-strings             f"x={x}"                  "x=" + str(x)
     generator expression  (x for x in ...)          explicit loop
     global                global x                  pass as parameter
     hasattr               hasattr(x, 'y')           explicit field check
-    in (search)           x in lst                  explicit loop search
+    in/not in (list/str)  x in lst                  explicit loop (sets OK)
+    loop else             for x: ... else:          use flag variable
     isinstance            isinstance(x, Foo)        use .kind field check
     lambda                lambda x: x+1             define a function
     list comprehension    [x*2 for x in items]      explicit loop
@@ -33,8 +37,11 @@ Banned constructions:
     or-default            x or []                   if x is None: x = []
     reversed              reversed(lst)             reverse index loop
     set comprehension     {x for x in items}        explicit loop
-    slicing               a[1:3], a[::2]            explicit index math
+    step slicing          a[::2], a[1:10:2]         explicit index math
+    string multiply       "x" * 3                   loop or helper function
+    ternary               x if c else y             if/else block
     star unpacking        a, *rest = lst            manual indexing
+    try else              try: ... else:            move else code after try block
     tuple unpacking       a, b = b, a               use temp variable
     walrus operator       if (x := foo()):          assign, then test
     with statement        with open(f) as x:        try/finally
@@ -183,10 +190,11 @@ def check_file(filepath):
             if isinstance(node.func, ast.Name) and node.func.id == "isinstance":
                 errors.append((lineno, "isinstance: use .kind field check instead"))
 
-        # slicing
+        # step slicing (basic slicing a[x:y] is allowed, step slicing a[::n] is not)
         if isinstance(node, ast.Subscript):
             if isinstance(node.slice, ast.Slice):
-                errors.append((lineno, "slicing: use explicit index math instead"))
+                if node.slice.step is not None:
+                    errors.append((lineno, "step slicing: use explicit index math instead"))
 
         # negative indexing
         if isinstance(node, ast.Subscript):
@@ -223,11 +231,31 @@ def check_file(filepath):
             if isinstance(node.func, ast.Name) and node.func.id == "zip":
                 errors.append((lineno, "zip(): use indexed loop"))
 
-        # in (search) - Compare with In operator
+        # in/not in (list/string) - banned for O(n) search, allowed for O(1) set lookup
         if isinstance(node, ast.Compare):
-            for op in node.ops:
-                if isinstance(op, ast.In):
-                    errors.append((lineno, "in (search): use explicit loop search"))
+            for i, op in enumerate(node.ops):
+                if isinstance(op, (ast.In, ast.NotIn)):
+                    comparator = node.comparators[i]
+                    # Allow sets: {literal}, set(), UPPER_NAMES, or names ending in _words/_set/_sets
+                    is_set_literal = isinstance(comparator, ast.Set)
+                    is_set_call = (
+                        isinstance(comparator, ast.Call)
+                        and isinstance(comparator.func, ast.Name)
+                        and comparator.func.id == "set"
+                    )
+                    is_set_name = isinstance(comparator, ast.Name) and (
+                        comparator.id.isupper()
+                        or comparator.id.endswith("_words")
+                        or comparator.id.endswith("_set")
+                        or comparator.id.endswith("_sets")
+                    )
+                    if not (is_set_literal or is_set_call or is_set_name):
+                        errors.append((lineno, "in/not in (list/string): use .find() or loop"))
+
+        # loop else (for...else, while...else) - Python-specific
+        if isinstance(node, (ast.For, ast.While)):
+            if node.orelse:
+                errors.append((lineno, "loop else: use flag variable instead"))
 
         # or-default pattern: x or []
         if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.Or):
@@ -236,6 +264,35 @@ def check_file(filepath):
                     errors.append((lineno, "or-default: use 'if x is None: x = ...' instead"))
                 if isinstance(val, ast.Constant) and val.value in (0, "", None, False):
                     errors.append((lineno, "or-default: use 'if x is None: x = ...' instead"))
+
+        # ** exponentiation
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
+            errors.append((lineno, "**: use pow() or explicit multiplication"))
+
+        # // floor division
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.FloorDiv):
+            errors.append((lineno, "//: use int(a / b) instead"))
+
+        # del statement
+        if isinstance(node, ast.Delete):
+            errors.append((lineno, "del: reassign or let variable go out of scope"))
+
+        # try...else
+        if isinstance(node, ast.Try) and node.orelse:
+            errors.append((lineno, "try else: move else code after try block"))
+
+        # string multiplication "x" * n
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mult):
+            left_is_str = isinstance(node.left, ast.Constant) and isinstance(node.left.value, str)
+            right_is_str = isinstance(node.right, ast.Constant) and isinstance(
+                node.right.value, str
+            )
+            if left_is_str or right_is_str:
+                errors.append((lineno, "string * n: use loop or helper function"))
+
+        # ternary expression (x if cond else y) - Go has no ternary
+        if isinstance(node, ast.IfExp):
+            errors.append((lineno, "ternary: use if/else block instead"))
 
     return errors
 

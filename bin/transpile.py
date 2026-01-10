@@ -352,7 +352,11 @@ class JSTranspiler(ast.NodeVisitor):
     def visit_expr_Call(self, node: ast.Call) -> str:
         # Combine positional and keyword args (JS doesn't have kwargs, so treat as positional)
         all_args = [self.visit_expr(a) for a in node.args]
+        # Handle keyword args that skip positional defaults
+        # Specific case: _format_cmdsub_node(x, in_procsub=True) -> FormatCmdsubNode(x, 0, true)
         for kw in node.keywords:
+            if kw.arg == "in_procsub" and len(all_args) == 1:
+                all_args.append("0")  # default for indent
             all_args.append(self.visit_expr(kw.value))
         args = ", ".join(all_args)
         # Handle method calls

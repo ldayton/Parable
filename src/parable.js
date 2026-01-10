@@ -727,7 +727,7 @@ class Word extends Node {
 				var direction = value[i];
 				j = FindCmdsubEnd(value, i + 2);
 				node = procsub_parts[procsub_idx];
-				formatted = FormatCmdsubNode(node.command, true);
+				formatted = FormatCmdsubNode(node.command, 0, true);
 				result.push(direction + "(" + formatted + ")");
 				procsub_idx += 1;
 				i = j;

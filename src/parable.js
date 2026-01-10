@@ -666,18 +666,19 @@ class Word extends Node {
 		"Replace $(...) and >(...) / <(...) with bash-oracle-formatted AST output.";
 		var cmdsub_parts = [];
 		var procsub_parts = [];
-		for (var p of this.parts) {
+		var parts = this.parts || [];
+		for (var p of parts) {
 			if (p.kind === "cmdsub") {
 				cmdsub_parts.push(p);
 			} else if (p.kind === "procsub") {
 				procsub_parts.push(p);
 			} else {
-				cmdsub_parts.push(this.CollectCmdsubs(p));
+				cmdsub_parts.push(...this.CollectCmdsubs(p));
 			}
 		}
 		var has_brace_cmdsub =
 			value.indexOf("${ ") !== -1 || value.indexOf("${|") !== -1;
-		if (!cmdsub_parts && !procsub_parts && !has_brace_cmdsub) {
+		if (cmdsub_parts.length === 0 && procsub_parts.length === 0 && !has_brace_cmdsub) {
 			return value;
 		}
 		var result = [];

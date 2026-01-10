@@ -2,7 +2,7 @@ set shell := ["bash", "-o", "pipefail", "-cu"]
 project := "parable"
 
 _test-py version *ARGS:
-    UV_PROJECT_ENVIRONMENT=.venv-{{version}} uv run --python {{version}} pytest {{ARGS}} 2>&1 | sed -u "s/^/[py{{version}}] /" | tee /tmp/{{project}}-test-py{{version}}.log
+    UV_PROJECT_ENVIRONMENT=.venv-{{version}} uv run --python {{version}} bin/run-tests.py {{ARGS}} 2>&1 | sed -u "s/^/[py{{version}}] /" | tee /tmp/{{project}}-test-py{{version}}.log
 
 # Run tests on Python 3.10
 test-py310 *ARGS: (_test-py "3.10" ARGS)
@@ -32,15 +32,15 @@ check: test-all lint fmt lock-check check-dump-ast
 
 # Run benchmarks
 bench:
-    uv run --group bench python bench/bench_parse.py
+    PYTHONPATH=src uvx pyperf command -- python bench/bench_parse.py
 
 # Lint (--fix to apply changes)
 lint *ARGS:
-    uv run ruff check {{ if ARGS == "--fix" { "--fix" } else { "" } }} 2>&1 | sed -u "s/^/[lint] /" | tee /tmp/{{project}}-lint.log
+    uvx ruff check {{ if ARGS == "--fix" { "--fix" } else { "" } }} 2>&1 | sed -u "s/^/[lint] /" | tee /tmp/{{project}}-lint.log
 
 # Format (--fix to apply changes)
 fmt *ARGS:
-    uv run ruff format {{ if ARGS == "--fix" { "" } else { "--check" } }} 2>&1 | sed -u "s/^/[fmt] /" | tee /tmp/{{project}}-fmt.log
+    uvx ruff format {{ if ARGS == "--fix" { "" } else { "--check" } }} 2>&1 | sed -u "s/^/[fmt] /" | tee /tmp/{{project}}-fmt.log
 
 # Verify parable-dump.py works
 check-dump-ast:

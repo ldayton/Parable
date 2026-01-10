@@ -616,8 +616,11 @@ class Command(Node):
         self.redirects = redirects or []
 
     def to_sexp(self) -> str:
-        parts = [w.to_sexp() for w in self.words]
-        parts.extend(r.to_sexp() for r in self.redirects)
+        parts = []
+        for w in self.words:
+            parts.append(w.to_sexp())
+        for r in self.redirects:
+            parts.append(r.to_sexp())
         inner = " ".join(parts)
         return "(command)" if not inner else f"(command {inner})"
 
@@ -664,10 +667,13 @@ class Pipeline(Node):
             return cmd.to_sexp()
         if isinstance(cmd, Command):
             # Inject redirect inside command
-            parts = [w.to_sexp() for w in cmd.words]
-            parts.extend(r.to_sexp() for r in cmd.redirects)
+            parts = []
+            for w in cmd.words:
+                parts.append(w.to_sexp())
+            for r in cmd.redirects:
+                parts.append(r.to_sexp())
             parts.append('(redirect ">&" 1)')
-            return f"(command {' '.join(parts)})"
+            return "(command " + " ".join(parts) + ")"
         # Compound command handled by caller
         return cmd.to_sexp()
 
@@ -889,9 +895,12 @@ class Subshell(Node):
         self.redirects = redirects
 
     def to_sexp(self) -> str:
-        base = f"(subshell {self.body.to_sexp()})"
+        base = "(subshell " + self.body.to_sexp() + ")"
         if self.redirects:
-            return base + " " + " ".join(r.to_sexp() for r in self.redirects)
+            redirect_parts = []
+            for r in self.redirects:
+                redirect_parts.append(r.to_sexp())
+            return base + " " + " ".join(redirect_parts)
         return base
 
 
@@ -907,9 +916,12 @@ class BraceGroup(Node):
         self.redirects = redirects
 
     def to_sexp(self) -> str:
-        base = f"(brace-group {self.body.to_sexp()})"
+        base = "(brace-group " + self.body.to_sexp() + ")"
         if self.redirects:
-            return base + " " + " ".join(r.to_sexp() for r in self.redirects)
+            redirect_parts = []
+            for r in self.redirects:
+                redirect_parts.append(r.to_sexp())
+            return base + " " + " ".join(redirect_parts)
         return base
 
 
@@ -954,9 +966,12 @@ class While(Node):
         self.redirects = redirects or []
 
     def to_sexp(self) -> str:
-        base = f"(while {self.condition.to_sexp()} {self.body.to_sexp()})"
+        base = "(while " + self.condition.to_sexp() + " " + self.body.to_sexp() + ")"
         if self.redirects:
-            return base + " " + " ".join(r.to_sexp() for r in self.redirects)
+            redirect_parts = []
+            for r in self.redirects:
+                redirect_parts.append(r.to_sexp())
+            return base + " " + " ".join(redirect_parts)
         return base
 
 
@@ -974,9 +989,12 @@ class Until(Node):
         self.redirects = redirects or []
 
     def to_sexp(self) -> str:
-        base = f"(until {self.condition.to_sexp()} {self.body.to_sexp()})"
+        base = "(until " + self.condition.to_sexp() + " " + self.body.to_sexp() + ")"
         if self.redirects:
-            return base + " " + " ".join(r.to_sexp() for r in self.redirects)
+            redirect_parts = []
+            for r in self.redirects:
+                redirect_parts.append(r.to_sexp())
+            return base + " " + " ".join(redirect_parts)
         return base
 
 
@@ -999,19 +1017,41 @@ class For(Node):
 
     def to_sexp(self) -> str:
         # Oracle format: (for (word "var") (in (word "a") ...) body)
-        suffix = " " + " ".join(r.to_sexp() for r in self.redirects) if self.redirects else ""
+        suffix = ""
+        if self.redirects:
+            redirect_parts = []
+            for r in self.redirects:
+                redirect_parts.append(r.to_sexp())
+            suffix = " " + " ".join(redirect_parts)
         var_escaped = self.var.replace("\\", "\\\\").replace('"', '\\"')
         if self.words is None:
             # No 'in' clause - oracle implies (in (word "\"$@\""))
             return (
-                f'(for (word "{var_escaped}") (in (word "\\"$@\\"")) {self.body.to_sexp()}){suffix}'
+                '(for (word "'
+                + var_escaped
+                + '") (in (word "\\"$@\\"")) '
+                + self.body.to_sexp()
+                + ")"
+                + suffix
             )
         elif len(self.words) == 0:
             # Empty 'in' clause - oracle outputs (in)
-            return f'(for (word "{var_escaped}") (in) {self.body.to_sexp()}){suffix}'
+            return '(for (word "' + var_escaped + '") (in) ' + self.body.to_sexp() + ")" + suffix
         else:
-            word_strs = " ".join(w.to_sexp() for w in self.words)
-            return f'(for (word "{var_escaped}") (in {word_strs}) {self.body.to_sexp()}){suffix}'
+            word_parts = []
+            for w in self.words:
+                word_parts.append(w.to_sexp())
+            word_strs = " ".join(word_parts)
+            return (
+                '(for (word "'
+                + var_escaped
+                + '") (in '
+                + word_strs
+                + ") "
+                + self.body.to_sexp()
+                + ")"
+                + suffix
+            )
 
 
 class ForArith(Node):
@@ -1041,14 +1081,28 @@ class ForArith(Node):
             val = val.replace("\\", "\\\\").replace('"', '\\"')
             return val
 
-        suffix = " " + " ".join(r.to_sexp() for r in self.redirects) if self.redirects else ""
+        suffix = ""
+        if self.redirects:
+            redirect_parts = []
+            for r in self.redirects:
+                redirect_parts.append(r.to_sexp())
+            suffix = " " + " ".join(redirect_parts)
         init_val = self.init if self.init else "1"
         cond_val = _normalize_fd_redirects(self.cond) if self.cond else "1"
         incr_val = self.incr if self.incr else "1"
         return (
-            f'(arith-for (init (word "{format_arith_val(init_val)}")) '
-            f'(test (word "{format_arith_val(cond_val)}")) '
-            f'(step (word "{format_arith_val(incr_val)}")) {self.body.to_sexp()}){suffix}'
+            '(arith-for (init (word "'
+            + format_arith_val(init_val)
+            + '")) '
+            + '(test (word "'
+            + format_arith_val(cond_val)
+            + '")) '
+            + '(step (word "'
+            + format_arith_val(incr_val)
+            + '")) '
+            + self.body.to_sexp()
+            + ")"
+            + suffix
         )
 
 
@@ -1071,15 +1125,35 @@ class Select(Node):
 
     def to_sexp(self) -> str:
         # Oracle format: (select (word "var") (in (word "a") ...) body)
-        suffix = " " + " ".join(r.to_sexp() for r in self.redirects) if self.redirects else ""
+        suffix = ""
+        if self.redirects:
+            redirect_parts = []
+            for r in self.redirects:
+                redirect_parts.append(r.to_sexp())
+            suffix = " " + " ".join(redirect_parts)
         var_escaped = self.var.replace("\\", "\\\\").replace('"', '\\"')
         if self.words is not None:
-            word_strs = " ".join(w.to_sexp() for w in self.words)
-            in_clause = f"(in {word_strs})" if self.words else "(in)"
+            word_parts = []
+            for w in self.words:
+                word_parts.append(w.to_sexp())
+            word_strs = " ".join(word_parts)
+            if self.words:
+                in_clause = "(in " + word_strs + ")"
+            else:
+                in_clause = "(in)"
         else:
             # No 'in' clause means implicit "$@"
             in_clause = '(in (word "\\"$@\\""))'
-        return f'(select (word "{var_escaped}") {in_clause} {self.body.to_sexp()}){suffix}'
+        return (
+            '(select (word "'
+            + var_escaped
+            + '") '
+            + in_clause
+            + " "
+            + self.body.to_sexp()
+            + ")"
+            + suffix
+        )
 
 
 class Case(Node):
@@ -1096,11 +1170,16 @@ class Case(Node):
         self.redirects = redirects or []
 
     def to_sexp(self) -> str:
-        parts = [f"(case {self.word.to_sexp()}"]
-        parts.extend(p.to_sexp() for p in self.patterns)
+        parts = []
+        parts.append("(case " + self.word.to_sexp())
+        for p in self.patterns:
+            parts.append(p.to_sexp())
         base = " ".join(parts) + ")"
         if self.redirects:
-            return base + " " + " ".join(r.to_sexp() for r in self.redirects)
+            redirect_parts = []
+            for r in self.redirects:
+                redirect_parts.append(r.to_sexp())
+            return base + " " + " ".join(redirect_parts)
         return base
 
 
@@ -1379,10 +1458,13 @@ class ArithmeticCommand(Node):
         # Oracle format: (arith (word "content"))
         # Redirects are siblings: (arith (word "...")) (redirect ...)
         escaped = self.raw_content.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-        result = f'(arith (word "{escaped}"))'
+        result = '(arith (word "' + escaped + '"))'
         if self.redirects:
-            redirect_sexps = " ".join(r.to_sexp() for r in self.redirects)
-            return f"{result} {redirect_sexps}"
+            redirect_parts = []
+            for r in self.redirects:
+                redirect_parts.append(r.to_sexp())
+            redirect_sexps = " ".join(redirect_parts)
+            return result + " " + redirect_sexps
         return result
 
 
@@ -1685,12 +1767,15 @@ class ConditionalExpr(Node):
         # Redirects are siblings, not children: (cond ...) (redirect ...)
         if isinstance(self.body, str):
             escaped = self.body.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-            result = f'(cond "{escaped}")'
+            result = '(cond "' + escaped + '")'
         else:
-            result = f"(cond {self.body.to_sexp()})"
+            result = "(cond " + self.body.to_sexp() + ")"
         if self.redirects:
-            redirect_sexps = " ".join(r.to_sexp() for r in self.redirects)
-            return f"{result} {redirect_sexps}"
+            redirect_parts = []
+            for r in self.redirects:
+                redirect_parts.append(r.to_sexp())
+            redirect_sexps = " ".join(redirect_parts)
+            return result + " " + redirect_sexps
         return result
 
 
@@ -1801,8 +1886,11 @@ class Array(Node):
     def to_sexp(self) -> str:
         if not self.elements:
             return "(array)"
-        inner = " ".join(e.to_sexp() for e in self.elements)
-        return f"(array {inner})"
+        parts = []
+        for e in self.elements:
+            parts.append(e.to_sexp())
+        inner = " ".join(parts)
+        return "(array " + inner + ")"
 
 
 class Coproc(Node):
@@ -1885,9 +1973,12 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
         var = node.var
         body = _format_cmdsub_node(node.body, indent + 4)
         if node.words:
-            words = " ".join(w.value for w in node.words)
-            return f"for {var} in {words};\ndo\n{inner_sp}{body};\n{sp}done"
-        return f"for {var};\ndo\n{inner_sp}{body};\n{sp}done"
+            word_vals = []
+            for w in node.words:
+                word_vals.append(w.value)
+            words = " ".join(word_vals)
+            return "for " + var + " in " + words + ";\ndo\n" + inner_sp + body + ";\n" + sp + "done"
+        return "for " + var + ";\ndo\n" + inner_sp + body + ";\n" + sp + "done"
     if isinstance(node, Case):
         word = node.word.value
         patterns = []
@@ -1910,23 +2001,28 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
         else:
             body = _format_cmdsub_node(node.body, indent + 4)
         body = body.rstrip(";")  # Strip trailing semicolons
-        return f"function {name} () \n{{ \n{inner_sp}{body}\n}}"
+        return "function " + name + " () \n{ \n" + inner_sp + body + "\n}"
     if isinstance(node, Subshell):
         body = _format_cmdsub_node(node.body, indent, in_procsub)
-        redirects = " ".join(_format_redirect(r) for r in node.redirects) if node.redirects else ""
+        redirects = ""
+        if node.redirects:
+            redirect_parts = []
+            for r in node.redirects:
+                redirect_parts.append(_format_redirect(r))
+            redirects = " ".join(redirect_parts)
         if in_procsub:
             if redirects:
-                return f"({body}) {redirects}"
-            return f"({body})"
+                return "(" + body + ") " + redirects
+            return "(" + body + ")"
         if redirects:
-            return f"( {body} ) {redirects}"
-        return f"( {body} )"
+            return "( " + body + " ) " + redirects
+        return "( " + body + " )"
     if isinstance(node, BraceGroup):
         body = _format_cmdsub_node(node.body, indent)
         body = body.rstrip(";")  # Strip trailing semicolons before adding our own
-        return f"{{ {body}; }}"
+        return "{ " + body + "; }"
     if isinstance(node, ArithmeticCommand):
-        return f"(({node.raw_content}))"
+        return "((" + node.raw_content + "))"
     # Fallback: return empty for unknown types
     return ""
 

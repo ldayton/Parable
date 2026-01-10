@@ -2692,7 +2692,11 @@ class Parser:
             # Otherwise parse a word
             # Allow array assignments like a[1 + 2]= in prefix position (before first non-assignment)
             # Check if all previous words were assignments (contain = not inside quotes)
-            all_assignments = all(self._is_assignment_word(w) for w in words)
+            all_assignments = True
+            for w in words:
+                if not self._is_assignment_word(w):
+                    all_assignments = False
+                    break
             word = self.parse_word(at_command_start=not words or all_assignments)
             if word is None:
                 break

@@ -226,8 +226,8 @@ class Word(Node):
                 in_double_quote = not in_double_quote
                 result.append(ch)
                 i += 1
-            elif ch == "\\" and in_double_quote and i + 1 < len(value):
-                # Escape in double quotes
+            elif ch == "\\" and i + 1 < len(value) and not in_single_quote:
+                # Backslash escape - skip both chars to avoid misinterpreting \" or \'
                 result.append(ch)
                 result.append(value[i + 1])
                 i += 2

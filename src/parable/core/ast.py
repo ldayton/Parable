@@ -39,6 +39,8 @@ class Word(Node):
         value = self._format_command_substitutions(value)
         # Strip line continuations (backslash-newline) from arithmetic expressions
         value = self._strip_arith_line_continuations(value)
+        # Double CTLESC (0x01) bytes - bash oracle uses this for quoting control chars
+        value = value.replace("\x01", "\x01\x01")
         # Escape backslashes for s-expression output
         value = value.replace("\\", "\\\\")
         # Escape double quotes, newlines, and tabs
@@ -46,9 +48,7 @@ class Word(Node):
         return f'(word "{escaped}")'
 
     def _append_with_ctlesc(self, result: bytearray, byte_val: int):
-        """Append byte to result, prefixing with CTLESC if the byte is CTLESC."""
-        if byte_val == 0x01:  # CTLESC - must be quoted with CTLESC
-            result.append(0x01)
+        """Append byte to result (CTLESC doubling happens later in to_sexp)."""
         result.append(byte_val)
 
     def _expand_ansi_c_escapes(self, value: str) -> str:

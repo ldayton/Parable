@@ -1,4 +1,4 @@
-# Parable Roadmap
+# Parable Development Guide
 
 ## Priorities
 
@@ -11,32 +11,15 @@
 
 ## P1: Usability
 
-Features that make Parable practical for tool authors.
-
 ### Position tracking
 
-**Status:** Not implemented
+AST nodes have no source location information. Required for syntax highlighters, linters, IDEs, source maps.
 
-AST nodes have no source location information. Required for:
-- Syntax highlighters
-- Linters with precise error locations
-- IDEs
-- Source maps
-
-**Approach:** Store only byte offsets (16 bytes/node). Compute line/column lazily on demand from a line index. Make it opt-in to avoid overhead when not needed.
-
-```python
-ast = parse(code, track_positions=True)
-node.start_offset  # always available
-node.start_line    # computed on first access
-node.start_col     # computed on first access
-```
+**Approach:** Store byte offsets (16 bytes/node). Compute line/column lazily. Opt-in via `parse(code, track_positions=True)`.
 
 **Effort:** Medium
 
 ### JSON serialization
-
-**Status:** Not implemented
 
 ```python
 ast.to_dict()  # For JSON serialization
@@ -46,8 +29,6 @@ ast.to_json()  # Direct JSON output
 **Effort:** Low
 
 ### Visitor pattern
-
-**Status:** Not implemented
 
 ```python
 class MyVisitor(Visitor):
@@ -64,86 +45,37 @@ visitor.walk(ast)
 
 ## P2: Nice to Have
 
-Features with narrower use cases.
-
 ### Error recovery
 
-**Status:** Not implemented
+Parse incomplete/invalid input and return best-effort AST. Required for IDE use cases.
 
-Parse incomplete/invalid input and return best-effort AST. Required for IDE use cases where code is often in an invalid state.
-
-**Effort:** High (architectural change)
-
-**Downside:** Partial ASTs can confuse downstream tools. Recovery heuristics are brittle.
+**Effort:** High | **Downside:** Partial ASTs confuse downstream tools. Recovery heuristics are brittle.
 
 ### Comments preservation
 
-**Status:** Not implemented
-
 Attach comments to AST nodes. Required for formatters and doc generators.
 
-**Effort:** Medium
-
-**Downside:** Lexer rewrite. Ambiguous attachment (does comment belong to preceding or following node?).
+**Effort:** Medium | **Downside:** Lexer rewrite. Ambiguous attachment.
 
 ### Source reconstruction
 
-**Status:** Not implemented
-
 Reconstruct source from AST: `ast.to_source()`. Required for formatters and refactoring tools.
 
-**Effort:** Medium
-
-**Downside:** Either preserve original whitespace (memory cost) or accept lossy reconstruction. Edge cases with heredocs and quotes.
+**Effort:** Medium | **Downside:** Either preserve whitespace (memory) or accept lossy reconstruction.
 
 ---
 
-## Internal Improvements
+## Quality Analysis
 
-### Performance
+Comparison against Go compiler parser, Crafting Interpreters, and Rob Pike's regex. See [quality.md](quality.md) for full analysis.
 
-From [optimizations.md](optimizations.md). Apply optimizations with low LLM impact:
+### What's Good
 
-| Do | Optimization | Impact |
-|----|--------------|--------|
-| ✓ | Inline hot paths | 5-10% speedup |
-| ✓ | Cached character sets | 3-5% speedup |
-| ✓ | ASCII range checks | 5-8% speedup |
-| ✓ | `__slots__` on AST nodes | 40-50% memory |
-| ✓ | Bulk consumption | 1-2% speedup |
-| ✗ | Unchecked advance | High LLM impact |
-| ✗ | Dispatch tables | High LLM impact |
-| ✗ | Table-driven precedence | Very high LLM impact |
+- Clear grammar-to-method mapping
+- Arithmetic parser follows Crafting Interpreters' precedence pattern
+- No separate lexer (appropriate for bash's context-sensitive grammar)
 
-### Refactoring
-
-From [quality.md](quality.md). Phases ordered by dependency and risk:
-
-1. Add `match()`/`consume()` helpers — low risk, immediate wins
-2. Extract `_parse_expansion()` — unify from 4 locations
-3. Extract quote-aware scanner — `_scan_to_closer()`
-4. Decompose `parse_word()` — split by quote type
-5. Unify state management — explicit fields, try/finally guards
-6. Consolidate depth tracking — replace multiple counters
-7. Extract formatters from AST — move `to_sexp()` out
-8. Standardize naming — consistent conventions
-9. Improve API surface — options, location info, boundaries
-
-### AST Formatting
-
-Three approaches for issue #18 (`Word.to_sexp()` 480 lines):
-
-1. Visitor pattern (Crafting Interpreters style)
-2. Match statements (Python 3.10+)
-3. Extract to standalone formatter module
-
-Decision: Option 3 (extract formatters) — lowest risk.
-
----
-
-## Quality Issues
-
-From [quality.md](quality.md):
+### Issues
 
 | #   | Category  | Issue                          | Severity | Effort |
 | --- | --------- | ------------------------------ | -------- | ------ |
@@ -185,3 +117,75 @@ From [quality.md](quality.md):
 | 36  | API       | No tree protocol               | Medium   | High   |
 | 37  | API       | Mixed concerns                 | Low      | Low    |
 | 38  | API       | No dialect handling            | Low      | Medium |
+
+---
+
+## Optimization Opportunities
+
+See [optimizations.md](optimizations.md) for implementation details and CPython internals.
+
+| Optimization            | Speedup | Memory | LLM Impact |
+| ----------------------- | ------- | ------ | ---------- |
+| Inline hot paths        | 5-10%   | —      | Moderate   |
+| Cached character sets   | 3-5%    | —      | Low        |
+| ASCII range checks      | 5-8%    | —      | Moderate   |
+| `__slots__` on nodes    | —       | 40-50% | Low        |
+| Unchecked advance       | 2-3%    | —      | High       |
+| Dispatch tables         | 3-5%    | —      | High       |
+| Table-driven precedence | 2-3%    | —      | Very High  |
+| Bulk consumption        | 1-2%    | —      | Low        |
+
+---
+
+## Decisions
+
+### Performance
+
+Apply optimizations with low LLM impact:
+
+| Do | Optimization | Rationale |
+|----|--------------|-----------|
+| ✓ | Inline hot paths | 5-10% gain, moderate LLM impact |
+| ✓ | Cached character sets | Clean pattern, low LLM impact |
+| ✓ | ASCII range checks | Correct for bash (ASCII-only identifiers) |
+| ✓ | `__slots__` on AST nodes | 40-50% memory, well-known pattern |
+| ✓ | Bulk consumption | Clearer intent than char-by-char |
+| ✗ | Unchecked advance | Two similar methods confuse LLMs |
+| ✗ | Dispatch tables | Fragments logic, hard to trace |
+| ✗ | Table-driven precedence | Explicit methods are clearer |
+
+### AST Formatting
+
+For issue #18 (`Word.to_sexp()` 480 lines):
+
+| Option | Approach | Verdict |
+|--------|----------|---------|
+| 1 | Visitor pattern | More infrastructure |
+| 2 | Match statements | Python 3.10+ only |
+| 3 | Extract to formatter module | **Use this** — lowest risk |
+
+---
+
+## Refactoring Plan
+
+Phases ordered by dependency and risk:
+
+| Phase | Task | Issues Addressed |
+|-------|------|------------------|
+| 1 | Add `match()`/`consume()` helpers | #3, #6, #9 |
+| 2 | Extract `_parse_expansion()` | #2 |
+| 3 | Extract quote-aware scanner | #4 |
+| 4 | Decompose `parse_word()` | #1 |
+| 5 | Unify state management | #14, #17 |
+| 6 | Consolidate depth tracking | #15, #16 |
+| 7 | Extract formatters from AST | #18, #19 |
+| 8 | Standardize naming | #23-29 |
+| 9 | Improve API surface | #30-38 |
+
+---
+
+## References
+
+- Go parser: `~/source/go/src/cmd/compile/internal/syntax/parser.go`
+- Crafting Interpreters: `~/source/craftinginterpreters/java/com/craftinginterpreters/lox/Parser.java`
+- Rob Pike's regex: `~/source/pike-regex/beautiful.html`

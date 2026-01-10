@@ -386,15 +386,13 @@ Sources: [futurelearn](https://www.futurelearn.com/info/courses/python-in-hpc/0/
 
 ## Summary
 
-| Optimization            | Speedup | Memory | LLM Impact | Recommendation |
-| ----------------------- | ------- | ------ | ---------- | -------------- |
-| Inline hot paths        | 5-10%   | —      | Moderate   | Do it          |
-| Cached character sets   | 3-5%    | —      | Low        | Do it          |
-| ASCII range checks      | 5-8%    | —      | Moderate   | Do it          |
-| `__slots__` on nodes    | —       | 40-50% | Low        | Do it          |
-| Unchecked advance       | 2-3%    | —      | High       | Skip           |
-| Dispatch tables         | 3-5%    | —      | High       | Skip           |
-| Table-driven precedence | 2-3%    | —      | Very High  | Skip           |
-| Bulk consumption        | 1-2%    | —      | Low        | Do selectively |
-
-**Recommended approach:** Apply the first four optimizations. They provide the best ratio of performance gain to LLM comprehension cost. The dispatch table and precedence table optimizations trade too much clarity for marginal gains.
+| Optimization            | Speedup | Memory | LLM Impact |
+| ----------------------- | ------- | ------ | ---------- |
+| Inline hot paths        | 5-10%   | —      | Moderate   |
+| Cached character sets   | 3-5%    | —      | Low        |
+| ASCII range checks      | 5-8%    | —      | Moderate   |
+| `__slots__` on nodes    | —       | 40-50% | Low        |
+| Unchecked advance       | 2-3%    | —      | High       |
+| Dispatch tables         | 3-5%    | —      | High       |
+| Table-driven precedence | 2-3%    | —      | Very High  |
+| Bulk consumption        | 1-2%    | —      | Low        |

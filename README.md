@@ -2,7 +2,7 @@
 <pre>
      ////        \\\\                         The wind blows where it wishes,
       ////              \\\\                          and you hear its sound,
-  --------////  P A R A B L E  \\\\--------      but you do not know where it
+  --------////  <strong>P A R A B L E</strong>  \\\\--------      but you do not know where it
         \\\\         ////                        comes from or where it goes.
      \\\\        ////                                              — John 3:8
 </pre>

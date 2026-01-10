@@ -232,6 +232,144 @@ def _is_semicolon_newline_brace(c: str) -> bool:
     return c == ";" or c == "\n" or c == "{"
 
 
+def _is_reserved_word(word: str) -> bool:
+    return (
+        word == "if"
+        or word == "then"
+        or word == "elif"
+        or word == "else"
+        or word == "fi"
+        or word == "while"
+        or word == "until"
+        or word == "for"
+        or word == "select"
+        or word == "do"
+        or word == "done"
+        or word == "case"
+        or word == "esac"
+        or word == "in"
+        or word == "function"
+        or word == "coproc"
+    )
+
+
+def _is_compound_keyword(word: str) -> bool:
+    return (
+        word == "while"
+        or word == "until"
+        or word == "for"
+        or word == "if"
+        or word == "case"
+        or word == "select"
+    )
+
+
+def _is_cond_unary_op(op: str) -> bool:
+    return (
+        op == "-a"
+        or op == "-b"
+        or op == "-c"
+        or op == "-d"
+        or op == "-e"
+        or op == "-f"
+        or op == "-g"
+        or op == "-h"
+        or op == "-k"
+        or op == "-p"
+        or op == "-r"
+        or op == "-s"
+        or op == "-t"
+        or op == "-u"
+        or op == "-w"
+        or op == "-x"
+        or op == "-G"
+        or op == "-L"
+        or op == "-N"
+        or op == "-O"
+        or op == "-S"
+        or op == "-z"
+        or op == "-n"
+        or op == "-o"
+        or op == "-v"
+        or op == "-R"
+    )
+
+
+def _is_cond_binary_op(op: str) -> bool:
+    return (
+        op == "=="
+        or op == "!="
+        or op == "=~"
+        or op == "="
+        or op == "<"
+        or op == ">"
+        or op == "-eq"
+        or op == "-ne"
+        or op == "-lt"
+        or op == "-le"
+        or op == "-gt"
+        or op == "-ge"
+        or op == "-nt"
+        or op == "-ot"
+        or op == "-ef"
+    )
+
+
+def _str_contains(haystack: str, needle: str) -> bool:
+    """Check if haystack contains needle substring."""
+    return haystack.find(needle) != -1
+
+
+def _list_contains(lst: list, item: str) -> bool:
+    """Check if list contains item."""
+    i = 0
+    while i < len(lst):
+        if lst[i] == item:
+            return True
+        i += 1
+    return False
+
+
+def _set_contains(s: set, item: str) -> bool:
+    """Check if set contains item."""
+    for elem in s:
+        if elem == item:
+            return True
+    return False
+
+
+def _substring(s: str, start: int, end: int) -> str:
+    """Extract substring from start to end (exclusive)."""
+    result = ""
+    i = start
+    while i < end and i < len(s):
+        result = result + s[i]
+        i += 1
+    return result
+
+
+def _starts_with_at(s: str, pos: int, prefix: str) -> bool:
+    """Check if s starts with prefix at position pos."""
+    if pos + len(prefix) > len(s):
+        return False
+    i = 0
+    while i < len(prefix):
+        if s[pos + i] != prefix[i]:
+            return False
+        i += 1
+    return True
+
+
+def _sublist(lst: list, start: int, end: int) -> list:
+    """Extract sublist from start to end (exclusive)."""
+    result = []
+    i = start
+    while i < end and i < len(lst):
+        result.append(lst[i])
+        i += 1
+    return result
+
+
 class Parser:
     """Recursive descent parser for bash."""
 
@@ -306,12 +444,12 @@ class Parser:
         saved_pos = self.pos
         self.skip_whitespace()
 
-        if self.at_end() or self.peek() in METACHAR:
+        if self.at_end() or _is_metachar(self.peek()):
             self.pos = saved_pos
             return None
 
         chars = []
-        while not self.at_end() and self.peek() not in METACHAR:
+        while not self.at_end() and not _is_metachar(self.peek()):
             ch = self.peek()
             # Stop at quotes - don't include in peek
             if _is_quote(ch):
@@ -602,7 +740,11 @@ class Parser:
                 and chars
                 and (
                     chars[len(chars) - 1] == "="
-                    or (len(chars) >= 2 and chars[len(chars) - 2 : len(chars)] == ["+", "="])
+                    or (
+                        len(chars) >= 2
+                        and chars[len(chars) - 2] == "+"
+                        and chars[len(chars) - 1] == "="
+                    )
                 )
             ):
                 array_result = self._parse_array_literal()
@@ -683,7 +825,7 @@ class Parser:
                         chars.append(self.advance())
 
             # Metacharacter ends the word (unless inside brackets like a[x|y]=1)
-            elif ch in METACHAR and bracket_depth == 0:
+            elif _is_metachar(ch) and bracket_depth == 0:
                 break
 
             # Regular character (including metacharacters inside brackets)
@@ -862,7 +1004,7 @@ class Parser:
                         line_end = self.pos
                         while line_end < self.length and self.source[line_end] != "\n":
                             line_end += 1
-                        line = self.source[line_start:line_end]
+                        line = _substring(self.source, line_start, line_end)
                         # Move position to end of line
                         self.pos = line_end
                         # Check if this line matches delimiter
@@ -967,10 +1109,10 @@ class Parser:
             self.pos = start
             return None, ""
 
-        content = self.source[content_start : self.pos]
+        content = _substring(self.source, content_start, self.pos)
         self.advance()  # consume final )
 
-        text = self.source[start : self.pos]
+        text = _substring(self.source, start, self.pos)
 
         # Parse the content as a command list
         sub_parser = Parser(content)
@@ -1010,7 +1152,7 @@ class Parser:
         """Check if keyword appears at current position followed by word boundary."""
         if self.pos + len(keyword) > self.length:
             return False
-        if self.source[self.pos : self.pos + len(keyword)] != keyword:
+        if not _starts_with_at(self.source, self.pos, keyword):
             return False
         # Check word boundary after keyword
         after_pos = self.pos + len(keyword)
@@ -1150,10 +1292,10 @@ class Parser:
             self.pos = start
             return None, ""
 
-        content = self.source[content_start : self.pos]
+        content = _substring(self.source, content_start, self.pos)
         self.advance()  # consume final )
 
-        text = self.source[start : self.pos]
+        text = _substring(self.source, start, self.pos)
 
         # Parse the content as a command list
         sub_parser = Parser(content)
@@ -1202,7 +1344,7 @@ class Parser:
             raise ParseError("Expected ) to close array literal", pos=self.pos)
         self.advance()  # consume )
 
-        text = self.source[start : self.pos]
+        text = _substring(self.source, start, self.pos)
         return Array(elements), text
 
     def _parse_arithmetic_expansion(self) -> tuple[Node | None, str]:
@@ -1258,11 +1400,11 @@ class Parser:
             self.pos = start
             return None, ""
 
-        content = self.source[content_start : self.pos]
+        content = _substring(self.source, content_start, self.pos)
         self.advance()  # consume first )
         self.advance()  # consume second )
 
-        text = self.source[start : self.pos]
+        text = _substring(self.source, start, self.pos)
 
         # Parse the arithmetic expression
         expr = self._parse_arith_expr(content)
@@ -1344,7 +1486,7 @@ class Parser:
 
     def _arith_match(self, s: str) -> bool:
         """Check if the next characters match s (without consuming)."""
-        return self._arith_src[self._arith_pos : self._arith_pos + len(s)] == s
+        return _starts_with_at(self._arith_src, self._arith_pos, s)
 
     def _arith_consume(self, s: str) -> bool:
         """If next chars match s, consume them and return True."""
@@ -1781,7 +1923,7 @@ class Parser:
                     self._arith_advance()
                 else:
                     self._arith_advance()
-            content = self._arith_src[content_start : self._arith_pos]
+            content = _substring(self._arith_src, content_start, self._arith_pos)
             self._arith_advance()  # consume first )
             self._arith_advance()  # consume second )
             inner_expr = self._parse_arith_expr(content)
@@ -1802,7 +1944,7 @@ class Parser:
                 self._arith_advance()
             else:
                 self._arith_advance()
-        content = self._arith_src[content_start : self._arith_pos]
+        content = _substring(self._arith_src, content_start, self._arith_pos)
         self._arith_advance()  # consume )
 
         # Parse the command inside
@@ -1875,27 +2017,27 @@ class Parser:
 
         # Parse the operator
         if op_str.startswith(":-"):
-            return ParamExpansion(name, ":-", op_str[2 : len(op_str)])
+            return ParamExpansion(name, ":-", _substring(op_str, 2, len(op_str)))
         if op_str.startswith(":="):
-            return ParamExpansion(name, ":=", op_str[2 : len(op_str)])
+            return ParamExpansion(name, ":=", _substring(op_str, 2, len(op_str)))
         if op_str.startswith(":+"):
-            return ParamExpansion(name, ":+", op_str[2 : len(op_str)])
+            return ParamExpansion(name, ":+", _substring(op_str, 2, len(op_str)))
         if op_str.startswith(":?"):
-            return ParamExpansion(name, ":?", op_str[2 : len(op_str)])
+            return ParamExpansion(name, ":?", _substring(op_str, 2, len(op_str)))
         if op_str.startswith(":"):
-            return ParamExpansion(name, ":", op_str[1 : len(op_str)])
+            return ParamExpansion(name, ":", _substring(op_str, 1, len(op_str)))
         if op_str.startswith("##"):
-            return ParamExpansion(name, "##", op_str[2 : len(op_str)])
+            return ParamExpansion(name, "##", _substring(op_str, 2, len(op_str)))
         if op_str.startswith("#"):
-            return ParamExpansion(name, "#", op_str[1 : len(op_str)])
+            return ParamExpansion(name, "#", _substring(op_str, 1, len(op_str)))
         if op_str.startswith("%%"):
-            return ParamExpansion(name, "%%", op_str[2 : len(op_str)])
+            return ParamExpansion(name, "%%", _substring(op_str, 2, len(op_str)))
         if op_str.startswith("%"):
-            return ParamExpansion(name, "%", op_str[1 : len(op_str)])
+            return ParamExpansion(name, "%", _substring(op_str, 1, len(op_str)))
         if op_str.startswith("//"):
-            return ParamExpansion(name, "//", op_str[2 : len(op_str)])
+            return ParamExpansion(name, "//", _substring(op_str, 2, len(op_str)))
         if op_str.startswith("/"):
-            return ParamExpansion(name, "/", op_str[1 : len(op_str)])
+            return ParamExpansion(name, "/", _substring(op_str, 1, len(op_str)))
         return ParamExpansion(name, "", op_str)
 
     def _arith_parse_single_quote(self) -> Node:
@@ -1904,7 +2046,7 @@ class Parser:
         content_start = self._arith_pos
         while not self._arith_at_end() and self._arith_peek() != "'":
             self._arith_advance()
-        content = self._arith_src[content_start : self._arith_pos]
+        content = _substring(self._arith_src, content_start, self._arith_pos)
         if not self._arith_consume("'"):
             raise ParseError("Unterminated single quote in arithmetic", pos=self._arith_pos)
         return ArithNumber(content)
@@ -1920,7 +2062,7 @@ class Parser:
                 self._arith_advance()  # skip escaped char
             else:
                 self._arith_advance()
-        content = self._arith_src[content_start : self._arith_pos]
+        content = _substring(self._arith_src, content_start, self._arith_pos)
         if not self._arith_consume('"'):
             raise ParseError("Unterminated double quote in arithmetic", pos=self._arith_pos)
         return ArithNumber(content)
@@ -1936,7 +2078,7 @@ class Parser:
                 self._arith_advance()  # skip escaped char
             else:
                 self._arith_advance()
-        content = self._arith_src[content_start : self._arith_pos]
+        content = _substring(self._arith_src, content_start, self._arith_pos)
         if not self._arith_consume("`"):
             raise ParseError("Unterminated backtick in arithmetic", pos=self._arith_pos)
         # Parse the command inside
@@ -2022,10 +2164,10 @@ class Parser:
             self.pos = start
             return None, ""
 
-        content = self.source[content_start : self.pos]
+        content = _substring(self.source, content_start, self.pos)
         self.advance()  # consume ]
 
-        text = self.source[start : self.pos]
+        text = _substring(self.source, start, self.pos)
         return ArithDeprecated(content), text
 
     def _parse_ansi_c_quote(self) -> tuple[Node | None, str]:
@@ -2061,7 +2203,7 @@ class Parser:
             self.pos = start
             return None, ""
 
-        text = self.source[start : self.pos]
+        text = _substring(self.source, start, self.pos)
         content = "".join(content_chars)
         return AnsiCQuote(content), text
 
@@ -2193,7 +2335,7 @@ class Parser:
         # Special parameters: ?$!#@*-0-9
         if _is_special_param_or_digit(ch) or ch == "#":
             self.advance()
-            text = self.source[start : self.pos]
+            text = _substring(self.source, start, self.pos)
             return ParamExpansion(ch), text
 
         # Variable name [a-zA-Z_][a-zA-Z0-9_]*
@@ -2205,8 +2347,8 @@ class Parser:
                     self.advance()
                 else:
                     break
-            name = self.source[name_start : self.pos]
-            text = self.source[start : self.pos]
+            name = _substring(self.source, name_start, self.pos)
+            text = _substring(self.source, start, self.pos)
             return ParamExpansion(name), text
 
         # Not a valid expansion, restore position
@@ -2231,7 +2373,7 @@ class Parser:
             param = self._consume_param_name()
             if param and not self.at_end() and self.peek() == "}":
                 self.advance()
-                text = self.source[start : self.pos]
+                text = _substring(self.source, start, self.pos)
                 return ParamLength(param), text
             self.pos = start
             return None, ""
@@ -2246,7 +2388,7 @@ class Parser:
                     self.advance()
                 if not self.at_end() and self.peek() == "}":
                     self.advance()
-                    text = self.source[start : self.pos]
+                    text = _substring(self.source, start, self.pos)
                     return ParamIndirect(param), text
                 # ${!prefix@} and ${!prefix*} are prefix matching (lists variable names)
                 # These are NOT operators - the @/* is part of the indirect form
@@ -2256,7 +2398,7 @@ class Parser:
                         self.advance()
                     if not self.at_end() and self.peek() == "}":
                         self.advance()
-                        text = self.source[start : self.pos]
+                        text = _substring(self.source, start, self.pos)
                         return ParamIndirect(param + suffix), text
                     # Not a valid prefix match, reset
                     self.pos = start
@@ -2290,7 +2432,7 @@ class Parser:
                     if depth == 0:
                         self.advance()  # consume final }
                         arg = "".join(arg_chars)
-                        text = self.source[start : self.pos]
+                        text = _substring(self.source, start, self.pos)
                         return ParamIndirect(param, op, arg), text
             self.pos = start
             return None, ""
@@ -2319,9 +2461,9 @@ class Parser:
                 else:
                     self.advance()
             if depth == 0:
-                content = self.source[content_start : self.pos]
+                content = _substring(self.source, content_start, self.pos)
                 self.advance()  # consume final }
-                text = self.source[start : self.pos]
+                text = _substring(self.source, start, self.pos)
                 return ParamExpansion(content), text
             self.pos = start
             return None, ""
@@ -2333,7 +2475,7 @@ class Parser:
         # Check for closing brace (simple expansion)
         if self.peek() == "}":
             self.advance()
-            text = self.source[start : self.pos]
+            text = _substring(self.source, start, self.pos)
             return ParamExpansion(param), text
 
         # Parse operator
@@ -2823,19 +2965,19 @@ class Parser:
             while line_end < self.length and self.source[line_end] != "\n":
                 line_end += 1
 
-            line = self.source[line_start:line_end]
+            line = _substring(self.source, line_start, line_end)
 
             # For unquoted heredocs, process backslash-newline before checking delimiter
             # Join continued lines to check the full logical line against delimiter
             if not quoted:
                 while line.endswith("\\") and line_end < self.length:
                     # Continue to next line
-                    line = line[0 : len(line) - 1]  # Remove backslash
+                    line = _substring(line, 0, len(line) - 1)  # Remove backslash
                     line_end += 1  # Skip newline
                     next_line_start = line_end
                     while line_end < self.length and self.source[line_end] != "\n":
                         line_end += 1
-                    line += self.source[next_line_start:line_end]
+                    line = line + _substring(self.source, next_line_start, line_end)
 
             # Check if this line is the delimiter
             check_line = line
@@ -3000,7 +3142,7 @@ class Parser:
             self.pos = saved_pos
             return None
 
-        content = self.source[content_start : self.pos]
+        content = _substring(self.source, content_start, self.pos)
         self.advance()  # consume first )
         self.advance()  # consume second )
 
@@ -3207,7 +3349,7 @@ class Parser:
         self._cond_skip_whitespace()
 
         # Check if word1 is a unary operator
-        if word1.value in self.COND_UNARY_OPS:
+        if _is_cond_unary_op(word1.value):
             # Unary test: -f file
             operand = self._parse_cond_word()
             if operand is None:
@@ -3232,7 +3374,7 @@ class Parser:
             # Peek at next word to see if it's a binary operator
             saved_pos = self.pos
             op_word = self._parse_cond_word()
-            if op_word and op_word.value in self.COND_BINARY_OPS:
+            if op_word and _is_cond_binary_op(op_word.value):
                 # Binary test: word1 op word2
                 self._cond_skip_whitespace()
                 # For =~ operator, the RHS is a regex where ( ) are grouping, not conditional grouping
@@ -4258,7 +4400,7 @@ class Parser:
                     # Skip ] as first char (literal in char class) only if there's another ]
                     if scan_pos < self.length and self.source[scan_pos] == "]":
                         # Check if there's another ] later
-                        if "]" in self.source[scan_pos + 1 :]:
+                        if self.source.find("]", scan_pos + 1) != -1:
                             scan_pos += 1
                             has_first_bracket_literal = True
                     while scan_pos < self.length:
@@ -4397,7 +4539,7 @@ class Parser:
 
         # Check for reserved word compounds directly
         next_word = self.peek_word()
-        if next_word in ("while", "until", "for", "if", "case", "select"):
+        if _is_compound_keyword(next_word):
             body = self.parse_compound_command()
             if body is not None:
                 return Coproc(body, name)
@@ -4432,7 +4574,7 @@ class Parser:
                     body = self.parse_subshell()
                 if body is not None:
                     return Coproc(body, name)
-            elif next_word in ("while", "until", "for", "if", "case", "select"):
+            elif _is_compound_keyword(next_word):
                 # NAME followed by reserved compound - extract name
                 name = potential_name
                 body = self.parse_compound_command()
@@ -4497,11 +4639,11 @@ class Parser:
         # Check for POSIX form: name()
         # We need to peek ahead to see if there's a () after the word
         name = self.peek_word()
-        if name is None or name in RESERVED_WORDS:
+        if name is None or _is_reserved_word(name):
             return None
 
         # Assignment words (containing =) are not function definitions
-        if "=" in name:
+        if _str_contains(name, "="):
             return None
 
         # Save position after the name
@@ -4517,7 +4659,7 @@ class Parser:
         ):
             self.advance()
 
-        name = self.source[name_start : self.pos]
+        name = _substring(self.source, name_start, self.pos)
         if not name:
             self.pos = saved_pos
             return None
@@ -4589,7 +4731,7 @@ class Parser:
         """Parse a list that stops before certain reserved words."""
         # Check if we're already at a stop word
         self.skip_whitespace_and_newlines()
-        if self.peek_word() in stop_words:
+        if _set_contains(stop_words, self.peek_word()):
             return None
 
         pipeline = self.parse_pipeline()
@@ -4618,7 +4760,7 @@ class Parser:
                 # Check if there's another command (not a stop word)
                 if (
                     not self.at_end()
-                    and self.peek_word() not in stop_words
+                    and not _set_contains(stop_words, self.peek_word())
                     and not _is_right_bracket(self.peek())
                 ):
                     op = "\n"  # Newline separator (distinct from explicit ;)
@@ -4632,7 +4774,7 @@ class Parser:
                 self.skip_whitespace_and_newlines()
                 if (
                     self.at_end()
-                    or self.peek_word() in stop_words
+                    or _set_contains(stop_words, self.peek_word())
                     or _is_newline_or_right_bracket(self.peek())
                 ):
                     break
@@ -4648,7 +4790,7 @@ class Parser:
                 )
                 if (
                     self.at_end()
-                    or self.peek_word() in stop_words
+                    or _set_contains(stop_words, self.peek_word())
                     or _is_newline_or_right_bracket(self.peek())
                     or at_case_terminator
                 ):
@@ -4661,7 +4803,7 @@ class Parser:
             # Check for stop words before parsing next pipeline
             self.skip_whitespace_and_newlines()
             # Also check for ;;, ;&, or ;;& (case terminators)
-            if self.peek_word() in stop_words:
+            if _set_contains(stop_words, self.peek_word()):
                 break
             if (
                 self.peek() == ";"
@@ -4779,7 +4921,7 @@ class Parser:
                     self.pos = saved
             self.skip_whitespace()
             # Check for -- (end of options) - implies -p per bash oracle
-            if not self.at_end() and self.source[self.pos : self.pos + 2] == "--":
+            if not self.at_end() and _starts_with_at(self.source, self.pos, "--"):
                 if self.pos + 2 >= self.length or _is_whitespace(self.source[self.pos + 2]):
                     self.advance()
                     self.advance()
@@ -4999,7 +5141,7 @@ class Parser:
                     continue
 
             # For && and ||, allow newlines before the next command
-            if op in ("&&", "||"):
+            if op == "&&" or op == "||":
                 self.skip_whitespace_and_newlines()
 
             pipeline = self.parse_pipeline()
@@ -5020,7 +5162,7 @@ class Parser:
         start = self.pos
         while not self.at_end() and self.peek() != "\n":
             self.advance()
-        text = self.source[start : self.pos]
+        text = _substring(self.source, start, self.pos)
         return Comment(text)
 
     def parse(self) -> list[Node]:

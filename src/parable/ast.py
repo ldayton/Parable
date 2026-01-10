@@ -17,6 +17,38 @@ def _is_whitespace_no_newline(c: str) -> bool:
     return c == " " or c == "\t"
 
 
+def _substring(s: str, start: int, end: int) -> str:
+    """Extract substring from start to end (exclusive)."""
+    result = ""
+    i = start
+    while i < end and i < len(s):
+        result = result + s[i]
+        i += 1
+    return result
+
+
+def _starts_with_at(s: str, pos: int, prefix: str) -> bool:
+    """Check if s starts with prefix at position pos."""
+    if pos + len(prefix) > len(s):
+        return False
+    i = 0
+    while i < len(prefix):
+        if s[pos + i] != prefix[i]:
+            return False
+        i += 1
+    return True
+
+
+def _sublist(lst: list, start: int, end: int) -> list:
+    """Extract sublist from start to end (exclusive)."""
+    result = []
+    i = start
+    while i < end and i < len(lst):
+        result.append(lst[i])
+        i += 1
+    return result
+
+
 class Node:
     """Base class for all AST nodes."""
 
@@ -104,7 +136,7 @@ class Word(Node):
         """
         if not (value.startswith("'") and value.endswith("'")):
             return value
-        inner = value[1 : len(value) - 1]
+        inner = _substring(value, 1, len(value) - 1)
         result = bytearray()
         i = 0
         while i < len(inner):
@@ -154,7 +186,7 @@ class Word(Node):
                         j = i + 3
                         while j < len(inner) and _is_hex_digit(inner[j]):
                             j += 1
-                        hex_str = inner[i + 3 : j]
+                        hex_str = _substring(inner, i + 3, j)
                         if j < len(inner) and inner[j] == "}":
                             j += 1  # consume }
                         # If no hex digits, treat as NUL (truncates)
@@ -171,7 +203,7 @@ class Word(Node):
                         while j < len(inner) and j < i + 4 and _is_hex_digit(inner[j]):
                             j += 1
                         if j > i + 2:
-                            byte_val = int(inner[i + 2 : j], 16)
+                            byte_val = int(_substring(inner, i + 2, j), 16)
                             if byte_val == 0:
                                 # NUL truncates string
                                 return "'" + result.decode("utf-8", errors="replace") + "'"
@@ -186,7 +218,7 @@ class Word(Node):
                     while j < len(inner) and j < i + 6 and _is_hex_digit(inner[j]):
                         j += 1
                     if j > i + 2:
-                        codepoint = int(inner[i + 2 : j], 16)
+                        codepoint = int(_substring(inner, i + 2, j), 16)
                         if codepoint == 0:
                             # NUL truncates string
                             return "'" + result.decode("utf-8", errors="replace") + "'"
@@ -201,7 +233,7 @@ class Word(Node):
                     while j < len(inner) and j < i + 10 and _is_hex_digit(inner[j]):
                         j += 1
                     if j > i + 2:
-                        codepoint = int(inner[i + 2 : j], 16)
+                        codepoint = int(_substring(inner, i + 2, j), 16)
                         if codepoint == 0:
                             # NUL truncates string
                             return "'" + result.decode("utf-8", errors="replace") + "'"
@@ -229,7 +261,7 @@ class Word(Node):
                     while j < len(inner) and j < i + 5 and _is_octal_digit(inner[j]):
                         j += 1
                     if j > i + 2:
-                        byte_val = int(inner[i + 1 : j], 8)
+                        byte_val = int(_substring(inner, i + 1, j), 8)
                         if byte_val == 0:
                             # NUL truncates string
                             return "'" + result.decode("utf-8", errors="replace") + "'"
@@ -243,7 +275,7 @@ class Word(Node):
                     j = i + 1
                     while j < len(inner) and j < i + 4 and _is_octal_digit(inner[j]):
                         j += 1
-                    byte_val = int(inner[i + 1 : j], 8)
+                    byte_val = int(_substring(inner, i + 1, j), 8)
                     if byte_val == 0:
                         # NUL truncates string
                         return "'" + result.decode("utf-8", errors="replace") + "'"
@@ -271,7 +303,7 @@ class Word(Node):
             ch = value[i]
             # Track brace depth for parameter expansions
             if not in_single_quote:
-                if value[i : i + 2] == "${":
+                if _starts_with_at(value, i, "${"):
                     brace_depth += 1
                     result.append("${")
                     i += 2
@@ -309,7 +341,9 @@ class Word(Node):
                 result.append(ch)
                 result.append(value[i + 1])
                 i += 2
-            elif value[i : i + 2] == "$'" and not in_single_quote and not effective_in_dquote:
+            elif (
+                _starts_with_at(value, i, "$'") and not in_single_quote and not effective_in_dquote
+            ):
                 # ANSI-C quoted string - find matching closing quote
                 j = i + 2
                 while j < len(value):
@@ -321,20 +355,20 @@ class Word(Node):
                     else:
                         j += 1
                 # Extract and expand the $'...' sequence
-                ansi_str = value[i:j]  # e.g. $'hello\nworld'
+                ansi_str = _substring(value, i, j)  # e.g. $'hello\nworld'
                 # Strip the $ and expand escapes
                 expanded = self._expand_ansi_c_escapes(
-                    ansi_str[1 : len(ansi_str)]
+                    _substring(ansi_str, 1, len(ansi_str))
                 )  # Pass 'hello\nworld'
                 # Inside ${...}, strip quotes for default/alternate value operators
                 # but keep them for pattern replacement operators
                 if brace_depth > 0 and expanded.startswith("'") and expanded.endswith("'"):
-                    inner = expanded[1 : len(expanded) - 1]
+                    inner = _substring(expanded, 1, len(expanded) - 1)
                     # Only strip if non-empty, no CTLESC, and after a default value operator
                     if inner and "\x01" not in inner:
                         # Check what precedes - default value ops: :- := :+ :? - = + ?
                         prev = (
-                            "".join(result[len(result) - 2 : len(result)])
+                            "".join(_sublist(result, len(result) - 2, len(result)))
                             if len(result) >= 2
                             else ""
                         )
@@ -380,7 +414,7 @@ class Word(Node):
                 result.append(ch)
                 result.append(value[i + 1])
                 i += 2
-            elif value[i : i + 2] == '$"' and not in_single_quote and not in_double_quote:
+            elif _starts_with_at(value, i, '$"') and not in_single_quote and not in_double_quote:
                 # Locale string $"..." outside quotes - strip the $ and enter double quote
                 result.append('"')
                 in_double_quote = True
@@ -408,9 +442,9 @@ class Word(Node):
         # Must have =(
         if not (i + 1 < len(value) and value[i] == "=" and value[i + 1] == "("):
             return value
-        prefix = value[: i + 1]  # e.g., "arr=" or "arr+="
+        prefix = _substring(value, 0, i + 1)  # e.g., "arr=" or "arr+="
         # Extract content inside parentheses
-        inner = value[len(prefix) + 1 : -1]
+        inner = _substring(value, len(prefix) + 1, len(value) - 1)
         # Normalize whitespace while respecting quotes
         normalized = []
         i = 0
@@ -428,7 +462,7 @@ class Word(Node):
                 j = i + 1
                 while j < len(inner) and inner[j] != "'":
                     j += 1
-                normalized.append(inner[i : j + 1])
+                normalized.append(_substring(inner, i, j + 1))
                 i = j + 1
             elif ch == '"':
                 # Double-quoted string - preserve as-is
@@ -441,12 +475,12 @@ class Word(Node):
                         break
                     else:
                         j += 1
-                normalized.append(inner[i : j + 1])
+                normalized.append(_substring(inner, i, j + 1))
                 i = j + 1
             elif ch == "\\" and i + 1 < len(inner):
                 # Escape sequence
                 in_whitespace = False
-                normalized.append(inner[i : i + 2])
+                normalized.append(_substring(inner, i, i + 2))
                 i += 2
             else:
                 in_whitespace = False
@@ -462,18 +496,18 @@ class Word(Node):
         i = 0
         while i < len(value):
             # Check for $(( arithmetic expression
-            if value[i : i + 3] == "$((":
+            if _starts_with_at(value, i, "$(("):
                 # Find matching ))
                 start = i
                 i += 3
                 depth = 1
                 arith_content = []
                 while i < len(value) and depth > 0:
-                    if value[i : i + 2] == "((":
+                    if _starts_with_at(value, i, "(("):
                         arith_content.append("((")
                         depth += 1
                         i += 2
-                    elif value[i : i + 2] == "))":
+                    elif _starts_with_at(value, i, "))"):
                         depth -= 1
                         if depth > 0:
                             arith_content.append("))")
@@ -489,7 +523,7 @@ class Word(Node):
                     result.append("$((" + "".join(arith_content) + "))")
                 else:
                     # Didn't find )) - not arithmetic (likely $( + ( subshell), pass through
-                    result.append(value[start:i])
+                    result.append(_substring(value, start, i))
             else:
                 result.append(value[i])
                 i += 1
@@ -539,7 +573,7 @@ class Word(Node):
             else:
                 cmdsub_parts.extend(self._collect_cmdsubs(p))
         # Check if we have ${ or ${| brace command substitutions to format
-        has_brace_cmdsub = "${ " in value or "${|" in value
+        has_brace_cmdsub = value.find("${ ") != -1 or value.find("${|") != -1
         if not cmdsub_parts and not procsub_parts and not has_brace_cmdsub:
             return value
         result = []
@@ -549,8 +583,8 @@ class Word(Node):
         while i < len(value):
             # Check for $( command substitution (but not $(( arithmetic)
             if (
-                value[i : i + 2] == "$("
-                and value[i : i + 3] != "$(("
+                _starts_with_at(value, i, "$(")
+                and not _starts_with_at(value, i, "$((")
                 and cmdsub_idx < len(cmdsub_parts)
             ):
                 # Find matching close paren using bash-aware matching
@@ -578,13 +612,13 @@ class Word(Node):
                         break
                     j += 1
                 # Keep backtick substitutions as-is (oracle doesn't reformat them)
-                result.append(value[i:j])
+                result.append(_substring(value, i, j))
                 cmdsub_idx += 1
                 i = j
             # Check for >( or <( process substitution
-            elif (value[i : i + 2] == ">(" or value[i : i + 2] == "<(") and procsub_idx < len(
-                procsub_parts
-            ):
+            elif (
+                _starts_with_at(value, i, ">(") or _starts_with_at(value, i, "<(")
+            ) and procsub_idx < len(procsub_parts):
                 direction = value[i]
                 # Find matching close paren
                 j = _find_cmdsub_end(value, i + 2)
@@ -595,8 +629,8 @@ class Word(Node):
                 procsub_idx += 1
                 i = j
             # Check for ${ (space) or ${| brace command substitution
-            elif value[i : i + 3] == "${ " or value[i : i + 3] == "${|":
-                prefix = value[i : i + 3]
+            elif _starts_with_at(value, i, "${ ") or _starts_with_at(value, i, "${|"):
+                prefix = _substring(value, i, i + 3)
                 # Find matching close brace
                 j = i + 3
                 depth = 1
@@ -607,7 +641,7 @@ class Word(Node):
                         depth -= 1
                     j += 1
                 # Parse and format the inner content
-                inner = value[i + 2 : j - 1]  # Content between ${ and }
+                inner = _substring(value, i + 2, j - 1)  # Content between ${ and }
                 # Check if content is all whitespace - normalize to single space
                 if inner.strip() == "":
                     result.append("${ }")
@@ -623,7 +657,7 @@ class Word(Node):
                         else:
                             result.append("${ }")
                     except Exception:
-                        result.append(value[i:j])
+                        result.append(_substring(value, i, j))
                 i = j
             else:
                 result.append(value[i])
@@ -750,7 +784,7 @@ class List(Node):
             and parts[len(parts) - 1].kind == "operator"
             and (parts[len(parts) - 1].op == ";" or parts[len(parts) - 1].op == "\n")
         ):
-            parts = parts[0 : len(parts) - 1]
+            parts = _sublist(parts, 0, len(parts) - 1)
         if len(parts) == 1:
             return parts[0].to_sexp()
         # Handle trailing & as unary background operator
@@ -759,13 +793,13 @@ class List(Node):
             # Find rightmost ; or \n to split there
             for i in range(len(parts) - 3, 0, -2):
                 if parts[i].kind == "operator" and (parts[i].op == ";" or parts[i].op == "\n"):
-                    left = parts[0:i]
-                    right = parts[i + 1 : len(parts) - 1]  # exclude trailing &
+                    left = _sublist(parts, 0, i)
+                    right = _sublist(parts, i + 1, len(parts) - 1)  # exclude trailing &
                     left_sexp = List(left).to_sexp() if len(left) > 1 else left[0].to_sexp()
                     right_sexp = List(right).to_sexp() if len(right) > 1 else right[0].to_sexp()
                     return "(semi " + left_sexp + " (background " + right_sexp + "))"
             # No ; or \n found, background the whole list (minus trailing &)
-            inner_parts = parts[0 : len(parts) - 1]
+            inner_parts = _sublist(parts, 0, len(parts) - 1)
             if len(inner_parts) == 1:
                 return "(background " + inner_parts[0].to_sexp() + ")"
             inner_list = List(inner_parts)
@@ -778,16 +812,16 @@ class List(Node):
         # Split on ; or \n first (rightmost for left-associativity)
         for i in range(len(parts) - 2, 0, -2):
             if parts[i].kind == "operator" and (parts[i].op == ";" or parts[i].op == "\n"):
-                left = parts[:i]
-                right = parts[i + 1 :]
+                left = _sublist(parts, 0, i)
+                right = _sublist(parts, i + 1, len(parts))
                 left_sexp = List(left).to_sexp() if len(left) > 1 else left[0].to_sexp()
                 right_sexp = List(right).to_sexp() if len(right) > 1 else right[0].to_sexp()
                 return "(semi " + left_sexp + " " + right_sexp + ")"
         # Then split on & (rightmost for left-associativity)
         for i in range(len(parts) - 2, 0, -2):
             if parts[i].kind == "operator" and parts[i].op == "&":
-                left = parts[:i]
-                right = parts[i + 1 :]
+                left = _sublist(parts, 0, i)
+                right = _sublist(parts, i + 1, len(parts))
                 left_sexp = List(left).to_sexp() if len(left) > 1 else left[0].to_sexp()
                 right_sexp = List(right).to_sexp() if len(right) > 1 else right[0].to_sexp()
                 return "(background " + left_sexp + " " + right_sexp + ")"
@@ -879,7 +913,7 @@ class Redirect(Node):
                 while j < len(op) and (op[j].isalnum() or op[j] == "_"):
                     j += 1
                 if j < len(op) and op[j] == "}":
-                    op = op[j + 1 :]
+                    op = _substring(op, j + 1, len(op))
         target_val = self.target.value
         # Expand ANSI-C $'...' quotes (converts escapes like \n to actual newline)
         target_val = Word(target_val)._expand_all_ansi_c_quotes(target_val)
@@ -892,7 +926,9 @@ class Redirect(Node):
                 op = ">&"
             elif op == "<":
                 op = "<&"
-            fd_target = target_val[1 : len(target_val)].rstrip("-")  # "&1" -> "1", "&1-" -> "1"
+            fd_target = _substring(target_val, 1, len(target_val)).rstrip(
+                "-"
+            )  # "&1" -> "1", "&1-" -> "1"
             if fd_target.isdigit():
                 return '(redirect "' + op + '" ' + fd_target + ")"
             elif target_val == "&-":
@@ -901,7 +937,7 @@ class Redirect(Node):
                 # Variable fd dup like >&$fd or >&$fd- (move) - strip the & and trailing -
                 return '(redirect "' + op + '" "' + fd_target + '")'
         # Handle case where op is already >& or <&
-        if op in (">&", "<&"):
+        if op == ">&" or op == "<&":
             if target_val.isdigit():
                 return '(redirect "' + op + '" ' + target_val + ")"
             # Variable fd dup with move indicator (trailing -)
@@ -1276,7 +1312,7 @@ class CasePattern(Node):
         while i < len(self.pattern):
             ch = self.pattern[i]
             if ch == "\\" and i + 1 < len(self.pattern):
-                current.append(self.pattern[i : i + 2])
+                current.append(_substring(self.pattern, i, i + 2))
                 i += 2
             elif (
                 (ch == "@" or ch == "?" or ch == "*" or ch == "+" or ch == "!")
@@ -2061,7 +2097,7 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
         # Strip trailing ; or newline
         s = "".join(result)
         while s.endswith(";") or s.endswith("\n"):
-            s = s[0 : len(s) - 1]
+            s = _substring(s, 0, len(s) - 1)
         return s
     if node.kind == "if":
         cond = _format_cmdsub_node(node.condition, indent)
@@ -2156,7 +2192,7 @@ def _format_redirect(r: "Redirect | HereDoc") -> str:
     if target.startswith("&"):
         # Normalize N<&- to N>&- (close always uses >)
         if target == "&-" and op.endswith("<"):
-            op = op[0 : len(op) - 1] + ">"
+            op = _substring(op, 0, len(op) - 1) + ">"
         # Add default fd for bare >&N or <&N
         if op == ">":
             op = "1>"
@@ -2221,7 +2257,7 @@ def _find_cmdsub_end(value: str, start: int) -> int:
             continue
         if in_double:
             # Inside double quotes, $() command substitution is still active
-            if value[i : i + 2] == "$(" and value[i : i + 3] != "$((":
+            if _starts_with_at(value, i, "$(") and not _starts_with_at(value, i, "$(("):
                 # Recursively find end of nested command substitution
                 j = _find_cmdsub_end(value, i + 2)
                 i = j
@@ -2246,29 +2282,29 @@ def _find_cmdsub_end(value: str, start: int) -> int:
                 i += 1
             continue
         # Handle heredocs
-        if value[i : i + 2] == "<<":
+        if _starts_with_at(value, i, "<<"):
             i = _skip_heredoc(value, i)
             continue
         # Check for 'case' keyword
-        if value[i : i + 4] == "case" and _is_word_boundary(value, i, 4):
+        if _starts_with_at(value, i, "case") and _is_word_boundary(value, i, 4):
             case_depth += 1
             in_case_patterns = False
             i += 4
             continue
         # Check for 'in' keyword (after case)
-        if case_depth > 0 and value[i : i + 2] == "in" and _is_word_boundary(value, i, 2):
+        if case_depth > 0 and _starts_with_at(value, i, "in") and _is_word_boundary(value, i, 2):
             in_case_patterns = True
             i += 2
             continue
         # Check for 'esac' keyword
-        if value[i : i + 4] == "esac" and _is_word_boundary(value, i, 4):
+        if _starts_with_at(value, i, "esac") and _is_word_boundary(value, i, 4):
             if case_depth > 0:
                 case_depth -= 1
                 in_case_patterns = False
             i += 4
             continue
         # Check for ';;' (end of case pattern, next pattern or esac follows)
-        if value[i : i + 2] == ";;":
+        if _starts_with_at(value, i, ";;"):
             i += 2
             continue
         # Handle parens
@@ -2303,7 +2339,7 @@ def _skip_heredoc(value: str, start: int) -> int:
         delim_start = i
         while i < len(value) and value[i] != quote_char:
             i += 1
-        delimiter = value[delim_start:i]
+        delimiter = _substring(value, delim_start, i)
         if i < len(value):
             i += 1  # Skip closing quote
     elif i < len(value) and value[i] == "\\":
@@ -2312,12 +2348,12 @@ def _skip_heredoc(value: str, start: int) -> int:
         delim_start = i
         while i < len(value) and not _is_whitespace(value[i]):
             i += 1
-        delimiter = value[delim_start:i]
+        delimiter = _substring(value, delim_start, i)
     else:
         # Unquoted delimiter
         while i < len(value) and not _is_whitespace(value[i]):
             i += 1
-        delimiter = value[delim_start:i]
+        delimiter = _substring(value, delim_start, i)
     # Skip to end of line (heredoc content starts on next line)
     while i < len(value) and value[i] != "\n":
         i += 1
@@ -2330,7 +2366,7 @@ def _skip_heredoc(value: str, start: int) -> int:
         line_end = i
         while line_end < len(value) and value[line_end] != "\n":
             line_end += 1
-        line = value[line_start:line_end]
+        line = _substring(value, line_start, line_end)
         # Check if this line is the delimiter (possibly with leading tabs for <<-)
         stripped = line.lstrip("\t") if start + 2 < len(value) and value[start + 2] == "-" else line
         if stripped == delimiter:

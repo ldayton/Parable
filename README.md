@@ -8,7 +8,7 @@
 </pre>
 </div>
 
-Parse bash exactly as bash does. Pure Python, zero dependencies. This is the only complete bash parser for Python. Extensively validated against bash itself.
+Parse bash exactly as bash does. Pure Python, zero dependencies, zero imports. This is the only complete bash parser for Python. Extensively validated against bash itself.
 
 ---
 

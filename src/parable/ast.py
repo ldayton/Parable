@@ -1,9 +1,6 @@
 """AST node types for Parable."""
 
-from dataclasses import dataclass, field
 
-
-@dataclass
 class Node:
     """Base class for all AST nodes."""
 
@@ -14,12 +11,11 @@ class Node:
         raise NotImplementedError
 
 
-@dataclass
 class Word(Node):
     """A word token, possibly containing expansions."""
 
     value: str
-    parts: list[Node] = field(default_factory=list)
+    parts: list[Node]
 
     def __init__(self, value: str, parts: list[Node] = None):
         self.kind = "word"
@@ -608,12 +604,11 @@ class Word(Node):
         return value.rstrip("\n")
 
 
-@dataclass
 class Command(Node):
     """A simple command (words + redirections)."""
 
     words: list[Word]
-    redirects: list[Node] = field(default_factory=list)
+    redirects: list[Node]
 
     def __init__(self, words: list[Word], redirects: list[Node] = None):
         self.kind = "command"
@@ -627,7 +622,6 @@ class Command(Node):
         return "(command)" if not inner else f"(command {inner})"
 
 
-@dataclass
 class Pipeline(Node):
     """A pipeline of commands."""
 
@@ -678,7 +672,6 @@ class Pipeline(Node):
         return cmd.to_sexp()
 
 
-@dataclass
 class List(Node):
     """A list of pipelines with operators."""
 
@@ -746,7 +739,6 @@ class List(Node):
         return result
 
 
-@dataclass
 class Operator(Node):
     """An operator token (&&, ||, ;, &, |)."""
 
@@ -767,7 +759,6 @@ class Operator(Node):
         return f"({names.get(self.op, self.op)})"
 
 
-@dataclass
 class PipeBoth(Node):
     """Marker for |& pipe (stdout + stderr)."""
 
@@ -778,7 +769,6 @@ class PipeBoth(Node):
         return "(pipe-both)"
 
 
-@dataclass
 class Empty(Node):
     """Empty input."""
 
@@ -789,7 +779,6 @@ class Empty(Node):
         return ""
 
 
-@dataclass
 class Comment(Node):
     """A comment (# to end of line)."""
 
@@ -804,7 +793,6 @@ class Comment(Node):
         return ""
 
 
-@dataclass
 class Redirect(Node):
     """A redirection."""
 
@@ -860,7 +848,6 @@ class Redirect(Node):
         return f'(redirect "{op}" "{target_val}")'
 
 
-@dataclass
 class HereDoc(Node):
     """A here document <<DELIM ... DELIM."""
 
@@ -890,7 +877,6 @@ class HereDoc(Node):
         return f'(redirect "{op}" "{self.content}")'
 
 
-@dataclass
 class Subshell(Node):
     """A subshell ( list )."""
 
@@ -909,7 +895,6 @@ class Subshell(Node):
         return base
 
 
-@dataclass
 class BraceGroup(Node):
     """A brace group { list; }."""
 
@@ -928,14 +913,13 @@ class BraceGroup(Node):
         return base
 
 
-@dataclass
 class If(Node):
     """An if statement."""
 
     condition: Node
     then_body: Node
     else_body: Node | None = None
-    redirects: list[Node] = field(default_factory=list)
+    redirects: list[Node]
 
     def __init__(
         self, condition: Node, then_body: Node, else_body: Node = None, redirects: list[Node] = None
@@ -956,13 +940,12 @@ class If(Node):
         return result
 
 
-@dataclass
 class While(Node):
     """A while loop."""
 
     condition: Node
     body: Node
-    redirects: list[Node] = field(default_factory=list)
+    redirects: list[Node]
 
     def __init__(self, condition: Node, body: Node, redirects: list[Node] = None):
         self.kind = "while"
@@ -977,13 +960,12 @@ class While(Node):
         return base
 
 
-@dataclass
 class Until(Node):
     """An until loop."""
 
     condition: Node
     body: Node
-    redirects: list[Node] = field(default_factory=list)
+    redirects: list[Node]
 
     def __init__(self, condition: Node, body: Node, redirects: list[Node] = None):
         self.kind = "until"
@@ -998,14 +980,13 @@ class Until(Node):
         return base
 
 
-@dataclass
 class For(Node):
     """A for loop."""
 
     var: str
     words: list[Word] | None
     body: Node
-    redirects: list[Node] = field(default_factory=list)
+    redirects: list[Node]
 
     def __init__(
         self, var: str, words: list[Word] | None, body: Node, redirects: list[Node] = None
@@ -1033,7 +1014,6 @@ class For(Node):
             return f'(for (word "{var_escaped}") (in {word_strs}) {self.body.to_sexp()}){suffix}'
 
 
-@dataclass
 class ForArith(Node):
     """A C-style for loop: for ((init; cond; incr)); do ... done."""
 
@@ -1041,7 +1021,7 @@ class ForArith(Node):
     cond: str
     incr: str
     body: Node
-    redirects: list[Node] = field(default_factory=list)
+    redirects: list[Node]
 
     def __init__(self, init: str, cond: str, incr: str, body: Node, redirects: list[Node] = None):
         self.kind = "for-arith"
@@ -1072,14 +1052,13 @@ class ForArith(Node):
         )
 
 
-@dataclass
 class Select(Node):
     """A select statement."""
 
     var: str
     words: list[Word] | None
     body: Node
-    redirects: list[Node] = field(default_factory=list)
+    redirects: list[Node]
 
     def __init__(
         self, var: str, words: list[Word] | None, body: Node, redirects: list[Node] = None
@@ -1103,7 +1082,6 @@ class Select(Node):
         return f'(select (word "{var_escaped}") {in_clause} {self.body.to_sexp()}){suffix}'
 
 
-@dataclass
 class Case(Node):
     """A case statement."""
 
@@ -1126,7 +1104,6 @@ class Case(Node):
         return base
 
 
-@dataclass
 class CasePattern(Node):
     """A pattern clause in a case statement."""
 
@@ -1282,7 +1259,6 @@ class CasePattern(Node):
         return "".join(parts)
 
 
-@dataclass
 class Function(Node):
     """A function definition."""
 
@@ -1298,7 +1274,6 @@ class Function(Node):
         return f'(function "{self.name}" {self.body.to_sexp()})'
 
 
-@dataclass
 class ParamExpansion(Node):
     """A parameter expansion ${var} or ${var:-default}."""
 
@@ -1321,7 +1296,6 @@ class ParamExpansion(Node):
         return f'(param "{escaped_param}")'
 
 
-@dataclass
 class ParamLength(Node):
     """A parameter length expansion ${#var}."""
 
@@ -1336,7 +1310,6 @@ class ParamLength(Node):
         return f'(param-len "{escaped}")'
 
 
-@dataclass
 class ParamIndirect(Node):
     """An indirect parameter expansion ${!var} or ${!var<op><arg>}."""
 
@@ -1359,7 +1332,6 @@ class ParamIndirect(Node):
         return f'(param-indirect "{escaped}")'
 
 
-@dataclass
 class CommandSubstitution(Node):
     """A command substitution $(...) or `...`."""
 
@@ -1373,7 +1345,6 @@ class CommandSubstitution(Node):
         return f"(cmdsub {self.command.to_sexp()})"
 
 
-@dataclass
 class ArithmeticExpansion(Node):
     """An arithmetic expansion $((...)) with parsed internals."""
 
@@ -1389,7 +1360,6 @@ class ArithmeticExpansion(Node):
         return f"(arith {self.expression.to_sexp()})"
 
 
-@dataclass
 class ArithmeticCommand(Node):
     """An arithmetic command ((...)) with parsed internals."""
 
@@ -1419,7 +1389,6 @@ class ArithmeticCommand(Node):
 # Arithmetic expression nodes
 
 
-@dataclass
 class ArithNumber(Node):
     """A numeric literal in arithmetic context."""
 
@@ -1433,7 +1402,6 @@ class ArithNumber(Node):
         return f'(number "{self.value}")'
 
 
-@dataclass
 class ArithVar(Node):
     """A variable reference in arithmetic context (without $)."""
 
@@ -1447,7 +1415,6 @@ class ArithVar(Node):
         return f'(var "{self.name}")'
 
 
-@dataclass
 class ArithBinaryOp(Node):
     """A binary operation in arithmetic."""
 
@@ -1465,7 +1432,6 @@ class ArithBinaryOp(Node):
         return f'(binary-op "{self.op}" {self.left.to_sexp()} {self.right.to_sexp()})'
 
 
-@dataclass
 class ArithUnaryOp(Node):
     """A unary operation in arithmetic."""
 
@@ -1481,7 +1447,6 @@ class ArithUnaryOp(Node):
         return f'(unary-op "{self.op}" {self.operand.to_sexp()})'
 
 
-@dataclass
 class ArithPreIncr(Node):
     """Pre-increment ++var."""
 
@@ -1495,7 +1460,6 @@ class ArithPreIncr(Node):
         return f"(pre-incr {self.operand.to_sexp()})"
 
 
-@dataclass
 class ArithPostIncr(Node):
     """Post-increment var++."""
 
@@ -1509,7 +1473,6 @@ class ArithPostIncr(Node):
         return f"(post-incr {self.operand.to_sexp()})"
 
 
-@dataclass
 class ArithPreDecr(Node):
     """Pre-decrement --var."""
 
@@ -1523,7 +1486,6 @@ class ArithPreDecr(Node):
         return f"(pre-decr {self.operand.to_sexp()})"
 
 
-@dataclass
 class ArithPostDecr(Node):
     """Post-decrement var--."""
 
@@ -1537,7 +1499,6 @@ class ArithPostDecr(Node):
         return f"(post-decr {self.operand.to_sexp()})"
 
 
-@dataclass
 class ArithAssign(Node):
     """Assignment operation (=, +=, -=, etc.)."""
 
@@ -1555,7 +1516,6 @@ class ArithAssign(Node):
         return f'(assign "{self.op}" {self.target.to_sexp()} {self.value.to_sexp()})'
 
 
-@dataclass
 class ArithTernary(Node):
     """Ternary conditional expr ? expr : expr."""
 
@@ -1573,7 +1533,6 @@ class ArithTernary(Node):
         return f"(ternary {self.condition.to_sexp()} {self.if_true.to_sexp()} {self.if_false.to_sexp()})"
 
 
-@dataclass
 class ArithComma(Node):
     """Comma operator expr, expr."""
 
@@ -1589,7 +1548,6 @@ class ArithComma(Node):
         return f"(comma {self.left.to_sexp()} {self.right.to_sexp()})"
 
 
-@dataclass
 class ArithSubscript(Node):
     """Array subscript arr[expr]."""
 
@@ -1605,7 +1563,6 @@ class ArithSubscript(Node):
         return f'(subscript "{self.array}" {self.index.to_sexp()})'
 
 
-@dataclass
 class ArithEscape(Node):
     """An escaped character in arithmetic expression."""
 
@@ -1619,7 +1576,6 @@ class ArithEscape(Node):
         return f'(escape "{self.char}")'
 
 
-@dataclass
 class ArithDeprecated(Node):
     """A deprecated arithmetic expansion $[expr]."""
 
@@ -1634,7 +1590,6 @@ class ArithDeprecated(Node):
         return f'(arith-deprecated "{escaped}")'
 
 
-@dataclass
 class AnsiCQuote(Node):
     """An ANSI-C quoted string $'...'."""
 
@@ -1649,7 +1604,6 @@ class AnsiCQuote(Node):
         return f'(ansi-c "{escaped}")'
 
 
-@dataclass
 class LocaleString(Node):
     """A locale-translated string $"..."."""
 
@@ -1664,7 +1618,6 @@ class LocaleString(Node):
         return f'(locale "{escaped}")'
 
 
-@dataclass
 class ProcessSubstitution(Node):
     """A process substitution <(...) or >(...)."""
 
@@ -1680,7 +1633,6 @@ class ProcessSubstitution(Node):
         return f'(procsub "{self.direction}" {self.command.to_sexp()})'
 
 
-@dataclass
 class Negation(Node):
     """Pipeline negation with !."""
 
@@ -1697,7 +1649,6 @@ class Negation(Node):
         return f"(negation {self.pipeline.to_sexp()})"
 
 
-@dataclass
 class Time(Node):
     """Time measurement with time keyword."""
 
@@ -1718,7 +1669,6 @@ class Time(Node):
         return f"(time {self.pipeline.to_sexp()})"
 
 
-@dataclass
 class ConditionalExpr(Node):
     """A conditional expression [[ expression ]]."""
 
@@ -1744,7 +1694,6 @@ class ConditionalExpr(Node):
         return result
 
 
-@dataclass
 class UnaryTest(Node):
     """A unary test in [[ ]], e.g., -f file, -z string."""
 
@@ -1762,7 +1711,6 @@ class UnaryTest(Node):
         return f'(cond-unary "{self.op}" (cond-term "{self.operand.value}"))'
 
 
-@dataclass
 class BinaryTest(Node):
     """A binary test in [[ ]], e.g., $a == $b, file1 -nt file2."""
 
@@ -1784,7 +1732,6 @@ class BinaryTest(Node):
         return f'(cond-binary "{self.op}" (cond-term "{left_val}") (cond-term "{right_val}"))'
 
 
-@dataclass
 class CondAnd(Node):
     """Logical AND in [[ ]], e.g., expr1 && expr2."""
 
@@ -1800,7 +1747,6 @@ class CondAnd(Node):
         return f"(cond-and {self.left.to_sexp()} {self.right.to_sexp()})"
 
 
-@dataclass
 class CondOr(Node):
     """Logical OR in [[ ]], e.g., expr1 || expr2."""
 
@@ -1816,7 +1762,6 @@ class CondOr(Node):
         return f"(cond-or {self.left.to_sexp()} {self.right.to_sexp()})"
 
 
-@dataclass
 class CondNot(Node):
     """Logical NOT in [[ ]], e.g., ! expr."""
 
@@ -1831,7 +1776,6 @@ class CondNot(Node):
         return self.operand.to_sexp()
 
 
-@dataclass
 class CondParen(Node):
     """Parenthesized group in [[ ]], e.g., ( expr )."""
 
@@ -1845,7 +1789,6 @@ class CondParen(Node):
         return f"(cond-expr {self.inner.to_sexp()})"
 
 
-@dataclass
 class Array(Node):
     """An array literal (word1 word2 ...)."""
 
@@ -1862,7 +1805,6 @@ class Array(Node):
         return f"(array {inner})"
 
 
-@dataclass
 class Coproc(Node):
     """A coprocess coproc [NAME] command."""
 

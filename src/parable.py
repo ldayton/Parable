@@ -100,6 +100,16 @@ def _sublist(lst: list, start: int, end: int) -> list:
     return lst[start:end]
 
 
+def _repeat_str(s: str, n: int) -> str:
+    """Repeat string s n times."""
+    result = []
+    i = 0
+    while i < n:
+        result.append(s)
+        i += 1
+    return "".join(result)
+
+
 class Node:
     """Base class for all AST nodes."""
 
@@ -2081,8 +2091,8 @@ class Coproc(Node):
 
 def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -> str:
     """Format an AST node for command substitution output (bash-oracle pretty-print format)."""
-    sp = " " * indent
-    inner_sp = " " * (indent + 4)
+    sp = _repeat_str(" ", indent)
+    inner_sp = _repeat_str(" ", indent + 4)
     if node.kind == "empty":
         return ""
     if node.kind == "command":
@@ -2160,15 +2170,15 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
             pat = p.pattern.replace("|", " | ")
             body = _format_cmdsub_node(p.body, indent + 8) if p.body else ""
             term = p.terminator  # ;;, ;&, or ;;&
-            pat_indent = " " * (indent + 8)
-            term_indent = " " * (indent + 4)
+            pat_indent = _repeat_str(" ", indent + 8)
+            term_indent = _repeat_str(" ", indent + 4)
             if i == 0:
                 # First pattern on same line as 'in'
                 patterns.append(" " + pat + ")\n" + pat_indent + body + "\n" + term_indent + term)
             else:
                 patterns.append(pat + ")\n" + pat_indent + body + "\n" + term_indent + term)
             i += 1
-        pattern_str = ("\n" + " " * (indent + 4)).join(patterns)
+        pattern_str = ("\n" + _repeat_str(" ", indent + 4)).join(patterns)
         return "case " + word + " in" + pattern_str + "\n" + sp + "esac"
     if node.kind == "function":
         name = node.name

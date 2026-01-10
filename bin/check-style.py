@@ -7,6 +7,8 @@ Banned constructions:
 
     Construction          Example                   Use instead
     --------------------  ------------------------  --------------------------
+    ** exponentiation     2 ** 3                    pow() or multiplication
+    // floor division     a // b                    int(a / b)
     *args / **kwargs      def f(*args):             explicit parameters
     all                   all(x for x in lst)       explicit loop with early return
     any                   any(x for x in lst)       explicit loop with early return
@@ -17,6 +19,7 @@ Banned constructions:
     await                 await x                   avoid async
     chained comparison    a < b < c                 a < b and b < c
     decorator             @cache                    call wrapper manually
+    del statement         del x                     reassign or let go out of scope
     dict comprehension    {k: v for k, v in ...}    explicit loop
     enumerate             for i, x in enumerate()   manual index counter
     f-strings             f"x={x}"                  "x=" + str(x)
@@ -35,7 +38,9 @@ Banned constructions:
     reversed              reversed(lst)             reverse index loop
     set comprehension     {x for x in items}        explicit loop
     step slicing          a[::2], a[1:10:2]         explicit index math
+    string multiply       "x" * 3                   loop or helper function
     star unpacking        a, *rest = lst            manual indexing
+    try else              try: ... else:            move else code after try block
     tuple unpacking       a, b = b, a               use temp variable
     walrus operator       if (x := foo()):          assign, then test
     with statement        with open(f) as x:        try/finally
@@ -258,6 +263,31 @@ def check_file(filepath):
                     errors.append((lineno, "or-default: use 'if x is None: x = ...' instead"))
                 if isinstance(val, ast.Constant) and val.value in (0, "", None, False):
                     errors.append((lineno, "or-default: use 'if x is None: x = ...' instead"))
+
+        # ** exponentiation
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
+            errors.append((lineno, "**: use pow() or explicit multiplication"))
+
+        # // floor division
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.FloorDiv):
+            errors.append((lineno, "//: use int(a / b) instead"))
+
+        # del statement
+        if isinstance(node, ast.Delete):
+            errors.append((lineno, "del: reassign or let variable go out of scope"))
+
+        # try...else
+        if isinstance(node, ast.Try) and node.orelse:
+            errors.append((lineno, "try else: move else code after try block"))
+
+        # string multiplication "x" * n
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mult):
+            left_is_str = isinstance(node.left, ast.Constant) and isinstance(node.left.value, str)
+            right_is_str = isinstance(node.right, ast.Constant) and isinstance(
+                node.right.value, str
+            )
+            if left_is_str or right_is_str:
+                errors.append((lineno, "string * n: use loop or helper function"))
 
     return errors
 

@@ -1802,8 +1802,13 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
         return f"function {name} () \n{{ \n{inner_sp}{body}\n}}"
     if isinstance(node, Subshell):
         body = _format_cmdsub_node(node.body, indent, in_procsub)
+        redirects = " ".join(_format_redirect(r) for r in node.redirects) if node.redirects else ""
         if in_procsub:
+            if redirects:
+                return f"({body}) {redirects}"
             return f"({body})"
+        if redirects:
+            return f"( {body} ) {redirects}"
         return f"( {body} )"
     if isinstance(node, BraceGroup):
         body = _format_cmdsub_node(node.body, indent)
@@ -1819,10 +1824,20 @@ def _format_redirect(r: "Redirect | HereDoc") -> str:
         # Include heredoc content: <<DELIM\ncontent\nDELIM\n
         op = "<<-" if r.strip_tabs else "<<"
         return f"{op}{r.delimiter}\n{r.content}{r.delimiter}\n"
-    # For fd duplication (target starts with &), no space between op and target
-    if r.target.value.startswith("&"):
-        return f"{r.op}{r.target.value}"
-    return f"{r.op} {r.target.value}"
+    op = r.op
+    target = r.target.value
+    # For fd duplication (target starts with &), handle normalization
+    if target.startswith("&"):
+        # Normalize N<&- to N>&- (close always uses >)
+        if target == "&-" and op.endswith("<"):
+            op = op[:-1] + ">"
+        # Add default fd for bare >&N or <&N
+        if op == ">":
+            op = "1>"
+        elif op == "<":
+            op = "0<"
+        return f"{op}{target}"
+    return f"{op} {target}"
 
 
 def _normalize_fd_redirects(s: str) -> str:

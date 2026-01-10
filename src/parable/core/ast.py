@@ -38,8 +38,8 @@ class Word(Node):
         # Escape backslashes for s-expression output (but not in ANSI-C strings)
         if not is_ansi_c:
             value = value.replace("\\", "\\\\")
-        # Escape double quotes and newlines
-        escaped = value.replace('"', '\\"').replace("\n", "\\n")
+        # Escape double quotes, newlines, and tabs
+        escaped = value.replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
         return f'(word "{escaped}")'
 
     def _format_command_substitutions(self, value: str) -> str:

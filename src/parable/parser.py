@@ -85,6 +85,153 @@ RESERVED_WORDS = {
 METACHAR = set(" \t\n|&;()<>")
 
 
+def _is_whitespace_no_newline(c: str) -> bool:
+    return c == " " or c == "\t"
+
+
+def _is_whitespace(c: str) -> bool:
+    return c == " " or c == "\t" or c == "\n"
+
+
+def _is_quote(c: str) -> bool:
+    return c == "'" or c == '"'
+
+
+def _is_metachar(c: str) -> bool:
+    return (
+        c == " "
+        or c == "\t"
+        or c == "\n"
+        or c == "|"
+        or c == "&"
+        or c == ";"
+        or c == "("
+        or c == ")"
+        or c == "<"
+        or c == ">"
+    )
+
+
+def _is_extglob_prefix(c: str) -> bool:
+    return c == "@" or c == "?" or c == "*" or c == "+" or c == "!"
+
+
+def _is_redirect_char(c: str) -> bool:
+    return c == "<" or c == ">"
+
+
+def _is_special_param(c: str) -> bool:
+    return c == "?" or c == "$" or c == "!" or c == "#" or c == "@" or c == "*" or c == "-"
+
+
+def _is_digit(c: str) -> bool:
+    return c >= "0" and c <= "9"
+
+
+def _is_semicolon_or_newline(c: str) -> bool:
+    return c == ";" or c == "\n"
+
+
+def _is_right_bracket(c: str) -> bool:
+    return c == ")" or c == "}"
+
+
+def _is_word_start_context(c: str) -> bool:
+    """Check if char is a valid context for starting a word (whitespace or metachar except >)."""
+    return (
+        c == " "
+        or c == "\t"
+        or c == "\n"
+        or c == ";"
+        or c == "|"
+        or c == "&"
+        or c == "<"
+        or c == "("
+    )
+
+
+def _is_word_end_context(c: str) -> bool:
+    """Check if char ends a word context (whitespace or metachar)."""
+    return (
+        c == " "
+        or c == "\t"
+        or c == "\n"
+        or c == ";"
+        or c == "|"
+        or c == "&"
+        or c == "<"
+        or c == ">"
+        or c == "("
+        or c == ")"
+    )
+
+
+def _is_special_param_or_digit(c: str) -> bool:
+    return _is_special_param(c) or _is_digit(c)
+
+
+def _is_param_expansion_op(c: str) -> bool:
+    return (
+        c == ":"
+        or c == "-"
+        or c == "="
+        or c == "+"
+        or c == "?"
+        or c == "#"
+        or c == "%"
+        or c == "/"
+        or c == "^"
+        or c == ","
+        or c == "@"
+        or c == "*"
+        or c == "["
+    )
+
+
+def _is_simple_param_op(c: str) -> bool:
+    return c == "-" or c == "=" or c == "?" or c == "+"
+
+
+def _is_escape_char_in_dquote(c: str) -> bool:
+    return c == "$" or c == "`" or c == "\\"
+
+
+def _is_list_terminator(c: str) -> bool:
+    return c == "\n" or c == "|" or c == ";" or c == "(" or c == ")"
+
+
+def _is_semicolon_or_amp(c: str) -> bool:
+    return c == ";" or c == "&"
+
+
+def _is_paren(c: str) -> bool:
+    return c == "(" or c == ")"
+
+
+def _is_caret_or_bang(c: str) -> bool:
+    return c == "!" or c == "^"
+
+
+def _is_at_or_star(c: str) -> bool:
+    return c == "@" or c == "*"
+
+
+def _is_digit_or_dash(c: str) -> bool:
+    return _is_digit(c) or c == "-"
+
+
+def _is_newline_or_right_paren(c: str) -> bool:
+    return c == "\n" or c == ")"
+
+
+def _is_newline_or_right_bracket(c: str) -> bool:
+    return c == "\n" or c == ")" or c == "}"
+
+
+def _is_semicolon_newline_brace(c: str) -> bool:
+    return c == ";" or c == "\n" or c == "{"
+
+
 class Parser:
     """Recursive descent parser for bash."""
 
@@ -116,7 +263,7 @@ class Parser:
         """Skip spaces, tabs, comments, and backslash-newline continuations."""
         while not self.at_end():
             ch = self.peek()
-            if ch in " \t":
+            if _is_whitespace_no_newline(ch):
                 self.advance()
             elif ch == "#":
                 # Skip comment to end of line (but not the newline itself)
@@ -133,7 +280,7 @@ class Parser:
         """Skip spaces, tabs, newlines, comments, and backslash-newline continuations."""
         while not self.at_end():
             ch = self.peek()
-            if ch in " \t\n":
+            if _is_whitespace(ch):
                 self.advance()
                 # After advancing past a newline, skip any pending heredoc content
                 if ch == "\n":
@@ -167,7 +314,7 @@ class Parser:
         while not self.at_end() and self.peek() not in METACHAR:
             ch = self.peek()
             # Stop at quotes - don't include in peek
-            if ch in "\"'":
+            if _is_quote(ch):
                 break
             chars.append(self.advance())
 
@@ -219,7 +366,7 @@ class Parser:
             # Only after identifier char (not [[ which is conditional keyword)
             if ch == "[" and chars and at_command_start and not seen_equals:
                 prev_char = chars[len(chars) - 1]
-                if prev_char.isalnum() or prev_char in "_]":
+                if prev_char.isalnum() or (prev_char == "_" or prev_char == "]"):
                     bracket_depth += 1
                     chars.append(self.advance())
                     continue
@@ -434,7 +581,11 @@ class Parser:
                     chars.append(self.advance())
 
             # Process substitution <(...) or >(...)
-            elif ch in "<>" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+            elif (
+                _is_redirect_char(ch)
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "("
+            ):
                 procsub_result = self._parse_process_substitution()
                 procsub_node = procsub_result[0]
                 procsub_text = procsub_result[1]
@@ -465,7 +616,11 @@ class Parser:
                     break
 
             # Extglob pattern @(), ?(), *(), +(), !()
-            elif ch in "@?*+!" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+            elif (
+                _is_extglob_prefix(ch)
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "("
+            ):
                 chars.append(self.advance())  # @, ?, *, +, or !
                 chars.append(self.advance())  # (
                 extglob_depth = 1
@@ -516,7 +671,7 @@ class Parser:
                             # $() command sub - count as nested paren
                             extglob_depth += 1
                     elif (
-                        c in "@?*+!"
+                        _is_extglob_prefix(c)
                         and self.pos + 1 < self.length
                         and self.source[self.pos + 1] == "("
                     ):
@@ -658,13 +813,13 @@ class Parser:
                 if not self.at_end() and self.peek() == "-":
                     self.advance()
                 # Skip whitespace before delimiter
-                while not self.at_end() and self.peek() in " \t":
+                while not self.at_end() and _is_whitespace_no_newline(self.peek()):
                     self.advance()
                 # Parse delimiter (handle quoting)
                 delimiter_chars = []
                 if not self.at_end():
                     ch = self.peek()
-                    if ch in "'\"":
+                    if _is_quote(ch):
                         quote = self.advance()
                         while not self.at_end() and self.peek() != quote:
                             delimiter_chars.append(self.advance())
@@ -675,13 +830,13 @@ class Parser:
                         # Backslash quotes - first char can be special, then read word
                         if not self.at_end():
                             delimiter_chars.append(self.advance())
-                        while not self.at_end() and self.peek() not in " \t\n;|&<>()":
+                        while not self.at_end() and not _is_metachar(self.peek()):
                             delimiter_chars.append(self.advance())
                     else:
                         # Unquoted delimiter with possible embedded quotes
-                        while not self.at_end() and self.peek() not in " \t\n;|&<>()":
+                        while not self.at_end() and not _is_metachar(self.peek()):
                             ch = self.peek()
-                            if ch in "'\"":
+                            if _is_quote(ch):
                                 quote = self.advance()
                                 while not self.at_end() and self.peek() != quote:
                                     delimiter_chars.append(self.advance())
@@ -830,7 +985,7 @@ class Parser:
         if self.pos == 0:
             return True
         prev = self.source[self.pos - 1]
-        return prev in " \t\n;|&<>("
+        return _is_word_start_context(prev)
 
     def _is_assignment_word(self, word: "Word") -> bool:
         """Check if a word is an assignment (contains = outside of quotes)."""
@@ -862,7 +1017,7 @@ class Parser:
         if after_pos >= self.length:
             return True
         after = self.source[after_pos]
-        return after in " \t\n;|&<>()"
+        return _is_word_end_context(after)
 
     def _skip_keyword(self, keyword: str) -> None:
         """Skip over a keyword."""
@@ -897,7 +1052,7 @@ class Parser:
                     self.advance()  # skip \
                     self.advance()  # skip newline
                     # Don't add to content_chars or text_chars
-                elif next_c in "$`\\":
+                elif _is_escape_char_in_dquote(next_c):
                     # Escape sequence: skip backslash in content, keep both in text
                     self.advance()  # skip \
                     escaped = self.advance()
@@ -936,7 +1091,7 @@ class Parser:
 
         Returns (node, text) where node is ProcessSubstitution and text is raw text.
         """
-        if self.at_end() or self.peek() not in "<>":
+        if self.at_end() or not _is_redirect_char(self.peek()):
             return None, ""
 
         start = self.pos
@@ -1024,7 +1179,7 @@ class Parser:
 
         while True:
             # Skip whitespace and newlines between elements
-            while not self.at_end() and self.peek() in " \t\n":
+            while not self.at_end() and _is_whitespace(self.peek()):
                 self.advance()
 
             if self.at_end():
@@ -1175,7 +1330,7 @@ class Parser:
     def _arith_skip_ws(self) -> None:
         while not self._arith_at_end():
             c = self._arith_src[self._arith_pos]
-            if c in " \t\n":
+            if _is_whitespace(c):
                 self._arith_pos += 1
             elif (
                 c == "\\"
@@ -1287,7 +1442,9 @@ class Parser:
         while True:
             self._arith_skip_ws()
             # Make sure it's not || or |=
-            if self._arith_peek() == "|" and self._arith_peek(1) not in "|=":
+            if self._arith_peek() == "|" and (
+                self._arith_peek(1) != "|" and self._arith_peek(1) != "="
+            ):
                 self._arith_advance()
                 self._arith_skip_ws()
                 right = self._arith_parse_bitwise_xor()
@@ -1317,7 +1474,9 @@ class Parser:
         while True:
             self._arith_skip_ws()
             # Make sure it's not && or &=
-            if self._arith_peek() == "&" and self._arith_peek(1) not in "&=":
+            if self._arith_peek() == "&" and (
+                self._arith_peek(1) != "&" and self._arith_peek(1) != "="
+            ):
                 self._arith_advance()
                 self._arith_skip_ws()
                 right = self._arith_parse_equality()
@@ -1360,12 +1519,16 @@ class Parser:
                 self._arith_skip_ws()
                 right = self._arith_parse_shift()
                 left = ArithBinaryOp(">=", left, right)
-            elif self._arith_peek() == "<" and self._arith_peek(1) not in "<=":
+            elif self._arith_peek() == "<" and (
+                self._arith_peek(1) != "<" and self._arith_peek(1) != "="
+            ):
                 self._arith_advance()
                 self._arith_skip_ws()
                 right = self._arith_parse_shift()
                 left = ArithBinaryOp("<", left, right)
-            elif self._arith_peek() == ">" and self._arith_peek(1) not in ">=":
+            elif self._arith_peek() == ">" and (
+                self._arith_peek(1) != ">" and self._arith_peek(1) != "="
+            ):
                 self._arith_advance()
                 self._arith_skip_ws()
                 right = self._arith_parse_shift()
@@ -1404,12 +1567,12 @@ class Parser:
             self._arith_skip_ws()
             c = self._arith_peek()
             c2 = self._arith_peek(1)
-            if c == "+" and c2 not in "+=":
+            if c == "+" and (c2 != "+" and c2 != "="):
                 self._arith_advance()
                 self._arith_skip_ws()
                 right = self._arith_parse_multiplicative()
                 left = ArithBinaryOp("+", left, right)
-            elif c == "-" and c2 not in "-=":
+            elif c == "-" and (c2 != "-" and c2 != "="):
                 self._arith_advance()
                 self._arith_skip_ws()
                 right = self._arith_parse_multiplicative()
@@ -1425,7 +1588,7 @@ class Parser:
             self._arith_skip_ws()
             c = self._arith_peek()
             c2 = self._arith_peek(1)
-            if c == "*" and c2 not in "*=":
+            if c == "*" and (c2 != "*" and c2 != "="):
                 self._arith_advance()
                 self._arith_skip_ws()
                 right = self._arith_parse_exponentiation()
@@ -1586,7 +1749,7 @@ class Parser:
             ch = self._arith_peek()
             if ch.isalnum() or ch == "_":
                 name_chars.append(self._arith_advance())
-            elif ch in "#?@*!$-0123456789" and not name_chars:
+            elif (_is_special_param_or_digit(ch) or ch == "#") and not name_chars:
                 # Special parameters
                 name_chars.append(self._arith_advance())
                 break
@@ -1685,7 +1848,7 @@ class Parser:
             if ch == "}":
                 self._arith_advance()
                 return ParamExpansion("".join(name_chars))
-            if ch in ":-=+?#%/^,@*[":
+            if _is_param_expansion_op(ch):
                 # Operator follows
                 break
             name_chars.append(self._arith_advance())
@@ -1800,7 +1963,7 @@ class Parser:
             # Could be decimal, hex (0x), octal (0), or base#n
             while not self._arith_at_end():
                 ch = self._arith_peek()
-                if ch.isalnum() or ch in "#_":
+                if ch.isalnum() or (ch == "#" or ch == "_"):
                     chars.append(self._arith_advance())
                 else:
                     break
@@ -2028,7 +2191,7 @@ class Parser:
 
         # Simple expansion $var or $special
         # Special parameters: ?$!#@*-0-9
-        if ch in "?$!#@*-0123456789":
+        if _is_special_param_or_digit(ch) or ch == "#":
             self.advance()
             text = self.source[start : self.pos]
             return ParamExpansion(ch), text
@@ -2079,7 +2242,7 @@ class Parser:
             param = self._consume_param_name()
             if param:
                 # Skip optional whitespace before closing brace
-                while not self.at_end() and self.peek() in " \t":
+                while not self.at_end() and _is_whitespace_no_newline(self.peek()):
                     self.advance()
                 if not self.at_end() and self.peek() == "}":
                     self.advance()
@@ -2087,9 +2250,9 @@ class Parser:
                     return ParamIndirect(param), text
                 # ${!prefix@} and ${!prefix*} are prefix matching (lists variable names)
                 # These are NOT operators - the @/* is part of the indirect form
-                if not self.at_end() and self.peek() in "@*":
+                if not self.at_end() and _is_at_or_star(self.peek()):
                     suffix = self.advance()
-                    while not self.at_end() and self.peek() in " \t":
+                    while not self.at_end() and _is_whitespace_no_newline(self.peek()):
                         self.advance()
                     if not self.at_end() and self.peek() == "}":
                         self.advance()
@@ -2248,7 +2411,7 @@ class Parser:
                     bc = self.peek()
                     if bc == "\\" and self.pos + 1 < self.length:
                         next_c = self.source[self.pos + 1]
-                        if next_c in "$`\\":
+                        if _is_escape_char_in_dquote(next_c):
                             arg_chars.append(self.advance())  # backslash
                     arg_chars.append(self.advance())
                 if not self.at_end():
@@ -2291,7 +2454,7 @@ class Parser:
         ch = self.peek()
 
         # Special parameters
-        if ch in "?$!#@*-":
+        if _is_special_param(ch):
             self.advance()
             return ch
 
@@ -2344,14 +2507,14 @@ class Parser:
             if self.at_end():
                 return ":"
             next_ch = self.peek()
-            if next_ch in "-=?+":
+            if _is_simple_param_op(next_ch):
                 self.advance()
                 return ":" + next_ch
             # Just : (substring)
             return ":"
 
         # Operators without colon: - = ? +
-        if ch in "-=?+":
+        if _is_simple_param_op(ch):
             self.advance()
             return ch
 
@@ -2423,9 +2586,9 @@ class Parser:
             saved = self.pos
             self.advance()  # consume {
             varname_chars = []
-            while not self.at_end() and self.peek() not in "}<>":
+            while not self.at_end() and (self.peek() != "}" and not _is_redirect_char(self.peek())):
                 ch = self.peek()
-                if ch.isalnum() or ch in "_[]":
+                if ch.isalnum() or (ch == "_" or ch == "[" or ch == "]"):
                     varname_chars.append(self.advance())
                 else:
                     break
@@ -2468,7 +2631,7 @@ class Parser:
                 raise ParseError("Expected target for redirect " + op, pos=self.pos)
             return Redirect(op, target)
 
-        if ch is None or ch not in "<>":
+        if ch is None or not _is_redirect_char(ch):
             # Not a redirect, restore position
             self.pos = start
             return None
@@ -2514,11 +2677,11 @@ class Parser:
             # (>&- should be > with target &-, not >& with target -)
             elif fd is None and varfd is None and op == ">" and next_ch == "&":
                 # Peek ahead to see if there's a digit or - after &
-                if self.pos + 1 >= self.length or self.source[self.pos + 1] not in "0123456789-":
+                if self.pos + 1 >= self.length or not _is_digit_or_dash(self.source[self.pos + 1]):
                     self.advance()
                     op = ">&"
             elif fd is None and varfd is None and op == "<" and next_ch == "&":
-                if self.pos + 1 >= self.length or self.source[self.pos + 1] not in "0123456789-":
+                if self.pos + 1 >= self.length or not _is_digit_or_dash(self.source[self.pos + 1]):
                     self.advance()
                     op = "<&"
 
@@ -2571,7 +2734,7 @@ class Parser:
         quoted = False
         delimiter_chars = []
 
-        while not self.at_end() and self.peek() not in " \t\n;|&<>()":
+        while not self.at_end() and not _is_metachar(self.peek()):
             ch = self.peek()
             if ch == '"':
                 quoted = True
@@ -2722,7 +2885,7 @@ class Parser:
                 break
             ch = self.peek()
             # Check for command terminators, but &> and &>> are redirects, not terminators
-            if ch in "\n|;()":
+            if _is_list_terminator(ch):
                 break
             if ch == "&" and not (self.pos + 1 < self.length and self.source[self.pos + 1] == ">"):
                 break
@@ -2731,7 +2894,7 @@ class Parser:
             if self.peek() == "}" and not words:
                 # Check if } would be a standalone word (next char is whitespace/meta/EOF)
                 next_pos = self.pos + 1
-                if next_pos >= self.length or self.source[next_pos] in " \t\n|&;()<>":
+                if next_pos >= self.length or _is_word_end_context(self.source[next_pos]):
                     break
 
             # Try to parse a redirect first
@@ -2923,7 +3086,7 @@ class Parser:
         body = self._parse_cond_or()
 
         # Skip whitespace before ]]
-        while not self.at_end() and self.peek() in " \t":
+        while not self.at_end() and _is_whitespace_no_newline(self.peek()):
             self.advance()
 
         # Expect ]]
@@ -2952,7 +3115,7 @@ class Parser:
     def _cond_skip_whitespace(self) -> None:
         """Skip whitespace inside [[ ]], including backslash-newline continuation."""
         while not self.at_end():
-            if self.peek() in " \t":
+            if _is_whitespace_no_newline(self.peek()):
                 self.advance()
             elif (
                 self.peek() == "\\"
@@ -3017,7 +3180,9 @@ class Parser:
         # Negation: ! term
         if self.peek() == "!":
             # Check it's not != operator (need whitespace after !)
-            if self.pos + 1 < self.length and self.source[self.pos + 1] not in " \t":
+            if self.pos + 1 < self.length and not _is_whitespace_no_newline(
+                self.source[self.pos + 1]
+            ):
                 pass  # not negation, fall through to word parsing
             else:
                 self.advance()  # consume !
@@ -3050,10 +3215,12 @@ class Parser:
             return UnaryTest(word1.value, operand)
 
         # Check if next token is a binary operator
-        if not self._cond_at_end() and self.peek() not in "&|)":
+        if not self._cond_at_end() and (
+            self.peek() != "&" and self.peek() != "|" and self.peek() != ")"
+        ):
             # Handle < and > as binary operators (they terminate words)
             # But not <( or >( which are process substitution
-            if self.peek() in "<>" and not (
+            if _is_redirect_char(self.peek()) and not (
                 self.pos + 1 < self.length and self.source[self.pos + 1] == "("
             ):
                 op = self.advance()
@@ -3092,7 +3259,7 @@ class Parser:
 
         # Check for special tokens that aren't words
         c = self.peek()
-        if c in "()":
+        if _is_paren(c):
             return None
         # Note: ! alone is handled by _parse_cond_term() as negation operator
         # Here we allow ! as a word so it can be used as pattern in binary tests
@@ -3113,16 +3280,18 @@ class Parser:
                 break
 
             # Word terminators in conditionals
-            if ch in " \t":
+            if _is_whitespace_no_newline(ch):
                 break
             # < and > are string comparison operators in [[ ]], terminate words
             # But <(...) and >(...) are process substitution - don't break
-            if ch in "<>" and not (self.pos + 1 < self.length and self.source[self.pos + 1] == "("):
+            if _is_redirect_char(ch) and not (
+                self.pos + 1 < self.length and self.source[self.pos + 1] == "("
+            ):
                 break
             # ( and ) end words unless part of extended glob: @(...), ?(...), *(...), +(...), !(...)
             if ch == "(":
                 # Check if this is an extended glob (preceded by @, ?, *, +, or !)
-                if chars and chars[len(chars) - 1] in "@?*+!":
+                if chars and _is_extglob_prefix(chars[len(chars) - 1]):
                     # Extended glob - consume the parenthesized content
                     chars.append(self.advance())  # (
                     depth = 1
@@ -3259,7 +3428,11 @@ class Parser:
                     chars.append(self.advance())
 
             # Process substitution <(...) or >(...)
-            elif ch in "<>" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+            elif (
+                _is_redirect_char(ch)
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "("
+            ):
                 procsub_result = self._parse_process_substitution()
                 procsub_node = procsub_result[0]
                 procsub_text = procsub_result[1]
@@ -3367,9 +3540,9 @@ class Parser:
                 continue
 
             # Word terminators - space/tab ends the regex (unless inside parens), as do && and ||
-            if ch in " \t\n" and paren_depth == 0:
+            if _is_whitespace(ch) and paren_depth == 0:
                 break
-            if ch in " \t\n" and paren_depth > 0:
+            if _is_whitespace(ch) and paren_depth > 0:
                 # Space inside regex parens is part of the pattern
                 chars.append(self.advance())
                 continue
@@ -3450,7 +3623,7 @@ class Parser:
             return None
 
         # Check that { is followed by whitespace (it's a reserved word)
-        if self.pos + 1 < self.length and self.source[self.pos + 1] not in " \t\n":
+        if self.pos + 1 < self.length and not _is_whitespace(self.source[self.pos + 1]):
             return None
 
         self.advance()  # consume {
@@ -3712,7 +3885,7 @@ class Parser:
                 # Check for end of word list
                 if self.at_end():
                     break
-                if self.peek() in ";\n":
+                if _is_semicolon_or_newline(self.peek()):
                     if self.peek() == ";":
                         self.advance()  # consume semicolon
                     break
@@ -3870,7 +4043,7 @@ class Parser:
                 # Check for end of word list
                 if self.at_end():
                     break
-                if self.peek() in ";\n{":
+                if _is_semicolon_newline_brace(self.peek()):
                     if self.peek() == ";":
                         self.advance()  # consume semicolon
                     break
@@ -3926,7 +4099,7 @@ class Parser:
             return False
         next_ch = self.source[self.pos + 1]
         # ;; or ;& or ;;& (which is actually ;;&)
-        return next_ch in ";&"
+        return _is_semicolon_or_amp(next_ch)
 
     def _consume_case_terminator(self) -> str:
         """Consume and return case pattern terminator (;;, ;&, or ;;&)."""
@@ -3984,7 +4157,9 @@ class Parser:
                 self.skip_whitespace()
                 # Consume "esac"
                 while (
-                    not self.at_end() and self.peek() not in METACHAR and self.peek() not in "\"'"
+                    not self.at_end()
+                    and not _is_metachar(self.peek())
+                    and not _is_quote(self.peek())
                 ):
                     self.advance()
                 self.skip_whitespace()
@@ -4000,7 +4175,7 @@ class Parser:
                         # If followed by ;; or actual command content, it's a pattern
                         if next_ch == ";":
                             is_pattern = True
-                        elif next_ch not in "\n)":
+                        elif not _is_newline_or_right_paren(next_ch):
                             is_pattern = True
                 self.pos = saved
                 if not is_pattern:
@@ -4062,7 +4237,7 @@ class Parser:
                     pattern_chars.append(self.advance())
                     extglob_depth += 1
                 elif (
-                    ch in "@?*+!"
+                    _is_extglob_prefix(ch)
                     and self.pos + 1 < self.length
                     and self.source[self.pos + 1] == "("
                 ):
@@ -4078,7 +4253,7 @@ class Parser:
                     scan_depth = 0
                     has_first_bracket_literal = False
                     # Skip [! or [^ at start
-                    if scan_pos < self.length and self.source[scan_pos] in "!^":
+                    if scan_pos < self.length and _is_caret_or_bang(self.source[scan_pos]):
                         scan_pos += 1
                     # Skip ] as first char (literal in char class) only if there's another ]
                     if scan_pos < self.length and self.source[scan_pos] == "]":
@@ -4103,7 +4278,7 @@ class Parser:
                     if is_char_class:
                         pattern_chars.append(self.advance())
                         # Handle [! or [^ at start
-                        if not self.at_end() and self.peek() in "!^":
+                        if not self.at_end() and _is_caret_or_bang(self.peek()):
                             pattern_chars.append(self.advance())
                         # Handle ] as first char (literal) only if we detected it in scan
                         if has_first_bracket_literal and not self.at_end() and self.peek() == "]":
@@ -4132,7 +4307,7 @@ class Parser:
                         pattern_chars.append(self.advance())
                     if not self.at_end():
                         pattern_chars.append(self.advance())
-                elif ch in " \t\n":
+                elif _is_whitespace(ch):
                     # Skip whitespace at top level, but preserve inside $() or extglob
                     if extglob_depth > 0:
                         pattern_chars.append(self.advance())
@@ -4232,7 +4407,9 @@ class Parser:
         potential_name = self.peek_word()
         if potential_name:
             # Skip past the potential name
-            while not self.at_end() and self.peek() not in METACHAR and self.peek() not in "\"'":
+            while (
+                not self.at_end() and not _is_metachar(self.peek()) and not _is_quote(self.peek())
+            ):
                 self.advance()
             self.skip_whitespace()
 
@@ -4332,7 +4509,12 @@ class Parser:
         name_start = self.pos
 
         # Consume the name
-        while not self.at_end() and self.peek() not in METACHAR and self.peek() not in "\"'()":
+        while (
+            not self.at_end()
+            and not _is_metachar(self.peek())
+            and not _is_quote(self.peek())
+            and not _is_paren(self.peek())
+        ):
             self.advance()
 
         name = self.source[name_start : self.pos]
@@ -4437,7 +4619,7 @@ class Parser:
                 if (
                     not self.at_end()
                     and self.peek_word() not in stop_words
-                    and self.peek() not in ")}"
+                    and not _is_right_bracket(self.peek())
                 ):
                     op = "\n"  # Newline separator (distinct from explicit ;)
 
@@ -4448,7 +4630,11 @@ class Parser:
             if op == "&":
                 parts.append(Operator(op))
                 self.skip_whitespace_and_newlines()
-                if self.at_end() or self.peek_word() in stop_words or self.peek() in "\n)}":
+                if (
+                    self.at_end()
+                    or self.peek_word() in stop_words
+                    or _is_newline_or_right_bracket(self.peek())
+                ):
                     break
 
             # For ; - check if it's a terminator before a stop word (don't include it)
@@ -4458,12 +4644,12 @@ class Parser:
                 at_case_terminator = (
                     self.peek() == ";"
                     and self.pos + 1 < self.length
-                    and self.source[self.pos + 1] in ";&"
+                    and _is_semicolon_or_amp(self.source[self.pos + 1])
                 )
                 if (
                     self.at_end()
                     or self.peek_word() in stop_words
-                    or self.peek() in "\n)}"
+                    or _is_newline_or_right_bracket(self.peek())
                     or at_case_terminator
                 ):
                     # Don't include trailing semicolon - it's just a terminator
@@ -4480,7 +4666,7 @@ class Parser:
             if (
                 self.peek() == ";"
                 and self.pos + 1 < self.length
-                and self.source[self.pos + 1] in ";&"
+                and _is_semicolon_or_amp(self.source[self.pos + 1])
             ):
                 break
 
@@ -4585,7 +4771,7 @@ class Parser:
                 self.advance()
                 if not self.at_end() and self.peek() == "p":
                     self.advance()
-                    if self.at_end() or self.peek() in " \t\n":
+                    if self.at_end() or _is_whitespace(self.peek()):
                         time_posix = True
                     else:
                         self.pos = saved
@@ -4594,7 +4780,7 @@ class Parser:
             self.skip_whitespace()
             # Check for -- (end of options) - implies -p per bash oracle
             if not self.at_end() and self.source[self.pos : self.pos + 2] == "--":
-                if self.pos + 2 >= self.length or self.source[self.pos + 2] in " \t\n":
+                if self.pos + 2 >= self.length or _is_whitespace(self.source[self.pos + 2]):
                     self.advance()
                     self.advance()
                     time_posix = True
@@ -4609,7 +4795,7 @@ class Parser:
                     self.advance()
                     if not self.at_end() and self.peek() == "p":
                         self.advance()
-                        if self.at_end() or self.peek() in " \t\n":
+                        if self.at_end() or _is_whitespace(self.peek()):
                             time_posix = True
                         else:
                             self.pos = saved
@@ -4618,14 +4804,14 @@ class Parser:
                 self.skip_whitespace()
             # Check for ! after time
             if not self.at_end() and self.peek() == "!":
-                if self.pos + 1 >= self.length or self.source[self.pos + 1] in " \t\n":
+                if self.pos + 1 >= self.length or _is_whitespace(self.source[self.pos + 1]):
                     self.advance()
                     prefix_order = "time_negation"
                     self.skip_whitespace()
 
         # Check for '!' negation prefix (if no time yet)
         elif not self.at_end() and self.peek() == "!":
-            if self.pos + 1 >= self.length or self.source[self.pos + 1] in " \t\n":
+            if self.pos + 1 >= self.length or _is_whitespace(self.source[self.pos + 1]):
                 self.advance()
                 self.skip_whitespace()
                 # Recursively parse pipeline to handle ! ! cmd, ! time cmd, etc.
@@ -4725,7 +4911,7 @@ class Parser:
 
         if ch == ";":
             # Don't treat ;;, ;&, or ;;& as a single semicolon (they're case terminators)
-            if self.pos + 1 < self.length and self.source[self.pos + 1] in ";&":
+            if self.pos + 1 < self.length and _is_semicolon_or_amp(self.source[self.pos + 1]):
                 return None
             self.advance()
             return ";"
@@ -4773,7 +4959,7 @@ class Parser:
 
             # Newline acts as implicit semicolon if followed by more commands
             if op is None and has_newline:
-                if not self.at_end() and self.peek() not in ")}":
+                if not self.at_end() and not _is_right_bracket(self.peek()):
                     op = "\n"  # Newline separator (distinct from explicit ;)
 
             if op is None:
@@ -4791,14 +4977,14 @@ class Parser:
             # For & at end of list, don't require another command
             if op == "&":
                 self.skip_whitespace()
-                if self.at_end() or self.peek() in ")}":
+                if self.at_end() or _is_right_bracket(self.peek()):
                     break
                 # Newline after & - in compound commands, skip it (& acts as separator)
                 # At top level, newline terminates (separate commands)
                 if self.peek() == "\n":
                     if newline_as_separator:
                         self.skip_whitespace_and_newlines()
-                        if self.at_end() or self.peek() in ")}":
+                        if self.at_end() or _is_right_bracket(self.peek()):
                             break
                     else:
                         break  # Top-level: newline ends this list
@@ -4806,7 +4992,7 @@ class Parser:
             # For ; at end of list, don't require another command
             if op == ";":
                 self.skip_whitespace()
-                if self.at_end() or self.peek() in ")}":
+                if self.at_end() or _is_right_bracket(self.peek()):
                     break
                 # Newline after ; means continue to see if more commands follow
                 if self.peek() == "\n":

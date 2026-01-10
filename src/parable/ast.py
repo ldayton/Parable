@@ -1,6 +1,22 @@
 """AST node types for Parable."""
 
 
+def _is_hex_digit(c: str) -> bool:
+    return (c >= "0" and c <= "9") or (c >= "a" and c <= "f") or (c >= "A" and c <= "F")
+
+
+def _is_octal_digit(c: str) -> bool:
+    return c >= "0" and c <= "7"
+
+
+def _is_whitespace(c: str) -> bool:
+    return c == " " or c == "\t" or c == "\n"
+
+
+def _is_whitespace_no_newline(c: str) -> bool:
+    return c == " " or c == "\t"
+
+
 class Node:
     """Base class for all AST nodes."""
 
@@ -100,7 +116,7 @@ class Word(Node):
                 elif c == "b":
                     result.append(0x08)
                     i += 2
-                elif c in ("e", "E"):
+                elif c == "e" or c == "E":
                     result.append(0x1B)
                     i += 2
                 elif c == "f":
@@ -136,7 +152,7 @@ class Word(Node):
                     if i + 2 < len(inner) and inner[i + 2] == "{":
                         # Find closing brace or end of hex digits
                         j = i + 3
-                        while j < len(inner) and inner[j] in "0123456789abcdefABCDEF":
+                        while j < len(inner) and _is_hex_digit(inner[j]):
                             j += 1
                         hex_str = inner[i + 3 : j]
                         if j < len(inner) and inner[j] == "}":
@@ -152,7 +168,7 @@ class Word(Node):
                     else:
                         # Hex escape \xHH (1-2 hex digits) - raw byte
                         j = i + 2
-                        while j < len(inner) and j < i + 4 and inner[j] in "0123456789abcdefABCDEF":
+                        while j < len(inner) and j < i + 4 and _is_hex_digit(inner[j]):
                             j += 1
                         if j > i + 2:
                             byte_val = int(inner[i + 2 : j], 16)
@@ -167,7 +183,7 @@ class Word(Node):
                 elif c == "u":
                     # Unicode escape \uHHHH (1-4 hex digits) - encode as UTF-8
                     j = i + 2
-                    while j < len(inner) and j < i + 6 and inner[j] in "0123456789abcdefABCDEF":
+                    while j < len(inner) and j < i + 6 and _is_hex_digit(inner[j]):
                         j += 1
                     if j > i + 2:
                         codepoint = int(inner[i + 2 : j], 16)
@@ -182,7 +198,7 @@ class Word(Node):
                 elif c == "U":
                     # Unicode escape \UHHHHHHHH (1-8 hex digits) - encode as UTF-8
                     j = i + 2
-                    while j < len(inner) and j < i + 10 and inner[j] in "0123456789abcdefABCDEF":
+                    while j < len(inner) and j < i + 10 and _is_hex_digit(inner[j]):
                         j += 1
                     if j > i + 2:
                         codepoint = int(inner[i + 2 : j], 16)
@@ -210,7 +226,7 @@ class Word(Node):
                 elif c == "0":
                     # Nul or octal \0 or \0NNN
                     j = i + 2
-                    while j < len(inner) and j < i + 5 and inner[j] in "01234567":
+                    while j < len(inner) and j < i + 5 and _is_octal_digit(inner[j]):
                         j += 1
                     if j > i + 2:
                         byte_val = int(inner[i + 1 : j], 8)
@@ -222,10 +238,10 @@ class Word(Node):
                     else:
                         # Just \0 - NUL truncates string
                         return "'" + result.decode("utf-8", errors="replace") + "'"
-                elif c in "1234567":
+                elif c >= "1" and c <= "7":
                     # Octal escape \NNN (1-3 digits) - raw byte
                     j = i + 1
-                    while j < len(inner) and j < i + 4 and inner[j] in "01234567":
+                    while j < len(inner) and j < i + 4 and _is_octal_digit(inner[j]):
                         j += 1
                     byte_val = int(inner[i + 1 : j], 8)
                     if byte_val == 0:
@@ -332,7 +348,7 @@ class Word(Node):
                         elif len(result) >= 1:
                             last = result[len(result) - 1]
                             # Single char operators (not after :), but not /
-                            if last in "-=+?" and (
+                            if (last == "-" or last == "=" or last == "+" or last == "?") and (
                                 len(result) < 2 or result[len(result) - 2] != ":"
                             ):
                                 expanded = inner
@@ -401,7 +417,7 @@ class Word(Node):
         in_whitespace = True  # Start true to skip leading whitespace
         while i < len(inner):
             ch = inner[i]
-            if ch in " \t\n":
+            if _is_whitespace(ch):
                 if not in_whitespace and normalized:
                     normalized.append(" ")
                     in_whitespace = True
@@ -566,7 +582,9 @@ class Word(Node):
                 cmdsub_idx += 1
                 i = j
             # Check for >( or <( process substitution
-            elif value[i : i + 2] in (">(", "<(") and procsub_idx < len(procsub_parts):
+            elif (value[i : i + 2] == ">(" or value[i : i + 2] == "<(") and procsub_idx < len(
+                procsub_parts
+            ):
                 direction = value[i]
                 # Find matching close paren
                 j = _find_cmdsub_end(value, i + 2)
@@ -730,7 +748,7 @@ class List(Node):
         while (
             len(parts) > 1
             and parts[len(parts) - 1].kind == "operator"
-            and parts[len(parts) - 1].op in (";", "\n")
+            and (parts[len(parts) - 1].op == ";" or parts[len(parts) - 1].op == "\n")
         ):
             parts = parts[0 : len(parts) - 1]
         if len(parts) == 1:
@@ -740,7 +758,7 @@ class List(Node):
         if parts[len(parts) - 1].kind == "operator" and parts[len(parts) - 1].op == "&":
             # Find rightmost ; or \n to split there
             for i in range(len(parts) - 3, 0, -2):
-                if parts[i].kind == "operator" and parts[i].op in (";", "\n"):
+                if parts[i].kind == "operator" and (parts[i].op == ";" or parts[i].op == "\n"):
                     left = parts[0:i]
                     right = parts[i + 1 : len(parts) - 1]  # exclude trailing &
                     left_sexp = List(left).to_sexp() if len(left) > 1 else left[0].to_sexp()
@@ -759,7 +777,7 @@ class List(Node):
         # Process operators by precedence: ; (lowest), then &, then && and ||
         # Split on ; or \n first (rightmost for left-associativity)
         for i in range(len(parts) - 2, 0, -2):
-            if parts[i].kind == "operator" and parts[i].op in (";", "\n"):
+            if parts[i].kind == "operator" and (parts[i].op == ";" or parts[i].op == "\n"):
                 left = parts[:i]
                 right = parts[i + 1 :]
                 left_sexp = List(left).to_sexp() if len(left) > 1 else left[0].to_sexp()
@@ -1260,7 +1278,11 @@ class CasePattern(Node):
             if ch == "\\" and i + 1 < len(self.pattern):
                 current.append(self.pattern[i : i + 2])
                 i += 2
-            elif ch in "@?*+!" and i + 1 < len(self.pattern) and self.pattern[i + 1] == "(":
+            elif (
+                (ch == "@" or ch == "?" or ch == "*" or ch == "+" or ch == "!")
+                and i + 1 < len(self.pattern)
+                and self.pattern[i + 1] == "("
+            ):
                 # Start of extglob: @(, ?(, *(, +(, !(
                 current.append(ch)
                 current.append("(")
@@ -1285,7 +1307,9 @@ class CasePattern(Node):
                 # First scan to check if ] exists before ) at same depth
                 scan_pos = i + 1
                 # Skip [! or [^ at start
-                if scan_pos < len(self.pattern) and self.pattern[scan_pos] in "!^":
+                if scan_pos < len(self.pattern) and (
+                    self.pattern[scan_pos] == "!" or self.pattern[scan_pos] == "^"
+                ):
                     scan_pos += 1
                 # Handle ] as first char - it's literal only if there's more content
                 # [] is a complete (empty) bracket, but []] has literal ] then closing ]
@@ -1297,7 +1321,9 @@ class CasePattern(Node):
                         if self.pattern[check_pos] == "]":
                             has_another_close = True
                             break
-                        if self.pattern[check_pos] in "|)" and depth == 0:
+                        if (
+                            self.pattern[check_pos] == "|" or self.pattern[check_pos] == ")"
+                        ) and depth == 0:
                             break
                     if has_another_close:
                         scan_pos += 1  # Skip first ] as literal
@@ -1320,7 +1346,7 @@ class CasePattern(Node):
                     current.append(ch)
                     i += 1
                     # Handle [! or [^ at start
-                    if i < len(self.pattern) and self.pattern[i] in "!^":
+                    if i < len(self.pattern) and (self.pattern[i] == "!" or self.pattern[i] == "^"):
                         current.append(self.pattern[i])
                         i += 1
                     # Handle ] as first char - only literal if there's another ]
@@ -1332,7 +1358,9 @@ class CasePattern(Node):
                             if self.pattern[check_pos] == "]":
                                 has_another = True
                                 break
-                            if self.pattern[check_pos] in "|)" and depth == 0:
+                            if (
+                                self.pattern[check_pos] == "|" or self.pattern[check_pos] == ")"
+                            ) and depth == 0:
                                 break
                         if has_another:
                             current.append(self.pattern[i])
@@ -2203,7 +2231,17 @@ def _find_cmdsub_end(value: str, start: int) -> int:
             continue
         # Handle comments - skip from # to end of line
         # Only treat # as comment if preceded by whitespace or at start
-        if c == "#" and (i == start or value[i - 1] in " \t\n;|&()"):
+        if c == "#" and (
+            i == start
+            or value[i - 1] == " "
+            or value[i - 1] == "\t"
+            or value[i - 1] == "\n"
+            or value[i - 1] == ";"
+            or value[i - 1] == "|"
+            or value[i - 1] == "&"
+            or value[i - 1] == "("
+            or value[i - 1] == ")"
+        ):
             while i < len(value) and value[i] != "\n":
                 i += 1
             continue
@@ -2254,12 +2292,12 @@ def _skip_heredoc(value: str, start: int) -> int:
     if i < len(value) and value[i] == "-":
         i += 1
     # Skip whitespace before delimiter
-    while i < len(value) and value[i] in " \t":
+    while i < len(value) and _is_whitespace_no_newline(value[i]):
         i += 1
     # Extract delimiter - may be quoted
     delim_start = i
     quote_char = None
-    if i < len(value) and value[i] in "\"'":
+    if i < len(value) and (value[i] == '"' or value[i] == "'"):
         quote_char = value[i]
         i += 1
         delim_start = i
@@ -2272,12 +2310,12 @@ def _skip_heredoc(value: str, start: int) -> int:
         # Backslash-quoted delimiter like <<\EOF
         i += 1
         delim_start = i
-        while i < len(value) and value[i] not in " \t\n":
+        while i < len(value) and not _is_whitespace(value[i]):
             i += 1
         delimiter = value[delim_start:i]
     else:
         # Unquoted delimiter
-        while i < len(value) and value[i] not in " \t\n":
+        while i < len(value) and not _is_whitespace(value[i]):
             i += 1
         delimiter = value[delim_start:i]
     # Skip to end of line (heredoc content starts on next line)

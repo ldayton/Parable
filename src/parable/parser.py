@@ -1465,7 +1465,7 @@ class Parser:
                 left = ArithPostDecr(left)
             elif self._arith_peek() == "[":
                 # Array subscript - but only for variables
-                if isinstance(left, ArithVar):
+                if left.kind == "var":
                     self._arith_advance()  # consume [
                     self._arith_skip_ws()
                     index = self._arith_parse_comma()
@@ -4555,7 +4555,7 @@ class Parser:
                 # Bare ! (no following command) is valid POSIX - equivalent to false
                 inner = self.parse_pipeline()
                 # Double negation cancels out (! ! cmd -> cmd, ! ! -> empty command)
-                if isinstance(inner, Negation):
+                if inner is not None and inner.kind == "negation":
                     return inner.pipeline if inner.pipeline is not None else Command([])
                 return Negation(inner)
 
@@ -4703,9 +4703,7 @@ class Parser:
                 break
 
             # Don't add duplicate semicolon (e.g., explicit ; followed by newline)
-            if not (
-                op == ";" and parts and isinstance(parts[-1], Operator) and parts[-1].op == ";"
-            ):
+            if not (op == ";" and parts and parts[-1].kind == "operator" and parts[-1].op == ";"):
                 parts.append(Operator(op))
 
             # For & at end of list, don't require another command

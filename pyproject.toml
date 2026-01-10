@@ -5,10 +5,9 @@ description = "A recursive descent parser for bash"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
-authors = [
-    { name = "Lily Dayton", email = "lily.dayton.git@gmail.com" }
-]
+authors = [{ name = "Lily Dayton", email = "lily.dayton.git@gmail.com" }]
 keywords = ["bash", "parser", "shell", "ast"]
+dependencies = []
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -19,6 +18,8 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
     "Topic :: Software Development :: Interpreters",
     "Topic :: System :: Shells",
 ]
@@ -29,9 +30,6 @@ Repository = "https://github.com/ldayton/Parable"
 Issues = "https://github.com/ldayton/Parable/issues"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/parable"]
+requires = ["uv_build>=0.9.0,<0.10.0"]
+build-backend = "uv_build"
 

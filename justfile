@@ -1,26 +1,35 @@
 set shell := ["bash", "-o", "pipefail", "-cu"]
 project := "parable"
 
-_test-py version *ARGS:
-    UV_PROJECT_ENVIRONMENT=.venv-{{version}} uv run --python {{version}} bin/run-tests.py {{ARGS}} 2>&1 | sed -u "s/^/[py{{version}}] /" | tee /tmp/{{project}}-test-py{{version}}.log
+_test version *ARGS:
+    UV_PROJECT_ENVIRONMENT=.venv-{{version}} uv run --python {{version}} bin/run-tests.py {{ARGS}} 2>&1 | sed -u "s/^/[{{version}}] /" | tee /tmp/{{project}}-test-{{version}}.log
 
-# Run tests on Python 3.10
-test-py310 *ARGS: (_test-py "3.10" ARGS)
-# Run tests on Python 3.11
-test-py311 *ARGS: (_test-py "3.11" ARGS)
-# Run tests on Python 3.12
-test-py312 *ARGS: (_test-py "3.12" ARGS)
-# Run tests on Python 3.13
-test-py313 *ARGS: (_test-py "3.13" ARGS)
-# Run tests on Python 3.14
-test-py314 *ARGS: (_test-py "3.14" ARGS)
+# Run tests on CPython 3.10
+test-cpy310 *ARGS: (_test "3.10" ARGS)
+# Run tests on CPython 3.11
+test-cpy311 *ARGS: (_test "3.11" ARGS)
+# Run tests on CPython 3.12
+test-cpy312 *ARGS: (_test "3.12" ARGS)
+# Run tests on CPython 3.13
+test-cpy313 *ARGS: (_test "3.13" ARGS)
+# Run tests on CPython 3.14
+test-cpy314 *ARGS: (_test "3.14" ARGS)
+# Run tests on PyPy 3.11
+test-pypy311 *ARGS: (_test "pypy3.11" ARGS)
 
-# Run tests (default: 3.14)
-test *ARGS: (_test-py "3.14" ARGS)
+# Run tests (default: CPython 3.14)
+test *ARGS: (_test "3.14" ARGS)
+
+# Run tests on all supported CPython versions (parallel)
+[parallel]
+test-cpy: test-cpy310 test-cpy311 test-cpy312 test-cpy313 test-cpy314
+
+# Run tests on PyPy
+test-pypy: test-pypy311
 
 # Run tests on all supported Python versions (parallel)
 [parallel]
-test-all: test-py310 test-py311 test-py312 test-py313 test-py314
+test-all: test-cpy test-pypy
 
 # Verify lock file is up to date
 lock-check:

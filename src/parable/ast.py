@@ -472,7 +472,7 @@ class Word(Node):
     def _collect_cmdsubs(self, node) -> list:
         """Recursively collect CommandSubstitution nodes from an AST node."""
         result = []
-        if isinstance(node, CommandSubstitution):
+        if hasattr(node, "kind") and node.kind == "cmdsub":
             result.append(node)
         elif hasattr(node, "expression") and node.expression is not None:
             # ArithmeticExpansion, ArithBinaryOp, etc.
@@ -497,9 +497,9 @@ class Word(Node):
         cmdsub_parts = []
         procsub_parts = []
         for p in self.parts:
-            if isinstance(p, CommandSubstitution):
+            if p.kind == "cmdsub":
                 cmdsub_parts.append(p)
-            elif isinstance(p, ProcessSubstitution):
+            elif p.kind == "procsub":
                 procsub_parts.append(p)
             else:
                 cmdsub_parts.extend(self._collect_cmdsubs(p))
@@ -640,12 +640,10 @@ class Pipeline(Node):
         # Build list of (cmd, needs_pipe_both_redirect) filtering out PipeBoth markers
         cmds = []
         for i, cmd in enumerate(self.commands):
-            if isinstance(cmd, PipeBoth):
+            if cmd.kind == "pipe-both":
                 continue
             # Check if next element is PipeBoth
-            needs_redirect = i + 1 < len(self.commands) and isinstance(
-                self.commands[i + 1], PipeBoth
-            )
+            needs_redirect = i + 1 < len(self.commands) and self.commands[i + 1].kind == "pipe-both"
             cmds.append((cmd, needs_redirect))
         if len(cmds) == 1:
             cmd, needs = cmds[0]
@@ -654,9 +652,9 @@ class Pipeline(Node):
         last_cmd, last_needs = cmds[-1]
         result = self._cmd_sexp(last_cmd, last_needs)
         for cmd, needs in reversed(cmds[:-1]):
-            if needs and not isinstance(cmd, Command):
+            if needs and cmd.kind != "command":
                 # Compound command: redirect as sibling in pipe
-                result = f'(pipe {cmd.to_sexp()} (redirect ">&" 1) {result})'
+                result = "(pipe " + cmd.to_sexp() + ' (redirect ">&" 1) ' + result + ")"
             else:
                 result = f"(pipe {self._cmd_sexp(cmd, needs)} {result})"
         return result
@@ -665,7 +663,7 @@ class Pipeline(Node):
         """Get s-expression for a command, optionally injecting pipe-both redirect."""
         if not needs_redirect:
             return cmd.to_sexp()
-        if isinstance(cmd, Command):
+        if cmd.kind == "command":
             # Inject redirect inside command
             parts = []
             for w in cmd.words:
@@ -693,16 +691,16 @@ class List(Node):
         parts = list(self.parts)
         op_names = {"&&": "and", "||": "or", ";": "semi", "\n": "semi", "&": "background"}
         # Strip trailing ; or \n (bash ignores it)
-        while len(parts) > 1 and isinstance(parts[-1], Operator) and parts[-1].op in (";", "\n"):
+        while len(parts) > 1 and parts[-1].kind == "operator" and parts[-1].op in (";", "\n"):
             parts = parts[:-1]
         if len(parts) == 1:
             return parts[0].to_sexp()
         # Handle trailing & as unary background operator
         # & only applies to the immediately preceding pipeline, not the whole list
-        if isinstance(parts[-1], Operator) and parts[-1].op == "&":
+        if parts[-1].kind == "operator" and parts[-1].op == "&":
             # Find rightmost ; or \n to split there
             for i in range(len(parts) - 3, 0, -2):
-                if isinstance(parts[i], Operator) and parts[i].op in (";", "\n"):
+                if parts[i].kind == "operator" and parts[i].op in (";", "\n"):
                     left = parts[:i]
                     right = parts[i + 1 : -1]  # exclude trailing &
                     left_sexp = List(left).to_sexp() if len(left) > 1 else left[0].to_sexp()
@@ -721,15 +719,15 @@ class List(Node):
         # Process operators by precedence: ; (lowest), then &, then && and ||
         # Split on ; or \n first (rightmost for left-associativity)
         for i in range(len(parts) - 2, 0, -2):
-            if isinstance(parts[i], Operator) and parts[i].op in (";", "\n"):
+            if parts[i].kind == "operator" and parts[i].op in (";", "\n"):
                 left = parts[:i]
                 right = parts[i + 1 :]
                 left_sexp = List(left).to_sexp() if len(left) > 1 else left[0].to_sexp()
                 right_sexp = List(right).to_sexp() if len(right) > 1 else right[0].to_sexp()
-                return f"(semi {left_sexp} {right_sexp})"
+                return "(semi " + left_sexp + " " + right_sexp + ")"
         # Then split on & (rightmost for left-associativity)
         for i in range(len(parts) - 2, 0, -2):
-            if isinstance(parts[i], Operator) and parts[i].op == "&":
+            if parts[i].kind == "operator" and parts[i].op == "&":
                 left = parts[:i]
                 right = parts[i + 1 :]
                 left_sexp = List(left).to_sexp() if len(left) > 1 else left[0].to_sexp()
@@ -1765,7 +1763,8 @@ class ConditionalExpr(Node):
     def to_sexp(self) -> str:
         # Oracle format: (cond ...) not (cond-expr ...)
         # Redirects are siblings, not children: (cond ...) (redirect ...)
-        if isinstance(self.body, str):
+        if not hasattr(self.body, "kind"):
+            # body is a string
             escaped = self.body.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
             result = '(cond "' + escaped + '")'
         else:
@@ -1914,9 +1913,9 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
     """Format an AST node for command substitution output (oracle pretty-print format)."""
     sp = " " * indent
     inner_sp = " " * (indent + 4)
-    if isinstance(node, Empty):
+    if node.kind == "empty":
         return ""
-    if isinstance(node, Command):
+    if node.kind == "command":
         parts = []
         for w in node.words:
             val = w._expand_all_ansi_c_quotes(w.value)
@@ -1925,13 +1924,16 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
         for r in node.redirects:
             parts.append(_format_redirect(r))
         return " ".join(parts)
-    if isinstance(node, Pipeline):
-        return " | ".join(_format_cmdsub_node(cmd, indent) for cmd in node.commands)
-    if isinstance(node, List):
+    if node.kind == "pipeline":
+        cmd_parts = []
+        for cmd in node.commands:
+            cmd_parts.append(_format_cmdsub_node(cmd, indent))
+        return " | ".join(cmd_parts)
+    if node.kind == "list":
         # Join commands with operators
         result = []
         for p in node.parts:
-            if isinstance(p, Operator):
+            if p.kind == "operator":
                 if p.op == ";":
                     result.append(";")
                 elif p.op == "\n":
@@ -1942,7 +1944,7 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
                 elif p.op == "&":
                     result.append(" &")
                 else:
-                    result.append(f" {p.op}")
+                    result.append(" " + p.op)
             else:
                 if result and not result[-1].endswith((" ", "\n")):
                     result.append(" ")
@@ -1952,24 +1954,24 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
         while s.endswith(";") or s.endswith("\n"):
             s = s[:-1]
         return s
-    if isinstance(node, If):
+    if node.kind == "if":
         cond = _format_cmdsub_node(node.condition, indent)
         then_body = _format_cmdsub_node(node.then_body, indent + 4)
-        result = f"if {cond}; then\n{inner_sp}{then_body};"
+        result = "if " + cond + "; then\n" + inner_sp + then_body + ";"
         if node.else_body:
             else_body = _format_cmdsub_node(node.else_body, indent + 4)
-            result += f"\n{sp}else\n{inner_sp}{else_body};"
-        result += f"\n{sp}fi"
+            result = result + "\n" + sp + "else\n" + inner_sp + else_body + ";"
+        result = result + "\n" + sp + "fi"
         return result
-    if isinstance(node, While):
+    if node.kind == "while":
         cond = _format_cmdsub_node(node.condition, indent)
         body = _format_cmdsub_node(node.body, indent + 4)
-        return f"while {cond}; do\n{inner_sp}{body};\n{sp}done"
-    if isinstance(node, Until):
+        return "while " + cond + "; do\n" + inner_sp + body + ";\n" + sp + "done"
+    if node.kind == "until":
         cond = _format_cmdsub_node(node.condition, indent)
         body = _format_cmdsub_node(node.body, indent + 4)
-        return f"until {cond}; do\n{inner_sp}{body};\n{sp}done"
-    if isinstance(node, For):
+        return "until " + cond + "; do\n" + inner_sp + body + ";\n" + sp + "done"
+    if node.kind == "for":
         var = node.var
         body = _format_cmdsub_node(node.body, indent + 4)
         if node.words:
@@ -1979,30 +1981,32 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
             words = " ".join(word_vals)
             return "for " + var + " in " + words + ";\ndo\n" + inner_sp + body + ";\n" + sp + "done"
         return "for " + var + ";\ndo\n" + inner_sp + body + ";\n" + sp + "done"
-    if isinstance(node, Case):
+    if node.kind == "case":
         word = node.word.value
         patterns = []
         for i, p in enumerate(node.patterns):
             pat = p.pattern.replace("|", " | ")
             body = _format_cmdsub_node(p.body, indent + 8) if p.body else ""
             term = p.terminator  # ;;, ;&, or ;;&
+            pat_indent = " " * (indent + 8)
+            term_indent = " " * (indent + 4)
             if i == 0:
                 # First pattern on same line as 'in'
-                patterns.append(f" {pat})\n{' ' * (indent + 8)}{body}\n{' ' * (indent + 4)}{term}")
+                patterns.append(" " + pat + ")\n" + pat_indent + body + "\n" + term_indent + term)
             else:
-                patterns.append(f"{pat})\n{' ' * (indent + 8)}{body}\n{' ' * (indent + 4)}{term}")
-        pattern_str = f"\n{' ' * (indent + 4)}".join(patterns)
-        return f"case {word} in{pattern_str}\n{sp}esac"
-    if isinstance(node, Function):
+                patterns.append(pat + ")\n" + pat_indent + body + "\n" + term_indent + term)
+        pattern_str = ("\n" + " " * (indent + 4)).join(patterns)
+        return "case " + word + " in" + pattern_str + "\n" + sp + "esac"
+    if node.kind == "function":
         name = node.name
         # Get the body content - if it's a BraceGroup, unwrap it
-        if isinstance(node.body, BraceGroup):
+        if node.body.kind == "brace-group":
             body = _format_cmdsub_node(node.body.body, indent + 4)
         else:
             body = _format_cmdsub_node(node.body, indent + 4)
         body = body.rstrip(";")  # Strip trailing semicolons
         return "function " + name + " () \n{ \n" + inner_sp + body + "\n}"
-    if isinstance(node, Subshell):
+    if node.kind == "subshell":
         body = _format_cmdsub_node(node.body, indent, in_procsub)
         redirects = ""
         if node.redirects:
@@ -2017,11 +2021,11 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
         if redirects:
             return "( " + body + " ) " + redirects
         return "( " + body + " )"
-    if isinstance(node, BraceGroup):
+    if node.kind == "brace-group":
         body = _format_cmdsub_node(node.body, indent)
         body = body.rstrip(";")  # Strip trailing semicolons before adding our own
         return "{ " + body + "; }"
-    if isinstance(node, ArithmeticCommand):
+    if node.kind == "arith-cmd":
         return "((" + node.raw_content + "))"
     # Fallback: return empty for unknown types
     return ""
@@ -2029,7 +2033,7 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
 
 def _format_redirect(r: "Redirect | HereDoc") -> str:
     """Format a redirect for command substitution output."""
-    if isinstance(r, HereDoc):
+    if r.kind == "heredoc":
         # Include heredoc content: <<DELIM\ncontent\nDELIM\n
         op = "<<-" if r.strip_tabs else "<<"
         delim = f"'{r.delimiter}'" if r.quoted else r.delimiter

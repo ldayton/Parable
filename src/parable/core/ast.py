@@ -33,6 +33,8 @@ class Word(Node):
         value = self._expand_all_ansi_c_quotes(value)
         # Strip $ from locale strings $"..."
         value = re.sub(r"(^|[=(\"' \t])\$\"", r'\1"', value)
+        # Normalize whitespace in array assignments: name=(a  b\tc) -> name=(a b c)
+        value = self._normalize_array_whitespace(value)
         # Format command substitutions with oracle pretty-printing (before escaping)
         value = self._format_command_substitutions(value)
         # Strip line continuations (backslash-newline) from arithmetic expressions
@@ -186,6 +188,61 @@ class Word(Node):
                 result.append(value[i])
                 i += 1
         return "".join(result)
+
+    def _normalize_array_whitespace(self, value: str) -> str:
+        """Normalize whitespace inside array assignments: arr=(a  b\tc) -> arr=(a b c)."""
+        import re
+        # Match array assignment pattern: name=( or name+=(
+        match = re.match(r'^([a-zA-Z_][a-zA-Z_0-9]*\+?=)\(', value)
+        if not match or not value.endswith(')'):
+            return value
+        prefix = match.group(1)  # e.g., "arr=" or "arr+="
+        # Extract content inside parentheses
+        inner = value[len(prefix) + 1 : -1]
+        # Normalize whitespace while respecting quotes
+        normalized = []
+        i = 0
+        in_whitespace = True  # Start true to skip leading whitespace
+        while i < len(inner):
+            ch = inner[i]
+            if ch in ' \t\n':
+                if not in_whitespace and normalized:
+                    normalized.append(' ')
+                    in_whitespace = True
+                i += 1
+            elif ch == "'":
+                # Single-quoted string - preserve as-is
+                in_whitespace = False
+                j = i + 1
+                while j < len(inner) and inner[j] != "'":
+                    j += 1
+                normalized.append(inner[i : j + 1])
+                i = j + 1
+            elif ch == '"':
+                # Double-quoted string - preserve as-is
+                in_whitespace = False
+                j = i + 1
+                while j < len(inner):
+                    if inner[j] == '\\' and j + 1 < len(inner):
+                        j += 2
+                    elif inner[j] == '"':
+                        break
+                    else:
+                        j += 1
+                normalized.append(inner[i : j + 1])
+                i = j + 1
+            elif ch == '\\' and i + 1 < len(inner):
+                # Escape sequence
+                in_whitespace = False
+                normalized.append(inner[i : i + 2])
+                i += 2
+            else:
+                in_whitespace = False
+                normalized.append(ch)
+                i += 1
+        # Strip trailing space
+        result = ''.join(normalized).rstrip(' ')
+        return f"{prefix}({result})"
 
     def _strip_arith_line_continuations(self, value: str) -> str:
         """Strip backslash-newline (line continuation) from inside $((...))."""

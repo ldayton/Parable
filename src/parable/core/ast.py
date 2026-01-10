@@ -43,13 +43,15 @@ class Word(Node):
         return f'(word "{escaped}")'
 
     def _format_command_substitutions(self, value: str) -> str:
-        """Replace $(...)  content with oracle-formatted AST output."""
+        """Replace $(...) and >(...) / <(...) with oracle-formatted AST output."""
         cmdsub_parts = [p for p in self.parts if isinstance(p, CommandSubstitution)]
-        if not cmdsub_parts:
+        procsub_parts = [p for p in self.parts if isinstance(p, ProcessSubstitution)]
+        if not cmdsub_parts and not procsub_parts:
             return value
         result = []
         i = 0
         cmdsub_idx = 0
+        procsub_idx = 0
         while i < len(value):
             # Check for $( command substitution
             if value[i : i + 2] == "$(" and cmdsub_idx < len(cmdsub_parts):
@@ -80,6 +82,17 @@ class Word(Node):
                 # Keep backtick substitutions as-is (oracle doesn't reformat them)
                 result.append(value[i:j])
                 cmdsub_idx += 1
+                i = j
+            # Check for >( or <( process substitution
+            elif value[i : i + 2] in (">(" , "<(") and procsub_idx < len(procsub_parts):
+                direction = value[i]
+                # Find matching close paren
+                j = _find_cmdsub_end(value, i + 2)
+                # Format this process substitution
+                node = procsub_parts[procsub_idx]
+                formatted = _format_cmdsub_node(node.command)
+                result.append(f"{direction}({formatted})")
+                procsub_idx += 1
                 i = j
             else:
                 result.append(value[i])
@@ -584,20 +597,84 @@ class CasePattern(Node):
 
     def to_sexp(self) -> str:
         # Oracle format: (pattern ((word "a") (word "b")) body)
-        # Split pattern by | respecting escapes
+        # Split pattern by | respecting escapes, extglobs, quotes, and brackets
         alternatives = []
         current = []
         i = 0
+        depth = 0  # Track extglob/paren depth
         while i < len(self.pattern):
-            if self.pattern[i] == "\\" and i + 1 < len(self.pattern):
+            ch = self.pattern[i]
+            if ch == "\\" and i + 1 < len(self.pattern):
                 current.append(self.pattern[i : i + 2])
                 i += 2
-            elif self.pattern[i] == "|":
+            elif ch in "@?*+!" and i + 1 < len(self.pattern) and self.pattern[i + 1] == "(":
+                # Start of extglob: @(, ?(, *(, +(, !(
+                current.append(ch)
+                current.append("(")
+                depth += 1
+                i += 2
+            elif ch == "$" and i + 1 < len(self.pattern) and self.pattern[i + 1] == "(":
+                # $( command sub or $(( arithmetic - track depth
+                current.append(ch)
+                current.append("(")
+                depth += 1
+                i += 2
+            elif ch == "(" and depth > 0:
+                current.append(ch)
+                depth += 1
+                i += 1
+            elif ch == ")" and depth > 0:
+                current.append(ch)
+                depth -= 1
+                i += 1
+            elif ch == "[":
+                # Character class - consume until ]
+                current.append(ch)
+                i += 1
+                # Handle [! or [^ at start
+                if i < len(self.pattern) and self.pattern[i] in "!^":
+                    current.append(self.pattern[i])
+                    i += 1
+                # Handle ] as first char (literal)
+                if i < len(self.pattern) and self.pattern[i] == "]":
+                    current.append(self.pattern[i])
+                    i += 1
+                # Consume until closing ]
+                while i < len(self.pattern) and self.pattern[i] != "]":
+                    current.append(self.pattern[i])
+                    i += 1
+                if i < len(self.pattern):
+                    current.append(self.pattern[i])  # ]
+                    i += 1
+            elif ch == "'" and depth == 0:
+                # Single-quoted string - consume until closing '
+                current.append(ch)
+                i += 1
+                while i < len(self.pattern) and self.pattern[i] != "'":
+                    current.append(self.pattern[i])
+                    i += 1
+                if i < len(self.pattern):
+                    current.append(self.pattern[i])  # '
+                    i += 1
+            elif ch == '"' and depth == 0:
+                # Double-quoted string - consume until closing "
+                current.append(ch)
+                i += 1
+                while i < len(self.pattern) and self.pattern[i] != '"':
+                    if self.pattern[i] == "\\" and i + 1 < len(self.pattern):
+                        current.append(self.pattern[i])
+                        i += 1
+                    current.append(self.pattern[i])
+                    i += 1
+                if i < len(self.pattern):
+                    current.append(self.pattern[i])  # "
+                    i += 1
+            elif ch == "|" and depth == 0:
                 alternatives.append("".join(current))
                 current = []
                 i += 1
             else:
-                current.append(self.pattern[i])
+                current.append(ch)
                 i += 1
         alternatives.append("".join(current))
         word_list = []

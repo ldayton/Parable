@@ -1932,7 +1932,8 @@ def _format_redirect(r: "Redirect | HereDoc") -> str:
     if isinstance(r, HereDoc):
         # Include heredoc content: <<DELIM\ncontent\nDELIM\n
         op = "<<-" if r.strip_tabs else "<<"
-        return f"{op}{r.delimiter}\n{r.content}{r.delimiter}\n"
+        delim = f"'{r.delimiter}'" if r.quoted else r.delimiter
+        return f"{op}{delim}\n{r.content}{r.delimiter}\n"
     op = r.op
     target = r.target.value
     # For fd duplication (target starts with &), handle normalization
@@ -1998,6 +1999,16 @@ def _find_cmdsub_end(value: str, start: int) -> int:
             # Skip other characters inside double quotes
             i += 1
             continue
+        # Handle comments - skip from # to end of line
+        # Only treat # as comment if preceded by whitespace or at start
+        if c == "#" and (i == start or value[i - 1] in " \t\n;|&()"):
+            while i < len(value) and value[i] != "\n":
+                i += 1
+            continue
+        # Handle heredocs
+        if value[i : i + 2] == "<<":
+            i = _skip_heredoc(value, i)
+            continue
         # Check for 'case' keyword
         if value[i : i + 4] == "case" and _is_word_boundary(value, i, 4):
             case_depth += 1
@@ -2031,6 +2042,64 @@ def _find_cmdsub_end(value: str, start: int) -> int:
             else:
                 depth -= 1
         i += 1
+    return i
+
+
+def _skip_heredoc(value: str, start: int) -> int:
+    """Skip past a heredoc starting at <<. Returns position after heredoc content."""
+    i = start + 2  # Skip <<
+    # Handle <<- (strip tabs)
+    if i < len(value) and value[i] == "-":
+        i += 1
+    # Skip whitespace before delimiter
+    while i < len(value) and value[i] in " \t":
+        i += 1
+    # Extract delimiter - may be quoted
+    delim_start = i
+    quoted = False
+    quote_char = None
+    if i < len(value) and value[i] in "\"'":
+        quote_char = value[i]
+        quoted = True
+        i += 1
+        delim_start = i
+        while i < len(value) and value[i] != quote_char:
+            i += 1
+        delimiter = value[delim_start:i]
+        if i < len(value):
+            i += 1  # Skip closing quote
+    elif i < len(value) and value[i] == "\\":
+        # Backslash-quoted delimiter like <<\EOF
+        i += 1
+        delim_start = i
+        while i < len(value) and value[i] not in " \t\n":
+            i += 1
+        delimiter = value[delim_start:i]
+        quoted = True
+    else:
+        # Unquoted delimiter
+        while i < len(value) and value[i] not in " \t\n":
+            i += 1
+        delimiter = value[delim_start:i]
+    # Skip to end of line (heredoc content starts on next line)
+    while i < len(value) and value[i] != "\n":
+        i += 1
+    if i < len(value):
+        i += 1  # Skip newline
+    # Find the end delimiter on its own line
+    while i < len(value):
+        line_start = i
+        # Find end of this line
+        line_end = i
+        while line_end < len(value) and value[line_end] != "\n":
+            line_end += 1
+        line = value[line_start:line_end]
+        # Check if this line is the delimiter (possibly with leading tabs for <<-)
+        stripped = line.lstrip("\t") if start + 2 < len(value) and value[start + 2] == "-" else line
+        if stripped == delimiter:
+            # Found end - return position after delimiter line
+            return line_end + 1 if line_end < len(value) else line_end
+        i = line_end + 1 if line_end < len(value) else line_end
     return i
 
 

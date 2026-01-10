@@ -2517,10 +2517,16 @@ class Parser:
                 if not self.at_end():
                     self.advance()
             elif ch == "\\":
-                quoted = True
                 self.advance()
                 if not self.at_end():
-                    delimiter_chars.append(self.advance())
+                    next_ch = self.peek()
+                    if next_ch == "\n":
+                        # Backslash-newline: continue delimiter on next line
+                        self.advance()  # skip the newline
+                    else:
+                        # Regular escape - quotes the next char
+                        quoted = True
+                        delimiter_chars.append(self.advance())
             elif (
                 ch == "$"
                 and self.pos + 1 < self.length
@@ -2589,6 +2595,18 @@ class Parser:
 
             line = self.source[line_start:line_end]
 
+            # For unquoted heredocs, process backslash-newline before checking delimiter
+            # Join continued lines to check the full logical line against delimiter
+            if not quoted:
+                while line.endswith("\\") and line_end < self.length:
+                    # Continue to next line
+                    line = line[:-1]  # Remove backslash
+                    line_end += 1  # Skip newline
+                    next_line_start = line_end
+                    while line_end < self.length and self.source[line_end] != "\n":
+                        line_end += 1
+                    line += self.source[next_line_start:line_end]
+
             # Check if this line is the delimiter
             check_line = line
             if strip_tabs:
@@ -2601,15 +2619,10 @@ class Parser:
                 # Store the heredoc info and let the command parser handle it
                 break
 
-            # Add line to content
+            # Add line to content (with newline, since we consumed continuations above)
             if strip_tabs:
                 line = line.lstrip("\t")
-            # Handle backslash-newline continuation in unquoted heredocs
-            if not quoted and line.endswith("\\"):
-                # Line continuation - append without the backslash, no newline
-                content_lines.append(line[:-1])
-            else:
-                content_lines.append(line + "\n")
+            content_lines.append(line + "\n")
 
             # Move past the newline
             scan_pos = line_end + 1 if line_end < self.length else self.length
@@ -2618,10 +2631,8 @@ class Parser:
         content = "".join(content_lines)
 
         # Store the position where heredoc content ends so we can skip it later
-        # scan_pos is at the start of the delimiter line, need to move past it
-        heredoc_end = scan_pos
-        while heredoc_end < self.length and self.source[heredoc_end] != "\n":
-            heredoc_end += 1
+        # line_end points to the end of the delimiter line (after any continuations)
+        heredoc_end = line_end
         if heredoc_end < self.length:
             heredoc_end += 1  # past the newline
 

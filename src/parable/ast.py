@@ -1,9 +1,54 @@
 """AST node types for Parable."""
 
-from dataclasses import dataclass, field
+
+def _is_hex_digit(c: str) -> bool:
+    return (c >= "0" and c <= "9") or (c >= "a" and c <= "f") or (c >= "A" and c <= "F")
 
 
-@dataclass
+def _is_octal_digit(c: str) -> bool:
+    return c >= "0" and c <= "7"
+
+
+def _is_whitespace(c: str) -> bool:
+    return c == " " or c == "\t" or c == "\n"
+
+
+def _is_whitespace_no_newline(c: str) -> bool:
+    return c == " " or c == "\t"
+
+
+def _substring(s: str, start: int, end: int) -> str:
+    """Extract substring from start to end (exclusive)."""
+    result = ""
+    i = start
+    while i < end and i < len(s):
+        result = result + s[i]
+        i += 1
+    return result
+
+
+def _starts_with_at(s: str, pos: int, prefix: str) -> bool:
+    """Check if s starts with prefix at position pos."""
+    if pos + len(prefix) > len(s):
+        return False
+    i = 0
+    while i < len(prefix):
+        if s[pos + i] != prefix[i]:
+            return False
+        i += 1
+    return True
+
+
+def _sublist(lst: list, start: int, end: int) -> list:
+    """Extract sublist from start to end (exclusive)."""
+    result = []
+    i = start
+    while i < end and i < len(lst):
+        result.append(lst[i])
+        i += 1
+    return result
+
+
 class Node:
     """Base class for all AST nodes."""
 
@@ -14,17 +59,18 @@ class Node:
         raise NotImplementedError
 
 
-@dataclass
 class Word(Node):
     """A word token, possibly containing expansions."""
 
     value: str
-    parts: list[Node] = field(default_factory=list)
+    parts: list[Node]
 
     def __init__(self, value: str, parts: list[Node] = None):
         self.kind = "word"
         self.value = value
-        self.parts = parts or []
+        if parts is None:
+            parts = []
+        self.parts = parts
 
     def to_sexp(self) -> str:
         value = self.value
@@ -47,7 +93,7 @@ class Word(Node):
         value = value.replace("\\", "\\\\")
         # Escape double quotes, newlines, and tabs
         escaped = value.replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
-        return f'(word "{escaped}")'
+        return '(word "' + escaped + '")'
 
     def _append_with_ctlesc(self, result: bytearray, byte_val: int):
         """Append byte to result (CTLESC doubling happens later in to_sexp)."""
@@ -90,7 +136,7 @@ class Word(Node):
         """
         if not (value.startswith("'") and value.endswith("'")):
             return value
-        inner = value[1:-1]
+        inner = _substring(value, 1, len(value) - 1)
         result = bytearray()
         i = 0
         while i < len(inner):
@@ -102,7 +148,7 @@ class Word(Node):
                 elif c == "b":
                     result.append(0x08)
                     i += 2
-                elif c in ("e", "E"):
+                elif c == "e" or c == "E":
                     result.append(0x1B)
                     i += 2
                 elif c == "f":
@@ -138,9 +184,9 @@ class Word(Node):
                     if i + 2 < len(inner) and inner[i + 2] == "{":
                         # Find closing brace or end of hex digits
                         j = i + 3
-                        while j < len(inner) and inner[j] in "0123456789abcdefABCDEF":
+                        while j < len(inner) and _is_hex_digit(inner[j]):
                             j += 1
-                        hex_str = inner[i + 3 : j]
+                        hex_str = _substring(inner, i + 3, j)
                         if j < len(inner) and inner[j] == "}":
                             j += 1  # consume }
                         # If no hex digits, treat as NUL (truncates)
@@ -154,10 +200,10 @@ class Word(Node):
                     else:
                         # Hex escape \xHH (1-2 hex digits) - raw byte
                         j = i + 2
-                        while j < len(inner) and j < i + 4 and inner[j] in "0123456789abcdefABCDEF":
+                        while j < len(inner) and j < i + 4 and _is_hex_digit(inner[j]):
                             j += 1
                         if j > i + 2:
-                            byte_val = int(inner[i + 2 : j], 16)
+                            byte_val = int(_substring(inner, i + 2, j), 16)
                             if byte_val == 0:
                                 # NUL truncates string
                                 return "'" + result.decode("utf-8", errors="replace") + "'"
@@ -169,10 +215,10 @@ class Word(Node):
                 elif c == "u":
                     # Unicode escape \uHHHH (1-4 hex digits) - encode as UTF-8
                     j = i + 2
-                    while j < len(inner) and j < i + 6 and inner[j] in "0123456789abcdefABCDEF":
+                    while j < len(inner) and j < i + 6 and _is_hex_digit(inner[j]):
                         j += 1
                     if j > i + 2:
-                        codepoint = int(inner[i + 2 : j], 16)
+                        codepoint = int(_substring(inner, i + 2, j), 16)
                         if codepoint == 0:
                             # NUL truncates string
                             return "'" + result.decode("utf-8", errors="replace") + "'"
@@ -184,10 +230,10 @@ class Word(Node):
                 elif c == "U":
                     # Unicode escape \UHHHHHHHH (1-8 hex digits) - encode as UTF-8
                     j = i + 2
-                    while j < len(inner) and j < i + 10 and inner[j] in "0123456789abcdefABCDEF":
+                    while j < len(inner) and j < i + 10 and _is_hex_digit(inner[j]):
                         j += 1
                     if j > i + 2:
-                        codepoint = int(inner[i + 2 : j], 16)
+                        codepoint = int(_substring(inner, i + 2, j), 16)
                         if codepoint == 0:
                             # NUL truncates string
                             return "'" + result.decode("utf-8", errors="replace") + "'"
@@ -212,10 +258,10 @@ class Word(Node):
                 elif c == "0":
                     # Nul or octal \0 or \0NNN
                     j = i + 2
-                    while j < len(inner) and j < i + 5 and inner[j] in "01234567":
+                    while j < len(inner) and j < i + 5 and _is_octal_digit(inner[j]):
                         j += 1
                     if j > i + 2:
-                        byte_val = int(inner[i + 1 : j], 8)
+                        byte_val = int(_substring(inner, i + 1, j), 8)
                         if byte_val == 0:
                             # NUL truncates string
                             return "'" + result.decode("utf-8", errors="replace") + "'"
@@ -224,12 +270,12 @@ class Word(Node):
                     else:
                         # Just \0 - NUL truncates string
                         return "'" + result.decode("utf-8", errors="replace") + "'"
-                elif c in "1234567":
+                elif c >= "1" and c <= "7":
                     # Octal escape \NNN (1-3 digits) - raw byte
                     j = i + 1
-                    while j < len(inner) and j < i + 4 and inner[j] in "01234567":
+                    while j < len(inner) and j < i + 4 and _is_octal_digit(inner[j]):
                         j += 1
-                    byte_val = int(inner[i + 1 : j], 8)
+                    byte_val = int(_substring(inner, i + 1, j), 8)
                     if byte_val == 0:
                         # NUL truncates string
                         return "'" + result.decode("utf-8", errors="replace") + "'"
@@ -257,7 +303,7 @@ class Word(Node):
             ch = value[i]
             # Track brace depth for parameter expansions
             if not in_single_quote:
-                if value[i : i + 2] == "${":
+                if _starts_with_at(value, i, "${"):
                     brace_depth += 1
                     result.append("${")
                     i += 2
@@ -295,7 +341,9 @@ class Word(Node):
                 result.append(ch)
                 result.append(value[i + 1])
                 i += 2
-            elif value[i : i + 2] == "$'" and not in_single_quote and not effective_in_dquote:
+            elif (
+                _starts_with_at(value, i, "$'") and not in_single_quote and not effective_in_dquote
+            ):
                 # ANSI-C quoted string - find matching closing quote
                 j = i + 2
                 while j < len(value):
@@ -307,17 +355,23 @@ class Word(Node):
                     else:
                         j += 1
                 # Extract and expand the $'...' sequence
-                ansi_str = value[i:j]  # e.g. $'hello\nworld'
+                ansi_str = _substring(value, i, j)  # e.g. $'hello\nworld'
                 # Strip the $ and expand escapes
-                expanded = self._expand_ansi_c_escapes(ansi_str[1:])  # Pass 'hello\nworld'
+                expanded = self._expand_ansi_c_escapes(
+                    _substring(ansi_str, 1, len(ansi_str))
+                )  # Pass 'hello\nworld'
                 # Inside ${...}, strip quotes for default/alternate value operators
                 # but keep them for pattern replacement operators
                 if brace_depth > 0 and expanded.startswith("'") and expanded.endswith("'"):
-                    inner = expanded[1:-1]
+                    inner = _substring(expanded, 1, len(expanded) - 1)
                     # Only strip if non-empty, no CTLESC, and after a default value operator
                     if inner and "\x01" not in inner:
                         # Check what precedes - default value ops: :- := :+ :? - = + ?
-                        prev = "".join(result[-2:]) if len(result) >= 2 else ""
+                        prev = (
+                            "".join(_sublist(result, len(result) - 2, len(result)))
+                            if len(result) >= 2
+                            else ""
+                        )
                         if (
                             prev.endswith(":-")
                             or prev.endswith(":=")
@@ -326,9 +380,11 @@ class Word(Node):
                         ):
                             expanded = inner
                         elif len(result) >= 1:
-                            last = result[-1]
+                            last = result[len(result) - 1]
                             # Single char operators (not after :), but not /
-                            if last in "-=+?" and (len(result) < 2 or result[-2] != ":"):
+                            if (last == "-" or last == "=" or last == "+" or last == "?") and (
+                                len(result) < 2 or result[len(result) - 2] != ":"
+                            ):
                                 expanded = inner
                 result.append(expanded)
                 i = j
@@ -358,7 +414,7 @@ class Word(Node):
                 result.append(ch)
                 result.append(value[i + 1])
                 i += 2
-            elif value[i : i + 2] == '$"' and not in_single_quote and not in_double_quote:
+            elif _starts_with_at(value, i, '$"') and not in_single_quote and not in_double_quote:
                 # Locale string $"..." outside quotes - strip the $ and enter double quote
                 result.append('"')
                 in_double_quote = True
@@ -370,22 +426,32 @@ class Word(Node):
 
     def _normalize_array_whitespace(self, value: str) -> str:
         """Normalize whitespace inside array assignments: arr=(a  b\tc) -> arr=(a b c)."""
-        import re
-
         # Match array assignment pattern: name=( or name+=(
-        match = re.match(r"^([a-zA-Z_][a-zA-Z_0-9]*\+?=)\(", value)
-        if not match or not value.endswith(")"):
+        if not value.endswith(")"):
             return value
-        prefix = match.group(1)  # e.g., "arr=" or "arr+="
+        # Parse identifier: starts with letter/underscore, then alnum/underscore
+        i = 0
+        if not (i < len(value) and (value[i].isalpha() or value[i] == "_")):
+            return value
+        i += 1
+        while i < len(value) and (value[i].isalnum() or value[i] == "_"):
+            i += 1
+        # Optional + for +=
+        if i < len(value) and value[i] == "+":
+            i += 1
+        # Must have =(
+        if not (i + 1 < len(value) and value[i] == "=" and value[i + 1] == "("):
+            return value
+        prefix = _substring(value, 0, i + 1)  # e.g., "arr=" or "arr+="
         # Extract content inside parentheses
-        inner = value[len(prefix) + 1 : -1]
+        inner = _substring(value, len(prefix) + 1, len(value) - 1)
         # Normalize whitespace while respecting quotes
         normalized = []
         i = 0
         in_whitespace = True  # Start true to skip leading whitespace
         while i < len(inner):
             ch = inner[i]
-            if ch in " \t\n":
+            if _is_whitespace(ch):
                 if not in_whitespace and normalized:
                     normalized.append(" ")
                     in_whitespace = True
@@ -396,7 +462,7 @@ class Word(Node):
                 j = i + 1
                 while j < len(inner) and inner[j] != "'":
                     j += 1
-                normalized.append(inner[i : j + 1])
+                normalized.append(_substring(inner, i, j + 1))
                 i = j + 1
             elif ch == '"':
                 # Double-quoted string - preserve as-is
@@ -409,12 +475,12 @@ class Word(Node):
                         break
                     else:
                         j += 1
-                normalized.append(inner[i : j + 1])
+                normalized.append(_substring(inner, i, j + 1))
                 i = j + 1
             elif ch == "\\" and i + 1 < len(inner):
                 # Escape sequence
                 in_whitespace = False
-                normalized.append(inner[i : i + 2])
+                normalized.append(_substring(inner, i, i + 2))
                 i += 2
             else:
                 in_whitespace = False
@@ -422,7 +488,7 @@ class Word(Node):
                 i += 1
         # Strip trailing space
         result = "".join(normalized).rstrip(" ")
-        return f"{prefix}({result})"
+        return prefix + "(" + result + ")"
 
     def _strip_arith_line_continuations(self, value: str) -> str:
         """Strip backslash-newline (line continuation) from inside $((...))."""
@@ -430,18 +496,18 @@ class Word(Node):
         i = 0
         while i < len(value):
             # Check for $(( arithmetic expression
-            if value[i : i + 3] == "$((":
+            if _starts_with_at(value, i, "$(("):
                 # Find matching ))
                 start = i
                 i += 3
                 depth = 1
                 arith_content = []
                 while i < len(value) and depth > 0:
-                    if value[i : i + 2] == "((":
+                    if _starts_with_at(value, i, "(("):
                         arith_content.append("((")
                         depth += 1
                         i += 2
-                    elif value[i : i + 2] == "))":
+                    elif _starts_with_at(value, i, "))"):
                         depth -= 1
                         if depth > 0:
                             arith_content.append("))")
@@ -457,7 +523,7 @@ class Word(Node):
                     result.append("$((" + "".join(arith_content) + "))")
                 else:
                     # Didn't find )) - not arithmetic (likely $( + ( subshell), pass through
-                    result.append(value[start:i])
+                    result.append(_substring(value, start, i))
             else:
                 result.append(value[i])
                 i += 1
@@ -466,23 +532,32 @@ class Word(Node):
     def _collect_cmdsubs(self, node) -> list:
         """Recursively collect CommandSubstitution nodes from an AST node."""
         result = []
-        if isinstance(node, CommandSubstitution):
+        node_kind = getattr(node, "kind", None)
+        if node_kind == "cmdsub":
             result.append(node)
-        elif hasattr(node, "expression") and node.expression is not None:
-            # ArithmeticExpansion, ArithBinaryOp, etc.
-            result.extend(self._collect_cmdsubs(node.expression))
-        if hasattr(node, "left"):
-            result.extend(self._collect_cmdsubs(node.left))
-        if hasattr(node, "right"):
-            result.extend(self._collect_cmdsubs(node.right))
-        if hasattr(node, "operand"):
-            result.extend(self._collect_cmdsubs(node.operand))
-        if hasattr(node, "condition"):
-            result.extend(self._collect_cmdsubs(node.condition))
-        if hasattr(node, "true_value"):
-            result.extend(self._collect_cmdsubs(node.true_value))
-        if hasattr(node, "false_value"):
-            result.extend(self._collect_cmdsubs(node.false_value))
+        else:
+            expr = getattr(node, "expression", None)
+            if expr is not None:
+                # ArithmeticExpansion, ArithBinaryOp, etc.
+                result.extend(self._collect_cmdsubs(expr))
+        left = getattr(node, "left", None)
+        if left is not None:
+            result.extend(self._collect_cmdsubs(left))
+        right = getattr(node, "right", None)
+        if right is not None:
+            result.extend(self._collect_cmdsubs(right))
+        operand = getattr(node, "operand", None)
+        if operand is not None:
+            result.extend(self._collect_cmdsubs(operand))
+        condition = getattr(node, "condition", None)
+        if condition is not None:
+            result.extend(self._collect_cmdsubs(condition))
+        true_value = getattr(node, "true_value", None)
+        if true_value is not None:
+            result.extend(self._collect_cmdsubs(true_value))
+        false_value = getattr(node, "false_value", None)
+        if false_value is not None:
+            result.extend(self._collect_cmdsubs(false_value))
         return result
 
     def _format_command_substitutions(self, value: str) -> str:
@@ -491,14 +566,14 @@ class Word(Node):
         cmdsub_parts = []
         procsub_parts = []
         for p in self.parts:
-            if isinstance(p, CommandSubstitution):
+            if p.kind == "cmdsub":
                 cmdsub_parts.append(p)
-            elif isinstance(p, ProcessSubstitution):
+            elif p.kind == "procsub":
                 procsub_parts.append(p)
             else:
                 cmdsub_parts.extend(self._collect_cmdsubs(p))
         # Check if we have ${ or ${| brace command substitutions to format
-        has_brace_cmdsub = "${ " in value or "${|" in value
+        has_brace_cmdsub = value.find("${ ") != -1 or value.find("${|") != -1
         if not cmdsub_parts and not procsub_parts and not has_brace_cmdsub:
             return value
         result = []
@@ -508,8 +583,8 @@ class Word(Node):
         while i < len(value):
             # Check for $( command substitution (but not $(( arithmetic)
             if (
-                value[i : i + 2] == "$("
-                and value[i : i + 3] != "$(("
+                _starts_with_at(value, i, "$(")
+                and not _starts_with_at(value, i, "$((")
                 and cmdsub_idx < len(cmdsub_parts)
             ):
                 # Find matching close paren using bash-aware matching
@@ -519,9 +594,9 @@ class Word(Node):
                 formatted = _format_cmdsub_node(node.command)
                 # Add space after $( if content starts with ( to avoid $((
                 if formatted.startswith("("):
-                    result.append(f"$( {formatted})")
+                    result.append("$( " + formatted + ")")
                 else:
-                    result.append(f"$({formatted})")
+                    result.append("$(" + formatted + ")")
                 cmdsub_idx += 1
                 i = j
             # Check for backtick command substitution
@@ -537,23 +612,25 @@ class Word(Node):
                         break
                     j += 1
                 # Keep backtick substitutions as-is (oracle doesn't reformat them)
-                result.append(value[i:j])
+                result.append(_substring(value, i, j))
                 cmdsub_idx += 1
                 i = j
             # Check for >( or <( process substitution
-            elif value[i : i + 2] in (">(", "<(") and procsub_idx < len(procsub_parts):
+            elif (
+                _starts_with_at(value, i, ">(") or _starts_with_at(value, i, "<(")
+            ) and procsub_idx < len(procsub_parts):
                 direction = value[i]
                 # Find matching close paren
                 j = _find_cmdsub_end(value, i + 2)
                 # Format this process substitution (with in_procsub=True for no-space subshells)
                 node = procsub_parts[procsub_idx]
                 formatted = _format_cmdsub_node(node.command, in_procsub=True)
-                result.append(f"{direction}({formatted})")
+                result.append(direction + "(" + formatted + ")")
                 procsub_idx += 1
                 i = j
             # Check for ${ (space) or ${| brace command substitution
-            elif value[i : i + 3] == "${ " or value[i : i + 3] == "${|":
-                prefix = value[i : i + 3]
+            elif _starts_with_at(value, i, "${ ") or _starts_with_at(value, i, "${|"):
+                prefix = _substring(value, i, i + 3)
                 # Find matching close brace
                 j = i + 3
                 depth = 1
@@ -564,23 +641,23 @@ class Word(Node):
                         depth -= 1
                     j += 1
                 # Parse and format the inner content
-                inner = value[i + 2 : j - 1]  # Content between ${ and }
+                inner = _substring(value, i + 2, j - 1)  # Content between ${ and }
                 # Check if content is all whitespace - normalize to single space
                 if inner.strip() == "":
                     result.append("${ }")
                 else:
-                    from parable.core.parser import Parser
+                    from .parser import Parser
 
                     try:
                         parser = Parser(inner.lstrip(" |"))
                         parsed = parser.parse_list()
                         if parsed:
                             formatted = _format_cmdsub_node(parsed)
-                            result.append(f"{prefix}{formatted}; }}")
+                            result.append(prefix + formatted + "; }")
                         else:
                             result.append("${ }")
                     except Exception:
-                        result.append(value[i:j])
+                        result.append(_substring(value, i, j))
                 i = j
             else:
                 result.append(value[i])
@@ -598,26 +675,31 @@ class Word(Node):
         return value.rstrip("\n")
 
 
-@dataclass
 class Command(Node):
     """A simple command (words + redirections)."""
 
     words: list[Word]
-    redirects: list[Node] = field(default_factory=list)
+    redirects: list[Node]
 
     def __init__(self, words: list[Word], redirects: list[Node] = None):
         self.kind = "command"
         self.words = words
-        self.redirects = redirects or []
+        if redirects is None:
+            redirects = []
+        self.redirects = redirects
 
     def to_sexp(self) -> str:
-        parts = [w.to_sexp() for w in self.words]
-        parts.extend(r.to_sexp() for r in self.redirects)
+        parts = []
+        for w in self.words:
+            parts.append(w.to_sexp())
+        for r in self.redirects:
+            parts.append(r.to_sexp())
         inner = " ".join(parts)
-        return "(command)" if not inner else f"(command {inner})"
+        if not inner:
+            return "(command)"
+        return "(command " + inner + ")"
 
 
-@dataclass
 class Pipeline(Node):
     """A pipeline of commands."""
 
@@ -632,43 +714,56 @@ class Pipeline(Node):
             return self.commands[0].to_sexp()
         # Build list of (cmd, needs_pipe_both_redirect) filtering out PipeBoth markers
         cmds = []
-        for i, cmd in enumerate(self.commands):
-            if isinstance(cmd, PipeBoth):
+        i = 0
+        while i < len(self.commands):
+            cmd = self.commands[i]
+            if cmd.kind == "pipe-both":
+                i += 1
                 continue
             # Check if next element is PipeBoth
-            needs_redirect = i + 1 < len(self.commands) and isinstance(
-                self.commands[i + 1], PipeBoth
-            )
+            needs_redirect = i + 1 < len(self.commands) and self.commands[i + 1].kind == "pipe-both"
             cmds.append((cmd, needs_redirect))
+            i += 1
         if len(cmds) == 1:
-            cmd, needs = cmds[0]
+            pair = cmds[0]
+            cmd = pair[0]
+            needs = pair[1]
             return self._cmd_sexp(cmd, needs)
         # Nest right-associatively: (pipe a (pipe b c))
-        last_cmd, last_needs = cmds[-1]
+        last_pair = cmds[len(cmds) - 1]
+        last_cmd = last_pair[0]
+        last_needs = last_pair[1]
         result = self._cmd_sexp(last_cmd, last_needs)
-        for cmd, needs in reversed(cmds[:-1]):
-            if needs and not isinstance(cmd, Command):
+        j = len(cmds) - 2
+        while j >= 0:
+            pair = cmds[j]
+            cmd = pair[0]
+            needs = pair[1]
+            if needs and cmd.kind != "command":
                 # Compound command: redirect as sibling in pipe
-                result = f'(pipe {cmd.to_sexp()} (redirect ">&" 1) {result})'
+                result = "(pipe " + cmd.to_sexp() + ' (redirect ">&" 1) ' + result + ")"
             else:
-                result = f"(pipe {self._cmd_sexp(cmd, needs)} {result})"
+                result = "(pipe " + self._cmd_sexp(cmd, needs) + " " + result + ")"
+            j -= 1
         return result
 
     def _cmd_sexp(self, cmd: Node, needs_redirect: bool) -> str:
         """Get s-expression for a command, optionally injecting pipe-both redirect."""
         if not needs_redirect:
             return cmd.to_sexp()
-        if isinstance(cmd, Command):
+        if cmd.kind == "command":
             # Inject redirect inside command
-            parts = [w.to_sexp() for w in cmd.words]
-            parts.extend(r.to_sexp() for r in cmd.redirects)
+            parts = []
+            for w in cmd.words:
+                parts.append(w.to_sexp())
+            for r in cmd.redirects:
+                parts.append(r.to_sexp())
             parts.append('(redirect ">&" 1)')
-            return f"(command {' '.join(parts)})"
+            return "(command " + " ".join(parts) + ")"
         # Compound command handled by caller
         return cmd.to_sexp()
 
 
-@dataclass
 class List(Node):
     """A list of pipelines with operators."""
 
@@ -684,27 +779,31 @@ class List(Node):
         parts = list(self.parts)
         op_names = {"&&": "and", "||": "or", ";": "semi", "\n": "semi", "&": "background"}
         # Strip trailing ; or \n (bash ignores it)
-        while len(parts) > 1 and isinstance(parts[-1], Operator) and parts[-1].op in (";", "\n"):
-            parts = parts[:-1]
+        while (
+            len(parts) > 1
+            and parts[len(parts) - 1].kind == "operator"
+            and (parts[len(parts) - 1].op == ";" or parts[len(parts) - 1].op == "\n")
+        ):
+            parts = _sublist(parts, 0, len(parts) - 1)
         if len(parts) == 1:
             return parts[0].to_sexp()
         # Handle trailing & as unary background operator
         # & only applies to the immediately preceding pipeline, not the whole list
-        if isinstance(parts[-1], Operator) and parts[-1].op == "&":
+        if parts[len(parts) - 1].kind == "operator" and parts[len(parts) - 1].op == "&":
             # Find rightmost ; or \n to split there
             for i in range(len(parts) - 3, 0, -2):
-                if isinstance(parts[i], Operator) and parts[i].op in (";", "\n"):
-                    left = parts[:i]
-                    right = parts[i + 1 : -1]  # exclude trailing &
+                if parts[i].kind == "operator" and (parts[i].op == ";" or parts[i].op == "\n"):
+                    left = _sublist(parts, 0, i)
+                    right = _sublist(parts, i + 1, len(parts) - 1)  # exclude trailing &
                     left_sexp = List(left).to_sexp() if len(left) > 1 else left[0].to_sexp()
                     right_sexp = List(right).to_sexp() if len(right) > 1 else right[0].to_sexp()
-                    return f"(semi {left_sexp} (background {right_sexp}))"
+                    return "(semi " + left_sexp + " (background " + right_sexp + "))"
             # No ; or \n found, background the whole list (minus trailing &)
-            inner_parts = parts[:-1]
+            inner_parts = _sublist(parts, 0, len(parts) - 1)
             if len(inner_parts) == 1:
-                return f"(background {inner_parts[0].to_sexp()})"
+                return "(background " + inner_parts[0].to_sexp() + ")"
             inner_list = List(inner_parts)
-            return f"(background {inner_list.to_sexp()})"
+            return "(background " + inner_list.to_sexp() + ")"
         # Process by precedence: first split on ; and &, then on && and ||
         return self._to_sexp_with_precedence(parts, op_names)
 
@@ -712,31 +811,30 @@ class List(Node):
         # Process operators by precedence: ; (lowest), then &, then && and ||
         # Split on ; or \n first (rightmost for left-associativity)
         for i in range(len(parts) - 2, 0, -2):
-            if isinstance(parts[i], Operator) and parts[i].op in (";", "\n"):
-                left = parts[:i]
-                right = parts[i + 1 :]
+            if parts[i].kind == "operator" and (parts[i].op == ";" or parts[i].op == "\n"):
+                left = _sublist(parts, 0, i)
+                right = _sublist(parts, i + 1, len(parts))
                 left_sexp = List(left).to_sexp() if len(left) > 1 else left[0].to_sexp()
                 right_sexp = List(right).to_sexp() if len(right) > 1 else right[0].to_sexp()
-                return f"(semi {left_sexp} {right_sexp})"
+                return "(semi " + left_sexp + " " + right_sexp + ")"
         # Then split on & (rightmost for left-associativity)
         for i in range(len(parts) - 2, 0, -2):
-            if isinstance(parts[i], Operator) and parts[i].op == "&":
-                left = parts[:i]
-                right = parts[i + 1 :]
+            if parts[i].kind == "operator" and parts[i].op == "&":
+                left = _sublist(parts, 0, i)
+                right = _sublist(parts, i + 1, len(parts))
                 left_sexp = List(left).to_sexp() if len(left) > 1 else left[0].to_sexp()
                 right_sexp = List(right).to_sexp() if len(right) > 1 else right[0].to_sexp()
-                return f"(background {left_sexp} {right_sexp})"
+                return "(background " + left_sexp + " " + right_sexp + ")"
         # No ; or &, process high-prec ops (&&, ||) left-associatively
         result = parts[0].to_sexp()
         for i in range(1, len(parts) - 1, 2):
             op = parts[i]
             cmd = parts[i + 1]
             op_name = op_names.get(op.op, op.op)
-            result = f"({op_name} {result} {cmd.to_sexp()})"
+            result = "(" + op_name + " " + result + " " + cmd.to_sexp() + ")"
         return result
 
 
-@dataclass
 class Operator(Node):
     """An operator token (&&, ||, ;, &, |)."""
 
@@ -754,10 +852,9 @@ class Operator(Node):
             "&": "bg",
             "|": "pipe",
         }
-        return f"({names.get(self.op, self.op)})"
+        return "(" + names.get(self.op, self.op) + ")"
 
 
-@dataclass
 class PipeBoth(Node):
     """Marker for |& pipe (stdout + stderr)."""
 
@@ -768,7 +865,6 @@ class PipeBoth(Node):
         return "(pipe-both)"
 
 
-@dataclass
 class Empty(Node):
     """Empty input."""
 
@@ -779,7 +875,6 @@ class Empty(Node):
         return ""
 
 
-@dataclass
 class Comment(Node):
     """A comment (# to end of line)."""
 
@@ -794,7 +889,6 @@ class Comment(Node):
         return ""
 
 
-@dataclass
 class Redirect(Node):
     """A redirection."""
 
@@ -809,16 +903,22 @@ class Redirect(Node):
         self.fd = fd
 
     def to_sexp(self) -> str:
-        import re
-
         # Strip fd prefix from operator (e.g., "2>" -> ">", "{fd}>" -> ">")
         op = self.op.lstrip("0123456789")
-        op = re.sub(r"^\{[a-zA-Z_][a-zA-Z_0-9]*\}", "", op)
+        # Strip {varname} prefix if present
+        if op.startswith("{"):
+            j = 1
+            if j < len(op) and (op[j].isalpha() or op[j] == "_"):
+                j += 1
+                while j < len(op) and (op[j].isalnum() or op[j] == "_"):
+                    j += 1
+                if j < len(op) and op[j] == "}":
+                    op = _substring(op, j + 1, len(op))
         target_val = self.target.value
         # Expand ANSI-C $'...' quotes (converts escapes like \n to actual newline)
         target_val = Word(target_val)._expand_all_ansi_c_quotes(target_val)
         # Strip $ from locale strings $"..."
-        target_val = re.sub(r'\$"', '"', target_val)
+        target_val = target_val.replace('$"', '"')
         # For fd duplication, target starts with & (e.g., "&1", "&2", "&-")
         if target_val.startswith("&"):
             # Determine the real operator
@@ -826,25 +926,26 @@ class Redirect(Node):
                 op = ">&"
             elif op == "<":
                 op = "<&"
-            fd_target = target_val[1:].rstrip("-")  # "&1" -> "1", "&1-" -> "1"
+            fd_target = _substring(target_val, 1, len(target_val)).rstrip(
+                "-"
+            )  # "&1" -> "1", "&1-" -> "1"
             if fd_target.isdigit():
-                return f'(redirect "{op}" {fd_target})'
+                return '(redirect "' + op + '" ' + fd_target + ")"
             elif target_val == "&-":
                 return '(redirect ">&-" 0)'
             else:
                 # Variable fd dup like >&$fd or >&$fd- (move) - strip the & and trailing -
-                return f'(redirect "{op}" "{fd_target}")'
+                return '(redirect "' + op + '" "' + fd_target + '")'
         # Handle case where op is already >& or <&
-        if op in (">&", "<&"):
+        if op == ">&" or op == "<&":
             if target_val.isdigit():
-                return f'(redirect "{op}" {target_val})'
+                return '(redirect "' + op + '" ' + target_val + ")"
             # Variable fd dup with move indicator (trailing -)
             target_val = target_val.rstrip("-")
-            return f'(redirect "{op}" "{target_val}")'
-        return f'(redirect "{op}" "{target_val}")'
+            return '(redirect "' + op + '" "' + target_val + '")'
+        return '(redirect "' + op + '" "' + target_val + '")'
 
 
-@dataclass
 class HereDoc(Node):
     """A here document <<DELIM ... DELIM."""
 
@@ -871,10 +972,9 @@ class HereDoc(Node):
 
     def to_sexp(self) -> str:
         op = "<<-" if self.strip_tabs else "<<"
-        return f'(redirect "{op}" "{self.content}")'
+        return '(redirect "' + op + '" "' + self.content + '")'
 
 
-@dataclass
 class Subshell(Node):
     """A subshell ( list )."""
 
@@ -887,13 +987,15 @@ class Subshell(Node):
         self.redirects = redirects
 
     def to_sexp(self) -> str:
-        base = f"(subshell {self.body.to_sexp()})"
+        base = "(subshell " + self.body.to_sexp() + ")"
         if self.redirects:
-            return base + " " + " ".join(r.to_sexp() for r in self.redirects)
+            redirect_parts = []
+            for r in self.redirects:
+                redirect_parts.append(r.to_sexp())
+            return base + " " + " ".join(redirect_parts)
         return base
 
 
-@dataclass
 class BraceGroup(Node):
     """A brace group { list; }."""
 
@@ -906,20 +1008,22 @@ class BraceGroup(Node):
         self.redirects = redirects
 
     def to_sexp(self) -> str:
-        base = f"(brace-group {self.body.to_sexp()})"
+        base = "(brace-group " + self.body.to_sexp() + ")"
         if self.redirects:
-            return base + " " + " ".join(r.to_sexp() for r in self.redirects)
+            redirect_parts = []
+            for r in self.redirects:
+                redirect_parts.append(r.to_sexp())
+            return base + " " + " ".join(redirect_parts)
         return base
 
 
-@dataclass
 class If(Node):
     """An if statement."""
 
     condition: Node
     then_body: Node
     else_body: Node | None = None
-    redirects: list[Node] = field(default_factory=list)
+    redirects: list[Node]
 
     def __init__(
         self, condition: Node, then_body: Node, else_body: Node = None, redirects: list[Node] = None
@@ -928,68 +1032,77 @@ class If(Node):
         self.condition = condition
         self.then_body = then_body
         self.else_body = else_body
-        self.redirects = redirects or []
+        if redirects is None:
+            redirects = []
+        self.redirects = redirects
 
     def to_sexp(self) -> str:
-        result = f"(if {self.condition.to_sexp()} {self.then_body.to_sexp()}"
+        result = "(if " + self.condition.to_sexp() + " " + self.then_body.to_sexp()
         if self.else_body:
-            result += f" {self.else_body.to_sexp()}"
-        result += ")"
+            result = result + " " + self.else_body.to_sexp()
+        result = result + ")"
         for r in self.redirects:
-            result += f" {r.to_sexp()}"
+            result = result + " " + r.to_sexp()
         return result
 
 
-@dataclass
 class While(Node):
     """A while loop."""
 
     condition: Node
     body: Node
-    redirects: list[Node] = field(default_factory=list)
+    redirects: list[Node]
 
     def __init__(self, condition: Node, body: Node, redirects: list[Node] = None):
         self.kind = "while"
         self.condition = condition
         self.body = body
-        self.redirects = redirects or []
+        if redirects is None:
+            redirects = []
+        self.redirects = redirects
 
     def to_sexp(self) -> str:
-        base = f"(while {self.condition.to_sexp()} {self.body.to_sexp()})"
+        base = "(while " + self.condition.to_sexp() + " " + self.body.to_sexp() + ")"
         if self.redirects:
-            return base + " " + " ".join(r.to_sexp() for r in self.redirects)
+            redirect_parts = []
+            for r in self.redirects:
+                redirect_parts.append(r.to_sexp())
+            return base + " " + " ".join(redirect_parts)
         return base
 
 
-@dataclass
 class Until(Node):
     """An until loop."""
 
     condition: Node
     body: Node
-    redirects: list[Node] = field(default_factory=list)
+    redirects: list[Node]
 
     def __init__(self, condition: Node, body: Node, redirects: list[Node] = None):
         self.kind = "until"
         self.condition = condition
         self.body = body
-        self.redirects = redirects or []
+        if redirects is None:
+            redirects = []
+        self.redirects = redirects
 
     def to_sexp(self) -> str:
-        base = f"(until {self.condition.to_sexp()} {self.body.to_sexp()})"
+        base = "(until " + self.condition.to_sexp() + " " + self.body.to_sexp() + ")"
         if self.redirects:
-            return base + " " + " ".join(r.to_sexp() for r in self.redirects)
+            redirect_parts = []
+            for r in self.redirects:
+                redirect_parts.append(r.to_sexp())
+            return base + " " + " ".join(redirect_parts)
         return base
 
 
-@dataclass
 class For(Node):
     """A for loop."""
 
     var: str
     words: list[Word] | None
     body: Node
-    redirects: list[Node] = field(default_factory=list)
+    redirects: list[Node]
 
     def __init__(
         self, var: str, words: list[Word] | None, body: Node, redirects: list[Node] = None
@@ -998,26 +1111,49 @@ class For(Node):
         self.var = var
         self.words = words
         self.body = body
-        self.redirects = redirects or []
+        if redirects is None:
+            redirects = []
+        self.redirects = redirects
 
     def to_sexp(self) -> str:
         # Oracle format: (for (word "var") (in (word "a") ...) body)
-        suffix = " " + " ".join(r.to_sexp() for r in self.redirects) if self.redirects else ""
+        suffix = ""
+        if self.redirects:
+            redirect_parts = []
+            for r in self.redirects:
+                redirect_parts.append(r.to_sexp())
+            suffix = " " + " ".join(redirect_parts)
         var_escaped = self.var.replace("\\", "\\\\").replace('"', '\\"')
         if self.words is None:
             # No 'in' clause - oracle implies (in (word "\"$@\""))
             return (
-                f'(for (word "{var_escaped}") (in (word "\\"$@\\"")) {self.body.to_sexp()}){suffix}'
+                '(for (word "'
+                + var_escaped
+                + '") (in (word "\\"$@\\"")) '
+                + self.body.to_sexp()
+                + ")"
+                + suffix
             )
         elif len(self.words) == 0:
             # Empty 'in' clause - oracle outputs (in)
-            return f'(for (word "{var_escaped}") (in) {self.body.to_sexp()}){suffix}'
+            return '(for (word "' + var_escaped + '") (in) ' + self.body.to_sexp() + ")" + suffix
         else:
-            word_strs = " ".join(w.to_sexp() for w in self.words)
-            return f'(for (word "{var_escaped}") (in {word_strs}) {self.body.to_sexp()}){suffix}'
+            word_parts = []
+            for w in self.words:
+                word_parts.append(w.to_sexp())
+            word_strs = " ".join(word_parts)
+            return (
+                '(for (word "'
+                + var_escaped
+                + '") (in '
+                + word_strs
+                + ") "
+                + self.body.to_sexp()
+                + ")"
+                + suffix
+            )
 
 
-@dataclass
 class ForArith(Node):
     """A C-style for loop: for ((init; cond; incr)); do ... done."""
 
@@ -1025,7 +1161,7 @@ class ForArith(Node):
     cond: str
     incr: str
     body: Node
-    redirects: list[Node] = field(default_factory=list)
+    redirects: list[Node]
 
     def __init__(self, init: str, cond: str, incr: str, body: Node, redirects: list[Node] = None):
         self.kind = "for-arith"
@@ -1033,7 +1169,9 @@ class ForArith(Node):
         self.cond = cond
         self.incr = incr
         self.body = body
-        self.redirects = redirects or []
+        if redirects is None:
+            redirects = []
+        self.redirects = redirects
 
     def to_sexp(self) -> str:
         # Oracle format: (arith-for (init (word "x")) (test (word "y")) (step (word "z")) body)
@@ -1045,25 +1183,38 @@ class ForArith(Node):
             val = val.replace("\\", "\\\\").replace('"', '\\"')
             return val
 
-        suffix = " " + " ".join(r.to_sexp() for r in self.redirects) if self.redirects else ""
+        suffix = ""
+        if self.redirects:
+            redirect_parts = []
+            for r in self.redirects:
+                redirect_parts.append(r.to_sexp())
+            suffix = " " + " ".join(redirect_parts)
         init_val = self.init if self.init else "1"
         cond_val = _normalize_fd_redirects(self.cond) if self.cond else "1"
         incr_val = self.incr if self.incr else "1"
         return (
-            f'(arith-for (init (word "{format_arith_val(init_val)}")) '
-            f'(test (word "{format_arith_val(cond_val)}")) '
-            f'(step (word "{format_arith_val(incr_val)}")) {self.body.to_sexp()}){suffix}'
+            '(arith-for (init (word "'
+            + format_arith_val(init_val)
+            + '")) '
+            + '(test (word "'
+            + format_arith_val(cond_val)
+            + '")) '
+            + '(step (word "'
+            + format_arith_val(incr_val)
+            + '")) '
+            + self.body.to_sexp()
+            + ")"
+            + suffix
         )
 
 
-@dataclass
 class Select(Node):
     """A select statement."""
 
     var: str
     words: list[Word] | None
     body: Node
-    redirects: list[Node] = field(default_factory=list)
+    redirects: list[Node]
 
     def __init__(
         self, var: str, words: list[Word] | None, body: Node, redirects: list[Node] = None
@@ -1072,22 +1223,43 @@ class Select(Node):
         self.var = var
         self.words = words
         self.body = body
-        self.redirects = redirects or []
+        if redirects is None:
+            redirects = []
+        self.redirects = redirects
 
     def to_sexp(self) -> str:
         # Oracle format: (select (word "var") (in (word "a") ...) body)
-        suffix = " " + " ".join(r.to_sexp() for r in self.redirects) if self.redirects else ""
+        suffix = ""
+        if self.redirects:
+            redirect_parts = []
+            for r in self.redirects:
+                redirect_parts.append(r.to_sexp())
+            suffix = " " + " ".join(redirect_parts)
         var_escaped = self.var.replace("\\", "\\\\").replace('"', '\\"')
         if self.words is not None:
-            word_strs = " ".join(w.to_sexp() for w in self.words)
-            in_clause = f"(in {word_strs})" if self.words else "(in)"
+            word_parts = []
+            for w in self.words:
+                word_parts.append(w.to_sexp())
+            word_strs = " ".join(word_parts)
+            if self.words:
+                in_clause = "(in " + word_strs + ")"
+            else:
+                in_clause = "(in)"
         else:
             # No 'in' clause means implicit "$@"
             in_clause = '(in (word "\\"$@\\""))'
-        return f'(select (word "{var_escaped}") {in_clause} {self.body.to_sexp()}){suffix}'
+        return (
+            '(select (word "'
+            + var_escaped
+            + '") '
+            + in_clause
+            + " "
+            + self.body.to_sexp()
+            + ")"
+            + suffix
+        )
 
 
-@dataclass
 class Case(Node):
     """A case statement."""
 
@@ -1099,18 +1271,24 @@ class Case(Node):
         self.kind = "case"
         self.word = word
         self.patterns = patterns
-        self.redirects = redirects or []
+        if redirects is None:
+            redirects = []
+        self.redirects = redirects
 
     def to_sexp(self) -> str:
-        parts = [f"(case {self.word.to_sexp()}"]
-        parts.extend(p.to_sexp() for p in self.patterns)
+        parts = []
+        parts.append("(case " + self.word.to_sexp())
+        for p in self.patterns:
+            parts.append(p.to_sexp())
         base = " ".join(parts) + ")"
         if self.redirects:
-            return base + " " + " ".join(r.to_sexp() for r in self.redirects)
+            redirect_parts = []
+            for r in self.redirects:
+                redirect_parts.append(r.to_sexp())
+            return base + " " + " ".join(redirect_parts)
         return base
 
 
-@dataclass
 class CasePattern(Node):
     """A pattern clause in a case statement."""
 
@@ -1134,9 +1312,13 @@ class CasePattern(Node):
         while i < len(self.pattern):
             ch = self.pattern[i]
             if ch == "\\" and i + 1 < len(self.pattern):
-                current.append(self.pattern[i : i + 2])
+                current.append(_substring(self.pattern, i, i + 2))
                 i += 2
-            elif ch in "@?*+!" and i + 1 < len(self.pattern) and self.pattern[i + 1] == "(":
+            elif (
+                (ch == "@" or ch == "?" or ch == "*" or ch == "+" or ch == "!")
+                and i + 1 < len(self.pattern)
+                and self.pattern[i + 1] == "("
+            ):
                 # Start of extglob: @(, ?(, *(, +(, !(
                 current.append(ch)
                 current.append("(")
@@ -1161,7 +1343,9 @@ class CasePattern(Node):
                 # First scan to check if ] exists before ) at same depth
                 scan_pos = i + 1
                 # Skip [! or [^ at start
-                if scan_pos < len(self.pattern) and self.pattern[scan_pos] in "!^":
+                if scan_pos < len(self.pattern) and (
+                    self.pattern[scan_pos] == "!" or self.pattern[scan_pos] == "^"
+                ):
                     scan_pos += 1
                 # Handle ] as first char - it's literal only if there's more content
                 # [] is a complete (empty) bracket, but []] has literal ] then closing ]
@@ -1173,7 +1357,9 @@ class CasePattern(Node):
                         if self.pattern[check_pos] == "]":
                             has_another_close = True
                             break
-                        if self.pattern[check_pos] in "|)" and depth == 0:
+                        if (
+                            self.pattern[check_pos] == "|" or self.pattern[check_pos] == ")"
+                        ) and depth == 0:
                             break
                     if has_another_close:
                         scan_pos += 1  # Skip first ] as literal
@@ -1196,7 +1382,7 @@ class CasePattern(Node):
                     current.append(ch)
                     i += 1
                     # Handle [! or [^ at start
-                    if i < len(self.pattern) and self.pattern[i] in "!^":
+                    if i < len(self.pattern) and (self.pattern[i] == "!" or self.pattern[i] == "^"):
                         current.append(self.pattern[i])
                         i += 1
                     # Handle ] as first char - only literal if there's another ]
@@ -1208,7 +1394,9 @@ class CasePattern(Node):
                             if self.pattern[check_pos] == "]":
                                 has_another = True
                                 break
-                            if self.pattern[check_pos] in "|)" and depth == 0:
+                            if (
+                                self.pattern[check_pos] == "|" or self.pattern[check_pos] == ")"
+                            ) and depth == 0:
                                 break
                         if has_another:
                             current.append(self.pattern[i])
@@ -1256,9 +1444,9 @@ class CasePattern(Node):
             # Use Word.to_sexp() to properly expand ANSI-C quotes and escape
             word_list.append(Word(alt).to_sexp())
         pattern_str = " ".join(word_list)
-        parts = [f"(pattern ({pattern_str})"]
+        parts = ["(pattern (" + pattern_str + ")"]
         if self.body:
-            parts.append(f" {self.body.to_sexp()}")
+            parts.append(" " + self.body.to_sexp())
         else:
             parts.append(" ()")
         # Oracle doesn't output fallthrough/falltest markers
@@ -1266,7 +1454,6 @@ class CasePattern(Node):
         return "".join(parts)
 
 
-@dataclass
 class Function(Node):
     """A function definition."""
 
@@ -1279,10 +1466,9 @@ class Function(Node):
         self.body = body
 
     def to_sexp(self) -> str:
-        return f'(function "{self.name}" {self.body.to_sexp()})'
+        return '(function "' + self.name + '" ' + self.body.to_sexp() + ")"
 
 
-@dataclass
 class ParamExpansion(Node):
     """A parameter expansion ${var} or ${var:-default}."""
 
@@ -1300,12 +1486,12 @@ class ParamExpansion(Node):
         escaped_param = self.param.replace("\\", "\\\\").replace('"', '\\"')
         if self.op is not None:
             escaped_op = self.op.replace("\\", "\\\\").replace('"', '\\"')
-            escaped_arg = (self.arg or "").replace("\\", "\\\\").replace('"', '\\"')
-            return f'(param "{escaped_param}" "{escaped_op}" "{escaped_arg}")'
-        return f'(param "{escaped_param}")'
+            arg_val = self.arg if self.arg is not None else ""
+            escaped_arg = arg_val.replace("\\", "\\\\").replace('"', '\\"')
+            return '(param "' + escaped_param + '" "' + escaped_op + '" "' + escaped_arg + '")'
+        return '(param "' + escaped_param + '")'
 
 
-@dataclass
 class ParamLength(Node):
     """A parameter length expansion ${#var}."""
 
@@ -1317,10 +1503,9 @@ class ParamLength(Node):
 
     def to_sexp(self) -> str:
         escaped = self.param.replace("\\", "\\\\").replace('"', '\\"')
-        return f'(param-len "{escaped}")'
+        return '(param-len "' + escaped + '")'
 
 
-@dataclass
 class ParamIndirect(Node):
     """An indirect parameter expansion ${!var} or ${!var<op><arg>}."""
 
@@ -1338,12 +1523,12 @@ class ParamIndirect(Node):
         escaped = self.param.replace("\\", "\\\\").replace('"', '\\"')
         if self.op is not None:
             escaped_op = self.op.replace("\\", "\\\\").replace('"', '\\"')
-            escaped_arg = (self.arg or "").replace("\\", "\\\\").replace('"', '\\"')
-            return f'(param-indirect "{escaped}" "{escaped_op}" "{escaped_arg}")'
-        return f'(param-indirect "{escaped}")'
+            arg_val = self.arg if self.arg is not None else ""
+            escaped_arg = arg_val.replace("\\", "\\\\").replace('"', '\\"')
+            return '(param-indirect "' + escaped + '" "' + escaped_op + '" "' + escaped_arg + '")'
+        return '(param-indirect "' + escaped + '")'
 
 
-@dataclass
 class CommandSubstitution(Node):
     """A command substitution $(...) or `...`."""
 
@@ -1354,10 +1539,9 @@ class CommandSubstitution(Node):
         self.command = command
 
     def to_sexp(self) -> str:
-        return f"(cmdsub {self.command.to_sexp()})"
+        return "(cmdsub " + self.command.to_sexp() + ")"
 
 
-@dataclass
 class ArithmeticExpansion(Node):
     """An arithmetic expansion $((...)) with parsed internals."""
 
@@ -1370,10 +1554,9 @@ class ArithmeticExpansion(Node):
     def to_sexp(self) -> str:
         if self.expression is None:
             return "(arith)"
-        return f"(arith {self.expression.to_sexp()})"
+        return "(arith " + self.expression.to_sexp() + ")"
 
 
-@dataclass
 class ArithmeticCommand(Node):
     """An arithmetic command ((...)) with parsed internals."""
 
@@ -1386,24 +1569,28 @@ class ArithmeticCommand(Node):
     ):
         self.kind = "arith-cmd"
         self.expression = expression
-        self.redirects = redirects or []
+        if redirects is None:
+            redirects = []
+        self.redirects = redirects
         self.raw_content = raw_content
 
     def to_sexp(self) -> str:
         # Oracle format: (arith (word "content"))
         # Redirects are siblings: (arith (word "...")) (redirect ...)
         escaped = self.raw_content.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-        result = f'(arith (word "{escaped}"))'
+        result = '(arith (word "' + escaped + '"))'
         if self.redirects:
-            redirect_sexps = " ".join(r.to_sexp() for r in self.redirects)
-            return f"{result} {redirect_sexps}"
+            redirect_parts = []
+            for r in self.redirects:
+                redirect_parts.append(r.to_sexp())
+            redirect_sexps = " ".join(redirect_parts)
+            return result + " " + redirect_sexps
         return result
 
 
 # Arithmetic expression nodes
 
 
-@dataclass
 class ArithNumber(Node):
     """A numeric literal in arithmetic context."""
 
@@ -1414,10 +1601,9 @@ class ArithNumber(Node):
         self.value = value
 
     def to_sexp(self) -> str:
-        return f'(number "{self.value}")'
+        return '(number "' + self.value + '")'
 
 
-@dataclass
 class ArithVar(Node):
     """A variable reference in arithmetic context (without $)."""
 
@@ -1428,10 +1614,9 @@ class ArithVar(Node):
         self.name = name
 
     def to_sexp(self) -> str:
-        return f'(var "{self.name}")'
+        return '(var "' + self.name + '")'
 
 
-@dataclass
 class ArithBinaryOp(Node):
     """A binary operation in arithmetic."""
 
@@ -1446,10 +1631,11 @@ class ArithBinaryOp(Node):
         self.right = right
 
     def to_sexp(self) -> str:
-        return f'(binary-op "{self.op}" {self.left.to_sexp()} {self.right.to_sexp()})'
+        return (
+            '(binary-op "' + self.op + '" ' + self.left.to_sexp() + " " + self.right.to_sexp() + ")"
+        )
 
 
-@dataclass
 class ArithUnaryOp(Node):
     """A unary operation in arithmetic."""
 
@@ -1462,10 +1648,9 @@ class ArithUnaryOp(Node):
         self.operand = operand
 
     def to_sexp(self) -> str:
-        return f'(unary-op "{self.op}" {self.operand.to_sexp()})'
+        return '(unary-op "' + self.op + '" ' + self.operand.to_sexp() + ")"
 
 
-@dataclass
 class ArithPreIncr(Node):
     """Pre-increment ++var."""
 
@@ -1476,10 +1661,9 @@ class ArithPreIncr(Node):
         self.operand = operand
 
     def to_sexp(self) -> str:
-        return f"(pre-incr {self.operand.to_sexp()})"
+        return "(pre-incr " + self.operand.to_sexp() + ")"
 
 
-@dataclass
 class ArithPostIncr(Node):
     """Post-increment var++."""
 
@@ -1490,10 +1674,9 @@ class ArithPostIncr(Node):
         self.operand = operand
 
     def to_sexp(self) -> str:
-        return f"(post-incr {self.operand.to_sexp()})"
+        return "(post-incr " + self.operand.to_sexp() + ")"
 
 
-@dataclass
 class ArithPreDecr(Node):
     """Pre-decrement --var."""
 
@@ -1504,10 +1687,9 @@ class ArithPreDecr(Node):
         self.operand = operand
 
     def to_sexp(self) -> str:
-        return f"(pre-decr {self.operand.to_sexp()})"
+        return "(pre-decr " + self.operand.to_sexp() + ")"
 
 
-@dataclass
 class ArithPostDecr(Node):
     """Post-decrement var--."""
 
@@ -1518,10 +1700,9 @@ class ArithPostDecr(Node):
         self.operand = operand
 
     def to_sexp(self) -> str:
-        return f"(post-decr {self.operand.to_sexp()})"
+        return "(post-decr " + self.operand.to_sexp() + ")"
 
 
-@dataclass
 class ArithAssign(Node):
     """Assignment operation (=, +=, -=, etc.)."""
 
@@ -1536,10 +1717,11 @@ class ArithAssign(Node):
         self.value = value
 
     def to_sexp(self) -> str:
-        return f'(assign "{self.op}" {self.target.to_sexp()} {self.value.to_sexp()})'
+        return (
+            '(assign "' + self.op + '" ' + self.target.to_sexp() + " " + self.value.to_sexp() + ")"
+        )
 
 
-@dataclass
 class ArithTernary(Node):
     """Ternary conditional expr ? expr : expr."""
 
@@ -1554,10 +1736,17 @@ class ArithTernary(Node):
         self.if_false = if_false
 
     def to_sexp(self) -> str:
-        return f"(ternary {self.condition.to_sexp()} {self.if_true.to_sexp()} {self.if_false.to_sexp()})"
+        return (
+            "(ternary "
+            + self.condition.to_sexp()
+            + " "
+            + self.if_true.to_sexp()
+            + " "
+            + self.if_false.to_sexp()
+            + ")"
+        )
 
 
-@dataclass
 class ArithComma(Node):
     """Comma operator expr, expr."""
 
@@ -1570,10 +1759,9 @@ class ArithComma(Node):
         self.right = right
 
     def to_sexp(self) -> str:
-        return f"(comma {self.left.to_sexp()} {self.right.to_sexp()})"
+        return "(comma " + self.left.to_sexp() + " " + self.right.to_sexp() + ")"
 
 
-@dataclass
 class ArithSubscript(Node):
     """Array subscript arr[expr]."""
 
@@ -1586,10 +1774,9 @@ class ArithSubscript(Node):
         self.index = index
 
     def to_sexp(self) -> str:
-        return f'(subscript "{self.array}" {self.index.to_sexp()})'
+        return '(subscript "' + self.array + '" ' + self.index.to_sexp() + ")"
 
 
-@dataclass
 class ArithEscape(Node):
     """An escaped character in arithmetic expression."""
 
@@ -1600,10 +1787,9 @@ class ArithEscape(Node):
         self.char = char
 
     def to_sexp(self) -> str:
-        return f'(escape "{self.char}")'
+        return '(escape "' + self.char + '")'
 
 
-@dataclass
 class ArithDeprecated(Node):
     """A deprecated arithmetic expansion $[expr]."""
 
@@ -1615,10 +1801,9 @@ class ArithDeprecated(Node):
 
     def to_sexp(self) -> str:
         escaped = self.expression.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-        return f'(arith-deprecated "{escaped}")'
+        return '(arith-deprecated "' + escaped + '")'
 
 
-@dataclass
 class AnsiCQuote(Node):
     """An ANSI-C quoted string $'...'."""
 
@@ -1630,10 +1815,9 @@ class AnsiCQuote(Node):
 
     def to_sexp(self) -> str:
         escaped = self.content.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-        return f'(ansi-c "{escaped}")'
+        return '(ansi-c "' + escaped + '")'
 
 
-@dataclass
 class LocaleString(Node):
     """A locale-translated string $"..."."""
 
@@ -1645,10 +1829,9 @@ class LocaleString(Node):
 
     def to_sexp(self) -> str:
         escaped = self.content.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-        return f'(locale "{escaped}")'
+        return '(locale "' + escaped + '")'
 
 
-@dataclass
 class ProcessSubstitution(Node):
     """A process substitution <(...) or >(...)."""
 
@@ -1661,10 +1844,9 @@ class ProcessSubstitution(Node):
         self.command = command
 
     def to_sexp(self) -> str:
-        return f'(procsub "{self.direction}" {self.command.to_sexp()})'
+        return '(procsub "' + self.direction + '" ' + self.command.to_sexp() + ")"
 
 
-@dataclass
 class Negation(Node):
     """Pipeline negation with !."""
 
@@ -1678,10 +1860,9 @@ class Negation(Node):
         if self.pipeline is None:
             # Bare "!" with no command - oracle shows empty command
             return "(negation (command))"
-        return f"(negation {self.pipeline.to_sexp()})"
+        return "(negation " + self.pipeline.to_sexp() + ")"
 
 
-@dataclass
 class Time(Node):
     """Time measurement with time keyword."""
 
@@ -1698,11 +1879,10 @@ class Time(Node):
             # Bare "time" with no command - oracle shows empty command
             return "(time -p (command))" if self.posix else "(time (command))"
         if self.posix:
-            return f"(time -p {self.pipeline.to_sexp()})"
-        return f"(time {self.pipeline.to_sexp()})"
+            return "(time -p " + self.pipeline.to_sexp() + ")"
+        return "(time " + self.pipeline.to_sexp() + ")"
 
 
-@dataclass
 class ConditionalExpr(Node):
     """A conditional expression [[ expression ]]."""
 
@@ -1712,23 +1892,29 @@ class ConditionalExpr(Node):
     def __init__(self, body: "Node | str", redirects: list[Node] = None):
         self.kind = "cond-expr"
         self.body = body
-        self.redirects = redirects or []
+        if redirects is None:
+            redirects = []
+        self.redirects = redirects
 
     def to_sexp(self) -> str:
         # Oracle format: (cond ...) not (cond-expr ...)
         # Redirects are siblings, not children: (cond ...) (redirect ...)
-        if isinstance(self.body, str):
+        body_kind = getattr(self.body, "kind", None)
+        if body_kind is None:
+            # body is a string
             escaped = self.body.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-            result = f'(cond "{escaped}")'
+            result = '(cond "' + escaped + '")'
         else:
-            result = f"(cond {self.body.to_sexp()})"
+            result = "(cond " + self.body.to_sexp() + ")"
         if self.redirects:
-            redirect_sexps = " ".join(r.to_sexp() for r in self.redirects)
-            return f"{result} {redirect_sexps}"
+            redirect_parts = []
+            for r in self.redirects:
+                redirect_parts.append(r.to_sexp())
+            redirect_sexps = " ".join(redirect_parts)
+            return result + " " + redirect_sexps
         return result
 
 
-@dataclass
 class UnaryTest(Node):
     """A unary test in [[ ]], e.g., -f file, -z string."""
 
@@ -1743,10 +1929,9 @@ class UnaryTest(Node):
     def to_sexp(self) -> str:
         # Oracle format: (cond-unary "-f" (cond-term "file"))
         # cond-term preserves content as-is (no backslash escaping)
-        return f'(cond-unary "{self.op}" (cond-term "{self.operand.value}"))'
+        return '(cond-unary "' + self.op + '" (cond-term "' + self.operand.value + '"))'
 
 
-@dataclass
 class BinaryTest(Node):
     """A binary test in [[ ]], e.g., $a == $b, file1 -nt file2."""
 
@@ -1765,10 +1950,17 @@ class BinaryTest(Node):
         # cond-term preserves content as-is (no backslash escaping)
         left_val = self.left.get_cond_formatted_value()
         right_val = self.right.get_cond_formatted_value()
-        return f'(cond-binary "{self.op}" (cond-term "{left_val}") (cond-term "{right_val}"))'
+        return (
+            '(cond-binary "'
+            + self.op
+            + '" (cond-term "'
+            + left_val
+            + '") (cond-term "'
+            + right_val
+            + '"))'
+        )
 
 
-@dataclass
 class CondAnd(Node):
     """Logical AND in [[ ]], e.g., expr1 && expr2."""
 
@@ -1781,10 +1973,9 @@ class CondAnd(Node):
         self.right = right
 
     def to_sexp(self) -> str:
-        return f"(cond-and {self.left.to_sexp()} {self.right.to_sexp()})"
+        return "(cond-and " + self.left.to_sexp() + " " + self.right.to_sexp() + ")"
 
 
-@dataclass
 class CondOr(Node):
     """Logical OR in [[ ]], e.g., expr1 || expr2."""
 
@@ -1797,10 +1988,9 @@ class CondOr(Node):
         self.right = right
 
     def to_sexp(self) -> str:
-        return f"(cond-or {self.left.to_sexp()} {self.right.to_sexp()})"
+        return "(cond-or " + self.left.to_sexp() + " " + self.right.to_sexp() + ")"
 
 
-@dataclass
 class CondNot(Node):
     """Logical NOT in [[ ]], e.g., ! expr."""
 
@@ -1815,7 +2005,6 @@ class CondNot(Node):
         return self.operand.to_sexp()
 
 
-@dataclass
 class CondParen(Node):
     """Parenthesized group in [[ ]], e.g., ( expr )."""
 
@@ -1826,10 +2015,9 @@ class CondParen(Node):
         self.inner = inner
 
     def to_sexp(self) -> str:
-        return f"(cond-expr {self.inner.to_sexp()})"
+        return "(cond-expr " + self.inner.to_sexp() + ")"
 
 
-@dataclass
 class Array(Node):
     """An array literal (word1 word2 ...)."""
 
@@ -1842,11 +2030,13 @@ class Array(Node):
     def to_sexp(self) -> str:
         if not self.elements:
             return "(array)"
-        inner = " ".join(e.to_sexp() for e in self.elements)
-        return f"(array {inner})"
+        parts = []
+        for e in self.elements:
+            parts.append(e.to_sexp())
+        inner = " ".join(parts)
+        return "(array " + inner + ")"
 
 
-@dataclass
 class Coproc(Node):
     """A coprocess coproc [NAME] command."""
 
@@ -1861,16 +2051,16 @@ class Coproc(Node):
     def to_sexp(self) -> str:
         # Use provided name for compound commands, "COPROC" for simple commands
         name = self.name if self.name else "COPROC"
-        return f'(coproc "{name}" {self.command.to_sexp()})'
+        return '(coproc "' + name + '" ' + self.command.to_sexp() + ")"
 
 
 def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -> str:
     """Format an AST node for command substitution output (oracle pretty-print format)."""
     sp = " " * indent
     inner_sp = " " * (indent + 4)
-    if isinstance(node, Empty):
+    if node.kind == "empty":
         return ""
-    if isinstance(node, Command):
+    if node.kind == "command":
         parts = []
         for w in node.words:
             val = w._expand_all_ansi_c_quotes(w.value)
@@ -1879,132 +2069,161 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
         for r in node.redirects:
             parts.append(_format_redirect(r))
         return " ".join(parts)
-    if isinstance(node, Pipeline):
-        return " | ".join(_format_cmdsub_node(cmd, indent) for cmd in node.commands)
-    if isinstance(node, List):
+    if node.kind == "pipeline":
+        cmd_parts = []
+        for cmd in node.commands:
+            cmd_parts.append(_format_cmdsub_node(cmd, indent))
+        return " | ".join(cmd_parts)
+    if node.kind == "list":
         # Join commands with operators
         result = []
         for p in node.parts:
-            if isinstance(p, Operator):
+            if p.kind == "operator":
                 if p.op == ";":
                     result.append(";")
                 elif p.op == "\n":
                     # Skip newline if it follows a semicolon (redundant separator)
-                    if result and result[-1] == ";":
+                    if result and result[len(result) - 1] == ";":
                         continue
                     result.append("\n")
                 elif p.op == "&":
                     result.append(" &")
                 else:
-                    result.append(f" {p.op}")
+                    result.append(" " + p.op)
             else:
-                if result and not result[-1].endswith((" ", "\n")):
+                if result and not result[len(result) - 1].endswith((" ", "\n")):
                     result.append(" ")
                 result.append(_format_cmdsub_node(p, indent))
         # Strip trailing ; or newline
         s = "".join(result)
         while s.endswith(";") or s.endswith("\n"):
-            s = s[:-1]
+            s = _substring(s, 0, len(s) - 1)
         return s
-    if isinstance(node, If):
+    if node.kind == "if":
         cond = _format_cmdsub_node(node.condition, indent)
         then_body = _format_cmdsub_node(node.then_body, indent + 4)
-        result = f"if {cond}; then\n{inner_sp}{then_body};"
+        result = "if " + cond + "; then\n" + inner_sp + then_body + ";"
         if node.else_body:
             else_body = _format_cmdsub_node(node.else_body, indent + 4)
-            result += f"\n{sp}else\n{inner_sp}{else_body};"
-        result += f"\n{sp}fi"
+            result = result + "\n" + sp + "else\n" + inner_sp + else_body + ";"
+        result = result + "\n" + sp + "fi"
         return result
-    if isinstance(node, While):
+    if node.kind == "while":
         cond = _format_cmdsub_node(node.condition, indent)
         body = _format_cmdsub_node(node.body, indent + 4)
-        return f"while {cond}; do\n{inner_sp}{body};\n{sp}done"
-    if isinstance(node, Until):
+        return "while " + cond + "; do\n" + inner_sp + body + ";\n" + sp + "done"
+    if node.kind == "until":
         cond = _format_cmdsub_node(node.condition, indent)
         body = _format_cmdsub_node(node.body, indent + 4)
-        return f"until {cond}; do\n{inner_sp}{body};\n{sp}done"
-    if isinstance(node, For):
+        return "until " + cond + "; do\n" + inner_sp + body + ";\n" + sp + "done"
+    if node.kind == "for":
         var = node.var
         body = _format_cmdsub_node(node.body, indent + 4)
         if node.words:
-            words = " ".join(w.value for w in node.words)
-            return f"for {var} in {words};\ndo\n{inner_sp}{body};\n{sp}done"
-        return f"for {var};\ndo\n{inner_sp}{body};\n{sp}done"
-    if isinstance(node, Case):
+            word_vals = []
+            for w in node.words:
+                word_vals.append(w.value)
+            words = " ".join(word_vals)
+            return "for " + var + " in " + words + ";\ndo\n" + inner_sp + body + ";\n" + sp + "done"
+        return "for " + var + ";\ndo\n" + inner_sp + body + ";\n" + sp + "done"
+    if node.kind == "case":
         word = node.word.value
         patterns = []
-        for i, p in enumerate(node.patterns):
+        i = 0
+        while i < len(node.patterns):
+            p = node.patterns[i]
             pat = p.pattern.replace("|", " | ")
             body = _format_cmdsub_node(p.body, indent + 8) if p.body else ""
             term = p.terminator  # ;;, ;&, or ;;&
+            pat_indent = " " * (indent + 8)
+            term_indent = " " * (indent + 4)
             if i == 0:
                 # First pattern on same line as 'in'
-                patterns.append(f" {pat})\n{' ' * (indent + 8)}{body}\n{' ' * (indent + 4)}{term}")
+                patterns.append(" " + pat + ")\n" + pat_indent + body + "\n" + term_indent + term)
             else:
-                patterns.append(f"{pat})\n{' ' * (indent + 8)}{body}\n{' ' * (indent + 4)}{term}")
-        pattern_str = f"\n{' ' * (indent + 4)}".join(patterns)
-        return f"case {word} in{pattern_str}\n{sp}esac"
-    if isinstance(node, Function):
+                patterns.append(pat + ")\n" + pat_indent + body + "\n" + term_indent + term)
+            i += 1
+        pattern_str = ("\n" + " " * (indent + 4)).join(patterns)
+        return "case " + word + " in" + pattern_str + "\n" + sp + "esac"
+    if node.kind == "function":
         name = node.name
         # Get the body content - if it's a BraceGroup, unwrap it
-        if isinstance(node.body, BraceGroup):
+        if node.body.kind == "brace-group":
             body = _format_cmdsub_node(node.body.body, indent + 4)
         else:
             body = _format_cmdsub_node(node.body, indent + 4)
         body = body.rstrip(";")  # Strip trailing semicolons
-        return f"function {name} () \n{{ \n{inner_sp}{body}\n}}"
-    if isinstance(node, Subshell):
+        return "function " + name + " () \n{ \n" + inner_sp + body + "\n}"
+    if node.kind == "subshell":
         body = _format_cmdsub_node(node.body, indent, in_procsub)
-        redirects = " ".join(_format_redirect(r) for r in node.redirects) if node.redirects else ""
+        redirects = ""
+        if node.redirects:
+            redirect_parts = []
+            for r in node.redirects:
+                redirect_parts.append(_format_redirect(r))
+            redirects = " ".join(redirect_parts)
         if in_procsub:
             if redirects:
-                return f"({body}) {redirects}"
-            return f"({body})"
+                return "(" + body + ") " + redirects
+            return "(" + body + ")"
         if redirects:
-            return f"( {body} ) {redirects}"
-        return f"( {body} )"
-    if isinstance(node, BraceGroup):
+            return "( " + body + " ) " + redirects
+        return "( " + body + " )"
+    if node.kind == "brace-group":
         body = _format_cmdsub_node(node.body, indent)
         body = body.rstrip(";")  # Strip trailing semicolons before adding our own
-        return f"{{ {body}; }}"
-    if isinstance(node, ArithmeticCommand):
-        return f"(({node.raw_content}))"
+        return "{ " + body + "; }"
+    if node.kind == "arith-cmd":
+        return "((" + node.raw_content + "))"
     # Fallback: return empty for unknown types
     return ""
 
 
 def _format_redirect(r: "Redirect | HereDoc") -> str:
     """Format a redirect for command substitution output."""
-    if isinstance(r, HereDoc):
+    if r.kind == "heredoc":
         # Include heredoc content: <<DELIM\ncontent\nDELIM\n
         op = "<<-" if r.strip_tabs else "<<"
-        delim = f"'{r.delimiter}'" if r.quoted else r.delimiter
-        return f"{op}{delim}\n{r.content}{r.delimiter}\n"
+        delim = "'" + r.delimiter + "'" if r.quoted else r.delimiter
+        return op + delim + "\n" + r.content + r.delimiter + "\n"
     op = r.op
     target = r.target.value
     # For fd duplication (target starts with &), handle normalization
     if target.startswith("&"):
         # Normalize N<&- to N>&- (close always uses >)
         if target == "&-" and op.endswith("<"):
-            op = op[:-1] + ">"
+            op = _substring(op, 0, len(op) - 1) + ">"
         # Add default fd for bare >&N or <&N
         if op == ">":
             op = "1>"
         elif op == "<":
             op = "0<"
-        return f"{op}{target}"
-    return f"{op} {target}"
+        return op + target
+    return op + " " + target
 
 
 def _normalize_fd_redirects(s: str) -> str:
     """Normalize fd redirects in a raw string: >&2 -> 1>&2, <&N -> 0<&N."""
-    import re
-
     # Match >&N or <&N not preceded by a digit, add default fd
-    # >&N -> 1>&N, <&N -> 0<&N
-    s = re.sub(r"(?<![0-9])>&(\d)", r"1>&\1", s)
-    s = re.sub(r"(?<![0-9])<&(\d)", r"0<&\1", s)
-    return s
+    result = []
+    i = 0
+    while i < len(s):
+        # Check for >&N or <&N
+        if i + 2 < len(s) and s[i + 1] == "&" and s[i + 2].isdigit():
+            prev_is_digit = i > 0 and s[i - 1].isdigit()
+            if s[i] == ">" and not prev_is_digit:
+                result.append("1>&")
+                result.append(s[i + 2])
+                i += 3
+                continue
+            elif s[i] == "<" and not prev_is_digit:
+                result.append("0<&")
+                result.append(s[i + 2])
+                i += 3
+                continue
+        result.append(s[i])
+        i += 1
+    return "".join(result)
 
 
 def _find_cmdsub_end(value: str, start: int) -> int:
@@ -2038,7 +2257,7 @@ def _find_cmdsub_end(value: str, start: int) -> int:
             continue
         if in_double:
             # Inside double quotes, $() command substitution is still active
-            if value[i : i + 2] == "$(" and value[i : i + 3] != "$((":
+            if _starts_with_at(value, i, "$(") and not _starts_with_at(value, i, "$(("):
                 # Recursively find end of nested command substitution
                 j = _find_cmdsub_end(value, i + 2)
                 i = j
@@ -2048,34 +2267,44 @@ def _find_cmdsub_end(value: str, start: int) -> int:
             continue
         # Handle comments - skip from # to end of line
         # Only treat # as comment if preceded by whitespace or at start
-        if c == "#" and (i == start or value[i - 1] in " \t\n;|&()"):
+        if c == "#" and (
+            i == start
+            or value[i - 1] == " "
+            or value[i - 1] == "\t"
+            or value[i - 1] == "\n"
+            or value[i - 1] == ";"
+            or value[i - 1] == "|"
+            or value[i - 1] == "&"
+            or value[i - 1] == "("
+            or value[i - 1] == ")"
+        ):
             while i < len(value) and value[i] != "\n":
                 i += 1
             continue
         # Handle heredocs
-        if value[i : i + 2] == "<<":
+        if _starts_with_at(value, i, "<<"):
             i = _skip_heredoc(value, i)
             continue
         # Check for 'case' keyword
-        if value[i : i + 4] == "case" and _is_word_boundary(value, i, 4):
+        if _starts_with_at(value, i, "case") and _is_word_boundary(value, i, 4):
             case_depth += 1
             in_case_patterns = False
             i += 4
             continue
         # Check for 'in' keyword (after case)
-        if case_depth > 0 and value[i : i + 2] == "in" and _is_word_boundary(value, i, 2):
+        if case_depth > 0 and _starts_with_at(value, i, "in") and _is_word_boundary(value, i, 2):
             in_case_patterns = True
             i += 2
             continue
         # Check for 'esac' keyword
-        if value[i : i + 4] == "esac" and _is_word_boundary(value, i, 4):
+        if _starts_with_at(value, i, "esac") and _is_word_boundary(value, i, 4):
             if case_depth > 0:
                 case_depth -= 1
                 in_case_patterns = False
             i += 4
             continue
         # Check for ';;' (end of case pattern, next pattern or esac follows)
-        if value[i : i + 2] == ";;":
+        if _starts_with_at(value, i, ";;"):
             i += 2
             continue
         # Handle parens
@@ -2099,32 +2328,32 @@ def _skip_heredoc(value: str, start: int) -> int:
     if i < len(value) and value[i] == "-":
         i += 1
     # Skip whitespace before delimiter
-    while i < len(value) and value[i] in " \t":
+    while i < len(value) and _is_whitespace_no_newline(value[i]):
         i += 1
     # Extract delimiter - may be quoted
     delim_start = i
     quote_char = None
-    if i < len(value) and value[i] in "\"'":
+    if i < len(value) and (value[i] == '"' or value[i] == "'"):
         quote_char = value[i]
         i += 1
         delim_start = i
         while i < len(value) and value[i] != quote_char:
             i += 1
-        delimiter = value[delim_start:i]
+        delimiter = _substring(value, delim_start, i)
         if i < len(value):
             i += 1  # Skip closing quote
     elif i < len(value) and value[i] == "\\":
         # Backslash-quoted delimiter like <<\EOF
         i += 1
         delim_start = i
-        while i < len(value) and value[i] not in " \t\n":
+        while i < len(value) and not _is_whitespace(value[i]):
             i += 1
-        delimiter = value[delim_start:i]
+        delimiter = _substring(value, delim_start, i)
     else:
         # Unquoted delimiter
-        while i < len(value) and value[i] not in " \t\n":
+        while i < len(value) and not _is_whitespace(value[i]):
             i += 1
-        delimiter = value[delim_start:i]
+        delimiter = _substring(value, delim_start, i)
     # Skip to end of line (heredoc content starts on next line)
     while i < len(value) and value[i] != "\n":
         i += 1
@@ -2137,7 +2366,7 @@ def _skip_heredoc(value: str, start: int) -> int:
         line_end = i
         while line_end < len(value) and value[line_end] != "\n":
             line_end += 1
-        line = value[line_start:line_end]
+        line = _substring(value, line_start, line_end)
         # Check if this line is the delimiter (possibly with leading tabs for <<-)
         stripped = line.lstrip("\t") if start + 2 < len(value) and value[start + 2] == "-" else line
         if stripped == delimiter:

@@ -12,7 +12,14 @@ class ParseError(Exception):
 
     def _format_message(self) -> str:
         if self.line is not None and self.pos is not None:
-            return f"Parse error at line {self.line}, position {self.pos}: {self.message}"
+            return (
+                "Parse error at line "
+                + str(self.line)
+                + ", position "
+                + str(self.pos)
+                + ": "
+                + self.message
+            )
         elif self.pos is not None:
-            return f"Parse error at position {self.pos}: {self.message}"
-        return f"Parse error: {self.message}"
+            return "Parse error at position " + str(self.pos) + ": " + self.message
+        return "Parse error: " + self.message

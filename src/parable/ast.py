@@ -43,7 +43,7 @@ class Word(Node):
         value = value.replace("\\", "\\\\")
         # Escape double quotes, newlines, and tabs
         escaped = value.replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
-        return f'(word "{escaped}")'
+        return '(word "' + escaped + '")'
 
     def _append_with_ctlesc(self, result: bytearray, byte_val: int):
         """Append byte to result (CTLESC doubling happens later in to_sexp)."""
@@ -428,7 +428,7 @@ class Word(Node):
                 i += 1
         # Strip trailing space
         result = "".join(normalized).rstrip(" ")
-        return f"{prefix}({result})"
+        return prefix + "(" + result + ")"
 
     def _strip_arith_line_continuations(self, value: str) -> str:
         """Strip backslash-newline (line continuation) from inside $((...))."""
@@ -525,9 +525,9 @@ class Word(Node):
                 formatted = _format_cmdsub_node(node.command)
                 # Add space after $( if content starts with ( to avoid $((
                 if formatted.startswith("("):
-                    result.append(f"$( {formatted})")
+                    result.append("$( " + formatted + ")")
                 else:
-                    result.append(f"$({formatted})")
+                    result.append("$(" + formatted + ")")
                 cmdsub_idx += 1
                 i = j
             # Check for backtick command substitution
@@ -554,7 +554,7 @@ class Word(Node):
                 # Format this process substitution (with in_procsub=True for no-space subshells)
                 node = procsub_parts[procsub_idx]
                 formatted = _format_cmdsub_node(node.command, in_procsub=True)
-                result.append(f"{direction}({formatted})")
+                result.append(direction + "(" + formatted + ")")
                 procsub_idx += 1
                 i = j
             # Check for ${ (space) or ${| brace command substitution
@@ -582,7 +582,7 @@ class Word(Node):
                         parsed = parser.parse_list()
                         if parsed:
                             formatted = _format_cmdsub_node(parsed)
-                            result.append(f"{prefix}{formatted}; }}")
+                            result.append(prefix + formatted + "; }")
                         else:
                             result.append("${ }")
                     except Exception:
@@ -622,7 +622,9 @@ class Command(Node):
         for r in self.redirects:
             parts.append(r.to_sexp())
         inner = " ".join(parts)
-        return "(command)" if not inner else f"(command {inner})"
+        if not inner:
+            return "(command)"
+        return "(command " + inner + ")"
 
 
 class Pipeline(Node):
@@ -656,7 +658,7 @@ class Pipeline(Node):
                 # Compound command: redirect as sibling in pipe
                 result = "(pipe " + cmd.to_sexp() + ' (redirect ">&" 1) ' + result + ")"
             else:
-                result = f"(pipe {self._cmd_sexp(cmd, needs)} {result})"
+                result = "(pipe " + self._cmd_sexp(cmd, needs) + " " + result + ")"
         return result
 
     def _cmd_sexp(self, cmd: Node, needs_redirect: bool) -> str:
@@ -705,13 +707,13 @@ class List(Node):
                     right = parts[i + 1 : -1]  # exclude trailing &
                     left_sexp = List(left).to_sexp() if len(left) > 1 else left[0].to_sexp()
                     right_sexp = List(right).to_sexp() if len(right) > 1 else right[0].to_sexp()
-                    return f"(semi {left_sexp} (background {right_sexp}))"
+                    return "(semi " + left_sexp + " (background " + right_sexp + "))"
             # No ; or \n found, background the whole list (minus trailing &)
             inner_parts = parts[:-1]
             if len(inner_parts) == 1:
-                return f"(background {inner_parts[0].to_sexp()})"
+                return "(background " + inner_parts[0].to_sexp() + ")"
             inner_list = List(inner_parts)
-            return f"(background {inner_list.to_sexp()})"
+            return "(background " + inner_list.to_sexp() + ")"
         # Process by precedence: first split on ; and &, then on && and ||
         return self._to_sexp_with_precedence(parts, op_names)
 
@@ -732,14 +734,14 @@ class List(Node):
                 right = parts[i + 1 :]
                 left_sexp = List(left).to_sexp() if len(left) > 1 else left[0].to_sexp()
                 right_sexp = List(right).to_sexp() if len(right) > 1 else right[0].to_sexp()
-                return f"(background {left_sexp} {right_sexp})"
+                return "(background " + left_sexp + " " + right_sexp + ")"
         # No ; or &, process high-prec ops (&&, ||) left-associatively
         result = parts[0].to_sexp()
         for i in range(1, len(parts) - 1, 2):
             op = parts[i]
             cmd = parts[i + 1]
             op_name = op_names.get(op.op, op.op)
-            result = f"({op_name} {result} {cmd.to_sexp()})"
+            result = "(" + op_name + " " + result + " " + cmd.to_sexp() + ")"
         return result
 
 
@@ -760,7 +762,7 @@ class Operator(Node):
             "&": "bg",
             "|": "pipe",
         }
-        return f"({names.get(self.op, self.op)})"
+        return "(" + names.get(self.op, self.op) + ")"
 
 
 class PipeBoth(Node):
@@ -836,20 +838,20 @@ class Redirect(Node):
                 op = "<&"
             fd_target = target_val[1:].rstrip("-")  # "&1" -> "1", "&1-" -> "1"
             if fd_target.isdigit():
-                return f'(redirect "{op}" {fd_target})'
+                return '(redirect "' + op + '" ' + fd_target + ")"
             elif target_val == "&-":
                 return '(redirect ">&-" 0)'
             else:
                 # Variable fd dup like >&$fd or >&$fd- (move) - strip the & and trailing -
-                return f'(redirect "{op}" "{fd_target}")'
+                return '(redirect "' + op + '" "' + fd_target + '")'
         # Handle case where op is already >& or <&
         if op in (">&", "<&"):
             if target_val.isdigit():
-                return f'(redirect "{op}" {target_val})'
+                return '(redirect "' + op + '" ' + target_val + ")"
             # Variable fd dup with move indicator (trailing -)
             target_val = target_val.rstrip("-")
-            return f'(redirect "{op}" "{target_val}")'
-        return f'(redirect "{op}" "{target_val}")'
+            return '(redirect "' + op + '" "' + target_val + '")'
+        return '(redirect "' + op + '" "' + target_val + '")'
 
 
 class HereDoc(Node):
@@ -878,7 +880,7 @@ class HereDoc(Node):
 
     def to_sexp(self) -> str:
         op = "<<-" if self.strip_tabs else "<<"
-        return f'(redirect "{op}" "{self.content}")'
+        return '(redirect "' + op + '" "' + self.content + '")'
 
 
 class Subshell(Node):
@@ -941,12 +943,12 @@ class If(Node):
         self.redirects = redirects or []
 
     def to_sexp(self) -> str:
-        result = f"(if {self.condition.to_sexp()} {self.then_body.to_sexp()}"
+        result = "(if " + self.condition.to_sexp() + " " + self.then_body.to_sexp()
         if self.else_body:
-            result += f" {self.else_body.to_sexp()}"
-        result += ")"
+            result = result + " " + self.else_body.to_sexp()
+        result = result + ")"
         for r in self.redirects:
-            result += f" {r.to_sexp()}"
+            result = result + " " + r.to_sexp()
         return result
 
 
@@ -1326,9 +1328,9 @@ class CasePattern(Node):
             # Use Word.to_sexp() to properly expand ANSI-C quotes and escape
             word_list.append(Word(alt).to_sexp())
         pattern_str = " ".join(word_list)
-        parts = [f"(pattern ({pattern_str})"]
+        parts = ["(pattern (" + pattern_str + ")"]
         if self.body:
-            parts.append(f" {self.body.to_sexp()}")
+            parts.append(" " + self.body.to_sexp())
         else:
             parts.append(" ()")
         # Oracle doesn't output fallthrough/falltest markers
@@ -1348,7 +1350,7 @@ class Function(Node):
         self.body = body
 
     def to_sexp(self) -> str:
-        return f'(function "{self.name}" {self.body.to_sexp()})'
+        return '(function "' + self.name + '" ' + self.body.to_sexp() + ")"
 
 
 class ParamExpansion(Node):
@@ -1369,8 +1371,8 @@ class ParamExpansion(Node):
         if self.op is not None:
             escaped_op = self.op.replace("\\", "\\\\").replace('"', '\\"')
             escaped_arg = (self.arg or "").replace("\\", "\\\\").replace('"', '\\"')
-            return f'(param "{escaped_param}" "{escaped_op}" "{escaped_arg}")'
-        return f'(param "{escaped_param}")'
+            return '(param "' + escaped_param + '" "' + escaped_op + '" "' + escaped_arg + '")'
+        return '(param "' + escaped_param + '")'
 
 
 class ParamLength(Node):
@@ -1384,7 +1386,7 @@ class ParamLength(Node):
 
     def to_sexp(self) -> str:
         escaped = self.param.replace("\\", "\\\\").replace('"', '\\"')
-        return f'(param-len "{escaped}")'
+        return '(param-len "' + escaped + '")'
 
 
 class ParamIndirect(Node):
@@ -1405,8 +1407,8 @@ class ParamIndirect(Node):
         if self.op is not None:
             escaped_op = self.op.replace("\\", "\\\\").replace('"', '\\"')
             escaped_arg = (self.arg or "").replace("\\", "\\\\").replace('"', '\\"')
-            return f'(param-indirect "{escaped}" "{escaped_op}" "{escaped_arg}")'
-        return f'(param-indirect "{escaped}")'
+            return '(param-indirect "' + escaped + '" "' + escaped_op + '" "' + escaped_arg + '")'
+        return '(param-indirect "' + escaped + '")'
 
 
 class CommandSubstitution(Node):
@@ -1419,7 +1421,7 @@ class CommandSubstitution(Node):
         self.command = command
 
     def to_sexp(self) -> str:
-        return f"(cmdsub {self.command.to_sexp()})"
+        return "(cmdsub " + self.command.to_sexp() + ")"
 
 
 class ArithmeticExpansion(Node):
@@ -1434,7 +1436,7 @@ class ArithmeticExpansion(Node):
     def to_sexp(self) -> str:
         if self.expression is None:
             return "(arith)"
-        return f"(arith {self.expression.to_sexp()})"
+        return "(arith " + self.expression.to_sexp() + ")"
 
 
 class ArithmeticCommand(Node):
@@ -1479,7 +1481,7 @@ class ArithNumber(Node):
         self.value = value
 
     def to_sexp(self) -> str:
-        return f'(number "{self.value}")'
+        return '(number "' + self.value + '")'
 
 
 class ArithVar(Node):
@@ -1492,7 +1494,7 @@ class ArithVar(Node):
         self.name = name
 
     def to_sexp(self) -> str:
-        return f'(var "{self.name}")'
+        return '(var "' + self.name + '")'
 
 
 class ArithBinaryOp(Node):
@@ -1509,7 +1511,9 @@ class ArithBinaryOp(Node):
         self.right = right
 
     def to_sexp(self) -> str:
-        return f'(binary-op "{self.op}" {self.left.to_sexp()} {self.right.to_sexp()})'
+        return (
+            '(binary-op "' + self.op + '" ' + self.left.to_sexp() + " " + self.right.to_sexp() + ")"
+        )
 
 
 class ArithUnaryOp(Node):
@@ -1524,7 +1528,7 @@ class ArithUnaryOp(Node):
         self.operand = operand
 
     def to_sexp(self) -> str:
-        return f'(unary-op "{self.op}" {self.operand.to_sexp()})'
+        return '(unary-op "' + self.op + '" ' + self.operand.to_sexp() + ")"
 
 
 class ArithPreIncr(Node):
@@ -1537,7 +1541,7 @@ class ArithPreIncr(Node):
         self.operand = operand
 
     def to_sexp(self) -> str:
-        return f"(pre-incr {self.operand.to_sexp()})"
+        return "(pre-incr " + self.operand.to_sexp() + ")"
 
 
 class ArithPostIncr(Node):
@@ -1550,7 +1554,7 @@ class ArithPostIncr(Node):
         self.operand = operand
 
     def to_sexp(self) -> str:
-        return f"(post-incr {self.operand.to_sexp()})"
+        return "(post-incr " + self.operand.to_sexp() + ")"
 
 
 class ArithPreDecr(Node):
@@ -1563,7 +1567,7 @@ class ArithPreDecr(Node):
         self.operand = operand
 
     def to_sexp(self) -> str:
-        return f"(pre-decr {self.operand.to_sexp()})"
+        return "(pre-decr " + self.operand.to_sexp() + ")"
 
 
 class ArithPostDecr(Node):
@@ -1576,7 +1580,7 @@ class ArithPostDecr(Node):
         self.operand = operand
 
     def to_sexp(self) -> str:
-        return f"(post-decr {self.operand.to_sexp()})"
+        return "(post-decr " + self.operand.to_sexp() + ")"
 
 
 class ArithAssign(Node):
@@ -1593,7 +1597,9 @@ class ArithAssign(Node):
         self.value = value
 
     def to_sexp(self) -> str:
-        return f'(assign "{self.op}" {self.target.to_sexp()} {self.value.to_sexp()})'
+        return (
+            '(assign "' + self.op + '" ' + self.target.to_sexp() + " " + self.value.to_sexp() + ")"
+        )
 
 
 class ArithTernary(Node):
@@ -1610,7 +1616,15 @@ class ArithTernary(Node):
         self.if_false = if_false
 
     def to_sexp(self) -> str:
-        return f"(ternary {self.condition.to_sexp()} {self.if_true.to_sexp()} {self.if_false.to_sexp()})"
+        return (
+            "(ternary "
+            + self.condition.to_sexp()
+            + " "
+            + self.if_true.to_sexp()
+            + " "
+            + self.if_false.to_sexp()
+            + ")"
+        )
 
 
 class ArithComma(Node):
@@ -1625,7 +1639,7 @@ class ArithComma(Node):
         self.right = right
 
     def to_sexp(self) -> str:
-        return f"(comma {self.left.to_sexp()} {self.right.to_sexp()})"
+        return "(comma " + self.left.to_sexp() + " " + self.right.to_sexp() + ")"
 
 
 class ArithSubscript(Node):
@@ -1640,7 +1654,7 @@ class ArithSubscript(Node):
         self.index = index
 
     def to_sexp(self) -> str:
-        return f'(subscript "{self.array}" {self.index.to_sexp()})'
+        return '(subscript "' + self.array + '" ' + self.index.to_sexp() + ")"
 
 
 class ArithEscape(Node):
@@ -1653,7 +1667,7 @@ class ArithEscape(Node):
         self.char = char
 
     def to_sexp(self) -> str:
-        return f'(escape "{self.char}")'
+        return '(escape "' + self.char + '")'
 
 
 class ArithDeprecated(Node):
@@ -1667,7 +1681,7 @@ class ArithDeprecated(Node):
 
     def to_sexp(self) -> str:
         escaped = self.expression.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-        return f'(arith-deprecated "{escaped}")'
+        return '(arith-deprecated "' + escaped + '")'
 
 
 class AnsiCQuote(Node):
@@ -1681,7 +1695,7 @@ class AnsiCQuote(Node):
 
     def to_sexp(self) -> str:
         escaped = self.content.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-        return f'(ansi-c "{escaped}")'
+        return '(ansi-c "' + escaped + '")'
 
 
 class LocaleString(Node):
@@ -1695,7 +1709,7 @@ class LocaleString(Node):
 
     def to_sexp(self) -> str:
         escaped = self.content.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-        return f'(locale "{escaped}")'
+        return '(locale "' + escaped + '")'
 
 
 class ProcessSubstitution(Node):
@@ -1710,7 +1724,7 @@ class ProcessSubstitution(Node):
         self.command = command
 
     def to_sexp(self) -> str:
-        return f'(procsub "{self.direction}" {self.command.to_sexp()})'
+        return '(procsub "' + self.direction + '" ' + self.command.to_sexp() + ")"
 
 
 class Negation(Node):
@@ -1726,7 +1740,7 @@ class Negation(Node):
         if self.pipeline is None:
             # Bare "!" with no command - oracle shows empty command
             return "(negation (command))"
-        return f"(negation {self.pipeline.to_sexp()})"
+        return "(negation " + self.pipeline.to_sexp() + ")"
 
 
 class Time(Node):
@@ -1745,8 +1759,8 @@ class Time(Node):
             # Bare "time" with no command - oracle shows empty command
             return "(time -p (command))" if self.posix else "(time (command))"
         if self.posix:
-            return f"(time -p {self.pipeline.to_sexp()})"
-        return f"(time {self.pipeline.to_sexp()})"
+            return "(time -p " + self.pipeline.to_sexp() + ")"
+        return "(time " + self.pipeline.to_sexp() + ")"
 
 
 class ConditionalExpr(Node):
@@ -1792,7 +1806,7 @@ class UnaryTest(Node):
     def to_sexp(self) -> str:
         # Oracle format: (cond-unary "-f" (cond-term "file"))
         # cond-term preserves content as-is (no backslash escaping)
-        return f'(cond-unary "{self.op}" (cond-term "{self.operand.value}"))'
+        return '(cond-unary "' + self.op + '" (cond-term "' + self.operand.value + '"))'
 
 
 class BinaryTest(Node):
@@ -1813,7 +1827,15 @@ class BinaryTest(Node):
         # cond-term preserves content as-is (no backslash escaping)
         left_val = self.left.get_cond_formatted_value()
         right_val = self.right.get_cond_formatted_value()
-        return f'(cond-binary "{self.op}" (cond-term "{left_val}") (cond-term "{right_val}"))'
+        return (
+            '(cond-binary "'
+            + self.op
+            + '" (cond-term "'
+            + left_val
+            + '") (cond-term "'
+            + right_val
+            + '"))'
+        )
 
 
 class CondAnd(Node):
@@ -1828,7 +1850,7 @@ class CondAnd(Node):
         self.right = right
 
     def to_sexp(self) -> str:
-        return f"(cond-and {self.left.to_sexp()} {self.right.to_sexp()})"
+        return "(cond-and " + self.left.to_sexp() + " " + self.right.to_sexp() + ")"
 
 
 class CondOr(Node):
@@ -1843,7 +1865,7 @@ class CondOr(Node):
         self.right = right
 
     def to_sexp(self) -> str:
-        return f"(cond-or {self.left.to_sexp()} {self.right.to_sexp()})"
+        return "(cond-or " + self.left.to_sexp() + " " + self.right.to_sexp() + ")"
 
 
 class CondNot(Node):
@@ -1870,7 +1892,7 @@ class CondParen(Node):
         self.inner = inner
 
     def to_sexp(self) -> str:
-        return f"(cond-expr {self.inner.to_sexp()})"
+        return "(cond-expr " + self.inner.to_sexp() + ")"
 
 
 class Array(Node):
@@ -1906,7 +1928,7 @@ class Coproc(Node):
     def to_sexp(self) -> str:
         # Use provided name for compound commands, "COPROC" for simple commands
         name = self.name if self.name else "COPROC"
-        return f'(coproc "{name}" {self.command.to_sexp()})'
+        return '(coproc "' + name + '" ' + self.command.to_sexp() + ")"
 
 
 def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -> str:
@@ -2036,8 +2058,8 @@ def _format_redirect(r: "Redirect | HereDoc") -> str:
     if r.kind == "heredoc":
         # Include heredoc content: <<DELIM\ncontent\nDELIM\n
         op = "<<-" if r.strip_tabs else "<<"
-        delim = f"'{r.delimiter}'" if r.quoted else r.delimiter
-        return f"{op}{delim}\n{r.content}{r.delimiter}\n"
+        delim = "'" + r.delimiter + "'" if r.quoted else r.delimiter
+        return op + delim + "\n" + r.content + r.delimiter + "\n"
     op = r.op
     target = r.target.value
     # For fd duplication (target starts with &), handle normalization
@@ -2050,8 +2072,8 @@ def _format_redirect(r: "Redirect | HereDoc") -> str:
             op = "1>"
         elif op == "<":
             op = "0<"
-        return f"{op}{target}"
-    return f"{op} {target}"
+        return op + target
+    return op + " " + target
 
 
 def _normalize_fd_redirects(s: str) -> str:

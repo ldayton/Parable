@@ -1776,7 +1776,7 @@ class Parser:
             return ArithVar("".join(chars))
 
         raise ParseError(
-            f"Unexpected character '{c}' in arithmetic expression", pos=self._arith_pos
+            "Unexpected character '" + c + "' in arithmetic expression", pos=self._arith_pos
         )
 
     def _parse_deprecated_arithmetic(self) -> tuple[Node | None, str]:
@@ -2414,7 +2414,7 @@ class Parser:
             self.skip_whitespace()
             target = self.parse_word()
             if target is None:
-                raise ParseError(f"Expected target for redirect {op}", pos=self.pos)
+                raise ParseError("Expected target for redirect " + op, pos=self.pos)
             return Redirect(op, target)
 
         if ch is None or ch not in "<>":
@@ -2477,9 +2477,9 @@ class Parser:
 
         # Combine fd or varfd with operator if present
         if varfd is not None:
-            op = f"{{{varfd}}}{op}"
+            op = "{" + varfd + "}" + op
         elif fd is not None:
-            op = f"{fd}{op}"
+            op = str(fd) + op
 
         self.skip_whitespace()
 
@@ -2495,20 +2495,20 @@ class Parser:
                 # Handle just - for close, or N- for move syntax
                 if not self.at_end() and self.peek() == "-":
                     fd_target += self.advance()  # consume the trailing -
-                target = Word(f"&{fd_target}")
+                target = Word("&" + fd_target)
             else:
                 # Could be &$var or &word - parse word and prepend &
                 inner_word = self.parse_word()
                 if inner_word is not None:
-                    target = Word(f"&{inner_word.value}")
+                    target = Word("&" + inner_word.value)
                     target.parts = inner_word.parts
                 else:
-                    raise ParseError(f"Expected target for redirect {op}", pos=self.pos)
+                    raise ParseError("Expected target for redirect " + op, pos=self.pos)
         else:
             target = self.parse_word()
 
         if target is None:
-            raise ParseError(f"Expected target for redirect {op}", pos=self.pos)
+            raise ParseError("Expected target for redirect " + op, pos=self.pos)
 
         return Redirect(op, target)
 
@@ -2995,7 +2995,7 @@ class Parser:
             # Unary test: -f file
             operand = self._parse_cond_word()
             if operand is None:
-                raise ParseError(f"Expected operand after {word1.value}", pos=self.pos)
+                raise ParseError("Expected operand after " + word1.value, pos=self.pos)
             return UnaryTest(word1.value, operand)
 
         # Check if next token is a binary operator
@@ -3009,7 +3009,7 @@ class Parser:
                 self._cond_skip_whitespace()
                 word2 = self._parse_cond_word()
                 if word2 is None:
-                    raise ParseError(f"Expected operand after {op}", pos=self.pos)
+                    raise ParseError("Expected operand after " + op, pos=self.pos)
                 return BinaryTest(op, word1, word2)
             # Peek at next word to see if it's a binary operator
             saved_pos = self.pos
@@ -3023,7 +3023,7 @@ class Parser:
                 else:
                     word2 = self._parse_cond_word()
                 if word2 is None:
-                    raise ParseError(f"Expected operand after {op_word.value}", pos=self.pos)
+                    raise ParseError("Expected operand after " + op_word.value, pos=self.pos)
                 return BinaryTest(op_word.value, word1, word2)
             else:
                 # Not a binary op, restore position
@@ -4409,7 +4409,7 @@ class Parser:
 
             pipeline = self.parse_pipeline()
             if pipeline is None:
-                raise ParseError(f"Expected command after {op}", pos=self.pos)
+                raise ParseError("Expected command after " + op, pos=self.pos)
             parts.append(pipeline)
 
         if len(parts) == 1:
@@ -4736,7 +4736,7 @@ class Parser:
 
             pipeline = self.parse_pipeline()
             if pipeline is None:
-                raise ParseError(f"Expected command after {op}", pos=self.pos)
+                raise ParseError("Expected command after " + op, pos=self.pos)
             parts.append(pipeline)
 
         if len(parts) == 1:

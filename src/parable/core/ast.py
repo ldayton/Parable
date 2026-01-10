@@ -45,6 +45,12 @@ class Word(Node):
         escaped = value.replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
         return f'(word "{escaped}")'
 
+    def _append_with_ctlesc(self, result: bytearray, byte_val: int):
+        """Append byte to result, prefixing with CTLESC if the byte is CTLESC."""
+        if byte_val == 0x01:  # CTLESC - must be quoted with CTLESC
+            result.append(0x01)
+        result.append(byte_val)
+
     def _expand_ansi_c_escapes(self, value: str) -> str:
         """Expand ANSI-C escape sequences in $'...' strings.
 
@@ -106,7 +112,7 @@ class Word(Node):
                         if byte_val == 0:
                             # NUL truncates string
                             return "'" + result.decode("utf-8", errors="replace") + "'"
-                        result.append(byte_val)
+                        self._append_with_ctlesc(result, byte_val)
                         i = j
                     else:
                         result.append(ord(inner[i]))
@@ -149,7 +155,7 @@ class Word(Node):
                         if ctrl_val == 0:
                             # NUL truncates string
                             return "'" + result.decode("utf-8", errors="replace") + "'"
-                        result.append(ctrl_val)
+                        self._append_with_ctlesc(result, ctrl_val)
                         i += 3
                     else:
                         result.append(ord(inner[i]))
@@ -164,7 +170,7 @@ class Word(Node):
                         if byte_val == 0:
                             # NUL truncates string
                             return "'" + result.decode("utf-8", errors="replace") + "'"
-                        result.append(byte_val)
+                        self._append_with_ctlesc(result, byte_val)
                         i = j
                     else:
                         # Just \0 - NUL truncates string
@@ -178,7 +184,7 @@ class Word(Node):
                     if byte_val == 0:
                         # NUL truncates string
                         return "'" + result.decode("utf-8", errors="replace") + "'"
-                    result.append(byte_val)
+                    self._append_with_ctlesc(result, byte_val)
                     i = j
                 else:
                     # Unknown escape - preserve as-is

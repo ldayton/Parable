@@ -298,8 +298,14 @@ class Parser:
 
             # Escape outside quotes
             elif ch == "\\" and self.pos + 1 < self.length:
-                chars.append(self.advance())  # backslash
-                chars.append(self.advance())  # escaped char
+                next_ch = self.source[self.pos + 1]
+                if next_ch == "\n":
+                    # Line continuation - skip both backslash and newline
+                    self.advance()
+                    self.advance()
+                else:
+                    chars.append(self.advance())  # backslash
+                    chars.append(self.advance())  # escaped char
 
             # ANSI-C quoting $'...'
             elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "'":
@@ -3979,8 +3985,11 @@ class Parser:
                     if not self.at_end():
                         pattern_chars.append(self.advance())
                 elif ch in " \t\n":
-                    # Skip whitespace (including newlines) in pattern but don't include
-                    self.advance()
+                    # Skip whitespace at top level, but preserve inside $() or extglob
+                    if extglob_depth > 0:
+                        pattern_chars.append(self.advance())
+                    else:
+                        self.advance()
                 else:
                     pattern_chars.append(self.advance())
 

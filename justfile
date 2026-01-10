@@ -70,4 +70,8 @@ check-style:
 transpile:
     python3 bin/transpile.py src/parable.py > src/parable.js
     npx -y @biomejs/biome format --write src/parable.js
-    npx -y @biomejs/biome lint --only=correctness --skip=noUndeclaredVariables --skip=noUnusedVariables src/parable.js
+    npx -y @biomejs/biome lint --only=correctness --skip=noUndeclaredVariables --skip=noUnusedVariables --skip=noInnerDeclarations src/parable.js
+
+# Run JavaScript tests
+test-js *ARGS:
+    node bin/run-js-tests.js {{ARGS}}

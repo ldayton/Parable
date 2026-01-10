@@ -14,6 +14,7 @@ class JSTranspiler(ast.NodeVisitor):
         self.in_method = False
         self.class_has_base = False
         self.declared_vars = set()
+        self.class_names = set()
 
     def emit(self, text: str):
         self.output.append("    " * self.indent + text)
@@ -31,6 +32,7 @@ class JSTranspiler(ast.NodeVisitor):
             self.visit(stmt)
 
     def visit_ClassDef(self, node: ast.ClassDef):
+        self.class_names.add(node.name)
         bases = [self.visit_expr(b) for b in node.bases]
         extends = f" extends {bases[0]}" if bases else ""
         self.emit(f"class {node.name}{extends} {{")
@@ -69,10 +71,15 @@ class JSTranspiler(ast.NodeVisitor):
             return False
         return call.func.value.func.id == "super"
 
+    def _camel_case(self, name: str) -> str:
+        """Convert snake_case to camelCase."""
+        parts = name.split("_")
+        return parts[0] + "".join(p.capitalize() for p in parts[1:])
+
     def visit_FunctionDef(self, node: ast.FunctionDef):
         args = [self._safe_name(a.arg) for a in node.args.args if a.arg != "self"]
         args_str = ", ".join(args)
-        name = "constructor" if node.name == "__init__" else node.name
+        name = "constructor" if node.name == "__init__" else self._camel_case(node.name)
         if self.in_class_body and not self.in_method:
             # Class method
             self.emit(f"{name}({args_str}) {{")
@@ -130,7 +137,7 @@ class JSTranspiler(ast.NodeVisitor):
                 self.emit(f"{target} = {value};")
             else:
                 self.declared_vars.add(var_name)
-                self.emit(f"let {target} = {value};")
+                self.emit(f"var {target} = {value};")
         else:
             self.emit(f"{target} = {value};")
 
@@ -146,7 +153,7 @@ class JSTranspiler(ast.NodeVisitor):
             else:
                 if var_name:
                     self.declared_vars.add(var_name)
-                self.emit(f"let {target} = {value};")
+                self.emit(f"var {target} = {value};")
 
     def visit_AugAssign(self, node: ast.AugAssign):
         target = self.visit_expr(node.target)
@@ -199,9 +206,9 @@ class JSTranspiler(ast.NodeVisitor):
         if isinstance(iter_expr, ast.Call) and isinstance(iter_expr.func, ast.Name) and iter_expr.func.id == "range":
             args = iter_expr.args
             if len(args) == 1:
-                self.emit(f"for (let {target} = 0; {target} < {self.visit_expr(args[0])}; {target}++) {{")
+                self.emit(f"for (var {target} = 0; {target} < {self.visit_expr(args[0])}; {target}++) {{")
             elif len(args) == 2:
-                self.emit(f"for (let {target} = {self.visit_expr(args[0])}; {target} < {self.visit_expr(args[1])}; {target}++) {{")
+                self.emit(f"for (var {target} = {self.visit_expr(args[0])}; {target} < {self.visit_expr(args[1])}; {target}++) {{")
             else:
                 start, end, step = args
                 # Check if step is negative for proper comparison and decrement
@@ -211,12 +218,12 @@ class JSTranspiler(ast.NodeVisitor):
                 elif isinstance(step, ast.Constant) and step.value < 0:
                     is_negative = True
                 if is_negative:
-                    self.emit(f"for (let {target} = {self.visit_expr(start)}; {target} > {self.visit_expr(end)}; {target}--) {{")
+                    self.emit(f"for (var {target} = {self.visit_expr(start)}; {target} > {self.visit_expr(end)}; {target}--) {{")
                 else:
                     step_val = self.visit_expr(step)
-                    self.emit(f"for (let {target} = {self.visit_expr(start)}; {target} < {self.visit_expr(end)}; {target} += {step_val}) {{")
+                    self.emit(f"for (var {target} = {self.visit_expr(start)}; {target} < {self.visit_expr(end)}; {target} += {step_val}) {{")
         else:
-            self.emit(f"for (const {target} of {self.visit_expr(iter_expr)}) {{")
+            self.emit(f"for (var {target} of {self.visit_expr(iter_expr)}) {{")
         self.indent += 1
         for stmt in node.body:
             self.visit(stmt)
@@ -320,8 +327,28 @@ class JSTranspiler(ast.NodeVisitor):
                 "append": "push",
                 "startswith": "startsWith",
                 "endswith": "endsWith",
+                "strip": "trim",
+                "lstrip": "trimStart",
+                "rstrip": "trimEnd",
+                "lower": "toLowerCase",
+                "upper": "toUpperCase",
+                "extend": "push",  # Not exact but works for single items
+                "find": "indexOf",
+                "rfind": "lastIndexOf",
             }
+            # Handle character class methods with regex
+            if method == "isalpha":
+                return f"/^[a-zA-Z]$/.test({obj})"
+            if method == "isdigit":
+                return f"/^[0-9]$/.test({obj})"
+            if method == "isalnum":
+                return f"/^[a-zA-Z0-9]$/.test({obj})"
+            if method == "isspace":
+                return f"/^\\s$/.test({obj})"
             method = method_map.get(method, method)
+            # Convert remaining snake_case to camelCase
+            if "_" in method:
+                method = self._camel_case(method)
             # Special case: "".join(lst) -> lst.join("")
             if method == "join" and isinstance(node.func.value, ast.Constant):
                 sep = self.visit_expr(node.func.value)
@@ -342,10 +369,26 @@ class JSTranspiler(ast.NodeVisitor):
                 return f"String.fromCharCode({args})"
             if name == "isinstance":
                 return f"{node.args[0].id} instanceof {self.visit_expr(node.args[1])}"
+            if name == "getattr":
+                obj = self.visit_expr(node.args[0])
+                attr = self.visit_expr(node.args[1])
+                if len(node.args) >= 3:
+                    default = self.visit_expr(node.args[2])
+                    return f"({obj}[{attr}] !== undefined ? {obj}[{attr}] : {default})"
+                return f"{obj}[{attr}]"
             if name == "bytearray":
+                return "[]"
+            if name == "list":
+                if args:
+                    return f"Array.from({args})"
                 return "[]"
             if name == "set":
                 return f"new Set({args})"
+            if name in self.class_names:
+                return f"new {name}({args})"
+            # Convert snake_case function names to camelCase
+            if "_" in name:
+                name = self._camel_case(name)
             return f"{name}({args})"
         return f"{self.visit_expr(node.func)}({args})"
 
@@ -433,6 +476,8 @@ def main():
     source = Path(sys.argv[1]).read_text()
     transpiler = JSTranspiler()
     print(transpiler.transpile(source))
+    print()
+    print("module.exports = { parse, ParseError };")
 
 
 if __name__ == "__main__":

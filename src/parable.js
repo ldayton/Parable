@@ -2,13 +2,13 @@
 class ParseError extends Error {
 	"Raised when parsing fails.";
 	constructor(message, pos, line) {
-		super(this._format_message());
+		super(this.FormatMessage());
 		this.message = message;
 		this.pos = pos;
 		this.line = line;
 	}
 
-	_format_message() {
+	FormatMessage() {
 		if (this.line !== null && this.pos !== null) {
 			return (
 				"Parse error at line " +
@@ -27,17 +27,17 @@ class ParseError extends Error {
 	}
 }
 
-function _is_hex_digit(c) {
+function IsHexDigit(c) {
 	return (
 		(c >= "0" && c <= "9") || (c >= "a" && c <= "f") || (c >= "A" && c <= "F")
 	);
 }
 
-function _is_octal_digit(c) {
+function IsOctalDigit(c) {
 	return c >= "0" && c <= "7";
 }
 
-let ANSI_C_ESCAPES = {
+var ANSI_C_ESCAPES = {
 	a: 7,
 	b: 8,
 	e: 27,
@@ -51,7 +51,7 @@ let ANSI_C_ESCAPES = {
 	'"': 34,
 	"?": 63,
 };
-function _get_ansi_escape(c) {
+function GetAnsiEscape(c) {
 	"Look up simple ANSI-C escape byte value. Returns -1 if not found.";
 	if (c === "a") {
 		return 7;
@@ -89,33 +89,33 @@ function _get_ansi_escape(c) {
 	return -1;
 }
 
-function _is_whitespace(c) {
+function IsWhitespace(c) {
 	return c === " " || c === "\t" || c === "\n";
 }
 
-function _is_whitespace_no_newline(c) {
+function IsWhitespaceNoNewline(c) {
 	return c === " " || c === "\t";
 }
 
-function _substring(s, start, end) {
+function Substring(s, start, end) {
 	"Extract substring from start to end (exclusive).";
 	return s.slice(start, end);
 }
 
-function _starts_with_at(s, pos, prefix) {
+function StartsWithAt(s, pos, prefix) {
 	"Check if s starts with prefix at position pos.";
 	return s.startsWith(prefix, pos);
 }
 
-function _sublist(lst, start, end) {
+function Sublist(lst, start, end) {
 	"Extract sublist from start to end (exclusive).";
 	return lst.slice(start, end);
 }
 
-function _repeat_str(s, n) {
+function RepeatStr(s, n) {
 	"Repeat string s n times.";
-	let result = [];
-	let i = 0;
+	var result = [];
+	var i = 0;
 	while (i < n) {
 		result.push(s);
 		i += 1;
@@ -125,7 +125,7 @@ function _repeat_str(s, n) {
 
 class Node {
 	"Base class for all AST nodes.";
-	to_sexp() {
+	toSexp() {
 		"Convert node to S-expression string for testing.";
 		throw new Error("Not implemented");
 	}
@@ -143,34 +143,34 @@ class Word extends Node {
 		this.parts = parts;
 	}
 
-	to_sexp() {
-		let value = this.value;
-		value = this._expand_all_ansi_c_quotes(value);
-		value = this._strip_locale_string_dollars(value);
-		value = this._normalize_array_whitespace(value);
-		value = this._format_command_substitutions(value);
-		value = this._strip_arith_line_continuations(value);
-		value = this._double_ctlesc_smart(value);
+	toSexp() {
+		var value = this.value;
+		value = this.ExpandAllAnsiCQuotes(value);
+		value = this.StripLocaleStringDollars(value);
+		value = this.NormalizeArrayWhitespace(value);
+		value = this.FormatCommandSubstitutions(value);
+		value = this.StripArithLineContinuations(value);
+		value = this.DoubleCtlescSmart(value);
 		value = value.replace("", "");
 		value = value.replace("\\", "\\\\");
-		let escaped = value
+		var escaped = value
 			.replace('"', '\\"')
 			.replace("\n", "\\n")
 			.replace("\t", "\\t");
 		return '(word "' + escaped + '")';
 	}
 
-	_append_with_ctlesc(result, byte_val) {
+	AppendWithCtlesc(result, byte_val) {
 		"Append byte to result (CTLESC doubling happens later in to_sexp).";
 		result.push(byte_val);
 	}
 
-	_double_ctlesc_smart(value) {
+	DoubleCtlescSmart(value) {
 		"Double CTLESC bytes unless escaped by backslash inside double quotes.";
-		let result = [];
-		let in_single = false;
-		let in_double = false;
-		for (const c of value) {
+		var result = [];
+		var in_single = false;
+		var in_double = false;
+		for (var c of value) {
 			if (c === "'" && !in_double) {
 				in_single = !in_single;
 			} else if (c === '"' && !in_single) {
@@ -179,8 +179,8 @@ class Word extends Node {
 			result.push(c);
 			if (c === "") {
 				if (in_double) {
-					let bs_count = 0;
-					for (let j = result.length - 2; j > -1; j--) {
+					var bs_count = 0;
+					for (var j = result.length - 2; j > -1; j--) {
 						if (result[j] === "\\") {
 							bs_count += 1;
 						} else {
@@ -198,54 +198,54 @@ class Word extends Node {
 		return result.join("");
 	}
 
-	_expand_ansi_c_escapes(value) {
+	ExpandAnsiCEscapes(value) {
 		"Expand ANSI-C escape sequences in $'...' strings.\n\n        Uses bytes internally so \\x escapes can form valid UTF-8 sequences.\n        Invalid UTF-8 is replaced with U+FFFD.\n        ";
 		if (!(value.startsWith("'") && value.endsWith("'"))) {
 			return value;
 		}
-		let inner = _substring(value, 1, value.length - 1);
-		let result = [];
-		let i = 0;
+		var inner = Substring(value, 1, value.length - 1);
+		var result = [];
+		var i = 0;
 		while (i < inner.length) {
 			if (inner[i] === "\\" && i + 1 < inner.length) {
-				let c = inner[i + 1];
-				let simple = _get_ansi_escape(c);
+				var c = inner[i + 1];
+				var simple = GetAnsiEscape(c);
 				if (simple >= 0) {
 					result.push(simple);
 					i += 2;
 				} else if (c === "'") {
-					result.extend([39, 92, 39, 39]);
+					result.push([39, 92, 39, 39]);
 					i += 2;
 				} else if (c === "x") {
 					if (i + 2 < inner.length && inner[i + 2] === "{") {
-						let j = i + 3;
-						while (j < inner.length && _is_hex_digit(inner[j])) {
+						var j = i + 3;
+						while (j < inner.length && IsHexDigit(inner[j])) {
 							j += 1;
 						}
-						let hex_str = _substring(inner, i + 3, j);
+						var hex_str = Substring(inner, i + 3, j);
 						if (j < inner.length && inner[j] === "}") {
 							j += 1;
 						}
 						if (!hex_str) {
 							return "'" + result.decode("utf-8") + "'";
 						}
-						let byte_val = parseInt(hex_str, 16, 10) & 255;
+						var byte_val = parseInt(hex_str, 16, 10) & 255;
 						if (byte_val === 0) {
 							return "'" + result.decode("utf-8") + "'";
 						}
-						this._append_with_ctlesc(result, byte_val);
+						this.AppendWithCtlesc(result, byte_val);
 						i = j;
 					} else {
 						j = i + 2;
-						while (j < inner.length && j < i + 4 && _is_hex_digit(inner[j])) {
+						while (j < inner.length && j < i + 4 && IsHexDigit(inner[j])) {
 							j += 1;
 						}
 						if (j > i + 2) {
-							byte_val = parseInt(_substring(inner, i + 2, j), 16, 10);
+							byte_val = parseInt(Substring(inner, i + 2, j), 16, 10);
 							if (byte_val === 0) {
 								return "'" + result.decode("utf-8") + "'";
 							}
-							this._append_with_ctlesc(result, byte_val);
+							this.AppendWithCtlesc(result, byte_val);
 							i = j;
 						} else {
 							result.push(inner[i].charCodeAt(0));
@@ -254,15 +254,15 @@ class Word extends Node {
 					}
 				} else if (c === "u") {
 					j = i + 2;
-					while (j < inner.length && j < i + 6 && _is_hex_digit(inner[j])) {
+					while (j < inner.length && j < i + 6 && IsHexDigit(inner[j])) {
 						j += 1;
 					}
 					if (j > i + 2) {
-						let codepoint = parseInt(_substring(inner, i + 2, j), 16, 10);
+						var codepoint = parseInt(Substring(inner, i + 2, j), 16, 10);
 						if (codepoint === 0) {
 							return "'" + result.decode("utf-8") + "'";
 						}
-						result.extend(String.fromCharCode(codepoint).encode("utf-8"));
+						result.push(String.fromCharCode(codepoint).encode("utf-8"));
 						i = j;
 					} else {
 						result.push(inner[i].charCodeAt(0));
@@ -270,15 +270,15 @@ class Word extends Node {
 					}
 				} else if (c === "U") {
 					j = i + 2;
-					while (j < inner.length && j < i + 10 && _is_hex_digit(inner[j])) {
+					while (j < inner.length && j < i + 10 && IsHexDigit(inner[j])) {
 						j += 1;
 					}
 					if (j > i + 2) {
-						codepoint = parseInt(_substring(inner, i + 2, j), 16, 10);
+						codepoint = parseInt(Substring(inner, i + 2, j), 16, 10);
 						if (codepoint === 0) {
 							return "'" + result.decode("utf-8") + "'";
 						}
-						result.extend(String.fromCharCode(codepoint).encode("utf-8"));
+						result.push(String.fromCharCode(codepoint).encode("utf-8"));
 						i = j;
 					} else {
 						result.push(inner[i].charCodeAt(0));
@@ -286,12 +286,12 @@ class Word extends Node {
 					}
 				} else if (c === "c") {
 					if (i + 3 <= inner.length) {
-						let ctrl_char = inner[i + 2];
-						let ctrl_val = ctrl_char.charCodeAt(0) & 31;
+						var ctrl_char = inner[i + 2];
+						var ctrl_val = ctrl_char.charCodeAt(0) & 31;
 						if (ctrl_val === 0) {
 							return "'" + result.decode("utf-8") + "'";
 						}
-						this._append_with_ctlesc(result, ctrl_val);
+						this.AppendWithCtlesc(result, ctrl_val);
 						i += 3;
 					} else {
 						result.push(inner[i].charCodeAt(0));
@@ -299,29 +299,29 @@ class Word extends Node {
 					}
 				} else if (c === "0") {
 					j = i + 2;
-					while (j < inner.length && j < i + 5 && _is_octal_digit(inner[j])) {
+					while (j < inner.length && j < i + 5 && IsOctalDigit(inner[j])) {
 						j += 1;
 					}
 					if (j > i + 2) {
-						byte_val = parseInt(_substring(inner, i + 1, j), 8, 10);
+						byte_val = parseInt(Substring(inner, i + 1, j), 8, 10);
 						if (byte_val === 0) {
 							return "'" + result.decode("utf-8") + "'";
 						}
-						this._append_with_ctlesc(result, byte_val);
+						this.AppendWithCtlesc(result, byte_val);
 						i = j;
 					} else {
 						return "'" + result.decode("utf-8") + "'";
 					}
 				} else if (c >= "1" && c <= "7") {
 					j = i + 1;
-					while (j < inner.length && j < i + 4 && _is_octal_digit(inner[j])) {
+					while (j < inner.length && j < i + 4 && IsOctalDigit(inner[j])) {
 						j += 1;
 					}
-					byte_val = parseInt(_substring(inner, i + 1, j), 8, 10);
+					byte_val = parseInt(Substring(inner, i + 1, j), 8, 10);
 					if (byte_val === 0) {
 						return "'" + result.decode("utf-8") + "'";
 					}
-					this._append_with_ctlesc(result, byte_val);
+					this.AppendWithCtlesc(result, byte_val);
 					i = j;
 				} else {
 					result.push(92);
@@ -329,24 +329,24 @@ class Word extends Node {
 					i += 2;
 				}
 			} else {
-				result.extend(inner[i].encode("utf-8"));
+				result.push(inner[i].encode("utf-8"));
 				i += 1;
 			}
 		}
 		return "'" + result.decode("utf-8") + "'";
 	}
 
-	_expand_all_ansi_c_quotes(value) {
+	ExpandAllAnsiCQuotes(value) {
 		"Find and expand ALL $'...' ANSI-C quoted strings in value.";
-		let result = [];
-		let i = 0;
-		let in_single_quote = false;
-		let in_double_quote = false;
-		let brace_depth = 0;
+		var result = [];
+		var i = 0;
+		var in_single_quote = false;
+		var in_double_quote = false;
+		var brace_depth = 0;
 		while (i < value.length) {
-			let ch = value[i];
+			var ch = value[i];
 			if (!in_single_quote) {
-				if (_starts_with_at(value, i, "${")) {
+				if (StartsWithAt(value, i, "${")) {
 					brace_depth += 1;
 					result.push("${");
 					i += 2;
@@ -358,7 +358,7 @@ class Word extends Node {
 					continue;
 				}
 			}
-			let effective_in_dquote = in_double_quote && brace_depth === 0;
+			var effective_in_dquote = in_double_quote && brace_depth === 0;
 			if (ch === "'" && !effective_in_dquote) {
 				if (!in_single_quote && i > 0 && value[i - 1] === "$") {
 					result.push(ch);
@@ -381,11 +381,11 @@ class Word extends Node {
 				result.push(value[i + 1]);
 				i += 2;
 			} else if (
-				_starts_with_at(value, i, "$'") &&
+				StartsWithAt(value, i, "$'") &&
 				!in_single_quote &&
 				!effective_in_dquote
 			) {
-				let j = i + 2;
+				var j = i + 2;
 				while (j < value.length) {
 					if (value[j] === "\\" && j + 1 < value.length) {
 						j += 2;
@@ -396,23 +396,21 @@ class Word extends Node {
 						j += 1;
 					}
 				}
-				let ansi_str = _substring(value, i, j);
-				let expanded = this._expand_ansi_c_escapes(
-					_substring(ansi_str, 1, ansi_str.length),
+				var ansi_str = Substring(value, i, j);
+				var expanded = this.ExpandAnsiCEscapes(
+					Substring(ansi_str, 1, ansi_str.length),
 				);
 				if (
 					brace_depth > 0 &&
 					expanded.startsWith("'") &&
 					expanded.endsWith("'")
 				) {
-					let inner = _substring(expanded, 1, expanded.length - 1);
-					if (inner && inner.find("") === -1) {
+					var inner = Substring(expanded, 1, expanded.length - 1);
+					if (inner && inner.indexOf("") === -1) {
 						if (result.length >= 2) {
-							let prev = _sublist(
-								result,
-								result.length - 2,
-								result.length,
-							).join("");
+							var prev = Sublist(result, result.length - 2, result.length).join(
+								"",
+							);
 						} else {
 							prev = "";
 						}
@@ -424,7 +422,7 @@ class Word extends Node {
 						) {
 							expanded = inner;
 						} else if (result.length >= 1) {
-							let last = result[result.length - 1];
+							var last = result[result.length - 1];
 							if (
 								(last === "-" ||
 									last === "=" ||
@@ -447,14 +445,14 @@ class Word extends Node {
 		return result.join("");
 	}
 
-	_strip_locale_string_dollars(value) {
+	StripLocaleStringDollars(value) {
 		"Strip $ from locale strings $\"...\" while tracking quote context.";
-		let result = [];
-		let i = 0;
-		let in_single_quote = false;
-		let in_double_quote = false;
+		var result = [];
+		var i = 0;
+		var in_single_quote = false;
+		var in_double_quote = false;
 		while (i < value.length) {
-			let ch = value[i];
+			var ch = value[i];
 			if (ch === "'" && !in_double_quote) {
 				in_single_quote = !in_single_quote;
 				result.push(ch);
@@ -468,7 +466,7 @@ class Word extends Node {
 				result.push(value[i + 1]);
 				i += 2;
 			} else if (
-				_starts_with_at(value, i, '$"') &&
+				StartsWithAt(value, i, '$"') &&
 				!in_single_quote &&
 				!in_double_quote
 			) {
@@ -483,17 +481,22 @@ class Word extends Node {
 		return result.join("");
 	}
 
-	_normalize_array_whitespace(value) {
+	NormalizeArrayWhitespace(value) {
 		"Normalize whitespace inside array assignments: arr=(a  b\tc) -> arr=(a b c).";
 		if (!value.endsWith(")")) {
 			return value;
 		}
-		let i = 0;
-		if (!(i < value.length && (value[i].isalpha() || value[i] === "_"))) {
+		var i = 0;
+		if (
+			!(i < value.length && (/^[a-zA-Z]$/.test(value[i]) || value[i] === "_"))
+		) {
 			return value;
 		}
 		i += 1;
-		while (i < value.length && (value[i].isalnum() || value[i] === "_")) {
+		while (
+			i < value.length &&
+			(/^[a-zA-Z0-9]$/.test(value[i]) || value[i] === "_")
+		) {
 			i += 1;
 		}
 		if (i < value.length && value[i] === "+") {
@@ -502,14 +505,14 @@ class Word extends Node {
 		if (!(i + 1 < value.length && value[i] === "=" && value[i + 1] === "(")) {
 			return value;
 		}
-		let prefix = _substring(value, 0, i + 1);
-		let inner = _substring(value, prefix.length + 1, value.length - 1);
-		let normalized = [];
+		var prefix = Substring(value, 0, i + 1);
+		var inner = Substring(value, prefix.length + 1, value.length - 1);
+		var normalized = [];
 		i = 0;
-		let in_whitespace = true;
+		var in_whitespace = true;
 		while (i < inner.length) {
-			let ch = inner[i];
-			if (_is_whitespace(ch)) {
+			var ch = inner[i];
+			if (IsWhitespace(ch)) {
 				if (!in_whitespace && normalized) {
 					normalized.push(" ");
 					in_whitespace = true;
@@ -517,11 +520,11 @@ class Word extends Node {
 				i += 1;
 			} else if (ch === "'") {
 				in_whitespace = false;
-				let j = i + 1;
+				var j = i + 1;
 				while (j < inner.length && inner[j] !== "'") {
 					j += 1;
 				}
-				normalized.push(_substring(inner, i, j + 1));
+				normalized.push(Substring(inner, i, j + 1));
 				i = j + 1;
 			} else if (ch === '"') {
 				in_whitespace = false;
@@ -535,11 +538,11 @@ class Word extends Node {
 						j += 1;
 					}
 				}
-				normalized.push(_substring(inner, i, j + 1));
+				normalized.push(Substring(inner, i, j + 1));
 				i = j + 1;
 			} else if (ch === "\\" && i + 1 < inner.length) {
 				in_whitespace = false;
-				normalized.push(_substring(inner, i, i + 2));
+				normalized.push(Substring(inner, i, i + 2));
 				i += 2;
 			} else {
 				in_whitespace = false;
@@ -547,26 +550,26 @@ class Word extends Node {
 				i += 1;
 			}
 		}
-		let result = normalized.join("").rstrip(" ");
+		var result = normalized.join("").trimEnd(" ");
 		return prefix + "(" + result + ")";
 	}
 
-	_strip_arith_line_continuations(value) {
+	StripArithLineContinuations(value) {
 		"Strip backslash-newline (line continuation) from inside $((...)).";
-		let result = [];
-		let i = 0;
+		var result = [];
+		var i = 0;
 		while (i < value.length) {
-			if (_starts_with_at(value, i, "$((")) {
-				let start = i;
+			if (StartsWithAt(value, i, "$((")) {
+				var start = i;
 				i += 3;
-				let depth = 1;
-				let arith_content = [];
+				var depth = 1;
+				var arith_content = [];
 				while (i < value.length && depth > 0) {
-					if (_starts_with_at(value, i, "((")) {
+					if (StartsWithAt(value, i, "((")) {
 						arith_content.push("((");
 						depth += 1;
 						i += 2;
-					} else if (_starts_with_at(value, i, "))")) {
+					} else if (StartsWithAt(value, i, "))")) {
 						depth -= 1;
 						if (depth > 0) {
 							arith_content.push("))");
@@ -586,7 +589,7 @@ class Word extends Node {
 				if (depth === 0) {
 					result.push("$((" + arith_content.join("") + "))");
 				} else {
-					result.push(_substring(value, start, i));
+					result.push(Substring(value, start, i));
 				}
 			} else {
 				result.push(value[i]);
@@ -596,75 +599,78 @@ class Word extends Node {
 		return result.join("");
 	}
 
-	_collect_cmdsubs(node) {
+	CollectCmdsubs(node) {
 		"Recursively collect CommandSubstitution nodes from an AST node.";
-		let result = [];
-		let node_kind = getattr(node, "kind", null);
+		var result = [];
+		var node_kind = node["kind"] !== undefined ? node["kind"] : null;
 		if (node_kind === "cmdsub") {
 			result.push(node);
 		} else {
-			let expr = getattr(node, "expression", null);
+			var expr = node["expression"] !== undefined ? node["expression"] : null;
 			if (expr !== null) {
-				result.extend(this._collect_cmdsubs(expr));
+				result.push(this.CollectCmdsubs(expr));
 			}
 		}
-		let left = getattr(node, "left", null);
+		var left = node["left"] !== undefined ? node["left"] : null;
 		if (left !== null) {
-			result.extend(this._collect_cmdsubs(left));
+			result.push(this.CollectCmdsubs(left));
 		}
-		let right = getattr(node, "right", null);
+		var right = node["right"] !== undefined ? node["right"] : null;
 		if (right !== null) {
-			result.extend(this._collect_cmdsubs(right));
+			result.push(this.CollectCmdsubs(right));
 		}
-		let operand = getattr(node, "operand", null);
+		var operand = node["operand"] !== undefined ? node["operand"] : null;
 		if (operand !== null) {
-			result.extend(this._collect_cmdsubs(operand));
+			result.push(this.CollectCmdsubs(operand));
 		}
-		let condition = getattr(node, "condition", null);
+		var condition = node["condition"] !== undefined ? node["condition"] : null;
 		if (condition !== null) {
-			result.extend(this._collect_cmdsubs(condition));
+			result.push(this.CollectCmdsubs(condition));
 		}
-		let true_value = getattr(node, "true_value", null);
+		var true_value =
+			node["true_value"] !== undefined ? node["true_value"] : null;
 		if (true_value !== null) {
-			result.extend(this._collect_cmdsubs(true_value));
+			result.push(this.CollectCmdsubs(true_value));
 		}
-		let false_value = getattr(node, "false_value", null);
+		var false_value =
+			node["false_value"] !== undefined ? node["false_value"] : null;
 		if (false_value !== null) {
-			result.extend(this._collect_cmdsubs(false_value));
+			result.push(this.CollectCmdsubs(false_value));
 		}
 		return result;
 	}
 
-	_format_command_substitutions(value) {
+	FormatCommandSubstitutions(value) {
 		"Replace $(...) and >(...) / <(...) with bash-oracle-formatted AST output.";
-		let cmdsub_parts = [];
-		let procsub_parts = [];
-		for (const p of this.parts) {
+		var cmdsub_parts = [];
+		var procsub_parts = [];
+		for (var p of this.parts) {
 			if (p.kind === "cmdsub") {
 				cmdsub_parts.push(p);
 			} else if (p.kind === "procsub") {
 				procsub_parts.push(p);
 			} else {
-				cmdsub_parts.extend(this._collect_cmdsubs(p));
+				cmdsub_parts.push(this.CollectCmdsubs(p));
 			}
 		}
-		let has_brace_cmdsub = value.find("${ ") !== -1 || value.find("${|") !== -1;
+		var has_brace_cmdsub =
+			value.indexOf("${ ") !== -1 || value.indexOf("${|") !== -1;
 		if (!cmdsub_parts && !procsub_parts && !has_brace_cmdsub) {
 			return value;
 		}
-		let result = [];
-		let i = 0;
-		let cmdsub_idx = 0;
-		let procsub_idx = 0;
+		var result = [];
+		var i = 0;
+		var cmdsub_idx = 0;
+		var procsub_idx = 0;
 		while (i < value.length) {
 			if (
-				_starts_with_at(value, i, "$(") &&
-				!_starts_with_at(value, i, "$((") &&
+				StartsWithAt(value, i, "$(") &&
+				!StartsWithAt(value, i, "$((") &&
 				cmdsub_idx < cmdsub_parts.length
 			) {
-				let j = _find_cmdsub_end(value, i + 2);
-				let node = cmdsub_parts[cmdsub_idx];
-				let formatted = _format_cmdsub_node(node.command);
+				var j = FindCmdsubEnd(value, i + 2);
+				var node = cmdsub_parts[cmdsub_idx];
+				var formatted = FormatCmdsubNode(node.command);
 				if (formatted.startsWith("(")) {
 					result.push("$( " + formatted + ")");
 				} else {
@@ -685,27 +691,27 @@ class Word extends Node {
 					}
 					j += 1;
 				}
-				result.push(_substring(value, i, j));
+				result.push(Substring(value, i, j));
 				cmdsub_idx += 1;
 				i = j;
 			} else if (
-				(_starts_with_at(value, i, ">(") || _starts_with_at(value, i, "<(")) &&
+				(StartsWithAt(value, i, ">(") || StartsWithAt(value, i, "<(")) &&
 				procsub_idx < procsub_parts.length
 			) {
-				let direction = value[i];
-				j = _find_cmdsub_end(value, i + 2);
+				var direction = value[i];
+				j = FindCmdsubEnd(value, i + 2);
 				node = procsub_parts[procsub_idx];
-				formatted = _format_cmdsub_node(node.command);
+				formatted = FormatCmdsubNode(node.command);
 				result.push(direction + "(" + formatted + ")");
 				procsub_idx += 1;
 				i = j;
 			} else if (
-				_starts_with_at(value, i, "${ ") ||
-				_starts_with_at(value, i, "${|")
+				StartsWithAt(value, i, "${ ") ||
+				StartsWithAt(value, i, "${|")
 			) {
-				let prefix = _substring(value, i, i + 3);
+				var prefix = Substring(value, i, i + 3);
 				j = i + 3;
-				let depth = 1;
+				var depth = 1;
 				while (j < value.length && depth > 0) {
 					if (value[j] === "{") {
 						depth += 1;
@@ -714,21 +720,21 @@ class Word extends Node {
 					}
 					j += 1;
 				}
-				let inner = _substring(value, i + 2, j - 1);
-				if (inner.strip() === "") {
+				var inner = Substring(value, i + 2, j - 1);
+				if (inner.trim() === "") {
 					result.push("${ }");
 				} else {
 					try {
-						let parser = Parser(inner.lstrip(" |"));
-						let parsed = parser.parse_list();
+						var parser = Parser(inner.trimStart(" |"));
+						var parsed = parser.parseList();
 						if (parsed) {
-							formatted = _format_cmdsub_node(parsed);
+							formatted = FormatCmdsubNode(parsed);
 							result.push(prefix + formatted + "; }");
 						} else {
 							result.push("${ }");
 						}
 					} catch (_) {
-						result.push(_substring(value, i, j));
+						result.push(Substring(value, i, j));
 					}
 				}
 				i = j;
@@ -740,12 +746,12 @@ class Word extends Node {
 		return result.join("");
 	}
 
-	get_cond_formatted_value() {
+	getCondFormattedValue() {
 		"Return value with command substitutions formatted for cond-term output.";
-		let value = this._expand_all_ansi_c_quotes(this.value);
-		value = this._format_command_substitutions(value);
+		var value = this.ExpandAllAnsiCQuotes(this.value);
+		value = this.FormatCommandSubstitutions(value);
 		value = value.replace("", "");
-		return value.rstrip("\n");
+		return value.trimEnd("\n");
 	}
 }
 
@@ -761,15 +767,15 @@ class Command extends Node {
 		this.redirects = redirects;
 	}
 
-	to_sexp() {
-		let parts = [];
-		for (const w of this.words) {
-			parts.push(w.to_sexp());
+	toSexp() {
+		var parts = [];
+		for (var w of this.words) {
+			parts.push(w.toSexp());
 		}
-		for (const r of this.redirects) {
-			parts.push(r.to_sexp());
+		for (var r of this.redirects) {
+			parts.push(r.toSexp());
 		}
-		let inner = parts.join(" ");
+		var inner = parts.join(" ");
 		if (!inner) {
 			return "(command)";
 		}
@@ -785,67 +791,66 @@ class Pipeline extends Node {
 		this.commands = commands;
 	}
 
-	to_sexp() {
+	toSexp() {
 		if (this.commands.length === 1) {
-			return this.commands[0].to_sexp();
+			return this.commands[0].toSexp();
 		}
-		let cmds = [];
-		let i = 0;
+		var cmds = [];
+		var i = 0;
 		while (i < this.commands.length) {
-			let cmd = this.commands[i];
+			var cmd = this.commands[i];
 			if (cmd.kind === "pipe-both") {
 				i += 1;
 				continue;
 			}
-			let needs_redirect =
+			var needs_redirect =
 				i + 1 < this.commands.length &&
 				this.commands[i + 1].kind === "pipe-both";
 			cmds.push([cmd, needs_redirect]);
 			i += 1;
 		}
 		if (cmds.length === 1) {
-			let pair = cmds[0];
+			var pair = cmds[0];
 			cmd = pair[0];
-			let needs = pair[1];
-			return this._cmd_sexp(cmd, needs);
+			var needs = pair[1];
+			return this.CmdSexp(cmd, needs);
 		}
-		let last_pair = cmds[cmds.length - 1];
-		let last_cmd = last_pair[0];
-		let last_needs = last_pair[1];
-		let result = this._cmd_sexp(last_cmd, last_needs);
-		let j = cmds.length - 2;
+		var last_pair = cmds[cmds.length - 1];
+		var last_cmd = last_pair[0];
+		var last_needs = last_pair[1];
+		var result = this.CmdSexp(last_cmd, last_needs);
+		var j = cmds.length - 2;
 		while (j >= 0) {
 			pair = cmds[j];
 			cmd = pair[0];
 			needs = pair[1];
 			if (needs && cmd.kind !== "command") {
-				result =
-					"(pipe " + cmd.to_sexp() + ' (redirect ">&" 1) ' + result + ")";
+				result = "(pipe " + cmd.toSexp() + ' (redirect ">&" 1) ' + result + ")";
 			} else {
-				result = "(pipe " + this._cmd_sexp(cmd, needs) + " " + result + ")";
+				result = "(pipe " + this.CmdSexp(cmd, needs) + " " + result + ")";
 			}
 			j -= 1;
 		}
 		return result;
 	}
 
-	_cmd_sexp(cmd, needs_redirect) {
+	CmdSexp(cmd, needs_redirect) {
 		"Get s-expression for a command, optionally injecting pipe-both redirect.";
 		if (!needs_redirect) {
-			return cmd.to_sexp();
+			return cmd.toSexp();
 		}
 		if (cmd.kind === "command") {
-			let parts = [];
-			for (const w of cmd.words) {
-				parts.push(w.to_sexp());
+			var parts = [];
+			for (var w of cmd.words) {
+				parts.push(w.toSexp());
 			}
-			for (const r of cmd.redirects) {
-				parts.push(r.to_sexp());
+			for (var r of cmd.redirects) {
+				parts.push(r.toSexp());
 			}
 			parts.push('(redirect ">&" 1)');
 			return "(command " + parts.join(" ") + ")";
 		}
-		return cmd.to_sexp();
+		return cmd.toSexp();
 	}
 }
 
@@ -857,9 +862,9 @@ class List extends Node {
 		this.parts = parts;
 	}
 
-	to_sexp() {
-		let parts = list(this.parts);
-		let op_names = {
+	toSexp() {
+		var parts = list(this.parts);
+		var op_names = {
 			"&&": "and",
 			"||": "or",
 			";": "semi",
@@ -872,89 +877,89 @@ class List extends Node {
 			(parts[parts.length - 1].op === ";" ||
 				parts[parts.length - 1].op === "\n")
 		) {
-			parts = _sublist(parts, 0, parts.length - 1);
+			parts = Sublist(parts, 0, parts.length - 1);
 		}
 		if (parts.length === 1) {
-			return parts[0].to_sexp();
+			return parts[0].toSexp();
 		}
 		if (
 			parts[parts.length - 1].kind === "operator" &&
 			parts[parts.length - 1].op === "&"
 		) {
-			for (let i = parts.length - 3; i > 0; i--) {
+			for (var i = parts.length - 3; i > 0; i--) {
 				if (
 					parts[i].kind === "operator" &&
 					(parts[i].op === ";" || parts[i].op === "\n")
 				) {
-					let left = _sublist(parts, 0, i);
-					let right = _sublist(parts, i + 1, parts.length - 1);
+					var left = Sublist(parts, 0, i);
+					var right = Sublist(parts, i + 1, parts.length - 1);
 					if (left.length > 1) {
-						let left_sexp = List(left).to_sexp();
+						var left_sexp = new List(left).toSexp();
 					} else {
-						left_sexp = left[0].to_sexp();
+						left_sexp = left[0].toSexp();
 					}
 					if (right.length > 1) {
-						let right_sexp = List(right).to_sexp();
+						var right_sexp = new List(right).toSexp();
 					} else {
-						right_sexp = right[0].to_sexp();
+						right_sexp = right[0].toSexp();
 					}
 					return "(semi " + left_sexp + " (background " + right_sexp + "))";
 				}
 			}
-			let inner_parts = _sublist(parts, 0, parts.length - 1);
+			var inner_parts = Sublist(parts, 0, parts.length - 1);
 			if (inner_parts.length === 1) {
-				return "(background " + inner_parts[0].to_sexp() + ")";
+				return "(background " + inner_parts[0].toSexp() + ")";
 			}
-			let inner_list = List(inner_parts);
-			return "(background " + inner_list.to_sexp() + ")";
+			var inner_list = new List(inner_parts);
+			return "(background " + inner_list.toSexp() + ")";
 		}
-		return this._to_sexp_with_precedence(parts, op_names);
+		return this.ToSexpWithPrecedence(parts, op_names);
 	}
 
-	_to_sexp_with_precedence(parts, op_names) {
-		for (let i = parts.length - 2; i > 0; i--) {
+	ToSexpWithPrecedence(parts, op_names) {
+		for (var i = parts.length - 2; i > 0; i--) {
 			if (
 				parts[i].kind === "operator" &&
 				(parts[i].op === ";" || parts[i].op === "\n")
 			) {
-				let left = _sublist(parts, 0, i);
-				let right = _sublist(parts, i + 1, parts.length);
+				var left = Sublist(parts, 0, i);
+				var right = Sublist(parts, i + 1, parts.length);
 				if (left.length > 1) {
-					let left_sexp = List(left).to_sexp();
+					var left_sexp = new List(left).toSexp();
 				} else {
-					left_sexp = left[0].to_sexp();
+					left_sexp = left[0].toSexp();
 				}
 				if (right.length > 1) {
-					let right_sexp = List(right).to_sexp();
+					var right_sexp = new List(right).toSexp();
 				} else {
-					right_sexp = right[0].to_sexp();
+					right_sexp = right[0].toSexp();
 				}
 				return "(semi " + left_sexp + " " + right_sexp + ")";
 			}
 		}
-		for (let i = parts.length - 2; i > 0; i--) {
+		for (var i = parts.length - 2; i > 0; i--) {
 			if (parts[i].kind === "operator" && parts[i].op === "&") {
-				left = _sublist(parts, 0, i);
-				right = _sublist(parts, i + 1, parts.length);
+				left = Sublist(parts, 0, i);
+				right = Sublist(parts, i + 1, parts.length);
 				if (left.length > 1) {
-					left_sexp = List(left).to_sexp();
+					left_sexp = new List(left).toSexp();
 				} else {
-					left_sexp = left[0].to_sexp();
+					left_sexp = left[0].toSexp();
 				}
 				if (right.length > 1) {
-					right_sexp = List(right).to_sexp();
+					right_sexp = new List(right).toSexp();
 				} else {
-					right_sexp = right[0].to_sexp();
+					right_sexp = right[0].toSexp();
 				}
 				return "(background " + left_sexp + " " + right_sexp + ")";
 			}
 		}
-		let result = parts[0].to_sexp();
-		for (let i = 1; i < parts.length - 1; i += 2) {
-			let op = parts[i];
-			let cmd = parts[i + 1];
-			let op_name = op_names.get(op.op, op.op);
-			result = "(" + op_name + " " + result + " " + cmd.to_sexp() + ")";
+		var result = parts[0].toSexp();
+		for (var i = 1; i < parts.length - 1; i += 2) {
+			var op = parts[i];
+			var cmd = parts[i + 1];
+			var op_name = op_names.get(op.op, op.op);
+			result = "(" + op_name + " " + result + " " + cmd.toSexp() + ")";
 		}
 		return result;
 	}
@@ -968,8 +973,8 @@ class Operator extends Node {
 		this.op = op;
 	}
 
-	to_sexp() {
-		let names = {
+	toSexp() {
+		var names = {
 			"&&": "and",
 			"||": "or",
 			";": "semi",
@@ -987,7 +992,7 @@ class PipeBoth extends Node {
 		this.kind = "pipe-both";
 	}
 
-	to_sexp() {
+	toSexp() {
 		return "(pipe-both)";
 	}
 }
@@ -999,7 +1004,7 @@ class Empty extends Node {
 		this.kind = "empty";
 	}
 
-	to_sexp() {
+	toSexp() {
 		return "";
 	}
 }
@@ -1012,7 +1017,7 @@ class Comment extends Node {
 		this.text = text;
 	}
 
-	to_sexp() {
+	toSexp() {
 		return "";
 	}
 }
@@ -1028,22 +1033,25 @@ class Redirect extends Node {
 		this.fd = fd;
 	}
 
-	to_sexp() {
-		let op = this.op.lstrip("0123456789");
+	toSexp() {
+		var op = this.op.trimStart("0123456789");
 		if (op.startsWith("{")) {
-			let j = 1;
-			if (j < op.length && (op[j].isalpha() || op[j] === "_")) {
+			var j = 1;
+			if (j < op.length && (/^[a-zA-Z]$/.test(op[j]) || op[j] === "_")) {
 				j += 1;
-				while (j < op.length && (op[j].isalnum() || op[j] === "_")) {
+				while (
+					j < op.length &&
+					(/^[a-zA-Z0-9]$/.test(op[j]) || op[j] === "_")
+				) {
 					j += 1;
 				}
 				if (j < op.length && op[j] === "}") {
-					op = _substring(op, j + 1, op.length);
+					op = Substring(op, j + 1, op.length);
 				}
 			}
 		}
-		let target_val = this.target.value;
-		target_val = Word(target_val)._expand_all_ansi_c_quotes(target_val);
+		var target_val = this.target.value;
+		target_val = new Word(target_val).ExpandAllAnsiCQuotes(target_val);
 		target_val = target_val.replace('$"', '"');
 		if (target_val.startsWith("&")) {
 			if (op === ">") {
@@ -1051,8 +1059,8 @@ class Redirect extends Node {
 			} else if (op === "<") {
 				op = "<&";
 			}
-			let fd_target = _substring(target_val, 1, target_val.length).rstrip("-");
-			if (fd_target.isdigit()) {
+			var fd_target = Substring(target_val, 1, target_val.length).trimEnd("-");
+			if (/^[0-9]$/.test(fd_target)) {
 				return '(redirect "' + op + '" ' + fd_target + ")";
 			} else if (target_val === "&-") {
 				return '(redirect ">&-" 0)';
@@ -1061,10 +1069,10 @@ class Redirect extends Node {
 			}
 		}
 		if (op === ">&" || op === "<&") {
-			if (target_val.isdigit()) {
+			if (/^[0-9]$/.test(target_val)) {
 				return '(redirect "' + op + '" ' + target_val + ")";
 			}
-			target_val = target_val.rstrip("-");
+			target_val = target_val.trimEnd("-");
 			return '(redirect "' + op + '" "' + target_val + '")';
 		}
 		return '(redirect "' + op + '" "' + target_val + '")';
@@ -1086,9 +1094,9 @@ class HereDoc extends Node {
 		this.fd = fd;
 	}
 
-	to_sexp() {
+	toSexp() {
 		if (this.strip_tabs) {
-			let op = "<<-";
+			var op = "<<-";
 		} else {
 			op = "<<";
 		}
@@ -1106,12 +1114,12 @@ class Subshell extends Node {
 		this.redirects = redirects;
 	}
 
-	to_sexp() {
-		let base = "(subshell " + this.body.to_sexp() + ")";
+	toSexp() {
+		var base = "(subshell " + this.body.toSexp() + ")";
 		if (this.redirects) {
-			let redirect_parts = [];
-			for (const r of this.redirects) {
-				redirect_parts.push(r.to_sexp());
+			var redirect_parts = [];
+			for (var r of this.redirects) {
+				redirect_parts.push(r.toSexp());
 			}
 			return base + " " + redirect_parts.join(" ");
 		}
@@ -1129,12 +1137,12 @@ class BraceGroup extends Node {
 		this.redirects = redirects;
 	}
 
-	to_sexp() {
-		let base = "(brace-group " + this.body.to_sexp() + ")";
+	toSexp() {
+		var base = "(brace-group " + this.body.toSexp() + ")";
 		if (this.redirects) {
-			let redirect_parts = [];
-			for (const r of this.redirects) {
-				redirect_parts.push(r.to_sexp());
+			var redirect_parts = [];
+			for (var r of this.redirects) {
+				redirect_parts.push(r.toSexp());
 			}
 			return base + " " + redirect_parts.join(" ");
 		}
@@ -1157,15 +1165,15 @@ class If extends Node {
 		this.redirects = redirects;
 	}
 
-	to_sexp() {
-		let result =
-			"(if " + this.condition.to_sexp() + " " + this.then_body.to_sexp();
+	toSexp() {
+		var result =
+			"(if " + this.condition.toSexp() + " " + this.then_body.toSexp();
 		if (this.else_body) {
-			result = result + " " + this.else_body.to_sexp();
+			result = result + " " + this.else_body.toSexp();
 		}
 		result = result + ")";
-		for (const r of this.redirects) {
-			result = result + " " + r.to_sexp();
+		for (var r of this.redirects) {
+			result = result + " " + r.toSexp();
 		}
 		return result;
 	}
@@ -1184,13 +1192,13 @@ class While extends Node {
 		this.redirects = redirects;
 	}
 
-	to_sexp() {
-		let base =
-			"(while " + this.condition.to_sexp() + " " + this.body.to_sexp() + ")";
+	toSexp() {
+		var base =
+			"(while " + this.condition.toSexp() + " " + this.body.toSexp() + ")";
 		if (this.redirects) {
-			let redirect_parts = [];
-			for (const r of this.redirects) {
-				redirect_parts.push(r.to_sexp());
+			var redirect_parts = [];
+			for (var r of this.redirects) {
+				redirect_parts.push(r.toSexp());
 			}
 			return base + " " + redirect_parts.join(" ");
 		}
@@ -1211,13 +1219,13 @@ class Until extends Node {
 		this.redirects = redirects;
 	}
 
-	to_sexp() {
-		let base =
-			"(until " + this.condition.to_sexp() + " " + this.body.to_sexp() + ")";
+	toSexp() {
+		var base =
+			"(until " + this.condition.toSexp() + " " + this.body.toSexp() + ")";
 		if (this.redirects) {
-			let redirect_parts = [];
-			for (const r of this.redirects) {
-				redirect_parts.push(r.to_sexp());
+			var redirect_parts = [];
+			for (var r of this.redirects) {
+				redirect_parts.push(r.toSexp());
 			}
 			return base + " " + redirect_parts.join(" ");
 		}
@@ -1239,22 +1247,22 @@ class For extends Node {
 		this.redirects = redirects;
 	}
 
-	to_sexp() {
-		let suffix = "";
+	toSexp() {
+		var suffix = "";
 		if (this.redirects) {
-			let redirect_parts = [];
-			for (const r of this.redirects) {
-				redirect_parts.push(r.to_sexp());
+			var redirect_parts = [];
+			for (var r of this.redirects) {
+				redirect_parts.push(r.toSexp());
 			}
 			suffix = " " + redirect_parts.join(" ");
 		}
-		let var_escaped = this.variable.replace("\\", "\\\\").replace('"', '\\"');
+		var var_escaped = this.variable.replace("\\", "\\\\").replace('"', '\\"');
 		if (this.words === null) {
 			return (
 				'(for (word "' +
 				var_escaped +
 				'") (in (word "\\"$@\\"")) ' +
-				this.body.to_sexp() +
+				this.body.toSexp() +
 				")" +
 				suffix
 			);
@@ -1263,23 +1271,23 @@ class For extends Node {
 				'(for (word "' +
 				var_escaped +
 				'") (in) ' +
-				this.body.to_sexp() +
+				this.body.toSexp() +
 				")" +
 				suffix
 			);
 		} else {
-			let word_parts = [];
-			for (const w of this.words) {
-				word_parts.push(w.to_sexp());
+			var word_parts = [];
+			for (var w of this.words) {
+				word_parts.push(w.toSexp());
 			}
-			let word_strs = word_parts.join(" ");
+			var word_strs = word_parts.join(" ");
 			return (
 				'(for (word "' +
 				var_escaped +
 				'") (in ' +
 				word_strs +
 				") " +
-				this.body.to_sexp() +
+				this.body.toSexp() +
 				")" +
 				suffix
 			);
@@ -1302,49 +1310,49 @@ class ForArith extends Node {
 		this.redirects = redirects;
 	}
 
-	to_sexp() {
-		function format_arith_val(s) {
-			let w = Word(s, []);
-			let val = w._expand_all_ansi_c_quotes(s);
-			val = w._strip_locale_string_dollars(val);
+	toSexp() {
+		function formatArithVal(s) {
+			var w = new Word(s, []);
+			var val = w.ExpandAllAnsiCQuotes(s);
+			val = w.StripLocaleStringDollars(val);
 			val = val.replace("\\", "\\\\").replace('"', '\\"');
 			return val;
 		}
 
-		let suffix = "";
+		var suffix = "";
 		if (this.redirects) {
-			let redirect_parts = [];
-			for (const r of this.redirects) {
-				redirect_parts.push(r.to_sexp());
+			var redirect_parts = [];
+			for (var r of this.redirects) {
+				redirect_parts.push(r.toSexp());
 			}
 			suffix = " " + redirect_parts.join(" ");
 		}
 		if (this.init) {
-			let init_val = this.init;
+			var init_val = this.init;
 		} else {
 			init_val = "1";
 		}
 		if (this.cond) {
-			let cond_val = _normalize_fd_redirects(this.cond);
+			var cond_val = NormalizeFdRedirects(this.cond);
 		} else {
 			cond_val = "1";
 		}
 		if (this.incr) {
-			let incr_val = this.incr;
+			var incr_val = this.incr;
 		} else {
 			incr_val = "1";
 		}
 		return (
 			'(arith-for (init (word "' +
-			format_arith_val(init_val) +
+			formatArithVal(init_val) +
 			'")) ' +
 			'(test (word "' +
-			format_arith_val(cond_val) +
+			formatArithVal(cond_val) +
 			'")) ' +
 			'(step (word "' +
-			format_arith_val(incr_val) +
+			formatArithVal(incr_val) +
 			'")) ' +
-			this.body.to_sexp() +
+			this.body.toSexp() +
 			")" +
 			suffix
 		);
@@ -1365,24 +1373,24 @@ class Select extends Node {
 		this.redirects = redirects;
 	}
 
-	to_sexp() {
-		let suffix = "";
+	toSexp() {
+		var suffix = "";
 		if (this.redirects) {
-			let redirect_parts = [];
-			for (const r of this.redirects) {
-				redirect_parts.push(r.to_sexp());
+			var redirect_parts = [];
+			for (var r of this.redirects) {
+				redirect_parts.push(r.toSexp());
 			}
 			suffix = " " + redirect_parts.join(" ");
 		}
-		let var_escaped = this.variable.replace("\\", "\\\\").replace('"', '\\"');
+		var var_escaped = this.variable.replace("\\", "\\\\").replace('"', '\\"');
 		if (this.words !== null) {
-			let word_parts = [];
-			for (const w of this.words) {
-				word_parts.push(w.to_sexp());
+			var word_parts = [];
+			for (var w of this.words) {
+				word_parts.push(w.toSexp());
 			}
-			let word_strs = word_parts.join(" ");
+			var word_strs = word_parts.join(" ");
 			if (this.words) {
-				let in_clause = "(in " + word_strs + ")";
+				var in_clause = "(in " + word_strs + ")";
 			} else {
 				in_clause = "(in)";
 			}
@@ -1395,7 +1403,7 @@ class Select extends Node {
 			'") ' +
 			in_clause +
 			" " +
-			this.body.to_sexp() +
+			this.body.toSexp() +
 			")" +
 			suffix
 		);
@@ -1415,17 +1423,17 @@ class Case extends Node {
 		this.redirects = redirects;
 	}
 
-	to_sexp() {
-		let parts = [];
-		parts.push("(case " + this.word.to_sexp());
-		for (const p of this.patterns) {
-			parts.push(p.to_sexp());
+	toSexp() {
+		var parts = [];
+		parts.push("(case " + this.word.toSexp());
+		for (var p of this.patterns) {
+			parts.push(p.toSexp());
 		}
-		let base = parts.join(" ") + ")";
+		var base = parts.join(" ") + ")";
 		if (this.redirects) {
-			let redirect_parts = [];
-			for (const r of this.redirects) {
-				redirect_parts.push(r.to_sexp());
+			var redirect_parts = [];
+			for (var r of this.redirects) {
+				redirect_parts.push(r.toSexp());
 			}
 			return base + " " + redirect_parts.join(" ");
 		}
@@ -1433,10 +1441,10 @@ class Case extends Node {
 	}
 }
 
-function _consume_single_quote(s, start) {
+function ConsumeSingleQuote(s, start) {
 	"Consume '...' from start. Returns (end_index, chars_list).";
-	let chars = ["'"];
-	let i = start + 1;
+	var chars = ["'"];
+	var i = start + 1;
 	while (i < s.length && s[i] !== "'") {
 		chars.push(s[i]);
 		i += 1;
@@ -1448,10 +1456,10 @@ function _consume_single_quote(s, start) {
 	return [i, chars];
 }
 
-function _consume_double_quote(s, start) {
+function ConsumeDoubleQuote(s, start) {
 	"Consume \"...\" from start, handling escapes. Returns (end_index, chars_list).";
-	let chars = ['"'];
-	let i = start + 1;
+	var chars = ['"'];
+	var i = start + 1;
 	while (i < s.length && s[i] !== '"') {
 		if (s[i] === "\\" && i + 1 < s.length) {
 			chars.push(s[i]);
@@ -1467,9 +1475,9 @@ function _consume_double_quote(s, start) {
 	return [i, chars];
 }
 
-function _has_bracket_close(s, start, depth) {
+function HasBracketClose(s, start, depth) {
 	"Check if there's a ] before | or ) at depth 0.";
-	let i = start;
+	var i = start;
 	while (i < s.length) {
 		if (s[i] === "]") {
 			return true;
@@ -1482,18 +1490,18 @@ function _has_bracket_close(s, start, depth) {
 	return false;
 }
 
-function _consume_bracket_class(s, start, depth) {
+function ConsumeBracketClass(s, start, depth) {
 	"Consume [...] bracket expression. Returns (end_index, chars_list, was_bracket).";
-	let scan_pos = start + 1;
+	var scan_pos = start + 1;
 	if (scan_pos < s.length && (s[scan_pos] === "!" || s[scan_pos] === "^")) {
 		scan_pos += 1;
 	}
 	if (scan_pos < s.length && s[scan_pos] === "]") {
-		if (_has_bracket_close(s, scan_pos + 1, depth)) {
+		if (HasBracketClose(s, scan_pos + 1, depth)) {
 			scan_pos += 1;
 		}
 	}
-	let is_bracket = false;
+	var is_bracket = false;
 	while (scan_pos < s.length) {
 		if (s[scan_pos] === "]") {
 			is_bracket = true;
@@ -1507,14 +1515,14 @@ function _consume_bracket_class(s, start, depth) {
 	if (!is_bracket) {
 		return [start + 1, ["["], false];
 	}
-	let chars = ["["];
-	let i = start + 1;
+	var chars = ["["];
+	var i = start + 1;
 	if (i < s.length && (s[i] === "!" || s[i] === "^")) {
 		chars.push(s[i]);
 		i += 1;
 	}
 	if (i < s.length && s[i] === "]") {
-		if (_has_bracket_close(s, i + 1, depth)) {
+		if (HasBracketClose(s, i + 1, depth)) {
 			chars.push(s[i]);
 			i += 1;
 		}
@@ -1541,15 +1549,15 @@ class CasePattern extends Node {
 		this.terminator = terminator;
 	}
 
-	to_sexp() {
-		let alternatives = [];
-		let current = [];
-		let i = 0;
-		let depth = 0;
+	toSexp() {
+		var alternatives = [];
+		var current = [];
+		var i = 0;
+		var depth = 0;
 		while (i < this.pattern.length) {
-			let ch = this.pattern[i];
+			var ch = this.pattern[i];
 			if (ch === "\\" && i + 1 < this.pattern.length) {
-				current.push(_substring(this.pattern, i, i + 2));
+				current.push(Substring(this.pattern, i, i + 2));
 				i += 2;
 			} else if (
 				(ch === "@" || ch === "?" || ch === "*" || ch === "+" || ch === "!") &&
@@ -1578,17 +1586,17 @@ class CasePattern extends Node {
 				depth -= 1;
 				i += 1;
 			} else if (ch === "[") {
-				let result = _consume_bracket_class(this.pattern, i, depth);
+				var result = ConsumeBracketClass(this.pattern, i, depth);
 				i = result[0];
-				current.extend(result[1]);
+				current.push(result[1]);
 			} else if (ch === "'" && depth === 0) {
-				result = _consume_single_quote(this.pattern, i);
+				result = ConsumeSingleQuote(this.pattern, i);
 				i = result[0];
-				current.extend(result[1]);
+				current.push(result[1]);
 			} else if (ch === '"' && depth === 0) {
-				result = _consume_double_quote(this.pattern, i);
+				result = ConsumeDoubleQuote(this.pattern, i);
 				i = result[0];
-				current.extend(result[1]);
+				current.push(result[1]);
 			} else if (ch === "|" && depth === 0) {
 				alternatives.push(current.join(""));
 				current = [];
@@ -1599,14 +1607,14 @@ class CasePattern extends Node {
 			}
 		}
 		alternatives.push(current.join(""));
-		let word_list = [];
-		for (const alt of alternatives) {
-			word_list.push(Word(alt).to_sexp());
+		var word_list = [];
+		for (var alt of alternatives) {
+			word_list.push(new Word(alt).toSexp());
 		}
-		let pattern_str = word_list.join(" ");
-		let parts = ["(pattern (" + pattern_str + ")"];
+		var pattern_str = word_list.join(" ");
+		var parts = ["(pattern (" + pattern_str + ")"];
 		if (this.body) {
-			parts.push(" " + this.body.to_sexp());
+			parts.push(" " + this.body.toSexp());
 		} else {
 			parts.push(" ()");
 		}
@@ -1624,8 +1632,8 @@ class Function extends Node {
 		this.body = body;
 	}
 
-	to_sexp() {
-		return '(function "' + this.name + '" ' + this.body.to_sexp() + ")";
+	toSexp() {
+		return '(function "' + this.name + '" ' + this.body.toSexp() + ")";
 	}
 }
 
@@ -1641,16 +1649,16 @@ class ParamExpansion extends Node {
 		this.arg = arg;
 	}
 
-	to_sexp() {
-		let escaped_param = this.param.replace("\\", "\\\\").replace('"', '\\"');
+	toSexp() {
+		var escaped_param = this.param.replace("\\", "\\\\").replace('"', '\\"');
 		if (this.op !== null) {
-			let escaped_op = this.op.replace("\\", "\\\\").replace('"', '\\"');
+			var escaped_op = this.op.replace("\\", "\\\\").replace('"', '\\"');
 			if (this.arg !== null) {
-				let arg_val = this.arg;
+				var arg_val = this.arg;
 			} else {
 				arg_val = "";
 			}
-			let escaped_arg = arg_val.replace("\\", "\\\\").replace('"', '\\"');
+			var escaped_arg = arg_val.replace("\\", "\\\\").replace('"', '\\"');
 			return (
 				'(param "' +
 				escaped_param +
@@ -1673,8 +1681,8 @@ class ParamLength extends Node {
 		this.param = param;
 	}
 
-	to_sexp() {
-		let escaped = this.param.replace("\\", "\\\\").replace('"', '\\"');
+	toSexp() {
+		var escaped = this.param.replace("\\", "\\\\").replace('"', '\\"');
 		return '(param-len "' + escaped + '")';
 	}
 }
@@ -1689,16 +1697,16 @@ class ParamIndirect extends Node {
 		this.arg = arg;
 	}
 
-	to_sexp() {
-		let escaped = this.param.replace("\\", "\\\\").replace('"', '\\"');
+	toSexp() {
+		var escaped = this.param.replace("\\", "\\\\").replace('"', '\\"');
 		if (this.op !== null) {
-			let escaped_op = this.op.replace("\\", "\\\\").replace('"', '\\"');
+			var escaped_op = this.op.replace("\\", "\\\\").replace('"', '\\"');
 			if (this.arg !== null) {
-				let arg_val = this.arg;
+				var arg_val = this.arg;
 			} else {
 				arg_val = "";
 			}
-			let escaped_arg = arg_val.replace("\\", "\\\\").replace('"', '\\"');
+			var escaped_arg = arg_val.replace("\\", "\\\\").replace('"', '\\"');
 			return (
 				'(param-indirect "' +
 				escaped +
@@ -1721,8 +1729,8 @@ class CommandSubstitution extends Node {
 		this.command = command;
 	}
 
-	to_sexp() {
-		return "(cmdsub " + this.command.to_sexp() + ")";
+	toSexp() {
+		return "(cmdsub " + this.command.toSexp() + ")";
 	}
 }
 
@@ -1734,11 +1742,11 @@ class ArithmeticExpansion extends Node {
 		this.expression = expression;
 	}
 
-	to_sexp() {
+	toSexp() {
 		if (this.expression === null) {
 			return "(arith)";
 		}
-		return "(arith " + this.expression.to_sexp() + ")";
+		return "(arith " + this.expression.toSexp() + ")";
 	}
 }
 
@@ -1755,18 +1763,18 @@ class ArithmeticCommand extends Node {
 		this.raw_content = raw_content;
 	}
 
-	to_sexp() {
-		let escaped = this.raw_content
+	toSexp() {
+		var escaped = this.raw_content
 			.replace("\\", "\\\\")
 			.replace('"', '\\"')
 			.replace("\n", "\\n");
-		let result = '(arith (word "' + escaped + '"))';
+		var result = '(arith (word "' + escaped + '"))';
 		if (this.redirects) {
-			let redirect_parts = [];
-			for (const r of this.redirects) {
-				redirect_parts.push(r.to_sexp());
+			var redirect_parts = [];
+			for (var r of this.redirects) {
+				redirect_parts.push(r.toSexp());
 			}
-			let redirect_sexps = redirect_parts.join(" ");
+			var redirect_sexps = redirect_parts.join(" ");
 			return result + " " + redirect_sexps;
 		}
 		return result;
@@ -1781,7 +1789,7 @@ class ArithNumber extends Node {
 		this.value = value;
 	}
 
-	to_sexp() {
+	toSexp() {
 		return '(number "' + this.value + '")';
 	}
 }
@@ -1794,7 +1802,7 @@ class ArithVar extends Node {
 		this.name = name;
 	}
 
-	to_sexp() {
+	toSexp() {
 		return '(var "' + this.name + '")';
 	}
 }
@@ -1809,14 +1817,14 @@ class ArithBinaryOp extends Node {
 		this.right = right;
 	}
 
-	to_sexp() {
+	toSexp() {
 		return (
 			'(binary-op "' +
 			this.op +
 			'" ' +
-			this.left.to_sexp() +
+			this.left.toSexp() +
 			" " +
-			this.right.to_sexp() +
+			this.right.toSexp() +
 			")"
 		);
 	}
@@ -1831,8 +1839,8 @@ class ArithUnaryOp extends Node {
 		this.operand = operand;
 	}
 
-	to_sexp() {
-		return '(unary-op "' + this.op + '" ' + this.operand.to_sexp() + ")";
+	toSexp() {
+		return '(unary-op "' + this.op + '" ' + this.operand.toSexp() + ")";
 	}
 }
 
@@ -1844,8 +1852,8 @@ class ArithPreIncr extends Node {
 		this.operand = operand;
 	}
 
-	to_sexp() {
-		return "(pre-incr " + this.operand.to_sexp() + ")";
+	toSexp() {
+		return "(pre-incr " + this.operand.toSexp() + ")";
 	}
 }
 
@@ -1857,8 +1865,8 @@ class ArithPostIncr extends Node {
 		this.operand = operand;
 	}
 
-	to_sexp() {
-		return "(post-incr " + this.operand.to_sexp() + ")";
+	toSexp() {
+		return "(post-incr " + this.operand.toSexp() + ")";
 	}
 }
 
@@ -1870,8 +1878,8 @@ class ArithPreDecr extends Node {
 		this.operand = operand;
 	}
 
-	to_sexp() {
-		return "(pre-decr " + this.operand.to_sexp() + ")";
+	toSexp() {
+		return "(pre-decr " + this.operand.toSexp() + ")";
 	}
 }
 
@@ -1883,8 +1891,8 @@ class ArithPostDecr extends Node {
 		this.operand = operand;
 	}
 
-	to_sexp() {
-		return "(post-decr " + this.operand.to_sexp() + ")";
+	toSexp() {
+		return "(post-decr " + this.operand.toSexp() + ")";
 	}
 }
 
@@ -1898,14 +1906,14 @@ class ArithAssign extends Node {
 		this.value = value;
 	}
 
-	to_sexp() {
+	toSexp() {
 		return (
 			'(assign "' +
 			this.op +
 			'" ' +
-			this.target.to_sexp() +
+			this.target.toSexp() +
 			" " +
-			this.value.to_sexp() +
+			this.value.toSexp() +
 			")"
 		);
 	}
@@ -1921,14 +1929,14 @@ class ArithTernary extends Node {
 		this.if_false = if_false;
 	}
 
-	to_sexp() {
+	toSexp() {
 		return (
 			"(ternary " +
-			this.condition.to_sexp() +
+			this.condition.toSexp() +
 			" " +
-			this.if_true.to_sexp() +
+			this.if_true.toSexp() +
 			" " +
-			this.if_false.to_sexp() +
+			this.if_false.toSexp() +
 			")"
 		);
 	}
@@ -1943,8 +1951,8 @@ class ArithComma extends Node {
 		this.right = right;
 	}
 
-	to_sexp() {
-		return "(comma " + this.left.to_sexp() + " " + this.right.to_sexp() + ")";
+	toSexp() {
+		return "(comma " + this.left.toSexp() + " " + this.right.toSexp() + ")";
 	}
 }
 
@@ -1957,8 +1965,8 @@ class ArithSubscript extends Node {
 		this.index = index;
 	}
 
-	to_sexp() {
-		return '(subscript "' + this.array + '" ' + this.index.to_sexp() + ")";
+	toSexp() {
+		return '(subscript "' + this.array + '" ' + this.index.toSexp() + ")";
 	}
 }
 
@@ -1970,7 +1978,7 @@ class ArithEscape extends Node {
 		this.char = char;
 	}
 
-	to_sexp() {
+	toSexp() {
 		return '(escape "' + this.char + '")';
 	}
 }
@@ -1983,8 +1991,8 @@ class ArithDeprecated extends Node {
 		this.expression = expression;
 	}
 
-	to_sexp() {
-		let escaped = this.expression
+	toSexp() {
+		var escaped = this.expression
 			.replace("\\", "\\\\")
 			.replace('"', '\\"')
 			.replace("\n", "\\n");
@@ -2000,8 +2008,8 @@ class AnsiCQuote extends Node {
 		this.content = content;
 	}
 
-	to_sexp() {
-		let escaped = this.content
+	toSexp() {
+		var escaped = this.content
 			.replace("\\", "\\\\")
 			.replace('"', '\\"')
 			.replace("\n", "\\n");
@@ -2017,8 +2025,8 @@ class LocaleString extends Node {
 		this.content = content;
 	}
 
-	to_sexp() {
-		let escaped = this.content
+	toSexp() {
+		var escaped = this.content
 			.replace("\\", "\\\\")
 			.replace('"', '\\"')
 			.replace("\n", "\\n");
@@ -2035,8 +2043,8 @@ class ProcessSubstitution extends Node {
 		this.command = command;
 	}
 
-	to_sexp() {
-		return '(procsub "' + this.direction + '" ' + this.command.to_sexp() + ")";
+	toSexp() {
+		return '(procsub "' + this.direction + '" ' + this.command.toSexp() + ")";
 	}
 }
 
@@ -2048,11 +2056,11 @@ class Negation extends Node {
 		this.pipeline = pipeline;
 	}
 
-	to_sexp() {
+	toSexp() {
 		if (this.pipeline === null) {
 			return "(negation (command))";
 		}
-		return "(negation " + this.pipeline.to_sexp() + ")";
+		return "(negation " + this.pipeline.toSexp() + ")";
 	}
 }
 
@@ -2066,7 +2074,7 @@ class Time extends Node {
 		this.posix = posix;
 	}
 
-	to_sexp() {
+	toSexp() {
 		if (this.pipeline === null) {
 			if (this.posix) {
 				return "(time -p (command))";
@@ -2075,9 +2083,9 @@ class Time extends Node {
 			}
 		}
 		if (this.posix) {
-			return "(time -p " + this.pipeline.to_sexp() + ")";
+			return "(time -p " + this.pipeline.toSexp() + ")";
 		}
-		return "(time " + this.pipeline.to_sexp() + ")";
+		return "(time " + this.pipeline.toSexp() + ")";
 	}
 }
 
@@ -2093,23 +2101,23 @@ class ConditionalExpr extends Node {
 		this.redirects = redirects;
 	}
 
-	to_sexp() {
-		let body_kind = getattr(this.body, "kind", null);
+	toSexp() {
+		var body_kind = this.body["kind"] !== undefined ? this.body["kind"] : null;
 		if (body_kind === null) {
-			let escaped = this.body
+			var escaped = this.body
 				.replace("\\", "\\\\")
 				.replace('"', '\\"')
 				.replace("\n", "\\n");
-			let result = '(cond "' + escaped + '")';
+			var result = '(cond "' + escaped + '")';
 		} else {
-			result = "(cond " + this.body.to_sexp() + ")";
+			result = "(cond " + this.body.toSexp() + ")";
 		}
 		if (this.redirects) {
-			let redirect_parts = [];
-			for (const r of this.redirects) {
-				redirect_parts.push(r.to_sexp());
+			var redirect_parts = [];
+			for (var r of this.redirects) {
+				redirect_parts.push(r.toSexp());
 			}
-			let redirect_sexps = redirect_parts.join(" ");
+			var redirect_sexps = redirect_parts.join(" ");
 			return result + " " + redirect_sexps;
 		}
 		return result;
@@ -2125,7 +2133,7 @@ class UnaryTest extends Node {
 		this.operand = operand;
 	}
 
-	to_sexp() {
+	toSexp() {
 		return (
 			'(cond-unary "' + this.op + '" (cond-term "' + this.operand.value + '"))'
 		);
@@ -2142,9 +2150,9 @@ class BinaryTest extends Node {
 		this.right = right;
 	}
 
-	to_sexp() {
-		let left_val = this.left.get_cond_formatted_value();
-		let right_val = this.right.get_cond_formatted_value();
+	toSexp() {
+		var left_val = this.left.getCondFormattedValue();
+		var right_val = this.right.getCondFormattedValue();
 		return (
 			'(cond-binary "' +
 			this.op +
@@ -2166,10 +2174,8 @@ class CondAnd extends Node {
 		this.right = right;
 	}
 
-	to_sexp() {
-		return (
-			"(cond-and " + this.left.to_sexp() + " " + this.right.to_sexp() + ")"
-		);
+	toSexp() {
+		return "(cond-and " + this.left.toSexp() + " " + this.right.toSexp() + ")";
 	}
 }
 
@@ -2182,8 +2188,8 @@ class CondOr extends Node {
 		this.right = right;
 	}
 
-	to_sexp() {
-		return "(cond-or " + this.left.to_sexp() + " " + this.right.to_sexp() + ")";
+	toSexp() {
+		return "(cond-or " + this.left.toSexp() + " " + this.right.toSexp() + ")";
 	}
 }
 
@@ -2195,8 +2201,8 @@ class CondNot extends Node {
 		this.operand = operand;
 	}
 
-	to_sexp() {
-		return this.operand.to_sexp();
+	toSexp() {
+		return this.operand.toSexp();
 	}
 }
 
@@ -2208,8 +2214,8 @@ class CondParen extends Node {
 		this.inner = inner;
 	}
 
-	to_sexp() {
-		return "(cond-expr " + this.inner.to_sexp() + ")";
+	toSexp() {
+		return "(cond-expr " + this.inner.toSexp() + ")";
 	}
 }
 
@@ -2221,15 +2227,15 @@ class Array extends Node {
 		this.elements = elements;
 	}
 
-	to_sexp() {
+	toSexp() {
 		if (!this.elements) {
 			return "(array)";
 		}
-		let parts = [];
-		for (const e of this.elements) {
-			parts.push(e.to_sexp());
+		var parts = [];
+		for (var e of this.elements) {
+			parts.push(e.toSexp());
 		}
-		let inner = parts.join(" ");
+		var inner = parts.join(" ");
 		return "(array " + inner + ")";
 	}
 }
@@ -2244,45 +2250,45 @@ class Coproc extends Node {
 		this.name = name;
 	}
 
-	to_sexp() {
+	toSexp() {
 		if (this.name) {
-			let name = this.name;
+			var name = this.name;
 		} else {
 			name = "COPROC";
 		}
-		return '(coproc "' + name + '" ' + this.command.to_sexp() + ")";
+		return '(coproc "' + name + '" ' + this.command.toSexp() + ")";
 	}
 }
 
-function _format_cmdsub_node(node, indent, in_procsub) {
+function FormatCmdsubNode(node, indent, in_procsub) {
 	"Format an AST node for command substitution output (bash-oracle pretty-print format).";
-	let sp = _repeat_str(" ", indent);
-	let inner_sp = _repeat_str(" ", indent + 4);
+	var sp = RepeatStr(" ", indent);
+	var inner_sp = RepeatStr(" ", indent + 4);
 	if (node.kind === "empty") {
 		return "";
 	}
 	if (node.kind === "command") {
-		let parts = [];
-		for (const w of node.words) {
-			let val = w._expand_all_ansi_c_quotes(w.value);
-			val = w._format_command_substitutions(val);
+		var parts = [];
+		for (var w of node.words) {
+			var val = w.ExpandAllAnsiCQuotes(w.value);
+			val = w.FormatCommandSubstitutions(val);
 			parts.push(val);
 		}
-		for (const r of node.redirects) {
-			parts.push(_format_redirect(r));
+		for (var r of node.redirects) {
+			parts.push(FormatRedirect(r));
 		}
 		return parts.join(" ");
 	}
 	if (node.kind === "pipeline") {
-		let cmd_parts = [];
-		for (const cmd of node.commands) {
-			cmd_parts.push(_format_cmdsub_node(cmd, indent));
+		var cmd_parts = [];
+		for (var cmd of node.commands) {
+			cmd_parts.push(FormatCmdsubNode(cmd, indent));
 		}
 		return cmd_parts.join(" | ");
 	}
 	if (node.kind === "list") {
-		let result = [];
-		for (const p of node.parts) {
+		var result = [];
+		for (var p of node.parts) {
 			if (p.kind === "operator") {
 				if (p.op === ";") {
 					result.push(";");
@@ -2300,45 +2306,45 @@ function _format_cmdsub_node(node, indent, in_procsub) {
 				if (result && !result[result.length - 1].endsWith([" ", "\n"])) {
 					result.push(" ");
 				}
-				result.push(_format_cmdsub_node(p, indent));
+				result.push(FormatCmdsubNode(p, indent));
 			}
 		}
-		let s = result.join("");
+		var s = result.join("");
 		while (s.endsWith(";") || s.endsWith("\n")) {
-			s = _substring(s, 0, s.length - 1);
+			s = Substring(s, 0, s.length - 1);
 		}
 		return s;
 	}
 	if (node.kind === "if") {
-		let cond = _format_cmdsub_node(node.condition, indent);
-		let then_body = _format_cmdsub_node(node.then_body, indent + 4);
+		var cond = FormatCmdsubNode(node.condition, indent);
+		var then_body = FormatCmdsubNode(node.then_body, indent + 4);
 		result = "if " + cond + "; then\n" + inner_sp + then_body + ";";
 		if (node.else_body) {
-			let else_body = _format_cmdsub_node(node.else_body, indent + 4);
+			var else_body = FormatCmdsubNode(node.else_body, indent + 4);
 			result = result + "\n" + sp + "else\n" + inner_sp + else_body + ";";
 		}
 		result = result + "\n" + sp + "fi";
 		return result;
 	}
 	if (node.kind === "while") {
-		cond = _format_cmdsub_node(node.condition, indent);
-		let body = _format_cmdsub_node(node.body, indent + 4);
+		cond = FormatCmdsubNode(node.condition, indent);
+		var body = FormatCmdsubNode(node.body, indent + 4);
 		return "while " + cond + "; do\n" + inner_sp + body + ";\n" + sp + "done";
 	}
 	if (node.kind === "until") {
-		cond = _format_cmdsub_node(node.condition, indent);
-		body = _format_cmdsub_node(node.body, indent + 4);
+		cond = FormatCmdsubNode(node.condition, indent);
+		body = FormatCmdsubNode(node.body, indent + 4);
 		return "until " + cond + "; do\n" + inner_sp + body + ";\n" + sp + "done";
 	}
 	if (node.kind === "for") {
-		let variable = node.variable;
-		body = _format_cmdsub_node(node.body, indent + 4);
+		var variable = node.variable;
+		body = FormatCmdsubNode(node.body, indent + 4);
 		if (node.words) {
-			let word_vals = [];
-			for (const w of node.words) {
+			var word_vals = [];
+			for (var w of node.words) {
 				word_vals.push(w.value);
 			}
-			let words = word_vals.join(" ");
+			var words = word_vals.join(" ");
 			return (
 				"for " +
 				variable +
@@ -2357,20 +2363,20 @@ function _format_cmdsub_node(node, indent, in_procsub) {
 		);
 	}
 	if (node.kind === "case") {
-		let word = node.word.value;
-		let patterns = [];
-		let i = 0;
+		var word = node.word.value;
+		var patterns = [];
+		var i = 0;
 		while (i < node.patterns.length) {
 			p = node.patterns[i];
-			let pat = p.pattern.replace("|", " | ");
+			var pat = p.pattern.replace("|", " | ");
 			if (p.body) {
-				body = _format_cmdsub_node(p.body, indent + 8);
+				body = FormatCmdsubNode(p.body, indent + 8);
 			} else {
 				body = "";
 			}
-			let term = p.terminator;
-			let pat_indent = _repeat_str(" ", indent + 8);
-			let term_indent = _repeat_str(" ", indent + 4);
+			var term = p.terminator;
+			var pat_indent = RepeatStr(" ", indent + 8);
+			var term_indent = RepeatStr(" ", indent + 4);
 			if (i === 0) {
 				patterns.push(
 					" " + pat + ")\n" + pat_indent + body + "\n" + term_indent + term,
@@ -2382,26 +2388,26 @@ function _format_cmdsub_node(node, indent, in_procsub) {
 			}
 			i += 1;
 		}
-		let pattern_str = ("\n" + _repeat_str(" ", indent + 4)).join(patterns);
+		var pattern_str = ("\n" + RepeatStr(" ", indent + 4)).join(patterns);
 		return "case " + word + " in" + pattern_str + "\n" + sp + "esac";
 	}
 	if (node.kind === "function") {
-		let name = node.name;
+		var name = node.name;
 		if (node.body.kind === "brace-group") {
-			body = _format_cmdsub_node(node.body.body, indent + 4);
+			body = FormatCmdsubNode(node.body.body, indent + 4);
 		} else {
-			body = _format_cmdsub_node(node.body, indent + 4);
+			body = FormatCmdsubNode(node.body, indent + 4);
 		}
-		body = body.rstrip(";");
+		body = body.trimEnd(";");
 		return "function " + name + " () \n{ \n" + inner_sp + body + "\n}";
 	}
 	if (node.kind === "subshell") {
-		body = _format_cmdsub_node(node.body, indent, in_procsub);
-		let redirects = "";
+		body = FormatCmdsubNode(node.body, indent, in_procsub);
+		var redirects = "";
 		if (node.redirects) {
-			let redirect_parts = [];
-			for (const r of node.redirects) {
-				redirect_parts.push(_format_redirect(r));
+			var redirect_parts = [];
+			for (var r of node.redirects) {
+				redirect_parts.push(FormatRedirect(r));
 			}
 			redirects = redirect_parts.join(" ");
 		}
@@ -2417,8 +2423,8 @@ function _format_cmdsub_node(node, indent, in_procsub) {
 		return "( " + body + " )";
 	}
 	if (node.kind === "brace-group") {
-		body = _format_cmdsub_node(node.body, indent);
-		body = body.rstrip(";");
+		body = FormatCmdsubNode(node.body, indent);
+		body = body.trimEnd(";");
 		return "{ " + body + "; }";
 	}
 	if (node.kind === "arith-cmd") {
@@ -2427,26 +2433,26 @@ function _format_cmdsub_node(node, indent, in_procsub) {
 	return "";
 }
 
-function _format_redirect(r) {
+function FormatRedirect(r) {
 	"Format a redirect for command substitution output.";
 	if (r.kind === "heredoc") {
 		if (r.strip_tabs) {
-			let op = "<<-";
+			var op = "<<-";
 		} else {
 			op = "<<";
 		}
 		if (r.quoted) {
-			let delim = "'" + r.delimiter + "'";
+			var delim = "'" + r.delimiter + "'";
 		} else {
 			delim = r.delimiter;
 		}
 		return op + delim + "\n" + r.content + r.delimiter + "\n";
 	}
 	op = r.op;
-	let target = r.target.value;
+	var target = r.target.value;
 	if (target.startsWith("&")) {
 		if (target === "&-" && op.endsWith("<")) {
-			op = _substring(op, 0, op.length - 1) + ">";
+			op = Substring(op, 0, op.length - 1) + ">";
 		}
 		if (op === ">") {
 			op = "1>";
@@ -2458,13 +2464,13 @@ function _format_redirect(r) {
 	return op + " " + target;
 }
 
-function _normalize_fd_redirects(s) {
+function NormalizeFdRedirects(s) {
 	"Normalize fd redirects in a raw string: >&2 -> 1>&2, <&N -> 0<&N.";
-	let result = [];
-	let i = 0;
+	var result = [];
+	var i = 0;
 	while (i < s.length) {
-		if (i + 2 < s.length && s[i + 1] === "&" && s[i + 2].isdigit()) {
-			let prev_is_digit = i > 0 && s[i - 1].isdigit();
+		if (i + 2 < s.length && s[i + 1] === "&" && /^[0-9]$/.test(s[i + 2])) {
+			var prev_is_digit = i > 0 && /^[0-9]$/.test(s[i - 1]);
 			if (s[i] === ">" && !prev_is_digit) {
 				result.push("1>&");
 				result.push(s[i + 2]);
@@ -2483,16 +2489,16 @@ function _normalize_fd_redirects(s) {
 	return result.join("");
 }
 
-function _find_cmdsub_end(value, start) {
+function FindCmdsubEnd(value, start) {
 	"Find the end of a $(...) command substitution, handling case statements.\n\n    Starts after the opening $(. Returns position after the closing ).\n    ";
-	let depth = 1;
-	let i = start;
-	let in_single = false;
-	let in_double = false;
-	let case_depth = 0;
-	let in_case_patterns = false;
+	var depth = 1;
+	var i = start;
+	var in_single = false;
+	var in_double = false;
+	var case_depth = 0;
+	var in_case_patterns = false;
 	while (i < value.length && depth > 0) {
-		let c = value[i];
+		var c = value[i];
 		if (c === "\\" && i + 1 < value.length && !in_single) {
 			i += 2;
 			continue;
@@ -2512,11 +2518,8 @@ function _find_cmdsub_end(value, start) {
 			continue;
 		}
 		if (in_double) {
-			if (
-				_starts_with_at(value, i, "$(") &&
-				!_starts_with_at(value, i, "$((")
-			) {
-				let j = _find_cmdsub_end(value, i + 2);
+			if (StartsWithAt(value, i, "$(") && !StartsWithAt(value, i, "$((")) {
+				var j = FindCmdsubEnd(value, i + 2);
 				i = j;
 				continue;
 			}
@@ -2540,11 +2543,11 @@ function _find_cmdsub_end(value, start) {
 			}
 			continue;
 		}
-		if (_starts_with_at(value, i, "<<")) {
-			i = _skip_heredoc(value, i);
+		if (StartsWithAt(value, i, "<<")) {
+			i = SkipHeredoc(value, i);
 			continue;
 		}
-		if (_starts_with_at(value, i, "case") && _is_word_boundary(value, i, 4)) {
+		if (StartsWithAt(value, i, "case") && IsWordBoundary(value, i, 4)) {
 			case_depth += 1;
 			in_case_patterns = false;
 			i += 4;
@@ -2552,14 +2555,14 @@ function _find_cmdsub_end(value, start) {
 		}
 		if (
 			case_depth > 0 &&
-			_starts_with_at(value, i, "in") &&
-			_is_word_boundary(value, i, 2)
+			StartsWithAt(value, i, "in") &&
+			IsWordBoundary(value, i, 2)
 		) {
 			in_case_patterns = true;
 			i += 2;
 			continue;
 		}
-		if (_starts_with_at(value, i, "esac") && _is_word_boundary(value, i, 4)) {
+		if (StartsWithAt(value, i, "esac") && IsWordBoundary(value, i, 4)) {
 			if (case_depth > 0) {
 				case_depth -= 1;
 				in_case_patterns = false;
@@ -2567,7 +2570,7 @@ function _find_cmdsub_end(value, start) {
 			i += 4;
 			continue;
 		}
-		if (_starts_with_at(value, i, ";;")) {
+		if (StartsWithAt(value, i, ";;")) {
 			i += 2;
 			continue;
 		}
@@ -2584,17 +2587,17 @@ function _find_cmdsub_end(value, start) {
 	return i;
 }
 
-function _skip_heredoc(value, start) {
+function SkipHeredoc(value, start) {
 	"Skip past a heredoc starting at <<. Returns position after heredoc content.";
-	let i = start + 2;
+	var i = start + 2;
 	if (i < value.length && value[i] === "-") {
 		i += 1;
 	}
-	while (i < value.length && _is_whitespace_no_newline(value[i])) {
+	while (i < value.length && IsWhitespaceNoNewline(value[i])) {
 		i += 1;
 	}
-	let delim_start = i;
-	let quote_char = null;
+	var delim_start = i;
+	var quote_char = null;
 	if (i < value.length && (value[i] === '"' || value[i] === "'")) {
 		quote_char = value[i];
 		i += 1;
@@ -2602,22 +2605,22 @@ function _skip_heredoc(value, start) {
 		while (i < value.length && value[i] !== quote_char) {
 			i += 1;
 		}
-		let delimiter = _substring(value, delim_start, i);
+		var delimiter = Substring(value, delim_start, i);
 		if (i < value.length) {
 			i += 1;
 		}
 	} else if (i < value.length && value[i] === "\\") {
 		i += 1;
 		delim_start = i;
-		while (i < value.length && !_is_whitespace(value[i])) {
+		while (i < value.length && !IsWhitespace(value[i])) {
 			i += 1;
 		}
-		delimiter = _substring(value, delim_start, i);
+		delimiter = Substring(value, delim_start, i);
 	} else {
-		while (i < value.length && !_is_whitespace(value[i])) {
+		while (i < value.length && !IsWhitespace(value[i])) {
 			i += 1;
 		}
-		delimiter = _substring(value, delim_start, i);
+		delimiter = Substring(value, delim_start, i);
 	}
 	while (i < value.length && value[i] !== "\n") {
 		i += 1;
@@ -2626,14 +2629,14 @@ function _skip_heredoc(value, start) {
 		i += 1;
 	}
 	while (i < value.length) {
-		let line_start = i;
-		let line_end = i;
+		var line_start = i;
+		var line_end = i;
 		while (line_end < value.length && value[line_end] !== "\n") {
 			line_end += 1;
 		}
-		let line = _substring(value, line_start, line_end);
+		var line = Substring(value, line_start, line_end);
 		if (start + 2 < value.length && value[start + 2] === "-") {
-			let stripped = line.lstrip("\t");
+			var stripped = line.trimStart("\t");
 		} else {
 			stripped = line;
 		}
@@ -2653,19 +2656,19 @@ function _skip_heredoc(value, start) {
 	return i;
 }
 
-function _is_word_boundary(s, pos, word_len) {
+function IsWordBoundary(s, pos, word_len) {
 	"Check if the word at pos is a standalone word (not part of larger word).";
-	if (pos > 0 && s[pos - 1].isalnum()) {
+	if (pos > 0 && /^[a-zA-Z0-9]$/.test(s[pos - 1])) {
 		return false;
 	}
-	let end = pos + word_len;
-	if (end < s.length && s[end].isalnum()) {
+	var end = pos + word_len;
+	if (end < s.length && /^[a-zA-Z0-9]$/.test(s[end])) {
 		return false;
 	}
 	return true;
 }
 
-let RESERVED_WORDS = new Set([
+var RESERVED_WORDS = new Set([
 	"if",
 	"then",
 	"elif",
@@ -2683,8 +2686,8 @@ let RESERVED_WORDS = new Set([
 	"function",
 	"coproc",
 ]);
-let METACHAR = new Set(" \t\n|&;()<>");
-let COND_UNARY_OPS = new Set([
+var METACHAR = new Set(" \t\n|&;()<>");
+var COND_UNARY_OPS = new Set([
 	"-a",
 	"-b",
 	"-c",
@@ -2712,7 +2715,7 @@ let COND_UNARY_OPS = new Set([
 	"-v",
 	"-R",
 ]);
-let COND_BINARY_OPS = new Set([
+var COND_BINARY_OPS = new Set([
 	"==",
 	"!=",
 	"=~",
@@ -2729,7 +2732,7 @@ let COND_BINARY_OPS = new Set([
 	"-ot",
 	"-ef",
 ]);
-let COMPOUND_KEYWORDS = new Set([
+var COMPOUND_KEYWORDS = new Set([
 	"while",
 	"until",
 	"for",
@@ -2737,11 +2740,11 @@ let COMPOUND_KEYWORDS = new Set([
 	"case",
 	"select",
 ]);
-function _is_quote(c) {
+function IsQuote(c) {
 	return c === "'" || c === '"';
 }
 
-function _is_metachar(c) {
+function IsMetachar(c) {
 	return (
 		c === " " ||
 		c === "\t" ||
@@ -2756,15 +2759,15 @@ function _is_metachar(c) {
 	);
 }
 
-function _is_extglob_prefix(c) {
+function IsExtglobPrefix(c) {
 	return c === "@" || c === "?" || c === "*" || c === "+" || c === "!";
 }
 
-function _is_redirect_char(c) {
+function IsRedirectChar(c) {
 	return c === "<" || c === ">";
 }
 
-function _is_special_param(c) {
+function IsSpecialParam(c) {
 	return (
 		c === "?" ||
 		c === "$" ||
@@ -2776,19 +2779,19 @@ function _is_special_param(c) {
 	);
 }
 
-function _is_digit(c) {
+function IsDigit(c) {
 	return c >= "0" && c <= "9";
 }
 
-function _is_semicolon_or_newline(c) {
+function IsSemicolonOrNewline(c) {
 	return c === ";" || c === "\n";
 }
 
-function _is_right_bracket(c) {
+function IsRightBracket(c) {
 	return c === ")" || c === "}";
 }
 
-function _is_word_start_context(c) {
+function IsWordStartContext(c) {
 	"Check if char is a valid context for starting a word (whitespace or metachar except >).";
 	return (
 		c === " " ||
@@ -2802,7 +2805,7 @@ function _is_word_start_context(c) {
 	);
 }
 
-function _is_word_end_context(c) {
+function IsWordEndContext(c) {
 	"Check if char ends a word context (whitespace or metachar).";
 	return (
 		c === " " ||
@@ -2818,11 +2821,11 @@ function _is_word_end_context(c) {
 	);
 }
 
-function _is_special_param_or_digit(c) {
-	return _is_special_param(c) || _is_digit(c);
+function IsSpecialParamOrDigit(c) {
+	return IsSpecialParam(c) || IsDigit(c);
 }
 
-function _is_param_expansion_op(c) {
+function IsParamExpansionOp(c) {
 	return (
 		c === ":" ||
 		c === "-" ||
@@ -2840,69 +2843,69 @@ function _is_param_expansion_op(c) {
 	);
 }
 
-function _is_simple_param_op(c) {
+function IsSimpleParamOp(c) {
 	return c === "-" || c === "=" || c === "?" || c === "+";
 }
 
-function _is_escape_char_in_dquote(c) {
+function IsEscapeCharInDquote(c) {
 	return c === "$" || c === "`" || c === "\\";
 }
 
-function _is_list_terminator(c) {
+function IsListTerminator(c) {
 	return c === "\n" || c === "|" || c === ";" || c === "(" || c === ")";
 }
 
-function _is_semicolon_or_amp(c) {
+function IsSemicolonOrAmp(c) {
 	return c === ";" || c === "&";
 }
 
-function _is_paren(c) {
+function IsParen(c) {
 	return c === "(" || c === ")";
 }
 
-function _is_caret_or_bang(c) {
+function IsCaretOrBang(c) {
 	return c === "!" || c === "^";
 }
 
-function _is_at_or_star(c) {
+function IsAtOrStar(c) {
 	return c === "@" || c === "*";
 }
 
-function _is_digit_or_dash(c) {
-	return _is_digit(c) || c === "-";
+function IsDigitOrDash(c) {
+	return IsDigit(c) || c === "-";
 }
 
-function _is_newline_or_right_paren(c) {
+function IsNewlineOrRightParen(c) {
 	return c === "\n" || c === ")";
 }
 
-function _is_newline_or_right_bracket(c) {
+function IsNewlineOrRightBracket(c) {
 	return c === "\n" || c === ")" || c === "}";
 }
 
-function _is_semicolon_newline_brace(c) {
+function IsSemicolonNewlineBrace(c) {
 	return c === ";" || c === "\n" || c === "{";
 }
 
-function _is_reserved_word(word) {
+function IsReservedWord(word) {
 	return RESERVED_WORDS.has(word);
 }
 
-function _is_compound_keyword(word) {
+function IsCompoundKeyword(word) {
 	return COMPOUND_KEYWORDS.has(word);
 }
 
-function _is_cond_unary_op(op) {
+function IsCondUnaryOp(op) {
 	return COND_UNARY_OPS.has(op);
 }
 
-function _is_cond_binary_op(op) {
+function IsCondBinaryOp(op) {
 	return COND_BINARY_OPS.has(op);
 }
 
-function _str_contains(haystack, needle) {
+function StrContains(haystack, needle) {
 	"Check if haystack contains needle substring.";
-	return haystack.find(needle) !== -1;
+	return haystack.indexOf(needle) !== -1;
 }
 
 class Parser {
@@ -2914,14 +2917,14 @@ class Parser {
 		this._pending_heredoc_end = null;
 	}
 
-	at_end() {
+	atEnd() {
 		"Check if we've reached the end of input.";
 		return this.pos >= this.length;
 	}
 
 	peek() {
 		"Return current character without consuming.";
-		if (this.at_end()) {
+		if (this.atEnd()) {
 			return null;
 		}
 		return this.source[this.pos];
@@ -2929,22 +2932,22 @@ class Parser {
 
 	advance() {
 		"Consume and return current character.";
-		if (this.at_end()) {
+		if (this.atEnd()) {
 			return null;
 		}
-		let ch = this.source[this.pos];
+		var ch = this.source[this.pos];
 		this.pos += 1;
 		return ch;
 	}
 
-	skip_whitespace() {
+	skipWhitespace() {
 		"Skip spaces, tabs, comments, and backslash-newline continuations.";
-		while (!this.at_end()) {
-			let ch = this.peek();
-			if (_is_whitespace_no_newline(ch)) {
+		while (!this.atEnd()) {
+			var ch = this.peek();
+			if (IsWhitespaceNoNewline(ch)) {
 				this.advance();
 			} else if (ch === "#") {
-				while (!this.at_end() && this.peek() !== "\n") {
+				while (!this.atEnd() && this.peek() !== "\n") {
 					this.advance();
 				}
 			} else if (
@@ -2960,11 +2963,11 @@ class Parser {
 		}
 	}
 
-	skip_whitespace_and_newlines() {
+	skipWhitespaceAndNewlines() {
 		"Skip spaces, tabs, newlines, comments, and backslash-newline continuations.";
-		while (!this.at_end()) {
-			let ch = this.peek();
-			if (_is_whitespace(ch)) {
+		while (!this.atEnd()) {
+			var ch = this.peek();
+			if (IsWhitespace(ch)) {
 				this.advance();
 				if (ch === "\n") {
 					if (
@@ -2976,7 +2979,7 @@ class Parser {
 					}
 				}
 			} else if (ch === "#") {
-				while (!this.at_end() && this.peek() !== "\n") {
+				while (!this.atEnd() && this.peek() !== "\n") {
 					this.advance();
 				}
 			} else if (
@@ -2992,24 +2995,24 @@ class Parser {
 		}
 	}
 
-	peek_word() {
+	peekWord() {
 		"Peek at the next word without consuming it.";
-		let saved_pos = this.pos;
-		this.skip_whitespace();
-		if (this.at_end() || _is_metachar(this.peek())) {
+		var saved_pos = this.pos;
+		this.skipWhitespace();
+		if (this.atEnd() || IsMetachar(this.peek())) {
 			this.pos = saved_pos;
 			return null;
 		}
-		let chars = [];
-		while (!this.at_end() && !_is_metachar(this.peek())) {
-			let ch = this.peek();
-			if (_is_quote(ch)) {
+		var chars = [];
+		while (!this.atEnd() && !IsMetachar(this.peek())) {
+			var ch = this.peek();
+			if (IsQuote(ch)) {
 				break;
 			}
 			chars.push(this.advance());
 		}
 		if (chars) {
-			let word = chars.join("");
+			var word = chars.join("");
 		} else {
 			word = null;
 		}
@@ -3017,38 +3020,42 @@ class Parser {
 		return word;
 	}
 
-	consume_word(expected) {
+	consumeWord(expected) {
 		"Try to consume a specific reserved word. Returns True if successful.";
-		let saved_pos = this.pos;
-		this.skip_whitespace();
-		let word = this.peek_word();
+		var saved_pos = this.pos;
+		this.skipWhitespace();
+		var word = this.peekWord();
 		if (word !== expected) {
 			this.pos = saved_pos;
 			return false;
 		}
-		this.skip_whitespace();
-		for (const _ of expected) {
+		this.skipWhitespace();
+		for (var _ of expected) {
 			this.advance();
 		}
 		return true;
 	}
 
-	parse_word(at_command_start) {
+	parseWord(at_command_start) {
 		"Parse a word token, detecting parameter expansions and command substitutions.\n\n        at_command_start: When True, preserve spaces inside brackets for array\n        assignments like a[1 + 2]=. When False, spaces break the word.\n        ";
-		this.skip_whitespace();
-		if (this.at_end()) {
+		this.skipWhitespace();
+		if (this.atEnd()) {
 			return null;
 		}
-		let start = this.pos;
-		let chars = [];
-		let parts = [];
-		let bracket_depth = 0;
-		let seen_equals = false;
-		while (!this.at_end()) {
-			let ch = this.peek();
+		var start = this.pos;
+		var chars = [];
+		var parts = [];
+		var bracket_depth = 0;
+		var seen_equals = false;
+		while (!this.atEnd()) {
+			var ch = this.peek();
 			if (ch === "[" && chars && at_command_start && !seen_equals) {
-				let prev_char = chars[chars.length - 1];
-				if (prev_char.isalnum() || prev_char === "_" || prev_char === "]") {
+				var prev_char = chars[chars.length - 1];
+				if (
+					/^[a-zA-Z0-9]$/.test(prev_char) ||
+					prev_char === "_" ||
+					prev_char === "]"
+				) {
 					bracket_depth += 1;
 					chars.push(this.advance());
 					continue;
@@ -3065,20 +3072,20 @@ class Parser {
 			if (ch === "'") {
 				this.advance();
 				chars.push("'");
-				while (!this.at_end() && this.peek() !== "'") {
+				while (!this.atEnd() && this.peek() !== "'") {
 					chars.push(this.advance());
 				}
-				if (this.at_end()) {
-					throw ParseError("Unterminated single quote");
+				if (this.atEnd()) {
+					throw new ParseError("Unterminated single quote");
 				}
 				chars.push(this.advance());
 			} else if (ch === '"') {
 				this.advance();
 				chars.push('"');
-				while (!this.at_end() && this.peek() !== '"') {
-					let c = this.peek();
+				while (!this.atEnd() && this.peek() !== '"') {
+					var c = this.peek();
 					if (c === "\\" && this.pos + 1 < this.length) {
-						let next_c = this.source[this.pos + 1];
+						var next_c = this.source[this.pos + 1];
 						if (next_c === "\n") {
 							this.advance();
 							this.advance();
@@ -3092,16 +3099,16 @@ class Parser {
 						this.source[this.pos + 1] === "(" &&
 						this.source[this.pos + 2] === "("
 					) {
-						let arith_result = this._parse_arithmetic_expansion();
-						let arith_node = arith_result[0];
-						let arith_text = arith_result[1];
+						var arith_result = this.ParseArithmeticExpansion();
+						var arith_node = arith_result[0];
+						var arith_text = arith_result[1];
 						if (arith_node) {
 							parts.push(arith_node);
 							chars.push(arith_text);
 						} else {
-							let cmdsub_result = this._parse_command_substitution();
-							let cmdsub_node = cmdsub_result[0];
-							let cmdsub_text = cmdsub_result[1];
+							var cmdsub_result = this.ParseCommandSubstitution();
+							var cmdsub_node = cmdsub_result[0];
+							var cmdsub_text = cmdsub_result[1];
 							if (cmdsub_node) {
 								parts.push(cmdsub_node);
 								chars.push(cmdsub_text);
@@ -3114,7 +3121,7 @@ class Parser {
 						this.pos + 1 < this.length &&
 						this.source[this.pos + 1] === "["
 					) {
-						arith_result = this._parse_deprecated_arithmetic();
+						arith_result = this.ParseDeprecatedArithmetic();
 						arith_node = arith_result[0];
 						arith_text = arith_result[1];
 						if (arith_node) {
@@ -3128,7 +3135,7 @@ class Parser {
 						this.pos + 1 < this.length &&
 						this.source[this.pos + 1] === "("
 					) {
-						cmdsub_result = this._parse_command_substitution();
+						cmdsub_result = this.ParseCommandSubstitution();
 						cmdsub_node = cmdsub_result[0];
 						cmdsub_text = cmdsub_result[1];
 						if (cmdsub_node) {
@@ -3138,9 +3145,9 @@ class Parser {
 							chars.push(this.advance());
 						}
 					} else if (c === "$") {
-						let param_result = this._parse_param_expansion();
-						let param_node = param_result[0];
-						let param_text = param_result[1];
+						var param_result = this.ParseParamExpansion();
+						var param_node = param_result[0];
+						var param_text = param_result[1];
 						if (param_node) {
 							parts.push(param_node);
 							chars.push(param_text);
@@ -3148,7 +3155,7 @@ class Parser {
 							chars.push(this.advance());
 						}
 					} else if (c === "`") {
-						cmdsub_result = this._parse_backtick_substitution();
+						cmdsub_result = this.ParseBacktickSubstitution();
 						cmdsub_node = cmdsub_result[0];
 						cmdsub_text = cmdsub_result[1];
 						if (cmdsub_node) {
@@ -3161,12 +3168,12 @@ class Parser {
 						chars.push(this.advance());
 					}
 				}
-				if (this.at_end()) {
-					throw ParseError("Unterminated double quote");
+				if (this.atEnd()) {
+					throw new ParseError("Unterminated double quote");
 				}
 				chars.push(this.advance());
 			} else if (ch === "\\" && this.pos + 1 < this.length) {
-				let next_ch = this.source[this.pos + 1];
+				var next_ch = this.source[this.pos + 1];
 				if (next_ch === "\n") {
 					this.advance();
 					this.advance();
@@ -3179,9 +3186,9 @@ class Parser {
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === "'"
 			) {
-				let ansi_result = this._parse_ansi_c_quote();
-				let ansi_node = ansi_result[0];
-				let ansi_text = ansi_result[1];
+				var ansi_result = this.ParseAnsiCQuote();
+				var ansi_node = ansi_result[0];
+				var ansi_text = ansi_result[1];
 				if (ansi_node) {
 					parts.push(ansi_node);
 					chars.push(ansi_text);
@@ -3193,13 +3200,13 @@ class Parser {
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === '"'
 			) {
-				let locale_result = this._parse_locale_string();
-				let locale_node = locale_result[0];
-				let locale_text = locale_result[1];
-				let inner_parts = locale_result[2];
+				var locale_result = this.ParseLocaleString();
+				var locale_node = locale_result[0];
+				var locale_text = locale_result[1];
+				var inner_parts = locale_result[2];
 				if (locale_node) {
 					parts.push(locale_node);
-					parts.extend(inner_parts);
+					parts.push(inner_parts);
 					chars.push(locale_text);
 				} else {
 					chars.push(this.advance());
@@ -3210,14 +3217,14 @@ class Parser {
 				this.source[this.pos + 1] === "(" &&
 				this.source[this.pos + 2] === "("
 			) {
-				arith_result = this._parse_arithmetic_expansion();
+				arith_result = this.ParseArithmeticExpansion();
 				arith_node = arith_result[0];
 				arith_text = arith_result[1];
 				if (arith_node) {
 					parts.push(arith_node);
 					chars.push(arith_text);
 				} else {
-					cmdsub_result = this._parse_command_substitution();
+					cmdsub_result = this.ParseCommandSubstitution();
 					cmdsub_node = cmdsub_result[0];
 					cmdsub_text = cmdsub_result[1];
 					if (cmdsub_node) {
@@ -3232,7 +3239,7 @@ class Parser {
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === "["
 			) {
-				arith_result = this._parse_deprecated_arithmetic();
+				arith_result = this.ParseDeprecatedArithmetic();
 				arith_node = arith_result[0];
 				arith_text = arith_result[1];
 				if (arith_node) {
@@ -3246,7 +3253,7 @@ class Parser {
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === "("
 			) {
-				cmdsub_result = this._parse_command_substitution();
+				cmdsub_result = this.ParseCommandSubstitution();
 				cmdsub_node = cmdsub_result[0];
 				cmdsub_text = cmdsub_result[1];
 				if (cmdsub_node) {
@@ -3256,7 +3263,7 @@ class Parser {
 					chars.push(this.advance());
 				}
 			} else if (ch === "$") {
-				param_result = this._parse_param_expansion();
+				param_result = this.ParseParamExpansion();
 				param_node = param_result[0];
 				param_text = param_result[1];
 				if (param_node) {
@@ -3266,7 +3273,7 @@ class Parser {
 					chars.push(this.advance());
 				}
 			} else if (ch === "`") {
-				cmdsub_result = this._parse_backtick_substitution();
+				cmdsub_result = this.ParseBacktickSubstitution();
 				cmdsub_node = cmdsub_result[0];
 				cmdsub_text = cmdsub_result[1];
 				if (cmdsub_node) {
@@ -3276,13 +3283,13 @@ class Parser {
 					chars.push(this.advance());
 				}
 			} else if (
-				_is_redirect_char(ch) &&
+				IsRedirectChar(ch) &&
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === "("
 			) {
-				let procsub_result = this._parse_process_substitution();
-				let procsub_node = procsub_result[0];
-				let procsub_text = procsub_result[1];
+				var procsub_result = this.ParseProcessSubstitution();
+				var procsub_node = procsub_result[0];
+				var procsub_text = procsub_result[1];
 				if (procsub_node) {
 					parts.push(procsub_node);
 					chars.push(procsub_text);
@@ -3297,9 +3304,9 @@ class Parser {
 						chars[chars.length - 2] === "+" &&
 						chars[chars.length - 1] === "="))
 			) {
-				let array_result = this._parse_array_literal();
-				let array_node = array_result[0];
-				let array_text = array_result[1];
+				var array_result = this.ParseArrayLiteral();
+				var array_node = array_result[0];
+				var array_text = array_result[1];
 				if (array_node) {
 					parts.push(array_node);
 					chars.push(array_text);
@@ -3307,14 +3314,14 @@ class Parser {
 					break;
 				}
 			} else if (
-				_is_extglob_prefix(ch) &&
+				IsExtglobPrefix(ch) &&
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === "("
 			) {
 				chars.push(this.advance());
 				chars.push(this.advance());
-				let extglob_depth = 1;
-				while (!this.at_end() && extglob_depth > 0) {
+				var extglob_depth = 1;
+				while (!this.atEnd() && extglob_depth > 0) {
 					c = this.peek();
 					if (c === ")") {
 						chars.push(this.advance());
@@ -3324,26 +3331,26 @@ class Parser {
 						extglob_depth += 1;
 					} else if (c === "\\") {
 						chars.push(this.advance());
-						if (!this.at_end()) {
+						if (!this.atEnd()) {
 							chars.push(this.advance());
 						}
 					} else if (c === "'") {
 						chars.push(this.advance());
-						while (!this.at_end() && this.peek() !== "'") {
+						while (!this.atEnd() && this.peek() !== "'") {
 							chars.push(this.advance());
 						}
-						if (!this.at_end()) {
+						if (!this.atEnd()) {
 							chars.push(this.advance());
 						}
 					} else if (c === '"') {
 						chars.push(this.advance());
-						while (!this.at_end() && this.peek() !== '"') {
+						while (!this.atEnd() && this.peek() !== '"') {
 							if (this.peek() === "\\" && this.pos + 1 < this.length) {
 								chars.push(this.advance());
 							}
 							chars.push(this.advance());
 						}
-						if (!this.at_end()) {
+						if (!this.atEnd()) {
 							chars.push(this.advance());
 						}
 					} else if (
@@ -3353,11 +3360,11 @@ class Parser {
 					) {
 						chars.push(this.advance());
 						chars.push(this.advance());
-						if (!this.at_end() && this.peek() === "(") {
+						if (!this.atEnd() && this.peek() === "(") {
 							chars.push(this.advance());
-							let paren_depth = 2;
-							while (!this.at_end() && paren_depth > 0) {
-								let pc = this.peek();
+							var paren_depth = 2;
+							while (!this.atEnd() && paren_depth > 0) {
+								var pc = this.peek();
 								if (pc === "(") {
 									paren_depth += 1;
 								} else if (pc === ")") {
@@ -3369,7 +3376,7 @@ class Parser {
 							extglob_depth += 1;
 						}
 					} else if (
-						_is_extglob_prefix(c) &&
+						IsExtglobPrefix(c) &&
 						this.pos + 1 < this.length &&
 						this.source[this.pos + 1] === "("
 					) {
@@ -3380,7 +3387,7 @@ class Parser {
 						chars.push(this.advance());
 					}
 				}
-			} else if (_is_metachar(ch) && bracket_depth === 0) {
+			} else if (IsMetachar(ch) && bracket_depth === 0) {
 				break;
 			} else {
 				chars.push(this.advance());
@@ -3390,42 +3397,42 @@ class Parser {
 			return null;
 		}
 		if (parts) {
-			return Word(chars.join(""), parts);
+			return new Word(chars.join(""), parts);
 		} else {
-			return Word(chars.join(""), null);
+			return new Word(chars.join(""), null);
 		}
 	}
 
-	_parse_command_substitution() {
+	ParseCommandSubstitution() {
 		"Parse a $(...) command substitution.\n\n        Returns (node, text) where node is CommandSubstitution and text is raw text.\n        ";
-		if (this.at_end() || this.peek() !== "$") {
+		if (this.atEnd() || this.peek() !== "$") {
 			return [null, ""];
 		}
-		let start = this.pos;
+		var start = this.pos;
 		this.advance();
-		if (this.at_end() || this.peek() !== "(") {
+		if (this.atEnd() || this.peek() !== "(") {
 			this.pos = start;
 			return [null, ""];
 		}
 		this.advance();
-		let content_start = this.pos;
-		let depth = 1;
-		let case_depth = 0;
-		while (!this.at_end() && depth > 0) {
-			let c = this.peek();
+		var content_start = this.pos;
+		var depth = 1;
+		var case_depth = 0;
+		while (!this.atEnd() && depth > 0) {
+			var c = this.peek();
 			if (c === "'") {
 				this.advance();
-				while (!this.at_end() && this.peek() !== "'") {
+				while (!this.atEnd() && this.peek() !== "'") {
 					this.advance();
 				}
-				if (!this.at_end()) {
+				if (!this.atEnd()) {
 					this.advance();
 				}
 				continue;
 			}
 			if (c === '"') {
 				this.advance();
-				while (!this.at_end() && this.peek() !== '"') {
+				while (!this.atEnd() && this.peek() !== '"') {
 					if (this.peek() === "\\" && this.pos + 1 < this.length) {
 						this.advance();
 						this.advance();
@@ -3436,26 +3443,26 @@ class Parser {
 					) {
 						this.advance();
 						this.advance();
-						let nested_depth = 1;
-						while (!this.at_end() && nested_depth > 0) {
-							let nc = this.peek();
+						var nested_depth = 1;
+						while (!this.atEnd() && nested_depth > 0) {
+							var nc = this.peek();
 							if (nc === "'") {
 								this.advance();
-								while (!this.at_end() && this.peek() !== "'") {
+								while (!this.atEnd() && this.peek() !== "'") {
 									this.advance();
 								}
-								if (!this.at_end()) {
+								if (!this.atEnd()) {
 									this.advance();
 								}
 							} else if (nc === '"') {
 								this.advance();
-								while (!this.at_end() && this.peek() !== '"') {
+								while (!this.atEnd() && this.peek() !== '"') {
 									if (this.peek() === "\\" && this.pos + 1 < this.length) {
 										this.advance();
 									}
 									this.advance();
 								}
-								if (!this.at_end()) {
+								if (!this.atEnd()) {
 									this.advance();
 								}
 							} else if (nc === "\\" && this.pos + 1 < this.length) {
@@ -3488,7 +3495,7 @@ class Parser {
 						this.advance();
 					}
 				}
-				if (!this.at_end()) {
+				if (!this.atEnd()) {
 					this.advance();
 				}
 				continue;
@@ -3498,8 +3505,8 @@ class Parser {
 				this.advance();
 				continue;
 			}
-			if (c === "#" && this._is_word_boundary_before()) {
-				while (!this.at_end() && this.peek() !== "\n") {
+			if (c === "#" && this.IsWordBoundaryBefore()) {
+				while (!this.atEnd() && this.peek() !== "\n") {
 					this.advance();
 				}
 				continue;
@@ -3511,45 +3518,45 @@ class Parser {
 			) {
 				this.advance();
 				this.advance();
-				if (!this.at_end() && this.peek() === "-") {
+				if (!this.atEnd() && this.peek() === "-") {
 					this.advance();
 				}
-				while (!this.at_end() && _is_whitespace_no_newline(this.peek())) {
+				while (!this.atEnd() && IsWhitespaceNoNewline(this.peek())) {
 					this.advance();
 				}
-				let delimiter_chars = [];
-				if (!this.at_end()) {
-					let ch = this.peek();
-					if (_is_quote(ch)) {
-						let quote = this.advance();
-						while (!this.at_end() && this.peek() !== quote) {
+				var delimiter_chars = [];
+				if (!this.atEnd()) {
+					var ch = this.peek();
+					if (IsQuote(ch)) {
+						var quote = this.advance();
+						while (!this.atEnd() && this.peek() !== quote) {
 							delimiter_chars.push(this.advance());
 						}
-						if (!this.at_end()) {
+						if (!this.atEnd()) {
 							this.advance();
 						}
 					} else if (ch === "\\") {
 						this.advance();
-						if (!this.at_end()) {
+						if (!this.atEnd()) {
 							delimiter_chars.push(this.advance());
 						}
-						while (!this.at_end() && !_is_metachar(this.peek())) {
+						while (!this.atEnd() && !IsMetachar(this.peek())) {
 							delimiter_chars.push(this.advance());
 						}
 					} else {
-						while (!this.at_end() && !_is_metachar(this.peek())) {
+						while (!this.atEnd() && !IsMetachar(this.peek())) {
 							ch = this.peek();
-							if (_is_quote(ch)) {
+							if (IsQuote(ch)) {
 								quote = this.advance();
-								while (!this.at_end() && this.peek() !== quote) {
+								while (!this.atEnd() && this.peek() !== quote) {
 									delimiter_chars.push(this.advance());
 								}
-								if (!this.at_end()) {
+								if (!this.atEnd()) {
 									this.advance();
 								}
 							} else if (ch === "\\") {
 								this.advance();
-								if (!this.at_end()) {
+								if (!this.atEnd()) {
 									delimiter_chars.push(this.advance());
 								}
 							} else {
@@ -3558,46 +3565,46 @@ class Parser {
 						}
 					}
 				}
-				let delimiter = delimiter_chars.join("");
+				var delimiter = delimiter_chars.join("");
 				if (delimiter) {
-					while (!this.at_end() && this.peek() !== "\n") {
+					while (!this.atEnd() && this.peek() !== "\n") {
 						this.advance();
 					}
-					if (!this.at_end() && this.peek() === "\n") {
+					if (!this.atEnd() && this.peek() === "\n") {
 						this.advance();
 					}
-					while (!this.at_end()) {
-						let line_start = this.pos;
-						let line_end = this.pos;
+					while (!this.atEnd()) {
+						var line_start = this.pos;
+						var line_end = this.pos;
 						while (line_end < this.length && this.source[line_end] !== "\n") {
 							line_end += 1;
 						}
-						let line = _substring(this.source, line_start, line_end);
+						var line = Substring(this.source, line_start, line_end);
 						this.pos = line_end;
-						if (line === delimiter || line.lstrip("\t") === delimiter) {
-							if (!this.at_end() && this.peek() === "\n") {
+						if (line === delimiter || line.trimStart("\t") === delimiter) {
+							if (!this.atEnd() && this.peek() === "\n") {
 								this.advance();
 							}
 							break;
 						}
-						if (!this.at_end() && this.peek() === "\n") {
+						if (!this.atEnd() && this.peek() === "\n") {
 							this.advance();
 						}
 					}
 				}
 				continue;
 			}
-			if (c === "c" && this._is_word_boundary_before()) {
-				if (this._lookahead_keyword("case")) {
+			if (c === "c" && this.IsWordBoundaryBefore()) {
+				if (this.LookaheadKeyword("case")) {
 					case_depth += 1;
-					this._skip_keyword("case");
+					this.SkipKeyword("case");
 					continue;
 				}
 			}
-			if (c === "e" && this._is_word_boundary_before() && case_depth > 0) {
-				if (this._lookahead_keyword("esac")) {
+			if (c === "e" && this.IsWordBoundaryBefore() && case_depth > 0) {
+				if (this.LookaheadKeyword("esac")) {
 					case_depth -= 1;
-					this._skip_keyword("esac");
+					this.SkipKeyword("esac");
 					continue;
 				}
 			}
@@ -3605,43 +3612,43 @@ class Parser {
 				depth += 1;
 			} else if (c === ")") {
 				if (case_depth > 0 && depth === 1) {
-					let saved = this.pos;
+					var saved = this.pos;
 					this.advance();
-					let temp_depth = 0;
-					let temp_case_depth = case_depth;
-					let found_esac = false;
-					while (!this.at_end()) {
-						let tc = this.peek();
+					var temp_depth = 0;
+					var temp_case_depth = case_depth;
+					var found_esac = false;
+					while (!this.atEnd()) {
+						var tc = this.peek();
 						if (tc === "'" || tc === '"') {
-							let q = tc;
+							var q = tc;
 							this.advance();
-							while (!this.at_end() && this.peek() !== q) {
+							while (!this.atEnd() && this.peek() !== q) {
 								if (q === '"' && this.peek() === "\\") {
 									this.advance();
 								}
 								this.advance();
 							}
-							if (!this.at_end()) {
+							if (!this.atEnd()) {
 								this.advance();
 							}
 						} else if (
 							tc === "c" &&
-							this._is_word_boundary_before() &&
-							this._lookahead_keyword("case")
+							this.IsWordBoundaryBefore() &&
+							this.LookaheadKeyword("case")
 						) {
 							temp_case_depth += 1;
-							this._skip_keyword("case");
+							this.SkipKeyword("case");
 						} else if (
 							tc === "e" &&
-							this._is_word_boundary_before() &&
-							this._lookahead_keyword("esac")
+							this.IsWordBoundaryBefore() &&
+							this.LookaheadKeyword("esac")
 						) {
 							temp_case_depth -= 1;
 							if (temp_case_depth === 0) {
 								found_esac = true;
 								break;
 							}
-							this._skip_keyword("esac");
+							this.SkipKeyword("esac");
 						} else if (tc === "(") {
 							temp_depth += 1;
 							this.advance();
@@ -3674,33 +3681,33 @@ class Parser {
 			this.pos = start;
 			return [null, ""];
 		}
-		let content = _substring(this.source, content_start, this.pos);
+		var content = Substring(this.source, content_start, this.pos);
 		this.advance();
-		let text = _substring(this.source, start, this.pos);
-		let sub_parser = Parser(content);
-		let cmd = sub_parser.parse_list();
+		var text = Substring(this.source, start, this.pos);
+		var sub_parser = new Parser(content);
+		var cmd = sub_parser.parseList();
 		if (cmd === null) {
-			cmd = Empty();
+			cmd = new Empty();
 		}
-		return [CommandSubstitution(cmd), text];
+		return [new CommandSubstitution(cmd), text];
 	}
 
-	_is_word_boundary_before() {
+	IsWordBoundaryBefore() {
 		"Check if current position is at a word boundary (preceded by space/newline/start).";
 		if (this.pos === 0) {
 			return true;
 		}
-		let prev = this.source[this.pos - 1];
-		return _is_word_start_context(prev);
+		var prev = this.source[this.pos - 1];
+		return IsWordStartContext(prev);
 	}
 
-	_is_assignment_word(word) {
+	IsAssignmentWord(word) {
 		"Check if a word is an assignment (contains = outside of quotes).";
-		let in_single = false;
-		let in_double = false;
-		let i = 0;
+		var in_single = false;
+		var in_double = false;
+		var i = 0;
 		while (i < word.value.length) {
-			let ch = word.value[i];
+			var ch = word.value[i];
 			if (ch === "'" && !in_double) {
 				in_single = !in_single;
 			} else if (ch === '"' && !in_single) {
@@ -3716,53 +3723,53 @@ class Parser {
 		return false;
 	}
 
-	_lookahead_keyword(keyword) {
+	LookaheadKeyword(keyword) {
 		"Check if keyword appears at current position followed by word boundary.";
 		if (this.pos + keyword.length > this.length) {
 			return false;
 		}
-		if (!_starts_with_at(this.source, this.pos, keyword)) {
+		if (!StartsWithAt(this.source, this.pos, keyword)) {
 			return false;
 		}
-		let after_pos = this.pos + keyword.length;
+		var after_pos = this.pos + keyword.length;
 		if (after_pos >= this.length) {
 			return true;
 		}
-		let after = this.source[after_pos];
-		return _is_word_end_context(after);
+		var after = this.source[after_pos];
+		return IsWordEndContext(after);
 	}
 
-	_skip_keyword(keyword) {
+	SkipKeyword(keyword) {
 		"Skip over a keyword.";
-		for (const _ of keyword) {
+		for (var _ of keyword) {
 			this.advance();
 		}
 	}
 
-	_parse_backtick_substitution() {
+	ParseBacktickSubstitution() {
 		"Parse a `...` command substitution.\n\n        Returns (node, text) where node is CommandSubstitution and text is raw text.\n        ";
-		if (this.at_end() || this.peek() !== "`") {
+		if (this.atEnd() || this.peek() !== "`") {
 			return [null, ""];
 		}
-		let start = this.pos;
+		var start = this.pos;
 		this.advance();
-		let content_chars = [];
-		let text_chars = ["`"];
-		while (!this.at_end() && this.peek() !== "`") {
-			let c = this.peek();
+		var content_chars = [];
+		var text_chars = ["`"];
+		while (!this.atEnd() && this.peek() !== "`") {
+			var c = this.peek();
 			if (c === "\\" && this.pos + 1 < this.length) {
-				let next_c = this.source[this.pos + 1];
+				var next_c = this.source[this.pos + 1];
 				if (next_c === "\n") {
 					this.advance();
 					this.advance();
-				} else if (_is_escape_char_in_dquote(next_c)) {
+				} else if (IsEscapeCharInDquote(next_c)) {
 					this.advance();
-					let escaped = this.advance();
+					var escaped = this.advance();
 					content_chars.push(escaped);
 					text_chars.push("\\");
 					text_chars.push(escaped);
 				} else {
-					let ch = this.advance();
+					var ch = this.advance();
 					content_chars.push(ch);
 					text_chars.push(ch);
 				}
@@ -3772,57 +3779,57 @@ class Parser {
 				text_chars.push(ch);
 			}
 		}
-		if (this.at_end()) {
+		if (this.atEnd()) {
 			this.pos = start;
 			return [null, ""];
 		}
 		this.advance();
 		text_chars.push("`");
-		let text = text_chars.join("");
-		let content = content_chars.join("");
-		let sub_parser = Parser(content);
-		let cmd = sub_parser.parse_list();
+		var text = text_chars.join("");
+		var content = content_chars.join("");
+		var sub_parser = new Parser(content);
+		var cmd = sub_parser.parseList();
 		if (cmd === null) {
-			cmd = Empty();
+			cmd = new Empty();
 		}
-		return [CommandSubstitution(cmd), text];
+		return [new CommandSubstitution(cmd), text];
 	}
 
-	_parse_process_substitution() {
+	ParseProcessSubstitution() {
 		"Parse a <(...) or >(...) process substitution.\n\n        Returns (node, text) where node is ProcessSubstitution and text is raw text.\n        ";
-		if (this.at_end() || !_is_redirect_char(this.peek())) {
+		if (this.atEnd() || !IsRedirectChar(this.peek())) {
 			return [null, ""];
 		}
-		let start = this.pos;
-		let direction = this.advance();
-		if (this.at_end() || this.peek() !== "(") {
+		var start = this.pos;
+		var direction = this.advance();
+		if (this.atEnd() || this.peek() !== "(") {
 			this.pos = start;
 			return [null, ""];
 		}
 		this.advance();
-		let content_start = this.pos;
-		let depth = 1;
-		while (!this.at_end() && depth > 0) {
-			let c = this.peek();
+		var content_start = this.pos;
+		var depth = 1;
+		while (!this.atEnd() && depth > 0) {
+			var c = this.peek();
 			if (c === "'") {
 				this.advance();
-				while (!this.at_end() && this.peek() !== "'") {
+				while (!this.atEnd() && this.peek() !== "'") {
 					this.advance();
 				}
-				if (!this.at_end()) {
+				if (!this.atEnd()) {
 					this.advance();
 				}
 				continue;
 			}
 			if (c === '"') {
 				this.advance();
-				while (!this.at_end() && this.peek() !== '"') {
+				while (!this.atEnd() && this.peek() !== '"') {
 					if (this.peek() === "\\" && this.pos + 1 < this.length) {
 						this.advance();
 					}
 					this.advance();
 				}
-				if (!this.at_end()) {
+				if (!this.atEnd()) {
 					this.advance();
 				}
 				continue;
@@ -3846,58 +3853,58 @@ class Parser {
 			this.pos = start;
 			return [null, ""];
 		}
-		let content = _substring(this.source, content_start, this.pos);
+		var content = Substring(this.source, content_start, this.pos);
 		this.advance();
-		let text = _substring(this.source, start, this.pos);
-		let sub_parser = Parser(content);
-		let cmd = sub_parser.parse_list();
+		var text = Substring(this.source, start, this.pos);
+		var sub_parser = new Parser(content);
+		var cmd = sub_parser.parseList();
 		if (cmd === null) {
-			cmd = Empty();
+			cmd = new Empty();
 		}
-		return [ProcessSubstitution(direction, cmd), text];
+		return [new ProcessSubstitution(direction, cmd), text];
 	}
 
-	_parse_array_literal() {
+	ParseArrayLiteral() {
 		"Parse an array literal (word1 word2 ...).\n\n        Returns (node, text) where node is Array and text is raw text.\n        Called when positioned at the opening '(' after '=' or '+='.\n        ";
-		if (this.at_end() || this.peek() !== "(") {
+		if (this.atEnd() || this.peek() !== "(") {
 			return [null, ""];
 		}
-		let start = this.pos;
+		var start = this.pos;
 		this.advance();
-		let elements = [];
+		var elements = [];
 		while (true) {
-			while (!this.at_end() && _is_whitespace(this.peek())) {
+			while (!this.atEnd() && IsWhitespace(this.peek())) {
 				this.advance();
 			}
-			if (this.at_end()) {
-				throw ParseError("Unterminated array literal");
+			if (this.atEnd()) {
+				throw new ParseError("Unterminated array literal");
 			}
 			if (this.peek() === ")") {
 				break;
 			}
-			let word = this.parse_word();
+			var word = this.parseWord();
 			if (word === null) {
 				if (this.peek() === ")") {
 					break;
 				}
-				throw ParseError("Expected word in array literal");
+				throw new ParseError("Expected word in array literal");
 			}
 			elements.push(word);
 		}
-		if (this.at_end() || this.peek() !== ")") {
-			throw ParseError("Expected ) to close array literal");
+		if (this.atEnd() || this.peek() !== ")") {
+			throw new ParseError("Expected ) to close array literal");
 		}
 		this.advance();
-		let text = _substring(this.source, start, this.pos);
-		return [Array(elements), text];
+		var text = Substring(this.source, start, this.pos);
+		return [new Array(elements), text];
 	}
 
-	_parse_arithmetic_expansion() {
+	ParseArithmeticExpansion() {
 		"Parse a $((...)) arithmetic expansion with parsed internals.\n\n        Returns (node, text) where node is ArithmeticExpansion and text is raw text.\n        Returns (None, \"\") if this is not arithmetic expansion (e.g., $( ( ... ) )\n        which is command substitution containing a subshell).\n        ";
-		if (this.at_end() || this.peek() !== "$") {
+		if (this.atEnd() || this.peek() !== "$") {
 			return [null, ""];
 		}
-		let start = this.pos;
+		var start = this.pos;
 		if (
 			this.pos + 2 >= this.length ||
 			this.source[this.pos + 1] !== "(" ||
@@ -3908,10 +3915,10 @@ class Parser {
 		this.advance();
 		this.advance();
 		this.advance();
-		let content_start = this.pos;
-		let depth = 1;
-		while (!this.at_end() && depth > 0) {
-			let c = this.peek();
+		var content_start = this.pos;
+		var depth = 1;
+		while (!this.atEnd() && depth > 0) {
+			var c = this.peek();
 			if (c === "(") {
 				depth += 1;
 				this.advance();
@@ -3933,31 +3940,34 @@ class Parser {
 				this.advance();
 			}
 		}
-		if (this.at_end() || depth !== 1) {
+		if (this.atEnd() || depth !== 1) {
 			this.pos = start;
 			return [null, ""];
 		}
-		let content = _substring(this.source, content_start, this.pos);
+		var content = Substring(this.source, content_start, this.pos);
 		this.advance();
 		this.advance();
-		let text = _substring(this.source, start, this.pos);
-		let expr = this._parse_arith_expr(content);
-		return [ArithmeticExpansion(expr), text];
+		var text = Substring(this.source, start, this.pos);
+		var expr = this.ParseArithExpr(content);
+		return [new ArithmeticExpansion(expr), text];
 	}
 
-	_parse_arith_expr(content) {
+	ParseArithExpr(content) {
 		"Parse an arithmetic expression string into AST nodes.";
-		let saved_arith_src = getattr(this, "_arith_src", null);
-		let saved_arith_pos = getattr(this, "_arith_pos", null);
-		let saved_arith_len = getattr(this, "_arith_len", null);
+		var saved_arith_src =
+			this["_arith_src"] !== undefined ? this["_arith_src"] : null;
+		var saved_arith_pos =
+			this["_arith_pos"] !== undefined ? this["_arith_pos"] : null;
+		var saved_arith_len =
+			this["_arith_len"] !== undefined ? this["_arith_len"] : null;
 		this._arith_src = content;
 		this._arith_pos = 0;
 		this._arith_len = content.length;
-		this._arith_skip_ws();
-		if (this._arith_at_end()) {
-			let result = null;
+		this.ArithSkipWs();
+		if (this.ArithAtEnd()) {
+			var result = null;
 		} else {
-			result = this._arith_parse_comma();
+			result = this.ArithParseComma();
 		}
 		if (saved_arith_src !== null) {
 			this._arith_src = saved_arith_src;
@@ -3967,31 +3977,31 @@ class Parser {
 		return result;
 	}
 
-	_arith_at_end() {
+	ArithAtEnd() {
 		return this._arith_pos >= this._arith_len;
 	}
 
-	_arith_peek(offset) {
-		let pos = this._arith_pos + offset;
+	ArithPeek(offset) {
+		var pos = this._arith_pos + offset;
 		if (pos >= this._arith_len) {
 			return "";
 		}
 		return this._arith_src[pos];
 	}
 
-	_arith_advance() {
-		if (this._arith_at_end()) {
+	ArithAdvance() {
+		if (this.ArithAtEnd()) {
 			return "";
 		}
-		let c = this._arith_src[this._arith_pos];
+		var c = this._arith_src[this._arith_pos];
 		this._arith_pos += 1;
 		return c;
 	}
 
-	_arith_skip_ws() {
-		while (!this._arith_at_end()) {
-			let c = this._arith_src[this._arith_pos];
-			if (_is_whitespace(c)) {
+	ArithSkipWs() {
+		while (!this.ArithAtEnd()) {
+			var c = this._arith_src[this._arith_pos];
+			if (IsWhitespace(c)) {
 				this._arith_pos += 1;
 			} else if (
 				c === "\\" &&
@@ -4005,29 +4015,29 @@ class Parser {
 		}
 	}
 
-	_arith_match(s) {
+	ArithMatch(s) {
 		"Check if the next characters match s (without consuming).";
-		return _starts_with_at(this._arith_src, this._arith_pos, s);
+		return StartsWithAt(this._arith_src, this._arith_pos, s);
 	}
 
-	_arith_consume(s) {
+	ArithConsume(s) {
 		"If next chars match s, consume them and return True.";
-		if (this._arith_match(s)) {
+		if (this.ArithMatch(s)) {
 			this._arith_pos += s.length;
 			return true;
 		}
 		return false;
 	}
 
-	_arith_parse_comma() {
+	ArithParseComma() {
 		"Parse comma expressions (lowest precedence).";
-		let left = this._arith_parse_assign();
+		var left = this.ArithParseAssign();
 		while (true) {
-			this._arith_skip_ws();
-			if (this._arith_consume(",")) {
-				this._arith_skip_ws();
-				let right = this._arith_parse_assign();
-				left = ArithComma(left, right);
+			this.ArithSkipWs();
+			if (this.ArithConsume(",")) {
+				this.ArithSkipWs();
+				var right = this.ArithParseAssign();
+				left = new ArithComma(left, right);
 			} else {
 				break;
 			}
@@ -4035,11 +4045,11 @@ class Parser {
 		return left;
 	}
 
-	_arith_parse_assign() {
+	ArithParseAssign() {
 		"Parse assignment expressions (right associative).";
-		let left = this._arith_parse_ternary();
-		this._arith_skip_ws();
-		let assign_ops = [
+		var left = this.ArithParseTernary();
+		this.ArithSkipWs();
+		var assign_ops = [
 			"<<=",
 			">>=",
 			"+=",
@@ -4052,57 +4062,57 @@ class Parser {
 			"|=",
 			"=",
 		];
-		for (const op of assign_ops) {
-			if (this._arith_match(op)) {
-				if (op === "=" && this._arith_peek(1) === "=") {
+		for (var op of assign_ops) {
+			if (this.ArithMatch(op)) {
+				if (op === "=" && this.ArithPeek(1) === "=") {
 					break;
 				}
-				this._arith_consume(op);
-				this._arith_skip_ws();
-				let right = this._arith_parse_assign();
-				return ArithAssign(op, left, right);
+				this.ArithConsume(op);
+				this.ArithSkipWs();
+				var right = this.ArithParseAssign();
+				return new ArithAssign(op, left, right);
 			}
 		}
 		return left;
 	}
 
-	_arith_parse_ternary() {
+	ArithParseTernary() {
 		"Parse ternary conditional (right associative).";
-		let cond = this._arith_parse_logical_or();
-		this._arith_skip_ws();
-		if (this._arith_consume("?")) {
-			this._arith_skip_ws();
-			if (this._arith_match(":")) {
-				let if_true = null;
+		var cond = this.ArithParseLogicalOr();
+		this.ArithSkipWs();
+		if (this.ArithConsume("?")) {
+			this.ArithSkipWs();
+			if (this.ArithMatch(":")) {
+				var if_true = null;
 			} else {
-				if_true = this._arith_parse_assign();
+				if_true = this.ArithParseAssign();
 			}
-			this._arith_skip_ws();
-			if (this._arith_consume(":")) {
-				this._arith_skip_ws();
-				if (this._arith_at_end() || this._arith_peek() === ")") {
-					let if_false = null;
+			this.ArithSkipWs();
+			if (this.ArithConsume(":")) {
+				this.ArithSkipWs();
+				if (this.ArithAtEnd() || this.ArithPeek() === ")") {
+					var if_false = null;
 				} else {
-					if_false = this._arith_parse_ternary();
+					if_false = this.ArithParseTernary();
 				}
 			} else {
 				if_false = null;
 			}
-			return ArithTernary(cond, if_true, if_false);
+			return new ArithTernary(cond, if_true, if_false);
 		}
 		return cond;
 	}
 
-	_arith_parse_logical_or() {
+	ArithParseLogicalOr() {
 		"Parse logical or (||).";
-		let left = this._arith_parse_logical_and();
+		var left = this.ArithParseLogicalAnd();
 		while (true) {
-			this._arith_skip_ws();
-			if (this._arith_match("||")) {
-				this._arith_consume("||");
-				this._arith_skip_ws();
-				let right = this._arith_parse_logical_and();
-				left = ArithBinaryOp("||", left, right);
+			this.ArithSkipWs();
+			if (this.ArithMatch("||")) {
+				this.ArithConsume("||");
+				this.ArithSkipWs();
+				var right = this.ArithParseLogicalAnd();
+				left = new ArithBinaryOp("||", left, right);
 			} else {
 				break;
 			}
@@ -4110,16 +4120,16 @@ class Parser {
 		return left;
 	}
 
-	_arith_parse_logical_and() {
+	ArithParseLogicalAnd() {
 		"Parse logical and (&&).";
-		let left = this._arith_parse_bitwise_or();
+		var left = this.ArithParseBitwiseOr();
 		while (true) {
-			this._arith_skip_ws();
-			if (this._arith_match("&&")) {
-				this._arith_consume("&&");
-				this._arith_skip_ws();
-				let right = this._arith_parse_bitwise_or();
-				left = ArithBinaryOp("&&", left, right);
+			this.ArithSkipWs();
+			if (this.ArithMatch("&&")) {
+				this.ArithConsume("&&");
+				this.ArithSkipWs();
+				var right = this.ArithParseBitwiseOr();
+				left = new ArithBinaryOp("&&", left, right);
 			} else {
 				break;
 			}
@@ -4127,20 +4137,20 @@ class Parser {
 		return left;
 	}
 
-	_arith_parse_bitwise_or() {
+	ArithParseBitwiseOr() {
 		"Parse bitwise or (|).";
-		let left = this._arith_parse_bitwise_xor();
+		var left = this.ArithParseBitwiseXor();
 		while (true) {
-			this._arith_skip_ws();
+			this.ArithSkipWs();
 			if (
-				this._arith_peek() === "|" &&
-				this._arith_peek(1) !== "|" &&
-				this._arith_peek(1) !== "="
+				this.ArithPeek() === "|" &&
+				this.ArithPeek(1) !== "|" &&
+				this.ArithPeek(1) !== "="
 			) {
-				this._arith_advance();
-				this._arith_skip_ws();
-				let right = this._arith_parse_bitwise_xor();
-				left = ArithBinaryOp("|", left, right);
+				this.ArithAdvance();
+				this.ArithSkipWs();
+				var right = this.ArithParseBitwiseXor();
+				left = new ArithBinaryOp("|", left, right);
 			} else {
 				break;
 			}
@@ -4148,16 +4158,16 @@ class Parser {
 		return left;
 	}
 
-	_arith_parse_bitwise_xor() {
+	ArithParseBitwiseXor() {
 		"Parse bitwise xor (^).";
-		let left = this._arith_parse_bitwise_and();
+		var left = this.ArithParseBitwiseAnd();
 		while (true) {
-			this._arith_skip_ws();
-			if (this._arith_peek() === "^" && this._arith_peek(1) !== "=") {
-				this._arith_advance();
-				this._arith_skip_ws();
-				let right = this._arith_parse_bitwise_and();
-				left = ArithBinaryOp("^", left, right);
+			this.ArithSkipWs();
+			if (this.ArithPeek() === "^" && this.ArithPeek(1) !== "=") {
+				this.ArithAdvance();
+				this.ArithSkipWs();
+				var right = this.ArithParseBitwiseAnd();
+				left = new ArithBinaryOp("^", left, right);
 			} else {
 				break;
 			}
@@ -4165,20 +4175,20 @@ class Parser {
 		return left;
 	}
 
-	_arith_parse_bitwise_and() {
+	ArithParseBitwiseAnd() {
 		"Parse bitwise and (&).";
-		let left = this._arith_parse_equality();
+		var left = this.ArithParseEquality();
 		while (true) {
-			this._arith_skip_ws();
+			this.ArithSkipWs();
 			if (
-				this._arith_peek() === "&" &&
-				this._arith_peek(1) !== "&" &&
-				this._arith_peek(1) !== "="
+				this.ArithPeek() === "&" &&
+				this.ArithPeek(1) !== "&" &&
+				this.ArithPeek(1) !== "="
 			) {
-				this._arith_advance();
-				this._arith_skip_ws();
-				let right = this._arith_parse_equality();
-				left = ArithBinaryOp("&", left, right);
+				this.ArithAdvance();
+				this.ArithSkipWs();
+				var right = this.ArithParseEquality();
+				left = new ArithBinaryOp("&", left, right);
 			} else {
 				break;
 			}
@@ -4186,21 +4196,21 @@ class Parser {
 		return left;
 	}
 
-	_arith_parse_equality() {
+	ArithParseEquality() {
 		"Parse equality (== !=).";
-		let left = this._arith_parse_comparison();
+		var left = this.ArithParseComparison();
 		while (true) {
-			this._arith_skip_ws();
-			if (this._arith_match("==")) {
-				this._arith_consume("==");
-				this._arith_skip_ws();
-				let right = this._arith_parse_comparison();
-				left = ArithBinaryOp("==", left, right);
-			} else if (this._arith_match("!=")) {
-				this._arith_consume("!=");
-				this._arith_skip_ws();
-				right = this._arith_parse_comparison();
-				left = ArithBinaryOp("!=", left, right);
+			this.ArithSkipWs();
+			if (this.ArithMatch("==")) {
+				this.ArithConsume("==");
+				this.ArithSkipWs();
+				var right = this.ArithParseComparison();
+				left = new ArithBinaryOp("==", left, right);
+			} else if (this.ArithMatch("!=")) {
+				this.ArithConsume("!=");
+				this.ArithSkipWs();
+				right = this.ArithParseComparison();
+				left = new ArithBinaryOp("!=", left, right);
 			} else {
 				break;
 			}
@@ -4208,39 +4218,39 @@ class Parser {
 		return left;
 	}
 
-	_arith_parse_comparison() {
+	ArithParseComparison() {
 		"Parse comparison (< > <= >=).";
-		let left = this._arith_parse_shift();
+		var left = this.ArithParseShift();
 		while (true) {
-			this._arith_skip_ws();
-			if (this._arith_match("<=")) {
-				this._arith_consume("<=");
-				this._arith_skip_ws();
-				let right = this._arith_parse_shift();
-				left = ArithBinaryOp("<=", left, right);
-			} else if (this._arith_match(">=")) {
-				this._arith_consume(">=");
-				this._arith_skip_ws();
-				right = this._arith_parse_shift();
-				left = ArithBinaryOp(">=", left, right);
+			this.ArithSkipWs();
+			if (this.ArithMatch("<=")) {
+				this.ArithConsume("<=");
+				this.ArithSkipWs();
+				var right = this.ArithParseShift();
+				left = new ArithBinaryOp("<=", left, right);
+			} else if (this.ArithMatch(">=")) {
+				this.ArithConsume(">=");
+				this.ArithSkipWs();
+				right = this.ArithParseShift();
+				left = new ArithBinaryOp(">=", left, right);
 			} else if (
-				this._arith_peek() === "<" &&
-				this._arith_peek(1) !== "<" &&
-				this._arith_peek(1) !== "="
+				this.ArithPeek() === "<" &&
+				this.ArithPeek(1) !== "<" &&
+				this.ArithPeek(1) !== "="
 			) {
-				this._arith_advance();
-				this._arith_skip_ws();
-				right = this._arith_parse_shift();
-				left = ArithBinaryOp("<", left, right);
+				this.ArithAdvance();
+				this.ArithSkipWs();
+				right = this.ArithParseShift();
+				left = new ArithBinaryOp("<", left, right);
 			} else if (
-				this._arith_peek() === ">" &&
-				this._arith_peek(1) !== ">" &&
-				this._arith_peek(1) !== "="
+				this.ArithPeek() === ">" &&
+				this.ArithPeek(1) !== ">" &&
+				this.ArithPeek(1) !== "="
 			) {
-				this._arith_advance();
-				this._arith_skip_ws();
-				right = this._arith_parse_shift();
-				left = ArithBinaryOp(">", left, right);
+				this.ArithAdvance();
+				this.ArithSkipWs();
+				right = this.ArithParseShift();
+				left = new ArithBinaryOp(">", left, right);
 			} else {
 				break;
 			}
@@ -4248,27 +4258,27 @@ class Parser {
 		return left;
 	}
 
-	_arith_parse_shift() {
+	ArithParseShift() {
 		"Parse shift (<< >>).";
-		let left = this._arith_parse_additive();
+		var left = this.ArithParseAdditive();
 		while (true) {
-			this._arith_skip_ws();
-			if (this._arith_match("<<=")) {
+			this.ArithSkipWs();
+			if (this.ArithMatch("<<=")) {
 				break;
 			}
-			if (this._arith_match(">>=")) {
+			if (this.ArithMatch(">>=")) {
 				break;
 			}
-			if (this._arith_match("<<")) {
-				this._arith_consume("<<");
-				this._arith_skip_ws();
-				let right = this._arith_parse_additive();
-				left = ArithBinaryOp("<<", left, right);
-			} else if (this._arith_match(">>")) {
-				this._arith_consume(">>");
-				this._arith_skip_ws();
-				right = this._arith_parse_additive();
-				left = ArithBinaryOp(">>", left, right);
+			if (this.ArithMatch("<<")) {
+				this.ArithConsume("<<");
+				this.ArithSkipWs();
+				var right = this.ArithParseAdditive();
+				left = new ArithBinaryOp("<<", left, right);
+			} else if (this.ArithMatch(">>")) {
+				this.ArithConsume(">>");
+				this.ArithSkipWs();
+				right = this.ArithParseAdditive();
+				left = new ArithBinaryOp(">>", left, right);
 			} else {
 				break;
 			}
@@ -4276,23 +4286,23 @@ class Parser {
 		return left;
 	}
 
-	_arith_parse_additive() {
+	ArithParseAdditive() {
 		"Parse addition and subtraction (+ -).";
-		let left = this._arith_parse_multiplicative();
+		var left = this.ArithParseMultiplicative();
 		while (true) {
-			this._arith_skip_ws();
-			let c = this._arith_peek();
-			let c2 = this._arith_peek(1);
+			this.ArithSkipWs();
+			var c = this.ArithPeek();
+			var c2 = this.ArithPeek(1);
 			if (c === "+" && c2 !== "+" && c2 !== "=") {
-				this._arith_advance();
-				this._arith_skip_ws();
-				let right = this._arith_parse_multiplicative();
-				left = ArithBinaryOp("+", left, right);
+				this.ArithAdvance();
+				this.ArithSkipWs();
+				var right = this.ArithParseMultiplicative();
+				left = new ArithBinaryOp("+", left, right);
 			} else if (c === "-" && c2 !== "-" && c2 !== "=") {
-				this._arith_advance();
-				this._arith_skip_ws();
-				right = this._arith_parse_multiplicative();
-				left = ArithBinaryOp("-", left, right);
+				this.ArithAdvance();
+				this.ArithSkipWs();
+				right = this.ArithParseMultiplicative();
+				left = new ArithBinaryOp("-", left, right);
 			} else {
 				break;
 			}
@@ -4300,28 +4310,28 @@ class Parser {
 		return left;
 	}
 
-	_arith_parse_multiplicative() {
+	ArithParseMultiplicative() {
 		"Parse multiplication, division, modulo (* / %).";
-		let left = this._arith_parse_exponentiation();
+		var left = this.ArithParseExponentiation();
 		while (true) {
-			this._arith_skip_ws();
-			let c = this._arith_peek();
-			let c2 = this._arith_peek(1);
+			this.ArithSkipWs();
+			var c = this.ArithPeek();
+			var c2 = this.ArithPeek(1);
 			if (c === "*" && c2 !== "*" && c2 !== "=") {
-				this._arith_advance();
-				this._arith_skip_ws();
-				let right = this._arith_parse_exponentiation();
-				left = ArithBinaryOp("*", left, right);
+				this.ArithAdvance();
+				this.ArithSkipWs();
+				var right = this.ArithParseExponentiation();
+				left = new ArithBinaryOp("*", left, right);
 			} else if (c === "/" && c2 !== "=") {
-				this._arith_advance();
-				this._arith_skip_ws();
-				right = this._arith_parse_exponentiation();
-				left = ArithBinaryOp("/", left, right);
+				this.ArithAdvance();
+				this.ArithSkipWs();
+				right = this.ArithParseExponentiation();
+				left = new ArithBinaryOp("/", left, right);
 			} else if (c === "%" && c2 !== "=") {
-				this._arith_advance();
-				this._arith_skip_ws();
-				right = this._arith_parse_exponentiation();
-				left = ArithBinaryOp("%", left, right);
+				this.ArithAdvance();
+				this.ArithSkipWs();
+				right = this.ArithParseExponentiation();
+				left = new ArithBinaryOp("%", left, right);
 			} else {
 				break;
 			}
@@ -4329,83 +4339,83 @@ class Parser {
 		return left;
 	}
 
-	_arith_parse_exponentiation() {
+	ArithParseExponentiation() {
 		"Parse exponentiation (**) - right associative.";
-		let left = this._arith_parse_unary();
-		this._arith_skip_ws();
-		if (this._arith_match("**")) {
-			this._arith_consume("**");
-			this._arith_skip_ws();
-			let right = this._arith_parse_exponentiation();
-			return ArithBinaryOp("**", left, right);
+		var left = this.ArithParseUnary();
+		this.ArithSkipWs();
+		if (this.ArithMatch("**")) {
+			this.ArithConsume("**");
+			this.ArithSkipWs();
+			var right = this.ArithParseExponentiation();
+			return new ArithBinaryOp("**", left, right);
 		}
 		return left;
 	}
 
-	_arith_parse_unary() {
+	ArithParseUnary() {
 		"Parse unary operators (! ~ + - ++ --).";
-		this._arith_skip_ws();
-		if (this._arith_match("++")) {
-			this._arith_consume("++");
-			this._arith_skip_ws();
-			let operand = this._arith_parse_unary();
-			return ArithPreIncr(operand);
+		this.ArithSkipWs();
+		if (this.ArithMatch("++")) {
+			this.ArithConsume("++");
+			this.ArithSkipWs();
+			var operand = this.ArithParseUnary();
+			return new ArithPreIncr(operand);
 		}
-		if (this._arith_match("--")) {
-			this._arith_consume("--");
-			this._arith_skip_ws();
-			operand = this._arith_parse_unary();
-			return ArithPreDecr(operand);
+		if (this.ArithMatch("--")) {
+			this.ArithConsume("--");
+			this.ArithSkipWs();
+			operand = this.ArithParseUnary();
+			return new ArithPreDecr(operand);
 		}
-		let c = this._arith_peek();
+		var c = this.ArithPeek();
 		if (c === "!") {
-			this._arith_advance();
-			this._arith_skip_ws();
-			operand = this._arith_parse_unary();
-			return ArithUnaryOp("!", operand);
+			this.ArithAdvance();
+			this.ArithSkipWs();
+			operand = this.ArithParseUnary();
+			return new ArithUnaryOp("!", operand);
 		}
 		if (c === "~") {
-			this._arith_advance();
-			this._arith_skip_ws();
-			operand = this._arith_parse_unary();
-			return ArithUnaryOp("~", operand);
+			this.ArithAdvance();
+			this.ArithSkipWs();
+			operand = this.ArithParseUnary();
+			return new ArithUnaryOp("~", operand);
 		}
-		if (c === "+" && this._arith_peek(1) !== "+") {
-			this._arith_advance();
-			this._arith_skip_ws();
-			operand = this._arith_parse_unary();
-			return ArithUnaryOp("+", operand);
+		if (c === "+" && this.ArithPeek(1) !== "+") {
+			this.ArithAdvance();
+			this.ArithSkipWs();
+			operand = this.ArithParseUnary();
+			return new ArithUnaryOp("+", operand);
 		}
-		if (c === "-" && this._arith_peek(1) !== "-") {
-			this._arith_advance();
-			this._arith_skip_ws();
-			operand = this._arith_parse_unary();
-			return ArithUnaryOp("-", operand);
+		if (c === "-" && this.ArithPeek(1) !== "-") {
+			this.ArithAdvance();
+			this.ArithSkipWs();
+			operand = this.ArithParseUnary();
+			return new ArithUnaryOp("-", operand);
 		}
-		return this._arith_parse_postfix();
+		return this.ArithParsePostfix();
 	}
 
-	_arith_parse_postfix() {
+	ArithParsePostfix() {
 		"Parse postfix operators (++ -- []).";
-		let left = this._arith_parse_primary();
+		var left = this.ArithParsePrimary();
 		while (true) {
-			this._arith_skip_ws();
-			if (this._arith_match("++")) {
-				this._arith_consume("++");
-				left = ArithPostIncr(left);
-			} else if (this._arith_match("--")) {
-				this._arith_consume("--");
-				left = ArithPostDecr(left);
-			} else if (this._arith_peek() === "[") {
+			this.ArithSkipWs();
+			if (this.ArithMatch("++")) {
+				this.ArithConsume("++");
+				left = new ArithPostIncr(left);
+			} else if (this.ArithMatch("--")) {
+				this.ArithConsume("--");
+				left = new ArithPostDecr(left);
+			} else if (this.ArithPeek() === "[") {
 				if (left.kind === "var") {
-					this._arith_advance();
-					this._arith_skip_ws();
-					let index = this._arith_parse_comma();
-					this._arith_skip_ws();
-					if (!this._arith_consume("]")) {
-						throw ParseError("Expected ']' in array subscript");
+					this.ArithAdvance();
+					this.ArithSkipWs();
+					var index = this.ArithParseComma();
+					this.ArithSkipWs();
+					if (!this.ArithConsume("]")) {
+						throw new ParseError("Expected ']' in array subscript");
 					}
-					left = ArithSubscript(left.name, index);
+					left = new ArithSubscript(left.name, index);
 				} else {
 					break;
 				}
@@ -4416,336 +4426,361 @@ class Parser {
 		return left;
 	}
 
-	_arith_parse_primary() {
+	ArithParsePrimary() {
 		"Parse primary expressions (numbers, variables, parens, expansions).";
-		this._arith_skip_ws();
-		let c = this._arith_peek();
+		this.ArithSkipWs();
+		var c = this.ArithPeek();
 		if (c === "(") {
-			this._arith_advance();
-			this._arith_skip_ws();
-			let expr = this._arith_parse_comma();
-			this._arith_skip_ws();
-			if (!this._arith_consume(")")) {
-				throw ParseError("Expected ')' in arithmetic expression");
+			this.ArithAdvance();
+			this.ArithSkipWs();
+			var expr = this.ArithParseComma();
+			this.ArithSkipWs();
+			if (!this.ArithConsume(")")) {
+				throw new ParseError("Expected ')' in arithmetic expression");
 			}
 			return expr;
 		}
 		if (c === "$") {
-			return this._arith_parse_expansion();
+			return this.ArithParseExpansion();
 		}
 		if (c === "'") {
-			return this._arith_parse_single_quote();
+			return this.ArithParseSingleQuote();
 		}
 		if (c === '"') {
-			return this._arith_parse_double_quote();
+			return this.ArithParseDoubleQuote();
 		}
 		if (c === "`") {
-			return this._arith_parse_backtick();
+			return this.ArithParseBacktick();
 		}
 		if (c === "\\") {
-			this._arith_advance();
-			if (this._arith_at_end()) {
-				throw ParseError("Unexpected end after backslash in arithmetic");
+			this.ArithAdvance();
+			if (this.ArithAtEnd()) {
+				throw new ParseError("Unexpected end after backslash in arithmetic");
 			}
-			let escaped_char = this._arith_advance();
-			return ArithEscape(escaped_char);
+			var escaped_char = this.ArithAdvance();
+			return new ArithEscape(escaped_char);
 		}
-		return this._arith_parse_number_or_var();
+		return this.ArithParseNumberOrVar();
 	}
 
-	_arith_parse_expansion() {
+	ArithParseExpansion() {
 		"Parse $var, ${...}, or $(...).";
-		if (!this._arith_consume("$")) {
-			throw ParseError("Expected '$'");
+		if (!this.ArithConsume("$")) {
+			throw new ParseError("Expected '$'");
 		}
-		let c = this._arith_peek();
+		var c = this.ArithPeek();
 		if (c === "(") {
-			return this._arith_parse_cmdsub();
+			return this.ArithParseCmdsub();
 		}
 		if (c === "{") {
-			return this._arith_parse_braced_param();
+			return this.ArithParseBracedParam();
 		}
-		let name_chars = [];
-		while (!this._arith_at_end()) {
-			let ch = this._arith_peek();
-			if (ch.isalnum() || ch === "_") {
-				name_chars.push(this._arith_advance());
-			} else if (
-				(_is_special_param_or_digit(ch) || ch === "#") &&
-				!name_chars
-			) {
-				name_chars.push(this._arith_advance());
+		var name_chars = [];
+		while (!this.ArithAtEnd()) {
+			var ch = this.ArithPeek();
+			if (/^[a-zA-Z0-9]$/.test(ch) || ch === "_") {
+				name_chars.push(this.ArithAdvance());
+			} else if ((IsSpecialParamOrDigit(ch) || ch === "#") && !name_chars) {
+				name_chars.push(this.ArithAdvance());
 				break;
 			} else {
 				break;
 			}
 		}
 		if (!name_chars) {
-			throw ParseError("Expected variable name after $");
+			throw new ParseError("Expected variable name after $");
 		}
-		return ParamExpansion(name_chars.join(""));
+		return new ParamExpansion(name_chars.join(""));
 	}
 
-	_arith_parse_cmdsub() {
+	ArithParseCmdsub() {
 		"Parse $(...) command substitution inside arithmetic.";
-		this._arith_advance();
-		if (this._arith_peek() === "(") {
-			this._arith_advance();
-			let depth = 1;
-			let content_start = this._arith_pos;
-			while (!this._arith_at_end() && depth > 0) {
-				let ch = this._arith_peek();
+		this.ArithAdvance();
+		if (this.ArithPeek() === "(") {
+			this.ArithAdvance();
+			var depth = 1;
+			var content_start = this._arith_pos;
+			while (!this.ArithAtEnd() && depth > 0) {
+				var ch = this.ArithPeek();
 				if (ch === "(") {
 					depth += 1;
-					this._arith_advance();
+					this.ArithAdvance();
 				} else if (ch === ")") {
-					if (depth === 1 && this._arith_peek(1) === ")") {
+					if (depth === 1 && this.ArithPeek(1) === ")") {
 						break;
 					}
 					depth -= 1;
-					this._arith_advance();
+					this.ArithAdvance();
 				} else {
-					this._arith_advance();
+					this.ArithAdvance();
 				}
 			}
-			let content = _substring(this._arith_src, content_start, this._arith_pos);
-			this._arith_advance();
-			this._arith_advance();
-			let inner_expr = this._parse_arith_expr(content);
-			return ArithmeticExpansion(inner_expr);
+			var content = Substring(this._arith_src, content_start, this._arith_pos);
+			this.ArithAdvance();
+			this.ArithAdvance();
+			var inner_expr = this.ParseArithExpr(content);
+			return new ArithmeticExpansion(inner_expr);
 		}
 		depth = 1;
 		content_start = this._arith_pos;
-		while (!this._arith_at_end() && depth > 0) {
-			ch = this._arith_peek();
+		while (!this.ArithAtEnd() && depth > 0) {
+			ch = this.ArithPeek();
 			if (ch === "(") {
 				depth += 1;
-				this._arith_advance();
+				this.ArithAdvance();
 			} else if (ch === ")") {
 				depth -= 1;
 				if (depth === 0) {
 					break;
 				}
-				this._arith_advance();
+				this.ArithAdvance();
 			} else {
-				this._arith_advance();
+				this.ArithAdvance();
 			}
 		}
-		content = _substring(this._arith_src, content_start, this._arith_pos);
-		this._arith_advance();
-		let saved_pos = this.pos;
-		let saved_src = this.source;
-		let saved_len = this.length;
+		content = Substring(this._arith_src, content_start, this._arith_pos);
+		this.ArithAdvance();
+		var saved_pos = this.pos;
+		var saved_src = this.source;
+		var saved_len = this.length;
 		this.source = content;
 		this.pos = 0;
 		this.length = content.length;
-		let cmd = this.parse_list();
+		var cmd = this.parseList();
 		this.source = saved_src;
 		this.pos = saved_pos;
 		this.length = saved_len;
-		return CommandSubstitution(cmd);
+		return new CommandSubstitution(cmd);
 	}
 
-	_arith_parse_braced_param() {
+	ArithParseBracedParam() {
 		"Parse ${...} parameter expansion inside arithmetic.";
-		this._arith_advance();
-		if (this._arith_peek() === "!") {
-			this._arith_advance();
-			let name_chars = [];
-			while (!this._arith_at_end() && this._arith_peek() !== "}") {
-				name_chars.push(this._arith_advance());
+		this.ArithAdvance();
+		if (this.ArithPeek() === "!") {
+			this.ArithAdvance();
+			var name_chars = [];
+			while (!this.ArithAtEnd() && this.ArithPeek() !== "}") {
+				name_chars.push(this.ArithAdvance());
 			}
-			this._arith_consume("}");
-			return ParamIndirect(name_chars.join(""));
+			this.ArithConsume("}");
+			return new ParamIndirect(name_chars.join(""));
 		}
-		if (this._arith_peek() === "#") {
-			this._arith_advance();
+		if (this.ArithPeek() === "#") {
+			this.ArithAdvance();
 			name_chars = [];
-			while (!this._arith_at_end() && this._arith_peek() !== "}") {
-				name_chars.push(this._arith_advance());
+			while (!this.ArithAtEnd() && this.ArithPeek() !== "}") {
+				name_chars.push(this.ArithAdvance());
 			}
-			this._arith_consume("}");
-			return ParamLength(name_chars.join(""));
+			this.ArithConsume("}");
+			return new ParamLength(name_chars.join(""));
 		}
 		name_chars = [];
-		while (!this._arith_at_end()) {
-			let ch = this._arith_peek();
+		while (!this.ArithAtEnd()) {
+			var ch = this.ArithPeek();
 			if (ch === "}") {
-				this._arith_advance();
-				return ParamExpansion(name_chars.join(""));
+				this.ArithAdvance();
+				return new ParamExpansion(name_chars.join(""));
 			}
-			if (_is_param_expansion_op(ch)) {
+			if (IsParamExpansionOp(ch)) {
 				break;
 			}
-			name_chars.push(this._arith_advance());
+			name_chars.push(this.ArithAdvance());
 		}
-		let name = name_chars.join("");
-		let op_chars = [];
-		let depth = 1;
-		while (!this._arith_at_end() && depth > 0) {
-			ch = this._arith_peek();
+		var name = name_chars.join("");
+		var op_chars = [];
+		var depth = 1;
+		while (!this.ArithAtEnd() && depth > 0) {
+			ch = this.ArithPeek();
 			if (ch === "{") {
 				depth += 1;
-				op_chars.push(this._arith_advance());
+				op_chars.push(this.ArithAdvance());
 			} else if (ch === "}") {
 				depth -= 1;
 				if (depth === 0) {
 					break;
 				}
-				op_chars.push(this._arith_advance());
+				op_chars.push(this.ArithAdvance());
 			} else {
-				op_chars.push(this._arith_advance());
+				op_chars.push(this.ArithAdvance());
 			}
 		}
-		this._arith_consume("}");
-		let op_str = op_chars.join("");
+		this.ArithConsume("}");
+		var op_str = op_chars.join("");
 		if (op_str.startsWith(":-")) {
-			return ParamExpansion(name, ":-", _substring(op_str, 2, op_str.length));
+			return new ParamExpansion(
+				name,
+				":-",
+				Substring(op_str, 2, op_str.length),
+			);
 		}
 		if (op_str.startsWith(":=")) {
-			return ParamExpansion(name, ":=", _substring(op_str, 2, op_str.length));
+			return new ParamExpansion(
+				name,
+				":=",
+				Substring(op_str, 2, op_str.length),
+			);
 		}
 		if (op_str.startsWith(":+")) {
-			return ParamExpansion(name, ":+", _substring(op_str, 2, op_str.length));
+			return new ParamExpansion(
+				name,
+				":+",
+				Substring(op_str, 2, op_str.length),
+			);
 		}
 		if (op_str.startsWith(":?")) {
-			return ParamExpansion(name, ":?", _substring(op_str, 2, op_str.length));
+			return new ParamExpansion(
+				name,
+				":?",
+				Substring(op_str, 2, op_str.length),
+			);
 		}
 		if (op_str.startsWith(":")) {
-			return ParamExpansion(name, ":", _substring(op_str, 1, op_str.length));
+			return new ParamExpansion(name, ":", Substring(op_str, 1, op_str.length));
 		}
 		if (op_str.startsWith("##")) {
-			return ParamExpansion(name, "##", _substring(op_str, 2, op_str.length));
+			return new ParamExpansion(
+				name,
+				"##",
+				Substring(op_str, 2, op_str.length),
+			);
 		}
 		if (op_str.startsWith("#")) {
-			return ParamExpansion(name, "#", _substring(op_str, 1, op_str.length));
+			return new ParamExpansion(name, "#", Substring(op_str, 1, op_str.length));
 		}
 		if (op_str.startsWith("%%")) {
-			return ParamExpansion(name, "%%", _substring(op_str, 2, op_str.length));
+			return new ParamExpansion(
+				name,
+				"%%",
+				Substring(op_str, 2, op_str.length),
+			);
 		}
 		if (op_str.startsWith("%")) {
-			return ParamExpansion(name, "%", _substring(op_str, 1, op_str.length));
+			return new ParamExpansion(name, "%", Substring(op_str, 1, op_str.length));
 		}
 		if (op_str.startsWith("//")) {
-			return ParamExpansion(name, "//", _substring(op_str, 2, op_str.length));
+			return new ParamExpansion(
+				name,
+				"//",
+				Substring(op_str, 2, op_str.length),
+			);
 		}
 		if (op_str.startsWith("/")) {
-			return ParamExpansion(name, "/", _substring(op_str, 1, op_str.length));
+			return new ParamExpansion(name, "/", Substring(op_str, 1, op_str.length));
 		}
-		return ParamExpansion(name, "", op_str);
+		return new ParamExpansion(name, "", op_str);
 	}
 
-	_arith_parse_single_quote() {
+	ArithParseSingleQuote() {
 		"Parse '...' inside arithmetic - returns content as a number/string.";
-		this._arith_advance();
-		let content_start = this._arith_pos;
-		while (!this._arith_at_end() && this._arith_peek() !== "'") {
-			this._arith_advance();
+		this.ArithAdvance();
+		var content_start = this._arith_pos;
+		while (!this.ArithAtEnd() && this.ArithPeek() !== "'") {
+			this.ArithAdvance();
 		}
-		let content = _substring(this._arith_src, content_start, this._arith_pos);
-		if (!this._arith_consume("'")) {
-			throw ParseError("Unterminated single quote in arithmetic");
+		var content = Substring(this._arith_src, content_start, this._arith_pos);
+		if (!this.ArithConsume("'")) {
+			throw new ParseError("Unterminated single quote in arithmetic");
 		}
-		return ArithNumber(content);
+		return new ArithNumber(content);
 	}
 
-	_arith_parse_double_quote() {
+	ArithParseDoubleQuote() {
 		"Parse \"...\" inside arithmetic - may contain expansions.";
-		this._arith_advance();
-		let content_start = this._arith_pos;
-		while (!this._arith_at_end() && this._arith_peek() !== '"') {
-			let c = this._arith_peek();
-			if (c === "\\" && !this._arith_at_end()) {
-				this._arith_advance();
-				this._arith_advance();
+		this.ArithAdvance();
+		var content_start = this._arith_pos;
+		while (!this.ArithAtEnd() && this.ArithPeek() !== '"') {
+			var c = this.ArithPeek();
+			if (c === "\\" && !this.ArithAtEnd()) {
+				this.ArithAdvance();
+				this.ArithAdvance();
 			} else {
-				this._arith_advance();
+				this.ArithAdvance();
 			}
 		}
-		let content = _substring(this._arith_src, content_start, this._arith_pos);
-		if (!this._arith_consume('"')) {
-			throw ParseError("Unterminated double quote in arithmetic");
+		var content = Substring(this._arith_src, content_start, this._arith_pos);
+		if (!this.ArithConsume('"')) {
+			throw new ParseError("Unterminated double quote in arithmetic");
 		}
-		return ArithNumber(content);
+		return new ArithNumber(content);
 	}
 
-	_arith_parse_backtick() {
+	ArithParseBacktick() {
 		"Parse `...` command substitution inside arithmetic.";
-		this._arith_advance();
-		let content_start = this._arith_pos;
-		while (!this._arith_at_end() && this._arith_peek() !== "`") {
-			let c = this._arith_peek();
-			if (c === "\\" && !this._arith_at_end()) {
-				this._arith_advance();
-				this._arith_advance();
+		this.ArithAdvance();
+		var content_start = this._arith_pos;
+		while (!this.ArithAtEnd() && this.ArithPeek() !== "`") {
+			var c = this.ArithPeek();
+			if (c === "\\" && !this.ArithAtEnd()) {
+				this.ArithAdvance();
+				this.ArithAdvance();
 			} else {
-				this._arith_advance();
+				this.ArithAdvance();
 			}
 		}
-		let content = _substring(this._arith_src, content_start, this._arith_pos);
-		if (!this._arith_consume("`")) {
-			throw ParseError("Unterminated backtick in arithmetic");
+		var content = Substring(this._arith_src, content_start, this._arith_pos);
+		if (!this.ArithConsume("`")) {
+			throw new ParseError("Unterminated backtick in arithmetic");
 		}
-		let saved_pos = this.pos;
-		let saved_src = this.source;
-		let saved_len = this.length;
+		var saved_pos = this.pos;
+		var saved_src = this.source;
+		var saved_len = this.length;
 		this.source = content;
 		this.pos = 0;
 		this.length = content.length;
-		let cmd = this.parse_list();
+		var cmd = this.parseList();
 		this.source = saved_src;
 		this.pos = saved_pos;
 		this.length = saved_len;
-		return CommandSubstitution(cmd);
+		return new CommandSubstitution(cmd);
 	}
 
-	_arith_parse_number_or_var() {
+	ArithParseNumberOrVar() {
 		"Parse a number or variable name.";
-		this._arith_skip_ws();
-		let chars = [];
-		let c = this._arith_peek();
-		if (c.isdigit()) {
-			while (!this._arith_at_end()) {
-				let ch = this._arith_peek();
-				if (ch.isalnum() || ch === "#" || ch === "_") {
-					chars.push(this._arith_advance());
+		this.ArithSkipWs();
+		var chars = [];
+		var c = this.ArithPeek();
+		if (/^[0-9]$/.test(c)) {
+			while (!this.ArithAtEnd()) {
+				var ch = this.ArithPeek();
+				if (/^[a-zA-Z0-9]$/.test(ch) || ch === "#" || ch === "_") {
+					chars.push(this.ArithAdvance());
 				} else {
 					break;
 				}
 			}
-			return ArithNumber(chars.join(""));
+			return new ArithNumber(chars.join(""));
 		}
-		if (c.isalpha() || c === "_") {
-			while (!this._arith_at_end()) {
-				ch = this._arith_peek();
-				if (ch.isalnum() || ch === "_") {
-					chars.push(this._arith_advance());
+		if (/^[a-zA-Z]$/.test(c) || c === "_") {
+			while (!this.ArithAtEnd()) {
+				ch = this.ArithPeek();
+				if (/^[a-zA-Z0-9]$/.test(ch) || ch === "_") {
+					chars.push(this.ArithAdvance());
 				} else {
 					break;
 				}
 			}
-			return ArithVar(chars.join(""));
+			return new ArithVar(chars.join(""));
 		}
-		throw ParseError(
+		throw new ParseError(
 			"Unexpected character '" + c + "' in arithmetic expression",
 		);
 	}
 
-	_parse_deprecated_arithmetic() {
+	ParseDeprecatedArithmetic() {
 		"Parse a deprecated $[expr] arithmetic expansion.\n\n        Returns (node, text) where node is ArithDeprecated and text is raw text.\n        ";
-		if (this.at_end() || this.peek() !== "$") {
+		if (this.atEnd() || this.peek() !== "$") {
 			return [null, ""];
 		}
-		let start = this.pos;
+		var start = this.pos;
 		if (this.pos + 1 >= this.length || this.source[this.pos + 1] !== "[") {
 			return [null, ""];
 		}
 		this.advance();
 		this.advance();
-		let content_start = this.pos;
-		let depth = 1;
-		while (!this.at_end() && depth > 0) {
-			let c = this.peek();
+		var content_start = this.pos;
+		var depth = 1;
+		while (!this.atEnd() && depth > 0) {
+			var c = this.peek();
 			if (c === "[") {
 				depth += 1;
 				this.advance();
@@ -4759,38 +4794,38 @@ class Parser {
 				this.advance();
 			}
 		}
-		if (this.at_end() || depth !== 0) {
+		if (this.atEnd() || depth !== 0) {
 			this.pos = start;
 			return [null, ""];
 		}
-		let content = _substring(this.source, content_start, this.pos);
+		var content = Substring(this.source, content_start, this.pos);
 		this.advance();
-		let text = _substring(this.source, start, this.pos);
-		return [ArithDeprecated(content), text];
+		var text = Substring(this.source, start, this.pos);
+		return [new ArithDeprecated(content), text];
 	}
 
-	_parse_ansi_c_quote() {
+	ParseAnsiCQuote() {
 		"Parse ANSI-C quoting $'...'.\n\n        Returns (node, text) where node is the AST node and text is the raw text.\n        Returns (None, \"\") if not a valid ANSI-C quote.\n        ";
-		if (this.at_end() || this.peek() !== "$") {
+		if (this.atEnd() || this.peek() !== "$") {
 			return [null, ""];
 		}
 		if (this.pos + 1 >= this.length || this.source[this.pos + 1] !== "'") {
 			return [null, ""];
 		}
-		let start = this.pos;
+		var start = this.pos;
 		this.advance();
 		this.advance();
-		let content_chars = [];
-		let found_close = false;
-		while (!this.at_end()) {
-			let ch = this.peek();
+		var content_chars = [];
+		var found_close = false;
+		while (!this.atEnd()) {
+			var ch = this.peek();
 			if (ch === "'") {
 				this.advance();
 				found_close = true;
 				break;
 			} else if (ch === "\\") {
 				content_chars.push(this.advance());
-				if (!this.at_end()) {
+				if (!this.atEnd()) {
 					content_chars.push(this.advance());
 				}
 			} else {
@@ -4801,33 +4836,33 @@ class Parser {
 			this.pos = start;
 			return [null, ""];
 		}
-		let text = _substring(this.source, start, this.pos);
-		let content = content_chars.join("");
-		return [AnsiCQuote(content), text];
+		var text = Substring(this.source, start, this.pos);
+		var content = content_chars.join("");
+		return [new AnsiCQuote(content), text];
 	}
 
-	_parse_locale_string() {
+	ParseLocaleString() {
 		"Parse locale translation $\"...\".\n\n        Returns (node, text, inner_parts) where:\n        - node is the LocaleString AST node\n        - text is the raw text including $\"...\"\n        - inner_parts is a list of expansion nodes found inside\n        Returns (None, \"\", []) if not a valid locale string.\n        ";
-		if (this.at_end() || this.peek() !== "$") {
+		if (this.atEnd() || this.peek() !== "$") {
 			return [null, "", []];
 		}
 		if (this.pos + 1 >= this.length || this.source[this.pos + 1] !== '"') {
 			return [null, "", []];
 		}
-		let start = this.pos;
+		var start = this.pos;
 		this.advance();
 		this.advance();
-		let content_chars = [];
-		let inner_parts = [];
-		let found_close = false;
-		while (!this.at_end()) {
-			let ch = this.peek();
+		var content_chars = [];
+		var inner_parts = [];
+		var found_close = false;
+		while (!this.atEnd()) {
+			var ch = this.peek();
 			if (ch === '"') {
 				this.advance();
 				found_close = true;
 				break;
 			} else if (ch === "\\" && this.pos + 1 < this.length) {
-				let next_ch = this.source[this.pos + 1];
+				var next_ch = this.source[this.pos + 1];
 				if (next_ch === "\n") {
 					this.advance();
 					this.advance();
@@ -4841,16 +4876,16 @@ class Parser {
 				this.source[this.pos + 1] === "(" &&
 				this.source[this.pos + 2] === "("
 			) {
-				let arith_result = this._parse_arithmetic_expansion();
-				let arith_node = arith_result[0];
-				let arith_text = arith_result[1];
+				var arith_result = this.ParseArithmeticExpansion();
+				var arith_node = arith_result[0];
+				var arith_text = arith_result[1];
 				if (arith_node) {
 					inner_parts.push(arith_node);
 					content_chars.push(arith_text);
 				} else {
-					let cmdsub_result = this._parse_command_substitution();
-					let cmdsub_node = cmdsub_result[0];
-					let cmdsub_text = cmdsub_result[1];
+					var cmdsub_result = this.ParseCommandSubstitution();
+					var cmdsub_node = cmdsub_result[0];
+					var cmdsub_text = cmdsub_result[1];
 					if (cmdsub_node) {
 						inner_parts.push(cmdsub_node);
 						content_chars.push(cmdsub_text);
@@ -4863,7 +4898,7 @@ class Parser {
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === "("
 			) {
-				cmdsub_result = this._parse_command_substitution();
+				cmdsub_result = this.ParseCommandSubstitution();
 				cmdsub_node = cmdsub_result[0];
 				cmdsub_text = cmdsub_result[1];
 				if (cmdsub_node) {
@@ -4873,9 +4908,9 @@ class Parser {
 					content_chars.push(this.advance());
 				}
 			} else if (ch === "$") {
-				let param_result = this._parse_param_expansion();
-				let param_node = param_result[0];
-				let param_text = param_result[1];
+				var param_result = this.ParseParamExpansion();
+				var param_node = param_result[0];
+				var param_text = param_result[1];
 				if (param_node) {
 					inner_parts.push(param_node);
 					content_chars.push(param_text);
@@ -4883,7 +4918,7 @@ class Parser {
 					content_chars.push(this.advance());
 				}
 			} else if (ch === "`") {
-				cmdsub_result = this._parse_backtick_substitution();
+				cmdsub_result = this.ParseBacktickSubstitution();
 				cmdsub_node = cmdsub_result[0];
 				cmdsub_text = cmdsub_result[1];
 				if (cmdsub_node) {
@@ -4900,99 +4935,99 @@ class Parser {
 			this.pos = start;
 			return [null, "", []];
 		}
-		let content = content_chars.join("");
-		let text = '$"' + content + '"';
-		return [LocaleString(content), text, inner_parts];
+		var content = content_chars.join("");
+		var text = '$"' + content + '"';
+		return [new LocaleString(content), text, inner_parts];
 	}
 
-	_parse_param_expansion() {
+	ParseParamExpansion() {
 		"Parse a parameter expansion starting at $.\n\n        Returns (node, text) where node is the AST node and text is the raw text.\n        Returns (None, \"\") if not a valid parameter expansion.\n        ";
-		if (this.at_end() || this.peek() !== "$") {
+		if (this.atEnd() || this.peek() !== "$") {
 			return [null, ""];
 		}
-		let start = this.pos;
+		var start = this.pos;
 		this.advance();
-		if (this.at_end()) {
+		if (this.atEnd()) {
 			this.pos = start;
 			return [null, ""];
 		}
-		let ch = this.peek();
+		var ch = this.peek();
 		if (ch === "{") {
 			this.advance();
-			return this._parse_braced_param(start);
+			return this.ParseBracedParam(start);
 		}
-		if (_is_special_param_or_digit(ch) || ch === "#") {
+		if (IsSpecialParamOrDigit(ch) || ch === "#") {
 			this.advance();
-			let text = _substring(this.source, start, this.pos);
-			return [ParamExpansion(ch), text];
+			var text = Substring(this.source, start, this.pos);
+			return [new ParamExpansion(ch), text];
 		}
-		if (ch.isalpha() || ch === "_") {
-			let name_start = this.pos;
-			while (!this.at_end()) {
-				let c = this.peek();
-				if (c.isalnum() || c === "_") {
+		if (/^[a-zA-Z]$/.test(ch) || ch === "_") {
+			var name_start = this.pos;
+			while (!this.atEnd()) {
+				var c = this.peek();
+				if (/^[a-zA-Z0-9]$/.test(c) || c === "_") {
 					this.advance();
 				} else {
 					break;
 				}
 			}
-			let name = _substring(this.source, name_start, this.pos);
-			text = _substring(this.source, start, this.pos);
-			return [ParamExpansion(name), text];
+			var name = Substring(this.source, name_start, this.pos);
+			text = Substring(this.source, start, this.pos);
+			return [new ParamExpansion(name), text];
 		}
 		this.pos = start;
 		return [null, ""];
 	}
 
-	_parse_braced_param(start) {
+	ParseBracedParam(start) {
 		"Parse contents of ${...} after the opening brace.\n\n        start is the position of the $.\n        Returns (node, text).\n        ";
-		if (this.at_end()) {
+		if (this.atEnd()) {
 			this.pos = start;
 			return [null, ""];
 		}
-		let ch = this.peek();
+		var ch = this.peek();
 		if (ch === "#") {
 			this.advance();
-			let param = this._consume_param_name();
-			if (param && !this.at_end() && this.peek() === "}") {
+			var param = this.ConsumeParamName();
+			if (param && !this.atEnd() && this.peek() === "}") {
 				this.advance();
-				let text = _substring(this.source, start, this.pos);
-				return [ParamLength(param), text];
+				var text = Substring(this.source, start, this.pos);
+				return [new ParamLength(param), text];
 			}
 			this.pos = start;
 			return [null, ""];
 		}
 		if (ch === "!") {
 			this.advance();
-			param = this._consume_param_name();
+			param = this.ConsumeParamName();
 			if (param) {
-				while (!this.at_end() && _is_whitespace_no_newline(this.peek())) {
+				while (!this.atEnd() && IsWhitespaceNoNewline(this.peek())) {
 					this.advance();
 				}
-				if (!this.at_end() && this.peek() === "}") {
+				if (!this.atEnd() && this.peek() === "}") {
 					this.advance();
-					text = _substring(this.source, start, this.pos);
-					return [ParamIndirect(param), text];
+					text = Substring(this.source, start, this.pos);
+					return [new ParamIndirect(param), text];
 				}
-				if (!this.at_end() && _is_at_or_star(this.peek())) {
-					let suffix = this.advance();
-					while (!this.at_end() && _is_whitespace_no_newline(this.peek())) {
+				if (!this.atEnd() && IsAtOrStar(this.peek())) {
+					var suffix = this.advance();
+					while (!this.atEnd() && IsWhitespaceNoNewline(this.peek())) {
 						this.advance();
 					}
-					if (!this.at_end() && this.peek() === "}") {
+					if (!this.atEnd() && this.peek() === "}") {
 						this.advance();
-						text = _substring(this.source, start, this.pos);
-						return [ParamIndirect(param + suffix), text];
+						text = Substring(this.source, start, this.pos);
+						return [new ParamIndirect(param + suffix), text];
 					}
 					this.pos = start;
 					return [null, ""];
 				}
-				let op = this._consume_param_operator();
+				var op = this.ConsumeParamOperator();
 				if (op !== null) {
-					let arg_chars = [];
-					let depth = 1;
-					while (!this.at_end() && depth > 0) {
-						let c = this.peek();
+					var arg_chars = [];
+					var depth = 1;
+					while (!this.atEnd() && depth > 0) {
+						var c = this.peek();
 						if (
 							c === "$" &&
 							this.pos + 1 < this.length &&
@@ -5008,7 +5043,7 @@ class Parser {
 							}
 						} else if (c === "\\") {
 							arg_chars.push(this.advance());
-							if (!this.at_end()) {
+							if (!this.atEnd()) {
 								arg_chars.push(this.advance());
 							}
 						} else {
@@ -5017,20 +5052,20 @@ class Parser {
 					}
 					if (depth === 0) {
 						this.advance();
-						let arg = arg_chars.join("");
-						text = _substring(this.source, start, this.pos);
-						return [ParamIndirect(param, op, arg), text];
+						var arg = arg_chars.join("");
+						text = Substring(this.source, start, this.pos);
+						return [new ParamIndirect(param, op, arg), text];
 					}
 				}
 			}
 			this.pos = start;
 			return [null, ""];
 		}
-		param = this._consume_param_name();
+		param = this.ConsumeParamName();
 		if (!param) {
 			depth = 1;
-			let content_start = this.pos;
-			while (!this.at_end() && depth > 0) {
+			var content_start = this.pos;
+			while (!this.atEnd() && depth > 0) {
 				c = this.peek();
 				if (c === "{") {
 					depth += 1;
@@ -5043,7 +5078,7 @@ class Parser {
 					this.advance();
 				} else if (c === "\\") {
 					this.advance();
-					if (!this.at_end()) {
+					if (!this.atEnd()) {
 						this.advance();
 					}
 				} else {
@@ -5051,32 +5086,32 @@ class Parser {
 				}
 			}
 			if (depth === 0) {
-				let content = _substring(this.source, content_start, this.pos);
+				var content = Substring(this.source, content_start, this.pos);
 				this.advance();
-				text = _substring(this.source, start, this.pos);
-				return [ParamExpansion(content), text];
+				text = Substring(this.source, start, this.pos);
+				return [new ParamExpansion(content), text];
 			}
 			this.pos = start;
 			return [null, ""];
 		}
-		if (this.at_end()) {
+		if (this.atEnd()) {
 			this.pos = start;
 			return [null, ""];
 		}
 		if (this.peek() === "}") {
 			this.advance();
-			text = _substring(this.source, start, this.pos);
-			return [ParamExpansion(param), text];
+			text = Substring(this.source, start, this.pos);
+			return [new ParamExpansion(param), text];
 		}
-		op = this._consume_param_operator();
+		op = this.ConsumeParamOperator();
 		if (op === null) {
 			op = this.advance();
 		}
 		arg_chars = [];
 		depth = 1;
-		let in_single_quote = false;
-		let in_double_quote = false;
-		while (!this.at_end() && depth > 0) {
+		var in_single_quote = false;
+		var in_double_quote = false;
+		while (!this.atEnd() && depth > 0) {
 			c = this.peek();
 			if (c === "'" && !in_double_quote) {
 				if (in_single_quote) {
@@ -5094,7 +5129,7 @@ class Parser {
 					this.advance();
 				} else {
 					arg_chars.push(this.advance());
-					if (!this.at_end()) {
+					if (!this.atEnd()) {
 						arg_chars.push(this.advance());
 					}
 				}
@@ -5115,16 +5150,16 @@ class Parser {
 			) {
 				arg_chars.push(this.advance());
 				arg_chars.push(this.advance());
-				let paren_depth = 1;
-				while (!this.at_end() && paren_depth > 0) {
-					let pc = this.peek();
+				var paren_depth = 1;
+				while (!this.atEnd() && paren_depth > 0) {
+					var pc = this.peek();
 					if (pc === "(") {
 						paren_depth += 1;
 					} else if (pc === ")") {
 						paren_depth -= 1;
 					} else if (pc === "\\") {
 						arg_chars.push(this.advance());
-						if (!this.at_end()) {
+						if (!this.atEnd()) {
 							arg_chars.push(this.advance());
 						}
 						continue;
@@ -5133,17 +5168,17 @@ class Parser {
 				}
 			} else if (c === "`" && !in_single_quote) {
 				arg_chars.push(this.advance());
-				while (!this.at_end() && this.peek() !== "`") {
-					let bc = this.peek();
+				while (!this.atEnd() && this.peek() !== "`") {
+					var bc = this.peek();
 					if (bc === "\\" && this.pos + 1 < this.length) {
-						let next_c = this.source[this.pos + 1];
-						if (_is_escape_char_in_dquote(next_c)) {
+						var next_c = this.source[this.pos + 1];
+						if (IsEscapeCharInDquote(next_c)) {
 							arg_chars.push(this.advance());
 						}
 					}
 					arg_chars.push(this.advance());
 				}
-				if (!this.at_end()) {
+				if (!this.atEnd()) {
 					arg_chars.push(this.advance());
 				}
 			} else if (c === "}") {
@@ -5173,37 +5208,37 @@ class Parser {
 		this.advance();
 		arg = arg_chars.join("");
 		text = "${" + param + op + arg + "}";
-		return [ParamExpansion(param, op, arg), text];
+		return [new ParamExpansion(param, op, arg), text];
 	}
 
-	_consume_param_name() {
+	ConsumeParamName() {
 		"Consume a parameter name (variable name, special char, or array subscript).";
-		if (this.at_end()) {
+		if (this.atEnd()) {
 			return null;
 		}
-		let ch = this.peek();
-		if (_is_special_param(ch)) {
+		var ch = this.peek();
+		if (IsSpecialParam(ch)) {
 			this.advance();
 			return ch;
 		}
-		if (ch.isdigit()) {
-			let name_chars = [];
-			while (!this.at_end() && this.peek().isdigit()) {
+		if (/^[0-9]$/.test(ch)) {
+			var name_chars = [];
+			while (!this.atEnd() && /^[0-9]$/.test(this.peek())) {
 				name_chars.push(this.advance());
 			}
 			return name_chars.join("");
 		}
-		if (ch.isalpha() || ch === "_") {
+		if (/^[a-zA-Z]$/.test(ch) || ch === "_") {
 			name_chars = [];
-			while (!this.at_end()) {
-				let c = this.peek();
-				if (c.isalnum() || c === "_") {
+			while (!this.atEnd()) {
+				var c = this.peek();
+				if (/^[a-zA-Z0-9]$/.test(c) || c === "_") {
 					name_chars.push(this.advance());
 				} else if (c === "[") {
 					name_chars.push(this.advance());
-					let bracket_depth = 1;
-					while (!this.at_end() && bracket_depth > 0) {
-						let sc = this.peek();
+					var bracket_depth = 1;
+					while (!this.atEnd() && bracket_depth > 0) {
+						var sc = this.peek();
 						if (sc === "[") {
 							bracket_depth += 1;
 						} else if (sc === "]") {
@@ -5214,7 +5249,7 @@ class Parser {
 						}
 						name_chars.push(this.advance());
 					}
-					if (!this.at_end() && this.peek() === "]") {
+					if (!this.atEnd() && this.peek() === "]") {
 						name_chars.push(this.advance());
 					}
 					break;
@@ -5231,31 +5266,31 @@ class Parser {
 		return null;
 	}
 
-	_consume_param_operator() {
+	ConsumeParamOperator() {
 		"Consume a parameter expansion operator.";
-		if (this.at_end()) {
+		if (this.atEnd()) {
 			return null;
 		}
-		let ch = this.peek();
+		var ch = this.peek();
 		if (ch === ":") {
 			this.advance();
-			if (this.at_end()) {
+			if (this.atEnd()) {
 				return ":";
 			}
-			let next_ch = this.peek();
-			if (_is_simple_param_op(next_ch)) {
+			var next_ch = this.peek();
+			if (IsSimpleParamOp(next_ch)) {
 				this.advance();
 				return ":" + next_ch;
 			}
 			return ":";
 		}
-		if (_is_simple_param_op(ch)) {
+		if (IsSimpleParamOp(ch)) {
 			this.advance();
 			return ch;
 		}
 		if (ch === "#") {
 			this.advance();
-			if (!this.at_end() && this.peek() === "#") {
+			if (!this.atEnd() && this.peek() === "#") {
 				this.advance();
 				return "##";
 			}
@@ -5263,7 +5298,7 @@ class Parser {
 		}
 		if (ch === "%") {
 			this.advance();
-			if (!this.at_end() && this.peek() === "%") {
+			if (!this.atEnd() && this.peek() === "%") {
 				this.advance();
 				return "%%";
 			}
@@ -5271,7 +5306,7 @@ class Parser {
 		}
 		if (ch === "/") {
 			this.advance();
-			if (!this.at_end()) {
+			if (!this.atEnd()) {
 				next_ch = this.peek();
 				if (next_ch === "/") {
 					this.advance();
@@ -5288,7 +5323,7 @@ class Parser {
 		}
 		if (ch === "^") {
 			this.advance();
-			if (!this.at_end() && this.peek() === "^") {
+			if (!this.atEnd() && this.peek() === "^") {
 				this.advance();
 				return "^^";
 			}
@@ -5296,7 +5331,7 @@ class Parser {
 		}
 		if (ch === ",") {
 			this.advance();
-			if (!this.at_end() && this.peek() === ",") {
+			if (!this.atEnd() && this.peek() === ",") {
 				this.advance();
 				return ",,";
 			}
@@ -5309,41 +5344,45 @@ class Parser {
 		return null;
 	}
 
-	parse_redirect() {
+	parseRedirect() {
 		"Parse a redirection operator and target.";
-		this.skip_whitespace();
-		if (this.at_end()) {
+		this.skipWhitespace();
+		if (this.atEnd()) {
 			return null;
 		}
-		let start = this.pos;
-		let fd = null;
-		let varfd = null;
+		var start = this.pos;
+		var fd = null;
+		var varfd = null;
 		if (this.peek() === "{") {
-			let saved = this.pos;
+			var saved = this.pos;
 			this.advance();
-			let varname_chars = [];
+			var varname_chars = [];
 			while (
-				!this.at_end() &&
+				!this.atEnd() &&
 				this.peek() !== "}" &&
-				!_is_redirect_char(this.peek())
+				!IsRedirectChar(this.peek())
 			) {
-				let ch = this.peek();
-				if (ch.isalnum() || ch === "_" || ch === "[" || ch === "]") {
+				var ch = this.peek();
+				if (
+					/^[a-zA-Z0-9]$/.test(ch) ||
+					ch === "_" || ch === "[" ||
+					ch === "]"
+				) {
 					varname_chars.push(this.advance());
 				} else {
 					break;
 				}
 			}
-			if (!this.at_end() && this.peek() === "}" && varname_chars) {
+			if (!this.atEnd() && this.peek() === "}" && varname_chars) {
 				this.advance();
 				varfd = varname_chars.join("");
 			} else {
 				this.pos = saved;
 			}
 		}
-		if (varfd === null && this.peek() && this.peek().isdigit()) {
-			let fd_chars = [];
-			while (!this.at_end() && this.peek().isdigit()) {
+		if (varfd === null && this.peek() && /^[0-9]$/.test(this.peek())) {
+			var fd_chars = [];
+			while (!this.atEnd() && /^[0-9]$/.test(this.peek())) {
 				fd_chars.push(this.advance());
 			}
 			fd = parseInt(fd_chars.join(""), 10);
@@ -5360,20 +5399,20 @@ class Parser {
 			}
 			this.advance();
 			this.advance();
-			if (!this.at_end() && this.peek() === ">") {
+			if (!this.atEnd() && this.peek() === ">") {
 				this.advance();
-				let op = "&>>";
+				var op = "&>>";
 			} else {
 				op = "&>";
 			}
-			this.skip_whitespace();
-			let target = this.parse_word();
+			this.skipWhitespace();
+			var target = this.parseWord();
 			if (target === null) {
-				throw ParseError("Expected target for redirect " + op);
+				throw new ParseError("Expected target for redirect " + op);
 			}
-			return Redirect(op, target);
+			return new Redirect(op, target);
 		}
-		if (ch === null || !_is_redirect_char(ch)) {
+		if (ch === null || !IsRedirectChar(ch)) {
 			this.pos = start;
 			return null;
 		}
@@ -5386,18 +5425,18 @@ class Parser {
 			return null;
 		}
 		op = this.advance();
-		let strip_tabs = false;
-		if (!this.at_end()) {
-			let next_ch = this.peek();
+		var strip_tabs = false;
+		if (!this.atEnd()) {
+			var next_ch = this.peek();
 			if (op === ">" && next_ch === ">") {
 				this.advance();
 				op = ">>";
 			} else if (op === "<" && next_ch === "<") {
 				this.advance();
-				if (!this.at_end() && this.peek() === "<") {
+				if (!this.atEnd() && this.peek() === "<") {
 					this.advance();
 					op = "<<<";
-				} else if (!this.at_end() && this.peek() === "-") {
+				} else if (!this.atEnd() && this.peek() === "-") {
 					this.advance();
 					op = "<<";
 					strip_tabs = true;
@@ -5418,7 +5457,7 @@ class Parser {
 			) {
 				if (
 					this.pos + 1 >= this.length ||
-					!_is_digit_or_dash(this.source[this.pos + 1])
+					!IsDigitOrDash(this.source[this.pos + 1])
 				) {
 					this.advance();
 					op = ">&";
@@ -5431,7 +5470,7 @@ class Parser {
 			) {
 				if (
 					this.pos + 1 >= this.length ||
-					!_is_digit_or_dash(this.source[this.pos + 1])
+					!IsDigitOrDash(this.source[this.pos + 1])
 				) {
 					this.advance();
 					op = "<&";
@@ -5439,77 +5478,80 @@ class Parser {
 			}
 		}
 		if (op === "<<") {
-			return this._parse_heredoc(fd, strip_tabs);
+			return this.ParseHeredoc(fd, strip_tabs);
 		}
 		if (varfd !== null) {
 			op = "{" + varfd + "}" + op;
 		} else if (fd !== null) {
 			op = String(fd) + op;
 		}
-		this.skip_whitespace();
-		if (!this.at_end() && this.peek() === "&") {
+		this.skipWhitespace();
+		if (!this.atEnd() && this.peek() === "&") {
 			this.advance();
-			if (!this.at_end() && (this.peek().isdigit() || this.peek() === "-")) {
+			if (
+				!this.atEnd() &&
+				(/^[0-9]$/.test(this.peek()) || this.peek() === "-")
+			) {
 				fd_chars = [];
-				while (!this.at_end() && this.peek().isdigit()) {
+				while (!this.atEnd() && /^[0-9]$/.test(this.peek())) {
 					fd_chars.push(this.advance());
 				}
 				if (fd_chars) {
-					let fd_target = fd_chars.join("");
+					var fd_target = fd_chars.join("");
 				} else {
 					fd_target = "";
 				}
-				if (!this.at_end() && this.peek() === "-") {
+				if (!this.atEnd() && this.peek() === "-") {
 					fd_target += this.advance();
 				}
-				target = Word("&" + fd_target);
+				target = new Word("&" + fd_target);
 			} else {
-				let inner_word = this.parse_word();
+				var inner_word = this.parseWord();
 				if (inner_word !== null) {
-					target = Word("&" + inner_word.value);
+					target = new Word("&" + inner_word.value);
 					target.parts = inner_word.parts;
 				} else {
-					throw ParseError("Expected target for redirect " + op);
+					throw new ParseError("Expected target for redirect " + op);
 				}
 			}
 		} else {
-			target = this.parse_word();
+			target = this.parseWord();
 		}
 		if (target === null) {
-			throw ParseError("Expected target for redirect " + op);
+			throw new ParseError("Expected target for redirect " + op);
 		}
-		return Redirect(op, target);
+		return new Redirect(op, target);
 	}
 
-	_parse_heredoc(fd, strip_tabs) {
+	ParseHeredoc(fd, strip_tabs) {
 		"Parse a here document <<DELIM ... DELIM.";
-		this.skip_whitespace();
-		let quoted = false;
-		let delimiter_chars = [];
-		while (!this.at_end() && !_is_metachar(this.peek())) {
-			let ch = this.peek();
+		this.skipWhitespace();
+		var quoted = false;
+		var delimiter_chars = [];
+		while (!this.atEnd() && !IsMetachar(this.peek())) {
+			var ch = this.peek();
 			if (ch === '"') {
 				quoted = true;
 				this.advance();
-				while (!this.at_end() && this.peek() !== '"') {
+				while (!this.atEnd() && this.peek() !== '"') {
 					delimiter_chars.push(this.advance());
 				}
-				if (!this.at_end()) {
+				if (!this.atEnd()) {
 					this.advance();
 				}
 			} else if (ch === "'") {
 				quoted = true;
 				this.advance();
-				while (!this.at_end() && this.peek() !== "'") {
+				while (!this.atEnd() && this.peek() !== "'") {
 					delimiter_chars.push(this.advance());
 				}
-				if (!this.at_end()) {
+				if (!this.atEnd()) {
 					this.advance();
 				}
 			} else if (ch === "\\") {
 				this.advance();
-				if (!this.at_end()) {
-					let next_ch = this.peek();
+				if (!this.atEnd()) {
+					var next_ch = this.peek();
 					if (next_ch === "\n") {
 						this.advance();
 					} else {
@@ -5524,9 +5566,9 @@ class Parser {
 			) {
 				delimiter_chars.push(this.advance());
 				delimiter_chars.push(this.advance());
-				let depth = 1;
-				while (!this.at_end() && depth > 0) {
-					let c = this.peek();
+				var depth = 1;
+				while (!this.atEnd() && depth > 0) {
+					var c = this.peek();
 					if (c === "(") {
 						depth += 1;
 					} else if (c === ")") {
@@ -5538,8 +5580,8 @@ class Parser {
 				delimiter_chars.push(this.advance());
 			}
 		}
-		let delimiter = delimiter_chars.join("");
-		let line_end = this.pos;
+		var delimiter = delimiter_chars.join("");
+		var line_end = this.pos;
 		while (line_end < this.length && this.source[line_end] !== "\n") {
 			ch = this.source[line_end];
 			if (ch === "'") {
@@ -5566,41 +5608,41 @@ class Parser {
 			this._pending_heredoc_end !== null &&
 			this._pending_heredoc_end > line_end
 		) {
-			let content_start = this._pending_heredoc_end;
+			var content_start = this._pending_heredoc_end;
 		} else if (line_end < this.length) {
 			content_start = line_end + 1;
 		} else {
 			content_start = this.length;
 		}
-		let content_lines = [];
-		let scan_pos = content_start;
+		var content_lines = [];
+		var scan_pos = content_start;
 		while (scan_pos < this.length) {
-			let line_start = scan_pos;
+			var line_start = scan_pos;
 			line_end = scan_pos;
 			while (line_end < this.length && this.source[line_end] !== "\n") {
 				line_end += 1;
 			}
-			let line = _substring(this.source, line_start, line_end);
+			var line = Substring(this.source, line_start, line_end);
 			if (!quoted) {
 				while (line.endsWith("\\") && line_end < this.length) {
-					line = _substring(line, 0, line.length - 1);
+					line = Substring(line, 0, line.length - 1);
 					line_end += 1;
-					let next_line_start = line_end;
+					var next_line_start = line_end;
 					while (line_end < this.length && this.source[line_end] !== "\n") {
 						line_end += 1;
 					}
-					line = line + _substring(this.source, next_line_start, line_end);
+					line = line + Substring(this.source, next_line_start, line_end);
 				}
 			}
-			let check_line = line;
+			var check_line = line;
 			if (strip_tabs) {
-				check_line = line.lstrip("\t");
+				check_line = line.trimStart("\t");
 			}
 			if (check_line === delimiter) {
 				break;
 			}
 			if (strip_tabs) {
-				line = line.lstrip("\t");
+				line = line.trimStart("\t");
 			}
 			content_lines.push(line + "\n");
 			if (line_end < this.length) {
@@ -5609,8 +5651,8 @@ class Parser {
 				scan_pos = this.length;
 			}
 		}
-		let content = content_lines.join("");
-		let heredoc_end = line_end;
+		var content = content_lines.join("");
+		var heredoc_end = line_end;
 		if (heredoc_end < this.length) {
 			heredoc_end += 1;
 		}
@@ -5619,20 +5661,20 @@ class Parser {
 		} else {
 			this._pending_heredoc_end = max(this._pending_heredoc_end, heredoc_end);
 		}
-		return HereDoc(delimiter, content, strip_tabs, quoted, fd);
+		return new HereDoc(delimiter, content, strip_tabs, quoted, fd);
 	}
 
-	parse_command() {
+	parseCommand() {
 		"Parse a simple command (sequence of words and redirections).";
-		let words = [];
-		let redirects = [];
+		var words = [];
+		var redirects = [];
 		while (true) {
-			this.skip_whitespace();
-			if (this.at_end()) {
+			this.skipWhitespace();
+			if (this.atEnd()) {
 				break;
 			}
-			let ch = this.peek();
-			if (_is_list_terminator(ch)) {
+			var ch = this.peek();
+			if (IsListTerminator(ch)) {
 				break;
 			}
 			if (
@@ -5642,27 +5684,27 @@ class Parser {
 				break;
 			}
 			if (this.peek() === "}" && !words) {
-				let next_pos = this.pos + 1;
+				var next_pos = this.pos + 1;
 				if (
 					next_pos >= this.length ||
-					_is_word_end_context(this.source[next_pos])
+					IsWordEndContext(this.source[next_pos])
 				) {
 					break;
 				}
 			}
-			let redirect = this.parse_redirect();
+			var redirect = this.parseRedirect();
 			if (redirect !== null) {
 				redirects.push(redirect);
 				continue;
 			}
-			let all_assignments = true;
-			for (const w of words) {
-				if (!this._is_assignment_word(w)) {
+			var all_assignments = true;
+			for (var w of words) {
+				if (!this.IsAssignmentWord(w)) {
 					all_assignments = false;
 					break;
 				}
 			}
-			let word = this.parse_word();
+			var word = this.parseWord();
 			if (word === null) {
 				break;
 			}
@@ -5671,59 +5713,59 @@ class Parser {
 		if (!words && !redirects) {
 			return null;
 		}
-		return Command(words, redirects);
+		return new Command(words, redirects);
 	}
 
-	parse_subshell() {
+	parseSubshell() {
 		"Parse a subshell ( list ).";
-		this.skip_whitespace();
-		if (this.at_end() || this.peek() !== "(") {
+		this.skipWhitespace();
+		if (this.atEnd() || this.peek() !== "(") {
 			return null;
 		}
 		this.advance();
-		let body = this.parse_list();
+		var body = this.parseList();
 		if (body === null) {
-			throw ParseError("Expected command in subshell");
+			throw new ParseError("Expected command in subshell");
 		}
-		this.skip_whitespace();
-		if (this.at_end() || this.peek() !== ")") {
-			throw ParseError("Expected ) to close subshell");
+		this.skipWhitespace();
+		if (this.atEnd() || this.peek() !== ")") {
+			throw new ParseError("Expected ) to close subshell");
 		}
 		this.advance();
-		let redirects = [];
+		var redirects = [];
 		while (true) {
-			this.skip_whitespace();
-			let redirect = this.parse_redirect();
+			this.skipWhitespace();
+			var redirect = this.parseRedirect();
 			if (redirect === null) {
 				break;
 			}
 			redirects.push(redirect);
 		}
 		if (redirects) {
-			return Subshell(body, redirects);
+			return new Subshell(body, redirects);
 		} else {
-			return Subshell(body, null);
+			return new Subshell(body, null);
 		}
 	}
 
-	parse_arithmetic_command() {
+	parseArithmeticCommand() {
 		"Parse an arithmetic command (( expression )) with parsed internals.\n\n        Returns None if this is not an arithmetic command (e.g., nested subshells\n        like '( ( x ) )' that close with ') )' instead of '))').\n        ";
-		this.skip_whitespace();
+		this.skipWhitespace();
 		if (
-			this.at_end() ||
+			this.atEnd() ||
 			this.peek() !== "(" ||
 			this.pos + 1 >= this.length ||
 			this.source[this.pos + 1] !== "("
 		) {
 			return null;
 		}
-		let saved_pos = this.pos;
+		var saved_pos = this.pos;
 		this.advance();
 		this.advance();
-		let content_start = this.pos;
-		let depth = 1;
-		while (!this.at_end() && depth > 0) {
-			let c = this.peek();
+		var content_start = this.pos;
+		var depth = 1;
+		while (!this.atEnd() && depth > 0) {
+			var c = this.peek();
 			if (c === "(") {
 				depth += 1;
 				this.advance();
@@ -5745,28 +5787,28 @@ class Parser {
 				this.advance();
 			}
 		}
-		if (this.at_end() || depth !== 1) {
+		if (this.atEnd() || depth !== 1) {
 			this.pos = saved_pos;
 			return null;
 		}
-		let content = _substring(this.source, content_start, this.pos);
+		var content = Substring(this.source, content_start, this.pos);
 		this.advance();
 		this.advance();
-		let expr = this._parse_arith_expr(content);
-		let redirects = [];
+		var expr = this.ParseArithExpr(content);
+		var redirects = [];
 		while (true) {
-			this.skip_whitespace();
-			let redirect = this.parse_redirect();
+			this.skipWhitespace();
+			var redirect = this.parseRedirect();
 			if (redirect === null) {
 				break;
 			}
 			redirects.push(redirect);
 		}
-		let redir_arg = null;
+		var redir_arg = null;
 		if (redirects) {
 			redir_arg = redirects;
 		}
-		return ArithmeticCommand(expr, redir_arg);
+		return new ArithmeticCommand(expr, redir_arg);
 	}
 
 	COND_UNARY_OPS = new Set([
@@ -5814,11 +5856,11 @@ class Parser {
 		"-ot",
 		"-ef",
 	]);
-	parse_conditional_expr() {
+	parseConditionalExpr() {
 		"Parse a conditional expression [[ expression ]].";
-		this.skip_whitespace();
+		this.skipWhitespace();
 		if (
-			this.at_end() ||
+			this.atEnd() ||
 			this.peek() !== "[" ||
 			this.pos + 1 >= this.length ||
 			this.source[this.pos + 1] !== "["
@@ -5827,40 +5869,40 @@ class Parser {
 		}
 		this.advance();
 		this.advance();
-		let body = this._parse_cond_or();
-		while (!this.at_end() && _is_whitespace_no_newline(this.peek())) {
+		var body = this.ParseCondOr();
+		while (!this.atEnd() && IsWhitespaceNoNewline(this.peek())) {
 			this.advance();
 		}
 		if (
-			this.at_end() ||
+			this.atEnd() ||
 			this.peek() !== "]" ||
 			this.pos + 1 >= this.length ||
 			this.source[this.pos + 1] !== "]"
 		) {
-			throw ParseError("Expected ]] to close conditional expression");
+			throw new ParseError("Expected ]] to close conditional expression");
 		}
 		this.advance();
 		this.advance();
-		let redirects = [];
+		var redirects = [];
 		while (true) {
-			this.skip_whitespace();
-			let redirect = this.parse_redirect();
+			this.skipWhitespace();
+			var redirect = this.parseRedirect();
 			if (redirect === null) {
 				break;
 			}
 			redirects.push(redirect);
 		}
-		let redir_arg = null;
+		var redir_arg = null;
 		if (redirects) {
 			redir_arg = redirects;
 		}
-		return ConditionalExpr(body, redir_arg);
+		return new ConditionalExpr(body, redir_arg);
 	}
 
-	_cond_skip_whitespace() {
+	CondSkipWhitespace() {
 		"Skip whitespace inside [[ ]], including backslash-newline continuation.";
-		while (!this.at_end()) {
-			if (_is_whitespace_no_newline(this.peek())) {
+		while (!this.atEnd()) {
+			if (IsWhitespaceNoNewline(this.peek())) {
 				this.advance();
 			} else if (
 				this.peek() === "\\" &&
@@ -5877,138 +5919,138 @@ class Parser {
 		}
 	}
 
-	_cond_at_end() {
+	CondAtEnd() {
 		"Check if we're at ]] (end of conditional).";
 		return (
-			this.at_end() ||
+			this.atEnd() ||
 			(this.peek() === "]" &&
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === "]")
 		);
 	}
 
-	_parse_cond_or() {
+	ParseCondOr() {
 		"Parse: or_expr = and_expr (|| or_expr)?  (right-associative)";
-		this._cond_skip_whitespace();
-		let left = this._parse_cond_and();
-		this._cond_skip_whitespace();
+		this.CondSkipWhitespace();
+		var left = this.ParseCondAnd();
+		this.CondSkipWhitespace();
 		if (
-			!this._cond_at_end() &&
+			!this.CondAtEnd() &&
 			this.peek() === "|" &&
 			this.pos + 1 < this.length &&
 			this.source[this.pos + 1] === "|"
 		) {
 			this.advance();
 			this.advance();
-			let right = this._parse_cond_or();
-			return CondOr(left, right);
+			var right = this.ParseCondOr();
+			return new CondOr(left, right);
 		}
 		return left;
 	}
 
-	_parse_cond_and() {
+	ParseCondAnd() {
 		"Parse: and_expr = term (&& and_expr)?  (right-associative)";
-		this._cond_skip_whitespace();
-		let left = this._parse_cond_term();
-		this._cond_skip_whitespace();
+		this.CondSkipWhitespace();
+		var left = this.ParseCondTerm();
+		this.CondSkipWhitespace();
 		if (
-			!this._cond_at_end() &&
+			!this.CondAtEnd() &&
 			this.peek() === "&" &&
 			this.pos + 1 < this.length &&
 			this.source[this.pos + 1] === "&"
 		) {
 			this.advance();
 			this.advance();
-			let right = this._parse_cond_and();
-			return CondAnd(left, right);
+			var right = this.ParseCondAnd();
+			return new CondAnd(left, right);
 		}
 		return left;
 	}
 
-	_parse_cond_term() {
+	ParseCondTerm() {
 		"Parse: term = '!' term | '(' or_expr ')' | unary_test | binary_test | bare_word";
-		this._cond_skip_whitespace();
-		if (this._cond_at_end()) {
-			throw ParseError("Unexpected end of conditional expression");
+		this.CondSkipWhitespace();
+		if (this.CondAtEnd()) {
+			throw new ParseError("Unexpected end of conditional expression");
 		}
 		if (this.peek() === "!") {
 			if (
 				this.pos + 1 < this.length &&
-				!_is_whitespace_no_newline(this.source[this.pos + 1])
+				!IsWhitespaceNoNewline(this.source[this.pos + 1])
 			) {
 			} else {
 				this.advance();
-				let operand = this._parse_cond_term();
-				return CondNot(operand);
+				var operand = this.ParseCondTerm();
+				return new CondNot(operand);
 			}
 		}
 		if (this.peek() === "(") {
 			this.advance();
-			let inner = this._parse_cond_or();
-			this._cond_skip_whitespace();
-			if (this.at_end() || this.peek() !== ")") {
-				throw ParseError("Expected ) in conditional expression");
+			var inner = this.ParseCondOr();
+			this.CondSkipWhitespace();
+			if (this.atEnd() || this.peek() !== ")") {
+				throw new ParseError("Expected ) in conditional expression");
 			}
 			this.advance();
-			return CondParen(inner);
+			return new CondParen(inner);
 		}
-		let word1 = this._parse_cond_word();
+		var word1 = this.ParseCondWord();
 		if (word1 === null) {
-			throw ParseError("Expected word in conditional expression");
+			throw new ParseError("Expected word in conditional expression");
 		}
-		this._cond_skip_whitespace();
-		if (_is_cond_unary_op(word1.value)) {
-			operand = this._parse_cond_word();
+		this.CondSkipWhitespace();
+		if (IsCondUnaryOp(word1.value)) {
+			operand = this.ParseCondWord();
 			if (operand === null) {
-				throw ParseError("Expected operand after " + word1.value);
+				throw new ParseError("Expected operand after " + word1.value);
 			}
-			return UnaryTest(word1.value, operand);
+			return new UnaryTest(word1.value, operand);
 		}
 		if (
-			!this._cond_at_end() &&
+			!this.CondAtEnd() &&
 			this.peek() !== "&" && this.peek() !== "|" &&
 			this.peek() !== ")"
 		) {
 			if (
-				_is_redirect_char(this.peek()) &&
+				IsRedirectChar(this.peek()) &&
 				!(this.pos + 1 < this.length && this.source[this.pos + 1] === "(")
 			) {
-				let op = this.advance();
-				this._cond_skip_whitespace();
-				let word2 = this._parse_cond_word();
+				var op = this.advance();
+				this.CondSkipWhitespace();
+				var word2 = this.ParseCondWord();
 				if (word2 === null) {
-					throw ParseError("Expected operand after " + op);
+					throw new ParseError("Expected operand after " + op);
 				}
-				return BinaryTest(op, word1, word2);
+				return new BinaryTest(op, word1, word2);
 			}
-			let saved_pos = this.pos;
-			let op_word = this._parse_cond_word();
-			if (op_word && _is_cond_binary_op(op_word.value)) {
-				this._cond_skip_whitespace();
+			var saved_pos = this.pos;
+			var op_word = this.ParseCondWord();
+			if (op_word && IsCondBinaryOp(op_word.value)) {
+				this.CondSkipWhitespace();
 				if (op_word.value === "=~") {
-					word2 = this._parse_cond_regex_word();
+					word2 = this.ParseCondRegexWord();
 				} else {
-					word2 = this._parse_cond_word();
+					word2 = this.ParseCondWord();
 				}
 				if (word2 === null) {
-					throw ParseError("Expected operand after " + op_word.value);
+					throw new ParseError("Expected operand after " + op_word.value);
 				}
-				return BinaryTest(op_word.value, word1, word2);
+				return new BinaryTest(op_word.value, word1, word2);
 			} else {
 				this.pos = saved_pos;
 			}
 		}
-		return UnaryTest("-n", word1);
+		return new UnaryTest("-n", word1);
 	}
 
-	_parse_cond_word() {
+	ParseCondWord() {
 		"Parse a word inside [[ ]], handling expansions but stopping at conditional operators.";
-		this._cond_skip_whitespace();
-		if (this._cond_at_end()) {
+		this.CondSkipWhitespace();
+		if (this.CondAtEnd()) {
 			return null;
 		}
-		let c = this.peek();
-		if (_is_paren(c)) {
+		var c = this.peek();
+		if (IsParen(c)) {
 			return null;
 		}
 		if (
@@ -6025,11 +6067,11 @@ class Parser {
 		) {
 			return null;
 		}
-		let start = this.pos;
-		let chars = [];
-		let parts = [];
-		while (!this.at_end()) {
-			let ch = this.peek();
+		var start = this.pos;
+		var chars = [];
+		var parts = [];
+		while (!this.atEnd()) {
+			var ch = this.peek();
 			if (
 				ch === "]" &&
 				this.pos + 1 < this.length &&
@@ -6037,20 +6079,20 @@ class Parser {
 			) {
 				break;
 			}
-			if (_is_whitespace_no_newline(ch)) {
+			if (IsWhitespaceNoNewline(ch)) {
 				break;
 			}
 			if (
-				_is_redirect_char(ch) &&
+				IsRedirectChar(ch) &&
 				!(this.pos + 1 < this.length && this.source[this.pos + 1] === "(")
 			) {
 				break;
 			}
 			if (ch === "(") {
-				if (chars && _is_extglob_prefix(chars[chars.length - 1])) {
+				if (chars && IsExtglobPrefix(chars[chars.length - 1])) {
 					chars.push(this.advance());
-					let depth = 1;
-					while (!this.at_end() && depth > 0) {
+					var depth = 1;
+					while (!this.atEnd() && depth > 0) {
 						c = this.peek();
 						if (c === "(") {
 							depth += 1;
@@ -6084,20 +6126,20 @@ class Parser {
 			if (ch === "'") {
 				this.advance();
 				chars.push("'");
-				while (!this.at_end() && this.peek() !== "'") {
+				while (!this.atEnd() && this.peek() !== "'") {
 					chars.push(this.advance());
 				}
-				if (this.at_end()) {
-					throw ParseError("Unterminated single quote");
+				if (this.atEnd()) {
+					throw new ParseError("Unterminated single quote");
 				}
 				chars.push(this.advance());
 			} else if (ch === '"') {
 				this.advance();
 				chars.push('"');
-				while (!this.at_end() && this.peek() !== '"') {
+				while (!this.atEnd() && this.peek() !== '"') {
 					c = this.peek();
 					if (c === "\\" && this.pos + 1 < this.length) {
-						let next_c = this.source[this.pos + 1];
+						var next_c = this.source[this.pos + 1];
 						if (next_c === "\n") {
 							this.advance();
 							this.advance();
@@ -6111,16 +6153,16 @@ class Parser {
 							this.source[this.pos + 1] === "(" &&
 							this.source[this.pos + 2] === "("
 						) {
-							let arith_result = this._parse_arithmetic_expansion();
-							let arith_node = arith_result[0];
-							let arith_text = arith_result[1];
+							var arith_result = this.ParseArithmeticExpansion();
+							var arith_node = arith_result[0];
+							var arith_text = arith_result[1];
 							if (arith_node) {
 								parts.push(arith_node);
 								chars.push(arith_text);
 							} else {
-								let cmdsub_result = this._parse_command_substitution();
-								let cmdsub_node = cmdsub_result[0];
-								let cmdsub_text = cmdsub_result[1];
+								var cmdsub_result = this.ParseCommandSubstitution();
+								var cmdsub_node = cmdsub_result[0];
+								var cmdsub_text = cmdsub_result[1];
 								if (cmdsub_node) {
 									parts.push(cmdsub_node);
 									chars.push(cmdsub_text);
@@ -6132,7 +6174,7 @@ class Parser {
 							this.pos + 1 < this.length &&
 							this.source[this.pos + 1] === "("
 						) {
-							cmdsub_result = this._parse_command_substitution();
+							cmdsub_result = this.ParseCommandSubstitution();
 							cmdsub_node = cmdsub_result[0];
 							cmdsub_text = cmdsub_result[1];
 							if (cmdsub_node) {
@@ -6142,9 +6184,9 @@ class Parser {
 								chars.push(this.advance());
 							}
 						} else {
-							let param_result = this._parse_param_expansion();
-							let param_node = param_result[0];
-							let param_text = param_result[1];
+							var param_result = this.ParseParamExpansion();
+							var param_node = param_result[0];
+							var param_text = param_result[1];
 							if (param_node) {
 								parts.push(param_node);
 								chars.push(param_text);
@@ -6156,8 +6198,8 @@ class Parser {
 						chars.push(this.advance());
 					}
 				}
-				if (this.at_end()) {
-					throw ParseError("Unterminated double quote");
+				if (this.atEnd()) {
+					throw new ParseError("Unterminated double quote");
 				}
 				chars.push(this.advance());
 			} else if (ch === "\\" && this.pos + 1 < this.length) {
@@ -6169,7 +6211,7 @@ class Parser {
 				this.source[this.pos + 1] === "(" &&
 				this.source[this.pos + 2] === "("
 			) {
-				arith_result = this._parse_arithmetic_expansion();
+				arith_result = this.ParseArithmeticExpansion();
 				arith_node = arith_result[0];
 				arith_text = arith_result[1];
 				if (arith_node) {
@@ -6183,7 +6225,7 @@ class Parser {
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === "("
 			) {
-				cmdsub_result = this._parse_command_substitution();
+				cmdsub_result = this.ParseCommandSubstitution();
 				cmdsub_node = cmdsub_result[0];
 				cmdsub_text = cmdsub_result[1];
 				if (cmdsub_node) {
@@ -6193,7 +6235,7 @@ class Parser {
 					chars.push(this.advance());
 				}
 			} else if (ch === "$") {
-				param_result = this._parse_param_expansion();
+				param_result = this.ParseParamExpansion();
 				param_node = param_result[0];
 				param_text = param_result[1];
 				if (param_node) {
@@ -6203,13 +6245,13 @@ class Parser {
 					chars.push(this.advance());
 				}
 			} else if (
-				_is_redirect_char(ch) &&
+				IsRedirectChar(ch) &&
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === "("
 			) {
-				let procsub_result = this._parse_process_substitution();
-				let procsub_node = procsub_result[0];
-				let procsub_text = procsub_result[1];
+				var procsub_result = this.ParseProcessSubstitution();
+				var procsub_node = procsub_result[0];
+				var procsub_text = procsub_result[1];
 				if (procsub_node) {
 					parts.push(procsub_node);
 					chars.push(procsub_text);
@@ -6217,7 +6259,7 @@ class Parser {
 					chars.push(this.advance());
 				}
 			} else if (ch === "`") {
-				cmdsub_result = this._parse_backtick_substitution();
+				cmdsub_result = this.ParseBacktickSubstitution();
 				cmdsub_node = cmdsub_result[0];
 				cmdsub_text = cmdsub_result[1];
 				if (cmdsub_node) {
@@ -6233,25 +6275,25 @@ class Parser {
 		if (!chars) {
 			return null;
 		}
-		let parts_arg = null;
+		var parts_arg = null;
 		if (parts) {
 			parts_arg = parts;
 		}
-		return Word(chars.join(""), parts_arg);
+		return new Word(chars.join(""), parts_arg);
 	}
 
-	_parse_cond_regex_word() {
+	ParseCondRegexWord() {
 		"Parse a regex pattern word in [[ ]], where ( ) are regex grouping, not conditional grouping.";
-		this._cond_skip_whitespace();
-		if (this._cond_at_end()) {
+		this.CondSkipWhitespace();
+		if (this.CondAtEnd()) {
 			return null;
 		}
-		let start = this.pos;
-		let chars = [];
-		let parts = [];
-		let paren_depth = 0;
-		while (!this.at_end()) {
-			let ch = this.peek();
+		var start = this.pos;
+		var chars = [];
+		var parts = [];
+		var paren_depth = 0;
+		while (!this.atEnd()) {
+			var ch = this.peek();
 			if (
 				ch === "]" &&
 				this.pos + 1 < this.length &&
@@ -6288,14 +6330,14 @@ class Parser {
 			}
 			if (ch === "[") {
 				chars.push(this.advance());
-				if (!this.at_end() && this.peek() === "^") {
+				if (!this.atEnd() && this.peek() === "^") {
 					chars.push(this.advance());
 				}
-				if (!this.at_end() && this.peek() === "]") {
+				if (!this.atEnd() && this.peek() === "]") {
 					chars.push(this.advance());
 				}
-				while (!this.at_end()) {
-					let c = this.peek();
+				while (!this.atEnd()) {
+					var c = this.peek();
 					if (c === "]") {
 						chars.push(this.advance());
 						break;
@@ -6308,7 +6350,7 @@ class Parser {
 						chars.push(this.advance());
 						chars.push(this.advance());
 						while (
-							!this.at_end() &&
+							!this.atEnd() &&
 							!(
 								this.peek() === ":" &&
 								this.pos + 1 < this.length &&
@@ -6317,7 +6359,7 @@ class Parser {
 						) {
 							chars.push(this.advance());
 						}
-						if (!this.at_end()) {
+						if (!this.atEnd()) {
 							chars.push(this.advance());
 							chars.push(this.advance());
 						}
@@ -6327,10 +6369,10 @@ class Parser {
 				}
 				continue;
 			}
-			if (_is_whitespace(ch) && paren_depth === 0) {
+			if (IsWhitespace(ch) && paren_depth === 0) {
 				break;
 			}
-			if (_is_whitespace(ch) && paren_depth > 0) {
+			if (IsWhitespace(ch) && paren_depth > 0) {
 				chars.push(this.advance());
 				continue;
 			}
@@ -6351,11 +6393,11 @@ class Parser {
 			if (ch === "'") {
 				this.advance();
 				chars.push("'");
-				while (!this.at_end() && this.peek() !== "'") {
+				while (!this.atEnd() && this.peek() !== "'") {
 					chars.push(this.advance());
 				}
-				if (this.at_end()) {
-					throw ParseError("Unterminated single quote");
+				if (this.atEnd()) {
+					throw new ParseError("Unterminated single quote");
 				}
 				chars.push(this.advance());
 				continue;
@@ -6363,15 +6405,15 @@ class Parser {
 			if (ch === '"') {
 				this.advance();
 				chars.push('"');
-				while (!this.at_end() && this.peek() !== '"') {
+				while (!this.atEnd() && this.peek() !== '"') {
 					c = this.peek();
 					if (c === "\\" && this.pos + 1 < this.length) {
 						chars.push(this.advance());
 						chars.push(this.advance());
 					} else if (c === "$") {
-						let param_result = this._parse_param_expansion();
-						let param_node = param_result[0];
-						let param_text = param_result[1];
+						var param_result = this.ParseParamExpansion();
+						var param_node = param_result[0];
+						var param_text = param_result[1];
 						if (param_node) {
 							parts.push(param_node);
 							chars.push(param_text);
@@ -6382,24 +6424,24 @@ class Parser {
 						chars.push(this.advance());
 					}
 				}
-				if (this.at_end()) {
-					throw ParseError("Unterminated double quote");
+				if (this.atEnd()) {
+					throw new ParseError("Unterminated double quote");
 				}
 				chars.push(this.advance());
 				continue;
 			}
 			if (ch === "$") {
 				if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
-					let cmdsub_result = this._parse_command_substitution();
-					let cmdsub_node = cmdsub_result[0];
-					let cmdsub_text = cmdsub_result[1];
+					var cmdsub_result = this.ParseCommandSubstitution();
+					var cmdsub_node = cmdsub_result[0];
+					var cmdsub_text = cmdsub_result[1];
 					if (cmdsub_node) {
 						parts.push(cmdsub_node);
 						chars.push(cmdsub_text);
 						continue;
 					}
 				}
-				param_result = this._parse_param_expansion();
+				param_result = this.ParseParamExpansion();
 				param_node = param_result[0];
 				param_text = param_result[1];
 				if (param_node) {
@@ -6415,326 +6457,324 @@ class Parser {
 		if (!chars) {
 			return null;
 		}
-		let parts_arg = null;
+		var parts_arg = null;
 		if (parts) {
 			parts_arg = parts;
 		}
-		return Word(chars.join(""), parts_arg);
+		return new Word(chars.join(""), parts_arg);
 	}
 
-	parse_brace_group() {
+	parseBraceGroup() {
 		"Parse a brace group { list }.";
-		this.skip_whitespace();
-		if (this.at_end() || this.peek() !== "{") {
+		this.skipWhitespace();
+		if (this.atEnd() || this.peek() !== "{") {
 			return null;
 		}
 		if (
 			this.pos + 1 < this.length &&
-			!_is_whitespace(this.source[this.pos + 1])
+			!IsWhitespace(this.source[this.pos + 1])
 		) {
 			return null;
 		}
 		this.advance();
-		this.skip_whitespace_and_newlines();
-		let body = this.parse_list();
+		this.skipWhitespaceAndNewlines();
+		var body = this.parseList();
 		if (body === null) {
-			throw ParseError("Expected command in brace group");
+			throw new ParseError("Expected command in brace group");
 		}
-		this.skip_whitespace();
-		if (this.at_end() || this.peek() !== "}") {
-			throw ParseError("Expected } to close brace group");
+		this.skipWhitespace();
+		if (this.atEnd() || this.peek() !== "}") {
+			throw new ParseError("Expected } to close brace group");
 		}
 		this.advance();
-		let redirects = [];
+		var redirects = [];
 		while (true) {
-			this.skip_whitespace();
-			let redirect = this.parse_redirect();
+			this.skipWhitespace();
+			var redirect = this.parseRedirect();
 			if (redirect === null) {
 				break;
 			}
 			redirects.push(redirect);
 		}
-		let redir_arg = null;
+		var redir_arg = null;
 		if (redirects) {
 			redir_arg = redirects;
 		}
-		return BraceGroup(body, redir_arg);
+		return new BraceGroup(body, redir_arg);
 	}
 
-	parse_if() {
+	parseIf() {
 		"Parse an if statement: if list; then list [elif list; then list]* [else list] fi.";
-		this.skip_whitespace();
-		if (this.peek_word() !== "if") {
+		this.skipWhitespace();
+		if (this.peekWord() !== "if") {
 			return null;
 		}
-		this.consume_word("if");
-		let condition = this.parse_list_until(new Set(["then"]));
+		this.consumeWord("if");
+		var condition = this.parseListUntil(new Set(["then"]));
 		if (condition === null) {
-			throw ParseError("Expected condition after 'if'");
+			throw new ParseError("Expected condition after 'if'");
 		}
-		this.skip_whitespace_and_newlines();
-		if (!this.consume_word("then")) {
-			throw ParseError("Expected 'then' after if condition");
+		this.skipWhitespaceAndNewlines();
+		if (!this.consumeWord("then")) {
+			throw new ParseError("Expected 'then' after if condition");
 		}
-		let then_body = this.parse_list_until(new Set(["elif", "else", "fi"]));
+		var then_body = this.parseListUntil(new Set(["elif", "else", "fi"]));
 		if (then_body === null) {
-			throw ParseError("Expected commands after 'then'");
+			throw new ParseError("Expected commands after 'then'");
 		}
-		this.skip_whitespace_and_newlines();
-		let next_word = this.peek_word();
-		let else_body = null;
+		this.skipWhitespaceAndNewlines();
+		var next_word = this.peekWord();
+		var else_body = null;
 		if (next_word === "elif") {
-			this.consume_word("elif");
-			let elif_condition = this.parse_list_until(new Set(["then"]));
+			this.consumeWord("elif");
+			var elif_condition = this.parseListUntil(new Set(["then"]));
 			if (elif_condition === null) {
-				throw ParseError("Expected condition after 'elif'");
+				throw new ParseError("Expected condition after 'elif'");
 			}
-			this.skip_whitespace_and_newlines();
-			if (!this.consume_word("then")) {
-				throw ParseError("Expected 'then' after elif condition");
+			this.skipWhitespaceAndNewlines();
+			if (!this.consumeWord("then")) {
+				throw new ParseError("Expected 'then' after elif condition");
 			}
-			let elif_then_body = this.parse_list_until(
-				new Set(["elif", "else", "fi"]),
-			);
+			var elif_then_body = this.parseListUntil(new Set(["elif", "else", "fi"]));
 			if (elif_then_body === null) {
-				throw ParseError("Expected commands after 'then'");
+				throw new ParseError("Expected commands after 'then'");
 			}
-			this.skip_whitespace_and_newlines();
-			let inner_next = this.peek_word();
-			let inner_else = null;
+			this.skipWhitespaceAndNewlines();
+			var inner_next = this.peekWord();
+			var inner_else = null;
 			if (inner_next === "elif") {
-				inner_else = this._parse_elif_chain();
+				inner_else = this.ParseElifChain();
 			} else if (inner_next === "else") {
-				this.consume_word("else");
-				inner_else = this.parse_list_until(new Set(["fi"]));
+				this.consumeWord("else");
+				inner_else = this.parseListUntil(new Set(["fi"]));
 				if (inner_else === null) {
-					throw ParseError("Expected commands after 'else'");
+					throw new ParseError("Expected commands after 'else'");
 				}
 			}
-			else_body = If(elif_condition, elif_then_body, inner_else);
+			else_body = new If(elif_condition, elif_then_body, inner_else);
 		} else if (next_word === "else") {
-			this.consume_word("else");
-			else_body = this.parse_list_until(new Set(["fi"]));
+			this.consumeWord("else");
+			else_body = this.parseListUntil(new Set(["fi"]));
 			if (else_body === null) {
-				throw ParseError("Expected commands after 'else'");
+				throw new ParseError("Expected commands after 'else'");
 			}
 		}
-		this.skip_whitespace_and_newlines();
-		if (!this.consume_word("fi")) {
-			throw ParseError("Expected 'fi' to close if statement");
+		this.skipWhitespaceAndNewlines();
+		if (!this.consumeWord("fi")) {
+			throw new ParseError("Expected 'fi' to close if statement");
 		}
-		let redirects = [];
+		var redirects = [];
 		while (true) {
-			this.skip_whitespace();
-			let redirect = this.parse_redirect();
+			this.skipWhitespace();
+			var redirect = this.parseRedirect();
 			if (redirect === null) {
 				break;
 			}
 			redirects.push(redirect);
 		}
-		let redir_arg = null;
+		var redir_arg = null;
 		if (redirects) {
 			redir_arg = redirects;
 		}
-		return If(condition, then_body, else_body, redir_arg);
+		return new If(condition, then_body, else_body, redir_arg);
 	}
 
-	_parse_elif_chain() {
+	ParseElifChain() {
 		"Parse elif chain (after seeing 'elif' keyword).";
-		this.consume_word("elif");
-		let condition = this.parse_list_until(new Set(["then"]));
+		this.consumeWord("elif");
+		var condition = this.parseListUntil(new Set(["then"]));
 		if (condition === null) {
-			throw ParseError("Expected condition after 'elif'");
+			throw new ParseError("Expected condition after 'elif'");
 		}
-		this.skip_whitespace_and_newlines();
-		if (!this.consume_word("then")) {
-			throw ParseError("Expected 'then' after elif condition");
+		this.skipWhitespaceAndNewlines();
+		if (!this.consumeWord("then")) {
+			throw new ParseError("Expected 'then' after elif condition");
 		}
-		let then_body = this.parse_list_until(new Set(["elif", "else", "fi"]));
+		var then_body = this.parseListUntil(new Set(["elif", "else", "fi"]));
 		if (then_body === null) {
-			throw ParseError("Expected commands after 'then'");
+			throw new ParseError("Expected commands after 'then'");
 		}
-		this.skip_whitespace_and_newlines();
-		let next_word = this.peek_word();
-		let else_body = null;
+		this.skipWhitespaceAndNewlines();
+		var next_word = this.peekWord();
+		var else_body = null;
 		if (next_word === "elif") {
-			else_body = this._parse_elif_chain();
+			else_body = this.ParseElifChain();
 		} else if (next_word === "else") {
-			this.consume_word("else");
-			else_body = this.parse_list_until(new Set(["fi"]));
+			this.consumeWord("else");
+			else_body = this.parseListUntil(new Set(["fi"]));
 			if (else_body === null) {
-				throw ParseError("Expected commands after 'else'");
+				throw new ParseError("Expected commands after 'else'");
 			}
 		}
-		return If(condition, then_body, else_body);
+		return new If(condition, then_body, else_body);
 	}
 
-	parse_while() {
+	parseWhile() {
 		"Parse a while loop: while list; do list; done.";
-		this.skip_whitespace();
-		if (this.peek_word() !== "while") {
+		this.skipWhitespace();
+		if (this.peekWord() !== "while") {
 			return null;
 		}
-		this.consume_word("while");
-		let condition = this.parse_list_until(new Set(["do"]));
+		this.consumeWord("while");
+		var condition = this.parseListUntil(new Set(["do"]));
 		if (condition === null) {
-			throw ParseError("Expected condition after 'while'");
+			throw new ParseError("Expected condition after 'while'");
 		}
-		this.skip_whitespace_and_newlines();
-		if (!this.consume_word("do")) {
-			throw ParseError("Expected 'do' after while condition");
+		this.skipWhitespaceAndNewlines();
+		if (!this.consumeWord("do")) {
+			throw new ParseError("Expected 'do' after while condition");
 		}
-		let body = this.parse_list_until(new Set(["done"]));
+		var body = this.parseListUntil(new Set(["done"]));
 		if (body === null) {
-			throw ParseError("Expected commands after 'do'");
+			throw new ParseError("Expected commands after 'do'");
 		}
-		this.skip_whitespace_and_newlines();
-		if (!this.consume_word("done")) {
-			throw ParseError("Expected 'done' to close while loop");
+		this.skipWhitespaceAndNewlines();
+		if (!this.consumeWord("done")) {
+			throw new ParseError("Expected 'done' to close while loop");
 		}
-		let redirects = [];
+		var redirects = [];
 		while (true) {
-			this.skip_whitespace();
-			let redirect = this.parse_redirect();
+			this.skipWhitespace();
+			var redirect = this.parseRedirect();
 			if (redirect === null) {
 				break;
 			}
 			redirects.push(redirect);
 		}
-		let redir_arg = null;
+		var redir_arg = null;
 		if (redirects) {
 			redir_arg = redirects;
 		}
-		return While(condition, body, redir_arg);
+		return new While(condition, body, redir_arg);
 	}
 
-	parse_until() {
+	parseUntil() {
 		"Parse an until loop: until list; do list; done.";
-		this.skip_whitespace();
-		if (this.peek_word() !== "until") {
+		this.skipWhitespace();
+		if (this.peekWord() !== "until") {
 			return null;
 		}
-		this.consume_word("until");
-		let condition = this.parse_list_until(new Set(["do"]));
+		this.consumeWord("until");
+		var condition = this.parseListUntil(new Set(["do"]));
 		if (condition === null) {
-			throw ParseError("Expected condition after 'until'");
+			throw new ParseError("Expected condition after 'until'");
 		}
-		this.skip_whitespace_and_newlines();
-		if (!this.consume_word("do")) {
-			throw ParseError("Expected 'do' after until condition");
+		this.skipWhitespaceAndNewlines();
+		if (!this.consumeWord("do")) {
+			throw new ParseError("Expected 'do' after until condition");
 		}
-		let body = this.parse_list_until(new Set(["done"]));
+		var body = this.parseListUntil(new Set(["done"]));
 		if (body === null) {
-			throw ParseError("Expected commands after 'do'");
+			throw new ParseError("Expected commands after 'do'");
 		}
-		this.skip_whitespace_and_newlines();
-		if (!this.consume_word("done")) {
-			throw ParseError("Expected 'done' to close until loop");
+		this.skipWhitespaceAndNewlines();
+		if (!this.consumeWord("done")) {
+			throw new ParseError("Expected 'done' to close until loop");
 		}
-		let redirects = [];
+		var redirects = [];
 		while (true) {
-			this.skip_whitespace();
-			let redirect = this.parse_redirect();
+			this.skipWhitespace();
+			var redirect = this.parseRedirect();
 			if (redirect === null) {
 				break;
 			}
 			redirects.push(redirect);
 		}
-		let redir_arg = null;
+		var redir_arg = null;
 		if (redirects) {
 			redir_arg = redirects;
 		}
-		return Until(condition, body, redir_arg);
+		return new Until(condition, body, redir_arg);
 	}
 
-	parse_for() {
+	parseFor() {
 		"Parse a for loop: for name [in words]; do list; done or C-style for ((;;)).";
-		this.skip_whitespace();
-		if (this.peek_word() !== "for") {
+		this.skipWhitespace();
+		if (this.peekWord() !== "for") {
 			return null;
 		}
-		this.consume_word("for");
-		this.skip_whitespace();
+		this.consumeWord("for");
+		this.skipWhitespace();
 		if (
 			this.peek() === "(" &&
 			this.pos + 1 < this.length &&
 			this.source[this.pos + 1] === "("
 		) {
-			return this._parse_for_arith();
+			return this.ParseForArith();
 		}
-		let var_name = this.peek_word();
+		var var_name = this.peekWord();
 		if (var_name === null) {
-			throw ParseError("Expected variable name after 'for'");
+			throw new ParseError("Expected variable name after 'for'");
 		}
-		this.consume_word(var_name);
-		this.skip_whitespace();
+		this.consumeWord(var_name);
+		this.skipWhitespace();
 		if (this.peek() === ";") {
 			this.advance();
 		}
-		this.skip_whitespace_and_newlines();
-		let words = null;
-		if (this.peek_word() === "in") {
-			this.consume_word("in");
-			this.skip_whitespace_and_newlines();
+		this.skipWhitespaceAndNewlines();
+		var words = null;
+		if (this.peekWord() === "in") {
+			this.consumeWord("in");
+			this.skipWhitespaceAndNewlines();
 			words = [];
 			while (true) {
-				this.skip_whitespace();
-				if (this.at_end()) {
+				this.skipWhitespace();
+				if (this.atEnd()) {
 					break;
 				}
-				if (_is_semicolon_or_newline(this.peek())) {
+				if (IsSemicolonOrNewline(this.peek())) {
 					if (this.peek() === ";") {
 						this.advance();
 					}
 					break;
 				}
-				if (this.peek_word() === "do") {
+				if (this.peekWord() === "do") {
 					break;
 				}
-				let word = this.parse_word();
+				var word = this.parseWord();
 				if (word === null) {
 					break;
 				}
 				words.push(word);
 			}
 		}
-		this.skip_whitespace_and_newlines();
-		if (!this.consume_word("do")) {
-			throw ParseError("Expected 'do' in for loop");
+		this.skipWhitespaceAndNewlines();
+		if (!this.consumeWord("do")) {
+			throw new ParseError("Expected 'do' in for loop");
 		}
-		let body = this.parse_list_until(new Set(["done"]));
+		var body = this.parseListUntil(new Set(["done"]));
 		if (body === null) {
-			throw ParseError("Expected commands after 'do'");
+			throw new ParseError("Expected commands after 'do'");
 		}
-		this.skip_whitespace_and_newlines();
-		if (!this.consume_word("done")) {
-			throw ParseError("Expected 'done' to close for loop");
+		this.skipWhitespaceAndNewlines();
+		if (!this.consumeWord("done")) {
+			throw new ParseError("Expected 'done' to close for loop");
 		}
-		let redirects = [];
+		var redirects = [];
 		while (true) {
-			this.skip_whitespace();
-			let redirect = this.parse_redirect();
+			this.skipWhitespace();
+			var redirect = this.parseRedirect();
 			if (redirect === null) {
 				break;
 			}
 			redirects.push(redirect);
 		}
-		let redir_arg = null;
+		var redir_arg = null;
 		if (redirects) {
 			redir_arg = redirects;
 		}
-		return For(var_name, words, body, redir_arg);
+		return new For(var_name, words, body, redir_arg);
 	}
 
-	_parse_for_arith() {
+	ParseForArith() {
 		"Parse C-style for loop: for ((init; cond; incr)); do list; done.";
 		this.advance();
 		this.advance();
-		let parts = [];
-		let current = [];
-		let paren_depth = 0;
-		while (!this.at_end()) {
-			let ch = this.peek();
+		var parts = [];
+		var current = [];
+		var paren_depth = 0;
+		while (!this.atEnd()) {
+			var ch = this.peek();
 			if (ch === "(") {
 				paren_depth += 1;
 				current.push(this.advance());
@@ -6746,7 +6786,7 @@ class Parser {
 					this.pos + 1 < this.length &&
 					this.source[this.pos + 1] === ")"
 				) {
-					parts.push(current.join("").lstrip());
+					parts.push(current.join("").trimStart());
 					this.advance();
 					this.advance();
 					break;
@@ -6754,7 +6794,7 @@ class Parser {
 					current.push(this.advance());
 				}
 			} else if (ch === ";" && paren_depth === 0) {
-				parts.push(current.join("").lstrip());
+				parts.push(current.join("").trimStart());
 				current = [];
 				this.advance();
 			} else {
@@ -6762,154 +6802,154 @@ class Parser {
 			}
 		}
 		if (parts.length !== 3) {
-			throw ParseError("Expected three expressions in for ((;;))");
+			throw new ParseError("Expected three expressions in for ((;;))");
 		}
-		let init = parts[0];
-		let cond = parts[1];
-		let incr = parts[2];
-		this.skip_whitespace();
-		if (!this.at_end() && this.peek() === ";") {
+		var init = parts[0];
+		var cond = parts[1];
+		var incr = parts[2];
+		this.skipWhitespace();
+		if (!this.atEnd() && this.peek() === ";") {
 			this.advance();
 		}
-		this.skip_whitespace_and_newlines();
+		this.skipWhitespaceAndNewlines();
 		if (this.peek() === "{") {
-			let brace = this.parse_brace_group();
+			var brace = this.parseBraceGroup();
 			if (brace === null) {
-				throw ParseError("Expected brace group body in for loop");
+				throw new ParseError("Expected brace group body in for loop");
 			}
-			let body = brace.body;
-		} else if (this.consume_word("do")) {
-			body = this.parse_list_until(new Set(["done"]));
+			var body = brace.body;
+		} else if (this.consumeWord("do")) {
+			body = this.parseListUntil(new Set(["done"]));
 			if (body === null) {
-				throw ParseError("Expected commands after 'do'");
+				throw new ParseError("Expected commands after 'do'");
 			}
-			this.skip_whitespace_and_newlines();
-			if (!this.consume_word("done")) {
-				throw ParseError("Expected 'done' to close for loop");
+			this.skipWhitespaceAndNewlines();
+			if (!this.consumeWord("done")) {
+				throw new ParseError("Expected 'done' to close for loop");
 			}
 		} else {
-			throw ParseError("Expected 'do' or '{' in for loop");
+			throw new ParseError("Expected 'do' or '{' in for loop");
 		}
-		let redirects = [];
+		var redirects = [];
 		while (true) {
-			this.skip_whitespace();
-			let redirect = this.parse_redirect();
+			this.skipWhitespace();
+			var redirect = this.parseRedirect();
 			if (redirect === null) {
 				break;
 			}
 			redirects.push(redirect);
 		}
-		let redir_arg = null;
+		var redir_arg = null;
 		if (redirects) {
 			redir_arg = redirects;
 		}
-		return ForArith(init, cond, incr, body, redir_arg);
+		return new ForArith(init, cond, incr, body, redir_arg);
 	}
 
-	parse_select() {
+	parseSelect() {
 		"Parse a select statement: select name [in words]; do list; done.";
-		this.skip_whitespace();
-		if (this.peek_word() !== "select") {
+		this.skipWhitespace();
+		if (this.peekWord() !== "select") {
 			return null;
 		}
-		this.consume_word("select");
-		this.skip_whitespace();
-		let var_name = this.peek_word();
+		this.consumeWord("select");
+		this.skipWhitespace();
+		var var_name = this.peekWord();
 		if (var_name === null) {
-			throw ParseError("Expected variable name after 'select'");
+			throw new ParseError("Expected variable name after 'select'");
 		}
-		this.consume_word(var_name);
-		this.skip_whitespace();
+		this.consumeWord(var_name);
+		this.skipWhitespace();
 		if (this.peek() === ";") {
 			this.advance();
 		}
-		this.skip_whitespace_and_newlines();
-		let words = null;
-		if (this.peek_word() === "in") {
-			this.consume_word("in");
-			this.skip_whitespace_and_newlines();
+		this.skipWhitespaceAndNewlines();
+		var words = null;
+		if (this.peekWord() === "in") {
+			this.consumeWord("in");
+			this.skipWhitespaceAndNewlines();
 			words = [];
 			while (true) {
-				this.skip_whitespace();
-				if (this.at_end()) {
+				this.skipWhitespace();
+				if (this.atEnd()) {
 					break;
 				}
-				if (_is_semicolon_newline_brace(this.peek())) {
+				if (IsSemicolonNewlineBrace(this.peek())) {
 					if (this.peek() === ";") {
 						this.advance();
 					}
 					break;
 				}
-				if (this.peek_word() === "do") {
+				if (this.peekWord() === "do") {
 					break;
 				}
-				let word = this.parse_word();
+				var word = this.parseWord();
 				if (word === null) {
 					break;
 				}
 				words.push(word);
 			}
 		}
-		this.skip_whitespace_and_newlines();
+		this.skipWhitespaceAndNewlines();
 		if (this.peek() === "{") {
-			let brace = this.parse_brace_group();
+			var brace = this.parseBraceGroup();
 			if (brace === null) {
-				throw ParseError("Expected brace group body in select");
+				throw new ParseError("Expected brace group body in select");
 			}
-			let body = brace.body;
-		} else if (this.consume_word("do")) {
-			body = this.parse_list_until(new Set(["done"]));
+			var body = brace.body;
+		} else if (this.consumeWord("do")) {
+			body = this.parseListUntil(new Set(["done"]));
 			if (body === null) {
-				throw ParseError("Expected commands after 'do'");
+				throw new ParseError("Expected commands after 'do'");
 			}
-			this.skip_whitespace_and_newlines();
-			if (!this.consume_word("done")) {
-				throw ParseError("Expected 'done' to close select");
+			this.skipWhitespaceAndNewlines();
+			if (!this.consumeWord("done")) {
+				throw new ParseError("Expected 'done' to close select");
 			}
 		} else {
-			throw ParseError("Expected 'do' or '{' in select");
+			throw new ParseError("Expected 'do' or '{' in select");
 		}
-		let redirects = [];
+		var redirects = [];
 		while (true) {
-			this.skip_whitespace();
-			let redirect = this.parse_redirect();
+			this.skipWhitespace();
+			var redirect = this.parseRedirect();
 			if (redirect === null) {
 				break;
 			}
 			redirects.push(redirect);
 		}
-		let redir_arg = null;
+		var redir_arg = null;
 		if (redirects) {
 			redir_arg = redirects;
 		}
-		return Select(var_name, words, body, redir_arg);
+		return new Select(var_name, words, body, redir_arg);
 	}
 
-	_is_case_terminator() {
+	IsCaseTerminator() {
 		"Check if we're at a case pattern terminator (;;, ;&, or ;;&).";
-		if (this.at_end() || this.peek() !== ";") {
+		if (this.atEnd() || this.peek() !== ";") {
 			return false;
 		}
 		if (this.pos + 1 >= this.length) {
 			return false;
 		}
-		let next_ch = this.source[this.pos + 1];
-		return _is_semicolon_or_amp(next_ch);
+		var next_ch = this.source[this.pos + 1];
+		return IsSemicolonOrAmp(next_ch);
 	}
 
-	_consume_case_terminator() {
+	ConsumeCaseTerminator() {
 		"Consume and return case pattern terminator (;;, ;&, or ;;&).";
-		if (this.at_end() || this.peek() !== ";") {
+		if (this.atEnd() || this.peek() !== ";") {
 			return ";;";
 		}
 		this.advance();
-		if (this.at_end()) {
+		if (this.atEnd()) {
 			return ";;";
 		}
-		let ch = this.peek();
+		var ch = this.peek();
 		if (ch === ";") {
 			this.advance();
-			if (!this.at_end() && this.peek() === "&") {
+			if (!this.atEnd() && this.peek() === "&") {
 				this.advance();
 				return ";;&";
 			}
@@ -6921,46 +6961,46 @@ class Parser {
 		return ";;";
 	}
 
-	parse_case() {
+	parseCase() {
 		"Parse a case statement: case word in pattern) commands;; ... esac.";
-		this.skip_whitespace();
-		if (this.peek_word() !== "case") {
+		this.skipWhitespace();
+		if (this.peekWord() !== "case") {
 			return null;
 		}
-		this.consume_word("case");
-		this.skip_whitespace();
-		let word = this.parse_word();
+		this.consumeWord("case");
+		this.skipWhitespace();
+		var word = this.parseWord();
 		if (word === null) {
-			throw ParseError("Expected word after 'case'");
+			throw new ParseError("Expected word after 'case'");
 		}
-		this.skip_whitespace_and_newlines();
-		if (!this.consume_word("in")) {
-			throw ParseError("Expected 'in' after case word");
+		this.skipWhitespaceAndNewlines();
+		if (!this.consumeWord("in")) {
+			throw new ParseError("Expected 'in' after case word");
 		}
-		this.skip_whitespace_and_newlines();
-		let patterns = [];
+		this.skipWhitespaceAndNewlines();
+		var patterns = [];
 		while (true) {
-			this.skip_whitespace_and_newlines();
-			if (this.peek_word() === "esac") {
-				let saved = this.pos;
-				this.skip_whitespace();
+			this.skipWhitespaceAndNewlines();
+			if (this.peekWord() === "esac") {
+				var saved = this.pos;
+				this.skipWhitespace();
 				while (
-					!this.at_end() &&
-					!_is_metachar(this.peek()) &&
-					!_is_quote(this.peek())
+					!this.atEnd() &&
+					!IsMetachar(this.peek()) &&
+					!IsQuote(this.peek())
 				) {
 					this.advance();
 				}
-				this.skip_whitespace();
-				let is_pattern = false;
-				if (!this.at_end() && this.peek() === ")") {
+				this.skipWhitespace();
+				var is_pattern = false;
+				if (!this.atEnd() && this.peek() === ")") {
 					this.advance();
-					this.skip_whitespace();
-					if (!this.at_end()) {
-						let next_ch = this.peek();
+					this.skipWhitespace();
+					if (!this.atEnd()) {
+						var next_ch = this.peek();
 						if (next_ch === ";") {
 							is_pattern = true;
-						} else if (!_is_newline_or_right_paren(next_ch)) {
+						} else if (!IsNewlineOrRightParen(next_ch)) {
 							is_pattern = true;
 						}
 					}
@@ -6970,15 +7010,15 @@ class Parser {
 					break;
 				}
 			}
-			this.skip_whitespace_and_newlines();
-			if (!this.at_end() && this.peek() === "(") {
+			this.skipWhitespaceAndNewlines();
+			if (!this.atEnd() && this.peek() === "(") {
 				this.advance();
-				this.skip_whitespace_and_newlines();
+				this.skipWhitespaceAndNewlines();
 			}
-			let pattern_chars = [];
-			let extglob_depth = 0;
-			while (!this.at_end()) {
-				let ch = this.peek();
+			var pattern_chars = [];
+			var extglob_depth = 0;
+			while (!this.atEnd()) {
+				var ch = this.peek();
 				if (ch === ")") {
 					if (extglob_depth > 0) {
 						pattern_chars.push(this.advance());
@@ -6996,7 +7036,7 @@ class Parser {
 						this.advance();
 					} else {
 						pattern_chars.push(this.advance());
-						if (!this.at_end()) {
+						if (!this.atEnd()) {
 							pattern_chars.push(this.advance());
 						}
 					}
@@ -7007,11 +7047,11 @@ class Parser {
 				) {
 					pattern_chars.push(this.advance());
 					pattern_chars.push(this.advance());
-					if (!this.at_end() && this.peek() === "(") {
+					if (!this.atEnd() && this.peek() === "(") {
 						pattern_chars.push(this.advance());
-						let paren_depth = 2;
-						while (!this.at_end() && paren_depth > 0) {
-							let c = this.peek();
+						var paren_depth = 2;
+						while (!this.atEnd() && paren_depth > 0) {
+							var c = this.peek();
 							if (c === "(") {
 								paren_depth += 1;
 							} else if (c === ")") {
@@ -7026,7 +7066,7 @@ class Parser {
 					pattern_chars.push(this.advance());
 					extglob_depth += 1;
 				} else if (
-					_is_extglob_prefix(ch) &&
+					IsExtglobPrefix(ch) &&
 					this.pos + 1 < this.length &&
 					this.source[this.pos + 1] === "("
 				) {
@@ -7034,24 +7074,21 @@ class Parser {
 					pattern_chars.push(this.advance());
 					extglob_depth += 1;
 				} else if (ch === "[") {
-					let is_char_class = false;
-					let scan_pos = this.pos + 1;
-					let scan_depth = 0;
-					let has_first_bracket_literal = false;
-					if (
-						scan_pos < this.length &&
-						_is_caret_or_bang(this.source[scan_pos])
-					) {
+					var is_char_class = false;
+					var scan_pos = this.pos + 1;
+					var scan_depth = 0;
+					var has_first_bracket_literal = false;
+					if (scan_pos < this.length && IsCaretOrBang(this.source[scan_pos])) {
 						scan_pos += 1;
 					}
 					if (scan_pos < this.length && this.source[scan_pos] === "]") {
-						if (this.source.find("]", scan_pos + 1) !== -1) {
+						if (this.source.indexOf("]", scan_pos + 1) !== -1) {
 							scan_pos += 1;
 							has_first_bracket_literal = true;
 						}
 					}
 					while (scan_pos < this.length) {
-						let sc = this.source[scan_pos];
+						var sc = this.source[scan_pos];
 						if (sc === "]" && scan_depth === 0) {
 							is_char_class = true;
 							break;
@@ -7066,20 +7103,20 @@ class Parser {
 					}
 					if (is_char_class) {
 						pattern_chars.push(this.advance());
-						if (!this.at_end() && _is_caret_or_bang(this.peek())) {
+						if (!this.atEnd() && IsCaretOrBang(this.peek())) {
 							pattern_chars.push(this.advance());
 						}
 						if (
 							has_first_bracket_literal &&
-							!this.at_end() &&
+							!this.atEnd() &&
 							this.peek() === "]"
 						) {
 							pattern_chars.push(this.advance());
 						}
-						while (!this.at_end() && this.peek() !== "]") {
+						while (!this.atEnd() && this.peek() !== "]") {
 							pattern_chars.push(this.advance());
 						}
-						if (!this.at_end()) {
+						if (!this.atEnd()) {
 							pattern_chars.push(this.advance());
 						}
 					} else {
@@ -7087,24 +7124,24 @@ class Parser {
 					}
 				} else if (ch === "'") {
 					pattern_chars.push(this.advance());
-					while (!this.at_end() && this.peek() !== "'") {
+					while (!this.atEnd() && this.peek() !== "'") {
 						pattern_chars.push(this.advance());
 					}
-					if (!this.at_end()) {
+					if (!this.atEnd()) {
 						pattern_chars.push(this.advance());
 					}
 				} else if (ch === '"') {
 					pattern_chars.push(this.advance());
-					while (!this.at_end() && this.peek() !== '"') {
+					while (!this.atEnd() && this.peek() !== '"') {
 						if (this.peek() === "\\" && this.pos + 1 < this.length) {
 							pattern_chars.push(this.advance());
 						}
 						pattern_chars.push(this.advance());
 					}
-					if (!this.at_end()) {
+					if (!this.atEnd()) {
 						pattern_chars.push(this.advance());
 					}
-				} else if (_is_whitespace(ch)) {
+				} else if (IsWhitespace(ch)) {
 					if (extglob_depth > 0) {
 						pattern_chars.push(this.advance());
 					} else {
@@ -7114,264 +7151,264 @@ class Parser {
 					pattern_chars.push(this.advance());
 				}
 			}
-			let pattern = pattern_chars.join("");
+			var pattern = pattern_chars.join("");
 			if (!pattern) {
-				throw ParseError("Expected pattern in case statement");
+				throw new ParseError("Expected pattern in case statement");
 			}
-			this.skip_whitespace();
-			let body = null;
-			let is_empty_body = this._is_case_terminator();
+			this.skipWhitespace();
+			var body = null;
+			var is_empty_body = this.IsCaseTerminator();
 			if (!is_empty_body) {
-				this.skip_whitespace_and_newlines();
-				if (!this.at_end() && this.peek_word() !== "esac") {
-					let is_at_terminator = this._is_case_terminator();
+				this.skipWhitespaceAndNewlines();
+				if (!this.atEnd() && this.peekWord() !== "esac") {
+					var is_at_terminator = this.IsCaseTerminator();
 					if (!is_at_terminator) {
-						body = this.parse_list_until(new Set(["esac"]));
-						this.skip_whitespace();
+						body = this.parseListUntil(new Set(["esac"]));
+						this.skipWhitespace();
 					}
 				}
 			}
-			let terminator = this._consume_case_terminator();
-			this.skip_whitespace_and_newlines();
-			patterns.push(CasePattern(pattern, body, terminator));
+			var terminator = this.ConsumeCaseTerminator();
+			this.skipWhitespaceAndNewlines();
+			patterns.push(new CasePattern(pattern, body, terminator));
 		}
-		this.skip_whitespace_and_newlines();
-		if (!this.consume_word("esac")) {
-			throw ParseError("Expected 'esac' to close case statement");
+		this.skipWhitespaceAndNewlines();
+		if (!this.consumeWord("esac")) {
+			throw new ParseError("Expected 'esac' to close case statement");
 		}
-		let redirects = [];
+		var redirects = [];
 		while (true) {
-			this.skip_whitespace();
-			let redirect = this.parse_redirect();
+			this.skipWhitespace();
+			var redirect = this.parseRedirect();
 			if (redirect === null) {
 				break;
 			}
 			redirects.push(redirect);
 		}
-		let redir_arg = null;
+		var redir_arg = null;
 		if (redirects) {
 			redir_arg = redirects;
 		}
-		return Case(word, patterns, redir_arg);
+		return new Case(word, patterns, redir_arg);
 	}
 
-	parse_coproc() {
+	parseCoproc() {
 		"Parse a coproc statement.\n\n        bash-oracle behavior:\n        - For compound commands (brace group, if, while, etc.), extract NAME if present\n        - For simple commands, don't extract NAME (treat everything as the command)\n        ";
-		this.skip_whitespace();
-		if (this.at_end()) {
+		this.skipWhitespace();
+		if (this.atEnd()) {
 			return null;
 		}
-		if (this.peek_word() !== "coproc") {
+		if (this.peekWord() !== "coproc") {
 			return null;
 		}
-		this.consume_word("coproc");
-		this.skip_whitespace();
-		let name = null;
-		let ch = null;
-		if (!this.at_end()) {
+		this.consumeWord("coproc");
+		this.skipWhitespace();
+		var name = null;
+		var ch = null;
+		if (!this.atEnd()) {
 			ch = this.peek();
 		}
 		if (ch === "{") {
-			let body = this.parse_brace_group();
+			var body = this.parseBraceGroup();
 			if (body !== null) {
-				return Coproc(body, name);
+				return new Coproc(body, name);
 			}
 		}
 		if (ch === "(") {
 			if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
-				body = this.parse_arithmetic_command();
+				body = this.parseArithmeticCommand();
 				if (body !== null) {
-					return Coproc(body, name);
+					return new Coproc(body, name);
 				}
 			}
-			body = this.parse_subshell();
+			body = this.parseSubshell();
 			if (body !== null) {
-				return Coproc(body, name);
+				return new Coproc(body, name);
 			}
 		}
-		let next_word = this.peek_word();
-		if (_is_compound_keyword(next_word)) {
-			body = this.parse_compound_command();
+		var next_word = this.peekWord();
+		if (IsCompoundKeyword(next_word)) {
+			body = this.parseCompoundCommand();
 			if (body !== null) {
-				return Coproc(body, name);
+				return new Coproc(body, name);
 			}
 		}
-		let word_start = this.pos;
-		let potential_name = this.peek_word();
+		var word_start = this.pos;
+		var potential_name = this.peekWord();
 		if (potential_name) {
 			while (
-				!this.at_end() &&
-				!_is_metachar(this.peek()) &&
-				!_is_quote(this.peek())
+				!this.atEnd() &&
+				!IsMetachar(this.peek()) &&
+				!IsQuote(this.peek())
 			) {
 				this.advance();
 			}
-			this.skip_whitespace();
+			this.skipWhitespace();
 			ch = null;
-			if (!this.at_end()) {
+			if (!this.atEnd()) {
 				ch = this.peek();
 			}
-			next_word = this.peek_word();
+			next_word = this.peekWord();
 			if (ch === "{") {
 				name = potential_name;
-				body = this.parse_brace_group();
+				body = this.parseBraceGroup();
 				if (body !== null) {
-					return Coproc(body, name);
+					return new Coproc(body, name);
 				}
 			} else if (ch === "(") {
 				name = potential_name;
 				if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
-					body = this.parse_arithmetic_command();
+					body = this.parseArithmeticCommand();
 				} else {
-					body = this.parse_subshell();
+					body = this.parseSubshell();
 				}
 				if (body !== null) {
-					return Coproc(body, name);
+					return new Coproc(body, name);
 				}
-			} else if (_is_compound_keyword(next_word)) {
+			} else if (IsCompoundKeyword(next_word)) {
 				name = potential_name;
-				body = this.parse_compound_command();
+				body = this.parseCompoundCommand();
 				if (body !== null) {
-					return Coproc(body, name);
+					return new Coproc(body, name);
 				}
 			}
 			this.pos = word_start;
 		}
-		body = this.parse_command();
+		body = this.parseCommand();
 		if (body !== null) {
-			return Coproc(body, name);
+			return new Coproc(body, name);
 		}
-		throw ParseError("Expected command after coproc");
+		throw new ParseError("Expected command after coproc");
 	}
 
-	parse_function() {
+	parseFunction() {
 		"Parse a function definition.\n\n        Forms:\n            name() compound_command           # POSIX form\n            function name compound_command    # bash form without parens\n            function name() compound_command  # bash form with parens\n        ";
-		this.skip_whitespace();
-		if (this.at_end()) {
+		this.skipWhitespace();
+		if (this.atEnd()) {
 			return null;
 		}
-		let saved_pos = this.pos;
-		if (this.peek_word() === "function") {
-			this.consume_word("function");
-			this.skip_whitespace();
-			let name = this.peek_word();
+		var saved_pos = this.pos;
+		if (this.peekWord() === "function") {
+			this.consumeWord("function");
+			this.skipWhitespace();
+			var name = this.peekWord();
 			if (name === null) {
 				this.pos = saved_pos;
 				return null;
 			}
-			this.consume_word(name);
-			this.skip_whitespace();
-			if (!this.at_end() && this.peek() === "(") {
+			this.consumeWord(name);
+			this.skipWhitespace();
+			if (!this.atEnd() && this.peek() === "(") {
 				if (this.pos + 1 < this.length && this.source[this.pos + 1] === ")") {
 					this.advance();
 					this.advance();
 				}
 			}
-			this.skip_whitespace_and_newlines();
-			let body = this._parse_compound_command();
+			this.skipWhitespaceAndNewlines();
+			var body = this.ParseCompoundCommand();
 			if (body === null) {
-				throw ParseError("Expected function body");
+				throw new ParseError("Expected function body");
 			}
-			return Function(name, body);
+			return new Function(name, body);
 		}
-		name = this.peek_word();
-		if (name === null || _is_reserved_word(name)) {
+		name = this.peekWord();
+		if (name === null || IsReservedWord(name)) {
 			return null;
 		}
-		if (_str_contains(name, "=")) {
+		if (StrContains(name, "=")) {
 			return null;
 		}
-		this.skip_whitespace();
-		let name_start = this.pos;
+		this.skipWhitespace();
+		var name_start = this.pos;
 		while (
-			!this.at_end() &&
-			!_is_metachar(this.peek()) &&
-			!_is_quote(this.peek()) &&
-			!_is_paren(this.peek())
+			!this.atEnd() &&
+			!IsMetachar(this.peek()) &&
+			!IsQuote(this.peek()) &&
+			!IsParen(this.peek())
 		) {
 			this.advance();
 		}
-		name = _substring(this.source, name_start, this.pos);
+		name = Substring(this.source, name_start, this.pos);
 		if (!name) {
 			this.pos = saved_pos;
 			return null;
 		}
-		this.skip_whitespace();
-		if (this.at_end() || this.peek() !== "(") {
+		this.skipWhitespace();
+		if (this.atEnd() || this.peek() !== "(") {
 			this.pos = saved_pos;
 			return null;
 		}
 		this.advance();
-		this.skip_whitespace();
-		if (this.at_end() || this.peek() !== ")") {
+		this.skipWhitespace();
+		if (this.atEnd() || this.peek() !== ")") {
 			this.pos = saved_pos;
 			return null;
 		}
 		this.advance();
-		this.skip_whitespace_and_newlines();
-		body = this._parse_compound_command();
+		this.skipWhitespaceAndNewlines();
+		body = this.ParseCompoundCommand();
 		if (body === null) {
-			throw ParseError("Expected function body");
+			throw new ParseError("Expected function body");
 		}
-		return Function(name, body);
+		return new Function(name, body);
 	}
 
-	_parse_compound_command() {
+	ParseCompoundCommand() {
 		"Parse any compound command (for function bodies, etc.).";
-		let result = this.parse_brace_group();
+		var result = this.parseBraceGroup();
 		if (result) {
 			return result;
 		}
-		result = this.parse_subshell();
+		result = this.parseSubshell();
 		if (result) {
 			return result;
 		}
-		result = this.parse_conditional_expr();
+		result = this.parseConditionalExpr();
 		if (result) {
 			return result;
 		}
-		result = this.parse_if();
+		result = this.parseIf();
 		if (result) {
 			return result;
 		}
-		result = this.parse_while();
+		result = this.parseWhile();
 		if (result) {
 			return result;
 		}
-		result = this.parse_until();
+		result = this.parseUntil();
 		if (result) {
 			return result;
 		}
-		result = this.parse_for();
+		result = this.parseFor();
 		if (result) {
 			return result;
 		}
-		result = this.parse_case();
+		result = this.parseCase();
 		if (result) {
 			return result;
 		}
-		result = this.parse_select();
+		result = this.parseSelect();
 		if (result) {
 			return result;
 		}
 		return null;
 	}
 
-	parse_list_until(stop_words) {
+	parseListUntil(stop_words) {
 		"Parse a list that stops before certain reserved words.";
-		this.skip_whitespace_and_newlines();
-		if (stop_words.has(this.peek_word())) {
+		this.skipWhitespaceAndNewlines();
+		if (stop_words.has(this.peekWord())) {
 			return null;
 		}
-		let pipeline = this.parse_pipeline();
+		var pipeline = this.parsePipeline();
 		if (pipeline === null) {
 			return null;
 		}
-		let parts = [pipeline];
+		var parts = [pipeline];
 		while (true) {
-			this.skip_whitespace();
-			let has_newline = false;
-			while (!this.at_end() && this.peek() === "\n") {
+			this.skipWhitespace();
+			var has_newline = false;
+			while (!this.atEnd() && this.peek() === "\n") {
 				has_newline = true;
 				this.advance();
 				if (
@@ -7381,14 +7418,14 @@ class Parser {
 					this.pos = this._pending_heredoc_end;
 					this._pending_heredoc_end = null;
 				}
-				this.skip_whitespace();
+				this.skipWhitespace();
 			}
-			let op = this.parse_list_operator();
+			var op = this.parseListOperator();
 			if (op === null && has_newline) {
 				if (
-					!this.at_end() &&
-					!stop_words.has(this.peek_word()) &&
-					!_is_right_bracket(this.peek())
+					!this.atEnd() &&
+					!stop_words.has(this.peekWord()) &&
+					!IsRightBracket(this.peek())
 				) {
 					op = "\n";
 				}
@@ -7397,79 +7434,79 @@ class Parser {
 				break;
 			}
 			if (op === "&") {
-				parts.push(Operator(op));
-				this.skip_whitespace_and_newlines();
+				parts.push(new Operator(op));
+				this.skipWhitespaceAndNewlines();
 				if (
-					this.at_end() ||
-					stop_words.has(this.peek_word()) ||
-					_is_newline_or_right_bracket(this.peek())
+					this.atEnd() ||
+					stop_words.has(this.peekWord()) ||
+					IsNewlineOrRightBracket(this.peek())
 				) {
 					break;
 				}
 			}
 			if (op === ";") {
-				this.skip_whitespace_and_newlines();
-				let at_case_terminator =
+				this.skipWhitespaceAndNewlines();
+				var at_case_terminator =
 					this.peek() === ";" &&
 					this.pos + 1 < this.length &&
-					_is_semicolon_or_amp(this.source[this.pos + 1]);
+					IsSemicolonOrAmp(this.source[this.pos + 1]);
 				if (
-					this.at_end() ||
-					stop_words.has(this.peek_word()) ||
-					_is_newline_or_right_bracket(this.peek()) ||
+					this.atEnd() ||
+					stop_words.has(this.peekWord()) ||
+					IsNewlineOrRightBracket(this.peek()) ||
 					at_case_terminator
 				) {
 					break;
 				}
-				parts.push(Operator(op));
+				parts.push(new Operator(op));
 			} else if (op !== "&") {
-				parts.push(Operator(op));
+				parts.push(new Operator(op));
 			}
-			this.skip_whitespace_and_newlines();
-			if (stop_words.has(this.peek_word())) {
+			this.skipWhitespaceAndNewlines();
+			if (stop_words.has(this.peekWord())) {
 				break;
 			}
 			if (
 				this.peek() === ";" &&
 				this.pos + 1 < this.length &&
-				_is_semicolon_or_amp(this.source[this.pos + 1])
+				IsSemicolonOrAmp(this.source[this.pos + 1])
 			) {
 				break;
 			}
-			pipeline = this.parse_pipeline();
+			pipeline = this.parsePipeline();
 			if (pipeline === null) {
-				throw ParseError("Expected command after " + op);
+				throw new ParseError("Expected command after " + op);
 			}
 			parts.push(pipeline);
 		}
 		if (parts.length === 1) {
 			return parts[0];
 		}
-		return List(parts);
+		return new List(parts);
 	}
 
-	parse_compound_command() {
+	parseCompoundCommand() {
 		"Parse a compound command (subshell, brace group, if, loops, or simple command).";
-		this.skip_whitespace();
-		if (this.at_end()) {
+		this.skipWhitespace();
+		if (this.atEnd()) {
 			return null;
 		}
-		let ch = this.peek();
+		var ch = this.peek();
 		if (
 			ch === "(" &&
 			this.pos + 1 < this.length &&
 			this.source[this.pos + 1] === "("
 		) {
-			let result = this.parse_arithmetic_command();
+			var result = this.parseArithmeticCommand();
 			if (result !== null) {
 				return result;
 			}
 		}
 		if (ch === "(") {
-			return this.parse_subshell();
+			return this.parseSubshell();
 		}
 		if (ch === "{") {
-			result = this.parse_brace_group();
+			result = this.parseBraceGroup();
 			if (result !== null) {
 				return result;
 			}
@@ -7479,55 +7516,55 @@ class Parser {
 			this.pos + 1 < this.length &&
 			this.source[this.pos + 1] === "["
 		) {
-			return this.parse_conditional_expr();
+			return this.parseConditionalExpr();
 		}
-		let word = this.peek_word();
+		var word = this.peekWord();
 		if (word === "if") {
-			return this.parse_if();
+			return this.parseIf();
 		}
 		if (word === "while") {
-			return this.parse_while();
+			return this.parseWhile();
 		}
 		if (word === "until") {
-			return this.parse_until();
+			return this.parseUntil();
 		}
 		if (word === "for") {
-			return this.parse_for();
+			return this.parseFor();
 		}
 		if (word === "select") {
-			return this.parse_select();
+			return this.parseSelect();
 		}
 		if (word === "case") {
-			return this.parse_case();
+			return this.parseCase();
 		}
 		if (word === "function") {
-			return this.parse_function();
+			return this.parseFunction();
 		}
 		if (word === "coproc") {
-			return this.parse_coproc();
+			return this.parseCoproc();
 		}
-		let func = this.parse_function();
+		var func = this.parseFunction();
 		if (func !== null) {
 			return func;
 		}
-		return this.parse_command();
+		return this.parseCommand();
 	}
 
-	parse_pipeline() {
+	parsePipeline() {
 		"Parse a pipeline (commands separated by |), with optional time/negation prefix.";
-		this.skip_whitespace();
-		let prefix_order = null;
-		let time_posix = false;
-		if (this.peek_word() === "time") {
-			this.consume_word("time");
+		this.skipWhitespace();
+		var prefix_order = null;
+		var time_posix = false;
+		if (this.peekWord() === "time") {
+			this.consumeWord("time");
 			prefix_order = "time";
-			this.skip_whitespace();
-			if (!this.at_end() && this.peek() === "-") {
-				let saved = this.pos;
+			this.skipWhitespace();
+			if (!this.atEnd() && this.peek() === "-") {
+				var saved = this.pos;
 				this.advance();
-				if (!this.at_end() && this.peek() === "p") {
+				if (!this.atEnd() && this.peek() === "p") {
 					this.advance();
-					if (this.at_end() || _is_whitespace(this.peek())) {
+					if (this.atEnd() || IsWhitespace(this.peek())) {
 						time_posix = true;
 					} else {
 						this.pos = saved;
@@ -7536,27 +7573,27 @@ class Parser {
 					this.pos = saved;
 				}
 			}
-			this.skip_whitespace();
-			if (!this.at_end() && _starts_with_at(this.source, this.pos, "--")) {
+			this.skipWhitespace();
+			if (!this.atEnd() && StartsWithAt(this.source, this.pos, "--")) {
 				if (
 					this.pos + 2 >= this.length ||
-					_is_whitespace(this.source[this.pos + 2])
+					IsWhitespace(this.source[this.pos + 2])
 				) {
 					this.advance();
 					this.advance();
 					time_posix = true;
-					this.skip_whitespace();
+					this.skipWhitespace();
 				}
 			}
-			while (this.peek_word() === "time") {
-				this.consume_word("time");
-				this.skip_whitespace();
-				if (!this.at_end() && this.peek() === "-") {
+			while (this.peekWord() === "time") {
+				this.consumeWord("time");
+				this.skipWhitespace();
+				if (!this.atEnd() && this.peek() === "-") {
 					saved = this.pos;
 					this.advance();
-					if (!this.at_end() && this.peek() === "p") {
+					if (!this.atEnd() && this.peek() === "p") {
 						this.advance();
-						if (this.at_end() || _is_whitespace(this.peek())) {
+						if (this.atEnd() || IsWhitespace(this.peek())) {
 							time_posix = true;
 						} else {
 							this.pos = saved;
@@ -7565,103 +7602,103 @@ class Parser {
 						this.pos = saved;
 					}
 				}
-				this.skip_whitespace();
+				this.skipWhitespace();
 			}
-			if (!this.at_end() && this.peek() === "!") {
+			if (!this.atEnd() && this.peek() === "!") {
 				if (
 					this.pos + 1 >= this.length ||
-					_is_whitespace(this.source[this.pos + 1])
+					IsWhitespace(this.source[this.pos + 1])
 				) {
 					this.advance();
 					prefix_order = "time_negation";
-					this.skip_whitespace();
+					this.skipWhitespace();
 				}
 			}
-		} else if (!this.at_end() && this.peek() === "!") {
+		} else if (!this.atEnd() && this.peek() === "!") {
 			if (
 				this.pos + 1 >= this.length ||
-				_is_whitespace(this.source[this.pos + 1])
+				IsWhitespace(this.source[this.pos + 1])
 			) {
 				this.advance();
-				this.skip_whitespace();
-				let inner = this.parse_pipeline();
+				this.skipWhitespace();
+				var inner = this.parsePipeline();
 				if (inner !== null && inner.kind === "negation") {
 					if (inner.pipeline !== null) {
 						return inner.pipeline;
 					} else {
-						return Command([]);
+						return new Command([]);
 					}
 				}
-				return Negation(inner);
+				return new Negation(inner);
 			}
 		}
-		let result = this._parse_simple_pipeline();
+		var result = this.ParseSimplePipeline();
 		if (prefix_order === "time") {
-			result = Time(result, time_posix);
+			result = new Time(result, time_posix);
 		} else if (prefix_order === "negation") {
-			result = Negation(result);
+			result = new Negation(result);
 		} else if (prefix_order === "time_negation") {
-			result = Time(result, time_posix);
-			result = Negation(result);
+			result = new Time(result, time_posix);
+			result = new Negation(result);
 		} else if (prefix_order === "negation_time") {
-			result = Time(result, time_posix);
-			result = Negation(result);
+			result = new Time(result, time_posix);
+			result = new Negation(result);
 		} else if (result === null) {
 			return null;
 		}
 		return result;
 	}
 
-	_parse_simple_pipeline() {
+	ParseSimplePipeline() {
 		"Parse a simple pipeline (commands separated by | or |&) without time/negation.";
-		let cmd = this.parse_compound_command();
+		var cmd = this.parseCompoundCommand();
 		if (cmd === null) {
 			return null;
 		}
-		let commands = [cmd];
+		var commands = [cmd];
 		while (true) {
-			this.skip_whitespace();
-			if (this.at_end() || this.peek() !== "|") {
+			this.skipWhitespace();
+			if (this.atEnd() || this.peek() !== "|") {
 				break;
 			}
 			if (this.pos + 1 < this.length && this.source[this.pos + 1] === "|") {
 				break;
 			}
 			this.advance();
-			let is_pipe_both = false;
-			if (!this.at_end() && this.peek() === "&") {
+			var is_pipe_both = false;
+			if (!this.atEnd() && this.peek() === "&") {
 				this.advance();
 				is_pipe_both = true;
 			}
-			this.skip_whitespace_and_newlines();
+			this.skipWhitespaceAndNewlines();
 			if (is_pipe_both) {
-				commands.push(PipeBoth());
+				commands.push(new PipeBoth());
 			}
-			cmd = this.parse_compound_command();
+			cmd = this.parseCompoundCommand();
 			if (cmd === null) {
-				throw ParseError("Expected command after |");
+				throw new ParseError("Expected command after |");
 			}
 			commands.push(cmd);
 		}
 		if (commands.length === 1) {
 			return commands[0];
 		}
-		return Pipeline(commands);
+		return new Pipeline(commands);
 	}
 
-	parse_list_operator() {
+	parseListOperator() {
 		"Parse a list operator (&&, ||, ;, &).";
-		this.skip_whitespace();
-		if (this.at_end()) {
+		this.skipWhitespace();
+		if (this.atEnd()) {
 			return null;
 		}
-		let ch = this.peek();
+		var ch = this.peek();
 		if (ch === "&") {
 			if (this.pos + 1 < this.length && this.source[this.pos + 1] === ">") {
 				return null;
 			}
 			this.advance();
-			if (!this.at_end() && this.peek() === "&") {
+			if (!this.atEnd() && this.peek() === "&") {
 				this.advance();
 				return "&&";
 			}
@@ -7678,7 +7715,7 @@ class Parser {
 		if (ch === ";") {
 			if (
 				this.pos + 1 < this.length &&
-				_is_semicolon_or_amp(this.source[this.pos + 1])
+				IsSemicolonOrAmp(this.source[this.pos + 1])
 			) {
 				return null;
 			}
@@ -7688,22 +7725,22 @@ class Parser {
 		return null;
 	}
 
-	parse_list(newline_as_separator) {
+	parseList(newline_as_separator) {
 		"Parse a command list (pipelines separated by &&, ||, ;, &).\n\n        Args:\n            newline_as_separator: If True, treat newlines as implicit semicolons.\n                If False, stop at newlines (for top-level parsing).\n        ";
 		if (newline_as_separator) {
-			this.skip_whitespace_and_newlines();
+			this.skipWhitespaceAndNewlines();
 		} else {
-			this.skip_whitespace();
+			this.skipWhitespace();
 		}
-		let pipeline = this.parse_pipeline();
+		var pipeline = this.parsePipeline();
 		if (pipeline === null) {
 			return null;
 		}
-		let parts = [pipeline];
+		var parts = [pipeline];
 		while (true) {
-			this.skip_whitespace();
-			let has_newline = false;
-			while (!this.at_end() && this.peek() === "\n") {
+			this.skipWhitespace();
+			var has_newline = false;
+			while (!this.atEnd() && this.peek() === "\n") {
 				has_newline = true;
 				if (!newline_as_separator) {
 					break;
@@ -7716,14 +7753,14 @@ class Parser {
 					this.pos = this._pending_heredoc_end;
 					this._pending_heredoc_end = null;
 				}
-				this.skip_whitespace();
+				this.skipWhitespace();
 			}
 			if (has_newline && !newline_as_separator) {
 				break;
 			}
-			let op = this.parse_list_operator();
+			var op = this.parseListOperator();
 			if (op === null && has_newline) {
-				if (!this.at_end() && !_is_right_bracket(this.peek())) {
+				if (!this.atEnd() && !IsRightBracket(this.peek())) {
 					op = "\n";
 				}
 			}
@@ -7738,17 +7775,17 @@ class Parser {
 					parts[parts.length - 1].op === ";"
 				)
 			) {
-				parts.push(Operator(op));
+				parts.push(new Operator(op));
 			}
 			if (op === "&") {
-				this.skip_whitespace();
-				if (this.at_end() || _is_right_bracket(this.peek())) {
+				this.skipWhitespace();
+				if (this.atEnd() || IsRightBracket(this.peek())) {
 					break;
 				}
 				if (this.peek() === "\n") {
 					if (newline_as_separator) {
-						this.skip_whitespace_and_newlines();
-						if (this.at_end() || _is_right_bracket(this.peek())) {
+						this.skipWhitespaceAndNewlines();
+						if (this.atEnd() || IsRightBracket(this.peek())) {
 							break;
 						}
 					} else {
@@ -7757,8 +7794,8 @@ class Parser {
 				}
 			}
 			if (op === ";") {
-				this.skip_whitespace();
-				if (this.at_end() || _is_right_bracket(this.peek())) {
+				this.skipWhitespace();
+				if (this.atEnd() || IsRightBracket(this.peek())) {
 					break;
 				}
 				if (this.peek() === "\n") {
@@ -7766,61 +7803,61 @@ class Parser {
 				}
 			}
 			if (op === "&&" || op === "||") {
-				this.skip_whitespace_and_newlines();
+				this.skipWhitespaceAndNewlines();
 			}
-			pipeline = this.parse_pipeline();
+			pipeline = this.parsePipeline();
 			if (pipeline === null) {
-				throw ParseError("Expected command after " + op);
+				throw new ParseError("Expected command after " + op);
 			}
 			parts.push(pipeline);
 		}
 		if (parts.length === 1) {
 			return parts[0];
 		}
-		return List(parts);
+		return new List(parts);
 	}
 
-	parse_comment() {
+	parseComment() {
 		"Parse a comment (# to end of line).";
-		if (this.at_end() || this.peek() !== "#") {
+		if (this.atEnd() || this.peek() !== "#") {
 			return null;
 		}
-		let start = this.pos;
-		while (!this.at_end() && this.peek() !== "\n") {
+		var start = this.pos;
+		while (!this.atEnd() && this.peek() !== "\n") {
 			this.advance();
 		}
-		let text = _substring(this.source, start, this.pos);
-		return Comment(text);
+		var text = Substring(this.source, start, this.pos);
+		return new Comment(text);
 	}
 
 	parse() {
 		"Parse the entire input.";
-		let source = this.source.strip();
+		var source = this.source.trim();
 		if (!source) {
-			return [Empty()];
+			return [new Empty()];
 		}
-		let results = [];
+		var results = [];
 		while (true) {
-			this.skip_whitespace();
-			while (!this.at_end() && this.peek() === "\n") {
+			this.skipWhitespace();
+			while (!this.atEnd() && this.peek() === "\n") {
 				this.advance();
 			}
-			if (this.at_end()) {
+			if (this.atEnd()) {
 				break;
 			}
-			let comment = this.parse_comment();
+			var comment = this.parseComment();
 			if (!comment) {
 				break;
 			}
 		}
-		while (!this.at_end()) {
-			let result = this.parse_list();
+		while (!this.atEnd()) {
+			var result = this.parseList();
 			if (result !== null) {
 				results.push(result);
 			}
-			this.skip_whitespace();
-			let found_newline = false;
-			while (!this.at_end() && this.peek() === "\n") {
+			this.skipWhitespace();
+			var found_newline = false;
+			while (!this.atEnd() && this.peek() === "\n") {
 				found_newline = true;
 				this.advance();
 				if (
@@ -7830,14 +7867,14 @@ class Parser {
 					this.pos = this._pending_heredoc_end;
 					this._pending_heredoc_end = null;
 				}
-				this.skip_whitespace();
+				this.skipWhitespace();
 			}
-			if (!found_newline && !this.at_end()) {
-				throw ParseError("Parser not fully implemented yet");
+			if (!found_newline && !this.atEnd()) {
+				throw new ParseError("Parser not fully implemented yet");
 			}
 		}
 		if (!results) {
-			return [Empty()];
+			return [new Empty()];
 		}
 		return results;
 	}
@@ -7845,6 +7882,8 @@ class Parser {
 
 function parse(source) {
 	"\n    Parse bash source code and return a list of AST nodes.\n\n    Args:\n        source: The bash source code to parse.\n\n    Returns:\n        A list of AST nodes representing the parsed code.\n\n    Raises:\n        ParseError: If the source code cannot be parsed.\n    ";
-	let parser = Parser(source);
+	var parser = new Parser(source);
 	return parser.parse();
 }
+
+module.exports = { parse, ParseError };

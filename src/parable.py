@@ -2435,6 +2435,53 @@ RESERVED_WORDS = {
 # for brace groups. In words like {a,b,c}, braces are literal.
 METACHAR = set(" \t\n|&;()<>")
 
+COND_UNARY_OPS = {
+    "-a",
+    "-b",
+    "-c",
+    "-d",
+    "-e",
+    "-f",
+    "-g",
+    "-h",
+    "-k",
+    "-p",
+    "-r",
+    "-s",
+    "-t",
+    "-u",
+    "-w",
+    "-x",
+    "-G",
+    "-L",
+    "-N",
+    "-O",
+    "-S",
+    "-z",
+    "-n",
+    "-o",
+    "-v",
+    "-R",
+}
+
+COND_BINARY_OPS = {
+    "==",
+    "!=",
+    "=~",
+    "=",
+    "<",
+    ">",
+    "-eq",
+    "-ne",
+    "-lt",
+    "-le",
+    "-gt",
+    "-ge",
+    "-nt",
+    "-ot",
+    "-ef",
+}
+
 
 def _is_quote(c: str) -> bool:
     return c == "'" or c == '"'
@@ -2608,54 +2655,11 @@ def _is_compound_keyword(word: str) -> bool:
 
 
 def _is_cond_unary_op(op: str) -> bool:
-    return (
-        op == "-a"
-        or op == "-b"
-        or op == "-c"
-        or op == "-d"
-        or op == "-e"
-        or op == "-f"
-        or op == "-g"
-        or op == "-h"
-        or op == "-k"
-        or op == "-p"
-        or op == "-r"
-        or op == "-s"
-        or op == "-t"
-        or op == "-u"
-        or op == "-w"
-        or op == "-x"
-        or op == "-G"
-        or op == "-L"
-        or op == "-N"
-        or op == "-O"
-        or op == "-S"
-        or op == "-z"
-        or op == "-n"
-        or op == "-o"
-        or op == "-v"
-        or op == "-R"
-    )
+    return _set_contains(COND_UNARY_OPS, op)
 
 
 def _is_cond_binary_op(op: str) -> bool:
-    return (
-        op == "=="
-        or op == "!="
-        or op == "=~"
-        or op == "="
-        or op == "<"
-        or op == ">"
-        or op == "-eq"
-        or op == "-ne"
-        or op == "-lt"
-        or op == "-le"
-        or op == "-gt"
-        or op == "-ge"
-        or op == "-nt"
-        or op == "-ot"
-        or op == "-ef"
-    )
+    return _set_contains(COND_BINARY_OPS, op)
 
 
 def _str_contains(haystack: str, needle: str) -> bool:

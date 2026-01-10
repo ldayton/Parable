@@ -1085,8 +1085,8 @@ class Redirect extends Node {
 			} else if (op === "<") {
 				op = "<&";
 			}
-			var fd_target = Substring(target_val, 1, target_val.length).trimEnd("-");
-			if (/^[0-9]$/.test(fd_target)) {
+			var fd_target = Substring(target_val, 1, target_val.length).replace(/-+$/, "");
+			if (/^\d+$/.test(fd_target)) {
 				return '(redirect "' + op + '" ' + fd_target + ")";
 			} else if (target_val === "&-") {
 				return '(redirect ">&-" 0)';
@@ -1095,10 +1095,10 @@ class Redirect extends Node {
 			}
 		}
 		if (op === ">&" || op === "<&") {
-			if (/^[0-9]$/.test(target_val)) {
+			if (/^\d+$/.test(target_val)) {
 				return '(redirect "' + op + '" ' + target_val + ")";
 			}
-			target_val = target_val.trimEnd("-");
+			target_val = target_val.replace(/-+$/, "");
 			return '(redirect "' + op + '" "' + target_val + '")';
 		}
 		return '(redirect "' + op + '" "' + target_val + '")';
@@ -2315,6 +2315,9 @@ function FormatCmdsubNode(node, indent, in_procsub) {
 		in_procsub = false;
 	}
 	("Format an AST node for command substitution output (bash-oracle pretty-print format).");
+	if (node == null) {
+		return "";
+	}
 	var sp = RepeatStr(" ", indent);
 	var inner_sp = RepeatStr(" ", indent + 4);
 	if (node.kind === "empty") {
@@ -2356,7 +2359,8 @@ function FormatCmdsubNode(node, indent, in_procsub) {
 					result.push(" " + p.op);
 				}
 			} else {
-				if (result && !result[result.length - 1].endsWith([" ", "\n"])) {
+				var lastItem = result.length > 0 ? result[result.length - 1] : "";
+				if (result.length > 0 && !lastItem.endsWith(" ") && !lastItem.endsWith("\n")) {
 					result.push(" ");
 				}
 				result.push(FormatCmdsubNode(p, indent));
@@ -2441,7 +2445,7 @@ function FormatCmdsubNode(node, indent, in_procsub) {
 			}
 			i += 1;
 		}
-		var pattern_str = ("\n" + RepeatStr(" ", indent + 4)).join(patterns);
+		var pattern_str = patterns.join("\n" + RepeatStr(" ", indent + 4));
 		return "case " + word + " in" + pattern_str + "\n" + sp + "esac";
 	}
 	if (node.kind === "function") {
@@ -2451,7 +2455,7 @@ function FormatCmdsubNode(node, indent, in_procsub) {
 		} else {
 			body = FormatCmdsubNode(node.body, indent + 4);
 		}
-		body = body.trimEnd(";");
+		body = body.replace(/;+$/, "");
 		return "function " + name + " () \n{ \n" + inner_sp + body + "\n}";
 	}
 	if (node.kind === "subshell") {

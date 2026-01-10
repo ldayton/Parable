@@ -43,12 +43,12 @@ def _is_whitespace_no_newline(c: str) -> bool:
 
 def _substring(s: str, start: int, end: int) -> str:
     """Extract substring from start to end (exclusive)."""
-    result = ""
+    result = []
     i = start
     while i < end and i < len(s):
-        result = result + s[i]
+        result.append(s[i])
         i += 1
-    return result
+    return "".join(result)
 
 
 def _starts_with_at(s: str, pos: int, prefix: str) -> bool:

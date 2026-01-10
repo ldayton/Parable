@@ -367,7 +367,8 @@ class Word(Node):
 
     def get_cond_formatted_value(self) -> str:
         """Return value with command substitutions formatted for cond-term output."""
-        return self._format_command_substitutions(self.value)
+        value = self._format_command_substitutions(self.value)
+        return value.rstrip("\n")
 
 
 @dataclass

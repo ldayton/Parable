@@ -673,14 +673,20 @@ class Pipeline(Node):
             cmds.append((cmd, needs_redirect))
             i += 1
         if len(cmds) == 1:
-            cmd, needs = cmds[0]
+            pair = cmds[0]
+            cmd = pair[0]
+            needs = pair[1]
             return self._cmd_sexp(cmd, needs)
         # Nest right-associatively: (pipe a (pipe b c))
-        last_cmd, last_needs = cmds[len(cmds) - 1]
+        last_pair = cmds[len(cmds) - 1]
+        last_cmd = last_pair[0]
+        last_needs = last_pair[1]
         result = self._cmd_sexp(last_cmd, last_needs)
         j = len(cmds) - 2
         while j >= 0:
-            cmd, needs = cmds[j]
+            pair = cmds[j]
+            cmd = pair[0]
+            needs = pair[1]
             if needs and cmd.kind != "command":
                 # Compound command: redirect as sibling in pipe
                 result = "(pipe " + cmd.to_sexp() + ' (redirect ">&" 1) ' + result + ")"

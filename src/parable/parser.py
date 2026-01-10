@@ -263,13 +263,17 @@ class Parser:
                         and self.source[self.pos + 1] == "("
                         and self.source[self.pos + 2] == "("
                     ):
-                        arith_node, arith_text = self._parse_arithmetic_expansion()
+                        arith_result = self._parse_arithmetic_expansion()
+                        arith_node = arith_result[0]
+                        arith_text = arith_result[1]
                         if arith_node:
                             parts.append(arith_node)
                             chars.append(arith_text)
                         else:
                             # Not arithmetic - try command substitution
-                            cmdsub_node, cmdsub_text = self._parse_command_substitution()
+                            cmdsub_result = self._parse_command_substitution()
+                            cmdsub_node = cmdsub_result[0]
+                            cmdsub_text = cmdsub_result[1]
                             if cmdsub_node:
                                 parts.append(cmdsub_node)
                                 chars.append(cmdsub_text)
@@ -279,7 +283,9 @@ class Parser:
                     elif (
                         c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "["
                     ):
-                        arith_node, arith_text = self._parse_deprecated_arithmetic()
+                        arith_result = self._parse_deprecated_arithmetic()
+                        arith_node = arith_result[0]
+                        arith_text = arith_result[1]
                         if arith_node:
                             parts.append(arith_node)
                             chars.append(arith_text)
@@ -289,7 +295,9 @@ class Parser:
                     elif (
                         c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "("
                     ):
-                        cmdsub_node, cmdsub_text = self._parse_command_substitution()
+                        cmdsub_result = self._parse_command_substitution()
+                        cmdsub_node = cmdsub_result[0]
+                        cmdsub_text = cmdsub_result[1]
                         if cmdsub_node:
                             parts.append(cmdsub_node)
                             chars.append(cmdsub_text)
@@ -297,7 +305,9 @@ class Parser:
                             chars.append(self.advance())
                     # Handle parameter expansion inside double quotes
                     elif c == "$":
-                        param_node, param_text = self._parse_param_expansion()
+                        param_result = self._parse_param_expansion()
+                        param_node = param_result[0]
+                        param_text = param_result[1]
                         if param_node:
                             parts.append(param_node)
                             chars.append(param_text)
@@ -305,7 +315,9 @@ class Parser:
                             chars.append(self.advance())  # just $
                     # Handle backtick command substitution
                     elif c == "`":
-                        cmdsub_node, cmdsub_text = self._parse_backtick_substitution()
+                        cmdsub_result = self._parse_backtick_substitution()
+                        cmdsub_node = cmdsub_result[0]
+                        cmdsub_text = cmdsub_result[1]
                         if cmdsub_node:
                             parts.append(cmdsub_node)
                             chars.append(cmdsub_text)
@@ -330,7 +342,9 @@ class Parser:
 
             # ANSI-C quoting $'...'
             elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "'":
-                ansi_node, ansi_text = self._parse_ansi_c_quote()
+                ansi_result = self._parse_ansi_c_quote()
+                ansi_node = ansi_result[0]
+                ansi_text = ansi_result[1]
                 if ansi_node:
                     parts.append(ansi_node)
                     chars.append(ansi_text)
@@ -339,7 +353,10 @@ class Parser:
 
             # Locale translation $"..."
             elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == '"':
-                locale_node, locale_text, inner_parts = self._parse_locale_string()
+                locale_result = self._parse_locale_string()
+                locale_node = locale_result[0]
+                locale_text = locale_result[1]
+                inner_parts = locale_result[2]
                 if locale_node:
                     parts.append(locale_node)
                     parts.extend(inner_parts)
@@ -355,13 +372,17 @@ class Parser:
                 and self.source[self.pos + 1] == "("
                 and self.source[self.pos + 2] == "("
             ):
-                arith_node, arith_text = self._parse_arithmetic_expansion()
+                arith_result = self._parse_arithmetic_expansion()
+                arith_node = arith_result[0]
+                arith_text = arith_result[1]
                 if arith_node:
                     parts.append(arith_node)
                     chars.append(arith_text)
                 else:
                     # Not arithmetic (e.g., '$( ( ... ) )' is command sub + subshell)
-                    cmdsub_node, cmdsub_text = self._parse_command_substitution()
+                    cmdsub_result = self._parse_command_substitution()
+                    cmdsub_node = cmdsub_result[0]
+                    cmdsub_text = cmdsub_result[1]
                     if cmdsub_node:
                         parts.append(cmdsub_node)
                         chars.append(cmdsub_text)
@@ -370,7 +391,9 @@ class Parser:
 
             # Deprecated arithmetic expansion $[expr]
             elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "[":
-                arith_node, arith_text = self._parse_deprecated_arithmetic()
+                arith_result = self._parse_deprecated_arithmetic()
+                arith_node = arith_result[0]
+                arith_text = arith_result[1]
                 if arith_node:
                     parts.append(arith_node)
                     chars.append(arith_text)
@@ -379,7 +402,9 @@ class Parser:
 
             # Command substitution $(...)
             elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
-                cmdsub_node, cmdsub_text = self._parse_command_substitution()
+                cmdsub_result = self._parse_command_substitution()
+                cmdsub_node = cmdsub_result[0]
+                cmdsub_text = cmdsub_result[1]
                 if cmdsub_node:
                     parts.append(cmdsub_node)
                     chars.append(cmdsub_text)
@@ -388,7 +413,9 @@ class Parser:
 
             # Parameter expansion $var or ${...}
             elif ch == "$":
-                param_node, param_text = self._parse_param_expansion()
+                param_result = self._parse_param_expansion()
+                param_node = param_result[0]
+                param_text = param_result[1]
                 if param_node:
                     parts.append(param_node)
                     chars.append(param_text)
@@ -397,7 +424,9 @@ class Parser:
 
             # Backtick command substitution
             elif ch == "`":
-                cmdsub_node, cmdsub_text = self._parse_backtick_substitution()
+                cmdsub_result = self._parse_backtick_substitution()
+                cmdsub_node = cmdsub_result[0]
+                cmdsub_text = cmdsub_result[1]
                 if cmdsub_node:
                     parts.append(cmdsub_node)
                     chars.append(cmdsub_text)
@@ -406,7 +435,9 @@ class Parser:
 
             # Process substitution <(...) or >(...)
             elif ch in "<>" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
-                procsub_node, procsub_text = self._parse_process_substitution()
+                procsub_result = self._parse_process_substitution()
+                procsub_node = procsub_result[0]
+                procsub_text = procsub_result[1]
                 if procsub_node:
                     parts.append(procsub_node)
                     chars.append(procsub_text)
@@ -423,7 +454,9 @@ class Parser:
                     or (len(chars) >= 2 and chars[len(chars) - 2 : len(chars)] == ["+", "="])
                 )
             ):
-                array_node, array_text = self._parse_array_literal()
+                array_result = self._parse_array_literal()
+                array_node = array_result[0]
+                array_text = array_result[1]
                 if array_node:
                     parts.append(array_node)
                     chars.append(array_text)
@@ -1912,13 +1945,17 @@ class Parser:
                 and self.source[self.pos + 1] == "("
                 and self.source[self.pos + 2] == "("
             ):
-                arith_node, arith_text = self._parse_arithmetic_expansion()
+                arith_result = self._parse_arithmetic_expansion()
+                arith_node = arith_result[0]
+                arith_text = arith_result[1]
                 if arith_node:
                     inner_parts.append(arith_node)
                     content_chars.append(arith_text)
                 else:
                     # Not arithmetic - try command substitution
-                    cmdsub_node, cmdsub_text = self._parse_command_substitution()
+                    cmdsub_result = self._parse_command_substitution()
+                    cmdsub_node = cmdsub_result[0]
+                    cmdsub_text = cmdsub_result[1]
                     if cmdsub_node:
                         inner_parts.append(cmdsub_node)
                         content_chars.append(cmdsub_text)
@@ -1926,7 +1963,9 @@ class Parser:
                         content_chars.append(self.advance())
             # Handle command substitution $(...)
             elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
-                cmdsub_node, cmdsub_text = self._parse_command_substitution()
+                cmdsub_result = self._parse_command_substitution()
+                cmdsub_node = cmdsub_result[0]
+                cmdsub_text = cmdsub_result[1]
                 if cmdsub_node:
                     inner_parts.append(cmdsub_node)
                     content_chars.append(cmdsub_text)
@@ -1934,7 +1973,9 @@ class Parser:
                     content_chars.append(self.advance())
             # Handle parameter expansion
             elif ch == "$":
-                param_node, param_text = self._parse_param_expansion()
+                param_result = self._parse_param_expansion()
+                param_node = param_result[0]
+                param_text = param_result[1]
                 if param_node:
                     inner_parts.append(param_node)
                     content_chars.append(param_text)
@@ -1942,7 +1983,9 @@ class Parser:
                     content_chars.append(self.advance())
             # Handle backtick command substitution
             elif ch == "`":
-                cmdsub_node, cmdsub_text = self._parse_backtick_substitution()
+                cmdsub_result = self._parse_backtick_substitution()
+                cmdsub_node = cmdsub_result[0]
+                cmdsub_text = cmdsub_result[1]
                 if cmdsub_node:
                     inner_parts.append(cmdsub_node)
                     content_chars.append(cmdsub_text)
@@ -3132,27 +3175,35 @@ class Parser:
                             and self.source[self.pos + 1] == "("
                             and self.source[self.pos + 2] == "("
                         ):
-                            arith_node, arith_text = self._parse_arithmetic_expansion()
+                            arith_result = self._parse_arithmetic_expansion()
+                            arith_node = arith_result[0]
+                            arith_text = arith_result[1]
                             if arith_node:
                                 parts.append(arith_node)
                                 chars.append(arith_text)
                             else:
                                 # Not arithmetic - try command substitution
-                                cmdsub_node, cmdsub_text = self._parse_command_substitution()
+                                cmdsub_result = self._parse_command_substitution()
+                                cmdsub_node = cmdsub_result[0]
+                                cmdsub_text = cmdsub_result[1]
                                 if cmdsub_node:
                                     parts.append(cmdsub_node)
                                     chars.append(cmdsub_text)
                                 else:
                                     chars.append(self.advance())
                         elif self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
-                            cmdsub_node, cmdsub_text = self._parse_command_substitution()
+                            cmdsub_result = self._parse_command_substitution()
+                            cmdsub_node = cmdsub_result[0]
+                            cmdsub_text = cmdsub_result[1]
                             if cmdsub_node:
                                 parts.append(cmdsub_node)
                                 chars.append(cmdsub_text)
                             else:
                                 chars.append(self.advance())
                         else:
-                            param_node, param_text = self._parse_param_expansion()
+                            param_result = self._parse_param_expansion()
+                            param_node = param_result[0]
+                            param_text = param_result[1]
                             if param_node:
                                 parts.append(param_node)
                                 chars.append(param_text)
@@ -3176,7 +3227,9 @@ class Parser:
                 and self.source[self.pos + 1] == "("
                 and self.source[self.pos + 2] == "("
             ):
-                arith_node, arith_text = self._parse_arithmetic_expansion()
+                arith_result = self._parse_arithmetic_expansion()
+                arith_node = arith_result[0]
+                arith_text = arith_result[1]
                 if arith_node:
                     parts.append(arith_node)
                     chars.append(arith_text)
@@ -3185,7 +3238,9 @@ class Parser:
 
             # Command substitution $(...)
             elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
-                cmdsub_node, cmdsub_text = self._parse_command_substitution()
+                cmdsub_result = self._parse_command_substitution()
+                cmdsub_node = cmdsub_result[0]
+                cmdsub_text = cmdsub_result[1]
                 if cmdsub_node:
                     parts.append(cmdsub_node)
                     chars.append(cmdsub_text)
@@ -3194,7 +3249,9 @@ class Parser:
 
             # Parameter expansion $var or ${...}
             elif ch == "$":
-                param_node, param_text = self._parse_param_expansion()
+                param_result = self._parse_param_expansion()
+                param_node = param_result[0]
+                param_text = param_result[1]
                 if param_node:
                     parts.append(param_node)
                     chars.append(param_text)
@@ -3203,7 +3260,9 @@ class Parser:
 
             # Process substitution <(...) or >(...)
             elif ch in "<>" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
-                procsub_node, procsub_text = self._parse_process_substitution()
+                procsub_result = self._parse_process_substitution()
+                procsub_node = procsub_result[0]
+                procsub_text = procsub_result[1]
                 if procsub_node:
                     parts.append(procsub_node)
                     chars.append(procsub_text)
@@ -3212,7 +3271,9 @@ class Parser:
 
             # Backtick command substitution
             elif ch == "`":
-                cmdsub_node, cmdsub_text = self._parse_backtick_substitution()
+                cmdsub_result = self._parse_backtick_substitution()
+                cmdsub_node = cmdsub_result[0]
+                cmdsub_text = cmdsub_result[1]
                 if cmdsub_node:
                     parts.append(cmdsub_node)
                     chars.append(cmdsub_text)
@@ -3338,7 +3399,9 @@ class Parser:
                         chars.append(self.advance())
                         chars.append(self.advance())
                     elif c == "$":
-                        param_node, param_text = self._parse_param_expansion()
+                        param_result = self._parse_param_expansion()
+                        param_node = param_result[0]
+                        param_text = param_result[1]
                         if param_node:
                             parts.append(param_node)
                             chars.append(param_text)
@@ -3355,12 +3418,16 @@ class Parser:
             if ch == "$":
                 # Try command substitution first
                 if self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
-                    cmdsub_node, cmdsub_text = self._parse_command_substitution()
+                    cmdsub_result = self._parse_command_substitution()
+                    cmdsub_node = cmdsub_result[0]
+                    cmdsub_text = cmdsub_result[1]
                     if cmdsub_node:
                         parts.append(cmdsub_node)
                         chars.append(cmdsub_text)
                         continue
-                param_node, param_text = self._parse_param_expansion()
+                param_result = self._parse_param_expansion()
+                param_node = param_result[0]
+                param_text = param_result[1]
                 if param_node:
                     parts.append(param_node)
                     chars.append(param_text)
@@ -3727,7 +3794,9 @@ class Parser:
         if len(parts) != 3:
             raise ParseError("Expected three expressions in for ((;;))", pos=self.pos)
 
-        init, cond, incr = parts
+        init = parts[0]
+        cond = parts[1]
+        incr = parts[2]
 
         self.skip_whitespace()
 

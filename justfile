@@ -39,9 +39,9 @@ lock-check:
 [parallel]
 check: test-all lint fmt lock-check check-dump-ast check-style
 
-# Run benchmarks
-bench:
-    PYTHONPATH=src uvx pyperf command -- python bench/bench_parse.py
+# Run benchmarks (--fast for quick run)
+bench *ARGS:
+    PYTHONPATH=src uvx --with pyperf python bench/bench_parse.py {{ARGS}}
 
 # Lint (--fix to apply changes)
 lint *ARGS:

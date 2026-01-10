@@ -2502,6 +2502,8 @@ COND_BINARY_OPS = {
     "-ef",
 }
 
+COMPOUND_KEYWORDS = {"while", "until", "for", "if", "case", "select"}
+
 
 def _is_quote(c: str) -> bool:
     return c == "'" or c == '"'
@@ -2643,35 +2645,11 @@ def _is_semicolon_newline_brace(c: str) -> bool:
 
 
 def _is_reserved_word(word: str) -> bool:
-    return (
-        word == "if"
-        or word == "then"
-        or word == "elif"
-        or word == "else"
-        or word == "fi"
-        or word == "while"
-        or word == "until"
-        or word == "for"
-        or word == "select"
-        or word == "do"
-        or word == "done"
-        or word == "case"
-        or word == "esac"
-        or word == "in"
-        or word == "function"
-        or word == "coproc"
-    )
+    return _set_contains(RESERVED_WORDS, word)
 
 
 def _is_compound_keyword(word: str) -> bool:
-    return (
-        word == "while"
-        or word == "until"
-        or word == "for"
-        or word == "if"
-        or word == "case"
-        or word == "select"
-    )
+    return _set_contains(COMPOUND_KEYWORDS, word)
 
 
 def _is_cond_unary_op(op: str) -> bool:

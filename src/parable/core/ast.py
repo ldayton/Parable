@@ -791,7 +791,7 @@ class ForArith(Node):
             return s.replace("\\", "\\\\").replace('"', '\\"')
         suffix = " " + " ".join(r.to_sexp() for r in self.redirects) if self.redirects else ""
         init_val = self.init if self.init else "1"
-        cond_val = self.cond if self.cond else "1"
+        cond_val = _normalize_fd_redirects(self.cond) if self.cond else "1"
         incr_val = self.incr if self.incr else "1"
         return (
             f'(arith-for (init (word "{escape(init_val)}")) '
@@ -1650,6 +1650,16 @@ def _format_redirect(r: "Redirect | HereDoc") -> str:
         op = "<<-" if r.strip_tabs else "<<"
         return f"{op}{r.delimiter}\n{r.content}{r.delimiter}\n"
     return f"{r.op} {r.target.value}"
+
+
+def _normalize_fd_redirects(s: str) -> str:
+    """Normalize fd redirects in a raw string: >&2 -> 1>&2, <&N -> 0<&N."""
+    import re
+    # Match >&N or <&N not preceded by a digit, add default fd
+    # >&N -> 1>&N, <&N -> 0<&N
+    s = re.sub(r'(?<![0-9])>&(\d)', r'1>&\1', s)
+    s = re.sub(r'(?<![0-9])<&(\d)', r'0<&\1', s)
+    return s
 
 
 def _find_cmdsub_end(value: str, start: int) -> int:

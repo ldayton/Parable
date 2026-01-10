@@ -3879,10 +3879,16 @@ class Parser:
                         self.advance()
                         break
                 elif ch == "\\":
-                    # Backslash escape - consume both chars
-                    pattern_chars.append(self.advance())
-                    if not self.at_end():
+                    # Line continuation or backslash escape
+                    if self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
+                        # Line continuation - skip both backslash and newline
+                        self.advance()
+                        self.advance()
+                    else:
+                        # Normal escape - consume both chars
                         pattern_chars.append(self.advance())
+                        if not self.at_end():
+                            pattern_chars.append(self.advance())
                 elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
                     # $( or $(( - command sub or arithmetic
                     pattern_chars.append(self.advance())  # $

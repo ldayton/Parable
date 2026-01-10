@@ -29,21 +29,16 @@ class Word(Node):
     def to_sexp(self) -> str:
         import re
         value = self.value
-        is_ansi_c = value.startswith("$'")
-        # Strip $ from ANSI-C quotes $'...' and locale strings $"..."
-        # Match at start or after =, (, ", ', space (but not after regular chars like in "s$")
-        value = re.sub(r"(^|[=(\"' \t])\$'", r"\1'", value)
+        # Expand ALL $'...' ANSI-C quotes (handles escapes and strips $)
+        value = self._expand_all_ansi_c_quotes(value)
+        # Strip $ from locale strings $"..."
         value = re.sub(r"(^|[=(\"' \t])\$\"", r'\1"', value)
-        # Expand ANSI-C escape sequences
-        if is_ansi_c:
-            value = self._expand_ansi_c_escapes(value)
         # Format command substitutions with oracle pretty-printing (before escaping)
         value = self._format_command_substitutions(value)
         # Strip line continuations (backslash-newline) from arithmetic expressions
         value = self._strip_arith_line_continuations(value)
-        # Escape backslashes for s-expression output (but not in ANSI-C strings - already handled)
-        if not is_ansi_c:
-            value = value.replace("\\", "\\\\")
+        # Escape backslashes for s-expression output
+        value = value.replace("\\", "\\\\")
         # Escape double quotes, newlines, and tabs
         escaped = value.replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
         return f'(word "{escaped}")'
@@ -83,11 +78,11 @@ class Word(Node):
                     result.append("\v")
                     i += 2
                 elif c == "\\":
-                    result.append("\\\\")  # One backslash doubled for sexp
+                    result.append("\\")  # Single backslash (will be escaped later)
                     i += 2
                 elif c == "'":
-                    # Oracle outputs \' as '\\'' (shell quoting trick, with backslash doubled for sexp)
-                    result.append("'\\\\''")
+                    # Oracle outputs \' as '\'' (shell quoting trick: end quote, escaped quote, start quote)
+                    result.append("'\\''")
                     i += 2
                 elif c == '"':
                     result.append('"')
@@ -141,9 +136,12 @@ class Word(Node):
                     while j < len(inner) and j < i + 5 and inner[j] in "01234567":
                         j += 1
                     if j == i + 2:
-                        result.append("\0")
+                        # Just \0 - NUL character, omit from output
+                        pass
                     else:
-                        result.append(chr(int(inner[i + 1 : j], 8)))
+                        char_val = int(inner[i + 1 : j], 8)
+                        if char_val != 0:  # Skip NUL
+                            result.append(chr(char_val))
                     i = j
                 elif c in "1234567":
                     # Octal escape \NNN (1-3 digits)
@@ -153,13 +151,41 @@ class Word(Node):
                     result.append(chr(int(inner[i + 1 : j], 8)))
                     i = j
                 else:
-                    # Unknown escape - preserve as-is (backslash doubled for sexp)
-                    result.append("\\\\" + c)
+                    # Unknown escape - preserve as-is
+                    result.append("\\" + c)
                     i += 2
             else:
                 result.append(inner[i])
                 i += 1
         return "'" + "".join(result) + "'"
+
+    def _expand_all_ansi_c_quotes(self, value: str) -> str:
+        """Find and expand ALL $'...' ANSI-C quoted strings in value."""
+        result = []
+        i = 0
+        while i < len(value):
+            # Check for $' start of ANSI-C string
+            if value[i : i + 2] == "$'":
+                # Find the matching closing quote (handling escapes)
+                j = i + 2
+                while j < len(value):
+                    if value[j] == "\\" and j + 1 < len(value):
+                        j += 2  # Skip escaped char
+                    elif value[j] == "'":
+                        j += 1  # Include closing quote
+                        break
+                    else:
+                        j += 1
+                # Extract and expand the $'...' sequence
+                ansi_str = value[i:j]  # e.g. $'hello\nworld'
+                # Strip the $ and expand escapes
+                expanded = self._expand_ansi_c_escapes(ansi_str[1:])  # Pass 'hello\nworld'
+                result.append(expanded)
+                i = j
+            else:
+                result.append(value[i])
+                i += 1
+        return "".join(result)
 
     def _strip_arith_line_continuations(self, value: str) -> str:
         """Strip backslash-newline (line continuation) from inside $((...))."""
@@ -457,14 +483,10 @@ class Redirect(Node):
         op = self.op.lstrip("0123456789")
         op = re.sub(r"^\{[a-zA-Z_][a-zA-Z_0-9]*\}", "", op)
         target_val = self.target.value
-        # Strip $ from ANSI-C $'...' and locale strings $"..."
-        target_val = re.sub(r"\$'", "'", target_val)
+        # Expand ANSI-C $'...' quotes (converts escapes like \n to actual newline)
+        target_val = Word(target_val)._expand_all_ansi_c_quotes(target_val)
+        # Strip $ from locale strings $"..."
         target_val = re.sub(r'\$"', '"', target_val)
-        # For here-strings, expand ANSI-C escape sequences
-        if op == "<<<" and target_val.startswith("'") and target_val.endswith("'"):
-            inner = target_val[1:-1]
-            inner = inner.replace("\\n", "\n").replace("\\t", "\t").replace("\\r", "\r")
-            target_val = "'" + inner + "'"
         # For fd duplication, target starts with & (e.g., "&1", "&2", "&-")
         if target_val.startswith("&"):
             # Determine the real operator
@@ -839,8 +861,8 @@ class CasePattern(Node):
         alternatives.append("".join(current))
         word_list = []
         for alt in alternatives:
-            escaped = alt.replace("\\", "\\\\").replace('"', '\\"').replace("\t", "\\t")
-            word_list.append(f'(word "{escaped}")')
+            # Use Word.to_sexp() to properly expand ANSI-C quotes and escape
+            word_list.append(Word(alt).to_sexp())
         pattern_str = " ".join(word_list)
         parts = [f"(pattern ({pattern_str})"]
         if self.body:
@@ -1517,7 +1539,7 @@ def _format_cmdsub_node(node: Node, indent: int = 0) -> str:
         return f"function {name} () \n{{ \n{inner_sp}{body}\n}}"
     if isinstance(node, Subshell):
         body = _format_cmdsub_node(node.body, indent)
-        return f"({body})"
+        return f"( {body} )"
     if isinstance(node, BraceGroup):
         body = _format_cmdsub_node(node.body, indent)
         body = body.rstrip(";")  # Strip trailing semicolons before adding our own

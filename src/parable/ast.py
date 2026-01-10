@@ -662,24 +662,31 @@ class Pipeline(Node):
             return self.commands[0].to_sexp()
         # Build list of (cmd, needs_pipe_both_redirect) filtering out PipeBoth markers
         cmds = []
-        for i, cmd in enumerate(self.commands):
+        i = 0
+        while i < len(self.commands):
+            cmd = self.commands[i]
             if cmd.kind == "pipe-both":
+                i += 1
                 continue
             # Check if next element is PipeBoth
             needs_redirect = i + 1 < len(self.commands) and self.commands[i + 1].kind == "pipe-both"
             cmds.append((cmd, needs_redirect))
+            i += 1
         if len(cmds) == 1:
             cmd, needs = cmds[0]
             return self._cmd_sexp(cmd, needs)
         # Nest right-associatively: (pipe a (pipe b c))
         last_cmd, last_needs = cmds[len(cmds) - 1]
         result = self._cmd_sexp(last_cmd, last_needs)
-        for cmd, needs in reversed(cmds[0 : len(cmds) - 1]):
+        j = len(cmds) - 2
+        while j >= 0:
+            cmd, needs = cmds[j]
             if needs and cmd.kind != "command":
                 # Compound command: redirect as sibling in pipe
                 result = "(pipe " + cmd.to_sexp() + ' (redirect ">&" 1) ' + result + ")"
             else:
                 result = "(pipe " + self._cmd_sexp(cmd, needs) + " " + result + ")"
+            j -= 1
         return result
 
     def _cmd_sexp(self, cmd: Node, needs_redirect: bool) -> str:
@@ -1409,7 +1416,8 @@ class ParamExpansion(Node):
         escaped_param = self.param.replace("\\", "\\\\").replace('"', '\\"')
         if self.op is not None:
             escaped_op = self.op.replace("\\", "\\\\").replace('"', '\\"')
-            escaped_arg = (self.arg or "").replace("\\", "\\\\").replace('"', '\\"')
+            arg_val = self.arg if self.arg is not None else ""
+            escaped_arg = arg_val.replace("\\", "\\\\").replace('"', '\\"')
             return '(param "' + escaped_param + '" "' + escaped_op + '" "' + escaped_arg + '")'
         return '(param "' + escaped_param + '")'
 
@@ -1445,7 +1453,8 @@ class ParamIndirect(Node):
         escaped = self.param.replace("\\", "\\\\").replace('"', '\\"')
         if self.op is not None:
             escaped_op = self.op.replace("\\", "\\\\").replace('"', '\\"')
-            escaped_arg = (self.arg or "").replace("\\", "\\\\").replace('"', '\\"')
+            arg_val = self.arg if self.arg is not None else ""
+            escaped_arg = arg_val.replace("\\", "\\\\").replace('"', '\\"')
             return '(param-indirect "' + escaped + '" "' + escaped_op + '" "' + escaped_arg + '")'
         return '(param-indirect "' + escaped + '")'
 
@@ -2050,7 +2059,9 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
     if node.kind == "case":
         word = node.word.value
         patterns = []
-        for i, p in enumerate(node.patterns):
+        i = 0
+        while i < len(node.patterns):
+            p = node.patterns[i]
             pat = p.pattern.replace("|", " | ")
             body = _format_cmdsub_node(p.body, indent + 8) if p.body else ""
             term = p.terminator  # ;;, ;&, or ;;&
@@ -2061,6 +2072,7 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
                 patterns.append(" " + pat + ")\n" + pat_indent + body + "\n" + term_indent + term)
             else:
                 patterns.append(pat + ")\n" + pat_indent + body + "\n" + term_indent + term)
+            i += 1
         pattern_str = ("\n" + " " * (indent + 4)).join(patterns)
         return "case " + word + " in" + pattern_str + "\n" + sp + "esac"
     if node.kind == "function":

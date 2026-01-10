@@ -803,15 +803,19 @@ class Parser:
         """Check if a word is an assignment (contains = outside of quotes)."""
         in_single = False
         in_double = False
-        for i, ch in enumerate(word.value):
+        i = 0
+        while i < len(word.value):
+            ch = word.value[i]
             if ch == "'" and not in_double:
                 in_single = not in_single
             elif ch == '"' and not in_single:
                 in_double = not in_double
             elif ch == "\\" and not in_single and i + 1 < len(word.value):
-                continue  # Skip next char
+                i += 1  # Skip next char
+                continue
             elif ch == "=" and not in_single and not in_double:
                 return True
+            i += 1
         return False
 
     def _lookahead_keyword(self, keyword: str) -> bool:

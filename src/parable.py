@@ -2648,15 +2648,6 @@ def _str_contains(haystack: str, needle: str) -> bool:
     return haystack.find(needle) != -1
 
 
-def _list_contains(lst: list, item: str) -> bool:
-    """Check if list contains item."""
-    i = 0
-    while i < len(lst):
-        if lst[i] == item:
-            return True
-        i += 1
-    return False
-
 
 class Parser:
     """Recursive descent parser for bash."""

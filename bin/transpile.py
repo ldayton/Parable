@@ -99,6 +99,16 @@ class JSTranspiler(ast.NodeVisitor):
         self.in_method = True
         # Start with function parameters as declared
         self.declared_vars = set(a.arg for a in node.args.args if a.arg != "self")
+        # Helper to emit default argument checks
+        def emit_defaults():
+            defaults = node.args.defaults
+            if defaults:
+                non_self_args = [a for a in node.args.args if a.arg != "self"]
+                first_default_idx = len(non_self_args) - len(defaults)
+                for i, default in enumerate(defaults):
+                    arg_name = self._safe_name(non_self_args[first_default_idx + i].arg)
+                    default_val = self.visit_expr(default)
+                    self.emit(f"if ({arg_name} == null) {{ {arg_name} = {default_val}; }}")
         # For constructors in subclasses, emit super() first
         if name == "constructor" and self.class_has_base:
             # Find and emit super() call first, or add one if missing
@@ -110,12 +120,25 @@ class JSTranspiler(ast.NodeVisitor):
                 else:
                     other_stmts.append(stmt)
             if super_stmt:
-                self.visit(super_stmt)
+                # Check if super() args reference self - if so, we need to emit super() first
+                # then the assignments, then update message if needed
+                call = super_stmt.value
+                super_args = call.args
+                args_use_self = any(
+                    "self" in ast.dump(arg) for arg in super_args
+                )
+                if args_use_self:
+                    # Emit super() with no args first
+                    self.emit("super();")
+                else:
+                    self.visit(super_stmt)
             else:
                 self.emit("super();")
+            emit_defaults()  # After super() for constructors
             for stmt in other_stmts:
                 self.visit(stmt)
         else:
+            emit_defaults()  # At start for regular methods
             for stmt in node.body:
                 self.visit(stmt)
         self.in_class_body = old_in_class
@@ -316,7 +339,11 @@ class JSTranspiler(ast.NodeVisitor):
         return f"{value}[{self.visit_expr(node.slice)}]"
 
     def visit_expr_Call(self, node: ast.Call) -> str:
-        args = ", ".join(self.visit_expr(a) for a in node.args)
+        # Combine positional and keyword args (JS doesn't have kwargs, so treat as positional)
+        all_args = [self.visit_expr(a) for a in node.args]
+        for kw in node.keywords:
+            all_args.append(self.visit_expr(kw.value))
+        args = ", ".join(all_args)
         # Handle method calls
         if isinstance(node.func, ast.Attribute):
             # Special case: super().__init__(args) -> super(args)
@@ -351,6 +378,12 @@ class JSTranspiler(ast.NodeVisitor):
                 return f"/^[a-zA-Z0-9]$/.test({obj})"
             if method == "isspace":
                 return f"/^\\s$/.test({obj})"
+            # Handle str.encode() - returns array of byte values
+            if method == "encode":
+                return f"Array.from(new TextEncoder().encode({obj}))"
+            # Handle bytes.decode() - converts byte array to string
+            if method == "decode":
+                return f"new TextDecoder().decode(new Uint8Array({obj}))"
             # Handle dict.get(key) and dict.get(key, default)
             if method == "get":
                 if len(node.args) >= 2:

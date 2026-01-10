@@ -39,6 +39,8 @@ class Word(Node):
             value = self._expand_ansi_c_escapes(value)
         # Format command substitutions with oracle pretty-printing (before escaping)
         value = self._format_command_substitutions(value)
+        # Strip line continuations (backslash-newline) from arithmetic expressions
+        value = self._strip_arith_line_continuations(value)
         # Escape backslashes for s-expression output (but not in ANSI-C strings - already handled)
         if not is_ansi_c:
             value = value.replace("\\", "\\\\")
@@ -158,6 +160,40 @@ class Word(Node):
                 result.append(inner[i])
                 i += 1
         return "'" + "".join(result) + "'"
+
+    def _strip_arith_line_continuations(self, value: str) -> str:
+        """Strip backslash-newline (line continuation) from inside $((...))."""
+        result = []
+        i = 0
+        while i < len(value):
+            # Check for $(( arithmetic expression
+            if value[i : i + 3] == "$((":
+                # Find matching ))
+                start = i
+                i += 3
+                depth = 1
+                arith_content = []
+                while i < len(value) and depth > 0:
+                    if value[i : i + 2] == "((":
+                        arith_content.append("((")
+                        depth += 1
+                        i += 2
+                    elif value[i : i + 2] == "))":
+                        depth -= 1
+                        if depth > 0:
+                            arith_content.append("))")
+                        i += 2
+                    elif value[i] == "\\" and i + 1 < len(value) and value[i + 1] == "\n":
+                        # Skip backslash-newline (line continuation)
+                        i += 2
+                    else:
+                        arith_content.append(value[i])
+                        i += 1
+                result.append("$((" + "".join(arith_content) + "))")
+            else:
+                result.append(value[i])
+                i += 1
+        return "".join(result)
 
     def _format_command_substitutions(self, value: str) -> str:
         """Replace $(...) and >(...) / <(...) with oracle-formatted AST output."""
@@ -697,8 +733,9 @@ class Case(Node):
         self.redirects = redirects or []
 
     def to_sexp(self) -> str:
-        inner = " ".join(p.to_sexp() for p in self.patterns)
-        base = f"(case {self.word.to_sexp()} {inner})"
+        parts = [f"(case {self.word.to_sexp()}"]
+        parts.extend(p.to_sexp() for p in self.patterns)
+        base = " ".join(parts) + ")"
         if self.redirects:
             return base + " " + " ".join(r.to_sexp() for r in self.redirects)
         return base

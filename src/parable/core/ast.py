@@ -278,10 +278,40 @@ class Word(Node):
                 i += 1
         return "".join(result)
 
+    def _collect_cmdsubs(self, node) -> list:
+        """Recursively collect CommandSubstitution nodes from an AST node."""
+        result = []
+        if isinstance(node, CommandSubstitution):
+            result.append(node)
+        elif hasattr(node, "expression") and node.expression is not None:
+            # ArithmeticExpansion, ArithBinaryOp, etc.
+            result.extend(self._collect_cmdsubs(node.expression))
+        if hasattr(node, "left"):
+            result.extend(self._collect_cmdsubs(node.left))
+        if hasattr(node, "right"):
+            result.extend(self._collect_cmdsubs(node.right))
+        if hasattr(node, "operand"):
+            result.extend(self._collect_cmdsubs(node.operand))
+        if hasattr(node, "condition"):
+            result.extend(self._collect_cmdsubs(node.condition))
+        if hasattr(node, "true_value"):
+            result.extend(self._collect_cmdsubs(node.true_value))
+        if hasattr(node, "false_value"):
+            result.extend(self._collect_cmdsubs(node.false_value))
+        return result
+
     def _format_command_substitutions(self, value: str) -> str:
         """Replace $(...) and >(...) / <(...) with oracle-formatted AST output."""
-        cmdsub_parts = [p for p in self.parts if isinstance(p, CommandSubstitution)]
-        procsub_parts = [p for p in self.parts if isinstance(p, ProcessSubstitution)]
+        # Collect command substitutions from all parts, including nested ones
+        cmdsub_parts = []
+        procsub_parts = []
+        for p in self.parts:
+            if isinstance(p, CommandSubstitution):
+                cmdsub_parts.append(p)
+            elif isinstance(p, ProcessSubstitution):
+                procsub_parts.append(p)
+            else:
+                cmdsub_parts.extend(self._collect_cmdsubs(p))
         if not cmdsub_parts and not procsub_parts:
             return value
         result = []
@@ -289,8 +319,8 @@ class Word(Node):
         cmdsub_idx = 0
         procsub_idx = 0
         while i < len(value):
-            # Check for $( command substitution
-            if value[i : i + 2] == "$(" and cmdsub_idx < len(cmdsub_parts):
+            # Check for $( command substitution (but not $(( arithmetic)
+            if value[i : i + 2] == "$(" and value[i : i + 3] != "$((" and cmdsub_idx < len(cmdsub_parts):
                 # Find matching close paren using bash-aware matching
                 j = _find_cmdsub_end(value, i + 2)
                 # Format this command substitution
@@ -1608,7 +1638,9 @@ def _format_cmdsub_node(node: Node, indent: int = 0) -> str:
 def _format_redirect(r: "Redirect | HereDoc") -> str:
     """Format a redirect for command substitution output."""
     if isinstance(r, HereDoc):
-        return f"<< {r.delimiter}"
+        # Include heredoc content: <<DELIM\ncontent\nDELIM\n
+        op = "<<-" if r.strip_tabs else "<<"
+        return f"{op}{r.delimiter}\n{r.content}{r.delimiter}\n"
     return f"{r.op} {r.target.value}"
 
 

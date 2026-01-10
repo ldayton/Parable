@@ -202,6 +202,7 @@ class Parser:
         chars = []
         parts = []
         bracket_depth = 0  # Track [...] for array subscripts
+        seen_equals = False  # Track if we've seen = (for array assignment detection)
 
         while not self.at_end():
             ch = self.peek()
@@ -210,7 +211,8 @@ class Parser:
             # Inside brackets, metacharacters like | and ( are literal
             # Only track [ after we've seen some chars (so [ -f file ] still works)
             # Only at command start (array assignments), not in argument position
-            if ch == "[" and chars and at_command_start:
+            # Only BEFORE = sign (key=1],a[1 should not track the [1 part)
+            if ch == "[" and chars and at_command_start and not seen_equals:
                 bracket_depth += 1
                 chars.append(self.advance())
                 continue
@@ -218,6 +220,8 @@ class Parser:
                 bracket_depth -= 1
                 chars.append(self.advance())
                 continue
+            if ch == "=" and bracket_depth == 0:
+                seen_equals = True
 
             # Single-quoted string - no expansion
             if ch == "'":

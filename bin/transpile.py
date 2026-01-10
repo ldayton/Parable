@@ -371,7 +371,6 @@ class JSTranspiler(ast.NodeVisitor):
                 "startswith": "startsWith",
                 "endswith": "endsWith",
                 "strip": "trim",
-                "lstrip": "trimStart",
                 "rstrip": "trimEnd",
                 "lower": "toLowerCase",
                 "upper": "toUpperCase",
@@ -389,6 +388,12 @@ class JSTranspiler(ast.NodeVisitor):
                 return f"/^[a-zA-Z0-9]$/.test({obj})"
             if method == "isspace":
                 return f"/^\\s$/.test({obj})"
+            # Handle lstrip with character set argument
+            if method == "lstrip":
+                if len(node.args) == 1:
+                    chars = self.visit_expr(node.args[0])
+                    return f'{obj}.replace(new RegExp("^[" + {chars} + "]+"), "")'
+                return f"{obj}.trimStart()"
             # Handle str.encode() - returns array of byte values
             if method == "encode":
                 return f"Array.from(new TextEncoder().encode({obj}))"

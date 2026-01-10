@@ -747,7 +747,9 @@ class Word extends Node {
 					result.push("${ }");
 				} else {
 					try {
-						var parser = Parser(inner.trimStart(" |"));
+						var parser = Parser(
+							inner.replace(new RegExp("^[" + " |" + "]+"), ""),
+						);
 						var parsed = parser.parseList();
 						if (parsed) {
 							formatted = FormatCmdsubNode(parsed);
@@ -1058,7 +1060,7 @@ class Redirect extends Node {
 	}
 
 	toSexp() {
-		var op = this.op.trimStart("0123456789");
+		var op = this.op.replace(new RegExp("^[" + "0123456789" + "]+"), "");
 		if (op.startsWith("{")) {
 			var j = 1;
 			if (j < op.length && (/^[a-zA-Z]$/.test(op[j]) || op[j] === "_")) {
@@ -2687,7 +2689,7 @@ function SkipHeredoc(value, start) {
 		}
 		var line = Substring(value, line_start, line_end);
 		if (start + 2 < value.length && value[start + 2] === "-") {
-			var stripped = line.trimStart("\t");
+			var stripped = line.replace(new RegExp("^[" + "\t" + "]+"), "");
 		} else {
 			stripped = line;
 		}
@@ -3635,7 +3637,10 @@ class Parser {
 						}
 						var line = Substring(this.source, line_start, line_end);
 						this.pos = line_end;
-						if (line === delimiter || line.trimStart("\t") === delimiter) {
+						if (
+							line === delimiter ||
+							line.replace(new RegExp("^[" + "\t" + "]+"), "") === delimiter
+						) {
 							if (!this.atEnd() && this.peek() === "\n") {
 								this.advance();
 							}
@@ -5702,13 +5707,13 @@ class Parser {
 			}
 			var check_line = line;
 			if (strip_tabs) {
-				check_line = line.trimStart("\t");
+				check_line = line.replace(new RegExp("^[" + "\t" + "]+"), "");
 			}
 			if (check_line === delimiter) {
 				break;
 			}
 			if (strip_tabs) {
-				line = line.trimStart("\t");
+				line = line.replace(new RegExp("^[" + "\t" + "]+"), "");
 			}
 			content_lines.push(line + "\n");
 			if (line_end < this.length) {

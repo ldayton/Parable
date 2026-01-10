@@ -20,7 +20,9 @@ class Word(Node):
     def __init__(self, value: str, parts: list[Node] = None):
         self.kind = "word"
         self.value = value
-        self.parts = parts or []
+        if parts is None:
+            parts = []
+        self.parts = parts
 
     def to_sexp(self) -> str:
         value = self.value
@@ -480,23 +482,32 @@ class Word(Node):
     def _collect_cmdsubs(self, node) -> list:
         """Recursively collect CommandSubstitution nodes from an AST node."""
         result = []
-        if hasattr(node, "kind") and node.kind == "cmdsub":
+        node_kind = getattr(node, "kind", None)
+        if node_kind == "cmdsub":
             result.append(node)
-        elif hasattr(node, "expression") and node.expression is not None:
-            # ArithmeticExpansion, ArithBinaryOp, etc.
-            result.extend(self._collect_cmdsubs(node.expression))
-        if hasattr(node, "left"):
-            result.extend(self._collect_cmdsubs(node.left))
-        if hasattr(node, "right"):
-            result.extend(self._collect_cmdsubs(node.right))
-        if hasattr(node, "operand"):
-            result.extend(self._collect_cmdsubs(node.operand))
-        if hasattr(node, "condition"):
-            result.extend(self._collect_cmdsubs(node.condition))
-        if hasattr(node, "true_value"):
-            result.extend(self._collect_cmdsubs(node.true_value))
-        if hasattr(node, "false_value"):
-            result.extend(self._collect_cmdsubs(node.false_value))
+        else:
+            expr = getattr(node, "expression", None)
+            if expr is not None:
+                # ArithmeticExpansion, ArithBinaryOp, etc.
+                result.extend(self._collect_cmdsubs(expr))
+        left = getattr(node, "left", None)
+        if left is not None:
+            result.extend(self._collect_cmdsubs(left))
+        right = getattr(node, "right", None)
+        if right is not None:
+            result.extend(self._collect_cmdsubs(right))
+        operand = getattr(node, "operand", None)
+        if operand is not None:
+            result.extend(self._collect_cmdsubs(operand))
+        condition = getattr(node, "condition", None)
+        if condition is not None:
+            result.extend(self._collect_cmdsubs(condition))
+        true_value = getattr(node, "true_value", None)
+        if true_value is not None:
+            result.extend(self._collect_cmdsubs(true_value))
+        false_value = getattr(node, "false_value", None)
+        if false_value is not None:
+            result.extend(self._collect_cmdsubs(false_value))
         return result
 
     def _format_command_substitutions(self, value: str) -> str:
@@ -621,7 +632,9 @@ class Command(Node):
     def __init__(self, words: list[Word], redirects: list[Node] = None):
         self.kind = "command"
         self.words = words
-        self.redirects = redirects or []
+        if redirects is None:
+            redirects = []
+        self.redirects = redirects
 
     def to_sexp(self) -> str:
         parts = []
@@ -952,7 +965,9 @@ class If(Node):
         self.condition = condition
         self.then_body = then_body
         self.else_body = else_body
-        self.redirects = redirects or []
+        if redirects is None:
+            redirects = []
+        self.redirects = redirects
 
     def to_sexp(self) -> str:
         result = "(if " + self.condition.to_sexp() + " " + self.then_body.to_sexp()
@@ -975,7 +990,9 @@ class While(Node):
         self.kind = "while"
         self.condition = condition
         self.body = body
-        self.redirects = redirects or []
+        if redirects is None:
+            redirects = []
+        self.redirects = redirects
 
     def to_sexp(self) -> str:
         base = "(while " + self.condition.to_sexp() + " " + self.body.to_sexp() + ")"
@@ -998,7 +1015,9 @@ class Until(Node):
         self.kind = "until"
         self.condition = condition
         self.body = body
-        self.redirects = redirects or []
+        if redirects is None:
+            redirects = []
+        self.redirects = redirects
 
     def to_sexp(self) -> str:
         base = "(until " + self.condition.to_sexp() + " " + self.body.to_sexp() + ")"
@@ -1025,7 +1044,9 @@ class For(Node):
         self.var = var
         self.words = words
         self.body = body
-        self.redirects = redirects or []
+        if redirects is None:
+            redirects = []
+        self.redirects = redirects
 
     def to_sexp(self) -> str:
         # Oracle format: (for (word "var") (in (word "a") ...) body)
@@ -1081,7 +1102,9 @@ class ForArith(Node):
         self.cond = cond
         self.incr = incr
         self.body = body
-        self.redirects = redirects or []
+        if redirects is None:
+            redirects = []
+        self.redirects = redirects
 
     def to_sexp(self) -> str:
         # Oracle format: (arith-for (init (word "x")) (test (word "y")) (step (word "z")) body)
@@ -1133,7 +1156,9 @@ class Select(Node):
         self.var = var
         self.words = words
         self.body = body
-        self.redirects = redirects or []
+        if redirects is None:
+            redirects = []
+        self.redirects = redirects
 
     def to_sexp(self) -> str:
         # Oracle format: (select (word "var") (in (word "a") ...) body)
@@ -1179,7 +1204,9 @@ class Case(Node):
         self.kind = "case"
         self.word = word
         self.patterns = patterns
-        self.redirects = redirects or []
+        if redirects is None:
+            redirects = []
+        self.redirects = redirects
 
     def to_sexp(self) -> str:
         parts = []
@@ -1463,7 +1490,9 @@ class ArithmeticCommand(Node):
     ):
         self.kind = "arith-cmd"
         self.expression = expression
-        self.redirects = redirects or []
+        if redirects is None:
+            redirects = []
+        self.redirects = redirects
         self.raw_content = raw_content
 
     def to_sexp(self) -> str:
@@ -1784,12 +1813,15 @@ class ConditionalExpr(Node):
     def __init__(self, body: "Node | str", redirects: list[Node] = None):
         self.kind = "cond-expr"
         self.body = body
-        self.redirects = redirects or []
+        if redirects is None:
+            redirects = []
+        self.redirects = redirects
 
     def to_sexp(self) -> str:
         # Oracle format: (cond ...) not (cond-expr ...)
         # Redirects are siblings, not children: (cond ...) (redirect ...)
-        if not hasattr(self.body, "kind"):
+        body_kind = getattr(self.body, "kind", None)
+        if body_kind is None:
             # body is a string
             escaped = self.body.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
             result = '(cond "' + escaped + '")'

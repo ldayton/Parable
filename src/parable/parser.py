@@ -92,6 +92,7 @@ class Parser:
         self.source = source
         self.pos = 0
         self.length = len(source)
+        self._pending_heredoc_end = None
 
     def at_end(self) -> bool:
         """Check if we've reached the end of input."""
@@ -137,11 +138,11 @@ class Parser:
                 # After advancing past a newline, skip any pending heredoc content
                 if ch == "\n":
                     if (
-                        hasattr(self, "_pending_heredoc_end")
+                        self._pending_heredoc_end is not None
                         and self._pending_heredoc_end > self.pos
                     ):
                         self.pos = self._pending_heredoc_end
-                        del self._pending_heredoc_end
+                        self._pending_heredoc_end = None
             elif ch == "#":
                 # Skip comment to end of line
                 while not self.at_end() and self.peek() != "\n":
@@ -2594,7 +2595,7 @@ class Parser:
 
         # Find heredoc content starting position
         # If there's already a pending heredoc, this one's content starts after that
-        if hasattr(self, "_pending_heredoc_end") and self._pending_heredoc_end > line_end:
+        if self._pending_heredoc_end is not None and self._pending_heredoc_end > line_end:
             content_start = self._pending_heredoc_end
         elif line_end < self.length:
             content_start = line_end + 1  # skip the newline
@@ -2656,7 +2657,7 @@ class Parser:
             heredoc_end += 1  # past the newline
 
         # Register this heredoc's end position
-        if not hasattr(self, "_pending_heredoc_end"):
+        if self._pending_heredoc_end is None:
             self._pending_heredoc_end = heredoc_end
         else:
             self._pending_heredoc_end = max(self._pending_heredoc_end, heredoc_end)
@@ -4350,9 +4351,9 @@ class Parser:
                 has_newline = True
                 self.advance()
                 # Skip past any pending heredoc content after newline
-                if hasattr(self, "_pending_heredoc_end") and self._pending_heredoc_end > self.pos:
+                if self._pending_heredoc_end is not None and self._pending_heredoc_end > self.pos:
                     self.pos = self._pending_heredoc_end
-                    del self._pending_heredoc_end
+                    self._pending_heredoc_end = None
                 self.skip_whitespace()
 
             op = self.parse_list_operator()
@@ -4686,9 +4687,9 @@ class Parser:
                     break
                 self.advance()
                 # Skip past any pending heredoc content after newline
-                if hasattr(self, "_pending_heredoc_end") and self._pending_heredoc_end > self.pos:
+                if self._pending_heredoc_end is not None and self._pending_heredoc_end > self.pos:
                     self.pos = self._pending_heredoc_end
-                    del self._pending_heredoc_end
+                    self._pending_heredoc_end = None
                 self.skip_whitespace()
 
             # If we hit a newline and not treating them as separators, stop
@@ -4798,9 +4799,9 @@ class Parser:
                 found_newline = True
                 self.advance()
                 # Skip past any pending heredoc content after newline
-                if hasattr(self, "_pending_heredoc_end") and self._pending_heredoc_end > self.pos:
+                if self._pending_heredoc_end is not None and self._pending_heredoc_end > self.pos:
                     self.pos = self._pending_heredoc_end
-                    del self._pending_heredoc_end
+                    self._pending_heredoc_end = None
                 self.skip_whitespace()
 
             # If no newline and not at end, we have unparsed content

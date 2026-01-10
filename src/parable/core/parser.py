@@ -212,10 +212,13 @@ class Parser:
             # Only track [ after we've seen some chars (so [ -f file ] still works)
             # Only at command start (array assignments), not in argument position
             # Only BEFORE = sign (key=1],a[1 should not track the [1 part)
+            # Only after identifier char (not [[ which is conditional keyword)
             if ch == "[" and chars and at_command_start and not seen_equals:
-                bracket_depth += 1
-                chars.append(self.advance())
-                continue
+                prev_char = chars[-1]
+                if prev_char.isalnum() or prev_char in "_]":
+                    bracket_depth += 1
+                    chars.append(self.advance())
+                    continue
             if ch == "]" and bracket_depth > 0:
                 bracket_depth -= 1
                 chars.append(self.advance())
@@ -788,6 +791,21 @@ class Parser:
             return True
         prev = self.source[self.pos - 1]
         return prev in " \t\n;|&<>("
+
+    def _is_assignment_word(self, word: "Word") -> bool:
+        """Check if a word is an assignment (contains = outside of quotes)."""
+        in_single = False
+        in_double = False
+        for i, ch in enumerate(word.value):
+            if ch == "'" and not in_double:
+                in_single = not in_single
+            elif ch == '"' and not in_single:
+                in_double = not in_double
+            elif ch == "\\" and not in_single and i + 1 < len(word.value):
+                continue  # Skip next char
+            elif ch == "=" and not in_single and not in_double:
+                return True
+        return False
 
     def _lookahead_keyword(self, keyword: str) -> bool:
         """Check if keyword appears at current position followed by word boundary."""
@@ -2645,8 +2663,10 @@ class Parser:
                 continue
 
             # Otherwise parse a word
-            # First word is at command start (array assignments like a[1 + 2]= are allowed)
-            word = self.parse_word(at_command_start=not words)
+            # Allow array assignments like a[1 + 2]= in prefix position (before first non-assignment)
+            # Check if all previous words were assignments (contain = not inside quotes)
+            all_assignments = all(self._is_assignment_word(w) for w in words)
+            word = self.parse_word(at_command_start=not words or all_assignments)
             if word is None:
                 break
             words.append(word)

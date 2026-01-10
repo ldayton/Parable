@@ -98,7 +98,14 @@ class Word(Node):
                     while j < len(inner) and j < i + 4 and inner[j] in "0123456789abcdefABCDEF":
                         j += 1
                     if j > i + 2:
-                        result.append(chr(int(inner[i + 2 : j], 16)))
+                        byte_val = int(inner[i + 2 : j], 16)
+                        if byte_val == 0:
+                            pass  # Skip NUL
+                        elif byte_val < 128:
+                            result.append(chr(byte_val))
+                        else:
+                            # Bytes >= 128 are not valid standalone UTF-8, use replacement char
+                            result.append("\ufffd")
                         i = j
                     else:
                         result.append(inner[i])
@@ -124,10 +131,14 @@ class Word(Node):
                         result.append(inner[i])
                         i += 1
                 elif c == "c":
-                    # Control character \cX
+                    # Control character \cX - mask with 0x1f
                     if i + 3 <= len(inner):
                         ctrl_char = inner[i + 2]
-                        result.append(chr(ord(ctrl_char.upper()) - ord("@")))
+                        ctrl_val = ord(ctrl_char) & 0x1F
+                        if ctrl_val == 0:
+                            pass  # Skip NUL
+                        else:
+                            result.append(chr(ctrl_val))
                         i += 3
                     else:
                         result.append(inner[i])
@@ -150,7 +161,14 @@ class Word(Node):
                     j = i + 1
                     while j < len(inner) and j < i + 4 and inner[j] in "01234567":
                         j += 1
-                    result.append(chr(int(inner[i + 1 : j], 8)))
+                    byte_val = int(inner[i + 1 : j], 8)
+                    if byte_val == 0:
+                        pass  # Skip NUL
+                    elif byte_val < 128:
+                        result.append(chr(byte_val))
+                    else:
+                        # Bytes >= 128 are not valid standalone UTF-8, use replacement char
+                        result.append("\ufffd")
                     i = j
                 else:
                     # Unknown escape - preserve as-is
@@ -968,17 +986,36 @@ class CasePattern(Node):
                 if i < len(self.pattern) and self.pattern[i] in "!^":
                     current.append(self.pattern[i])
                     i += 1
-                # Handle ] as first char (literal)
+                # Handle ] as first char (literal) - but only if followed by more content
+                # For [] (empty bracket), the ] closes immediately, not literal
+                # For []] the first ] is literal, second ] closes
                 if i < len(self.pattern) and self.pattern[i] == "]":
-                    current.append(self.pattern[i])
-                    i += 1
-                # Consume until closing ]
-                while i < len(self.pattern) and self.pattern[i] != "]":
-                    current.append(self.pattern[i])
-                    i += 1
-                if i < len(self.pattern):
-                    current.append(self.pattern[i])  # ]
-                    i += 1
+                    # Check if char after this ] is also ] or if there's more content
+                    # Only treat as literal if there's more content before closing ]
+                    if i + 1 < len(self.pattern) and self.pattern[i + 1] not in "|)":
+                        current.append(self.pattern[i])
+                        i += 1
+                # Consume until closing ] (tracking nested brackets)
+                bracket_depth = 0
+                while i < len(self.pattern):
+                    c = self.pattern[i]
+                    if c == "[":
+                        bracket_depth += 1
+                        current.append(c)
+                        i += 1
+                    elif c == "]":
+                        if bracket_depth > 0:
+                            bracket_depth -= 1
+                            current.append(c)
+                            i += 1
+                        else:
+                            # Found closing bracket
+                            current.append(c)
+                            i += 1
+                            break
+                    else:
+                        current.append(c)
+                        i += 1
             elif ch == "'" and depth == 0:
                 # Single-quoted string - consume until closing '
                 current.append(ch)

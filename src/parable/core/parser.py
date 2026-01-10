@@ -3960,12 +3960,16 @@ class Parser:
                     is_char_class = False
                     scan_pos = self.pos + 1
                     scan_depth = 0
+                    has_first_bracket_literal = False
                     # Skip [! or [^ at start
                     if scan_pos < self.length and self.source[scan_pos] in "!^":
                         scan_pos += 1
-                    # Skip ] as first char (literal in char class)
+                    # Skip ] as first char (literal in char class) only if there's another ]
                     if scan_pos < self.length and self.source[scan_pos] == "]":
-                        scan_pos += 1
+                        # Check if there's another ] later
+                        if "]" in self.source[scan_pos + 1 :]:
+                            scan_pos += 1
+                            has_first_bracket_literal = True
                     while scan_pos < self.length:
                         sc = self.source[scan_pos]
                         if sc == "]" and scan_depth == 0:
@@ -3985,8 +3989,8 @@ class Parser:
                         # Handle [! or [^ at start
                         if not self.at_end() and self.peek() in "!^":
                             pattern_chars.append(self.advance())
-                        # Handle ] as first char (literal)
-                        if not self.at_end() and self.peek() == "]":
+                        # Handle ] as first char (literal) only if we detected it in scan
+                        if has_first_bracket_literal and not self.at_end() and self.peek() == "]":
                             pattern_chars.append(self.advance())
                         # Consume until closing ]
                         while not self.at_end() and self.peek() != "]":

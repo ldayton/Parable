@@ -1,14 +1,14 @@
 <div align="center">
 <pre>
-     ////        \\\\                         The wind blows where it wishes,
-      ////              \\\\                          and you hear its sound,
-  --------////  <strong>P A R A B L E</strong>  \\\\--------      but you do not know where it
-        \\\\         ////                        comes from or where it goes.
-     \\\\        ////                                              — John 3:8
+   ////        \\\\                         The wind blows where it wishes,
+    ////              \\\\                          and you hear its sound,
+--------////  <strong>P A R A B L E</strong>  \\\\--------      but you do not know where it
+      \\\\         ////                        comes from or where it goes.
+   \\\\        ////                                              — John 3:8
 </pre>
 </div>
 
-Parse bash exactly as bash does. Pure Python, zero dependencies. This is the only complete bash parser for Python. Extensively validated against bash itself.
+Parse bash exactly as bash does. Pure Python, zero dependencies, zero imports. This is the only complete bash parser for Python. Extensively validated against bash itself.
 
 ---
 
@@ -149,10 +149,9 @@ just lint  # Check linting with ruff
 ```
 src/parable/
 ├── __init__.py        # parse() entry point
-└── core/
-    ├── ast.py         # AST node definitions
-    ├── errors.py      # ParseError
-    └── parser.py      # Recursive descent parser
+├── ast.py             # AST node definitions
+├── errors.py          # ParseError
+└── parser.py          # Recursive descent parser
 
 tests/
 ├── *.tests                      # Test cases in custom format

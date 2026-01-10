@@ -38,9 +38,8 @@ class Word(Node):
             value = self._expand_ansi_c_escapes(value)
         # Format command substitutions with oracle pretty-printing (before escaping)
         value = self._format_command_substitutions(value)
-        # Escape backslashes for s-expression output (but not in ANSI-C strings)
-        if not is_ansi_c:
-            value = value.replace("\\", "\\\\")
+        # Escape backslashes for s-expression output
+        value = value.replace("\\", "\\\\")
         # Escape double quotes, newlines, and tabs
         escaped = value.replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
         return f'(word "{escaped}")'
@@ -80,11 +79,11 @@ class Word(Node):
                     result.append("\v")
                     i += 2
                 elif c == "\\":
-                    result.append("\\")
+                    result.append("\\\\")  # One backslash doubled for sexp
                     i += 2
                 elif c == "'":
-                    # Oracle outputs \' as '\\''
-                    result.append("'\\''")
+                    # Oracle outputs \' as '\\'' (shell quoting trick, with backslash doubled for sexp)
+                    result.append("'\\\\''")
                     i += 2
                 elif c == '"':
                     result.append('"')
@@ -150,8 +149,8 @@ class Word(Node):
                     result.append(chr(int(inner[i + 1 : j], 8)))
                     i = j
                 else:
-                    # Unknown escape - preserve as-is
-                    result.append("\\" + c)
+                    # Unknown escape - preserve as-is (backslash doubled for sexp)
+                    result.append("\\\\" + c)
                     i += 2
             else:
                 result.append(inner[i])
@@ -1473,7 +1472,7 @@ def _format_cmdsub_node(node: Node, indent: int = 0) -> str:
         return f"function {name} () \n{{ \n{inner_sp}{body}\n}}"
     if isinstance(node, Subshell):
         body = _format_cmdsub_node(node.body, indent)
-        return f"( {body} )"
+        return f"({body})"
     if isinstance(node, BraceGroup):
         body = _format_cmdsub_node(node.body, indent)
         body = body.rstrip(";")  # Strip trailing semicolons before adding our own

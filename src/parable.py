@@ -388,7 +388,7 @@ class Word(Node):
                 if brace_depth > 0 and expanded.startswith("'") and expanded.endswith("'"):
                     inner = _substring(expanded, 1, len(expanded) - 1)
                     # Only strip if non-empty, no CTLESC, and after a default value operator
-                    if inner and "\x01" not in inner:
+                    if inner and inner.find("\x01") == -1:
                         # Check what precedes - default value ops: :- := :+ :? - = + ?
                         prev = (
                             "".join(_sublist(result, len(result) - 2, len(result)))
@@ -4464,10 +4464,12 @@ class Parser:
         self.advance()  # consume opening '
 
         content_chars = []
+        found_close = False
         while not self.at_end():
             ch = self.peek()
             if ch == "'":
                 self.advance()  # consume closing '
+                found_close = True
                 break
             elif ch == "\\":
                 # Escape sequence - include both backslash and following char in content
@@ -4476,7 +4478,7 @@ class Parser:
                     content_chars.append(self.advance())  # escaped char
             else:
                 content_chars.append(self.advance())
-        else:
+        if not found_close:
             # Unterminated - reset and return None
             self.pos = start
             return None, ""
@@ -4505,11 +4507,13 @@ class Parser:
 
         content_chars = []
         inner_parts = []
+        found_close = False
 
         while not self.at_end():
             ch = self.peek()
             if ch == '"':
                 self.advance()  # consume closing "
+                found_close = True
                 break
             elif ch == "\\" and self.pos + 1 < self.length:
                 # Escape sequence (line continuation removes both)
@@ -4576,7 +4580,7 @@ class Parser:
                     content_chars.append(self.advance())
             else:
                 content_chars.append(self.advance())
-        else:
+        if not found_close:
             # Unterminated - reset and return None
             self.pos = start
             return None, "", []

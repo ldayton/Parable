@@ -1094,42 +1094,68 @@ class CasePattern(Node):
                 depth -= 1
                 i += 1
             elif ch == "[":
-                # Character class - consume until ]
-                current.append(ch)
-                i += 1
-                # Handle [! or [^ at start
-                if i < len(self.pattern) and self.pattern[i] in "!^":
-                    current.append(self.pattern[i])
+                # Character class - but only if there's a matching ]
+                # First scan to check if ] exists before ) at same depth
+                scan_pos = i + 1
+                # Skip [! or [^ at start
+                if scan_pos < len(self.pattern) and self.pattern[scan_pos] in "!^":
+                    scan_pos += 1
+                # Handle ] as first char - it's literal only if there's more content
+                # [] is a complete (empty) bracket, but []] has literal ] then closing ]
+                if scan_pos < len(self.pattern) and self.pattern[scan_pos] == "]":
+                    # Check if there's another ] after this one (making first ] literal)
+                    # but only within this pattern (stop at | or ) at depth 0)
+                    has_another_close = False
+                    for check_pos in range(scan_pos + 1, len(self.pattern)):
+                        if self.pattern[check_pos] == "]":
+                            has_another_close = True
+                            break
+                        if self.pattern[check_pos] in "|)" and depth == 0:
+                            break
+                    if has_another_close:
+                        scan_pos += 1  # Skip first ] as literal
+                is_char_class = False
+                while scan_pos < len(self.pattern):
+                    sc = self.pattern[scan_pos]
+                    if sc == "]":
+                        is_char_class = True
+                        break
+                    elif sc == ")" and depth == 0:
+                        # Hit pattern closer before ]
+                        break
+                    scan_pos += 1
+                if not is_char_class:
+                    # No matching ], treat [ as literal
+                    current.append(ch)
                     i += 1
-                # Handle ] as first char (literal) - but only if followed by more content
-                # For [] (empty bracket), the ] closes immediately, not literal
-                # For []] the first ] is literal, second ] closes
-                if i < len(self.pattern) and self.pattern[i] == "]":
-                    # Check if char after this ] is also ] or if there's more content
-                    # Only treat as literal if there's more content before closing ]
-                    if i + 1 < len(self.pattern) and self.pattern[i + 1] not in "|)":
+                else:
+                    # Valid character class - consume until ]
+                    current.append(ch)
+                    i += 1
+                    # Handle [! or [^ at start
+                    if i < len(self.pattern) and self.pattern[i] in "!^":
                         current.append(self.pattern[i])
                         i += 1
-                # Consume until closing ] (tracking nested brackets)
-                bracket_depth = 0
-                while i < len(self.pattern):
-                    c = self.pattern[i]
-                    if c == "[":
-                        bracket_depth += 1
-                        current.append(c)
+                    # Handle ] as first char - only literal if there's another ]
+                    # within this pattern (before | at depth 0)
+                    if i < len(self.pattern) and self.pattern[i] == "]":
+                        # Check if there's another ] to close (making this one literal)
+                        has_another = False
+                        for check_pos in range(i + 1, len(self.pattern)):
+                            if self.pattern[check_pos] == "]":
+                                has_another = True
+                                break
+                            if self.pattern[check_pos] in "|)" and depth == 0:
+                                break
+                        if has_another:
+                            current.append(self.pattern[i])
+                            i += 1
+                    # Consume until closing ]
+                    while i < len(self.pattern) and self.pattern[i] != "]":
+                        current.append(self.pattern[i])
                         i += 1
-                    elif c == "]":
-                        if bracket_depth > 0:
-                            bracket_depth -= 1
-                            current.append(c)
-                            i += 1
-                        else:
-                            # Found closing bracket
-                            current.append(c)
-                            i += 1
-                            break
-                    else:
-                        current.append(c)
+                    if i < len(self.pattern):
+                        current.append(self.pattern[i])  # ]
                         i += 1
             elif ch == "'" and depth == 0:
                 # Single-quoted string - consume until closing '

@@ -1652,6 +1652,9 @@ def _format_redirect(r: "Redirect | HereDoc") -> str:
         # Include heredoc content: <<DELIM\ncontent\nDELIM\n
         op = "<<-" if r.strip_tabs else "<<"
         return f"{op}{r.delimiter}\n{r.content}{r.delimiter}\n"
+    # For fd duplication (target starts with &), no space between op and target
+    if r.target.value.startswith("&"):
+        return f"{r.op}{r.target.value}"
     return f"{r.op} {r.target.value}"
 
 

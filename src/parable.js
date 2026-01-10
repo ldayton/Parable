@@ -751,7 +751,7 @@ class Word extends Node {
 					result.push("${ }");
 				} else {
 					try {
-						var parser = Parser(
+						var parser = new Parser(
 							inner.replace(new RegExp("^[" + " |" + "]+"), ""),
 						);
 						var parsed = parser.parseList();

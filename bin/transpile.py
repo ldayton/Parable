@@ -14,7 +14,8 @@ class JSTranspiler(ast.NodeVisitor):
         self.in_method = False
         self.class_has_base = False
         self.declared_vars = set()
-        self.class_names = set()
+        # Pre-populate with known class names (needed for forward references)
+        self.class_names = {"Parser", "Word", "ParseError"}
 
     def emit(self, text: str):
         self.output.append("    " * self.indent + text)

@@ -33,7 +33,7 @@ Banned constructions:
     or-default            x or []                   if x is None: x = []
     reversed              reversed(lst)             reverse index loop
     set comprehension     {x for x in items}        explicit loop
-    slicing               a[1:3], a[::2]            explicit index math
+    step slicing          a[::2], a[1:10:2]         explicit index math
     star unpacking        a, *rest = lst            manual indexing
     tuple unpacking       a, b = b, a               use temp variable
     walrus operator       if (x := foo()):          assign, then test
@@ -183,10 +183,11 @@ def check_file(filepath):
             if isinstance(node.func, ast.Name) and node.func.id == "isinstance":
                 errors.append((lineno, "isinstance: use .kind field check instead"))
 
-        # slicing
+        # step slicing (basic slicing a[x:y] is allowed, step slicing a[::n] is not)
         if isinstance(node, ast.Subscript):
             if isinstance(node.slice, ast.Slice):
-                errors.append((lineno, "slicing: use explicit index math instead"))
+                if node.slice.step is not None:
+                    errors.append((lineno, "step slicing: use explicit index math instead"))
 
         # negative indexing
         if isinstance(node, ast.Subscript):

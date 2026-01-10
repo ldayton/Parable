@@ -87,34 +87,17 @@ def _is_whitespace_no_newline(c: str) -> bool:
 
 def _substring(s: str, start: int, end: int) -> str:
     """Extract substring from start to end (exclusive)."""
-    result = []
-    i = start
-    while i < end and i < len(s):
-        result.append(s[i])
-        i += 1
-    return "".join(result)
+    return s[start:end]
 
 
 def _starts_with_at(s: str, pos: int, prefix: str) -> bool:
     """Check if s starts with prefix at position pos."""
-    if pos + len(prefix) > len(s):
-        return False
-    i = 0
-    while i < len(prefix):
-        if s[pos + i] != prefix[i]:
-            return False
-        i += 1
-    return True
+    return s.startswith(prefix, pos)
 
 
 def _sublist(lst: list, start: int, end: int) -> list:
     """Extract sublist from start to end (exclusive)."""
-    result = []
-    i = start
-    while i < end and i < len(lst):
-        result.append(lst[i])
-        i += 1
-    return result
+    return lst[start:end]
 
 
 class Node:

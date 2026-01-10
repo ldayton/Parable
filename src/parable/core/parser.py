@@ -2478,12 +2478,11 @@ class Parser:
         """Parse a here document <<DELIM ... DELIM."""
         self.skip_whitespace()
 
-        # Parse the delimiter, handling quoting
+        # Parse the delimiter, handling quoting (can be mixed like 'EOF'"2")
         quoted = False
         delimiter_chars = []
 
-        # Check for quoting of delimiter
-        if not self.at_end():
+        while not self.at_end() and self.peek() not in " \t\n;|&<>()":
             ch = self.peek()
             if ch == '"':
                 quoted = True
@@ -2491,22 +2490,25 @@ class Parser:
                 while not self.at_end() and self.peek() != '"':
                     delimiter_chars.append(self.advance())
                 if not self.at_end():
-                    self.advance()  # closing "
+                    self.advance()
             elif ch == "'":
                 quoted = True
                 self.advance()
                 while not self.at_end() and self.peek() != "'":
                     delimiter_chars.append(self.advance())
                 if not self.at_end():
-                    self.advance()  # closing '
+                    self.advance()
             elif ch == "\\":
                 quoted = True
-                self.advance()  # skip backslash
-                # Read unquoted delimiter
-                while not self.at_end() and self.peek() not in " \t\n;|&<>()":
+                self.advance()
+                if not self.at_end():
                     delimiter_chars.append(self.advance())
-            elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
-                # Command substitution as delimiter: $(...)
+            elif (
+                ch == "$"
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "("
+            ):
+                # Command substitution embedded in delimiter
                 delimiter_chars.append(self.advance())  # $
                 delimiter_chars.append(self.advance())  # (
                 depth = 1
@@ -2518,46 +2520,7 @@ class Parser:
                         depth -= 1
                     delimiter_chars.append(self.advance())
             else:
-                # Unquoted delimiter - but check for partial quoting and command subs
-                while not self.at_end() and self.peek() not in " \t\n;|&<>()":
-                    ch = self.peek()
-                    if ch == '"':
-                        quoted = True
-                        self.advance()
-                        while not self.at_end() and self.peek() != '"':
-                            delimiter_chars.append(self.advance())
-                        if not self.at_end():
-                            self.advance()
-                    elif ch == "'":
-                        quoted = True
-                        self.advance()
-                        while not self.at_end() and self.peek() != "'":
-                            delimiter_chars.append(self.advance())
-                        if not self.at_end():
-                            self.advance()
-                    elif ch == "\\":
-                        quoted = True
-                        self.advance()
-                        if not self.at_end():
-                            delimiter_chars.append(self.advance())
-                    elif (
-                        ch == "$"
-                        and self.pos + 1 < self.length
-                        and self.source[self.pos + 1] == "("
-                    ):
-                        # Command substitution embedded in delimiter
-                        delimiter_chars.append(self.advance())  # $
-                        delimiter_chars.append(self.advance())  # (
-                        depth = 1
-                        while not self.at_end() and depth > 0:
-                            c = self.peek()
-                            if c == "(":
-                                depth += 1
-                            elif c == ")":
-                                depth -= 1
-                            delimiter_chars.append(self.advance())
-                    else:
-                        delimiter_chars.append(self.advance())
+                delimiter_chars.append(self.advance())
 
         delimiter = "".join(delimiter_chars)
 

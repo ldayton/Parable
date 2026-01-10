@@ -39,11 +39,23 @@ class Word(Node):
         value = self._format_command_substitutions(value)
         # Strip line continuations (backslash-newline) from arithmetic expressions
         value = self._strip_arith_line_continuations(value)
+        # Strip unprintable control characters (0x00-0x1f except \t and \n)
+        value = self._strip_control_chars(value)
         # Escape backslashes for s-expression output
         value = value.replace("\\", "\\\\")
         # Escape double quotes, newlines, and tabs
         escaped = value.replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
         return f'(word "{escaped}")'
+
+    def _strip_control_chars(self, value: str) -> str:
+        """Strip unprintable control characters (0x00-0x1f except tab and newline)."""
+        result = []
+        for ch in value:
+            code = ord(ch)
+            if code < 0x20 and code not in (0x09, 0x0A):  # Keep \t and \n
+                continue  # Skip control char
+            result.append(ch)
+        return "".join(result)
 
     def _expand_ansi_c_escapes(self, value: str) -> str:
         """Expand ANSI-C escape sequences in $'...' strings.
@@ -103,29 +115,41 @@ class Word(Node):
                         j += 1
                     if j > i + 2:
                         byte_val = int(inner[i + 2 : j], 16)
-                        if byte_val != 0:  # Skip NUL
-                            result.append(byte_val)
+                        if byte_val == 0:
+                            # NUL truncates string
+                            return "'" + result.decode("utf-8", errors="replace") + "'"
+                        result.append(byte_val)
                         i = j
                     else:
                         result.append(ord(inner[i]))
                         i += 1
                 elif c == "u":
-                    # Unicode escape \uHHHH (4 hex digits) - encode as UTF-8
-                    if i + 6 <= len(inner) and all(
-                        x in "0123456789abcdefABCDEF" for x in inner[i + 2 : i + 6]
-                    ):
-                        result.extend(chr(int(inner[i + 2 : i + 6], 16)).encode("utf-8"))
-                        i += 6
+                    # Unicode escape \uHHHH (1-4 hex digits) - encode as UTF-8
+                    j = i + 2
+                    while j < len(inner) and j < i + 6 and inner[j] in "0123456789abcdefABCDEF":
+                        j += 1
+                    if j > i + 2:
+                        codepoint = int(inner[i + 2 : j], 16)
+                        if codepoint == 0:
+                            # NUL truncates string
+                            return "'" + result.decode("utf-8", errors="replace") + "'"
+                        result.extend(chr(codepoint).encode("utf-8"))
+                        i = j
                     else:
                         result.append(ord(inner[i]))
                         i += 1
                 elif c == "U":
-                    # Unicode escape \UHHHHHHHH (8 hex digits) - encode as UTF-8
-                    if i + 10 <= len(inner) and all(
-                        x in "0123456789abcdefABCDEF" for x in inner[i + 2 : i + 10]
-                    ):
-                        result.extend(chr(int(inner[i + 2 : i + 10], 16)).encode("utf-8"))
-                        i += 10
+                    # Unicode escape \UHHHHHHHH (1-8 hex digits) - encode as UTF-8
+                    j = i + 2
+                    while j < len(inner) and j < i + 10 and inner[j] in "0123456789abcdefABCDEF":
+                        j += 1
+                    if j > i + 2:
+                        codepoint = int(inner[i + 2 : j], 16)
+                        if codepoint == 0:
+                            # NUL truncates string
+                            return "'" + result.decode("utf-8", errors="replace") + "'"
+                        result.extend(chr(codepoint).encode("utf-8"))
+                        i = j
                     else:
                         result.append(ord(inner[i]))
                         i += 1
@@ -134,8 +158,10 @@ class Word(Node):
                     if i + 3 <= len(inner):
                         ctrl_char = inner[i + 2]
                         ctrl_val = ord(ctrl_char) & 0x1F
-                        if ctrl_val != 0:  # Skip NUL
-                            result.append(ctrl_val)
+                        if ctrl_val == 0:
+                            # NUL truncates string
+                            return "'" + result.decode("utf-8", errors="replace") + "'"
+                        result.append(ctrl_val)
                         i += 3
                     else:
                         result.append(ord(inner[i]))
@@ -147,18 +173,24 @@ class Word(Node):
                         j += 1
                     if j > i + 2:
                         byte_val = int(inner[i + 1 : j], 8)
-                        if byte_val != 0:  # Skip NUL
-                            result.append(byte_val)
-                    # If just \0, skip NUL
-                    i = j
+                        if byte_val == 0:
+                            # NUL truncates string
+                            return "'" + result.decode("utf-8", errors="replace") + "'"
+                        result.append(byte_val)
+                        i = j
+                    else:
+                        # Just \0 - NUL truncates string
+                        return "'" + result.decode("utf-8", errors="replace") + "'"
                 elif c in "1234567":
                     # Octal escape \NNN (1-3 digits) - raw byte
                     j = i + 1
                     while j < len(inner) and j < i + 4 and inner[j] in "01234567":
                         j += 1
                     byte_val = int(inner[i + 1 : j], 8)
-                    if byte_val != 0:  # Skip NUL
-                        result.append(byte_val)
+                    if byte_val == 0:
+                        # NUL truncates string
+                        return "'" + result.decode("utf-8", errors="replace") + "'"
+                    result.append(byte_val)
                     i = j
                 else:
                     # Unknown escape - preserve as-is
@@ -436,7 +468,12 @@ class Word(Node):
 
     def get_cond_formatted_value(self) -> str:
         """Return value with command substitutions formatted for cond-term output."""
-        value = self._format_command_substitutions(self.value)
+        # Expand ANSI-C quotes
+        value = self._expand_all_ansi_c_quotes(self.value)
+        # Format command substitutions
+        value = self._format_command_substitutions(value)
+        # Strip control characters
+        value = self._strip_control_chars(value)
         return value.rstrip("\n")
 
 
@@ -663,6 +700,9 @@ class Redirect(Node):
             else:
                 # Variable fd dup like >&$fd - strip the & from target
                 return f'(redirect "{op}" "{target_val[1:]}")'
+        # Handle case where op is already >& or <& and target is just a digit
+        if op in (">&", "<&") and target_val.isdigit():
+            return f'(redirect "{op}" {target_val})'
         return f'(redirect "{op}" "{target_val}")'
 
 

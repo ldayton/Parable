@@ -31,8 +31,8 @@ class Word(Node):
         value = self.value
         # Expand ALL $'...' ANSI-C quotes (handles escapes and strips $)
         value = self._expand_all_ansi_c_quotes(value)
-        # Strip $ from locale strings $"..."
-        value = re.sub(r"(^|[=(\"' \t])\$\"", r'\1"', value)
+        # Strip $ from locale strings $"..." (quote-aware)
+        value = self._strip_locale_string_dollars(value)
         # Normalize whitespace in array assignments: name=(a  b\tc) -> name=(a b c)
         value = self._normalize_array_whitespace(value)
         # Format command substitutions with oracle pretty-printing (before escaping)
@@ -165,10 +165,38 @@ class Word(Node):
         """Find and expand ALL $'...' ANSI-C quoted strings in value."""
         result = []
         i = 0
+        in_single_quote = False
+        in_double_quote = False
         while i < len(value):
-            # Check for $' start of ANSI-C string
-            if value[i : i + 2] == "$'":
-                # Find the matching closing quote (handling escapes)
+            ch = value[i]
+            # Track quote state to avoid matching $' inside regular quotes
+            if ch == "'" and not in_double_quote:
+                # Check if this is start of $'...' ANSI-C string
+                if not in_single_quote and i > 0 and value[i - 1] == "$":
+                    # This is handled below when we see $'
+                    result.append(ch)
+                    i += 1
+                elif in_single_quote:
+                    # End of single-quoted string
+                    in_single_quote = False
+                    result.append(ch)
+                    i += 1
+                else:
+                    # Start of regular single-quoted string
+                    in_single_quote = True
+                    result.append(ch)
+                    i += 1
+            elif ch == '"' and not in_single_quote:
+                in_double_quote = not in_double_quote
+                result.append(ch)
+                i += 1
+            elif ch == "\\" and in_double_quote and i + 1 < len(value):
+                # Escape in double quotes
+                result.append(ch)
+                result.append(value[i + 1])
+                i += 2
+            elif value[i : i + 2] == "$'" and not in_single_quote and not in_double_quote:
+                # ANSI-C quoted string - find matching closing quote
                 j = i + 2
                 while j < len(value):
                     if value[j] == "\\" and j + 1 < len(value):
@@ -185,7 +213,38 @@ class Word(Node):
                 result.append(expanded)
                 i = j
             else:
-                result.append(value[i])
+                result.append(ch)
+                i += 1
+        return "".join(result)
+
+    def _strip_locale_string_dollars(self, value: str) -> str:
+        """Strip $ from locale strings $"..." while tracking quote context."""
+        result = []
+        i = 0
+        in_single_quote = False
+        in_double_quote = False
+        while i < len(value):
+            ch = value[i]
+            if ch == "'" and not in_double_quote:
+                in_single_quote = not in_single_quote
+                result.append(ch)
+                i += 1
+            elif ch == '"' and not in_single_quote:
+                in_double_quote = not in_double_quote
+                result.append(ch)
+                i += 1
+            elif ch == "\\" and i + 1 < len(value):
+                # Escape - copy both chars
+                result.append(ch)
+                result.append(value[i + 1])
+                i += 2
+            elif value[i : i + 2] == '$"' and not in_single_quote and not in_double_quote:
+                # Locale string $"..." outside quotes - strip the $ and enter double quote
+                result.append('"')
+                in_double_quote = True
+                i += 2
+            else:
+                result.append(ch)
                 i += 1
         return "".join(result)
 
@@ -1089,8 +1148,13 @@ class ArithmeticCommand(Node):
 
     def to_sexp(self) -> str:
         # Oracle format: (arith (word "content"))
+        # Redirects are siblings: (arith (word "...")) (redirect ...)
         escaped = self.raw_content.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-        return f'(arith (word "{escaped}"))'
+        result = f'(arith (word "{escaped}"))'
+        if self.redirects:
+            redirect_sexps = " ".join(r.to_sexp() for r in self.redirects)
+            return f"{result} {redirect_sexps}"
+        return result
 
 
 # Arithmetic expression nodes
@@ -1368,6 +1432,9 @@ class Negation(Node):
         self.pipeline = pipeline
 
     def to_sexp(self) -> str:
+        if self.pipeline is None:
+            # Bare "!" with no command
+            return "(negation)"
         return f"(negation {self.pipeline.to_sexp()})"
 
 
@@ -1384,6 +1451,9 @@ class Time(Node):
         self.posix = posix
 
     def to_sexp(self) -> str:
+        if self.pipeline is None:
+            # Bare "time" with no command
+            return "(time -p)" if self.posix else "(time)"
         if self.posix:
             return f"(time -p {self.pipeline.to_sexp()})"
         return f"(time {self.pipeline.to_sexp()})"
@@ -1403,16 +1473,16 @@ class ConditionalExpr(Node):
 
     def to_sexp(self) -> str:
         # Oracle format: (cond ...) not (cond-expr ...)
+        # Redirects are siblings, not children: (cond ...) (redirect ...)
         if isinstance(self.body, str):
             escaped = self.body.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-            if self.redirects:
-                inner = " ".join(r.to_sexp() for r in self.redirects)
-                return f'(cond "{escaped}" {inner})'
-            return f'(cond "{escaped}")'
+            result = f'(cond "{escaped}")'
+        else:
+            result = f"(cond {self.body.to_sexp()})"
         if self.redirects:
-            inner = " ".join(r.to_sexp() for r in self.redirects)
-            return f"(cond {self.body.to_sexp()} {inner})"
-        return f"(cond {self.body.to_sexp()})"
+            redirect_sexps = " ".join(r.to_sexp() for r in self.redirects)
+            return f"{result} {redirect_sexps}"
+        return result
 
 
 @dataclass

@@ -2348,7 +2348,15 @@ class Parser:
         ch = self.peek()
 
         # Handle &> and &>> (redirect both stdout and stderr)
+        # Note: &> does NOT take a preceding fd number. If we consumed digits,
+        # they should be a separate word, not an fd. E.g., "2&>1" is command "2"
+        # with redirect "&> 1", not fd 2 redirected.
         if ch == "&" and self.pos + 1 < self.length and self.source[self.pos + 1] == ">":
+            if fd is not None:
+                # We consumed digits that should be a word, not an fd
+                # Restore position and let parse_word handle them
+                self.pos = start
+                return None
             self.advance()  # consume &
             self.advance()  # consume >
             if not self.at_end() and self.peek() == ">":

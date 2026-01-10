@@ -22,22 +22,45 @@ A recursive descent parser for bash in pure Python. 4,700 lines, no dependencies
 
 **Fast as possible.** Recursive descent is inherently slower than table-driven parsing. We pay that cost for clarity, then claw back every microsecond we can.
 
-## What It Handles
+## What It Handles 😱
 
 The dark corners of bash that break other parsers:
 
-- **Parameter expansion**: `${var:-default}`, `${var:+alt}`, `${var%pattern}`, `${!prefix*}`, `${var@Q}`
-- **Nested substitutions**: `echo $(cat <(grep ${pattern:-".*"} "$file"))`
-- **Here documents**: `<<EOF`, `<<-EOF`, `<<<word`, quoted/unquoted delimiters
-- **Process substitution**: `<(cmd)`, `>(cmd)` as arguments or redirects
-- **Arithmetic**: `$(( ))`, `$[ ]` (deprecated), C-style `for ((i=0; i<10; i++))`
-- **Conditionals**: `[[ ]]` with `=~`, `-eq`, pattern matching, `&&`, `||`
-- **Arrays**: `arr=(a b c)`, `${arr[@]}`, `${!arr[@]}`, `${#arr[@]}`
-- **Quoting edge cases**: `$'ansi\nescapes'`, `$"locale"`, adjacent quotes, backslash semantics
-- **Obscure redirects**: `{fd}>file`, `3<&0-`, `&>`, `|&`, `>|`
-- **Coprocesses**: `coproc name { commands; }`
-- **Case fallthrough**: `;&` and `;;&`
-- **Everything else**: functions, subshells, brace groups, pipelines, lists—the full grammar
+```bash
+# Nested everything
+echo $(cat <(grep ${pattern:-".*"} "${files[@]}"))
+
+# Heredoc inside command substitution inside heredoc
+cat <<OUTER
+$(cat <<INNER
+$nested
+INNER
+)
+OUTER
+
+# Multiple heredocs on one line
+diff <(cat <<A
+one
+A
+) <(cat <<B
+two
+B
+)
+
+# Quoting transforms on array slices
+printf '%q\n' "${arr[@]:2:5@Q}"
+
+# Regex with expansions in conditional
+[[ ${foo:-$(whoami)} =~ ^(user|${pattern})$ ]]
+
+# Process substitution as redirect target
+cmd > >(tee log.txt) 2> >(tee err.txt >&2)
+
+# Extglob patterns that look like syntax
+case $x in @(foo|bar|?(baz))) echo match;; esac
+```
+
+The full grammar—parameter expansion, heredocs, process substitution, arithmetic, arrays, conditionals, coprocesses, all of it.
 
 ## Test Coverage
 
@@ -58,15 +81,12 @@ ast = parse("ps aux | grep python | awk '{print $2}'")
 
 # S-expression output for inspection
 print(ast[0].to_sexp())
-# (pipeline
-#   (command (word "ps") (word "aux"))
-#   (command (word "grep") (word "python"))
-#   (command (word "awk") (word "'{print $2}'")))
+# (pipe (command (word "ps") (word "aux")) (pipe (command (word "grep") (word "python")) (command (word "awk") (word "'{print $2}'"))))
 
 # Handles the weird stuff
 ast = parse("cat <<'EOF'\nheredoc content\nEOF")
 print(ast[0].to_sexp())
-# (command (word "cat") (heredoc-quoted "EOF" "heredoc content\n"))
+# (command (word "cat") (redirect "<<" "heredoc content\n"))
 ```
 
 ## Installation
@@ -83,8 +103,6 @@ just test        # Run tests (Python 3.14)
 just test-py312  # Run tests on specific version
 just test-all    # Run tests on all versions (3.10-3.14)
 ```
-
-32 test modules covering progressively deeper bash semantics plus corpus testing of edge cases.
 
 ## Benchmarks
 
@@ -106,14 +124,15 @@ src/parable/
 ├── __init__.py        # parse() entry point
 └── core/
     ├── ast.py         # AST node definitions
-    └── parser.py      # Recursive descent parser (~4500 lines)
+    ├── errors.py      # ParseError
+    └── parser.py      # Recursive descent parser
 
 tests/
-├── *.tests                      # 1,517 test cases in custom format
+├── *.tests                      # Test cases in custom format
 └── corpus/
-    ├── gnu-bash/                # GNU Bash test corpus tests
-    ├── tree-sitter-bash/        # tree-sitter bash corpus tests
-    └── oils/                    # Oils spec tests
+    ├── gnu-bash/                # GNU Bash test corpus
+    ├── tree-sitter-bash/        # tree-sitter-bash corpus
+    └── oils/                    # Oils corpus
 ```
 
 ## License

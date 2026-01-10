@@ -400,11 +400,10 @@ class Word(Node):
                     # Only strip if non-empty, no CTLESC, and after a default value operator
                     if inner and inner.find("\x01") == -1:
                         # Check what precedes - default value ops: :- := :+ :? - = + ?
-                        prev = (
-                            "".join(_sublist(result, len(result) - 2, len(result)))
-                            if len(result) >= 2
-                            else ""
-                        )
+                        if len(result) >= 2:
+                            prev = "".join(_sublist(result, len(result) - 2, len(result)))
+                        else:
+                            prev = ""
                         if (
                             prev.endswith(":-")
                             or prev.endswith(":=")
@@ -826,8 +825,14 @@ class List(Node):
                 if parts[i].kind == "operator" and (parts[i].op == ";" or parts[i].op == "\n"):
                     left = _sublist(parts, 0, i)
                     right = _sublist(parts, i + 1, len(parts) - 1)  # exclude trailing &
-                    left_sexp = List(left).to_sexp() if len(left) > 1 else left[0].to_sexp()
-                    right_sexp = List(right).to_sexp() if len(right) > 1 else right[0].to_sexp()
+                    if len(left) > 1:
+                        left_sexp = List(left).to_sexp()
+                    else:
+                        left_sexp = left[0].to_sexp()
+                    if len(right) > 1:
+                        right_sexp = List(right).to_sexp()
+                    else:
+                        right_sexp = right[0].to_sexp()
                     return "(semi " + left_sexp + " (background " + right_sexp + "))"
             # No ; or \n found, background the whole list (minus trailing &)
             inner_parts = _sublist(parts, 0, len(parts) - 1)
@@ -845,16 +850,28 @@ class List(Node):
             if parts[i].kind == "operator" and (parts[i].op == ";" or parts[i].op == "\n"):
                 left = _sublist(parts, 0, i)
                 right = _sublist(parts, i + 1, len(parts))
-                left_sexp = List(left).to_sexp() if len(left) > 1 else left[0].to_sexp()
-                right_sexp = List(right).to_sexp() if len(right) > 1 else right[0].to_sexp()
+                if len(left) > 1:
+                    left_sexp = List(left).to_sexp()
+                else:
+                    left_sexp = left[0].to_sexp()
+                if len(right) > 1:
+                    right_sexp = List(right).to_sexp()
+                else:
+                    right_sexp = right[0].to_sexp()
                 return "(semi " + left_sexp + " " + right_sexp + ")"
         # Then split on & (rightmost for left-associativity)
         for i in range(len(parts) - 2, 0, -2):
             if parts[i].kind == "operator" and parts[i].op == "&":
                 left = _sublist(parts, 0, i)
                 right = _sublist(parts, i + 1, len(parts))
-                left_sexp = List(left).to_sexp() if len(left) > 1 else left[0].to_sexp()
-                right_sexp = List(right).to_sexp() if len(right) > 1 else right[0].to_sexp()
+                if len(left) > 1:
+                    left_sexp = List(left).to_sexp()
+                else:
+                    left_sexp = left[0].to_sexp()
+                if len(right) > 1:
+                    right_sexp = List(right).to_sexp()
+                else:
+                    right_sexp = right[0].to_sexp()
                 return "(background " + left_sexp + " " + right_sexp + ")"
         # No ; or &, process high-prec ops (&&, ||) left-associatively
         result = parts[0].to_sexp()
@@ -1002,7 +1019,10 @@ class HereDoc(Node):
         self.fd = fd
 
     def to_sexp(self) -> str:
-        op = "<<-" if self.strip_tabs else "<<"
+        if self.strip_tabs:
+            op = "<<-"
+        else:
+            op = "<<"
         return '(redirect "' + op + '" "' + self.content + '")'
 
 
@@ -1220,9 +1240,18 @@ class ForArith(Node):
             for r in self.redirects:
                 redirect_parts.append(r.to_sexp())
             suffix = " " + " ".join(redirect_parts)
-        init_val = self.init if self.init else "1"
-        cond_val = _normalize_fd_redirects(self.cond) if self.cond else "1"
-        incr_val = self.incr if self.incr else "1"
+        if self.init:
+            init_val = self.init
+        else:
+            init_val = "1"
+        if self.cond:
+            cond_val = _normalize_fd_redirects(self.cond)
+        else:
+            cond_val = "1"
+        if self.incr:
+            incr_val = self.incr
+        else:
+            incr_val = "1"
         return (
             '(arith-for (init (word "'
             + format_arith_val(init_val)
@@ -1521,7 +1550,10 @@ class ParamExpansion(Node):
         escaped_param = self.param.replace("\\", "\\\\").replace('"', '\\"')
         if self.op is not None:
             escaped_op = self.op.replace("\\", "\\\\").replace('"', '\\"')
-            arg_val = self.arg if self.arg is not None else ""
+            if self.arg is not None:
+                arg_val = self.arg
+            else:
+                arg_val = ""
             escaped_arg = arg_val.replace("\\", "\\\\").replace('"', '\\"')
             return '(param "' + escaped_param + '" "' + escaped_op + '" "' + escaped_arg + '")'
         return '(param "' + escaped_param + '")'
@@ -1558,7 +1590,10 @@ class ParamIndirect(Node):
         escaped = self.param.replace("\\", "\\\\").replace('"', '\\"')
         if self.op is not None:
             escaped_op = self.op.replace("\\", "\\\\").replace('"', '\\"')
-            arg_val = self.arg if self.arg is not None else ""
+            if self.arg is not None:
+                arg_val = self.arg
+            else:
+                arg_val = ""
             escaped_arg = arg_val.replace("\\", "\\\\").replace('"', '\\"')
             return '(param-indirect "' + escaped + '" "' + escaped_op + '" "' + escaped_arg + '")'
         return '(param-indirect "' + escaped + '")'
@@ -1912,7 +1947,10 @@ class Time(Node):
     def to_sexp(self) -> str:
         if self.pipeline is None:
             # Bare "time" with no command - bash-oracle shows empty command
-            return "(time -p (command))" if self.posix else "(time (command))"
+            if self.posix:
+                return "(time -p (command))"
+            else:
+                return "(time (command))"
         if self.posix:
             return "(time -p " + self.pipeline.to_sexp() + ")"
         return "(time " + self.pipeline.to_sexp() + ")"
@@ -2085,7 +2123,10 @@ class Coproc(Node):
 
     def to_sexp(self) -> str:
         # Use provided name for compound commands, "COPROC" for simple commands
-        name = self.name if self.name else "COPROC"
+        if self.name:
+            name = self.name
+        else:
+            name = "COPROC"
         return '(coproc "' + name + '" ' + self.command.to_sexp() + ")"
 
 
@@ -2168,7 +2209,10 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
         while i < len(node.patterns):
             p = node.patterns[i]
             pat = p.pattern.replace("|", " | ")
-            body = _format_cmdsub_node(p.body, indent + 8) if p.body else ""
+            if p.body:
+                body = _format_cmdsub_node(p.body, indent + 8)
+            else:
+                body = ""
             term = p.terminator  # ;;, ;&, or ;;&
             pat_indent = _repeat_str(" ", indent + 8)
             term_indent = _repeat_str(" ", indent + 4)
@@ -2218,8 +2262,14 @@ def _format_redirect(r: "Redirect | HereDoc") -> str:
     """Format a redirect for command substitution output."""
     if r.kind == "heredoc":
         # Include heredoc content: <<DELIM\ncontent\nDELIM\n
-        op = "<<-" if r.strip_tabs else "<<"
-        delim = "'" + r.delimiter + "'" if r.quoted else r.delimiter
+        if r.strip_tabs:
+            op = "<<-"
+        else:
+            op = "<<"
+        if r.quoted:
+            delim = "'" + r.delimiter + "'"
+        else:
+            delim = r.delimiter
         return op + delim + "\n" + r.content + r.delimiter + "\n"
     op = r.op
     target = r.target.value
@@ -2403,11 +2453,20 @@ def _skip_heredoc(value: str, start: int) -> int:
             line_end += 1
         line = _substring(value, line_start, line_end)
         # Check if this line is the delimiter (possibly with leading tabs for <<-)
-        stripped = line.lstrip("\t") if start + 2 < len(value) and value[start + 2] == "-" else line
+        if start + 2 < len(value) and value[start + 2] == "-":
+            stripped = line.lstrip("\t")
+        else:
+            stripped = line
         if stripped == delimiter:
             # Found end - return position after delimiter line
-            return line_end + 1 if line_end < len(value) else line_end
-        i = line_end + 1 if line_end < len(value) else line_end
+            if line_end < len(value):
+                return line_end + 1
+            else:
+                return line_end
+        if line_end < len(value):
+            i = line_end + 1
+        else:
+            i = line_end
     return i
 
 
@@ -2744,7 +2803,10 @@ class Parser:
                 break
             chars.append(self.advance())
 
-        word = "".join(chars) if chars else None
+        if chars:
+            word = "".join(chars)
+        else:
+            word = None
         self.pos = saved_pos
         return word
 
@@ -3123,7 +3185,10 @@ class Parser:
         if not chars:
             return None
 
-        return Word("".join(chars), parts if parts else None)
+        if parts:
+            return Word("".join(chars), parts)
+        else:
+            return Word("".join(chars), None)
 
     def _parse_command_substitution(self) -> tuple[Node | None, str]:
         """Parse a $(...) command substitution.
@@ -4924,7 +4989,10 @@ class Parser:
                     break
                 else:
                     break
-            return "".join(name_chars) if name_chars else None
+            if name_chars:
+                return "".join(name_chars)
+            else:
+                return None
 
         return None
 
@@ -5139,7 +5207,10 @@ class Parser:
                 fd_chars = []
                 while not self.at_end() and self.peek().isdigit():
                     fd_chars.append(self.advance())
-                fd_target = "".join(fd_chars) if fd_chars else ""
+                if fd_chars:
+                    fd_target = "".join(fd_chars)
+                else:
+                    fd_target = ""
                 # Handle just - for close, or N- for move syntax
                 if not self.at_end() and self.peek() == "-":
                     fd_target += self.advance()  # consume the trailing -
@@ -5289,7 +5360,10 @@ class Parser:
             content_lines.append(line + "\n")
 
             # Move past the newline
-            scan_pos = line_end + 1 if line_end < self.length else self.length
+            if line_end < self.length:
+                scan_pos = line_end + 1
+            else:
+                scan_pos = self.length
 
         # Join content (newlines already included per line)
         content = "".join(content_lines)
@@ -5381,7 +5455,10 @@ class Parser:
                 break
             redirects.append(redirect)
 
-        return Subshell(body, redirects if redirects else None)
+        if redirects:
+            return Subshell(body, redirects)
+        else:
+            return Subshell(body, None)
 
     def parse_arithmetic_command(self) -> ArithmeticCommand | None:
         """Parse an arithmetic command (( expression )) with parsed internals.
@@ -5450,7 +5527,10 @@ class Parser:
                 break
             redirects.append(redirect)
 
-        return ArithmeticCommand(expr, redirects if redirects else None, raw_content=content)
+        redir_arg = None
+        if redirects:
+            redir_arg = redirects
+        return ArithmeticCommand(expr, redir_arg, raw_content=content)
 
     # Unary operators for [[ ]] conditionals
     COND_UNARY_OPS = {
@@ -5544,7 +5624,10 @@ class Parser:
                 break
             redirects.append(redirect)
 
-        return ConditionalExpr(body, redirects if redirects else None)
+        redir_arg = None
+        if redirects:
+            redir_arg = redirects
+        return ConditionalExpr(body, redir_arg)
 
     def _cond_skip_whitespace(self) -> None:
         """Skip whitespace inside [[ ]], including backslash-newline continuation."""
@@ -5894,7 +5977,10 @@ class Parser:
         if not chars:
             return None
 
-        return Word("".join(chars), parts if parts else None)
+        parts_arg = None
+        if parts:
+            parts_arg = parts
+        return Word("".join(chars), parts_arg)
 
     def _parse_cond_regex_word(self) -> Word | None:
         """Parse a regex pattern word in [[ ]], where ( ) are regex grouping, not conditional grouping."""
@@ -6048,7 +6134,10 @@ class Parser:
         if not chars:
             return None
 
-        return Word("".join(chars), parts if parts else None)
+        parts_arg = None
+        if parts:
+            parts_arg = parts
+        return Word("".join(chars), parts_arg)
 
     def parse_brace_group(self) -> BraceGroup | None:
         """Parse a brace group { list }."""
@@ -6081,7 +6170,10 @@ class Parser:
                 break
             redirects.append(redirect)
 
-        return BraceGroup(body, redirects if redirects else None)
+        redir_arg = None
+        if redirects:
+            redir_arg = redirects
+        return BraceGroup(body, redir_arg)
 
     def parse_if(self) -> If | None:
         """Parse an if statement: if list; then list [elif list; then list]* [else list] fi."""
@@ -6167,7 +6259,10 @@ class Parser:
                 break
             redirects.append(redirect)
 
-        return If(condition, then_body, else_body, redirects if redirects else None)
+        redir_arg = None
+        if redirects:
+            redir_arg = redirects
+        return If(condition, then_body, else_body, redir_arg)
 
     def _parse_elif_chain(self) -> If:
         """Parse elif chain (after seeing 'elif' keyword)."""
@@ -6237,7 +6332,10 @@ class Parser:
                 break
             redirects.append(redirect)
 
-        return While(condition, body, redirects if redirects else None)
+        redir_arg = None
+        if redirects:
+            redir_arg = redirects
+        return While(condition, body, redir_arg)
 
     def parse_until(self) -> Until | None:
         """Parse an until loop: until list; do list; done."""
@@ -6277,7 +6375,10 @@ class Parser:
                 break
             redirects.append(redirect)
 
-        return Until(condition, body, redirects if redirects else None)
+        redir_arg = None
+        if redirects:
+            redir_arg = redirects
+        return Until(condition, body, redir_arg)
 
     def parse_for(self) -> For | ForArith | None:
         """Parse a for loop: for name [in words]; do list; done or C-style for ((;;))."""
@@ -6357,7 +6458,10 @@ class Parser:
                 break
             redirects.append(redirect)
 
-        return For(var_name, words, body, redirects if redirects else None)
+        redir_arg = None
+        if redirects:
+            redir_arg = redirects
+        return For(var_name, words, body, redir_arg)
 
     def _parse_for_arith(self) -> ForArith:
         """Parse C-style for loop: for ((init; cond; incr)); do list; done."""
@@ -6439,7 +6543,10 @@ class Parser:
                 break
             redirects.append(redirect)
 
-        return ForArith(init, cond, incr, body, redirects if redirects else None)
+        redir_arg = None
+        if redirects:
+            redir_arg = redirects
+        return ForArith(init, cond, incr, body, redir_arg)
 
     def parse_select(self) -> Select | None:
         """Parse a select statement: select name [in words]; do list; done."""
@@ -6523,7 +6630,10 @@ class Parser:
                 break
             redirects.append(redirect)
 
-        return Select(var_name, words, body, redirects if redirects else None)
+        redir_arg = None
+        if redirects:
+            redir_arg = redirects
+        return Select(var_name, words, body, redir_arg)
 
     def _is_case_terminator(self) -> bool:
         """Check if we're at a case pattern terminator (;;, ;&, or ;;&)."""
@@ -6793,7 +6903,10 @@ class Parser:
                 break
             redirects.append(redirect)
 
-        return Case(word, patterns, redirects if redirects else None)
+        redir_arg = None
+        if redirects:
+            redir_arg = redirects
+        return Case(word, patterns, redir_arg)
 
     def parse_coproc(self) -> Coproc | None:
         """Parse a coproc statement.
@@ -6815,7 +6928,9 @@ class Parser:
         name = None
 
         # Check for compound command directly (no NAME)
-        ch = self.peek() if not self.at_end() else None
+        ch = None
+        if not self.at_end():
+            ch = self.peek()
         if ch == "{":
             body = self.parse_brace_group()
             if body is not None:
@@ -6848,7 +6963,9 @@ class Parser:
             self.skip_whitespace()
 
             # Check what follows
-            ch = self.peek() if not self.at_end() else None
+            ch = None
+            if not self.at_end():
+                ch = self.peek()
             next_word = self.peek_word()
 
             if ch == "{":
@@ -7253,7 +7370,10 @@ class Parser:
                 inner = self.parse_pipeline()
                 # Double negation cancels out (! ! cmd -> cmd, ! ! -> empty command)
                 if inner is not None and inner.kind == "negation":
-                    return inner.pipeline if inner.pipeline is not None else Command([])
+                    if inner.pipeline is not None:
+                        return inner.pipeline
+                    else:
+                        return Command([])
                 return Negation(inner)
 
         # Parse the actual pipeline

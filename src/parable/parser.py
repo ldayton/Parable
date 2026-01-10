@@ -4126,7 +4126,7 @@ class Parser:
             brace = self.parse_brace_group()
             if brace is None:
                 raise ParseError("Expected brace group body in for loop", pos=self.pos)
-            # Unwrap the brace-group to match oracle output format
+            # Unwrap the brace-group to match bash-oracle output format
             body = brace.body
         elif self.consume_word("do"):
             body = self.parse_list_until({"done"})
@@ -4207,7 +4207,7 @@ class Parser:
             brace = self.parse_brace_group()
             if brace is None:
                 raise ParseError("Expected brace group body in select", pos=self.pos)
-            # Unwrap the brace-group to match oracle output format
+            # Unwrap the brace-group to match bash-oracle output format
             body = brace.body
         elif self.consume_word("do"):
             # Parse body (ends at 'done')
@@ -4506,7 +4506,7 @@ class Parser:
     def parse_coproc(self) -> Coproc | None:
         """Parse a coproc statement.
 
-        Oracle behavior:
+        bash-oracle behavior:
         - For compound commands (brace group, if, while, etc.), extract NAME if present
         - For simple commands, don't extract NAME (treat everything as the command)
         """
@@ -4920,7 +4920,7 @@ class Parser:
                 else:
                     self.pos = saved
             self.skip_whitespace()
-            # Check for -- (end of options) - implies -p per bash oracle
+            # Check for -- (end of options) - implies -p per bash-oracle
             if not self.at_end() and _starts_with_at(self.source, self.pos, "--"):
                 if self.pos + 2 >= self.length or _is_whitespace(self.source[self.pos + 2]):
                     self.advance()

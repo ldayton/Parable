@@ -80,14 +80,14 @@ class Word(Node):
         value = self._strip_locale_string_dollars(value)
         # Normalize whitespace in array assignments: name=(a  b\tc) -> name=(a b c)
         value = self._normalize_array_whitespace(value)
-        # Format command substitutions with oracle pretty-printing (before escaping)
+        # Format command substitutions with bash-oracle pretty-printing (before escaping)
         value = self._format_command_substitutions(value)
         # Strip line continuations (backslash-newline) from arithmetic expressions
         value = self._strip_arith_line_continuations(value)
-        # Double CTLESC (0x01) bytes - bash oracle uses this for quoting control chars
+        # Double CTLESC (0x01) bytes - bash-oracle uses this for quoting control chars
         # Exception: don't double when preceded by odd number of backslashes (escaped)
         value = self._double_ctlesc_smart(value)
-        # Prefix DEL (0x7f) with CTLESC - bash oracle quotes this control char
+        # Prefix DEL (0x7f) with CTLESC - bash-oracle quotes this control char
         value = value.replace("\x7f", "\x01\x7f")
         # Escape backslashes for s-expression output
         value = value.replace("\\", "\\\\")
@@ -170,7 +170,7 @@ class Word(Node):
                     result.append(0x5C)
                     i += 2
                 elif c == "'":
-                    # Oracle outputs \' as '\'' (shell quoting trick)
+                    # bash-oracle outputs \' as '\'' (shell quoting trick)
                     result.extend(b"'\\''")
                     i += 2
                 elif c == '"':
@@ -561,7 +561,7 @@ class Word(Node):
         return result
 
     def _format_command_substitutions(self, value: str) -> str:
-        """Replace $(...) and >(...) / <(...) with oracle-formatted AST output."""
+        """Replace $(...) and >(...) / <(...) with bash-oracle-formatted AST output."""
         # Collect command substitutions from all parts, including nested ones
         cmdsub_parts = []
         procsub_parts = []
@@ -611,7 +611,7 @@ class Word(Node):
                         j += 1
                         break
                     j += 1
-                # Keep backtick substitutions as-is (oracle doesn't reformat them)
+                # Keep backtick substitutions as-is (bash-oracle doesn't reformat them)
                 result.append(_substring(value, i, j))
                 cmdsub_idx += 1
                 i = j
@@ -885,7 +885,7 @@ class Comment(Node):
         self.text = text
 
     def to_sexp(self) -> str:
-        # Oracle doesn't output comments
+        # bash-oracle doesn't output comments
         return ""
 
 
@@ -1116,7 +1116,7 @@ class For(Node):
         self.redirects = redirects
 
     def to_sexp(self) -> str:
-        # Oracle format: (for (word "var") (in (word "a") ...) body)
+        # bash-oracle format: (for (word "var") (in (word "a") ...) body)
         suffix = ""
         if self.redirects:
             redirect_parts = []
@@ -1125,7 +1125,7 @@ class For(Node):
             suffix = " " + " ".join(redirect_parts)
         var_escaped = self.var.replace("\\", "\\\\").replace('"', '\\"')
         if self.words is None:
-            # No 'in' clause - oracle implies (in (word "\"$@\""))
+            # No 'in' clause - bash-oracle implies (in (word "\"$@\""))
             return (
                 '(for (word "'
                 + var_escaped
@@ -1135,7 +1135,7 @@ class For(Node):
                 + suffix
             )
         elif len(self.words) == 0:
-            # Empty 'in' clause - oracle outputs (in)
+            # Empty 'in' clause - bash-oracle outputs (in)
             return '(for (word "' + var_escaped + '") (in) ' + self.body.to_sexp() + ")" + suffix
         else:
             word_parts = []
@@ -1174,7 +1174,7 @@ class ForArith(Node):
         self.redirects = redirects
 
     def to_sexp(self) -> str:
-        # Oracle format: (arith-for (init (word "x")) (test (word "y")) (step (word "z")) body)
+        # bash-oracle format: (arith-for (init (word "x")) (test (word "y")) (step (word "z")) body)
         def format_arith_val(s: str) -> str:
             # Use Word's methods to expand ANSI-C quotes and strip locale $
             w = Word(s, [])
@@ -1228,7 +1228,7 @@ class Select(Node):
         self.redirects = redirects
 
     def to_sexp(self) -> str:
-        # Oracle format: (select (word "var") (in (word "a") ...) body)
+        # bash-oracle format: (select (word "var") (in (word "a") ...) body)
         suffix = ""
         if self.redirects:
             redirect_parts = []
@@ -1303,7 +1303,7 @@ class CasePattern(Node):
         self.terminator = terminator
 
     def to_sexp(self) -> str:
-        # Oracle format: (pattern ((word "a") (word "b")) body)
+        # bash-oracle format: (pattern ((word "a") (word "b")) body)
         # Split pattern by | respecting escapes, extglobs, quotes, and brackets
         alternatives = []
         current = []
@@ -1449,7 +1449,7 @@ class CasePattern(Node):
             parts.append(" " + self.body.to_sexp())
         else:
             parts.append(" ()")
-        # Oracle doesn't output fallthrough/falltest markers
+        # bash-oracle doesn't output fallthrough/falltest markers
         parts.append(")")
         return "".join(parts)
 
@@ -1562,7 +1562,7 @@ class ArithmeticCommand(Node):
 
     expression: "Node | None"  # Parsed arithmetic expression, or None for empty
     redirects: list[Node]
-    raw_content: str  # Raw expression text for oracle-compatible output
+    raw_content: str  # Raw expression text for bash-oracle-compatible output
 
     def __init__(
         self, expression: "Node | None", redirects: list[Node] = None, raw_content: str = ""
@@ -1575,7 +1575,7 @@ class ArithmeticCommand(Node):
         self.raw_content = raw_content
 
     def to_sexp(self) -> str:
-        # Oracle format: (arith (word "content"))
+        # bash-oracle format: (arith (word "content"))
         # Redirects are siblings: (arith (word "...")) (redirect ...)
         escaped = self.raw_content.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
         result = '(arith (word "' + escaped + '"))'
@@ -1858,7 +1858,7 @@ class Negation(Node):
 
     def to_sexp(self) -> str:
         if self.pipeline is None:
-            # Bare "!" with no command - oracle shows empty command
+            # Bare "!" with no command - bash-oracle shows empty command
             return "(negation (command))"
         return "(negation " + self.pipeline.to_sexp() + ")"
 
@@ -1876,7 +1876,7 @@ class Time(Node):
 
     def to_sexp(self) -> str:
         if self.pipeline is None:
-            # Bare "time" with no command - oracle shows empty command
+            # Bare "time" with no command - bash-oracle shows empty command
             return "(time -p (command))" if self.posix else "(time (command))"
         if self.posix:
             return "(time -p " + self.pipeline.to_sexp() + ")"
@@ -1897,7 +1897,7 @@ class ConditionalExpr(Node):
         self.redirects = redirects
 
     def to_sexp(self) -> str:
-        # Oracle format: (cond ...) not (cond-expr ...)
+        # bash-oracle format: (cond ...) not (cond-expr ...)
         # Redirects are siblings, not children: (cond ...) (redirect ...)
         body_kind = getattr(self.body, "kind", None)
         if body_kind is None:
@@ -1927,7 +1927,7 @@ class UnaryTest(Node):
         self.operand = operand
 
     def to_sexp(self) -> str:
-        # Oracle format: (cond-unary "-f" (cond-term "file"))
+        # bash-oracle format: (cond-unary "-f" (cond-term "file"))
         # cond-term preserves content as-is (no backslash escaping)
         return '(cond-unary "' + self.op + '" (cond-term "' + self.operand.value + '"))'
 
@@ -1946,7 +1946,7 @@ class BinaryTest(Node):
         self.right = right
 
     def to_sexp(self) -> str:
-        # Oracle format: (cond-binary "==" (cond-term "x") (cond-term "y"))
+        # bash-oracle format: (cond-binary "==" (cond-term "x") (cond-term "y"))
         # cond-term preserves content as-is (no backslash escaping)
         left_val = self.left.get_cond_formatted_value()
         right_val = self.right.get_cond_formatted_value()
@@ -2001,7 +2001,7 @@ class CondNot(Node):
         self.operand = operand
 
     def to_sexp(self) -> str:
-        # Oracle ignores negation - just output the operand
+        # bash-oracle ignores negation - just output the operand
         return self.operand.to_sexp()
 
 
@@ -2055,7 +2055,7 @@ class Coproc(Node):
 
 
 def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -> str:
-    """Format an AST node for command substitution output (oracle pretty-print format)."""
+    """Format an AST node for command substitution output (bash-oracle pretty-print format)."""
     sp = " " * indent
     inner_sp = " " * (indent + 4)
     if node.kind == "empty":

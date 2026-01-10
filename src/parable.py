@@ -33,6 +33,50 @@ def _is_octal_digit(c: str) -> bool:
     return c >= "0" and c <= "7"
 
 
+# ANSI-C escape sequence byte values
+ANSI_C_ESCAPES = {
+    "a": 0x07,   # bell
+    "b": 0x08,   # backspace
+    "e": 0x1B,   # escape
+    "E": 0x1B,   # escape (alt)
+    "f": 0x0C,   # form feed
+    "n": 0x0A,   # newline
+    "r": 0x0D,   # carriage return
+    "t": 0x09,   # tab
+    "v": 0x0B,   # vertical tab
+    "\\": 0x5C,  # backslash
+    '"': 0x22,   # double quote
+    "?": 0x3F,   # question mark
+}
+
+
+def _get_ansi_escape(c: str) -> int:
+    """Look up simple ANSI-C escape byte value. Returns -1 if not found."""
+    if c == "a":
+        return 0x07
+    if c == "b":
+        return 0x08
+    if c == "e" or c == "E":
+        return 0x1B
+    if c == "f":
+        return 0x0C
+    if c == "n":
+        return 0x0A
+    if c == "r":
+        return 0x0D
+    if c == "t":
+        return 0x09
+    if c == "v":
+        return 0x0B
+    if c == "\\":
+        return 0x5C
+    if c == '"':
+        return 0x22
+    if c == "?":
+        return 0x3F
+    return -1
+
+
 def _is_whitespace(c: str) -> bool:
     return c == " " or c == "\t" or c == "\n"
 
@@ -166,42 +210,14 @@ class Word(Node):
         while i < len(inner):
             if inner[i] == "\\" and i + 1 < len(inner):
                 c = inner[i + 1]
-                if c == "a":
-                    result.append(0x07)
-                    i += 2
-                elif c == "b":
-                    result.append(0x08)
-                    i += 2
-                elif c == "e" or c == "E":
-                    result.append(0x1B)
-                    i += 2
-                elif c == "f":
-                    result.append(0x0C)
-                    i += 2
-                elif c == "n":
-                    result.append(0x0A)
-                    i += 2
-                elif c == "r":
-                    result.append(0x0D)
-                    i += 2
-                elif c == "t":
-                    result.append(0x09)
-                    i += 2
-                elif c == "v":
-                    result.append(0x0B)
-                    i += 2
-                elif c == "\\":
-                    result.append(0x5C)
+                # Check simple escapes first
+                simple = _get_ansi_escape(c)
+                if simple >= 0:
+                    result.append(simple)
                     i += 2
                 elif c == "'":
                     # bash-oracle outputs \' as '\'' (shell quoting trick)
                     result.extend(b"'\\''")
-                    i += 2
-                elif c == '"':
-                    result.append(0x22)
-                    i += 2
-                elif c == "?":
-                    result.append(0x3F)
                     i += 2
                 elif c == "x":
                     # Check for \x{...} brace syntax (bash 5.3+)

@@ -2150,17 +2150,6 @@ class Parser:
                     arg_chars.append(self.advance())
                 if not self.at_end():
                     arg_chars.append(self.advance())  # closing `
-            # Opening brace followed by whitespace - increase depth for matching
-            # (like brace groups). Bare {foo is literal, not balanced.
-            elif (
-                c == "{"
-                and not in_single_quote
-                and not in_double_quote
-                and self.pos + 1 < self.length
-                and self.source[self.pos + 1] in " \t\n"
-            ):
-                depth += 1
-                arg_chars.append(self.advance())
             # Closing brace - handle depth for nested ${...}
             elif c == "}":
                 if in_single_quote:

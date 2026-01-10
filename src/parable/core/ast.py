@@ -40,7 +40,8 @@ class Word(Node):
         # Strip line continuations (backslash-newline) from arithmetic expressions
         value = self._strip_arith_line_continuations(value)
         # Double CTLESC (0x01) bytes - bash oracle uses this for quoting control chars
-        value = value.replace("\x01", "\x01\x01")
+        # Exception: don't double when preceded by odd number of backslashes (escaped)
+        value = self._double_ctlesc_smart(value)
         # Prefix DEL (0x7f) with CTLESC - bash oracle quotes this control char
         value = value.replace("\x7f", "\x01\x7f")
         # Escape backslashes for s-expression output
@@ -52,6 +53,35 @@ class Word(Node):
     def _append_with_ctlesc(self, result: bytearray, byte_val: int):
         """Append byte to result (CTLESC doubling happens later in to_sexp)."""
         result.append(byte_val)
+
+    def _double_ctlesc_smart(self, value: str) -> str:
+        """Double CTLESC bytes unless escaped by backslash inside double quotes."""
+        result = []
+        in_single = False
+        in_double = False
+        for c in value:
+            # Track quote state
+            if c == "'" and not in_double:
+                in_single = not in_single
+            elif c == '"' and not in_single:
+                in_double = not in_double
+            result.append(c)
+            if c == "\x01":
+                # Only count backslashes in double-quoted context (where they escape)
+                # In single quotes, backslashes are literal, so always double CTLESC
+                if in_double:
+                    bs_count = 0
+                    for j in range(len(result) - 2, -1, -1):
+                        if result[j] == "\\":
+                            bs_count += 1
+                        else:
+                            break
+                    if bs_count % 2 == 0:
+                        result.append("\x01")
+                else:
+                    # Outside double quotes (including single quotes): always double
+                    result.append("\x01")
+        return "".join(result)
 
     def _expand_ansi_c_escapes(self, value: str) -> str:
         """Expand ANSI-C escape sequences in $'...' strings.

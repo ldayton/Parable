@@ -89,7 +89,7 @@ function runTest(testInput, testExpected) {
     if (e instanceof ParseError) {
       return { passed: false, actual: '<parse error>', error: e.message };
     }
-    return { passed: false, actual: '<exception>', error: e.message };
+    return { passed: false, actual: '<exception>', error: e.message + '\n' + e.stack };
   }
 }
 
@@ -138,7 +138,7 @@ function main() {
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
   
   console.log('');
-  if (totalFailed > 0 && totalFailed <= 20) {
+  if (totalFailed > 0 && totalFailed <= 50) {
     console.log('='.repeat(60));
     console.log('FAILURES');
     console.log('='.repeat(60));
@@ -152,7 +152,7 @@ function main() {
       }
     }
     console.log('');
-  } else if (totalFailed > 20) {
+  } else if (totalFailed > 50) {
     console.log(`${totalFailed} failures (too many to show)`);
   }
   

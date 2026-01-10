@@ -151,12 +151,12 @@ class Word extends Node {
 		value = this.FormatCommandSubstitutions(value);
 		value = this.StripArithLineContinuations(value);
 		value = this.DoubleCtlescSmart(value);
-		value = value.replace("", "");
-		value = value.replace("\\", "\\\\");
+		value = value.replaceAll("", "");
+		value = value.replaceAll("\\", "\\\\");
 		var escaped = value
-			.replace('"', '\\"')
-			.replace("\n", "\\n")
-			.replace("\t", "\\t");
+			.replaceAll('"', '\\"')
+			.replaceAll("\n", "\\n")
+			.replaceAll("\t", "\\t");
 		return '(word "' + escaped + '")';
 	}
 
@@ -750,7 +750,7 @@ class Word extends Node {
 		"Return value with command substitutions formatted for cond-term output.";
 		var value = this.ExpandAllAnsiCQuotes(this.value);
 		value = this.FormatCommandSubstitutions(value);
-		value = value.replace("", "");
+		value = value.replaceAll("", "");
 		return value.trimEnd("\n");
 	}
 }
@@ -863,7 +863,7 @@ class List extends Node {
 	}
 
 	toSexp() {
-		var parts = list(this.parts);
+		var parts = Array.from(this.parts);
 		var op_names = {
 			"&&": "and",
 			"||": "or",
@@ -958,7 +958,7 @@ class List extends Node {
 		for (var i = 1; i < parts.length - 1; i += 2) {
 			var op = parts[i];
 			var cmd = parts[i + 1];
-			var op_name = op_names.get(op.op, op.op);
+			var op_name = op_names[op.op] !== undefined ? op_names[op.op] : op.op;
 			result = "(" + op_name + " " + result + " " + cmd.toSexp() + ")";
 		}
 		return result;
@@ -981,7 +981,9 @@ class Operator extends Node {
 			"&": "bg",
 			"|": "pipe",
 		};
-		return "(" + names.get(this.op, this.op) + ")";
+		return (
+			"(" + (names[this.op] !== undefined ? names[this.op] : this.op) + ")"
+		);
 	}
 }
 
@@ -1052,7 +1054,7 @@ class Redirect extends Node {
 		}
 		var target_val = this.target.value;
 		target_val = new Word(target_val).ExpandAllAnsiCQuotes(target_val);
-		target_val = target_val.replace('$"', '"');
+		target_val = target_val.replaceAll('$"', '"');
 		if (target_val.startsWith("&")) {
 			if (op === ">") {
 				op = ">&";
@@ -1256,7 +1258,9 @@ class For extends Node {
 			}
 			suffix = " " + redirect_parts.join(" ");
 		}
-		var var_escaped = this.variable.replace("\\", "\\\\").replace('"', '\\"');
+		var var_escaped = this.variable
+			.replaceAll("\\", "\\\\")
+			.replaceAll('"', '\\"');
 		if (this.words === null) {
 			return (
 				'(for (word "' +
@@ -1315,7 +1319,7 @@ class ForArith extends Node {
 			var w = new Word(s, []);
 			var val = w.ExpandAllAnsiCQuotes(s);
 			val = w.StripLocaleStringDollars(val);
-			val = val.replace("\\", "\\\\").replace('"', '\\"');
+			val = val.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 			return val;
 		}
 
@@ -1382,7 +1386,9 @@ class Select extends Node {
 			}
 			suffix = " " + redirect_parts.join(" ");
 		}
-		var var_escaped = this.variable.replace("\\", "\\\\").replace('"', '\\"');
+		var var_escaped = this.variable
+			.replaceAll("\\", "\\\\")
+			.replaceAll('"', '\\"');
 		if (this.words !== null) {
 			var word_parts = [];
 			for (var w of this.words) {
@@ -1650,15 +1656,17 @@ class ParamExpansion extends Node {
 	}
 
 	toSexp() {
-		var escaped_param = this.param.replace("\\", "\\\\").replace('"', '\\"');
+		var escaped_param = this.param
+			.replaceAll("\\", "\\\\")
+			.replaceAll('"', '\\"');
 		if (this.op !== null) {
-			var escaped_op = this.op.replace("\\", "\\\\").replace('"', '\\"');
+			var escaped_op = this.op.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 			if (this.arg !== null) {
 				var arg_val = this.arg;
 			} else {
 				arg_val = "";
 			}
-			var escaped_arg = arg_val.replace("\\", "\\\\").replace('"', '\\"');
+			var escaped_arg = arg_val.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 			return (
 				'(param "' +
 				escaped_param +
@@ -1682,7 +1690,7 @@ class ParamLength extends Node {
 	}
 
 	toSexp() {
-		var escaped = this.param.replace("\\", "\\\\").replace('"', '\\"');
+		var escaped = this.param.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 		return '(param-len "' + escaped + '")';
 	}
 }
@@ -1698,15 +1706,15 @@ class ParamIndirect extends Node {
 	}
 
 	toSexp() {
-		var escaped = this.param.replace("\\", "\\\\").replace('"', '\\"');
+		var escaped = this.param.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 		if (this.op !== null) {
-			var escaped_op = this.op.replace("\\", "\\\\").replace('"', '\\"');
+			var escaped_op = this.op.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 			if (this.arg !== null) {
 				var arg_val = this.arg;
 			} else {
 				arg_val = "";
 			}
-			var escaped_arg = arg_val.replace("\\", "\\\\").replace('"', '\\"');
+			var escaped_arg = arg_val.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 			return (
 				'(param-indirect "' +
 				escaped +
@@ -1765,9 +1773,9 @@ class ArithmeticCommand extends Node {
 
 	toSexp() {
 		var escaped = this.raw_content
-			.replace("\\", "\\\\")
-			.replace('"', '\\"')
-			.replace("\n", "\\n");
+			.replaceAll("\\", "\\\\")
+			.replaceAll('"', '\\"')
+			.replaceAll("\n", "\\n");
 		var result = '(arith (word "' + escaped + '"))';
 		if (this.redirects) {
 			var redirect_parts = [];
@@ -1993,9 +2001,9 @@ class ArithDeprecated extends Node {
 
 	toSexp() {
 		var escaped = this.expression
-			.replace("\\", "\\\\")
-			.replace('"', '\\"')
-			.replace("\n", "\\n");
+			.replaceAll("\\", "\\\\")
+			.replaceAll('"', '\\"')
+			.replaceAll("\n", "\\n");
 		return '(arith-deprecated "' + escaped + '")';
 	}
 }
@@ -2010,9 +2018,9 @@ class AnsiCQuote extends Node {
 
 	toSexp() {
 		var escaped = this.content
-			.replace("\\", "\\\\")
-			.replace('"', '\\"')
-			.replace("\n", "\\n");
+			.replaceAll("\\", "\\\\")
+			.replaceAll('"', '\\"')
+			.replaceAll("\n", "\\n");
 		return '(ansi-c "' + escaped + '")';
 	}
 }
@@ -2027,9 +2035,9 @@ class LocaleString extends Node {
 
 	toSexp() {
 		var escaped = this.content
-			.replace("\\", "\\\\")
-			.replace('"', '\\"')
-			.replace("\n", "\\n");
+			.replaceAll("\\", "\\\\")
+			.replaceAll('"', '\\"')
+			.replaceAll("\n", "\\n");
 		return '(locale "' + escaped + '")';
 	}
 }
@@ -2105,9 +2113,9 @@ class ConditionalExpr extends Node {
 		var body_kind = this.body["kind"] !== undefined ? this.body["kind"] : null;
 		if (body_kind === null) {
 			var escaped = this.body
-				.replace("\\", "\\\\")
-				.replace('"', '\\"')
-				.replace("\n", "\\n");
+				.replaceAll("\\", "\\\\")
+				.replaceAll('"', '\\"')
+				.replaceAll("\n", "\\n");
 			var result = '(cond "' + escaped + '")';
 		} else {
 			result = "(cond " + this.body.toSexp() + ")";
@@ -2219,7 +2227,7 @@ class CondParen extends Node {
 	}
 }
 
-class Array extends Node {
+class ArrayNode extends Node {
 	"An array literal (word1 word2 ...).";
 	constructor(elements) {
 		super();
@@ -2368,7 +2376,7 @@ function FormatCmdsubNode(node, indent, in_procsub) {
 		var i = 0;
 		while (i < node.patterns.length) {
 			p = node.patterns[i];
-			var pat = p.pattern.replace("|", " | ");
+			var pat = p.pattern.replaceAll("|", " | ");
 			if (p.body) {
 				body = FormatCmdsubNode(p.body, indent + 8);
 			} else {
@@ -3896,7 +3904,7 @@ class Parser {
 		}
 		this.advance();
 		var text = Substring(this.source, start, this.pos);
-		return [new Array(elements), text];
+		return [new ArrayNode(elements), text];
 	}
 
 	ParseArithmeticExpansion() {

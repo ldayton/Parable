@@ -32,10 +32,11 @@ class JSTranspiler(ast.NodeVisitor):
             self.visit(stmt)
 
     def visit_ClassDef(self, node: ast.ClassDef):
-        self.class_names.add(node.name)
+        safe_name = self._safe_name(node.name)
+        self.class_names.add(node.name)  # Track original name for isinstance checks
         bases = [self.visit_expr(b) for b in node.bases]
         extends = f" extends {bases[0]}" if bases else ""
-        self.emit(f"class {node.name}{extends} {{")
+        self.emit(f"class {safe_name}{extends} {{")
         self.indent += 1
         old_in_class = self.in_class_body
         old_has_base = self.class_has_base
@@ -50,8 +51,12 @@ class JSTranspiler(ast.NodeVisitor):
         self.emit("")
 
     def _safe_name(self, name: str) -> str:
-        """Rename JS reserved words."""
-        reserved = {"var": "variable", "class": "cls", "function": "func", "in": "inVal", "with": "withVal"}
+        """Rename JS reserved words and conflicting globals."""
+        reserved = {
+            "var": "variable", "class": "cls", "function": "func",
+            "in": "inVal", "with": "withVal",
+            "Array": "ArrayNode",  # Avoid shadowing JS global
+        }
         return reserved.get(name, name)
 
     def _is_super_call(self, stmt: ast.stmt) -> bool:
@@ -335,6 +340,7 @@ class JSTranspiler(ast.NodeVisitor):
                 "extend": "push",  # Not exact but works for single items
                 "find": "indexOf",
                 "rfind": "lastIndexOf",
+                "replace": "replaceAll",  # Python replaces all, JS replace() only first
             }
             # Handle character class methods with regex
             if method == "isalpha":
@@ -345,6 +351,15 @@ class JSTranspiler(ast.NodeVisitor):
                 return f"/^[a-zA-Z0-9]$/.test({obj})"
             if method == "isspace":
                 return f"/^\\s$/.test({obj})"
+            # Handle dict.get(key) and dict.get(key, default)
+            if method == "get":
+                if len(node.args) >= 2:
+                    key = self.visit_expr(node.args[0])
+                    default = self.visit_expr(node.args[1])
+                    return f"({obj}[{key}] !== undefined ? {obj}[{key}] : {default})"
+                elif len(node.args) == 1:
+                    key = self.visit_expr(node.args[0])
+                    return f"{obj}[{key}]"
             method = method_map.get(method, method)
             # Convert remaining snake_case to camelCase
             if "_" in method:
@@ -385,7 +400,7 @@ class JSTranspiler(ast.NodeVisitor):
             if name == "set":
                 return f"new Set({args})"
             if name in self.class_names:
-                return f"new {name}({args})"
+                return f"new {self._safe_name(name)}({args})"
             # Convert snake_case function names to camelCase
             if "_" in name:
                 name = self._camel_case(name)

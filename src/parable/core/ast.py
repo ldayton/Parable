@@ -401,7 +401,9 @@ class Word(Node):
                 procsub_parts.append(p)
             else:
                 cmdsub_parts.extend(self._collect_cmdsubs(p))
-        if not cmdsub_parts and not procsub_parts:
+        # Check if we have ${ or ${| brace command substitutions to format
+        has_brace_cmdsub = "${ " in value or "${|" in value
+        if not cmdsub_parts and not procsub_parts and not has_brace_cmdsub:
             return value
         result = []
         i = 0
@@ -448,6 +450,32 @@ class Word(Node):
                 formatted = _format_cmdsub_node(node.command, in_procsub=True)
                 result.append(f"{direction}({formatted})")
                 procsub_idx += 1
+                i = j
+            # Check for ${ (space) or ${| brace command substitution
+            elif value[i : i + 3] == "${ " or value[i : i + 3] == "${|":
+                prefix = value[i : i + 3]
+                # Find matching close brace
+                j = i + 3
+                depth = 1
+                while j < len(value) and depth > 0:
+                    if value[j] == "{":
+                        depth += 1
+                    elif value[j] == "}":
+                        depth -= 1
+                    j += 1
+                # Parse and format the inner content
+                inner = value[i + 2 : j - 1]  # Content between ${ and }
+                from parable.core.parser import Parser
+                try:
+                    parser = Parser(inner.lstrip(" |"))
+                    parsed = parser.parse_list()
+                    if parsed:
+                        formatted = _format_cmdsub_node(parsed)
+                        result.append(f"{prefix}{formatted}; }}")
+                    else:
+                        result.append(value[i:j])
+                except Exception:
+                    result.append(value[i:j])
                 i = j
             else:
                 result.append(value[i])

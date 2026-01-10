@@ -2645,19 +2645,19 @@ def _is_semicolon_newline_brace(c: str) -> bool:
 
 
 def _is_reserved_word(word: str) -> bool:
-    return _set_contains(RESERVED_WORDS, word)
+    return word in RESERVED_WORDS
 
 
 def _is_compound_keyword(word: str) -> bool:
-    return _set_contains(COMPOUND_KEYWORDS, word)
+    return word in COMPOUND_KEYWORDS
 
 
 def _is_cond_unary_op(op: str) -> bool:
-    return _set_contains(COND_UNARY_OPS, op)
+    return op in COND_UNARY_OPS
 
 
 def _is_cond_binary_op(op: str) -> bool:
-    return _set_contains(COND_BINARY_OPS, op)
+    return op in COND_BINARY_OPS
 
 
 def _str_contains(haystack: str, needle: str) -> bool:
@@ -2672,14 +2672,6 @@ def _list_contains(lst: list, item: str) -> bool:
         if lst[i] == item:
             return True
         i += 1
-    return False
-
-
-def _set_contains(s: set, item: str) -> bool:
-    """Check if set contains item."""
-    for elem in s:
-        if elem == item:
-            return True
     return False
 
 
@@ -7044,7 +7036,7 @@ class Parser:
         """Parse a list that stops before certain reserved words."""
         # Check if we're already at a stop word
         self.skip_whitespace_and_newlines()
-        if _set_contains(stop_words, self.peek_word()):
+        if self.peek_word() in stop_words:
             return None
 
         pipeline = self.parse_pipeline()
@@ -7073,7 +7065,7 @@ class Parser:
                 # Check if there's another command (not a stop word)
                 if (
                     not self.at_end()
-                    and not _set_contains(stop_words, self.peek_word())
+                    and self.peek_word() not in stop_words
                     and not _is_right_bracket(self.peek())
                 ):
                     op = "\n"  # Newline separator (distinct from explicit ;)
@@ -7087,7 +7079,7 @@ class Parser:
                 self.skip_whitespace_and_newlines()
                 if (
                     self.at_end()
-                    or _set_contains(stop_words, self.peek_word())
+                    or self.peek_word() in stop_words
                     or _is_newline_or_right_bracket(self.peek())
                 ):
                     break
@@ -7103,7 +7095,7 @@ class Parser:
                 )
                 if (
                     self.at_end()
-                    or _set_contains(stop_words, self.peek_word())
+                    or self.peek_word() in stop_words
                     or _is_newline_or_right_bracket(self.peek())
                     or at_case_terminator
                 ):
@@ -7116,7 +7108,7 @@ class Parser:
             # Check for stop words before parsing next pipeline
             self.skip_whitespace_and_newlines()
             # Also check for ;;, ;&, or ;;& (case terminators)
-            if _set_contains(stop_words, self.peek_word()):
+            if self.peek_word() in stop_words:
                 break
             if (
                 self.peek() == ";"

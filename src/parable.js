@@ -3,12 +3,6 @@ class ParseError extends Error {
 	"Raised when parsing fails.";
 	constructor(message, pos, line) {
 		super();
-		if (pos == null) {
-			pos = null;
-		}
-		if (line == null) {
-			line = null;
-		}
 		this.message = message;
 		this.pos = pos;
 		this.line = line;
@@ -141,9 +135,6 @@ class Word extends Node {
 	"A word token, possibly containing expansions.";
 	constructor(value, parts) {
 		super();
-		if (parts == null) {
-			parts = null;
-		}
 		this.kind = "word";
 		this.value = value;
 		if (parts == null) {
@@ -790,9 +781,6 @@ class Command extends Node {
 	"A simple command (words + redirections).";
 	constructor(words, redirects) {
 		super();
-		if (redirects == null) {
-			redirects = null;
-		}
 		this.kind = "command";
 		this.words = words;
 		if (redirects == null) {
@@ -1063,9 +1051,6 @@ class Redirect extends Node {
 	fd = null;
 	constructor(op, target, fd) {
 		super();
-		if (fd == null) {
-			fd = null;
-		}
 		this.kind = "redirect";
 		this.op = op;
 		this.target = target;
@@ -1131,9 +1116,6 @@ class HereDoc extends Node {
 		if (quoted == null) {
 			quoted = false;
 		}
-		if (fd == null) {
-			fd = null;
-		}
 		this.kind = "heredoc";
 		this.delimiter = delimiter;
 		this.content = content;
@@ -1157,9 +1139,6 @@ class Subshell extends Node {
 	redirects = null;
 	constructor(body, redirects) {
 		super();
-		if (redirects == null) {
-			redirects = null;
-		}
 		this.kind = "subshell";
 		this.body = body;
 		this.redirects = redirects;
@@ -1167,7 +1146,7 @@ class Subshell extends Node {
 
 	toSexp() {
 		var base = "(subshell " + this.body.toSexp() + ")";
-		if (this.redirects) {
+		if (this.redirects && this.redirects.length) {
 			var redirect_parts = [];
 			for (var r of this.redirects) {
 				redirect_parts.push(r.toSexp());
@@ -1183,9 +1162,6 @@ class BraceGroup extends Node {
 	redirects = null;
 	constructor(body, redirects) {
 		super();
-		if (redirects == null) {
-			redirects = null;
-		}
 		this.kind = "brace-group";
 		this.body = body;
 		this.redirects = redirects;
@@ -1193,7 +1169,7 @@ class BraceGroup extends Node {
 
 	toSexp() {
 		var base = "(brace-group " + this.body.toSexp() + ")";
-		if (this.redirects) {
+		if (this.redirects && this.redirects.length) {
 			var redirect_parts = [];
 			for (var r of this.redirects) {
 				redirect_parts.push(r.toSexp());
@@ -1209,12 +1185,6 @@ class If extends Node {
 	else_body = null;
 	constructor(condition, then_body, else_body, redirects) {
 		super();
-		if (else_body == null) {
-			else_body = null;
-		}
-		if (redirects == null) {
-			redirects = null;
-		}
 		this.kind = "if";
 		this.condition = condition;
 		this.then_body = then_body;
@@ -1243,9 +1213,6 @@ class While extends Node {
 	"A while loop.";
 	constructor(condition, body, redirects) {
 		super();
-		if (redirects == null) {
-			redirects = null;
-		}
 		this.kind = "while";
 		this.condition = condition;
 		this.body = body;
@@ -1258,7 +1225,7 @@ class While extends Node {
 	toSexp() {
 		var base =
 			"(while " + this.condition.toSexp() + " " + this.body.toSexp() + ")";
-		if (this.redirects) {
+		if (this.redirects && this.redirects.length) {
 			var redirect_parts = [];
 			for (var r of this.redirects) {
 				redirect_parts.push(r.toSexp());
@@ -1273,9 +1240,6 @@ class Until extends Node {
 	"An until loop.";
 	constructor(condition, body, redirects) {
 		super();
-		if (redirects == null) {
-			redirects = null;
-		}
 		this.kind = "until";
 		this.condition = condition;
 		this.body = body;
@@ -1288,7 +1252,7 @@ class Until extends Node {
 	toSexp() {
 		var base =
 			"(until " + this.condition.toSexp() + " " + this.body.toSexp() + ")";
-		if (this.redirects) {
+		if (this.redirects && this.redirects.length) {
 			var redirect_parts = [];
 			for (var r of this.redirects) {
 				redirect_parts.push(r.toSexp());
@@ -1303,9 +1267,6 @@ class For extends Node {
 	"A for loop.";
 	constructor(variable, words, body, redirects) {
 		super();
-		if (redirects == null) {
-			redirects = null;
-		}
 		this.kind = "for";
 		this.variable = variable;
 		this.words = words;
@@ -1318,7 +1279,7 @@ class For extends Node {
 
 	toSexp() {
 		var suffix = "";
-		if (this.redirects) {
+		if (this.redirects && this.redirects.length) {
 			var redirect_parts = [];
 			for (var r of this.redirects) {
 				redirect_parts.push(r.toSexp());
@@ -1370,9 +1331,6 @@ class ForArith extends Node {
 	"A C-style for loop: for ((init; cond; incr)); do ... done.";
 	constructor(init, cond, incr, body, redirects) {
 		super();
-		if (redirects == null) {
-			redirects = null;
-		}
 		this.kind = "for-arith";
 		this.init = init;
 		this.cond = cond;
@@ -1394,7 +1352,7 @@ class ForArith extends Node {
 		}
 
 		var suffix = "";
-		if (this.redirects) {
+		if (this.redirects && this.redirects.length) {
 			var redirect_parts = [];
 			for (var r of this.redirects) {
 				redirect_parts.push(r.toSexp());
@@ -1437,9 +1395,6 @@ class Select extends Node {
 	"A select statement.";
 	constructor(variable, words, body, redirects) {
 		super();
-		if (redirects == null) {
-			redirects = null;
-		}
 		this.kind = "select";
 		this.variable = variable;
 		this.words = words;
@@ -1452,7 +1407,7 @@ class Select extends Node {
 
 	toSexp() {
 		var suffix = "";
-		if (this.redirects) {
+		if (this.redirects && this.redirects.length) {
 			var redirect_parts = [];
 			for (var r of this.redirects) {
 				redirect_parts.push(r.toSexp());
@@ -1468,7 +1423,7 @@ class Select extends Node {
 				word_parts.push(w.toSexp());
 			}
 			var word_strs = word_parts.join(" ");
-			if (this.words) {
+			if (this.words && this.words.length) {
 				var in_clause = "(in " + word_strs + ")";
 			} else {
 				in_clause = "(in)";
@@ -1493,9 +1448,6 @@ class Case extends Node {
 	"A case statement.";
 	constructor(word, patterns, redirects) {
 		super();
-		if (redirects == null) {
-			redirects = null;
-		}
 		this.kind = "case";
 		this.word = word;
 		this.patterns = patterns;
@@ -1512,7 +1464,7 @@ class Case extends Node {
 			parts.push(p.toSexp());
 		}
 		var base = parts.join(" ") + ")";
-		if (this.redirects) {
+		if (this.redirects && this.redirects.length) {
 			var redirect_parts = [];
 			for (var r of this.redirects) {
 				redirect_parts.push(r.toSexp());
@@ -1728,12 +1680,6 @@ class ParamExpansion extends Node {
 	arg = null;
 	constructor(param, op, arg) {
 		super();
-		if (op == null) {
-			op = null;
-		}
-		if (arg == null) {
-			arg = null;
-		}
 		this.kind = "param";
 		this.param = param;
 		this.op = op;
@@ -1784,12 +1730,6 @@ class ParamIndirect extends Node {
 	"An indirect parameter expansion ${!var} or ${!var<op><arg>}.";
 	constructor(param, op, arg) {
 		super();
-		if (op == null) {
-			op = null;
-		}
-		if (arg == null) {
-			arg = null;
-		}
 		this.kind = "param-indirect";
 		this.param = param;
 		this.op = op;
@@ -1853,9 +1793,6 @@ class ArithmeticCommand extends Node {
 	"An arithmetic command ((...)) with parsed internals.";
 	constructor(expression, redirects, raw_content) {
 		super();
-		if (redirects == null) {
-			redirects = null;
-		}
 		if (raw_content == null) {
 			raw_content = "";
 		}
@@ -1874,7 +1811,7 @@ class ArithmeticCommand extends Node {
 			.replaceAll('"', '\\"')
 			.replaceAll("\n", "\\n");
 		var result = '(arith (word "' + escaped + '"))';
-		if (this.redirects) {
+		if (this.redirects && this.redirects.length) {
 			var redirect_parts = [];
 			for (var r of this.redirects) {
 				redirect_parts.push(r.toSexp());
@@ -2201,9 +2138,6 @@ class ConditionalExpr extends Node {
 	"A conditional expression [[ expression ]].";
 	constructor(body, redirects) {
 		super();
-		if (redirects == null) {
-			redirects = null;
-		}
 		this.kind = "cond-expr";
 		this.body = body;
 		if (redirects == null) {
@@ -2223,7 +2157,7 @@ class ConditionalExpr extends Node {
 		} else {
 			result = "(cond " + this.body.toSexp() + ")";
 		}
-		if (this.redirects) {
+		if (this.redirects && this.redirects.length) {
 			var redirect_parts = [];
 			for (var r of this.redirects) {
 				redirect_parts.push(r.toSexp());
@@ -2356,9 +2290,6 @@ class Coproc extends Node {
 	name = null;
 	constructor(command, name) {
 		super();
-		if (name == null) {
-			name = null;
-		}
 		this.kind = "coproc";
 		this.command = command;
 		this.name = name;

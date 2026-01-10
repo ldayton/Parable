@@ -106,6 +106,9 @@ class JSTranspiler(ast.NodeVisitor):
                 non_self_args = [a for a in node.args.args if a.arg != "self"]
                 first_default_idx = len(non_self_args) - len(defaults)
                 for i, default in enumerate(defaults):
+                    # Skip None defaults - they're already undefined/null in JS
+                    if isinstance(default, ast.Constant) and default.value is None:
+                        continue
                     arg_name = self._safe_name(non_self_args[first_default_idx + i].arg)
                     default_val = self.visit_expr(default)
                     self.emit(f"if ({arg_name} == null) {{ {arg_name} = {default_val}; }}")
@@ -194,6 +197,14 @@ class JSTranspiler(ast.NodeVisitor):
 
     def _emit_if(self, node: ast.If, is_elif: bool):
         test = self.visit_expr(node.test)
+        # Handle self.attr truthiness checks - in Python [] is falsy but in JS it's truthy
+        # Only add length check for known array-like attributes
+        array_attrs = {"redirects", "parts", "elements", "words", "patterns", "commands"}
+        if (isinstance(node.test, ast.Attribute)
+            and isinstance(node.test.value, ast.Name)
+            and node.test.value.id == "self"
+            and node.test.attr in array_attrs):
+            test = f"{test} && {test}.length"
         if is_elif:
             self.emit_raw("    " * self.indent + f"}} else if ({test}) {{")
         else:

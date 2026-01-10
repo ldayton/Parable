@@ -8,7 +8,7 @@
 </pre>
 </div>
 
-A recursive descent parser for bash in pure Python. 4,700 lines, no dependencies, no compromises.
+Parse bash exactly as bash does. Pure Python, zero dependencies. This is the only complete bash parser for Python. Extensively validated against bash itself.
 
 ---
 

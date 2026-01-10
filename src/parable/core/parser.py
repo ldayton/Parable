@@ -2326,14 +2326,14 @@ class Parser:
         fd = None
         varfd = None  # Variable fd like {fd}
 
-        # Check for variable fd {varname} before redirect
+        # Check for variable fd {varname} or {varname[subscript]} before redirect
         if self.peek() == "{":
             saved = self.pos
             self.advance()  # consume {
             varname_chars = []
             while not self.at_end() and self.peek() not in "}<>":
                 ch = self.peek()
-                if ch.isalnum() or ch == "_":
+                if ch.isalnum() or ch in "_[]":
                     varname_chars.append(self.advance())
                 else:
                     break

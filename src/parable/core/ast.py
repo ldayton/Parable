@@ -917,16 +917,21 @@ class ForArith(Node):
 
     def to_sexp(self) -> str:
         # Oracle format: (arith-for (init (word "x")) (test (word "y")) (step (word "z")) body)
-        def escape(s: str) -> str:
-            return s.replace("\\", "\\\\").replace('"', '\\"')
+        def format_arith_val(s: str) -> str:
+            # Use Word's methods to expand ANSI-C quotes and strip locale $
+            w = Word(s, [])
+            val = w._expand_all_ansi_c_quotes(s)
+            val = w._strip_locale_string_dollars(val)
+            val = val.replace("\\", "\\\\").replace('"', '\\"')
+            return val
         suffix = " " + " ".join(r.to_sexp() for r in self.redirects) if self.redirects else ""
         init_val = self.init if self.init else "1"
         cond_val = _normalize_fd_redirects(self.cond) if self.cond else "1"
         incr_val = self.incr if self.incr else "1"
         return (
-            f'(arith-for (init (word "{escape(init_val)}")) '
-            f'(test (word "{escape(cond_val)}")) '
-            f'(step (word "{escape(incr_val)}")) {self.body.to_sexp()}){suffix}'
+            f'(arith-for (init (word "{format_arith_val(init_val)}")) '
+            f'(test (word "{format_arith_val(cond_val)}")) '
+            f'(step (word "{format_arith_val(incr_val)}")) {self.body.to_sexp()}){suffix}'
         )
 
 

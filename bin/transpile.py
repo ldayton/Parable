@@ -371,10 +371,10 @@ class JSTranspiler(ast.NodeVisitor):
                 "startswith": "startsWith",
                 "endswith": "endsWith",
                 "strip": "trim",
-                "rstrip": "trimEnd",
+                # rstrip handled specially below
                 "lower": "toLowerCase",
                 "upper": "toUpperCase",
-                "extend": "push",  # Not exact but works for single items
+                # extend handled specially below
                 "find": "indexOf",
                 "rfind": "lastIndexOf",
                 "replace": "replaceAll",  # Python replaces all, JS replace() only first
@@ -394,6 +394,12 @@ class JSTranspiler(ast.NodeVisitor):
                     chars = self.visit_expr(node.args[0])
                     return f'{obj}.replace(new RegExp("^[" + {chars} + "]+"), "")'
                 return f"{obj}.trimStart()"
+            # Handle rstrip with character set argument
+            if method == "rstrip":
+                if len(node.args) == 1:
+                    chars = self.visit_expr(node.args[0])
+                    return f'{obj}.replace(new RegExp("[" + {chars} + "]+$"), "")'
+                return f"{obj}.trimEnd()"
             # Handle str.encode() - returns array of byte values
             if method == "encode":
                 return f"Array.from(new TextEncoder().encode({obj}))"
@@ -409,6 +415,11 @@ class JSTranspiler(ast.NodeVisitor):
                 elif len(node.args) == 1:
                     key = self.visit_expr(node.args[0])
                     return f"{obj}[{key}]"
+            # Handle list.extend() - needs spread operator
+            if method == "extend":
+                if len(node.args) == 1:
+                    items = self.visit_expr(node.args[0])
+                    return f"{obj}.push(...{items})"
             method = method_map.get(method, method)
             # Convert remaining snake_case to camelCase
             if "_" in method:
@@ -448,6 +459,10 @@ class JSTranspiler(ast.NodeVisitor):
                 return "[]"
             if name == "set":
                 return f"new Set({args})"
+            if name == "max":
+                return f"Math.max({args})"
+            if name == "min":
+                return f"Math.min({args})"
             if name in self.class_names:
                 return f"new {self._safe_name(name)}({args})"
             # Convert snake_case function names to camelCase

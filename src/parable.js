@@ -1,4 +1,4 @@
-"Parable - A recursive descent bash parser in pure Python.";
+"Parable - A recursive descent parser for bash.";
 class ParseError extends Error {
 	"Raised when parsing fails.";
 	constructor(message, pos, line) {
@@ -214,7 +214,7 @@ class Word extends Node {
 					result.push(simple);
 					i += 2;
 				} else if (c === "'") {
-					result.push(39, 92, 39, 39);
+					result.push(...[39, 92, 39, 39]);
 					i += 2;
 				} else if (c === "x") {
 					if (i + 2 < inner.length && inner[i + 2] === "{") {
@@ -271,7 +271,7 @@ class Word extends Node {
 							);
 						}
 						result.push(
-							Array.from(
+							...Array.from(
 								new TextEncoder().encode(String.fromCharCode(codepoint)),
 							),
 						);
@@ -293,7 +293,7 @@ class Word extends Node {
 							);
 						}
 						result.push(
-							Array.from(
+							...Array.from(
 								new TextEncoder().encode(String.fromCharCode(codepoint)),
 							),
 						);
@@ -351,7 +351,7 @@ class Word extends Node {
 					i += 2;
 				}
 			} else {
-				result.push(Array.from(new TextEncoder().encode(inner[i])));
+				result.push(...Array.from(new TextEncoder().encode(inner[i])));
 				i += 1;
 			}
 		}
@@ -572,7 +572,7 @@ class Word extends Node {
 				i += 1;
 			}
 		}
-		var result = normalized.join("").trimEnd(" ");
+		var result = normalized.join("").replace(new RegExp("[" + " " + "]+$"), "");
 		return prefix + "(" + result + ")";
 	}
 
@@ -666,8 +666,7 @@ class Word extends Node {
 		"Replace $(...) and >(...) / <(...) with bash-oracle-formatted AST output.";
 		var cmdsub_parts = [];
 		var procsub_parts = [];
-		var parts = this.parts || [];
-		for (var p of parts) {
+		for (var p of this.parts) {
 			if (p.kind === "cmdsub") {
 				cmdsub_parts.push(p);
 			} else if (p.kind === "procsub") {
@@ -678,7 +677,7 @@ class Word extends Node {
 		}
 		var has_brace_cmdsub =
 			value.indexOf("${ ") !== -1 || value.indexOf("${|") !== -1;
-		if (cmdsub_parts.length === 0 && procsub_parts.length === 0 && !has_brace_cmdsub) {
+		if (!cmdsub_parts && !procsub_parts && !has_brace_cmdsub) {
 			return value;
 		}
 		var result = [];
@@ -776,7 +775,7 @@ class Word extends Node {
 		var value = this.ExpandAllAnsiCQuotes(this.value);
 		value = this.FormatCommandSubstitutions(value);
 		value = value.replaceAll("", "");
-		return value.trimEnd("\n");
+		return value.replace(new RegExp("[" + "\n" + "]+$"), "");
 	}
 }
 
@@ -1086,8 +1085,11 @@ class Redirect extends Node {
 			} else if (op === "<") {
 				op = "<&";
 			}
-			var fd_target = Substring(target_val, 1, target_val.length).replace(/-+$/, "");
-			if (/^\d+$/.test(fd_target)) {
+			var fd_target = Substring(target_val, 1, target_val.length).replace(
+				new RegExp("[" + "-" + "]+$"),
+				"",
+			);
+			if (/^[0-9]$/.test(fd_target)) {
 				return '(redirect "' + op + '" ' + fd_target + ")";
 			} else if (target_val === "&-") {
 				return '(redirect ">&-" 0)';
@@ -1096,10 +1098,10 @@ class Redirect extends Node {
 			}
 		}
 		if (op === ">&" || op === "<&") {
-			if (/^\d+$/.test(target_val)) {
+			if (/^[0-9]$/.test(target_val)) {
 				return '(redirect "' + op + '" ' + target_val + ")";
 			}
-			target_val = target_val.replace(/-+$/, "");
+			target_val = target_val.replace(new RegExp("[" + "-" + "]+$"), "");
 			return '(redirect "' + op + '" "' + target_val + '")';
 		}
 		return '(redirect "' + op + '" "' + target_val + '")';
@@ -2316,9 +2318,6 @@ function FormatCmdsubNode(node, indent, in_procsub) {
 		in_procsub = false;
 	}
 	("Format an AST node for command substitution output (bash-oracle pretty-print format).");
-	if (node == null) {
-		return "";
-	}
 	var sp = RepeatStr(" ", indent);
 	var inner_sp = RepeatStr(" ", indent + 4);
 	if (node.kind === "empty") {
@@ -2360,8 +2359,7 @@ function FormatCmdsubNode(node, indent, in_procsub) {
 					result.push(" " + p.op);
 				}
 			} else {
-				var lastItem = result.length > 0 ? result[result.length - 1] : "";
-				if (result.length > 0 && !lastItem.endsWith(" ") && !lastItem.endsWith("\n")) {
+				if (result && !result[result.length - 1].endsWith([" ", "\n"])) {
 					result.push(" ");
 				}
 				result.push(FormatCmdsubNode(p, indent));
@@ -2446,7 +2444,7 @@ function FormatCmdsubNode(node, indent, in_procsub) {
 			}
 			i += 1;
 		}
-		var pattern_str = patterns.join("\n" + RepeatStr(" ", indent + 4));
+		var pattern_str = ("\n" + RepeatStr(" ", indent + 4)).join(patterns);
 		return "case " + word + " in" + pattern_str + "\n" + sp + "esac";
 	}
 	if (node.kind === "function") {
@@ -2456,7 +2454,7 @@ function FormatCmdsubNode(node, indent, in_procsub) {
 		} else {
 			body = FormatCmdsubNode(node.body, indent + 4);
 		}
-		body = body.replace(/;+$/, "");
+		body = body.replace(new RegExp("[" + ";" + "]+$"), "");
 		return "function " + name + " () \n{ \n" + inner_sp + body + "\n}";
 	}
 	if (node.kind === "subshell") {
@@ -2482,7 +2480,7 @@ function FormatCmdsubNode(node, indent, in_procsub) {
 	}
 	if (node.kind === "brace-group") {
 		body = FormatCmdsubNode(node.body, indent);
-		body = body.replace(/;+$/, "");
+		body = body.replace(new RegExp("[" + ";" + "]+$"), "");
 		return "{ " + body + "; }";
 	}
 	if (node.kind === "arith-cmd") {
@@ -3267,7 +3265,7 @@ class Parser {
 				var inner_parts = locale_result[2];
 				if (locale_node) {
 					parts.push(locale_node);
-					parts.push(inner_parts);
+					parts.push(...inner_parts);
 					chars.push(locale_text);
 				} else {
 					chars.push(this.advance());
@@ -5735,7 +5733,10 @@ class Parser {
 		if (this._pending_heredoc_end == null) {
 			this._pending_heredoc_end = heredoc_end;
 		} else {
-			this._pending_heredoc_end = Math.max(this._pending_heredoc_end, heredoc_end);
+			this._pending_heredoc_end = Math.max(
+				this._pending_heredoc_end,
+				heredoc_end,
+			);
 		}
 		return new HereDoc(delimiter, content, strip_tabs, quoted, fd);
 	}

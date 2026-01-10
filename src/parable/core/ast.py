@@ -1722,7 +1722,7 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
     if isinstance(node, Empty):
         return ""
     if isinstance(node, Command):
-        parts = [w.value for w in node.words]
+        parts = [w._expand_all_ansi_c_quotes(w.value) for w in node.words]
         for r in node.redirects:
             parts.append(_format_redirect(r))
         return " ".join(parts)

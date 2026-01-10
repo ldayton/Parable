@@ -1572,6 +1572,9 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
                 if p.op == ";":
                     result.append(";")
                 elif p.op == "\n":
+                    # Skip newline if it follows a semicolon (redundant separator)
+                    if result and result[-1] == ";":
+                        continue
                     result.append("\n")
                 elif p.op == "&":
                     result.append(" &")

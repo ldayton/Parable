@@ -2987,7 +2987,8 @@ class Parser:
         # Check if next token is a binary operator
         if not self._cond_at_end() and self.peek() not in "&|)":
             # Handle < and > as binary operators (they terminate words)
-            if self.peek() in "<>":
+            # But not <( or >( which are process substitution
+            if self.peek() in "<>" and not (self.pos + 1 < self.length and self.source[self.pos + 1] == "("):
                 op = self.advance()
                 self._cond_skip_whitespace()
                 word2 = self._parse_cond_word()
@@ -3048,7 +3049,8 @@ class Parser:
             if ch in " \t":
                 break
             # < and > are string comparison operators in [[ ]], terminate words
-            if ch in "<>":
+            # But <(...) and >(...) are process substitution - don't break
+            if ch in "<>" and not (self.pos + 1 < self.length and self.source[self.pos + 1] == "("):
                 break
             # ( and ) end words unless part of extended glob: @(...), ?(...), *(...), +(...), !(...)
             if ch == "(":

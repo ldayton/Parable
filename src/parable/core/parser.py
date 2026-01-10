@@ -4665,9 +4665,15 @@ class Parser:
                 self.skip_whitespace()
                 if self.at_end() or self.peek() in ")}":
                     break
-                # Newline after & means continue to see if more commands follow
+                # Newline after & - in compound commands, skip it (& acts as separator)
+                # At top level, newline terminates (separate commands)
                 if self.peek() == "\n":
-                    continue
+                    if newline_as_separator:
+                        self.skip_whitespace_and_newlines()
+                        if self.at_end() or self.peek() in ")}":
+                            break
+                    else:
+                        break  # Top-level: newline ends this list
 
             # For ; at end of list, don't require another command
             if op == ";":

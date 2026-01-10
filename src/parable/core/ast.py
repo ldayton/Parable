@@ -624,7 +624,19 @@ class List(Node):
         if len(parts) == 1:
             return parts[0].to_sexp()
         # Handle trailing & as unary background operator
+        # & only applies to the immediately preceding pipeline, not the whole list
         if isinstance(parts[-1], Operator) and parts[-1].op == "&":
+            # Find rightmost ; or \n to split there
+            for i in range(len(parts) - 3, 0, -2):
+                if isinstance(parts[i], Operator) and parts[i].op in (";", "\n"):
+                    left = parts[:i]
+                    right = parts[i + 1 : -1]  # exclude trailing &
+                    left_sexp = List(left).to_sexp() if len(left) > 1 else left[0].to_sexp()
+                    right_sexp = (
+                        List(right).to_sexp() if len(right) > 1 else right[0].to_sexp()
+                    )
+                    return f"(semi {left_sexp} (background {right_sexp}))"
+            # No ; or \n found, background the whole list (minus trailing &)
             inner_parts = parts[:-1]
             if len(inner_parts) == 1:
                 return f"(background {inner_parts[0].to_sexp()})"

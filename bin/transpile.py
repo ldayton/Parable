@@ -527,6 +527,13 @@ class JSTranspiler(ast.NodeVisitor):
     def visit_expr_UnaryOp(self, node: ast.UnaryOp) -> str:
         operand = self.visit_expr(node.operand)
         if isinstance(node.op, ast.Not):
+            # Handle `not list_var` - in Python empty list is falsy, in JS array is truthy
+            # Convert to `list_var.length === 0` for common list variable names
+            if isinstance(node.operand, ast.Name):
+                name = node.operand.id
+                list_suffixes = ("_chars", "_list", "_parts", "chars", "parts", "result", "results", "items", "values")
+                if name.endswith(list_suffixes) or name in list_suffixes:
+                    return f"{name}.length === 0"
             return f"!{operand}"
         if isinstance(node.op, ast.USub):
             return f"-{operand}"

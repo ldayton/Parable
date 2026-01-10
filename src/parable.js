@@ -677,7 +677,11 @@ class Word extends Node {
 		}
 		var has_brace_cmdsub =
 			value.indexOf("${ ") !== -1 || value.indexOf("${|") !== -1;
-		if (!cmdsub_parts && !procsub_parts && !has_brace_cmdsub) {
+		if (
+			cmdsub_parts.length === 0 &&
+			procsub_parts.length === 0 &&
+			!has_brace_cmdsub
+		) {
 			return value;
 		}
 		var result = [];
@@ -3458,7 +3462,7 @@ class Parser {
 				chars.push(this.advance());
 			}
 		}
-		if (!chars) {
+		if (chars.length === 0) {
 			return null;
 		}
 		if (parts) {
@@ -4560,14 +4564,17 @@ class Parser {
 			var ch = this.ArithPeek();
 			if (/^[a-zA-Z0-9]$/.test(ch) || ch === "_") {
 				name_chars.push(this.ArithAdvance());
-			} else if ((IsSpecialParamOrDigit(ch) || ch === "#") && !name_chars) {
+			} else if (
+				(IsSpecialParamOrDigit(ch) || ch === "#") &&
+				name_chars.length === 0
+			) {
 				name_chars.push(this.ArithAdvance());
 				break;
 			} else {
 				break;
 			}
 		}
-		if (!name_chars) {
+		if (name_chars.length === 0) {
 			throw new ParseError("Expected variable name after $", this._arith_pos);
 		}
 		return new ParamExpansion(name_chars.join(""));
@@ -6364,7 +6371,7 @@ class Parser {
 				chars.push(this.advance());
 			}
 		}
-		if (!chars) {
+		if (chars.length === 0) {
 			return null;
 		}
 		var parts_arg = null;
@@ -6546,7 +6553,7 @@ class Parser {
 			}
 			chars.push(this.advance());
 		}
-		if (!chars) {
+		if (chars.length === 0) {
 			return null;
 		}
 		var parts_arg = null;
@@ -7971,7 +7978,7 @@ class Parser {
 				throw new ParseError("Parser not fully implemented yet", this.pos);
 			}
 		}
-		if (!results) {
+		if (results.length === 0) {
 			return [new Empty()];
 		}
 		return results;

@@ -478,7 +478,7 @@ class JSTranspiler(ast.NodeVisitor):
     def visit_cmpop(self, op: ast.cmpop) -> str:
         ops = {
             ast.Eq: "===", ast.NotEq: "!==", ast.Lt: "<", ast.LtE: "<=",
-            ast.Gt: ">", ast.GtE: ">=", ast.Is: "===", ast.IsNot: "!==",
+            ast.Gt: ">", ast.GtE: ">=", ast.Is: "==", ast.IsNot: "!=",  # == for is None checks (handles undefined)
             ast.In: "in", ast.NotIn: "not in",
         }
         return ops.get(type(op), "/* ? */")

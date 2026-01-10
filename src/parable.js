@@ -9,7 +9,7 @@ class ParseError extends Error {
 	}
 
 	FormatMessage() {
-		if (this.line !== null && this.pos !== null) {
+		if (this.line != null && this.pos != null) {
 			return (
 				"Parse error at line " +
 				String(this.line) +
@@ -18,7 +18,7 @@ class ParseError extends Error {
 				": " +
 				this.message
 			);
-		} else if (this.pos !== null) {
+		} else if (this.pos != null) {
 			return (
 				"Parse error at position " + String(this.pos) + ": " + this.message
 			);
@@ -137,7 +137,7 @@ class Word extends Node {
 		super();
 		this.kind = "word";
 		this.value = value;
-		if (parts === null) {
+		if (parts == null) {
 			parts = [];
 		}
 		this.parts = parts;
@@ -607,34 +607,34 @@ class Word extends Node {
 			result.push(node);
 		} else {
 			var expr = node["expression"] !== undefined ? node["expression"] : null;
-			if (expr !== null) {
+			if (expr != null) {
 				result.push(this.CollectCmdsubs(expr));
 			}
 		}
 		var left = node["left"] !== undefined ? node["left"] : null;
-		if (left !== null) {
+		if (left != null) {
 			result.push(this.CollectCmdsubs(left));
 		}
 		var right = node["right"] !== undefined ? node["right"] : null;
-		if (right !== null) {
+		if (right != null) {
 			result.push(this.CollectCmdsubs(right));
 		}
 		var operand = node["operand"] !== undefined ? node["operand"] : null;
-		if (operand !== null) {
+		if (operand != null) {
 			result.push(this.CollectCmdsubs(operand));
 		}
 		var condition = node["condition"] !== undefined ? node["condition"] : null;
-		if (condition !== null) {
+		if (condition != null) {
 			result.push(this.CollectCmdsubs(condition));
 		}
 		var true_value =
 			node["true_value"] !== undefined ? node["true_value"] : null;
-		if (true_value !== null) {
+		if (true_value != null) {
 			result.push(this.CollectCmdsubs(true_value));
 		}
 		var false_value =
 			node["false_value"] !== undefined ? node["false_value"] : null;
-		if (false_value !== null) {
+		if (false_value != null) {
 			result.push(this.CollectCmdsubs(false_value));
 		}
 		return result;
@@ -761,7 +761,7 @@ class Command extends Node {
 		super();
 		this.kind = "command";
 		this.words = words;
-		if (redirects === null) {
+		if (redirects == null) {
 			redirects = [];
 		}
 		this.redirects = redirects;
@@ -1161,7 +1161,7 @@ class If extends Node {
 		this.condition = condition;
 		this.then_body = then_body;
 		this.else_body = else_body;
-		if (redirects === null) {
+		if (redirects == null) {
 			redirects = [];
 		}
 		this.redirects = redirects;
@@ -1188,7 +1188,7 @@ class While extends Node {
 		this.kind = "while";
 		this.condition = condition;
 		this.body = body;
-		if (redirects === null) {
+		if (redirects == null) {
 			redirects = [];
 		}
 		this.redirects = redirects;
@@ -1215,7 +1215,7 @@ class Until extends Node {
 		this.kind = "until";
 		this.condition = condition;
 		this.body = body;
-		if (redirects === null) {
+		if (redirects == null) {
 			redirects = [];
 		}
 		this.redirects = redirects;
@@ -1243,7 +1243,7 @@ class For extends Node {
 		this.variable = variable;
 		this.words = words;
 		this.body = body;
-		if (redirects === null) {
+		if (redirects == null) {
 			redirects = [];
 		}
 		this.redirects = redirects;
@@ -1261,7 +1261,7 @@ class For extends Node {
 		var var_escaped = this.variable
 			.replaceAll("\\", "\\\\")
 			.replaceAll('"', '\\"');
-		if (this.words === null) {
+		if (this.words == null) {
 			return (
 				'(for (word "' +
 				var_escaped +
@@ -1308,7 +1308,7 @@ class ForArith extends Node {
 		this.cond = cond;
 		this.incr = incr;
 		this.body = body;
-		if (redirects === null) {
+		if (redirects == null) {
 			redirects = [];
 		}
 		this.redirects = redirects;
@@ -1371,7 +1371,7 @@ class Select extends Node {
 		this.variable = variable;
 		this.words = words;
 		this.body = body;
-		if (redirects === null) {
+		if (redirects == null) {
 			redirects = [];
 		}
 		this.redirects = redirects;
@@ -1389,7 +1389,7 @@ class Select extends Node {
 		var var_escaped = this.variable
 			.replaceAll("\\", "\\\\")
 			.replaceAll('"', '\\"');
-		if (this.words !== null) {
+		if (this.words != null) {
 			var word_parts = [];
 			for (var w of this.words) {
 				word_parts.push(w.toSexp());
@@ -1423,7 +1423,7 @@ class Case extends Node {
 		this.kind = "case";
 		this.word = word;
 		this.patterns = patterns;
-		if (redirects === null) {
+		if (redirects == null) {
 			redirects = [];
 		}
 		this.redirects = redirects;
@@ -1659,9 +1659,9 @@ class ParamExpansion extends Node {
 		var escaped_param = this.param
 			.replaceAll("\\", "\\\\")
 			.replaceAll('"', '\\"');
-		if (this.op !== null) {
+		if (this.op != null) {
 			var escaped_op = this.op.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
-			if (this.arg !== null) {
+			if (this.arg != null) {
 				var arg_val = this.arg;
 			} else {
 				arg_val = "";
@@ -1707,9 +1707,9 @@ class ParamIndirect extends Node {
 
 	toSexp() {
 		var escaped = this.param.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
-		if (this.op !== null) {
+		if (this.op != null) {
 			var escaped_op = this.op.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
-			if (this.arg !== null) {
+			if (this.arg != null) {
 				var arg_val = this.arg;
 			} else {
 				arg_val = "";
@@ -1751,7 +1751,7 @@ class ArithmeticExpansion extends Node {
 	}
 
 	toSexp() {
-		if (this.expression === null) {
+		if (this.expression == null) {
 			return "(arith)";
 		}
 		return "(arith " + this.expression.toSexp() + ")";
@@ -1764,7 +1764,7 @@ class ArithmeticCommand extends Node {
 		super();
 		this.kind = "arith-cmd";
 		this.expression = expression;
-		if (redirects === null) {
+		if (redirects == null) {
 			redirects = [];
 		}
 		this.redirects = redirects;
@@ -2065,7 +2065,7 @@ class Negation extends Node {
 	}
 
 	toSexp() {
-		if (this.pipeline === null) {
+		if (this.pipeline == null) {
 			return "(negation (command))";
 		}
 		return "(negation " + this.pipeline.toSexp() + ")";
@@ -2083,7 +2083,7 @@ class Time extends Node {
 	}
 
 	toSexp() {
-		if (this.pipeline === null) {
+		if (this.pipeline == null) {
 			if (this.posix) {
 				return "(time -p (command))";
 			} else {
@@ -2103,7 +2103,7 @@ class ConditionalExpr extends Node {
 		super();
 		this.kind = "cond-expr";
 		this.body = body;
-		if (redirects === null) {
+		if (redirects == null) {
 			redirects = [];
 		}
 		this.redirects = redirects;
@@ -2111,7 +2111,7 @@ class ConditionalExpr extends Node {
 
 	toSexp() {
 		var body_kind = this.body["kind"] !== undefined ? this.body["kind"] : null;
-		if (body_kind === null) {
+		if (body_kind == null) {
 			var escaped = this.body
 				.replaceAll("\\", "\\\\")
 				.replaceAll('"', '\\"')
@@ -2979,7 +2979,7 @@ class Parser {
 				this.advance();
 				if (ch === "\n") {
 					if (
-						this._pending_heredoc_end !== null &&
+						this._pending_heredoc_end != null &&
 						this._pending_heredoc_end > this.pos
 					) {
 						this.pos = this._pending_heredoc_end;
@@ -3694,7 +3694,7 @@ class Parser {
 		var text = Substring(this.source, start, this.pos);
 		var sub_parser = new Parser(content);
 		var cmd = sub_parser.parseList();
-		if (cmd === null) {
+		if (cmd == null) {
 			cmd = new Empty();
 		}
 		return [new CommandSubstitution(cmd), text];
@@ -3797,7 +3797,7 @@ class Parser {
 		var content = content_chars.join("");
 		var sub_parser = new Parser(content);
 		var cmd = sub_parser.parseList();
-		if (cmd === null) {
+		if (cmd == null) {
 			cmd = new Empty();
 		}
 		return [new CommandSubstitution(cmd), text];
@@ -3866,7 +3866,7 @@ class Parser {
 		var text = Substring(this.source, start, this.pos);
 		var sub_parser = new Parser(content);
 		var cmd = sub_parser.parseList();
-		if (cmd === null) {
+		if (cmd == null) {
 			cmd = new Empty();
 		}
 		return [new ProcessSubstitution(direction, cmd), text];
@@ -3891,7 +3891,7 @@ class Parser {
 				break;
 			}
 			var word = this.parseWord();
-			if (word === null) {
+			if (word == null) {
 				if (this.peek() === ")") {
 					break;
 				}
@@ -3977,7 +3977,7 @@ class Parser {
 		} else {
 			result = this.ArithParseComma();
 		}
-		if (saved_arith_src !== null) {
+		if (saved_arith_src != null) {
 			this._arith_src = saved_arith_src;
 			this._arith_pos = saved_arith_pos;
 			this._arith_len = saved_arith_len;
@@ -5031,7 +5031,7 @@ class Parser {
 					return [null, ""];
 				}
 				var op = this.ConsumeParamOperator();
-				if (op !== null) {
+				if (op != null) {
 					var arg_chars = [];
 					var depth = 1;
 					while (!this.atEnd() && depth > 0) {
@@ -5112,7 +5112,7 @@ class Parser {
 			return [new ParamExpansion(param), text];
 		}
 		op = this.ConsumeParamOperator();
-		if (op === null) {
+		if (op == null) {
 			op = this.advance();
 		}
 		arg_chars = [];
@@ -5388,7 +5388,7 @@ class Parser {
 				this.pos = saved;
 			}
 		}
-		if (varfd === null && this.peek() && /^[0-9]$/.test(this.peek())) {
+		if (varfd == null && this.peek() && /^[0-9]$/.test(this.peek())) {
 			var fd_chars = [];
 			while (!this.atEnd() && /^[0-9]$/.test(this.peek())) {
 				fd_chars.push(this.advance());
@@ -5401,7 +5401,7 @@ class Parser {
 			this.pos + 1 < this.length &&
 			this.source[this.pos + 1] === ">"
 		) {
-			if (fd !== null) {
+			if (fd != null) {
 				this.pos = start;
 				return null;
 			}
@@ -5415,17 +5415,17 @@ class Parser {
 			}
 			this.skipWhitespace();
 			var target = this.parseWord();
-			if (target === null) {
+			if (target == null) {
 				throw new ParseError("Expected target for redirect " + op);
 			}
 			return new Redirect(op, target);
 		}
-		if (ch === null || !IsRedirectChar(ch)) {
+		if (ch == null || !IsRedirectChar(ch)) {
 			this.pos = start;
 			return null;
 		}
 		if (
-			fd === null &&
+			fd == null &&
 			this.pos + 1 < this.length &&
 			this.source[this.pos + 1] === "("
 		) {
@@ -5457,12 +5457,7 @@ class Parser {
 			} else if (op === ">" && next_ch === "|") {
 				this.advance();
 				op = ">|";
-			} else if (
-				fd === null &&
-				varfd === null &&
-				op === ">" &&
-				next_ch === "&"
-			) {
+			} else if (fd == null && varfd == null && op === ">" && next_ch === "&") {
 				if (
 					this.pos + 1 >= this.length ||
 					!IsDigitOrDash(this.source[this.pos + 1])
@@ -5470,12 +5465,7 @@ class Parser {
 					this.advance();
 					op = ">&";
 				}
-			} else if (
-				fd === null &&
-				varfd === null &&
-				op === "<" &&
-				next_ch === "&"
-			) {
+			} else if (fd == null && varfd == null && op === "<" && next_ch === "&") {
 				if (
 					this.pos + 1 >= this.length ||
 					!IsDigitOrDash(this.source[this.pos + 1])
@@ -5488,9 +5478,9 @@ class Parser {
 		if (op === "<<") {
 			return this.ParseHeredoc(fd, strip_tabs);
 		}
-		if (varfd !== null) {
+		if (varfd != null) {
 			op = "{" + varfd + "}" + op;
-		} else if (fd !== null) {
+		} else if (fd != null) {
 			op = String(fd) + op;
 		}
 		this.skipWhitespace();
@@ -5515,7 +5505,7 @@ class Parser {
 				target = new Word("&" + fd_target);
 			} else {
 				var inner_word = this.parseWord();
-				if (inner_word !== null) {
+				if (inner_word != null) {
 					target = new Word("&" + inner_word.value);
 					target.parts = inner_word.parts;
 				} else {
@@ -5525,7 +5515,7 @@ class Parser {
 		} else {
 			target = this.parseWord();
 		}
-		if (target === null) {
+		if (target == null) {
 			throw new ParseError("Expected target for redirect " + op);
 		}
 		return new Redirect(op, target);
@@ -5613,7 +5603,7 @@ class Parser {
 			line_end += 1;
 		}
 		if (
-			this._pending_heredoc_end !== null &&
+			this._pending_heredoc_end != null &&
 			this._pending_heredoc_end > line_end
 		) {
 			var content_start = this._pending_heredoc_end;
@@ -5664,7 +5654,7 @@ class Parser {
 		if (heredoc_end < this.length) {
 			heredoc_end += 1;
 		}
-		if (this._pending_heredoc_end === null) {
+		if (this._pending_heredoc_end == null) {
 			this._pending_heredoc_end = heredoc_end;
 		} else {
 			this._pending_heredoc_end = max(this._pending_heredoc_end, heredoc_end);
@@ -5701,7 +5691,7 @@ class Parser {
 				}
 			}
 			var redirect = this.parseRedirect();
-			if (redirect !== null) {
+			if (redirect != null) {
 				redirects.push(redirect);
 				continue;
 			}
@@ -5713,7 +5703,7 @@ class Parser {
 				}
 			}
 			var word = this.parseWord();
-			if (word === null) {
+			if (word == null) {
 				break;
 			}
 			words.push(word);
@@ -5732,7 +5722,7 @@ class Parser {
 		}
 		this.advance();
 		var body = this.parseList();
-		if (body === null) {
+		if (body == null) {
 			throw new ParseError("Expected command in subshell");
 		}
 		this.skipWhitespace();
@@ -5744,7 +5734,7 @@ class Parser {
 		while (true) {
 			this.skipWhitespace();
 			var redirect = this.parseRedirect();
-			if (redirect === null) {
+			if (redirect == null) {
 				break;
 			}
 			redirects.push(redirect);
@@ -5807,7 +5797,7 @@ class Parser {
 		while (true) {
 			this.skipWhitespace();
 			var redirect = this.parseRedirect();
-			if (redirect === null) {
+			if (redirect == null) {
 				break;
 			}
 			redirects.push(redirect);
@@ -5895,7 +5885,7 @@ class Parser {
 		while (true) {
 			this.skipWhitespace();
 			var redirect = this.parseRedirect();
-			if (redirect === null) {
+			if (redirect == null) {
 				break;
 			}
 			redirects.push(redirect);
@@ -6003,13 +5993,13 @@ class Parser {
 			return new CondParen(inner);
 		}
 		var word1 = this.ParseCondWord();
-		if (word1 === null) {
+		if (word1 == null) {
 			throw new ParseError("Expected word in conditional expression");
 		}
 		this.CondSkipWhitespace();
 		if (IsCondUnaryOp(word1.value)) {
 			operand = this.ParseCondWord();
-			if (operand === null) {
+			if (operand == null) {
 				throw new ParseError("Expected operand after " + word1.value);
 			}
 			return new UnaryTest(word1.value, operand);
@@ -6026,7 +6016,7 @@ class Parser {
 				var op = this.advance();
 				this.CondSkipWhitespace();
 				var word2 = this.ParseCondWord();
-				if (word2 === null) {
+				if (word2 == null) {
 					throw new ParseError("Expected operand after " + op);
 				}
 				return new BinaryTest(op, word1, word2);
@@ -6040,7 +6030,7 @@ class Parser {
 				} else {
 					word2 = this.ParseCondWord();
 				}
-				if (word2 === null) {
+				if (word2 == null) {
 					throw new ParseError("Expected operand after " + op_word.value);
 				}
 				return new BinaryTest(op_word.value, word1, word2);
@@ -6487,7 +6477,7 @@ class Parser {
 		this.advance();
 		this.skipWhitespaceAndNewlines();
 		var body = this.parseList();
-		if (body === null) {
+		if (body == null) {
 			throw new ParseError("Expected command in brace group");
 		}
 		this.skipWhitespace();
@@ -6499,7 +6489,7 @@ class Parser {
 		while (true) {
 			this.skipWhitespace();
 			var redirect = this.parseRedirect();
-			if (redirect === null) {
+			if (redirect == null) {
 				break;
 			}
 			redirects.push(redirect);
@@ -6519,7 +6509,7 @@ class Parser {
 		}
 		this.consumeWord("if");
 		var condition = this.parseListUntil(new Set(["then"]));
-		if (condition === null) {
+		if (condition == null) {
 			throw new ParseError("Expected condition after 'if'");
 		}
 		this.skipWhitespaceAndNewlines();
@@ -6527,7 +6517,7 @@ class Parser {
 			throw new ParseError("Expected 'then' after if condition");
 		}
 		var then_body = this.parseListUntil(new Set(["elif", "else", "fi"]));
-		if (then_body === null) {
+		if (then_body == null) {
 			throw new ParseError("Expected commands after 'then'");
 		}
 		this.skipWhitespaceAndNewlines();
@@ -6536,7 +6526,7 @@ class Parser {
 		if (next_word === "elif") {
 			this.consumeWord("elif");
 			var elif_condition = this.parseListUntil(new Set(["then"]));
-			if (elif_condition === null) {
+			if (elif_condition == null) {
 				throw new ParseError("Expected condition after 'elif'");
 			}
 			this.skipWhitespaceAndNewlines();
@@ -6544,7 +6534,7 @@ class Parser {
 				throw new ParseError("Expected 'then' after elif condition");
 			}
 			var elif_then_body = this.parseListUntil(new Set(["elif", "else", "fi"]));
-			if (elif_then_body === null) {
+			if (elif_then_body == null) {
 				throw new ParseError("Expected commands after 'then'");
 			}
 			this.skipWhitespaceAndNewlines();
@@ -6555,7 +6545,7 @@ class Parser {
 			} else if (inner_next === "else") {
 				this.consumeWord("else");
 				inner_else = this.parseListUntil(new Set(["fi"]));
-				if (inner_else === null) {
+				if (inner_else == null) {
 					throw new ParseError("Expected commands after 'else'");
 				}
 			}
@@ -6563,7 +6553,7 @@ class Parser {
 		} else if (next_word === "else") {
 			this.consumeWord("else");
 			else_body = this.parseListUntil(new Set(["fi"]));
-			if (else_body === null) {
+			if (else_body == null) {
 				throw new ParseError("Expected commands after 'else'");
 			}
 		}
@@ -6575,7 +6565,7 @@ class Parser {
 		while (true) {
 			this.skipWhitespace();
 			var redirect = this.parseRedirect();
-			if (redirect === null) {
+			if (redirect == null) {
 				break;
 			}
 			redirects.push(redirect);
@@ -6591,7 +6581,7 @@ class Parser {
 		"Parse elif chain (after seeing 'elif' keyword).";
 		this.consumeWord("elif");
 		var condition = this.parseListUntil(new Set(["then"]));
-		if (condition === null) {
+		if (condition == null) {
 			throw new ParseError("Expected condition after 'elif'");
 		}
 		this.skipWhitespaceAndNewlines();
@@ -6599,7 +6589,7 @@ class Parser {
 			throw new ParseError("Expected 'then' after elif condition");
 		}
 		var then_body = this.parseListUntil(new Set(["elif", "else", "fi"]));
-		if (then_body === null) {
+		if (then_body == null) {
 			throw new ParseError("Expected commands after 'then'");
 		}
 		this.skipWhitespaceAndNewlines();
@@ -6610,7 +6600,7 @@ class Parser {
 		} else if (next_word === "else") {
 			this.consumeWord("else");
 			else_body = this.parseListUntil(new Set(["fi"]));
-			if (else_body === null) {
+			if (else_body == null) {
 				throw new ParseError("Expected commands after 'else'");
 			}
 		}
@@ -6625,7 +6615,7 @@ class Parser {
 		}
 		this.consumeWord("while");
 		var condition = this.parseListUntil(new Set(["do"]));
-		if (condition === null) {
+		if (condition == null) {
 			throw new ParseError("Expected condition after 'while'");
 		}
 		this.skipWhitespaceAndNewlines();
@@ -6633,7 +6623,7 @@ class Parser {
 			throw new ParseError("Expected 'do' after while condition");
 		}
 		var body = this.parseListUntil(new Set(["done"]));
-		if (body === null) {
+		if (body == null) {
 			throw new ParseError("Expected commands after 'do'");
 		}
 		this.skipWhitespaceAndNewlines();
@@ -6644,7 +6634,7 @@ class Parser {
 		while (true) {
 			this.skipWhitespace();
 			var redirect = this.parseRedirect();
-			if (redirect === null) {
+			if (redirect == null) {
 				break;
 			}
 			redirects.push(redirect);
@@ -6664,7 +6654,7 @@ class Parser {
 		}
 		this.consumeWord("until");
 		var condition = this.parseListUntil(new Set(["do"]));
-		if (condition === null) {
+		if (condition == null) {
 			throw new ParseError("Expected condition after 'until'");
 		}
 		this.skipWhitespaceAndNewlines();
@@ -6672,7 +6662,7 @@ class Parser {
 			throw new ParseError("Expected 'do' after until condition");
 		}
 		var body = this.parseListUntil(new Set(["done"]));
-		if (body === null) {
+		if (body == null) {
 			throw new ParseError("Expected commands after 'do'");
 		}
 		this.skipWhitespaceAndNewlines();
@@ -6683,7 +6673,7 @@ class Parser {
 		while (true) {
 			this.skipWhitespace();
 			var redirect = this.parseRedirect();
-			if (redirect === null) {
+			if (redirect == null) {
 				break;
 			}
 			redirects.push(redirect);
@@ -6711,7 +6701,7 @@ class Parser {
 			return this.ParseForArith();
 		}
 		var var_name = this.peekWord();
-		if (var_name === null) {
+		if (var_name == null) {
 			throw new ParseError("Expected variable name after 'for'");
 		}
 		this.consumeWord(var_name);
@@ -6740,7 +6730,7 @@ class Parser {
 					break;
 				}
 				var word = this.parseWord();
-				if (word === null) {
+				if (word == null) {
 					break;
 				}
 				words.push(word);
@@ -6751,7 +6741,7 @@ class Parser {
 			throw new ParseError("Expected 'do' in for loop");
 		}
 		var body = this.parseListUntil(new Set(["done"]));
-		if (body === null) {
+		if (body == null) {
 			throw new ParseError("Expected commands after 'do'");
 		}
 		this.skipWhitespaceAndNewlines();
@@ -6762,7 +6752,7 @@ class Parser {
 		while (true) {
 			this.skipWhitespace();
 			var redirect = this.parseRedirect();
-			if (redirect === null) {
+			if (redirect == null) {
 				break;
 			}
 			redirects.push(redirect);
@@ -6822,13 +6812,13 @@ class Parser {
 		this.skipWhitespaceAndNewlines();
 		if (this.peek() === "{") {
 			var brace = this.parseBraceGroup();
-			if (brace === null) {
+			if (brace == null) {
 				throw new ParseError("Expected brace group body in for loop");
 			}
 			var body = brace.body;
 		} else if (this.consumeWord("do")) {
 			body = this.parseListUntil(new Set(["done"]));
-			if (body === null) {
+			if (body == null) {
 				throw new ParseError("Expected commands after 'do'");
 			}
 			this.skipWhitespaceAndNewlines();
@@ -6842,7 +6832,7 @@ class Parser {
 		while (true) {
 			this.skipWhitespace();
 			var redirect = this.parseRedirect();
-			if (redirect === null) {
+			if (redirect == null) {
 				break;
 			}
 			redirects.push(redirect);
@@ -6863,7 +6853,7 @@ class Parser {
 		this.consumeWord("select");
 		this.skipWhitespace();
 		var var_name = this.peekWord();
-		if (var_name === null) {
+		if (var_name == null) {
 			throw new ParseError("Expected variable name after 'select'");
 		}
 		this.consumeWord(var_name);
@@ -6892,7 +6882,7 @@ class Parser {
 					break;
 				}
 				var word = this.parseWord();
-				if (word === null) {
+				if (word == null) {
 					break;
 				}
 				words.push(word);
@@ -6901,13 +6891,13 @@ class Parser {
 		this.skipWhitespaceAndNewlines();
 		if (this.peek() === "{") {
 			var brace = this.parseBraceGroup();
-			if (brace === null) {
+			if (brace == null) {
 				throw new ParseError("Expected brace group body in select");
 			}
 			var body = brace.body;
 		} else if (this.consumeWord("do")) {
 			body = this.parseListUntil(new Set(["done"]));
-			if (body === null) {
+			if (body == null) {
 				throw new ParseError("Expected commands after 'do'");
 			}
 			this.skipWhitespaceAndNewlines();
@@ -6921,7 +6911,7 @@ class Parser {
 		while (true) {
 			this.skipWhitespace();
 			var redirect = this.parseRedirect();
-			if (redirect === null) {
+			if (redirect == null) {
 				break;
 			}
 			redirects.push(redirect);
@@ -6978,7 +6968,7 @@ class Parser {
 		this.consumeWord("case");
 		this.skipWhitespace();
 		var word = this.parseWord();
-		if (word === null) {
+		if (word == null) {
 			throw new ParseError("Expected word after 'case'");
 		}
 		this.skipWhitespaceAndNewlines();
@@ -7188,7 +7178,7 @@ class Parser {
 		while (true) {
 			this.skipWhitespace();
 			var redirect = this.parseRedirect();
-			if (redirect === null) {
+			if (redirect == null) {
 				break;
 			}
 			redirects.push(redirect);
@@ -7218,26 +7208,26 @@ class Parser {
 		}
 		if (ch === "{") {
 			var body = this.parseBraceGroup();
-			if (body !== null) {
+			if (body != null) {
 				return new Coproc(body, name);
 			}
 		}
 		if (ch === "(") {
 			if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
 				body = this.parseArithmeticCommand();
-				if (body !== null) {
+				if (body != null) {
 					return new Coproc(body, name);
 				}
 			}
 			body = this.parseSubshell();
-			if (body !== null) {
+			if (body != null) {
 				return new Coproc(body, name);
 			}
 		}
 		var next_word = this.peekWord();
 		if (IsCompoundKeyword(next_word)) {
 			body = this.parseCompoundCommand();
-			if (body !== null) {
+			if (body != null) {
 				return new Coproc(body, name);
 			}
 		}
@@ -7260,7 +7250,7 @@ class Parser {
 			if (ch === "{") {
 				name = potential_name;
 				body = this.parseBraceGroup();
-				if (body !== null) {
+				if (body != null) {
 					return new Coproc(body, name);
 				}
 			} else if (ch === "(") {
@@ -7270,20 +7260,20 @@ class Parser {
 				} else {
 					body = this.parseSubshell();
 				}
-				if (body !== null) {
+				if (body != null) {
 					return new Coproc(body, name);
 				}
 			} else if (IsCompoundKeyword(next_word)) {
 				name = potential_name;
 				body = this.parseCompoundCommand();
-				if (body !== null) {
+				if (body != null) {
 					return new Coproc(body, name);
 				}
 			}
 			this.pos = word_start;
 		}
 		body = this.parseCommand();
-		if (body !== null) {
+		if (body != null) {
 			return new Coproc(body, name);
 		}
 		throw new ParseError("Expected command after coproc");
@@ -7300,7 +7290,7 @@ class Parser {
 			this.consumeWord("function");
 			this.skipWhitespace();
 			var name = this.peekWord();
-			if (name === null) {
+			if (name == null) {
 				this.pos = saved_pos;
 				return null;
 			}
@@ -7314,13 +7304,13 @@ class Parser {
 			}
 			this.skipWhitespaceAndNewlines();
 			var body = this.ParseCompoundCommand();
-			if (body === null) {
+			if (body == null) {
 				throw new ParseError("Expected function body");
 			}
 			return new Function(name, body);
 		}
 		name = this.peekWord();
-		if (name === null || IsReservedWord(name)) {
+		if (name == null || IsReservedWord(name)) {
 			return null;
 		}
 		if (StrContains(name, "=")) {
@@ -7355,7 +7345,7 @@ class Parser {
 		this.advance();
 		this.skipWhitespaceAndNewlines();
 		body = this.ParseCompoundCommand();
-		if (body === null) {
+		if (body == null) {
 			throw new ParseError("Expected function body");
 		}
 		return new Function(name, body);
@@ -7409,7 +7399,7 @@ class Parser {
 			return null;
 		}
 		var pipeline = this.parsePipeline();
-		if (pipeline === null) {
+		if (pipeline == null) {
 			return null;
 		}
 		var parts = [pipeline];
@@ -7420,7 +7410,7 @@ class Parser {
 				has_newline = true;
 				this.advance();
 				if (
-					this._pending_heredoc_end !== null &&
+					this._pending_heredoc_end != null &&
 					this._pending_heredoc_end > this.pos
 				) {
 					this.pos = this._pending_heredoc_end;
@@ -7429,7 +7419,7 @@ class Parser {
 				this.skipWhitespace();
 			}
 			var op = this.parseListOperator();
-			if (op === null && has_newline) {
+			if (op == null && has_newline) {
 				if (
 					!this.atEnd() &&
 					!stop_words.has(this.peekWord()) &&
@@ -7438,7 +7428,7 @@ class Parser {
 					op = "\n";
 				}
 			}
-			if (op === null) {
+			if (op == null) {
 				break;
 			}
 			if (op === "&") {
@@ -7482,7 +7472,7 @@ class Parser {
 				break;
 			}
 			pipeline = this.parsePipeline();
-			if (pipeline === null) {
+			if (pipeline == null) {
 				throw new ParseError("Expected command after " + op);
 			}
 			parts.push(pipeline);
@@ -7506,7 +7496,7 @@ class Parser {
 			this.source[this.pos + 1] === "("
 		) {
 			var result = this.parseArithmeticCommand();
-			if (result !== null) {
+			if (result != null) {
 				return result;
 			}
 		}
@@ -7515,7 +7505,7 @@ class Parser {
 		}
 		if (ch === "{") {
 			result = this.parseBraceGroup();
-			if (result !== null) {
+			if (result != null) {
 				return result;
 			}
 		}
@@ -7552,7 +7542,7 @@ class Parser {
 			return this.parseCoproc();
 		}
 		var func = this.parseFunction();
-		if (func !== null) {
+		if (func != null) {
 			return func;
 		}
 		return this.parseCommand();
@@ -7630,8 +7620,8 @@ class Parser {
 				this.advance();
 				this.skipWhitespace();
 				var inner = this.parsePipeline();
-				if (inner !== null && inner.kind === "negation") {
-					if (inner.pipeline !== null) {
+				if (inner != null && inner.kind === "negation") {
+					if (inner.pipeline != null) {
 						return inner.pipeline;
 					} else {
 						return new Command([]);
@@ -7651,7 +7641,7 @@ class Parser {
 		} else if (prefix_order === "negation_time") {
 			result = new Time(result, time_posix);
 			result = new Negation(result);
-		} else if (result === null) {
+		} else if (result == null) {
 			return null;
 		}
 		return result;
@@ -7660,7 +7650,7 @@ class Parser {
 	ParseSimplePipeline() {
 		"Parse a simple pipeline (commands separated by | or |&) without time/negation.";
 		var cmd = this.parseCompoundCommand();
-		if (cmd === null) {
+		if (cmd == null) {
 			return null;
 		}
 		var commands = [cmd];
@@ -7683,7 +7673,7 @@ class Parser {
 				commands.push(new PipeBoth());
 			}
 			cmd = this.parseCompoundCommand();
-			if (cmd === null) {
+			if (cmd == null) {
 				throw new ParseError("Expected command after |");
 			}
 			commands.push(cmd);
@@ -7741,7 +7731,7 @@ class Parser {
 			this.skipWhitespace();
 		}
 		var pipeline = this.parsePipeline();
-		if (pipeline === null) {
+		if (pipeline == null) {
 			return null;
 		}
 		var parts = [pipeline];
@@ -7755,7 +7745,7 @@ class Parser {
 				}
 				this.advance();
 				if (
-					this._pending_heredoc_end !== null &&
+					this._pending_heredoc_end != null &&
 					this._pending_heredoc_end > this.pos
 				) {
 					this.pos = this._pending_heredoc_end;
@@ -7767,12 +7757,12 @@ class Parser {
 				break;
 			}
 			var op = this.parseListOperator();
-			if (op === null && has_newline) {
+			if (op == null && has_newline) {
 				if (!this.atEnd() && !IsRightBracket(this.peek())) {
 					op = "\n";
 				}
 			}
-			if (op === null) {
+			if (op == null) {
 				break;
 			}
 			if (
@@ -7814,7 +7804,7 @@ class Parser {
 				this.skipWhitespaceAndNewlines();
 			}
 			pipeline = this.parsePipeline();
-			if (pipeline === null) {
+			if (pipeline == null) {
 				throw new ParseError("Expected command after " + op);
 			}
 			parts.push(pipeline);
@@ -7860,7 +7850,7 @@ class Parser {
 		}
 		while (!this.atEnd()) {
 			var result = this.parseList();
-			if (result !== null) {
+			if (result != null) {
 				results.push(result);
 			}
 			this.skipWhitespace();
@@ -7869,7 +7859,7 @@ class Parser {
 				found_newline = true;
 				this.advance();
 				if (
-					this._pending_heredoc_end !== null &&
+					this._pending_heredoc_end != null &&
 					this._pending_heredoc_end > this.pos
 				) {
 					this.pos = this._pending_heredoc_end;

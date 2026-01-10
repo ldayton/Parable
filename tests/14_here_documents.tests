@@ -7,7 +7,10 @@ cat <<EOF
 hello world
 EOF
 ---
-(command (word "cat") (heredoc "EOF" "hello world\n"))
+(command (word "cat") (redirect "<<" "hello world
+"))
+---
+
 
 === here document with multiple lines
 cat <<END
@@ -16,20 +19,30 @@ line two
 line three
 END
 ---
-(command (word "cat") (heredoc "END" "line one\nline two\nline three\n"))
+(command (word "cat") (redirect "<<" "line one
+line two
+line three
+"))
+---
+
 
 === here document empty
 cat <<EOF
 EOF
 ---
-(command (word "cat") (heredoc "EOF" ""))
+(command (word "cat") (redirect "<<" ""))
+---
+
 
 === here document single line no newline at end
 cat <<EOF
 hello
 EOF
 ---
-(command (word "cat") (heredoc "EOF" "hello\n"))
+(command (word "cat") (redirect "<<" "hello
+"))
+---
+
 
 # === Different delimiters ===
 
@@ -38,35 +51,50 @@ cat <<END_OF_DATA
 content
 END_OF_DATA
 ---
-(command (word "cat") (heredoc "END_OF_DATA" "content\n"))
+(command (word "cat") (redirect "<<" "content
+"))
+---
+
 
 === delimiter all caps
 cat <<MARKER
 text
 MARKER
 ---
-(command (word "cat") (heredoc "MARKER" "text\n"))
+(command (word "cat") (redirect "<<" "text
+"))
+---
+
 
 === delimiter lowercase
 cat <<end
 text
 end
 ---
-(command (word "cat") (heredoc "end" "text\n"))
+(command (word "cat") (redirect "<<" "text
+"))
+---
+
 
 === delimiter mixed case
 cat <<EndMarker
 text
 EndMarker
 ---
-(command (word "cat") (heredoc "EndMarker" "text\n"))
+(command (word "cat") (redirect "<<" "text
+"))
+---
+
 
 === delimiter with numbers
 cat <<EOF123
 text
 EOF123
 ---
-(command (word "cat") (heredoc "EOF123" "text\n"))
+(command (word "cat") (redirect "<<" "text
+"))
+---
+
 
 # === Tab stripping with <<- ===
 
@@ -75,7 +103,10 @@ cat <<-EOF
 	indented with tab
 EOF
 ---
-(command (word "cat") (heredoc-strip "EOF" "indented with tab\n"))
+(command (word "cat") (redirect "<<-" "indented with tab
+"))
+---
+
 
 === heredoc strip tabs multiple lines
 cat <<-END
@@ -83,14 +114,21 @@ cat <<-END
 	line two
 END
 ---
-(command (word "cat") (heredoc-strip "END" "line one\nline two\n"))
+(command (word "cat") (redirect "<<-" "line one
+line two
+"))
+---
+
 
 === heredoc strip tabs delimiter indented
 cat <<-EOF
 	content
 	EOF
 ---
-(command (word "cat") (heredoc-strip "EOF" "content\n"))
+(command (word "cat") (redirect "<<-" "content
+"))
+---
+
 
 # === Quoted delimiters (no expansion) ===
 
@@ -99,28 +137,40 @@ cat <<"EOF"
 $variable not expanded
 EOF
 ---
-(command (word "cat") (heredoc-quoted "EOF" "$variable not expanded\n"))
+(command (word "cat") (redirect "<<" "$variable not expanded
+"))
+---
+
 
 === single quoted delimiter
 cat <<'EOF'
 $variable not expanded
 EOF
 ---
-(command (word "cat") (heredoc-quoted "EOF" "$variable not expanded\n"))
+(command (word "cat") (redirect "<<" "$variable not expanded
+"))
+---
+
 
 === escaped delimiter
 cat <<\EOF
 $variable not expanded
 EOF
 ---
-(command (word "cat") (heredoc-quoted "EOF" "$variable not expanded\n"))
+(command (word "cat") (redirect "<<" "$variable not expanded
+"))
+---
+
 
 === partially quoted delimiter
 cat <<E"OF"
 $variable not expanded
 EOF
 ---
-(command (word "cat") (heredoc-quoted "EOF" "$variable not expanded\n"))
+(command (word "cat") (redirect "<<" "$variable not expanded
+"))
+---
+
 
 # === Here documents with expansions ===
 
@@ -129,28 +179,40 @@ cat <<EOF
 hello $name
 EOF
 ---
-(command (word "cat") (heredoc "EOF" "hello $name\n"))
+(command (word "cat") (redirect "<<" "hello $name
+"))
+---
+
 
 === heredoc with command substitution
 cat <<EOF
 today is $(date)
 EOF
 ---
-(command (word "cat") (heredoc "EOF" "today is $(date)\n"))
+(command (word "cat") (redirect "<<" "today is $(date)
+"))
+---
+
 
 === heredoc with arithmetic
 cat <<EOF
 result is $((1+2))
 EOF
 ---
-(command (word "cat") (heredoc "EOF" "result is $((1+2))\n"))
+(command (word "cat") (redirect "<<" "result is $((1+2))
+"))
+---
+
 
 === heredoc with braced variable
 cat <<EOF
 value is ${var}
 EOF
 ---
-(command (word "cat") (heredoc "EOF" "value is ${var}\n"))
+(command (word "cat") (redirect "<<" "value is ${var}
+"))
+---
+
 
 # === Here documents in different positions ===
 
@@ -159,21 +221,30 @@ cat <<EOF >output.txt
 content
 EOF
 ---
-(command (word "cat") (heredoc "EOF" "content\n") (redirect ">" (word "output.txt")))
+(command (word "cat") (redirect "<<" "content
+") (redirect ">" "output.txt"))
+---
+
 
 === heredoc with fd number
 cat 0<<EOF
 content
 EOF
 ---
-(command (word "cat") (heredoc "EOF" "content\n" 0))
+(command (word "cat") (redirect "<<" "content
+"))
+---
+
 
 === heredoc after args
 cat -n <<EOF
 content
 EOF
 ---
-(command (word "cat") (word "-n") (heredoc "EOF" "content\n"))
+(command (word "cat") (word "-n") (redirect "<<" "content
+"))
+---
+
 
 # === Multiple here documents ===
 
@@ -184,7 +255,11 @@ EOF1
 second
 EOF2
 ---
-(command (word "cat") (heredoc "EOF1" "first\n") (heredoc "EOF2" "second\n"))
+(command (word "cat") (redirect "<<" "first
+") (redirect "<<" "second
+"))
+---
+
 
 # === Here document in pipelines ===
 
@@ -194,14 +269,21 @@ hello world
 goodbye world
 EOF
 ---
-(pipeline (command (word "cat") (heredoc "EOF" "hello world\ngoodbye world\n")) (command (word "grep") (word "hello")))
+(pipe (command (word "cat") (redirect "<<" "hello world
+goodbye world
+")) (command (word "grep") (word "hello")))
+---
+
 
 === heredoc at end of pipeline
 echo start | cat <<EOF
 middle
 EOF
 ---
-(pipeline (command (word "echo") (word "start")) (command (word "cat") (heredoc "EOF" "middle\n")))
+(pipe (command (word "echo") (word "start")) (command (word "cat") (redirect "<<" "middle
+")))
+---
+
 
 # === Here document in lists ===
 
@@ -210,31 +292,43 @@ cat <<EOF; echo done
 content
 EOF
 ---
-(list (command (word "cat") (heredoc "EOF" "content\n")) (semi) (command (word "echo") (word "done")))
+(semi (command (word "cat") (redirect "<<" "content
+")) (command (word "echo") (word "done")))
+---
+
 
 === heredoc with and
 cat <<EOF && echo success
 content
 EOF
 ---
-(list (command (word "cat") (heredoc "EOF" "content\n")) (and) (command (word "echo") (word "success")))
+(and (command (word "cat") (redirect "<<" "content
+")) (command (word "echo") (word "success")))
+---
+
 
 # === Here strings (<<<) ===
 
 === simple here string
 cat <<<"hello world"
 ---
-(command (word "cat") (redirect "<<<" (word "\"hello world\"")))
+(command (word "cat") (redirect "<<<" ""hello world""))
+---
+
 
 === here string with variable
 cat <<<"$name"
 ---
-(command (word "cat") (redirect "<<<" (word "\"$name\"" (param "name"))))
+(command (word "cat") (redirect "<<<" ""$name""))
+---
+
 
 === here string unquoted
 cat <<<hello
 ---
-(command (word "cat") (redirect "<<<" (word "hello")))
+(command (word "cat") (redirect "<<<" "hello"))
+---
+
 
 # === Edge cases ===
 
@@ -242,7 +336,9 @@ cat <<<hello
 cat <<EOF
 EOF
 ---
-(command (word "cat") (heredoc "EOF" ""))
+(command (word "cat") (redirect "<<" ""))
+---
+
 
 === heredoc with blank lines
 cat <<EOF
@@ -251,21 +347,32 @@ blank above and below
 
 EOF
 ---
-(command (word "cat") (heredoc "EOF" "\nblank above and below\n\n"))
+(command (word "cat") (redirect "<<" "
+blank above and below
+
+"))
+---
+
 
 === heredoc with special characters in content
 cat <<EOF
 $dollar `backtick` "quotes" 'single'
 EOF
 ---
-(command (word "cat") (heredoc "EOF" "$dollar `backtick` \"quotes\" 'single'\n"))
+(command (word "cat") (redirect "<<" "$dollar `backtick` "quotes" 'single'
+"))
+---
+
 
 === heredoc delimiter not at start of line does not end
 cat <<EOF
 not EOF here
 EOF
 ---
-(command (word "cat") (heredoc "EOF" "not EOF here\n"))
+(command (word "cat") (redirect "<<" "not EOF here
+"))
+---
+
 
 # === Additional edge cases from research ===
 
@@ -274,28 +381,40 @@ cat <<EOF >>output.txt
 content
 EOF
 ---
-(command (word "cat") (heredoc "EOF" "content\n") (redirect ">>" (word "output.txt")))
+(command (word "cat") (redirect "<<" "content
+") (redirect ">>" "output.txt"))
+---
+
 
 === heredoc with stderr redirect
 cat <<EOF 2>&1
 content
 EOF
 ---
-(command (word "cat") (heredoc "EOF" "content\n") (redirect "2>" (word "&1")))
+(command (word "cat") (redirect "<<" "content
+") (redirect ">&" 1))
+---
+
 
 === heredoc with or operator
 cat <<EOF || echo failed
 content
 EOF
 ---
-(list (command (word "cat") (heredoc "EOF" "content\n")) (or) (command (word "echo") (word "failed")))
+(or (command (word "cat") (redirect "<<" "content
+")) (command (word "echo") (word "failed")))
+---
+
 
 === heredoc with background operator
 cat <<EOF &
 content
 EOF
 ---
-(list (command (word "cat") (heredoc "EOF" "content\n")) (bg))
+(background (command (word "cat") (redirect "<<" "content
+")))
+---
+
 
 === heredoc in while loop body
 while true; do cat <<EOF
@@ -303,7 +422,10 @@ hello
 EOF
 done
 ---
-(while (command (word "true")) (command (word "cat") (heredoc "EOF" "hello\n")))
+(while (command (word "true")) (command (word "cat") (redirect "<<" "hello
+")))
+---
+
 
 === heredoc in for loop body
 for i in 1 2; do cat <<EOF
@@ -311,7 +433,10 @@ line
 EOF
 done
 ---
-(for "i" (words "1" "2") (command (word "cat") (heredoc "EOF" "line\n")))
+(for (word "i") (in (word "1") (word "2")) (command (word "cat") (redirect "<<" "line
+")))
+---
+
 
 === heredoc after if then
 if true; then cat <<EOF
@@ -319,14 +444,20 @@ content
 EOF
 fi
 ---
-(if (command (word "true")) (command (word "cat") (heredoc "EOF" "content\n")))
+(if (command (word "true")) (command (word "cat") (redirect "<<" "content
+")))
+---
+
 
 === heredoc with escaped dollar in content
 cat <<EOF
 price is \$100
 EOF
 ---
-(command (word "cat") (heredoc "EOF" "price is \\$100\n"))
+(command (word "cat") (redirect "<<" "price is \$100
+"))
+---
+
 
 === heredoc with backslash at end of line
 cat <<EOF
@@ -334,59 +465,83 @@ line continues\
 next part
 EOF
 ---
-(command (word "cat") (heredoc "EOF" "line continues\\\nnext part\n"))
+(command (word "cat") (redirect "<<" "line continuesnext part
+"))
+---
+
 
 === heredoc with only whitespace content
 cat <<EOF
 
 EOF
 ---
-(command (word "cat") (heredoc "EOF" "\n"))
+(command (word "cat") (redirect "<<" "
+"))
+---
+
 
 === heredoc strip tabs preserves spaces
 cat <<-EOF
 	tab then spaces
 EOF
 ---
-(command (word "cat") (heredoc-strip "EOF" "tab then spaces\n"))
+(command (word "cat") (redirect "<<-" "tab then spaces
+"))
+---
+
 
 === heredoc delimiter with hyphen
 cat <<END-MARKER
 content
 END-MARKER
 ---
-(command (word "cat") (heredoc "END-MARKER" "content\n"))
+(command (word "cat") (redirect "<<" "content
+"))
+---
+
 
 === herestring after file redirect
 cat <input.txt <<<"extra"
 ---
-(command (word "cat") (redirect "<" (word "input.txt")) (redirect "<<<" (word "\"extra\"")))
+(command (word "cat") (redirect "<" "input.txt") (redirect "<<<" ""extra""))
+---
+
 
 === heredoc then herestring same command
 cat <<EOF <<<"suffix"
 prefix
 EOF
 ---
-(command (word "cat") (heredoc "EOF" "prefix\n") (redirect "<<<" (word "\"suffix\"")))
+(command (word "cat") (redirect "<<" "prefix
+") (redirect "<<<" ""suffix""))
+---
+
 
 === multiple commands after heredoc
 cat <<EOF; echo one; echo two
 content
 EOF
 ---
-(list (command (word "cat") (heredoc "EOF" "content\n")) (semi) (command (word "echo") (word "one")) (semi) (command (word "echo") (word "two")))
+(semi (semi (command (word "cat") (redirect "<<" "content
+")) (command (word "echo") (word "one"))) (command (word "echo") (word "two")))
+---
+
 
 === heredoc in subshell
 (cat <<EOF)
 content
 EOF
 ---
-(subshell (command (word "cat") (heredoc "EOF" "content\n")))
+(subshell (command (word "cat") (redirect "<<" "content
+")))
+---
+
 
 === heredoc in brace group
 { cat <<EOF; }
 content
 EOF
 ---
-(brace-group (list (command (word "cat") (heredoc "EOF" "content\n")) (semi)))
-
+(brace-group (command (word "cat") (redirect "<<" "content
+")))
+---

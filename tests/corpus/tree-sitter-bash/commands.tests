@@ -1,0 +1,364 @@
+# Converted from tree-sitter-bash corpus: commands.txt
+
+=== Commands
+whoami
+---
+(command (word "whoami"))
+---
+
+=== Commands with arguments
+cat file1.txt
+git diff --word-diff=color -- file1.txt file2.txt
+echo $sing\
+levar
+---
+(command (word "cat") (word "file1.txt"))
+(command (word "git") (word "diff") (word "--word-diff=color") (word "--") (word "file1.txt") (word "file2.txt"))
+(command (word "echo") (word "$singlevar"))
+---
+
+=== Quoted command names
+"$a/$b" c
+---
+(command (word "\"$a/$b\"") (word "c"))
+---
+
+=== Commands with numeric arguments
+exit 1
+---
+(command (word "exit") (word "1"))
+---
+
+=== Commands with environment variables
+VAR1=1 ./script/test
+VAR1=a VAR2="ok" git diff --word-diff=color
+---
+(command (word "VAR1=1") (word "./script/test"))
+(command (word "VAR1=a") (word "VAR2=\"ok\"") (word "git") (word "diff") (word "--word-diff=color"))
+---
+
+=== Empty environment variables
+VAR1=
+VAR2= echo
+---
+(command (word "VAR1="))
+(command (word "VAR2=") (word "echo"))
+---
+
+=== File redirects
+whoami > /dev/null
+cat a b > /dev/null
+2>&1 whoami
+echo "foobar" >&2
+[ ! command -v go &>/dev/null ] && return
+
+if [ ]; then
+	>aa >bb
+fi
+
+exec {VIRTWL[0]} {VIRTWL[1]} <&- >&-
+exec {VIRTWL[0]}<&- {VIRTWL[1]}>&-
+
+grep 2>/dev/null -q "^/usr/bin/scponly$" /etc/shells
+
+x <x a b c
+---
+(command (word "whoami") (redirect ">" "/dev/null"))
+(command (word "cat") (word "a") (word "b") (redirect ">" "/dev/null"))
+(command (word "whoami") (redirect ">&" 1))
+(command (word "echo") (word "\"foobar\"") (redirect ">&" 2))
+(and (command (word "[") (word "!") (word "command") (word "-v") (word "go") (word "]") (redirect "&>" "/dev/null")) (command (word "return")))
+(if (command (word "[") (word "]")) (command (redirect ">" "aa") (redirect ">" "bb")))
+(command (word "exec") (word "{VIRTWL[0]}") (word "{VIRTWL[1]}") (redirect ">&-" 0) (redirect ">&-" 0))
+(command (word "exec") (redirect ">&-" 0) (redirect ">&-" 0))
+(command (word "grep") (word "-q") (word "\"^/usr/bin/scponly$\"") (word "/etc/shells") (redirect ">" "/dev/null"))
+(command (word "x") (word "a") (word "b") (word "c") (redirect "<" "x"))
+---
+
+=== File redirects (noclobber override)
+whoami >| /dev/null
+cat a b >| /dev/null
+---
+(command (word "whoami") (redirect ">|" "/dev/null"))
+(command (word "cat") (word "a") (word "b") (redirect ">|" "/dev/null"))
+---
+
+=== Heredoc redirects
+node <<JS
+console.log("hi")
+JS
+
+bash -c <<JS
+echo hi
+JS
+
+newins <<-EOF - org.freedesktop.Notifications.service
+	[D-BUS Service]
+	Name=org.freedesktop.Notifications
+	Exec=/usr/libexec/notification-daemon
+EOF
+---
+(command (word "node") (redirect "<<" "console.log("hi")
+"))
+(command (word "bash") (word "-c") (redirect "<<" "echo hi
+"))
+(command (word "newins") (word "-") (word "org.freedesktop.Notifications.service") (redirect "<<-" "[D-BUS Service]
+Name=org.freedesktop.Notifications
+Exec=/usr/libexec/notification-daemon
+"))
+---
+
+=== Heredocs with variables
+node <<JS
+a $B ${C}
+JS
+
+exit
+---
+(command (word "node") (redirect "<<" "a $B ${C}
+"))
+(command (word "exit"))
+---
+
+=== Heredocs with file redirects
+cat <<EOF > $tmpfile
+a $B ${C}
+EOF
+
+wc -l $tmpfile
+---
+(command (word "cat") (redirect "<<" "a $B ${C}
+") (redirect ">" "$tmpfile"))
+(command (word "wc") (word "-l") (word "$tmpfile"))
+---
+
+=== Heredocs with many file redirects
+FOO=bar echo <<EOF 2> err.txt > hello.txt
+hello
+EOF
+---
+(command (word "FOO=bar") (word "echo") (redirect "<<" "hello
+") (redirect ">" "err.txt") (redirect ">" "hello.txt"))
+---
+
+=== Heredocs with pipes
+one <<EOF | grep two
+three
+EOF
+---
+(pipe (command (word "one") (redirect "<<" "three
+")) (command (word "grep") (word "two")))
+---
+
+=== Heredocs with escaped expansions
+cat  << EOF
+DEV_NAME=\$(lsblk)
+EOF
+---
+(command (word "cat") (redirect "<<" "DEV_NAME=\$(lsblk)
+"))
+---
+
+=== Quoted Heredocs
+cat << 'EOF'
+a=$b
+EOF
+
+cat << "EOF"
+a=$b
+EOF
+
+cat <<"END OF FILE"
+hello,
+world
+END OF FILE
+
+cat << \EOF
+EOF
+---
+(command (word "cat") (redirect "<<" "a=$b
+"))
+(command (word "cat") (redirect "<<" "a=$b
+"))
+(command (word "cat") (redirect "<<" "hello,
+world
+"))
+(command (word "cat") (redirect "<<" ""))
+---
+
+=== Heredocs with indented closing delimiters
+usage() {
+	cat <<-EOF
+		Usage: ${0##*/} FOO BAR
+	EOF
+}
+---
+(function "usage" (brace-group (command (word "cat") (redirect "<<-" "Usage: ${0##*/} FOO BAR
+"))))
+---
+
+=== Heredocs with empty bodies
+node <<JS
+JS
+
+node << 'SJ'
+SJ
+
+usage() {
+	cat <<-EOF
+	EOF
+}
+
+node << 'EOF' > temp
+EOF
+---
+(command (word "node") (redirect "<<" ""))
+(command (word "node") (redirect "<<" ""))
+(function "usage" (brace-group (command (word "cat") (redirect "<<-" ""))))
+(command (word "node") (redirect "<<" "") (redirect ">" "temp"))
+---
+
+=== Heredocs with weird characters
+node <<_DELIMITER_WITH_UNDERSCORES_
+Hello.
+_DELIMITER_WITH_UNDERSCORES_
+
+node <<'```'
+Hello.
+```
+
+node <<!HEREDOC!
+Hello.
+!HEREDOC!
+
+node <<\'
+Hello.
+'
+
+node <<\\
+Hello.
+\
+---
+(command (word "node") (redirect "<<" "Hello.
+"))
+(command (word "node") (redirect "<<" "Hello.
+"))
+(command (word "node") (redirect "<<" "Hello.
+"))
+(command (word "node") (redirect "<<" "Hello.
+"))
+(command (word "node") (redirect "<<" "Hello.
+"))
+---
+
+=== Heredocs with a rhs statement
+cat <<-_EOF_ || die "cat EOF failed"
+	#!/bin/sh
+	echo hello
+_EOF_
+---
+(or (command (word "cat") (redirect "<<-" "#!/bin/sh
+echo hello
+")) (command (word "die") (word "\"cat EOF failed\"")))
+---
+
+=== Heredocs with a $ that is not an expansion
+cat <<EOF
+# check out this regex '^EOF$'
+EOF
+---
+(command (word "cat") (redirect "<<" "# check out this regex '^EOF$'
+"))
+---
+
+=== Nested Heredocs
+cat <<OUTER
+Outer Heredoc Start
+$(cat <<INNER
+Inner Heredoc Content
+$(cat <<INNERMOST
+Innermost Heredoc Content
+INNERMOST
+)
+INNER)
+Outer Heredoc End
+OUTER
+---
+(command (word "cat") (redirect "<<" "Outer Heredoc Start
+$(cat <<INNER
+Inner Heredoc Content
+$(cat <<INNERMOST
+Innermost Heredoc Content
+INNERMOST
+)
+INNER)
+Outer Heredoc End
+"))
+---
+
+=== Herestrings
+node <<< foo
+
+while read -u 3 entry; do
+  echo $entry
+done 3<<<"$ENTRIES"
+
+$(tc-getCC) -Werror -Wl,-l:libobjc.so.${ver} -x objective-c \
+		- <<<$'int main() {}' -o /dev/null 2> /dev/null;
+
+<<<string cmd arg
+
+cmd arg <<<string
+
+cmd <<<string arg
+
+<<<string
+---
+(command (word "node") (redirect "<<<" "foo"))
+(while (command (word "read") (word "-u") (word "3") (word "entry")) (command (word "echo") (word "$entry"))) (redirect "<<<" ""$ENTRIES"")
+(command (word "$(tc-getCC)") (word "-Werror") (word "-Wl,-l:libobjc.so.${ver}") (word "-x") (word "objective-c") (word "-") (word "-o") (word "/dev/null") (redirect "<<<" "'int main() {}'") (redirect ">" "/dev/null"))
+(command (word "cmd") (word "arg") (redirect "<<<" "string"))
+(command (word "cmd") (word "arg") (redirect "<<<" "string"))
+(command (word "cmd") (word "arg") (redirect "<<<" "string"))
+(command (redirect "<<<" "string"))
+---
+
+=== Subscripts
+echo ${a[1 + 2]}
+
+echo ${b[1234 % 2]}
+
+${words[++counter]}
+
+${array[(($number+1))]}
+
+${array[((number+1))]}
+---
+(command (word "echo") (word "${a[1 + 2]}"))
+(command (word "echo") (word "${b[1234 % 2]}"))
+(command (word "${words[++counter]}"))
+(command (word "${array[(($number+1))]}"))
+(command (word "${array[((number+1))]}"))
+---
+
+=== Bare $
+echo $
+echo "${module}"$
+echo $$
+---
+(command (word "echo") (word "$"))
+(command (word "echo") (word "\"${module}\"$"))
+(command (word "echo") (word "$$"))
+---
+
+=== Arithmetic with command substitution
+$(( $( ver_cut 2 ) - 1 ))
+---
+(command (word "$(( $(ver_cut 2) - 1 ))"))
+---
+
+=== Ralative path without dots
+bin/ls /usr/bin
+---
+(command (word "bin/ls") (word "/usr/bin"))
+---

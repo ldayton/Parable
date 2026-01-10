@@ -5,3 +5,5 @@ __pycache__/
 .ruff_cache/
 .DS_Store
 .claude/
+dippy.toml
+tools/bash-oracle/bash-oracle

@@ -1,0 +1,28 @@
+# Multi-digit fd in dup redirects
+
+=== input dup multi-digit fd
+read <&10
+---
+(command (word "read") (redirect "<&" 10))
+---
+
+
+=== output dup multi-digit fd
+echo >&20
+---
+(command (word "echo") (redirect ">&" 20))
+---
+
+
+=== fd move multi-digit source
+exec 3<&10-
+---
+(command (word "exec") (redirect "<&" 10))
+---
+
+
+=== multi-digit fd with process substitution
+cmd 10< <(echo test)
+---
+(command (word "cmd") (redirect "<" "<(echo test)"))
+---

@@ -5,168 +5,229 @@
 === simple and
 echo foo && echo bar
 ---
-(list (command (word "echo") (word "foo")) (and) (command (word "echo") (word "bar")))
+(and (command (word "echo") (word "foo")) (command (word "echo") (word "bar")))
+---
+
 
 === triple and
 cmd1 && cmd2 && cmd3
 ---
-(list (command (word "cmd1")) (and) (command (word "cmd2")) (and) (command (word "cmd3")))
+(and (and (command (word "cmd1")) (command (word "cmd2"))) (command (word "cmd3")))
+---
+
 
 === and no spaces
 echo foo&&echo bar
 ---
-(list (command (word "echo") (word "foo")) (and) (command (word "echo") (word "bar")))
+(and (command (word "echo") (word "foo")) (command (word "echo") (word "bar")))
+---
+
 
 === and with complex commands
 grep pattern file && echo "found" && notify-send "done"
 ---
-(list (command (word "grep") (word "pattern") (word "file")) (and) (command (word "echo") (word "\"found\"")) (and) (command (word "notify-send") (word "\"done\"")))
+(and (and (command (word "grep") (word "pattern") (word "file")) (command (word "echo") (word "\"found\""))) (command (word "notify-send") (word "\"done\"")))
+---
+
 
 # === OR lists ===
 
 === simple or
 echo foo || echo bar
 ---
-(list (command (word "echo") (word "foo")) (or) (command (word "echo") (word "bar")))
+(or (command (word "echo") (word "foo")) (command (word "echo") (word "bar")))
+---
+
 
 === triple or
 cmd1 || cmd2 || cmd3
 ---
-(list (command (word "cmd1")) (or) (command (word "cmd2")) (or) (command (word "cmd3")))
+(or (or (command (word "cmd1")) (command (word "cmd2"))) (command (word "cmd3")))
+---
+
 
 === or no spaces
 echo foo||echo bar
 ---
-(list (command (word "echo") (word "foo")) (or) (command (word "echo") (word "bar")))
+(or (command (word "echo") (word "foo")) (command (word "echo") (word "bar")))
+---
+
 
 === or with exit
 command || exit 1
 ---
-(list (command (word "command")) (or) (command (word "exit") (word "1")))
+(or (command (word "command")) (command (word "exit") (word "1")))
+---
+
 
 # === Sequential lists ===
 
 === simple sequential
 echo foo ; echo bar
 ---
-(list (command (word "echo") (word "foo")) (semi) (command (word "echo") (word "bar")))
+(semi (command (word "echo") (word "foo")) (command (word "echo") (word "bar")))
+---
+
 
 === triple sequential
 cmd1 ; cmd2 ; cmd3
 ---
-(list (command (word "cmd1")) (semi) (command (word "cmd2")) (semi) (command (word "cmd3")))
+(semi (semi (command (word "cmd1")) (command (word "cmd2"))) (command (word "cmd3")))
+---
+
 
 === sequential no space before
 echo foo; echo bar
 ---
-(list (command (word "echo") (word "foo")) (semi) (command (word "echo") (word "bar")))
+(semi (command (word "echo") (word "foo")) (command (word "echo") (word "bar")))
+---
+
 
 === sequential no spaces
 echo foo;echo bar
 ---
-(list (command (word "echo") (word "foo")) (semi) (command (word "echo") (word "bar")))
+(semi (command (word "echo") (word "foo")) (command (word "echo") (word "bar")))
+---
+
 
 === trailing semicolon
 echo foo;
 ---
-(list (command (word "echo") (word "foo")) (semi))
+(command (word "echo") (word "foo"))
+---
+
 
 === multiple trailing semicolons become single
 echo foo ;
 ---
-(list (command (word "echo") (word "foo")) (semi))
+(command (word "echo") (word "foo"))
+---
+
 
 # === Background ===
 
 === simple background
 echo foo &
 ---
-(list (command (word "echo") (word "foo")) (bg))
+(background (command (word "echo") (word "foo")))
+---
+
 
 === background no space
 echo foo&
 ---
-(list (command (word "echo") (word "foo")) (bg))
+(background (command (word "echo") (word "foo")))
+---
+
 
 === background then command
 sleep 10 & echo started
 ---
-(list (command (word "sleep") (word "10")) (bg) (command (word "echo") (word "started")))
+(background (command (word "sleep") (word "10")) (command (word "echo") (word "started")))
+---
+
 
 === multiple backgrounds
 cmd1 & cmd2 & cmd3 &
 ---
-(list (command (word "cmd1")) (bg) (command (word "cmd2")) (bg) (command (word "cmd3")) (bg))
+(background (background (background (command (word "cmd1")) (command (word "cmd2"))) (command (word "cmd3"))))
+---
+
 
 # === Mixed operators ===
 
 === and then or
 echo a && echo b || echo c
 ---
-(list (command (word "echo") (word "a")) (and) (command (word "echo") (word "b")) (or) (command (word "echo") (word "c")))
+(or (and (command (word "echo") (word "a")) (command (word "echo") (word "b"))) (command (word "echo") (word "c")))
+---
+
 
 === or then and
 cmd1 || cmd2 && cmd3
 ---
-(list (command (word "cmd1")) (or) (command (word "cmd2")) (and) (command (word "cmd3")))
+(and (or (command (word "cmd1")) (command (word "cmd2"))) (command (word "cmd3")))
+---
+
 
 === semi then and
 cmd1 ; cmd2 && cmd3
 ---
-(list (command (word "cmd1")) (semi) (command (word "cmd2")) (and) (command (word "cmd3")))
+(semi (command (word "cmd1")) (and (command (word "cmd2")) (command (word "cmd3"))))
+---
+
 
 === and then semi
 cmd1 && cmd2 ; cmd3
 ---
-(list (command (word "cmd1")) (and) (command (word "cmd2")) (semi) (command (word "cmd3")))
+(semi (and (command (word "cmd1")) (command (word "cmd2"))) (command (word "cmd3")))
+---
+
 
 === complex mixed
 a && b || c ; d & e
 ---
-(list (command (word "a")) (and) (command (word "b")) (or) (command (word "c")) (semi) (command (word "d")) (bg) (command (word "e")))
+(semi (or (and (command (word "a")) (command (word "b"))) (command (word "c"))) (background (command (word "d")) (command (word "e"))))
+---
+
 
 # === Pipelines in lists ===
 
 === pipeline then and
 echo foo | grep foo && echo found
 ---
-(list (pipeline (command (word "echo") (word "foo")) (command (word "grep") (word "foo"))) (and) (command (word "echo") (word "found")))
+(and (pipe (command (word "echo") (word "foo")) (command (word "grep") (word "foo"))) (command (word "echo") (word "found")))
+---
+
 
 === pipeline then or
 cat file | grep pattern || echo "not found"
 ---
-(list (pipeline (command (word "cat") (word "file")) (command (word "grep") (word "pattern"))) (or) (command (word "echo") (word "\"not found\"")))
+(or (pipe (command (word "cat") (word "file")) (command (word "grep") (word "pattern"))) (command (word "echo") (word "\"not found\"")))
+---
+
 
 === multiple pipelines with and
 ls | head && ps | head
 ---
-(list (pipeline (command (word "ls")) (command (word "head"))) (and) (pipeline (command (word "ps")) (command (word "head"))))
+(and (pipe (command (word "ls")) (command (word "head"))) (pipe (command (word "ps")) (command (word "head"))))
+---
+
 
 === pipeline in background
 find . -name "*.log" | xargs rm &
 ---
-(list (pipeline (command (word "find") (word ".") (word "-name") (word "\"*.log\"")) (command (word "xargs") (word "rm"))) (bg))
+(background (pipe (command (word "find") (word ".") (word "-name") (word "\"*.log\"")) (command (word "xargs") (word "rm"))))
+---
+
 
 # === From tree-sitter-bash ===
 
 === complex list from tree-sitter
 a | b && c && d ; e f g || h i
 ---
-(list (pipeline (command (word "a")) (command (word "b"))) (and) (command (word "c")) (and) (command (word "d")) (semi) (command (word "e") (word "f") (word "g")) (or) (command (word "h") (word "i")))
+(semi (and (and (pipe (command (word "a")) (command (word "b"))) (command (word "c"))) (command (word "d"))) (or (command (word "e") (word "f") (word "g")) (command (word "h") (word "i"))))
+---
+
 
 # === Edge cases ===
 
 === cd then command pattern
 cd /foo ; bar
 ---
-(list (command (word "cd") (word "/foo")) (semi) (command (word "bar")))
+(semi (command (word "cd") (word "/foo")) (command (word "bar")))
+---
+
 
 === true and increment pattern
 true && echo yes
 ---
-(list (command (word "true")) (and) (command (word "echo") (word "yes")))
+(and (command (word "true")) (command (word "echo") (word "yes")))
+---
+
 
 === false or fallback pattern
 false || echo fallback
 ---
-(list (command (word "false")) (or) (command (word "echo") (word "fallback")))
+(or (command (word "false")) (command (word "echo") (word "fallback")))
+---

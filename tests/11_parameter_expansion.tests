@@ -5,349 +5,479 @@
 === simple variable $var
 echo $foo
 ---
-(command (word "echo") (word "$foo" (param "foo")))
+(command (word "echo") (word "$foo"))
+---
+
 
 === simple variable in middle
 echo hello$world
 ---
-(command (word "echo") (word "hello$world" (param "world")))
+(command (word "echo") (word "hello$world"))
+---
+
 
 === simple variable before text
 echo $foo-bar
 ---
-(command (word "echo") (word "$foo-bar" (param "foo")))
+(command (word "echo") (word "$foo-bar"))
+---
+
 
 === braced variable ${var}
 echo ${foo}
 ---
-(command (word "echo") (word "${foo}" (param "foo")))
+(command (word "echo") (word "${foo}"))
+---
+
 
 === braced variable in text
 echo hello${world}there
 ---
-(command (word "echo") (word "hello${world}there" (param "world")))
+(command (word "echo") (word "hello${world}there"))
+---
+
 
 === special parameter $?
 echo $?
 ---
-(command (word "echo") (word "$?" (param "?")))
+(command (word "echo") (word "$?"))
+---
+
 
 === special parameter $$
 echo $$
 ---
-(command (word "echo") (word "$$" (param "$")))
+(command (word "echo") (word "$$"))
+---
+
 
 === special parameter $!
 echo $!
 ---
-(command (word "echo") (word "$!" (param "!")))
+(command (word "echo") (word "$!"))
+---
+
 
 === special parameter $#
 echo $#
 ---
-(command (word "echo") (word "$#" (param "#")))
+(command (word "echo") (word "$#"))
+---
+
 
 === special parameter $@
 echo $@
 ---
-(command (word "echo") (word "$@" (param "@")))
+(command (word "echo") (word "$@"))
+---
+
 
 === special parameter $*
 echo $*
 ---
-(command (word "echo") (word "$*" (param "*")))
+(command (word "echo") (word "$*"))
+---
+
 
 === special parameter $-
 echo $-
 ---
-(command (word "echo") (word "$-" (param "-")))
+(command (word "echo") (word "$-"))
+---
+
 
 === positional parameter $0
 echo $0
 ---
-(command (word "echo") (word "$0" (param "0")))
+(command (word "echo") (word "$0"))
+---
+
 
 === positional parameter $1
 echo $1
 ---
-(command (word "echo") (word "$1" (param "1")))
+(command (word "echo") (word "$1"))
+---
+
 
 === positional parameter $9
 echo $9
 ---
-(command (word "echo") (word "$9" (param "9")))
+(command (word "echo") (word "$9"))
+---
+
 
 === braced positional ${10}
 echo ${10}
 ---
-(command (word "echo") (word "${10}" (param "10")))
+(command (word "echo") (word "${10}"))
+---
+
 
 # === Length ${#var} ===
 
 === length of variable
 echo ${#foo}
 ---
-(command (word "echo") (word "${#foo}" (param-len "foo")))
+(command (word "echo") (word "${#foo}"))
+---
+
 
 === length of special $@
 echo ${#@}
 ---
-(command (word "echo") (word "${#@}" (param-len "@")))
+(command (word "echo") (word "${#@}"))
+---
+
 
 === length of special $*
 echo ${#*}
 ---
-(command (word "echo") (word "${#*}" (param-len "*")))
+(command (word "echo") (word "${#*}"))
+---
+
 
 # === Indirect expansion ${!var} ===
 
 === indirect expansion
 echo ${!foo}
 ---
-(command (word "echo") (word "${!foo}" (param-indirect "foo")))
+(command (word "echo") (word "${!foo}"))
+---
+
 
 # === Default values ===
 
 === default value :-
 echo ${foo:-default}
 ---
-(command (word "echo") (word "${foo:-default}" (param "foo" ":-" "default")))
+(command (word "echo") (word "${foo:-default}"))
+---
+
 
 === default value - (unset only)
 echo ${foo-default}
 ---
-(command (word "echo") (word "${foo-default}" (param "foo" "-" "default")))
+(command (word "echo") (word "${foo-default}"))
+---
+
 
 === assign default :=
 echo ${foo:=default}
 ---
-(command (word "echo") (word "${foo:=default}" (param "foo" ":=" "default")))
+(command (word "echo") (word "${foo:=default}"))
+---
+
 
 === assign default = (unset only)
 echo ${foo=default}
 ---
-(command (word "echo") (word "${foo=default}" (param "foo" "=" "default")))
+(command (word "echo") (word "${foo=default}"))
+---
+
 
 === error if unset :?
 echo ${foo:?error message}
 ---
-(command (word "echo") (word "${foo:?error message}" (param "foo" ":?" "error message")))
+(command (word "echo") (word "${foo:?error message}"))
+---
+
 
 === error if unset ? (unset only)
 echo ${foo?error}
 ---
-(command (word "echo") (word "${foo?error}" (param "foo" "?" "error")))
+(command (word "echo") (word "${foo?error}"))
+---
+
 
 === alternate value :+
 echo ${foo:+alternate}
 ---
-(command (word "echo") (word "${foo:+alternate}" (param "foo" ":+" "alternate")))
+(command (word "echo") (word "${foo:+alternate}"))
+---
+
 
 === alternate value + (unset only)
 echo ${foo+alternate}
 ---
-(command (word "echo") (word "${foo+alternate}" (param "foo" "+" "alternate")))
+(command (word "echo") (word "${foo+alternate}"))
+---
+
 
 === empty default
 echo ${foo:-}
 ---
-(command (word "echo") (word "${foo:-}" (param "foo" ":-" "")))
+(command (word "echo") (word "${foo:-}"))
+---
+
 
 # === Substring ${var:offset} ${var:offset:length} ===
 
 === substring from offset
 echo ${foo:5}
 ---
-(command (word "echo") (word "${foo:5}" (param "foo" ":" "5")))
+(command (word "echo") (word "${foo:5}"))
+---
+
 
 === substring with length
 echo ${foo:5:3}
 ---
-(command (word "echo") (word "${foo:5:3}" (param "foo" ":" "5:3")))
+(command (word "echo") (word "${foo:5:3}"))
+---
+
 
 === substring negative offset
 echo ${foo: -3}
 ---
-(command (word "echo") (word "${foo: -3}" (param "foo" ":" " -3")))
+(command (word "echo") (word "${foo: -3}"))
+---
+
 
 === substring from start with length
 echo ${foo:0:5}
 ---
-(command (word "echo") (word "${foo:0:5}" (param "foo" ":" "0:5")))
+(command (word "echo") (word "${foo:0:5}"))
+---
+
 
 # === Pattern removal ===
 
 === remove shortest prefix #
 echo ${foo#pattern}
 ---
-(command (word "echo") (word "${foo#pattern}" (param "foo" "#" "pattern")))
+(command (word "echo") (word "${foo#pattern}"))
+---
+
 
 === remove longest prefix ##
 echo ${foo##pattern}
 ---
-(command (word "echo") (word "${foo##pattern}" (param "foo" "##" "pattern")))
+(command (word "echo") (word "${foo##pattern}"))
+---
+
 
 === remove shortest suffix %
 echo ${foo%pattern}
 ---
-(command (word "echo") (word "${foo%pattern}" (param "foo" "%" "pattern")))
+(command (word "echo") (word "${foo%pattern}"))
+---
+
 
 === remove longest suffix %%
 echo ${foo%%pattern}
 ---
-(command (word "echo") (word "${foo%%pattern}" (param "foo" "%%" "pattern")))
+(command (word "echo") (word "${foo%%pattern}"))
+---
+
 
 === prefix glob pattern
 echo ${foo#*.}
 ---
-(command (word "echo") (word "${foo#*.}" (param "foo" "#" "*.")))
+(command (word "echo") (word "${foo#*.}"))
+---
+
 
 === suffix glob pattern
 echo ${foo%.*}
 ---
-(command (word "echo") (word "${foo%.*}" (param "foo" "%" ".*")))
+(command (word "echo") (word "${foo%.*}"))
+---
+
 
 # === Substitution ===
 
 === replace first /
 echo ${foo/old/new}
 ---
-(command (word "echo") (word "${foo/old/new}" (param "foo" "/" "old/new")))
+(command (word "echo") (word "${foo/old/new}"))
+---
+
 
 === replace all //
 echo ${foo//old/new}
 ---
-(command (word "echo") (word "${foo//old/new}" (param "foo" "//" "old/new")))
+(command (word "echo") (word "${foo//old/new}"))
+---
+
 
 === replace prefix /#
 echo ${foo/#old/new}
 ---
-(command (word "echo") (word "${foo/#old/new}" (param "foo" "/#" "old/new")))
+(command (word "echo") (word "${foo/#old/new}"))
+---
+
 
 === replace suffix /%
 echo ${foo/%old/new}
 ---
-(command (word "echo") (word "${foo/%old/new}" (param "foo" "/%" "old/new")))
+(command (word "echo") (word "${foo/%old/new}"))
+---
+
 
 === delete pattern
 echo ${foo/pattern}
 ---
-(command (word "echo") (word "${foo/pattern}" (param "foo" "/" "pattern")))
+(command (word "echo") (word "${foo/pattern}"))
+---
+
 
 === delete all matches
 echo ${foo//pattern}
 ---
-(command (word "echo") (word "${foo//pattern}" (param "foo" "//" "pattern")))
+(command (word "echo") (word "${foo//pattern}"))
+---
+
 
 # === Case modification ===
 
 === uppercase first ^
 echo ${foo^}
 ---
-(command (word "echo") (word "${foo^}" (param "foo" "^" "")))
+(command (word "echo") (word "${foo^}"))
+---
+
 
 === uppercase all ^^
 echo ${foo^^}
 ---
-(command (word "echo") (word "${foo^^}" (param "foo" "^^" "")))
+(command (word "echo") (word "${foo^^}"))
+---
+
 
 === lowercase first ,
 echo ${foo,}
 ---
-(command (word "echo") (word "${foo,}" (param "foo" "," "")))
+(command (word "echo") (word "${foo,}"))
+---
+
 
 === lowercase all ,,
 echo ${foo,,}
 ---
-(command (word "echo") (word "${foo,,}" (param "foo" ",," "")))
+(command (word "echo") (word "${foo,,}"))
+---
+
 
 === uppercase with pattern
 echo ${foo^[a-z]}
 ---
-(command (word "echo") (word "${foo^[a-z]}" (param "foo" "^" "[a-z]")))
+(command (word "echo") (word "${foo^[a-z]}"))
+---
+
 
 # === Transformation @ ===
 
 === transform uppercase @U
 echo ${foo@U}
 ---
-(command (word "echo") (word "${foo@U}" (param "foo" "@" "U")))
+(command (word "echo") (word "${foo@U}"))
+---
+
 
 === transform lowercase @L
 echo ${foo@L}
 ---
-(command (word "echo") (word "${foo@L}" (param "foo" "@" "L")))
+(command (word "echo") (word "${foo@L}"))
+---
+
 
 === transform quoted @Q
 echo ${foo@Q}
 ---
-(command (word "echo") (word "${foo@Q}" (param "foo" "@" "Q")))
+(command (word "echo") (word "${foo@Q}"))
+---
+
 
 # === Array subscripts ===
 
 === array element
 echo ${arr[0]}
 ---
-(command (word "echo") (word "${arr[0]}" (param "arr[0]")))
+(command (word "echo") (word "${arr[0]}"))
+---
+
 
 === array all elements @
 echo ${arr[@]}
 ---
-(command (word "echo") (word "${arr[@]}" (param "arr[@]")))
+(command (word "echo") (word "${arr[@]}"))
+---
+
 
 === array all elements *
 echo ${arr[*]}
 ---
-(command (word "echo") (word "${arr[*]}" (param "arr[*]")))
+(command (word "echo") (word "${arr[*]}"))
+---
+
 
 === array length
 echo ${#arr[@]}
 ---
-(command (word "echo") (word "${#arr[@]}" (param-len "arr[@]")))
+(command (word "echo") (word "${#arr[@]}"))
+---
+
 
 === array keys
 echo ${!arr[@]}
 ---
-(command (word "echo") (word "${!arr[@]}" (param-indirect "arr[@]")))
+(command (word "echo") (word "${!arr[@]}"))
+---
+
 
 # === Multiple expansions in one word ===
 
 === two variables
 echo $foo$bar
 ---
-(command (word "echo") (word "$foo$bar" (param "foo") (param "bar")))
+(command (word "echo") (word "$foo$bar"))
+---
+
 
 === variable and text
 echo ${foo}-${bar}
 ---
-(command (word "echo") (word "${foo}-${bar}" (param "foo") (param "bar")))
+(command (word "echo") (word "${foo}-${bar}"))
+---
+
 
 === complex word
 echo pre${foo}mid${bar}post
 ---
-(command (word "echo") (word "pre${foo}mid${bar}post" (param "foo") (param "bar")))
+(command (word "echo") (word "pre${foo}mid${bar}post"))
+---
+
 
 # === In double quotes ===
 
 === variable in double quotes
 echo "$foo"
 ---
-(command (word "echo") (word "\"$foo\"" (param "foo")))
+(command (word "echo") (word "\"$foo\""))
+---
+
 
 === braced in double quotes
 echo "${foo}"
 ---
-(command (word "echo") (word "\"${foo}\"" (param "foo")))
+(command (word "echo") (word "\"${foo}\""))
+---
+
 
 === expansion with default in quotes
 echo "${foo:-default}"
 ---
-(command (word "echo") (word "\"${foo:-default}\"" (param "foo" ":-" "default")))
+(command (word "echo") (word "\"${foo:-default}\""))
+---
+
 
 === mixed quoted and unquoted
 echo "$foo"$bar
 ---
-(command (word "echo") (word "\"$foo\"$bar" (param "foo") (param "bar")))
+(command (word "echo") (word "\"$foo\"$bar"))
+---
+
 
 # === Not expansion ===
 
@@ -355,177 +485,244 @@ echo "$foo"$bar
 echo '$foo'
 ---
 (command (word "echo") (word "'$foo'"))
+---
+
 
 === escaped dollar
 echo \$foo
 ---
 (command (word "echo") (word "\\$foo"))
+---
+
 
 === dollar at end of word
 echo foo$
 ---
 (command (word "echo") (word "foo$"))
+---
+
 
 # === Brutal edge cases ===
 
 === nested parameter expansion in default
 echo ${foo:-${bar}}
 ---
-(command (word "echo") (word "${foo:-${bar}}" (param "foo" ":-" "${bar}")))
+(command (word "echo") (word "${foo:-${bar}}"))
+---
+
 
 === nested double expansion
 echo ${foo:-${bar:-default}}
 ---
-(command (word "echo") (word "${foo:-${bar:-default}}" (param "foo" ":-" "${bar:-default}")))
+(command (word "echo") (word "${foo:-${bar:-default}}"))
+---
+
 
 === escaped brace in argument
 echo ${foo:-\}}
 ---
-(command (word "echo") (word "${foo:-\\}}" (param "foo" ":-" "\\}")))
+(command (word "echo") (word "${foo:-\\}}"))
+---
+
 
 === escaped dollar in argument
 echo ${foo:-\$bar}
 ---
-(command (word "echo") (word "${foo:-\\$bar}" (param "foo" ":-" "\\$bar")))
+(command (word "echo") (word "${foo:-\\$bar}"))
+---
+
 
 === hash in default looks like pattern removal
 echo ${foo:-#comment}
 ---
-(command (word "echo") (word "${foo:-#comment}" (param "foo" ":-" "#comment")))
+(command (word "echo") (word "${foo:-#comment}"))
+---
+
 
 === percent in default looks like suffix removal
 echo ${foo:-%percent}
 ---
-(command (word "echo") (word "${foo:-%percent}" (param "foo" ":-" "%percent")))
+(command (word "echo") (word "${foo:-%percent}"))
+---
+
 
 === slash in default looks like substitution
 echo ${foo:-path/to/file}
 ---
-(command (word "echo") (word "${foo:-path/to/file}" (param "foo" ":-" "path/to/file")))
+(command (word "echo") (word "${foo:-path/to/file}"))
+---
+
 
 === double slash in default
 echo ${foo:-a//b}
 ---
-(command (word "echo") (word "${foo:-a//b}" (param "foo" ":-" "a//b")))
+(command (word "echo") (word "${foo:-a//b}"))
+---
+
 
 === colon only after param
 echo ${foo:}
 ---
-(command (word "echo") (word "${foo:}" (param "foo" ":" "")))
+(command (word "echo") (word "${foo:}"))
+---
+
 
 === multi-digit positional
 echo ${100}
 ---
-(command (word "echo") (word "${100}" (param "100")))
+(command (word "echo") (word "${100}"))
+---
+
 
 === array subscript with arithmetic
 echo ${arr[i+1]}
 ---
-(command (word "echo") (word "${arr[i+1]}" (param "arr[i+1]")))
+(command (word "echo") (word "${arr[i+1]}"))
+---
+
 
 === array subscript negative
 echo ${arr[-1]}
 ---
-(command (word "echo") (word "${arr[-1]}" (param "arr[-1]")))
+(command (word "echo") (word "${arr[-1]}"))
+---
+
 
 === length of array negative subscript
 echo ${#arr[-1]}
 ---
-(command (word "echo") (word "${#arr[-1]}" (param-len "arr[-1]")))
+(command (word "echo") (word "${#arr[-1]}"))
+---
+
 
 === special param with operator
 echo ${?:-0}
 ---
-(command (word "echo") (word "${?:-0}" (param "?" ":-" "0")))
+(command (word "echo") (word "${?:-0}"))
+---
+
 
 === length of special dollar
 echo ${#$}
 ---
-(command (word "echo") (word "${#$}" (param-len "$")))
+(command (word "echo") (word "${#$}"))
+---
+
 
 === length with immediate word
 echo ${#foo}bar
 ---
-(command (word "echo") (word "${#foo}bar" (param-len "foo")))
+(command (word "echo") (word "${#foo}bar"))
+---
+
 
 === pattern removal escaped glob
 echo ${foo#\*.txt}
 ---
-(command (word "echo") (word "${foo#\\*.txt}" (param "foo" "#" "\\*.txt")))
+(command (word "echo") (word "${foo#\\*.txt}"))
+---
+
 
 === pattern removal bracket expression
 echo ${foo%[0-9]*}
 ---
-(command (word "echo") (word "${foo%[0-9]*}" (param "foo" "%" "[0-9]*")))
+(command (word "echo") (word "${foo%[0-9]*}"))
+---
+
 
 === substitution empty pattern
 echo ${foo//}
 ---
-(command (word "echo") (word "${foo//}" (param "foo" "//" "")))
+(command (word "echo") (word "${foo//}"))
+---
+
 
 === substitution pattern no replacement
 echo ${foo/old}
 ---
-(command (word "echo") (word "${foo/old}" (param "foo" "/" "old")))
+(command (word "echo") (word "${foo/old}"))
+---
+
 
 === substitution pattern empty replacement
 echo ${foo/old/}
 ---
-(command (word "echo") (word "${foo/old/}" (param "foo" "/" "old/")))
+(command (word "echo") (word "${foo/old/}"))
+---
+
 
 === quoted string in default
 echo ${foo:-"quoted"}
 ---
-(command (word "echo") (word "${foo:-\"quoted\"}" (param "foo" ":-" "\"quoted\"")))
+(command (word "echo") (word "${foo:-\"quoted\"}"))
+---
+
 
 === single quoted in default
 echo ${foo:-'literal'}
 ---
-(command (word "echo") (word "${foo:-'literal'}" (param "foo" ":-" "'literal'")))
+(command (word "echo") (word "${foo:-'literal'}"))
+---
+
 
 === error message with colon
 echo ${foo:?error: failed}
 ---
-(command (word "echo") (word "${foo:?error: failed}" (param "foo" ":?" "error: failed")))
+(command (word "echo") (word "${foo:?error: failed}"))
+---
+
 
 === semicolon in default (special char)
 echo ${foo:-bar;baz}
 ---
-(command (word "echo") (word "${foo:-bar;baz}" (param "foo" ":-" "bar;baz")))
+(command (word "echo") (word "${foo:-bar;baz}"))
+---
+
 
 === unbalanced brace in default
 echo ${foo:-bar{baz}
 ---
-(command (word "echo") (word "${foo:-bar{baz}" (param "foo" ":-" "bar{baz")))
+(command (word "echo") (word "${foo:-bar{baz}"))
+---
+
 
 === underscore prefix name
 echo ${_private}
 ---
-(command (word "echo") (word "${_private}" (param "_private")))
+(command (word "echo") (word "${_private}"))
+---
+
 
 === double underscore name
 echo ${__dunder__}
 ---
-(command (word "echo") (word "${__dunder__}" (param "__dunder__")))
+(command (word "echo") (word "${__dunder__}"))
+---
+
 
 === dollar at not variable
 echo $@foo
 ---
-(command (word "echo") (word "$@foo" (param "@")))
+(command (word "echo") (word "$@foo"))
+---
+
 
 === braced expansion not param
 echo {1..10}
 ---
 (command (word "echo") (word "{1..10}"))
+---
+
 
 === param followed by text without braces
 echo $foobar
 ---
-(command (word "echo") (word "$foobar" (param "foobar")))
+(command (word "echo") (word "$foobar"))
+---
+
 
 === braced stops at first special
 echo ${foo}bar$baz
 ---
-(command (word "echo") (word "${foo}bar$baz" (param "foo") (param "baz")))
-
-
+(command (word "echo") (word "${foo}bar$baz"))
+---

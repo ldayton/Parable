@@ -7,53 +7,73 @@
 while true; do echo yes; done
 ---
 (while (command (word "true")) (command (word "echo") (word "yes")))
+---
+
 
 === while with test
 while [ -f file ]; do sleep 1; done
 ---
 (while (command (word "[") (word "-f") (word "file") (word "]")) (command (word "sleep") (word "1")))
+---
+
 
 === while with pipeline condition
 while read line; do echo "$line"; done
 ---
-(while (command (word "read") (word "line")) (command (word "echo") (word "\"$line\"" (param "line"))))
+(while (command (word "read") (word "line")) (command (word "echo") (word "\"$line\"")))
+---
+
 
 === while with complex condition
 while cmd1 && cmd2; do echo both; done
 ---
-(while (list (command (word "cmd1")) (and) (command (word "cmd2"))) (command (word "echo") (word "both")))
+(while (and (command (word "cmd1")) (command (word "cmd2"))) (command (word "echo") (word "both")))
+---
+
 
 === while with or condition
 while cmd1 || cmd2; do echo either; done
 ---
-(while (list (command (word "cmd1")) (or) (command (word "cmd2"))) (command (word "echo") (word "either")))
+(while (or (command (word "cmd1")) (command (word "cmd2"))) (command (word "echo") (word "either")))
+---
+
 
 === while with multiple body commands
 while true; do echo a; echo b; done
 ---
-(while (command (word "true")) (list (command (word "echo") (word "a")) (semi) (command (word "echo") (word "b"))))
+(while (command (word "true")) (semi (command (word "echo") (word "a")) (command (word "echo") (word "b"))))
+---
+
 
 === while false does nothing
 while false; do echo never; done
 ---
 (while (command (word "false")) (command (word "echo") (word "never")))
+---
+
 
 === while with colon condition
 while :; do echo forever; break; done
 ---
-(while (command (word ":")) (list (command (word "echo") (word "forever")) (semi) (command (word "break"))))
+(while (command (word ":")) (semi (command (word "echo") (word "forever")) (command (word "break"))))
+---
+
 
 # === Multiple commands in while condition (from tree-sitter-bash) ===
 
 === while with multiple condition commands
 while echo a; echo b; do echo body; break; done
 ---
-(while (list (command (word "echo") (word "a")) (semi) (command (word "echo") (word "b"))) (list (command (word "echo") (word "body")) (semi) (command (word "break"))))
+(while (semi (command (word "echo") (word "a")) (command (word "echo") (word "b"))) (semi (command (word "echo") (word "body")) (command (word "break"))))
+---
+
 
 === while with pipeline in condition
 while cat file | grep pattern; do echo found; break; done
 ---
-(while (pipeline (command (word "cat") (word "file")) (command (word "grep") (word "pattern"))) (list (command (word "echo") (word "found")) (semi) (command (word "break"))))
+(while (pipe (command (word "cat") (word "file")) (command (word "grep") (word "pattern"))) (semi (command (word "echo") (word "found")) (command (word "break"))))
+---
+
 
 # === Basic until loops ===
 
@@ -61,147 +81,203 @@ while cat file | grep pattern; do echo found; break; done
 until false; do echo yes; done
 ---
 (until (command (word "false")) (command (word "echo") (word "yes")))
+---
+
 
 === until with test
 until [ -f file ]; do sleep 1; done
 ---
 (until (command (word "[") (word "-f") (word "file") (word "]")) (command (word "sleep") (word "1")))
+---
+
 
 === until with complex condition
 until cmd1 || cmd2; do echo waiting; done
 ---
-(until (list (command (word "cmd1")) (or) (command (word "cmd2"))) (command (word "echo") (word "waiting")))
+(until (or (command (word "cmd1")) (command (word "cmd2"))) (command (word "echo") (word "waiting")))
+---
+
 
 === until with multiple body commands
 until false; do echo a; echo b; done
 ---
-(until (command (word "false")) (list (command (word "echo") (word "a")) (semi) (command (word "echo") (word "b"))))
+(until (command (word "false")) (semi (command (word "echo") (word "a")) (command (word "echo") (word "b"))))
+---
+
 
 === until true exits immediately
 until true; do echo never; done
 ---
 (until (command (word "true")) (command (word "echo") (word "never")))
+---
+
 
 === until with and condition
 until cmd1 && cmd2; do echo waiting; done
 ---
-(until (list (command (word "cmd1")) (and) (command (word "cmd2"))) (command (word "echo") (word "waiting")))
+(until (and (command (word "cmd1")) (command (word "cmd2"))) (command (word "echo") (word "waiting")))
+---
+
 
 # === Basic for loops ===
 
 === for with word list
 for x in a b c; do echo $x; done
 ---
-(for "x" (words "a" "b" "c") (command (word "echo") (word "$x" (param "x"))))
+(for (word "x") (in (word "a") (word "b") (word "c")) (command (word "echo") (word "$x")))
+---
+
 
 === for with single word
 for x in item; do echo $x; done
 ---
-(for "x" (words "item") (command (word "echo") (word "$x" (param "x"))))
+(for (word "x") (in (word "item")) (command (word "echo") (word "$x")))
+---
+
 
 === for with many words
 for i in 1 2 3 4 5; do echo $i; done
 ---
-(for "i" (words "1" "2" "3" "4" "5") (command (word "echo") (word "$i" (param "i"))))
+(for (word "i") (in (word "1") (word "2") (word "3") (word "4") (word "5")) (command (word "echo") (word "$i")))
+---
+
 
 === for with quoted words
 for f in "file one" "file two"; do cat "$f"; done
 ---
-(for "f" (words "\"file one\"" "\"file two\"") (command (word "cat") (word "\"$f\"" (param "f"))))
+(for (word "f") (in (word "\"file one\"") (word "\"file two\"")) (command (word "cat") (word "\"$f\"")))
+---
+
 
 === for with single quoted words
 for f in 'file one' 'file two'; do cat "$f"; done
 ---
-(for "f" (words "'file one'" "'file two'") (command (word "cat") (word "\"$f\"" (param "f"))))
+(for (word "f") (in (word "'file one'") (word "'file two'")) (command (word "cat") (word "\"$f\"")))
+---
+
 
 === for with glob pattern
 for f in *.txt; do cat $f; done
 ---
-(for "f" (words "*.txt") (command (word "cat") (word "$f" (param "f"))))
+(for (word "f") (in (word "*.txt")) (command (word "cat") (word "$f")))
+---
+
 
 === for with multiple globs
 for f in *.txt *.md; do cat $f; done
 ---
-(for "f" (words "*.txt" "*.md") (command (word "cat") (word "$f" (param "f"))))
+(for (word "f") (in (word "*.txt") (word "*.md")) (command (word "cat") (word "$f")))
+---
+
 
 === for with question mark glob
 for f in file?.txt; do cat $f; done
 ---
-(for "f" (words "file?.txt") (command (word "cat") (word "$f" (param "f"))))
+(for (word "f") (in (word "file?.txt")) (command (word "cat") (word "$f")))
+---
+
 
 === for with bracket glob
 for f in file[0-9].txt; do cat $f; done
 ---
-(for "f" (words "file[0-9].txt") (command (word "cat") (word "$f" (param "f"))))
+(for (word "f") (in (word "file[0-9].txt")) (command (word "cat") (word "$f")))
+---
+
 
 === for with variable expansion
 for x in $items; do echo $x; done
 ---
-(for "x" (words "$items") (command (word "echo") (word "$x" (param "x"))))
+(for (word "x") (in (word "$items")) (command (word "echo") (word "$x")))
+---
+
 
 === for with array expansion
 for x in "${array[@]}"; do echo $x; done
 ---
-(for "x" (words "\"${array[@]}\"") (command (word "echo") (word "$x" (param "x"))))
+(for (word "x") (in (word "\"${array[@]}\"")) (command (word "echo") (word "$x")))
+---
+
 
 === for without in clause
 for x; do echo $x; done
 ---
-(for "x" (command (word "echo") (word "$x" (param "x"))))
+(for (word "x") (in (word "\"$@\"")) (command (word "echo") (word "$x")))
+---
+
 
 === for with multiple body commands
 for x in a b; do echo start; echo $x; echo end; done
 ---
-(for "x" (words "a" "b") (list (command (word "echo") (word "start")) (semi) (command (word "echo") (word "$x" (param "x"))) (semi) (command (word "echo") (word "end"))))
+(for (word "x") (in (word "a") (word "b")) (semi (semi (command (word "echo") (word "start")) (command (word "echo") (word "$x"))) (command (word "echo") (word "end"))))
+---
+
 
 # === For loop with special variable names (from Oil Shell) ===
 
 === for using in as variable name
 for in in a b c; do echo $in; done
 ---
-(for "in" (words "a" "b" "c") (command (word "echo") (word "$in" (param "in"))))
+(for (word "in") (in (word "a") (word "b") (word "c")) (command (word "echo") (word "$in")))
+---
+
 
 === for using do as variable name
 for do in a b c; do echo $do; done
 ---
-(for "do" (words "a" "b" "c") (command (word "echo") (word "$do" (param "do"))))
+(for (word "do") (in (word "a") (word "b") (word "c")) (command (word "echo") (word "$do")))
+---
+
 
 === for with underscore variable
 for _ in a b c; do echo $_; done
 ---
-(for "_" (words "a" "b" "c") (command (word "echo") (word "$_" (param "_"))))
+(for (word "_") (in (word "a") (word "b") (word "c")) (command (word "echo") (word "$_")))
+---
+
 
 === for with long variable name
 for very_long_variable_name in a b c; do echo $very_long_variable_name; done
 ---
-(for "very_long_variable_name" (words "a" "b" "c") (command (word "echo") (word "$very_long_variable_name" (param "very_long_variable_name"))))
+(for (word "very_long_variable_name") (in (word "a") (word "b") (word "c")) (command (word "echo") (word "$very_long_variable_name")))
+---
+
 
 # === For loop word list edge cases ===
 
 === for with tilde expansion
 for name in ~/src ~/git; do echo $name; done
 ---
-(for "name" (words "~/src" "~/git") (command (word "echo") (word "$name" (param "name"))))
+(for (word "name") (in (word "~/src") (word "~/git")) (command (word "echo") (word "$name")))
+---
+
 
 === for with path words
 for dir in /usr/bin /usr/local/bin /opt/bin; do echo $dir; done
 ---
-(for "dir" (words "/usr/bin" "/usr/local/bin" "/opt/bin") (command (word "echo") (word "$dir" (param "dir"))))
+(for (word "dir") (in (word "/usr/bin") (word "/usr/local/bin") (word "/opt/bin")) (command (word "echo") (word "$dir")))
+---
+
 
 === for with mixed quoted and unquoted
 for x in a "b c" d; do echo $x; done
 ---
-(for "x" (words "a" "\"b c\"" "d") (command (word "echo") (word "$x" (param "x"))))
+(for (word "x") (in (word "a") (word "\"b c\"") (word "d")) (command (word "echo") (word "$x")))
+---
+
 
 === for with equals in words
 for opt in --foo=bar --baz=qux; do echo $opt; done
 ---
-(for "opt" (words "--foo=bar" "--baz=qux") (command (word "echo") (word "$opt" (param "opt"))))
+(for (word "opt") (in (word "--foo=bar") (word "--baz=qux")) (command (word "echo") (word "$opt")))
+---
+
 
 === for with command substitution in words
 for x in $(seq 1 3); do echo $x; done
 ---
-(for "x" (words "$(seq 1 3)") (command (word "echo") (word "$x" (param "x"))))
+(for (word "x") (in (word "$(seq 1 3)")) (command (word "echo") (word "$x")))
+---
+
 
 # === Loops with newlines ===
 
@@ -212,6 +288,8 @@ echo yes
 done
 ---
 (while (command (word "true")) (command (word "echo") (word "yes")))
+---
+
 
 === until with newlines
 until false
@@ -220,6 +298,8 @@ echo yes
 done
 ---
 (until (command (word "false")) (command (word "echo") (word "yes")))
+---
+
 
 === for with newlines
 for x in a b c
@@ -227,7 +307,9 @@ do
 echo $x
 done
 ---
-(for "x" (words "a" "b" "c") (command (word "echo") (word "$x" (param "x"))))
+(for (word "x") (in (word "a") (word "b") (word "c")) (command (word "echo") (word "$x")))
+---
+
 
 === for multiline body
 for x in a b
@@ -237,7 +319,9 @@ echo $x
 echo end
 done
 ---
-(for "x" (words "a" "b") (list (command (word "echo") (word "start")) (semi) (command (word "echo") (word "$x" (param "x"))) (semi) (command (word "echo") (word "end"))))
+(for (word "x") (in (word "a") (word "b")) (semi (semi (command (word "echo") (word "start")) (command (word "echo") (word "$x"))) (command (word "echo") (word "end"))))
+---
+
 
 === while with newline after condition
 while true; do
@@ -245,6 +329,8 @@ echo yes
 done
 ---
 (while (command (word "true")) (command (word "echo") (word "yes")))
+---
+
 
 # === Deeply nested loops ===
 
@@ -252,31 +338,43 @@ done
 while a; do while b; do echo inner; done; done
 ---
 (while (command (word "a")) (while (command (word "b")) (command (word "echo") (word "inner"))))
+---
+
 
 === nested for
 for x in a b; do for y in 1 2; do echo $x$y; done; done
 ---
-(for "x" (words "a" "b") (for "y" (words "1" "2") (command (word "echo") (word "$x$y" (param "x") (param "y")))))
+(for (word "x") (in (word "a") (word "b")) (for (word "y") (in (word "1") (word "2")) (command (word "echo") (word "$x$y"))))
+---
+
 
 === for inside while
 while true; do for x in a b; do echo $x; done; done
 ---
-(while (command (word "true")) (for "x" (words "a" "b") (command (word "echo") (word "$x" (param "x")))))
+(while (command (word "true")) (for (word "x") (in (word "a") (word "b")) (command (word "echo") (word "$x"))))
+---
+
 
 === while inside for
 for x in a b; do while test $x; do echo $x; break; done; done
 ---
-(for "x" (words "a" "b") (while (command (word "test") (word "$x" (param "x"))) (list (command (word "echo") (word "$x" (param "x"))) (semi) (command (word "break")))))
+(for (word "x") (in (word "a") (word "b")) (while (command (word "test") (word "$x")) (semi (command (word "echo") (word "$x")) (command (word "break")))))
+---
+
 
 === triple nested for
 for x in a b; do for y in 1 2; do for z in p q; do echo $x$y$z; done; done; done
 ---
-(for "x" (words "a" "b") (for "y" (words "1" "2") (for "z" (words "p" "q") (command (word "echo") (word "$x$y$z" (param "x") (param "y") (param "z"))))))
+(for (word "x") (in (word "a") (word "b")) (for (word "y") (in (word "1") (word "2")) (for (word "z") (in (word "p") (word "q")) (command (word "echo") (word "$x$y$z")))))
+---
+
 
 === until inside while inside for
 for x in a; do while true; do until false; do echo deep; break 3; done; done; done
 ---
-(for "x" (words "a") (while (command (word "true")) (until (command (word "false")) (list (command (word "echo") (word "deep")) (semi) (command (word "break") (word "3"))))))
+(for (word "x") (in (word "a")) (while (command (word "true")) (until (command (word "false")) (semi (command (word "echo") (word "deep")) (command (word "break") (word "3"))))))
+---
+
 
 === nested while with newlines
 while a
@@ -288,166 +386,228 @@ done
 done
 ---
 (while (command (word "a")) (while (command (word "b")) (command (word "echo") (word "inner"))))
+---
+
 
 # === Loops in pipelines and lists ===
 
 === while in pipeline
 while read line; do echo $line; done | cat
 ---
-(pipeline (while (command (word "read") (word "line")) (command (word "echo") (word "$line" (param "line")))) (command (word "cat")))
+(pipe (while (command (word "read") (word "line")) (command (word "echo") (word "$line"))) (command (word "cat")))
+---
+
 
 === for in pipeline
 for x in a b c; do echo $x; done | wc -l
 ---
-(pipeline (for "x" (words "a" "b" "c") (command (word "echo") (word "$x" (param "x")))) (command (word "wc") (word "-l")))
+(pipe (for (word "x") (in (word "a") (word "b") (word "c")) (command (word "echo") (word "$x"))) (command (word "wc") (word "-l")))
+---
+
 
 === while in and list
 while true; do echo yes; break; done && echo done
 ---
-(list (while (command (word "true")) (list (command (word "echo") (word "yes")) (semi) (command (word "break")))) (and) (command (word "echo") (word "done")))
+(and (while (command (word "true")) (semi (command (word "echo") (word "yes")) (command (word "break")))) (command (word "echo") (word "done")))
+---
+
 
 === while in or list
 while false; do echo no; done || echo fallback
 ---
-(list (while (command (word "false")) (command (word "echo") (word "no"))) (or) (command (word "echo") (word "fallback")))
+(or (while (command (word "false")) (command (word "echo") (word "no"))) (command (word "echo") (word "fallback")))
+---
+
 
 === for in background
 for x in a b c; do echo $x; done &
 ---
-(list (for "x" (words "a" "b" "c") (command (word "echo") (word "$x" (param "x")))) (bg))
+(background (for (word "x") (in (word "a") (word "b") (word "c")) (command (word "echo") (word "$x"))))
+---
+
 
 === multiple loops in sequence
 for x in a; do echo $x; done; for y in b; do echo $y; done
 ---
-(list (for "x" (words "a") (command (word "echo") (word "$x" (param "x")))) (semi) (for "y" (words "b") (command (word "echo") (word "$y" (param "y")))))
+(semi (for (word "x") (in (word "a")) (command (word "echo") (word "$x"))) (for (word "y") (in (word "b")) (command (word "echo") (word "$y"))))
+---
+
 
 === loop in middle of pipeline
 echo input | while read x; do echo $x; done | cat
 ---
-(pipeline (command (word "echo") (word "input")) (while (command (word "read") (word "x")) (command (word "echo") (word "$x" (param "x")))) (command (word "cat")))
+(pipe (command (word "echo") (word "input")) (pipe (while (command (word "read") (word "x")) (command (word "echo") (word "$x"))) (command (word "cat"))))
+---
+
 
 === multiple loops in pipeline
 for x in a; do echo $x; done | while read y; do echo $y; done
 ---
-(pipeline (for "x" (words "a") (command (word "echo") (word "$x" (param "x")))) (while (command (word "read") (word "y")) (command (word "echo") (word "$y" (param "y")))))
+(pipe (for (word "x") (in (word "a")) (command (word "echo") (word "$x"))) (while (command (word "read") (word "y")) (command (word "echo") (word "$y"))))
+---
+
 
 === loop after command in sequence
 echo before; while true; do echo loop; break; done
 ---
-(list (command (word "echo") (word "before")) (semi) (while (command (word "true")) (list (command (word "echo") (word "loop")) (semi) (command (word "break")))))
+(semi (command (word "echo") (word "before")) (while (command (word "true")) (semi (command (word "echo") (word "loop")) (command (word "break")))))
+---
+
 
 # === Loops with compound commands in body ===
 
 === while with if in body
 while read line; do if [ -n "$line" ]; then echo $line; fi; done
 ---
-(while (command (word "read") (word "line")) (if (command (word "[") (word "-n") (word "\"$line\"" (param "line")) (word "]")) (command (word "echo") (word "$line" (param "line")))))
+(while (command (word "read") (word "line")) (if (command (word "[") (word "-n") (word "\"$line\"") (word "]")) (command (word "echo") (word "$line"))))
+---
+
 
 === for with if else in body
 for x in a b c; do if [ "$x" = "b" ]; then echo match; else echo no; fi; done
 ---
-(for "x" (words "a" "b" "c") (if (command (word "[") (word "\"$x\"" (param "x")) (word "=") (word "\"b\"") (word "]")) (command (word "echo") (word "match")) (command (word "echo") (word "no"))))
+(for (word "x") (in (word "a") (word "b") (word "c")) (if (command (word "[") (word "\"$x\"") (word "=") (word "\"b\"") (word "]")) (command (word "echo") (word "match")) (command (word "echo") (word "no"))))
+---
+
 
 === for with subshell in body
 for x in a b; do (echo $x); done
 ---
-(for "x" (words "a" "b") (subshell (command (word "echo") (word "$x" (param "x")))))
+(for (word "x") (in (word "a") (word "b")) (subshell (command (word "echo") (word "$x"))))
+---
+
 
 === for with brace group in body
 for x in a b; do { echo $x; }; done
 ---
-(for "x" (words "a" "b") (brace-group (list (command (word "echo") (word "$x" (param "x"))) (semi))))
+(for (word "x") (in (word "a") (word "b")) (brace-group (command (word "echo") (word "$x"))))
+---
+
 
 === while with nested while in body
 while a; do while b; do echo inner; break; done; done
 ---
-(while (command (word "a")) (while (command (word "b")) (list (command (word "echo") (word "inner")) (semi) (command (word "break")))))
+(while (command (word "a")) (while (command (word "b")) (semi (command (word "echo") (word "inner")) (command (word "break")))))
+---
+
 
 === for with nested for in body
 for x in a b; do for y in 1 2; do echo $x$y; done; done
 ---
-(for "x" (words "a" "b") (for "y" (words "1" "2") (command (word "echo") (word "$x$y" (param "x") (param "y")))))
+(for (word "x") (in (word "a") (word "b")) (for (word "y") (in (word "1") (word "2")) (command (word "echo") (word "$x$y"))))
+---
+
 
 # === Loops with compound commands in condition ===
 
 === while with subshell condition
 while (true); do echo yes; break; done
 ---
-(while (subshell (command (word "true"))) (list (command (word "echo") (word "yes")) (semi) (command (word "break"))))
+(while (subshell (command (word "true"))) (semi (command (word "echo") (word "yes")) (command (word "break"))))
+---
+
 
 === while with brace group condition
 while { true; }; do echo yes; break; done
 ---
-(while (brace-group (list (command (word "true")) (semi))) (list (command (word "echo") (word "yes")) (semi) (command (word "break"))))
+(while (brace-group (command (word "true"))) (semi (command (word "echo") (word "yes")) (command (word "break"))))
+---
+
 
 === until with subshell condition
 until (false); do echo yes; break; done
 ---
-(until (subshell (command (word "false"))) (list (command (word "echo") (word "yes")) (semi) (command (word "break"))))
+(until (subshell (command (word "false"))) (semi (command (word "echo") (word "yes")) (command (word "break"))))
+---
+
 
 # === Loops with redirections ===
 
 === while with redirect in body
 while read line; do echo $line > out.txt; done
 ---
-(while (command (word "read") (word "line")) (command (word "echo") (word "$line" (param "line")) (redirect ">" (word "out.txt"))))
+(while (command (word "read") (word "line")) (command (word "echo") (word "$line") (redirect ">" "out.txt")))
+---
+
 
 === for with redirect in body
 for f in *.txt; do cat $f >> all.txt; done
 ---
-(for "f" (words "*.txt") (command (word "cat") (word "$f" (param "f")) (redirect ">>" (word "all.txt"))))
+(for (word "f") (in (word "*.txt")) (command (word "cat") (word "$f") (redirect ">>" "all.txt")))
+---
+
 
 === while with multiple redirects in body
 while read line; do echo $line > out.txt 2>&1; done
 ---
-(while (command (word "read") (word "line")) (command (word "echo") (word "$line" (param "line")) (redirect ">" (word "out.txt")) (redirect "2>" (word "&1"))))
+(while (command (word "read") (word "line")) (command (word "echo") (word "$line") (redirect ">" "out.txt") (redirect ">&" 1)))
+---
+
 
 === while with input redirect in condition
 while read line < input.txt; do echo $line; done
 ---
-(while (command (word "read") (word "line") (redirect "<" (word "input.txt"))) (command (word "echo") (word "$line" (param "line"))))
+(while (command (word "read") (word "line") (redirect "<" "input.txt")) (command (word "echo") (word "$line")))
+---
+
 
 === for with here string in body
 for x in a b; do cat <<< "$x"; done
 ---
-(for "x" (words "a" "b") (command (word "cat") (redirect "<<<" (word "\"$x\"" (param "x")))))
+(for (word "x") (in (word "a") (word "b")) (command (word "cat") (redirect "<<<" ""$x"")))
+---
+
 
 # === Loops in compound commands ===
 
 === while in subshell
 (while true; do echo yes; break; done)
 ---
-(subshell (while (command (word "true")) (list (command (word "echo") (word "yes")) (semi) (command (word "break")))))
+(subshell (while (command (word "true")) (semi (command (word "echo") (word "yes")) (command (word "break")))))
+---
+
 
 === for in brace group
 { for x in a b; do echo $x; done; }
 ---
-(brace-group (list (for "x" (words "a" "b") (command (word "echo") (word "$x" (param "x")))) (semi)))
+(brace-group (for (word "x") (in (word "a") (word "b")) (command (word "echo") (word "$x"))))
+---
+
 
 === while in if body
 if true; then while false; do echo no; done; fi
 ---
 (if (command (word "true")) (while (command (word "false")) (command (word "echo") (word "no"))))
+---
+
 
 === for in if body
 if true; then for x in a b; do echo $x; done; fi
 ---
-(if (command (word "true")) (for "x" (words "a" "b") (command (word "echo") (word "$x" (param "x")))))
+(if (command (word "true")) (for (word "x") (in (word "a") (word "b")) (command (word "echo") (word "$x"))))
+---
+
 
 === while in if else
 if false; then echo no; else while true; do echo yes; break; done; fi
 ---
-(if (command (word "false")) (command (word "echo") (word "no")) (while (command (word "true")) (list (command (word "echo") (word "yes")) (semi) (command (word "break")))))
+(if (command (word "false")) (command (word "echo") (word "no")) (while (command (word "true")) (semi (command (word "echo") (word "yes")) (command (word "break")))))
+---
+
 
 === for in elif
 if false; then echo no; elif true; then for x in a; do echo $x; done; fi
 ---
-(if (command (word "false")) (command (word "echo") (word "no")) (if (command (word "true")) (for "x" (words "a") (command (word "echo") (word "$x" (param "x"))))))
+(if (command (word "false")) (command (word "echo") (word "no")) (if (command (word "true")) (for (word "x") (in (word "a")) (command (word "echo") (word "$x")))))
+---
+
 
 === nested subshells with loops
 ( (while true; do echo inner; break; done) )
 ---
-(subshell (subshell (while (command (word "true")) (list (command (word "echo") (word "inner")) (semi) (command (word "break"))))))
+(subshell (subshell (while (command (word "true")) (semi (command (word "echo") (word "inner")) (command (word "break"))))))
+---
+
 
 # === Whitespace variations ===
 
@@ -455,143 +615,197 @@ if false; then echo no; elif true; then for x in a; do echo $x; done; fi
 while true;do echo yes;done
 ---
 (while (command (word "true")) (command (word "echo") (word "yes")))
+---
+
 
 === for no spaces after semicolons
 for x in a b;do echo $x;done
 ---
-(for "x" (words "a" "b") (command (word "echo") (word "$x" (param "x"))))
+(for (word "x") (in (word "a") (word "b")) (command (word "echo") (word "$x")))
+---
+
 
 === until no spaces
 until false;do echo yes;done
 ---
 (until (command (word "false")) (command (word "echo") (word "yes")))
+---
+
 
 === extra spaces
 while   true  ;  do   echo yes  ;  done
 ---
 (while (command (word "true")) (command (word "echo") (word "yes")))
+---
+
 
 === tabs instead of spaces
 while	true;	do	echo yes;	done
 ---
 (while (command (word "true")) (command (word "echo") (word "yes")))
+---
+
 
 === mixed whitespace in for
 for	x   in	 a   b	 c  ;  do   echo $x  ;	done
 ---
-(for "x" (words "a" "b" "c") (command (word "echo") (word "$x" (param "x"))))
+(for (word "x") (in (word "a") (word "b") (word "c")) (command (word "echo") (word "$x")))
+---
+
 
 # === Break and continue ===
 
 === while with break
 while true; do echo once; break; done
 ---
-(while (command (word "true")) (list (command (word "echo") (word "once")) (semi) (command (word "break"))))
+(while (command (word "true")) (semi (command (word "echo") (word "once")) (command (word "break"))))
+---
+
 
 === while with continue
 while read line; do continue; echo never; done
 ---
-(while (command (word "read") (word "line")) (list (command (word "continue")) (semi) (command (word "echo") (word "never"))))
+(while (command (word "read") (word "line")) (semi (command (word "continue")) (command (word "echo") (word "never"))))
+---
+
 
 === for with break
 for x in a b c; do echo $x; break; done
 ---
-(for "x" (words "a" "b" "c") (list (command (word "echo") (word "$x" (param "x"))) (semi) (command (word "break"))))
+(for (word "x") (in (word "a") (word "b") (word "c")) (semi (command (word "echo") (word "$x")) (command (word "break"))))
+---
+
 
 === for with conditional break
 for x in a b c; do if [ "$x" = "b" ]; then break; fi; echo $x; done
 ---
-(for "x" (words "a" "b" "c") (list (if (command (word "[") (word "\"$x\"" (param "x")) (word "=") (word "\"b\"") (word "]")) (command (word "break"))) (semi) (command (word "echo") (word "$x" (param "x")))))
+(for (word "x") (in (word "a") (word "b") (word "c")) (semi (if (command (word "[") (word "\"$x\"") (word "=") (word "\"b\"") (word "]")) (command (word "break"))) (command (word "echo") (word "$x"))))
+---
+
 
 === break with level number
 for x in a b; do for y in 1 2; do break 2; done; done
 ---
-(for "x" (words "a" "b") (for "y" (words "1" "2") (command (word "break") (word "2"))))
+(for (word "x") (in (word "a") (word "b")) (for (word "y") (in (word "1") (word "2")) (command (word "break") (word "2"))))
+---
+
 
 === continue with level number
 for x in a b; do for y in 1 2; do continue 2; done; done
 ---
-(for "x" (words "a" "b") (for "y" (words "1" "2") (command (word "continue") (word "2"))))
+(for (word "x") (in (word "a") (word "b")) (for (word "y") (in (word "1") (word "2")) (command (word "continue") (word "2"))))
+---
+
 
 === break 1 explicit
 while true; do break 1; done
 ---
 (while (command (word "true")) (command (word "break") (word "1")))
+---
+
 
 === continue 1 explicit
 while true; do continue 1; done
 ---
 (while (command (word "true")) (command (word "continue") (word "1")))
+---
+
 
 === break in nested if
 for x in a b; do if true; then break; fi; done
 ---
-(for "x" (words "a" "b") (if (command (word "true")) (command (word "break"))))
+(for (word "x") (in (word "a") (word "b")) (if (command (word "true")) (command (word "break"))))
+---
+
 
 # === Complex real-world examples ===
 
 === process all files
 for f in *.sh; do chmod +x "$f"; done
 ---
-(for "f" (words "*.sh") (command (word "chmod") (word "+x") (word "\"$f\"" (param "f"))))
+(for (word "f") (in (word "*.sh")) (command (word "chmod") (word "+x") (word "\"$f\"")))
+---
+
 
 === read lines from file
 while IFS= read -r line; do echo "$line"; done
 ---
-(while (command (word "IFS=") (word "read") (word "-r") (word "line")) (command (word "echo") (word "\"$line\"" (param "line"))))
+(while (command (word "IFS=") (word "read") (word "-r") (word "line")) (command (word "echo") (word "\"$line\"")))
+---
+
 
 === countdown
 while [ $n -gt 0 ]; do echo $n; done
 ---
-(while (command (word "[") (word "$n" (param "n")) (word "-gt") (word "0") (word "]")) (command (word "echo") (word "$n" (param "n"))))
+(while (command (word "[") (word "$n") (word "-gt") (word "0") (word "]")) (command (word "echo") (word "$n")))
+---
+
 
 === retry loop
 until curl -s http://localhost; do sleep 1; done
 ---
 (until (command (word "curl") (word "-s") (word "http://localhost")) (command (word "sleep") (word "1")))
+---
+
 
 === iterate with index
 for i in 1 2 3 4 5; do echo "Item $i"; done
 ---
-(for "i" (words "1" "2" "3" "4" "5") (command (word "echo") (word "\"Item $i\"" (param "i"))))
+(for (word "i") (in (word "1") (word "2") (word "3") (word "4") (word "5")) (command (word "echo") (word "\"Item $i\"")))
+---
+
 
 === find and process
 for f in $(find . -name "*.txt"); do echo $f; done
 ---
-(for "f" (words "$(find . -name \"*.txt\")") (command (word "echo") (word "$f" (param "f"))))
+(for (word "f") (in (word "$(find . -name \"*.txt\")")) (command (word "echo") (word "$f")))
+---
+
 
 === parallel background loops
 for x in a b c; do process $x & done
 ---
-(for "x" (words "a" "b" "c") (list (command (word "process") (word "$x" (param "x"))) (bg)))
+(for (word "x") (in (word "a") (word "b") (word "c")) (background (command (word "process") (word "$x"))))
+---
+
 
 === wait for condition
 until [ -f /tmp/ready ]; do sleep 0.1; done
 ---
 (until (command (word "[") (word "-f") (word "/tmp/ready") (word "]")) (command (word "sleep") (word "0.1")))
+---
+
 
 === loop with error handling
 for f in *.txt; do cat "$f" || echo "failed: $f"; done
 ---
-(for "f" (words "*.txt") (list (command (word "cat") (word "\"$f\"" (param "f"))) (or) (command (word "echo") (word "\"failed: $f\"" (param "f")))))
+(for (word "f") (in (word "*.txt")) (or (command (word "cat") (word "\"$f\"")) (command (word "echo") (word "\"failed: $f\""))))
+---
+
 
 === loop with and chain
 for f in *.txt; do test -f "$f" && cat "$f"; done
 ---
-(for "f" (words "*.txt") (list (command (word "test") (word "-f") (word "\"$f\"" (param "f"))) (and) (command (word "cat") (word "\"$f\"" (param "f")))))
+(for (word "f") (in (word "*.txt")) (and (command (word "test") (word "-f") (word "\"$f\"")) (command (word "cat") (word "\"$f\""))))
+---
+
 
 === complex condition with double bracket
 while [[ -f file && ! -f done ]]; do sleep 1; done
 ---
-(while (cond-expr (cond-and (unary-test "-f" (word "file")) (cond-not (unary-test "-f" (word "done"))))) (command (word "sleep") (word "1")))
+(while (cond (cond-and (cond-unary "-f" (cond-term "file")) (cond-unary "-f" (cond-term "done")))) (command (word "sleep") (word "1")))
+---
+
 
 === for over command output
 for user in $(cut -d: -f1 /etc/passwd); do echo $user; done
 ---
-(for "user" (words "$(cut -d: -f1 /etc/passwd)") (command (word "echo") (word "$user" (param "user"))))
+(for (word "user") (in (word "$(cut -d: -f1 /etc/passwd)")) (command (word "echo") (word "$user")))
+---
+
 
 === nested loop with complex body
 for i in 1 2; do for j in a b; do echo "$i$j"; if [ "$j" = "b" ]; then continue 2; fi; done; done
 ---
-(for "i" (words "1" "2") (for "j" (words "a" "b") (list (command (word "echo") (word "\"$i$j\"" (param "i") (param "j"))) (semi) (if (command (word "[") (word "\"$j\"" (param "j")) (word "=") (word "\"b\"") (word "]")) (command (word "continue") (word "2"))))))
-
+(for (word "i") (in (word "1") (word "2")) (for (word "j") (in (word "a") (word "b")) (semi (command (word "echo") (word "\"$i$j\"")) (if (command (word "[") (word "\"$j\"") (word "=") (word "\"b\"") (word "]")) (command (word "continue") (word "2"))))))
+---

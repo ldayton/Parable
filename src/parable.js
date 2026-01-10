@@ -214,7 +214,7 @@ class Word extends Node {
 					result.push(simple);
 					i += 2;
 				} else if (c === "'") {
-					result.push([39, 92, 39, 39]);
+					result.push(39, 92, 39, 39);
 					i += 2;
 				} else if (c === "x") {
 					if (i + 2 < inner.length && inner[i + 2] === "{") {
@@ -2481,7 +2481,7 @@ function FormatCmdsubNode(node, indent, in_procsub) {
 	}
 	if (node.kind === "brace-group") {
 		body = FormatCmdsubNode(node.body, indent);
-		body = body.trimEnd(";");
+		body = body.replace(/;+$/, "");
 		return "{ " + body + "; }";
 	}
 	if (node.kind === "arith-cmd") {

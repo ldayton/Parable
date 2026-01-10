@@ -1,0 +1,3 @@
+# Parable project config
+
+allow node -e *

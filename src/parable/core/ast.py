@@ -774,9 +774,13 @@ class Redirect(Node):
             else:
                 # Variable fd dup like >&$fd or >&$fd- (move) - strip the & and trailing -
                 return f'(redirect "{op}" "{fd_target}")'
-        # Handle case where op is already >& or <& and target is just a digit
-        if op in (">&", "<&") and target_val.isdigit():
-            return f'(redirect "{op}" {target_val})'
+        # Handle case where op is already >& or <&
+        if op in (">&", "<&"):
+            if target_val.isdigit():
+                return f'(redirect "{op}" {target_val})'
+            # Variable fd dup with move indicator (trailing -)
+            target_val = target_val.rstrip("-")
+            return f'(redirect "{op}" "{target_val}")'
         return f'(redirect "{op}" "{target_val}")'
 
 

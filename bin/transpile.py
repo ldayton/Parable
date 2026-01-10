@@ -451,7 +451,8 @@ class JSTranspiler(ast.NodeVisitor):
             if name == "ord":
                 return f"{args}.charCodeAt(0)"
             if name == "chr":
-                return f"String.fromCharCode({args})"
+                # Use fromCodePoint for full unicode support (including > 0xFFFF)
+                return f"String.fromCodePoint({args})"
             if name == "isinstance":
                 return f"{node.args[0].id} instanceof {self.visit_expr(node.args[1])}"
             if name == "getattr":

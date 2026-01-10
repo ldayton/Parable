@@ -272,7 +272,7 @@ class Word extends Node {
 						}
 						result.push(
 							...Array.from(
-								new TextEncoder().encode(String.fromCharCode(codepoint)),
+								new TextEncoder().encode(String.fromCodePoint(codepoint)),
 							),
 						);
 						i = j;
@@ -294,7 +294,7 @@ class Word extends Node {
 						}
 						result.push(
 							...Array.from(
-								new TextEncoder().encode(String.fromCharCode(codepoint)),
+								new TextEncoder().encode(String.fromCodePoint(codepoint)),
 							),
 						);
 						i = j;

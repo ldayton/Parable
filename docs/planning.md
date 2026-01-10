@@ -1,27 +1,65 @@
 # Parable Development Guide
 
-## Priorities
+Decisions in this document follow the [project philosophy](../README.md#philosophy):
 
-| Priority | Focus | Goal |
-|----------|-------|------|
-| P1 | Usability | Features for tool authors |
-| P2 | Nice to have | Narrower use cases |
+1. **LLM-driven development** — clarity wins over performance; verbose beats clever
+2. **Match bash exactly** — bash is the oracle
+3. **Pure Python** — one parser file, one AST file
+4. **Fast as possible** — pay the cost for clarity, then claw back every microsecond
 
 ---
 
-## P1: Usability
+## Priorities
+
+| Priority | Focus                 | Goal                   |
+| -------- | --------------------- | ---------------------- |
+| P1       | Essential usability   | So others can use this |
+| P2       | Quality & performance | Internal improvements  |
+| P3       | Nice to have          | Narrower use cases     |
+
+| Priority   | Category     | Item                            | Rationale                            |
+| ---------- | ------------ | ------------------------------- | ------------------------------------ |
+| **P1**     | Usability    | Position tracking (#32)         | Linters, IDEs, source maps need it   |
+| **P1**     | Usability    | JSON serialization              | Interop with other tools             |
+| **P1**     | Usability    | Line/column in errors (#30)     | Users can't debug without this       |
+|            |              |                                 |                                      |
+| **P2**     | Performance  | Inline hot paths                | 5-10% gain, low clarity cost         |
+| **P2**     | Performance  | Cached character sets           | 3-5% gain, common pattern            |
+| **P2**     | Performance  | ASCII range checks              | 5-8% gain, correct for bash          |
+| **P2**     | Performance  | `__slots__` on AST nodes        | 40-50% memory                        |
+| **P2**     | Performance  | Bulk consumption                | Clearer intent                       |
+| **P2**     | Quality      | Exception safety (#17)          | High severity, state corruption risk |
+| **P2**     | Quality      | Extract `to_sexp()` (#18-19)    | High severity, 480-line method       |
+| **P2**     | Quality      | Add helpers (#3, #6, #9)        | Foundation for other refactoring     |
+|            |              |                                 |                                      |
+| **P3**     | Nice to have | Error recovery                  | IDE use cases only                   |
+| **P3**     | Nice to have | Comments preservation           | Formatters only                      |
+| **P3**     | Nice to have | Source reconstruction           | Formatters only                      |
+| **P3**     | Quality      | Decompose `parse_word()` (#1-4) | Depends on P2 helpers                |
+|            |              |                                 |                                      |
+| **Future** |              | Incremental parsing (#31)       | High effort, narrow use              |
+| **Future** |              | Syntax tree protocol (#34)      | High effort                          |
+| **Future** |              | Dialect handling (#36)          | Low severity                         |
+| **Future** |              | Naming standardization (#22-27) | Low severity, cosmetic               |
+| **Future** |              | Rejected optimizations          | Violate [1]                          |
+
+---
+
+## P1: Essential Usability
+
+So others can use Parable as a tool. Correctness [2] assumed; approaches follow [1] (clarity) and [3] (simplicity).
 
 ### Position tracking
 
-AST nodes have no source location information. Required for syntax highlighters, linters, IDEs, source maps.
+AST nodes have no source location information (#32). Required for syntax highlighters, linters, IDEs, source maps.
 
-**Approach:** Store byte offsets (16 bytes/node). Compute line/column lazily. Opt-in to avoid overhead.
+**Approach:** Store byte offsets (start + end = 16 bytes/node). Compute line/column lazily. Opt-in to avoid overhead when not needed [4].
 
 ```python
 ast = parse(code, track_positions=True)
 node.start_offset  # always available
+node.end_offset    # always available
 node.start_line    # computed on first access
-node.start_col     # computed on first access
 ```
 
 **Effort:** Medium
@@ -35,22 +73,47 @@ ast.to_json()  # Direct JSON output
 
 **Effort:** Low
 
-### Visitor pattern
+### Line/column in errors
 
-```python
-class MyVisitor(Visitor):
-    def visit_CommandSubstitution(self, node):
-        print(f"Found command sub: {node}")
+Error positions are currently byte offsets only (#30). Users must compute line/column themselves.
 
-visitor = MyVisitor()
-visitor.walk(ast)
-```
+**Approach:** Include line/column in `ParseError`. Compute from offset using line index.
 
 **Effort:** Low
 
 ---
 
-## P2: Nice to Have
+## P2: Quality & Performance
+
+Internal improvements per [1] (clarity) and [4] (fast as possible).
+
+### Performance
+
+See [Optimization Opportunities](#optimization-opportunities) for details. Approved optimizations:
+
+- Inline hot paths (5-10%)
+- Cached character sets (3-5%)
+- ASCII range checks (5-8%)
+- `__slots__` on AST nodes (40-50% memory)
+- Bulk consumption (1-2%)
+
+### Quality
+
+Priority refactoring from [Quality Analysis](#quality-analysis):
+
+| Task                              | Issues     | Rationale                       | Dependency |
+| --------------------------------- | ---------- | ------------------------------- | ---------- |
+| Add `match()`/`consume()` helpers | #3, #6, #9 | Foundation for other work       | None       |
+| Exception safety                  | #17        | High severity, state corruption | None       |
+| Extract `to_sexp()` formatters    | #18, #19   | High severity, 480-line method  | None       |
+
+**AST Formatting approach** for #18: Extract to formatter module with explicit `isinstance()` chains [1, 3]. Visitor pattern rejected (clever indirection violates [1]).
+
+---
+
+## P3: Nice to Have
+
+Narrower use cases or dependencies on P2 work.
 
 ### Error recovery
 
@@ -70,23 +133,29 @@ Reconstruct source from AST: `ast.to_source()`. Required for formatters and refa
 
 **Effort:** Medium | **Downside:** Either preserve whitespace (memory) or accept lossy reconstruction.
 
+### Decompose parse_word()
+
+Issue #1: 300-line monolith. **Dependency:** P2 helpers must be in place first. Consider #2 (expansion logic) and #4 (quote scanning) as part of this work.
+
 ---
 
 ## Quality Analysis
 
 Comparison against three reference parsers:
 
-| Implementation | Language | Notable Qualities |
-|----------------|----------|-------------------|
-| Go compiler | Go | `got()`/`want()` helpers, grammar comments, nesting tracking |
-| Crafting Interpreters | Java | `match()`/`consume()` helpers, error synchronization |
-| Rob Pike's regex | C | Radical simplicity, ~30 lines |
+| Implementation        | Language | Notable Qualities                                            |
+| --------------------- | -------- | ------------------------------------------------------------ |
+| Go compiler           | Go       | `got()`/`want()` helpers, grammar comments, nesting tracking |
+| Crafting Interpreters | Java     | `match()`/`consume()` helpers, error synchronization         |
+| Rob Pike's regex      | C        | Radical simplicity, ~30 lines                                |
 
 ### What's Good
 
-- Clear grammar-to-method mapping: `parse_list()` → `parse_pipeline()` → `parse_compound_command()`
-- Arithmetic parser follows Crafting Interpreters' precedence pattern
-- No separate lexer (appropriate for bash's context-sensitive grammar)
+Per **LLM-driven development** [1] and **Pure Python** [3]:
+
+- Clear grammar-to-method mapping: `parse_list()` → `parse_pipeline()` → `parse_compound_command()` — verbose, traceable [1]
+- Arithmetic parser follows Crafting Interpreters' precedence pattern — explicit over clever [1]
+- No separate lexer — appropriate for bash's context-sensitive grammar; fewer moving parts [3]
 
 ### Issues by Category
 
@@ -99,10 +168,10 @@ Handles quotes, escapes, expansions, process substitution, extglob, arrays. Comp
 **#2. Duplicated expansion-parsing logic**
 
 Same `$`-expansion handling in 4 places:
-- `parse_word()` lines 243-397
-- `_parse_command_substitution()` lines 529-587
-- `_parse_cond_word()` lines 3067-3118
-- `_parse_braced_param()` lines 2088-2176
+- `parse_word()`
+- `_parse_command_substitution()`
+- `_parse_cond_word()`
+- `_parse_braced_param()`
 
 **#3. Missing helper patterns**
 
@@ -131,101 +200,103 @@ Similar quote-aware scanning loops in `_parse_command_substitution()`, `_parse_h
 
 #### B. Control Flow
 
-| # | Issue | Severity | Effort |
-|---|-------|----------|--------|
-| 5 | Keyword dispatch (cascading if/elif) | Low | Low |
-| 6 | Manual peek-advance (50+ times) | Medium | Low |
-| 7 | Inconsistent error recovery | Medium | High |
-| 8 | Deep nesting (5+ levels) | Low | Medium |
-| 9 | Repeated boundary checks | Low | Low |
-| 10 | Loop-and-accumulate patterns | Low | Low |
-| 11 | Inconsistent `_skip_whitespace()` | Low | Low |
+| #   | Issue                                | Severity | Effort |
+| --- | ------------------------------------ | -------- | ------ |
+| 5   | Keyword dispatch (cascading if/elif) | Low      | Low    |
+| 6   | Manual peek-advance (50+ times)      | Medium   | Low    |
+| 7   | Inconsistent error recovery          | Medium   | High   |
+| 8   | Deep nesting (5+ levels)             | Low      | Medium |
+| 9   | Repeated boundary checks             | Low      | Low    |
+| 10  | Loop-and-accumulate patterns         | Low      | Low    |
+| 11  | Inconsistent `_skip_whitespace()`    | Low      | Low    |
 
 #### C. Performance
 
-| # | Issue | Severity | Effort |
-|---|-------|----------|--------|
-| 12 | Repeated string scanning in `parse_word()` | Medium | High |
-| 13 | Backtracking in ambiguous constructs | Low | Medium |
+| #   | Issue                                      | Severity | Effort |
+| --- | ------------------------------------------ | -------- | ------ |
+| 12  | Repeated string scanning in `parse_word()` | Medium   | High   |
+| 13  | Backtracking in ambiguous constructs       | Low      | Medium |
 
 #### D. State Management
 
-| Aspect | Go | Crafting Interpreters | Parable |
-|--------|----|-----------------------|---------|
-| State location | Explicit struct fields | Instance fields | Mix of instance + dynamic attrs |
-| Position tracking | Single `pos` | Single `current` | `pos` + parallel `arith_pos` |
-| Lookahead | `tok`, `lit` (current token) | `tokens[current]` | Direct `source[pos]` access |
-| Nesting tracking | `nestLev` counter | Call stack only | Multiple: `paren_depth`, `bracket_depth`, etc. |
-| Mode flags | Implicit in call stack | Implicit in call stack | Explicit `in_*` parameters |
+| Aspect            | Go                           | Crafting Interpreters  | Parable                                        |
+| ----------------- | ---------------------------- | ---------------------- | ---------------------------------------------- |
+| State location    | Explicit struct fields       | Instance fields        | Mix of instance + dynamic attrs                |
+| Position tracking | Single `pos`                 | Single `current`       | `pos` + parallel `arith_pos`                   |
+| Lookahead         | `tok`, `lit` (current token) | `tokens[current]`      | Direct `source[pos]` access                    |
+| Nesting tracking  | `nestLev` counter            | Call stack only        | Multiple: `paren_depth`, `bracket_depth`, etc. |
+| Mode flags        | Implicit in call stack       | Implicit in call stack | Explicit `in_*` parameters                     |
 
-| # | Issue | Severity | Effort |
-|---|-------|----------|--------|
-| 14 | Dynamic `_pending_heredoc_end` via `setattr()` | Medium | Low |
-| 15 | Parallel cursor for arithmetic (`_arith_pos`) | Medium | Medium |
-| 16 | Multiple depth counters | Low | Medium |
-| 17 | No exception safety (no try/finally) | High | Medium |
+| #   | Issue                                          | Severity | Effort |
+| --- | ---------------------------------------------- | -------- | ------ |
+| 14  | Dynamic `_pending_heredoc_end` via `setattr()` | Medium   | Low    |
+| 15  | Parallel cursor for arithmetic (`_arith_pos`)  | Medium   | Medium |
+| 16  | Multiple depth counters                        | Low      | Medium |
+| 17  | No exception safety (no try/finally)           | High     | Medium |
 
 #### E. AST Design
 
-| Aspect | Go | Crafting Interpreters | Parable |
-|--------|----|-----------------------|---------|
-| Node count | ~80 | 21 (Expr) + 9 (Stmt) | 47 |
-| Definition style | Structs | Generated classes | Dataclasses |
-| Visitor pattern | No (type switches) | Yes (`Visitor<R>`) | No |
-| Position info | Explicit `Pos` field | Token reference | Implicit from source |
-| Formatting | Separate printer | `AstPrinter` visitor | `to_sexp()` methods |
+| Aspect           | Go                   | Crafting Interpreters | Parable              |
+| ---------------- | -------------------- | --------------------- | -------------------- |
+| Node count       | ~80                  | 21 (Expr) + 9 (Stmt)  | 47                   |
+| Definition style | Structs              | Generated classes     | Dataclasses          |
+| Visitor pattern  | No (type switches)   | Yes (`Visitor<R>`)    | No                   |
+| Position info    | Explicit `Pos` field | Token reference       | Implicit from source |
+| Formatting       | Separate printer     | `AstPrinter` visitor  | `to_sexp()` methods  |
 
-| # | Issue | Severity | Effort |
-|---|-------|----------|--------|
-| 18 | `Word.to_sexp()` is 480 lines | High | High |
-| 19 | Mixed data and presentation | Medium | High |
-| 20 | No visitor pattern | Medium | High |
-| 21 | Redundant `kind` field | Low | Low |
-| 22 | Inconsistent node granularity | Low | High |
+| #   | Issue                         | Severity | Effort |
+| --- | ----------------------------- | -------- | ------ |
+| 18  | `Word.to_sexp()` is 480 lines | High     | High   |
+| 19  | Mixed data and presentation   | Medium   | High   |
+| 20  | Redundant `kind` field        | Low      | Low    |
+| 21  | Inconsistent node granularity | Low      | High   |
 
 #### F. Naming
 
-| Convention | Go | Crafting Interpreters | Parable |
-|------------|----|-----------------------|---------|
-| Parse methods | `funcDecl()` | `function()` | `parse_function_definition()` |
-| Helpers | `got()`, `want()` | `match()`, `consume()` | None |
-| Private | Unexported | Private keyword | `_` prefix |
-| Boolean methods | `is*` | `is*`, `check*` | Mixed |
+| Convention      | Go                | Crafting Interpreters  | Parable                       |
+| --------------- | ----------------- | ---------------------- | ----------------------------- |
+| Parse methods   | `funcDecl()`      | `function()`           | `parse_function_definition()` |
+| Helpers         | `got()`, `want()` | `match()`, `consume()` | None                          |
+| Private         | Unexported        | Private keyword        | `_` prefix                    |
+| Boolean methods | `is*`             | `is*`, `check*`        | Mixed                         |
 
-| # | Issue | Severity | Effort |
-|---|-------|----------|--------|
-| 23 | Verbose method names | Low | Medium |
-| 24 | Inconsistent `_parse` vs `parse` prefix | Low | Low |
-| 25 | Hungarian-ish parameters (`in_array_subscript`) | Low | Low |
-| 26 | Abbreviation inconsistency | Low | Low |
-| 27 | Boolean parameter proliferation | Medium | Medium |
-| 28 | Unclear method boundaries | Low | Medium |
-| 29 | No docstring conventions | Low | Medium |
+| #   | Issue                                           | Severity | Effort |
+| --- | ----------------------------------------------- | -------- | ------ |
+| 22  | Inconsistent `_parse` vs `parse` prefix         | Low      | Low    |
+| 23  | Hungarian-ish parameters (`in_array_subscript`) | Low      | Low    |
+| 24  | Abbreviation inconsistency                      | Low      | Low    |
+| 25  | Boolean parameter proliferation                 | Medium   | Medium |
+| 26  | Unclear method boundaries                       | Low      | Medium |
+| 27  | No docstring conventions                        | Low      | Medium |
+
+Note: "Verbose method names" removed — verbosity is a feature per [1].
 
 #### G. API Design
 
-| Aspect | Go | Crafting Interpreters | Parable |
-|--------|----|-----------------------|---------|
-| Entry point | `Parse(src)` | `new Parser(tokens).parse()` | `Parser(src).parse()` |
-| Options | `Mode` flags | None | None |
-| Error type | `Error` with `Pos` | `ParseError` | `ParseError` |
-| Re-entrancy | New parser per file | New parser per input | Stateful instance |
+| Aspect      | Go                  | Crafting Interpreters        | Parable               |
+| ----------- | ------------------- | ---------------------------- | --------------------- |
+| Entry point | `Parse(src)`        | `new Parser(tokens).parse()` | `Parser(src).parse()` |
+| Options     | `Mode` flags        | None                         | None                  |
+| Error type  | `Error` with `Pos`  | `ParseError`                 | `ParseError`          |
+| Re-entrancy | New parser per file | New parser per input         | Stateful instance     |
 
-| # | Issue | Severity | Effort |
-|---|-------|----------|--------|
-| 30 | Limited public API | Medium | Low |
-| 31 | No parse options | Medium | Medium |
-| 32 | Error positions are offsets only | Medium | Low |
-| 33 | No incremental parsing | Low | High |
-| 34 | No AST location spans | Medium | Medium |
-| 35 | Coupled to source string | Low | Medium |
-| 36 | No syntax tree protocol | Medium | High |
-| 37 | Mixed concerns in module | Low | Low |
-| 38 | No version/dialect handling | Low | Medium |
+| #   | Issue                            | Severity | Effort |
+| --- | -------------------------------- | -------- | ------ |
+| 28  | Limited public API               | Medium   | Low    |
+| 29  | No parse options                 | Medium   | Medium |
+| 30  | Error positions are offsets only | Medium   | Low    |
+| 31  | No incremental parsing           | Low      | High   |
+| 32  | No AST location spans            | Medium   | Medium |
+| 33  | Coupled to source string         | Low      | Medium |
+| 34  | No syntax tree protocol          | Medium   | High   |
+| 35  | Mixed concerns in module         | Low      | Low    |
+| 36  | No version/dialect handling      | Low      | Medium |
 
 ---
 
 ## Optimization Opportunities
+
+Each optimization is assessed for speed gain and clarity cost per principle [1] (LLM-driven development) and [4] (fast as possible).
 
 ### 1. Inline Hot Path Methods
 
@@ -241,7 +312,7 @@ def peek(self) -> str | None:
     return self.source[self.pos] if self.pos < self.length else None
 ```
 
-**Impact:** 5-10% speedup | **LLM Impact:** Moderate — loses semantic abstraction
+**Impact:** 5-10% speedup | **Clarity cost:** Moderate — loses semantic abstraction
 
 ### 2. Cached Character Sets
 
@@ -256,7 +327,7 @@ if ch in _WHITESPACE_NEWLINE:
     ...
 ```
 
-**Impact:** 3-5% speedup | **LLM Impact:** Low — common pattern
+**Impact:** 3-5% speedup | **Clarity cost:** Low — common pattern
 
 ### 3. ASCII Range Checks
 
@@ -270,7 +341,7 @@ def _is_name_start(ch: str) -> bool:
     return ('a' <= ch <= 'z') or ('A' <= ch <= 'Z') or ch == '_'
 ```
 
-**Impact:** 5-8% speedup | **LLM Impact:** Moderate — less intuitive than `.isalpha()`
+**Impact:** 5-8% speedup | **Clarity cost:** Moderate — less intuitive than `.isalpha()`
 
 Note: Bash identifiers are ASCII-only. `.isalpha()` accepts Unicode, which would be wrong.
 
@@ -283,7 +354,7 @@ class Word(Node):
     parts: list[Node] = field(default_factory=list)
 ```
 
-**Impact:** 40-50% memory reduction | **LLM Impact:** Low — well-known pattern
+**Impact:** 40-50% memory reduction | **Clarity cost:** Low — well-known pattern
 
 ### 5. Unchecked Advance Variant
 
@@ -294,7 +365,7 @@ def _advance_unchecked(self) -> str:
     return ch
 ```
 
-**Impact:** 2-3% in tight loops | **LLM Impact:** High — two similar methods confuse
+**Impact:** 2-3% in tight loops | **Clarity cost:** High — two similar methods confuse
 
 ### 6. First-Character Dispatch
 
@@ -309,13 +380,13 @@ if handler:
     getattr(self, handler)(chars, parts)
 ```
 
-**Impact:** 3-5% | **LLM Impact:** High — fragments logic, hard to trace
+**Impact:** 3-5% | **Clarity cost:** High — fragments logic, hard to trace
 
 ### 7. Table-Driven Arithmetic Precedence
 
 Replace 27 explicit methods with precedence climbing algorithm.
 
-**Impact:** 2-3% speedup, significant code reduction | **LLM Impact:** Very High — algorithm is hard for LLMs to modify correctly
+**Impact:** 2-3% speedup, significant code reduction | **Clarity cost:** Very High — algorithm is hard to modify correctly
 
 ### 8. Bulk Character Consumption
 
@@ -333,73 +404,43 @@ while pos < length and (('a' <= ch <= 'z') or ('A' <= ch <= 'Z') or ('0' <= ch <
 return source[start:pos]
 ```
 
-**Impact:** 1-2% | **LLM Impact:** Low — slicing is idiomatic
+**Impact:** 1-2% | **Clarity cost:** Low — slicing is idiomatic
 
 ### CPython Internals
 
+Reference data for optimization decisions per [4] (fast as possible).
+
 **Membership testing:**
-| Pattern | Time |
-|---------|------|
-| `x in set` | ~100 ns (O(1)) |
-| `x in list` (miss) | ~11 ms (O(n)) |
-| `x in "abc"` | O(n) linear scan |
+| Pattern            | Time             |
+| ------------------ | ---------------- |
+| `x in set`         | ~100 ns (O(1))   |
+| `x in list` (miss) | ~11 ms (O(n))    |
+| `x in "abc"`       | O(n) linear scan |
 
 Set literals in membership tests are compiled to `frozenset` at compile time.
 
 **Local variable access:**
-| Opcode | Relative Speed |
-|--------|----------------|
-| LOAD_FAST (local) | 1x |
-| LOAD_ATTR (self.x) | ~2x slower |
+| Opcode             | Relative Speed |
+| ------------------ | -------------- |
+| LOAD_FAST (local)  | 1x             |
+| LOAD_ATTR (self.x) | ~2x slower     |
 
 Aliasing `source = self.source` in hot loops still helps, even in Python 3.11+.
 
 **Function call overhead:** 50-100 ns per call.
 
----
+### Summary
 
-## Decisions
-
-### Performance
-
-| Do | Optimization | Rationale |
-|----|--------------|-----------|
-| ✓ | Inline hot paths | 5-10% gain, acceptable LLM impact |
-| ✓ | Cached character sets | Clean pattern, low LLM impact |
-| ✓ | ASCII range checks | Correct for bash, moderate LLM impact |
-| ✓ | `__slots__` on AST nodes | 40-50% memory, well-known |
-| ✓ | Bulk consumption | Clearer intent than char-by-char |
-| ✗ | Unchecked advance | Two similar methods confuse LLMs |
-| ✗ | Dispatch tables | Fragments logic |
-| ✗ | Table-driven precedence | Explicit methods are clearer |
-
-### AST Formatting
-
-For issue #18 (`Word.to_sexp()` 480 lines):
-
-| Option | Approach | Verdict |
-|--------|----------|---------|
-| 1 | Visitor pattern | More infrastructure |
-| 2 | Match statements | Python 3.10+ only |
-| 3 | Extract to formatter module | **Use this** |
-
----
-
-## Refactoring Plan
-
-Phases ordered by dependency and risk:
-
-| Phase | Task | Issues |
-|-------|------|--------|
-| 1 | Add `match()`/`consume()` helpers | #3, #6, #9 |
-| 2 | Extract `_parse_expansion()` | #2 |
-| 3 | Extract quote-aware scanner | #4 |
-| 4 | Decompose `parse_word()` | #1 |
-| 5 | Unify state management | #14, #17 |
-| 6 | Consolidate depth tracking | #15, #16 |
-| 7 | Extract formatters from AST | #18, #19 |
-| 8 | Standardize naming | #23-29 |
-| 9 | Improve API surface | #30-38 |
+| # | Optimization | Verdict | Rationale |
+|---|--------------|---------|-----------|
+| 1 | Inline hot paths | ✓ | Low clarity cost |
+| 2 | Cached character sets | ✓ | Common pattern |
+| 3 | ASCII range checks | ✓ | Correct for bash |
+| 4 | `__slots__` on AST nodes | ✓ | Well-known pattern |
+| 5 | Unchecked advance | ✗ | Two similar methods confuse [1] |
+| 6 | First-character dispatch | ✗ | Fragments logic [1] |
+| 7 | Table-driven precedence | ✗ | Hard to modify [1] |
+| 8 | Bulk consumption | ✓ | Idiomatic slicing |
 
 ---
 

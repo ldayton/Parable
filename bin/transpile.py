@@ -1,0 +1,367 @@
+#!/usr/bin/env python3
+"""Transpile parable.py's restricted Python subset to JavaScript."""
+
+import ast
+import sys
+from pathlib import Path
+
+
+class JSTranspiler(ast.NodeVisitor):
+    def __init__(self):
+        self.indent = 0
+        self.output = []
+        self.in_class_body = False
+        self.in_method = False
+
+    def emit(self, text: str):
+        self.output.append("    " * self.indent + text)
+
+    def emit_raw(self, text: str):
+        self.output.append(text)
+
+    def transpile(self, source: str) -> str:
+        tree = ast.parse(source)
+        self.visit(tree)
+        return "\n".join(self.output)
+
+    def visit_Module(self, node: ast.Module):
+        for stmt in node.body:
+            self.visit(stmt)
+
+    def visit_ClassDef(self, node: ast.ClassDef):
+        bases = [self.visit_expr(b) for b in node.bases]
+        extends = f" extends {bases[0]}" if bases else ""
+        self.emit(f"class {node.name}{extends} {{")
+        self.indent += 1
+        old_in_class = self.in_class_body
+        self.in_class_body = True
+        for stmt in node.body:
+            self.visit(stmt)
+        self.in_class_body = old_in_class
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
+
+    def _safe_name(self, name: str) -> str:
+        """Rename JS reserved words."""
+        reserved = {"var": "variable", "class": "cls", "function": "func", "in": "inVal", "with": "withVal"}
+        return reserved.get(name, name)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef):
+        args = [self._safe_name(a.arg) for a in node.args.args if a.arg != "self"]
+        args_str = ", ".join(args)
+        name = "constructor" if node.name == "__init__" else node.name
+        if self.in_class_body and not self.in_method:
+            # Class method
+            self.emit(f"{name}({args_str}) {{")
+        else:
+            # Top-level or nested function
+            self.emit(f"function {name}({args_str}) {{")
+        self.indent += 1
+        old_in_class = self.in_class_body
+        old_in_method = self.in_method
+        self.in_class_body = False
+        self.in_method = True
+        for stmt in node.body:
+            self.visit(stmt)
+        self.in_class_body = old_in_class
+        self.in_method = old_in_method
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
+
+    def visit_Return(self, node: ast.Return):
+        if node.value:
+            self.emit(f"return {self.visit_expr(node.value)};")
+        else:
+            self.emit("return;")
+
+    def visit_Assign(self, node: ast.Assign):
+        target = self.visit_expr(node.targets[0])
+        value = self.visit_expr(node.value)
+        if isinstance(node.targets[0], ast.Name):
+            if self.in_class_body:
+                self.emit(f"{target} = {value};")
+            else:
+                self.emit(f"let {target} = {value};")
+        else:
+            self.emit(f"{target} = {value};")
+
+    def visit_AnnAssign(self, node: ast.AnnAssign):
+        target = self.visit_expr(node.target)
+        if node.value:
+            value = self.visit_expr(node.value)
+            if self.in_class_body:
+                self.emit(f"{target} = {value};")
+            else:
+                self.emit(f"let {target} = {value};")
+
+    def visit_AugAssign(self, node: ast.AugAssign):
+        target = self.visit_expr(node.target)
+        op = self.visit_op(node.op)
+        value = self.visit_expr(node.value)
+        self.emit(f"{target} {op}= {value};")
+
+    def visit_If(self, node: ast.If):
+        self._emit_if(node, is_elif=False)
+
+    def _emit_if(self, node: ast.If, is_elif: bool):
+        test = self.visit_expr(node.test)
+        if is_elif:
+            self.emit_raw("    " * self.indent + f"}} else if ({test}) {{")
+        else:
+            self.emit(f"if ({test}) {{")
+        self.indent += 1
+        for stmt in node.body:
+            self.visit(stmt)
+        self.indent -= 1
+        if node.orelse:
+            if len(node.orelse) == 1 and isinstance(node.orelse[0], ast.If):
+                self._emit_if(node.orelse[0], is_elif=True)
+            else:
+                self.emit("} else {")
+                self.indent += 1
+                for stmt in node.orelse:
+                    self.visit(stmt)
+                self.indent -= 1
+                self.emit("}")
+        else:
+            self.emit("}")
+
+    def visit_While(self, node: ast.While):
+        test = self.visit_expr(node.test)
+        self.emit(f"while ({test}) {{")
+        self.indent += 1
+        for stmt in node.body:
+            self.visit(stmt)
+        self.indent -= 1
+        self.emit("}")
+
+    def visit_For(self, node: ast.For):
+        target = self.visit_expr(node.target)
+        iter_expr = node.iter
+        # Handle range() specially
+        if isinstance(iter_expr, ast.Call) and isinstance(iter_expr.func, ast.Name) and iter_expr.func.id == "range":
+            args = iter_expr.args
+            if len(args) == 1:
+                self.emit(f"for (let {target} = 0; {target} < {self.visit_expr(args[0])}; {target}++) {{")
+            elif len(args) == 2:
+                self.emit(f"for (let {target} = {self.visit_expr(args[0])}; {target} < {self.visit_expr(args[1])}; {target}++) {{")
+            else:
+                start, end, step = args
+                self.emit(f"for (let {target} = {self.visit_expr(start)}; {target} < {self.visit_expr(end)}; {target} += {self.visit_expr(step)}) {{")
+        else:
+            self.emit(f"for (const {target} of {self.visit_expr(iter_expr)}) {{")
+        self.indent += 1
+        for stmt in node.body:
+            self.visit(stmt)
+        self.indent -= 1
+        self.emit("}")
+
+    def visit_Expr(self, node: ast.Expr):
+        self.emit(f"{self.visit_expr(node.value)};")
+
+    def visit_Pass(self, node: ast.Pass):
+        pass
+
+    def visit_Break(self, node: ast.Break):
+        self.emit("break;")
+
+    def visit_Continue(self, node: ast.Continue):
+        self.emit("continue;")
+
+    def visit_Raise(self, node: ast.Raise):
+        if node.exc:
+            self.emit(f"throw {self.visit_expr(node.exc)};")
+        else:
+            self.emit("throw;")
+
+    def visit_Try(self, node: ast.Try):
+        self.emit("try {")
+        self.indent += 1
+        for stmt in node.body:
+            self.visit(stmt)
+        self.indent -= 1
+        for handler in node.handlers:
+            name = handler.name or "_"
+            self.emit(f"}} catch ({name}) {{")
+            self.indent += 1
+            for stmt in handler.body:
+                self.visit(stmt)
+            self.indent -= 1
+        self.emit("}")
+
+    # Expression visitors return strings
+    def visit_expr(self, node: ast.expr) -> str:
+        method = f"visit_expr_{node.__class__.__name__}"
+        if hasattr(self, method):
+            return getattr(self, method)(node)
+        return f"/* TODO: {node.__class__.__name__} */"
+
+    def visit_expr_Name(self, node: ast.Name) -> str:
+        mapping = {"True": "true", "False": "false", "None": "null", "self": "this"}
+        name = mapping.get(node.id, node.id)
+        return self._safe_name(name)
+
+    def visit_expr_Constant(self, node: ast.Constant) -> str:
+        if isinstance(node.value, str):
+            escaped = node.value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
+            return f'"{escaped}"'
+        if isinstance(node.value, bytes):
+            # Convert bytes to array of numbers
+            return "[" + ", ".join(str(b) for b in node.value) + "]"
+        if node.value is None:
+            return "null"
+        if node.value is True:
+            return "true"
+        if node.value is False:
+            return "false"
+        return repr(node.value)
+
+    def visit_expr_Attribute(self, node: ast.Attribute) -> str:
+        value = self.visit_expr(node.value)
+        attr = self._safe_name(node.attr)
+        if isinstance(node.value, ast.Name) and node.value.id == "self":
+            return f"this.{attr}"
+        return f"{value}.{attr}"
+
+    def visit_expr_Subscript(self, node: ast.Subscript) -> str:
+        value = self.visit_expr(node.value)
+        if isinstance(node.slice, ast.Slice):
+            lower = self.visit_expr(node.slice.lower) if node.slice.lower else "0"
+            upper = self.visit_expr(node.slice.upper) if node.slice.upper else ""
+            if upper:
+                return f"{value}.slice({lower}, {upper})"
+            return f"{value}.slice({lower})"
+        return f"{value}[{self.visit_expr(node.slice)}]"
+
+    def visit_expr_Call(self, node: ast.Call) -> str:
+        args = ", ".join(self.visit_expr(a) for a in node.args)
+        # Handle method calls
+        if isinstance(node.func, ast.Attribute):
+            # Special case: super().__init__(args) -> super(args)
+            if (node.func.attr == "__init__"
+                and isinstance(node.func.value, ast.Call)
+                and isinstance(node.func.value.func, ast.Name)
+                and node.func.value.func.id == "super"):
+                return f"super({args})"
+            obj = self.visit_expr(node.func.value)
+            method = node.func.attr
+            # Map Python methods to JS
+            method_map = {
+                "append": "push",
+                "startswith": "startsWith",
+                "endswith": "endsWith",
+            }
+            method = method_map.get(method, method)
+            # Special case: "".join(lst) -> lst.join("")
+            if method == "join" and isinstance(node.func.value, ast.Constant):
+                sep = self.visit_expr(node.func.value)
+                return f"{args}.join({sep})"
+            return f"{obj}.{method}({args})"
+        # Handle builtins
+        if isinstance(node.func, ast.Name):
+            name = node.func.id
+            if name == "len":
+                return f"{args}.length"
+            if name == "str":
+                return f"String({args})"
+            if name == "int":
+                return f"parseInt({args})"
+            if name == "ord":
+                return f"{args}.charCodeAt(0)"
+            if name == "chr":
+                return f"String.fromCharCode({args})"
+            if name == "isinstance":
+                return f"{node.args[0].id} instanceof {self.visit_expr(node.args[1])}"
+            return f"{name}({args})"
+        return f"{self.visit_expr(node.func)}({args})"
+
+    def visit_expr_BinOp(self, node: ast.BinOp) -> str:
+        left = self.visit_expr(node.left)
+        right = self.visit_expr(node.right)
+        op = self.visit_op(node.op)
+        return f"({left} {op} {right})"
+
+    def visit_expr_Compare(self, node: ast.Compare) -> str:
+        # Handle single comparison with in/not in specially
+        if len(node.ops) == 1:
+            left = self.visit_expr(node.left)
+            right = self.visit_expr(node.comparators[0])
+            op = node.ops[0]
+            if isinstance(op, ast.In):
+                return f"{right}.has({left})"
+            if isinstance(op, ast.NotIn):
+                return f"!{right}.has({left})"
+        result = self.visit_expr(node.left)
+        for op, comparator in zip(node.ops, node.comparators):
+            op_str = self.visit_cmpop(op)
+            result += f" {op_str} {self.visit_expr(comparator)}"
+        return f"({result})"
+
+    def visit_expr_BoolOp(self, node: ast.BoolOp) -> str:
+        op = " && " if isinstance(node.op, ast.And) else " || "
+        values = [self.visit_expr(v) for v in node.values]
+        return f"({op.join(values)})"
+
+    def visit_expr_UnaryOp(self, node: ast.UnaryOp) -> str:
+        operand = self.visit_expr(node.operand)
+        if isinstance(node.op, ast.Not):
+            return f"!{operand}"
+        if isinstance(node.op, ast.USub):
+            return f"-{operand}"
+        return f"/* TODO: UnaryOp {node.op} */{operand}"
+
+    def visit_expr_IfExp(self, node: ast.IfExp) -> str:
+        test = self.visit_expr(node.test)
+        body = self.visit_expr(node.body)
+        orelse = self.visit_expr(node.orelse)
+        return f"({test} ? {body} : {orelse})"
+
+    def visit_expr_List(self, node: ast.List) -> str:
+        elements = ", ".join(self.visit_expr(e) for e in node.elts)
+        return f"[{elements}]"
+
+    def visit_expr_Dict(self, node: ast.Dict) -> str:
+        pairs = []
+        for k, v in zip(node.keys, node.values):
+            pairs.append(f"{self.visit_expr(k)}: {self.visit_expr(v)}")
+        return "{" + ", ".join(pairs) + "}"
+
+    def visit_expr_Tuple(self, node: ast.Tuple) -> str:
+        elements = ", ".join(self.visit_expr(e) for e in node.elts)
+        return f"[{elements}]"
+
+    def visit_expr_Set(self, node: ast.Set) -> str:
+        elements = ", ".join(self.visit_expr(e) for e in node.elts)
+        return f"new Set([{elements}])"
+
+    def visit_op(self, op: ast.operator) -> str:
+        ops = {
+            ast.Add: "+", ast.Sub: "-", ast.Mult: "*", ast.Div: "/",
+            ast.FloorDiv: "Math.floor(/", ast.Mod: "%", ast.Pow: "**",
+            ast.LShift: "<<", ast.RShift: ">>", ast.BitOr: "|",
+            ast.BitXor: "^", ast.BitAnd: "&",
+        }
+        return ops.get(type(op), "/* ? */")
+
+    def visit_cmpop(self, op: ast.cmpop) -> str:
+        ops = {
+            ast.Eq: "===", ast.NotEq: "!==", ast.Lt: "<", ast.LtE: "<=",
+            ast.Gt: ">", ast.GtE: ">=", ast.Is: "===", ast.IsNot: "!==",
+            ast.In: "in", ast.NotIn: "not in",
+        }
+        return ops.get(type(op), "/* ? */")
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: transpile.py <input.py>", file=sys.stderr)
+        sys.exit(1)
+    source = Path(sys.argv[1]).read_text()
+    transpiler = JSTranspiler()
+    print(transpiler.transpile(source))
+
+
+if __name__ == "__main__":
+    main()

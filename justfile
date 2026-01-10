@@ -65,3 +65,9 @@ check-dump-ast:
 # Check for banned Python constructions
 check-style:
     python3 bin/check-style.py 2>&1 | sed -u "s/^/[style] /" | tee /tmp/{{project}}-style.log
+
+# Transpile Python to JavaScript
+transpile:
+    python3 bin/transpile.py src/parable.py > src/parable.js
+    npx -y @biomejs/biome format --write src/parable.js
+    npx -y @biomejs/biome lint src/parable.js

@@ -383,7 +383,7 @@ class JSTranspiler(ast.NodeVisitor):
             if method == "isalpha":
                 return f"/^[a-zA-Z]$/.test({obj})"
             if method == "isdigit":
-                return f"/^[0-9]$/.test({obj})"
+                return f"/^[0-9]+$/.test({obj})"
             if method == "isalnum":
                 return f"/^[a-zA-Z0-9]$/.test({obj})"
             if method == "isspace":

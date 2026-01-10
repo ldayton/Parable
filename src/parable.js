@@ -1089,7 +1089,7 @@ class Redirect extends Node {
 				new RegExp("[" + "-" + "]+$"),
 				"",
 			);
-			if (/^[0-9]$/.test(fd_target)) {
+			if (/^[0-9]+$/.test(fd_target)) {
 				return '(redirect "' + op + '" ' + fd_target + ")";
 			} else if (target_val === "&-") {
 				return '(redirect ">&-" 0)';
@@ -1098,7 +1098,7 @@ class Redirect extends Node {
 			}
 		}
 		if (op === ">&" || op === "<&") {
-			if (/^[0-9]$/.test(target_val)) {
+			if (/^[0-9]+$/.test(target_val)) {
 				return '(redirect "' + op + '" ' + target_val + ")";
 			}
 			target_val = target_val.replace(new RegExp("[" + "-" + "]+$"), "");
@@ -2531,8 +2531,8 @@ function NormalizeFdRedirects(s) {
 	var result = [];
 	var i = 0;
 	while (i < s.length) {
-		if (i + 2 < s.length && s[i + 1] === "&" && /^[0-9]$/.test(s[i + 2])) {
-			var prev_is_digit = i > 0 && /^[0-9]$/.test(s[i - 1]);
+		if (i + 2 < s.length && s[i + 1] === "&" && /^[0-9]+$/.test(s[i + 2])) {
+			var prev_is_digit = i > 0 && /^[0-9]+$/.test(s[i - 1]);
 			if (s[i] === ">" && !prev_is_digit) {
 				result.push("1>&");
 				result.push(s[i + 2]);
@@ -4828,7 +4828,7 @@ class Parser {
 		this.ArithSkipWs();
 		var chars = [];
 		var c = this.ArithPeek();
-		if (/^[0-9]$/.test(c)) {
+		if (/^[0-9]+$/.test(c)) {
 			while (!this.ArithAtEnd()) {
 				var ch = this.ArithPeek();
 				if (/^[a-zA-Z0-9]$/.test(ch) || ch === "#" || ch === "_") {
@@ -5311,9 +5311,9 @@ class Parser {
 			this.advance();
 			return ch;
 		}
-		if (/^[0-9]$/.test(ch)) {
+		if (/^[0-9]+$/.test(ch)) {
 			var name_chars = [];
-			while (!this.atEnd() && /^[0-9]$/.test(this.peek())) {
+			while (!this.atEnd() && /^[0-9]+$/.test(this.peek())) {
 				name_chars.push(this.advance());
 			}
 			return name_chars.join("");
@@ -5470,9 +5470,9 @@ class Parser {
 				this.pos = saved;
 			}
 		}
-		if (varfd == null && this.peek() && /^[0-9]$/.test(this.peek())) {
+		if (varfd == null && this.peek() && /^[0-9]+$/.test(this.peek())) {
 			var fd_chars = [];
-			while (!this.atEnd() && /^[0-9]$/.test(this.peek())) {
+			while (!this.atEnd() && /^[0-9]+$/.test(this.peek())) {
 				fd_chars.push(this.advance());
 			}
 			fd = parseInt(fd_chars.join(""), 10);
@@ -5570,10 +5570,10 @@ class Parser {
 			this.advance();
 			if (
 				!this.atEnd() &&
-				(/^[0-9]$/.test(this.peek()) || this.peek() === "-")
+				(/^[0-9]+$/.test(this.peek()) || this.peek() === "-")
 			) {
 				fd_chars = [];
-				while (!this.atEnd() && /^[0-9]$/.test(this.peek())) {
+				while (!this.atEnd() && /^[0-9]+$/.test(this.peek())) {
 					fd_chars.push(this.advance());
 				}
 				if (fd_chars) {

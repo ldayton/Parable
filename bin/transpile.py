@@ -2,7 +2,9 @@
 """Transpile parable.py's restricted Python subset to JavaScript."""
 
 import ast
+import io
 import sys
+import tokenize
 from pathlib import Path
 
 
@@ -16,6 +18,8 @@ class JSTranspiler(ast.NodeVisitor):
         self.declared_vars = set()
         # Pre-populate with known class names (needed for forward references)
         self.class_names = {"Parser", "Word", "ParseError"}
+        self.comments = {}  # line_number -> comment_text
+        self.last_line = 0
 
     def emit(self, text: str):
         self.output.append("    " * self.indent + text)
@@ -23,13 +27,32 @@ class JSTranspiler(ast.NodeVisitor):
     def emit_raw(self, text: str):
         self.output.append(text)
 
+    def emit_comments_before(self, line: int):
+        for comment_line in sorted(self.comments.keys()):
+            if comment_line >= line:
+                break
+            if comment_line > self.last_line:
+                comment = self.comments[comment_line].lstrip("# ").rstrip()
+                self.emit(f"// {comment}")
+        self.last_line = line
+
     def transpile(self, source: str) -> str:
+        # Extract standalone comments (not inline) using tokenize
+        lines = source.splitlines()
+        tokens = tokenize.generate_tokens(io.StringIO(source).readline)
+        for tok in tokens:
+            if tok.type == tokenize.COMMENT:
+                line_num, col = tok.start
+                # Only keep comments where preceding content on line is whitespace
+                if lines[line_num - 1][:col].strip() == "":
+                    self.comments[line_num] = tok.string
         tree = ast.parse(source)
         self.visit(tree)
         return "\n".join(self.output)
 
     def visit_Module(self, node: ast.Module):
         for stmt in node.body:
+            self.emit_comments_before(stmt.lineno)
             self.visit(stmt)
 
     def visit_ClassDef(self, node: ast.ClassDef):
@@ -44,6 +67,7 @@ class JSTranspiler(ast.NodeVisitor):
         self.in_class_body = True
         self.class_has_base = bool(bases)
         for stmt in node.body:
+            self.emit_comments_before(stmt.lineno)
             self.visit(stmt)
         self.in_class_body = old_in_class
         self.class_has_base = old_has_base
@@ -62,6 +86,20 @@ class JSTranspiler(ast.NodeVisitor):
             "Array": "ArrayNode",  # Avoid shadowing JS global
         }
         return reserved.get(name, name)
+
+    def _escape_regex_chars(self, s: str) -> str:
+        """Escape special regex characters for use in a character class."""
+        result = []
+        for c in s:
+            if c in r"\]^-":
+                result.append("\\" + c)
+            elif c == "\t":
+                result.append("\\t")
+            elif c == "\n":
+                result.append("\\n")
+            else:
+                result.append(c)
+        return "".join(result)
 
     def _is_super_call(self, stmt: ast.stmt) -> bool:
         """Check if statement is a super().__init__() call."""
@@ -86,6 +124,9 @@ class JSTranspiler(ast.NodeVisitor):
         return parts[0] + "".join(p.capitalize() for p in parts[1:])
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
+        # Skip helper functions that are inlined
+        if node.name in ("_substring", "_sublist", "_repeat_str"):
+            return
         args = [self._safe_name(a.arg) for a in node.args.args if a.arg != "self"]
         args_str = ", ".join(args)
         name = "constructor" if node.name == "__init__" else self._camel_case(node.name)
@@ -143,10 +184,12 @@ class JSTranspiler(ast.NodeVisitor):
                 self.emit("super();")
             emit_defaults()  # After super() for constructors
             for stmt in other_stmts:
+                self.emit_comments_before(stmt.lineno)
                 self.visit(stmt)
         else:
             emit_defaults()  # At start for regular methods
             for stmt in node.body:
+                self.emit_comments_before(stmt.lineno)
                 self.visit(stmt)
         self.in_class_body = old_in_class
         self.in_method = old_in_method
@@ -177,13 +220,14 @@ class JSTranspiler(ast.NodeVisitor):
             self.emit(f"{target} = {value};")
 
     def visit_AnnAssign(self, node: ast.AnnAssign):
+        # Skip class-level type annotations - constructor handles initialization
+        if self.in_class_body:
+            return
         target = self.visit_expr(node.target)
         if node.value:
             value = self.visit_expr(node.value)
             var_name = node.target.id if isinstance(node.target, ast.Name) else None
-            if self.in_class_body:
-                self.emit(f"{target} = {value};")
-            elif var_name and var_name in self.declared_vars:
+            if var_name and var_name in self.declared_vars:
                 self.emit(f"{target} = {value};")
             else:
                 if var_name:
@@ -217,6 +261,7 @@ class JSTranspiler(ast.NodeVisitor):
             self.emit(f"if ({test}) {{")
         self.indent += 1
         for stmt in node.body:
+            self.emit_comments_before(stmt.lineno)
             self.visit(stmt)
         self.indent -= 1
         if node.orelse:
@@ -226,6 +271,7 @@ class JSTranspiler(ast.NodeVisitor):
                 self.emit("} else {")
                 self.indent += 1
                 for stmt in node.orelse:
+                    self.emit_comments_before(stmt.lineno)
                     self.visit(stmt)
                 self.indent -= 1
                 self.emit("}")
@@ -237,6 +283,7 @@ class JSTranspiler(ast.NodeVisitor):
         self.emit(f"while ({test}) {{")
         self.indent += 1
         for stmt in node.body:
+            self.emit_comments_before(stmt.lineno)
             self.visit(stmt)
         self.indent -= 1
         self.emit("}")
@@ -256,11 +303,11 @@ class JSTranspiler(ast.NodeVisitor):
             args = iter_expr.args
             if len(args) == 1:
                 self.emit(
-                    f"for (var {target} = 0; {target} < {self.visit_expr(args[0])}; {target}++) {{"
+                    f"for (let {target} = 0; {target} < {self.visit_expr(args[0])}; {target}++) {{"
                 )
             elif len(args) == 2:
                 self.emit(
-                    f"for (var {target} = {self.visit_expr(args[0])}; {target} < {self.visit_expr(args[1])}; {target}++) {{"
+                    f"for (let {target} = {self.visit_expr(args[0])}; {target} < {self.visit_expr(args[1])}; {target}++) {{"
                 )
             else:
                 start, end, step = args
@@ -272,22 +319,26 @@ class JSTranspiler(ast.NodeVisitor):
                     is_negative = True
                 if is_negative:
                     self.emit(
-                        f"for (var {target} = {self.visit_expr(start)}; {target} > {self.visit_expr(end)}; {target}--) {{"
+                        f"for (let {target} = {self.visit_expr(start)}; {target} > {self.visit_expr(end)}; {target}--) {{"
                     )
                 else:
                     step_val = self.visit_expr(step)
                     self.emit(
-                        f"for (var {target} = {self.visit_expr(start)}; {target} < {self.visit_expr(end)}; {target} += {step_val}) {{"
+                        f"for (let {target} = {self.visit_expr(start)}; {target} < {self.visit_expr(end)}; {target} += {step_val}) {{"
                     )
         else:
-            self.emit(f"for (var {target} of {self.visit_expr(iter_expr)}) {{")
+            self.emit(f"for (let {target} of {self.visit_expr(iter_expr)}) {{")
         self.indent += 1
         for stmt in node.body:
+            self.emit_comments_before(stmt.lineno)
             self.visit(stmt)
         self.indent -= 1
         self.emit("}")
 
     def visit_Expr(self, node: ast.Expr):
+        # Skip bare string literals (docstrings) - they do nothing in JS
+        if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+            return
         self.emit(f"{self.visit_expr(node.value)};")
 
     def visit_Pass(self, node: ast.Pass):
@@ -309,6 +360,7 @@ class JSTranspiler(ast.NodeVisitor):
         self.emit("try {")
         self.indent += 1
         for stmt in node.body:
+            self.emit_comments_before(stmt.lineno)
             self.visit(stmt)
         self.indent -= 1
         for handler in node.handlers:
@@ -316,6 +368,7 @@ class JSTranspiler(ast.NodeVisitor):
             self.emit(f"}} catch ({name}) {{")
             self.indent += 1
             for stmt in handler.body:
+                self.emit_comments_before(stmt.lineno)
                 self.visit(stmt)
             self.indent -= 1
         self.emit("}")
@@ -374,6 +427,27 @@ class JSTranspiler(ast.NodeVisitor):
             if upper:
                 return f"{value}.slice({lower}, {upper})"
             return f"{value}.slice({lower})"
+        # Use dot notation for string keys that are valid identifiers
+        if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
+            key = node.slice.value
+            if key.isidentifier() and key not in (
+                "class",
+                "default",
+                "delete",
+                "export",
+                "import",
+                "new",
+                "return",
+                "super",
+                "switch",
+                "this",
+                "throw",
+                "typeof",
+                "void",
+                "with",
+                "yield",
+            ):
+                return f"{value}.{key}"
         return f"{value}[{self.visit_expr(node.slice)}]"
 
     def visit_expr_Call(self, node: ast.Call) -> str:
@@ -424,13 +498,21 @@ class JSTranspiler(ast.NodeVisitor):
             # Handle lstrip with character set argument
             if method == "lstrip":
                 if len(node.args) == 1:
-                    chars = self.visit_expr(node.args[0])
+                    arg = node.args[0]
+                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                        escaped = self._escape_regex_chars(arg.value)
+                        return f'{obj}.replace(/^[{escaped}]+/, "")'
+                    chars = self.visit_expr(arg)
                     return f'{obj}.replace(new RegExp("^[" + {chars} + "]+"), "")'
                 return f"{obj}.trimStart()"
             # Handle rstrip with character set argument
             if method == "rstrip":
                 if len(node.args) == 1:
-                    chars = self.visit_expr(node.args[0])
+                    arg = node.args[0]
+                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                        escaped = self._escape_regex_chars(arg.value)
+                        return f'{obj}.replace(/[{escaped}]+$/, "")'
+                    chars = self.visit_expr(arg)
                     return f'{obj}.replace(new RegExp("[" + {chars} + "]+$"), "")'
                 return f"{obj}.trimEnd()"
             # Handle str.encode() - returns array of byte values
@@ -444,7 +526,7 @@ class JSTranspiler(ast.NodeVisitor):
                 if len(node.args) >= 2:
                     key = self.visit_expr(node.args[0])
                     default = self.visit_expr(node.args[1])
-                    return f"({obj}[{key}] !== undefined ? {obj}[{key}] : {default})"
+                    return f"({obj}[{key}] ?? {default})"
                 elif len(node.args) == 1:
                     key = self.visit_expr(node.args[0])
                     return f"{obj}[{key}]"
@@ -484,6 +566,8 @@ class JSTranspiler(ast.NodeVisitor):
             if name == "str":
                 return f"String({args})"
             if name == "int":
+                if len(node.args) >= 2:
+                    return f"parseInt({args})"
                 return f"parseInt({args}, 10)"
             if name == "ord":
                 return f"{args}.charCodeAt(0)"
@@ -494,10 +578,19 @@ class JSTranspiler(ast.NodeVisitor):
                 return f"{node.args[0].id} instanceof {self.visit_expr(node.args[1])}"
             if name == "getattr":
                 obj = self.visit_expr(node.args[0])
-                attr = self.visit_expr(node.args[1])
+                attr_node = node.args[1]
+                # Use dot notation for string attrs that are valid identifiers
+                if isinstance(attr_node, ast.Constant) and isinstance(attr_node.value, str):
+                    key = attr_node.value
+                    if key.isidentifier():
+                        if len(node.args) >= 3:
+                            default = self.visit_expr(node.args[2])
+                            return f"({obj}.{key} ?? {default})"
+                        return f"{obj}.{key}"
+                attr = self.visit_expr(attr_node)
                 if len(node.args) >= 3:
                     default = self.visit_expr(node.args[2])
-                    return f"({obj}[{attr}] !== undefined ? {obj}[{attr}] : {default})"
+                    return f"({obj}[{attr}] ?? {default})"
                 return f"{obj}[{attr}]"
             if name == "bytearray":
                 return "[]"
@@ -511,6 +604,15 @@ class JSTranspiler(ast.NodeVisitor):
                 return f"Math.max({args})"
             if name == "min":
                 return f"Math.min({args})"
+            if name in ("_substring", "_sublist"):
+                obj = self.visit_expr(node.args[0])
+                start = self.visit_expr(node.args[1])
+                end = self.visit_expr(node.args[2])
+                return f"{obj}.slice({start}, {end})"
+            if name == "_repeat_str":
+                s = self.visit_expr(node.args[0])
+                n = self.visit_expr(node.args[1])
+                return f"{s}.repeat({n})"
             if name in self.class_names:
                 return f"new {self._safe_name(name)}({args})"
             # Convert snake_case function names to camelCase

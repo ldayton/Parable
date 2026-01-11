@@ -3,8 +3,8 @@ package parable
 import (
 	"fmt"
 	"reflect"
-	"strconv"
 	"strings"
+	"strconv"
 	"unicode/utf8"
 )
 
@@ -19,13 +19,9 @@ func toSet(items interface{}) map[interface{}]bool {
 	m := make(map[interface{}]bool)
 	switch v := items.(type) {
 	case []interface{}:
-		for _, item := range v {
-			m[item] = true
-		}
+		for _, item := range v { m[item] = true }
 	case string:
-		for _, c := range v {
-			m[string(c)] = true
-		}
+		for _, c := range v { m[string(c)] = true }
 	}
 	return m
 }
@@ -35,12 +31,8 @@ func contains(set map[interface{}]bool, key interface{}) bool {
 }
 
 func substring(s string, start, end int) string {
-	if end > len(s) {
-		end = len(s)
-	}
-	if start < 0 {
-		start = 0
-	}
+	if end > len(s) { end = len(s) }
+	if start < 0 { start = 0 }
 	return s[start:end]
 }
 
@@ -51,13 +43,9 @@ func parseInt(s string, base int) int {
 
 func toInt(v interface{}) int {
 	switch x := v.(type) {
-	case int:
-		return x
-	case string:
-		n, _ := strconv.Atoi(x)
-		return n
-	default:
-		return 0
+	case int: return x
+	case string: n, _ := strconv.Atoi(x); return n
+	default: return 0
 	}
 }
 
@@ -78,73 +66,53 @@ func joinStrings(items []interface{}, sep string) string {
 }
 
 func sublist(items []interface{}, start, end int) []interface{} {
-	if start < 0 {
-		start = 0
-	}
-	if end > len(items) {
-		end = len(items)
-	}
+	if start < 0 { start = 0 }
+	if end > len(items) { end = len(items) }
 	return items[start:end]
 }
 
 func toSlice(nodes []Node) []interface{} {
 	result := make([]interface{}, len(nodes))
-	for i, n := range nodes {
-		result[i] = n
-	}
+	for i, n := range nodes { result[i] = n }
 	return result
 }
 
 func sublistNodes(nodes []Node, start, end int) []Node {
-	if start < 0 {
-		start = 0
-	}
-	if end > len(nodes) {
-		end = len(nodes)
-	}
+	if start < 0 { start = 0 }
+	if end > len(nodes) { end = len(nodes) }
 	return nodes[start:end]
 }
 
 func toNodes(items []interface{}) []Node {
 	result := make([]Node, len(items))
-	for i, item := range items {
-		result[i] = item.(Node)
-	}
+	for i, item := range items { result[i] = item.(Node) }
 	return result
 }
 
 func isAlpha_h(s string) bool {
 	for _, c := range s {
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
-			return false
-		}
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) { return false }
 	}
 	return len(s) > 0
 }
 
 func isAlnum_h(s string) bool {
 	for _, c := range s {
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
-			return false
-		}
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) { return false }
 	}
 	return len(s) > 0
 }
 
 func isDigit_h(s string) bool {
 	for _, c := range s {
-		if !(c >= '0' && c <= '9') {
-			return false
-		}
+		if !(c >= '0' && c <= '9') { return false }
 	}
 	return len(s) > 0
 }
 
 func isSpace_h(s string) bool {
 	for _, c := range s {
-		if !(c == ' ' || c == '\t' || c == '\n' || c == '\r') {
-			return false
-		}
+		if !(c == ' ' || c == '\t' || c == '\n' || c == '\r') { return false }
 	}
 	return len(s) > 0
 }
@@ -158,52 +126,40 @@ func byteToStr(b byte) string { return string([]byte{b}) }
 
 func pairFirst(p interface{}) Node {
 	if arr, ok := p.([]interface{}); ok && len(arr) > 0 {
-		if n, ok := arr[0].(Node); ok {
-			return n
-		}
+		if n, ok := arr[0].(Node); ok { return n }
 	}
 	return nil
 }
 
 func pairSecond(p interface{}) bool {
 	if arr, ok := p.([]interface{}); ok && len(arr) > 1 {
-		if b, ok := arr[1].(bool); ok {
-			return b
-		}
+		if b, ok := arr[1].(bool); ok { return b }
 	}
 	return false
 }
 
 func getCommand(n interface{}) Node {
 	v := reflect.ValueOf(n)
-	if v.Kind() == reflect.Ptr {
-		v = v.Elem()
-	}
+	if v.Kind() == reflect.Ptr { v = v.Elem() }
 	f := v.FieldByName("Command")
 	if f.IsValid() {
-		if cmd, ok := f.Interface().(Node); ok {
-			return cmd
-		}
+		if cmd, ok := f.Interface().(Node); ok { return cmd }
 	}
 	return nil
 }
 
 func mapGet(m map[string]interface{}, key string, defaultVal interface{}) string {
 	if val, ok := m[key]; ok {
-		if s, ok := val.(string); ok {
-			return s
-		}
+		if s, ok := val.(string); ok { return s }
 	}
-	if s, ok := defaultVal.(string); ok {
-		return s
-	}
+	if s, ok := defaultVal.(string); ok { return s }
 	return ""
 }
 
 type ParseError struct {
 	Message string
-	Pos     *int
-	Line    *int
+	Pos *int
+	Line *int
 }
 
 func (p *ParseError) Error() string {
@@ -219,9 +175,9 @@ func NewParseError(message string, pos *int, line *int) *ParseError {
 }
 
 func (p *ParseError) formatMessage() string {
-	if (p.Line != nil) && (p.Pos != nil) {
+	if ((p.Line != nil) && (p.Pos != nil)) {
 		return ((((("Parse error at line " + fmt.Sprintf("%v", p.Line)) + ", position ") + fmt.Sprintf("%v", p.Pos)) + ": ") + p.Message)
-	} else if p.Pos != nil {
+	} else if (p.Pos != nil) {
 		return ((("Parse error at position " + fmt.Sprintf("%v", p.Pos)) + ": ") + p.Message)
 	}
 	return ("Parse error: " + p.Message)
@@ -237,39 +193,38 @@ func isOctalDigit(c byte) bool {
 
 // ANSI-C escape sequence byte values
 var ANSI_C_ESCAPES = map[string]interface{}{"a": 7, "b": 8, "e": 27, "E": 27, "f": 12, "n": 10, "r": 13, "t": 9, "v": 11, "\\": 92, "\"": 34, "?": 63}
-
 func getAnsiEscape(c byte) int {
-	if c == 'a' {
+	if (c == 'a') {
 		return 7
 	}
-	if c == 'b' {
+	if (c == 'b') {
 		return 8
 	}
-	if (c == 'e') || (c == 'E') {
+	if ((c == 'e') || (c == 'E')) {
 		return 27
 	}
-	if c == 'f' {
+	if (c == 'f') {
 		return 12
 	}
-	if c == 'n' {
+	if (c == 'n') {
 		return 10
 	}
-	if c == 'r' {
+	if (c == 'r') {
 		return 13
 	}
-	if c == 't' {
+	if (c == 't') {
 		return 9
 	}
-	if c == 'v' {
+	if (c == 'v') {
 		return 11
 	}
-	if c == '\\' {
+	if (c == '\\') {
 		return 92
 	}
-	if c == '"' {
+	if (c == '"') {
 		return 34
 	}
-	if c == '?' {
+	if (c == '?') {
 		return 63
 	}
 	return -1
@@ -290,7 +245,7 @@ func startsWithAt(s string, pos int, prefix string) bool {
 type Word struct {
 	Value string
 	Parts []Node
-	Kind  string
+	Kind string
 }
 
 func (w *Word) GetKind() string {
@@ -340,25 +295,25 @@ func (w *Word) doubleCtlescSmart(value string) string {
 	var bs_count int
 	for _, c := range value {
 		// Track quote state
-		if (c == '\'') && !(in_double) {
+		if ((c == '\'') && !(in_double)) {
 			in_single = !(in_single)
-		} else if (c == '"') && !(in_single) {
+		} else if ((c == '"') && !(in_single)) {
 			in_double = !(in_double)
 		}
 		result = append(result, c)
-		if c == '\x01' {
+		if (c == '\x01') {
 			// Only count backslashes in double-quoted context (where they escape)
 			// In single quotes, backslashes are literal, so always double CTLESC
 			if in_double {
 				bs_count = 0
 				for j := (len(result) - 2); j > -1; j-- {
-					if result[j] == '\\' {
+					if (result[j] == '\\') {
 						bs_count += 1
 					} else {
 						break
 					}
 				}
-				if (bs_count % 2) == 0 {
+				if ((bs_count % 2) == 0) {
 					result = append(result, "")
 				}
 			} else {
@@ -371,49 +326,49 @@ func (w *Word) doubleCtlescSmart(value string) string {
 }
 
 func (w *Word) expandAnsiCEscapes(value string) string {
-	if !(strings.HasPrefix(value, "'") && strings.HasSuffix(value, "'")) {
+	if !((strings.HasPrefix(value, "'") && strings.HasSuffix(value, "'"))) {
 		return value
 	}
 	inner := substring(value, 1, (len(value) - 1))
 	result := []byte{}
 	i := 0
+	var ctrl_char byte
+	var hex_str string
+	var ctrl_val int
 	var byte_val int
 	var codepoint int
-	var hex_str string
-	var ctrl_char byte
-	var ctrl_val int
 	var simple int
-	for i < len(inner) {
-		if (inner[i] == '\\') && ((i + 1) < len(inner)) {
+	for (i < len(inner)) {
+		if ((inner[i] == '\\') && ((i + 1) < len(inner))) {
 			c := inner[(i + 1)]
 			// Check simple escapes first
 			simple = getAnsiEscape(c)
 			var j int
-			if simple >= 0 {
+			if (simple >= 0) {
 				result = append(result, byte(simple))
 				i += 2
-			} else if c == '\'' {
+			} else if (c == '\'') {
 				// bash-oracle outputs \' as '\'' (shell quoting trick)
 				result = append(result, []byte{39, 92, 39, 39}...)
 				i += 2
-			} else if c == 'x' {
+			} else if (c == 'x') {
 				// Check for \x{...} brace syntax (bash 5.3+)
-				if ((i + 2) < len(inner)) && (inner[(i+2)] == '{') {
+				if (((i + 2) < len(inner)) && (inner[(i + 2)] == '{')) {
 					// Find closing brace or end of hex digits
 					j = (i + 3)
-					for (j < len(inner)) && isHexDigit(inner[j]) {
+					for ((j < len(inner)) && isHexDigit(inner[j])) {
 						j += 1
 					}
 					hex_str = substring(inner, (i + 3), j)
-					if (j < len(inner)) && (inner[j] == '}') {
+					if ((j < len(inner)) && (inner[j] == '}')) {
 						j += 1
 					}
 					// If no hex digits, treat as NUL (truncates)
-					if hex_str == "" {
+					if (hex_str == "") {
 						return (("'" + string(result)) + "'")
 					}
 					byte_val = (parseInt(hex_str, 16) & 255)
-					if byte_val == 0 {
+					if (byte_val == 0) {
 						return (("'" + string(result)) + "'")
 					}
 					w.appendWithCtlesc(result, byte_val)
@@ -421,12 +376,12 @@ func (w *Word) expandAnsiCEscapes(value string) string {
 				} else {
 					// Hex escape \xHH (1-2 hex digits) - raw byte
 					j = (i + 2)
-					for (j < len(inner)) && (j < (i + 4)) && isHexDigit(inner[j]) {
+					for ((j < len(inner)) && (j < (i + 4)) && isHexDigit(inner[j])) {
 						j += 1
 					}
-					if j > (i + 2) {
-						byte_val = parseInt(substring(inner, (i+2), j), 16)
-						if byte_val == 0 {
+					if (j > (i + 2)) {
+						byte_val = parseInt(substring(inner, (i + 2), j), 16)
+						if (byte_val == 0) {
 							// NUL truncates string
 							return (("'" + string(result)) + "'")
 						}
@@ -437,15 +392,15 @@ func (w *Word) expandAnsiCEscapes(value string) string {
 						i += 1
 					}
 				}
-			} else if c == 'u' {
+			} else if (c == 'u') {
 				// Unicode escape \uHHHH (1-4 hex digits) - encode as UTF-8
 				j = (i + 2)
-				for (j < len(inner)) && (j < (i + 6)) && isHexDigit(inner[j]) {
+				for ((j < len(inner)) && (j < (i + 6)) && isHexDigit(inner[j])) {
 					j += 1
 				}
-				if j > (i + 2) {
-					codepoint = parseInt(substring(inner, (i+2), j), 16)
-					if codepoint == 0 {
+				if (j > (i + 2)) {
+					codepoint = parseInt(substring(inner, (i + 2), j), 16)
+					if (codepoint == 0) {
 						// NUL truncates string
 						return (("'" + string(result)) + "'")
 					}
@@ -455,15 +410,15 @@ func (w *Word) expandAnsiCEscapes(value string) string {
 					result = append(result, inner[i])
 					i += 1
 				}
-			} else if c == 'U' {
+			} else if (c == 'U') {
 				// Unicode escape \UHHHHHHHH (1-8 hex digits) - encode as UTF-8
 				j = (i + 2)
-				for (j < len(inner)) && (j < (i + 10)) && isHexDigit(inner[j]) {
+				for ((j < len(inner)) && (j < (i + 10)) && isHexDigit(inner[j])) {
 					j += 1
 				}
-				if j > (i + 2) {
-					codepoint = parseInt(substring(inner, (i+2), j), 16)
-					if codepoint == 0 {
+				if (j > (i + 2)) {
+					codepoint = parseInt(substring(inner, (i + 2), j), 16)
+					if (codepoint == 0) {
 						// NUL truncates string
 						return (("'" + string(result)) + "'")
 					}
@@ -473,12 +428,12 @@ func (w *Word) expandAnsiCEscapes(value string) string {
 					result = append(result, inner[i])
 					i += 1
 				}
-			} else if c == 'c' {
+			} else if (c == 'c') {
 				// Control character \cX - mask with 0x1f
-				if (i + 3) <= len(inner) {
+				if ((i + 3) <= len(inner)) {
 					ctrl_char = inner[(i + 2)]
 					ctrl_val = (int(ctrl_char) & 31)
-					if ctrl_val == 0 {
+					if (ctrl_val == 0) {
 						// NUL truncates string
 						return (("'" + string(result)) + "'")
 					}
@@ -488,15 +443,15 @@ func (w *Word) expandAnsiCEscapes(value string) string {
 					result = append(result, inner[i])
 					i += 1
 				}
-			} else if c == '0' {
+			} else if (c == '0') {
 				// Nul or octal \0 or \0NNN
 				j = (i + 2)
-				for (j < len(inner)) && (j < (i + 5)) && isOctalDigit(inner[j]) {
+				for ((j < len(inner)) && (j < (i + 5)) && isOctalDigit(inner[j])) {
 					j += 1
 				}
-				if j > (i + 2) {
-					byte_val = parseInt(substring(inner, (i+1), j), 8)
-					if byte_val == 0 {
+				if (j > (i + 2)) {
+					byte_val = parseInt(substring(inner, (i + 1), j), 8)
+					if (byte_val == 0) {
 						// NUL truncates string
 						return (("'" + string(result)) + "'")
 					}
@@ -506,14 +461,14 @@ func (w *Word) expandAnsiCEscapes(value string) string {
 					// Just \0 - NUL truncates string
 					return (("'" + string(result)) + "'")
 				}
-			} else if (c >= '1') && (c <= '7') {
+			} else if ((c >= '1') && (c <= '7')) {
 				// Octal escape \NNN (1-3 digits) - raw byte
 				j = (i + 1)
-				for (j < len(inner)) && (j < (i + 4)) && isOctalDigit(inner[j]) {
+				for ((j < len(inner)) && (j < (i + 4)) && isOctalDigit(inner[j])) {
 					j += 1
 				}
-				byte_val = parseInt(substring(inner, (i+1), j), 8)
-				if byte_val == 0 {
+				byte_val = parseInt(substring(inner, (i + 1), j), 8)
+				if (byte_val == 0) {
 					// NUL truncates string
 					return (("'" + string(result)) + "'")
 				}
@@ -541,12 +496,12 @@ func (w *Word) expandAllAnsiCQuotes(value string) string {
 	in_double_quote := false
 	brace_depth := 0
 	var last interface{}
-	var expanded string
-	var effective_in_dquote bool
-	var prev string
 	var ch byte
 	var ansi_str string
-	for i < len(value) {
+	var prev string
+	var expanded string
+	var effective_in_dquote bool
+	for (i < len(value)) {
 		ch = value[i]
 		// Track brace depth for parameter expansions
 		if !(in_single_quote) {
@@ -555,7 +510,7 @@ func (w *Word) expandAllAnsiCQuotes(value string) string {
 				result = append(result, "${")
 				i += 2
 				continue
-			} else if (ch == '}') && (brace_depth > 0) {
+			} else if ((ch == '}') && (brace_depth > 0)) {
 				brace_depth -= 1
 				result = append(result, ch)
 				i += 1
@@ -565,9 +520,9 @@ func (w *Word) expandAllAnsiCQuotes(value string) string {
 		// Inside ${...}, we can expand $'...' even if originally in double quotes
 		effective_in_dquote = (in_double_quote && (brace_depth == 0))
 		// Track quote state to avoid matching $' inside regular quotes
-		if (ch == '\'') && !(effective_in_dquote) {
+		if ((ch == '\'') && !(effective_in_dquote)) {
 			// Check if this is start of $'...' ANSI-C string
-			if !(in_single_quote) && (i > 0) && (value[(i-1)] == '$') {
+			if (!(in_single_quote) && (i > 0) && (value[(i - 1)] == '$')) {
 				// This is handled below when we see $'
 				result = append(result, ch)
 				i += 1
@@ -582,22 +537,22 @@ func (w *Word) expandAllAnsiCQuotes(value string) string {
 				result = append(result, ch)
 				i += 1
 			}
-		} else if (ch == '"') && !(in_single_quote) {
+		} else if ((ch == '"') && !(in_single_quote)) {
 			in_double_quote = !(in_double_quote)
 			result = append(result, ch)
 			i += 1
-		} else if (ch == '\\') && ((i + 1) < len(value)) && !(in_single_quote) {
+		} else if ((ch == '\\') && ((i + 1) < len(value)) && !(in_single_quote)) {
 			// Backslash escape - skip both chars to avoid misinterpreting \" or \'
 			result = append(result, ch)
-			result = append(result, value[(i+1)])
+			result = append(result, value[(i + 1)])
 			i += 2
-		} else if startsWithAt(value, i, "$'") && !(in_single_quote) && !(effective_in_dquote) {
+		} else if (startsWithAt(value, i, "$'") && !(in_single_quote) && !(effective_in_dquote)) {
 			// ANSI-C quoted string - find matching closing quote
 			j := (i + 2)
-			for j < len(value) {
-				if (value[j] == '\\') && ((j + 1) < len(value)) {
+			for (j < len(value)) {
+				if ((value[j] == '\\') && ((j + 1) < len(value))) {
 					j += 2
-				} else if value[j] == '\'' {
+				} else if (value[j] == '\'') {
 					j += 1
 					break
 				} else {
@@ -610,22 +565,22 @@ func (w *Word) expandAllAnsiCQuotes(value string) string {
 			expanded = w.expandAnsiCEscapes(substring(ansi_str, 1, len(ansi_str)))
 			// Inside ${...}, strip quotes for default/alternate value operators
 			// but keep them for pattern replacement operators
-			if (brace_depth > 0) && strings.HasPrefix(expanded, "'") && strings.HasSuffix(expanded, "'") {
+			if ((brace_depth > 0) && strings.HasPrefix(expanded, "'") && strings.HasSuffix(expanded, "'")) {
 				inner := substring(expanded, 1, (len(expanded) - 1))
 				// Only strip if non-empty, no CTLESC, and after a default value operator
-				if (inner != "") && (strings.Index(inner, "") == -1) {
+				if ((inner != "") && (strings.Index(inner, "") == -1)) {
 					// Check what precedes - default value ops: :- := :+ :? - = + ?
-					if len(result) >= 2 {
-						prev = joinStrings(sublist(result, (len(result)-2), len(result)), "")
+					if (len(result) >= 2) {
+						prev = joinStrings(sublist(result, (len(result) - 2), len(result)), "")
 					} else {
 						prev = ""
 					}
-					if strings.HasSuffix(prev, ":-") || strings.HasSuffix(prev, ":=") || strings.HasSuffix(prev, ":+") || strings.HasSuffix(prev, ":?") {
+					if (strings.HasSuffix(prev, ":-") || strings.HasSuffix(prev, ":=") || strings.HasSuffix(prev, ":+") || strings.HasSuffix(prev, ":?")) {
 						expanded = inner
-					} else if len(result) >= 1 {
+					} else if (len(result) >= 1) {
 						last = result[(len(result) - 1)]
 						// Single char operators (not after :), but not /
-						if ((last == '-') || (last == '=') || (last == '+') || (last == '?')) && ((len(result) < 2) || (result[(len(result)-2)] != ':')) {
+						if (((last == '-') || (last == '=') || (last == '+') || (last == '?')) && ((len(result) < 2) || (result[(len(result) - 2)] != ':'))) {
 							expanded = inner
 						}
 					}
@@ -647,22 +602,22 @@ func (w *Word) stripLocaleStringDollars(value string) string {
 	in_single_quote := false
 	in_double_quote := false
 	var ch byte
-	for i < len(value) {
+	for (i < len(value)) {
 		ch = value[i]
-		if (ch == '\'') && !(in_double_quote) {
+		if ((ch == '\'') && !(in_double_quote)) {
 			in_single_quote = !(in_single_quote)
 			result = append(result, ch)
 			i += 1
-		} else if (ch == '"') && !(in_single_quote) {
+		} else if ((ch == '"') && !(in_single_quote)) {
 			in_double_quote = !(in_double_quote)
 			result = append(result, ch)
 			i += 1
-		} else if (ch == '\\') && ((i + 1) < len(value)) {
+		} else if ((ch == '\\') && ((i + 1) < len(value))) {
 			// Escape - copy both chars
 			result = append(result, ch)
-			result = append(result, value[(i+1)])
+			result = append(result, value[(i + 1)])
 			i += 2
-		} else if startsWithAt(value, i, "$\"") && !(in_single_quote) && !(in_double_quote) {
+		} else if (startsWithAt(value, i, "$\"") && !(in_single_quote) && !(in_double_quote)) {
 			// Locale string $"..." outside quotes - strip the $ and enter double quote
 			result = append(result, "\"")
 			in_double_quote = true
@@ -682,19 +637,19 @@ func (w *Word) normalizeArrayWhitespace(value string) string {
 	}
 	// Parse identifier: starts with letter/underscore, then alnum/underscore
 	i := 0
-	if !((i < len(value)) && (isAlpha_h(string(value[i])) || (value[i] == '_'))) {
+	if !(((i < len(value)) && (isAlpha_h(string(value[i])) || (value[i] == '_')))) {
 		return value
 	}
 	i += 1
-	for (i < len(value)) && (isAlnum_h(string(value[i])) || (value[i] == '_')) {
+	for ((i < len(value)) && (isAlnum_h(string(value[i])) || (value[i] == '_'))) {
 		i += 1
 	}
 	// Optional + for +=
-	if (i < len(value)) && (value[i] == '+') {
+	if ((i < len(value)) && (value[i] == '+')) {
 		i += 1
 	}
 	// Must have =(
-	if !(((i + 1) < len(value)) && (value[i] == '=') && (value[(i+1)] == '(')) {
+	if !((((i + 1) < len(value)) && (value[i] == '=') && (value[(i + 1)] == '('))) {
 		return value
 	}
 	prefix := substring(value, 0, (i + 1))
@@ -705,43 +660,43 @@ func (w *Word) normalizeArrayWhitespace(value string) string {
 	i = 0
 	in_whitespace := true
 	var ch byte
-	for i < len(inner) {
+	for (i < len(inner)) {
 		ch = inner[i]
 		var j int
 		if isWhitespace(ch) {
-			if !(in_whitespace) && (len(normalized) > 0) {
+			if (!(in_whitespace) && (len(normalized) > 0)) {
 				normalized = append(normalized, " ")
 				in_whitespace = true
 			}
 			i += 1
-		} else if ch == '\'' {
+		} else if (ch == '\'') {
 			// Single-quoted string - preserve as-is
 			in_whitespace = false
 			j = (i + 1)
-			for (j < len(inner)) && (inner[j] != '\'') {
+			for ((j < len(inner)) && (inner[j] != '\'')) {
 				j += 1
 			}
-			normalized = append(normalized, substring(inner, i, (j+1)))
+			normalized = append(normalized, substring(inner, i, (j + 1)))
 			i = (j + 1)
-		} else if ch == '"' {
+		} else if (ch == '"') {
 			// Double-quoted string - preserve as-is
 			in_whitespace = false
 			j = (i + 1)
-			for j < len(inner) {
-				if (inner[j] == '\\') && ((j + 1) < len(inner)) {
+			for (j < len(inner)) {
+				if ((inner[j] == '\\') && ((j + 1) < len(inner))) {
 					j += 2
-				} else if inner[j] == '"' {
+				} else if (inner[j] == '"') {
 					break
 				} else {
 					j += 1
 				}
 			}
-			normalized = append(normalized, substring(inner, i, (j+1)))
+			normalized = append(normalized, substring(inner, i, (j + 1)))
 			i = (j + 1)
-		} else if (ch == '\\') && ((i + 1) < len(inner)) {
+		} else if ((ch == '\\') && ((i + 1) < len(inner))) {
 			// Escape sequence
 			in_whitespace = false
-			normalized = append(normalized, substring(inner, i, (i+2)))
+			normalized = append(normalized, substring(inner, i, (i + 2)))
 			i += 2
 		} else {
 			in_whitespace = false
@@ -759,7 +714,7 @@ func (w *Word) stripArithLineContinuations(value string) string {
 	i := 0
 	var depth int
 	var start int
-	for i < len(value) {
+	for (i < len(value)) {
 		// Check for $(( arithmetic expression
 		if startsWithAt(value, i, "$((") {
 			// Find matching ))
@@ -767,18 +722,18 @@ func (w *Word) stripArithLineContinuations(value string) string {
 			i += 3
 			depth = 1
 			arith_content := []interface{}{}
-			for (i < len(value)) && (depth > 0) {
+			for ((i < len(value)) && (depth > 0)) {
 				if startsWithAt(value, i, "((") {
 					arith_content = append(arith_content, "((")
 					depth += 1
 					i += 2
 				} else if startsWithAt(value, i, "))") {
 					depth -= 1
-					if depth > 0 {
+					if (depth > 0) {
 						arith_content = append(arith_content, "))")
 					}
 					i += 2
-				} else if (value[i] == '\\') && ((i + 1) < len(value)) && (value[(i+1)] == '\n') {
+				} else if ((value[i] == '\\') && ((i + 1) < len(value)) && (value[(i + 1)] == '\n')) {
 					// Skip backslash-newline (line continuation)
 					i += 2
 				} else {
@@ -786,7 +741,7 @@ func (w *Word) stripArithLineContinuations(value string) string {
 					i += 1
 				}
 			}
-			if depth == 0 {
+			if (depth == 0) {
 				// Found proper )) closing - this is arithmetic
 				result = append(result, (("$((" + joinStrings(arith_content, "")) + "))"))
 			} else {
@@ -805,37 +760,37 @@ func (w *Word) collectCmdsubs(node interface{}) []interface{} {
 	result := []interface{}{}
 	node_kind := getAttr(node, "kind", nil)
 	var expr interface{}
-	if node_kind == "cmdsub" {
+	if (node_kind == "cmdsub") {
 		result = append(result, node)
 	} else {
 		expr = getAttr(node, "expression", nil)
-		if expr != nil {
+		if (expr != nil) {
 			// ArithmeticExpansion, ArithBinaryOp, etc.
 			result = append(result, w.collectCmdsubs(expr)...)
 		}
 	}
 	left := getAttr(node, "left", nil)
-	if left != nil {
+	if (left != nil) {
 		result = append(result, w.collectCmdsubs(left)...)
 	}
 	right := getAttr(node, "right", nil)
-	if right != nil {
+	if (right != nil) {
 		result = append(result, w.collectCmdsubs(right)...)
 	}
 	operand := getAttr(node, "operand", nil)
-	if operand != nil {
+	if (operand != nil) {
 		result = append(result, w.collectCmdsubs(operand)...)
 	}
 	condition := getAttr(node, "condition", nil)
-	if condition != nil {
+	if (condition != nil) {
 		result = append(result, w.collectCmdsubs(condition)...)
 	}
 	true_value := getAttr(node, "true_value", nil)
-	if true_value != nil {
+	if (true_value != nil) {
 		result = append(result, w.collectCmdsubs(true_value)...)
 	}
 	false_value := getAttr(node, "false_value", nil)
-	if false_value != nil {
+	if (false_value != nil) {
 		result = append(result, w.collectCmdsubs(false_value)...)
 	}
 	return result
@@ -846,9 +801,9 @@ func (w *Word) formatCommandSubstitutions(value string) string {
 	cmdsub_parts := []interface{}{}
 	procsub_parts := []interface{}{}
 	for _, p := range w.Parts {
-		if p.GetKind() == "cmdsub" {
+		if (p.GetKind() == "cmdsub") {
 			cmdsub_parts = append(cmdsub_parts, p)
-		} else if p.GetKind() == "procsub" {
+		} else if (p.GetKind() == "procsub") {
 			procsub_parts = append(procsub_parts, p)
 		} else {
 			cmdsub_parts = append(cmdsub_parts, w.collectCmdsubs(p)...)
@@ -856,7 +811,7 @@ func (w *Word) formatCommandSubstitutions(value string) string {
 	}
 	// Check if we have ${ or ${| brace command substitutions to format
 	has_brace_cmdsub := ((strings.Index(value, "${ ") != -1) || (strings.Index(value, "${|") != -1))
-	if (len(cmdsub_parts) == 0) && (len(procsub_parts) == 0) && !(has_brace_cmdsub) {
+	if ((len(cmdsub_parts) == 0) && (len(procsub_parts) == 0) && !(has_brace_cmdsub)) {
 		return value
 	}
 	result := []interface{}{}
@@ -864,13 +819,13 @@ func (w *Word) formatCommandSubstitutions(value string) string {
 	cmdsub_idx := 0
 	procsub_idx := 0
 	var formatted string
-	var depth int
 	var node Node
+	var depth int
 	var direction byte
-	for i < len(value) {
+	for (i < len(value)) {
 		// Check for $( command substitution (but not $(( arithmetic)
 		var j int
-		if startsWithAt(value, i, "$(") && !(startsWithAt(value, i, "$((")) && (cmdsub_idx < len(cmdsub_parts)) {
+		if (startsWithAt(value, i, "$(") && !(startsWithAt(value, i, "$((")) && (cmdsub_idx < len(cmdsub_parts))) {
 			// Find matching close paren using bash-aware matching
 			j = findCmdsubEnd(value, (i + 2))
 			// Format this command substitution
@@ -884,16 +839,16 @@ func (w *Word) formatCommandSubstitutions(value string) string {
 			}
 			cmdsub_idx += 1
 			i = j
-		} else if (value[i] == '`') && (cmdsub_idx < len(cmdsub_parts)) {
+		} else if ((value[i] == '`') && (cmdsub_idx < len(cmdsub_parts))) {
 			// Check for backtick command substitution
 			// Find matching backtick
 			j = (i + 1)
-			for j < len(value) {
-				if (value[j] == '\\') && ((j + 1) < len(value)) {
+			for (j < len(value)) {
+				if ((value[j] == '\\') && ((j + 1) < len(value))) {
 					j += 2
 					continue
 				}
-				if value[j] == '`' {
+				if (value[j] == '`') {
 					j += 1
 					break
 				}
@@ -903,7 +858,7 @@ func (w *Word) formatCommandSubstitutions(value string) string {
 			result = append(result, substring(value, i, j))
 			cmdsub_idx += 1
 			i = j
-		} else if (startsWithAt(value, i, ">(") || startsWithAt(value, i, "<(")) && (procsub_idx < len(procsub_parts)) {
+		} else if ((startsWithAt(value, i, ">(") || startsWithAt(value, i, "<(")) && (procsub_idx < len(procsub_parts))) {
 			// Check for >( or <( process substitution
 			direction = value[i]
 			// Find matching close paren
@@ -914,16 +869,16 @@ func (w *Word) formatCommandSubstitutions(value string) string {
 			result = append(result, (((byteToStr(direction) + "(") + formatted) + ")"))
 			procsub_idx += 1
 			i = j
-		} else if startsWithAt(value, i, "${ ") || startsWithAt(value, i, "${|") {
+		} else if (startsWithAt(value, i, "${ ") || startsWithAt(value, i, "${|")) {
 			// Check for ${ (space) or ${| brace command substitution
 			prefix := substring(value, i, (i + 3))
 			// Find matching close brace
 			j = (i + 3)
 			depth = 1
-			for (j < len(value)) && (depth > 0) {
-				if value[j] == '{' {
+			for ((j < len(value)) && (depth > 0)) {
+				if (value[j] == '{') {
 					depth += 1
-				} else if value[j] == '}' {
+				} else if (value[j] == '}') {
 					depth -= 1
 				}
 				j += 1
@@ -931,13 +886,13 @@ func (w *Word) formatCommandSubstitutions(value string) string {
 			// Parse and format the inner content
 			inner := substring(value, (i + 2), (j - 1))
 			// Check if content is all whitespace - normalize to single space
-			if strings.TrimSpace(inner) == "" {
+			if (strings.TrimSpace(inner) == "") {
 				result = append(result, "${ }")
 			} else {
 				// try {
 				parser := NewParser(strings.TrimLeft(inner, " |"))
 				parsed := parser.ParseList(true)
-				if parsed != nil {
+				if (parsed != nil) {
 					formatted = formatCmdsubNode(parsed, 0, false)
 					result = append(result, ((prefix + formatted) + "; }"))
 				} else {
@@ -967,9 +922,9 @@ func (w *Word) GetCondFormattedValue() string {
 }
 
 type Command struct {
-	Words     []Node
+	Words []Node
 	Redirects []Node
-	Kind      string
+	Kind string
 }
 
 func (c *Command) GetKind() string {
@@ -993,7 +948,7 @@ func (c *Command) ToSexp() string {
 		parts = append(parts, r.ToSexp())
 	}
 	inner := joinStrings(parts, " ")
-	if inner == "" {
+	if (inner == "") {
 		return "(command)"
 	}
 	return (("(command " + inner) + ")")
@@ -1001,7 +956,7 @@ func (c *Command) ToSexp() string {
 
 type Pipeline struct {
 	Commands []Node
-	Kind     string
+	Kind string
 }
 
 func (p *Pipeline) GetKind() string {
@@ -1016,7 +971,7 @@ func NewPipeline(commands []Node) *Pipeline {
 }
 
 func (p *Pipeline) ToSexp() string {
-	if len(p.Commands) == 1 {
+	if (len(p.Commands) == 1) {
 		return p.Commands[0].ToSexp()
 	}
 	// Build list of (cmd, needs_pipe_both_redirect) filtering out PipeBoth markers
@@ -1024,20 +979,20 @@ func (p *Pipeline) ToSexp() string {
 	i := 0
 	var needs_redirect interface{}
 	var cmd Node
-	for i < len(p.Commands) {
+	for (i < len(p.Commands)) {
 		cmd = p.Commands[i]
-		if cmd.GetKind() == "pipe-both" {
+		if (cmd.GetKind() == "pipe-both") {
 			i += 1
 			continue
 		}
 		// Check if next element is PipeBoth
-		needs_redirect = (((i + 1) < len(p.Commands)) && (p.Commands[(i+1)].GetKind() == "pipe-both"))
+		needs_redirect = (((i + 1) < len(p.Commands)) && (p.Commands[(i + 1)].GetKind() == "pipe-both"))
 		cmds = append(cmds, []interface{}{cmd, needs_redirect})
 		i += 1
 	}
 	var pair interface{}
 	var needs bool
-	if len(cmds) == 1 {
+	if (len(cmds) == 1) {
 		pair = cmds[0]
 		cmd = pairFirst(pair)
 		needs = pairSecond(pair)
@@ -1049,11 +1004,11 @@ func (p *Pipeline) ToSexp() string {
 	last_needs := pairSecond(last_pair)
 	result := p.cmdSexp(last_cmd, last_needs)
 	j := (len(cmds) - 2)
-	for j >= 0 {
+	for (j >= 0) {
 		pair = cmds[j]
 		cmd = pairFirst(pair)
 		needs = pairSecond(pair)
-		if needs && (cmd.GetKind() != "command") {
+		if (needs && (cmd.GetKind() != "command")) {
 			// Compound command: redirect as sibling in pipe
 			result = (((("(pipe " + cmd.ToSexp()) + " (redirect \">&\" 1) ") + result) + ")")
 		} else {
@@ -1068,7 +1023,7 @@ func (p *Pipeline) cmdSexp(cmd Node, needs_redirect bool) string {
 	if !(needs_redirect) {
 		return cmd.ToSexp()
 	}
-	if cmd.GetKind() == "command" {
+	if (cmd.GetKind() == "command") {
 		// Inject redirect inside command
 		parts := []interface{}{}
 		for _, w := range cmd.(*Command).Words {
@@ -1086,7 +1041,7 @@ func (p *Pipeline) cmdSexp(cmd Node, needs_redirect bool) string {
 
 type List struct {
 	Parts []Node
-	Kind  string
+	Kind string
 }
 
 func (l *List) GetKind() string {
@@ -1106,32 +1061,32 @@ func (l *List) ToSexp() string {
 	parts := toSlice(l.Parts)
 	op_names := map[string]interface{}{"&&": "and", "||": "or", ";": "semi", "\n": "semi", "&": "background"}
 	// Strip trailing ; or \n (bash ignores it)
-	for (len(parts) > 1) && (parts[(len(parts)-1)].(Node).GetKind() == "operator") && ((parts[(len(parts)-1)].(Node).(*Operator).Op == ";") || (parts[(len(parts)-1)].(Node).(*Operator).Op == "\n")) {
+	for ((len(parts) > 1) && (parts[(len(parts) - 1)].(Node).GetKind() == "operator") && ((parts[(len(parts) - 1)].(Node).(*Operator).Op == ";") || (parts[(len(parts) - 1)].(Node).(*Operator).Op == "\n"))) {
 		parts = sublist(parts, 0, (len(parts) - 1))
 	}
-	if len(parts) == 1 {
+	if (len(parts) == 1) {
 		return parts[0].(Node).ToSexp()
 	}
 	// Handle trailing & as unary background operator
 	// & only applies to the immediately preceding pipeline, not the whole list
-	var inner_list Node
-	var right []interface{}
 	var left_sexp string
-	var right_sexp string
+	var inner_list Node
 	var left []interface{}
+	var right []interface{}
 	var inner_parts []interface{}
-	if (parts[(len(parts)-1)].(Node).GetKind() == "operator") && (parts[(len(parts)-1)].(Node).(*Operator).Op == "&") {
+	var right_sexp string
+	if ((parts[(len(parts) - 1)].(Node).GetKind() == "operator") && (parts[(len(parts) - 1)].(Node).(*Operator).Op == "&")) {
 		// Find rightmost ; or \n to split there
 		for i := (len(parts) - 3); i > 0; i-- {
-			if (parts[i].(Node).GetKind() == "operator") && ((parts[i].(Node).(*Operator).Op == ";") || (parts[i].(Node).(*Operator).Op == "\n")) {
+			if ((parts[i].(Node).GetKind() == "operator") && ((parts[i].(Node).(*Operator).Op == ";") || (parts[i].(Node).(*Operator).Op == "\n"))) {
 				left = sublist(parts, 0, i)
 				right = sublist(parts, (i + 1), (len(parts) - 1))
-				if len(left) > 1 {
+				if (len(left) > 1) {
 					left_sexp = NewList(toNodes(left)).ToSexp()
 				} else {
 					left_sexp = left[0].(Node).ToSexp()
 				}
-				if len(right) > 1 {
+				if (len(right) > 1) {
 					right_sexp = NewList(toNodes(right)).ToSexp()
 				} else {
 					right_sexp = right[0].(Node).ToSexp()
@@ -1141,7 +1096,7 @@ func (l *List) ToSexp() string {
 		}
 		// No ; or \n found, background the whole list (minus trailing &)
 		inner_parts = sublist(parts, 0, (len(parts) - 1))
-		if len(inner_parts) == 1 {
+		if (len(inner_parts) == 1) {
 			return (("(background " + inner_parts[0].(Node).ToSexp()) + ")")
 		}
 		inner_list = NewList(toNodes(inner_parts))
@@ -1154,20 +1109,20 @@ func (l *List) ToSexp() string {
 func (l *List) toSexpWithPrecedence(parts []interface{}, op_names map[string]interface{}) string {
 	// Process operators by precedence: ; (lowest), then &, then && and ||
 	// Split on ; or \n first (rightmost for left-associativity)
-	var right_sexp string
-	var left []interface{}
 	var right []interface{}
+	var left []interface{}
 	var left_sexp string
+	var right_sexp string
 	for i := (len(parts) - 2); i > 0; i-- {
-		if (parts[i].(Node).GetKind() == "operator") && ((parts[i].(Node).(*Operator).Op == ";") || (parts[i].(Node).(*Operator).Op == "\n")) {
+		if ((parts[i].(Node).GetKind() == "operator") && ((parts[i].(Node).(*Operator).Op == ";") || (parts[i].(Node).(*Operator).Op == "\n"))) {
 			left = sublist(parts, 0, i)
 			right = sublist(parts, (i + 1), len(parts))
-			if len(left) > 1 {
+			if (len(left) > 1) {
 				left_sexp = NewList(toNodes(left)).ToSexp()
 			} else {
 				left_sexp = left[0].(Node).ToSexp()
 			}
-			if len(right) > 1 {
+			if (len(right) > 1) {
 				right_sexp = NewList(toNodes(right)).ToSexp()
 			} else {
 				right_sexp = right[0].(Node).ToSexp()
@@ -1177,15 +1132,15 @@ func (l *List) toSexpWithPrecedence(parts []interface{}, op_names map[string]int
 	}
 	// Then split on & (rightmost for left-associativity)
 	for i := (len(parts) - 2); i > 0; i-- {
-		if (parts[i].(Node).GetKind() == "operator") && (parts[i].(Node).(*Operator).Op == "&") {
+		if ((parts[i].(Node).GetKind() == "operator") && (parts[i].(Node).(*Operator).Op == "&")) {
 			left = sublist(parts, 0, i)
 			right = sublist(parts, (i + 1), len(parts))
-			if len(left) > 1 {
+			if (len(left) > 1) {
 				left_sexp = NewList(toNodes(left)).ToSexp()
 			} else {
 				left_sexp = left[0].(Node).ToSexp()
 			}
-			if len(right) > 1 {
+			if (len(right) > 1) {
 				right_sexp = NewList(toNodes(right)).ToSexp()
 			} else {
 				right_sexp = right[0].(Node).ToSexp()
@@ -1195,9 +1150,9 @@ func (l *List) toSexpWithPrecedence(parts []interface{}, op_names map[string]int
 	}
 	// No ; or &, process high-prec ops (&&, ||) left-associatively
 	result := parts[0].(Node).ToSexp()
-	var op interface{}
 	var cmd Node
 	var op_name string
+	var op interface{}
 	for i := 1; i < (len(parts) - 1); i += 2 {
 		op = parts[i].(Node)
 		cmd = parts[(i + 1)].(Node)
@@ -1208,7 +1163,7 @@ func (l *List) toSexpWithPrecedence(parts []interface{}, op_names map[string]int
 }
 
 type Operator struct {
-	Op   string
+	Op string
 	Kind string
 }
 
@@ -1286,10 +1241,10 @@ func (c *Comment) ToSexp() string {
 }
 
 type Redirect struct {
-	Op     string
+	Op string
 	Target Word
-	Fd     *int
-	Kind   string
+	Fd *int
+	Kind string
 }
 
 func (r *Redirect) GetKind() string {
@@ -1311,12 +1266,12 @@ func (r *Redirect) ToSexp() string {
 	// Strip {varname} prefix if present
 	if strings.HasPrefix(op, "{") {
 		j := 1
-		if (j < len(op)) && (isAlpha_h(string(op[j])) || (op[j] == '_')) {
+		if ((j < len(op)) && (isAlpha_h(string(op[j])) || (op[j] == '_'))) {
 			j += 1
-			for (j < len(op)) && (isAlnum_h(string(op[j])) || (op[j] == '_')) {
+			for ((j < len(op)) && (isAlnum_h(string(op[j])) || (op[j] == '_'))) {
 				j += 1
 			}
-			if (j < len(op)) && (op[j] == '}') {
+			if ((j < len(op)) && (op[j] == '}')) {
 				op = substring(op, (j + 1), len(op))
 			}
 		}
@@ -1330,15 +1285,15 @@ func (r *Redirect) ToSexp() string {
 	var fd_target string
 	if strings.HasPrefix(target_val, "&") {
 		// Determine the real operator
-		if op == ">" {
+		if (op == ">") {
 			op = ">&"
-		} else if op == "<" {
+		} else if (op == "<") {
 			op = "<&"
 		}
 		fd_target = strings.TrimRight(substring(target_val, 1, len(target_val)), "-")
 		if isDigit_h(fd_target) {
 			return (((("(redirect \"" + op) + "\" ") + fd_target) + ")")
-		} else if target_val == "&-" {
+		} else if (target_val == "&-") {
 			return "(redirect \">&-\" 0)"
 		} else {
 			// Variable fd dup like >&$fd or >&$fd- (move) - strip the & and trailing -
@@ -1346,7 +1301,7 @@ func (r *Redirect) ToSexp() string {
 		}
 	}
 	// Handle case where op is already >& or <&
-	if (op == ">&") || (op == "<&") {
+	if ((op == ">&") || (op == "<&")) {
 		if isDigit_h(target_val) {
 			return (((("(redirect \"" + op) + "\" ") + target_val) + ")")
 		}
@@ -1359,11 +1314,11 @@ func (r *Redirect) ToSexp() string {
 
 type HereDoc struct {
 	Delimiter string
-	Content   string
+	Content string
 	StripTabs bool
-	Quoted    bool
-	Fd        *int
-	Kind      string
+	Quoted bool
+	Fd *int
+	Kind string
 }
 
 func (h *HereDoc) GetKind() string {
@@ -1392,9 +1347,9 @@ func (h *HereDoc) ToSexp() string {
 }
 
 type Subshell struct {
-	Body      Node
+	Body Node
 	Redirects []Node
-	Kind      string
+	Kind string
 }
 
 func (s *Subshell) GetKind() string {
@@ -1411,20 +1366,20 @@ func NewSubshell(body Node, redirects []Node) *Subshell {
 
 func (s *Subshell) ToSexp() string {
 	base := (("(subshell " + s.Body.ToSexp()) + ")")
-	var redirect_parts []string
-	if len(s.Redirects) > 0 {
+	var redirect_parts []interface{}
+	if (len(s.Redirects) > 0) {
 		for _, r := range s.Redirects {
 			redirect_parts = append(redirect_parts, r.ToSexp())
 		}
-		return ((base + " ") + strings.Join(redirect_parts, " "))
+		return ((base + " ") + joinStrings(redirect_parts, " "))
 	}
 	return base
 }
 
 type BraceGroup struct {
-	Body      Node
+	Body Node
 	Redirects []Node
-	Kind      string
+	Kind string
 }
 
 func (b *BraceGroup) GetKind() string {
@@ -1441,22 +1396,22 @@ func NewBraceGroup(body Node, redirects []Node) *BraceGroup {
 
 func (b *BraceGroup) ToSexp() string {
 	base := (("(brace-group " + b.Body.ToSexp()) + ")")
-	var redirect_parts []string
-	if len(b.Redirects) > 0 {
+	var redirect_parts []interface{}
+	if (len(b.Redirects) > 0) {
 		for _, r := range b.Redirects {
 			redirect_parts = append(redirect_parts, r.ToSexp())
 		}
-		return ((base + " ") + strings.Join(redirect_parts, " "))
+		return ((base + " ") + joinStrings(redirect_parts, " "))
 	}
 	return base
 }
 
 type If struct {
 	Condition Node
-	ThenBody  Node
-	ElseBody  Node
+	ThenBody Node
+	ElseBody Node
 	Redirects []Node
-	Kind      string
+	Kind string
 }
 
 func (i *If) GetKind() string {
@@ -1475,7 +1430,7 @@ func NewIf(condition Node, then_body Node, else_body Node, redirects []Node) *If
 
 func (i *If) ToSexp() string {
 	result := ((("(if " + i.Condition.ToSexp()) + " ") + i.ThenBody.ToSexp())
-	if i.ElseBody != nil {
+	if (i.ElseBody != nil) {
 		result = ((result + " ") + i.ElseBody.ToSexp())
 	}
 	result = (result + ")")
@@ -1487,9 +1442,9 @@ func (i *If) ToSexp() string {
 
 type While struct {
 	Condition Node
-	Body      Node
+	Body Node
 	Redirects []Node
-	Kind      string
+	Kind string
 }
 
 func (w *While) GetKind() string {
@@ -1507,21 +1462,21 @@ func NewWhile(condition Node, body Node, redirects []Node) *While {
 
 func (w *While) ToSexp() string {
 	base := (((("(while " + w.Condition.ToSexp()) + " ") + w.Body.ToSexp()) + ")")
-	var redirect_parts []string
-	if len(w.Redirects) > 0 {
+	var redirect_parts []interface{}
+	if (len(w.Redirects) > 0) {
 		for _, r := range w.Redirects {
 			redirect_parts = append(redirect_parts, r.ToSexp())
 		}
-		return ((base + " ") + strings.Join(redirect_parts, " "))
+		return ((base + " ") + joinStrings(redirect_parts, " "))
 	}
 	return base
 }
 
 type Until struct {
 	Condition Node
-	Body      Node
+	Body Node
 	Redirects []Node
-	Kind      string
+	Kind string
 }
 
 func (u *Until) GetKind() string {
@@ -1539,22 +1494,22 @@ func NewUntil(condition Node, body Node, redirects []Node) *Until {
 
 func (u *Until) ToSexp() string {
 	base := (((("(until " + u.Condition.ToSexp()) + " ") + u.Body.ToSexp()) + ")")
-	var redirect_parts []string
-	if len(u.Redirects) > 0 {
+	var redirect_parts []interface{}
+	if (len(u.Redirects) > 0) {
 		for _, r := range u.Redirects {
 			redirect_parts = append(redirect_parts, r.ToSexp())
 		}
-		return ((base + " ") + strings.Join(redirect_parts, " "))
+		return ((base + " ") + joinStrings(redirect_parts, " "))
 	}
 	return base
 }
 
 type For struct {
-	Var       string
-	Words     []Node
-	Body      Node
+	Var string
+	Words []Node
+	Body Node
 	Redirects []Node
-	Kind      string
+	Kind string
 }
 
 func (f *For) GetKind() string {
@@ -1574,38 +1529,38 @@ func NewFor(variable string, words []Node, body Node, redirects []Node) *For {
 func (f *For) ToSexp() string {
 	// bash-oracle format: (for (word "var") (in (word "a") ...) body)
 	suffix := ""
-	var redirect_parts []string
-	if len(f.Redirects) > 0 {
+	var redirect_parts []interface{}
+	if (len(f.Redirects) > 0) {
 		for _, r := range f.Redirects {
 			redirect_parts = append(redirect_parts, r.ToSexp())
 		}
-		suffix = (" " + strings.Join(redirect_parts, " "))
+		suffix = (" " + joinStrings(redirect_parts, " "))
 	}
 	var_escaped := strings.ReplaceAll(strings.ReplaceAll(f.Var, "\\", "\\\\"), "\"", "\\\"")
-	var word_parts []string
+	var word_parts []interface{}
 	var word_strs string
-	if f.Words == nil {
+	if (f.Words == nil) {
 		// No 'in' clause - bash-oracle implies (in (word "\"$@\""))
 		return ((((("(for (word \"" + var_escaped) + "\") (in (word \"\\\"$@\\\"\")) ") + f.Body.ToSexp()) + ")") + suffix)
-	} else if len(f.Words) == 0 {
+	} else if (len(f.Words) == 0) {
 		// Empty 'in' clause - bash-oracle outputs (in)
 		return ((((("(for (word \"" + var_escaped) + "\") (in) ") + f.Body.ToSexp()) + ")") + suffix)
 	} else {
 		for _, w := range f.Words {
 			word_parts = append(word_parts, w.ToSexp())
 		}
-		word_strs = strings.Join(word_parts, " ")
+		word_strs = joinStrings(word_parts, " ")
 		return ((((((("(for (word \"" + var_escaped) + "\") (in ") + word_strs) + ") ") + f.Body.ToSexp()) + ")") + suffix)
 	}
 }
 
 type ForArith struct {
-	Init      string
-	Cond      string
-	Incr      string
-	Body      Node
+	Init string
+	Cond string
+	Incr string
+	Body Node
 	Redirects []Node
-	Kind      string
+	Kind string
 }
 
 func (f *ForArith) GetKind() string {
@@ -1627,35 +1582,35 @@ func (f *ForArith) ToSexp() string {
 	// bash-oracle format: (arith-for (init (word "x")) (test (word "y")) (step (word "z")) body)
 	FormatArithVal := func(s string) string {
 		// Use Word's methods to expand ANSI-C quotes and strip locale $
-		w := NewWord(s, []interface{}{})
+		w := NewWord(s, nil)
 		val := w.expandAllAnsiCQuotes(s)
 		val = w.stripLocaleStringDollars(val)
 		val = strings.ReplaceAll(strings.ReplaceAll(val, "\\", "\\\\"), "\"", "\\\"")
 		return val
 	}
-
+	
 	suffix := ""
-	if len(f.Redirects) > 0 {
+	if (len(f.Redirects) > 0) {
 		redirect_parts := []interface{}{}
 		for _, r := range f.Redirects {
 			redirect_parts = append(redirect_parts, r.ToSexp())
 		}
-		suffix = (" " + strings.Join(redirect_parts, " "))
+		suffix = (" " + joinStrings(redirect_parts, " "))
 	}
-	var init_val interface{}
-	if len(f.Init) > 0 {
+	var init_val string
+	if (f.Init != "") {
 		init_val = f.Init
 	} else {
 		init_val = "1"
 	}
-	var cond_val interface{}
-	if f.Cond {
+	var cond_val string
+	if (f.Cond != "") {
 		cond_val = normalizeFdRedirects(f.Cond)
 	} else {
 		cond_val = "1"
 	}
-	var incr_val interface{}
-	if f.Incr {
+	var incr_val string
+	if (f.Incr != "") {
 		incr_val = f.Incr
 	} else {
 		incr_val = "1"
@@ -1664,11 +1619,11 @@ func (f *ForArith) ToSexp() string {
 }
 
 type Select struct {
-	Var       string
-	Words     []Node
-	Body      Node
+	Var string
+	Words []Node
+	Body Node
 	Redirects []Node
-	Kind      string
+	Kind string
 }
 
 func (s *Select) GetKind() string {
@@ -1688,23 +1643,23 @@ func NewSelect(variable string, words []Node, body Node, redirects []Node) *Sele
 func (s *Select) ToSexp() string {
 	// bash-oracle format: (select (word "var") (in (word "a") ...) body)
 	suffix := ""
-	var redirect_parts []string
-	if len(s.Redirects) > 0 {
+	var redirect_parts []interface{}
+	if (len(s.Redirects) > 0) {
 		for _, r := range s.Redirects {
 			redirect_parts = append(redirect_parts, r.ToSexp())
 		}
-		suffix = (" " + strings.Join(redirect_parts, " "))
+		suffix = (" " + joinStrings(redirect_parts, " "))
 	}
 	var_escaped := strings.ReplaceAll(strings.ReplaceAll(s.Var, "\\", "\\\\"), "\"", "\\\"")
 	var in_clause string
-	var word_parts []string
+	var word_parts []interface{}
 	var word_strs string
-	if s.Words != nil {
+	if (s.Words != nil) {
 		for _, w := range s.Words {
 			word_parts = append(word_parts, w.ToSexp())
 		}
-		word_strs = strings.Join(word_parts, " ")
-		if len(s.Words) > 0 {
+		word_strs = joinStrings(word_parts, " ")
+		if (len(s.Words) > 0) {
 			in_clause = (("(in " + word_strs) + ")")
 		} else {
 			in_clause = "(in)"
@@ -1717,10 +1672,10 @@ func (s *Select) ToSexp() string {
 }
 
 type Case struct {
-	Word      Word
-	Patterns  []Node
+	Word Word
+	Patterns []Node
 	Redirects []Node
-	Kind      string
+	Kind string
 }
 
 func (c *Case) GetKind() string {
@@ -1743,12 +1698,12 @@ func (c *Case) ToSexp() string {
 		parts = append(parts, p.ToSexp())
 	}
 	base := (joinStrings(parts, " ") + ")")
-	var redirect_parts []string
-	if len(c.Redirects) > 0 {
+	var redirect_parts []interface{}
+	if (len(c.Redirects) > 0) {
 		for _, r := range c.Redirects {
 			redirect_parts = append(redirect_parts, r.ToSexp())
 		}
-		return ((base + " ") + strings.Join(redirect_parts, " "))
+		return ((base + " ") + joinStrings(redirect_parts, " "))
 	}
 	return base
 }
@@ -1756,11 +1711,11 @@ func (c *Case) ToSexp() string {
 func consumeSingleQuote(s string, start int) []interface{} {
 	chars := []interface{}{"'"}
 	i := (start + 1)
-	for (i < len(s)) && (s[i] != '\'') {
+	for ((i < len(s)) && (s[i] != '\'')) {
 		chars = append(chars, s[i])
 		i += 1
 	}
-	if i < len(s) {
+	if (i < len(s)) {
 		chars = append(chars, s[i])
 		i += 1
 	}
@@ -1770,15 +1725,15 @@ func consumeSingleQuote(s string, start int) []interface{} {
 func consumeDoubleQuote(s string, start int) []interface{} {
 	chars := []interface{}{"\""}
 	i := (start + 1)
-	for (i < len(s)) && (s[i] != '"') {
-		if (s[i] == '\\') && ((i + 1) < len(s)) {
+	for ((i < len(s)) && (s[i] != '"')) {
+		if ((s[i] == '\\') && ((i + 1) < len(s))) {
 			chars = append(chars, s[i])
 			i += 1
 		}
 		chars = append(chars, s[i])
 		i += 1
 	}
-	if i < len(s) {
+	if (i < len(s)) {
 		chars = append(chars, s[i])
 		i += 1
 	}
@@ -1787,11 +1742,11 @@ func consumeDoubleQuote(s string, start int) []interface{} {
 
 func hasBracketClose(s string, start int, depth int) bool {
 	i := start
-	for i < len(s) {
-		if s[i] == ']' {
+	for (i < len(s)) {
+		if (s[i] == ']') {
 			return true
 		}
-		if ((s[i] == '|') || (s[i] == ')')) && (depth == 0) {
+		if (((s[i] == '|') || (s[i] == ')')) && (depth == 0)) {
 			return false
 		}
 		i += 1
@@ -1803,23 +1758,23 @@ func consumeBracketClass(s string, start int, depth int) []interface{} {
 	// First scan to see if this is a valid bracket expression
 	scan_pos := (start + 1)
 	// Skip [! or [^ at start
-	if (scan_pos < len(s)) && ((s[scan_pos] == '!') || (s[scan_pos] == '^')) {
+	if ((scan_pos < len(s)) && ((s[scan_pos] == '!') || (s[scan_pos] == '^'))) {
 		scan_pos += 1
 	}
 	// Handle ] as first char
-	if (scan_pos < len(s)) && (s[scan_pos] == ']') {
+	if ((scan_pos < len(s)) && (s[scan_pos] == ']')) {
 		if hasBracketClose(s, (scan_pos + 1), depth) {
 			scan_pos += 1
 		}
 	}
 	// Scan for closing ]
 	is_bracket := false
-	for scan_pos < len(s) {
-		if s[scan_pos] == ']' {
+	for (scan_pos < len(s)) {
+		if (s[scan_pos] == ']') {
 			is_bracket = true
 			break
 		}
-		if (s[scan_pos] == ')') && (depth == 0) {
+		if ((s[scan_pos] == ')') && (depth == 0)) {
 			break
 		}
 		scan_pos += 1
@@ -1831,23 +1786,23 @@ func consumeBracketClass(s string, start int, depth int) []interface{} {
 	chars := []interface{}{"["}
 	i := (start + 1)
 	// Handle [! or [^
-	if (i < len(s)) && ((s[i] == '!') || (s[i] == '^')) {
+	if ((i < len(s)) && ((s[i] == '!') || (s[i] == '^'))) {
 		chars = append(chars, s[i])
 		i += 1
 	}
 	// Handle ] as first char
-	if (i < len(s)) && (s[i] == ']') {
+	if ((i < len(s)) && (s[i] == ']')) {
 		if hasBracketClose(s, (i + 1), depth) {
 			chars = append(chars, s[i])
 			i += 1
 		}
 	}
 	// Consume until ]
-	for (i < len(s)) && (s[i] != ']') {
+	for ((i < len(s)) && (s[i] != ']')) {
 		chars = append(chars, s[i])
 		i += 1
 	}
-	if i < len(s) {
+	if (i < len(s)) {
 		chars = append(chars, s[i])
 		i += 1
 	}
@@ -1855,10 +1810,10 @@ func consumeBracketClass(s string, start int, depth int) []interface{} {
 }
 
 type CasePattern struct {
-	Pattern    string
-	Body       Node
+	Pattern string
+	Body Node
 	Terminator string
-	Kind       string
+	Kind string
 }
 
 func (c *CasePattern) GetKind() string {
@@ -1882,61 +1837,61 @@ func (c *CasePattern) ToSexp() string {
 	i := 0
 	depth := 0
 	var ch byte
-	for i < len(c.Pattern) {
+	for (i < len(c.Pattern)) {
 		ch = c.Pattern[i]
-		var result interface{}
-		if (ch == '\\') && ((i + 1) < len(c.Pattern)) {
-			current = append(current, substring(c.Pattern, i, (i+2)))
+		var result []interface{}
+		if ((ch == '\\') && ((i + 1) < len(c.Pattern))) {
+			current = append(current, substring(c.Pattern, i, (i + 2)))
 			i += 2
-		} else if ((ch == '@') || (ch == '?') || (ch == '*') || (ch == '+') || (ch == '!')) && ((i + 1) < len(c.Pattern)) && (c.Pattern[(i+1)] == '(') {
+		} else if (((ch == '@') || (ch == '?') || (ch == '*') || (ch == '+') || (ch == '!')) && ((i + 1) < len(c.Pattern)) && (c.Pattern[(i + 1)] == '(')) {
 			// Start of extglob: @(, ?(, *(, +(, !(
 			current = append(current, ch)
 			current = append(current, "(")
 			depth += 1
 			i += 2
-		} else if (ch == '$') && ((i + 1) < len(c.Pattern)) && (c.Pattern[(i+1)] == '(') {
+		} else if ((ch == '$') && ((i + 1) < len(c.Pattern)) && (c.Pattern[(i + 1)] == '(')) {
 			// $( command sub or $(( arithmetic - track depth
 			current = append(current, ch)
 			current = append(current, "(")
 			depth += 1
 			i += 2
-		} else if (ch == '(') && (depth > 0) {
+		} else if ((ch == '(') && (depth > 0)) {
 			current = append(current, ch)
 			depth += 1
 			i += 1
-		} else if (ch == ')') && (depth > 0) {
+		} else if ((ch == ')') && (depth > 0)) {
 			current = append(current, ch)
 			depth -= 1
 			i += 1
-		} else if ch == '[' {
+		} else if (ch == '[') {
 			result = consumeBracketClass(c.Pattern, i, depth)
-			i = result[0]
-			current = append(current, result[1]...)
-		} else if (ch == '\'') && (depth == 0) {
+			i = result[0].(int)
+			current = append(current, result[1].([]interface{})...)
+		} else if ((ch == '\'') && (depth == 0)) {
 			result = consumeSingleQuote(c.Pattern, i)
-			i = result[0]
-			current = append(current, result[1]...)
-		} else if (ch == '"') && (depth == 0) {
+			i = result[0].(int)
+			current = append(current, result[1].([]interface{})...)
+		} else if ((ch == '"') && (depth == 0)) {
 			result = consumeDoubleQuote(c.Pattern, i)
-			i = result[0]
-			current = append(current, result[1]...)
-		} else if (ch == '|') && (depth == 0) {
-			alternatives = append(alternatives, strings.Join(current, ""))
+			i = result[0].(int)
+			current = append(current, result[1].([]interface{})...)
+		} else if ((ch == '|') && (depth == 0)) {
+			alternatives = append(alternatives, joinStrings(current, ""))
 			i += 1
 		} else {
 			current = append(current, ch)
 			i += 1
 		}
 	}
-	alternatives = append(alternatives, strings.Join(current, ""))
+	alternatives = append(alternatives, joinStrings(current, ""))
 	word_list := []interface{}{}
 	for _, alt := range alternatives {
 		// Use Word.to_sexp() to properly expand ANSI-C quotes and escape
-		word_list = append(word_list, NewWord(alt, nil).ToSexp())
+		word_list = append(word_list, NewWord(alt.(string), nil).ToSexp())
 	}
-	pattern_str := strings.Join(word_list, " ")
+	pattern_str := joinStrings(word_list, " ")
 	parts := []interface{}{(("(pattern (" + pattern_str) + ")")}
-	if c.Body != nil {
+	if (c.Body != nil) {
 		parts = append(parts, (" " + c.Body.ToSexp()))
 	} else {
 		parts = append(parts, " ()")
@@ -1970,9 +1925,9 @@ func (f *Function) ToSexp() string {
 
 type ParamExpansion struct {
 	Param string
-	Op    *string
-	Arg   *string
-	Kind  string
+	Op *string
+	Arg *string
+	Kind string
 }
 
 func (p *ParamExpansion) GetKind() string {
@@ -1990,13 +1945,13 @@ func NewParamExpansion(param string, op *string, arg *string) *ParamExpansion {
 
 func (p *ParamExpansion) ToSexp() string {
 	escaped_param := strings.ReplaceAll(strings.ReplaceAll(p.Param, "\\", "\\\\"), "\"", "\\\"")
-	var escaped_op interface{}
-	var escaped_arg interface{}
-	var arg_val interface{}
-	if p.Op != nil {
-		escaped_op = strings.ReplaceAll(strings.ReplaceAll(p.Op, "\\", "\\\\"), "\"", "\\\"")
-		if p.Arg != nil {
-			arg_val = p.Arg
+	var arg_val string
+	var escaped_arg string
+	var escaped_op string
+	if (p.Op != nil) {
+		escaped_op = strings.ReplaceAll(strings.ReplaceAll(*p.Op, "\\", "\\\\"), "\"", "\\\"")
+		if (p.Arg != nil) {
+			arg_val = *p.Arg
 		} else {
 			arg_val = ""
 		}
@@ -2008,7 +1963,7 @@ func (p *ParamExpansion) ToSexp() string {
 
 type ParamLength struct {
 	Param string
-	Kind  string
+	Kind string
 }
 
 func (p *ParamLength) GetKind() string {
@@ -2029,9 +1984,9 @@ func (p *ParamLength) ToSexp() string {
 
 type ParamIndirect struct {
 	Param string
-	Op    *string
-	Arg   *string
-	Kind  string
+	Op *string
+	Arg *string
+	Kind string
 }
 
 func (p *ParamIndirect) GetKind() string {
@@ -2049,13 +2004,13 @@ func NewParamIndirect(param string, op *string, arg *string) *ParamIndirect {
 
 func (p *ParamIndirect) ToSexp() string {
 	escaped := strings.ReplaceAll(strings.ReplaceAll(p.Param, "\\", "\\\\"), "\"", "\\\"")
-	var escaped_op interface{}
-	var escaped_arg interface{}
-	var arg_val interface{}
-	if p.Op != nil {
-		escaped_op = strings.ReplaceAll(strings.ReplaceAll(p.Op, "\\", "\\\\"), "\"", "\\\"")
-		if p.Arg != nil {
-			arg_val = p.Arg
+	var arg_val string
+	var escaped_arg string
+	var escaped_op string
+	if (p.Op != nil) {
+		escaped_op = strings.ReplaceAll(strings.ReplaceAll(*p.Op, "\\", "\\\\"), "\"", "\\\"")
+		if (p.Arg != nil) {
+			arg_val = *p.Arg
 		} else {
 			arg_val = ""
 		}
@@ -2067,7 +2022,7 @@ func (p *ParamIndirect) ToSexp() string {
 
 type CommandSubstitution struct {
 	Command Node
-	Kind    string
+	Kind string
 }
 
 func (c *CommandSubstitution) GetKind() string {
@@ -2087,7 +2042,7 @@ func (c *CommandSubstitution) ToSexp() string {
 
 type ArithmeticExpansion struct {
 	Expression Node
-	Kind       string
+	Kind string
 }
 
 func (a *ArithmeticExpansion) GetKind() string {
@@ -2102,7 +2057,7 @@ func NewArithmeticExpansion(expression Node) *ArithmeticExpansion {
 }
 
 func (a *ArithmeticExpansion) ToSexp() string {
-	if a.Expression == nil {
+	if (a.Expression == nil) {
 		return "(arith)"
 	}
 	return (("(arith " + a.Expression.ToSexp()) + ")")
@@ -2110,9 +2065,9 @@ func (a *ArithmeticExpansion) ToSexp() string {
 
 type ArithmeticCommand struct {
 	Expression Node
-	Redirects  []Node
+	Redirects []Node
 	RawContent string
-	Kind       string
+	Kind string
 }
 
 func (a *ArithmeticCommand) GetKind() string {
@@ -2133,13 +2088,13 @@ func (a *ArithmeticCommand) ToSexp() string {
 	// Redirects are siblings: (arith (word "...")) (redirect ...)
 	escaped := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(a.RawContent, "\\", "\\\\"), "\"", "\\\""), "\n", "\\n")
 	result := (("(arith (word \"" + escaped) + "\"))")
-	var redirect_parts []string
-	var redirect_sexps interface{}
-	if len(a.Redirects) > 0 {
+	var redirect_parts []interface{}
+	var redirect_sexps string
+	if (len(a.Redirects) > 0) {
 		for _, r := range a.Redirects {
 			redirect_parts = append(redirect_parts, r.ToSexp())
 		}
-		redirect_sexps = strings.Join(redirect_parts, " ")
+		redirect_sexps = joinStrings(redirect_parts, " ")
 		return ((result + " ") + redirect_sexps)
 	}
 	return result
@@ -2148,7 +2103,7 @@ func (a *ArithmeticCommand) ToSexp() string {
 // Arithmetic expression nodes
 type ArithNumber struct {
 	Value string
-	Kind  string
+	Kind string
 }
 
 func (a *ArithNumber) GetKind() string {
@@ -2187,10 +2142,10 @@ func (a *ArithVar) ToSexp() string {
 }
 
 type ArithBinaryOp struct {
-	Op    string
-	Left  Node
+	Op string
+	Left Node
 	Right Node
-	Kind  string
+	Kind string
 }
 
 func (a *ArithBinaryOp) GetKind() string {
@@ -2211,9 +2166,9 @@ func (a *ArithBinaryOp) ToSexp() string {
 }
 
 type ArithUnaryOp struct {
-	Op      string
+	Op string
 	Operand Node
-	Kind    string
+	Kind string
 }
 
 func (a *ArithUnaryOp) GetKind() string {
@@ -2234,7 +2189,7 @@ func (a *ArithUnaryOp) ToSexp() string {
 
 type ArithPreIncr struct {
 	Operand Node
-	Kind    string
+	Kind string
 }
 
 func (a *ArithPreIncr) GetKind() string {
@@ -2254,7 +2209,7 @@ func (a *ArithPreIncr) ToSexp() string {
 
 type ArithPostIncr struct {
 	Operand Node
-	Kind    string
+	Kind string
 }
 
 func (a *ArithPostIncr) GetKind() string {
@@ -2274,7 +2229,7 @@ func (a *ArithPostIncr) ToSexp() string {
 
 type ArithPreDecr struct {
 	Operand Node
-	Kind    string
+	Kind string
 }
 
 func (a *ArithPreDecr) GetKind() string {
@@ -2294,7 +2249,7 @@ func (a *ArithPreDecr) ToSexp() string {
 
 type ArithPostDecr struct {
 	Operand Node
-	Kind    string
+	Kind string
 }
 
 func (a *ArithPostDecr) GetKind() string {
@@ -2313,10 +2268,10 @@ func (a *ArithPostDecr) ToSexp() string {
 }
 
 type ArithAssign struct {
-	Op     string
+	Op string
 	Target Node
-	Value  Node
-	Kind   string
+	Value Node
+	Kind string
 }
 
 func (a *ArithAssign) GetKind() string {
@@ -2338,9 +2293,9 @@ func (a *ArithAssign) ToSexp() string {
 
 type ArithTernary struct {
 	Condition Node
-	IfTrue    Node
-	IfFalse   Node
-	Kind      string
+	IfTrue Node
+	IfFalse Node
+	Kind string
 }
 
 func (a *ArithTernary) GetKind() string {
@@ -2361,9 +2316,9 @@ func (a *ArithTernary) ToSexp() string {
 }
 
 type ArithComma struct {
-	Left  Node
+	Left Node
 	Right Node
-	Kind  string
+	Kind string
 }
 
 func (a *ArithComma) GetKind() string {
@@ -2385,7 +2340,7 @@ func (a *ArithComma) ToSexp() string {
 type ArithSubscript struct {
 	Array string
 	Index Node
-	Kind  string
+	Kind string
 }
 
 func (a *ArithSubscript) GetKind() string {
@@ -2426,7 +2381,7 @@ func (a *ArithEscape) ToSexp() string {
 
 type ArithDeprecated struct {
 	Expression string
-	Kind       string
+	Kind string
 }
 
 func (a *ArithDeprecated) GetKind() string {
@@ -2447,7 +2402,7 @@ func (a *ArithDeprecated) ToSexp() string {
 
 type AnsiCQuote struct {
 	Content string
-	Kind    string
+	Kind string
 }
 
 func (a *AnsiCQuote) GetKind() string {
@@ -2468,7 +2423,7 @@ func (a *AnsiCQuote) ToSexp() string {
 
 type LocaleString struct {
 	Content string
-	Kind    string
+	Kind string
 }
 
 func (l *LocaleString) GetKind() string {
@@ -2489,8 +2444,8 @@ func (l *LocaleString) ToSexp() string {
 
 type ProcessSubstitution struct {
 	Direction string
-	Command   Node
-	Kind      string
+	Command Node
+	Kind string
 }
 
 func (p *ProcessSubstitution) GetKind() string {
@@ -2511,7 +2466,7 @@ func (p *ProcessSubstitution) ToSexp() string {
 
 type Negation struct {
 	Pipeline Node
-	Kind     string
+	Kind string
 }
 
 func (n *Negation) GetKind() string {
@@ -2526,7 +2481,7 @@ func NewNegation(pipeline Node) *Negation {
 }
 
 func (n *Negation) ToSexp() string {
-	if n.Pipeline == nil {
+	if (n.Pipeline == nil) {
 		// Bare "!" with no command - bash-oracle shows empty command
 		return "(negation (command))"
 	}
@@ -2535,8 +2490,8 @@ func (n *Negation) ToSexp() string {
 
 type Time struct {
 	Pipeline Node
-	Posix    bool
-	Kind     string
+	Posix bool
+	Kind string
 }
 
 func (t *Time) GetKind() string {
@@ -2552,7 +2507,7 @@ func NewTime(pipeline Node, posix bool) *Time {
 }
 
 func (t *Time) ToSexp() string {
-	if t.Pipeline == nil {
+	if (t.Pipeline == nil) {
 		// Bare "time" with no command - bash-oracle shows empty command
 		if t.Posix {
 			return "(time -p (command))"
@@ -2567,9 +2522,9 @@ func (t *Time) ToSexp() string {
 }
 
 type ConditionalExpr struct {
-	Body      Node
+	Body Node
 	Redirects []Node
-	Kind      string
+	Kind string
 }
 
 func (c *ConditionalExpr) GetKind() string {
@@ -2588,31 +2543,31 @@ func (c *ConditionalExpr) ToSexp() string {
 	// bash-oracle format: (cond ...) not (cond-expr ...)
 	// Redirects are siblings, not children: (cond ...) (redirect ...)
 	body_kind := getAttr(c.Body, "kind", nil)
-	var result int
-	var escaped interface{}
-	if body_kind == nil {
+	var result string
+	var escaped string
+	if (body_kind == nil) {
 		// body is a string
 		escaped = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(c.Body, "\\", "\\\\"), "\"", "\\\""), "\n", "\\n")
 		result = (("(cond \"" + escaped) + "\")")
 	} else {
 		result = (("(cond " + c.Body.ToSexp()) + ")")
 	}
-	var redirect_parts []string
-	var redirect_sexps interface{}
-	if len(c.Redirects) > 0 {
+	var redirect_parts []interface{}
+	var redirect_sexps string
+	if (len(c.Redirects) > 0) {
 		for _, r := range c.Redirects {
 			redirect_parts = append(redirect_parts, r.ToSexp())
 		}
-		redirect_sexps = strings.Join(redirect_parts, " ")
+		redirect_sexps = joinStrings(redirect_parts, " ")
 		return ((result + " ") + redirect_sexps)
 	}
 	return result
 }
 
 type UnaryTest struct {
-	Op      string
+	Op string
 	Operand Word
-	Kind    string
+	Kind string
 }
 
 func (u *UnaryTest) GetKind() string {
@@ -2634,10 +2589,10 @@ func (u *UnaryTest) ToSexp() string {
 }
 
 type BinaryTest struct {
-	Op    string
-	Left  Word
+	Op string
+	Left Word
 	Right Word
-	Kind  string
+	Kind string
 }
 
 func (b *BinaryTest) GetKind() string {
@@ -2662,9 +2617,9 @@ func (b *BinaryTest) ToSexp() string {
 }
 
 type CondAnd struct {
-	Left  Node
+	Left Node
 	Right Node
-	Kind  string
+	Kind string
 }
 
 func (c *CondAnd) GetKind() string {
@@ -2684,9 +2639,9 @@ func (c *CondAnd) ToSexp() string {
 }
 
 type CondOr struct {
-	Left  Node
+	Left Node
 	Right Node
-	Kind  string
+	Kind string
 }
 
 func (c *CondOr) GetKind() string {
@@ -2707,7 +2662,7 @@ func (c *CondOr) ToSexp() string {
 
 type CondNot struct {
 	Operand Node
-	Kind    string
+	Kind string
 }
 
 func (c *CondNot) GetKind() string {
@@ -2728,7 +2683,7 @@ func (c *CondNot) ToSexp() string {
 
 type CondParen struct {
 	Inner Node
-	Kind  string
+	Kind string
 }
 
 func (c *CondParen) GetKind() string {
@@ -2748,7 +2703,7 @@ func (c *CondParen) ToSexp() string {
 
 type Array struct {
 	Elements []Node
-	Kind     string
+	Kind string
 }
 
 func (a *Array) GetKind() string {
@@ -2763,7 +2718,7 @@ func NewArray(elements []Node) *Array {
 }
 
 func (a *Array) ToSexp() string {
-	if !(a.Elements) {
+	if (len(a.Elements) == 0) {
 		return "(array)"
 	}
 	parts := []interface{}{}
@@ -2776,8 +2731,8 @@ func (a *Array) ToSexp() string {
 
 type Coproc struct {
 	Command Node
-	Name    *string
-	Kind    string
+	Name *string
+	Kind string
 }
 
 func (c *Coproc) GetKind() string {
@@ -2794,9 +2749,9 @@ func NewCoproc(command Node, name *string) *Coproc {
 
 func (c *Coproc) ToSexp() string {
 	// Use provided name for compound commands, "COPROC" for simple commands
-	var name interface{}
-	if c.Name {
-		name = c.Name
+	var name string
+	if (c.Name != nil) {
+		name = *c.Name
 	} else {
 		name = "COPROC"
 	}
@@ -2804,19 +2759,13 @@ func (c *Coproc) ToSexp() string {
 }
 
 func formatCmdsubNode(node Node, indent int, in_procsub bool) string {
-	if indent == nil {
-		indent = 0
-	}
-	if in_procsub == nil {
-		in_procsub = false
-	}
 	sp := repeatStr(" ", indent)
 	inner_sp := repeatStr(" ", (indent + 4))
-	if node.GetKind() == "empty" {
+	if (node.GetKind() == "empty") {
 		return ""
 	}
 	var val interface{}
-	if node.GetKind() == "command" {
+	if (node.GetKind() == "command") {
 		parts := []interface{}{}
 		for _, w := range node.(*Command).Words {
 			val = w.expandAllAnsiCQuotes(w.Value)
@@ -2828,9 +2777,9 @@ func formatCmdsubNode(node Node, indent int, in_procsub bool) string {
 		}
 		return joinStrings(parts, " ")
 	}
-	var cmd Node
 	var cmd_parts interface{}
-	if node.GetKind() == "pipeline" {
+	var cmd Node
+	if (node.GetKind() == "pipeline") {
 		for _, cmd := range node.Commands {
 			cmd_parts = append(cmd_parts, formatCmdsubNode(cmd, indent, false))
 		}
@@ -2838,26 +2787,26 @@ func formatCmdsubNode(node Node, indent int, in_procsub bool) string {
 	}
 	var s interface{}
 	var p interface{}
-	if node.GetKind() == "list" {
+	if (node.GetKind() == "list") {
 		// Join commands with operators
 		result := []interface{}{}
 		for _, p := range node.Parts {
-			if p.GetKind() == "operator" {
-				if p.(*Operator).Op == ";" {
+			if (p.GetKind() == "operator") {
+				if (p.(*Operator).Op == ";") {
 					result = append(result, ";")
-				} else if p.(*Operator).Op == "\n" {
+				} else if (p.(*Operator).Op == "\n") {
 					// Skip newline if it follows a semicolon (redundant separator)
-					if (len(result) > 0) && (result[(len(result)-1)] == ';') {
+					if ((len(result) > 0) && (result[(len(result) - 1)] == ';')) {
 						continue
 					}
 					result = append(result, "\n")
-				} else if p.(*Operator).Op == "&" {
+				} else if (p.(*Operator).Op == "&") {
 					result = append(result, " &")
 				} else {
 					result = append(result, (" " + p.(*Operator).Op))
 				}
 			} else {
-				if (len(result) > 0) && !(strings.HasSuffix(result[(len(result)-1)], []interface{}{" ", "\n"})) {
+				if ((len(result) > 0) && !(strings.HasSuffix(result[(len(result) - 1)], []interface{}{" ", "\n"}))) {
 					result = append(result, " ")
 				}
 				result = append(result, formatCmdsubNode(p, indent, false))
@@ -2865,19 +2814,19 @@ func formatCmdsubNode(node Node, indent int, in_procsub bool) string {
 		}
 		// Strip trailing ; or newline
 		s = joinStrings(result, "")
-		for strings.HasSuffix(s, ";") || strings.HasSuffix(s, "\n") {
+		for (strings.HasSuffix(s, ";") || strings.HasSuffix(s, "\n")) {
 			s = substring(s, 0, (len(s) - 1))
 		}
 		return s
 	}
-	var cond interface{}
 	var else_body interface{}
 	var then_body interface{}
-	if node.GetKind() == "if" {
+	var cond interface{}
+	if (node.GetKind() == "if") {
 		cond = formatCmdsubNode(node.Condition, indent, false)
 		then_body = formatCmdsubNode(node.ThenBody, (indent + 4), false)
 		result = ((((("if " + cond) + "; then\n") + inner_sp) + then_body) + ";")
-		if node.ElseBody != nil {
+		if (node.ElseBody != nil) {
 			else_body = formatCmdsubNode(node.ElseBody, (indent + 4), false)
 			result = ((((((result + "\n") + sp) + "else\n") + inner_sp) + else_body) + ";")
 		}
@@ -2885,12 +2834,12 @@ func formatCmdsubNode(node Node, indent int, in_procsub bool) string {
 		return result
 	}
 	var body interface{}
-	if node.GetKind() == "while" {
+	if (node.GetKind() == "while") {
 		cond = formatCmdsubNode(node.Condition, indent, false)
 		body = formatCmdsubNode(node.Body, (indent + 4), false)
 		return ((((((("while " + cond) + "; do\n") + inner_sp) + body) + ";\n") + sp) + "done")
 	}
-	if node.GetKind() == "until" {
+	if (node.GetKind() == "until") {
 		cond = formatCmdsubNode(node.Condition, indent, false)
 		body = formatCmdsubNode(node.Body, (indent + 4), false)
 		return ((((((("until " + cond) + "; do\n") + inner_sp) + body) + ";\n") + sp) + "done")
@@ -2898,10 +2847,10 @@ func formatCmdsubNode(node Node, indent int, in_procsub bool) string {
 	var word_vals interface{}
 	var variable interface{}
 	var words []Node
-	if node.GetKind() == "for" {
+	if (node.GetKind() == "for") {
 		variable = node.Var
 		body = formatCmdsubNode(node.Body, (indent + 4), false)
-		if len(node.(*Command).Words) > 0 {
+		if (len(node.(*Command).Words) > 0) {
 			for _, w := range node.(*Command).Words {
 				word_vals = append(word_vals, w.Value)
 			}
@@ -2910,20 +2859,20 @@ func formatCmdsubNode(node Node, indent int, in_procsub bool) string {
 		}
 		return ((((((("for " + variable) + ";\ndo\n") + inner_sp) + body) + ";\n") + sp) + "done")
 	}
-	var pattern_str interface{}
-	var word Node
 	var pat_indent interface{}
-	var term interface{}
+	var word Node
 	var patterns interface{}
-	var pat interface{}
 	var term_indent interface{}
-	if node.GetKind() == "case" {
+	var pat interface{}
+	var pattern_str interface{}
+	var term interface{}
+	if (node.GetKind() == "case") {
 		word = node.Word.Value
 		i := 0
-		for i < len(node.Patterns) {
+		for (i < len(node.Patterns)) {
 			p = node.Patterns[i]
 			pat = strings.ReplaceAll(p.Pattern, "|", " | ")
-			if p.Body != nil {
+			if (p.Body != nil) {
 				body = formatCmdsubNode(p.Body, (indent + 8), false)
 			} else {
 				body = ""
@@ -2931,7 +2880,7 @@ func formatCmdsubNode(node Node, indent int, in_procsub bool) string {
 			term = p.Terminator
 			pat_indent = repeatStr(" ", (indent + 8))
 			term_indent = repeatStr(" ", (indent + 4))
-			if i == 0 {
+			if (i == 0) {
 				// First pattern on same line as 'in'
 				patterns = append(patterns, (((((((" " + pat) + ")\n") + pat_indent) + body) + "\n") + term_indent) + term))
 			} else {
@@ -2939,14 +2888,14 @@ func formatCmdsubNode(node Node, indent int, in_procsub bool) string {
 			}
 			i += 1
 		}
-		pattern_str = strings.Join(patterns, ("\n" + repeatStr(" ", (indent+4))))
+		pattern_str = strings.Join(patterns, ("\n" + repeatStr(" ", (indent + 4))))
 		return (((((("case " + word) + " in") + pattern_str) + "\n") + sp) + "esac")
 	}
 	var name string
-	if node.GetKind() == "function" {
+	if (node.GetKind() == "function") {
 		name = node.Name
 		// Get the body content - if it's a BraceGroup, unwrap it
-		if node.Body.GetKind() == "brace-group" {
+		if (node.Body.GetKind() == "brace-group") {
 			body = formatCmdsubNode(node.Body.Body, (indent + 4), false)
 		} else {
 			body = formatCmdsubNode(node.Body, (indent + 4), false)
@@ -2954,16 +2903,16 @@ func formatCmdsubNode(node Node, indent int, in_procsub bool) string {
 		body = strings.TrimRight(body, ";")
 		return ((((("function " + name) + " () \n{ \n") + inner_sp) + body) + "\n}")
 	}
-	var redirect_parts []string
+	var redirect_parts []interface{}
 	var redirects interface{}
-	if node.GetKind() == "subshell" {
+	if (node.GetKind() == "subshell") {
 		body = formatCmdsubNode(node.Body, indent, in_procsub)
 		redirects = ""
-		if len(node.(*Command).Redirects) > 0 {
+		if (len(node.(*Command).Redirects) > 0) {
 			for _, r := range node.(*Command).Redirects {
 				redirect_parts = append(redirect_parts, formatRedirect(r))
 			}
-			redirects = strings.Join(redirect_parts, " ")
+			redirects = joinStrings(redirect_parts, " ")
 		}
 		if in_procsub {
 			if redirects {
@@ -2976,12 +2925,12 @@ func formatCmdsubNode(node Node, indent int, in_procsub bool) string {
 		}
 		return (("( " + body) + " )")
 	}
-	if node.GetKind() == "brace-group" {
+	if (node.GetKind() == "brace-group") {
 		body = formatCmdsubNode(node.Body, indent, false)
 		body = strings.TrimRight(body, ";")
 		return (("{ " + body) + "; }")
 	}
-	if node.GetKind() == "arith-cmd" {
+	if (node.GetKind() == "arith-cmd") {
 		return (("((" + node.RawContent) + "))")
 	}
 	// Fallback: return empty for unknown types
@@ -2989,9 +2938,9 @@ func formatCmdsubNode(node Node, indent int, in_procsub bool) string {
 }
 
 func formatRedirect(r Node) string {
-	var op interface{}
 	var delim interface{}
-	if r.GetKind() == "heredoc" {
+	var op interface{}
+	if (r.GetKind() == "heredoc") {
 		// Include heredoc content: <<DELIM\ncontent\nDELIM\n
 		if r.StripTabs {
 			op = "<<-"
@@ -3010,13 +2959,13 @@ func formatRedirect(r Node) string {
 	// For fd duplication (target starts with &), handle normalization
 	if strings.HasPrefix(target, "&") {
 		// Normalize N<&- to N>&- (close always uses >)
-		if (target == "&-") && strings.HasSuffix(op, "<") {
-			op = (substring(op, 0, (len(op)-1)) + ">")
+		if ((target == "&-") && strings.HasSuffix(op, "<")) {
+			op = (substring(op, 0, (len(op) - 1)) + ">")
 		}
 		// Add default fd for bare >&N or <&N
-		if op == ">" {
+		if (op == ">") {
 			op = "1>"
-		} else if op == "<" {
+		} else if (op == "<") {
 			op = "0<"
 		}
 		return (op + target)
@@ -3029,18 +2978,18 @@ func normalizeFdRedirects(s string) string {
 	result := []interface{}{}
 	i := 0
 	var prev_is_digit interface{}
-	for i < len(s) {
+	for (i < len(s)) {
 		// Check for >&N or <&N
-		if ((i + 2) < len(s)) && (s[(i+1)] == '&') && isDigit_h(string(s[(i+2)])) {
-			prev_is_digit = ((i > 0) && isDigit_h(string(s[(i-1)])))
-			if (s[i] == '>') && !(prev_is_digit) {
+		if (((i + 2) < len(s)) && (s[(i + 1)] == '&') && isDigit_h(string(s[(i + 2)]))) {
+			prev_is_digit = ((i > 0) && isDigit_h(string(s[(i - 1)])))
+			if ((s[i] == '>') && !(prev_is_digit)) {
 				result = append(result, "1>&")
-				result = append(result, s[(i+2)])
+				result = append(result, s[(i + 2)])
 				i += 3
 				continue
-			} else if (s[i] == '<') && !(prev_is_digit) {
+			} else if ((s[i] == '<') && !(prev_is_digit)) {
 				result = append(result, "0<&")
-				result = append(result, s[(i+2)])
+				result = append(result, s[(i + 2)])
 				i += 3
 				continue
 			}
@@ -3058,20 +3007,20 @@ func findCmdsubEnd(value string, start int) int {
 	in_double := false
 	case_depth := 0
 	in_case_patterns := false
-	for (i < len(value)) && (depth > 0) {
+	for ((i < len(value)) && (depth > 0)) {
 		c := value[i]
 		// Handle escapes
-		if (c == '\\') && ((i + 1) < len(value)) && !(in_single) {
+		if ((c == '\\') && ((i + 1) < len(value)) && !(in_single)) {
 			i += 2
 			continue
 		}
 		// Handle quotes
-		if (c == '\'') && !(in_double) {
+		if ((c == '\'') && !(in_double)) {
 			in_single = !(in_single)
 			i += 1
 			continue
 		}
-		if (c == '"') && !(in_single) {
+		if ((c == '"') && !(in_single)) {
 			in_double = !(in_double)
 			i += 1
 			continue
@@ -3082,7 +3031,7 @@ func findCmdsubEnd(value string, start int) int {
 		}
 		if in_double {
 			// Inside double quotes, $() command substitution is still active
-			if startsWithAt(value, i, "$(") && !(startsWithAt(value, i, "$((")) {
+			if (startsWithAt(value, i, "$(") && !(startsWithAt(value, i, "$(("))) {
 				// Recursively find end of nested command substitution
 				j := findCmdsubEnd(value, (i + 2))
 				i = j
@@ -3094,8 +3043,8 @@ func findCmdsubEnd(value string, start int) int {
 		}
 		// Handle comments - skip from # to end of line
 		// Only treat # as comment if preceded by whitespace or at start
-		if (c == '#') && ((i == start) || (value[(i-1)] == ' ') || (value[(i-1)] == '\t') || (value[(i-1)] == '\n') || (value[(i-1)] == ';') || (value[(i-1)] == '|') || (value[(i-1)] == '&') || (value[(i-1)] == '(') || (value[(i-1)] == ')')) {
-			for (i < len(value)) && (value[i] != '\n') {
+		if ((c == '#') && ((i == start) || (value[(i - 1)] == ' ') || (value[(i - 1)] == '\t') || (value[(i - 1)] == '\n') || (value[(i - 1)] == ';') || (value[(i - 1)] == '|') || (value[(i - 1)] == '&') || (value[(i - 1)] == '(') || (value[(i - 1)] == ')'))) {
+			for ((i < len(value)) && (value[i] != '\n')) {
 				i += 1
 			}
 			continue
@@ -3106,21 +3055,21 @@ func findCmdsubEnd(value string, start int) int {
 			continue
 		}
 		// Check for 'case' keyword
-		if startsWithAt(value, i, "case") && isWordBoundary(value, i, 4) {
+		if (startsWithAt(value, i, "case") && isWordBoundary(value, i, 4)) {
 			case_depth += 1
 			in_case_patterns = false
 			i += 4
 			continue
 		}
 		// Check for 'in' keyword (after case)
-		if (case_depth > 0) && startsWithAt(value, i, "in") && isWordBoundary(value, i, 2) {
+		if ((case_depth > 0) && startsWithAt(value, i, "in") && isWordBoundary(value, i, 2)) {
 			in_case_patterns = true
 			i += 2
 			continue
 		}
 		// Check for 'esac' keyword
-		if startsWithAt(value, i, "esac") && isWordBoundary(value, i, 4) {
-			if case_depth > 0 {
+		if (startsWithAt(value, i, "esac") && isWordBoundary(value, i, 4)) {
+			if (case_depth > 0) {
 				case_depth -= 1
 				in_case_patterns = false
 			}
@@ -3133,11 +3082,11 @@ func findCmdsubEnd(value string, start int) int {
 			continue
 		}
 		// Handle parens
-		if c == '(' {
+		if (c == '(') {
 			depth += 1
-		} else if c == ')' {
+		} else if (c == ')') {
 			// In case patterns, ) after pattern name is not a grouping paren
-			if in_case_patterns && (case_depth > 0) {
+			if (in_case_patterns && (case_depth > 0)) {
 				// This ) is a case pattern terminator, skip it
 			} else {
 				depth -= 1
@@ -3151,78 +3100,78 @@ func findCmdsubEnd(value string, start int) int {
 func skipHeredoc(value string, start int) int {
 	i := (start + 2)
 	// Handle <<- (strip tabs)
-	if (i < len(value)) && (value[i] == '-') {
+	if ((i < len(value)) && (value[i] == '-')) {
 		i += 1
 	}
 	// Skip whitespace before delimiter
-	for (i < len(value)) && isWhitespaceNoNewline(value[i]) {
+	for ((i < len(value)) && isWhitespaceNoNewline(value[i])) {
 		i += 1
 	}
 	// Extract delimiter - may be quoted
 	delim_start := i
 	quote_char := nil
 	var delimiter interface{}
-	if (i < len(value)) && ((value[i] == '"') || (value[i] == '\'')) {
+	if ((i < len(value)) && ((value[i] == '"') || (value[i] == '\''))) {
 		quote_char = value[i]
 		i += 1
 		delim_start = i
-		for (i < len(value)) && (value[i] != quote_char) {
+		for ((i < len(value)) && (value[i] != quote_char)) {
 			i += 1
 		}
 		delimiter = substring(value, delim_start, i)
-		if i < len(value) {
+		if (i < len(value)) {
 			i += 1
 		}
-	} else if (i < len(value)) && (value[i] == '\\') {
+	} else if ((i < len(value)) && (value[i] == '\\')) {
 		// Backslash-quoted delimiter like <<\EOF
 		i += 1
 		delim_start = i
-		for (i < len(value)) && !(isWhitespace(value[i])) {
+		for ((i < len(value)) && !(isWhitespace(value[i]))) {
 			i += 1
 		}
 		delimiter = substring(value, delim_start, i)
 	} else {
 		// Unquoted delimiter
-		for (i < len(value)) && !(isWhitespace(value[i])) {
+		for ((i < len(value)) && !(isWhitespace(value[i]))) {
 			i += 1
 		}
 		delimiter = substring(value, delim_start, i)
 	}
 	// Skip to end of line (heredoc content starts on next line)
-	for (i < len(value)) && (value[i] != '\n') {
+	for ((i < len(value)) && (value[i] != '\n')) {
 		i += 1
 	}
-	if i < len(value) {
+	if (i < len(value)) {
 		i += 1
 	}
 	// Find the end delimiter on its own line
-	var line_end interface{}
+	var line_start interface{}
 	var stripped interface{}
 	var line interface{}
-	var line_start interface{}
-	for i < len(value) {
+	var line_end interface{}
+	for (i < len(value)) {
 		line_start = i
 		// Find end of this line
 		line_end = i
-		for (line_end < len(value)) && (value[line_end] != '\n') {
+		for ((line_end < len(value)) && (value[line_end] != '\n')) {
 			line_end += 1
 		}
 		line = substring(value, line_start, line_end)
 		// Check if this line is the delimiter (possibly with leading tabs for <<-)
-		if ((start + 2) < len(value)) && (value[(start+2)] == '-') {
+		if (((start + 2) < len(value)) && (value[(start + 2)] == '-')) {
 			stripped = strings.TrimLeft(line, "\t")
 		} else {
 			stripped = line
 		}
-		if stripped == delimiter {
+		if (stripped == delimiter) {
 			// Found end - return position after delimiter line
-			if line_end < len(value) {
+			if (line_end < len(value)) {
 				return (line_end + 1)
 			} else {
 				return line_end
 			}
 		}
-		if line_end < len(value) {
+		if (line_end < len(value)) {
 			i = (line_end + 1)
 		} else {
 			i = line_end
@@ -3233,12 +3182,12 @@ func skipHeredoc(value string, start int) int {
 
 func isWordBoundary(s string, pos int, word_len int) bool {
 	// Check character before
-	if (pos > 0) && isAlnum_h(string(s[(pos-1)])) {
+	if ((pos > 0) && isAlnum_h(string(s[(pos - 1)]))) {
 		return false
 	}
 	// Check character after
 	end := (pos + word_len)
-	if (end < len(s)) && isAlnum_h(string(s[end])) {
+	if ((end < len(s)) && isAlnum_h(string(s[end]))) {
 		return false
 	}
 	return true
@@ -3246,7 +3195,6 @@ func isWordBoundary(s string, pos int, word_len int) bool {
 
 // Reserved words that cannot be command names
 var RESERVED_WORDS = toSet([]interface{}{"if", "then", "elif", "else", "fi", "while", "until", "for", "select", "do", "done", "case", "esac", "in", "function", "coproc"})
-
 // Metacharacters that break words (unquoted)
 // Note: {} are NOT metacharacters - they're only special at command position
 // for brace groups. In words like {a,b,c}, braces are literal.
@@ -3254,7 +3202,6 @@ var METACHAR = toSet(" \t\n|&;()<>")
 var COND_UNARY_OPS = toSet([]interface{}{"-a", "-b", "-c", "-d", "-e", "-f", "-g", "-h", "-k", "-p", "-r", "-s", "-t", "-u", "-w", "-x", "-G", "-L", "-N", "-O", "-S", "-z", "-n", "-o", "-v", "-R"})
 var COND_BINARY_OPS = toSet([]interface{}{"==", "!=", "=~", "=", "<", ">", "-eq", "-ne", "-lt", "-le", "-gt", "-ge", "-nt", "-ot", "-ef"})
 var COMPOUND_KEYWORDS = toSet([]interface{}{"while", "until", "for", "if", "case", "select"})
-
 func isQuote(c byte) bool {
 	return ((c == '\'') || (c == '"'))
 }
@@ -3368,9 +3315,9 @@ func strContains(haystack string, needle string) bool {
 }
 
 type Parser struct {
-	Source            string
-	Pos               int
-	Length            int
+	Source string
+	Pos int
+	Length int
 	pendingHeredocEnd interface{}
 }
 
@@ -3409,12 +3356,12 @@ func (p *Parser) SkipWhitespace() {
 		ch = p.Peek()
 		if isWhitespaceNoNewline(ch) {
 			p.Advance()
-		} else if ch == '#' {
+		} else if (ch == '#') {
 			// Skip comment to end of line (but not the newline itself)
-			for !(p.AtEnd()) && (p.Peek() != '\n') {
+			for (!(p.AtEnd()) && (p.Peek() != '\n')) {
 				p.Advance()
 			}
-		} else if (ch == '\\') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '\n') {
+		} else if ((ch == '\\') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '\n')) {
 			// Backslash-newline is line continuation - skip both
 			p.Advance()
 			p.Advance()
@@ -3431,18 +3378,18 @@ func (p *Parser) SkipWhitespaceAndNewlines() {
 		if isWhitespace(ch) {
 			p.Advance()
 			// After advancing past a newline, skip any pending heredoc content
-			if ch == '\n' {
-				if (p.pendingHeredocEnd != nil) && (p.pendingHeredocEnd > p.Pos) {
+			if (ch == '\n') {
+				if ((p.pendingHeredocEnd != nil) && (p.pendingHeredocEnd > p.Pos)) {
 					p.Pos = p.pendingHeredocEnd
 					p.pendingHeredocEnd = nil
 				}
 			}
-		} else if ch == '#' {
+		} else if (ch == '#') {
 			// Skip comment to end of line
-			for !(p.AtEnd()) && (p.Peek() != '\n') {
+			for (!(p.AtEnd()) && (p.Peek() != '\n')) {
 				p.Advance()
 			}
-		} else if (ch == '\\') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '\n') {
+		} else if ((ch == '\\') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '\n')) {
 			// Backslash-newline is line continuation - skip both
 			p.Advance()
 			p.Advance()
@@ -3455,13 +3402,13 @@ func (p *Parser) SkipWhitespaceAndNewlines() {
 func (p *Parser) PeekWord() *string {
 	saved_pos := p.Pos
 	p.SkipWhitespace()
-	if p.AtEnd() || isMetachar(p.Peek()) {
+	if (p.AtEnd() || isMetachar(p.Peek())) {
 		p.Pos = saved_pos
 		return nil
 	}
 	chars := []interface{}{}
 	var ch byte
-	for !(p.AtEnd()) && !(isMetachar(p.Peek())) {
+	for (!(p.AtEnd()) && !(isMetachar(p.Peek()))) {
 		ch = p.Peek()
 		// Stop at quotes - don't include in peek
 		if isQuote(ch) {
@@ -3471,7 +3418,7 @@ func (p *Parser) PeekWord() *string {
 	}
 	var word string
 	if chars {
-		word = strings.Join(chars, "")
+		word = joinStrings(chars, "")
 	} else {
 		word = nil
 	}
@@ -3483,7 +3430,7 @@ func (p *Parser) ConsumeWord(expected string) bool {
 	saved_pos := p.Pos
 	p.SkipWhitespace()
 	word := p.PeekWord()
-	if word != expected {
+	if (word != expected) {
 		p.Pos = saved_pos
 		return false
 	}
@@ -3496,9 +3443,6 @@ func (p *Parser) ConsumeWord(expected string) bool {
 }
 
 func (p *Parser) ParseWord(at_command_start bool) Node {
-	if at_command_start == nil {
-		at_command_start = false
-	}
 	p.SkipWhitespace()
 	if p.AtEnd() {
 		return nil
@@ -3508,35 +3452,35 @@ func (p *Parser) ParseWord(at_command_start bool) Node {
 	parts := []interface{}{}
 	bracket_depth := 0
 	seen_equals := false
-	var paren_depth interface{}
-	var procsub_result interface{}
-	var next_c interface{}
-	var procsub_node interface{}
-	var arith_result interface{}
-	var next_ch interface{}
-	var locale_text interface{}
-	var cmdsub_text interface{}
-	var param_result interface{}
-	var prev_char interface{}
-	var ansi_node interface{}
-	var arith_text interface{}
 	var ansi_text interface{}
-	var arith_node interface{}
-	var array_text interface{}
+	var array_node interface{}
+	var inner_parts []interface{}
+	var procsub_node interface{}
+	var procsub_result interface{}
+	var next_ch interface{}
+	var cmdsub_result interface{}
+	var arith_result interface{}
+	var arith_text interface{}
 	var array_result interface{}
 	var ansi_result interface{}
-	var cmdsub_node interface{}
-	var inner_parts []interface{}
-	var cmdsub_result interface{}
-	var procsub_text interface{}
-	var array_node interface{}
-	var ch byte
-	var param_text interface{}
-	var param_node interface{}
 	var extglob_depth interface{}
-	var pc interface{}
-	var locale_result interface{}
+	var locale_text interface{}
+	var array_text interface{}
+	var param_text interface{}
 	var locale_node interface{}
+	var prev_char interface{}
+	var cmdsub_text interface{}
+	var ch byte
+	var param_result interface{}
+	var next_c interface{}
+	var locale_result interface{}
+	var cmdsub_node interface{}
+	var paren_depth interface{}
+	var pc interface{}
+	var arith_node interface{}
+	var procsub_text interface{}
+	var ansi_node interface{}
+	var param_node interface{}
 	for !(p.AtEnd()) {
 		ch = p.Peek()
 		// Track bracket depth for array subscripts like a[1+2]=3
@@ -3545,43 +3489,43 @@ func (p *Parser) ParseWord(at_command_start bool) Node {
 		// Only at command start (array assignments), not in argument position
 		// Only BEFORE = sign (key=1],a[1 should not track the [1 part)
 		// Only after identifier char (not [[ which is conditional keyword)
-		if (ch == '[') && chars && at_command_start && !(seen_equals) {
+		if ((ch == '[') && chars && at_command_start && !(seen_equals)) {
 			prev_char = chars[(len(chars) - 1)]
-			if isAlnum_h(prev_char) || ((prev_char == '_') || (prev_char == ']')) {
+			if (isAlnum_h(prev_char) || ((prev_char == '_') || (prev_char == ']'))) {
 				bracket_depth += 1
 				chars = append(chars, p.Advance())
 				continue
 			}
 		}
-		if (ch == ']') && (bracket_depth > 0) {
+		if ((ch == ']') && (bracket_depth > 0)) {
 			bracket_depth -= 1
 			chars = append(chars, p.Advance())
 			continue
 		}
-		if (ch == '=') && (bracket_depth == 0) {
+		if ((ch == '=') && (bracket_depth == 0)) {
 			seen_equals = true
 		}
 		// Single-quoted string - no expansion
-		if ch == '\'' {
+		if (ch == '\'') {
 			p.Advance()
 			chars = append(chars, "'")
-			for !(p.AtEnd()) && (p.Peek() != '\'') {
+			for (!(p.AtEnd()) && (p.Peek() != '\'')) {
 				chars = append(chars, p.Advance())
 			}
 			if p.AtEnd() {
 				panic(NewParseError("Unterminated single quote"))
 			}
 			chars = append(chars, p.Advance())
-		} else if ch == '"' {
+		} else if (ch == '"') {
 			// Double-quoted string - expansions happen inside
 			p.Advance()
 			chars = append(chars, "\"")
-			for !(p.AtEnd()) && (p.Peek() != '"') {
+			for (!(p.AtEnd()) && (p.Peek() != '"')) {
 				c := p.Peek()
 				// Handle escape sequences in double quotes
-				if (c == '\\') && ((p.Pos + 1) < p.Length) {
+				if ((c == '\\') && ((p.Pos + 1) < p.Length)) {
 					next_c = p.Source[(p.Pos + 1)]
-					if next_c == '\n' {
+					if (next_c == '\n') {
 						// Line continuation - skip both backslash and newline
 						p.Advance()
 						p.Advance()
@@ -3589,7 +3533,7 @@ func (p *Parser) ParseWord(at_command_start bool) Node {
 						chars = append(chars, p.Advance())
 						chars = append(chars, p.Advance())
 					}
-				} else if (c == '$') && ((p.Pos + 2) < p.Length) && (p.Source[(p.Pos+1)] == '(') && (p.Source[(p.Pos+2)] == '(') {
+				} else if ((c == '$') && ((p.Pos + 2) < p.Length) && (p.Source[(p.Pos + 1)] == '(') && (p.Source[(p.Pos + 2)] == '(')) {
 					// Handle arithmetic expansion $((...))
 					arith_result = p.parseArithmeticExpansion()
 					arith_node = arith_result[0]
@@ -3609,7 +3553,7 @@ func (p *Parser) ParseWord(at_command_start bool) Node {
 							chars = append(chars, p.Advance())
 						}
 					}
-				} else if (c == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '[') {
+				} else if ((c == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '[')) {
 					// Handle deprecated arithmetic expansion $[expr]
 					arith_result = p.parseDeprecatedArithmetic()
 					arith_node = arith_result[0]
@@ -3620,7 +3564,7 @@ func (p *Parser) ParseWord(at_command_start bool) Node {
 					} else {
 						chars = append(chars, p.Advance())
 					}
-				} else if (c == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '(') {
+				} else if ((c == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '(')) {
 					// Handle command substitution $(...)
 					cmdsub_result = p.parseCommandSubstitution()
 					cmdsub_node = cmdsub_result[0]
@@ -3631,7 +3575,7 @@ func (p *Parser) ParseWord(at_command_start bool) Node {
 					} else {
 						chars = append(chars, p.Advance())
 					}
-				} else if c == '$' {
+				} else if (c == '$') {
 					// Handle parameter expansion inside double quotes
 					param_result = p.parseParamExpansion()
 					param_node = param_result[0]
@@ -3642,7 +3586,7 @@ func (p *Parser) ParseWord(at_command_start bool) Node {
 					} else {
 						chars = append(chars, p.Advance())
 					}
-				} else if c == '`' {
+				} else if (c == '`') {
 					// Handle backtick command substitution
 					cmdsub_result = p.parseBacktickSubstitution()
 					cmdsub_node = cmdsub_result[0]
@@ -3661,10 +3605,10 @@ func (p *Parser) ParseWord(at_command_start bool) Node {
 				panic(NewParseError("Unterminated double quote"))
 			}
 			chars = append(chars, p.Advance())
-		} else if (ch == '\\') && ((p.Pos + 1) < p.Length) {
+		} else if ((ch == '\\') && ((p.Pos + 1) < p.Length)) {
 			// Escape outside quotes
 			next_ch = p.Source[(p.Pos + 1)]
-			if next_ch == '\n' {
+			if (next_ch == '\n') {
 				// Line continuation - skip both backslash and newline
 				p.Advance()
 				p.Advance()
@@ -3672,7 +3616,7 @@ func (p *Parser) ParseWord(at_command_start bool) Node {
 				chars = append(chars, p.Advance())
 				chars = append(chars, p.Advance())
 			}
-		} else if (ch == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '\'') {
+		} else if ((ch == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '\'')) {
 			// ANSI-C quoting $'...'
 			ansi_result = p.parseAnsiCQuote()
 			ansi_node = ansi_result[0]
@@ -3683,7 +3627,7 @@ func (p *Parser) ParseWord(at_command_start bool) Node {
 			} else {
 				chars = append(chars, p.Advance())
 			}
-		} else if (ch == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '"') {
+		} else if ((ch == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '"')) {
 			// Locale translation $"..."
 			locale_result = p.parseLocaleString()
 			locale_node = locale_result[0]
@@ -3696,7 +3640,7 @@ func (p *Parser) ParseWord(at_command_start bool) Node {
 			} else {
 				chars = append(chars, p.Advance())
 			}
-		} else if (ch == '$') && ((p.Pos + 2) < p.Length) && (p.Source[(p.Pos+1)] == '(') && (p.Source[(p.Pos+2)] == '(') {
+		} else if ((ch == '$') && ((p.Pos + 2) < p.Length) && (p.Source[(p.Pos + 1)] == '(') && (p.Source[(p.Pos + 2)] == '(')) {
 			// Arithmetic expansion $((...)) - try before command substitution
 			// If it fails (returns None), fall through to command substitution
 			arith_result = p.parseArithmeticExpansion()
@@ -3717,7 +3661,7 @@ func (p *Parser) ParseWord(at_command_start bool) Node {
 					chars = append(chars, p.Advance())
 				}
 			}
-		} else if (ch == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '[') {
+		} else if ((ch == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '[')) {
 			// Deprecated arithmetic expansion $[expr]
 			arith_result = p.parseDeprecatedArithmetic()
 			arith_node = arith_result[0]
@@ -3728,7 +3672,7 @@ func (p *Parser) ParseWord(at_command_start bool) Node {
 			} else {
 				chars = append(chars, p.Advance())
 			}
-		} else if (ch == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '(') {
+		} else if ((ch == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '(')) {
 			// Command substitution $(...)
 			cmdsub_result = p.parseCommandSubstitution()
 			cmdsub_node = cmdsub_result[0]
@@ -3739,7 +3683,7 @@ func (p *Parser) ParseWord(at_command_start bool) Node {
 			} else {
 				chars = append(chars, p.Advance())
 			}
-		} else if ch == '$' {
+		} else if (ch == '$') {
 			// Parameter expansion $var or ${...}
 			param_result = p.parseParamExpansion()
 			param_node = param_result[0]
@@ -3750,7 +3694,7 @@ func (p *Parser) ParseWord(at_command_start bool) Node {
 			} else {
 				chars = append(chars, p.Advance())
 			}
-		} else if ch == '`' {
+		} else if (ch == '`') {
 			// Backtick command substitution
 			cmdsub_result = p.parseBacktickSubstitution()
 			cmdsub_node = cmdsub_result[0]
@@ -3761,7 +3705,7 @@ func (p *Parser) ParseWord(at_command_start bool) Node {
 			} else {
 				chars = append(chars, p.Advance())
 			}
-		} else if isRedirectChar(ch) && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '(') {
+		} else if (isRedirectChar(ch) && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '(')) {
 			// Process substitution <(...) or >(...)
 			procsub_result = p.parseProcessSubstitution()
 			procsub_node = procsub_result[0]
@@ -3773,7 +3717,7 @@ func (p *Parser) ParseWord(at_command_start bool) Node {
 				// Not a process substitution, treat as metacharacter
 				break
 			}
-		} else if (ch == '(') && chars && ((chars[(len(chars)-1)] == '=') || ((len(chars) >= 2) && (chars[(len(chars)-2)] == '+') && (chars[(len(chars)-1)] == '='))) {
+		} else if ((ch == '(') && chars && ((chars[(len(chars) - 1)] == '=') || ((len(chars) >= 2) && (chars[(len(chars) - 2)] == '+') && (chars[(len(chars) - 1)] == '=')))) {
 			// Array literal: name=(elements) or name+=(elements)
 			array_result = p.parseArrayLiteral()
 			array_node = array_result[0]
@@ -3785,36 +3729,36 @@ func (p *Parser) ParseWord(at_command_start bool) Node {
 				// Unexpected: ( without matching )
 				break
 			}
-		} else if isExtglobPrefix(ch) && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '(') {
+		} else if (isExtglobPrefix(ch) && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '(')) {
 			// Extglob pattern @(), ?(), *(), +(), !()
 			chars = append(chars, p.Advance())
 			chars = append(chars, p.Advance())
 			extglob_depth = 1
-			for !(p.AtEnd()) && (extglob_depth > 0) {
+			for (!(p.AtEnd()) && (extglob_depth > 0)) {
 				c = p.Peek()
-				if c == ')' {
+				if (c == ')') {
 					chars = append(chars, p.Advance())
 					extglob_depth -= 1
-				} else if c == '(' {
+				} else if (c == '(') {
 					chars = append(chars, p.Advance())
 					extglob_depth += 1
-				} else if c == '\\' {
+				} else if (c == '\\') {
 					chars = append(chars, p.Advance())
 					if !(p.AtEnd()) {
 						chars = append(chars, p.Advance())
 					}
-				} else if c == '\'' {
+				} else if (c == '\'') {
 					chars = append(chars, p.Advance())
-					for !(p.AtEnd()) && (p.Peek() != '\'') {
+					for (!(p.AtEnd()) && (p.Peek() != '\'')) {
 						chars = append(chars, p.Advance())
 					}
 					if !(p.AtEnd()) {
 						chars = append(chars, p.Advance())
 					}
-				} else if c == '"' {
+				} else if (c == '"') {
 					chars = append(chars, p.Advance())
-					for !(p.AtEnd()) && (p.Peek() != '"') {
-						if (p.Peek() == '\\') && ((p.Pos + 1) < p.Length) {
+					for (!(p.AtEnd()) && (p.Peek() != '"')) {
+						if ((p.Peek() == '\\') && ((p.Pos + 1) < p.Length)) {
 							chars = append(chars, p.Advance())
 						}
 						chars = append(chars, p.Advance())
@@ -3822,19 +3766,19 @@ func (p *Parser) ParseWord(at_command_start bool) Node {
 					if !(p.AtEnd()) {
 						chars = append(chars, p.Advance())
 					}
-				} else if (c == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '(') {
+				} else if ((c == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '(')) {
 					// $() or $(()) inside extglob
 					chars = append(chars, p.Advance())
 					chars = append(chars, p.Advance())
-					if !(p.AtEnd()) && (p.Peek() == '(') {
+					if (!(p.AtEnd()) && (p.Peek() == '(')) {
 						// $(()) arithmetic
 						chars = append(chars, p.Advance())
 						paren_depth = 2
-						for !(p.AtEnd()) && (paren_depth > 0) {
+						for (!(p.AtEnd()) && (paren_depth > 0)) {
 							pc = p.Peek()
-							if pc == '(' {
+							if (pc == '(') {
 								paren_depth += 1
-							} else if pc == ')' {
+							} else if (pc == ')') {
 								paren_depth -= 1
 							}
 							chars = append(chars, p.Advance())
@@ -3843,7 +3787,7 @@ func (p *Parser) ParseWord(at_command_start bool) Node {
 						// $() command sub - count as nested paren
 						extglob_depth += 1
 					}
-				} else if isExtglobPrefix(c) && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '(') {
+				} else if (isExtglobPrefix(c) && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '(')) {
 					// Nested extglob
 					chars = append(chars, p.Advance())
 					chars = append(chars, p.Advance())
@@ -3852,7 +3796,7 @@ func (p *Parser) ParseWord(at_command_start bool) Node {
 					chars = append(chars, p.Advance())
 				}
 			}
-		} else if isMetachar(ch) && (bracket_depth == 0) {
+		} else if (isMetachar(ch) && (bracket_depth == 0)) {
 			// Metacharacter ends the word (unless inside brackets like a[x|y]=1)
 			break
 		} else {
@@ -3863,20 +3807,20 @@ func (p *Parser) ParseWord(at_command_start bool) Node {
 	if !(chars) {
 		return nil
 	}
-	if len(parts) > 0 {
-		return NewWord(strings.Join(chars, ""), parts)
+	if (len(parts) > 0) {
+		return NewWord(joinStrings(chars, ""), parts)
 	} else {
-		return NewWord(strings.Join(chars, ""), nil)
+		return NewWord(joinStrings(chars, ""), nil)
 	}
 }
 
 func (p *Parser) parseCommandSubstitution() {
-	if p.AtEnd() || (p.Peek() != '$') {
+	if (p.AtEnd() || (p.Peek() != '$')) {
 		return []interface{}{nil, ""}
 	}
 	start := p.Pos
 	p.Advance()
-	if p.AtEnd() || (p.Peek() != '(') {
+	if (p.AtEnd() || (p.Peek() != '(')) {
 		p.Pos = start
 		return []interface{}{nil, ""}
 	}
@@ -3888,27 +3832,27 @@ func (p *Parser) parseCommandSubstitution() {
 	content_start := p.Pos
 	depth := 1
 	case_depth := 0
-	var found_esac interface{}
-	var line interface{}
-	var quote interface{}
-	var delimiter interface{}
-	var saved interface{}
-	var tc interface{}
-	var q interface{}
-	var temp_depth interface{}
-	var nested_depth interface{}
-	var temp_case_depth interface{}
-	var line_end interface{}
-	var nc interface{}
-	var ch byte
-	var delimiter_chars interface{}
 	var line_start interface{}
-	for !(p.AtEnd()) && (depth > 0) {
+	var nested_depth interface{}
+	var saved interface{}
+	var found_esac interface{}
+	var tc interface{}
+	var ch byte
+	var quote interface{}
+	var line interface{}
+	var temp_depth interface{}
+	var delimiter interface{}
+	var temp_case_depth interface{}
+	var delimiter_chars interface{}
+	var q interface{}
+	var nc interface{}
+	var line_end interface{}
+	for (!(p.AtEnd()) && (depth > 0)) {
 		c := p.Peek()
 		// Single-quoted string - no special chars inside
-		if c == '\'' {
+		if (c == '\'') {
 			p.Advance()
-			for !(p.AtEnd()) && (p.Peek() != '\'') {
+			for (!(p.AtEnd()) && (p.Peek() != '\'')) {
 				p.Advance()
 			}
 			if !(p.AtEnd()) {
@@ -3917,32 +3861,32 @@ func (p *Parser) parseCommandSubstitution() {
 			continue
 		}
 		// Double-quoted string - handle escapes and nested $()
-		if c == '"' {
+		if (c == '"') {
 			p.Advance()
-			for !(p.AtEnd()) && (p.Peek() != '"') {
-				if (p.Peek() == '\\') && ((p.Pos + 1) < p.Length) {
+			for (!(p.AtEnd()) && (p.Peek() != '"')) {
+				if ((p.Peek() == '\\') && ((p.Pos + 1) < p.Length)) {
 					p.Advance()
 					p.Advance()
-				} else if (p.Peek() == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '(') {
+				} else if ((p.Peek() == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '(')) {
 					// Nested $() in double quotes - recurse to find matching )
 					// Command substitution creates new quoting context
 					p.Advance()
 					p.Advance()
 					nested_depth = 1
-					for !(p.AtEnd()) && (nested_depth > 0) {
+					for (!(p.AtEnd()) && (nested_depth > 0)) {
 						nc = p.Peek()
-						if nc == '\'' {
+						if (nc == '\'') {
 							p.Advance()
-							for !(p.AtEnd()) && (p.Peek() != '\'') {
+							for (!(p.AtEnd()) && (p.Peek() != '\'')) {
 								p.Advance()
 							}
 							if !(p.AtEnd()) {
 								p.Advance()
 							}
-						} else if nc == '"' {
+						} else if (nc == '"') {
 							p.Advance()
-							for !(p.AtEnd()) && (p.Peek() != '"') {
-								if (p.Peek() == '\\') && ((p.Pos + 1) < p.Length) {
+							for (!(p.AtEnd()) && (p.Peek() != '"')) {
+								if ((p.Peek() == '\\') && ((p.Pos + 1) < p.Length)) {
 									p.Advance()
 								}
 								p.Advance()
@@ -3950,26 +3894,26 @@ func (p *Parser) parseCommandSubstitution() {
 							if !(p.AtEnd()) {
 								p.Advance()
 							}
-						} else if (nc == '\\') && ((p.Pos + 1) < p.Length) {
+						} else if ((nc == '\\') && ((p.Pos + 1) < p.Length)) {
 							p.Advance()
 							p.Advance()
-						} else if (nc == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '(') {
+						} else if ((nc == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '(')) {
 							p.Advance()
 							p.Advance()
 							nested_depth += 1
-						} else if nc == '(' {
+						} else if (nc == '(') {
 							nested_depth += 1
 							p.Advance()
-						} else if nc == ')' {
+						} else if (nc == ')') {
 							nested_depth -= 1
-							if nested_depth > 0 {
+							if (nested_depth > 0) {
 								p.Advance()
 							}
 						} else {
 							p.Advance()
 						}
 					}
-					if nested_depth == 0 {
+					if (nested_depth == 0) {
 						p.Advance()
 					}
 				} else {
@@ -3982,28 +3926,28 @@ func (p *Parser) parseCommandSubstitution() {
 			continue
 		}
 		// Backslash escape
-		if (c == '\\') && ((p.Pos + 1) < p.Length) {
+		if ((c == '\\') && ((p.Pos + 1) < p.Length)) {
 			p.Advance()
 			p.Advance()
 			continue
 		}
 		// Comment - skip until newline
-		if (c == '#') && p.isWordBoundaryBefore() {
-			for !(p.AtEnd()) && (p.Peek() != '\n') {
+		if ((c == '#') && p.isWordBoundaryBefore()) {
+			for (!(p.AtEnd()) && (p.Peek() != '\n')) {
 				p.Advance()
 			}
 			continue
 		}
 		// Heredoc - skip until delimiter line is found
-		if (c == '<') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '<') {
+		if ((c == '<') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '<')) {
 			p.Advance()
 			p.Advance()
 			// Check for <<- (strip tabs)
-			if !(p.AtEnd()) && (p.Peek() == '-') {
+			if (!(p.AtEnd()) && (p.Peek() == '-')) {
 				p.Advance()
 			}
 			// Skip whitespace before delimiter
-			for !(p.AtEnd()) && isWhitespaceNoNewline(p.Peek()) {
+			for (!(p.AtEnd()) && isWhitespaceNoNewline(p.Peek())) {
 				p.Advance()
 			}
 			// Parse delimiter (handle quoting)
@@ -4011,34 +3955,34 @@ func (p *Parser) parseCommandSubstitution() {
 				ch = p.Peek()
 				if isQuote(ch) {
 					quote = p.Advance()
-					for !(p.AtEnd()) && (p.Peek() != quote) {
+					for (!(p.AtEnd()) && (p.Peek() != quote)) {
 						delimiter_chars = append(delimiter_chars, p.Advance())
 					}
 					if !(p.AtEnd()) {
 						p.Advance()
 					}
-				} else if ch == '\\' {
+				} else if (ch == '\\') {
 					p.Advance()
 					// Backslash quotes - first char can be special, then read word
 					if !(p.AtEnd()) {
 						delimiter_chars = append(delimiter_chars, p.Advance())
 					}
-					for !(p.AtEnd()) && !(isMetachar(p.Peek())) {
+					for (!(p.AtEnd()) && !(isMetachar(p.Peek()))) {
 						delimiter_chars = append(delimiter_chars, p.Advance())
 					}
 				} else {
 					// Unquoted delimiter with possible embedded quotes
-					for !(p.AtEnd()) && !(isMetachar(p.Peek())) {
+					for (!(p.AtEnd()) && !(isMetachar(p.Peek()))) {
 						ch = p.Peek()
 						if isQuote(ch) {
 							quote = p.Advance()
-							for !(p.AtEnd()) && (p.Peek() != quote) {
+							for (!(p.AtEnd()) && (p.Peek() != quote)) {
 								delimiter_chars = append(delimiter_chars, p.Advance())
 							}
 							if !(p.AtEnd()) {
 								p.Advance()
 							}
-						} else if ch == '\\' {
+						} else if (ch == '\\') {
 							p.Advance()
 							if !(p.AtEnd()) {
 								delimiter_chars = append(delimiter_chars, p.Advance())
@@ -4052,33 +3996,33 @@ func (p *Parser) parseCommandSubstitution() {
 			delimiter = strings.Join(delimiter_chars, "")
 			if delimiter {
 				// Skip to end of current line
-				for !(p.AtEnd()) && (p.Peek() != '\n') {
+				for (!(p.AtEnd()) && (p.Peek() != '\n')) {
 					p.Advance()
 				}
 				// Skip newline
-				if !(p.AtEnd()) && (p.Peek() == '\n') {
+				if (!(p.AtEnd()) && (p.Peek() == '\n')) {
 					p.Advance()
 				}
 				// Skip lines until we find the delimiter
 				for !(p.AtEnd()) {
 					line_start = p.Pos
 					line_end = p.Pos
-					for (line_end < p.Length) && (p.Source[line_end] != '\n') {
+					for ((line_end < p.Length) && (p.Source[line_end] != '\n')) {
 						line_end += 1
 					}
 					line = substring(p.Source, line_start, line_end)
 					// Move position to end of line
 					p.Pos = line_end
 					// Check if this line matches delimiter
-					if (line == delimiter) || (strings.TrimLeft(line, "\t") == delimiter) {
+					if ((line == delimiter) || (strings.TrimLeft(line, "\t") == delimiter)) {
 						// Skip newline after delimiter
-						if !(p.AtEnd()) && (p.Peek() == '\n') {
+						if (!(p.AtEnd()) && (p.Peek() == '\n')) {
 							p.Advance()
 						}
 						break
 					}
 					// Skip newline and continue
-					if !(p.AtEnd()) && (p.Peek() == '\n') {
+					if (!(p.AtEnd()) && (p.Peek() == '\n')) {
 						p.Advance()
 					}
 				}
@@ -4087,7 +4031,7 @@ func (p *Parser) parseCommandSubstitution() {
 		}
 		// Track case/esac for pattern terminator handling
 		// Check for 'case' keyword (word boundary: preceded by space/newline/start)
-		if (c == 'c') && p.isWordBoundaryBefore() {
+		if ((c == 'c') && p.isWordBoundaryBefore()) {
 			if p.lookaheadKeyword("case") {
 				case_depth += 1
 				p.skipKeyword("case")
@@ -4095,7 +4039,7 @@ func (p *Parser) parseCommandSubstitution() {
 			}
 		}
 		// Check for 'esac' keyword
-		if (c == 'e') && p.isWordBoundaryBefore() && (case_depth > 0) {
+		if ((c == 'e') && p.isWordBoundaryBefore() && (case_depth > 0)) {
 			if p.lookaheadKeyword("esac") {
 				case_depth -= 1
 				p.skipKeyword("esac")
@@ -4103,12 +4047,12 @@ func (p *Parser) parseCommandSubstitution() {
 			}
 		}
 		// Handle parentheses
-		if c == '(' {
+		if (c == '(') {
 			depth += 1
-		} else if c == ')' {
+		} else if (c == ')') {
 			// In case statement, ) after pattern is a terminator, not a paren
 			// Only decrement depth if we're not in a case pattern position
-			if (case_depth > 0) && (depth == 1) {
+			if ((case_depth > 0) && (depth == 1)) {
 				// This ) might be a case pattern terminator, not closing the $(
 				// Look ahead to see if there's still content that needs esac
 				saved = p.Pos
@@ -4120,12 +4064,12 @@ func (p *Parser) parseCommandSubstitution() {
 				found_esac = false
 				for !(p.AtEnd()) {
 					tc = p.Peek()
-					if (tc == '\'') || (tc == '"') {
+					if ((tc == '\'') || (tc == '"')) {
 						// Skip quoted strings
 						q = tc
 						p.Advance()
-						for !(p.AtEnd()) && (p.Peek() != q) {
-							if (q == '"') && (p.Peek() == '\\') {
+						for (!(p.AtEnd()) && (p.Peek() != q)) {
+							if ((q == '"') && (p.Peek() == '\\')) {
 								p.Advance()
 							}
 							p.Advance()
@@ -4133,26 +4077,26 @@ func (p *Parser) parseCommandSubstitution() {
 						if !(p.AtEnd()) {
 							p.Advance()
 						}
-					} else if (tc == 'c') && p.isWordBoundaryBefore() && p.lookaheadKeyword("case") {
+					} else if ((tc == 'c') && p.isWordBoundaryBefore() && p.lookaheadKeyword("case")) {
 						// Nested case in lookahead
 						temp_case_depth += 1
 						p.skipKeyword("case")
-					} else if (tc == 'e') && p.isWordBoundaryBefore() && p.lookaheadKeyword("esac") {
+					} else if ((tc == 'e') && p.isWordBoundaryBefore() && p.lookaheadKeyword("esac")) {
 						temp_case_depth -= 1
-						if temp_case_depth == 0 {
+						if (temp_case_depth == 0) {
 							// All cases are closed
 							found_esac = true
 							break
 						}
 						p.skipKeyword("esac")
-					} else if tc == '(' {
+					} else if (tc == '(') {
 						temp_depth += 1
 						p.Advance()
-					} else if tc == ')' {
+					} else if (tc == ')') {
 						// In case, ) is a pattern terminator, not a closer
-						if temp_case_depth > 0 {
+						if (temp_case_depth > 0) {
 							p.Advance()
-						} else if temp_depth > 0 {
+						} else if (temp_depth > 0) {
 							temp_depth -= 1
 							p.Advance()
 						} else {
@@ -4172,11 +4116,11 @@ func (p *Parser) parseCommandSubstitution() {
 			}
 			depth -= 1
 		}
-		if depth > 0 {
+		if (depth > 0) {
 			p.Advance()
 		}
 	}
-	if depth != 0 {
+	if (depth != 0) {
 		p.Pos = start
 		return []interface{}{nil, ""}
 	}
@@ -4186,14 +4130,14 @@ func (p *Parser) parseCommandSubstitution() {
 	// Parse the content as a command list
 	sub_parser := NewParser(content)
 	cmd := sub_parser.ParseList(true)
-	if cmd == nil {
+	if (cmd == nil) {
 		cmd = NewEmpty()
 	}
 	return []interface{}{NewCommandSubstitution(cmd), text}
 }
 
 func (p *Parser) isWordBoundaryBefore() bool {
-	if p.Pos == 0 {
+	if (p.Pos == 0) {
 		return true
 	}
 	prev := p.Source[(p.Pos - 1)]
@@ -4205,16 +4149,16 @@ func (p *Parser) isAssignmentWord(word Word) bool {
 	in_double := false
 	i := 0
 	var ch byte
-	for i < len(word.Value) {
+	for (i < len(word.Value)) {
 		ch = word.Value[i]
-		if (ch == '\'') && !(in_double) {
+		if ((ch == '\'') && !(in_double)) {
 			in_single = !(in_single)
-		} else if (ch == '"') && !(in_single) {
+		} else if ((ch == '"') && !(in_single)) {
 			in_double = !(in_double)
-		} else if (ch == '\\') && !(in_single) && ((i + 1) < len(word.Value)) {
+		} else if ((ch == '\\') && !(in_single) && ((i + 1) < len(word.Value))) {
 			i += 1
 			continue
-		} else if (ch == '=') && !(in_single) && !(in_double) {
+		} else if ((ch == '=') && !(in_single) && !(in_double)) {
 			return true
 		}
 		i += 1
@@ -4223,7 +4167,7 @@ func (p *Parser) isAssignmentWord(word Word) bool {
 }
 
 func (p *Parser) lookaheadKeyword(keyword string) bool {
-	if (p.Pos + len(keyword)) > p.Length {
+	if ((p.Pos + len(keyword)) > p.Length) {
 		return false
 	}
 	if !(startsWithAt(p.Source, p.Pos, keyword)) {
@@ -4231,7 +4175,7 @@ func (p *Parser) lookaheadKeyword(keyword string) bool {
 	}
 	// Check word boundary after keyword
 	after_pos := (p.Pos + len(keyword))
-	if after_pos >= p.Length {
+	if (after_pos >= p.Length) {
 		return true
 	}
 	after := p.Source[after_pos]
@@ -4245,7 +4189,7 @@ func (p *Parser) skipKeyword(keyword string) {
 }
 
 func (p *Parser) parseBacktickSubstitution() {
-	if p.AtEnd() || (p.Peek() != '`') {
+	if (p.AtEnd() || (p.Peek() != '`')) {
 		return []interface{}{nil, ""}
 	}
 	start := p.Pos
@@ -4258,14 +4202,14 @@ func (p *Parser) parseBacktickSubstitution() {
 	// text_chars: what appears in the word representation (with line continuations removed)
 	content_chars := []interface{}{}
 	text_chars := []interface{}{"`"}
-	var escaped interface{}
-	var ch byte
 	var next_c interface{}
-	for !(p.AtEnd()) && (p.Peek() != '`') {
+	var ch byte
+	var escaped string
+	for (!(p.AtEnd()) && (p.Peek() != '`')) {
 		c := p.Peek()
-		if (c == '\\') && ((p.Pos + 1) < p.Length) {
+		if ((c == '\\') && ((p.Pos + 1) < p.Length)) {
 			next_c = p.Source[(p.Pos + 1)]
-			if next_c == '\n' {
+			if (next_c == '\n') {
 				// Line continuation: skip both backslash and newline
 				p.Advance()
 				p.Advance()
@@ -4300,19 +4244,19 @@ func (p *Parser) parseBacktickSubstitution() {
 	// Parse the content as a command list
 	sub_parser := NewParser(content)
 	cmd := sub_parser.ParseList(true)
-	if cmd == nil {
+	if (cmd == nil) {
 		cmd = NewEmpty()
 	}
 	return []interface{}{NewCommandSubstitution(cmd), text}
 }
 
 func (p *Parser) parseProcessSubstitution() {
-	if p.AtEnd() || !(isRedirectChar(p.Peek())) {
+	if (p.AtEnd() || !(isRedirectChar(p.Peek()))) {
 		return []interface{}{nil, ""}
 	}
 	start := p.Pos
 	direction := p.Advance()
-	if p.AtEnd() || (p.Peek() != '(') {
+	if (p.AtEnd() || (p.Peek() != '(')) {
 		p.Pos = start
 		return []interface{}{nil, ""}
 	}
@@ -4320,12 +4264,12 @@ func (p *Parser) parseProcessSubstitution() {
 	// Find matching ) - track nested parens and handle quotes
 	content_start := p.Pos
 	depth := 1
-	for !(p.AtEnd()) && (depth > 0) {
+	for (!(p.AtEnd()) && (depth > 0)) {
 		c := p.Peek()
 		// Single-quoted string
-		if c == '\'' {
+		if (c == '\'') {
 			p.Advance()
-			for !(p.AtEnd()) && (p.Peek() != '\'') {
+			for (!(p.AtEnd()) && (p.Peek() != '\'')) {
 				p.Advance()
 			}
 			if !(p.AtEnd()) {
@@ -4334,10 +4278,10 @@ func (p *Parser) parseProcessSubstitution() {
 			continue
 		}
 		// Double-quoted string
-		if c == '"' {
+		if (c == '"') {
 			p.Advance()
-			for !(p.AtEnd()) && (p.Peek() != '"') {
-				if (p.Peek() == '\\') && ((p.Pos + 1) < p.Length) {
+			for (!(p.AtEnd()) && (p.Peek() != '"')) {
+				if ((p.Peek() == '\\') && ((p.Pos + 1) < p.Length)) {
 					p.Advance()
 				}
 				p.Advance()
@@ -4348,23 +4292,23 @@ func (p *Parser) parseProcessSubstitution() {
 			continue
 		}
 		// Backslash escape
-		if (c == '\\') && ((p.Pos + 1) < p.Length) {
+		if ((c == '\\') && ((p.Pos + 1) < p.Length)) {
 			p.Advance()
 			p.Advance()
 			continue
 		}
 		// Nested parentheses (including nested process substitutions)
-		if c == '(' {
+		if (c == '(') {
 			depth += 1
-		} else if c == ')' {
+		} else if (c == ')') {
 			depth -= 1
-			if depth == 0 {
+			if (depth == 0) {
 				break
 			}
 		}
 		p.Advance()
 	}
-	if depth != 0 {
+	if (depth != 0) {
 		p.Pos = start
 		return []interface{}{nil, ""}
 	}
@@ -4374,14 +4318,14 @@ func (p *Parser) parseProcessSubstitution() {
 	// Parse the content as a command list
 	sub_parser := NewParser(content)
 	cmd := sub_parser.ParseList(true)
-	if cmd == nil {
+	if (cmd == nil) {
 		cmd = NewEmpty()
 	}
 	return []interface{}{NewProcessSubstitution(direction, cmd), text}
 }
 
 func (p *Parser) parseArrayLiteral() {
-	if p.AtEnd() || (p.Peek() != '(') {
+	if (p.AtEnd() || (p.Peek() != '(')) {
 		return []interface{}{nil, ""}
 	}
 	start := p.Pos
@@ -4390,27 +4334,27 @@ func (p *Parser) parseArrayLiteral() {
 	var word Node
 	for true {
 		// Skip whitespace and newlines between elements
-		for !(p.AtEnd()) && isWhitespace(p.Peek()) {
+		for (!(p.AtEnd()) && isWhitespace(p.Peek())) {
 			p.Advance()
 		}
 		if p.AtEnd() {
 			panic(NewParseError("Unterminated array literal"))
 		}
-		if p.Peek() == ')' {
+		if (p.Peek() == ')') {
 			break
 		}
 		// Parse an element word
 		word = p.ParseWord()
-		if word == nil {
+		if (word == nil) {
 			// Might be a closing paren or error
-			if p.Peek() == ')' {
+			if (p.Peek() == ')') {
 				break
 			}
 			panic(NewParseError("Expected word in array literal"))
 		}
 		elements = append(elements, word)
 	}
-	if p.AtEnd() || (p.Peek() != ')') {
+	if (p.AtEnd() || (p.Peek() != ')')) {
 		panic(NewParseError("Expected ) to close array literal"))
 	}
 	p.Advance()
@@ -4419,12 +4363,12 @@ func (p *Parser) parseArrayLiteral() {
 }
 
 func (p *Parser) parseArithmeticExpansion() {
-	if p.AtEnd() || (p.Peek() != '$') {
+	if (p.AtEnd() || (p.Peek() != '$')) {
 		return []interface{}{nil, ""}
 	}
 	start := p.Pos
 	// Check for $((
-	if ((p.Pos + 2) >= p.Length) || (p.Source[(p.Pos+1)] != '(') || (p.Source[(p.Pos+2)] != '(') {
+	if (((p.Pos + 2) >= p.Length) || (p.Source[(p.Pos + 1)] != '(') || (p.Source[(p.Pos + 2)] != '(')) {
 		return []interface{}{nil, ""}
 	}
 	p.Advance()
@@ -4434,19 +4378,19 @@ func (p *Parser) parseArithmeticExpansion() {
 	// Must be )) with no space between - ') )' is command sub + subshell
 	content_start := p.Pos
 	depth := 1
-	for !(p.AtEnd()) && (depth > 0) {
+	for (!(p.AtEnd()) && (depth > 0)) {
 		c := p.Peek()
-		if c == '(' {
+		if (c == '(') {
 			depth += 1
 			p.Advance()
-		} else if c == ')' {
+		} else if (c == ')') {
 			// Check for ))
-			if (depth == 1) && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == ')') {
+			if ((depth == 1) && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == ')')) {
 				// Found the closing ))
 				break
 			}
 			depth -= 1
-			if depth == 0 {
+			if (depth == 0) {
 				// Closed with ) but next isn't ) - this is $( ( ... ) )
 				p.Pos = start
 				return []interface{}{nil, ""}
@@ -4456,7 +4400,7 @@ func (p *Parser) parseArithmeticExpansion() {
 			p.Advance()
 		}
 	}
-	if p.AtEnd() || (depth != 1) {
+	if (p.AtEnd() || (depth != 1)) {
 		p.Pos = start
 		return []interface{}{nil, ""}
 	}
@@ -4503,7 +4447,7 @@ func (p *Parser) parseArithExpr(content string) Node {
 		result = p.arithParseComma()
 	}
 	// Restore previous arith context
-	if saved_arith_src != nil {
+	if (saved_arith_src != nil) {
 		p.arithSrc = saved_arith_src
 		p.arithPos = saved_arith_pos
 		p.arithLen = saved_arith_len
@@ -4516,11 +4460,8 @@ func (p *Parser) arithAtEnd() bool {
 }
 
 func (p *Parser) arithPeek(offset int) string {
-	if offset == nil {
-		offset = 0
-	}
 	pos := (p.arithPos + offset)
-	if pos >= p.arithLen {
+	if (pos >= p.arithLen) {
 		return ""
 	}
 	return p.arithSrc[pos]
@@ -4540,7 +4481,7 @@ func (p *Parser) arithSkipWs() {
 		c := p.arithSrc[p.arithPos]
 		if isWhitespace(c) {
 			p.arithPos += 1
-		} else if (c == '\\') && ((p.arithPos + 1) < p.arithLen) && (p.arithSrc[(p.arithPos+1)] == '\n') {
+		} else if ((c == '\\') && ((p.arithPos + 1) < p.arithLen) && (p.arithSrc[(p.arithPos + 1)] == '\n')) {
 			// Backslash-newline continuation
 			p.arithPos += 2
 		} else {
@@ -4586,7 +4527,7 @@ func (p *Parser) arithParseAssign() Node {
 	for _, op := range assign_ops {
 		if p.arithMatch(op) {
 			// Make sure it's not == or !=
-			if (op == "=") && (p.arithPeek(1) == '=') {
+			if ((op == "=") && (p.arithPeek(1) == '=')) {
 				break
 			}
 			p.arithConsume(op)
@@ -4601,8 +4542,8 @@ func (p *Parser) arithParseAssign() Node {
 func (p *Parser) arithParseTernary() Node {
 	cond := p.arithParseLogicalOr()
 	p.arithSkipWs()
-	var if_false interface{}
 	var if_true interface{}
+	var if_false interface{}
 	if p.arithConsume("?") {
 		p.arithSkipWs()
 		// True branch can be empty (e.g., 4 ? : $A - invalid at runtime, valid syntax)
@@ -4616,7 +4557,7 @@ func (p *Parser) arithParseTernary() Node {
 		if p.arithConsume(":") {
 			p.arithSkipWs()
 			// False branch can be empty (e.g., 4 ? 20 : - invalid at runtime)
-			if p.arithAtEnd() || (p.arithPeek() == ')') {
+			if (p.arithAtEnd() || (p.arithPeek() == ')')) {
 				if_false = nil
 			} else {
 				if_false = p.arithParseTernary()
@@ -4669,7 +4610,7 @@ func (p *Parser) arithParseBitwiseOr() Node {
 	for true {
 		p.arithSkipWs()
 		// Make sure it's not || or |=
-		if (p.arithPeek() == '|') && ((p.arithPeek(1) != '|') && (p.arithPeek(1) != '=')) {
+		if ((p.arithPeek() == '|') && ((p.arithPeek(1) != '|') && (p.arithPeek(1) != '='))) {
 			p.arithAdvance()
 			p.arithSkipWs()
 			right = p.arithParseBitwiseXor()
@@ -4687,7 +4628,7 @@ func (p *Parser) arithParseBitwiseXor() Node {
 	for true {
 		p.arithSkipWs()
 		// Make sure it's not ^=
-		if (p.arithPeek() == '^') && (p.arithPeek(1) != '=') {
+		if ((p.arithPeek() == '^') && (p.arithPeek(1) != '=')) {
 			p.arithAdvance()
 			p.arithSkipWs()
 			right = p.arithParseBitwiseAnd()
@@ -4705,7 +4646,7 @@ func (p *Parser) arithParseBitwiseAnd() Node {
 	for true {
 		p.arithSkipWs()
 		// Make sure it's not && or &=
-		if (p.arithPeek() == '&') && ((p.arithPeek(1) != '&') && (p.arithPeek(1) != '=')) {
+		if ((p.arithPeek() == '&') && ((p.arithPeek(1) != '&') && (p.arithPeek(1) != '='))) {
 			p.arithAdvance()
 			p.arithSkipWs()
 			right = p.arithParseEquality()
@@ -4754,12 +4695,12 @@ func (p *Parser) arithParseComparison() Node {
 			p.arithSkipWs()
 			right = p.arithParseShift()
 			left = NewArithBinaryOp(">=", left, right)
-		} else if (p.arithPeek() == '<') && ((p.arithPeek(1) != '<') && (p.arithPeek(1) != '=')) {
+		} else if ((p.arithPeek() == '<') && ((p.arithPeek(1) != '<') && (p.arithPeek(1) != '='))) {
 			p.arithAdvance()
 			p.arithSkipWs()
 			right = p.arithParseShift()
 			left = NewArithBinaryOp("<", left, right)
-		} else if (p.arithPeek() == '>') && ((p.arithPeek(1) != '>') && (p.arithPeek(1) != '=')) {
+		} else if ((p.arithPeek() == '>') && ((p.arithPeek(1) != '>') && (p.arithPeek(1) != '='))) {
 			p.arithAdvance()
 			p.arithSkipWs()
 			right = p.arithParseShift()
@@ -4801,18 +4742,18 @@ func (p *Parser) arithParseShift() Node {
 
 func (p *Parser) arithParseAdditive() Node {
 	left := p.arithParseMultiplicative()
-	var right []interface{}
 	var c2 interface{}
+	var right []interface{}
 	for true {
 		p.arithSkipWs()
 		c := p.arithPeek()
 		c2 = p.arithPeek(1)
-		if (c == '+') && ((c2 != '+') && (c2 != '=')) {
+		if ((c == '+') && ((c2 != '+') && (c2 != '='))) {
 			p.arithAdvance()
 			p.arithSkipWs()
 			right = p.arithParseMultiplicative()
 			left = NewArithBinaryOp("+", left, right)
-		} else if (c == '-') && ((c2 != '-') && (c2 != '=')) {
+		} else if ((c == '-') && ((c2 != '-') && (c2 != '='))) {
 			p.arithAdvance()
 			p.arithSkipWs()
 			right = p.arithParseMultiplicative()
@@ -4826,23 +4767,23 @@ func (p *Parser) arithParseAdditive() Node {
 
 func (p *Parser) arithParseMultiplicative() Node {
 	left := p.arithParseExponentiation()
-	var right []interface{}
 	var c2 interface{}
+	var right []interface{}
 	for true {
 		p.arithSkipWs()
 		c := p.arithPeek()
 		c2 = p.arithPeek(1)
-		if (c == '*') && ((c2 != '*') && (c2 != '=')) {
+		if ((c == '*') && ((c2 != '*') && (c2 != '='))) {
 			p.arithAdvance()
 			p.arithSkipWs()
 			right = p.arithParseExponentiation()
 			left = NewArithBinaryOp("*", left, right)
-		} else if (c == '/') && (c2 != '=') {
+		} else if ((c == '/') && (c2 != '=')) {
 			p.arithAdvance()
 			p.arithSkipWs()
 			right = p.arithParseExponentiation()
 			left = NewArithBinaryOp("/", left, right)
-		} else if (c == '%') && (c2 != '=') {
+		} else if ((c == '%') && (c2 != '=')) {
 			p.arithAdvance()
 			p.arithSkipWs()
 			right = p.arithParseExponentiation()
@@ -4885,25 +4826,25 @@ func (p *Parser) arithParseUnary() Node {
 	}
 	// Unary operators
 	c := p.arithPeek()
-	if c == '!' {
+	if (c == '!') {
 		p.arithAdvance()
 		p.arithSkipWs()
 		operand = p.arithParseUnary()
 		return NewArithUnaryOp("!", operand)
 	}
-	if c == '~' {
+	if (c == '~') {
 		p.arithAdvance()
 		p.arithSkipWs()
 		operand = p.arithParseUnary()
 		return NewArithUnaryOp("~", operand)
 	}
-	if (c == '+') && (p.arithPeek(1) != '+') {
+	if ((c == '+') && (p.arithPeek(1) != '+')) {
 		p.arithAdvance()
 		p.arithSkipWs()
 		operand = p.arithParseUnary()
 		return NewArithUnaryOp("+", operand)
 	}
-	if (c == '-') && (p.arithPeek(1) != '-') {
+	if ((c == '-') && (p.arithPeek(1) != '-')) {
 		p.arithAdvance()
 		p.arithSkipWs()
 		operand = p.arithParseUnary()
@@ -4923,9 +4864,9 @@ func (p *Parser) arithParsePostfix() Node {
 		} else if p.arithMatch("--") {
 			p.arithConsume("--")
 			left = NewArithPostDecr(left)
-		} else if p.arithPeek() == '[' {
+		} else if (p.arithPeek() == '[') {
 			// Array subscript - but only for variables
-			if left.GetKind() == "var" {
+			if (left.GetKind() == "var") {
 				p.arithAdvance()
 				p.arithSkipWs()
 				index = p.arithParseComma()
@@ -4949,7 +4890,7 @@ func (p *Parser) arithParsePrimary() Node {
 	c := p.arithPeek()
 	// Parenthesized expression
 	var expr interface{}
-	if c == '(' {
+	if (c == '(') {
 		p.arithAdvance()
 		p.arithSkipWs()
 		expr = p.arithParseComma()
@@ -4960,25 +4901,25 @@ func (p *Parser) arithParsePrimary() Node {
 		return expr
 	}
 	// Parameter expansion ${...} or $var or $(...)
-	if c == '$' {
+	if (c == '$') {
 		return p.arithParseExpansion()
 	}
 	// Single-quoted string - content becomes the number
-	if c == '\'' {
+	if (c == '\'') {
 		return p.arithParseSingleQuote()
 	}
 	// Double-quoted string - may contain expansions
-	if c == '"' {
+	if (c == '"') {
 		return p.arithParseDoubleQuote()
 	}
 	// Backtick command substitution
-	if c == '`' {
+	if (c == '`') {
 		return p.arithParseBacktick()
 	}
 	// Escape sequence \X (not line continuation, which is handled in _arith_skip_ws)
 	// Escape covers only the single character after backslash
 	var escaped_char interface{}
-	if c == '\\' {
+	if (c == '\\') {
 		p.arithAdvance()
 		if p.arithAtEnd() {
 			panic(NewParseError("Unexpected end after backslash in arithmetic"))
@@ -4996,11 +4937,11 @@ func (p *Parser) arithParseExpansion() Node {
 	}
 	c := p.arithPeek()
 	// Command substitution $(...)
-	if c == '(' {
+	if (c == '(') {
 		return p.arithParseCmdsub()
 	}
 	// Braced parameter ${...}
-	if c == '{' {
+	if (c == '{') {
 		return p.arithParseBracedParam()
 	}
 	// Simple $var
@@ -5008,9 +4949,9 @@ func (p *Parser) arithParseExpansion() Node {
 	var ch byte
 	for !(p.arithAtEnd()) {
 		ch = p.arithPeek()
-		if isAlnum_h(ch) || (ch == '_') {
+		if (isAlnum_h(ch) || (ch == '_')) {
 			name_chars = append(name_chars, p.arithAdvance())
-		} else if (isSpecialParamOrDigit(ch) || (ch == '#')) && !(name_chars) {
+		} else if ((isSpecialParamOrDigit(ch) || (ch == '#')) && !(name_chars)) {
 			// Special parameters
 			name_chars = append(name_chars, p.arithAdvance())
 			break
@@ -5028,22 +4969,22 @@ func (p *Parser) arithParseCmdsub() Node {
 	// We're positioned after $, at (
 	p.arithAdvance()
 	// Check for $(( which is nested arithmetic
-	var content interface{}
-	var ch byte
+	var inner_expr interface{}
 	var depth int
 	var content_start interface{}
-	var inner_expr interface{}
-	if p.arithPeek() == '(' {
+	var content interface{}
+	var ch byte
+	if (p.arithPeek() == '(') {
 		p.arithAdvance()
 		depth = 1
 		content_start = p.arithPos
-		for !(p.arithAtEnd()) && (depth > 0) {
+		for (!(p.arithAtEnd()) && (depth > 0)) {
 			ch = p.arithPeek()
-			if ch == '(' {
+			if (ch == '(') {
 				depth += 1
 				p.arithAdvance()
-			} else if ch == ')' {
-				if (depth == 1) && (p.arithPeek(1) == ')') {
+			} else if (ch == ')') {
+				if ((depth == 1) && (p.arithPeek(1) == ')')) {
 					break
 				}
 				depth -= 1
@@ -5061,14 +5002,14 @@ func (p *Parser) arithParseCmdsub() Node {
 	// Regular command substitution
 	depth = 1
 	content_start = p.arithPos
-	for !(p.arithAtEnd()) && (depth > 0) {
+	for (!(p.arithAtEnd()) && (depth > 0)) {
 		ch = p.arithPeek()
-		if ch == '(' {
+		if (ch == '(') {
 			depth += 1
 			p.arithAdvance()
-		} else if ch == ')' {
+		} else if (ch == ')') {
 			depth -= 1
-			if depth == 0 {
+			if (depth == 0) {
 				break
 			}
 			p.arithAdvance()
@@ -5096,18 +5037,18 @@ func (p *Parser) arithParseBracedParam() Node {
 	p.arithAdvance()
 	// Handle indirect ${!var}
 	var name_chars interface{}
-	if p.arithPeek() == '!' {
+	if (p.arithPeek() == '!') {
 		p.arithAdvance()
-		for !(p.arithAtEnd()) && (p.arithPeek() != '}') {
+		for (!(p.arithAtEnd()) && (p.arithPeek() != '}')) {
 			name_chars = append(name_chars, p.arithAdvance())
 		}
 		p.arithConsume("}")
 		return NewParamIndirect(strings.Join(name_chars, ""))
 	}
 	// Handle length ${#var}
-	if p.arithPeek() == '#' {
+	if (p.arithPeek() == '#') {
 		p.arithAdvance()
-		for !(p.arithAtEnd()) && (p.arithPeek() != '}') {
+		for (!(p.arithAtEnd()) && (p.arithPeek() != '}')) {
 			name_chars = append(name_chars, p.arithAdvance())
 		}
 		p.arithConsume("}")
@@ -5117,7 +5058,7 @@ func (p *Parser) arithParseBracedParam() Node {
 	var ch byte
 	for !(p.arithAtEnd()) {
 		ch = p.arithPeek()
-		if ch == '}' {
+		if (ch == '}') {
 			p.arithAdvance()
 			return NewParamExpansion(strings.Join(name_chars, ""))
 		}
@@ -5131,14 +5072,14 @@ func (p *Parser) arithParseBracedParam() Node {
 	// Check for operator
 	op_chars := []interface{}{}
 	depth := 1
-	for !(p.arithAtEnd()) && (depth > 0) {
+	for (!(p.arithAtEnd()) && (depth > 0)) {
 		ch = p.arithPeek()
-		if ch == '{' {
+		if (ch == '{') {
 			depth += 1
 			op_chars = append(op_chars, p.arithAdvance())
-		} else if ch == '}' {
+		} else if (ch == '}') {
 			depth -= 1
-			if depth == 0 {
+			if (depth == 0) {
 				break
 			}
 			op_chars = append(op_chars, p.arithAdvance())
@@ -5188,7 +5129,7 @@ func (p *Parser) arithParseBracedParam() Node {
 func (p *Parser) arithParseSingleQuote() Node {
 	p.arithAdvance()
 	content_start := p.arithPos
-	for !(p.arithAtEnd()) && (p.arithPeek() != '\'') {
+	for (!(p.arithAtEnd()) && (p.arithPeek() != '\'')) {
 		p.arithAdvance()
 	}
 	content := substring(p.arithSrc, content_start, p.arithPos)
@@ -5201,9 +5142,9 @@ func (p *Parser) arithParseSingleQuote() Node {
 func (p *Parser) arithParseDoubleQuote() Node {
 	p.arithAdvance()
 	content_start := p.arithPos
-	for !(p.arithAtEnd()) && (p.arithPeek() != '"') {
+	for (!(p.arithAtEnd()) && (p.arithPeek() != '"')) {
 		c := p.arithPeek()
-		if (c == '\\') && !(p.arithAtEnd()) {
+		if ((c == '\\') && !(p.arithAtEnd())) {
 			p.arithAdvance()
 			p.arithAdvance()
 		} else {
@@ -5220,9 +5161,9 @@ func (p *Parser) arithParseDoubleQuote() Node {
 func (p *Parser) arithParseBacktick() Node {
 	p.arithAdvance()
 	content_start := p.arithPos
-	for !(p.arithAtEnd()) && (p.arithPeek() != '`') {
+	for (!(p.arithAtEnd()) && (p.arithPeek() != '`')) {
 		c := p.arithPeek()
-		if (c == '\\') && !(p.arithAtEnd()) {
+		if ((c == '\\') && !(p.arithAtEnd())) {
 			p.arithAdvance()
 			p.arithAdvance()
 		} else {
@@ -5257,36 +5198,36 @@ func (p *Parser) arithParseNumberOrVar() Node {
 		// Could be decimal, hex (0x), octal (0), or base#n
 		for !(p.arithAtEnd()) {
 			ch = p.arithPeek()
-			if isAlnum_h(ch) || ((ch == '#') || (ch == '_')) {
+			if (isAlnum_h(ch) || ((ch == '#') || (ch == '_'))) {
 				chars = append(chars, p.arithAdvance())
 			} else {
 				break
 			}
 		}
-		return NewArithNumber(strings.Join(chars, ""))
+		return NewArithNumber(joinStrings(chars, ""))
 	}
 	// Variable name (starts with letter or _)
-	if isAlpha_h(c) || (c == '_') {
+	if (isAlpha_h(c) || (c == '_')) {
 		for !(p.arithAtEnd()) {
 			ch = p.arithPeek()
-			if isAlnum_h(ch) || (ch == '_') {
+			if (isAlnum_h(ch) || (ch == '_')) {
 				chars = append(chars, p.arithAdvance())
 			} else {
 				break
 			}
 		}
-		return NewArithVar(strings.Join(chars, ""))
+		return NewArithVar(joinStrings(chars, ""))
 	}
 	panic(NewParseError((("Unexpected character '" + c) + "' in arithmetic expression")))
 }
 
 func (p *Parser) parseDeprecatedArithmetic() {
-	if p.AtEnd() || (p.Peek() != '$') {
+	if (p.AtEnd() || (p.Peek() != '$')) {
 		return []interface{}{nil, ""}
 	}
 	start := p.Pos
 	// Check for $[
-	if ((p.Pos + 1) >= p.Length) || (p.Source[(p.Pos+1)] != '[') {
+	if (((p.Pos + 1) >= p.Length) || (p.Source[(p.Pos + 1)] != '[')) {
 		return []interface{}{nil, ""}
 	}
 	p.Advance()
@@ -5294,14 +5235,14 @@ func (p *Parser) parseDeprecatedArithmetic() {
 	// Find matching ] - need to track nested brackets
 	content_start := p.Pos
 	depth := 1
-	for !(p.AtEnd()) && (depth > 0) {
+	for (!(p.AtEnd()) && (depth > 0)) {
 		c := p.Peek()
-		if c == '[' {
+		if (c == '[') {
 			depth += 1
 			p.Advance()
-		} else if c == ']' {
+		} else if (c == ']') {
 			depth -= 1
-			if depth == 0 {
+			if (depth == 0) {
 				break
 			}
 			p.Advance()
@@ -5309,7 +5250,7 @@ func (p *Parser) parseDeprecatedArithmetic() {
 			p.Advance()
 		}
 	}
-	if p.AtEnd() || (depth != 0) {
+	if (p.AtEnd() || (depth != 0)) {
 		p.Pos = start
 		return []interface{}{nil, ""}
 	}
@@ -5320,10 +5261,10 @@ func (p *Parser) parseDeprecatedArithmetic() {
 }
 
 func (p *Parser) parseAnsiCQuote() {
-	if p.AtEnd() || (p.Peek() != '$') {
+	if (p.AtEnd() || (p.Peek() != '$')) {
 		return []interface{}{nil, ""}
 	}
-	if ((p.Pos + 1) >= p.Length) || (p.Source[(p.Pos+1)] != '\'') {
+	if (((p.Pos + 1) >= p.Length) || (p.Source[(p.Pos + 1)] != '\'')) {
 		return []interface{}{nil, ""}
 	}
 	start := p.Pos
@@ -5334,11 +5275,11 @@ func (p *Parser) parseAnsiCQuote() {
 	var ch byte
 	for !(p.AtEnd()) {
 		ch = p.Peek()
-		if ch == '\'' {
+		if (ch == '\'') {
 			p.Advance()
 			found_close = true
 			break
-		} else if ch == '\\' {
+		} else if (ch == '\\') {
 			// Escape sequence - include both backslash and following char in content
 			content_chars = append(content_chars, p.Advance())
 			if !(p.AtEnd()) {
@@ -5359,10 +5300,10 @@ func (p *Parser) parseAnsiCQuote() {
 }
 
 func (p *Parser) parseLocaleString() {
-	if p.AtEnd() || (p.Peek() != '$') {
+	if (p.AtEnd() || (p.Peek() != '$')) {
 		return []interface{}{nil, "", []interface{}{}}
 	}
-	if ((p.Pos + 1) >= p.Length) || (p.Source[(p.Pos+1)] != '"') {
+	if (((p.Pos + 1) >= p.Length) || (p.Source[(p.Pos + 1)] != '"')) {
 		return []interface{}{nil, "", []interface{}{}}
 	}
 	start := p.Pos
@@ -5371,27 +5312,27 @@ func (p *Parser) parseLocaleString() {
 	content_chars := []interface{}{}
 	inner_parts := []interface{}{}
 	found_close := false
-	var arith_text interface{}
-	var cmdsub_node interface{}
 	var arith_node interface{}
 	var arith_result interface{}
-	var next_ch interface{}
-	var ch byte
-	var param_text interface{}
-	var cmdsub_text interface{}
-	var param_node interface{}
-	var param_result interface{}
+	var arith_text interface{}
 	var cmdsub_result interface{}
+	var cmdsub_text interface{}
+	var ch byte
+	var param_result interface{}
+	var param_node interface{}
+	var cmdsub_node interface{}
+	var next_ch interface{}
+	var param_text interface{}
 	for !(p.AtEnd()) {
 		ch = p.Peek()
-		if ch == '"' {
+		if (ch == '"') {
 			p.Advance()
 			found_close = true
 			break
-		} else if (ch == '\\') && ((p.Pos + 1) < p.Length) {
+		} else if ((ch == '\\') && ((p.Pos + 1) < p.Length)) {
 			// Escape sequence (line continuation removes both)
 			next_ch = p.Source[(p.Pos + 1)]
-			if next_ch == '\n' {
+			if (next_ch == '\n') {
 				// Line continuation - skip both backslash and newline
 				p.Advance()
 				p.Advance()
@@ -5399,7 +5340,7 @@ func (p *Parser) parseLocaleString() {
 				content_chars = append(content_chars, p.Advance())
 				content_chars = append(content_chars, p.Advance())
 			}
-		} else if (ch == '$') && ((p.Pos + 2) < p.Length) && (p.Source[(p.Pos+1)] == '(') && (p.Source[(p.Pos+2)] == '(') {
+		} else if ((ch == '$') && ((p.Pos + 2) < p.Length) && (p.Source[(p.Pos + 1)] == '(') && (p.Source[(p.Pos + 2)] == '(')) {
 			// Handle arithmetic expansion $((...))
 			arith_result = p.parseArithmeticExpansion()
 			arith_node = arith_result[0]
@@ -5419,7 +5360,7 @@ func (p *Parser) parseLocaleString() {
 					content_chars = append(content_chars, p.Advance())
 				}
 			}
-		} else if (ch == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '(') {
+		} else if ((ch == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '(')) {
 			// Handle command substitution $(...)
 			cmdsub_result = p.parseCommandSubstitution()
 			cmdsub_node = cmdsub_result[0]
@@ -5430,7 +5371,7 @@ func (p *Parser) parseLocaleString() {
 			} else {
 				content_chars = append(content_chars, p.Advance())
 			}
-		} else if ch == '$' {
+		} else if (ch == '$') {
 			// Handle parameter expansion
 			param_result = p.parseParamExpansion()
 			param_node = param_result[0]
@@ -5441,7 +5382,7 @@ func (p *Parser) parseLocaleString() {
 			} else {
 				content_chars = append(content_chars, p.Advance())
 			}
-		} else if ch == '`' {
+		} else if (ch == '`') {
 			// Handle backtick command substitution
 			cmdsub_result = p.parseBacktickSubstitution()
 			cmdsub_node = cmdsub_result[0]
@@ -5468,7 +5409,7 @@ func (p *Parser) parseLocaleString() {
 }
 
 func (p *Parser) parseParamExpansion() {
-	if p.AtEnd() || (p.Peek() != '$') {
+	if (p.AtEnd() || (p.Peek() != '$')) {
 		return []interface{}{nil, ""}
 	}
 	start := p.Pos
@@ -5479,26 +5420,26 @@ func (p *Parser) parseParamExpansion() {
 	}
 	ch := p.Peek()
 	// Braced expansion ${...}
-	if ch == '{' {
+	if (ch == '{') {
 		p.Advance()
 		return p.parseBracedParam(start)
 	}
 	// Simple expansion $var or $special
 	// Special parameters: ?$!#@*-0-9
 	var text string
-	if isSpecialParamOrDigit(ch) || (ch == '#') {
+	if (isSpecialParamOrDigit(ch) || (ch == '#')) {
 		p.Advance()
 		text = substring(p.Source, start, p.Pos)
 		return []interface{}{NewParamExpansion(ch), text}
 	}
 	// Variable name [a-zA-Z_][a-zA-Z0-9_]*
-	var name string
 	var name_start interface{}
-	if isAlpha_h(ch) || (ch == '_') {
+	var name string
+	if (isAlpha_h(ch) || (ch == '_')) {
 		name_start = p.Pos
 		for !(p.AtEnd()) {
 			c := p.Peek()
-			if isAlnum_h(c) || (c == '_') {
+			if (isAlnum_h(c) || (c == '_')) {
 				p.Advance()
 			} else {
 				break
@@ -5522,10 +5463,10 @@ func (p *Parser) parseBracedParam(start int) {
 	// ${#param} - length
 	var text string
 	var param interface{}
-	if ch == '#' {
+	if (ch == '#') {
 		p.Advance()
 		param = p.consumeParamName()
-		if param && !(p.AtEnd()) && (p.Peek() == '}') {
+		if (param && !(p.AtEnd()) && (p.Peek() == '}')) {
 			p.Advance()
 			text = substring(p.Source, start, p.Pos)
 			return []interface{}{NewParamLength(param), text}
@@ -5534,32 +5475,32 @@ func (p *Parser) parseBracedParam(start int) {
 		return []interface{}{nil, ""}
 	}
 	// ${!param} or ${!param<op><arg>} - indirect
-	var arg_chars interface{}
-	var depth int
 	var op interface{}
 	var suffix interface{}
 	var arg Node
-	if ch == '!' {
+	var depth int
+	var arg_chars interface{}
+	if (ch == '!') {
 		p.Advance()
 		param = p.consumeParamName()
 		if param {
 			// Skip optional whitespace before closing brace
-			for !(p.AtEnd()) && isWhitespaceNoNewline(p.Peek()) {
+			for (!(p.AtEnd()) && isWhitespaceNoNewline(p.Peek())) {
 				p.Advance()
 			}
-			if !(p.AtEnd()) && (p.Peek() == '}') {
+			if (!(p.AtEnd()) && (p.Peek() == '}')) {
 				p.Advance()
 				text = substring(p.Source, start, p.Pos)
 				return []interface{}{NewParamIndirect(param), text}
 			}
 			// ${!prefix@} and ${!prefix*} are prefix matching (lists variable names)
 			// These are NOT operators - the @/* is part of the indirect form
-			if !(p.AtEnd()) && isAtOrStar(p.Peek()) {
+			if (!(p.AtEnd()) && isAtOrStar(p.Peek())) {
 				suffix = p.Advance()
-				for !(p.AtEnd()) && isWhitespaceNoNewline(p.Peek()) {
+				for (!(p.AtEnd()) && isWhitespaceNoNewline(p.Peek())) {
 					p.Advance()
 				}
-				if !(p.AtEnd()) && (p.Peek() == '}') {
+				if (!(p.AtEnd()) && (p.Peek() == '}')) {
 					p.Advance()
 					text = substring(p.Source, start, p.Pos)
 					return []interface{}{NewParamIndirect((param + suffix)), text}
@@ -5570,21 +5511,21 @@ func (p *Parser) parseBracedParam(start int) {
 			}
 			// Check for operator (e.g., ${!##} = indirect of # with # op)
 			op = p.consumeParamOperator()
-			if op != nil {
+			if (op != nil) {
 				// Parse argument until closing brace
 				depth = 1
-				for !(p.AtEnd()) && (depth > 0) {
+				for (!(p.AtEnd()) && (depth > 0)) {
 					c := p.Peek()
-					if (c == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '{') {
+					if ((c == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '{')) {
 						depth += 1
 						arg_chars = append(arg_chars, p.Advance())
 						arg_chars = append(arg_chars, p.Advance())
-					} else if c == '}' {
+					} else if (c == '}') {
 						depth -= 1
-						if depth > 0 {
+						if (depth > 0) {
 							arg_chars = append(arg_chars, p.Advance())
 						}
-					} else if c == '\\' {
+					} else if (c == '\\') {
 						arg_chars = append(arg_chars, p.Advance())
 						if !(p.AtEnd()) {
 							arg_chars = append(arg_chars, p.Advance())
@@ -5593,7 +5534,7 @@ func (p *Parser) parseBracedParam(start int) {
 						arg_chars = append(arg_chars, p.Advance())
 					}
 				}
-				if depth == 0 {
+				if (depth == 0) {
 					p.Advance()
 					arg = strings.Join(arg_chars, "")
 					text = substring(p.Source, start, p.Pos)
@@ -5606,25 +5547,25 @@ func (p *Parser) parseBracedParam(start int) {
 	}
 	// ${param} or ${param<op><arg>}
 	param = p.consumeParamName()
-	var content interface{}
 	var content_start interface{}
+	var content interface{}
 	if !(param) {
 		// Unknown syntax like ${(M)...} (zsh) - consume until matching }
 		// Bash accepts these syntactically but fails at runtime
 		depth = 1
 		content_start = p.Pos
-		for !(p.AtEnd()) && (depth > 0) {
+		for (!(p.AtEnd()) && (depth > 0)) {
 			c = p.Peek()
-			if c == '{' {
+			if (c == '{') {
 				depth += 1
 				p.Advance()
-			} else if c == '}' {
+			} else if (c == '}') {
 				depth -= 1
-				if depth == 0 {
+				if (depth == 0) {
 					break
 				}
 				p.Advance()
-			} else if c == '\\' {
+			} else if (c == '\\') {
 				p.Advance()
 				if !(p.AtEnd()) {
 					p.Advance()
@@ -5633,7 +5574,7 @@ func (p *Parser) parseBracedParam(start int) {
 				p.Advance()
 			}
 		}
-		if depth == 0 {
+		if (depth == 0) {
 			content = substring(p.Source, content_start, p.Pos)
 			p.Advance()
 			text = substring(p.Source, start, p.Pos)
@@ -5647,14 +5588,14 @@ func (p *Parser) parseBracedParam(start int) {
 		return []interface{}{nil, ""}
 	}
 	// Check for closing brace (simple expansion)
-	if p.Peek() == '}' {
+	if (p.Peek() == '}') {
 		p.Advance()
 		text = substring(p.Source, start, p.Pos)
 		return []interface{}{NewParamExpansion(param), text}
 	}
 	// Parse operator
 	op = p.consumeParamOperator()
-	if op == nil {
+	if (op == nil) {
 		// Unknown operator - bash still parses these (fails at runtime)
 		// Treat the current char as the operator
 		op = p.Advance()
@@ -5665,26 +5606,26 @@ func (p *Parser) parseBracedParam(start int) {
 	in_single_quote := false
 	in_double_quote := false
 	var paren_depth interface{}
-	var next_c interface{}
 	var pc interface{}
 	var bc interface{}
-	for !(p.AtEnd()) && (depth > 0) {
+	var next_c interface{}
+	for (!(p.AtEnd()) && (depth > 0)) {
 		c = p.Peek()
 		// Single quotes - no escapes, just scan to closing quote
-		if (c == '\'') && !(in_double_quote) {
+		if ((c == '\'') && !(in_double_quote)) {
 			if in_single_quote {
 				in_single_quote = false
 			} else {
 				in_single_quote = true
 			}
 			arg_chars = append(arg_chars, p.Advance())
-		} else if (c == '"') && !(in_single_quote) {
+		} else if ((c == '"') && !(in_single_quote)) {
 			// Double quotes - toggle state
 			in_double_quote = !(in_double_quote)
 			arg_chars = append(arg_chars, p.Advance())
-		} else if (c == '\\') && !(in_single_quote) {
+		} else if ((c == '\\') && !(in_single_quote)) {
 			// Escape - skip next char (line continuation removes both)
-			if ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '\n') {
+			if (((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '\n')) {
 				// Line continuation - skip both backslash and newline
 				p.Advance()
 				p.Advance()
@@ -5694,23 +5635,23 @@ func (p *Parser) parseBracedParam(start int) {
 					arg_chars = append(arg_chars, p.Advance())
 				}
 			}
-		} else if (c == '$') && !(in_single_quote) && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '{') {
+		} else if ((c == '$') && !(in_single_quote) && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '{')) {
 			// Nested ${...} - increase depth (outside single quotes)
 			depth += 1
 			arg_chars = append(arg_chars, p.Advance())
 			arg_chars = append(arg_chars, p.Advance())
-		} else if (c == '$') && !(in_single_quote) && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '(') {
+		} else if ((c == '$') && !(in_single_quote) && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '(')) {
 			// Command substitution $(...) - scan to matching )
 			arg_chars = append(arg_chars, p.Advance())
 			arg_chars = append(arg_chars, p.Advance())
 			paren_depth = 1
-			for !(p.AtEnd()) && (paren_depth > 0) {
+			for (!(p.AtEnd()) && (paren_depth > 0)) {
 				pc = p.Peek()
-				if pc == '(' {
+				if (pc == '(') {
 					paren_depth += 1
-				} else if pc == ')' {
+				} else if (pc == ')') {
 					paren_depth -= 1
-				} else if pc == '\\' {
+				} else if (pc == '\\') {
 					arg_chars = append(arg_chars, p.Advance())
 					if !(p.AtEnd()) {
 						arg_chars = append(arg_chars, p.Advance())
@@ -5719,12 +5660,12 @@ func (p *Parser) parseBracedParam(start int) {
 				}
 				arg_chars = append(arg_chars, p.Advance())
 			}
-		} else if (c == '`') && !(in_single_quote) {
+		} else if ((c == '`') && !(in_single_quote)) {
 			// Backtick command substitution - scan to matching `
 			arg_chars = append(arg_chars, p.Advance())
-			for !(p.AtEnd()) && (p.Peek() != '`') {
+			for (!(p.AtEnd()) && (p.Peek() != '`')) {
 				bc = p.Peek()
-				if (bc == '\\') && ((p.Pos + 1) < p.Length) {
+				if ((bc == '\\') && ((p.Pos + 1) < p.Length)) {
 					next_c = p.Source[(p.Pos + 1)]
 					if isEscapeCharInDquote(next_c) {
 						arg_chars = append(arg_chars, p.Advance())
@@ -5735,14 +5676,14 @@ func (p *Parser) parseBracedParam(start int) {
 			if !(p.AtEnd()) {
 				arg_chars = append(arg_chars, p.Advance())
 			}
-		} else if c == '}' {
+		} else if (c == '}') {
 			// Closing brace - handle depth for nested ${...}
 			if in_single_quote {
 				// Inside single quotes, } is literal
 				arg_chars = append(arg_chars, p.Advance())
 			} else if in_double_quote {
 				// Inside double quotes, } can close nested ${...}
-				if depth > 1 {
+				if (depth > 1) {
 					depth -= 1
 					arg_chars = append(arg_chars, p.Advance())
 				} else {
@@ -5751,7 +5692,7 @@ func (p *Parser) parseBracedParam(start int) {
 				}
 			} else {
 				depth -= 1
-				if depth > 0 {
+				if (depth > 0) {
 					arg_chars = append(arg_chars, p.Advance())
 				}
 			}
@@ -5759,7 +5700,7 @@ func (p *Parser) parseBracedParam(start int) {
 			arg_chars = append(arg_chars, p.Advance())
 		}
 	}
-	if depth != 0 {
+	if (depth != 0) {
 		p.Pos = start
 		return []interface{}{nil, ""}
 	}
@@ -5783,36 +5724,36 @@ func (p *Parser) consumeParamName() *string {
 	// Digits (positional params)
 	var name_chars interface{}
 	if isDigit_h(ch) {
-		for !(p.AtEnd()) && isDigit_h(p.Peek()) {
+		for (!(p.AtEnd()) && isDigit_h(p.Peek())) {
 			name_chars = append(name_chars, p.Advance())
 		}
 		return strings.Join(name_chars, "")
 	}
 	// Variable name
-	var bracket_depth interface{}
 	var sc interface{}
-	if isAlpha_h(ch) || (ch == '_') {
+	var bracket_depth interface{}
+	if (isAlpha_h(ch) || (ch == '_')) {
 		for !(p.AtEnd()) {
 			c := p.Peek()
-			if isAlnum_h(c) || (c == '_') {
+			if (isAlnum_h(c) || (c == '_')) {
 				name_chars = append(name_chars, p.Advance())
-			} else if c == '[' {
+			} else if (c == '[') {
 				// Array subscript - track bracket depth
 				name_chars = append(name_chars, p.Advance())
 				bracket_depth = 1
-				for !(p.AtEnd()) && (bracket_depth > 0) {
+				for (!(p.AtEnd()) && (bracket_depth > 0)) {
 					sc = p.Peek()
-					if sc == '[' {
+					if (sc == '[') {
 						bracket_depth += 1
-					} else if sc == ']' {
+					} else if (sc == ']') {
 						bracket_depth -= 1
-						if bracket_depth == 0 {
+						if (bracket_depth == 0) {
 							break
 						}
 					}
 					name_chars = append(name_chars, p.Advance())
 				}
-				if !(p.AtEnd()) && (p.Peek() == ']') {
+				if (!(p.AtEnd()) && (p.Peek() == ']')) {
 					name_chars = append(name_chars, p.Advance())
 				}
 				break
@@ -5836,7 +5777,7 @@ func (p *Parser) consumeParamOperator() *string {
 	ch := p.Peek()
 	// Operators with optional colon prefix: :- := :? :+
 	var next_ch interface{}
-	if ch == ':' {
+	if (ch == ':') {
 		p.Advance()
 		if p.AtEnd() {
 			return ":"
@@ -5855,34 +5796,34 @@ func (p *Parser) consumeParamOperator() *string {
 		return ch
 	}
 	// Pattern removal: # ## % %%
-	if ch == '#' {
+	if (ch == '#') {
 		p.Advance()
-		if !(p.AtEnd()) && (p.Peek() == '#') {
+		if (!(p.AtEnd()) && (p.Peek() == '#')) {
 			p.Advance()
 			return "##"
 		}
 		return "#"
 	}
-	if ch == '%' {
+	if (ch == '%') {
 		p.Advance()
-		if !(p.AtEnd()) && (p.Peek() == '%') {
+		if (!(p.AtEnd()) && (p.Peek() == '%')) {
 			p.Advance()
 			return "%%"
 		}
 		return "%"
 	}
 	// Substitution: / // /# /%
-	if ch == '/' {
+	if (ch == '/') {
 		p.Advance()
 		if !(p.AtEnd()) {
 			next_ch = p.Peek()
-			if next_ch == '/' {
+			if (next_ch == '/') {
 				p.Advance()
 				return "//"
-			} else if next_ch == '#' {
+			} else if (next_ch == '#') {
 				p.Advance()
 				return "/#"
-			} else if next_ch == '%' {
+			} else if (next_ch == '%') {
 				p.Advance()
 				return "/%"
 			}
@@ -5890,24 +5831,24 @@ func (p *Parser) consumeParamOperator() *string {
 		return "/"
 	}
 	// Case modification: ^ ^^ , ,,
-	if ch == '^' {
+	if (ch == '^') {
 		p.Advance()
-		if !(p.AtEnd()) && (p.Peek() == '^') {
+		if (!(p.AtEnd()) && (p.Peek() == '^')) {
 			p.Advance()
 			return "^^"
 		}
 		return "^"
 	}
-	if ch == ',' {
+	if (ch == ',') {
 		p.Advance()
-		if !(p.AtEnd()) && (p.Peek() == ',') {
+		if (!(p.AtEnd()) && (p.Peek() == ',')) {
 			p.Advance()
 			return ",,"
 		}
 		return ","
 	}
 	// Transformation: @
-	if ch == '@' {
+	if (ch == '@') {
 		p.Advance()
 		return "@"
 	}
@@ -5923,21 +5864,21 @@ func (p *Parser) ParseRedirect() Node {
 	fd := nil
 	varfd := nil
 	// Check for variable fd {varname} or {varname[subscript]} before redirect
-	var ch byte
 	var varname_chars interface{}
+	var ch byte
 	var saved interface{}
-	if p.Peek() == '{' {
+	if (p.Peek() == '{') {
 		saved = p.Pos
 		p.Advance()
-		for !(p.AtEnd()) && ((p.Peek() != '}') && !(isRedirectChar(p.Peek()))) {
+		for (!(p.AtEnd()) && ((p.Peek() != '}') && !(isRedirectChar(p.Peek())))) {
 			ch = p.Peek()
-			if isAlnum_h(ch) || ((ch == '_') || (ch == '[') || (ch == ']')) {
+			if (isAlnum_h(ch) || ((ch == '_') || (ch == '[') || (ch == ']'))) {
 				varname_chars = append(varname_chars, p.Advance())
 			} else {
 				break
 			}
 		}
-		if !(p.AtEnd()) && (p.Peek() == '}') && varname_chars {
+		if (!(p.AtEnd()) && (p.Peek() == '}') && varname_chars) {
 			p.Advance()
 			varfd = strings.Join(varname_chars, "")
 		} else {
@@ -5947,8 +5888,8 @@ func (p *Parser) ParseRedirect() Node {
 	}
 	// Check for optional fd number before redirect (if no varfd)
 	var fd_chars interface{}
-	if (varfd == nil) && p.Peek() && isDigit_h(p.Peek()) {
-		for !(p.AtEnd()) && isDigit_h(p.Peek()) {
+	if ((varfd == nil) && p.Peek() && isDigit_h(p.Peek())) {
+		for (!(p.AtEnd()) && isDigit_h(p.Peek())) {
 			fd_chars = append(fd_chars, p.Advance())
 		}
 		fd = toInt(strings.Join(fd_chars, ""))
@@ -5958,10 +5899,10 @@ func (p *Parser) ParseRedirect() Node {
 	// Note: &> does NOT take a preceding fd number. If we consumed digits,
 	// they should be a separate word, not an fd. E.g., "2&>1" is command "2"
 	// with redirect "&> 1", not fd 2 redirected.
-	var op interface{}
 	var target interface{}
-	if (ch == '&') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '>') {
-		if fd != nil {
+	var op interface{}
+	if ((ch == '&') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '>')) {
+		if (fd != nil) {
 			// We consumed digits that should be a word, not an fd
 			// Restore position and let parse_word handle them
 			p.Pos = start
@@ -5969,7 +5910,7 @@ func (p *Parser) ParseRedirect() Node {
 		}
 		p.Advance()
 		p.Advance()
-		if !(p.AtEnd()) && (p.Peek() == '>') {
+		if (!(p.AtEnd()) && (p.Peek() == '>')) {
 			p.Advance()
 			op = "&>>"
 		} else {
@@ -5977,19 +5918,19 @@ func (p *Parser) ParseRedirect() Node {
 		}
 		p.SkipWhitespace()
 		target = p.ParseWord()
-		if target == nil {
+		if (target == nil) {
 			panic(NewParseError(("Expected target for redirect " + op)))
 		}
 		return NewRedirect(op, target)
 	}
-	if (ch == nil) || !(isRedirectChar(ch)) {
+	if ((ch == nil) || !(isRedirectChar(ch))) {
 		// Not a redirect, restore position
 		p.Pos = start
 		return nil
 	}
 	// Check for process substitution <(...) or >(...) - not a redirect
 	// Only treat as redirect if there's a space before ( or an fd number
-	if (fd == nil) && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '(') {
+	if ((fd == nil) && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '(')) {
 		// This is a process substitution, not a redirect
 		p.Pos = start
 		return nil
@@ -6001,64 +5942,64 @@ func (p *Parser) ParseRedirect() Node {
 	var next_ch interface{}
 	if !(p.AtEnd()) {
 		next_ch = p.Peek()
-		if (op == ">") && (next_ch == '>') {
+		if ((op == ">") && (next_ch == '>')) {
 			p.Advance()
 			op = ">>"
-		} else if (op == "<") && (next_ch == '<') {
+		} else if ((op == "<") && (next_ch == '<')) {
 			p.Advance()
-			if !(p.AtEnd()) && (p.Peek() == '<') {
+			if (!(p.AtEnd()) && (p.Peek() == '<')) {
 				p.Advance()
 				op = "<<<"
-			} else if !(p.AtEnd()) && (p.Peek() == '-') {
+			} else if (!(p.AtEnd()) && (p.Peek() == '-')) {
 				p.Advance()
 				op = "<<"
 				strip_tabs = true
 			} else {
 				op = "<<"
 			}
-		} else if (op == "<") && (next_ch == '>') {
+		} else if ((op == "<") && (next_ch == '>')) {
 			// Handle <> (read-write)
 			p.Advance()
 			op = "<>"
-		} else if (op == ">") && (next_ch == '|') {
+		} else if ((op == ">") && (next_ch == '|')) {
 			// Handle >| (noclobber override)
 			p.Advance()
 			op = ">|"
-		} else if (fd == nil) && (varfd == nil) && (op == ">") && (next_ch == '&') {
+		} else if ((fd == nil) && (varfd == nil) && (op == ">") && (next_ch == '&')) {
 			// Only consume >& or <& as operators if NOT followed by a digit or -
 			// (>&2 should be > with target &2, not >& with target 2)
 			// (>&- should be > with target &-, not >& with target -)
 			// Peek ahead to see if there's a digit or - after &
-			if ((p.Pos + 1) >= p.Length) || !(isDigitOrDash(p.Source[(p.Pos + 1)])) {
+			if (((p.Pos + 1) >= p.Length) || !(isDigitOrDash(p.Source[(p.Pos + 1)]))) {
 				p.Advance()
 				op = ">&"
 			}
-		} else if (fd == nil) && (varfd == nil) && (op == "<") && (next_ch == '&') {
-			if ((p.Pos + 1) >= p.Length) || !(isDigitOrDash(p.Source[(p.Pos + 1)])) {
+		} else if ((fd == nil) && (varfd == nil) && (op == "<") && (next_ch == '&')) {
+			if (((p.Pos + 1) >= p.Length) || !(isDigitOrDash(p.Source[(p.Pos + 1)]))) {
 				p.Advance()
 				op = "<&"
 			}
 		}
 	}
 	// Handle here document
-	if op == "<<" {
+	if (op == "<<") {
 		return p.parseHeredoc(fd, strip_tabs)
 	}
 	// Combine fd or varfd with operator if present
-	if varfd != nil {
+	if (varfd != nil) {
 		op = ((("{" + varfd) + "}") + op)
-	} else if fd != nil {
+	} else if (fd != nil) {
 		op = (fmt.Sprintf("%v", fd) + op)
 	}
 	p.SkipWhitespace()
 	// Handle fd duplication targets like &1, &2, &-, &10-, &$var
 	var inner_word interface{}
 	var fd_target string
-	if !(p.AtEnd()) && (p.Peek() == '&') {
+	if (!(p.AtEnd()) && (p.Peek() == '&')) {
 		p.Advance()
 		// Parse the fd number or - for close, including move syntax like &10-
-		if !(p.AtEnd()) && (isDigit_h(p.Peek()) || (p.Peek() == '-')) {
-			for !(p.AtEnd()) && isDigit_h(p.Peek()) {
+		if (!(p.AtEnd()) && (isDigit_h(p.Peek()) || (p.Peek() == '-'))) {
+			for (!(p.AtEnd()) && isDigit_h(p.Peek())) {
 				fd_chars = append(fd_chars, p.Advance())
 			}
 			if fd_chars {
@@ -6067,14 +6008,14 @@ func (p *Parser) ParseRedirect() Node {
 				fd_target = ""
 			}
 			// Handle just - for close, or N- for move syntax
-			if !(p.AtEnd()) && (p.Peek() == '-') {
+			if (!(p.AtEnd()) && (p.Peek() == '-')) {
 				fd_target += p.Advance()
 			}
 			target = NewWord(("&" + fd_target), nil)
 		} else {
 			// Could be &$var or &word - parse word and prepend &
 			inner_word = p.ParseWord()
-			if inner_word != nil {
+			if (inner_word != nil) {
 				target = NewWord(("&" + inner_word.Value), nil)
 				target.Parts = inner_word.Parts
 			} else {
@@ -6084,7 +6025,7 @@ func (p *Parser) ParseRedirect() Node {
 	} else {
 		target = p.ParseWord()
 	}
-	if target == nil {
+	if (target == nil) {
 		panic(NewParseError(("Expected target for redirect " + op)))
 	}
 	return NewRedirect(op, target)
@@ -6095,34 +6036,34 @@ func (p *Parser) parseHeredoc(fd *int, strip_tabs bool) HereDoc {
 	// Parse the delimiter, handling quoting (can be mixed like 'EOF'"2")
 	quoted := false
 	delimiter_chars := []interface{}{}
+	var ch byte
 	var depth int
 	var next_ch interface{}
-	var ch byte
-	for !(p.AtEnd()) && !(isMetachar(p.Peek())) {
+	for (!(p.AtEnd()) && !(isMetachar(p.Peek()))) {
 		ch = p.Peek()
-		if ch == '"' {
+		if (ch == '"') {
 			quoted = true
 			p.Advance()
-			for !(p.AtEnd()) && (p.Peek() != '"') {
+			for (!(p.AtEnd()) && (p.Peek() != '"')) {
 				delimiter_chars = append(delimiter_chars, p.Advance())
 			}
 			if !(p.AtEnd()) {
 				p.Advance()
 			}
-		} else if ch == '\'' {
+		} else if (ch == '\'') {
 			quoted = true
 			p.Advance()
-			for !(p.AtEnd()) && (p.Peek() != '\'') {
+			for (!(p.AtEnd()) && (p.Peek() != '\'')) {
 				delimiter_chars = append(delimiter_chars, p.Advance())
 			}
 			if !(p.AtEnd()) {
 				p.Advance()
 			}
-		} else if ch == '\\' {
+		} else if (ch == '\\') {
 			p.Advance()
 			if !(p.AtEnd()) {
 				next_ch = p.Peek()
-				if next_ch == '\n' {
+				if (next_ch == '\n') {
 					// Backslash-newline: continue delimiter on next line
 					p.Advance()
 				} else {
@@ -6131,16 +6072,16 @@ func (p *Parser) parseHeredoc(fd *int, strip_tabs bool) HereDoc {
 					delimiter_chars = append(delimiter_chars, p.Advance())
 				}
 			}
-		} else if (ch == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '(') {
+		} else if ((ch == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '(')) {
 			// Command substitution embedded in delimiter
 			delimiter_chars = append(delimiter_chars, p.Advance())
 			delimiter_chars = append(delimiter_chars, p.Advance())
 			depth = 1
-			for !(p.AtEnd()) && (depth > 0) {
+			for (!(p.AtEnd()) && (depth > 0)) {
 				c := p.Peek()
-				if c == '(' {
+				if (c == '(') {
 					depth += 1
-				} else if c == ')' {
+				} else if (c == ')') {
 					depth -= 1
 				}
 				delimiter_chars = append(delimiter_chars, p.Advance())
@@ -6154,25 +6095,25 @@ func (p *Parser) parseHeredoc(fd *int, strip_tabs bool) HereDoc {
 	// We need to mark where the heredoc content starts
 	// Must be quote-aware - newlines inside quoted strings don't end the line
 	line_end := p.Pos
-	for (line_end < p.Length) && (p.Source[line_end] != '\n') {
+	for ((line_end < p.Length) && (p.Source[line_end] != '\n')) {
 		ch = p.Source[line_end]
-		if ch == '\'' {
+		if (ch == '\'') {
 			// Single-quoted string - skip to closing quote (no escapes)
 			line_end += 1
-			for (line_end < p.Length) && (p.Source[line_end] != '\'') {
+			for ((line_end < p.Length) && (p.Source[line_end] != '\'')) {
 				line_end += 1
 			}
-		} else if ch == '"' {
+		} else if (ch == '"') {
 			// Double-quoted string - skip to closing quote (with escapes)
 			line_end += 1
-			for (line_end < p.Length) && (p.Source[line_end] != '"') {
-				if (p.Source[line_end] == '\\') && ((line_end + 1) < p.Length) {
+			for ((line_end < p.Length) && (p.Source[line_end] != '"')) {
+				if ((p.Source[line_end] == '\\') && ((line_end + 1) < p.Length)) {
 					line_end += 2
 				} else {
 					line_end += 1
 				}
 			}
-		} else if (ch == '\\') && ((line_end + 1) < p.Length) {
+		} else if ((ch == '\\') && ((line_end + 1) < p.Length)) {
 			// Backslash escape - skip both chars
 			line_end += 2
 			continue
@@ -6182,9 +6123,9 @@ func (p *Parser) parseHeredoc(fd *int, strip_tabs bool) HereDoc {
 	// Find heredoc content starting position
 	// If there's already a pending heredoc, this one's content starts after that
 	var content_start interface{}
-	if (p.pendingHeredocEnd != nil) && (p.pendingHeredocEnd > line_end) {
+	if ((p.pendingHeredocEnd != nil) && (p.pendingHeredocEnd > line_end)) {
 		content_start = p.pendingHeredocEnd
-	} else if line_end < p.Length {
+	} else if (line_end < p.Length) {
 		content_start = (line_end + 1)
 	} else {
 		content_start = p.Length
@@ -6192,27 +6133,27 @@ func (p *Parser) parseHeredoc(fd *int, strip_tabs bool) HereDoc {
 	// Find the delimiter line
 	content_lines := []interface{}{}
 	scan_pos := content_start
+	var line_start interface{}
+	var line interface{}
 	var next_line_start interface{}
 	var check_line interface{}
-	var line interface{}
-	var line_start interface{}
-	for scan_pos < p.Length {
+	for (scan_pos < p.Length) {
 		// Find end of current line
 		line_start = scan_pos
 		line_end = scan_pos
-		for (line_end < p.Length) && (p.Source[line_end] != '\n') {
+		for ((line_end < p.Length) && (p.Source[line_end] != '\n')) {
 			line_end += 1
 		}
 		line = substring(p.Source, line_start, line_end)
 		// For unquoted heredocs, process backslash-newline before checking delimiter
 		// Join continued lines to check the full logical line against delimiter
 		if !(quoted) {
-			for strings.HasSuffix(line, "\\") && (line_end < p.Length) {
+			for (strings.HasSuffix(line, "\\") && (line_end < p.Length)) {
 				// Continue to next line
 				line = substring(line, 0, (len(line) - 1))
 				line_end += 1
 				next_line_start = line_end
-				for (line_end < p.Length) && (p.Source[line_end] != '\n') {
+				for ((line_end < p.Length) && (p.Source[line_end] != '\n')) {
 					line_end += 1
 				}
 				line = (line + substring(p.Source, next_line_start, line_end))
@@ -6220,10 +6161,10 @@ func (p *Parser) parseHeredoc(fd *int, strip_tabs bool) HereDoc {
 		}
 		// Check if this line is the delimiter
 		check_line = line
-		if strip_tabs != "" {
+		if (strip_tabs != "") {
 			check_line = strings.TrimLeft(line, "\t")
 		}
-		if check_line == delimiter {
+		if (check_line == delimiter) {
 			// Found the end - update parser position past the heredoc
 			// We need to consume the heredoc content from the input
 			// But we can't do that here because we haven't finished parsing the command line
@@ -6231,12 +6172,12 @@ func (p *Parser) parseHeredoc(fd *int, strip_tabs bool) HereDoc {
 			break
 		}
 		// Add line to content (with newline, since we consumed continuations above)
-		if strip_tabs != "" {
+		if (strip_tabs != "") {
 			line = strings.TrimLeft(line, "\t")
 		}
 		content_lines = append(content_lines, (line + "\n"))
 		// Move past the newline
-		if line_end < p.Length {
+		if (line_end < p.Length) {
 			scan_pos = (line_end + 1)
 		} else {
 			scan_pos = p.Length
@@ -6247,11 +6188,11 @@ func (p *Parser) parseHeredoc(fd *int, strip_tabs bool) HereDoc {
 	// Store the position where heredoc content ends so we can skip it later
 	// line_end points to the end of the delimiter line (after any continuations)
 	heredoc_end := line_end
-	if heredoc_end < p.Length {
+	if (heredoc_end < p.Length) {
 		heredoc_end += 1
 	}
 	// Register this heredoc's end position
-	if p.pendingHeredocEnd == nil {
+	if (p.pendingHeredocEnd == nil) {
 		p.pendingHeredocEnd = heredoc_end
 	} else {
 		p.pendingHeredocEnd = max(p.pendingHeredocEnd, heredoc_end)
@@ -6263,9 +6204,9 @@ func (p *Parser) ParseCommand() Node {
 	words := []interface{}{}
 	redirects := []interface{}{}
 	var word Node
-	var redirect interface{}
-	var next_pos interface{}
 	var ch byte
+	var next_pos interface{}
+	var redirect interface{}
 	for true {
 		p.SkipWhitespace()
 		if p.AtEnd() {
@@ -6276,21 +6217,21 @@ func (p *Parser) ParseCommand() Node {
 		if isListTerminator(ch) {
 			break
 		}
-		if (ch == '&') && !(((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '>')) {
+		if ((ch == '&') && !((((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '>')))) {
 			break
 		}
 		// } is only a terminator at command position (closing a brace group)
 		// In argument position, } is just a regular word
-		if (p.Peek() == '}') && !(words) {
+		if ((p.Peek() == '}') && !(words)) {
 			// Check if } would be a standalone word (next char is whitespace/meta/EOF)
 			next_pos = (p.Pos + 1)
-			if (next_pos >= p.Length) || isWordEndContext(p.Source[next_pos]) {
+			if ((next_pos >= p.Length) || isWordEndContext(p.Source[next_pos])) {
 				break
 			}
 		}
 		// Try to parse a redirect first
 		redirect = p.ParseRedirect()
-		if redirect != nil {
+		if (redirect != nil) {
 			redirects = append(redirects, redirect)
 			continue
 		}
@@ -6305,12 +6246,12 @@ func (p *Parser) ParseCommand() Node {
 			}
 		}
 		word = p.ParseWord()
-		if word == nil {
+		if (word == nil) {
 			break
 		}
 		words = append(words, word)
 	}
-	if !(words) && !(redirects) {
+	if (!(words) && !(redirects)) {
 		return nil
 	}
 	return NewCommand(words, redirects)
@@ -6318,16 +6259,16 @@ func (p *Parser) ParseCommand() Node {
 
 func (p *Parser) ParseSubshell() Node {
 	p.SkipWhitespace()
-	if p.AtEnd() || (p.Peek() != '(') {
+	if (p.AtEnd() || (p.Peek() != '(')) {
 		return nil
 	}
 	p.Advance()
 	body := p.ParseList(true)
-	if body == nil {
+	if (body == nil) {
 		panic(NewParseError("Expected command in subshell"))
 	}
 	p.SkipWhitespace()
-	if p.AtEnd() || (p.Peek() != ')') {
+	if (p.AtEnd() || (p.Peek() != ')')) {
 		panic(NewParseError("Expected ) to close subshell"))
 	}
 	p.Advance()
@@ -6337,7 +6278,7 @@ func (p *Parser) ParseSubshell() Node {
 	for true {
 		p.SkipWhitespace()
 		redirect = p.ParseRedirect()
-		if redirect == nil {
+		if (redirect == nil) {
 			break
 		}
 		redirects = append(redirects, redirect)
@@ -6352,7 +6293,7 @@ func (p *Parser) ParseSubshell() Node {
 func (p *Parser) ParseArithmeticCommand() Node {
 	p.SkipWhitespace()
 	// Check for ((
-	if p.AtEnd() || (p.Peek() != '(') || ((p.Pos + 1) >= p.Length) || (p.Source[(p.Pos+1)] != '(') {
+	if (p.AtEnd() || (p.Peek() != '(') || ((p.Pos + 1) >= p.Length) || (p.Source[(p.Pos + 1)] != '(')) {
 		return nil
 	}
 	saved_pos := p.Pos
@@ -6362,19 +6303,19 @@ func (p *Parser) ParseArithmeticCommand() Node {
 	// Must be )) with no space between - ') )' is nested subshells
 	content_start := p.Pos
 	depth := 1
-	for !(p.AtEnd()) && (depth > 0) {
+	for (!(p.AtEnd()) && (depth > 0)) {
 		c := p.Peek()
-		if c == '(' {
+		if (c == '(') {
 			depth += 1
 			p.Advance()
-		} else if c == ')' {
+		} else if (c == ')') {
 			// Check for )) (must be consecutive, no space)
-			if (depth == 1) && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == ')') {
+			if ((depth == 1) && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == ')')) {
 				// Found the closing ))
 				break
 			}
 			depth -= 1
-			if depth == 0 {
+			if (depth == 0) {
 				// Closed with ) but next isn't ) - this is nested subshells, not arithmetic
 				p.Pos = saved_pos
 				return nil
@@ -6384,7 +6325,7 @@ func (p *Parser) ParseArithmeticCommand() Node {
 			p.Advance()
 		}
 	}
-	if p.AtEnd() || (depth != 1) {
+	if (p.AtEnd() || (depth != 1)) {
 		// Didn't find )) - might be nested subshells or malformed
 		p.Pos = saved_pos
 		return nil
@@ -6400,7 +6341,7 @@ func (p *Parser) ParseArithmeticCommand() Node {
 	for true {
 		p.SkipWhitespace()
 		redirect = p.ParseRedirect()
-		if redirect == nil {
+		if (redirect == nil) {
 			break
 		}
 		redirects = append(redirects, redirect)
@@ -6417,7 +6358,7 @@ func (p *Parser) ParseConditionalExpr() Node {
 	// Binary operators for [[ ]] conditionals
 	p.SkipWhitespace()
 	// Check for [[
-	if p.AtEnd() || (p.Peek() != '[') || ((p.Pos + 1) >= p.Length) || (p.Source[(p.Pos+1)] != '[') {
+	if (p.AtEnd() || (p.Peek() != '[') || ((p.Pos + 1) >= p.Length) || (p.Source[(p.Pos + 1)] != '[')) {
 		return nil
 	}
 	p.Advance()
@@ -6425,11 +6366,11 @@ func (p *Parser) ParseConditionalExpr() Node {
 	// Parse the conditional expression body
 	body := p.parseCondOr()
 	// Skip whitespace before ]]
-	for !(p.AtEnd()) && isWhitespaceNoNewline(p.Peek()) {
+	for (!(p.AtEnd()) && isWhitespaceNoNewline(p.Peek())) {
 		p.Advance()
 	}
 	// Expect ]]
-	if p.AtEnd() || (p.Peek() != ']') || ((p.Pos + 1) >= p.Length) || (p.Source[(p.Pos+1)] != ']') {
+	if (p.AtEnd() || (p.Peek() != ']') || ((p.Pos + 1) >= p.Length) || (p.Source[(p.Pos + 1)] != ']')) {
 		panic(NewParseError("Expected ]] to close conditional expression"))
 	}
 	p.Advance()
@@ -6440,7 +6381,7 @@ func (p *Parser) ParseConditionalExpr() Node {
 	for true {
 		p.SkipWhitespace()
 		redirect = p.ParseRedirect()
-		if redirect == nil {
+		if (redirect == nil) {
 			break
 		}
 		redirects = append(redirects, redirect)
@@ -6456,10 +6397,10 @@ func (p *Parser) condSkipWhitespace() {
 	for !(p.AtEnd()) {
 		if isWhitespaceNoNewline(p.Peek()) {
 			p.Advance()
-		} else if (p.Peek() == '\\') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '\n') {
+		} else if ((p.Peek() == '\\') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '\n')) {
 			p.Advance()
 			p.Advance()
-		} else if p.Peek() == '\n' {
+		} else if (p.Peek() == '\n') {
 			// Bare newline is also allowed inside [[ ]]
 			p.Advance()
 		} else {
@@ -6469,7 +6410,7 @@ func (p *Parser) condSkipWhitespace() {
 }
 
 func (p *Parser) condAtEnd() bool {
-	return (p.AtEnd() || ((p.Peek() == ']') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == ']')))
+	return (p.AtEnd() || ((p.Peek() == ']') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == ']')))
 }
 
 func (p *Parser) parseCondOr() Node {
@@ -6477,7 +6418,7 @@ func (p *Parser) parseCondOr() Node {
 	left := p.parseCondAnd()
 	p.condSkipWhitespace()
 	var right []interface{}
-	if !(p.condAtEnd()) && (p.Peek() == '|') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '|') {
+	if (!(p.condAtEnd()) && (p.Peek() == '|') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '|')) {
 		p.Advance()
 		p.Advance()
 		right = p.parseCondOr()
@@ -6491,7 +6432,7 @@ func (p *Parser) parseCondAnd() Node {
 	left := p.parseCondTerm()
 	p.condSkipWhitespace()
 	var right []interface{}
-	if !(p.condAtEnd()) && (p.Peek() == '&') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '&') {
+	if (!(p.condAtEnd()) && (p.Peek() == '&') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '&')) {
 		p.Advance()
 		p.Advance()
 		right = p.parseCondAnd()
@@ -6507,9 +6448,9 @@ func (p *Parser) parseCondTerm() Node {
 	}
 	// Negation: ! term
 	var operand interface{}
-	if p.Peek() == '!' {
+	if (p.Peek() == '!') {
 		// Check it's not != operator (need whitespace after !)
-		if ((p.Pos + 1) < p.Length) && !(isWhitespaceNoNewline(p.Source[(p.Pos + 1)])) {
+		if (((p.Pos + 1) < p.Length) && !(isWhitespaceNoNewline(p.Source[(p.Pos + 1)]))) {
 		} else {
 			p.Advance()
 			operand = p.parseCondTerm()
@@ -6517,11 +6458,11 @@ func (p *Parser) parseCondTerm() Node {
 		}
 	}
 	// Parenthesized group: ( or_expr )
-	if p.Peek() == '(' {
+	if (p.Peek() == '(') {
 		p.Advance()
 		inner := p.parseCondOr()
 		p.condSkipWhitespace()
-		if p.AtEnd() || (p.Peek() != ')') {
+		if (p.AtEnd() || (p.Peek() != ')')) {
 			panic(NewParseError("Expected ) in conditional expression"))
 		}
 		p.Advance()
@@ -6529,7 +6470,7 @@ func (p *Parser) parseCondTerm() Node {
 	}
 	// Parse first word
 	word1 := p.parseCondWord()
-	if word1 == nil {
+	if (word1 == nil) {
 		panic(NewParseError("Expected word in conditional expression"))
 	}
 	p.condSkipWhitespace()
@@ -6537,24 +6478,24 @@ func (p *Parser) parseCondTerm() Node {
 	if isCondUnaryOp(word1.Value) {
 		// Unary test: -f file
 		operand = p.parseCondWord()
-		if operand == nil {
+		if (operand == nil) {
 			panic(NewParseError(("Expected operand after " + word1.Value)))
 		}
 		return NewUnaryTest(word1.Value, operand)
 	}
 	// Check if next token is a binary operator
-	var word2 interface{}
-	var op interface{}
-	var saved_pos interface{}
 	var op_word interface{}
-	if !(p.condAtEnd()) && ((p.Peek() != '&') && (p.Peek() != '|') && (p.Peek() != ')')) {
+	var word2 interface{}
+	var saved_pos interface{}
+	var op interface{}
+	if (!(p.condAtEnd()) && ((p.Peek() != '&') && (p.Peek() != '|') && (p.Peek() != ')'))) {
 		// Handle < and > as binary operators (they terminate words)
 		// But not <( or >( which are process substitution
-		if isRedirectChar(p.Peek()) && !(((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '(')) {
+		if (isRedirectChar(p.Peek()) && !((((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '(')))) {
 			op = p.Advance()
 			p.condSkipWhitespace()
 			word2 = p.parseCondWord()
-			if word2 == nil {
+			if (word2 == nil) {
 				panic(NewParseError(("Expected operand after " + op)))
 			}
 			return NewBinaryTest(op, word1, word2)
@@ -6562,16 +6503,16 @@ func (p *Parser) parseCondTerm() Node {
 		// Peek at next word to see if it's a binary operator
 		saved_pos = p.Pos
 		op_word = p.parseCondWord()
-		if op_word && isCondBinaryOp(op_word.Value) {
+		if (op_word && isCondBinaryOp(op_word.Value)) {
 			// Binary test: word1 op word2
 			p.condSkipWhitespace()
 			// For =~ operator, the RHS is a regex where ( ) are grouping, not conditional grouping
-			if op_word.Value == "=~" {
+			if (op_word.Value == "=~") {
 				word2 = p.parseCondRegexWord()
 			} else {
 				word2 = p.parseCondWord()
 			}
-			if word2 == nil {
+			if (word2 == nil) {
 				panic(NewParseError(("Expected operand after " + op_word.Value)))
 			}
 			return NewBinaryTest(op_word.Value, word1, word2)
@@ -6596,34 +6537,34 @@ func (p *Parser) parseCondWord() Node {
 	}
 	// Note: ! alone is handled by _parse_cond_term() as negation operator
 	// Here we allow ! as a word so it can be used as pattern in binary tests
-	if (c == '&') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '&') {
+	if ((c == '&') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '&')) {
 		return nil
 	}
-	if (c == '|') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '|') {
+	if ((c == '|') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '|')) {
 		return nil
 	}
 	start := p.Pos
 	chars := []interface{}{}
 	parts := []interface{}{}
-	var arith_text interface{}
-	var depth int
-	var next_c interface{}
-	var cmdsub_node interface{}
-	var procsub_text interface{}
-	var procsub_node interface{}
-	var arith_result interface{}
 	var arith_node interface{}
-	var ch byte
-	var param_text interface{}
-	var cmdsub_text interface{}
-	var param_node interface{}
-	var param_result interface{}
+	var arith_result interface{}
+	var arith_text interface{}
 	var cmdsub_result interface{}
+	var cmdsub_text interface{}
+	var procsub_node interface{}
+	var ch byte
+	var param_result interface{}
+	var next_c interface{}
+	var depth int
+	var cmdsub_node interface{}
+	var param_node interface{}
 	var procsub_result interface{}
+	var procsub_text interface{}
+	var param_text interface{}
 	for !(p.AtEnd()) {
 		ch = p.Peek()
 		// End of conditional
-		if (ch == ']') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == ']') {
+		if ((ch == ']') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == ']')) {
 			break
 		}
 		// Word terminators in conditionals
@@ -6632,21 +6573,21 @@ func (p *Parser) parseCondWord() Node {
 		}
 		// < and > are string comparison operators in [[ ]], terminate words
 		// But <(...) and >(...) are process substitution - don't break
-		if isRedirectChar(ch) && !(((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '(')) {
+		if (isRedirectChar(ch) && !((((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '(')))) {
 			break
 		}
 		// ( and ) end words unless part of extended glob: @(...), ?(...), *(...), +(...), !(...)
-		if ch == '(' {
+		if (ch == '(') {
 			// Check if this is an extended glob (preceded by @, ?, *, +, or !)
-			if chars && isExtglobPrefix(chars[(len(chars)-1)]) {
+			if (chars && isExtglobPrefix(chars[(len(chars) - 1)])) {
 				// Extended glob - consume the parenthesized content
 				chars = append(chars, p.Advance())
 				depth = 1
-				for !(p.AtEnd()) && (depth > 0) {
+				for (!(p.AtEnd()) && (depth > 0)) {
 					c = p.Peek()
-					if c == '(' {
+					if (c == '(') {
 						depth += 1
-					} else if c == ')' {
+					} else if (c == ')') {
 						depth -= 1
 					}
 					chars = append(chars, p.Advance())
@@ -6656,35 +6597,35 @@ func (p *Parser) parseCondWord() Node {
 				break
 			}
 		}
-		if ch == ')' {
+		if (ch == ')') {
 			break
 		}
-		if (ch == '&') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '&') {
+		if ((ch == '&') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '&')) {
 			break
 		}
-		if (ch == '|') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '|') {
+		if ((ch == '|') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '|')) {
 			break
 		}
 		// Single-quoted string
-		if ch == '\'' {
+		if (ch == '\'') {
 			p.Advance()
 			chars = append(chars, "'")
-			for !(p.AtEnd()) && (p.Peek() != '\'') {
+			for (!(p.AtEnd()) && (p.Peek() != '\'')) {
 				chars = append(chars, p.Advance())
 			}
 			if p.AtEnd() {
 				panic(NewParseError("Unterminated single quote"))
 			}
 			chars = append(chars, p.Advance())
-		} else if ch == '"' {
+		} else if (ch == '"') {
 			// Double-quoted string
 			p.Advance()
 			chars = append(chars, "\"")
-			for !(p.AtEnd()) && (p.Peek() != '"') {
+			for (!(p.AtEnd()) && (p.Peek() != '"')) {
 				c = p.Peek()
-				if (c == '\\') && ((p.Pos + 1) < p.Length) {
+				if ((c == '\\') && ((p.Pos + 1) < p.Length)) {
 					next_c = p.Source[(p.Pos + 1)]
-					if next_c == '\n' {
+					if (next_c == '\n') {
 						// Line continuation - skip both backslash and newline
 						p.Advance()
 						p.Advance()
@@ -6692,9 +6633,9 @@ func (p *Parser) parseCondWord() Node {
 						chars = append(chars, p.Advance())
 						chars = append(chars, p.Advance())
 					}
-				} else if c == '$' {
+				} else if (c == '$') {
 					// Handle expansions inside double quotes
-					if ((p.Pos + 2) < p.Length) && (p.Source[(p.Pos+1)] == '(') && (p.Source[(p.Pos+2)] == '(') {
+					if (((p.Pos + 2) < p.Length) && (p.Source[(p.Pos + 1)] == '(') && (p.Source[(p.Pos + 2)] == '(')) {
 						arith_result = p.parseArithmeticExpansion()
 						arith_node = arith_result[0]
 						arith_text = arith_result[1]
@@ -6713,7 +6654,7 @@ func (p *Parser) parseCondWord() Node {
 								chars = append(chars, p.Advance())
 							}
 						}
-					} else if ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '(') {
+					} else if (((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '(')) {
 						cmdsub_result = p.parseCommandSubstitution()
 						cmdsub_node = cmdsub_result[0]
 						cmdsub_text = cmdsub_result[1]
@@ -6742,11 +6683,11 @@ func (p *Parser) parseCondWord() Node {
 				panic(NewParseError("Unterminated double quote"))
 			}
 			chars = append(chars, p.Advance())
-		} else if (ch == '\\') && ((p.Pos + 1) < p.Length) {
+		} else if ((ch == '\\') && ((p.Pos + 1) < p.Length)) {
 			// Escape
 			chars = append(chars, p.Advance())
 			chars = append(chars, p.Advance())
-		} else if (ch == '$') && ((p.Pos + 2) < p.Length) && (p.Source[(p.Pos+1)] == '(') && (p.Source[(p.Pos+2)] == '(') {
+		} else if ((ch == '$') && ((p.Pos + 2) < p.Length) && (p.Source[(p.Pos + 1)] == '(') && (p.Source[(p.Pos + 2)] == '(')) {
 			// Arithmetic expansion $((...))
 			arith_result = p.parseArithmeticExpansion()
 			arith_node = arith_result[0]
@@ -6757,7 +6698,7 @@ func (p *Parser) parseCondWord() Node {
 			} else {
 				chars = append(chars, p.Advance())
 			}
-		} else if (ch == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '(') {
+		} else if ((ch == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '(')) {
 			// Command substitution $(...)
 			cmdsub_result = p.parseCommandSubstitution()
 			cmdsub_node = cmdsub_result[0]
@@ -6768,7 +6709,7 @@ func (p *Parser) parseCondWord() Node {
 			} else {
 				chars = append(chars, p.Advance())
 			}
-		} else if ch == '$' {
+		} else if (ch == '$') {
 			// Parameter expansion $var or ${...}
 			param_result = p.parseParamExpansion()
 			param_node = param_result[0]
@@ -6779,7 +6720,7 @@ func (p *Parser) parseCondWord() Node {
 			} else {
 				chars = append(chars, p.Advance())
 			}
-		} else if isRedirectChar(ch) && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '(') {
+		} else if (isRedirectChar(ch) && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '(')) {
 			// Process substitution <(...) or >(...)
 			procsub_result = p.parseProcessSubstitution()
 			procsub_node = procsub_result[0]
@@ -6790,7 +6731,7 @@ func (p *Parser) parseCondWord() Node {
 			} else {
 				chars = append(chars, p.Advance())
 			}
-		} else if ch == '`' {
+		} else if (ch == '`') {
 			// Backtick command substitution
 			cmdsub_result = p.parseBacktickSubstitution()
 			cmdsub_node = cmdsub_result[0]
@@ -6810,10 +6751,10 @@ func (p *Parser) parseCondWord() Node {
 		return nil
 	}
 	parts_arg := nil
-	if len(parts) > 0 {
+	if (len(parts) > 0) {
 		parts_arg = parts
 	}
-	return NewWord(strings.Join(chars, ""), parts_arg)
+	return NewWord(joinStrings(chars, ""), parts_arg)
 }
 
 func (p *Parser) parseCondRegexWord() Node {
@@ -6825,39 +6766,39 @@ func (p *Parser) parseCondRegexWord() Node {
 	chars := []interface{}{}
 	parts := []interface{}{}
 	paren_depth := 0
-	var cmdsub_node interface{}
-	var ch byte
-	var param_text interface{}
-	var cmdsub_text interface{}
-	var param_node interface{}
-	var param_result interface{}
 	var cmdsub_result interface{}
+	var cmdsub_text interface{}
+	var ch byte
+	var param_result interface{}
+	var param_node interface{}
+	var cmdsub_node interface{}
+	var param_text interface{}
 	for !(p.AtEnd()) {
 		ch = p.Peek()
 		// End of conditional
-		if (ch == ']') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == ']') {
+		if ((ch == ']') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == ']')) {
 			break
 		}
 		// Backslash-newline continuation (check before space/escape handling)
-		if (ch == '\\') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '\n') {
+		if ((ch == '\\') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '\n')) {
 			p.Advance()
 			p.Advance()
 			continue
 		}
 		// Escape sequences - consume both characters (including escaped spaces)
-		if (ch == '\\') && ((p.Pos + 1) < p.Length) {
+		if ((ch == '\\') && ((p.Pos + 1) < p.Length)) {
 			chars = append(chars, p.Advance())
 			chars = append(chars, p.Advance())
 			continue
 		}
 		// Track regex grouping parentheses
-		if ch == '(' {
+		if (ch == '(') {
 			paren_depth += 1
 			chars = append(chars, p.Advance())
 			continue
 		}
-		if ch == ')' {
-			if paren_depth > 0 {
+		if (ch == ')') {
+			if (paren_depth > 0) {
 				paren_depth -= 1
 				chars = append(chars, p.Advance())
 				continue
@@ -6867,28 +6808,28 @@ func (p *Parser) parseCondRegexWord() Node {
 		}
 		// Regex character class [...] - consume until closing ]
 		// Handles [[:alpha:]], [^0-9], []a-z] (] as first char), etc.
-		if ch == '[' {
+		if (ch == '[') {
 			chars = append(chars, p.Advance())
 			// Handle negation [^
-			if !(p.AtEnd()) && (p.Peek() == '^') {
+			if (!(p.AtEnd()) && (p.Peek() == '^')) {
 				chars = append(chars, p.Advance())
 			}
 			// Handle ] as first char (literal ])
-			if !(p.AtEnd()) && (p.Peek() == ']') {
+			if (!(p.AtEnd()) && (p.Peek() == ']')) {
 				chars = append(chars, p.Advance())
 			}
 			// Consume until closing ]
 			for !(p.AtEnd()) {
 				c := p.Peek()
-				if c == ']' {
+				if (c == ']') {
 					chars = append(chars, p.Advance())
 					break
 				}
-				if (c == '[') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == ':') {
+				if ((c == '[') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == ':')) {
 					// POSIX class like [:alpha:] inside bracket expression
 					chars = append(chars, p.Advance())
 					chars = append(chars, p.Advance())
-					for !(p.AtEnd()) && !((p.Peek() == ':') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == ']')) {
+					for (!(p.AtEnd()) && !(((p.Peek() == ':') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == ']')))) {
 						chars = append(chars, p.Advance())
 					}
 					if !(p.AtEnd()) {
@@ -6902,25 +6843,25 @@ func (p *Parser) parseCondRegexWord() Node {
 			continue
 		}
 		// Word terminators - space/tab ends the regex (unless inside parens), as do && and ||
-		if isWhitespace(ch) && (paren_depth == 0) {
+		if (isWhitespace(ch) && (paren_depth == 0)) {
 			break
 		}
-		if isWhitespace(ch) && (paren_depth > 0) {
+		if (isWhitespace(ch) && (paren_depth > 0)) {
 			// Space inside regex parens is part of the pattern
 			chars = append(chars, p.Advance())
 			continue
 		}
-		if (ch == '&') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '&') {
+		if ((ch == '&') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '&')) {
 			break
 		}
-		if (ch == '|') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '|') {
+		if ((ch == '|') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '|')) {
 			break
 		}
 		// Single-quoted string
-		if ch == '\'' {
+		if (ch == '\'') {
 			p.Advance()
 			chars = append(chars, "'")
-			for !(p.AtEnd()) && (p.Peek() != '\'') {
+			for (!(p.AtEnd()) && (p.Peek() != '\'')) {
 				chars = append(chars, p.Advance())
 			}
 			if p.AtEnd() {
@@ -6930,15 +6871,15 @@ func (p *Parser) parseCondRegexWord() Node {
 			continue
 		}
 		// Double-quoted string
-		if ch == '"' {
+		if (ch == '"') {
 			p.Advance()
 			chars = append(chars, "\"")
-			for !(p.AtEnd()) && (p.Peek() != '"') {
+			for (!(p.AtEnd()) && (p.Peek() != '"')) {
 				c = p.Peek()
-				if (c == '\\') && ((p.Pos + 1) < p.Length) {
+				if ((c == '\\') && ((p.Pos + 1) < p.Length)) {
 					chars = append(chars, p.Advance())
 					chars = append(chars, p.Advance())
-				} else if c == '$' {
+				} else if (c == '$') {
 					param_result = p.parseParamExpansion()
 					param_node = param_result[0]
 					param_text = param_result[1]
@@ -6959,9 +6900,9 @@ func (p *Parser) parseCondRegexWord() Node {
 			continue
 		}
 		// Command substitution $(...) or parameter expansion $var or ${...}
-		if ch == '$' {
+		if (ch == '$') {
 			// Try command substitution first
-			if ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '(') {
+			if (((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '(')) {
 				cmdsub_result = p.parseCommandSubstitution()
 				cmdsub_node = cmdsub_result[0]
 				cmdsub_text = cmdsub_result[1]
@@ -6989,29 +6930,29 @@ func (p *Parser) parseCondRegexWord() Node {
 		return nil
 	}
 	parts_arg := nil
-	if len(parts) > 0 {
+	if (len(parts) > 0) {
 		parts_arg = parts
 	}
-	return NewWord(strings.Join(chars, ""), parts_arg)
+	return NewWord(joinStrings(chars, ""), parts_arg)
 }
 
 func (p *Parser) ParseBraceGroup() Node {
 	p.SkipWhitespace()
-	if p.AtEnd() || (p.Peek() != '{') {
+	if (p.AtEnd() || (p.Peek() != '{')) {
 		return nil
 	}
 	// Check that { is followed by whitespace (it's a reserved word)
-	if ((p.Pos + 1) < p.Length) && !(isWhitespace(p.Source[(p.Pos + 1)])) {
+	if (((p.Pos + 1) < p.Length) && !(isWhitespace(p.Source[(p.Pos + 1)]))) {
 		return nil
 	}
 	p.Advance()
 	p.SkipWhitespaceAndNewlines()
 	body := p.ParseList(true)
-	if body == nil {
+	if (body == nil) {
 		panic(NewParseError("Expected command in brace group"))
 	}
 	p.SkipWhitespace()
-	if p.AtEnd() || (p.Peek() != '}') {
+	if (p.AtEnd() || (p.Peek() != '}')) {
 		panic(NewParseError("Expected } to close brace group"))
 	}
 	p.Advance()
@@ -7021,7 +6962,7 @@ func (p *Parser) ParseBraceGroup() Node {
 	for true {
 		p.SkipWhitespace()
 		redirect = p.ParseRedirect()
-		if redirect == nil {
+		if (redirect == nil) {
 			break
 		}
 		redirects = append(redirects, redirect)
@@ -7036,13 +6977,13 @@ func (p *Parser) ParseBraceGroup() Node {
 func (p *Parser) ParseIf() Node {
 	p.SkipWhitespace()
 	// Check for 'if' keyword
-	if p.PeekWord() != "if" {
+	if (p.PeekWord() != "if") {
 		return nil
 	}
 	p.ConsumeWord("if")
 	// Parse condition (a list that ends at 'then')
 	condition := p.ParseListUntil(toSet([]interface{}{"then"}))
-	if condition == nil {
+	if (condition == nil) {
 		panic(NewParseError("Expected condition after 'if'"))
 	}
 	// Expect 'then'
@@ -7052,7 +6993,7 @@ func (p *Parser) ParseIf() Node {
 	}
 	// Parse then body (ends at elif, else, or fi)
 	then_body := p.ParseListUntil(toSet([]interface{}{"elif", "else", "fi"}))
-	if then_body == nil {
+	if (then_body == nil) {
 		panic(NewParseError("Expected commands after 'then'"))
 	}
 	// Check what comes next: elif, else, or fi
@@ -7060,16 +7001,16 @@ func (p *Parser) ParseIf() Node {
 	next_word := p.PeekWord()
 	else_body := nil
 	var elif_condition interface{}
-	var inner_next interface{}
 	var elif_then_body interface{}
 	var inner_else interface{}
-	if next_word == "elif" {
+	var inner_next interface{}
+	if (next_word == "elif") {
 		// elif is syntactic sugar for else if ... fi
 		p.ConsumeWord("elif")
 		// Parse the rest as a nested if (but we've already consumed 'elif')
 		// We need to parse: condition; then body [elif|else|fi]
 		elif_condition = p.ParseListUntil(toSet([]interface{}{"then"}))
-		if elif_condition == nil {
+		if (elif_condition == nil) {
 			panic(NewParseError("Expected condition after 'elif'"))
 		}
 		p.SkipWhitespaceAndNewlines()
@@ -7077,29 +7018,29 @@ func (p *Parser) ParseIf() Node {
 			panic(NewParseError("Expected 'then' after elif condition"))
 		}
 		elif_then_body = p.ParseListUntil(toSet([]interface{}{"elif", "else", "fi"}))
-		if elif_then_body == nil {
+		if (elif_then_body == nil) {
 			panic(NewParseError("Expected commands after 'then'"))
 		}
 		// Recursively handle more elif/else/fi
 		p.SkipWhitespaceAndNewlines()
 		inner_next = p.PeekWord()
 		inner_else = nil
-		if inner_next == "elif" {
+		if (inner_next == "elif") {
 			// More elif - recurse by creating a fake "if" and parsing
 			// Actually, let's just recursively call a helper
 			inner_else = p.parseElifChain()
-		} else if inner_next == "else" {
+		} else if (inner_next == "else") {
 			p.ConsumeWord("else")
 			inner_else = p.ParseListUntil(toSet([]interface{}{"fi"}))
-			if inner_else == nil {
+			if (inner_else == nil) {
 				panic(NewParseError("Expected commands after 'else'"))
 			}
 		}
 		else_body = NewIf(elif_condition, elif_then_body, inner_else)
-	} else if next_word == "else" {
+	} else if (next_word == "else") {
 		p.ConsumeWord("else")
 		else_body = p.ParseListUntil(toSet([]interface{}{"fi"}))
-		if else_body == nil {
+		if (else_body == nil) {
 			panic(NewParseError("Expected commands after 'else'"))
 		}
 	}
@@ -7114,7 +7055,7 @@ func (p *Parser) ParseIf() Node {
 	for true {
 		p.SkipWhitespace()
 		redirect = p.ParseRedirect()
-		if redirect == nil {
+		if (redirect == nil) {
 			break
 		}
 		redirects = append(redirects, redirect)
@@ -7129,7 +7070,7 @@ func (p *Parser) ParseIf() Node {
 func (p *Parser) parseElifChain() If {
 	p.ConsumeWord("elif")
 	condition := p.ParseListUntil(toSet([]interface{}{"then"}))
-	if condition == nil {
+	if (condition == nil) {
 		panic(NewParseError("Expected condition after 'elif'"))
 	}
 	p.SkipWhitespaceAndNewlines()
@@ -7137,18 +7078,18 @@ func (p *Parser) parseElifChain() If {
 		panic(NewParseError("Expected 'then' after elif condition"))
 	}
 	then_body := p.ParseListUntil(toSet([]interface{}{"elif", "else", "fi"}))
-	if then_body == nil {
+	if (then_body == nil) {
 		panic(NewParseError("Expected commands after 'then'"))
 	}
 	p.SkipWhitespaceAndNewlines()
 	next_word := p.PeekWord()
 	else_body := nil
-	if next_word == "elif" {
+	if (next_word == "elif") {
 		else_body = p.parseElifChain()
-	} else if next_word == "else" {
+	} else if (next_word == "else") {
 		p.ConsumeWord("else")
 		else_body = p.ParseListUntil(toSet([]interface{}{"fi"}))
-		if else_body == nil {
+		if (else_body == nil) {
 			panic(NewParseError("Expected commands after 'else'"))
 		}
 	}
@@ -7157,13 +7098,13 @@ func (p *Parser) parseElifChain() If {
 
 func (p *Parser) ParseWhile() Node {
 	p.SkipWhitespace()
-	if p.PeekWord() != "while" {
+	if (p.PeekWord() != "while") {
 		return nil
 	}
 	p.ConsumeWord("while")
 	// Parse condition (ends at 'do')
 	condition := p.ParseListUntil(toSet([]interface{}{"do"}))
-	if condition == nil {
+	if (condition == nil) {
 		panic(NewParseError("Expected condition after 'while'"))
 	}
 	// Expect 'do'
@@ -7173,7 +7114,7 @@ func (p *Parser) ParseWhile() Node {
 	}
 	// Parse body (ends at 'done')
 	body := p.ParseListUntil(toSet([]interface{}{"done"}))
-	if body == nil {
+	if (body == nil) {
 		panic(NewParseError("Expected commands after 'do'"))
 	}
 	// Expect 'done'
@@ -7187,7 +7128,7 @@ func (p *Parser) ParseWhile() Node {
 	for true {
 		p.SkipWhitespace()
 		redirect = p.ParseRedirect()
-		if redirect == nil {
+		if (redirect == nil) {
 			break
 		}
 		redirects = append(redirects, redirect)
@@ -7201,13 +7142,13 @@ func (p *Parser) ParseWhile() Node {
 
 func (p *Parser) ParseUntil() Node {
 	p.SkipWhitespace()
-	if p.PeekWord() != "until" {
+	if (p.PeekWord() != "until") {
 		return nil
 	}
 	p.ConsumeWord("until")
 	// Parse condition (ends at 'do')
 	condition := p.ParseListUntil(toSet([]interface{}{"do"}))
-	if condition == nil {
+	if (condition == nil) {
 		panic(NewParseError("Expected condition after 'until'"))
 	}
 	// Expect 'do'
@@ -7217,7 +7158,7 @@ func (p *Parser) ParseUntil() Node {
 	}
 	// Parse body (ends at 'done')
 	body := p.ParseListUntil(toSet([]interface{}{"done"}))
-	if body == nil {
+	if (body == nil) {
 		panic(NewParseError("Expected commands after 'do'"))
 	}
 	// Expect 'done'
@@ -7231,7 +7172,7 @@ func (p *Parser) ParseUntil() Node {
 	for true {
 		p.SkipWhitespace()
 		redirect = p.ParseRedirect()
-		if redirect == nil {
+		if (redirect == nil) {
 			break
 		}
 		redirects = append(redirects, redirect)
@@ -7245,31 +7186,31 @@ func (p *Parser) ParseUntil() Node {
 
 func (p *Parser) ParseFor() Node {
 	p.SkipWhitespace()
-	if p.PeekWord() != "for" {
+	if (p.PeekWord() != "for") {
 		return nil
 	}
 	p.ConsumeWord("for")
 	p.SkipWhitespace()
 	// Check for C-style for loop: for ((init; cond; incr))
-	if (p.Peek() == '(') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '(') {
+	if ((p.Peek() == '(') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '(')) {
 		return p.parseForArith()
 	}
 	// Parse variable name (bash allows reserved words as variable names in for loops)
 	var_name := p.PeekWord()
-	if var_name == nil {
+	if (var_name == nil) {
 		panic(NewParseError("Expected variable name after 'for'"))
 	}
 	p.ConsumeWord(var_name)
 	p.SkipWhitespace()
 	// Handle optional semicolon or newline before 'in' or 'do'
-	if p.Peek() == ';' {
+	if (p.Peek() == ';') {
 		p.Advance()
 	}
 	p.SkipWhitespaceAndNewlines()
 	// Check for optional 'in' clause
 	words := nil
 	var word Node
-	if p.PeekWord() == "in" {
+	if (p.PeekWord() == "in") {
 		p.ConsumeWord("in")
 		p.SkipWhitespaceAndNewlines()
 		// Parse words until semicolon, newline, or 'do'
@@ -7280,16 +7221,16 @@ func (p *Parser) ParseFor() Node {
 				break
 			}
 			if isSemicolonOrNewline(p.Peek()) {
-				if p.Peek() == ';' {
+				if (p.Peek() == ';') {
 					p.Advance()
 				}
 				break
 			}
-			if p.PeekWord() == "do" {
+			if (p.PeekWord() == "do") {
 				break
 			}
 			word = p.ParseWord()
-			if word == nil {
+			if (word == nil) {
 				break
 			}
 			words = append(words, word)
@@ -7303,7 +7244,7 @@ func (p *Parser) ParseFor() Node {
 	}
 	// Parse body (ends at 'done')
 	body := p.ParseListUntil(toSet([]interface{}{"done"}))
-	if body == nil {
+	if (body == nil) {
 		panic(NewParseError("Expected commands after 'do'"))
 	}
 	// Expect 'done'
@@ -7317,7 +7258,7 @@ func (p *Parser) ParseFor() Node {
 	for true {
 		p.SkipWhitespace()
 		redirect = p.ParseRedirect()
-		if redirect == nil {
+		if (redirect == nil) {
 			break
 		}
 		redirects = append(redirects, redirect)
@@ -7341,32 +7282,32 @@ func (p *Parser) parseForArith() ForArith {
 	var ch byte
 	for !(p.AtEnd()) {
 		ch = p.Peek()
-		if ch == '(' {
+		if (ch == '(') {
 			paren_depth += 1
 			current = append(current, p.Advance())
-		} else if ch == ')' {
-			if paren_depth > 0 {
+		} else if (ch == ')') {
+			if (paren_depth > 0) {
 				paren_depth -= 1
 				current = append(current, p.Advance())
-			} else if ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == ')') {
+			} else if (((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == ')')) {
 				// Check for closing ))
 				// End of ((...)) - preserve trailing whitespace
-				parts = append(parts, strings.TrimLeft(strings.Join(current, ""), " \t\n"))
+				parts = append(parts, strings.TrimLeft(joinStrings(current, ""), " \t\n"))
 				p.Advance()
 				p.Advance()
 				break
 			} else {
 				current = append(current, p.Advance())
 			}
-		} else if (ch == ';') && (paren_depth == 0) {
+		} else if ((ch == ';') && (paren_depth == 0)) {
 			// Preserve trailing whitespace in expressions
-			parts = append(parts, strings.TrimLeft(strings.Join(current, ""), " \t\n"))
+			parts = append(parts, strings.TrimLeft(joinStrings(current, ""), " \t\n"))
 			p.Advance()
 		} else {
 			current = append(current, p.Advance())
 		}
 	}
-	if len(parts) != 3 {
+	if (len(parts) != 3) {
 		panic(NewParseError("Expected three expressions in for ((;;))"))
 	}
 	init := parts[0].(Node)
@@ -7374,23 +7315,23 @@ func (p *Parser) parseForArith() ForArith {
 	incr := parts[2].(Node)
 	p.SkipWhitespace()
 	// Handle optional semicolon
-	if !(p.AtEnd()) && (p.Peek() == ';') {
+	if (!(p.AtEnd()) && (p.Peek() == ';')) {
 		p.Advance()
 	}
 	p.SkipWhitespaceAndNewlines()
 	// Parse body - either do/done or brace group
-	var body interface{}
+	var body Node
 	var brace interface{}
-	if p.Peek() == '{' {
+	if (p.Peek() == '{') {
 		brace = p.ParseBraceGroup()
-		if brace == nil {
+		if (brace == nil) {
 			panic(NewParseError("Expected brace group body in for loop"))
 		}
 		// Unwrap the brace-group to match bash-oracle output format
 		body = brace.Body
 	} else if p.ConsumeWord("do") {
 		body = p.ParseListUntil(toSet([]interface{}{"done"}))
-		if body == nil {
+		if (body == nil) {
 			panic(NewParseError("Expected commands after 'do'"))
 		}
 		p.SkipWhitespaceAndNewlines()
@@ -7406,7 +7347,7 @@ func (p *Parser) parseForArith() ForArith {
 	for true {
 		p.SkipWhitespace()
 		redirect = p.ParseRedirect()
-		if redirect == nil {
+		if (redirect == nil) {
 			break
 		}
 		redirects = append(redirects, redirect)
@@ -7420,27 +7361,27 @@ func (p *Parser) parseForArith() ForArith {
 
 func (p *Parser) ParseSelect() Node {
 	p.SkipWhitespace()
-	if p.PeekWord() != "select" {
+	if (p.PeekWord() != "select") {
 		return nil
 	}
 	p.ConsumeWord("select")
 	p.SkipWhitespace()
 	// Parse variable name
 	var_name := p.PeekWord()
-	if var_name == nil {
+	if (var_name == nil) {
 		panic(NewParseError("Expected variable name after 'select'"))
 	}
 	p.ConsumeWord(var_name)
 	p.SkipWhitespace()
 	// Handle optional semicolon before 'in', 'do', or '{'
-	if p.Peek() == ';' {
+	if (p.Peek() == ';') {
 		p.Advance()
 	}
 	p.SkipWhitespaceAndNewlines()
 	// Check for optional 'in' clause
 	words := nil
 	var word Node
-	if p.PeekWord() == "in" {
+	if (p.PeekWord() == "in") {
 		p.ConsumeWord("in")
 		p.SkipWhitespaceAndNewlines()
 		// Parse words until semicolon, newline, 'do', or '{'
@@ -7451,16 +7392,16 @@ func (p *Parser) ParseSelect() Node {
 				break
 			}
 			if isSemicolonNewlineBrace(p.Peek()) {
-				if p.Peek() == ';' {
+				if (p.Peek() == ';') {
 					p.Advance()
 				}
 				break
 			}
-			if p.PeekWord() == "do" {
+			if (p.PeekWord() == "do") {
 				break
 			}
 			word = p.ParseWord()
-			if word == nil {
+			if (word == nil) {
 				break
 			}
 			words = append(words, word)
@@ -7470,11 +7411,11 @@ func (p *Parser) ParseSelect() Node {
 	// Skip whitespace before body
 	p.SkipWhitespaceAndNewlines()
 	// Parse body - either do/done or brace group
-	var body interface{}
+	var body Node
 	var brace interface{}
-	if p.Peek() == '{' {
+	if (p.Peek() == '{') {
 		brace = p.ParseBraceGroup()
-		if brace == nil {
+		if (brace == nil) {
 			panic(NewParseError("Expected brace group body in select"))
 		}
 		// Unwrap the brace-group to match bash-oracle output format
@@ -7482,7 +7423,7 @@ func (p *Parser) ParseSelect() Node {
 	} else if p.ConsumeWord("do") {
 		// Parse body (ends at 'done')
 		body = p.ParseListUntil(toSet([]interface{}{"done"}))
-		if body == nil {
+		if (body == nil) {
 			panic(NewParseError("Expected commands after 'do'"))
 		}
 		// Expect 'done'
@@ -7499,7 +7440,7 @@ func (p *Parser) ParseSelect() Node {
 	for true {
 		p.SkipWhitespace()
 		redirect = p.ParseRedirect()
-		if redirect == nil {
+		if (redirect == nil) {
 			break
 		}
 		redirects = append(redirects, redirect)
@@ -7512,10 +7453,10 @@ func (p *Parser) ParseSelect() Node {
 }
 
 func (p *Parser) isCaseTerminator() bool {
-	if p.AtEnd() || (p.Peek() != ';') {
+	if (p.AtEnd() || (p.Peek() != ';')) {
 		return false
 	}
-	if (p.Pos + 1) >= p.Length {
+	if ((p.Pos + 1) >= p.Length) {
 		return false
 	}
 	next_ch := p.Source[(p.Pos + 1)]
@@ -7524,7 +7465,7 @@ func (p *Parser) isCaseTerminator() bool {
 }
 
 func (p *Parser) consumeCaseTerminator() string {
-	if p.AtEnd() || (p.Peek() != ';') {
+	if (p.AtEnd() || (p.Peek() != ';')) {
 		return ";;"
 	}
 	p.Advance()
@@ -7532,15 +7473,15 @@ func (p *Parser) consumeCaseTerminator() string {
 		return ";;"
 	}
 	ch := p.Peek()
-	if ch == ';' {
+	if (ch == ';') {
 		p.Advance()
 		// Check for ;;&
-		if !(p.AtEnd()) && (p.Peek() == '&') {
+		if (!(p.AtEnd()) && (p.Peek() == '&')) {
 			p.Advance()
 			return ";;&"
 		}
 		return ";;"
-	} else if ch == '&' {
+	} else if (ch == '&') {
 		p.Advance()
 		return ";&"
 	}
@@ -7549,14 +7490,14 @@ func (p *Parser) consumeCaseTerminator() string {
 
 func (p *Parser) ParseCase() Node {
 	p.SkipWhitespace()
-	if p.PeekWord() != "case" {
+	if (p.PeekWord() != "case") {
 		return nil
 	}
 	p.ConsumeWord("case")
 	p.SkipWhitespace()
 	// Parse the word to match
 	word := p.ParseWord()
-	if word == nil {
+	if (word == nil) {
 		panic(NewParseError("Expected word after 'case'"))
 	}
 	p.SkipWhitespaceAndNewlines()
@@ -7567,39 +7508,39 @@ func (p *Parser) ParseCase() Node {
 	p.SkipWhitespaceAndNewlines()
 	// Parse pattern clauses until 'esac'
 	patterns := []interface{}{}
-	var paren_depth interface{}
-	var pattern_chars interface{}
-	var extglob_depth interface{}
-	var saved interface{}
-	var scan_depth interface{}
-	var sc interface{}
-	var next_ch interface{}
-	var is_pattern interface{}
 	var pattern interface{}
-	var ch byte
-	var is_empty_body interface{}
-	var scan_pos interface{}
-	var terminator interface{}
-	var is_at_terminator interface{}
-	var is_char_class interface{}
-	var body interface{}
 	var has_first_bracket_literal interface{}
+	var is_char_class interface{}
+	var is_at_terminator interface{}
+	var saved interface{}
+	var body interface{}
+	var is_empty_body interface{}
+	var is_pattern interface{}
+	var ch byte
+	var scan_depth interface{}
+	var pattern_chars interface{}
+	var paren_depth interface{}
+	var terminator interface{}
+	var extglob_depth interface{}
+	var sc interface{}
+	var scan_pos interface{}
+	var next_ch interface{}
 	for true {
 		p.SkipWhitespaceAndNewlines()
 		// Check if we're at 'esac' (but not 'esac)' which is esac as a pattern)
-		if p.PeekWord() == "esac" {
+		if (p.PeekWord() == "esac") {
 			// Look ahead to see if esac is a pattern (esac followed by ) then body/;;)
 			// or the closing keyword (esac followed by ) that closes containing construct)
 			saved = p.Pos
 			p.SkipWhitespace()
 			// Consume "esac"
-			for !(p.AtEnd()) && !(isMetachar(p.Peek())) && !(isQuote(p.Peek())) {
+			for (!(p.AtEnd()) && !(isMetachar(p.Peek())) && !(isQuote(p.Peek()))) {
 				p.Advance()
 			}
 			p.SkipWhitespace()
 			// Check for ) and what follows
 			is_pattern = false
-			if !(p.AtEnd()) && (p.Peek() == ')') {
+			if (!(p.AtEnd()) && (p.Peek() == ')')) {
 				p.Advance()
 				p.SkipWhitespace()
 				// esac is a pattern if there's body content or ;; after )
@@ -7607,7 +7548,7 @@ func (p *Parser) ParseCase() Node {
 				if !(p.AtEnd()) {
 					next_ch = p.Peek()
 					// If followed by ;; or actual command content, it's a pattern
-					if next_ch == ';' {
+					if (next_ch == ';') {
 						is_pattern = true
 					} else if !(isNewlineOrRightParen(next_ch)) {
 						is_pattern = true
@@ -7621,7 +7562,7 @@ func (p *Parser) ParseCase() Node {
 		}
 		// Skip optional leading ( before pattern (POSIX allows this)
 		p.SkipWhitespaceAndNewlines()
-		if !(p.AtEnd()) && (p.Peek() == '(') {
+		if (!(p.AtEnd()) && (p.Peek() == '(')) {
 			p.Advance()
 			p.SkipWhitespaceAndNewlines()
 		}
@@ -7631,8 +7572,8 @@ func (p *Parser) ParseCase() Node {
 		extglob_depth = 0
 		for !(p.AtEnd()) {
 			ch = p.Peek()
-			if ch == ')' {
-				if extglob_depth > 0 {
+			if (ch == ')') {
+				if (extglob_depth > 0) {
 					// Inside extglob, consume the ) and decrement depth
 					pattern_chars = append(pattern_chars, p.Advance())
 					extglob_depth -= 1
@@ -7641,9 +7582,9 @@ func (p *Parser) ParseCase() Node {
 					p.Advance()
 					break
 				}
-			} else if ch == '\\' {
+			} else if (ch == '\\') {
 				// Line continuation or backslash escape
-				if ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '\n') {
+				if (((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '\n')) {
 					// Line continuation - skip both backslash and newline
 					p.Advance()
 					p.Advance()
@@ -7654,19 +7595,19 @@ func (p *Parser) ParseCase() Node {
 						pattern_chars = append(pattern_chars, p.Advance())
 					}
 				}
-			} else if (ch == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '(') {
+			} else if ((ch == '$') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '(')) {
 				// $( or $(( - command sub or arithmetic
 				pattern_chars = append(pattern_chars, p.Advance())
 				pattern_chars = append(pattern_chars, p.Advance())
-				if !(p.AtEnd()) && (p.Peek() == '(') {
+				if (!(p.AtEnd()) && (p.Peek() == '(')) {
 					// $(( arithmetic - need to find matching ))
 					pattern_chars = append(pattern_chars, p.Advance())
 					paren_depth = 2
-					for !(p.AtEnd()) && (paren_depth > 0) {
+					for (!(p.AtEnd()) && (paren_depth > 0)) {
 						c := p.Peek()
-						if c == '(' {
+						if (c == '(') {
 							paren_depth += 1
-						} else if c == ')' {
+						} else if (c == ')') {
 							paren_depth -= 1
 						}
 						pattern_chars = append(pattern_chars, p.Advance())
@@ -7675,16 +7616,16 @@ func (p *Parser) ParseCase() Node {
 					// $() command sub - track single paren
 					extglob_depth += 1
 				}
-			} else if (ch == '(') && (extglob_depth > 0) {
+			} else if ((ch == '(') && (extglob_depth > 0)) {
 				// Grouping paren inside extglob
 				pattern_chars = append(pattern_chars, p.Advance())
 				extglob_depth += 1
-			} else if isExtglobPrefix(ch) && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '(') {
+			} else if (isExtglobPrefix(ch) && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '(')) {
 				// Extglob opener: @(, ?(, *(, +(, !(
 				pattern_chars = append(pattern_chars, p.Advance())
 				pattern_chars = append(pattern_chars, p.Advance())
 				extglob_depth += 1
-			} else if ch == '[' {
+			} else if (ch == '[') {
 				// Character class - but only if there's a matching ]
 				// ] must come before ) at same depth (either extglob or pattern)
 				is_char_class = false
@@ -7692,28 +7633,28 @@ func (p *Parser) ParseCase() Node {
 				scan_depth = 0
 				has_first_bracket_literal = false
 				// Skip [! or [^ at start
-				if (scan_pos < p.Length) && isCaretOrBang(p.Source[scan_pos]) {
+				if ((scan_pos < p.Length) && isCaretOrBang(p.Source[scan_pos])) {
 					scan_pos += 1
 				}
 				// Skip ] as first char (literal in char class) only if there's another ]
-				if (scan_pos < p.Length) && (p.Source[scan_pos] == ']') {
+				if ((scan_pos < p.Length) && (p.Source[scan_pos] == ']')) {
 					// Check if there's another ] later
-					if strings.Index(p.Source, "]", (scan_pos+1)) != -1 {
+					if (strings.Index(p.Source, "]", (scan_pos + 1)) != -1) {
 						scan_pos += 1
 						has_first_bracket_literal = true
 					}
 				}
-				for scan_pos < p.Length {
+				for (scan_pos < p.Length) {
 					sc = p.Source[scan_pos]
-					if (sc == ']') && (scan_depth == 0) {
+					if ((sc == ']') && (scan_depth == 0)) {
 						is_char_class = true
 						break
-					} else if sc == '[' {
+					} else if (sc == '[') {
 						scan_depth += 1
-					} else if (sc == ')') && (scan_depth == 0) {
+					} else if ((sc == ')') && (scan_depth == 0)) {
 						// Hit pattern/extglob closer before finding ]
 						break
-					} else if (sc == '|') && (scan_depth == 0) && (extglob_depth > 0) {
+					} else if ((sc == '|') && (scan_depth == 0) && (extglob_depth > 0)) {
 						// Hit alternation in extglob - ] must be in this branch
 						break
 					}
@@ -7722,15 +7663,15 @@ func (p *Parser) ParseCase() Node {
 				if is_char_class {
 					pattern_chars = append(pattern_chars, p.Advance())
 					// Handle [! or [^ at start
-					if !(p.AtEnd()) && isCaretOrBang(p.Peek()) {
+					if (!(p.AtEnd()) && isCaretOrBang(p.Peek())) {
 						pattern_chars = append(pattern_chars, p.Advance())
 					}
 					// Handle ] as first char (literal) only if we detected it in scan
-					if has_first_bracket_literal && !(p.AtEnd()) && (p.Peek() == ']') {
+					if (has_first_bracket_literal && !(p.AtEnd()) && (p.Peek() == ']')) {
 						pattern_chars = append(pattern_chars, p.Advance())
 					}
 					// Consume until closing ]
-					for !(p.AtEnd()) && (p.Peek() != ']') {
+					for (!(p.AtEnd()) && (p.Peek() != ']')) {
 						pattern_chars = append(pattern_chars, p.Advance())
 					}
 					if !(p.AtEnd()) {
@@ -7740,20 +7681,20 @@ func (p *Parser) ParseCase() Node {
 					// Not a valid char class, treat [ as literal
 					pattern_chars = append(pattern_chars, p.Advance())
 				}
-			} else if ch == '\'' {
+			} else if (ch == '\'') {
 				// Single-quoted string in pattern
 				pattern_chars = append(pattern_chars, p.Advance())
-				for !(p.AtEnd()) && (p.Peek() != '\'') {
+				for (!(p.AtEnd()) && (p.Peek() != '\'')) {
 					pattern_chars = append(pattern_chars, p.Advance())
 				}
 				if !(p.AtEnd()) {
 					pattern_chars = append(pattern_chars, p.Advance())
 				}
-			} else if ch == '"' {
+			} else if (ch == '"') {
 				// Double-quoted string in pattern
 				pattern_chars = append(pattern_chars, p.Advance())
-				for !(p.AtEnd()) && (p.Peek() != '"') {
-					if (p.Peek() == '\\') && ((p.Pos + 1) < p.Length) {
+				for (!(p.AtEnd()) && (p.Peek() != '"')) {
+					if ((p.Peek() == '\\') && ((p.Pos + 1) < p.Length)) {
 						pattern_chars = append(pattern_chars, p.Advance())
 					}
 					pattern_chars = append(pattern_chars, p.Advance())
@@ -7763,7 +7704,7 @@ func (p *Parser) ParseCase() Node {
 				}
 			} else if isWhitespace(ch) {
 				// Skip whitespace at top level, but preserve inside $() or extglob
-				if extglob_depth > 0 {
+				if (extglob_depth > 0) {
 					pattern_chars = append(pattern_chars, p.Advance())
 				} else {
 					p.Advance()
@@ -7785,7 +7726,7 @@ func (p *Parser) ParseCase() Node {
 		if !(is_empty_body) {
 			// Skip newlines and check if there's content before terminator or esac
 			p.SkipWhitespaceAndNewlines()
-			if !(p.AtEnd()) && (p.PeekWord() != "esac") {
+			if (!(p.AtEnd()) && (p.PeekWord() != "esac")) {
 				// Check again for terminator after whitespace/newlines
 				is_at_terminator = p.isCaseTerminator()
 				if !(is_at_terminator) {
@@ -7810,7 +7751,7 @@ func (p *Parser) ParseCase() Node {
 	for true {
 		p.SkipWhitespace()
 		redirect = p.ParseRedirect()
-		if redirect == nil {
+		if (redirect == nil) {
 			break
 		}
 		redirects = append(redirects, redirect)
@@ -7827,7 +7768,7 @@ func (p *Parser) ParseCoproc() Node {
 	if p.AtEnd() {
 		return nil
 	}
-	if p.PeekWord() != "coproc" {
+	if (p.PeekWord() != "coproc") {
 		return nil
 	}
 	p.ConsumeWord("coproc")
@@ -7839,21 +7780,21 @@ func (p *Parser) ParseCoproc() Node {
 		ch = p.Peek()
 	}
 	var body interface{}
-	if ch == '{' {
+	if (ch == '{') {
 		body = p.ParseBraceGroup()
-		if body != nil {
+		if (body != nil) {
 			return NewCoproc(body, name)
 		}
 	}
-	if ch == '(' {
-		if ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '(') {
+	if (ch == '(') {
+		if (((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '(')) {
 			body = p.ParseArithmeticCommand()
-			if body != nil {
+			if (body != nil) {
 				return NewCoproc(body, name)
 			}
 		}
 		body = p.ParseSubshell()
-		if body != nil {
+		if (body != nil) {
 			return NewCoproc(body, name)
 		}
 	}
@@ -7861,7 +7802,7 @@ func (p *Parser) ParseCoproc() Node {
 	next_word := p.PeekWord()
 	if isCompoundKeyword(next_word) {
 		body = p.ParseCompoundCommand()
-		if body != nil {
+		if (body != nil) {
 			return NewCoproc(body, name)
 		}
 	}
@@ -7870,7 +7811,7 @@ func (p *Parser) ParseCoproc() Node {
 	potential_name := p.PeekWord()
 	if potential_name {
 		// Skip past the potential name
-		for !(p.AtEnd()) && !(isMetachar(p.Peek())) && !(isQuote(p.Peek())) {
+		for (!(p.AtEnd()) && !(isMetachar(p.Peek())) && !(isQuote(p.Peek()))) {
 			p.Advance()
 		}
 		p.SkipWhitespace()
@@ -7880,29 +7821,29 @@ func (p *Parser) ParseCoproc() Node {
 			ch = p.Peek()
 		}
 		next_word = p.PeekWord()
-		if ch == '{' {
+		if (ch == '{') {
 			// NAME { ... } - extract name
 			name = potential_name
 			body = p.ParseBraceGroup()
-			if body != nil {
+			if (body != nil) {
 				return NewCoproc(body, name)
 			}
-		} else if ch == '(' {
+		} else if (ch == '(') {
 			// NAME ( ... ) - extract name
 			name = potential_name
-			if ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '(') {
+			if (((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '(')) {
 				body = p.ParseArithmeticCommand()
 			} else {
 				body = p.ParseSubshell()
 			}
-			if body != nil {
+			if (body != nil) {
 				return NewCoproc(body, name)
 			}
 		} else if isCompoundKeyword(next_word) {
 			// NAME followed by reserved compound - extract name
 			name = potential_name
 			body = p.ParseCompoundCommand()
-			if body != nil {
+			if (body != nil) {
 				return NewCoproc(body, name)
 			}
 		}
@@ -7911,7 +7852,7 @@ func (p *Parser) ParseCoproc() Node {
 	}
 	// Parse as simple command (includes any "NAME" as part of the command)
 	body = p.ParseCommand()
-	if body != nil {
+	if (body != nil) {
 		return NewCoproc(body, name)
 	}
 	panic(NewParseError("Expected command after coproc"))
@@ -7924,14 +7865,14 @@ func (p *Parser) ParseFunction() Node {
 	}
 	saved_pos := p.Pos
 	// Check for 'function' keyword form
-	var name string
 	var body interface{}
-	if p.PeekWord() == "function" {
+	var name string
+	if (p.PeekWord() == "function") {
 		p.ConsumeWord("function")
 		p.SkipWhitespace()
 		// Get function name
 		name = p.PeekWord()
-		if name == nil {
+		if (name == nil) {
 			p.Pos = saved_pos
 			return nil
 		}
@@ -7939,9 +7880,9 @@ func (p *Parser) ParseFunction() Node {
 		p.SkipWhitespace()
 		// Optional () after name - but only if it's actually ()
 		// and not the start of a subshell body
-		if !(p.AtEnd()) && (p.Peek() == '(') {
+		if (!(p.AtEnd()) && (p.Peek() == '(')) {
 			// Check if this is () or start of subshell
-			if ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == ')') {
+			if (((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == ')')) {
 				p.Advance()
 				p.Advance()
 			}
@@ -7950,7 +7891,7 @@ func (p *Parser) ParseFunction() Node {
 		p.SkipWhitespaceAndNewlines()
 		// Parse body (any compound command)
 		body = p.parseCompoundCommand()
-		if body == nil {
+		if (body == nil) {
 			panic(NewParseError("Expected function body"))
 		}
 		return NewFunction(name, body)
@@ -7958,7 +7899,7 @@ func (p *Parser) ParseFunction() Node {
 	// Check for POSIX form: name()
 	// We need to peek ahead to see if there's a () after the word
 	name = p.PeekWord()
-	if (name == nil) || isReservedWord(name) {
+	if ((name == nil) || isReservedWord(name)) {
 		return nil
 	}
 	// Assignment words (containing =) are not function definitions
@@ -7969,7 +7910,7 @@ func (p *Parser) ParseFunction() Node {
 	p.SkipWhitespace()
 	name_start := p.Pos
 	// Consume the name
-	for !(p.AtEnd()) && !(isMetachar(p.Peek())) && !(isQuote(p.Peek())) && !(isParen(p.Peek())) {
+	for (!(p.AtEnd()) && !(isMetachar(p.Peek())) && !(isQuote(p.Peek())) && !(isParen(p.Peek()))) {
 		p.Advance()
 	}
 	name = substring(p.Source, name_start, p.Pos)
@@ -7979,13 +7920,13 @@ func (p *Parser) ParseFunction() Node {
 	}
 	// Check for () - whitespace IS allowed between name and (
 	p.SkipWhitespace()
-	if p.AtEnd() || (p.Peek() != '(') {
+	if (p.AtEnd() || (p.Peek() != '(')) {
 		p.Pos = saved_pos
 		return nil
 	}
 	p.Advance()
 	p.SkipWhitespace()
-	if p.AtEnd() || (p.Peek() != ')') {
+	if (p.AtEnd() || (p.Peek() != ')')) {
 		p.Pos = saved_pos
 		return nil
 	}
@@ -7993,7 +7934,7 @@ func (p *Parser) ParseFunction() Node {
 	p.SkipWhitespaceAndNewlines()
 	// Parse body (any compound command)
 	body = p.parseCompoundCommand()
-	if body == nil {
+	if (body == nil) {
 		panic(NewParseError("Expected function body"))
 	}
 	return NewFunction(name, body)
@@ -8002,39 +7943,39 @@ func (p *Parser) ParseFunction() Node {
 func (p *Parser) parseCompoundCommand() Node {
 	// Try each compound command type
 	result := p.ParseBraceGroup()
-	if len(result) > 0 {
+	if (len(result) > 0) {
 		return result
 	}
 	result = p.ParseSubshell()
-	if len(result) > 0 {
+	if (len(result) > 0) {
 		return result
 	}
 	result = p.ParseConditionalExpr()
-	if len(result) > 0 {
+	if (len(result) > 0) {
 		return result
 	}
 	result = p.ParseIf()
-	if len(result) > 0 {
+	if (len(result) > 0) {
 		return result
 	}
 	result = p.ParseWhile()
-	if len(result) > 0 {
+	if (len(result) > 0) {
 		return result
 	}
 	result = p.ParseUntil()
-	if len(result) > 0 {
+	if (len(result) > 0) {
 		return result
 	}
 	result = p.ParseFor()
-	if len(result) > 0 {
+	if (len(result) > 0) {
 		return result
 	}
 	result = p.ParseCase()
-	if len(result) > 0 {
+	if (len(result) > 0) {
 		return result
 	}
 	result = p.ParseSelect()
-	if len(result) > 0 {
+	if (len(result) > 0) {
 		return result
 	}
 	return nil
@@ -8047,7 +7988,7 @@ func (p *Parser) ParseListUntil(stop_words interface{}) Node {
 		return nil
 	}
 	pipeline := p.ParsePipeline()
-	if pipeline == nil {
+	if (pipeline == nil) {
 		return nil
 	}
 	parts := []interface{}{pipeline}
@@ -8058,11 +7999,11 @@ func (p *Parser) ParseListUntil(stop_words interface{}) Node {
 		// Check for newline as implicit command separator
 		p.SkipWhitespace()
 		has_newline = false
-		for !(p.AtEnd()) && (p.Peek() == '\n') {
+		for (!(p.AtEnd()) && (p.Peek() == '\n')) {
 			has_newline = true
 			p.Advance()
 			// Skip past any pending heredoc content after newline
-			if (p.pendingHeredocEnd != nil) && (p.pendingHeredocEnd > p.Pos) {
+			if ((p.pendingHeredocEnd != nil) && (p.pendingHeredocEnd > p.Pos)) {
 				p.Pos = p.pendingHeredocEnd
 				p.pendingHeredocEnd = nil
 			}
@@ -8070,34 +8011,34 @@ func (p *Parser) ParseListUntil(stop_words interface{}) Node {
 		}
 		op = p.ParseListOperator()
 		// Newline acts as implicit semicolon if followed by more commands
-		if (op == nil) && has_newline {
+		if ((op == nil) && has_newline) {
 			// Check if there's another command (not a stop word)
-			if !(p.AtEnd()) && !contains(stop_words, p.PeekWord()) && !(isRightBracket(p.Peek())) {
+			if (!(p.AtEnd()) && !contains(stop_words, p.PeekWord()) && !(isRightBracket(p.Peek()))) {
 				op = "\n"
 			}
 		}
-		if op == nil {
+		if (op == nil) {
 			break
 		}
 		// For & at end of list, don't require another command
-		if op == "&" {
+		if (op == "&") {
 			parts = append(parts, NewOperator(op))
 			p.SkipWhitespaceAndNewlines()
-			if p.AtEnd() || contains(stop_words, p.PeekWord()) || isNewlineOrRightBracket(p.Peek()) {
+			if (p.AtEnd() || contains(stop_words, p.PeekWord()) || isNewlineOrRightBracket(p.Peek())) {
 				break
 			}
 		}
 		// For ; - check if it's a terminator before a stop word (don't include it)
-		if op == ";" {
+		if (op == ";") {
 			p.SkipWhitespaceAndNewlines()
 			// Also check for ;;, ;&, or ;;& (case terminators)
-			at_case_terminator = ((p.Peek() == ';') && ((p.Pos + 1) < p.Length) && isSemicolonOrAmp(p.Source[(p.Pos+1)]))
-			if p.AtEnd() || contains(stop_words, p.PeekWord()) || isNewlineOrRightBracket(p.Peek()) || at_case_terminator {
+			at_case_terminator = ((p.Peek() == ';') && ((p.Pos + 1) < p.Length) && isSemicolonOrAmp(p.Source[(p.Pos + 1)]))
+			if (p.AtEnd() || contains(stop_words, p.PeekWord()) || isNewlineOrRightBracket(p.Peek()) || at_case_terminator) {
 				// Don't include trailing semicolon - it's just a terminator
 				break
 			}
 			parts = append(parts, NewOperator(op))
-		} else if op != "&" {
+		} else if (op != "&") {
 			parts = append(parts, NewOperator(op))
 		}
 		// Check for stop words before parsing next pipeline
@@ -8106,16 +8047,16 @@ func (p *Parser) ParseListUntil(stop_words interface{}) Node {
 		if contains(stop_words, p.PeekWord()) {
 			break
 		}
-		if (p.Peek() == ';') && ((p.Pos + 1) < p.Length) && isSemicolonOrAmp(p.Source[(p.Pos+1)]) {
+		if ((p.Peek() == ';') && ((p.Pos + 1) < p.Length) && isSemicolonOrAmp(p.Source[(p.Pos + 1)])) {
 			break
 		}
 		pipeline = p.ParsePipeline()
-		if pipeline == nil {
+		if (pipeline == nil) {
 			panic(NewParseError(("Expected command after " + op)))
 		}
 		parts = append(parts, pipeline)
 	}
-	if len(parts) == 1 {
+	if (len(parts) == 1) {
 		return parts[0].(Node)
 	}
 	return NewList(toNodes(parts))
@@ -8128,66 +8069,66 @@ func (p *Parser) ParseCompoundCommand() Node {
 	}
 	ch := p.Peek()
 	// Arithmetic command ((...)) - check before subshell
-	if (ch == '(') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '(') {
+	if ((ch == '(') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '(')) {
 		result := p.ParseArithmeticCommand()
-		if result != nil {
+		if (result != nil) {
 			return result
 		}
 	}
 	// Not arithmetic (e.g., '(( x ) )' is nested subshells) - fall through
 	// Subshell
-	if ch == '(' {
+	if (ch == '(') {
 		return p.ParseSubshell()
 	}
 	// Brace group
-	if ch == '{' {
+	if (ch == '{') {
 		result = p.ParseBraceGroup()
-		if result != nil {
+		if (result != nil) {
 			return result
 		}
 	}
 	// Fall through to simple command if not a brace group
 	// Conditional expression [[ ]] - check before reserved words
-	if (ch == '[') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '[') {
+	if ((ch == '[') && ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '[')) {
 		return p.ParseConditionalExpr()
 	}
 	// Check for reserved words
 	word := p.PeekWord()
 	// If statement
-	if word == "if" {
+	if (word == "if") {
 		return p.ParseIf()
 	}
 	// While loop
-	if word == "while" {
+	if (word == "while") {
 		return p.ParseWhile()
 	}
 	// Until loop
-	if word == "until" {
+	if (word == "until") {
 		return p.ParseUntil()
 	}
 	// For loop
-	if word == "for" {
+	if (word == "for") {
 		return p.ParseFor()
 	}
 	// Select statement
-	if word == "select" {
+	if (word == "select") {
 		return p.ParseSelect()
 	}
 	// Case statement
-	if word == "case" {
+	if (word == "case") {
 		return p.ParseCase()
 	}
 	// Function definition (function keyword form)
-	if word == "function" {
+	if (word == "function") {
 		return p.ParseFunction()
 	}
 	// Coproc
-	if word == "coproc" {
+	if (word == "coproc") {
 		return p.ParseCoproc()
 	}
 	// Try POSIX function definition (name() form) before simple command
 	fn := p.ParseFunction()
-	if fn != nil {
+	if (fn != nil) {
 		return fn
 	}
 	// Simple command
@@ -8201,17 +8142,17 @@ func (p *Parser) ParsePipeline() Node {
 	time_posix := false
 	// Check for 'time' prefix first
 	var saved interface{}
-	if p.PeekWord() == "time" {
+	if (p.PeekWord() == "time") {
 		p.ConsumeWord("time")
 		prefix_order = "time"
 		p.SkipWhitespace()
 		// Check for -p flag
-		if !(p.AtEnd()) && (p.Peek() == '-') {
+		if (!(p.AtEnd()) && (p.Peek() == '-')) {
 			saved = p.Pos
 			p.Advance()
-			if !(p.AtEnd()) && (p.Peek() == 'p') {
+			if (!(p.AtEnd()) && (p.Peek() == 'p')) {
 				p.Advance()
-				if p.AtEnd() || isWhitespace(p.Peek()) {
+				if (p.AtEnd() || isWhitespace(p.Peek())) {
 					time_posix = true
 				} else {
 					p.Pos = saved
@@ -8222,8 +8163,8 @@ func (p *Parser) ParsePipeline() Node {
 		}
 		p.SkipWhitespace()
 		// Check for -- (end of options) - implies -p per bash-oracle
-		if !(p.AtEnd()) && startsWithAt(p.Source, p.Pos, "--") {
-			if ((p.Pos + 2) >= p.Length) || isWhitespace(p.Source[(p.Pos+2)]) {
+		if (!(p.AtEnd()) && startsWithAt(p.Source, p.Pos, "--")) {
+			if (((p.Pos + 2) >= p.Length) || isWhitespace(p.Source[(p.Pos + 2)])) {
 				p.Advance()
 				p.Advance()
 				time_posix = true
@@ -8231,16 +8172,16 @@ func (p *Parser) ParsePipeline() Node {
 			}
 		}
 		// Skip nested time keywords (time time X collapses to time X)
-		for p.PeekWord() == "time" {
+		for (p.PeekWord() == "time") {
 			p.ConsumeWord("time")
 			p.SkipWhitespace()
 			// Check for -p after nested time
-			if !(p.AtEnd()) && (p.Peek() == '-') {
+			if (!(p.AtEnd()) && (p.Peek() == '-')) {
 				saved = p.Pos
 				p.Advance()
-				if !(p.AtEnd()) && (p.Peek() == 'p') {
+				if (!(p.AtEnd()) && (p.Peek() == 'p')) {
 					p.Advance()
-					if p.AtEnd() || isWhitespace(p.Peek()) {
+					if (p.AtEnd() || isWhitespace(p.Peek())) {
 						time_posix = true
 					} else {
 						p.Pos = saved
@@ -8252,24 +8193,24 @@ func (p *Parser) ParsePipeline() Node {
 			p.SkipWhitespace()
 		}
 		// Check for ! after time
-		if !(p.AtEnd()) && (p.Peek() == '!') {
-			if ((p.Pos + 1) >= p.Length) || isWhitespace(p.Source[(p.Pos+1)]) {
+		if (!(p.AtEnd()) && (p.Peek() == '!')) {
+			if (((p.Pos + 1) >= p.Length) || isWhitespace(p.Source[(p.Pos + 1)])) {
 				p.Advance()
 				prefix_order = "time_negation"
 				p.SkipWhitespace()
 			}
 		}
-	} else if !(p.AtEnd()) && (p.Peek() == '!') {
+	} else if (!(p.AtEnd()) && (p.Peek() == '!')) {
 		// Check for '!' negation prefix (if no time yet)
-		if ((p.Pos + 1) >= p.Length) || isWhitespace(p.Source[(p.Pos+1)]) {
+		if (((p.Pos + 1) >= p.Length) || isWhitespace(p.Source[(p.Pos + 1)])) {
 			p.Advance()
 			p.SkipWhitespace()
 			// Recursively parse pipeline to handle ! ! cmd, ! time cmd, etc.
 			// Bare ! (no following command) is valid POSIX - equivalent to false
 			inner := p.ParsePipeline()
 			// Double negation cancels out (! ! cmd -> cmd, ! ! -> empty command)
-			if (inner != nil) && (inner.GetKind() == "negation") {
-				if inner.Pipeline != nil {
+			if ((inner != nil) && (inner.GetKind() == "negation")) {
+				if (inner.Pipeline != nil) {
 					return inner.Pipeline
 				} else {
 					return NewCommand([]interface{}{})
@@ -8282,19 +8223,19 @@ func (p *Parser) ParsePipeline() Node {
 	result := p.parseSimplePipeline()
 	// Wrap based on prefix order
 	// Note: bare time and time ! are valid (null command timing)
-	if prefix_order == "time" {
+	if (prefix_order == "time") {
 		result = NewTime(result, time_posix)
-	} else if prefix_order == "negation" {
+	} else if (prefix_order == "negation") {
 		result = NewNegation(result)
-	} else if prefix_order == "time_negation" {
+	} else if (prefix_order == "time_negation") {
 		// time ! cmd -> Negation(Time(cmd)) per bash-oracle
 		result = NewTime(result, time_posix)
 		result = NewNegation(result)
-	} else if prefix_order == "negation_time" {
+	} else if (prefix_order == "negation_time") {
 		// ! time cmd -> Negation(Time(cmd))
 		result = NewTime(result, time_posix)
 		result = NewNegation(result)
-	} else if result == nil {
+	} else if (result == nil) {
 		// No prefix and no pipeline
 		return nil
 	}
@@ -8303,24 +8244,24 @@ func (p *Parser) ParsePipeline() Node {
 
 func (p *Parser) parseSimplePipeline() Node {
 	cmd := p.ParseCompoundCommand()
-	if cmd == nil {
+	if (cmd == nil) {
 		return nil
 	}
 	commands := []interface{}{cmd}
 	var is_pipe_both interface{}
 	for true {
 		p.SkipWhitespace()
-		if p.AtEnd() || (p.Peek() != '|') {
+		if (p.AtEnd() || (p.Peek() != '|')) {
 			break
 		}
 		// Check it's not ||
-		if ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '|') {
+		if (((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '|')) {
 			break
 		}
 		p.Advance()
 		// Check for |& (pipe stderr)
 		is_pipe_both = false
-		if !(p.AtEnd()) && (p.Peek() == '&') {
+		if (!(p.AtEnd()) && (p.Peek() == '&')) {
 			p.Advance()
 			is_pipe_both = true
 		}
@@ -8330,12 +8271,12 @@ func (p *Parser) parseSimplePipeline() Node {
 			commands = append(commands, NewPipeBoth())
 		}
 		cmd = p.ParseCompoundCommand()
-		if cmd == nil {
+		if (cmd == nil) {
 			panic(NewParseError("Expected command after |"))
 		}
 		commands = append(commands, cmd)
 	}
-	if len(commands) == 1 {
+	if (len(commands) == 1) {
 		return commands[0]
 	}
 	return NewPipeline(commands)
@@ -8347,29 +8288,29 @@ func (p *Parser) ParseListOperator() *string {
 		return nil
 	}
 	ch := p.Peek()
-	if ch == '&' {
+	if (ch == '&') {
 		// Check if this is &> or &>> (redirect), not background operator
-		if ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '>') {
+		if (((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '>')) {
 			return nil
 		}
 		p.Advance()
-		if !(p.AtEnd()) && (p.Peek() == '&') {
+		if (!(p.AtEnd()) && (p.Peek() == '&')) {
 			p.Advance()
 			return "&&"
 		}
 		return "&"
 	}
-	if ch == '|' {
-		if ((p.Pos + 1) < p.Length) && (p.Source[(p.Pos+1)] == '|') {
+	if (ch == '|') {
+		if (((p.Pos + 1) < p.Length) && (p.Source[(p.Pos + 1)] == '|')) {
 			p.Advance()
 			p.Advance()
 			return "||"
 		}
 		return nil
 	}
-	if ch == ';' {
+	if (ch == ';') {
 		// Don't treat ;;, ;&, or ;;& as a single semicolon (they're case terminators)
-		if ((p.Pos + 1) < p.Length) && isSemicolonOrAmp(p.Source[(p.Pos+1)]) {
+		if (((p.Pos + 1) < p.Length) && isSemicolonOrAmp(p.Source[(p.Pos + 1)])) {
 			return nil
 		}
 		p.Advance()
@@ -8379,16 +8320,13 @@ func (p *Parser) ParseListOperator() *string {
 }
 
 func (p *Parser) ParseList(newline_as_separator bool) Node {
-	if newline_as_separator == nil {
-		newline_as_separator = true
-	}
 	if newline_as_separator {
 		p.SkipWhitespaceAndNewlines()
 	} else {
 		p.SkipWhitespace()
 	}
 	pipeline := p.ParsePipeline()
-	if pipeline == nil {
+	if (pipeline == nil) {
 		return nil
 	}
 	parts := []interface{}{pipeline}
@@ -8398,7 +8336,7 @@ func (p *Parser) ParseList(newline_as_separator bool) Node {
 		// Check for newline as implicit command separator
 		p.SkipWhitespace()
 		has_newline = false
-		for !(p.AtEnd()) && (p.Peek() == '\n') {
+		for (!(p.AtEnd()) && (p.Peek() == '\n')) {
 			has_newline = true
 			// If not treating newlines as separators, stop here
 			if !(newline_as_separator) {
@@ -8406,42 +8344,42 @@ func (p *Parser) ParseList(newline_as_separator bool) Node {
 			}
 			p.Advance()
 			// Skip past any pending heredoc content after newline
-			if (p.pendingHeredocEnd != nil) && (p.pendingHeredocEnd > p.Pos) {
+			if ((p.pendingHeredocEnd != nil) && (p.pendingHeredocEnd > p.Pos)) {
 				p.Pos = p.pendingHeredocEnd
 				p.pendingHeredocEnd = nil
 			}
 			p.SkipWhitespace()
 		}
 		// If we hit a newline and not treating them as separators, stop
-		if has_newline && !(newline_as_separator) {
+		if (has_newline && !(newline_as_separator)) {
 			break
 		}
 		op = p.ParseListOperator()
 		// Newline acts as implicit semicolon if followed by more commands
-		if (op == nil) && has_newline {
-			if !(p.AtEnd()) && !(isRightBracket(p.Peek())) {
+		if ((op == nil) && has_newline) {
+			if (!(p.AtEnd()) && !(isRightBracket(p.Peek()))) {
 				op = "\n"
 			}
 		}
-		if op == nil {
+		if (op == nil) {
 			break
 		}
 		// Don't add duplicate semicolon (e.g., explicit ; followed by newline)
-		if !((op == ";") && (len(parts) > 0) && (parts[(len(parts)-1)].(Node).GetKind() == "operator") && (parts[(len(parts)-1)].(Node).(*Operator).Op == ";")) {
+		if !(((op == ";") && (len(parts) > 0) && (parts[(len(parts) - 1)].(Node).GetKind() == "operator") && (parts[(len(parts) - 1)].(Node).(*Operator).Op == ";"))) {
 			parts = append(parts, NewOperator(op))
 		}
 		// For & at end of list, don't require another command
-		if op == "&" {
+		if (op == "&") {
 			p.SkipWhitespace()
-			if p.AtEnd() || isRightBracket(p.Peek()) {
+			if (p.AtEnd() || isRightBracket(p.Peek())) {
 				break
 			}
 			// Newline after & - in compound commands, skip it (& acts as separator)
 			// At top level, newline terminates (separate commands)
-			if p.Peek() == '\n' {
+			if (p.Peek() == '\n') {
 				if newline_as_separator {
 					p.SkipWhitespaceAndNewlines()
-					if p.AtEnd() || isRightBracket(p.Peek()) {
+					if (p.AtEnd() || isRightBracket(p.Peek())) {
 						break
 					}
 				} else {
@@ -8450,38 +8388,38 @@ func (p *Parser) ParseList(newline_as_separator bool) Node {
 			}
 		}
 		// For ; at end of list, don't require another command
-		if op == ";" {
+		if (op == ";") {
 			p.SkipWhitespace()
-			if p.AtEnd() || isRightBracket(p.Peek()) {
+			if (p.AtEnd() || isRightBracket(p.Peek())) {
 				break
 			}
 			// Newline after ; means continue to see if more commands follow
-			if p.Peek() == '\n' {
+			if (p.Peek() == '\n') {
 				continue
 			}
 		}
 		// For && and ||, allow newlines before the next command
-		if (op == "&&") || (op == "||") {
+		if ((op == "&&") || (op == "||")) {
 			p.SkipWhitespaceAndNewlines()
 		}
 		pipeline = p.ParsePipeline()
-		if pipeline == nil {
+		if (pipeline == nil) {
 			panic(NewParseError(("Expected command after " + op)))
 		}
 		parts = append(parts, pipeline)
 	}
-	if len(parts) == 1 {
+	if (len(parts) == 1) {
 		return parts[0].(Node)
 	}
 	return NewList(toNodes(parts))
 }
 
 func (p *Parser) ParseComment() Node {
-	if p.AtEnd() || (p.Peek() != '#') {
+	if (p.AtEnd() || (p.Peek() != '#')) {
 		return nil
 	}
 	start := p.Pos
-	for !(p.AtEnd()) && (p.Peek() != '\n') {
+	for (!(p.AtEnd()) && (p.Peek() != '\n')) {
 		p.Advance()
 	}
 	text := substring(p.Source, start, p.Pos)
@@ -8499,7 +8437,7 @@ func (p *Parser) Parse() []Node {
 	for true {
 		p.SkipWhitespace()
 		// Skip newlines but not comments
-		for !(p.AtEnd()) && (p.Peek() == '\n') {
+		for (!(p.AtEnd()) && (p.Peek() == '\n')) {
 			p.Advance()
 		}
 		if p.AtEnd() {
@@ -8515,24 +8453,24 @@ func (p *Parser) Parse() []Node {
 	var found_newline interface{}
 	for !(p.AtEnd()) {
 		result := p.ParseList(true)
-		if result != nil {
+		if (result != nil) {
 			results = append(results, result)
 		}
 		p.SkipWhitespace()
 		// Skip newlines (and any pending heredoc content) between statements
 		found_newline = false
-		for !(p.AtEnd()) && (p.Peek() == '\n') {
+		for (!(p.AtEnd()) && (p.Peek() == '\n')) {
 			found_newline = true
 			p.Advance()
 			// Skip past any pending heredoc content after newline
-			if (p.pendingHeredocEnd != nil) && (p.pendingHeredocEnd > p.Pos) {
+			if ((p.pendingHeredocEnd != nil) && (p.pendingHeredocEnd > p.Pos)) {
 				p.Pos = p.pendingHeredocEnd
 				p.pendingHeredocEnd = nil
 			}
 			p.SkipWhitespace()
 		}
 		// If no newline and not at end, we have unparsed content
-		if !(found_newline) && !(p.AtEnd()) {
+		if (!(found_newline) && !(p.AtEnd())) {
 			panic(NewParseError("Parser not fully implemented yet"))
 		}
 	}
@@ -8546,3 +8484,4 @@ func Parse(source string) ([]Node, error) {
 	parser := NewParser(source)
 	return parser.Parse()
 }
+

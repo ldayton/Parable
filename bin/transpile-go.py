@@ -257,6 +257,21 @@ class GoTranspiler(ast.NodeVisitor):
         }
         return reserved.get(name, name)
 
+    def _get_list_var_type(self, var_name: str) -> str:
+        """Get the appropriate Go slice type for a variable."""
+        typed_vars = {
+            "redirect_parts": "[]interface{}",
+            "word_parts": "[]string",
+            "current": "[]interface{}",
+            "alternatives": "[]interface{}",
+            "chars": "[]interface{}",
+            "word_list": "[]interface{}",
+            "parts": "[]interface{}",
+            "items": "[]interface{}",
+            "result": "[]interface{}",
+        }
+        return typed_vars.get(var_name, "[]interface{}")
+
     def _public_name(self, name: str) -> str:
         """Convert to public Go name (PascalCase)."""
         if not name:
@@ -757,7 +772,13 @@ class GoTranspiler(ast.NodeVisitor):
         for i, default in enumerate(defaults):
             if isinstance(default, ast.Constant) and default.value is None:
                 continue
-            arg_name = self._safe_name(non_self_args[first_default_idx + i].arg)
+            # Skip int/bool defaults - Go doesn't support default args, and
+            # these types can't be nil. Callers must pass all arguments.
+            arg = non_self_args[first_default_idx + i]
+            go_type = self._go_type(arg.annotation) if arg.annotation else ""
+            if go_type in ("int", "bool", "string"):
+                continue
+            arg_name = self._safe_name(arg.arg)
             default_val = self.visit_expr(default)
             self.emit(f"if {arg_name} == nil {{ {arg_name} = {default_val} }}")
 
@@ -884,13 +905,22 @@ class GoTranspiler(ast.NodeVisitor):
             "inner_list": "Node",
             "op_name": "string",
             "fd_target": "string",
-            "redirect_parts": "[]string",
-            "word_parts": "[]string",
             "word_strs": "string",
+            "redirect_parts": "[]interface{}",
+            "word_parts": "[]interface{}",
             "init_val": "string",
             "cond_val": "string",
             "update_val": "string",
             "incr_val": "string",
+            "escaped_op": "string",
+            "escaped_arg": "string",
+            "escaped_param": "string",
+            "arg_val": "string",
+            "alternatives": "[]interface{}",
+            "current": "[]interface{}",
+            "word_list": "[]interface{}",
+            "escaped": "string",
+            "redirect_sexps": "string",
         }
         # Skip pre-declaring variables that have context-dependent types
         # or are only used within their block
@@ -1022,7 +1052,26 @@ class GoTranspiler(ast.NodeVisitor):
                 and target.id in self.block_reused_vars):
                 # Variable already pre-declared with correct type, skip assignment
                 return
-            value = self.visit_expr(node.value)
+            # Use typed empty list literals for known variable types
+            if isinstance(node.value, ast.List) and len(node.value.elts) == 0:
+                var_type = self._get_list_var_type(target.id)
+                value = f"{var_type}{{}}"
+            # Dereference optional string fields when assigning to a variable
+            elif (isinstance(node.value, ast.Attribute)
+                  and node.value.attr in ("op", "arg")
+                  and isinstance(node.value.value, ast.Name)
+                  and node.value.value.id == "self"
+                  and self.current_class in ("ParamExpansion", "ParamIndirect")):
+                value = f"*{self.visit_expr(node.value)}"
+            # Dereference optional name field in Coproc
+            elif (isinstance(node.value, ast.Attribute)
+                  and node.value.attr == "name"
+                  and isinstance(node.value.value, ast.Name)
+                  and node.value.value.id == "self"
+                  and self.current_class == "Coproc"):
+                value = f"*{self.visit_expr(node.value)}"
+            else:
+                value = self.visit_expr(node.value)
             # Module-level assignments need var keyword
             if not self.in_method and not self.in_class_body:
                 self.emit(f"var {var} = {value}")
@@ -1135,6 +1184,12 @@ class GoTranspiler(ast.NodeVisitor):
             if isinstance(node.value, bool):
                 return "bool"
         if isinstance(node, ast.BinOp):
+            # Check if this is string concatenation
+            if isinstance(node.op, ast.Add):
+                left_type = self._infer_expr_type(node.left)
+                right_type = self._infer_expr_type(node.right)
+                if left_type == "string" or right_type == "string":
+                    return "string"
             # Arithmetic ops usually return int
             if isinstance(node.op, (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Mod, ast.BitAnd, ast.BitOr)):
                 return "int"
@@ -1143,7 +1198,7 @@ class GoTranspiler(ast.NodeVisitor):
                 func_name = node.func.id
                 if func_name in ("len", "parseInt", "int", "ord"):
                     return "int"
-                if func_name in ("str", "joinStrings", "substring"):
+                if func_name in ("str", "joinStrings", "substring", "_normalize_fd_redirects", "normalizeFdRedirects"):
                     return "string"
                 # Functions that return int (based on name patterns)
                 if "find" in func_name.lower() or "index" in func_name.lower() or "end" in func_name.lower():
@@ -1151,6 +1206,9 @@ class GoTranspiler(ast.NodeVisitor):
                 # Functions that return string (based on name patterns)
                 if "format" in func_name.lower() or "to_sexp" in func_name.lower():
                     return "string"
+                # Functions that return []interface{} (tuple-like returns)
+                if func_name.startswith("_consume") or func_name.startswith("consume"):
+                    return "[]interface{}"
             # Method calls that return strings
             if isinstance(node.func, ast.Attribute):
                 if node.func.attr == "join":
@@ -1160,6 +1218,15 @@ class GoTranspiler(ast.NodeVisitor):
             if isinstance(node.value, ast.Name):
                 if "parts" in node.value.id or "nodes" in node.value.id:
                     return "Node"
+        # Attribute access - infer from attribute name
+        if isinstance(node, ast.Attribute):
+            attr = node.attr
+            if attr in ("init", "cond", "incr", "var", "op", "value", "name"):
+                return "string"
+            if attr in ("body", "command", "target"):
+                return "Node"
+            if attr in ("redirects", "words", "parts", "commands"):
+                return "[]Node"
         return "interface{}"
 
     def _emit_if(self, node: ast.If, is_elif: bool):
@@ -1177,9 +1244,14 @@ class GoTranspiler(ast.NodeVisitor):
             # Handle self.redirects, s.Redirects, etc.
             attr = node.test.attr
             if attr in ("redirects", "words", "parts", "commands", "items", "args",
-                        "init", "condition", "update", "in_words", "cases", "patterns"):
+                        "update", "in_words", "cases", "patterns"):
                 test = f"(len({test}) > 0)"
-            elif attr in ("command", "body", "target", "then_part", "else_part", "else_body", "then_body"):
+            elif attr in ("command", "body", "target", "then_part", "else_part", "else_body", "then_body", "name"):
+                test = f"({test} != nil)"
+            elif attr in ("init", "cond", "incr"):
+                # ForArith fields are strings
+                test = f'({test} != "")'
+            elif attr == "condition":
                 test = f"({test} != nil)"
         if is_elif:
             self.emit_raw("\t" * self.indent + f"}} else if {test} {{")
@@ -1401,6 +1473,12 @@ class GoTranspiler(ast.NodeVisitor):
                     return f"pairFirst({value})"
                 elif node.slice.value == 1:
                     return f"pairSecond({value})"
+            # Handle result from consume* functions (returns [int, []interface{}])
+            if var_name == "result" and isinstance(node.slice, ast.Constant):
+                if node.slice.value == 0:
+                    return f"{result}.(int)"
+                elif node.slice.value == 1:
+                    return f"{result}.([]interface{{}})"
         return result
 
     def visit_expr_Call(self, node: ast.Call) -> str:
@@ -1410,6 +1488,14 @@ class GoTranspiler(ast.NodeVisitor):
         if isinstance(node.func, ast.Attribute):
             obj = self.visit_expr(node.func.value)
             method = node.func.attr
+            # Dereference optional string fields (self.op, self.arg) when used in method calls
+            # Only for classes with optional op/arg fields
+            if (isinstance(node.func.value, ast.Attribute)
+                and node.func.value.attr in ("op", "arg")
+                and isinstance(node.func.value.value, ast.Name)
+                and node.func.value.value.id == "self"
+                and self.current_class in ("ParamExpansion", "ParamIndirect")):
+                obj = f"*{obj}"
             # Map Python methods to Go
             if method == "append":
                 # Handle appending to byte arrays
@@ -1479,7 +1565,10 @@ class GoTranspiler(ast.NodeVisitor):
                     arg = node.args[0]
                     if isinstance(arg, ast.Name):
                         var_name = arg.id
-                        if var_name in ("result", "normalized", "arith_content", "parts", "items"):
+                        # Use joinStrings for variables that might be []interface{}
+                        if var_name in ("result", "normalized", "arith_content", "parts", "items",
+                                        "current", "alternatives", "chars", "word_list",
+                                        "redirect_parts", "word_parts", "esc_parts"):
                             return f"joinStrings({args_str}, {obj})"
                     # Also use joinStrings for function calls like _sublist/sublist
                     if isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name):
@@ -1584,8 +1673,19 @@ class GoTranspiler(ast.NodeVisitor):
                     if isinstance(arg, ast.Name) and arg.id in ("left", "right", "inner_parts", "parts"):
                         return f"New{go_name}(toNodes({args_str}))"
                 # Word constructor has default parts=nil
-                if name == "Word" and len(node.args) == 1:
-                    return f"New{go_name}({args_str}, nil)"
+                if name == "Word":
+                    first_arg = args[0]
+                    # Type assert if first arg is a loop var that might be interface{}
+                    if len(node.args) >= 1 and isinstance(node.args[0], ast.Name):
+                        var_name = node.args[0].id
+                        if var_name in ("alt", "item", "elem", "e", "x"):
+                            first_arg = f"{first_arg}.(string)"
+                    if len(node.args) == 1:
+                        return f"New{go_name}({first_arg}, nil)"
+                    # If second arg is empty list, use nil
+                    if len(node.args) == 2 and isinstance(node.args[1], ast.List) and len(node.args[1].elts) == 0:
+                        return f"New{go_name}({first_arg}, nil)"
+                    return f"New{go_name}({first_arg}, {', '.join(args[1:])})"
                 return f"New{go_name}({args_str})"
             # Handle functions with default arguments
             if name == "_format_cmdsub_node" or name == "format_cmdsub_node":
@@ -1729,6 +1829,11 @@ class GoTranspiler(ast.NodeVisitor):
                 # String-like variable names need == "" check
                 if "str" in name.lower() or name in ("value", "text", "s", "inner", "prefix", "suffix"):
                     return f'({operand} == "")'
+            # Handle attribute access for slices
+            elif isinstance(node.operand, ast.Attribute):
+                attr = node.operand.attr
+                if attr in ("elements", "words", "redirects", "parts", "commands", "items", "args", "patterns"):
+                    return f"(len({operand}) == 0)"
             return f"!({operand})"
         if isinstance(node.op, ast.USub):
             return f"-{operand}"

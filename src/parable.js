@@ -522,7 +522,7 @@ class Word extends Node {
             }
         }
         // Strip trailing space
-        var result = normalized.join("").replace(new RegExp("[" + " " + "]+$"), "");
+        var result = normalized.join("").replace(/[ ]+$/, "");
         return (((prefix + "(") + result) + ")");
     }
     
@@ -699,7 +699,7 @@ class Word extends Node {
                     result.push("${ }");
                 } else {
                     try {
-                        var parser = new Parser(inner.replace(new RegExp("^[" + " |" + "]+"), ""));
+                        var parser = new Parser(inner.replace(/^[ |]+/, ""));
                         var parsed = parser.parseList();
                         if (parsed) {
                             formatted = FormatCmdsubNode(parsed);
@@ -727,7 +727,7 @@ class Word extends Node {
         value = this.FormatCommandSubstitutions(value);
         // Bash doubles CTLESC (\x01) characters in output
         value = value.replaceAll("", "");
-        return value.replace(new RegExp("[" + "\n" + "]+$"), "");
+        return value.replace(/[\n]+$/, "");
     }
     
 }
@@ -1001,7 +1001,7 @@ class Redirect extends Node {
     
     toSexp() {
         // Strip fd prefix from operator (e.g., "2>" -> ">", "{fd}>" -> ">")
-        var op = this.op.replace(new RegExp("^[" + "0123456789" + "]+"), "");
+        var op = this.op.replace(/^[0123456789]+/, "");
         // Strip {varname} prefix if present
         if (op.startsWith("{")) {
             var j = 1;
@@ -1028,7 +1028,7 @@ class Redirect extends Node {
             } else if ((op === "<")) {
                 op = "<&";
             }
-            var fd_target = target_val.slice(1, target_val.length).replace(new RegExp("[" + "-" + "]+$"), "");
+            var fd_target = target_val.slice(1, target_val.length).replace(/[\-]+$/, "");
             if (/^[0-9]+$/.test(fd_target)) {
                 return (((("(redirect \"" + op) + "\" ") + fd_target) + ")");
             } else if ((target_val === "&-")) {
@@ -1044,7 +1044,7 @@ class Redirect extends Node {
                 return (((("(redirect \"" + op) + "\" ") + target_val) + ")");
             }
             // Variable fd dup with move indicator (trailing -)
-            target_val = target_val.replace(new RegExp("[" + "-" + "]+$"), "");
+            target_val = target_val.replace(/[\-]+$/, "");
             return (((("(redirect \"" + op) + "\" \"") + target_val) + "\")");
         }
         return (((("(redirect \"" + op) + "\" \"") + target_val) + "\")");
@@ -2275,7 +2275,7 @@ function FormatCmdsubNode(node, indent, in_procsub) {
         } else {
             body = FormatCmdsubNode(node.body, (indent + 4));
         }
-        body = body.replace(new RegExp("[" + ";" + "]+$"), "");
+        body = body.replace(/[;]+$/, "");
         return ((((("function " + name) + " () \n{ \n") + inner_sp) + body) + "\n}");
     }
     if ((node.kind === "subshell")) {
@@ -2301,7 +2301,7 @@ function FormatCmdsubNode(node, indent, in_procsub) {
     }
     if ((node.kind === "brace-group")) {
         body = FormatCmdsubNode(node.body, indent);
-        body = body.replace(new RegExp("[" + ";" + "]+$"), "");
+        body = body.replace(/[;]+$/, "");
         return (("{ " + body) + "; }");
     }
     if ((node.kind === "arith-cmd")) {
@@ -2525,7 +2525,7 @@ function SkipHeredoc(value, start) {
         var line = value.slice(line_start, line_end);
         // Check if this line is the delimiter (possibly with leading tabs for <<-)
         if ((((start + 2) < value.length) && (value[(start + 2)] === "-"))) {
-            var stripped = line.replace(new RegExp("^[" + "\t" + "]+"), "");
+            var stripped = line.replace(/^[\t]+/, "");
         } else {
             stripped = line;
         }
@@ -3326,7 +3326,7 @@ class Parser {
                         // Move position to end of line
                         this.pos = line_end;
                         // Check if this line matches delimiter
-                        if (((line === delimiter) || (line.replace(new RegExp("^[" + "\t" + "]+"), "") === delimiter))) {
+                        if (((line === delimiter) || (line.replace(/^[\t]+/, "") === delimiter))) {
                             // Skip newline after delimiter
                             if ((!this.atEnd() && (this.peek() === "\n"))) {
                                 this.advance();
@@ -5400,7 +5400,7 @@ class Parser {
             // Check if this line is the delimiter
             var check_line = line;
             if (strip_tabs) {
-                check_line = line.replace(new RegExp("^[" + "\t" + "]+"), "");
+                check_line = line.replace(/^[\t]+/, "");
             }
             if ((check_line === delimiter)) {
                 // Found the end - update parser position past the heredoc
@@ -5411,7 +5411,7 @@ class Parser {
             }
             // Add line to content (with newline, since we consumed continuations above)
             if (strip_tabs) {
-                line = line.replace(new RegExp("^[" + "\t" + "]+"), "");
+                line = line.replace(/^[\t]+/, "");
             }
             content_lines.push((line + "\n"));
             // Move past the newline

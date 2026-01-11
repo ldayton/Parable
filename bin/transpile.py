@@ -87,6 +87,20 @@ class JSTranspiler(ast.NodeVisitor):
         }
         return reserved.get(name, name)
 
+    def _escape_regex_chars(self, s: str) -> str:
+        """Escape special regex characters for use in a character class."""
+        result = []
+        for c in s:
+            if c in r"\]^-":
+                result.append("\\" + c)
+            elif c == "\t":
+                result.append("\\t")
+            elif c == "\n":
+                result.append("\\n")
+            else:
+                result.append(c)
+        return "".join(result)
+
     def _is_super_call(self, stmt: ast.stmt) -> bool:
         """Check if statement is a super().__init__() call."""
         if not isinstance(stmt, ast.Expr):
@@ -462,13 +476,21 @@ class JSTranspiler(ast.NodeVisitor):
             # Handle lstrip with character set argument
             if method == "lstrip":
                 if len(node.args) == 1:
-                    chars = self.visit_expr(node.args[0])
+                    arg = node.args[0]
+                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                        escaped = self._escape_regex_chars(arg.value)
+                        return f'{obj}.replace(/^[{escaped}]+/, "")'
+                    chars = self.visit_expr(arg)
                     return f'{obj}.replace(new RegExp("^[" + {chars} + "]+"), "")'
                 return f"{obj}.trimStart()"
             # Handle rstrip with character set argument
             if method == "rstrip":
                 if len(node.args) == 1:
-                    chars = self.visit_expr(node.args[0])
+                    arg = node.args[0]
+                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                        escaped = self._escape_regex_chars(arg.value)
+                        return f'{obj}.replace(/[{escaped}]+$/, "")'
+                    chars = self.visit_expr(arg)
                     return f'{obj}.replace(new RegExp("[" + {chars} + "]+$"), "")'
                 return f"{obj}.trimEnd()"
             # Handle str.encode() - returns array of byte values

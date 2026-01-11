@@ -192,8 +192,13 @@ class GoTranspiler(ast.NodeVisitor):
                 # Handle union types in string form like "Redirect | HereDoc"
                 if " | " in type_name:
                     parts = [p.strip() for p in type_name.split(" | ")]
+                    # Node | str needs interface{} since it can be either
+                    has_node = any(p in self.node_classes or p == "Node" for p in parts)
+                    has_str = "str" in parts
+                    if has_node and has_str:
+                        return "interface{}"
                     # If any part is a Node subclass, return Node
-                    if any(p in self.node_classes or p == "Node" for p in parts):
+                    if has_node:
                         return "Node"
                     return parts[0]  # Return first type
                 if type_name in self.node_classes or type_name == "Node":
@@ -205,7 +210,10 @@ class GoTranspiler(ast.NodeVisitor):
             if isinstance(annotation.value, ast.Name):
                 if annotation.value.id == "list":
                     elem_type = self._go_type(annotation.slice)
-                    # If element type is a union or a Node subclass, use []Node
+                    # For Word specifically, use []*Word to access Word methods
+                    if elem_type == "Word":
+                        return "[]*Word"
+                    # For generic Node or unknown types, use []Node
                     if not elem_type or elem_type in self.node_classes or elem_type == "Node":
                         return "[]Node"
                     if elem_type:
@@ -218,6 +226,11 @@ class GoTranspiler(ast.NodeVisitor):
             if isinstance(annotation.op, ast.BitOr):
                 left_type = self._go_type(annotation.left)
                 right_type = self._go_type(annotation.right)
+                # Node | str needs interface{} since it can be either
+                if (left_type in self.node_classes or left_type == "Node") and right_type == "string":
+                    return "interface{}"
+                if left_type == "string" and (right_type in self.node_classes or right_type == "Node"):
+                    return "interface{}"
                 # If any part of the union is a Node subclass, return Node
                 if left_type in self.node_classes or left_type == "Node":
                     return "Node"
@@ -498,6 +511,15 @@ class GoTranspiler(ast.NodeVisitor):
         self.indent -= 1
         self.emit("}")
         self.emit("return len(s) > 0")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
+        # repeatStr helper
+        self.emit("func repeatStr(s string, n int) string {")
+        self.indent += 1
+        self.emit("result := \"\"")
+        self.emit("for i := 0; i < n; i++ { result += s }")
+        self.emit("return result")
         self.indent -= 1
         self.emit("}")
         self.emit("")
@@ -921,6 +943,7 @@ class GoTranspiler(ast.NodeVisitor):
             "word_list": "[]interface{}",
             "escaped": "string",
             "redirect_sexps": "string",
+            "cmd_parts": "[]string",
         }
         # Skip pre-declaring variables that have context-dependent types
         # or are only used within their block
@@ -1444,6 +1467,14 @@ class GoTranspiler(ast.NodeVisitor):
         if node.attr in ("words", "redirects") and isinstance(node.value, ast.Name):
             if node.value.id in ("cmd", "node", "command"):
                 return f"{value}.(*Command).{attr}"
+        # For .commands on Node (Pipeline), need type assertion
+        if node.attr == "commands" and isinstance(node.value, ast.Name):
+            if node.value.id == "node":
+                return f"{value}.(*Pipeline).{attr}"
+        # For .parts on Node (List), need type assertion
+        if node.attr == "parts" and isinstance(node.value, ast.Name):
+            if node.value.id == "node":
+                return f"{value}.(*List).{attr}"
         # For .op on Node (from subscript/type assertion), need type assertion to *Operator
         # But not if the object is already an Operator (like o.Op or self in Operator methods)
         if node.attr == "op":
@@ -1496,6 +1527,14 @@ class GoTranspiler(ast.NodeVisitor):
                 and node.func.value.value.id == "self"
                 and self.current_class in ("ParamExpansion", "ParamIndirect")):
                 obj = f"*{obj}"
+            # Type assert body to Node when calling methods on it (union type interface{})
+            if (isinstance(node.func.value, ast.Attribute)
+                and node.func.value.attr == "body"
+                and isinstance(node.func.value.value, ast.Name)
+                and node.func.value.value.id == "self"
+                and self.current_class == "ConditionalExpr"
+                and method == "to_sexp"):
+                obj = f"{obj}.(Node)"
             # Map Python methods to Go
             if method == "append":
                 # Handle appending to byte arrays
@@ -1544,6 +1583,13 @@ class GoTranspiler(ast.NodeVisitor):
             if method == "rfind":
                 return f"strings.LastIndex({obj}, {args_str})"
             if method == "replace":
+                # Type assert if calling replace on self.body (interface{} union type)
+                if (isinstance(node.func.value, ast.Attribute)
+                    and node.func.value.attr == "body"
+                    and isinstance(node.func.value.value, ast.Name)
+                    and node.func.value.value.id == "self"
+                    and self.current_class == "ConditionalExpr"):
+                    obj = f"{obj}.(string)"
                 return f"strings.ReplaceAll({obj}, {args_str})"
             if method == "strip":
                 return f"strings.TrimSpace({obj})"

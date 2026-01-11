@@ -302,11 +302,11 @@ class JSTranspiler(ast.NodeVisitor):
             args = iter_expr.args
             if len(args) == 1:
                 self.emit(
-                    f"for (var {target} = 0; {target} < {self.visit_expr(args[0])}; {target}++) {{"
+                    f"for (let {target} = 0; {target} < {self.visit_expr(args[0])}; {target}++) {{"
                 )
             elif len(args) == 2:
                 self.emit(
-                    f"for (var {target} = {self.visit_expr(args[0])}; {target} < {self.visit_expr(args[1])}; {target}++) {{"
+                    f"for (let {target} = {self.visit_expr(args[0])}; {target} < {self.visit_expr(args[1])}; {target}++) {{"
                 )
             else:
                 start, end, step = args
@@ -318,15 +318,15 @@ class JSTranspiler(ast.NodeVisitor):
                     is_negative = True
                 if is_negative:
                     self.emit(
-                        f"for (var {target} = {self.visit_expr(start)}; {target} > {self.visit_expr(end)}; {target}--) {{"
+                        f"for (let {target} = {self.visit_expr(start)}; {target} > {self.visit_expr(end)}; {target}--) {{"
                     )
                 else:
                     step_val = self.visit_expr(step)
                     self.emit(
-                        f"for (var {target} = {self.visit_expr(start)}; {target} < {self.visit_expr(end)}; {target} += {step_val}) {{"
+                        f"for (let {target} = {self.visit_expr(start)}; {target} < {self.visit_expr(end)}; {target} += {step_val}) {{"
                     )
         else:
-            self.emit(f"for (var {target} of {self.visit_expr(iter_expr)}) {{")
+            self.emit(f"for (let {target} of {self.visit_expr(iter_expr)}) {{")
         self.indent += 1
         for stmt in node.body:
             self.emit_comments_before(stmt.lineno)

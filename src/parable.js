@@ -126,7 +126,7 @@ class Word extends Node {
         var result = [];
         var in_single = false;
         var in_double = false;
-        for (var c of value) {
+        for (let c of value) {
             // Track quote state
             if (((c === "'") && !in_double)) {
                 in_single = !in_single;
@@ -139,7 +139,7 @@ class Word extends Node {
                 // In single quotes, backslashes are literal, so always double CTLESC
                 if (in_double) {
                     var bs_count = 0;
-                    for (var j = (result.length - 2); j > -1; j--) {
+                    for (let j = (result.length - 2); j > -1; j--) {
                         if ((result[j] === "\\")) {
                             bs_count += 1;
                         } else {
@@ -614,7 +614,7 @@ class Word extends Node {
         // Collect command substitutions from all parts, including nested ones
         var cmdsub_parts = [];
         var procsub_parts = [];
-        for (var p of this.parts) {
+        for (let p of this.parts) {
             if ((p.kind === "cmdsub")) {
                 cmdsub_parts.push(p);
             } else if ((p.kind === "procsub")) {
@@ -745,10 +745,10 @@ class Command extends Node {
     
     toSexp() {
         var parts = [];
-        for (var w of this.words) {
+        for (let w of this.words) {
             parts.push(w.toSexp());
         }
-        for (var r of this.redirects) {
+        for (let r of this.redirects) {
             parts.push(r.toSexp());
         }
         var inner = parts.join(" ");
@@ -819,10 +819,10 @@ class Pipeline extends Node {
         if ((cmd.kind === "command")) {
             // Inject redirect inside command
             var parts = [];
-            for (var w of cmd.words) {
+            for (let w of cmd.words) {
                 parts.push(w.toSexp());
             }
-            for (var r of cmd.redirects) {
+            for (let r of cmd.redirects) {
                 parts.push(r.toSexp());
             }
             parts.push("(redirect \">&\" 1)");
@@ -857,7 +857,7 @@ class List extends Node {
         // & only applies to the immediately preceding pipeline, not the whole list
         if (((parts[(parts.length - 1)].kind === "operator") && (parts[(parts.length - 1)].op === "&"))) {
             // Find rightmost ; or \n to split there
-            for (var i = (parts.length - 3); i > 0; i--) {
+            for (let i = (parts.length - 3); i > 0; i--) {
                 if (((parts[i].kind === "operator") && ((parts[i].op === ";") || (parts[i].op === "\n")))) {
                     var left = parts.slice(0, i);
                     var right = parts.slice((i + 1), (parts.length - 1));
@@ -889,7 +889,7 @@ class List extends Node {
     ToSexpWithPrecedence(parts, op_names) {
         // Process operators by precedence: ; (lowest), then &, then && and ||
         // Split on ; or \n first (rightmost for left-associativity)
-        for (var i = (parts.length - 2); i > 0; i--) {
+        for (let i = (parts.length - 2); i > 0; i--) {
             if (((parts[i].kind === "operator") && ((parts[i].op === ";") || (parts[i].op === "\n")))) {
                 var left = parts.slice(0, i);
                 var right = parts.slice((i + 1), parts.length);
@@ -907,7 +907,7 @@ class List extends Node {
             }
         }
         // Then split on & (rightmost for left-associativity)
-        for (var i = (parts.length - 2); i > 0; i--) {
+        for (let i = (parts.length - 2); i > 0; i--) {
             if (((parts[i].kind === "operator") && (parts[i].op === "&"))) {
                 left = parts.slice(0, i);
                 right = parts.slice((i + 1), parts.length);
@@ -926,7 +926,7 @@ class List extends Node {
         }
         // No ; or &, process high-prec ops (&&, ||) left-associatively
         var result = parts[0].toSexp();
-        for (var i = 1; i < (parts.length - 1); i += 2) {
+        for (let i = 1; i < (parts.length - 1); i += 2) {
             var op = parts[i];
             var cmd = parts[(i + 1)];
             var op_name = (op_names[op.op] ?? op.op);
@@ -1092,7 +1092,7 @@ class Subshell extends Node {
         var base = (("(subshell " + this.body.toSexp()) + ")");
         if (this.redirects && this.redirects.length) {
             var redirect_parts = [];
-            for (var r of this.redirects) {
+            for (let r of this.redirects) {
                 redirect_parts.push(r.toSexp());
             }
             return ((base + " ") + redirect_parts.join(" "));
@@ -1115,7 +1115,7 @@ class BraceGroup extends Node {
         var base = (("(brace-group " + this.body.toSexp()) + ")");
         if (this.redirects && this.redirects.length) {
             var redirect_parts = [];
-            for (var r of this.redirects) {
+            for (let r of this.redirects) {
                 redirect_parts.push(r.toSexp());
             }
             return ((base + " ") + redirect_parts.join(" "));
@@ -1145,7 +1145,7 @@ class If extends Node {
             result = ((result + " ") + this.else_body.toSexp());
         }
         result = (result + ")");
-        for (var r of this.redirects) {
+        for (let r of this.redirects) {
             result = ((result + " ") + r.toSexp());
         }
         return result;
@@ -1169,7 +1169,7 @@ class While extends Node {
         var base = (((("(while " + this.condition.toSexp()) + " ") + this.body.toSexp()) + ")");
         if (this.redirects && this.redirects.length) {
             var redirect_parts = [];
-            for (var r of this.redirects) {
+            for (let r of this.redirects) {
                 redirect_parts.push(r.toSexp());
             }
             return ((base + " ") + redirect_parts.join(" "));
@@ -1195,7 +1195,7 @@ class Until extends Node {
         var base = (((("(until " + this.condition.toSexp()) + " ") + this.body.toSexp()) + ")");
         if (this.redirects && this.redirects.length) {
             var redirect_parts = [];
-            for (var r of this.redirects) {
+            for (let r of this.redirects) {
                 redirect_parts.push(r.toSexp());
             }
             return ((base + " ") + redirect_parts.join(" "));
@@ -1223,7 +1223,7 @@ class For extends Node {
         var suffix = "";
         if (this.redirects && this.redirects.length) {
             var redirect_parts = [];
-            for (var r of this.redirects) {
+            for (let r of this.redirects) {
                 redirect_parts.push(r.toSexp());
             }
             suffix = (" " + redirect_parts.join(" "));
@@ -1237,7 +1237,7 @@ class For extends Node {
             return ((((("(for (word \"" + var_escaped) + "\") (in) ") + this.body.toSexp()) + ")") + suffix);
         } else {
             var word_parts = [];
-            for (var w of this.words) {
+            for (let w of this.words) {
                 word_parts.push(w.toSexp());
             }
             var word_strs = word_parts.join(" ");
@@ -1275,7 +1275,7 @@ class ForArith extends Node {
         var suffix = "";
         if (this.redirects && this.redirects.length) {
             var redirect_parts = [];
-            for (var r of this.redirects) {
+            for (let r of this.redirects) {
                 redirect_parts.push(r.toSexp());
             }
             suffix = (" " + redirect_parts.join(" "));
@@ -1318,7 +1318,7 @@ class Select extends Node {
         var suffix = "";
         if (this.redirects && this.redirects.length) {
             var redirect_parts = [];
-            for (var r of this.redirects) {
+            for (let r of this.redirects) {
                 redirect_parts.push(r.toSexp());
             }
             suffix = (" " + redirect_parts.join(" "));
@@ -1326,7 +1326,7 @@ class Select extends Node {
         var var_escaped = this.variable.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"");
         if ((this.words != null)) {
             var word_parts = [];
-            for (var w of this.words) {
+            for (let w of this.words) {
                 word_parts.push(w.toSexp());
             }
             var word_strs = word_parts.join(" ");
@@ -1359,13 +1359,13 @@ class Case extends Node {
     toSexp() {
         var parts = [];
         parts.push(("(case " + this.word.toSexp()));
-        for (var p of this.patterns) {
+        for (let p of this.patterns) {
             parts.push(p.toSexp());
         }
         var base = (parts.join(" ") + ")");
         if (this.redirects && this.redirects.length) {
             var redirect_parts = [];
-            for (var r of this.redirects) {
+            for (let r of this.redirects) {
                 redirect_parts.push(r.toSexp());
             }
             return ((base + " ") + redirect_parts.join(" "));
@@ -1542,7 +1542,7 @@ class CasePattern extends Node {
         }
         alternatives.push(current.join(""));
         var word_list = [];
-        for (var alt of alternatives) {
+        for (let alt of alternatives) {
             // Use Word.to_sexp() to properly expand ANSI-C quotes and escape
             word_list.push(new Word(alt).toSexp());
         }
@@ -1691,7 +1691,7 @@ class ArithmeticCommand extends Node {
         var result = (("(arith (word \"" + escaped) + "\"))");
         if (this.redirects && this.redirects.length) {
             var redirect_parts = [];
-            for (var r of this.redirects) {
+            for (let r of this.redirects) {
                 redirect_parts.push(r.toSexp());
             }
             var redirect_sexps = redirect_parts.join(" ");
@@ -2005,7 +2005,7 @@ class ConditionalExpr extends Node {
         }
         if (this.redirects && this.redirects.length) {
             var redirect_parts = [];
-            for (var r of this.redirects) {
+            for (let r of this.redirects) {
                 redirect_parts.push(r.toSexp());
             }
             var redirect_sexps = redirect_parts.join(" ");
@@ -2118,7 +2118,7 @@ class ArrayNode extends Node {
             return "(array)";
         }
         var parts = [];
-        for (var e of this.elements) {
+        for (let e of this.elements) {
             parts.push(e.toSexp());
         }
         var inner = parts.join(" ");
@@ -2158,19 +2158,19 @@ function FormatCmdsubNode(node, indent, in_procsub) {
     }
     if ((node.kind === "command")) {
         var parts = [];
-        for (var w of node.words) {
+        for (let w of node.words) {
             var val = w.ExpandAllAnsiCQuotes(w.value);
             val = w.FormatCommandSubstitutions(val);
             parts.push(val);
         }
-        for (var r of node.redirects) {
+        for (let r of node.redirects) {
             parts.push(FormatRedirect(r));
         }
         return parts.join(" ");
     }
     if ((node.kind === "pipeline")) {
         var cmd_parts = [];
-        for (var cmd of node.commands) {
+        for (let cmd of node.commands) {
             cmd_parts.push(FormatCmdsubNode(cmd, indent));
         }
         return cmd_parts.join(" | ");
@@ -2178,7 +2178,7 @@ function FormatCmdsubNode(node, indent, in_procsub) {
     if ((node.kind === "list")) {
         // Join commands with operators
         var result = [];
-        for (var p of node.parts) {
+        for (let p of node.parts) {
             if ((p.kind === "operator")) {
                 if ((p.op === ";")) {
                     result.push(";");
@@ -2233,7 +2233,7 @@ function FormatCmdsubNode(node, indent, in_procsub) {
         body = FormatCmdsubNode(node.body, (indent + 4));
         if (node.words) {
             var word_vals = [];
-            for (var w of node.words) {
+            for (let w of node.words) {
                 word_vals.push(w.value);
             }
             var words = word_vals.join(" ");
@@ -2283,7 +2283,7 @@ function FormatCmdsubNode(node, indent, in_procsub) {
         var redirects = "";
         if (node.redirects) {
             var redirect_parts = [];
-            for (var r of node.redirects) {
+            for (let r of node.redirects) {
                 redirect_parts.push(FormatRedirect(r));
             }
             redirects = redirect_parts.join(" ");
@@ -2790,7 +2790,7 @@ class Parser {
         }
         // Actually consume the word
         this.skipWhitespace();
-        for (var _ of expected) {
+        for (let _ of expected) {
             this.advance();
         }
         return true;
@@ -3494,7 +3494,7 @@ class Parser {
     }
     
     SkipKeyword(keyword) {
-        for (var _ of keyword) {
+        for (let _ of keyword) {
             this.advance();
         }
     }
@@ -3829,7 +3829,7 @@ class Parser {
         this.ArithSkipWs();
         // Check for assignment operators
         var assign_ops = ["<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "^=", "|=", "="];
-        for (var op of assign_ops) {
+        for (let op of assign_ops) {
             if (this.ArithMatch(op)) {
                 // Make sure it's not == or !=
                 if (((op === "=") && (this.ArithPeek(1) === "="))) {
@@ -5473,7 +5473,7 @@ class Parser {
             // Allow array assignments like a[1 + 2]= in prefix position (before first non-assignment)
             // Check if all previous words were assignments (contain = not inside quotes)
             var all_assignments = true;
-            for (var w of words) {
+            for (let w of words) {
                 if (!this.IsAssignmentWord(w)) {
                     all_assignments = false;
                     break;

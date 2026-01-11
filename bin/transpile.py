@@ -484,6 +484,8 @@ class JSTranspiler(ast.NodeVisitor):
             if name == "str":
                 return f"String({args})"
             if name == "int":
+                if len(node.args) >= 2:
+                    return f"parseInt({args})"
                 return f"parseInt({args}, 10)"
             if name == "ord":
                 return f"{args}.charCodeAt(0)"

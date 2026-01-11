@@ -87,7 +87,7 @@ class JSTranspiler(ast.NodeVisitor):
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
         # Skip helper functions that are inlined
-        if node.name in ("_substring", "_sublist"):
+        if node.name in ("_substring", "_sublist", "_repeat_str"):
             return
         args = [self._safe_name(a.arg) for a in node.args.args if a.arg != "self"]
         args_str = ", ".join(args)
@@ -524,6 +524,10 @@ class JSTranspiler(ast.NodeVisitor):
                 start = self.visit_expr(node.args[1])
                 end = self.visit_expr(node.args[2])
                 return f"{obj}.slice({start}, {end})"
+            if name == "_repeat_str":
+                s = self.visit_expr(node.args[0])
+                n = self.visit_expr(node.args[1])
+                return f"{s}.repeat({n})"
             if name in self.class_names:
                 return f"new {self._safe_name(name)}({args})"
             # Convert snake_case function names to camelCase

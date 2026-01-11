@@ -75,16 +75,6 @@ function StartsWithAt(s, pos, prefix) {
     return s.startsWith(prefix, pos);
 }
 
-function RepeatStr(s, n) {
-    var result = [];
-    var i = 0;
-    while ((i < n)) {
-        result.push(s);
-        i += 1;
-    }
-    return result.join("");
-}
-
 class Node {
     toSexp() {
         throw new Error("Not implemented");
@@ -2010,8 +2000,8 @@ class Coproc extends Node {
 function FormatCmdsubNode(node, indent, in_procsub) {
     if (indent == null) { indent = 0; }
     if (in_procsub == null) { in_procsub = false; }
-    var sp = RepeatStr(" ", indent);
-    var inner_sp = RepeatStr(" ", (indent + 4));
+    var sp = " ".repeat(indent);
+    var inner_sp = " ".repeat((indent + 4));
     if ((node.kind === "empty")) {
         return "";
     }
@@ -2110,8 +2100,8 @@ function FormatCmdsubNode(node, indent, in_procsub) {
                 body = "";
             }
             var term = p.terminator;
-            var pat_indent = RepeatStr(" ", (indent + 8));
-            var term_indent = RepeatStr(" ", (indent + 4));
+            var pat_indent = " ".repeat((indent + 8));
+            var term_indent = " ".repeat((indent + 4));
             if ((i === 0)) {
                 patterns.push((((((((" " + pat) + ")\n") + pat_indent) + body) + "\n") + term_indent) + term));
             } else {
@@ -2119,7 +2109,7 @@ function FormatCmdsubNode(node, indent, in_procsub) {
             }
             i += 1;
         }
-        var pattern_str = patterns.join(("\n" + RepeatStr(" ", (indent + 4))));
+        var pattern_str = patterns.join(("\n" + " ".repeat((indent + 4))));
         return (((((("case " + word) + " in") + pattern_str) + "\n") + sp) + "esac");
     }
     if ((node.kind === "function")) {

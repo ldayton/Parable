@@ -1,4 +1,4 @@
-"""Parable - A recursive descent bash parser in pure Python."""
+"""Parable - A recursive descent parser for bash."""
 
 
 class ParseError(Exception):

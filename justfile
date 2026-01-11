@@ -37,7 +37,7 @@ lock-check:
 
 # Run all checks (tests, lint, format, lock, style) in parallel
 [parallel]
-check: test-all lint fmt lock-check check-dump-ast check-style
+check: test-all lint fmt lock-check check-dump-ast check-style test-js fmt-js
 
 # Run benchmarks (--fast for quick run)
 bench *ARGS:
@@ -65,3 +65,15 @@ check-dump-ast:
 # Check for banned Python constructions
 check-style:
     python3 bin/check-style.py 2>&1 | sed -u "s/^/[style] /" | tee /tmp/{{project}}-style.log
+
+# Transpile Python to JavaScript
+transpile:
+    python3 bin/transpile.py src/parable.py > src/parable.js
+
+# Run JavaScript tests
+test-js *ARGS:
+    node bin/run-js-tests.js {{ARGS}}
+
+# Format JavaScript (--fix to apply changes)
+fmt-js *ARGS:
+    npx -y @biomejs/biome format {{ if ARGS == "--fix" { "--write" } else { "" } }} src/parable.js 2>&1 | sed -u "s/^/[fmt-js] /" | tee /tmp/{{project}}-fmt-js.log

@@ -2,7 +2,9 @@
 """Transpile parable.py's restricted Python subset to JavaScript."""
 
 import ast
+import io
 import sys
+import tokenize
 from pathlib import Path
 
 
@@ -16,6 +18,8 @@ class JSTranspiler(ast.NodeVisitor):
         self.declared_vars = set()
         # Pre-populate with known class names (needed for forward references)
         self.class_names = {"Parser", "Word", "ParseError"}
+        self.comments = {}  # line_number -> comment_text
+        self.last_line = 0
 
     def emit(self, text: str):
         self.output.append("    " * self.indent + text)
@@ -23,13 +27,32 @@ class JSTranspiler(ast.NodeVisitor):
     def emit_raw(self, text: str):
         self.output.append(text)
 
+    def emit_comments_before(self, line: int):
+        for comment_line in sorted(self.comments.keys()):
+            if comment_line >= line:
+                break
+            if comment_line > self.last_line:
+                comment = self.comments[comment_line].lstrip("# ").rstrip()
+                self.emit(f"// {comment}")
+        self.last_line = line
+
     def transpile(self, source: str) -> str:
+        # Extract standalone comments (not inline) using tokenize
+        lines = source.splitlines()
+        tokens = tokenize.generate_tokens(io.StringIO(source).readline)
+        for tok in tokens:
+            if tok.type == tokenize.COMMENT:
+                line_num, col = tok.start
+                # Only keep comments where preceding content on line is whitespace
+                if lines[line_num - 1][:col].strip() == "":
+                    self.comments[line_num] = tok.string
         tree = ast.parse(source)
         self.visit(tree)
         return "\n".join(self.output)
 
     def visit_Module(self, node: ast.Module):
         for stmt in node.body:
+            self.emit_comments_before(stmt.lineno)
             self.visit(stmt)
 
     def visit_ClassDef(self, node: ast.ClassDef):
@@ -44,6 +67,7 @@ class JSTranspiler(ast.NodeVisitor):
         self.in_class_body = True
         self.class_has_base = bool(bases)
         for stmt in node.body:
+            self.emit_comments_before(stmt.lineno)
             self.visit(stmt)
         self.in_class_body = old_in_class
         self.class_has_base = old_has_base
@@ -146,10 +170,12 @@ class JSTranspiler(ast.NodeVisitor):
                 self.emit("super();")
             emit_defaults()  # After super() for constructors
             for stmt in other_stmts:
+                self.emit_comments_before(stmt.lineno)
                 self.visit(stmt)
         else:
             emit_defaults()  # At start for regular methods
             for stmt in node.body:
+                self.emit_comments_before(stmt.lineno)
                 self.visit(stmt)
         self.in_class_body = old_in_class
         self.in_method = old_in_method
@@ -220,6 +246,7 @@ class JSTranspiler(ast.NodeVisitor):
             self.emit(f"if ({test}) {{")
         self.indent += 1
         for stmt in node.body:
+            self.emit_comments_before(stmt.lineno)
             self.visit(stmt)
         self.indent -= 1
         if node.orelse:
@@ -229,6 +256,7 @@ class JSTranspiler(ast.NodeVisitor):
                 self.emit("} else {")
                 self.indent += 1
                 for stmt in node.orelse:
+                    self.emit_comments_before(stmt.lineno)
                     self.visit(stmt)
                 self.indent -= 1
                 self.emit("}")
@@ -240,6 +268,7 @@ class JSTranspiler(ast.NodeVisitor):
         self.emit(f"while ({test}) {{")
         self.indent += 1
         for stmt in node.body:
+            self.emit_comments_before(stmt.lineno)
             self.visit(stmt)
         self.indent -= 1
         self.emit("}")
@@ -286,6 +315,7 @@ class JSTranspiler(ast.NodeVisitor):
             self.emit(f"for (var {target} of {self.visit_expr(iter_expr)}) {{")
         self.indent += 1
         for stmt in node.body:
+            self.emit_comments_before(stmt.lineno)
             self.visit(stmt)
         self.indent -= 1
         self.emit("}")
@@ -315,6 +345,7 @@ class JSTranspiler(ast.NodeVisitor):
         self.emit("try {")
         self.indent += 1
         for stmt in node.body:
+            self.emit_comments_before(stmt.lineno)
             self.visit(stmt)
         self.indent -= 1
         for handler in node.handlers:
@@ -322,6 +353,7 @@ class JSTranspiler(ast.NodeVisitor):
             self.emit(f"}} catch ({name}) {{")
             self.indent += 1
             for stmt in handler.body:
+                self.emit_comments_before(stmt.lineno)
                 self.visit(stmt)
             self.indent -= 1
         self.emit("}")

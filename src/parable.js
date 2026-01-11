@@ -25,6 +25,7 @@ function IsOctalDigit(c) {
     return ((c >= "0") && (c <= "7"));
 }
 
+// ANSI-C escape sequence byte values
 var ANSI_C_ESCAPES = {"a": 7, "b": 8, "e": 27, "E": 27, "f": 12, "n": 10, "r": 13, "t": 9, "v": 11, "\\": 92, "\"": 34, "?": 63};
 function GetAnsiEscape(c) {
     if ((c === "a")) {
@@ -95,14 +96,24 @@ class Word extends Node {
     
     toSexp() {
         var value = this.value;
+        // Expand ALL $'...' ANSI-C quotes (handles escapes and strips $)
         value = this.ExpandAllAnsiCQuotes(value);
+        // Strip $ from locale strings $"..." (quote-aware)
         value = this.StripLocaleStringDollars(value);
+        // Normalize whitespace in array assignments: name=(a  b\tc) -> name=(a b c)
         value = this.NormalizeArrayWhitespace(value);
+        // Format command substitutions with bash-oracle pretty-printing (before escaping)
         value = this.FormatCommandSubstitutions(value);
+        // Strip line continuations (backslash-newline) from arithmetic expressions
         value = this.StripArithLineContinuations(value);
+        // Double CTLESC (0x01) bytes - bash-oracle uses this for quoting control chars
+        // Exception: don't double when preceded by odd number of backslashes (escaped)
         value = this.DoubleCtlescSmart(value);
+        // Prefix DEL (0x7f) with CTLESC - bash-oracle quotes this control char
         value = value.replaceAll("", "");
+        // Escape backslashes for s-expression output
         value = value.replaceAll("\\", "\\\\");
+        // Escape double quotes, newlines, and tabs
         var escaped = value.replaceAll("\"", "\\\"").replaceAll("\n", "\\n").replaceAll("\t", "\\t");
         return (("(word \"" + escaped) + "\")");
     }
@@ -116,6 +127,7 @@ class Word extends Node {
         var in_single = false;
         var in_double = false;
         for (var c of value) {
+            // Track quote state
             if (((c === "'") && !in_double)) {
                 in_single = !in_single;
             } else if (((c === "\"") && !in_single)) {
@@ -123,6 +135,8 @@ class Word extends Node {
             }
             result.push(c);
             if ((c === "")) {
+                // Only count backslashes in double-quoted context (where they escape)
+                // In single quotes, backslashes are literal, so always double CTLESC
                 if (in_double) {
                     var bs_count = 0;
                     for (var j = (result.length - 2); j > -1; j--) {
@@ -136,6 +150,7 @@ class Word extends Node {
                         result.push("");
                     }
                 } else {
+                    // Outside double quotes (including single quotes): always double
                     result.push("");
                 }
             }
@@ -153,15 +168,19 @@ class Word extends Node {
         while ((i < inner.length)) {
             if (((inner[i] === "\\") && ((i + 1) < inner.length))) {
                 var c = inner[(i + 1)];
+                // Check simple escapes first
                 var simple = GetAnsiEscape(c);
                 if ((simple >= 0)) {
                     result.push(simple);
                     i += 2;
                 } else if ((c === "'")) {
+                    // bash-oracle outputs \' as '\'' (shell quoting trick)
                     result.push(...[39, 92, 39, 39]);
                     i += 2;
                 } else if ((c === "x")) {
+                    // Check for \x{...} brace syntax (bash 5.3+)
                     if ((((i + 2) < inner.length) && (inner[(i + 2)] === "{"))) {
+                        // Find closing brace or end of hex digits
                         var j = (i + 3);
                         while (((j < inner.length) && IsHexDigit(inner[j]))) {
                             j += 1;
@@ -170,6 +189,7 @@ class Word extends Node {
                         if (((j < inner.length) && (inner[j] === "}"))) {
                             j += 1;
                         }
+                        // If no hex digits, treat as NUL (truncates)
                         if (!hex_str) {
                             return (("'" + new TextDecoder().decode(new Uint8Array(result))) + "'");
                         }
@@ -180,6 +200,7 @@ class Word extends Node {
                         this.AppendWithCtlesc(result, byte_val);
                         i = j;
                     } else {
+                        // Hex escape \xHH (1-2 hex digits) - raw byte
                         j = (i + 2);
                         while (((j < inner.length) && (j < (i + 4)) && IsHexDigit(inner[j]))) {
                             j += 1;
@@ -187,6 +208,7 @@ class Word extends Node {
                         if ((j > (i + 2))) {
                             byte_val = parseInt(inner.slice((i + 2), j), 16);
                             if ((byte_val === 0)) {
+                                // NUL truncates string
                                 return (("'" + new TextDecoder().decode(new Uint8Array(result))) + "'");
                             }
                             this.AppendWithCtlesc(result, byte_val);
@@ -197,6 +219,7 @@ class Word extends Node {
                         }
                     }
                 } else if ((c === "u")) {
+                    // Unicode escape \uHHHH (1-4 hex digits) - encode as UTF-8
                     j = (i + 2);
                     while (((j < inner.length) && (j < (i + 6)) && IsHexDigit(inner[j]))) {
                         j += 1;
@@ -204,6 +227,7 @@ class Word extends Node {
                     if ((j > (i + 2))) {
                         var codepoint = parseInt(inner.slice((i + 2), j), 16);
                         if ((codepoint === 0)) {
+                            // NUL truncates string
                             return (("'" + new TextDecoder().decode(new Uint8Array(result))) + "'");
                         }
                         result.push(...Array.from(new TextEncoder().encode(String.fromCodePoint(codepoint))));
@@ -213,6 +237,7 @@ class Word extends Node {
                         i += 1;
                     }
                 } else if ((c === "U")) {
+                    // Unicode escape \UHHHHHHHH (1-8 hex digits) - encode as UTF-8
                     j = (i + 2);
                     while (((j < inner.length) && (j < (i + 10)) && IsHexDigit(inner[j]))) {
                         j += 1;
@@ -220,6 +245,7 @@ class Word extends Node {
                     if ((j > (i + 2))) {
                         codepoint = parseInt(inner.slice((i + 2), j), 16);
                         if ((codepoint === 0)) {
+                            // NUL truncates string
                             return (("'" + new TextDecoder().decode(new Uint8Array(result))) + "'");
                         }
                         result.push(...Array.from(new TextEncoder().encode(String.fromCodePoint(codepoint))));
@@ -229,10 +255,12 @@ class Word extends Node {
                         i += 1;
                     }
                 } else if ((c === "c")) {
+                    // Control character \cX - mask with 0x1f
                     if (((i + 3) <= inner.length)) {
                         var ctrl_char = inner[(i + 2)];
                         var ctrl_val = (ctrl_char.charCodeAt(0) & 31);
                         if ((ctrl_val === 0)) {
+                            // NUL truncates string
                             return (("'" + new TextDecoder().decode(new Uint8Array(result))) + "'");
                         }
                         this.AppendWithCtlesc(result, ctrl_val);
@@ -242,6 +270,7 @@ class Word extends Node {
                         i += 1;
                     }
                 } else if ((c === "0")) {
+                    // Nul or octal \0 or \0NNN
                     j = (i + 2);
                     while (((j < inner.length) && (j < (i + 5)) && IsOctalDigit(inner[j]))) {
                         j += 1;
@@ -249,25 +278,30 @@ class Word extends Node {
                     if ((j > (i + 2))) {
                         byte_val = parseInt(inner.slice((i + 1), j), 8);
                         if ((byte_val === 0)) {
+                            // NUL truncates string
                             return (("'" + new TextDecoder().decode(new Uint8Array(result))) + "'");
                         }
                         this.AppendWithCtlesc(result, byte_val);
                         i = j;
                     } else {
+                        // Just \0 - NUL truncates string
                         return (("'" + new TextDecoder().decode(new Uint8Array(result))) + "'");
                     }
                 } else if (((c >= "1") && (c <= "7"))) {
+                    // Octal escape \NNN (1-3 digits) - raw byte
                     j = (i + 1);
                     while (((j < inner.length) && (j < (i + 4)) && IsOctalDigit(inner[j]))) {
                         j += 1;
                     }
                     byte_val = parseInt(inner.slice((i + 1), j), 8);
                     if ((byte_val === 0)) {
+                        // NUL truncates string
                         return (("'" + new TextDecoder().decode(new Uint8Array(result))) + "'");
                     }
                     this.AppendWithCtlesc(result, byte_val);
                     i = j;
                 } else {
+                    // Unknown escape - preserve as-is
                     result.push(92);
                     result.push(c.charCodeAt(0));
                     i += 2;
@@ -277,6 +311,7 @@ class Word extends Node {
                 i += 1;
             }
         }
+        // Decode as UTF-8, replacing invalid sequences with U+FFFD
         return (("'" + new TextDecoder().decode(new Uint8Array(result))) + "'");
     }
     
@@ -288,6 +323,7 @@ class Word extends Node {
         var brace_depth = 0;
         while ((i < value.length)) {
             var ch = value[i];
+            // Track brace depth for parameter expansions
             if (!in_single_quote) {
                 if (StartsWithAt(value, i, "${")) {
                     brace_depth += 1;
@@ -301,16 +337,22 @@ class Word extends Node {
                     continue;
                 }
             }
+            // Inside ${...}, we can expand $'...' even if originally in double quotes
             var effective_in_dquote = (in_double_quote && (brace_depth === 0));
+            // Track quote state to avoid matching $' inside regular quotes
             if (((ch === "'") && !effective_in_dquote)) {
+                // Check if this is start of $'...' ANSI-C string
                 if ((!in_single_quote && (i > 0) && (value[(i - 1)] === "$"))) {
+                    // This is handled below when we see $'
                     result.push(ch);
                     i += 1;
                 } else if (in_single_quote) {
+                    // End of single-quoted string
                     in_single_quote = false;
                     result.push(ch);
                     i += 1;
                 } else {
+                    // Start of regular single-quoted string
                     in_single_quote = true;
                     result.push(ch);
                     i += 1;
@@ -320,10 +362,12 @@ class Word extends Node {
                 result.push(ch);
                 i += 1;
             } else if (((ch === "\\") && ((i + 1) < value.length) && !in_single_quote)) {
+                // Backslash escape - skip both chars to avoid misinterpreting \" or \'
                 result.push(ch);
                 result.push(value[(i + 1)]);
                 i += 2;
             } else if ((StartsWithAt(value, i, "$'") && !in_single_quote && !effective_in_dquote)) {
+                // ANSI-C quoted string - find matching closing quote
                 var j = (i + 2);
                 while ((j < value.length)) {
                     if (((value[j] === "\\") && ((j + 1) < value.length))) {
@@ -335,11 +379,17 @@ class Word extends Node {
                         j += 1;
                     }
                 }
+                // Extract and expand the $'...' sequence
                 var ansi_str = value.slice(i, j);
+                // Strip the $ and expand escapes
                 var expanded = this.ExpandAnsiCEscapes(ansi_str.slice(1, ansi_str.length));
+                // Inside ${...}, strip quotes for default/alternate value operators
+                // but keep them for pattern replacement operators
                 if (((brace_depth > 0) && expanded.startsWith("'") && expanded.endsWith("'"))) {
                     var inner = expanded.slice(1, (expanded.length - 1));
+                    // Only strip if non-empty, no CTLESC, and after a default value operator
                     if ((inner && (inner.indexOf("") === -1))) {
+                        // Check what precedes - default value ops: :- := :+ :? - = + ?
                         if ((result.length >= 2)) {
                             var prev = result.slice((result.length - 2), result.length).join("");
                         } else {
@@ -349,6 +399,7 @@ class Word extends Node {
                             expanded = inner;
                         } else if ((result.length >= 1)) {
                             var last = result[(result.length - 1)];
+                            // Single char operators (not after :), but not /
                             if ((((last === "-") || (last === "=") || (last === "+") || (last === "?")) && ((result.length < 2) || (result[(result.length - 2)] !== ":")))) {
                                 expanded = inner;
                             }
@@ -381,10 +432,12 @@ class Word extends Node {
                 result.push(ch);
                 i += 1;
             } else if (((ch === "\\") && ((i + 1) < value.length))) {
+                // Escape - copy both chars
                 result.push(ch);
                 result.push(value[(i + 1)]);
                 i += 2;
             } else if ((StartsWithAt(value, i, "$\"") && !in_single_quote && !in_double_quote)) {
+                // Locale string $"..." outside quotes - strip the $ and enter double quote
                 result.push("\"");
                 in_double_quote = true;
                 i += 2;
@@ -397,9 +450,11 @@ class Word extends Node {
     }
     
     NormalizeArrayWhitespace(value) {
+        // Match array assignment pattern: name=( or name+=(
         if (!value.endsWith(")")) {
             return value;
         }
+        // Parse identifier: starts with letter/underscore, then alnum/underscore
         var i = 0;
         if (!((i < value.length) && (/^[a-zA-Z]$/.test(value[i]) || (value[i] === "_")))) {
             return value;
@@ -408,14 +463,18 @@ class Word extends Node {
         while (((i < value.length) && (/^[a-zA-Z0-9]$/.test(value[i]) || (value[i] === "_")))) {
             i += 1;
         }
+        // Optional + for +=
         if (((i < value.length) && (value[i] === "+"))) {
             i += 1;
         }
+        // Must have =(
         if (!(((i + 1) < value.length) && (value[i] === "=") && (value[(i + 1)] === "("))) {
             return value;
         }
         var prefix = value.slice(0, (i + 1));
+        // Extract content inside parentheses
         var inner = value.slice((prefix.length + 1), (value.length - 1));
+        // Normalize whitespace while respecting quotes
         var normalized = [];
         i = 0;
         var in_whitespace = true;
@@ -428,6 +487,7 @@ class Word extends Node {
                 }
                 i += 1;
             } else if ((ch === "'")) {
+                // Single-quoted string - preserve as-is
                 in_whitespace = false;
                 var j = (i + 1);
                 while (((j < inner.length) && (inner[j] !== "'"))) {
@@ -436,6 +496,7 @@ class Word extends Node {
                 normalized.push(inner.slice(i, (j + 1)));
                 i = (j + 1);
             } else if ((ch === "\"")) {
+                // Double-quoted string - preserve as-is
                 in_whitespace = false;
                 j = (i + 1);
                 while ((j < inner.length)) {
@@ -450,6 +511,7 @@ class Word extends Node {
                 normalized.push(inner.slice(i, (j + 1)));
                 i = (j + 1);
             } else if (((ch === "\\") && ((i + 1) < inner.length))) {
+                // Escape sequence
                 in_whitespace = false;
                 normalized.push(inner.slice(i, (i + 2)));
                 i += 2;
@@ -459,6 +521,7 @@ class Word extends Node {
                 i += 1;
             }
         }
+        // Strip trailing space
         var result = normalized.join("").replace(new RegExp("[" + " " + "]+$"), "");
         return (((prefix + "(") + result) + ")");
     }
@@ -467,7 +530,9 @@ class Word extends Node {
         var result = [];
         var i = 0;
         while ((i < value.length)) {
+            // Check for $(( arithmetic expression
             if (StartsWithAt(value, i, "$((")) {
+                // Find matching ))
                 var start = i;
                 i += 3;
                 var depth = 1;
@@ -484,6 +549,7 @@ class Word extends Node {
                         }
                         i += 2;
                     } else if (((value[i] === "\\") && ((i + 1) < value.length) && (value[(i + 1)] === "\n"))) {
+                        // Skip backslash-newline (line continuation)
                         i += 2;
                     } else {
                         arith_content.push(value[i]);
@@ -491,8 +557,10 @@ class Word extends Node {
                     }
                 }
                 if ((depth === 0)) {
+                    // Found proper )) closing - this is arithmetic
                     result.push((("$((" + arith_content.join("")) + "))"));
                 } else {
+                    // Didn't find )) - not arithmetic (likely $( + ( subshell), pass through
                     result.push(value.slice(start, i));
                 }
             } else {
@@ -511,6 +579,7 @@ class Word extends Node {
         } else {
             var expr = (node["expression"] !== undefined ? node["expression"] : null);
             if ((expr != null)) {
+                // ArithmeticExpansion, ArithBinaryOp, etc.
                 result.push(...this.CollectCmdsubs(expr));
             }
         }
@@ -542,6 +611,7 @@ class Word extends Node {
     }
     
     FormatCommandSubstitutions(value) {
+        // Collect command substitutions from all parts, including nested ones
         var cmdsub_parts = [];
         var procsub_parts = [];
         for (var p of this.parts) {
@@ -553,6 +623,7 @@ class Word extends Node {
                 cmdsub_parts.push(...this.CollectCmdsubs(p));
             }
         }
+        // Check if we have ${ or ${| brace command substitutions to format
         var has_brace_cmdsub = ((value.indexOf("${ ") !== -1) || (value.indexOf("${|") !== -1));
         if ((cmdsub_parts.length === 0 && procsub_parts.length === 0 && !has_brace_cmdsub)) {
             return value;
@@ -562,10 +633,14 @@ class Word extends Node {
         var cmdsub_idx = 0;
         var procsub_idx = 0;
         while ((i < value.length)) {
+            // Check for $( command substitution (but not $(( arithmetic)
             if ((StartsWithAt(value, i, "$(") && !StartsWithAt(value, i, "$((") && (cmdsub_idx < cmdsub_parts.length))) {
+                // Find matching close paren using bash-aware matching
                 var j = FindCmdsubEnd(value, (i + 2));
+                // Format this command substitution
                 var node = cmdsub_parts[cmdsub_idx];
                 var formatted = FormatCmdsubNode(node.command);
+                // Add space after $( if content starts with ( to avoid $((
                 if (formatted.startsWith("(")) {
                     result.push((("$( " + formatted) + ")"));
                 } else {
@@ -574,6 +649,8 @@ class Word extends Node {
                 cmdsub_idx += 1;
                 i = j;
             } else if (((value[i] === "`") && (cmdsub_idx < cmdsub_parts.length))) {
+                // Check for backtick command substitution
+                // Find matching backtick
                 j = (i + 1);
                 while ((j < value.length)) {
                     if (((value[j] === "\\") && ((j + 1) < value.length))) {
@@ -586,19 +663,25 @@ class Word extends Node {
                     }
                     j += 1;
                 }
+                // Keep backtick substitutions as-is (bash-oracle doesn't reformat them)
                 result.push(value.slice(i, j));
                 cmdsub_idx += 1;
                 i = j;
             } else if (((StartsWithAt(value, i, ">(") || StartsWithAt(value, i, "<(")) && (procsub_idx < procsub_parts.length))) {
+                // Check for >( or <( process substitution
                 var direction = value[i];
+                // Find matching close paren
                 j = FindCmdsubEnd(value, (i + 2));
+                // Format this process substitution (with in_procsub=True for no-space subshells)
                 node = procsub_parts[procsub_idx];
                 formatted = FormatCmdsubNode(node.command, 0, true);
                 result.push((((direction + "(") + formatted) + ")"));
                 procsub_idx += 1;
                 i = j;
             } else if ((StartsWithAt(value, i, "${ ") || StartsWithAt(value, i, "${|"))) {
+                // Check for ${ (space) or ${| brace command substitution
                 var prefix = value.slice(i, (i + 3));
+                // Find matching close brace
                 j = (i + 3);
                 var depth = 1;
                 while (((j < value.length) && (depth > 0))) {
@@ -609,7 +692,9 @@ class Word extends Node {
                     }
                     j += 1;
                 }
+                // Parse and format the inner content
                 var inner = value.slice((i + 2), (j - 1));
+                // Check if content is all whitespace - normalize to single space
                 if ((inner.trim() === "")) {
                     result.push("${ }");
                 } else {
@@ -636,8 +721,11 @@ class Word extends Node {
     }
     
     getCondFormattedValue() {
+        // Expand ANSI-C quotes
         var value = this.ExpandAllAnsiCQuotes(this.value);
+        // Format command substitutions
         value = this.FormatCommandSubstitutions(value);
+        // Bash doubles CTLESC (\x01) characters in output
         value = value.replaceAll("", "");
         return value.replace(new RegExp("[" + "\n" + "]+$"), "");
     }
@@ -683,6 +771,7 @@ class Pipeline extends Node {
         if ((this.commands.length === 1)) {
             return this.commands[0].toSexp();
         }
+        // Build list of (cmd, needs_pipe_both_redirect) filtering out PipeBoth markers
         var cmds = [];
         var i = 0;
         while ((i < this.commands.length)) {
@@ -691,6 +780,7 @@ class Pipeline extends Node {
                 i += 1;
                 continue;
             }
+            // Check if next element is PipeBoth
             var needs_redirect = (((i + 1) < this.commands.length) && (this.commands[(i + 1)].kind === "pipe-both"));
             cmds.push([cmd, needs_redirect]);
             i += 1;
@@ -701,6 +791,7 @@ class Pipeline extends Node {
             var needs = pair[1];
             return this.CmdSexp(cmd, needs);
         }
+        // Nest right-associatively: (pipe a (pipe b c))
         var last_pair = cmds[(cmds.length - 1)];
         var last_cmd = last_pair[0];
         var last_needs = last_pair[1];
@@ -711,6 +802,7 @@ class Pipeline extends Node {
             cmd = pair[0];
             needs = pair[1];
             if ((needs && (cmd.kind !== "command"))) {
+                // Compound command: redirect as sibling in pipe
                 result = (((("(pipe " + cmd.toSexp()) + " (redirect \">&\" 1) ") + result) + ")");
             } else {
                 result = (((("(pipe " + this.CmdSexp(cmd, needs)) + " ") + result) + ")");
@@ -725,6 +817,7 @@ class Pipeline extends Node {
             return cmd.toSexp();
         }
         if ((cmd.kind === "command")) {
+            // Inject redirect inside command
             var parts = [];
             for (var w of cmd.words) {
                 parts.push(w.toSexp());
@@ -735,6 +828,7 @@ class Pipeline extends Node {
             parts.push("(redirect \">&\" 1)");
             return (("(command " + parts.join(" ")) + ")");
         }
+        // Compound command handled by caller
         return cmd.toSexp();
     }
     
@@ -748,15 +842,21 @@ class List extends Node {
     }
     
     toSexp() {
+        // parts = [cmd, op, cmd, op, cmd, ...]
+        // Bash precedence: && and || bind tighter than ; and &
         var parts = Array.from(this.parts);
         var op_names = {"&&": "and", "||": "or", ";": "semi", "\n": "semi", "&": "background"};
+        // Strip trailing ; or \n (bash ignores it)
         while (((parts.length > 1) && (parts[(parts.length - 1)].kind === "operator") && ((parts[(parts.length - 1)].op === ";") || (parts[(parts.length - 1)].op === "\n")))) {
             parts = parts.slice(0, (parts.length - 1));
         }
         if ((parts.length === 1)) {
             return parts[0].toSexp();
         }
+        // Handle trailing & as unary background operator
+        // & only applies to the immediately preceding pipeline, not the whole list
         if (((parts[(parts.length - 1)].kind === "operator") && (parts[(parts.length - 1)].op === "&"))) {
+            // Find rightmost ; or \n to split there
             for (var i = (parts.length - 3); i > 0; i--) {
                 if (((parts[i].kind === "operator") && ((parts[i].op === ";") || (parts[i].op === "\n")))) {
                     var left = parts.slice(0, i);
@@ -774,6 +874,7 @@ class List extends Node {
                     return (((("(semi " + left_sexp) + " (background ") + right_sexp) + "))");
                 }
             }
+            // No ; or \n found, background the whole list (minus trailing &)
             var inner_parts = parts.slice(0, (parts.length - 1));
             if ((inner_parts.length === 1)) {
                 return (("(background " + inner_parts[0].toSexp()) + ")");
@@ -781,10 +882,13 @@ class List extends Node {
             var inner_list = new List(inner_parts);
             return (("(background " + inner_list.toSexp()) + ")");
         }
+        // Process by precedence: first split on ; and &, then on && and ||
         return this.ToSexpWithPrecedence(parts, op_names);
     }
     
     ToSexpWithPrecedence(parts, op_names) {
+        // Process operators by precedence: ; (lowest), then &, then && and ||
+        // Split on ; or \n first (rightmost for left-associativity)
         for (var i = (parts.length - 2); i > 0; i--) {
             if (((parts[i].kind === "operator") && ((parts[i].op === ";") || (parts[i].op === "\n")))) {
                 var left = parts.slice(0, i);
@@ -802,6 +906,7 @@ class List extends Node {
                 return (((("(semi " + left_sexp) + " ") + right_sexp) + ")");
             }
         }
+        // Then split on & (rightmost for left-associativity)
         for (var i = (parts.length - 2); i > 0; i--) {
             if (((parts[i].kind === "operator") && (parts[i].op === "&"))) {
                 left = parts.slice(0, i);
@@ -819,6 +924,7 @@ class List extends Node {
                 return (((("(background " + left_sexp) + " ") + right_sexp) + ")");
             }
         }
+        // No ; or &, process high-prec ops (&&, ||) left-associatively
         var result = parts[0].toSexp();
         for (var i = 1; i < (parts.length - 1); i += 2) {
             var op = parts[i];
@@ -877,6 +983,7 @@ class Comment extends Node {
     }
     
     toSexp() {
+        // bash-oracle doesn't output comments
         return "";
     }
     
@@ -893,7 +1000,9 @@ class Redirect extends Node {
     }
     
     toSexp() {
+        // Strip fd prefix from operator (e.g., "2>" -> ">", "{fd}>" -> ">")
         var op = this.op.replace(new RegExp("^[" + "0123456789" + "]+"), "");
+        // Strip {varname} prefix if present
         if (op.startsWith("{")) {
             var j = 1;
             if (((j < op.length) && (/^[a-zA-Z]$/.test(op[j]) || (op[j] === "_")))) {
@@ -907,9 +1016,13 @@ class Redirect extends Node {
             }
         }
         var target_val = this.target.value;
+        // Expand ANSI-C $'...' quotes (converts escapes like \n to actual newline)
         target_val = new Word(target_val).ExpandAllAnsiCQuotes(target_val);
+        // Strip $ from locale strings $"..."
         target_val = target_val.replaceAll("$\"", "\"");
+        // For fd duplication, target starts with & (e.g., "&1", "&2", "&-")
         if (target_val.startsWith("&")) {
+            // Determine the real operator
             if ((op === ">")) {
                 op = ">&";
             } else if ((op === "<")) {
@@ -921,13 +1034,16 @@ class Redirect extends Node {
             } else if ((target_val === "&-")) {
                 return "(redirect \">&-\" 0)";
             } else {
+                // Variable fd dup like >&$fd or >&$fd- (move) - strip the & and trailing -
                 return (((("(redirect \"" + op) + "\" \"") + fd_target) + "\")");
             }
         }
+        // Handle case where op is already >& or <&
         if (((op === ">&") || (op === "<&"))) {
             if (/^[0-9]+$/.test(target_val)) {
                 return (((("(redirect \"" + op) + "\" ") + target_val) + ")");
             }
+            // Variable fd dup with move indicator (trailing -)
             target_val = target_val.replace(new RegExp("[" + "-" + "]+$"), "");
             return (((("(redirect \"" + op) + "\" \"") + target_val) + "\")");
         }
@@ -1103,6 +1219,7 @@ class For extends Node {
     }
     
     toSexp() {
+        // bash-oracle format: (for (word "var") (in (word "a") ...) body)
         var suffix = "";
         if (this.redirects && this.redirects.length) {
             var redirect_parts = [];
@@ -1113,8 +1230,10 @@ class For extends Node {
         }
         var var_escaped = this.variable.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"");
         if ((this.words == null)) {
+            // No 'in' clause - bash-oracle implies (in (word "\"$@\""))
             return ((((("(for (word \"" + var_escaped) + "\") (in (word \"\\\"$@\\\"\")) ") + this.body.toSexp()) + ")") + suffix);
         } else if ((this.words.length === 0)) {
+            // Empty 'in' clause - bash-oracle outputs (in)
             return ((((("(for (word \"" + var_escaped) + "\") (in) ") + this.body.toSexp()) + ")") + suffix);
         } else {
             var word_parts = [];
@@ -1143,7 +1262,9 @@ class ForArith extends Node {
     }
     
     toSexp() {
+        // bash-oracle format: (arith-for (init (word "x")) (test (word "y")) (step (word "z")) body)
         function formatArithVal(s) {
+            // Use Word's methods to expand ANSI-C quotes and strip locale $
             var w = new Word(s, []);
             var val = w.ExpandAllAnsiCQuotes(s);
             val = w.StripLocaleStringDollars(val);
@@ -1193,6 +1314,7 @@ class Select extends Node {
     }
     
     toSexp() {
+        // bash-oracle format: (select (word "var") (in (word "a") ...) body)
         var suffix = "";
         if (this.redirects && this.redirects.length) {
             var redirect_parts = [];
@@ -1214,6 +1336,7 @@ class Select extends Node {
                 in_clause = "(in)";
             }
         } else {
+            // No 'in' clause means implicit "$@"
             in_clause = "(in (word \"\\\"$@\\\"\"))";
         }
         return ((((((("(select (word \"" + var_escaped) + "\") ") + in_clause) + " ") + this.body.toSexp()) + ")") + suffix);
@@ -1299,15 +1422,19 @@ function HasBracketClose(s, start, depth) {
 }
 
 function ConsumeBracketClass(s, start, depth) {
+    // First scan to see if this is a valid bracket expression
     var scan_pos = (start + 1);
+    // Skip [! or [^ at start
     if (((scan_pos < s.length) && ((s[scan_pos] === "!") || (s[scan_pos] === "^")))) {
         scan_pos += 1;
     }
+    // Handle ] as first char
     if (((scan_pos < s.length) && (s[scan_pos] === "]"))) {
         if (HasBracketClose(s, (scan_pos + 1), depth)) {
             scan_pos += 1;
         }
     }
+    // Scan for closing ]
     var is_bracket = false;
     while ((scan_pos < s.length)) {
         if ((s[scan_pos] === "]")) {
@@ -1322,18 +1449,22 @@ function ConsumeBracketClass(s, start, depth) {
     if (!is_bracket) {
         return [(start + 1), ["["], false];
     }
+    // Valid bracket - consume it
     var chars = ["["];
     var i = (start + 1);
+    // Handle [! or [^
     if (((i < s.length) && ((s[i] === "!") || (s[i] === "^")))) {
         chars.push(s[i]);
         i += 1;
     }
+    // Handle ] as first char
     if (((i < s.length) && (s[i] === "]"))) {
         if (HasBracketClose(s, (i + 1), depth)) {
             chars.push(s[i]);
             i += 1;
         }
     }
+    // Consume until ]
     while (((i < s.length) && (s[i] !== "]"))) {
         chars.push(s[i]);
         i += 1;
@@ -1357,6 +1488,8 @@ class CasePattern extends Node {
     }
     
     toSexp() {
+        // bash-oracle format: (pattern ((word "a") (word "b")) body)
+        // Split pattern by | respecting escapes, extglobs, quotes, and brackets
         var alternatives = [];
         var current = [];
         var i = 0;
@@ -1367,11 +1500,13 @@ class CasePattern extends Node {
                 current.push(this.pattern.slice(i, (i + 2)));
                 i += 2;
             } else if ((((ch === "@") || (ch === "?") || (ch === "*") || (ch === "+") || (ch === "!")) && ((i + 1) < this.pattern.length) && (this.pattern[(i + 1)] === "("))) {
+                // Start of extglob: @(, ?(, *(, +(, !(
                 current.push(ch);
                 current.push("(");
                 depth += 1;
                 i += 2;
             } else if (((ch === "$") && ((i + 1) < this.pattern.length) && (this.pattern[(i + 1)] === "("))) {
+                // $( command sub or $(( arithmetic - track depth
                 current.push(ch);
                 current.push("(");
                 depth += 1;
@@ -1408,6 +1543,7 @@ class CasePattern extends Node {
         alternatives.push(current.join(""));
         var word_list = [];
         for (var alt of alternatives) {
+            // Use Word.to_sexp() to properly expand ANSI-C quotes and escape
             word_list.push(new Word(alt).toSexp());
         }
         var pattern_str = word_list.join(" ");
@@ -1417,6 +1553,7 @@ class CasePattern extends Node {
         } else {
             parts.push(" ()");
         }
+        // bash-oracle doesn't output fallthrough/falltest markers
         parts.push(")");
         return parts.join("");
     }
@@ -1548,6 +1685,8 @@ class ArithmeticCommand extends Node {
     }
     
     toSexp() {
+        // bash-oracle format: (arith (word "content"))
+        // Redirects are siblings: (arith (word "...")) (redirect ...)
         var escaped = this.raw_content.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"").replaceAll("\n", "\\n");
         var result = (("(arith (word \"" + escaped) + "\"))");
         if (this.redirects && this.redirects.length) {
@@ -1563,6 +1702,7 @@ class ArithmeticCommand extends Node {
     
 }
 
+// Arithmetic expression nodes
 class ArithNumber extends Node {
     constructor(value) {
         super();
@@ -1806,6 +1946,7 @@ class Negation extends Node {
     
     toSexp() {
         if ((this.pipeline == null)) {
+            // Bare "!" with no command - bash-oracle shows empty command
             return "(negation (command))";
         }
         return (("(negation " + this.pipeline.toSexp()) + ")");
@@ -1825,6 +1966,7 @@ class Time extends Node {
     
     toSexp() {
         if ((this.pipeline == null)) {
+            // Bare "time" with no command - bash-oracle shows empty command
             if (this.posix) {
                 return "(time -p (command))";
             } else {
@@ -1851,8 +1993,11 @@ class ConditionalExpr extends Node {
     }
     
     toSexp() {
+        // bash-oracle format: (cond ...) not (cond-expr ...)
+        // Redirects are siblings, not children: (cond ...) (redirect ...)
         var body_kind = (this.body["kind"] !== undefined ? this.body["kind"] : null);
         if ((body_kind == null)) {
+            // body is a string
             var escaped = this.body.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"").replaceAll("\n", "\\n");
             var result = (("(cond \"" + escaped) + "\")");
         } else {
@@ -1880,6 +2025,8 @@ class UnaryTest extends Node {
     }
     
     toSexp() {
+        // bash-oracle format: (cond-unary "-f" (cond-term "file"))
+        // cond-term preserves content as-is (no backslash escaping)
         return (((("(cond-unary \"" + this.op) + "\" (cond-term \"") + this.operand.value) + "\"))");
     }
     
@@ -1895,6 +2042,8 @@ class BinaryTest extends Node {
     }
     
     toSexp() {
+        // bash-oracle format: (cond-binary "==" (cond-term "x") (cond-term "y"))
+        // cond-term preserves content as-is (no backslash escaping)
         var left_val = this.left.getCondFormattedValue();
         var right_val = this.right.getCondFormattedValue();
         return (((((("(cond-binary \"" + this.op) + "\" (cond-term \"") + left_val) + "\") (cond-term \"") + right_val) + "\"))");
@@ -1938,6 +2087,7 @@ class CondNot extends Node {
     }
     
     toSexp() {
+        // bash-oracle ignores negation - just output the operand
         return this.operand.toSexp();
     }
     
@@ -1987,6 +2137,7 @@ class Coproc extends Node {
     }
     
     toSexp() {
+        // Use provided name for compound commands, "COPROC" for simple commands
         if (this.name) {
             var name = this.name;
         } else {
@@ -2025,12 +2176,14 @@ function FormatCmdsubNode(node, indent, in_procsub) {
         return cmd_parts.join(" | ");
     }
     if ((node.kind === "list")) {
+        // Join commands with operators
         var result = [];
         for (var p of node.parts) {
             if ((p.kind === "operator")) {
                 if ((p.op === ";")) {
                     result.push(";");
                 } else if ((p.op === "\n")) {
+                    // Skip newline if it follows a semicolon (redundant separator)
                     if ((result.length > 0 && (result[(result.length - 1)] === ";"))) {
                         continue;
                     }
@@ -2047,6 +2200,7 @@ function FormatCmdsubNode(node, indent, in_procsub) {
                 result.push(FormatCmdsubNode(p, indent));
             }
         }
+        // Strip trailing ; or newline
         var s = result.join("");
         while ((s.endsWith(";") || s.endsWith("\n"))) {
             s = s.slice(0, (s.length - 1));
@@ -2103,6 +2257,7 @@ function FormatCmdsubNode(node, indent, in_procsub) {
             var pat_indent = " ".repeat((indent + 8));
             var term_indent = " ".repeat((indent + 4));
             if ((i === 0)) {
+                // First pattern on same line as 'in'
                 patterns.push((((((((" " + pat) + ")\n") + pat_indent) + body) + "\n") + term_indent) + term));
             } else {
                 patterns.push(((((((pat + ")\n") + pat_indent) + body) + "\n") + term_indent) + term));
@@ -2114,6 +2269,7 @@ function FormatCmdsubNode(node, indent, in_procsub) {
     }
     if ((node.kind === "function")) {
         var name = node.name;
+        // Get the body content - if it's a BraceGroup, unwrap it
         if ((node.body.kind === "brace-group")) {
             body = FormatCmdsubNode(node.body.body, (indent + 4));
         } else {
@@ -2151,11 +2307,13 @@ function FormatCmdsubNode(node, indent, in_procsub) {
     if ((node.kind === "arith-cmd")) {
         return (("((" + node.raw_content) + "))");
     }
+    // Fallback: return empty for unknown types
     return "";
 }
 
 function FormatRedirect(r) {
     if ((r.kind === "heredoc")) {
+        // Include heredoc content: <<DELIM\ncontent\nDELIM\n
         if (r.strip_tabs) {
             var op = "<<-";
         } else {
@@ -2170,10 +2328,13 @@ function FormatRedirect(r) {
     }
     op = r.op;
     var target = r.target.value;
+    // For fd duplication (target starts with &), handle normalization
     if (target.startsWith("&")) {
+        // Normalize N<&- to N>&- (close always uses >)
         if (((target === "&-") && op.endsWith("<"))) {
             op = (op.slice(0, (op.length - 1)) + ">");
         }
+        // Add default fd for bare >&N or <&N
         if ((op === ">")) {
             op = "1>";
         } else if ((op === "<")) {
@@ -2185,9 +2346,11 @@ function FormatRedirect(r) {
 }
 
 function NormalizeFdRedirects(s) {
+    // Match >&N or <&N not preceded by a digit, add default fd
     var result = [];
     var i = 0;
     while ((i < s.length)) {
+        // Check for >&N or <&N
         if ((((i + 2) < s.length) && (s[(i + 1)] === "&") && /^[0-9]+$/.test(s[(i + 2)]))) {
             var prev_is_digit = ((i > 0) && /^[0-9]+$/.test(s[(i - 1)]));
             if (((s[i] === ">") && !prev_is_digit)) {
@@ -2217,10 +2380,12 @@ function FindCmdsubEnd(value, start) {
     var in_case_patterns = false;
     while (((i < value.length) && (depth > 0))) {
         var c = value[i];
+        // Handle escapes
         if (((c === "\\") && ((i + 1) < value.length) && !in_single)) {
             i += 2;
             continue;
         }
+        // Handle quotes
         if (((c === "'") && !in_double)) {
             in_single = !in_single;
             i += 1;
@@ -2236,35 +2401,44 @@ function FindCmdsubEnd(value, start) {
             continue;
         }
         if (in_double) {
+            // Inside double quotes, $() command substitution is still active
             if ((StartsWithAt(value, i, "$(") && !StartsWithAt(value, i, "$(("))) {
+                // Recursively find end of nested command substitution
                 var j = FindCmdsubEnd(value, (i + 2));
                 i = j;
                 continue;
             }
+            // Skip other characters inside double quotes
             i += 1;
             continue;
         }
+        // Handle comments - skip from # to end of line
+        // Only treat # as comment if preceded by whitespace or at start
         if (((c === "#") && ((i === start) || (value[(i - 1)] === " ") || (value[(i - 1)] === "\t") || (value[(i - 1)] === "\n") || (value[(i - 1)] === ";") || (value[(i - 1)] === "|") || (value[(i - 1)] === "&") || (value[(i - 1)] === "(") || (value[(i - 1)] === ")")))) {
             while (((i < value.length) && (value[i] !== "\n"))) {
                 i += 1;
             }
             continue;
         }
+        // Handle heredocs
         if (StartsWithAt(value, i, "<<")) {
             i = SkipHeredoc(value, i);
             continue;
         }
+        // Check for 'case' keyword
         if ((StartsWithAt(value, i, "case") && IsWordBoundary(value, i, 4))) {
             case_depth += 1;
             in_case_patterns = false;
             i += 4;
             continue;
         }
+        // Check for 'in' keyword (after case)
         if (((case_depth > 0) && StartsWithAt(value, i, "in") && IsWordBoundary(value, i, 2))) {
             in_case_patterns = true;
             i += 2;
             continue;
         }
+        // Check for 'esac' keyword
         if ((StartsWithAt(value, i, "esac") && IsWordBoundary(value, i, 4))) {
             if ((case_depth > 0)) {
                 case_depth -= 1;
@@ -2273,14 +2447,18 @@ function FindCmdsubEnd(value, start) {
             i += 4;
             continue;
         }
+        // Check for ';;' (end of case pattern, next pattern or esac follows)
         if (StartsWithAt(value, i, ";;")) {
             i += 2;
             continue;
         }
+        // Handle parens
         if ((c === "(")) {
             depth += 1;
         } else if ((c === ")")) {
+            // In case patterns, ) after pattern name is not a grouping paren
             if ((in_case_patterns && (case_depth > 0))) {
+                // This ) is a case pattern terminator, skip it
             } else {
                 depth -= 1;
             }
@@ -2292,12 +2470,15 @@ function FindCmdsubEnd(value, start) {
 
 function SkipHeredoc(value, start) {
     var i = (start + 2);
+    // Handle <<- (strip tabs)
     if (((i < value.length) && (value[i] === "-"))) {
         i += 1;
     }
+    // Skip whitespace before delimiter
     while (((i < value.length) && IsWhitespaceNoNewline(value[i]))) {
         i += 1;
     }
+    // Extract delimiter - may be quoted
     var delim_start = i;
     var quote_char = null;
     if (((i < value.length) && ((value[i] === "\"") || (value[i] === "'")))) {
@@ -2312,6 +2493,7 @@ function SkipHeredoc(value, start) {
             i += 1;
         }
     } else if (((i < value.length) && (value[i] === "\\"))) {
+        // Backslash-quoted delimiter like <<\EOF
         i += 1;
         delim_start = i;
         while (((i < value.length) && !IsWhitespace(value[i]))) {
@@ -2319,30 +2501,36 @@ function SkipHeredoc(value, start) {
         }
         delimiter = value.slice(delim_start, i);
     } else {
+        // Unquoted delimiter
         while (((i < value.length) && !IsWhitespace(value[i]))) {
             i += 1;
         }
         delimiter = value.slice(delim_start, i);
     }
+    // Skip to end of line (heredoc content starts on next line)
     while (((i < value.length) && (value[i] !== "\n"))) {
         i += 1;
     }
     if ((i < value.length)) {
         i += 1;
     }
+    // Find the end delimiter on its own line
     while ((i < value.length)) {
         var line_start = i;
+        // Find end of this line
         var line_end = i;
         while (((line_end < value.length) && (value[line_end] !== "\n"))) {
             line_end += 1;
         }
         var line = value.slice(line_start, line_end);
+        // Check if this line is the delimiter (possibly with leading tabs for <<-)
         if ((((start + 2) < value.length) && (value[(start + 2)] === "-"))) {
             var stripped = line.replace(new RegExp("^[" + "\t" + "]+"), "");
         } else {
             stripped = line;
         }
         if ((stripped === delimiter)) {
+            // Found end - return position after delimiter line
             if ((line_end < value.length)) {
                 return (line_end + 1);
             } else {
@@ -2359,9 +2547,11 @@ function SkipHeredoc(value, start) {
 }
 
 function IsWordBoundary(s, pos, word_len) {
+    // Check character before
     if (((pos > 0) && /^[a-zA-Z0-9]$/.test(s[(pos - 1)]))) {
         return false;
     }
+    // Check character after
     var end = (pos + word_len);
     if (((end < s.length) && /^[a-zA-Z0-9]$/.test(s[end]))) {
         return false;
@@ -2369,7 +2559,11 @@ function IsWordBoundary(s, pos, word_len) {
     return true;
 }
 
+// Reserved words that cannot be command names
 var RESERVED_WORDS = new Set(["if", "then", "elif", "else", "fi", "while", "until", "for", "select", "do", "done", "case", "esac", "in", "function", "coproc"]);
+// Metacharacters that break words (unquoted)
+// Note: {} are NOT metacharacters - they're only special at command position
+// for brace groups. In words like {a,b,c}, braces are literal.
 var METACHAR = new Set(" \t\n|&;()<>");
 var COND_UNARY_OPS = new Set(["-a", "-b", "-c", "-d", "-e", "-f", "-g", "-h", "-k", "-p", "-r", "-s", "-t", "-u", "-w", "-x", "-G", "-L", "-N", "-O", "-S", "-z", "-n", "-o", "-v", "-R"]);
 var COND_BINARY_OPS = new Set(["==", "!=", "=~", "=", "<", ">", "-eq", "-ne", "-lt", "-le", "-gt", "-ge", "-nt", "-ot", "-ef"]);
@@ -2520,10 +2714,12 @@ class Parser {
             if (IsWhitespaceNoNewline(ch)) {
                 this.advance();
             } else if ((ch === "#")) {
+                // Skip comment to end of line (but not the newline itself)
                 while ((!this.atEnd() && (this.peek() !== "\n"))) {
                     this.advance();
                 }
             } else if (((ch === "\\") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "\n"))) {
+                // Backslash-newline is line continuation - skip both
                 this.advance();
                 this.advance();
             } else {
@@ -2537,6 +2733,7 @@ class Parser {
             var ch = this.peek();
             if (IsWhitespace(ch)) {
                 this.advance();
+                // After advancing past a newline, skip any pending heredoc content
                 if ((ch === "\n")) {
                     if (((this._pending_heredoc_end != null) && (this._pending_heredoc_end > this.pos))) {
                         this.pos = this._pending_heredoc_end;
@@ -2544,10 +2741,12 @@ class Parser {
                     }
                 }
             } else if ((ch === "#")) {
+                // Skip comment to end of line
                 while ((!this.atEnd() && (this.peek() !== "\n"))) {
                     this.advance();
                 }
             } else if (((ch === "\\") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "\n"))) {
+                // Backslash-newline is line continuation - skip both
                 this.advance();
                 this.advance();
             } else {
@@ -2566,6 +2765,7 @@ class Parser {
         var chars = [];
         while ((!this.atEnd() && !IsMetachar(this.peek()))) {
             var ch = this.peek();
+            // Stop at quotes - don't include in peek
             if (IsQuote(ch)) {
                 break;
             }
@@ -2588,6 +2788,7 @@ class Parser {
             this.pos = saved_pos;
             return false;
         }
+        // Actually consume the word
         this.skipWhitespace();
         for (var _ of expected) {
             this.advance();
@@ -2608,6 +2809,12 @@ class Parser {
         var seen_equals = false;
         while (!this.atEnd()) {
             var ch = this.peek();
+            // Track bracket depth for array subscripts like a[1+2]=3
+            // Inside brackets, metacharacters like | and ( are literal
+            // Only track [ after we've seen some chars (so [ -f file ] still works)
+            // Only at command start (array assignments), not in argument position
+            // Only BEFORE = sign (key=1],a[1 should not track the [1 part)
+            // Only after identifier char (not [[ which is conditional keyword)
             if (((ch === "[") && chars && at_command_start && !seen_equals)) {
                 var prev_char = chars[(chars.length - 1)];
                 if ((/^[a-zA-Z0-9]$/.test(prev_char) || ((prev_char === "_") || (prev_char === "]")))) {
@@ -2624,6 +2831,7 @@ class Parser {
             if (((ch === "=") && (bracket_depth === 0))) {
                 seen_equals = true;
             }
+            // Single-quoted string - no expansion
             if ((ch === "'")) {
                 this.advance();
                 chars.push("'");
@@ -2635,13 +2843,16 @@ class Parser {
                 }
                 chars.push(this.advance());
             } else if ((ch === "\"")) {
+                // Double-quoted string - expansions happen inside
                 this.advance();
                 chars.push("\"");
                 while ((!this.atEnd() && (this.peek() !== "\""))) {
                     var c = this.peek();
+                    // Handle escape sequences in double quotes
                     if (((c === "\\") && ((this.pos + 1) < this.length))) {
                         var next_c = this.source[(this.pos + 1)];
                         if ((next_c === "\n")) {
+                            // Line continuation - skip both backslash and newline
                             this.advance();
                             this.advance();
                         } else {
@@ -2649,6 +2860,7 @@ class Parser {
                             chars.push(this.advance());
                         }
                     } else if (((c === "$") && ((this.pos + 2) < this.length) && (this.source[(this.pos + 1)] === "(") && (this.source[(this.pos + 2)] === "("))) {
+                        // Handle arithmetic expansion $((...))
                         var arith_result = this.ParseArithmeticExpansion();
                         var arith_node = arith_result[0];
                         var arith_text = arith_result[1];
@@ -2656,6 +2868,7 @@ class Parser {
                             parts.push(arith_node);
                             chars.push(arith_text);
                         } else {
+                            // Not arithmetic - try command substitution
                             var cmdsub_result = this.ParseCommandSubstitution();
                             var cmdsub_node = cmdsub_result[0];
                             var cmdsub_text = cmdsub_result[1];
@@ -2667,6 +2880,7 @@ class Parser {
                             }
                         }
                     } else if (((c === "$") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "["))) {
+                        // Handle deprecated arithmetic expansion $[expr]
                         arith_result = this.ParseDeprecatedArithmetic();
                         arith_node = arith_result[0];
                         arith_text = arith_result[1];
@@ -2677,6 +2891,7 @@ class Parser {
                             chars.push(this.advance());
                         }
                     } else if (((c === "$") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "("))) {
+                        // Handle command substitution $(...)
                         cmdsub_result = this.ParseCommandSubstitution();
                         cmdsub_node = cmdsub_result[0];
                         cmdsub_text = cmdsub_result[1];
@@ -2687,6 +2902,7 @@ class Parser {
                             chars.push(this.advance());
                         }
                     } else if ((c === "$")) {
+                        // Handle parameter expansion inside double quotes
                         var param_result = this.ParseParamExpansion();
                         var param_node = param_result[0];
                         var param_text = param_result[1];
@@ -2697,6 +2913,7 @@ class Parser {
                             chars.push(this.advance());
                         }
                     } else if ((c === "`")) {
+                        // Handle backtick command substitution
                         cmdsub_result = this.ParseBacktickSubstitution();
                         cmdsub_node = cmdsub_result[0];
                         cmdsub_text = cmdsub_result[1];
@@ -2715,8 +2932,10 @@ class Parser {
                 }
                 chars.push(this.advance());
             } else if (((ch === "\\") && ((this.pos + 1) < this.length))) {
+                // Escape outside quotes
                 var next_ch = this.source[(this.pos + 1)];
                 if ((next_ch === "\n")) {
+                    // Line continuation - skip both backslash and newline
                     this.advance();
                     this.advance();
                 } else {
@@ -2724,6 +2943,7 @@ class Parser {
                     chars.push(this.advance());
                 }
             } else if (((ch === "$") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "'"))) {
+                // ANSI-C quoting $'...'
                 var ansi_result = this.ParseAnsiCQuote();
                 var ansi_node = ansi_result[0];
                 var ansi_text = ansi_result[1];
@@ -2734,6 +2954,7 @@ class Parser {
                     chars.push(this.advance());
                 }
             } else if (((ch === "$") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "\""))) {
+                // Locale translation $"..."
                 var locale_result = this.ParseLocaleString();
                 var locale_node = locale_result[0];
                 var locale_text = locale_result[1];
@@ -2746,6 +2967,8 @@ class Parser {
                     chars.push(this.advance());
                 }
             } else if (((ch === "$") && ((this.pos + 2) < this.length) && (this.source[(this.pos + 1)] === "(") && (this.source[(this.pos + 2)] === "("))) {
+                // Arithmetic expansion $((...)) - try before command substitution
+                // If it fails (returns None), fall through to command substitution
                 arith_result = this.ParseArithmeticExpansion();
                 arith_node = arith_result[0];
                 arith_text = arith_result[1];
@@ -2753,6 +2976,7 @@ class Parser {
                     parts.push(arith_node);
                     chars.push(arith_text);
                 } else {
+                    // Not arithmetic (e.g., '$( ( ... ) )' is command sub + subshell)
                     cmdsub_result = this.ParseCommandSubstitution();
                     cmdsub_node = cmdsub_result[0];
                     cmdsub_text = cmdsub_result[1];
@@ -2764,6 +2988,7 @@ class Parser {
                     }
                 }
             } else if (((ch === "$") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "["))) {
+                // Deprecated arithmetic expansion $[expr]
                 arith_result = this.ParseDeprecatedArithmetic();
                 arith_node = arith_result[0];
                 arith_text = arith_result[1];
@@ -2774,6 +2999,7 @@ class Parser {
                     chars.push(this.advance());
                 }
             } else if (((ch === "$") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "("))) {
+                // Command substitution $(...)
                 cmdsub_result = this.ParseCommandSubstitution();
                 cmdsub_node = cmdsub_result[0];
                 cmdsub_text = cmdsub_result[1];
@@ -2784,6 +3010,7 @@ class Parser {
                     chars.push(this.advance());
                 }
             } else if ((ch === "$")) {
+                // Parameter expansion $var or ${...}
                 param_result = this.ParseParamExpansion();
                 param_node = param_result[0];
                 param_text = param_result[1];
@@ -2794,6 +3021,7 @@ class Parser {
                     chars.push(this.advance());
                 }
             } else if ((ch === "`")) {
+                // Backtick command substitution
                 cmdsub_result = this.ParseBacktickSubstitution();
                 cmdsub_node = cmdsub_result[0];
                 cmdsub_text = cmdsub_result[1];
@@ -2804,6 +3032,7 @@ class Parser {
                     chars.push(this.advance());
                 }
             } else if ((IsRedirectChar(ch) && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "("))) {
+                // Process substitution <(...) or >(...)
                 var procsub_result = this.ParseProcessSubstitution();
                 var procsub_node = procsub_result[0];
                 var procsub_text = procsub_result[1];
@@ -2811,9 +3040,11 @@ class Parser {
                     parts.push(procsub_node);
                     chars.push(procsub_text);
                 } else {
+                    // Not a process substitution, treat as metacharacter
                     break;
                 }
             } else if (((ch === "(") && chars && ((chars[(chars.length - 1)] === "=") || ((chars.length >= 2) && (chars[(chars.length - 2)] === "+") && (chars[(chars.length - 1)] === "="))))) {
+                // Array literal: name=(elements) or name+=(elements)
                 var array_result = this.ParseArrayLiteral();
                 var array_node = array_result[0];
                 var array_text = array_result[1];
@@ -2821,9 +3052,11 @@ class Parser {
                     parts.push(array_node);
                     chars.push(array_text);
                 } else {
+                    // Unexpected: ( without matching )
                     break;
                 }
             } else if ((IsExtglobPrefix(ch) && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "("))) {
+                // Extglob pattern @(), ?(), *(), +(), !()
                 chars.push(this.advance());
                 chars.push(this.advance());
                 var extglob_depth = 1;
@@ -2860,9 +3093,11 @@ class Parser {
                             chars.push(this.advance());
                         }
                     } else if (((c === "$") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "("))) {
+                        // $() or $(()) inside extglob
                         chars.push(this.advance());
                         chars.push(this.advance());
                         if ((!this.atEnd() && (this.peek() === "("))) {
+                            // $(()) arithmetic
                             chars.push(this.advance());
                             var paren_depth = 2;
                             while ((!this.atEnd() && (paren_depth > 0))) {
@@ -2875,9 +3110,11 @@ class Parser {
                                 chars.push(this.advance());
                             }
                         } else {
+                            // $() command sub - count as nested paren
                             extglob_depth += 1;
                         }
                     } else if ((IsExtglobPrefix(c) && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "("))) {
+                        // Nested extglob
                         chars.push(this.advance());
                         chars.push(this.advance());
                         extglob_depth += 1;
@@ -2886,8 +3123,10 @@ class Parser {
                     }
                 }
             } else if ((IsMetachar(ch) && (bracket_depth === 0))) {
+                // Metacharacter ends the word (unless inside brackets like a[x|y]=1)
                 break;
             } else {
+                // Regular character (including metacharacters inside brackets)
                 chars.push(this.advance());
             }
         }
@@ -2912,11 +3151,16 @@ class Parser {
             return [null, ""];
         }
         this.advance();
+        // Find matching closing paren, being aware of:
+        // - Nested $() and plain ()
+        // - Quoted strings
+        // - case statements (where ) after pattern isn't a closer)
         var content_start = this.pos;
         var depth = 1;
         var case_depth = 0;
         while ((!this.atEnd() && (depth > 0))) {
             var c = this.peek();
+            // Single-quoted string - no special chars inside
             if ((c === "'")) {
                 this.advance();
                 while ((!this.atEnd() && (this.peek() !== "'"))) {
@@ -2927,6 +3171,7 @@ class Parser {
                 }
                 continue;
             }
+            // Double-quoted string - handle escapes and nested $()
             if ((c === "\"")) {
                 this.advance();
                 while ((!this.atEnd() && (this.peek() !== "\""))) {
@@ -2934,6 +3179,8 @@ class Parser {
                         this.advance();
                         this.advance();
                     } else if (((this.peek() === "$") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "("))) {
+                        // Nested $() in double quotes - recurse to find matching )
+                        // Command substitution creates new quoting context
                         this.advance();
                         this.advance();
                         var nested_depth = 1;
@@ -2989,26 +3236,32 @@ class Parser {
                 }
                 continue;
             }
+            // Backslash escape
             if (((c === "\\") && ((this.pos + 1) < this.length))) {
                 this.advance();
                 this.advance();
                 continue;
             }
+            // Comment - skip until newline
             if (((c === "#") && this.IsWordBoundaryBefore())) {
                 while ((!this.atEnd() && (this.peek() !== "\n"))) {
                     this.advance();
                 }
                 continue;
             }
+            // Heredoc - skip until delimiter line is found
             if (((c === "<") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "<"))) {
                 this.advance();
                 this.advance();
+                // Check for <<- (strip tabs)
                 if ((!this.atEnd() && (this.peek() === "-"))) {
                     this.advance();
                 }
+                // Skip whitespace before delimiter
                 while ((!this.atEnd() && IsWhitespaceNoNewline(this.peek()))) {
                     this.advance();
                 }
+                // Parse delimiter (handle quoting)
                 var delimiter_chars = [];
                 if (!this.atEnd()) {
                     var ch = this.peek();
@@ -3022,6 +3275,7 @@ class Parser {
                         }
                     } else if ((ch === "\\")) {
                         this.advance();
+                        // Backslash quotes - first char can be special, then read word
                         if (!this.atEnd()) {
                             delimiter_chars.push(this.advance());
                         }
@@ -3029,6 +3283,7 @@ class Parser {
                             delimiter_chars.push(this.advance());
                         }
                     } else {
+                        // Unquoted delimiter with possible embedded quotes
                         while ((!this.atEnd() && !IsMetachar(this.peek()))) {
                             ch = this.peek();
                             if (IsQuote(ch)) {
@@ -3052,12 +3307,15 @@ class Parser {
                 }
                 var delimiter = delimiter_chars.join("");
                 if (delimiter) {
+                    // Skip to end of current line
                     while ((!this.atEnd() && (this.peek() !== "\n"))) {
                         this.advance();
                     }
+                    // Skip newline
                     if ((!this.atEnd() && (this.peek() === "\n"))) {
                         this.advance();
                     }
+                    // Skip lines until we find the delimiter
                     while (!this.atEnd()) {
                         var line_start = this.pos;
                         var line_end = this.pos;
@@ -3065,13 +3323,17 @@ class Parser {
                             line_end += 1;
                         }
                         var line = this.source.slice(line_start, line_end);
+                        // Move position to end of line
                         this.pos = line_end;
+                        // Check if this line matches delimiter
                         if (((line === delimiter) || (line.replace(new RegExp("^[" + "\t" + "]+"), "") === delimiter))) {
+                            // Skip newline after delimiter
                             if ((!this.atEnd() && (this.peek() === "\n"))) {
                                 this.advance();
                             }
                             break;
                         }
+                        // Skip newline and continue
                         if ((!this.atEnd() && (this.peek() === "\n"))) {
                             this.advance();
                         }
@@ -3079,6 +3341,8 @@ class Parser {
                 }
                 continue;
             }
+            // Track case/esac for pattern terminator handling
+            // Check for 'case' keyword (word boundary: preceded by space/newline/start)
             if (((c === "c") && this.IsWordBoundaryBefore())) {
                 if (this.LookaheadKeyword("case")) {
                     case_depth += 1;
@@ -3086,6 +3350,7 @@ class Parser {
                     continue;
                 }
             }
+            // Check for 'esac' keyword
             if (((c === "e") && this.IsWordBoundaryBefore() && (case_depth > 0))) {
                 if (this.LookaheadKeyword("esac")) {
                     case_depth -= 1;
@@ -3093,18 +3358,26 @@ class Parser {
                     continue;
                 }
             }
+            // Handle parentheses
             if ((c === "(")) {
                 depth += 1;
             } else if ((c === ")")) {
+                // In case statement, ) after pattern is a terminator, not a paren
+                // Only decrement depth if we're not in a case pattern position
                 if (((case_depth > 0) && (depth === 1))) {
+                    // This ) might be a case pattern terminator, not closing the $(
+                    // Look ahead to see if there's still content that needs esac
                     var saved = this.pos;
                     this.advance();
+                    // Scan ahead to see if we find esac that closes our case
+                    // before finding a ) that could close our $(
                     var temp_depth = 0;
                     var temp_case_depth = case_depth;
                     var found_esac = false;
                     while (!this.atEnd()) {
                         var tc = this.peek();
                         if (((tc === "'") || (tc === "\""))) {
+                            // Skip quoted strings
                             var q = tc;
                             this.advance();
                             while ((!this.atEnd() && (this.peek() !== q))) {
@@ -3117,11 +3390,13 @@ class Parser {
                                 this.advance();
                             }
                         } else if (((tc === "c") && this.IsWordBoundaryBefore() && this.LookaheadKeyword("case"))) {
+                            // Nested case in lookahead
                             temp_case_depth += 1;
                             this.SkipKeyword("case");
                         } else if (((tc === "e") && this.IsWordBoundaryBefore() && this.LookaheadKeyword("esac"))) {
                             temp_case_depth -= 1;
                             if ((temp_case_depth === 0)) {
+                                // All cases are closed
                                 found_esac = true;
                                 break;
                             }
@@ -3130,12 +3405,14 @@ class Parser {
                             temp_depth += 1;
                             this.advance();
                         } else if ((tc === ")")) {
+                            // In case, ) is a pattern terminator, not a closer
                             if ((temp_case_depth > 0)) {
                                 this.advance();
                             } else if ((temp_depth > 0)) {
                                 temp_depth -= 1;
                                 this.advance();
                             } else {
+                                // Found a ) that could be our closer
                                 break;
                             }
                         } else {
@@ -3144,6 +3421,7 @@ class Parser {
                     }
                     this.pos = saved;
                     if (found_esac) {
+                        // This ) is a case pattern terminator, not our closer
                         this.advance();
                         continue;
                     }
@@ -3161,6 +3439,7 @@ class Parser {
         var content = this.source.slice(content_start, this.pos);
         this.advance();
         var text = this.source.slice(start, this.pos);
+        // Parse the content as a command list
         var sub_parser = new Parser(content);
         var cmd = sub_parser.parseList();
         if ((cmd == null)) {
@@ -3205,6 +3484,7 @@ class Parser {
         if (!StartsWithAt(this.source, this.pos, keyword)) {
             return false;
         }
+        // Check word boundary after keyword
         var after_pos = (this.pos + keyword.length);
         if ((after_pos >= this.length)) {
             return true;
@@ -3225,6 +3505,12 @@ class Parser {
         }
         var start = this.pos;
         this.advance();
+        // Find closing backtick, processing escape sequences as we go.
+        // In backticks, backslash is special only before $, `, \, or newline.
+        // \$ -> $, \` -> `, \\ -> \, \<newline> -> removed (line continuation)
+        // other \X -> \X (backslash is literal)
+        // content_chars: what gets parsed as the inner command
+        // text_chars: what appears in the word representation (with line continuations removed)
         var content_chars = [];
         var text_chars = ["`"];
         while ((!this.atEnd() && (this.peek() !== "`"))) {
@@ -3232,15 +3518,19 @@ class Parser {
             if (((c === "\\") && ((this.pos + 1) < this.length))) {
                 var next_c = this.source[(this.pos + 1)];
                 if ((next_c === "\n")) {
+                    // Line continuation: skip both backslash and newline
                     this.advance();
                     this.advance();
                 } else if (IsEscapeCharInDquote(next_c)) {
+                    // Don't add to content_chars or text_chars
+                    // Escape sequence: skip backslash in content, keep both in text
                     this.advance();
                     var escaped = this.advance();
                     content_chars.push(escaped);
                     text_chars.push("\\");
                     text_chars.push(escaped);
                 } else {
+                    // Backslash is literal before other characters
                     var ch = this.advance();
                     content_chars.push(ch);
                     text_chars.push(ch);
@@ -3259,6 +3549,7 @@ class Parser {
         text_chars.push("`");
         var text = text_chars.join("");
         var content = content_chars.join("");
+        // Parse the content as a command list
         var sub_parser = new Parser(content);
         var cmd = sub_parser.parseList();
         if ((cmd == null)) {
@@ -3278,10 +3569,12 @@ class Parser {
             return [null, ""];
         }
         this.advance();
+        // Find matching ) - track nested parens and handle quotes
         var content_start = this.pos;
         var depth = 1;
         while ((!this.atEnd() && (depth > 0))) {
             var c = this.peek();
+            // Single-quoted string
             if ((c === "'")) {
                 this.advance();
                 while ((!this.atEnd() && (this.peek() !== "'"))) {
@@ -3292,6 +3585,7 @@ class Parser {
                 }
                 continue;
             }
+            // Double-quoted string
             if ((c === "\"")) {
                 this.advance();
                 while ((!this.atEnd() && (this.peek() !== "\""))) {
@@ -3305,11 +3599,13 @@ class Parser {
                 }
                 continue;
             }
+            // Backslash escape
             if (((c === "\\") && ((this.pos + 1) < this.length))) {
                 this.advance();
                 this.advance();
                 continue;
             }
+            // Nested parentheses (including nested process substitutions)
             if ((c === "(")) {
                 depth += 1;
             } else if ((c === ")")) {
@@ -3327,6 +3623,7 @@ class Parser {
         var content = this.source.slice(content_start, this.pos);
         this.advance();
         var text = this.source.slice(start, this.pos);
+        // Parse the content as a command list
         var sub_parser = new Parser(content);
         var cmd = sub_parser.parseList();
         if ((cmd == null)) {
@@ -3343,6 +3640,7 @@ class Parser {
         this.advance();
         var elements = [];
         while (true) {
+            // Skip whitespace and newlines between elements
             while ((!this.atEnd() && IsWhitespace(this.peek()))) {
                 this.advance();
             }
@@ -3352,8 +3650,10 @@ class Parser {
             if ((this.peek() === ")")) {
                 break;
             }
+            // Parse an element word
             var word = this.parseWord();
             if ((word == null)) {
+                // Might be a closing paren or error
                 if ((this.peek() === ")")) {
                     break;
                 }
@@ -3374,12 +3674,15 @@ class Parser {
             return [null, ""];
         }
         var start = this.pos;
+        // Check for $((
         if ((((this.pos + 2) >= this.length) || (this.source[(this.pos + 1)] !== "(") || (this.source[(this.pos + 2)] !== "("))) {
             return [null, ""];
         }
         this.advance();
         this.advance();
         this.advance();
+        // Find matching )) - need to track nested parens
+        // Must be )) with no space between - ') )' is command sub + subshell
         var content_start = this.pos;
         var depth = 1;
         while ((!this.atEnd() && (depth > 0))) {
@@ -3388,11 +3691,14 @@ class Parser {
                 depth += 1;
                 this.advance();
             } else if ((c === ")")) {
+                // Check for ))
                 if (((depth === 1) && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === ")"))) {
+                    // Found the closing ))
                     break;
                 }
                 depth -= 1;
                 if ((depth === 0)) {
+                    // Closed with ) but next isn't ) - this is $( ( ... ) )
                     this.pos = start;
                     return [null, ""];
                 }
@@ -3409,11 +3715,31 @@ class Parser {
         this.advance();
         this.advance();
         var text = this.source.slice(start, this.pos);
+        // Parse the arithmetic expression
         var expr = this.ParseArithExpr(content);
         return [new ArithmeticExpansion(expr), text];
     }
     
+    // ========== Arithmetic expression parser ==========
+    // Operator precedence (lowest to highest):
+    // 1. comma (,)
+    // 2. assignment (= += -= *= /= %= <<= >>= &= ^= |=)
+    // 3. ternary (? :)
+    // 4. logical or (||)
+    // 5. logical and (&&)
+    // 6. bitwise or (|)
+    // 7. bitwise xor (^)
+    // 8. bitwise and (&)
+    // 9. equality (== !=)
+    // 10. comparison (< > <= >=)
+    // 11. shift (<< >>)
+    // 12. addition (+ -)
+    // 13. multiplication (* / %)
+    // 14. exponentiation (**)
+    // 15. unary (! ~ + - ++ --)
+    // 16. postfix (++ -- [])
     ParseArithExpr(content) {
+        // Save any existing arith context (for nested parsing)
         var saved_arith_src = (this["_arith_src"] !== undefined ? this["_arith_src"] : null);
         var saved_arith_pos = (this["_arith_pos"] !== undefined ? this["_arith_pos"] : null);
         var saved_arith_len = (this["_arith_len"] !== undefined ? this["_arith_len"] : null);
@@ -3426,6 +3752,7 @@ class Parser {
         } else {
             result = this.ArithParseComma();
         }
+        // Restore previous arith context
         if ((saved_arith_src != null)) {
             this._arith_src = saved_arith_src;
             this._arith_pos = saved_arith_pos;
@@ -3462,6 +3789,7 @@ class Parser {
             if (IsWhitespace(c)) {
                 this._arith_pos += 1;
             } else if (((c === "\\") && ((this._arith_pos + 1) < this._arith_len) && (this._arith_src[(this._arith_pos + 1)] === "\n"))) {
+                // Backslash-newline continuation
                 this._arith_pos += 2;
             } else {
                 break;
@@ -3499,9 +3827,11 @@ class Parser {
     ArithParseAssign() {
         var left = this.ArithParseTernary();
         this.ArithSkipWs();
+        // Check for assignment operators
         var assign_ops = ["<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "^=", "|=", "="];
         for (var op of assign_ops) {
             if (this.ArithMatch(op)) {
+                // Make sure it's not == or !=
                 if (((op === "=") && (this.ArithPeek(1) === "="))) {
                     break;
                 }
@@ -3519,14 +3849,17 @@ class Parser {
         this.ArithSkipWs();
         if (this.ArithConsume("?")) {
             this.ArithSkipWs();
+            // True branch can be empty (e.g., 4 ? : $A - invalid at runtime, valid syntax)
             if (this.ArithMatch(":")) {
                 var if_true = null;
             } else {
                 if_true = this.ArithParseAssign();
             }
             this.ArithSkipWs();
+            // Check for : (may be missing in malformed expressions like 1 ? 20)
             if (this.ArithConsume(":")) {
                 this.ArithSkipWs();
+                // False branch can be empty (e.g., 4 ? 20 : - invalid at runtime)
                 if ((this.ArithAtEnd() || (this.ArithPeek() === ")"))) {
                     var if_false = null;
                 } else {
@@ -3576,6 +3909,7 @@ class Parser {
         var left = this.ArithParseBitwiseXor();
         while (true) {
             this.ArithSkipWs();
+            // Make sure it's not || or |=
             if (((this.ArithPeek() === "|") && ((this.ArithPeek(1) !== "|") && (this.ArithPeek(1) !== "=")))) {
                 this.ArithAdvance();
                 this.ArithSkipWs();
@@ -3592,6 +3926,7 @@ class Parser {
         var left = this.ArithParseBitwiseAnd();
         while (true) {
             this.ArithSkipWs();
+            // Make sure it's not ^=
             if (((this.ArithPeek() === "^") && (this.ArithPeek(1) !== "="))) {
                 this.ArithAdvance();
                 this.ArithSkipWs();
@@ -3608,6 +3943,7 @@ class Parser {
         var left = this.ArithParseEquality();
         while (true) {
             this.ArithSkipWs();
+            // Make sure it's not && or &=
             if (((this.ArithPeek() === "&") && ((this.ArithPeek(1) !== "&") && (this.ArithPeek(1) !== "=")))) {
                 this.ArithAdvance();
                 this.ArithSkipWs();
@@ -3764,6 +4100,7 @@ class Parser {
     
     ArithParseUnary() {
         this.ArithSkipWs();
+        // Pre-increment/decrement
         if (this.ArithMatch("++")) {
             this.ArithConsume("++");
             this.ArithSkipWs();
@@ -3776,6 +4113,7 @@ class Parser {
             operand = this.ArithParseUnary();
             return new ArithPreDecr(operand);
         }
+        // Unary operators
         var c = this.ArithPeek();
         if ((c === "!")) {
             this.ArithAdvance();
@@ -3815,6 +4153,7 @@ class Parser {
                 this.ArithConsume("--");
                 left = new ArithPostDecr(left);
             } else if ((this.ArithPeek() === "[")) {
+                // Array subscript - but only for variables
                 if ((left.kind === "var")) {
                     this.ArithAdvance();
                     this.ArithSkipWs();
@@ -3837,6 +4176,7 @@ class Parser {
     ArithParsePrimary() {
         this.ArithSkipWs();
         var c = this.ArithPeek();
+        // Parenthesized expression
         if ((c === "(")) {
             this.ArithAdvance();
             this.ArithSkipWs();
@@ -3847,18 +4187,24 @@ class Parser {
             }
             return expr;
         }
+        // Parameter expansion ${...} or $var or $(...)
         if ((c === "$")) {
             return this.ArithParseExpansion();
         }
+        // Single-quoted string - content becomes the number
         if ((c === "'")) {
             return this.ArithParseSingleQuote();
         }
+        // Double-quoted string - may contain expansions
         if ((c === "\"")) {
             return this.ArithParseDoubleQuote();
         }
+        // Backtick command substitution
         if ((c === "`")) {
             return this.ArithParseBacktick();
         }
+        // Escape sequence \X (not line continuation, which is handled in _arith_skip_ws)
+        // Escape covers only the single character after backslash
         if ((c === "\\")) {
             this.ArithAdvance();
             if (this.ArithAtEnd()) {
@@ -3867,6 +4213,7 @@ class Parser {
             var escaped_char = this.ArithAdvance();
             return new ArithEscape(escaped_char);
         }
+        // Number or variable
         return this.ArithParseNumberOrVar();
     }
     
@@ -3875,18 +4222,22 @@ class Parser {
             throw new ParseError("Expected '$'", this._arith_pos);
         }
         var c = this.ArithPeek();
+        // Command substitution $(...)
         if ((c === "(")) {
             return this.ArithParseCmdsub();
         }
+        // Braced parameter ${...}
         if ((c === "{")) {
             return this.ArithParseBracedParam();
         }
+        // Simple $var
         var name_chars = [];
         while (!this.ArithAtEnd()) {
             var ch = this.ArithPeek();
             if ((/^[a-zA-Z0-9]$/.test(ch) || (ch === "_"))) {
                 name_chars.push(this.ArithAdvance());
             } else if (((IsSpecialParamOrDigit(ch) || (ch === "#")) && name_chars.length === 0)) {
+                // Special parameters
                 name_chars.push(this.ArithAdvance());
                 break;
             } else {
@@ -3900,7 +4251,9 @@ class Parser {
     }
     
     ArithParseCmdsub() {
+        // We're positioned after $, at (
         this.ArithAdvance();
+        // Check for $(( which is nested arithmetic
         if ((this.ArithPeek() === "(")) {
             this.ArithAdvance();
             var depth = 1;
@@ -3926,6 +4279,7 @@ class Parser {
             var inner_expr = this.ParseArithExpr(content);
             return new ArithmeticExpansion(inner_expr);
         }
+        // Regular command substitution
         depth = 1;
         content_start = this._arith_pos;
         while ((!this.ArithAtEnd() && (depth > 0))) {
@@ -3945,6 +4299,7 @@ class Parser {
         }
         content = this._arith_src.slice(content_start, this._arith_pos);
         this.ArithAdvance();
+        // Parse the command inside
         var saved_pos = this.pos;
         var saved_src = this.source;
         var saved_len = this.length;
@@ -3960,6 +4315,7 @@ class Parser {
     
     ArithParseBracedParam() {
         this.ArithAdvance();
+        // Handle indirect ${!var}
         if ((this.ArithPeek() === "!")) {
             this.ArithAdvance();
             var name_chars = [];
@@ -3969,6 +4325,7 @@ class Parser {
             this.ArithConsume("}");
             return new ParamIndirect(name_chars.join(""));
         }
+        // Handle length ${#var}
         if ((this.ArithPeek() === "#")) {
             this.ArithAdvance();
             name_chars = [];
@@ -3978,6 +4335,7 @@ class Parser {
             this.ArithConsume("}");
             return new ParamLength(name_chars.join(""));
         }
+        // Regular ${var} or ${var...}
         name_chars = [];
         while (!this.ArithAtEnd()) {
             var ch = this.ArithPeek();
@@ -3986,11 +4344,13 @@ class Parser {
                 return new ParamExpansion(name_chars.join(""));
             }
             if (IsParamExpansionOp(ch)) {
+                // Operator follows
                 break;
             }
             name_chars.push(this.ArithAdvance());
         }
         var name = name_chars.join("");
+        // Check for operator
         var op_chars = [];
         var depth = 1;
         while ((!this.ArithAtEnd() && (depth > 0))) {
@@ -4010,6 +4370,7 @@ class Parser {
         }
         this.ArithConsume("}");
         var op_str = op_chars.join("");
+        // Parse the operator
         if (op_str.startsWith(":-")) {
             return new ParamExpansion(name, ":-", op_str.slice(2, op_str.length));
         }
@@ -4094,6 +4455,7 @@ class Parser {
         if (!this.ArithConsume("`")) {
             throw new ParseError("Unterminated backtick in arithmetic", this._arith_pos);
         }
+        // Parse the command inside
         var saved_pos = this.pos;
         var saved_src = this.source;
         var saved_len = this.length;
@@ -4111,7 +4473,9 @@ class Parser {
         this.ArithSkipWs();
         var chars = [];
         var c = this.ArithPeek();
+        // Check for number (starts with digit or base#)
         if (/^[0-9]+$/.test(c)) {
+            // Could be decimal, hex (0x), octal (0), or base#n
             while (!this.ArithAtEnd()) {
                 var ch = this.ArithPeek();
                 if ((/^[a-zA-Z0-9]$/.test(ch) || ((ch === "#") || (ch === "_")))) {
@@ -4122,6 +4486,7 @@ class Parser {
             }
             return new ArithNumber(chars.join(""));
         }
+        // Variable name (starts with letter or _)
         if ((/^[a-zA-Z]$/.test(c) || (c === "_"))) {
             while (!this.ArithAtEnd()) {
                 ch = this.ArithPeek();
@@ -4141,11 +4506,13 @@ class Parser {
             return [null, ""];
         }
         var start = this.pos;
+        // Check for $[
         if ((((this.pos + 1) >= this.length) || (this.source[(this.pos + 1)] !== "["))) {
             return [null, ""];
         }
         this.advance();
         this.advance();
+        // Find matching ] - need to track nested brackets
         var content_start = this.pos;
         var depth = 1;
         while ((!this.atEnd() && (depth > 0))) {
@@ -4192,6 +4559,7 @@ class Parser {
                 found_close = true;
                 break;
             } else if ((ch === "\\")) {
+                // Escape sequence - include both backslash and following char in content
                 content_chars.push(this.advance());
                 if (!this.atEnd()) {
                     content_chars.push(this.advance());
@@ -4201,6 +4569,7 @@ class Parser {
             }
         }
         if (!found_close) {
+            // Unterminated - reset and return None
             this.pos = start;
             return [null, ""];
         }
@@ -4229,8 +4598,10 @@ class Parser {
                 found_close = true;
                 break;
             } else if (((ch === "\\") && ((this.pos + 1) < this.length))) {
+                // Escape sequence (line continuation removes both)
                 var next_ch = this.source[(this.pos + 1)];
                 if ((next_ch === "\n")) {
+                    // Line continuation - skip both backslash and newline
                     this.advance();
                     this.advance();
                 } else {
@@ -4238,6 +4609,7 @@ class Parser {
                     content_chars.push(this.advance());
                 }
             } else if (((ch === "$") && ((this.pos + 2) < this.length) && (this.source[(this.pos + 1)] === "(") && (this.source[(this.pos + 2)] === "("))) {
+                // Handle arithmetic expansion $((...))
                 var arith_result = this.ParseArithmeticExpansion();
                 var arith_node = arith_result[0];
                 var arith_text = arith_result[1];
@@ -4245,6 +4617,7 @@ class Parser {
                     inner_parts.push(arith_node);
                     content_chars.push(arith_text);
                 } else {
+                    // Not arithmetic - try command substitution
                     var cmdsub_result = this.ParseCommandSubstitution();
                     var cmdsub_node = cmdsub_result[0];
                     var cmdsub_text = cmdsub_result[1];
@@ -4256,6 +4629,7 @@ class Parser {
                     }
                 }
             } else if (((ch === "$") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "("))) {
+                // Handle command substitution $(...)
                 cmdsub_result = this.ParseCommandSubstitution();
                 cmdsub_node = cmdsub_result[0];
                 cmdsub_text = cmdsub_result[1];
@@ -4266,6 +4640,7 @@ class Parser {
                     content_chars.push(this.advance());
                 }
             } else if ((ch === "$")) {
+                // Handle parameter expansion
                 var param_result = this.ParseParamExpansion();
                 var param_node = param_result[0];
                 var param_text = param_result[1];
@@ -4276,6 +4651,7 @@ class Parser {
                     content_chars.push(this.advance());
                 }
             } else if ((ch === "`")) {
+                // Handle backtick command substitution
                 cmdsub_result = this.ParseBacktickSubstitution();
                 cmdsub_node = cmdsub_result[0];
                 cmdsub_text = cmdsub_result[1];
@@ -4290,10 +4666,12 @@ class Parser {
             }
         }
         if (!found_close) {
+            // Unterminated - reset and return None
             this.pos = start;
             return [null, "", []];
         }
         var content = content_chars.join("");
+        // Reconstruct text from parsed content (handles line continuation removal)
         var text = (("$\"" + content) + "\"");
         return [new LocaleString(content), text, inner_parts];
     }
@@ -4309,15 +4687,19 @@ class Parser {
             return [null, ""];
         }
         var ch = this.peek();
+        // Braced expansion ${...}
         if ((ch === "{")) {
             this.advance();
             return this.ParseBracedParam(start);
         }
+        // Simple expansion $var or $special
+        // Special parameters: ?$!#@*-0-9
         if ((IsSpecialParamOrDigit(ch) || (ch === "#"))) {
             this.advance();
             var text = this.source.slice(start, this.pos);
             return [new ParamExpansion(ch), text];
         }
+        // Variable name [a-zA-Z_][a-zA-Z0-9_]*
         if ((/^[a-zA-Z]$/.test(ch) || (ch === "_"))) {
             var name_start = this.pos;
             while (!this.atEnd()) {
@@ -4332,6 +4714,7 @@ class Parser {
             text = this.source.slice(start, this.pos);
             return [new ParamExpansion(name), text];
         }
+        // Not a valid expansion, restore position
         this.pos = start;
         return [null, ""];
     }
@@ -4342,6 +4725,7 @@ class Parser {
             return [null, ""];
         }
         var ch = this.peek();
+        // ${#param} - length
         if ((ch === "#")) {
             this.advance();
             var param = this.ConsumeParamName();
@@ -4353,10 +4737,12 @@ class Parser {
             this.pos = start;
             return [null, ""];
         }
+        // ${!param} or ${!param<op><arg>} - indirect
         if ((ch === "!")) {
             this.advance();
             param = this.ConsumeParamName();
             if (param) {
+                // Skip optional whitespace before closing brace
                 while ((!this.atEnd() && IsWhitespaceNoNewline(this.peek()))) {
                     this.advance();
                 }
@@ -4365,6 +4751,8 @@ class Parser {
                     text = this.source.slice(start, this.pos);
                     return [new ParamIndirect(param), text];
                 }
+                // ${!prefix@} and ${!prefix*} are prefix matching (lists variable names)
+                // These are NOT operators - the @/* is part of the indirect form
                 if ((!this.atEnd() && IsAtOrStar(this.peek()))) {
                     var suffix = this.advance();
                     while ((!this.atEnd() && IsWhitespaceNoNewline(this.peek()))) {
@@ -4375,11 +4763,14 @@ class Parser {
                         text = this.source.slice(start, this.pos);
                         return [new ParamIndirect((param + suffix)), text];
                     }
+                    // Not a valid prefix match, reset
                     this.pos = start;
                     return [null, ""];
                 }
+                // Check for operator (e.g., ${!##} = indirect of # with # op)
                 var op = this.ConsumeParamOperator();
                 if ((op != null)) {
+                    // Parse argument until closing brace
                     var arg_chars = [];
                     var depth = 1;
                     while ((!this.atEnd() && (depth > 0))) {
@@ -4413,8 +4804,11 @@ class Parser {
             this.pos = start;
             return [null, ""];
         }
+        // ${param} or ${param<op><arg>}
         param = this.ConsumeParamName();
         if (!param) {
+            // Unknown syntax like ${(M)...} (zsh) - consume until matching }
+            // Bash accepts these syntactically but fails at runtime
             depth = 1;
             var content_start = this.pos;
             while ((!this.atEnd() && (depth > 0))) {
@@ -4450,21 +4844,28 @@ class Parser {
             this.pos = start;
             return [null, ""];
         }
+        // Check for closing brace (simple expansion)
         if ((this.peek() === "}")) {
             this.advance();
             text = this.source.slice(start, this.pos);
             return [new ParamExpansion(param), text];
         }
+        // Parse operator
         op = this.ConsumeParamOperator();
         if ((op == null)) {
+            // Unknown operator - bash still parses these (fails at runtime)
+            // Treat the current char as the operator
             op = this.advance();
         }
+        // Parse argument (everything until closing brace)
+        // Track quote state and nesting
         arg_chars = [];
         depth = 1;
         var in_single_quote = false;
         var in_double_quote = false;
         while ((!this.atEnd() && (depth > 0))) {
             c = this.peek();
+            // Single quotes - no escapes, just scan to closing quote
             if (((c === "'") && !in_double_quote)) {
                 if (in_single_quote) {
                     in_single_quote = false;
@@ -4473,10 +4874,13 @@ class Parser {
                 }
                 arg_chars.push(this.advance());
             } else if (((c === "\"") && !in_single_quote)) {
+                // Double quotes - toggle state
                 in_double_quote = !in_double_quote;
                 arg_chars.push(this.advance());
             } else if (((c === "\\") && !in_single_quote)) {
+                // Escape - skip next char (line continuation removes both)
                 if ((((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "\n"))) {
+                    // Line continuation - skip both backslash and newline
                     this.advance();
                     this.advance();
                 } else {
@@ -4486,10 +4890,12 @@ class Parser {
                     }
                 }
             } else if (((c === "$") && !in_single_quote && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "{"))) {
+                // Nested ${...} - increase depth (outside single quotes)
                 depth += 1;
                 arg_chars.push(this.advance());
                 arg_chars.push(this.advance());
             } else if (((c === "$") && !in_single_quote && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "("))) {
+                // Command substitution $(...) - scan to matching )
                 arg_chars.push(this.advance());
                 arg_chars.push(this.advance());
                 var paren_depth = 1;
@@ -4509,6 +4915,7 @@ class Parser {
                     arg_chars.push(this.advance());
                 }
             } else if (((c === "`") && !in_single_quote)) {
+                // Backtick command substitution - scan to matching `
                 arg_chars.push(this.advance());
                 while ((!this.atEnd() && (this.peek() !== "`"))) {
                     var bc = this.peek();
@@ -4524,13 +4931,17 @@ class Parser {
                     arg_chars.push(this.advance());
                 }
             } else if ((c === "}")) {
+                // Closing brace - handle depth for nested ${...}
                 if (in_single_quote) {
+                    // Inside single quotes, } is literal
                     arg_chars.push(this.advance());
                 } else if (in_double_quote) {
+                    // Inside double quotes, } can close nested ${...}
                     if ((depth > 1)) {
                         depth -= 1;
                         arg_chars.push(this.advance());
                     } else {
+                        // Literal } in double quotes (not closing nested)
                         arg_chars.push(this.advance());
                     }
                 } else {
@@ -4549,6 +4960,7 @@ class Parser {
         }
         this.advance();
         arg = arg_chars.join("");
+        // Reconstruct text from parsed components (handles line continuation removal)
         text = (((("${" + param) + op) + arg) + "}");
         return [new ParamExpansion(param, op, arg), text];
     }
@@ -4558,10 +4970,12 @@ class Parser {
             return null;
         }
         var ch = this.peek();
+        // Special parameters
         if (IsSpecialParam(ch)) {
             this.advance();
             return ch;
         }
+        // Digits (positional params)
         if (/^[0-9]+$/.test(ch)) {
             var name_chars = [];
             while ((!this.atEnd() && /^[0-9]+$/.test(this.peek()))) {
@@ -4569,6 +4983,7 @@ class Parser {
             }
             return name_chars.join("");
         }
+        // Variable name
         if ((/^[a-zA-Z]$/.test(ch) || (ch === "_"))) {
             name_chars = [];
             while (!this.atEnd()) {
@@ -4576,6 +4991,7 @@ class Parser {
                 if ((/^[a-zA-Z0-9]$/.test(c) || (c === "_"))) {
                     name_chars.push(this.advance());
                 } else if ((c === "[")) {
+                    // Array subscript - track bracket depth
                     name_chars.push(this.advance());
                     var bracket_depth = 1;
                     while ((!this.atEnd() && (bracket_depth > 0))) {
@@ -4612,6 +5028,7 @@ class Parser {
             return null;
         }
         var ch = this.peek();
+        // Operators with optional colon prefix: :- := :? :+
         if ((ch === ":")) {
             this.advance();
             if (this.atEnd()) {
@@ -4622,12 +5039,15 @@ class Parser {
                 this.advance();
                 return (":" + next_ch);
             }
+            // Just : (substring)
             return ":";
         }
+        // Operators without colon: - = ? +
         if (IsSimpleParamOp(ch)) {
             this.advance();
             return ch;
         }
+        // Pattern removal: # ## % %%
         if ((ch === "#")) {
             this.advance();
             if ((!this.atEnd() && (this.peek() === "#"))) {
@@ -4644,6 +5064,7 @@ class Parser {
             }
             return "%";
         }
+        // Substitution: / // /# /%
         if ((ch === "/")) {
             this.advance();
             if (!this.atEnd()) {
@@ -4661,6 +5082,7 @@ class Parser {
             }
             return "/";
         }
+        // Case modification: ^ ^^ , ,,
         if ((ch === "^")) {
             this.advance();
             if ((!this.atEnd() && (this.peek() === "^"))) {
@@ -4677,6 +5099,7 @@ class Parser {
             }
             return ",";
         }
+        // Transformation: @
         if ((ch === "@")) {
             this.advance();
             return "@";
@@ -4692,6 +5115,7 @@ class Parser {
         var start = this.pos;
         var fd = null;
         var varfd = null;
+        // Check for variable fd {varname} or {varname[subscript]} before redirect
         if ((this.peek() === "{")) {
             var saved = this.pos;
             this.advance();
@@ -4708,9 +5132,11 @@ class Parser {
                 this.advance();
                 varfd = varname_chars.join("");
             } else {
+                // Not a valid variable fd, restore
                 this.pos = saved;
             }
         }
+        // Check for optional fd number before redirect (if no varfd)
         if (((varfd == null) && this.peek() && /^[0-9]+$/.test(this.peek()))) {
             var fd_chars = [];
             while ((!this.atEnd() && /^[0-9]+$/.test(this.peek()))) {
@@ -4719,8 +5145,14 @@ class Parser {
             fd = parseInt(fd_chars.join(""), 10);
         }
         ch = this.peek();
+        // Handle &> and &>> (redirect both stdout and stderr)
+        // Note: &> does NOT take a preceding fd number. If we consumed digits,
+        // they should be a separate word, not an fd. E.g., "2&>1" is command "2"
+        // with redirect "&> 1", not fd 2 redirected.
         if (((ch === "&") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === ">"))) {
             if ((fd != null)) {
+                // We consumed digits that should be a word, not an fd
+                // Restore position and let parse_word handle them
                 this.pos = start;
                 return null;
             }
@@ -4740,14 +5172,20 @@ class Parser {
             return new Redirect(op, target);
         }
         if (((ch == null) || !IsRedirectChar(ch))) {
+            // Not a redirect, restore position
             this.pos = start;
             return null;
         }
+        // Check for process substitution <(...) or >(...) - not a redirect
+        // Only treat as redirect if there's a space before ( or an fd number
         if (((fd == null) && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "("))) {
+            // This is a process substitution, not a redirect
             this.pos = start;
             return null;
         }
+        // Parse the redirect operator
         op = this.advance();
+        // Check for multi-char operators
         var strip_tabs = false;
         if (!this.atEnd()) {
             var next_ch = this.peek();
@@ -4767,12 +5205,18 @@ class Parser {
                     op = "<<";
                 }
             } else if (((op === "<") && (next_ch === ">"))) {
+                // Handle <> (read-write)
                 this.advance();
                 op = "<>";
             } else if (((op === ">") && (next_ch === "|"))) {
+                // Handle >| (noclobber override)
                 this.advance();
                 op = ">|";
             } else if (((fd == null) && (varfd == null) && (op === ">") && (next_ch === "&"))) {
+                // Only consume >& or <& as operators if NOT followed by a digit or -
+                // (>&2 should be > with target &2, not >& with target 2)
+                // (>&- should be > with target &-, not >& with target -)
+                // Peek ahead to see if there's a digit or - after &
                 if ((((this.pos + 1) >= this.length) || !IsDigitOrDash(this.source[(this.pos + 1)]))) {
                     this.advance();
                     op = ">&";
@@ -4784,17 +5228,21 @@ class Parser {
                 }
             }
         }
+        // Handle here document
         if ((op === "<<")) {
             return this.ParseHeredoc(fd, strip_tabs);
         }
+        // Combine fd or varfd with operator if present
         if ((varfd != null)) {
             op = ((("{" + varfd) + "}") + op);
         } else if ((fd != null)) {
             op = (String(fd) + op);
         }
         this.skipWhitespace();
+        // Handle fd duplication targets like &1, &2, &-, &10-, &$var
         if ((!this.atEnd() && (this.peek() === "&"))) {
             this.advance();
+            // Parse the fd number or - for close, including move syntax like &10-
             if ((!this.atEnd() && (/^[0-9]+$/.test(this.peek()) || (this.peek() === "-")))) {
                 fd_chars = [];
                 while ((!this.atEnd() && /^[0-9]+$/.test(this.peek()))) {
@@ -4805,11 +5253,13 @@ class Parser {
                 } else {
                     fd_target = "";
                 }
+                // Handle just - for close, or N- for move syntax
                 if ((!this.atEnd() && (this.peek() === "-"))) {
                     fd_target += this.advance();
                 }
                 target = new Word(("&" + fd_target));
             } else {
+                // Could be &$var or &word - parse word and prepend &
                 var inner_word = this.parseWord();
                 if ((inner_word != null)) {
                     target = new Word(("&" + inner_word.value));
@@ -4829,6 +5279,7 @@ class Parser {
     
     ParseHeredoc(fd, strip_tabs) {
         this.skipWhitespace();
+        // Parse the delimiter, handling quoting (can be mixed like 'EOF'"2")
         var quoted = false;
         var delimiter_chars = [];
         while ((!this.atEnd() && !IsMetachar(this.peek()))) {
@@ -4856,13 +5307,16 @@ class Parser {
                 if (!this.atEnd()) {
                     var next_ch = this.peek();
                     if ((next_ch === "\n")) {
+                        // Backslash-newline: continue delimiter on next line
                         this.advance();
                     } else {
+                        // Regular escape - quotes the next char
                         quoted = true;
                         delimiter_chars.push(this.advance());
                     }
                 }
             } else if (((ch === "$") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "("))) {
+                // Command substitution embedded in delimiter
                 delimiter_chars.push(this.advance());
                 delimiter_chars.push(this.advance());
                 var depth = 1;
@@ -4880,15 +5334,20 @@ class Parser {
             }
         }
         var delimiter = delimiter_chars.join("");
+        // Find the end of the current line (command continues until newline)
+        // We need to mark where the heredoc content starts
+        // Must be quote-aware - newlines inside quoted strings don't end the line
         var line_end = this.pos;
         while (((line_end < this.length) && (this.source[line_end] !== "\n"))) {
             ch = this.source[line_end];
             if ((ch === "'")) {
+                // Single-quoted string - skip to closing quote (no escapes)
                 line_end += 1;
                 while (((line_end < this.length) && (this.source[line_end] !== "'"))) {
                     line_end += 1;
                 }
             } else if ((ch === "\"")) {
+                // Double-quoted string - skip to closing quote (with escapes)
                 line_end += 1;
                 while (((line_end < this.length) && (this.source[line_end] !== "\""))) {
                     if (((this.source[line_end] === "\\") && ((line_end + 1) < this.length))) {
@@ -4898,11 +5357,14 @@ class Parser {
                     }
                 }
             } else if (((ch === "\\") && ((line_end + 1) < this.length))) {
+                // Backslash escape - skip both chars
                 line_end += 2;
                 continue;
             }
             line_end += 1;
         }
+        // Find heredoc content starting position
+        // If there's already a pending heredoc, this one's content starts after that
         if (((this._pending_heredoc_end != null) && (this._pending_heredoc_end > line_end))) {
             var content_start = this._pending_heredoc_end;
         } else if ((line_end < this.length)) {
@@ -4910,17 +5372,22 @@ class Parser {
         } else {
             content_start = this.length;
         }
+        // Find the delimiter line
         var content_lines = [];
         var scan_pos = content_start;
         while ((scan_pos < this.length)) {
+            // Find end of current line
             var line_start = scan_pos;
             line_end = scan_pos;
             while (((line_end < this.length) && (this.source[line_end] !== "\n"))) {
                 line_end += 1;
             }
             var line = this.source.slice(line_start, line_end);
+            // For unquoted heredocs, process backslash-newline before checking delimiter
+            // Join continued lines to check the full logical line against delimiter
             if (!quoted) {
                 while ((line.endsWith("\\") && (line_end < this.length))) {
+                    // Continue to next line
                     line = line.slice(0, (line.length - 1));
                     line_end += 1;
                     var next_line_start = line_end;
@@ -4930,28 +5397,39 @@ class Parser {
                     line = (line + this.source.slice(next_line_start, line_end));
                 }
             }
+            // Check if this line is the delimiter
             var check_line = line;
             if (strip_tabs) {
                 check_line = line.replace(new RegExp("^[" + "\t" + "]+"), "");
             }
             if ((check_line === delimiter)) {
+                // Found the end - update parser position past the heredoc
+                // We need to consume the heredoc content from the input
+                // But we can't do that here because we haven't finished parsing the command line
+                // Store the heredoc info and let the command parser handle it
                 break;
             }
+            // Add line to content (with newline, since we consumed continuations above)
             if (strip_tabs) {
                 line = line.replace(new RegExp("^[" + "\t" + "]+"), "");
             }
             content_lines.push((line + "\n"));
+            // Move past the newline
             if ((line_end < this.length)) {
                 scan_pos = (line_end + 1);
             } else {
                 scan_pos = this.length;
             }
         }
+        // Join content (newlines already included per line)
         var content = content_lines.join("");
+        // Store the position where heredoc content ends so we can skip it later
+        // line_end points to the end of the delimiter line (after any continuations)
         var heredoc_end = line_end;
         if ((heredoc_end < this.length)) {
             heredoc_end += 1;
         }
+        // Register this heredoc's end position
         if ((this._pending_heredoc_end == null)) {
             this._pending_heredoc_end = heredoc_end;
         } else {
@@ -4969,23 +5447,31 @@ class Parser {
                 break;
             }
             var ch = this.peek();
+            // Check for command terminators, but &> and &>> are redirects, not terminators
             if (IsListTerminator(ch)) {
                 break;
             }
             if (((ch === "&") && !(((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === ">")))) {
                 break;
             }
+            // } is only a terminator at command position (closing a brace group)
+            // In argument position, } is just a regular word
             if (((this.peek() === "}") && !words)) {
+                // Check if } would be a standalone word (next char is whitespace/meta/EOF)
                 var next_pos = (this.pos + 1);
                 if (((next_pos >= this.length) || IsWordEndContext(this.source[next_pos]))) {
                     break;
                 }
             }
+            // Try to parse a redirect first
             var redirect = this.parseRedirect();
             if ((redirect != null)) {
                 redirects.push(redirect);
                 continue;
             }
+            // Otherwise parse a word
+            // Allow array assignments like a[1 + 2]= in prefix position (before first non-assignment)
+            // Check if all previous words were assignments (contain = not inside quotes)
             var all_assignments = true;
             for (var w of words) {
                 if (!this.IsAssignmentWord(w)) {
@@ -5020,6 +5506,7 @@ class Parser {
             throw new ParseError("Expected ) to close subshell", this.pos);
         }
         this.advance();
+        // Collect trailing redirects
         var redirects = [];
         while (true) {
             this.skipWhitespace();
@@ -5038,12 +5525,15 @@ class Parser {
     
     parseArithmeticCommand() {
         this.skipWhitespace();
+        // Check for ((
         if ((this.atEnd() || (this.peek() !== "(") || ((this.pos + 1) >= this.length) || (this.source[(this.pos + 1)] !== "("))) {
             return null;
         }
         var saved_pos = this.pos;
         this.advance();
         this.advance();
+        // Find matching )) - track nested parens
+        // Must be )) with no space between - ') )' is nested subshells
         var content_start = this.pos;
         var depth = 1;
         while ((!this.atEnd() && (depth > 0))) {
@@ -5052,11 +5542,14 @@ class Parser {
                 depth += 1;
                 this.advance();
             } else if ((c === ")")) {
+                // Check for )) (must be consecutive, no space)
                 if (((depth === 1) && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === ")"))) {
+                    // Found the closing ))
                     break;
                 }
                 depth -= 1;
                 if ((depth === 0)) {
+                    // Closed with ) but next isn't ) - this is nested subshells, not arithmetic
                     this.pos = saved_pos;
                     return null;
                 }
@@ -5066,13 +5559,16 @@ class Parser {
             }
         }
         if ((this.atEnd() || (depth !== 1))) {
+            // Didn't find )) - might be nested subshells or malformed
             this.pos = saved_pos;
             return null;
         }
         var content = this.source.slice(content_start, this.pos);
         this.advance();
         this.advance();
+        // Parse the arithmetic expression
         var expr = this.ParseArithExpr(content);
+        // Collect trailing redirects
         var redirects = [];
         while (true) {
             this.skipWhitespace();
@@ -5089,24 +5585,31 @@ class Parser {
         return new ArithmeticCommand(expr, redir_arg, content);
     }
     
+    // Unary operators for [[ ]] conditionals
     COND_UNARY_OPS = new Set(["-a", "-b", "-c", "-d", "-e", "-f", "-g", "-h", "-k", "-p", "-r", "-s", "-t", "-u", "-w", "-x", "-G", "-L", "-N", "-O", "-S", "-z", "-n", "-o", "-v", "-R"]);
+    // Binary operators for [[ ]] conditionals
     COND_BINARY_OPS = new Set(["==", "!=", "=~", "=", "<", ">", "-eq", "-ne", "-lt", "-le", "-gt", "-ge", "-nt", "-ot", "-ef"]);
     parseConditionalExpr() {
         this.skipWhitespace();
+        // Check for [[
         if ((this.atEnd() || (this.peek() !== "[") || ((this.pos + 1) >= this.length) || (this.source[(this.pos + 1)] !== "["))) {
             return null;
         }
         this.advance();
         this.advance();
+        // Parse the conditional expression body
         var body = this.ParseCondOr();
+        // Skip whitespace before ]]
         while ((!this.atEnd() && IsWhitespaceNoNewline(this.peek()))) {
             this.advance();
         }
+        // Expect ]]
         if ((this.atEnd() || (this.peek() !== "]") || ((this.pos + 1) >= this.length) || (this.source[(this.pos + 1)] !== "]"))) {
             throw new ParseError("Expected ]] to close conditional expression", this.pos);
         }
         this.advance();
         this.advance();
+        // Collect trailing redirects
         var redirects = [];
         while (true) {
             this.skipWhitespace();
@@ -5131,6 +5634,7 @@ class Parser {
                 this.advance();
                 this.advance();
             } else if ((this.peek() === "\n")) {
+                // Bare newline is also allowed inside [[ ]]
                 this.advance();
             } else {
                 break;
@@ -5173,7 +5677,9 @@ class Parser {
         if (this.CondAtEnd()) {
             throw new ParseError("Unexpected end of conditional expression", this.pos);
         }
+        // Negation: ! term
         if ((this.peek() === "!")) {
+            // Check it's not != operator (need whitespace after !)
             if ((((this.pos + 1) < this.length) && !IsWhitespaceNoNewline(this.source[(this.pos + 1)]))) {
             } else {
                 this.advance();
@@ -5181,6 +5687,7 @@ class Parser {
                 return new CondNot(operand);
             }
         }
+        // Parenthesized group: ( or_expr )
         if ((this.peek() === "(")) {
             this.advance();
             var inner = this.ParseCondOr();
@@ -5191,19 +5698,25 @@ class Parser {
             this.advance();
             return new CondParen(inner);
         }
+        // Parse first word
         var word1 = this.ParseCondWord();
         if ((word1 == null)) {
             throw new ParseError("Expected word in conditional expression", this.pos);
         }
         this.CondSkipWhitespace();
+        // Check if word1 is a unary operator
         if (IsCondUnaryOp(word1.value)) {
+            // Unary test: -f file
             operand = this.ParseCondWord();
             if ((operand == null)) {
                 throw new ParseError(("Expected operand after " + word1.value), this.pos);
             }
             return new UnaryTest(word1.value, operand);
         }
+        // Check if next token is a binary operator
         if ((!this.CondAtEnd() && ((this.peek() !== "&") && (this.peek() !== "|") && (this.peek() !== ")")))) {
+            // Handle < and > as binary operators (they terminate words)
+            // But not <( or >( which are process substitution
             if ((IsRedirectChar(this.peek()) && !(((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "(")))) {
                 var op = this.advance();
                 this.CondSkipWhitespace();
@@ -5213,10 +5726,13 @@ class Parser {
                 }
                 return new BinaryTest(op, word1, word2);
             }
+            // Peek at next word to see if it's a binary operator
             var saved_pos = this.pos;
             var op_word = this.ParseCondWord();
             if ((op_word && IsCondBinaryOp(op_word.value))) {
+                // Binary test: word1 op word2
                 this.CondSkipWhitespace();
+                // For =~ operator, the RHS is a regex where ( ) are grouping, not conditional grouping
                 if ((op_word.value === "=~")) {
                     word2 = this.ParseCondRegexWord();
                 } else {
@@ -5227,9 +5743,11 @@ class Parser {
                 }
                 return new BinaryTest(op_word.value, word1, word2);
             } else {
+                // Not a binary op, restore position
                 this.pos = saved_pos;
             }
         }
+        // Bare word: implicit -n test
         return new UnaryTest("-n", word1);
     }
     
@@ -5238,10 +5756,13 @@ class Parser {
         if (this.CondAtEnd()) {
             return null;
         }
+        // Check for special tokens that aren't words
         var c = this.peek();
         if (IsParen(c)) {
             return null;
         }
+        // Note: ! alone is handled by _parse_cond_term() as negation operator
+        // Here we allow ! as a word so it can be used as pattern in binary tests
         if (((c === "&") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "&"))) {
             return null;
         }
@@ -5253,17 +5774,24 @@ class Parser {
         var parts = [];
         while (!this.atEnd()) {
             var ch = this.peek();
+            // End of conditional
             if (((ch === "]") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "]"))) {
                 break;
             }
+            // Word terminators in conditionals
             if (IsWhitespaceNoNewline(ch)) {
                 break;
             }
+            // < and > are string comparison operators in [[ ]], terminate words
+            // But <(...) and >(...) are process substitution - don't break
             if ((IsRedirectChar(ch) && !(((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "(")))) {
                 break;
             }
+            // ( and ) end words unless part of extended glob: @(...), ?(...), *(...), +(...), !(...)
             if ((ch === "(")) {
+                // Check if this is an extended glob (preceded by @, ?, *, +, or !)
                 if ((chars.length > 0 && IsExtglobPrefix(chars[(chars.length - 1)]))) {
+                    // Extended glob - consume the parenthesized content
                     chars.push(this.advance());
                     var depth = 1;
                     while ((!this.atEnd() && (depth > 0))) {
@@ -5289,6 +5817,7 @@ class Parser {
             if (((ch === "|") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "|"))) {
                 break;
             }
+            // Single-quoted string
             if ((ch === "'")) {
                 this.advance();
                 chars.push("'");
@@ -5300,6 +5829,7 @@ class Parser {
                 }
                 chars.push(this.advance());
             } else if ((ch === "\"")) {
+                // Double-quoted string
                 this.advance();
                 chars.push("\"");
                 while ((!this.atEnd() && (this.peek() !== "\""))) {
@@ -5307,6 +5837,7 @@ class Parser {
                     if (((c === "\\") && ((this.pos + 1) < this.length))) {
                         var next_c = this.source[(this.pos + 1)];
                         if ((next_c === "\n")) {
+                            // Line continuation - skip both backslash and newline
                             this.advance();
                             this.advance();
                         } else {
@@ -5314,6 +5845,7 @@ class Parser {
                             chars.push(this.advance());
                         }
                     } else if ((c === "$")) {
+                        // Handle expansions inside double quotes
                         if ((((this.pos + 2) < this.length) && (this.source[(this.pos + 1)] === "(") && (this.source[(this.pos + 2)] === "("))) {
                             var arith_result = this.ParseArithmeticExpansion();
                             var arith_node = arith_result[0];
@@ -5322,6 +5854,7 @@ class Parser {
                                 parts.push(arith_node);
                                 chars.push(arith_text);
                             } else {
+                                // Not arithmetic - try command substitution
                                 var cmdsub_result = this.ParseCommandSubstitution();
                                 var cmdsub_node = cmdsub_result[0];
                                 var cmdsub_text = cmdsub_result[1];
@@ -5362,9 +5895,11 @@ class Parser {
                 }
                 chars.push(this.advance());
             } else if (((ch === "\\") && ((this.pos + 1) < this.length))) {
+                // Escape
                 chars.push(this.advance());
                 chars.push(this.advance());
             } else if (((ch === "$") && ((this.pos + 2) < this.length) && (this.source[(this.pos + 1)] === "(") && (this.source[(this.pos + 2)] === "("))) {
+                // Arithmetic expansion $((...))
                 arith_result = this.ParseArithmeticExpansion();
                 arith_node = arith_result[0];
                 arith_text = arith_result[1];
@@ -5375,6 +5910,7 @@ class Parser {
                     chars.push(this.advance());
                 }
             } else if (((ch === "$") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "("))) {
+                // Command substitution $(...)
                 cmdsub_result = this.ParseCommandSubstitution();
                 cmdsub_node = cmdsub_result[0];
                 cmdsub_text = cmdsub_result[1];
@@ -5385,6 +5921,7 @@ class Parser {
                     chars.push(this.advance());
                 }
             } else if ((ch === "$")) {
+                // Parameter expansion $var or ${...}
                 param_result = this.ParseParamExpansion();
                 param_node = param_result[0];
                 param_text = param_result[1];
@@ -5395,6 +5932,7 @@ class Parser {
                     chars.push(this.advance());
                 }
             } else if ((IsRedirectChar(ch) && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "("))) {
+                // Process substitution <(...) or >(...)
                 var procsub_result = this.ParseProcessSubstitution();
                 var procsub_node = procsub_result[0];
                 var procsub_text = procsub_result[1];
@@ -5405,6 +5943,7 @@ class Parser {
                     chars.push(this.advance());
                 }
             } else if ((ch === "`")) {
+                // Backtick command substitution
                 cmdsub_result = this.ParseBacktickSubstitution();
                 cmdsub_node = cmdsub_result[0];
                 cmdsub_text = cmdsub_result[1];
@@ -5415,6 +5954,7 @@ class Parser {
                     chars.push(this.advance());
                 }
             } else {
+                // Regular character
                 chars.push(this.advance());
             }
         }
@@ -5439,19 +5979,23 @@ class Parser {
         var paren_depth = 0;
         while (!this.atEnd()) {
             var ch = this.peek();
+            // End of conditional
             if (((ch === "]") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "]"))) {
                 break;
             }
+            // Backslash-newline continuation (check before space/escape handling)
             if (((ch === "\\") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "\n"))) {
                 this.advance();
                 this.advance();
                 continue;
             }
+            // Escape sequences - consume both characters (including escaped spaces)
             if (((ch === "\\") && ((this.pos + 1) < this.length))) {
                 chars.push(this.advance());
                 chars.push(this.advance());
                 continue;
             }
+            // Track regex grouping parentheses
             if ((ch === "(")) {
                 paren_depth += 1;
                 chars.push(this.advance());
@@ -5463,16 +6007,22 @@ class Parser {
                     chars.push(this.advance());
                     continue;
                 }
+                // Unmatched ) - probably end of pattern
                 break;
             }
+            // Regex character class [...] - consume until closing ]
+            // Handles [[:alpha:]], [^0-9], []a-z] (] as first char), etc.
             if ((ch === "[")) {
                 chars.push(this.advance());
+                // Handle negation [^
                 if ((!this.atEnd() && (this.peek() === "^"))) {
                     chars.push(this.advance());
                 }
+                // Handle ] as first char (literal ])
                 if ((!this.atEnd() && (this.peek() === "]"))) {
                     chars.push(this.advance());
                 }
+                // Consume until closing ]
                 while (!this.atEnd()) {
                     var c = this.peek();
                     if ((c === "]")) {
@@ -5480,6 +6030,7 @@ class Parser {
                         break;
                     }
                     if (((c === "[") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === ":"))) {
+                        // POSIX class like [:alpha:] inside bracket expression
                         chars.push(this.advance());
                         chars.push(this.advance());
                         while ((!this.atEnd() && !((this.peek() === ":") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "]")))) {
@@ -5495,10 +6046,12 @@ class Parser {
                 }
                 continue;
             }
+            // Word terminators - space/tab ends the regex (unless inside parens), as do && and ||
             if ((IsWhitespace(ch) && (paren_depth === 0))) {
                 break;
             }
             if ((IsWhitespace(ch) && (paren_depth > 0))) {
+                // Space inside regex parens is part of the pattern
                 chars.push(this.advance());
                 continue;
             }
@@ -5508,6 +6061,7 @@ class Parser {
             if (((ch === "|") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "|"))) {
                 break;
             }
+            // Single-quoted string
             if ((ch === "'")) {
                 this.advance();
                 chars.push("'");
@@ -5520,6 +6074,7 @@ class Parser {
                 chars.push(this.advance());
                 continue;
             }
+            // Double-quoted string
             if ((ch === "\"")) {
                 this.advance();
                 chars.push("\"");
@@ -5548,7 +6103,9 @@ class Parser {
                 chars.push(this.advance());
                 continue;
             }
+            // Command substitution $(...) or parameter expansion $var or ${...}
             if ((ch === "$")) {
+                // Try command substitution first
                 if ((((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "("))) {
                     var cmdsub_result = this.ParseCommandSubstitution();
                     var cmdsub_node = cmdsub_result[0];
@@ -5570,6 +6127,7 @@ class Parser {
                 }
                 continue;
             }
+            // Regular character (including ( ) which are regex grouping)
             chars.push(this.advance());
         }
         if (chars.length === 0) {
@@ -5587,6 +6145,7 @@ class Parser {
         if ((this.atEnd() || (this.peek() !== "{"))) {
             return null;
         }
+        // Check that { is followed by whitespace (it's a reserved word)
         if ((((this.pos + 1) < this.length) && !IsWhitespace(this.source[(this.pos + 1)]))) {
             return null;
         }
@@ -5601,6 +6160,7 @@ class Parser {
             throw new ParseError("Expected } to close brace group", this.pos);
         }
         this.advance();
+        // Collect trailing redirects
         var redirects = [];
         while (true) {
             this.skipWhitespace();
@@ -5619,27 +6179,35 @@ class Parser {
     
     parseIf() {
         this.skipWhitespace();
+        // Check for 'if' keyword
         if ((this.peekWord() !== "if")) {
             return null;
         }
         this.consumeWord("if");
+        // Parse condition (a list that ends at 'then')
         var condition = this.parseListUntil(new Set(["then"]));
         if ((condition == null)) {
             throw new ParseError("Expected condition after 'if'", this.pos);
         }
+        // Expect 'then'
         this.skipWhitespaceAndNewlines();
         if (!this.consumeWord("then")) {
             throw new ParseError("Expected 'then' after if condition", this.pos);
         }
+        // Parse then body (ends at elif, else, or fi)
         var then_body = this.parseListUntil(new Set(["elif", "else", "fi"]));
         if ((then_body == null)) {
             throw new ParseError("Expected commands after 'then'", this.pos);
         }
+        // Check what comes next: elif, else, or fi
         this.skipWhitespaceAndNewlines();
         var next_word = this.peekWord();
         var else_body = null;
         if ((next_word === "elif")) {
+            // elif is syntactic sugar for else if ... fi
             this.consumeWord("elif");
+            // Parse the rest as a nested if (but we've already consumed 'elif')
+            // We need to parse: condition; then body [elif|else|fi]
             var elif_condition = this.parseListUntil(new Set(["then"]));
             if ((elif_condition == null)) {
                 throw new ParseError("Expected condition after 'elif'", this.pos);
@@ -5652,10 +6220,13 @@ class Parser {
             if ((elif_then_body == null)) {
                 throw new ParseError("Expected commands after 'then'", this.pos);
             }
+            // Recursively handle more elif/else/fi
             this.skipWhitespaceAndNewlines();
             var inner_next = this.peekWord();
             var inner_else = null;
             if ((inner_next === "elif")) {
+                // More elif - recurse by creating a fake "if" and parsing
+                // Actually, let's just recursively call a helper
                 inner_else = this.ParseElifChain();
             } else if ((inner_next === "else")) {
                 this.consumeWord("else");
@@ -5672,10 +6243,12 @@ class Parser {
                 throw new ParseError("Expected commands after 'else'", this.pos);
             }
         }
+        // Expect 'fi'
         this.skipWhitespaceAndNewlines();
         if (!this.consumeWord("fi")) {
             throw new ParseError("Expected 'fi' to close if statement", this.pos);
         }
+        // Parse optional trailing redirections
         var redirects = [];
         while (true) {
             this.skipWhitespace();
@@ -5727,22 +6300,27 @@ class Parser {
             return null;
         }
         this.consumeWord("while");
+        // Parse condition (ends at 'do')
         var condition = this.parseListUntil(new Set(["do"]));
         if ((condition == null)) {
             throw new ParseError("Expected condition after 'while'", this.pos);
         }
+        // Expect 'do'
         this.skipWhitespaceAndNewlines();
         if (!this.consumeWord("do")) {
             throw new ParseError("Expected 'do' after while condition", this.pos);
         }
+        // Parse body (ends at 'done')
         var body = this.parseListUntil(new Set(["done"]));
         if ((body == null)) {
             throw new ParseError("Expected commands after 'do'", this.pos);
         }
+        // Expect 'done'
         this.skipWhitespaceAndNewlines();
         if (!this.consumeWord("done")) {
             throw new ParseError("Expected 'done' to close while loop", this.pos);
         }
+        // Parse optional trailing redirections
         var redirects = [];
         while (true) {
             this.skipWhitespace();
@@ -5765,22 +6343,27 @@ class Parser {
             return null;
         }
         this.consumeWord("until");
+        // Parse condition (ends at 'do')
         var condition = this.parseListUntil(new Set(["do"]));
         if ((condition == null)) {
             throw new ParseError("Expected condition after 'until'", this.pos);
         }
+        // Expect 'do'
         this.skipWhitespaceAndNewlines();
         if (!this.consumeWord("do")) {
             throw new ParseError("Expected 'do' after until condition", this.pos);
         }
+        // Parse body (ends at 'done')
         var body = this.parseListUntil(new Set(["done"]));
         if ((body == null)) {
             throw new ParseError("Expected commands after 'do'", this.pos);
         }
+        // Expect 'done'
         this.skipWhitespaceAndNewlines();
         if (!this.consumeWord("done")) {
             throw new ParseError("Expected 'done' to close until loop", this.pos);
         }
+        // Parse optional trailing redirections
         var redirects = [];
         while (true) {
             this.skipWhitespace();
@@ -5804,26 +6387,32 @@ class Parser {
         }
         this.consumeWord("for");
         this.skipWhitespace();
+        // Check for C-style for loop: for ((init; cond; incr))
         if (((this.peek() === "(") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "("))) {
             return this.ParseForArith();
         }
+        // Parse variable name (bash allows reserved words as variable names in for loops)
         var var_name = this.peekWord();
         if ((var_name == null)) {
             throw new ParseError("Expected variable name after 'for'", this.pos);
         }
         this.consumeWord(var_name);
         this.skipWhitespace();
+        // Handle optional semicolon or newline before 'in' or 'do'
         if ((this.peek() === ";")) {
             this.advance();
         }
         this.skipWhitespaceAndNewlines();
+        // Check for optional 'in' clause
         var words = null;
         if ((this.peekWord() === "in")) {
             this.consumeWord("in");
             this.skipWhitespaceAndNewlines();
+            // Parse words until semicolon, newline, or 'do'
             words = [];
             while (true) {
                 this.skipWhitespace();
+                // Check for end of word list
                 if (this.atEnd()) {
                     break;
                 }
@@ -5843,18 +6432,23 @@ class Parser {
                 words.push(word);
             }
         }
+        // Skip to 'do'
         this.skipWhitespaceAndNewlines();
+        // Expect 'do'
         if (!this.consumeWord("do")) {
             throw new ParseError("Expected 'do' in for loop", this.pos);
         }
+        // Parse body (ends at 'done')
         var body = this.parseListUntil(new Set(["done"]));
         if ((body == null)) {
             throw new ParseError("Expected commands after 'do'", this.pos);
         }
+        // Expect 'done'
         this.skipWhitespaceAndNewlines();
         if (!this.consumeWord("done")) {
             throw new ParseError("Expected 'done' to close for loop", this.pos);
         }
+        // Parse optional trailing redirections
         var redirects = [];
         while (true) {
             this.skipWhitespace();
@@ -5872,8 +6466,11 @@ class Parser {
     }
     
     ParseForArith() {
+        // We've already consumed 'for' and positioned at '(('
         this.advance();
         this.advance();
+        // Parse the three expressions separated by semicolons
+        // Each can be empty
         var parts = [];
         var current = [];
         var paren_depth = 0;
@@ -5887,6 +6484,8 @@ class Parser {
                     paren_depth -= 1;
                     current.push(this.advance());
                 } else if ((((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === ")"))) {
+                    // Check for closing ))
+                    // End of ((...)) - preserve trailing whitespace
                     parts.push(current.join("").trimStart());
                     this.advance();
                     this.advance();
@@ -5895,6 +6494,7 @@ class Parser {
                     current.push(this.advance());
                 }
             } else if (((ch === ";") && (paren_depth === 0))) {
+                // Preserve trailing whitespace in expressions
                 parts.push(current.join("").trimStart());
                 current = [];
                 this.advance();
@@ -5909,15 +6509,18 @@ class Parser {
         var cond = parts[1];
         var incr = parts[2];
         this.skipWhitespace();
+        // Handle optional semicolon
         if ((!this.atEnd() && (this.peek() === ";"))) {
             this.advance();
         }
         this.skipWhitespaceAndNewlines();
+        // Parse body - either do/done or brace group
         if ((this.peek() === "{")) {
             var brace = this.parseBraceGroup();
             if ((brace == null)) {
                 throw new ParseError("Expected brace group body in for loop", this.pos);
             }
+            // Unwrap the brace-group to match bash-oracle output format
             var body = brace.body;
         } else if (this.consumeWord("do")) {
             body = this.parseListUntil(new Set(["done"]));
@@ -5931,6 +6534,7 @@ class Parser {
         } else {
             throw new ParseError("Expected 'do' or '{' in for loop", this.pos);
         }
+        // Parse optional trailing redirections
         var redirects = [];
         while (true) {
             this.skipWhitespace();
@@ -5954,23 +6558,28 @@ class Parser {
         }
         this.consumeWord("select");
         this.skipWhitespace();
+        // Parse variable name
         var var_name = this.peekWord();
         if ((var_name == null)) {
             throw new ParseError("Expected variable name after 'select'", this.pos);
         }
         this.consumeWord(var_name);
         this.skipWhitespace();
+        // Handle optional semicolon before 'in', 'do', or '{'
         if ((this.peek() === ";")) {
             this.advance();
         }
         this.skipWhitespaceAndNewlines();
+        // Check for optional 'in' clause
         var words = null;
         if ((this.peekWord() === "in")) {
             this.consumeWord("in");
             this.skipWhitespaceAndNewlines();
+            // Parse words until semicolon, newline, 'do', or '{'
             words = [];
             while (true) {
                 this.skipWhitespace();
+                // Check for end of word list
                 if (this.atEnd()) {
                     break;
                 }
@@ -5990,18 +6599,24 @@ class Parser {
                 words.push(word);
             }
         }
+        // Empty word list is allowed for select (unlike for)
+        // Skip whitespace before body
         this.skipWhitespaceAndNewlines();
+        // Parse body - either do/done or brace group
         if ((this.peek() === "{")) {
             var brace = this.parseBraceGroup();
             if ((brace == null)) {
                 throw new ParseError("Expected brace group body in select", this.pos);
             }
+            // Unwrap the brace-group to match bash-oracle output format
             var body = brace.body;
         } else if (this.consumeWord("do")) {
+            // Parse body (ends at 'done')
             body = this.parseListUntil(new Set(["done"]));
             if ((body == null)) {
                 throw new ParseError("Expected commands after 'do'", this.pos);
             }
+            // Expect 'done'
             this.skipWhitespaceAndNewlines();
             if (!this.consumeWord("done")) {
                 throw new ParseError("Expected 'done' to close select", this.pos);
@@ -6009,6 +6624,7 @@ class Parser {
         } else {
             throw new ParseError("Expected 'do' or '{' in select", this.pos);
         }
+        // Parse optional trailing redirections
         var redirects = [];
         while (true) {
             this.skipWhitespace();
@@ -6033,6 +6649,7 @@ class Parser {
             return false;
         }
         var next_ch = this.source[(this.pos + 1)];
+        // ;; or ;& or ;;& (which is actually ;;&)
         return IsSemicolonOrAmp(next_ch);
     }
     
@@ -6047,6 +6664,7 @@ class Parser {
         var ch = this.peek();
         if ((ch === ";")) {
             this.advance();
+            // Check for ;;&
             if ((!this.atEnd() && (this.peek() === "&"))) {
                 this.advance();
                 return ";;&";
@@ -6066,31 +6684,42 @@ class Parser {
         }
         this.consumeWord("case");
         this.skipWhitespace();
+        // Parse the word to match
         var word = this.parseWord();
         if ((word == null)) {
             throw new ParseError("Expected word after 'case'", this.pos);
         }
         this.skipWhitespaceAndNewlines();
+        // Expect 'in'
         if (!this.consumeWord("in")) {
             throw new ParseError("Expected 'in' after case word", this.pos);
         }
         this.skipWhitespaceAndNewlines();
+        // Parse pattern clauses until 'esac'
         var patterns = [];
         while (true) {
             this.skipWhitespaceAndNewlines();
+            // Check if we're at 'esac' (but not 'esac)' which is esac as a pattern)
             if ((this.peekWord() === "esac")) {
+                // Look ahead to see if esac is a pattern (esac followed by ) then body/;;)
+                // or the closing keyword (esac followed by ) that closes containing construct)
                 var saved = this.pos;
                 this.skipWhitespace();
+                // Consume "esac"
                 while ((!this.atEnd() && !IsMetachar(this.peek()) && !IsQuote(this.peek()))) {
                     this.advance();
                 }
                 this.skipWhitespace();
+                // Check for ) and what follows
                 var is_pattern = false;
                 if ((!this.atEnd() && (this.peek() === ")"))) {
                     this.advance();
                     this.skipWhitespace();
+                    // esac is a pattern if there's body content or ;; after )
+                    // Not a pattern if ) is followed by end, newline, or another )
                     if (!this.atEnd()) {
                         var next_ch = this.peek();
+                        // If followed by ;; or actual command content, it's a pattern
                         if ((next_ch === ";")) {
                             is_pattern = true;
                         } else if (!IsNewlineOrRightParen(next_ch)) {
@@ -6103,37 +6732,48 @@ class Parser {
                     break;
                 }
             }
+            // Skip optional leading ( before pattern (POSIX allows this)
             this.skipWhitespaceAndNewlines();
             if ((!this.atEnd() && (this.peek() === "("))) {
                 this.advance();
                 this.skipWhitespaceAndNewlines();
             }
+            // Parse pattern (everything until ')' at depth 0)
+            // Pattern can contain | for alternation, quotes, globs, extglobs, etc.
+            // Extglob patterns @(), ?(), *(), +(), !() contain nested parens
             var pattern_chars = [];
             var extglob_depth = 0;
             while (!this.atEnd()) {
                 var ch = this.peek();
                 if ((ch === ")")) {
                     if ((extglob_depth > 0)) {
+                        // Inside extglob, consume the ) and decrement depth
                         pattern_chars.push(this.advance());
                         extglob_depth -= 1;
                     } else {
+                        // End of pattern
                         this.advance();
                         break;
                     }
                 } else if ((ch === "\\")) {
+                    // Line continuation or backslash escape
                     if ((((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "\n"))) {
+                        // Line continuation - skip both backslash and newline
                         this.advance();
                         this.advance();
                     } else {
+                        // Normal escape - consume both chars
                         pattern_chars.push(this.advance());
                         if (!this.atEnd()) {
                             pattern_chars.push(this.advance());
                         }
                     }
                 } else if (((ch === "$") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "("))) {
+                    // $( or $(( - command sub or arithmetic
                     pattern_chars.push(this.advance());
                     pattern_chars.push(this.advance());
                     if ((!this.atEnd() && (this.peek() === "("))) {
+                        // $(( arithmetic - need to find matching ))
                         pattern_chars.push(this.advance());
                         var paren_depth = 2;
                         while ((!this.atEnd() && (paren_depth > 0))) {
@@ -6146,24 +6786,32 @@ class Parser {
                             pattern_chars.push(this.advance());
                         }
                     } else {
+                        // $() command sub - track single paren
                         extglob_depth += 1;
                     }
                 } else if (((ch === "(") && (extglob_depth > 0))) {
+                    // Grouping paren inside extglob
                     pattern_chars.push(this.advance());
                     extglob_depth += 1;
                 } else if ((IsExtglobPrefix(ch) && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "("))) {
+                    // Extglob opener: @(, ?(, *(, +(, !(
                     pattern_chars.push(this.advance());
                     pattern_chars.push(this.advance());
                     extglob_depth += 1;
                 } else if ((ch === "[")) {
+                    // Character class - but only if there's a matching ]
+                    // ] must come before ) at same depth (either extglob or pattern)
                     var is_char_class = false;
                     var scan_pos = (this.pos + 1);
                     var scan_depth = 0;
                     var has_first_bracket_literal = false;
+                    // Skip [! or [^ at start
                     if (((scan_pos < this.length) && IsCaretOrBang(this.source[scan_pos]))) {
                         scan_pos += 1;
                     }
+                    // Skip ] as first char (literal in char class) only if there's another ]
                     if (((scan_pos < this.length) && (this.source[scan_pos] === "]"))) {
+                        // Check if there's another ] later
                         if ((this.source.indexOf("]", (scan_pos + 1)) !== -1)) {
                             scan_pos += 1;
                             has_first_bracket_literal = true;
@@ -6177,20 +6825,25 @@ class Parser {
                         } else if ((sc === "[")) {
                             scan_depth += 1;
                         } else if (((sc === ")") && (scan_depth === 0))) {
+                            // Hit pattern/extglob closer before finding ]
                             break;
                         } else if (((sc === "|") && (scan_depth === 0) && (extglob_depth > 0))) {
+                            // Hit alternation in extglob - ] must be in this branch
                             break;
                         }
                         scan_pos += 1;
                     }
                     if (is_char_class) {
                         pattern_chars.push(this.advance());
+                        // Handle [! or [^ at start
                         if ((!this.atEnd() && IsCaretOrBang(this.peek()))) {
                             pattern_chars.push(this.advance());
                         }
+                        // Handle ] as first char (literal) only if we detected it in scan
                         if ((has_first_bracket_literal && !this.atEnd() && (this.peek() === "]"))) {
                             pattern_chars.push(this.advance());
                         }
+                        // Consume until closing ]
                         while ((!this.atEnd() && (this.peek() !== "]"))) {
                             pattern_chars.push(this.advance());
                         }
@@ -6198,9 +6851,11 @@ class Parser {
                             pattern_chars.push(this.advance());
                         }
                     } else {
+                        // Not a valid char class, treat [ as literal
                         pattern_chars.push(this.advance());
                     }
                 } else if ((ch === "'")) {
+                    // Single-quoted string in pattern
                     pattern_chars.push(this.advance());
                     while ((!this.atEnd() && (this.peek() !== "'"))) {
                         pattern_chars.push(this.advance());
@@ -6209,6 +6864,7 @@ class Parser {
                         pattern_chars.push(this.advance());
                     }
                 } else if ((ch === "\"")) {
+                    // Double-quoted string in pattern
                     pattern_chars.push(this.advance());
                     while ((!this.atEnd() && (this.peek() !== "\""))) {
                         if (((this.peek() === "\\") && ((this.pos + 1) < this.length))) {
@@ -6220,6 +6876,7 @@ class Parser {
                         pattern_chars.push(this.advance());
                     }
                 } else if (IsWhitespace(ch)) {
+                    // Skip whitespace at top level, but preserve inside $() or extglob
                     if ((extglob_depth > 0)) {
                         pattern_chars.push(this.advance());
                     } else {
@@ -6233,12 +6890,17 @@ class Parser {
             if (!pattern) {
                 throw new ParseError("Expected pattern in case statement", this.pos);
             }
+            // Parse commands until ;;, ;&, ;;&, or esac
+            // Commands are optional (can have empty body)
             this.skipWhitespace();
             var body = null;
+            // Check for empty body: terminator right after pattern
             var is_empty_body = this.IsCaseTerminator();
             if (!is_empty_body) {
+                // Skip newlines and check if there's content before terminator or esac
                 this.skipWhitespaceAndNewlines();
                 if ((!this.atEnd() && (this.peekWord() !== "esac"))) {
+                    // Check again for terminator after whitespace/newlines
                     var is_at_terminator = this.IsCaseTerminator();
                     if (!is_at_terminator) {
                         body = this.parseListUntil(new Set(["esac"]));
@@ -6246,14 +6908,17 @@ class Parser {
                     }
                 }
             }
+            // Handle terminator: ;;, ;&, or ;;&
             var terminator = this.ConsumeCaseTerminator();
             this.skipWhitespaceAndNewlines();
             patterns.push(new CasePattern(pattern, body, terminator));
         }
+        // Expect 'esac'
         this.skipWhitespaceAndNewlines();
         if (!this.consumeWord("esac")) {
             throw new ParseError("Expected 'esac' to close case statement", this.pos);
         }
+        // Collect trailing redirects
         var redirects = [];
         while (true) {
             this.skipWhitespace();
@@ -6281,6 +6946,7 @@ class Parser {
         this.consumeWord("coproc");
         this.skipWhitespace();
         var name = null;
+        // Check for compound command directly (no NAME)
         var ch = null;
         if (!this.atEnd()) {
             ch = this.peek();
@@ -6303,6 +6969,7 @@ class Parser {
                 return new Coproc(body, name);
             }
         }
+        // Check for reserved word compounds directly
         var next_word = this.peekWord();
         if (IsCompoundKeyword(next_word)) {
             body = this.parseCompoundCommand();
@@ -6310,25 +6977,30 @@ class Parser {
                 return new Coproc(body, name);
             }
         }
+        // Check if first word is NAME followed by compound command
         var word_start = this.pos;
         var potential_name = this.peekWord();
         if (potential_name) {
+            // Skip past the potential name
             while ((!this.atEnd() && !IsMetachar(this.peek()) && !IsQuote(this.peek()))) {
                 this.advance();
             }
             this.skipWhitespace();
+            // Check what follows
             ch = null;
             if (!this.atEnd()) {
                 ch = this.peek();
             }
             next_word = this.peekWord();
             if ((ch === "{")) {
+                // NAME { ... } - extract name
                 name = potential_name;
                 body = this.parseBraceGroup();
                 if ((body != null)) {
                     return new Coproc(body, name);
                 }
             } else if ((ch === "(")) {
+                // NAME ( ... ) - extract name
                 name = potential_name;
                 if ((((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "("))) {
                     body = this.parseArithmeticCommand();
@@ -6339,14 +7011,17 @@ class Parser {
                     return new Coproc(body, name);
                 }
             } else if (IsCompoundKeyword(next_word)) {
+                // NAME followed by reserved compound - extract name
                 name = potential_name;
                 body = this.parseCompoundCommand();
                 if ((body != null)) {
                     return new Coproc(body, name);
                 }
             }
+            // Not followed by compound - restore position and parse as simple command
             this.pos = word_start;
         }
+        // Parse as simple command (includes any "NAME" as part of the command)
         body = this.parseCommand();
         if ((body != null)) {
             return new Coproc(body, name);
@@ -6360,9 +7035,11 @@ class Parser {
             return null;
         }
         var saved_pos = this.pos;
+        // Check for 'function' keyword form
         if ((this.peekWord() === "function")) {
             this.consumeWord("function");
             this.skipWhitespace();
+            // Get function name
             var name = this.peekWord();
             if ((name == null)) {
                 this.pos = saved_pos;
@@ -6370,28 +7047,38 @@ class Parser {
             }
             this.consumeWord(name);
             this.skipWhitespace();
+            // Optional () after name - but only if it's actually ()
+            // and not the start of a subshell body
             if ((!this.atEnd() && (this.peek() === "("))) {
+                // Check if this is () or start of subshell
                 if ((((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === ")"))) {
                     this.advance();
                     this.advance();
                 }
             }
+            // else: the ( is start of subshell body, don't consume
             this.skipWhitespaceAndNewlines();
+            // Parse body (any compound command)
             var body = this.ParseCompoundCommand();
             if ((body == null)) {
                 throw new ParseError("Expected function body", this.pos);
             }
             return new Function(name, body);
         }
+        // Check for POSIX form: name()
+        // We need to peek ahead to see if there's a () after the word
         name = this.peekWord();
         if (((name == null) || IsReservedWord(name))) {
             return null;
         }
+        // Assignment words (containing =) are not function definitions
         if (StrContains(name, "=")) {
             return null;
         }
+        // Save position after the name
         this.skipWhitespace();
         var name_start = this.pos;
+        // Consume the name
         while ((!this.atEnd() && !IsMetachar(this.peek()) && !IsQuote(this.peek()) && !IsParen(this.peek()))) {
             this.advance();
         }
@@ -6400,6 +7087,7 @@ class Parser {
             this.pos = saved_pos;
             return null;
         }
+        // Check for () - whitespace IS allowed between name and (
         this.skipWhitespace();
         if ((this.atEnd() || (this.peek() !== "("))) {
             this.pos = saved_pos;
@@ -6413,6 +7101,7 @@ class Parser {
         }
         this.advance();
         this.skipWhitespaceAndNewlines();
+        // Parse body (any compound command)
         body = this.ParseCompoundCommand();
         if ((body == null)) {
             throw new ParseError("Expected function body", this.pos);
@@ -6421,6 +7110,7 @@ class Parser {
     }
     
     ParseCompoundCommand() {
+        // Try each compound command type
         var result = this.parseBraceGroup();
         if (result) {
             return result;
@@ -6461,6 +7151,7 @@ class Parser {
     }
     
     parseListUntil(stop_words) {
+        // Check if we're already at a stop word
         this.skipWhitespaceAndNewlines();
         if (stop_words.has(this.peekWord())) {
             return null;
@@ -6471,11 +7162,13 @@ class Parser {
         }
         var parts = [pipeline];
         while (true) {
+            // Check for newline as implicit command separator
             this.skipWhitespace();
             var has_newline = false;
             while ((!this.atEnd() && (this.peek() === "\n"))) {
                 has_newline = true;
                 this.advance();
+                // Skip past any pending heredoc content after newline
                 if (((this._pending_heredoc_end != null) && (this._pending_heredoc_end > this.pos))) {
                     this.pos = this._pending_heredoc_end;
                     this._pending_heredoc_end = null;
@@ -6483,7 +7176,9 @@ class Parser {
                 this.skipWhitespace();
             }
             var op = this.parseListOperator();
+            // Newline acts as implicit semicolon if followed by more commands
             if (((op == null) && has_newline)) {
+                // Check if there's another command (not a stop word)
                 if ((!this.atEnd() && !stop_words.has(this.peekWord()) && !IsRightBracket(this.peek()))) {
                     op = "\n";
                 }
@@ -6491,6 +7186,7 @@ class Parser {
             if ((op == null)) {
                 break;
             }
+            // For & at end of list, don't require another command
             if ((op === "&")) {
                 parts.push(new Operator(op));
                 this.skipWhitespaceAndNewlines();
@@ -6498,17 +7194,22 @@ class Parser {
                     break;
                 }
             }
+            // For ; - check if it's a terminator before a stop word (don't include it)
             if ((op === ";")) {
                 this.skipWhitespaceAndNewlines();
+                // Also check for ;;, ;&, or ;;& (case terminators)
                 var at_case_terminator = ((this.peek() === ";") && ((this.pos + 1) < this.length) && IsSemicolonOrAmp(this.source[(this.pos + 1)]));
                 if ((this.atEnd() || stop_words.has(this.peekWord()) || IsNewlineOrRightBracket(this.peek()) || at_case_terminator)) {
+                    // Don't include trailing semicolon - it's just a terminator
                     break;
                 }
                 parts.push(new Operator(op));
             } else if ((op !== "&")) {
                 parts.push(new Operator(op));
             }
+            // Check for stop words before parsing next pipeline
             this.skipWhitespaceAndNewlines();
+            // Also check for ;;, ;&, or ;;& (case terminators)
             if (stop_words.has(this.peekWord())) {
                 break;
             }
@@ -6533,64 +7234,84 @@ class Parser {
             return null;
         }
         var ch = this.peek();
+        // Arithmetic command ((...)) - check before subshell
         if (((ch === "(") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "("))) {
             var result = this.parseArithmeticCommand();
             if ((result != null)) {
                 return result;
             }
         }
+        // Not arithmetic (e.g., '(( x ) )' is nested subshells) - fall through
+        // Subshell
         if ((ch === "(")) {
             return this.parseSubshell();
         }
+        // Brace group
         if ((ch === "{")) {
             result = this.parseBraceGroup();
             if ((result != null)) {
                 return result;
             }
         }
+        // Fall through to simple command if not a brace group
+        // Conditional expression [[ ]] - check before reserved words
         if (((ch === "[") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "["))) {
             return this.parseConditionalExpr();
         }
+        // Check for reserved words
         var word = this.peekWord();
+        // If statement
         if ((word === "if")) {
             return this.parseIf();
         }
+        // While loop
         if ((word === "while")) {
             return this.parseWhile();
         }
+        // Until loop
         if ((word === "until")) {
             return this.parseUntil();
         }
+        // For loop
         if ((word === "for")) {
             return this.parseFor();
         }
+        // Select statement
         if ((word === "select")) {
             return this.parseSelect();
         }
+        // Case statement
         if ((word === "case")) {
             return this.parseCase();
         }
+        // Function definition (function keyword form)
         if ((word === "function")) {
             return this.parseFunction();
         }
+        // Coproc
         if ((word === "coproc")) {
             return this.parseCoproc();
         }
+        // Try POSIX function definition (name() form) before simple command
         var func = this.parseFunction();
         if ((func != null)) {
             return func;
         }
+        // Simple command
         return this.parseCommand();
     }
     
     parsePipeline() {
         this.skipWhitespace();
+        // Track order of prefixes: "time", "negation", or "time_negation" or "negation_time"
         var prefix_order = null;
         var time_posix = false;
+        // Check for 'time' prefix first
         if ((this.peekWord() === "time")) {
             this.consumeWord("time");
             prefix_order = "time";
             this.skipWhitespace();
+            // Check for -p flag
             if ((!this.atEnd() && (this.peek() === "-"))) {
                 var saved = this.pos;
                 this.advance();
@@ -6606,6 +7327,7 @@ class Parser {
                 }
             }
             this.skipWhitespace();
+            // Check for -- (end of options) - implies -p per bash-oracle
             if ((!this.atEnd() && StartsWithAt(this.source, this.pos, "--"))) {
                 if ((((this.pos + 2) >= this.length) || IsWhitespace(this.source[(this.pos + 2)]))) {
                     this.advance();
@@ -6614,9 +7336,11 @@ class Parser {
                     this.skipWhitespace();
                 }
             }
+            // Skip nested time keywords (time time X collapses to time X)
             while ((this.peekWord() === "time")) {
                 this.consumeWord("time");
                 this.skipWhitespace();
+                // Check for -p after nested time
                 if ((!this.atEnd() && (this.peek() === "-"))) {
                     saved = this.pos;
                     this.advance();
@@ -6633,6 +7357,7 @@ class Parser {
                 }
                 this.skipWhitespace();
             }
+            // Check for ! after time
             if ((!this.atEnd() && (this.peek() === "!"))) {
                 if ((((this.pos + 1) >= this.length) || IsWhitespace(this.source[(this.pos + 1)]))) {
                     this.advance();
@@ -6641,10 +7366,14 @@ class Parser {
                 }
             }
         } else if ((!this.atEnd() && (this.peek() === "!"))) {
+            // Check for '!' negation prefix (if no time yet)
             if ((((this.pos + 1) >= this.length) || IsWhitespace(this.source[(this.pos + 1)]))) {
                 this.advance();
                 this.skipWhitespace();
+                // Recursively parse pipeline to handle ! ! cmd, ! time cmd, etc.
+                // Bare ! (no following command) is valid POSIX - equivalent to false
                 var inner = this.parsePipeline();
+                // Double negation cancels out (! ! cmd -> cmd, ! ! -> empty command)
                 if (((inner != null) && (inner.kind === "negation"))) {
                     if ((inner.pipeline != null)) {
                         return inner.pipeline;
@@ -6655,18 +7384,24 @@ class Parser {
                 return new Negation(inner);
             }
         }
+        // Parse the actual pipeline
         var result = this.ParseSimplePipeline();
+        // Wrap based on prefix order
+        // Note: bare time and time ! are valid (null command timing)
         if ((prefix_order === "time")) {
             result = new Time(result, time_posix);
         } else if ((prefix_order === "negation")) {
             result = new Negation(result);
         } else if ((prefix_order === "time_negation")) {
+            // time ! cmd -> Negation(Time(cmd)) per bash-oracle
             result = new Time(result, time_posix);
             result = new Negation(result);
         } else if ((prefix_order === "negation_time")) {
+            // ! time cmd -> Negation(Time(cmd))
             result = new Time(result, time_posix);
             result = new Negation(result);
         } else if ((result == null)) {
+            // No prefix and no pipeline
             return null;
         }
         return result;
@@ -6683,16 +7418,19 @@ class Parser {
             if ((this.atEnd() || (this.peek() !== "|"))) {
                 break;
             }
+            // Check it's not ||
             if ((((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "|"))) {
                 break;
             }
             this.advance();
+            // Check for |& (pipe stderr)
             var is_pipe_both = false;
             if ((!this.atEnd() && (this.peek() === "&"))) {
                 this.advance();
                 is_pipe_both = true;
             }
             this.skipWhitespaceAndNewlines();
+            // Add pipe-both marker if this is a |& pipe
             if (is_pipe_both) {
                 commands.push(new PipeBoth());
             }
@@ -6715,6 +7453,7 @@ class Parser {
         }
         var ch = this.peek();
         if ((ch === "&")) {
+            // Check if this is &> or &>> (redirect), not background operator
             if ((((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === ">"))) {
                 return null;
             }
@@ -6734,6 +7473,7 @@ class Parser {
             return null;
         }
         if ((ch === ";")) {
+            // Don't treat ;;, ;&, or ;;& as a single semicolon (they're case terminators)
             if ((((this.pos + 1) < this.length) && IsSemicolonOrAmp(this.source[(this.pos + 1)]))) {
                 return null;
             }
@@ -6756,24 +7496,29 @@ class Parser {
         }
         var parts = [pipeline];
         while (true) {
+            // Check for newline as implicit command separator
             this.skipWhitespace();
             var has_newline = false;
             while ((!this.atEnd() && (this.peek() === "\n"))) {
                 has_newline = true;
+                // If not treating newlines as separators, stop here
                 if (!newline_as_separator) {
                     break;
                 }
                 this.advance();
+                // Skip past any pending heredoc content after newline
                 if (((this._pending_heredoc_end != null) && (this._pending_heredoc_end > this.pos))) {
                     this.pos = this._pending_heredoc_end;
                     this._pending_heredoc_end = null;
                 }
                 this.skipWhitespace();
             }
+            // If we hit a newline and not treating them as separators, stop
             if ((has_newline && !newline_as_separator)) {
                 break;
             }
             var op = this.parseListOperator();
+            // Newline acts as implicit semicolon if followed by more commands
             if (((op == null) && has_newline)) {
                 if ((!this.atEnd() && !IsRightBracket(this.peek()))) {
                     op = "\n";
@@ -6782,14 +7527,18 @@ class Parser {
             if ((op == null)) {
                 break;
             }
+            // Don't add duplicate semicolon (e.g., explicit ; followed by newline)
             if (!((op === ";") && parts && (parts[(parts.length - 1)].kind === "operator") && (parts[(parts.length - 1)].op === ";"))) {
                 parts.push(new Operator(op));
             }
+            // For & at end of list, don't require another command
             if ((op === "&")) {
                 this.skipWhitespace();
                 if ((this.atEnd() || IsRightBracket(this.peek()))) {
                     break;
                 }
+                // Newline after & - in compound commands, skip it (& acts as separator)
+                // At top level, newline terminates (separate commands)
                 if ((this.peek() === "\n")) {
                     if (newline_as_separator) {
                         this.skipWhitespaceAndNewlines();
@@ -6801,15 +7550,18 @@ class Parser {
                     }
                 }
             }
+            // For ; at end of list, don't require another command
             if ((op === ";")) {
                 this.skipWhitespace();
                 if ((this.atEnd() || IsRightBracket(this.peek()))) {
                     break;
                 }
+                // Newline after ; means continue to see if more commands follow
                 if ((this.peek() === "\n")) {
                     continue;
                 }
             }
+            // For && and ||, allow newlines before the next command
             if (((op === "&&") || (op === "||"))) {
                 this.skipWhitespaceAndNewlines();
             }
@@ -6843,8 +7595,10 @@ class Parser {
             return [new Empty()];
         }
         var results = [];
+        // Skip leading comments (bash-oracle doesn't output them)
         while (true) {
             this.skipWhitespace();
+            // Skip newlines but not comments
             while ((!this.atEnd() && (this.peek() === "\n"))) {
                 this.advance();
             }
@@ -6856,22 +7610,27 @@ class Parser {
                 break;
             }
         }
+        // Don't add to results - bash-oracle doesn't output comments
+        // Parse statements separated by newlines as separate top-level nodes
         while (!this.atEnd()) {
             var result = this.parseList(false);
             if ((result != null)) {
                 results.push(result);
             }
             this.skipWhitespace();
+            // Skip newlines (and any pending heredoc content) between statements
             var found_newline = false;
             while ((!this.atEnd() && (this.peek() === "\n"))) {
                 found_newline = true;
                 this.advance();
+                // Skip past any pending heredoc content after newline
                 if (((this._pending_heredoc_end != null) && (this._pending_heredoc_end > this.pos))) {
                     this.pos = this._pending_heredoc_end;
                     this._pending_heredoc_end = null;
                 }
                 this.skipWhitespace();
             }
+            // If no newline and not at end, we have unparsed content
             if ((!found_newline && !this.atEnd())) {
                 throw new ParseError("Parser not fully implemented yet", this.pos);
             }

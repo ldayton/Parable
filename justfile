@@ -37,7 +37,7 @@ lock-check:
 
 # Run all checks (tests, lint, format, lock, style) in parallel
 [parallel]
-check: test-all lint fmt lock-check check-dump-ast check-style test-js fmt-js
+check: test-all lint fmt lock-check check-dump-ast check-style test-js fmt-js fmt-go
 
 # Run benchmarks (--fast for quick run)
 bench *ARGS:
@@ -67,8 +67,12 @@ check-style:
     python3 bin/check-style.py 2>&1 | sed -u "s/^/[style] /" | tee /tmp/{{project}}-style.log
 
 # Transpile Python to JavaScript
-transpile:
-    python3 bin/transpile.py src/parable.py > src/parable.js && just fmt-js --fix
+transpile-js:
+    python3 bin/transpile-js.py src/parable.py > src/parable.js && just fmt-js --fix
+
+# Transpile Python to Go
+transpile-go:
+    uv run python bin/transpile-go.py src/parable.py > src/parable.go && just fmt-go --fix && go build ./src/...
 
 # Run JavaScript tests
 test-js *ARGS:
@@ -79,3 +83,11 @@ test-js *ARGS:
 fmt-js *ARGS:
     npx -y @biomejs/biome format {{ if ARGS == "--fix" { "--write" } else { "" } }} src/parable.js 2>&1 | sed -u "s/^/[fmt-js] /" | tee /tmp/{{project}}-fmt-js.log
     {{ if ARGS == "--fix" { "npx -y @biomejs/biome format --write src/parable.js >/dev/null 2>&1 || true" } else { "" } }}
+
+# Run Go tests
+test-go *ARGS:
+    go run bin/run-go-tests.go {{ARGS}}
+
+# Format Go (--fix to apply changes)
+fmt-go *ARGS:
+    gofmt {{ if ARGS == "--fix" { "-w" } else { "-l" } }} src/parable.go 2>&1 | sed -u "s/^/[fmt-go] /" | tee /tmp/{{project}}-fmt-go.log

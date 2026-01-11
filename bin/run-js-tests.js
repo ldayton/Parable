@@ -94,12 +94,25 @@ function runTest(testInput, testExpected) {
 }
 
 function main() {
-  const testDir = path.join(__dirname, '..', 'tests');
-  const verbose = process.argv.includes('-v') || process.argv.includes('--verbose');
+  const repoRoot = path.join(__dirname, '..');
+  let testDir = path.join(repoRoot, 'tests');
+  let verbose = false;
   let filterPattern = null;
-  const filterIdx = process.argv.indexOf('-f');
-  if (filterIdx !== -1 && process.argv[filterIdx + 1]) {
-    filterPattern = process.argv[filterIdx + 1];
+
+  let i = 2;
+  while (i < process.argv.length) {
+    const arg = process.argv[i];
+    if (arg === '-v' || arg === '--verbose') {
+      verbose = true;
+    } else if (arg === '-f' || arg === '--filter') {
+      i++;
+      if (i < process.argv.length) {
+        filterPattern = process.argv[i];
+      }
+    } else if (fs.existsSync(arg)) {
+      testDir = arg;
+    }
+    i++;
   }
   
   const startTime = Date.now();
@@ -107,11 +120,16 @@ function main() {
   let totalFailed = 0;
   const failedTests = [];
   
-  const testFiles = findTestFiles(testDir);
-  
+  let testFiles;
+  if (fs.statSync(testDir).isFile()) {
+    testFiles = [testDir];
+  } else {
+    testFiles = findTestFiles(testDir);
+  }
+
   for (const filepath of testFiles) {
     const tests = parseTestFile(filepath);
-    const relPath = path.relative(path.join(__dirname, '..'), filepath);
+    const relPath = path.relative(repoRoot, filepath);
     
     for (const { name, input, expected, lineNum } of tests) {
       if (filterPattern && !name.includes(filterPattern) && !relPath.includes(filterPattern)) {
@@ -137,7 +155,8 @@ function main() {
   
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
 
-  if (totalFailed > 0 && totalFailed <= 50) {
+  console.log('');
+  if (totalFailed > 0) {
     console.log('='.repeat(60));
     console.log('FAILURES');
     console.log('='.repeat(60));
@@ -150,10 +169,9 @@ function main() {
         console.log(`  Error:    ${error}`);
       }
     }
-  } else if (totalFailed > 110) {
-    console.log(`${totalFailed} failures (too many to show)`);
+    console.log('');
   }
-  
+
   console.log(`${totalPassed} passed, ${totalFailed} failed in ${elapsed}s`);
   
   process.exit(totalFailed > 0 ? 1 : 0);

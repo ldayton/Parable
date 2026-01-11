@@ -288,6 +288,9 @@ class JSTranspiler(ast.NodeVisitor):
         self.emit("}")
 
     def visit_Expr(self, node: ast.Expr):
+        # Skip bare string literals (docstrings) - they do nothing in JS
+        if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+            return
         self.emit(f"{self.visit_expr(node.value)};")
 
     def visit_Pass(self, node: ast.Pass):

@@ -1,6 +1,4 @@
-"Parable - A recursive descent parser for bash.";
 class ParseError extends Error {
-    "Raised when parsing fails.";
     constructor(message, pos, line) {
         super();
         this.message = message;
@@ -29,7 +27,6 @@ function IsOctalDigit(c) {
 
 var ANSI_C_ESCAPES = {"a": 7, "b": 8, "e": 27, "E": 27, "f": 12, "n": 10, "r": 13, "t": 9, "v": 11, "\\": 92, "\"": 34, "?": 63};
 function GetAnsiEscape(c) {
-    "Look up simple ANSI-C escape byte value. Returns -1 if not found.";
     if ((c === "a")) {
         return 7;
     }
@@ -75,22 +72,18 @@ function IsWhitespaceNoNewline(c) {
 }
 
 function Substring(s, start, end) {
-    "Extract substring from start to end (exclusive).";
     return s.slice(start, end);
 }
 
 function StartsWithAt(s, pos, prefix) {
-    "Check if s starts with prefix at position pos.";
     return s.startsWith(prefix, pos);
 }
 
 function Sublist(lst, start, end) {
-    "Extract sublist from start to end (exclusive).";
     return lst.slice(start, end);
 }
 
 function RepeatStr(s, n) {
-    "Repeat string s n times.";
     var result = [];
     var i = 0;
     while ((i < n)) {
@@ -101,16 +94,13 @@ function RepeatStr(s, n) {
 }
 
 class Node {
-    "Base class for all AST nodes.";
     toSexp() {
-        "Convert node to S-expression string for testing.";
         throw new Error("Not implemented");
     }
     
 }
 
 class Word extends Node {
-    "A word token, possibly containing expansions.";
     constructor(value, parts) {
         super();
         this.kind = "word";
@@ -136,12 +126,10 @@ class Word extends Node {
     }
     
     AppendWithCtlesc(result, byte_val) {
-        "Append byte to result (CTLESC doubling happens later in to_sexp).";
         result.push(byte_val);
     }
     
     DoubleCtlescSmart(value) {
-        "Double CTLESC bytes unless escaped by backslash inside double quotes.";
         var result = [];
         var in_single = false;
         var in_double = false;
@@ -174,7 +162,6 @@ class Word extends Node {
     }
     
     ExpandAnsiCEscapes(value) {
-        "Expand ANSI-C escape sequences in $'...' strings.\n\n        Uses bytes internally so \\x escapes can form valid UTF-8 sequences.\n        Invalid UTF-8 is replaced with U+FFFD.\n        ";
         if (!(value.startsWith("'") && value.endsWith("'"))) {
             return value;
         }
@@ -312,7 +299,6 @@ class Word extends Node {
     }
     
     ExpandAllAnsiCQuotes(value) {
-        "Find and expand ALL $'...' ANSI-C quoted strings in value.";
         var result = [];
         var i = 0;
         var in_single_quote = false;
@@ -398,7 +384,6 @@ class Word extends Node {
     }
     
     StripLocaleStringDollars(value) {
-        "Strip $ from locale strings $\"...\" while tracking quote context.";
         var result = [];
         var i = 0;
         var in_single_quote = false;
@@ -430,7 +415,6 @@ class Word extends Node {
     }
     
     NormalizeArrayWhitespace(value) {
-        "Normalize whitespace inside array assignments: arr=(a  b\tc) -> arr=(a b c).";
         if (!value.endsWith(")")) {
             return value;
         }
@@ -498,7 +482,6 @@ class Word extends Node {
     }
     
     StripArithLineContinuations(value) {
-        "Strip backslash-newline (line continuation) from inside $((...)).";
         var result = [];
         var i = 0;
         while ((i < value.length)) {
@@ -539,7 +522,6 @@ class Word extends Node {
     }
     
     CollectCmdsubs(node) {
-        "Recursively collect CommandSubstitution nodes from an AST node.";
         var result = [];
         var node_kind = (node["kind"] !== undefined ? node["kind"] : null);
         if ((node_kind === "cmdsub")) {
@@ -578,7 +560,6 @@ class Word extends Node {
     }
     
     FormatCommandSubstitutions(value) {
-        "Replace $(...) and >(...) / <(...) with bash-oracle-formatted AST output.";
         var cmdsub_parts = [];
         var procsub_parts = [];
         for (var p of this.parts) {
@@ -673,7 +654,6 @@ class Word extends Node {
     }
     
     getCondFormattedValue() {
-        "Return value with command substitutions formatted for cond-term output.";
         var value = this.ExpandAllAnsiCQuotes(this.value);
         value = this.FormatCommandSubstitutions(value);
         value = value.replaceAll("", "");
@@ -683,7 +663,6 @@ class Word extends Node {
 }
 
 class Command extends Node {
-    "A simple command (words + redirections).";
     constructor(words, redirects) {
         super();
         this.kind = "command";
@@ -712,7 +691,6 @@ class Command extends Node {
 }
 
 class Pipeline extends Node {
-    "A pipeline of commands.";
     constructor(commands) {
         super();
         this.kind = "pipeline";
@@ -761,7 +739,6 @@ class Pipeline extends Node {
     }
     
     CmdSexp(cmd, needs_redirect) {
-        "Get s-expression for a command, optionally injecting pipe-both redirect.";
         if (!needs_redirect) {
             return cmd.toSexp();
         }
@@ -782,7 +759,6 @@ class Pipeline extends Node {
 }
 
 class List extends Node {
-    "A list of pipelines with operators.";
     constructor(parts) {
         super();
         this.kind = "list";
@@ -874,7 +850,6 @@ class List extends Node {
 }
 
 class Operator extends Node {
-    "An operator token (&&, ||, ;, &, |).";
     constructor(op) {
         super();
         this.kind = "operator";
@@ -889,7 +864,6 @@ class Operator extends Node {
 }
 
 class PipeBoth extends Node {
-    "Marker for |& pipe (stdout + stderr).";
     constructor() {
         super();
         this.kind = "pipe-both";
@@ -902,7 +876,6 @@ class PipeBoth extends Node {
 }
 
 class Empty extends Node {
-    "Empty input.";
     constructor() {
         super();
         this.kind = "empty";
@@ -915,7 +888,6 @@ class Empty extends Node {
 }
 
 class Comment extends Node {
-    "A comment (# to end of line).";
     constructor(text) {
         super();
         this.kind = "comment";
@@ -929,7 +901,6 @@ class Comment extends Node {
 }
 
 class Redirect extends Node {
-    "A redirection.";
     fd = null;
     constructor(op, target, fd) {
         super();
@@ -984,7 +955,6 @@ class Redirect extends Node {
 }
 
 class HereDoc extends Node {
-    "A here document <<DELIM ... DELIM.";
     strip_tabs = false;
     quoted = false;
     fd = null;
@@ -1012,7 +982,6 @@ class HereDoc extends Node {
 }
 
 class Subshell extends Node {
-    "A subshell ( list ).";
     redirects = null;
     constructor(body, redirects) {
         super();
@@ -1036,7 +1005,6 @@ class Subshell extends Node {
 }
 
 class BraceGroup extends Node {
-    "A brace group { list; }.";
     redirects = null;
     constructor(body, redirects) {
         super();
@@ -1060,7 +1028,6 @@ class BraceGroup extends Node {
 }
 
 class If extends Node {
-    "An if statement.";
     else_body = null;
     constructor(condition, then_body, else_body, redirects) {
         super();
@@ -1089,7 +1056,6 @@ class If extends Node {
 }
 
 class While extends Node {
-    "A while loop.";
     constructor(condition, body, redirects) {
         super();
         this.kind = "while";
@@ -1116,7 +1082,6 @@ class While extends Node {
 }
 
 class Until extends Node {
-    "An until loop.";
     constructor(condition, body, redirects) {
         super();
         this.kind = "until";
@@ -1143,7 +1108,6 @@ class Until extends Node {
 }
 
 class For extends Node {
-    "A for loop.";
     constructor(variable, words, body, redirects) {
         super();
         this.kind = "for";
@@ -1183,7 +1147,6 @@ class For extends Node {
 }
 
 class ForArith extends Node {
-    "A C-style for loop: for ((init; cond; incr)); do ... done.";
     constructor(init, cond, incr, body, redirects) {
         super();
         this.kind = "for-arith";
@@ -1235,7 +1198,6 @@ class ForArith extends Node {
 }
 
 class Select extends Node {
-    "A select statement.";
     constructor(variable, words, body, redirects) {
         super();
         this.kind = "select";
@@ -1278,7 +1240,6 @@ class Select extends Node {
 }
 
 class Case extends Node {
-    "A case statement.";
     constructor(word, patterns, redirects) {
         super();
         this.kind = "case";
@@ -1310,7 +1271,6 @@ class Case extends Node {
 }
 
 function ConsumeSingleQuote(s, start) {
-    "Consume '...' from start. Returns (end_index, chars_list).";
     var chars = ["'"];
     var i = (start + 1);
     while (((i < s.length) && (s[i] !== "'"))) {
@@ -1325,7 +1285,6 @@ function ConsumeSingleQuote(s, start) {
 }
 
 function ConsumeDoubleQuote(s, start) {
-    "Consume \"...\" from start, handling escapes. Returns (end_index, chars_list).";
     var chars = ["\""];
     var i = (start + 1);
     while (((i < s.length) && (s[i] !== "\""))) {
@@ -1344,7 +1303,6 @@ function ConsumeDoubleQuote(s, start) {
 }
 
 function HasBracketClose(s, start, depth) {
-    "Check if there's a ] before | or ) at depth 0.";
     var i = start;
     while ((i < s.length)) {
         if ((s[i] === "]")) {
@@ -1359,7 +1317,6 @@ function HasBracketClose(s, start, depth) {
 }
 
 function ConsumeBracketClass(s, start, depth) {
-    "Consume [...] bracket expression. Returns (end_index, chars_list, was_bracket).";
     var scan_pos = (start + 1);
     if (((scan_pos < s.length) && ((s[scan_pos] === "!") || (s[scan_pos] === "^")))) {
         scan_pos += 1;
@@ -1407,7 +1364,6 @@ function ConsumeBracketClass(s, start, depth) {
 }
 
 class CasePattern extends Node {
-    "A pattern clause in a case statement.";
     terminator = ";;";
     constructor(pattern, body, terminator) {
         super();
@@ -1486,7 +1442,6 @@ class CasePattern extends Node {
 }
 
 class Function extends Node {
-    "A function definition.";
     constructor(name, body) {
         super();
         this.kind = "function";
@@ -1501,7 +1456,6 @@ class Function extends Node {
 }
 
 class ParamExpansion extends Node {
-    "A parameter expansion ${var} or ${var:-default}.";
     op = null;
     arg = null;
     constructor(param, op, arg) {
@@ -1530,7 +1484,6 @@ class ParamExpansion extends Node {
 }
 
 class ParamLength extends Node {
-    "A parameter length expansion ${#var}.";
     constructor(param) {
         super();
         this.kind = "param-len";
@@ -1545,7 +1498,6 @@ class ParamLength extends Node {
 }
 
 class ParamIndirect extends Node {
-    "An indirect parameter expansion ${!var} or ${!var<op><arg>}.";
     constructor(param, op, arg) {
         super();
         this.kind = "param-indirect";
@@ -1572,7 +1524,6 @@ class ParamIndirect extends Node {
 }
 
 class CommandSubstitution extends Node {
-    "A command substitution $(...) or `...`.";
     constructor(command) {
         super();
         this.kind = "cmdsub";
@@ -1586,7 +1537,6 @@ class CommandSubstitution extends Node {
 }
 
 class ArithmeticExpansion extends Node {
-    "An arithmetic expansion $((...)) with parsed internals.";
     constructor(expression) {
         super();
         this.kind = "arith";
@@ -1603,7 +1553,6 @@ class ArithmeticExpansion extends Node {
 }
 
 class ArithmeticCommand extends Node {
-    "An arithmetic command ((...)) with parsed internals.";
     constructor(expression, redirects, raw_content) {
         super();
         if (raw_content == null) { raw_content = ""; }
@@ -1633,7 +1582,6 @@ class ArithmeticCommand extends Node {
 }
 
 class ArithNumber extends Node {
-    "A numeric literal in arithmetic context.";
     constructor(value) {
         super();
         this.kind = "number";
@@ -1647,7 +1595,6 @@ class ArithNumber extends Node {
 }
 
 class ArithVar extends Node {
-    "A variable reference in arithmetic context (without $).";
     constructor(name) {
         super();
         this.kind = "var";
@@ -1661,7 +1608,6 @@ class ArithVar extends Node {
 }
 
 class ArithBinaryOp extends Node {
-    "A binary operation in arithmetic.";
     constructor(op, left, right) {
         super();
         this.kind = "binary-op";
@@ -1677,7 +1623,6 @@ class ArithBinaryOp extends Node {
 }
 
 class ArithUnaryOp extends Node {
-    "A unary operation in arithmetic.";
     constructor(op, operand) {
         super();
         this.kind = "unary-op";
@@ -1692,7 +1637,6 @@ class ArithUnaryOp extends Node {
 }
 
 class ArithPreIncr extends Node {
-    "Pre-increment ++var.";
     constructor(operand) {
         super();
         this.kind = "pre-incr";
@@ -1706,7 +1650,6 @@ class ArithPreIncr extends Node {
 }
 
 class ArithPostIncr extends Node {
-    "Post-increment var++.";
     constructor(operand) {
         super();
         this.kind = "post-incr";
@@ -1720,7 +1663,6 @@ class ArithPostIncr extends Node {
 }
 
 class ArithPreDecr extends Node {
-    "Pre-decrement --var.";
     constructor(operand) {
         super();
         this.kind = "pre-decr";
@@ -1734,7 +1676,6 @@ class ArithPreDecr extends Node {
 }
 
 class ArithPostDecr extends Node {
-    "Post-decrement var--.";
     constructor(operand) {
         super();
         this.kind = "post-decr";
@@ -1748,7 +1689,6 @@ class ArithPostDecr extends Node {
 }
 
 class ArithAssign extends Node {
-    "Assignment operation (=, +=, -=, etc.).";
     constructor(op, target, value) {
         super();
         this.kind = "assign";
@@ -1764,7 +1704,6 @@ class ArithAssign extends Node {
 }
 
 class ArithTernary extends Node {
-    "Ternary conditional expr ? expr : expr.";
     constructor(condition, if_true, if_false) {
         super();
         this.kind = "ternary";
@@ -1780,7 +1719,6 @@ class ArithTernary extends Node {
 }
 
 class ArithComma extends Node {
-    "Comma operator expr, expr.";
     constructor(left, right) {
         super();
         this.kind = "comma";
@@ -1795,7 +1733,6 @@ class ArithComma extends Node {
 }
 
 class ArithSubscript extends Node {
-    "Array subscript arr[expr].";
     constructor(array, index) {
         super();
         this.kind = "subscript";
@@ -1810,7 +1747,6 @@ class ArithSubscript extends Node {
 }
 
 class ArithEscape extends Node {
-    "An escaped character in arithmetic expression.";
     constructor(char) {
         super();
         this.kind = "escape";
@@ -1824,7 +1760,6 @@ class ArithEscape extends Node {
 }
 
 class ArithDeprecated extends Node {
-    "A deprecated arithmetic expansion $[expr].";
     constructor(expression) {
         super();
         this.kind = "arith-deprecated";
@@ -1839,7 +1774,6 @@ class ArithDeprecated extends Node {
 }
 
 class AnsiCQuote extends Node {
-    "An ANSI-C quoted string $'...'.";
     constructor(content) {
         super();
         this.kind = "ansi-c";
@@ -1854,7 +1788,6 @@ class AnsiCQuote extends Node {
 }
 
 class LocaleString extends Node {
-    "A locale-translated string $\"...\".";
     constructor(content) {
         super();
         this.kind = "locale";
@@ -1869,7 +1802,6 @@ class LocaleString extends Node {
 }
 
 class ProcessSubstitution extends Node {
-    "A process substitution <(...) or >(...).";
     constructor(direction, command) {
         super();
         this.kind = "procsub";
@@ -1884,7 +1816,6 @@ class ProcessSubstitution extends Node {
 }
 
 class Negation extends Node {
-    "Pipeline negation with !.";
     constructor(pipeline) {
         super();
         this.kind = "negation";
@@ -1901,7 +1832,6 @@ class Negation extends Node {
 }
 
 class Time extends Node {
-    "Time measurement with time keyword.";
     posix = false;
     constructor(pipeline, posix) {
         super();
@@ -1928,7 +1858,6 @@ class Time extends Node {
 }
 
 class ConditionalExpr extends Node {
-    "A conditional expression [[ expression ]].";
     constructor(body, redirects) {
         super();
         this.kind = "cond-expr";
@@ -1961,7 +1890,6 @@ class ConditionalExpr extends Node {
 }
 
 class UnaryTest extends Node {
-    "A unary test in [[ ]], e.g., -f file, -z string.";
     constructor(op, operand) {
         super();
         this.kind = "unary-test";
@@ -1976,7 +1904,6 @@ class UnaryTest extends Node {
 }
 
 class BinaryTest extends Node {
-    "A binary test in [[ ]], e.g., $a == $b, file1 -nt file2.";
     constructor(op, left, right) {
         super();
         this.kind = "binary-test";
@@ -1994,7 +1921,6 @@ class BinaryTest extends Node {
 }
 
 class CondAnd extends Node {
-    "Logical AND in [[ ]], e.g., expr1 && expr2.";
     constructor(left, right) {
         super();
         this.kind = "cond-and";
@@ -2009,7 +1935,6 @@ class CondAnd extends Node {
 }
 
 class CondOr extends Node {
-    "Logical OR in [[ ]], e.g., expr1 || expr2.";
     constructor(left, right) {
         super();
         this.kind = "cond-or";
@@ -2024,7 +1949,6 @@ class CondOr extends Node {
 }
 
 class CondNot extends Node {
-    "Logical NOT in [[ ]], e.g., ! expr.";
     constructor(operand) {
         super();
         this.kind = "cond-not";
@@ -2038,7 +1962,6 @@ class CondNot extends Node {
 }
 
 class CondParen extends Node {
-    "Parenthesized group in [[ ]], e.g., ( expr ).";
     constructor(inner) {
         super();
         this.kind = "cond-paren";
@@ -2052,7 +1975,6 @@ class CondParen extends Node {
 }
 
 class ArrayNode extends Node {
-    "An array literal (word1 word2 ...).";
     constructor(elements) {
         super();
         this.kind = "array";
@@ -2074,7 +1996,6 @@ class ArrayNode extends Node {
 }
 
 class Coproc extends Node {
-    "A coprocess coproc [NAME] command.";
     name = null;
     constructor(command, name) {
         super();
@@ -2097,7 +2018,6 @@ class Coproc extends Node {
 function FormatCmdsubNode(node, indent, in_procsub) {
     if (indent == null) { indent = 0; }
     if (in_procsub == null) { in_procsub = false; }
-    "Format an AST node for command substitution output (bash-oracle pretty-print format).";
     var sp = RepeatStr(" ", indent);
     var inner_sp = RepeatStr(" ", (indent + 4));
     if ((node.kind === "empty")) {
@@ -2253,7 +2173,6 @@ function FormatCmdsubNode(node, indent, in_procsub) {
 }
 
 function FormatRedirect(r) {
-    "Format a redirect for command substitution output.";
     if ((r.kind === "heredoc")) {
         if (r.strip_tabs) {
             var op = "<<-";
@@ -2284,7 +2203,6 @@ function FormatRedirect(r) {
 }
 
 function NormalizeFdRedirects(s) {
-    "Normalize fd redirects in a raw string: >&2 -> 1>&2, <&N -> 0<&N.";
     var result = [];
     var i = 0;
     while ((i < s.length)) {
@@ -2309,7 +2227,6 @@ function NormalizeFdRedirects(s) {
 }
 
 function FindCmdsubEnd(value, start) {
-    "Find the end of a $(...) command substitution, handling case statements.\n\n    Starts after the opening $(. Returns position after the closing ).\n    ";
     var depth = 1;
     var i = start;
     var in_single = false;
@@ -2392,7 +2309,6 @@ function FindCmdsubEnd(value, start) {
 }
 
 function SkipHeredoc(value, start) {
-    "Skip past a heredoc starting at <<. Returns position after heredoc content.";
     var i = (start + 2);
     if (((i < value.length) && (value[i] === "-"))) {
         i += 1;
@@ -2461,7 +2377,6 @@ function SkipHeredoc(value, start) {
 }
 
 function IsWordBoundary(s, pos, word_len) {
-    "Check if the word at pos is a standalone word (not part of larger word).";
     if (((pos > 0) && /^[a-zA-Z0-9]$/.test(s[(pos - 1)]))) {
         return false;
     }
@@ -2510,12 +2425,10 @@ function IsRightBracket(c) {
 }
 
 function IsWordStartContext(c) {
-    "Check if char is a valid context for starting a word (whitespace or metachar except >).";
     return ((c === " ") || (c === "\t") || (c === "\n") || (c === ";") || (c === "|") || (c === "&") || (c === "<") || (c === "("));
 }
 
 function IsWordEndContext(c) {
-    "Check if char ends a word context (whitespace or metachar).";
     return ((c === " ") || (c === "\t") || (c === "\n") || (c === ";") || (c === "|") || (c === "&") || (c === "<") || (c === ">") || (c === "(") || (c === ")"));
 }
 
@@ -2588,12 +2501,10 @@ function IsCondBinaryOp(op) {
 }
 
 function StrContains(haystack, needle) {
-    "Check if haystack contains needle substring.";
     return (haystack.indexOf(needle) !== -1);
 }
 
 class Parser {
-    "Recursive descent parser for bash.";
     constructor(source) {
         this.source = source;
         this.pos = 0;
@@ -2602,12 +2513,10 @@ class Parser {
     }
     
     atEnd() {
-        "Check if we've reached the end of input.";
         return (this.pos >= this.length);
     }
     
     peek() {
-        "Return current character without consuming.";
         if (this.atEnd()) {
             return null;
         }
@@ -2615,7 +2524,6 @@ class Parser {
     }
     
     advance() {
-        "Consume and return current character.";
         if (this.atEnd()) {
             return null;
         }
@@ -2625,7 +2533,6 @@ class Parser {
     }
     
     skipWhitespace() {
-        "Skip spaces, tabs, comments, and backslash-newline continuations.";
         while (!this.atEnd()) {
             var ch = this.peek();
             if (IsWhitespaceNoNewline(ch)) {
@@ -2644,7 +2551,6 @@ class Parser {
     }
     
     skipWhitespaceAndNewlines() {
-        "Skip spaces, tabs, newlines, comments, and backslash-newline continuations.";
         while (!this.atEnd()) {
             var ch = this.peek();
             if (IsWhitespace(ch)) {
@@ -2669,7 +2575,6 @@ class Parser {
     }
     
     peekWord() {
-        "Peek at the next word without consuming it.";
         var saved_pos = this.pos;
         this.skipWhitespace();
         if ((this.atEnd() || IsMetachar(this.peek()))) {
@@ -2694,7 +2599,6 @@ class Parser {
     }
     
     consumeWord(expected) {
-        "Try to consume a specific reserved word. Returns True if successful.";
         var saved_pos = this.pos;
         this.skipWhitespace();
         var word = this.peekWord();
@@ -2711,7 +2615,6 @@ class Parser {
     
     parseWord(at_command_start) {
         if (at_command_start == null) { at_command_start = false; }
-        "Parse a word token, detecting parameter expansions and command substitutions.\n\n        at_command_start: When True, preserve spaces inside brackets for array\n        assignments like a[1 + 2]=. When False, spaces break the word.\n        ";
         this.skipWhitespace();
         if (this.atEnd()) {
             return null;
@@ -3017,7 +2920,6 @@ class Parser {
     }
     
     ParseCommandSubstitution() {
-        "Parse a $(...) command substitution.\n\n        Returns (node, text) where node is CommandSubstitution and text is raw text.\n        ";
         if ((this.atEnd() || (this.peek() !== "$"))) {
             return [null, ""];
         }
@@ -3286,7 +3188,6 @@ class Parser {
     }
     
     IsWordBoundaryBefore() {
-        "Check if current position is at a word boundary (preceded by space/newline/start).";
         if ((this.pos === 0)) {
             return true;
         }
@@ -3295,7 +3196,6 @@ class Parser {
     }
     
     IsAssignmentWord(word) {
-        "Check if a word is an assignment (contains = outside of quotes).";
         var in_single = false;
         var in_double = false;
         var i = 0;
@@ -3317,7 +3217,6 @@ class Parser {
     }
     
     LookaheadKeyword(keyword) {
-        "Check if keyword appears at current position followed by word boundary.";
         if (((this.pos + keyword.length) > this.length)) {
             return false;
         }
@@ -3333,14 +3232,12 @@ class Parser {
     }
     
     SkipKeyword(keyword) {
-        "Skip over a keyword.";
         for (var _ of keyword) {
             this.advance();
         }
     }
     
     ParseBacktickSubstitution() {
-        "Parse a `...` command substitution.\n\n        Returns (node, text) where node is CommandSubstitution and text is raw text.\n        ";
         if ((this.atEnd() || (this.peek() !== "`"))) {
             return [null, ""];
         }
@@ -3389,7 +3286,6 @@ class Parser {
     }
     
     ParseProcessSubstitution() {
-        "Parse a <(...) or >(...) process substitution.\n\n        Returns (node, text) where node is ProcessSubstitution and text is raw text.\n        ";
         if ((this.atEnd() || !IsRedirectChar(this.peek()))) {
             return [null, ""];
         }
@@ -3458,7 +3354,6 @@ class Parser {
     }
     
     ParseArrayLiteral() {
-        "Parse an array literal (word1 word2 ...).\n\n        Returns (node, text) where node is Array and text is raw text.\n        Called when positioned at the opening '(' after '=' or '+='.\n        ";
         if ((this.atEnd() || (this.peek() !== "("))) {
             return [null, ""];
         }
@@ -3493,7 +3388,6 @@ class Parser {
     }
     
     ParseArithmeticExpansion() {
-        "Parse a $((...)) arithmetic expansion with parsed internals.\n\n        Returns (node, text) where node is ArithmeticExpansion and text is raw text.\n        Returns (None, \"\") if this is not arithmetic expansion (e.g., $( ( ... ) )\n        which is command substitution containing a subshell).\n        ";
         if ((this.atEnd() || (this.peek() !== "$"))) {
             return [null, ""];
         }
@@ -3538,7 +3432,6 @@ class Parser {
     }
     
     ParseArithExpr(content) {
-        "Parse an arithmetic expression string into AST nodes.";
         var saved_arith_src = (this["_arith_src"] !== undefined ? this["_arith_src"] : null);
         var saved_arith_pos = (this["_arith_pos"] !== undefined ? this["_arith_pos"] : null);
         var saved_arith_len = (this["_arith_len"] !== undefined ? this["_arith_len"] : null);
@@ -3595,12 +3488,10 @@ class Parser {
     }
     
     ArithMatch(s) {
-        "Check if the next characters match s (without consuming).";
         return StartsWithAt(this._arith_src, this._arith_pos, s);
     }
     
     ArithConsume(s) {
-        "If next chars match s, consume them and return True.";
         if (this.ArithMatch(s)) {
             this._arith_pos += s.length;
             return true;
@@ -3609,7 +3500,6 @@ class Parser {
     }
     
     ArithParseComma() {
-        "Parse comma expressions (lowest precedence).";
         var left = this.ArithParseAssign();
         while (true) {
             this.ArithSkipWs();
@@ -3625,7 +3515,6 @@ class Parser {
     }
     
     ArithParseAssign() {
-        "Parse assignment expressions (right associative).";
         var left = this.ArithParseTernary();
         this.ArithSkipWs();
         var assign_ops = ["<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "^=", "|=", "="];
@@ -3644,7 +3533,6 @@ class Parser {
     }
     
     ArithParseTernary() {
-        "Parse ternary conditional (right associative).";
         var cond = this.ArithParseLogicalOr();
         this.ArithSkipWs();
         if (this.ArithConsume("?")) {
@@ -3671,7 +3559,6 @@ class Parser {
     }
     
     ArithParseLogicalOr() {
-        "Parse logical or (||).";
         var left = this.ArithParseLogicalAnd();
         while (true) {
             this.ArithSkipWs();
@@ -3688,7 +3575,6 @@ class Parser {
     }
     
     ArithParseLogicalAnd() {
-        "Parse logical and (&&).";
         var left = this.ArithParseBitwiseOr();
         while (true) {
             this.ArithSkipWs();
@@ -3705,7 +3591,6 @@ class Parser {
     }
     
     ArithParseBitwiseOr() {
-        "Parse bitwise or (|).";
         var left = this.ArithParseBitwiseXor();
         while (true) {
             this.ArithSkipWs();
@@ -3722,7 +3607,6 @@ class Parser {
     }
     
     ArithParseBitwiseXor() {
-        "Parse bitwise xor (^).";
         var left = this.ArithParseBitwiseAnd();
         while (true) {
             this.ArithSkipWs();
@@ -3739,7 +3623,6 @@ class Parser {
     }
     
     ArithParseBitwiseAnd() {
-        "Parse bitwise and (&).";
         var left = this.ArithParseEquality();
         while (true) {
             this.ArithSkipWs();
@@ -3756,7 +3639,6 @@ class Parser {
     }
     
     ArithParseEquality() {
-        "Parse equality (== !=).";
         var left = this.ArithParseComparison();
         while (true) {
             this.ArithSkipWs();
@@ -3778,7 +3660,6 @@ class Parser {
     }
     
     ArithParseComparison() {
-        "Parse comparison (< > <= >=).";
         var left = this.ArithParseShift();
         while (true) {
             this.ArithSkipWs();
@@ -3810,7 +3691,6 @@ class Parser {
     }
     
     ArithParseShift() {
-        "Parse shift (<< >>).";
         var left = this.ArithParseAdditive();
         while (true) {
             this.ArithSkipWs();
@@ -3838,7 +3718,6 @@ class Parser {
     }
     
     ArithParseAdditive() {
-        "Parse addition and subtraction (+ -).";
         var left = this.ArithParseMultiplicative();
         while (true) {
             this.ArithSkipWs();
@@ -3862,7 +3741,6 @@ class Parser {
     }
     
     ArithParseMultiplicative() {
-        "Parse multiplication, division, modulo (* / %).";
         var left = this.ArithParseExponentiation();
         while (true) {
             this.ArithSkipWs();
@@ -3891,7 +3769,6 @@ class Parser {
     }
     
     ArithParseExponentiation() {
-        "Parse exponentiation (**) - right associative.";
         var left = this.ArithParseUnary();
         this.ArithSkipWs();
         if (this.ArithMatch("**")) {
@@ -3904,7 +3781,6 @@ class Parser {
     }
     
     ArithParseUnary() {
-        "Parse unary operators (! ~ + - ++ --).";
         this.ArithSkipWs();
         if (this.ArithMatch("++")) {
             this.ArithConsume("++");
@@ -3947,7 +3823,6 @@ class Parser {
     }
     
     ArithParsePostfix() {
-        "Parse postfix operators (++ -- []).";
         var left = this.ArithParsePrimary();
         while (true) {
             this.ArithSkipWs();
@@ -3978,7 +3853,6 @@ class Parser {
     }
     
     ArithParsePrimary() {
-        "Parse primary expressions (numbers, variables, parens, expansions).";
         this.ArithSkipWs();
         var c = this.ArithPeek();
         if ((c === "(")) {
@@ -4015,7 +3889,6 @@ class Parser {
     }
     
     ArithParseExpansion() {
-        "Parse $var, ${...}, or $(...).";
         if (!this.ArithConsume("$")) {
             throw new ParseError("Expected '$'", this._arith_pos);
         }
@@ -4045,7 +3918,6 @@ class Parser {
     }
     
     ArithParseCmdsub() {
-        "Parse $(...) command substitution inside arithmetic.";
         this.ArithAdvance();
         if ((this.ArithPeek() === "(")) {
             this.ArithAdvance();
@@ -4105,7 +3977,6 @@ class Parser {
     }
     
     ArithParseBracedParam() {
-        "Parse ${...} parameter expansion inside arithmetic.";
         this.ArithAdvance();
         if ((this.ArithPeek() === "!")) {
             this.ArithAdvance();
@@ -4194,7 +4065,6 @@ class Parser {
     }
     
     ArithParseSingleQuote() {
-        "Parse '...' inside arithmetic - returns content as a number/string.";
         this.ArithAdvance();
         var content_start = this._arith_pos;
         while ((!this.ArithAtEnd() && (this.ArithPeek() !== "'"))) {
@@ -4208,7 +4078,6 @@ class Parser {
     }
     
     ArithParseDoubleQuote() {
-        "Parse \"...\" inside arithmetic - may contain expansions.";
         this.ArithAdvance();
         var content_start = this._arith_pos;
         while ((!this.ArithAtEnd() && (this.ArithPeek() !== "\""))) {
@@ -4228,7 +4097,6 @@ class Parser {
     }
     
     ArithParseBacktick() {
-        "Parse `...` command substitution inside arithmetic.";
         this.ArithAdvance();
         var content_start = this._arith_pos;
         while ((!this.ArithAtEnd() && (this.ArithPeek() !== "`"))) {
@@ -4258,7 +4126,6 @@ class Parser {
     }
     
     ArithParseNumberOrVar() {
-        "Parse a number or variable name.";
         this.ArithSkipWs();
         var chars = [];
         var c = this.ArithPeek();
@@ -4288,7 +4155,6 @@ class Parser {
     }
     
     ParseDeprecatedArithmetic() {
-        "Parse a deprecated $[expr] arithmetic expansion.\n\n        Returns (node, text) where node is ArithDeprecated and text is raw text.\n        ";
         if ((this.atEnd() || (this.peek() !== "$"))) {
             return [null, ""];
         }
@@ -4326,7 +4192,6 @@ class Parser {
     }
     
     ParseAnsiCQuote() {
-        "Parse ANSI-C quoting $'...'.\n\n        Returns (node, text) where node is the AST node and text is the raw text.\n        Returns (None, \"\") if not a valid ANSI-C quote.\n        ";
         if ((this.atEnd() || (this.peek() !== "$"))) {
             return [null, ""];
         }
@@ -4363,7 +4228,6 @@ class Parser {
     }
     
     ParseLocaleString() {
-        "Parse locale translation $\"...\".\n\n        Returns (node, text, inner_parts) where:\n        - node is the LocaleString AST node\n        - text is the raw text including $\"...\"\n        - inner_parts is a list of expansion nodes found inside\n        Returns (None, \"\", []) if not a valid locale string.\n        ";
         if ((this.atEnd() || (this.peek() !== "$"))) {
             return [null, "", []];
         }
@@ -4453,7 +4317,6 @@ class Parser {
     }
     
     ParseParamExpansion() {
-        "Parse a parameter expansion starting at $.\n\n        Returns (node, text) where node is the AST node and text is the raw text.\n        Returns (None, \"\") if not a valid parameter expansion.\n        ";
         if ((this.atEnd() || (this.peek() !== "$"))) {
             return [null, ""];
         }
@@ -4492,7 +4355,6 @@ class Parser {
     }
     
     ParseBracedParam(start) {
-        "Parse contents of ${...} after the opening brace.\n\n        start is the position of the $.\n        Returns (node, text).\n        ";
         if (this.atEnd()) {
             this.pos = start;
             return [null, ""];
@@ -4710,7 +4572,6 @@ class Parser {
     }
     
     ConsumeParamName() {
-        "Consume a parameter name (variable name, special char, or array subscript).";
         if (this.atEnd()) {
             return null;
         }
@@ -4765,7 +4626,6 @@ class Parser {
     }
     
     ConsumeParamOperator() {
-        "Consume a parameter expansion operator.";
         if (this.atEnd()) {
             return null;
         }
@@ -4843,7 +4703,6 @@ class Parser {
     }
     
     parseRedirect() {
-        "Parse a redirection operator and target.";
         this.skipWhitespace();
         if (this.atEnd()) {
             return null;
@@ -4987,7 +4846,6 @@ class Parser {
     }
     
     ParseHeredoc(fd, strip_tabs) {
-        "Parse a here document <<DELIM ... DELIM.";
         this.skipWhitespace();
         var quoted = false;
         var delimiter_chars = [];
@@ -5121,7 +4979,6 @@ class Parser {
     }
     
     parseCommand() {
-        "Parse a simple command (sequence of words and redirections).";
         var words = [];
         var redirects = [];
         while (true) {
@@ -5167,7 +5024,6 @@ class Parser {
     }
     
     parseSubshell() {
-        "Parse a subshell ( list ).";
         this.skipWhitespace();
         if ((this.atEnd() || (this.peek() !== "("))) {
             return null;
@@ -5199,7 +5055,6 @@ class Parser {
     }
     
     parseArithmeticCommand() {
-        "Parse an arithmetic command (( expression )) with parsed internals.\n\n        Returns None if this is not an arithmetic command (e.g., nested subshells\n        like '( ( x ) )' that close with ') )' instead of '))').\n        ";
         this.skipWhitespace();
         if ((this.atEnd() || (this.peek() !== "(") || ((this.pos + 1) >= this.length) || (this.source[(this.pos + 1)] !== "("))) {
             return null;
@@ -5255,7 +5110,6 @@ class Parser {
     COND_UNARY_OPS = new Set(["-a", "-b", "-c", "-d", "-e", "-f", "-g", "-h", "-k", "-p", "-r", "-s", "-t", "-u", "-w", "-x", "-G", "-L", "-N", "-O", "-S", "-z", "-n", "-o", "-v", "-R"]);
     COND_BINARY_OPS = new Set(["==", "!=", "=~", "=", "<", ">", "-eq", "-ne", "-lt", "-le", "-gt", "-ge", "-nt", "-ot", "-ef"]);
     parseConditionalExpr() {
-        "Parse a conditional expression [[ expression ]].";
         this.skipWhitespace();
         if ((this.atEnd() || (this.peek() !== "[") || ((this.pos + 1) >= this.length) || (this.source[(this.pos + 1)] !== "["))) {
             return null;
@@ -5288,7 +5142,6 @@ class Parser {
     }
     
     CondSkipWhitespace() {
-        "Skip whitespace inside [[ ]], including backslash-newline continuation.";
         while (!this.atEnd()) {
             if (IsWhitespaceNoNewline(this.peek())) {
                 this.advance();
@@ -5304,12 +5157,10 @@ class Parser {
     }
     
     CondAtEnd() {
-        "Check if we're at ]] (end of conditional).";
         return (this.atEnd() || ((this.peek() === "]") && ((this.pos + 1) < this.length) && (this.source[(this.pos + 1)] === "]")));
     }
     
     ParseCondOr() {
-        "Parse: or_expr = and_expr (|| or_expr)?  (right-associative)";
         this.CondSkipWhitespace();
         var left = this.ParseCondAnd();
         this.CondSkipWhitespace();
@@ -5323,7 +5174,6 @@ class Parser {
     }
     
     ParseCondAnd() {
-        "Parse: and_expr = term (&& and_expr)?  (right-associative)";
         this.CondSkipWhitespace();
         var left = this.ParseCondTerm();
         this.CondSkipWhitespace();
@@ -5337,7 +5187,6 @@ class Parser {
     }
     
     ParseCondTerm() {
-        "Parse: term = '!' term | '(' or_expr ')' | unary_test | binary_test | bare_word";
         this.CondSkipWhitespace();
         if (this.CondAtEnd()) {
             throw new ParseError("Unexpected end of conditional expression", this.pos);
@@ -5403,7 +5252,6 @@ class Parser {
     }
     
     ParseCondWord() {
-        "Parse a word inside [[ ]], handling expansions but stopping at conditional operators.";
         this.CondSkipWhitespace();
         if (this.CondAtEnd()) {
             return null;
@@ -5599,7 +5447,6 @@ class Parser {
     }
     
     ParseCondRegexWord() {
-        "Parse a regex pattern word in [[ ]], where ( ) are regex grouping, not conditional grouping.";
         this.CondSkipWhitespace();
         if (this.CondAtEnd()) {
             return null;
@@ -5754,7 +5601,6 @@ class Parser {
     }
     
     parseBraceGroup() {
-        "Parse a brace group { list }.";
         this.skipWhitespace();
         if ((this.atEnd() || (this.peek() !== "{"))) {
             return null;
@@ -5790,7 +5636,6 @@ class Parser {
     }
     
     parseIf() {
-        "Parse an if statement: if list; then list [elif list; then list]* [else list] fi.";
         this.skipWhitespace();
         if ((this.peekWord() !== "if")) {
             return null;
@@ -5866,7 +5711,6 @@ class Parser {
     }
     
     ParseElifChain() {
-        "Parse elif chain (after seeing 'elif' keyword).";
         this.consumeWord("elif");
         var condition = this.parseListUntil(new Set(["then"]));
         if ((condition == null)) {
@@ -5896,7 +5740,6 @@ class Parser {
     }
     
     parseWhile() {
-        "Parse a while loop: while list; do list; done.";
         this.skipWhitespace();
         if ((this.peekWord() !== "while")) {
             return null;
@@ -5935,7 +5778,6 @@ class Parser {
     }
     
     parseUntil() {
-        "Parse an until loop: until list; do list; done.";
         this.skipWhitespace();
         if ((this.peekWord() !== "until")) {
             return null;
@@ -5974,7 +5816,6 @@ class Parser {
     }
     
     parseFor() {
-        "Parse a for loop: for name [in words]; do list; done or C-style for ((;;)).";
         this.skipWhitespace();
         if ((this.peekWord() !== "for")) {
             return null;
@@ -6049,7 +5890,6 @@ class Parser {
     }
     
     ParseForArith() {
-        "Parse C-style for loop: for ((init; cond; incr)); do list; done.";
         this.advance();
         this.advance();
         var parts = [];
@@ -6126,7 +5966,6 @@ class Parser {
     }
     
     parseSelect() {
-        "Parse a select statement: select name [in words]; do list; done.";
         this.skipWhitespace();
         if ((this.peekWord() !== "select")) {
             return null;
@@ -6205,7 +6044,6 @@ class Parser {
     }
     
     IsCaseTerminator() {
-        "Check if we're at a case pattern terminator (;;, ;&, or ;;&).";
         if ((this.atEnd() || (this.peek() !== ";"))) {
             return false;
         }
@@ -6217,7 +6055,6 @@ class Parser {
     }
     
     ConsumeCaseTerminator() {
-        "Consume and return case pattern terminator (;;, ;&, or ;;&).";
         if ((this.atEnd() || (this.peek() !== ";"))) {
             return ";;";
         }
@@ -6241,7 +6078,6 @@ class Parser {
     }
     
     parseCase() {
-        "Parse a case statement: case word in pattern) commands;; ... esac.";
         this.skipWhitespace();
         if ((this.peekWord() !== "case")) {
             return null;
@@ -6453,7 +6289,6 @@ class Parser {
     }
     
     parseCoproc() {
-        "Parse a coproc statement.\n\n        bash-oracle behavior:\n        - For compound commands (brace group, if, while, etc.), extract NAME if present\n        - For simple commands, don't extract NAME (treat everything as the command)\n        ";
         this.skipWhitespace();
         if (this.atEnd()) {
             return null;
@@ -6538,7 +6373,6 @@ class Parser {
     }
     
     parseFunction() {
-        "Parse a function definition.\n\n        Forms:\n            name() compound_command           # POSIX form\n            function name compound_command    # bash form without parens\n            function name() compound_command  # bash form with parens\n        ";
         this.skipWhitespace();
         if (this.atEnd()) {
             return null;
@@ -6605,7 +6439,6 @@ class Parser {
     }
     
     ParseCompoundCommand() {
-        "Parse any compound command (for function bodies, etc.).";
         var result = this.parseBraceGroup();
         if (result) {
             return result;
@@ -6646,7 +6479,6 @@ class Parser {
     }
     
     parseListUntil(stop_words) {
-        "Parse a list that stops before certain reserved words.";
         this.skipWhitespaceAndNewlines();
         if (stop_words.has(this.peekWord())) {
             return null;
@@ -6714,7 +6546,6 @@ class Parser {
     }
     
     parseCompoundCommand() {
-        "Parse a compound command (subshell, brace group, if, loops, or simple command).";
         this.skipWhitespace();
         if (this.atEnd()) {
             return null;
@@ -6771,7 +6602,6 @@ class Parser {
     }
     
     parsePipeline() {
-        "Parse a pipeline (commands separated by |), with optional time/negation prefix.";
         this.skipWhitespace();
         var prefix_order = null;
         var time_posix = false;
@@ -6861,7 +6691,6 @@ class Parser {
     }
     
     ParseSimplePipeline() {
-        "Parse a simple pipeline (commands separated by | or |&) without time/negation.";
         var cmd = this.parseCompoundCommand();
         if ((cmd == null)) {
             return null;
@@ -6898,7 +6727,6 @@ class Parser {
     }
     
     parseListOperator() {
-        "Parse a list operator (&&, ||, ;, &).";
         this.skipWhitespace();
         if (this.atEnd()) {
             return null;
@@ -6935,7 +6763,6 @@ class Parser {
     
     parseList(newline_as_separator) {
         if (newline_as_separator == null) { newline_as_separator = true; }
-        "Parse a command list (pipelines separated by &&, ||, ;, &).\n\n        Args:\n            newline_as_separator: If True, treat newlines as implicit semicolons.\n                If False, stop at newlines (for top-level parsing).\n        ";
         if (newline_as_separator) {
             this.skipWhitespaceAndNewlines();
         } else {
@@ -7017,7 +6844,6 @@ class Parser {
     }
     
     parseComment() {
-        "Parse a comment (# to end of line).";
         if ((this.atEnd() || (this.peek() !== "#"))) {
             return null;
         }
@@ -7030,7 +6856,6 @@ class Parser {
     }
     
     parse() {
-        "Parse the entire input.";
         var source = this.source.trim();
         if (!source) {
             return [new Empty()];
@@ -7078,7 +6903,6 @@ class Parser {
 }
 
 function parse(source) {
-    "\n    Parse bash source code and return a list of AST nodes.\n\n    Args:\n        source: The bash source code to parse.\n\n    Returns:\n        A list of AST nodes representing the parsed code.\n\n    Raises:\n        ParseError: If the source code cannot be parsed.\n    ";
     var parser = new Parser(source);
     return parser.parse();
 }

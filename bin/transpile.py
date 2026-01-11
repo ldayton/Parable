@@ -50,8 +50,24 @@ class JSTranspiler(ast.NodeVisitor):
         self.visit(tree)
         return "\n".join(self.output)
 
+    def _is_name_used(self, name: str, tree: ast.Module, skip_stmt: ast.stmt) -> bool:
+        """Check if a name is used anywhere in the module besides its definition."""
+        skip_nodes = set(ast.walk(skip_stmt))
+        for node in ast.walk(tree):
+            if node in skip_nodes:
+                continue
+            if isinstance(node, ast.Name) and node.id == name:
+                return True
+        return False
+
     def visit_Module(self, node: ast.Module):
         for stmt in node.body:
+            # Skip unused module-level variable definitions
+            if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+                if isinstance(stmt.targets[0], ast.Name):
+                    var_name = stmt.targets[0].id
+                    if not self._is_name_used(var_name, node, stmt):
+                        continue
             self.emit_comments_before(stmt.lineno)
             self.visit(stmt)
 
@@ -84,6 +100,7 @@ class JSTranspiler(ast.NodeVisitor):
             "in": "inVal",
             "with": "withVal",
             "Array": "ArrayNode",  # Avoid shadowing JS global
+            "Function": "FunctionNode",  # Avoid shadowing JS global
         }
         return reserved.get(name, name)
 
@@ -91,7 +108,8 @@ class JSTranspiler(ast.NodeVisitor):
         """Escape special regex characters for use in a character class."""
         result = []
         for c in s:
-            if c in r"\]^-":
+            # Note: - doesn't need escaping at start/end of character class
+            if c in r"\]^":
                 result.append("\\" + c)
             elif c == "\t":
                 result.append("\\t")
@@ -119,9 +137,45 @@ class JSTranspiler(ast.NodeVisitor):
         return call.func.value.func.id == "super"
 
     def _camel_case(self, name: str) -> str:
-        """Convert snake_case to camelCase."""
+        """Convert snake_case or PascalCase to camelCase, preserving leading underscore."""
+        prefix = ""
+        if name.startswith("_"):
+            prefix = "_"
+            name = name[1:]
         parts = name.split("_")
-        return parts[0] + "".join(p.capitalize() for p in parts[1:])
+        result = parts[0] + "".join(p.capitalize() for p in parts[1:])
+        if result and result[0].isupper():
+            result = result[0].lower() + result[1:]
+        return prefix + result
+
+    def _collect_local_vars(self, stmts: list) -> set:
+        """Collect all variable names assigned in a list of statements."""
+        names = set()
+        for stmt in stmts:
+            if isinstance(stmt, ast.Assign):
+                for target in stmt.targets:
+                    if isinstance(target, ast.Name):
+                        names.add(target.id)
+            elif isinstance(stmt, ast.AnnAssign):
+                if isinstance(stmt.target, ast.Name) and stmt.value:
+                    names.add(stmt.target.id)
+            elif isinstance(stmt, ast.For):
+                if isinstance(stmt.target, ast.Name):
+                    names.add(stmt.target.id)
+                names.update(self._collect_local_vars(stmt.body))
+                names.update(self._collect_local_vars(stmt.orelse))
+            elif isinstance(stmt, ast.While):
+                names.update(self._collect_local_vars(stmt.body))
+                names.update(self._collect_local_vars(stmt.orelse))
+            elif isinstance(stmt, ast.If):
+                names.update(self._collect_local_vars(stmt.body))
+                names.update(self._collect_local_vars(stmt.orelse))
+            elif isinstance(stmt, ast.Try):
+                names.update(self._collect_local_vars(stmt.body))
+                for handler in stmt.handlers:
+                    names.update(self._collect_local_vars(handler.body))
+                names.update(self._collect_local_vars(stmt.finalbody))
+        return names
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
         # Skip helper functions that are inlined
@@ -142,8 +196,13 @@ class JSTranspiler(ast.NodeVisitor):
         old_declared = self.declared_vars
         self.in_class_body = False
         self.in_method = True
-        # Start with function parameters as declared
-        self.declared_vars = {a.arg for a in node.args.args if a.arg != "self"}
+        # Collect all local variables and emit hoisted let declarations
+        param_names = {a.arg for a in node.args.args if a.arg != "self"}
+        local_vars = self._collect_local_vars(node.body) - param_names
+        if local_vars:
+            sorted_vars = sorted(self._safe_name(v) for v in local_vars)
+            self.emit(f"let {', '.join(sorted_vars)};")
+        self.declared_vars = param_names | local_vars
 
         # Helper to emit default argument checks
         def emit_defaults():
@@ -207,15 +266,9 @@ class JSTranspiler(ast.NodeVisitor):
     def visit_Assign(self, node: ast.Assign):
         target = self.visit_expr(node.targets[0])
         value = self.visit_expr(node.value)
-        if isinstance(node.targets[0], ast.Name):
-            var_name = node.targets[0].id
-            if self.in_class_body:
-                self.emit(f"{target} = {value};")
-            elif var_name in self.declared_vars:
-                self.emit(f"{target} = {value};")
-            else:
-                self.declared_vars.add(var_name)
-                self.emit(f"var {target} = {value};")
+        # Module-level assignments get const
+        if not self.in_method and not self.in_class_body:
+            self.emit(f"const {target} = {value};")
         else:
             self.emit(f"{target} = {value};")
 
@@ -223,16 +276,10 @@ class JSTranspiler(ast.NodeVisitor):
         # Skip class-level type annotations - constructor handles initialization
         if self.in_class_body:
             return
-        target = self.visit_expr(node.target)
         if node.value:
+            target = self.visit_expr(node.target)
             value = self.visit_expr(node.value)
-            var_name = node.target.id if isinstance(node.target, ast.Name) else None
-            if var_name and var_name in self.declared_vars:
-                self.emit(f"{target} = {value};")
-            else:
-                if var_name:
-                    self.declared_vars.add(var_name)
-                self.emit(f"var {target} = {value};")
+            self.emit(f"{target} = {value};")
 
     def visit_AugAssign(self, node: ast.AugAssign):
         target = self.visit_expr(node.target)
@@ -290,9 +337,6 @@ class JSTranspiler(ast.NodeVisitor):
 
     def visit_For(self, node: ast.For):
         target = self.visit_expr(node.target)
-        # Track loop variable as declared
-        if isinstance(node.target, ast.Name):
-            self.declared_vars.add(node.target.id)
         iter_expr = node.iter
         # Handle range() specially
         if (
@@ -303,11 +347,11 @@ class JSTranspiler(ast.NodeVisitor):
             args = iter_expr.args
             if len(args) == 1:
                 self.emit(
-                    f"for (let {target} = 0; {target} < {self.visit_expr(args[0])}; {target}++) {{"
+                    f"for ({target} = 0; {target} < {self.visit_expr(args[0])}; {target}++) {{"
                 )
             elif len(args) == 2:
                 self.emit(
-                    f"for (let {target} = {self.visit_expr(args[0])}; {target} < {self.visit_expr(args[1])}; {target}++) {{"
+                    f"for ({target} = {self.visit_expr(args[0])}; {target} < {self.visit_expr(args[1])}; {target}++) {{"
                 )
             else:
                 start, end, step = args
@@ -319,15 +363,15 @@ class JSTranspiler(ast.NodeVisitor):
                     is_negative = True
                 if is_negative:
                     self.emit(
-                        f"for (let {target} = {self.visit_expr(start)}; {target} > {self.visit_expr(end)}; {target}--) {{"
+                        f"for ({target} = {self.visit_expr(start)}; {target} > {self.visit_expr(end)}; {target}--) {{"
                     )
                 else:
                     step_val = self.visit_expr(step)
                     self.emit(
-                        f"for (let {target} = {self.visit_expr(start)}; {target} < {self.visit_expr(end)}; {target} += {step_val}) {{"
+                        f"for ({target} = {self.visit_expr(start)}; {target} < {self.visit_expr(end)}; {target} += {step_val}) {{"
                     )
         else:
-            self.emit(f"for (let {target} of {self.visit_expr(iter_expr)}) {{")
+            self.emit(f"for ({target} of {self.visit_expr(iter_expr)}) {{")
         self.indent += 1
         for stmt in node.body:
             self.emit_comments_before(stmt.lineno)
@@ -621,7 +665,58 @@ class JSTranspiler(ast.NodeVisitor):
             return f"{name}({args})"
         return f"{self.visit_expr(node.func)}({args})"
 
+    def _is_string_concat(self, node: ast.expr) -> bool:
+        """Check if an expression is part of string concatenation."""
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return True
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+            return self._is_string_concat(node.left) or self._is_string_concat(node.right)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            return node.func.id == "str"
+        if isinstance(node, ast.Attribute):
+            return True  # Assume attribute access in concat context is string
+        return False
+
+    def _flatten_string_concat(self, node: ast.expr) -> list:
+        """Flatten a chain of string concatenations into parts."""
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+            if self._is_string_concat(node):
+                return self._flatten_string_concat(node.left) + self._flatten_string_concat(
+                    node.right
+                )
+        return [node]
+
+    def _build_template_literal(self, parts: list) -> str:
+        """Build a JS template literal from parts."""
+        result = []
+        for part in parts:
+            if isinstance(part, ast.Constant) and isinstance(part.value, str):
+                # Escape backticks and ${} in string literals
+                escaped = part.value.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
+                escaped = escaped.replace("\n", "\\n").replace("\t", "\\t")
+                result.append(escaped)
+            elif (
+                isinstance(part, ast.Call)
+                and isinstance(part.func, ast.Name)
+                and part.func.id == "str"
+            ):
+                # str(x) becomes ${x}
+                result.append("${" + self.visit_expr(part.args[0]) + "}")
+            else:
+                # Other expressions become ${expr}
+                result.append("${" + self.visit_expr(part) + "}")
+        return "`" + "".join(result) + "`"
+
     def visit_expr_BinOp(self, node: ast.BinOp) -> str:
+        # Check for string concatenation - convert to template literal
+        if isinstance(node.op, ast.Add) and self._is_string_concat(node):
+            parts = self._flatten_string_concat(node)
+            # Only use template literal if there's at least one string literal
+            has_string = any(
+                isinstance(p, ast.Constant) and isinstance(p.value, str) for p in parts
+            )
+            if has_string:
+                return self._build_template_literal(parts)
         left = self.visit_expr(node.left)
         right = self.visit_expr(node.right)
         op = self.visit_op(node.op)

@@ -7,3 +7,4 @@ __pycache__/
 .claude/
 dippy.toml
 tools/bash-oracle/bash-oracle
+.dippy

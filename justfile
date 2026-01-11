@@ -68,12 +68,14 @@ check-style:
 
 # Transpile Python to JavaScript
 transpile:
-    python3 bin/transpile.py src/parable.py > src/parable.js
+    python3 bin/transpile.py src/parable.py > src/parable.js && just fmt-js --fix
 
 # Run JavaScript tests
 test-js *ARGS:
     node bin/run-js-tests.js {{ARGS}}
 
 # Format JavaScript (--fix to apply changes)
+# Note: biome format is run twice due to https://github.com/biomejs/biome/issues/4383
 fmt-js *ARGS:
     npx -y @biomejs/biome format {{ if ARGS == "--fix" { "--write" } else { "" } }} src/parable.js 2>&1 | sed -u "s/^/[fmt-js] /" | tee /tmp/{{project}}-fmt-js.log
+    {{ if ARGS == "--fix" { "npx -y @biomejs/biome format --write src/parable.js >/dev/null 2>&1 || true" } else { "" } }}

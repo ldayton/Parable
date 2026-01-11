@@ -430,7 +430,23 @@ class JSTranspiler(ast.NodeVisitor):
         # Use dot notation for string keys that are valid identifiers
         if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
             key = node.slice.value
-            if key.isidentifier() and key not in ("class", "default", "delete", "export", "import", "new", "return", "super", "switch", "this", "throw", "typeof", "void", "with", "yield"):
+            if key.isidentifier() and key not in (
+                "class",
+                "default",
+                "delete",
+                "export",
+                "import",
+                "new",
+                "return",
+                "super",
+                "switch",
+                "this",
+                "throw",
+                "typeof",
+                "void",
+                "with",
+                "yield",
+            ):
                 return f"{value}.{key}"
         return f"{value}[{self.visit_expr(node.slice)}]"
 

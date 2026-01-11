@@ -71,16 +71,8 @@ function IsWhitespaceNoNewline(c) {
     return ((c === " ") || (c === "\t"));
 }
 
-function Substring(s, start, end) {
-    return s.slice(start, end);
-}
-
 function StartsWithAt(s, pos, prefix) {
     return s.startsWith(prefix, pos);
-}
-
-function Sublist(lst, start, end) {
-    return lst.slice(start, end);
 }
 
 function RepeatStr(s, n) {
@@ -165,7 +157,7 @@ class Word extends Node {
         if (!(value.startsWith("'") && value.endsWith("'"))) {
             return value;
         }
-        var inner = Substring(value, 1, (value.length - 1));
+        var inner = value.slice(1, (value.length - 1));
         var result = [];
         var i = 0;
         while ((i < inner.length)) {
@@ -184,7 +176,7 @@ class Word extends Node {
                         while (((j < inner.length) && IsHexDigit(inner[j]))) {
                             j += 1;
                         }
-                        var hex_str = Substring(inner, (i + 3), j);
+                        var hex_str = inner.slice((i + 3), j);
                         if (((j < inner.length) && (inner[j] === "}"))) {
                             j += 1;
                         }
@@ -203,7 +195,7 @@ class Word extends Node {
                             j += 1;
                         }
                         if ((j > (i + 2))) {
-                            byte_val = parseInt(Substring(inner, (i + 2), j), 16);
+                            byte_val = parseInt(inner.slice((i + 2), j), 16);
                             if ((byte_val === 0)) {
                                 return (("'" + new TextDecoder().decode(new Uint8Array(result))) + "'");
                             }
@@ -220,7 +212,7 @@ class Word extends Node {
                         j += 1;
                     }
                     if ((j > (i + 2))) {
-                        var codepoint = parseInt(Substring(inner, (i + 2), j), 16);
+                        var codepoint = parseInt(inner.slice((i + 2), j), 16);
                         if ((codepoint === 0)) {
                             return (("'" + new TextDecoder().decode(new Uint8Array(result))) + "'");
                         }
@@ -236,7 +228,7 @@ class Word extends Node {
                         j += 1;
                     }
                     if ((j > (i + 2))) {
-                        codepoint = parseInt(Substring(inner, (i + 2), j), 16);
+                        codepoint = parseInt(inner.slice((i + 2), j), 16);
                         if ((codepoint === 0)) {
                             return (("'" + new TextDecoder().decode(new Uint8Array(result))) + "'");
                         }
@@ -265,7 +257,7 @@ class Word extends Node {
                         j += 1;
                     }
                     if ((j > (i + 2))) {
-                        byte_val = parseInt(Substring(inner, (i + 1), j), 8);
+                        byte_val = parseInt(inner.slice((i + 1), j), 8);
                         if ((byte_val === 0)) {
                             return (("'" + new TextDecoder().decode(new Uint8Array(result))) + "'");
                         }
@@ -279,7 +271,7 @@ class Word extends Node {
                     while (((j < inner.length) && (j < (i + 4)) && IsOctalDigit(inner[j]))) {
                         j += 1;
                     }
-                    byte_val = parseInt(Substring(inner, (i + 1), j), 8);
+                    byte_val = parseInt(inner.slice((i + 1), j), 8);
                     if ((byte_val === 0)) {
                         return (("'" + new TextDecoder().decode(new Uint8Array(result))) + "'");
                     }
@@ -353,13 +345,13 @@ class Word extends Node {
                         j += 1;
                     }
                 }
-                var ansi_str = Substring(value, i, j);
-                var expanded = this.ExpandAnsiCEscapes(Substring(ansi_str, 1, ansi_str.length));
+                var ansi_str = value.slice(i, j);
+                var expanded = this.ExpandAnsiCEscapes(ansi_str.slice(1, ansi_str.length));
                 if (((brace_depth > 0) && expanded.startsWith("'") && expanded.endsWith("'"))) {
-                    var inner = Substring(expanded, 1, (expanded.length - 1));
+                    var inner = expanded.slice(1, (expanded.length - 1));
                     if ((inner && (inner.indexOf("") === -1))) {
                         if ((result.length >= 2)) {
-                            var prev = Sublist(result, (result.length - 2), result.length).join("");
+                            var prev = result.slice((result.length - 2), result.length).join("");
                         } else {
                             prev = "";
                         }
@@ -432,8 +424,8 @@ class Word extends Node {
         if (!(((i + 1) < value.length) && (value[i] === "=") && (value[(i + 1)] === "("))) {
             return value;
         }
-        var prefix = Substring(value, 0, (i + 1));
-        var inner = Substring(value, (prefix.length + 1), (value.length - 1));
+        var prefix = value.slice(0, (i + 1));
+        var inner = value.slice((prefix.length + 1), (value.length - 1));
         var normalized = [];
         i = 0;
         var in_whitespace = true;
@@ -451,7 +443,7 @@ class Word extends Node {
                 while (((j < inner.length) && (inner[j] !== "'"))) {
                     j += 1;
                 }
-                normalized.push(Substring(inner, i, (j + 1)));
+                normalized.push(inner.slice(i, (j + 1)));
                 i = (j + 1);
             } else if ((ch === "\"")) {
                 in_whitespace = false;
@@ -465,11 +457,11 @@ class Word extends Node {
                         j += 1;
                     }
                 }
-                normalized.push(Substring(inner, i, (j + 1)));
+                normalized.push(inner.slice(i, (j + 1)));
                 i = (j + 1);
             } else if (((ch === "\\") && ((i + 1) < inner.length))) {
                 in_whitespace = false;
-                normalized.push(Substring(inner, i, (i + 2)));
+                normalized.push(inner.slice(i, (i + 2)));
                 i += 2;
             } else {
                 in_whitespace = false;
@@ -511,7 +503,7 @@ class Word extends Node {
                 if ((depth === 0)) {
                     result.push((("$((" + arith_content.join("")) + "))"));
                 } else {
-                    result.push(Substring(value, start, i));
+                    result.push(value.slice(start, i));
                 }
             } else {
                 result.push(value[i]);
@@ -604,7 +596,7 @@ class Word extends Node {
                     }
                     j += 1;
                 }
-                result.push(Substring(value, i, j));
+                result.push(value.slice(i, j));
                 cmdsub_idx += 1;
                 i = j;
             } else if (((StartsWithAt(value, i, ">(") || StartsWithAt(value, i, "<(")) && (procsub_idx < procsub_parts.length))) {
@@ -616,7 +608,7 @@ class Word extends Node {
                 procsub_idx += 1;
                 i = j;
             } else if ((StartsWithAt(value, i, "${ ") || StartsWithAt(value, i, "${|"))) {
-                var prefix = Substring(value, i, (i + 3));
+                var prefix = value.slice(i, (i + 3));
                 j = (i + 3);
                 var depth = 1;
                 while (((j < value.length) && (depth > 0))) {
@@ -627,7 +619,7 @@ class Word extends Node {
                     }
                     j += 1;
                 }
-                var inner = Substring(value, (i + 2), (j - 1));
+                var inner = value.slice((i + 2), (j - 1));
                 if ((inner.trim() === "")) {
                     result.push("${ }");
                 } else {
@@ -641,7 +633,7 @@ class Word extends Node {
                             result.push("${ }");
                         }
                     } catch (_) {
-                        result.push(Substring(value, i, j));
+                        result.push(value.slice(i, j));
                     }
                 }
                 i = j;
@@ -769,7 +761,7 @@ class List extends Node {
         var parts = Array.from(this.parts);
         var op_names = {"&&": "and", "||": "or", ";": "semi", "\n": "semi", "&": "background"};
         while (((parts.length > 1) && (parts[(parts.length - 1)].kind === "operator") && ((parts[(parts.length - 1)].op === ";") || (parts[(parts.length - 1)].op === "\n")))) {
-            parts = Sublist(parts, 0, (parts.length - 1));
+            parts = parts.slice(0, (parts.length - 1));
         }
         if ((parts.length === 1)) {
             return parts[0].toSexp();
@@ -777,8 +769,8 @@ class List extends Node {
         if (((parts[(parts.length - 1)].kind === "operator") && (parts[(parts.length - 1)].op === "&"))) {
             for (var i = (parts.length - 3); i > 0; i--) {
                 if (((parts[i].kind === "operator") && ((parts[i].op === ";") || (parts[i].op === "\n")))) {
-                    var left = Sublist(parts, 0, i);
-                    var right = Sublist(parts, (i + 1), (parts.length - 1));
+                    var left = parts.slice(0, i);
+                    var right = parts.slice((i + 1), (parts.length - 1));
                     if ((left.length > 1)) {
                         var left_sexp = new List(left).toSexp();
                     } else {
@@ -792,7 +784,7 @@ class List extends Node {
                     return (((("(semi " + left_sexp) + " (background ") + right_sexp) + "))");
                 }
             }
-            var inner_parts = Sublist(parts, 0, (parts.length - 1));
+            var inner_parts = parts.slice(0, (parts.length - 1));
             if ((inner_parts.length === 1)) {
                 return (("(background " + inner_parts[0].toSexp()) + ")");
             }
@@ -805,8 +797,8 @@ class List extends Node {
     ToSexpWithPrecedence(parts, op_names) {
         for (var i = (parts.length - 2); i > 0; i--) {
             if (((parts[i].kind === "operator") && ((parts[i].op === ";") || (parts[i].op === "\n")))) {
-                var left = Sublist(parts, 0, i);
-                var right = Sublist(parts, (i + 1), parts.length);
+                var left = parts.slice(0, i);
+                var right = parts.slice((i + 1), parts.length);
                 if ((left.length > 1)) {
                     var left_sexp = new List(left).toSexp();
                 } else {
@@ -822,8 +814,8 @@ class List extends Node {
         }
         for (var i = (parts.length - 2); i > 0; i--) {
             if (((parts[i].kind === "operator") && (parts[i].op === "&"))) {
-                left = Sublist(parts, 0, i);
-                right = Sublist(parts, (i + 1), parts.length);
+                left = parts.slice(0, i);
+                right = parts.slice((i + 1), parts.length);
                 if ((left.length > 1)) {
                     left_sexp = new List(left).toSexp();
                 } else {
@@ -920,7 +912,7 @@ class Redirect extends Node {
                     j += 1;
                 }
                 if (((j < op.length) && (op[j] === "}"))) {
-                    op = Substring(op, (j + 1), op.length);
+                    op = op.slice((j + 1), op.length);
                 }
             }
         }
@@ -933,7 +925,7 @@ class Redirect extends Node {
             } else if ((op === "<")) {
                 op = "<&";
             }
-            var fd_target = Substring(target_val, 1, target_val.length).replace(new RegExp("[" + "-" + "]+$"), "");
+            var fd_target = target_val.slice(1, target_val.length).replace(new RegExp("[" + "-" + "]+$"), "");
             if (/^[0-9]+$/.test(fd_target)) {
                 return (((("(redirect \"" + op) + "\" ") + fd_target) + ")");
             } else if ((target_val === "&-")) {
@@ -1382,7 +1374,7 @@ class CasePattern extends Node {
         while ((i < this.pattern.length)) {
             var ch = this.pattern[i];
             if (((ch === "\\") && ((i + 1) < this.pattern.length))) {
-                current.push(Substring(this.pattern, i, (i + 2)));
+                current.push(this.pattern.slice(i, (i + 2)));
                 i += 2;
             } else if ((((ch === "@") || (ch === "?") || (ch === "*") || (ch === "+") || (ch === "!")) && ((i + 1) < this.pattern.length) && (this.pattern[(i + 1)] === "("))) {
                 current.push(ch);
@@ -2067,7 +2059,7 @@ function FormatCmdsubNode(node, indent, in_procsub) {
         }
         var s = result.join("");
         while ((s.endsWith(";") || s.endsWith("\n"))) {
-            s = Substring(s, 0, (s.length - 1));
+            s = s.slice(0, (s.length - 1));
         }
         return s;
     }
@@ -2190,7 +2182,7 @@ function FormatRedirect(r) {
     var target = r.target.value;
     if (target.startsWith("&")) {
         if (((target === "&-") && op.endsWith("<"))) {
-            op = (Substring(op, 0, (op.length - 1)) + ">");
+            op = (op.slice(0, (op.length - 1)) + ">");
         }
         if ((op === ">")) {
             op = "1>";
@@ -2325,7 +2317,7 @@ function SkipHeredoc(value, start) {
         while (((i < value.length) && (value[i] !== quote_char))) {
             i += 1;
         }
-        var delimiter = Substring(value, delim_start, i);
+        var delimiter = value.slice(delim_start, i);
         if ((i < value.length)) {
             i += 1;
         }
@@ -2335,12 +2327,12 @@ function SkipHeredoc(value, start) {
         while (((i < value.length) && !IsWhitespace(value[i]))) {
             i += 1;
         }
-        delimiter = Substring(value, delim_start, i);
+        delimiter = value.slice(delim_start, i);
     } else {
         while (((i < value.length) && !IsWhitespace(value[i]))) {
             i += 1;
         }
-        delimiter = Substring(value, delim_start, i);
+        delimiter = value.slice(delim_start, i);
     }
     while (((i < value.length) && (value[i] !== "\n"))) {
         i += 1;
@@ -2354,7 +2346,7 @@ function SkipHeredoc(value, start) {
         while (((line_end < value.length) && (value[line_end] !== "\n"))) {
             line_end += 1;
         }
-        var line = Substring(value, line_start, line_end);
+        var line = value.slice(line_start, line_end);
         if ((((start + 2) < value.length) && (value[(start + 2)] === "-"))) {
             var stripped = line.replace(new RegExp("^[" + "\t" + "]+"), "");
         } else {
@@ -3082,7 +3074,7 @@ class Parser {
                         while (((line_end < this.length) && (this.source[line_end] !== "\n"))) {
                             line_end += 1;
                         }
-                        var line = Substring(this.source, line_start, line_end);
+                        var line = this.source.slice(line_start, line_end);
                         this.pos = line_end;
                         if (((line === delimiter) || (line.replace(new RegExp("^[" + "\t" + "]+"), "") === delimiter))) {
                             if ((!this.atEnd() && (this.peek() === "\n"))) {
@@ -3176,9 +3168,9 @@ class Parser {
             this.pos = start;
             return [null, ""];
         }
-        var content = Substring(this.source, content_start, this.pos);
+        var content = this.source.slice(content_start, this.pos);
         this.advance();
-        var text = Substring(this.source, start, this.pos);
+        var text = this.source.slice(start, this.pos);
         var sub_parser = new Parser(content);
         var cmd = sub_parser.parseList();
         if ((cmd == null)) {
@@ -3342,9 +3334,9 @@ class Parser {
             this.pos = start;
             return [null, ""];
         }
-        var content = Substring(this.source, content_start, this.pos);
+        var content = this.source.slice(content_start, this.pos);
         this.advance();
-        var text = Substring(this.source, start, this.pos);
+        var text = this.source.slice(start, this.pos);
         var sub_parser = new Parser(content);
         var cmd = sub_parser.parseList();
         if ((cmd == null)) {
@@ -3383,7 +3375,7 @@ class Parser {
             throw new ParseError("Expected ) to close array literal", this.pos);
         }
         this.advance();
-        var text = Substring(this.source, start, this.pos);
+        var text = this.source.slice(start, this.pos);
         return [new ArrayNode(elements), text];
     }
     
@@ -3423,10 +3415,10 @@ class Parser {
             this.pos = start;
             return [null, ""];
         }
-        var content = Substring(this.source, content_start, this.pos);
+        var content = this.source.slice(content_start, this.pos);
         this.advance();
         this.advance();
-        var text = Substring(this.source, start, this.pos);
+        var text = this.source.slice(start, this.pos);
         var expr = this.ParseArithExpr(content);
         return [new ArithmeticExpansion(expr), text];
     }
@@ -3938,7 +3930,7 @@ class Parser {
                     this.ArithAdvance();
                 }
             }
-            var content = Substring(this._arith_src, content_start, this._arith_pos);
+            var content = this._arith_src.slice(content_start, this._arith_pos);
             this.ArithAdvance();
             this.ArithAdvance();
             var inner_expr = this.ParseArithExpr(content);
@@ -3961,7 +3953,7 @@ class Parser {
                 this.ArithAdvance();
             }
         }
-        content = Substring(this._arith_src, content_start, this._arith_pos);
+        content = this._arith_src.slice(content_start, this._arith_pos);
         this.ArithAdvance();
         var saved_pos = this.pos;
         var saved_src = this.source;
@@ -4029,37 +4021,37 @@ class Parser {
         this.ArithConsume("}");
         var op_str = op_chars.join("");
         if (op_str.startsWith(":-")) {
-            return new ParamExpansion(name, ":-", Substring(op_str, 2, op_str.length));
+            return new ParamExpansion(name, ":-", op_str.slice(2, op_str.length));
         }
         if (op_str.startsWith(":=")) {
-            return new ParamExpansion(name, ":=", Substring(op_str, 2, op_str.length));
+            return new ParamExpansion(name, ":=", op_str.slice(2, op_str.length));
         }
         if (op_str.startsWith(":+")) {
-            return new ParamExpansion(name, ":+", Substring(op_str, 2, op_str.length));
+            return new ParamExpansion(name, ":+", op_str.slice(2, op_str.length));
         }
         if (op_str.startsWith(":?")) {
-            return new ParamExpansion(name, ":?", Substring(op_str, 2, op_str.length));
+            return new ParamExpansion(name, ":?", op_str.slice(2, op_str.length));
         }
         if (op_str.startsWith(":")) {
-            return new ParamExpansion(name, ":", Substring(op_str, 1, op_str.length));
+            return new ParamExpansion(name, ":", op_str.slice(1, op_str.length));
         }
         if (op_str.startsWith("##")) {
-            return new ParamExpansion(name, "##", Substring(op_str, 2, op_str.length));
+            return new ParamExpansion(name, "##", op_str.slice(2, op_str.length));
         }
         if (op_str.startsWith("#")) {
-            return new ParamExpansion(name, "#", Substring(op_str, 1, op_str.length));
+            return new ParamExpansion(name, "#", op_str.slice(1, op_str.length));
         }
         if (op_str.startsWith("%%")) {
-            return new ParamExpansion(name, "%%", Substring(op_str, 2, op_str.length));
+            return new ParamExpansion(name, "%%", op_str.slice(2, op_str.length));
         }
         if (op_str.startsWith("%")) {
-            return new ParamExpansion(name, "%", Substring(op_str, 1, op_str.length));
+            return new ParamExpansion(name, "%", op_str.slice(1, op_str.length));
         }
         if (op_str.startsWith("//")) {
-            return new ParamExpansion(name, "//", Substring(op_str, 2, op_str.length));
+            return new ParamExpansion(name, "//", op_str.slice(2, op_str.length));
         }
         if (op_str.startsWith("/")) {
-            return new ParamExpansion(name, "/", Substring(op_str, 1, op_str.length));
+            return new ParamExpansion(name, "/", op_str.slice(1, op_str.length));
         }
         return new ParamExpansion(name, "", op_str);
     }
@@ -4070,7 +4062,7 @@ class Parser {
         while ((!this.ArithAtEnd() && (this.ArithPeek() !== "'"))) {
             this.ArithAdvance();
         }
-        var content = Substring(this._arith_src, content_start, this._arith_pos);
+        var content = this._arith_src.slice(content_start, this._arith_pos);
         if (!this.ArithConsume("'")) {
             throw new ParseError("Unterminated single quote in arithmetic", this._arith_pos);
         }
@@ -4089,7 +4081,7 @@ class Parser {
                 this.ArithAdvance();
             }
         }
-        var content = Substring(this._arith_src, content_start, this._arith_pos);
+        var content = this._arith_src.slice(content_start, this._arith_pos);
         if (!this.ArithConsume("\"")) {
             throw new ParseError("Unterminated double quote in arithmetic", this._arith_pos);
         }
@@ -4108,7 +4100,7 @@ class Parser {
                 this.ArithAdvance();
             }
         }
-        var content = Substring(this._arith_src, content_start, this._arith_pos);
+        var content = this._arith_src.slice(content_start, this._arith_pos);
         if (!this.ArithConsume("`")) {
             throw new ParseError("Unterminated backtick in arithmetic", this._arith_pos);
         }
@@ -4185,9 +4177,9 @@ class Parser {
             this.pos = start;
             return [null, ""];
         }
-        var content = Substring(this.source, content_start, this.pos);
+        var content = this.source.slice(content_start, this.pos);
         this.advance();
-        var text = Substring(this.source, start, this.pos);
+        var text = this.source.slice(start, this.pos);
         return [new ArithDeprecated(content), text];
     }
     
@@ -4222,7 +4214,7 @@ class Parser {
             this.pos = start;
             return [null, ""];
         }
-        var text = Substring(this.source, start, this.pos);
+        var text = this.source.slice(start, this.pos);
         var content = content_chars.join("");
         return [new AnsiCQuote(content), text];
     }
@@ -4333,7 +4325,7 @@ class Parser {
         }
         if ((IsSpecialParamOrDigit(ch) || (ch === "#"))) {
             this.advance();
-            var text = Substring(this.source, start, this.pos);
+            var text = this.source.slice(start, this.pos);
             return [new ParamExpansion(ch), text];
         }
         if ((/^[a-zA-Z]$/.test(ch) || (ch === "_"))) {
@@ -4346,8 +4338,8 @@ class Parser {
                     break;
                 }
             }
-            var name = Substring(this.source, name_start, this.pos);
-            text = Substring(this.source, start, this.pos);
+            var name = this.source.slice(name_start, this.pos);
+            text = this.source.slice(start, this.pos);
             return [new ParamExpansion(name), text];
         }
         this.pos = start;
@@ -4365,7 +4357,7 @@ class Parser {
             var param = this.ConsumeParamName();
             if ((param && !this.atEnd() && (this.peek() === "}"))) {
                 this.advance();
-                var text = Substring(this.source, start, this.pos);
+                var text = this.source.slice(start, this.pos);
                 return [new ParamLength(param), text];
             }
             this.pos = start;
@@ -4380,7 +4372,7 @@ class Parser {
                 }
                 if ((!this.atEnd() && (this.peek() === "}"))) {
                     this.advance();
-                    text = Substring(this.source, start, this.pos);
+                    text = this.source.slice(start, this.pos);
                     return [new ParamIndirect(param), text];
                 }
                 if ((!this.atEnd() && IsAtOrStar(this.peek()))) {
@@ -4390,7 +4382,7 @@ class Parser {
                     }
                     if ((!this.atEnd() && (this.peek() === "}"))) {
                         this.advance();
-                        text = Substring(this.source, start, this.pos);
+                        text = this.source.slice(start, this.pos);
                         return [new ParamIndirect((param + suffix)), text];
                     }
                     this.pos = start;
@@ -4423,7 +4415,7 @@ class Parser {
                     if ((depth === 0)) {
                         this.advance();
                         var arg = arg_chars.join("");
-                        text = Substring(this.source, start, this.pos);
+                        text = this.source.slice(start, this.pos);
                         return [new ParamIndirect(param, op, arg), text];
                     }
                 }
@@ -4456,9 +4448,9 @@ class Parser {
                 }
             }
             if ((depth === 0)) {
-                var content = Substring(this.source, content_start, this.pos);
+                var content = this.source.slice(content_start, this.pos);
                 this.advance();
-                text = Substring(this.source, start, this.pos);
+                text = this.source.slice(start, this.pos);
                 return [new ParamExpansion(content), text];
             }
             this.pos = start;
@@ -4470,7 +4462,7 @@ class Parser {
         }
         if ((this.peek() === "}")) {
             this.advance();
-            text = Substring(this.source, start, this.pos);
+            text = this.source.slice(start, this.pos);
             return [new ParamExpansion(param), text];
         }
         op = this.ConsumeParamOperator();
@@ -4936,16 +4928,16 @@ class Parser {
             while (((line_end < this.length) && (this.source[line_end] !== "\n"))) {
                 line_end += 1;
             }
-            var line = Substring(this.source, line_start, line_end);
+            var line = this.source.slice(line_start, line_end);
             if (!quoted) {
                 while ((line.endsWith("\\") && (line_end < this.length))) {
-                    line = Substring(line, 0, (line.length - 1));
+                    line = line.slice(0, (line.length - 1));
                     line_end += 1;
                     var next_line_start = line_end;
                     while (((line_end < this.length) && (this.source[line_end] !== "\n"))) {
                         line_end += 1;
                     }
-                    line = (line + Substring(this.source, next_line_start, line_end));
+                    line = (line + this.source.slice(next_line_start, line_end));
                 }
             }
             var check_line = line;
@@ -5087,7 +5079,7 @@ class Parser {
             this.pos = saved_pos;
             return null;
         }
-        var content = Substring(this.source, content_start, this.pos);
+        var content = this.source.slice(content_start, this.pos);
         this.advance();
         this.advance();
         var expr = this.ParseArithExpr(content);
@@ -6413,7 +6405,7 @@ class Parser {
         while ((!this.atEnd() && !IsMetachar(this.peek()) && !IsQuote(this.peek()) && !IsParen(this.peek()))) {
             this.advance();
         }
-        name = Substring(this.source, name_start, this.pos);
+        name = this.source.slice(name_start, this.pos);
         if (!name) {
             this.pos = saved_pos;
             return null;
@@ -6851,7 +6843,7 @@ class Parser {
         while ((!this.atEnd() && (this.peek() !== "\n"))) {
             this.advance();
         }
-        var text = Substring(this.source, start, this.pos);
+        var text = this.source.slice(start, this.pos);
         return new Comment(text);
     }
     

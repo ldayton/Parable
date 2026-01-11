@@ -86,6 +86,9 @@ class JSTranspiler(ast.NodeVisitor):
         return parts[0] + "".join(p.capitalize() for p in parts[1:])
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
+        # Skip helper functions that are inlined
+        if node.name in ("_substring", "_sublist"):
+            return
         args = [self._safe_name(a.arg) for a in node.args.args if a.arg != "self"]
         args_str = ", ".join(args)
         name = "constructor" if node.name == "__init__" else self._camel_case(node.name)
@@ -516,6 +519,11 @@ class JSTranspiler(ast.NodeVisitor):
                 return f"Math.max({args})"
             if name == "min":
                 return f"Math.min({args})"
+            if name in ("_substring", "_sublist"):
+                obj = self.visit_expr(node.args[0])
+                start = self.visit_expr(node.args[1])
+                end = self.visit_expr(node.args[2])
+                return f"{obj}.slice({start}, {end})"
             if name in self.class_names:
                 return f"new {self._safe_name(name)}({args})"
             # Convert snake_case function names to camelCase

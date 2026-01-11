@@ -54,8 +54,11 @@ class JSTranspiler(ast.NodeVisitor):
     def _safe_name(self, name: str) -> str:
         """Rename JS reserved words and conflicting globals."""
         reserved = {
-            "var": "variable", "class": "cls", "function": "func",
-            "in": "inVal", "with": "withVal",
+            "var": "variable",
+            "class": "cls",
+            "function": "func",
+            "in": "inVal",
+            "with": "withVal",
             "Array": "ArrayNode",  # Avoid shadowing JS global
         }
         return reserved.get(name, name)
@@ -99,7 +102,8 @@ class JSTranspiler(ast.NodeVisitor):
         self.in_class_body = False
         self.in_method = True
         # Start with function parameters as declared
-        self.declared_vars = set(a.arg for a in node.args.args if a.arg != "self")
+        self.declared_vars = {a.arg for a in node.args.args if a.arg != "self"}
+
         # Helper to emit default argument checks
         def emit_defaults():
             defaults = node.args.defaults
@@ -113,6 +117,7 @@ class JSTranspiler(ast.NodeVisitor):
                     arg_name = self._safe_name(non_self_args[first_default_idx + i].arg)
                     default_val = self.visit_expr(default)
                     self.emit(f"if ({arg_name} == null) {{ {arg_name} = {default_val}; }}")
+
         # For constructors in subclasses, emit super() first
         if name == "constructor" and self.class_has_base:
             # Find and emit super() call first, or add one if missing
@@ -128,9 +133,7 @@ class JSTranspiler(ast.NodeVisitor):
                 # then the assignments, then update message if needed
                 call = super_stmt.value
                 super_args = call.args
-                args_use_self = any(
-                    "self" in ast.dump(arg) for arg in super_args
-                )
+                args_use_self = any("self" in ast.dump(arg) for arg in super_args)
                 if args_use_self:
                     # Emit super() with no args first
                     self.emit("super();")
@@ -201,10 +204,12 @@ class JSTranspiler(ast.NodeVisitor):
         # Handle self.attr truthiness checks - in Python [] is falsy but in JS it's truthy
         # Only add length check for known array-like attributes
         array_attrs = {"redirects", "parts", "elements", "words", "patterns", "commands"}
-        if (isinstance(node.test, ast.Attribute)
+        if (
+            isinstance(node.test, ast.Attribute)
             and isinstance(node.test.value, ast.Name)
             and node.test.value.id == "self"
-            and node.test.attr in array_attrs):
+            and node.test.attr in array_attrs
+        ):
             test = f"{test} && {test}.length"
         if is_elif:
             self.emit_raw("    " * self.indent + f"}} else if ({test}) {{")
@@ -243,12 +248,20 @@ class JSTranspiler(ast.NodeVisitor):
             self.declared_vars.add(node.target.id)
         iter_expr = node.iter
         # Handle range() specially
-        if isinstance(iter_expr, ast.Call) and isinstance(iter_expr.func, ast.Name) and iter_expr.func.id == "range":
+        if (
+            isinstance(iter_expr, ast.Call)
+            and isinstance(iter_expr.func, ast.Name)
+            and iter_expr.func.id == "range"
+        ):
             args = iter_expr.args
             if len(args) == 1:
-                self.emit(f"for (var {target} = 0; {target} < {self.visit_expr(args[0])}; {target}++) {{")
+                self.emit(
+                    f"for (var {target} = 0; {target} < {self.visit_expr(args[0])}; {target}++) {{"
+                )
             elif len(args) == 2:
-                self.emit(f"for (var {target} = {self.visit_expr(args[0])}; {target} < {self.visit_expr(args[1])}; {target}++) {{")
+                self.emit(
+                    f"for (var {target} = {self.visit_expr(args[0])}; {target} < {self.visit_expr(args[1])}; {target}++) {{"
+                )
             else:
                 start, end, step = args
                 # Check if step is negative for proper comparison and decrement
@@ -258,10 +271,14 @@ class JSTranspiler(ast.NodeVisitor):
                 elif isinstance(step, ast.Constant) and step.value < 0:
                     is_negative = True
                 if is_negative:
-                    self.emit(f"for (var {target} = {self.visit_expr(start)}; {target} > {self.visit_expr(end)}; {target}--) {{")
+                    self.emit(
+                        f"for (var {target} = {self.visit_expr(start)}; {target} > {self.visit_expr(end)}; {target}--) {{"
+                    )
                 else:
                     step_val = self.visit_expr(step)
-                    self.emit(f"for (var {target} = {self.visit_expr(start)}; {target} < {self.visit_expr(end)}; {target} += {step_val}) {{")
+                    self.emit(
+                        f"for (var {target} = {self.visit_expr(start)}; {target} < {self.visit_expr(end)}; {target} += {step_val}) {{"
+                    )
         else:
             self.emit(f"for (var {target} of {self.visit_expr(iter_expr)}) {{")
         self.indent += 1
@@ -312,15 +329,24 @@ class JSTranspiler(ast.NodeVisitor):
 
     def visit_expr_Name(self, node: ast.Name) -> str:
         mapping = {
-            "True": "true", "False": "false", "None": "null", "self": "this",
-            "Exception": "Error", "NotImplementedError": 'new Error("Not implemented")',
+            "True": "true",
+            "False": "false",
+            "None": "null",
+            "self": "this",
+            "Exception": "Error",
+            "NotImplementedError": 'new Error("Not implemented")',
         }
         name = mapping.get(node.id, node.id)
         return self._safe_name(name)
 
     def visit_expr_Constant(self, node: ast.Constant) -> str:
         if isinstance(node.value, str):
-            escaped = node.value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
+            escaped = (
+                node.value.replace("\\", "\\\\")
+                .replace('"', '\\"')
+                .replace("\n", "\\n")
+                .replace("\t", "\\t")
+            )
             return f'"{escaped}"'
         if isinstance(node.value, bytes):
             # Convert bytes to array of numbers
@@ -363,10 +389,12 @@ class JSTranspiler(ast.NodeVisitor):
         # Handle method calls
         if isinstance(node.func, ast.Attribute):
             # Special case: super().__init__(args) -> super(args)
-            if (node.func.attr == "__init__"
+            if (
+                node.func.attr == "__init__"
                 and isinstance(node.func.value, ast.Call)
                 and isinstance(node.func.value.func, ast.Name)
-                and node.func.value.func.id == "super"):
+                and node.func.value.func.id == "super"
+            ):
                 return f"super({args})"
             obj = self.visit_expr(node.func.value)
             method = node.func.attr
@@ -428,11 +456,15 @@ class JSTranspiler(ast.NodeVisitor):
             # Handle endswith/startswith with tuple argument (JS only accepts string)
             if method == "endswith" and len(node.args) == 1:
                 if isinstance(node.args[0], (ast.Tuple, ast.List)):
-                    checks = [f"{obj}.endsWith({self.visit_expr(elt)})" for elt in node.args[0].elts]
+                    checks = [
+                        f"{obj}.endsWith({self.visit_expr(elt)})" for elt in node.args[0].elts
+                    ]
                     return f"({' || '.join(checks)})"
             if method == "startswith" and len(node.args) == 1:
                 if isinstance(node.args[0], (ast.Tuple, ast.List)):
-                    checks = [f"{obj}.startsWith({self.visit_expr(elt)})" for elt in node.args[0].elts]
+                    checks = [
+                        f"{obj}.startsWith({self.visit_expr(elt)})" for elt in node.args[0].elts
+                    ]
                     return f"({' || '.join(checks)})"
             method = method_map.get(method, method)
             # Convert remaining snake_case to camelCase
@@ -504,7 +536,7 @@ class JSTranspiler(ast.NodeVisitor):
             if isinstance(op, ast.NotIn):
                 return f"!{right}.has({left})"
         result = self.visit_expr(node.left)
-        for op, comparator in zip(node.ops, node.comparators):
+        for op, comparator in zip(node.ops, node.comparators, strict=True):
             op_str = self.visit_cmpop(op)
             result += f" {op_str} {self.visit_expr(comparator)}"
         return f"({result})"
@@ -536,7 +568,17 @@ class JSTranspiler(ast.NodeVisitor):
             # Convert to `list_var.length === 0` for common list variable names
             if isinstance(node.operand, ast.Name):
                 name = node.operand.id
-                list_suffixes = ("_chars", "_list", "_parts", "chars", "parts", "result", "results", "items", "values")
+                list_suffixes = (
+                    "_chars",
+                    "_list",
+                    "_parts",
+                    "chars",
+                    "parts",
+                    "result",
+                    "results",
+                    "items",
+                    "values",
+                )
                 if name.endswith(list_suffixes) or name in list_suffixes:
                     return f"{name}.length === 0"
             return f"!{operand}"
@@ -556,7 +598,7 @@ class JSTranspiler(ast.NodeVisitor):
 
     def visit_expr_Dict(self, node: ast.Dict) -> str:
         pairs = []
-        for k, v in zip(node.keys, node.values):
+        for k, v in zip(node.keys, node.values, strict=True):
             pairs.append(f"{self.visit_expr(k)}: {self.visit_expr(v)}")
         return "{" + ", ".join(pairs) + "}"
 
@@ -570,18 +612,33 @@ class JSTranspiler(ast.NodeVisitor):
 
     def visit_op(self, op: ast.operator) -> str:
         ops = {
-            ast.Add: "+", ast.Sub: "-", ast.Mult: "*", ast.Div: "/",
-            ast.FloorDiv: "Math.floor(/", ast.Mod: "%", ast.Pow: "**",
-            ast.LShift: "<<", ast.RShift: ">>", ast.BitOr: "|",
-            ast.BitXor: "^", ast.BitAnd: "&",
+            ast.Add: "+",
+            ast.Sub: "-",
+            ast.Mult: "*",
+            ast.Div: "/",
+            ast.FloorDiv: "Math.floor(/",
+            ast.Mod: "%",
+            ast.Pow: "**",
+            ast.LShift: "<<",
+            ast.RShift: ">>",
+            ast.BitOr: "|",
+            ast.BitXor: "^",
+            ast.BitAnd: "&",
         }
         return ops.get(type(op), "/* ? */")
 
     def visit_cmpop(self, op: ast.cmpop) -> str:
         ops = {
-            ast.Eq: "===", ast.NotEq: "!==", ast.Lt: "<", ast.LtE: "<=",
-            ast.Gt: ">", ast.GtE: ">=", ast.Is: "==", ast.IsNot: "!=",  # == for is None checks (handles undefined)
-            ast.In: "in", ast.NotIn: "not in",
+            ast.Eq: "===",
+            ast.NotEq: "!==",
+            ast.Lt: "<",
+            ast.LtE: "<=",
+            ast.Gt: ">",
+            ast.GtE: ">=",
+            ast.Is: "==",
+            ast.IsNot: "!=",  # == for is None checks (handles undefined)
+            ast.In: "in",
+            ast.NotIn: "not in",
         }
         return ops.get(type(op), "/* ? */")
 

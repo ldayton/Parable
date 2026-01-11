@@ -5462,7 +5462,8 @@ class Parser {
 				var ch = this.peek();
 				if (
 					/^[a-zA-Z0-9]$/.test(ch) ||
-					ch === "_" || ch === "[" ||
+					ch === "_" ||
+					ch === "[" ||
 					ch === "]"
 				) {
 					varname_chars.push(this.advance());
@@ -6104,7 +6105,8 @@ class Parser {
 		}
 		if (
 			!this.CondAtEnd() &&
-			this.peek() !== "&" && this.peek() !== "|" &&
+			this.peek() !== "&" &&
+			this.peek() !== "|" &&
 			this.peek() !== ")"
 		) {
 			if (

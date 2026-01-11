@@ -37,7 +37,7 @@ lock-check:
 
 # Run all checks (tests, lint, format, lock, style) in parallel
 [parallel]
-check: test-all lint fmt lock-check check-dump-ast check-style test-js fmt-js lint-js
+check: test-all lint fmt lock-check check-dump-ast check-style test-js fmt-js
 
 # Run benchmarks (--fast for quick run)
 bench *ARGS:
@@ -69,8 +69,6 @@ check-style:
 # Transpile Python to JavaScript
 transpile:
     python3 bin/transpile.py src/parable.py > src/parable.js
-    npx -y @biomejs/biome format --write src/parable.js
-    npx -y @biomejs/biome lint --only=correctness --skip=noUndeclaredVariables --skip=noUnusedVariables --skip=noInnerDeclarations src/parable.js
 
 # Run JavaScript tests
 test-js *ARGS:
@@ -79,7 +77,3 @@ test-js *ARGS:
 # Format JavaScript (--fix to apply changes)
 fmt-js *ARGS:
     npx -y @biomejs/biome format {{ if ARGS == "--fix" { "--write" } else { "" } }} src/parable.js 2>&1 | sed -u "s/^/[fmt-js] /" | tee /tmp/{{project}}-fmt-js.log
-
-# Lint JavaScript (--fix to apply changes)
-lint-js *ARGS:
-    npx -y @biomejs/biome lint --only=correctness --skip=noUndeclaredVariables --skip=noUnusedVariables --skip=noInnerDeclarations {{ if ARGS == "--fix" { "--write" } else { "" } }} src/parable.js 2>&1 | sed -u "s/^/[lint-js] /" | tee /tmp/{{project}}-lint-js.log

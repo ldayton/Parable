@@ -136,8 +136,7 @@ function main() {
   }
   
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
-  
-  console.log('');
+
   if (totalFailed > 0 && totalFailed <= 50) {
     console.log('='.repeat(60));
     console.log('FAILURES');
@@ -151,7 +150,6 @@ function main() {
         console.log(`  Error:    ${error}`);
       }
     }
-    console.log('');
   } else if (totalFailed > 110) {
     console.log(`${totalFailed} failures (too many to show)`);
   }

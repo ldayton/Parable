@@ -573,37 +573,37 @@ class Word extends Node {
     
     CollectCmdsubs(node) {
         var result = [];
-        var node_kind = (node["kind"] !== undefined ? node["kind"] : null);
+        var node_kind = (node["kind"] ?? null);
         if ((node_kind === "cmdsub")) {
             result.push(node);
         } else {
-            var expr = (node["expression"] !== undefined ? node["expression"] : null);
+            var expr = (node["expression"] ?? null);
             if ((expr != null)) {
                 // ArithmeticExpansion, ArithBinaryOp, etc.
                 result.push(...this.CollectCmdsubs(expr));
             }
         }
-        var left = (node["left"] !== undefined ? node["left"] : null);
+        var left = (node["left"] ?? null);
         if ((left != null)) {
             result.push(...this.CollectCmdsubs(left));
         }
-        var right = (node["right"] !== undefined ? node["right"] : null);
+        var right = (node["right"] ?? null);
         if ((right != null)) {
             result.push(...this.CollectCmdsubs(right));
         }
-        var operand = (node["operand"] !== undefined ? node["operand"] : null);
+        var operand = (node["operand"] ?? null);
         if ((operand != null)) {
             result.push(...this.CollectCmdsubs(operand));
         }
-        var condition = (node["condition"] !== undefined ? node["condition"] : null);
+        var condition = (node["condition"] ?? null);
         if ((condition != null)) {
             result.push(...this.CollectCmdsubs(condition));
         }
-        var true_value = (node["true_value"] !== undefined ? node["true_value"] : null);
+        var true_value = (node["true_value"] ?? null);
         if ((true_value != null)) {
             result.push(...this.CollectCmdsubs(true_value));
         }
-        var false_value = (node["false_value"] !== undefined ? node["false_value"] : null);
+        var false_value = (node["false_value"] ?? null);
         if ((false_value != null)) {
             result.push(...this.CollectCmdsubs(false_value));
         }
@@ -929,7 +929,7 @@ class List extends Node {
         for (var i = 1; i < (parts.length - 1); i += 2) {
             var op = parts[i];
             var cmd = parts[(i + 1)];
-            var op_name = (op_names[op.op] !== undefined ? op_names[op.op] : op.op);
+            var op_name = (op_names[op.op] ?? op.op);
             result = (((((("(" + op_name) + " ") + result) + " ") + cmd.toSexp()) + ")");
         }
         return result;
@@ -946,7 +946,7 @@ class Operator extends Node {
     
     toSexp() {
         var names = {"&&": "and", "||": "or", ";": "semi", "&": "bg", "|": "pipe"};
-        return (("(" + (names[this.op] !== undefined ? names[this.op] : this.op)) + ")");
+        return (("(" + (names[this.op] ?? this.op)) + ")");
     }
     
 }
@@ -1995,7 +1995,7 @@ class ConditionalExpr extends Node {
     toSexp() {
         // bash-oracle format: (cond ...) not (cond-expr ...)
         // Redirects are siblings, not children: (cond ...) (redirect ...)
-        var body_kind = (this.body["kind"] !== undefined ? this.body["kind"] : null);
+        var body_kind = (this.body["kind"] ?? null);
         if ((body_kind == null)) {
             // body is a string
             var escaped = this.body.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"").replaceAll("\n", "\\n");
@@ -3740,9 +3740,9 @@ class Parser {
     // 16. postfix (++ -- [])
     ParseArithExpr(content) {
         // Save any existing arith context (for nested parsing)
-        var saved_arith_src = (this["_arith_src"] !== undefined ? this["_arith_src"] : null);
-        var saved_arith_pos = (this["_arith_pos"] !== undefined ? this["_arith_pos"] : null);
-        var saved_arith_len = (this["_arith_len"] !== undefined ? this["_arith_len"] : null);
+        var saved_arith_src = (this["_arith_src"] ?? null);
+        var saved_arith_pos = (this["_arith_pos"] ?? null);
+        var saved_arith_len = (this["_arith_len"] ?? null);
         this._arith_src = content;
         this._arith_pos = 0;
         this._arith_len = content.length;

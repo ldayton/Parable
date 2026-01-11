@@ -504,7 +504,7 @@ class JSTranspiler(ast.NodeVisitor):
                 if len(node.args) >= 2:
                     key = self.visit_expr(node.args[0])
                     default = self.visit_expr(node.args[1])
-                    return f"({obj}[{key}] !== undefined ? {obj}[{key}] : {default})"
+                    return f"({obj}[{key}] ?? {default})"
                 elif len(node.args) == 1:
                     key = self.visit_expr(node.args[0])
                     return f"{obj}[{key}]"
@@ -559,7 +559,7 @@ class JSTranspiler(ast.NodeVisitor):
                 attr = self.visit_expr(node.args[1])
                 if len(node.args) >= 3:
                     default = self.visit_expr(node.args[2])
-                    return f"({obj}[{attr}] !== undefined ? {obj}[{attr}] : {default})"
+                    return f"({obj}[{attr}] ?? {default})"
                 return f"{obj}[{attr}]"
             if name == "bytearray":
                 return "[]"

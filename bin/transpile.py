@@ -220,13 +220,14 @@ class JSTranspiler(ast.NodeVisitor):
             self.emit(f"{target} = {value};")
 
     def visit_AnnAssign(self, node: ast.AnnAssign):
+        # Skip class-level type annotations - constructor handles initialization
+        if self.in_class_body:
+            return
         target = self.visit_expr(node.target)
         if node.value:
             value = self.visit_expr(node.value)
             var_name = node.target.id if isinstance(node.target, ast.Name) else None
-            if self.in_class_body:
-                self.emit(f"{target} = {value};")
-            elif var_name and var_name in self.declared_vars:
+            if var_name and var_name in self.declared_vars:
                 self.emit(f"{target} = {value};")
             else:
                 if var_name:

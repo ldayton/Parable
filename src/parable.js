@@ -990,7 +990,6 @@ class Comment extends Node {
 }
 
 class Redirect extends Node {
-    fd = null;
     constructor(op, target, fd) {
         super();
         this.kind = "redirect";
@@ -1053,9 +1052,6 @@ class Redirect extends Node {
 }
 
 class HereDoc extends Node {
-    strip_tabs = false;
-    quoted = false;
-    fd = null;
     constructor(delimiter, content, strip_tabs, quoted, fd) {
         super();
         if (strip_tabs == null) { strip_tabs = false; }
@@ -1080,7 +1076,6 @@ class HereDoc extends Node {
 }
 
 class Subshell extends Node {
-    redirects = null;
     constructor(body, redirects) {
         super();
         this.kind = "subshell";
@@ -1103,7 +1098,6 @@ class Subshell extends Node {
 }
 
 class BraceGroup extends Node {
-    redirects = null;
     constructor(body, redirects) {
         super();
         this.kind = "brace-group";
@@ -1126,7 +1120,6 @@ class BraceGroup extends Node {
 }
 
 class If extends Node {
-    else_body = null;
     constructor(condition, then_body, else_body, redirects) {
         super();
         this.kind = "if";
@@ -1477,7 +1470,6 @@ function ConsumeBracketClass(s, start, depth) {
 }
 
 class CasePattern extends Node {
-    terminator = ";;";
     constructor(pattern, body, terminator) {
         super();
         if (terminator == null) { terminator = ";;"; }
@@ -1575,8 +1567,6 @@ class Function extends Node {
 }
 
 class ParamExpansion extends Node {
-    op = null;
-    arg = null;
     constructor(param, op, arg) {
         super();
         this.kind = "param";
@@ -1955,7 +1945,6 @@ class Negation extends Node {
 }
 
 class Time extends Node {
-    posix = false;
     constructor(pipeline, posix) {
         super();
         if (posix == null) { posix = false; }
@@ -2128,7 +2117,6 @@ class ArrayNode extends Node {
 }
 
 class Coproc extends Node {
-    name = null;
     constructor(command, name) {
         super();
         this.kind = "coproc";

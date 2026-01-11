@@ -310,6 +310,7 @@ class GoTranspiler(ast.NodeVisitor):
         self.emit('import (')
         self.indent += 1
         self.emit('"fmt"')
+        self.emit('"reflect"')
         self.emit('"strings"')
         self.emit('"strconv"')
         self.emit('"unicode/utf8"')
@@ -321,6 +322,7 @@ class GoTranspiler(ast.NodeVisitor):
         self.emit("type Node interface {")
         self.indent += 1
         self.emit("ToSexp() string")
+        self.emit("GetKind() string")
         self.indent -= 1
         self.emit("}")
         self.emit("")
@@ -399,6 +401,109 @@ class GoTranspiler(ast.NodeVisitor):
         self.indent -= 1
         self.emit("}")
         self.emit("")
+        # Helper for slicing a slice
+        self.emit("func sublist(items []interface{}, start, end int) []interface{} {")
+        self.indent += 1
+        self.emit("if start < 0 { start = 0 }")
+        self.emit("if end > len(items) { end = len(items) }")
+        self.emit("return items[start:end]")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
+        # Character type helpers (use _h suffix to avoid conflicts with source functions)
+        self.emit("func isAlpha_h(s string) bool {")
+        self.indent += 1
+        self.emit("for _, c := range s {")
+        self.indent += 1
+        self.emit("if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) { return false }")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("return len(s) > 0")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
+        self.emit("func isAlnum_h(s string) bool {")
+        self.indent += 1
+        self.emit("for _, c := range s {")
+        self.indent += 1
+        self.emit("if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) { return false }")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("return len(s) > 0")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
+        self.emit("func isDigit_h(s string) bool {")
+        self.indent += 1
+        self.emit("for _, c := range s {")
+        self.indent += 1
+        self.emit("if !(c >= '0' && c <= '9') { return false }")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("return len(s) > 0")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
+        self.emit("func isSpace_h(s string) bool {")
+        self.indent += 1
+        self.emit("for _, c := range s {")
+        self.indent += 1
+        self.emit("if !(c == ' ' || c == '\\t' || c == '\\n' || c == '\\r') { return false }")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("return len(s) > 0")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
+        # getAttr helper
+        self.emit("func getAttr(obj interface{}, attr string, defaultVal interface{}) interface{} {")
+        self.indent += 1
+        self.emit("// Simplified getattr - just return default for now")
+        self.emit("return defaultVal")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
+        # Helper to convert byte to string
+        self.emit("func byteToStr(b byte) string { return string([]byte{b}) }")
+        self.emit("")
+        # Helper for tuple-like access on []interface{} pairs
+        self.emit("func pairFirst(p interface{}) Node {")
+        self.indent += 1
+        self.emit("if arr, ok := p.([]interface{}); ok && len(arr) > 0 {")
+        self.indent += 1
+        self.emit("if n, ok := arr[0].(Node); ok { return n }")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("return nil")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
+        self.emit("func pairSecond(p interface{}) bool {")
+        self.indent += 1
+        self.emit("if arr, ok := p.([]interface{}); ok && len(arr) > 1 {")
+        self.indent += 1
+        self.emit("if b, ok := arr[1].(bool); ok { return b }")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("return false")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
+        # Helper to get Command field from any struct using reflect
+        self.emit("func getCommand(n interface{}) Node {")
+        self.indent += 1
+        self.emit("v := reflect.ValueOf(n)")
+        self.emit("if v.Kind() == reflect.Ptr { v = v.Elem() }")
+        self.emit('f := v.FieldByName("Command")')
+        self.emit("if f.IsValid() {")
+        self.indent += 1
+        self.emit("if cmd, ok := f.Interface().(Node); ok { return cmd }")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("return nil")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
         for stmt in node.body:
             self.emit_comments_before(stmt.lineno)
             self.visit(stmt)
@@ -433,6 +538,15 @@ class GoTranspiler(ast.NodeVisitor):
             self.emit(f"func ({recv} *{class_name}) Error() string {{")
             self.indent += 1
             self.emit(f"return {recv}.{format_method}()")
+            self.indent -= 1
+            self.emit("}")
+            self.emit("")
+        # For node classes, implement GetKind()
+        if is_node:
+            recv = self._receiver_name(node.name)
+            self.emit(f"func ({recv} *{class_name}) GetKind() string {{")
+            self.indent += 1
+            self.emit(f"return {recv}.Kind")
             self.indent -= 1
             self.emit("}")
             self.emit("")
@@ -575,6 +689,9 @@ class GoTranspiler(ast.NodeVisitor):
         self.assigned_vars = param_names.copy()  # Parameters are already assigned
         # Handle default arguments
         self._emit_defaults(node)
+        # Track variables that will be assigned in blocks but used later
+        # These need outer-scope declaration for proper Go scoping
+        self.block_reused_vars = self._find_reused_variables(node.body)
         # Emit body
         for stmt in node.body:
             self.emit_comments_before(stmt.lineno)
@@ -599,6 +716,152 @@ class GoTranspiler(ast.NodeVisitor):
             arg_name = self._safe_name(non_self_args[first_default_idx + i].arg)
             default_val = self.visit_expr(default)
             self.emit(f"if {arg_name} == nil {{ {arg_name} = {default_val} }}")
+
+    def _find_reused_variables(self, body: list[ast.stmt]) -> dict[str, str]:
+        """Find variables assigned in blocks that are used later, needing pre-declaration."""
+        # Track where variables are assigned (inside blocks vs top level)
+        block_assigned = set()  # Variables assigned inside for/if blocks
+        all_assigned = set()  # All assigned variables
+        all_used = set()  # All used variables
+
+        def collect_names(node, in_block=False):
+            """Recursively collect assigned and used variable names."""
+            if isinstance(node, ast.Name):
+                if isinstance(node.ctx, ast.Store):
+                    all_assigned.add(node.id)
+                    if in_block:
+                        block_assigned.add(node.id)
+                elif isinstance(node.ctx, ast.Load):
+                    all_used.add(node.id)
+            elif isinstance(node, ast.For):
+                # For loop target is a block assignment
+                if isinstance(node.target, ast.Name):
+                    all_assigned.add(node.target.id)
+                    block_assigned.add(node.target.id)
+                elif isinstance(node.target, ast.Tuple):
+                    for elt in node.target.elts:
+                        if isinstance(elt, ast.Name):
+                            all_assigned.add(elt.id)
+                            block_assigned.add(elt.id)
+                # Iter and body
+                collect_names(node.iter, in_block)
+                for stmt in node.body:
+                    collect_names(stmt, in_block=True)
+                for stmt in node.orelse:
+                    collect_names(stmt, in_block=True)
+            elif isinstance(node, ast.If):
+                collect_names(node.test, in_block)
+                for stmt in node.body:
+                    collect_names(stmt, in_block=True)
+                for stmt in node.orelse:
+                    collect_names(stmt, in_block=True)
+            elif isinstance(node, ast.While):
+                collect_names(node.test, in_block)
+                for stmt in node.body:
+                    collect_names(stmt, in_block=True)
+                for stmt in node.orelse:
+                    collect_names(stmt, in_block=True)
+            elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+                for child in ast.iter_child_nodes(node):
+                    collect_names(child, in_block)
+            elif isinstance(node, (ast.Expr, ast.Return)):
+                for child in ast.iter_child_nodes(node):
+                    collect_names(child, in_block)
+            elif isinstance(node, ast.Call):
+                for child in ast.iter_child_nodes(node):
+                    collect_names(child, in_block)
+            elif isinstance(node, (ast.Attribute, ast.Subscript, ast.BinOp, ast.Compare,
+                                   ast.BoolOp, ast.UnaryOp, ast.IfExp, ast.List, ast.Tuple)):
+                for child in ast.iter_child_nodes(node):
+                    collect_names(child, in_block)
+
+        for stmt in body:
+            collect_names(stmt, in_block=False)
+
+        # Variables that need pre-declaration: assigned in block AND used somewhere
+        needs_predecl = block_assigned & all_used
+
+        # Infer types for these variables
+        result = {}
+        type_hints = {
+            "cmd": "Node",
+            "pair": "interface{}",
+            "needs": "bool",
+            # Note: inner, parts, items can be string or slice in different contexts
+            # so we don't pre-declare them with a fixed type
+            "parsed": "Node",
+            "node": "Node",
+            "words": "[]Node",
+            "arg": "Node",
+            "args": "[]Node",
+            "part": "interface{}",
+            "char": "byte",
+            "text": "string",
+            "name": "string",
+            "value": "interface{}",
+            "word": "Node",
+            "redir": "Node",
+            "op": "string",
+            "rest": "string",
+            "in_double": "bool",
+            "in_single": "bool",
+            "in_single_quote": "bool",
+            "in_double_quote": "bool",
+            "bs_count": "int",
+            "simple": "int",
+            "depth": "int",
+            "start": "int",
+            "end": "int",
+            "count": "int",
+            "hex_str": "string",
+            "byte_val": "int",
+            "codepoint": "int",
+            "ctrl_char": "byte",
+            "ctrl_val": "int",
+            "oct_str": "string",
+            "digit_count": "int",
+            "escape_char": "byte",
+            "brace_depth": "int",
+            "effective_in_dquote": "bool",
+            "ansi_str": "string",
+            "expanded": "string",
+            "esc_parts": "[]interface{}",
+            "j": "int",
+            "prev": "string",
+            "direction": "byte",
+            "formatted": "string",
+            "prefix": "string",
+            "last": "interface{}",
+        }
+        # Skip pre-declaring variables that have context-dependent types
+        # or are only used within their block
+        skip_vars = {
+            "i", "c", "n",  # Loop variables
+            "inner", "parts", "items", "result",  # Can be string or slice
+            "arith_content",  # Context-dependent (prev is handled by multi-branch logic)
+        }
+        for var in needs_predecl:
+            if var in skip_vars:
+                continue  # Let these be declared naturally in loops
+            if var in type_hints:
+                result[var] = type_hints[var]
+            else:
+                result[var] = "interface{}"
+
+        return result
+
+    def _collect_assignments_in_block(self, body: list[ast.stmt]) -> set[str]:
+        """Collect all variable names assigned in a block."""
+        assigned = set()
+        for stmt in body:
+            for node in ast.walk(stmt):
+                if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                    assigned.add(node.id)
+                elif isinstance(node, ast.Tuple) and isinstance(node.ctx, ast.Store):
+                    for elt in node.elts:
+                        if isinstance(elt, ast.Name):
+                            assigned.add(elt.id)
+        return assigned
 
     def _is_super_call(self, stmt: ast.stmt) -> bool:
         """Check if statement is a super().__init__() call."""
@@ -739,22 +1002,29 @@ class GoTranspiler(ast.NodeVisitor):
         return ops.get(type(op), "?")
 
     def visit_If(self, node: ast.If):
-        # Pre-declare variables assigned in multiple branches of if-elif-else
         all_branches = self._collect_all_branches(node)
+        # First: Pre-declare variables assigned in multiple branches (if/elif/else)
         if len(all_branches) > 1:
-            # Collect vars from all branches
             all_vars = {}
             for branch in all_branches:
                 vars_in_branch = self._collect_first_assignments_with_types(branch)
                 for var, var_type in vars_in_branch.items():
                     if var not in all_vars:
                         all_vars[var] = var_type
-            # Pre-declare vars that appear in multiple branches
             branch_var_sets = [set(self._collect_first_assignments_with_types(b).keys()) for b in all_branches]
             for var, var_type in all_vars.items():
-                # Count how many branches have this var
                 count = sum(1 for s in branch_var_sets if var in s)
                 if count >= 2 and var not in self.assigned_vars:
+                    self.emit(f"var {self._safe_name(var)} {var_type}")
+                    self.assigned_vars.add(var)
+        # Second: Pre-declare variables assigned in this if that will be used later
+        if hasattr(self, 'block_reused_vars'):
+            vars_in_if = set()
+            for branch in all_branches:
+                vars_in_if.update(self._collect_assignments_in_block(branch))
+            for var in vars_in_if:
+                if var in self.block_reused_vars and var not in self.assigned_vars:
+                    var_type = self.block_reused_vars[var]
                     self.emit(f"var {self._safe_name(var)} {var_type}")
                     self.assigned_vars.add(var)
         self._emit_if(node, is_elif=False)
@@ -804,12 +1074,39 @@ class GoTranspiler(ast.NodeVisitor):
                 return "int"
         if isinstance(node, ast.Call):
             if isinstance(node.func, ast.Name):
-                if node.func.id in ("len", "parseInt", "int", "ord"):
+                func_name = node.func.id
+                if func_name in ("len", "parseInt", "int", "ord"):
                     return "int"
+                if func_name in ("str", "joinStrings", "substring"):
+                    return "string"
+                # Functions that return int (based on name patterns)
+                if "find" in func_name.lower() or "index" in func_name.lower() or "end" in func_name.lower():
+                    return "int"
+                # Functions that return string (based on name patterns)
+                if "format" in func_name.lower() or "to_sexp" in func_name.lower():
+                    return "string"
+            # Method calls that return strings
+            if isinstance(node.func, ast.Attribute):
+                if node.func.attr == "join":
+                    return "string"
+        # Subscript on a parts list is usually a Node
+        if isinstance(node, ast.Subscript):
+            if isinstance(node.value, ast.Name):
+                if "parts" in node.value.id or "nodes" in node.value.id:
+                    return "Node"
         return "interface{}"
 
     def _emit_if(self, node: ast.If, is_elif: bool):
         test = self.visit_expr(node.test)
+        # Handle truthiness for non-boolean types in if conditions
+        if isinstance(node.test, ast.Name):
+            name = node.test.id
+            if name in ("parsed", "node", "cmd", "tree"):
+                test = f"({test} != nil)"
+            elif name.endswith("_parts") or name in ("result", "parts", "items"):
+                test = f"(len({test}) > 0)"
+            elif "str" in name.lower() or name in ("inner", "value", "text"):
+                test = f'({test} != "")'
         if is_elif:
             self.emit_raw("\t" * self.indent + f"}} else if {test} {{")
         else:
@@ -844,6 +1141,14 @@ class GoTranspiler(ast.NodeVisitor):
         self.emit("}")
 
     def visit_For(self, node: ast.For):
+        # Pre-declare variables assigned in this loop that will be used later
+        if hasattr(self, 'block_reused_vars'):
+            vars_in_loop = self._collect_assignments_in_block(node.body)
+            for var in vars_in_loop:
+                if var in self.block_reused_vars and var not in self.assigned_vars:
+                    var_type = self.block_reused_vars[var]
+                    self.emit(f"var {self._safe_name(var)} {var_type}")
+                    self.assigned_vars.add(var)
         target = self.visit_expr(node.target)
         iter_expr = node.iter
         # Handle range() specially
@@ -974,6 +1279,13 @@ class GoTranspiler(ast.NodeVisitor):
     def visit_expr_Attribute(self, node: ast.Attribute) -> str:
         value = self.visit_expr(node.value)
         attr = self._public_name(node.attr)
+        # For .kind on a loop variable over Node slices, use GetKind() method
+        if node.attr == "kind":
+            return f"{value}.GetKind()"
+        # For .command on Node types, use getCommand() helper
+        if node.attr == "command" and isinstance(node.value, ast.Name):
+            if node.value.id in ("node", "n", "cmdsub", "procsub"):
+                return f"getCommand({value})"
         return f"{value}.{attr}"
 
     def visit_expr_Subscript(self, node: ast.Subscript) -> str:
@@ -984,7 +1296,20 @@ class GoTranspiler(ast.NodeVisitor):
             if upper:
                 return f"{value}[{lower}:{upper}]"
             return f"{value}[{lower}:]"
-        return f"{value}[{self.visit_expr(node.slice)}]"
+        idx = self.visit_expr(node.slice)
+        result = f"{value}[{idx}]"
+        # Add type assertion for interface slice access that should be Node
+        if isinstance(node.value, ast.Name):
+            var_name = node.value.id
+            if "parts" in var_name or "nodes" in var_name:
+                return f"{result}.(Node)"
+            # Handle pair-like access (tuple unpacking simulation)
+            if var_name in ("pair", "last_pair") and isinstance(node.slice, ast.Constant):
+                if node.slice.value == 0:
+                    return f"pairFirst({value})"
+                elif node.slice.value == 1:
+                    return f"pairSecond({value})"
+        return result
 
     def visit_expr_Call(self, node: ast.Call) -> str:
         args = [self.visit_expr(a) for a in node.args]
@@ -995,13 +1320,36 @@ class GoTranspiler(ast.NodeVisitor):
             method = node.func.attr
             # Map Python methods to Go
             if method == "append":
-                # Cast int to byte when appending to result/byte variables
-                if len(node.args) == 1 and isinstance(node.args[0], ast.Name):
-                    arg_name = node.args[0].id
-                    if "byte" in arg_name or arg_name in ("simple",):
-                        return f"{obj} = append({obj}, byte({args_str}))"
+                # Handle appending to byte arrays
+                if len(node.args) == 1:
+                    arg = node.args[0]
+                    # If appending ord(x) to result, handle byte conversion
+                    if isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name) and arg.func.id == "ord":
+                        if len(arg.args) == 1:
+                            ord_arg = arg.args[0]
+                            inner_arg = self.visit_expr(ord_arg)
+                            # If ord() of a subscript or simple var (byte), just use it
+                            if isinstance(ord_arg, (ast.Subscript, ast.Name)):
+                                return f"{obj} = append({obj}, {inner_arg})"
+                    # If appending x.encode() where x is a subscript (already byte)
+                    if isinstance(arg, ast.Call) and isinstance(arg.func, ast.Attribute):
+                        if arg.func.attr == "encode" and isinstance(arg.func.value, ast.Subscript):
+                            inner_arg = self.visit_expr(arg.func.value)
+                            return f"{obj} = append({obj}, {inner_arg})"
+                    # Cast int to byte when appending int variables to byte arrays
+                    if isinstance(arg, ast.Name):
+                        arg_name = arg.id
+                        if "byte" in arg_name or arg_name in ("simple",):
+                            return f"{obj} = append({obj}, byte({args_str}))"
                 return f"{obj} = append({obj}, {args_str})"
             if method == "extend":
+                # If extending with x.encode() where x is a subscript (single byte)
+                if len(node.args) == 1:
+                    arg = node.args[0]
+                    if isinstance(arg, ast.Call) and isinstance(arg.func, ast.Attribute):
+                        if arg.func.attr == "encode" and isinstance(arg.func.value, ast.Subscript):
+                            inner_arg = self.visit_expr(arg.func.value)
+                            return f"{obj} = append({obj}, {inner_arg})"
                 return f"{obj} = append({obj}, {args_str}...)"
             if method == "startswith":
                 if len(args) == 2:
@@ -1034,23 +1382,43 @@ class GoTranspiler(ast.NodeVisitor):
             if method == "upper":
                 return f"strings.ToUpper({obj})"
             if method == "join":
-                # Use joinStrings for interface slices
-                if "result" in args_str.lower():
-                    return f"joinStrings({args_str}, {obj})"
+                # Use joinStrings for interface slices (variables that could be []interface{})
+                if len(node.args) == 1:
+                    arg = node.args[0]
+                    if isinstance(arg, ast.Name):
+                        var_name = arg.id
+                        if var_name in ("result", "normalized", "arith_content", "parts", "items"):
+                            return f"joinStrings({args_str}, {obj})"
+                    # Also use joinStrings for function calls like _sublist/sublist
+                    if isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name):
+                        if arg.func.id in ("sublist", "_sublist"):
+                            return f"joinStrings({args_str}, {obj})"
                 return f"strings.Join({args_str}, {obj})"
             if method == "split":
                 if args:
                     return f"strings.Split({obj}, {args_str})"
                 return f"strings.Fields({obj})"
             if method == "isalpha":
-                return f"isAlpha({obj})"
+                # If obj is a subscript (byte), convert to string
+                if isinstance(node.func.value, ast.Subscript):
+                    return f"isAlpha_h(string({obj}))"
+                return f"isAlpha_h({obj})"
             if method == "isdigit":
-                return f"isDigit({obj})"
+                if isinstance(node.func.value, ast.Subscript):
+                    return f"isDigit_h(string({obj}))"
+                return f"isDigit_h({obj})"
             if method == "isalnum":
-                return f"isAlnum({obj})"
+                if isinstance(node.func.value, ast.Subscript):
+                    return f"isAlnum_h(string({obj}))"
+                return f"isAlnum_h({obj})"
             if method == "isspace":
-                return f"isSpace({obj})"
+                if isinstance(node.func.value, ast.Subscript):
+                    return f"isSpace_h(string({obj}))"
+                return f"isSpace_h({obj})"
             if method == "encode":
+                # If encoding a subscript (s[i]), it's already a byte
+                if isinstance(node.func.value, ast.Subscript):
+                    return obj
                 return f"[]byte({obj})"
             if method == "decode":
                 return f"string({obj})"
@@ -1058,6 +1426,12 @@ class GoTranspiler(ast.NodeVisitor):
                 if len(args) >= 2:
                     return f"mapGet({obj}, {args_str})"
                 return f"{obj}[{args[0]}]"
+            # Handle methods with default arguments
+            if method == "parse_list":
+                # def parse_list(self, at_start: bool = True) -> Node | None
+                if len(args) == 0:
+                    args.append("true")
+                    args_str = ", ".join(args)
             # Method call
             go_method = self._method_name(method)
             return f"{obj}.{go_method}({args_str})"
@@ -1073,9 +1447,11 @@ class GoTranspiler(ast.NodeVisitor):
                     return f"parseInt({args_str})"
                 return f"toInt({args_str})"
             if name == "ord":
-                # If arg is a subscript (s[i]), just cast to int directly
-                if len(node.args) == 1 and isinstance(node.args[0], ast.Subscript):
-                    return f"int({args_str})"
+                # If arg is a subscript (s[i]) or a simple name, just cast to int
+                if len(node.args) == 1:
+                    arg = node.args[0]
+                    if isinstance(arg, ast.Subscript) or isinstance(arg, ast.Name):
+                        return f"int({args_str})"
                 return f"int([]rune({args_str})[0])"
             if name == "chr":
                 return f"string(rune({args_str}))"
@@ -1111,6 +1487,15 @@ class GoTranspiler(ast.NodeVisitor):
             if name in self.class_names:
                 go_name = self._public_name(name)
                 return f"New{go_name}({args_str})"
+            # Handle functions with default arguments
+            if name == "_format_cmdsub_node" or name == "format_cmdsub_node":
+                # def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False)
+                while len(args) < 3:
+                    if len(args) == 1:
+                        args.append("0")
+                    elif len(args) == 2:
+                        args.append("false")
+                args_str = ", ".join(args)
             # Regular function call
             go_name = self._func_name(name)
             return f"{go_name}({args_str})"
@@ -1122,6 +1507,11 @@ class GoTranspiler(ast.NodeVisitor):
         op = self._binop_str(node.op)
         # String concatenation
         if isinstance(node.op, ast.Add):
+            # If left is a byte (subscript on string) and right is a string, convert left
+            if isinstance(node.left, ast.Name) and self._is_string_expr(node.right):
+                # Variable that might be a byte (from subscript assignment)
+                if node.left.id in ("direction", "ch", "c", "byte_char"):
+                    return f"(byteToStr({left}) + {right})"
             # Check if likely string context
             if self._is_string_expr(node.left) or self._is_string_expr(node.right):
                 return f"({left} + {right})"
@@ -1193,16 +1583,33 @@ class GoTranspiler(ast.NodeVisitor):
 
     def visit_expr_BoolOp(self, node: ast.BoolOp) -> str:
         op = " && " if isinstance(node.op, ast.And) else " || "
-        values = [self.visit_expr(v) for v in node.values]
+        values = []
+        for v in node.values:
+            expr = self.visit_expr(v)
+            # Handle truthiness for non-boolean types
+            if isinstance(v, ast.Name):
+                name = v.id
+                # String-like variable names need != "" check
+                if "str" in name.lower() or name in ("inner", "value", "text", "s", "prefix", "suffix", "expanded"):
+                    expr = f'({expr} != "")'
+                # Slice-like variable names need len() > 0 check
+                elif name in ("normalized", "result", "parts", "items", "elements"):
+                    expr = f"(len({expr}) > 0)"
+                # Node-like variable names need != nil check
+                elif name in ("parsed", "node", "cmd", "tree"):
+                    expr = f"({expr} != nil)"
+            values.append(expr)
         return f"({op.join(values)})"
 
     def visit_expr_UnaryOp(self, node: ast.UnaryOp) -> str:
         operand = self.visit_expr(node.operand)
         if isinstance(node.op, ast.Not):
-            # Handle !string as string == "" in Go - only for string-like names
             if isinstance(node.operand, ast.Name):
                 name = node.operand.id
-                # Only convert to == "" for string-like variable names
+                # Slice-like variable names need len() == 0 check
+                if name.endswith("_parts") or name in ("result", "parts", "items", "elements", "nodes", "cmdsub_parts", "procsub_parts"):
+                    return f"(len({operand}) == 0)"
+                # String-like variable names need == "" check
                 if "str" in name.lower() or name in ("value", "text", "s", "inner", "prefix", "suffix"):
                     return f'({operand} == "")'
             return f"!({operand})"

@@ -426,6 +426,11 @@ class JSTranspiler(ast.NodeVisitor):
             if upper:
                 return f"{value}.slice({lower}, {upper})"
             return f"{value}.slice({lower})"
+        # Use dot notation for string keys that are valid identifiers
+        if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
+            key = node.slice.value
+            if key.isidentifier() and key not in ("class", "default", "delete", "export", "import", "new", "return", "super", "switch", "this", "throw", "typeof", "void", "with", "yield"):
+                return f"{value}.{key}"
         return f"{value}[{self.visit_expr(node.slice)}]"
 
     def visit_expr_Call(self, node: ast.Call) -> str:
@@ -556,7 +561,16 @@ class JSTranspiler(ast.NodeVisitor):
                 return f"{node.args[0].id} instanceof {self.visit_expr(node.args[1])}"
             if name == "getattr":
                 obj = self.visit_expr(node.args[0])
-                attr = self.visit_expr(node.args[1])
+                attr_node = node.args[1]
+                # Use dot notation for string attrs that are valid identifiers
+                if isinstance(attr_node, ast.Constant) and isinstance(attr_node.value, str):
+                    key = attr_node.value
+                    if key.isidentifier():
+                        if len(node.args) >= 3:
+                            default = self.visit_expr(node.args[2])
+                            return f"({obj}.{key} ?? {default})"
+                        return f"{obj}.{key}"
+                attr = self.visit_expr(attr_node)
                 if len(node.args) >= 3:
                     default = self.visit_expr(node.args[2])
                     return f"({obj}[{attr}] ?? {default})"

@@ -214,12 +214,16 @@ class GoTranspiler(ast.NodeVisitor):
                 if annotation.value.id == "tuple":
                     return ""  # Go doesn't have tuples, handle case by case
         if isinstance(annotation, ast.BinOp):
-            # Union type like Node | None or Redirect | HereDoc
+            # Union type like Node | None or Redirect | HereDoc or int | None
             if isinstance(annotation.op, ast.BitOr):
                 left_type = self._go_type(annotation.left)
+                right_type = self._go_type(annotation.right)
                 # If any part of the union is a Node subclass, return Node
                 if left_type in self.node_classes or left_type == "Node":
                     return "Node"
+                # T | None becomes *T (pointer for optional)
+                if right_type == "" and left_type in ("int", "bool", "string"):
+                    return f"*{left_type}"
                 return left_type
         return ""
 
@@ -410,6 +414,33 @@ class GoTranspiler(ast.NodeVisitor):
         self.indent -= 1
         self.emit("}")
         self.emit("")
+        # Helper for converting []Node to []interface{}
+        self.emit("func toSlice(nodes []Node) []interface{} {")
+        self.indent += 1
+        self.emit("result := make([]interface{}, len(nodes))")
+        self.emit("for i, n := range nodes { result[i] = n }")
+        self.emit("return result")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
+        # Helper for slicing []Node
+        self.emit("func sublistNodes(nodes []Node, start, end int) []Node {")
+        self.indent += 1
+        self.emit("if start < 0 { start = 0 }")
+        self.emit("if end > len(nodes) { end = len(nodes) }")
+        self.emit("return nodes[start:end]")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
+        # Helper for converting []interface{} to []Node
+        self.emit("func toNodes(items []interface{}) []Node {")
+        self.indent += 1
+        self.emit("result := make([]Node, len(items))")
+        self.emit("for i, item := range items { result[i] = item.(Node) }")
+        self.emit("return result")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
         # Character type helpers (use _h suffix to avoid conflicts with source functions)
         self.emit("func isAlpha_h(s string) bool {")
         self.indent += 1
@@ -501,6 +532,19 @@ class GoTranspiler(ast.NodeVisitor):
         self.indent -= 1
         self.emit("}")
         self.emit("return nil")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
+        # Helper for map.get(key, default)
+        self.emit("func mapGet(m map[string]interface{}, key string, defaultVal interface{}) string {")
+        self.indent += 1
+        self.emit("if val, ok := m[key]; ok {")
+        self.indent += 1
+        self.emit("if s, ok := val.(string); ok { return s }")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("if s, ok := defaultVal.(string); ok { return s }")
+        self.emit('return ""')
         self.indent -= 1
         self.emit("}")
         self.emit("")
@@ -801,7 +845,6 @@ class GoTranspiler(ast.NodeVisitor):
             "value": "interface{}",
             "word": "Node",
             "redir": "Node",
-            "op": "string",
             "rest": "string",
             "in_double": "bool",
             "in_single": "bool",
@@ -832,11 +875,27 @@ class GoTranspiler(ast.NodeVisitor):
             "formatted": "string",
             "prefix": "string",
             "last": "interface{}",
+            "ch": "byte",
+            "left": "[]interface{}",
+            "right": "[]interface{}",
+            "left_sexp": "string",
+            "right_sexp": "string",
+            "inner_parts": "[]interface{}",
+            "inner_list": "Node",
+            "op_name": "string",
+            "fd_target": "string",
+            "redirect_parts": "[]string",
+            "word_parts": "[]string",
+            "word_strs": "string",
+            "init_val": "string",
+            "cond_val": "string",
+            "update_val": "string",
+            "incr_val": "string",
         }
         # Skip pre-declaring variables that have context-dependent types
         # or are only used within their block
         skip_vars = {
-            "i", "c", "n",  # Loop variables
+            "i", "c", "n", "j", "w", "r",  # Loop variables
             "inner", "parts", "items", "result",  # Can be string or slice
             "arith_content",  # Context-dependent (prev is handled by multi-branch logic)
         }
@@ -956,6 +1015,13 @@ class GoTranspiler(ast.NodeVisitor):
             self.emit(f"{self.visit_expr(target)} = {self.visit_expr(node.value)}")
         elif isinstance(target, ast.Name):
             var = self._safe_name(target.id)
+            # Skip empty list assignment to pre-declared slice variables
+            if (isinstance(node.value, ast.List) and len(node.value.elts) == 0
+                and target.id in self.assigned_vars
+                and hasattr(self, 'block_reused_vars')
+                and target.id in self.block_reused_vars):
+                # Variable already pre-declared with correct type, skip assignment
+                return
             value = self.visit_expr(node.value)
             # Module-level assignments need var keyword
             if not self.in_method and not self.in_class_body:
@@ -1107,6 +1173,14 @@ class GoTranspiler(ast.NodeVisitor):
                 test = f"(len({test}) > 0)"
             elif "str" in name.lower() or name in ("inner", "value", "text"):
                 test = f'({test} != "")'
+        elif isinstance(node.test, ast.Attribute):
+            # Handle self.redirects, s.Redirects, etc.
+            attr = node.test.attr
+            if attr in ("redirects", "words", "parts", "commands", "items", "args",
+                        "init", "condition", "update", "in_words", "cases", "patterns"):
+                test = f"(len({test}) > 0)"
+            elif attr in ("command", "body", "target", "then_part", "else_part", "else_body", "then_body"):
+                test = f"({test} != nil)"
         if is_elif:
             self.emit_raw("\t" * self.indent + f"}} else if {test} {{")
         else:
@@ -1131,6 +1205,14 @@ class GoTranspiler(ast.NodeVisitor):
             self.emit("}")
 
     def visit_While(self, node: ast.While):
+        # Pre-declare variables assigned in this loop that will be used later
+        if hasattr(self, 'block_reused_vars'):
+            vars_in_loop = self._collect_assignments_in_block(node.body)
+            for var in vars_in_loop:
+                if var in self.block_reused_vars and var not in self.assigned_vars:
+                    var_type = self.block_reused_vars[var]
+                    self.emit(f"var {self._safe_name(var)} {var_type}")
+                    self.assigned_vars.add(var)
         test = self.visit_expr(node.test)
         self.emit(f"for {test} {{")
         self.indent += 1
@@ -1286,6 +1368,16 @@ class GoTranspiler(ast.NodeVisitor):
         if node.attr == "command" and isinstance(node.value, ast.Name):
             if node.value.id in ("node", "n", "cmdsub", "procsub"):
                 return f"getCommand({value})"
+        # For .words and .redirects on Node, need type assertion to *Command
+        if node.attr in ("words", "redirects") and isinstance(node.value, ast.Name):
+            if node.value.id in ("cmd", "node", "command"):
+                return f"{value}.(*Command).{attr}"
+        # For .op on Node (from subscript/type assertion), need type assertion to *Operator
+        # But not if the object is already an Operator (like o.Op or self in Operator methods)
+        if node.attr == "op":
+            if isinstance(node.value, ast.Name) and node.value.id in ("o", "self", "r"):
+                return f"{value}.{attr}"  # Already *Operator
+            return f"{value}.(*Operator).{attr}"
         return f"{value}.{attr}"
 
     def visit_expr_Subscript(self, node: ast.Subscript) -> str:
@@ -1301,7 +1393,7 @@ class GoTranspiler(ast.NodeVisitor):
         # Add type assertion for interface slice access that should be Node
         if isinstance(node.value, ast.Name):
             var_name = node.value.id
-            if "parts" in var_name or "nodes" in var_name:
+            if "parts" in var_name or "nodes" in var_name or var_name in ("left", "right"):
                 return f"{result}.(Node)"
             # Handle pair-like access (tuple unpacking simulation)
             if var_name in ("pair", "last_pair") and isinstance(node.slice, ast.Constant):
@@ -1486,6 +1578,14 @@ class GoTranspiler(ast.NodeVisitor):
             # Check if it's a class constructor
             if name in self.class_names:
                 go_name = self._public_name(name)
+                # If constructing List with a []interface{} variable, wrap with toNodes
+                if name == "List" and len(node.args) == 1:
+                    arg = node.args[0]
+                    if isinstance(arg, ast.Name) and arg.id in ("left", "right", "inner_parts", "parts"):
+                        return f"New{go_name}(toNodes({args_str}))"
+                # Word constructor has default parts=nil
+                if name == "Word" and len(node.args) == 1:
+                    return f"New{go_name}({args_str}, nil)"
                 return f"New{go_name}({args_str})"
             # Handle functions with default arguments
             if name == "_format_cmdsub_node" or name == "format_cmdsub_node":
@@ -1527,6 +1627,12 @@ class GoTranspiler(ast.NodeVisitor):
 
     def visit_expr_Compare(self, node: ast.Compare) -> str:
         result = self.visit_expr(node.left)
+        # Check if left side is .op attribute or 'op' variable (which is a string, not byte)
+        left_is_string = False
+        if isinstance(node.left, ast.Attribute) and node.left.attr == "op":
+            left_is_string = True
+        elif isinstance(node.left, ast.Name) and node.left.id == "op":
+            left_is_string = True
         for op, comparator in zip(node.ops, node.comparators, strict=True):
             op_str = self._cmpop_str(op)
             if isinstance(op, ast.In):
@@ -1534,10 +1640,21 @@ class GoTranspiler(ast.NodeVisitor):
                 return f"contains({self.visit_expr(comparator)}, {result})"
             if isinstance(op, ast.NotIn):
                 return f"!contains({self.visit_expr(comparator)}, {result})"
-            # For single-char string comparisons, use rune literal
-            cmp_expr = self._comparison_operand(comparator)
+            # For .op comparisons, use string literals; otherwise use rune for single chars
+            if left_is_string:
+                cmp_expr = self._string_operand(comparator)
+            else:
+                cmp_expr = self._comparison_operand(comparator)
             result += f" {op_str} {cmp_expr}"
         return f"({result})"
+
+    def _string_operand(self, node: ast.expr) -> str:
+        """Convert operand for string comparison, always using string literals."""
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            # Escape special characters for Go string
+            s = node.value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
+            return f'"{s}"'
+        return self.visit_expr(node)
 
     def _comparison_operand(self, node: ast.expr) -> str:
         """Convert operand for comparison, using rune literals for single chars."""

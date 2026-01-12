@@ -2733,6 +2733,17 @@ class Parser:
             else:
                 break
 
+    def _collect_redirects(self) -> list | None:
+        """Collect trailing redirects after a compound command."""
+        redirects = []
+        while True:
+            self.skip_whitespace()
+            redirect = self.parse_redirect()
+            if redirect is None:
+                break
+            redirects.append(redirect)
+        return redirects if redirects else None
+
     def peek_word(self) -> str | None:
         """Peek at the next word without consuming it."""
         saved_pos = self.pos
@@ -5392,20 +5403,7 @@ class Parser:
         if self.at_end() or self.peek() != ")":
             raise ParseError("Expected ) to close subshell", pos=self.pos)
         self.advance()  # consume )
-
-        # Collect trailing redirects
-        redirects = []
-        while True:
-            self.skip_whitespace()
-            redirect = self.parse_redirect()
-            if redirect is None:
-                break
-            redirects.append(redirect)
-
-        if redirects:
-            return Subshell(body, redirects)
-        else:
-            return Subshell(body, None)
+        return Subshell(body, self._collect_redirects())
 
     def parse_arithmetic_command(self) -> ArithmeticCommand | None:
         """Parse an arithmetic command (( expression )) with parsed internals.
@@ -5464,20 +5462,7 @@ class Parser:
 
         # Parse the arithmetic expression
         expr = self._parse_arith_expr(content)
-
-        # Collect trailing redirects
-        redirects = []
-        while True:
-            self.skip_whitespace()
-            redirect = self.parse_redirect()
-            if redirect is None:
-                break
-            redirects.append(redirect)
-
-        redir_arg = None
-        if redirects:
-            redir_arg = redirects
-        return ArithmeticCommand(expr, redir_arg, raw_content=content)
+        return ArithmeticCommand(expr, self._collect_redirects(), raw_content=content)
 
     # Unary operators for [[ ]] conditionals
     COND_UNARY_OPS = {
@@ -5561,20 +5546,7 @@ class Parser:
 
         self.advance()  # consume first ]
         self.advance()  # consume second ]
-
-        # Collect trailing redirects
-        redirects = []
-        while True:
-            self.skip_whitespace()
-            redirect = self.parse_redirect()
-            if redirect is None:
-                break
-            redirects.append(redirect)
-
-        redir_arg = None
-        if redirects:
-            redir_arg = redirects
-        return ConditionalExpr(body, redir_arg)
+        return ConditionalExpr(body, self._collect_redirects())
 
     def _cond_skip_whitespace(self) -> None:
         """Skip whitespace inside [[ ]], including backslash-newline continuation."""
@@ -6107,20 +6079,7 @@ class Parser:
         if self.at_end() or self.peek() != "}":
             raise ParseError("Expected } to close brace group", pos=self.pos)
         self.advance()  # consume }
-
-        # Collect trailing redirects
-        redirects = []
-        while True:
-            self.skip_whitespace()
-            redirect = self.parse_redirect()
-            if redirect is None:
-                break
-            redirects.append(redirect)
-
-        redir_arg = None
-        if redirects:
-            redir_arg = redirects
-        return BraceGroup(body, redir_arg)
+        return BraceGroup(body, self._collect_redirects())
 
     def parse_if(self) -> If | None:
         """Parse an if statement: if list; then list [elif list; then list]* [else list] fi."""
@@ -6196,20 +6155,7 @@ class Parser:
         self.skip_whitespace_and_newlines()
         if not self.consume_word("fi"):
             raise ParseError("Expected 'fi' to close if statement", pos=self.pos)
-
-        # Parse optional trailing redirections
-        redirects = []
-        while True:
-            self.skip_whitespace()
-            redirect = self.parse_redirect()
-            if redirect is None:
-                break
-            redirects.append(redirect)
-
-        redir_arg = None
-        if redirects:
-            redir_arg = redirects
-        return If(condition, then_body, else_body, redir_arg)
+        return If(condition, then_body, else_body, self._collect_redirects())
 
     def _parse_elif_chain(self) -> If:
         """Parse elif chain (after seeing 'elif' keyword)."""
@@ -6269,20 +6215,7 @@ class Parser:
         self.skip_whitespace_and_newlines()
         if not self.consume_word("done"):
             raise ParseError("Expected 'done' to close while loop", pos=self.pos)
-
-        # Parse optional trailing redirections
-        redirects = []
-        while True:
-            self.skip_whitespace()
-            redirect = self.parse_redirect()
-            if redirect is None:
-                break
-            redirects.append(redirect)
-
-        redir_arg = None
-        if redirects:
-            redir_arg = redirects
-        return While(condition, body, redir_arg)
+        return While(condition, body, self._collect_redirects())
 
     def parse_until(self) -> Until | None:
         """Parse an until loop: until list; do list; done."""
@@ -6312,20 +6245,7 @@ class Parser:
         self.skip_whitespace_and_newlines()
         if not self.consume_word("done"):
             raise ParseError("Expected 'done' to close until loop", pos=self.pos)
-
-        # Parse optional trailing redirections
-        redirects = []
-        while True:
-            self.skip_whitespace()
-            redirect = self.parse_redirect()
-            if redirect is None:
-                break
-            redirects.append(redirect)
-
-        redir_arg = None
-        if redirects:
-            redir_arg = redirects
-        return Until(condition, body, redir_arg)
+        return Until(condition, body, self._collect_redirects())
 
     def parse_for(self) -> For | ForArith | None:
         """Parse a for loop: for name [in words]; do list; done or C-style for ((;;))."""
@@ -6395,20 +6315,7 @@ class Parser:
         self.skip_whitespace_and_newlines()
         if not self.consume_word("done"):
             raise ParseError("Expected 'done' to close for loop", pos=self.pos)
-
-        # Parse optional trailing redirections
-        redirects = []
-        while True:
-            self.skip_whitespace()
-            redirect = self.parse_redirect()
-            if redirect is None:
-                break
-            redirects.append(redirect)
-
-        redir_arg = None
-        if redirects:
-            redir_arg = redirects
-        return For(var_name, words, body, redir_arg)
+        return For(var_name, words, body, self._collect_redirects())
 
     def _parse_for_arith(self) -> ForArith:
         """Parse C-style for loop: for ((init; cond; incr)); do list; done."""
@@ -6480,20 +6387,7 @@ class Parser:
                 raise ParseError("Expected 'done' to close for loop", pos=self.pos)
         else:
             raise ParseError("Expected 'do' or '{' in for loop", pos=self.pos)
-
-        # Parse optional trailing redirections
-        redirects = []
-        while True:
-            self.skip_whitespace()
-            redirect = self.parse_redirect()
-            if redirect is None:
-                break
-            redirects.append(redirect)
-
-        redir_arg = None
-        if redirects:
-            redir_arg = redirects
-        return ForArith(init, cond, incr, body, redir_arg)
+        return ForArith(init, cond, incr, body, self._collect_redirects())
 
     def parse_select(self) -> Select | None:
         """Parse a select statement: select name [in words]; do list; done."""
@@ -6567,20 +6461,7 @@ class Parser:
                 raise ParseError("Expected 'done' to close select", pos=self.pos)
         else:
             raise ParseError("Expected 'do' or '{' in select", pos=self.pos)
-
-        # Parse optional trailing redirections
-        redirects = []
-        while True:
-            self.skip_whitespace()
-            redirect = self.parse_redirect()
-            if redirect is None:
-                break
-            redirects.append(redirect)
-
-        redir_arg = None
-        if redirects:
-            redir_arg = redirects
-        return Select(var_name, words, body, redir_arg)
+        return Select(var_name, words, body, self._collect_redirects())
 
     def _is_case_terminator(self) -> bool:
         """Check if we're at a case pattern terminator (;;, ;&, or ;;&)."""
@@ -6840,20 +6721,7 @@ class Parser:
         self.skip_whitespace_and_newlines()
         if not self.consume_word("esac"):
             raise ParseError("Expected 'esac' to close case statement", pos=self.pos)
-
-        # Collect trailing redirects
-        redirects = []
-        while True:
-            self.skip_whitespace()
-            redirect = self.parse_redirect()
-            if redirect is None:
-                break
-            redirects.append(redirect)
-
-        redir_arg = None
-        if redirects:
-            redir_arg = redirects
-        return Case(word, patterns, redir_arg)
+        return Case(word, patterns, self._collect_redirects())
 
     def parse_coproc(self) -> Coproc | None:
         """Parse a coproc statement.

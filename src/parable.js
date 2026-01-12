@@ -3101,6 +3101,20 @@ class Parser {
 		}
 	}
 
+	_collectRedirects() {
+		let redirect, redirects;
+		redirects = [];
+		while (true) {
+			this.skipWhitespace();
+			redirect = this.parseRedirect();
+			if (redirect == null) {
+				break;
+			}
+			redirects.push(redirect);
+		}
+		return redirects ? redirects : null;
+	}
+
 	peekWord() {
 		let ch, chars, saved_pos, word;
 		saved_pos = this.pos;
@@ -6248,7 +6262,7 @@ class Parser {
 	}
 
 	parseSubshell() {
-		let body, redirect, redirects;
+		let body;
 		this.skipWhitespace();
 		if (this.atEnd() || this.peek() !== "(") {
 			return null;
@@ -6263,33 +6277,11 @@ class Parser {
 			throw new ParseError("Expected ) to close subshell", this.pos);
 		}
 		this.advance();
-		// Collect trailing redirects
-		redirects = [];
-		while (true) {
-			this.skipWhitespace();
-			redirect = this.parseRedirect();
-			if (redirect == null) {
-				break;
-			}
-			redirects.push(redirect);
-		}
-		if (redirects) {
-			return new Subshell(body, redirects);
-		} else {
-			return new Subshell(body, null);
-		}
+		return new Subshell(body, this._collectRedirects());
 	}
 
 	parseArithmeticCommand() {
-		let c,
-			content,
-			content_start,
-			depth,
-			expr,
-			redir_arg,
-			redirect,
-			redirects,
-			saved_pos;
+		let c, content, content_start, depth, expr, saved_pos;
 		this.skipWhitespace();
 		// Check for ((
 		if (
@@ -6343,21 +6335,7 @@ class Parser {
 		this.advance();
 		// Parse the arithmetic expression
 		expr = this._parseArithExpr(content);
-		// Collect trailing redirects
-		redirects = [];
-		while (true) {
-			this.skipWhitespace();
-			redirect = this.parseRedirect();
-			if (redirect == null) {
-				break;
-			}
-			redirects.push(redirect);
-		}
-		redir_arg = null;
-		if (redirects) {
-			redir_arg = redirects;
-		}
-		return new ArithmeticCommand(expr, redir_arg, content);
+		return new ArithmeticCommand(expr, this._collectRedirects(), content);
 	}
 
 	// Unary operators for [[ ]] conditionals
@@ -6408,7 +6386,7 @@ class Parser {
 		"-ef",
 	]);
 	parseConditionalExpr() {
-		let body, redir_arg, redirect, redirects;
+		let body;
 		this.skipWhitespace();
 		// Check for [[
 		if (
@@ -6441,21 +6419,7 @@ class Parser {
 		}
 		this.advance();
 		this.advance();
-		// Collect trailing redirects
-		redirects = [];
-		while (true) {
-			this.skipWhitespace();
-			redirect = this.parseRedirect();
-			if (redirect == null) {
-				break;
-			}
-			redirects.push(redirect);
-		}
-		redir_arg = null;
-		if (redirects) {
-			redir_arg = redirects;
-		}
-		return new ConditionalExpr(body, redir_arg);
+		return new ConditionalExpr(body, this._collectRedirects());
 	}
 
 	_condSkipWhitespace() {
@@ -7115,7 +7079,7 @@ class Parser {
 	}
 
 	parseBraceGroup() {
-		let body, redir_arg, redirect, redirects;
+		let body;
 		this.skipWhitespace();
 		if (this.atEnd() || this.peek() !== "{") {
 			return null;
@@ -7138,21 +7102,7 @@ class Parser {
 			throw new ParseError("Expected } to close brace group", this.pos);
 		}
 		this.advance();
-		// Collect trailing redirects
-		redirects = [];
-		while (true) {
-			this.skipWhitespace();
-			redirect = this.parseRedirect();
-			if (redirect == null) {
-				break;
-			}
-			redirects.push(redirect);
-		}
-		redir_arg = null;
-		if (redirects) {
-			redir_arg = redirects;
-		}
-		return new BraceGroup(body, redir_arg);
+		return new BraceGroup(body, this._collectRedirects());
 	}
 
 	parseIf() {
@@ -7163,9 +7113,6 @@ class Parser {
 			inner_else,
 			inner_next,
 			next_word,
-			redir_arg,
-			redirect,
-			redirects,
 			then_body;
 		this.skipWhitespace();
 		// Check for 'if' keyword
@@ -7237,21 +7184,7 @@ class Parser {
 		if (!this.consumeWord("fi")) {
 			throw new ParseError("Expected 'fi' to close if statement", this.pos);
 		}
-		// Parse optional trailing redirections
-		redirects = [];
-		while (true) {
-			this.skipWhitespace();
-			redirect = this.parseRedirect();
-			if (redirect == null) {
-				break;
-			}
-			redirects.push(redirect);
-		}
-		redir_arg = null;
-		if (redirects) {
-			redir_arg = redirects;
-		}
-		return new If(condition, then_body, else_body, redir_arg);
+		return new If(condition, then_body, else_body, this._collectRedirects());
 	}
 
 	_parseElifChain() {
@@ -7285,7 +7218,7 @@ class Parser {
 	}
 
 	parseWhile() {
-		let body, condition, redir_arg, redirect, redirects;
+		let body, condition;
 		this.skipWhitespace();
 		if (this.peekWord() !== "while") {
 			return null;
@@ -7311,25 +7244,11 @@ class Parser {
 		if (!this.consumeWord("done")) {
 			throw new ParseError("Expected 'done' to close while loop", this.pos);
 		}
-		// Parse optional trailing redirections
-		redirects = [];
-		while (true) {
-			this.skipWhitespace();
-			redirect = this.parseRedirect();
-			if (redirect == null) {
-				break;
-			}
-			redirects.push(redirect);
-		}
-		redir_arg = null;
-		if (redirects) {
-			redir_arg = redirects;
-		}
-		return new While(condition, body, redir_arg);
+		return new While(condition, body, this._collectRedirects());
 	}
 
 	parseUntil() {
-		let body, condition, redir_arg, redirect, redirects;
+		let body, condition;
 		this.skipWhitespace();
 		if (this.peekWord() !== "until") {
 			return null;
@@ -7355,25 +7274,11 @@ class Parser {
 		if (!this.consumeWord("done")) {
 			throw new ParseError("Expected 'done' to close until loop", this.pos);
 		}
-		// Parse optional trailing redirections
-		redirects = [];
-		while (true) {
-			this.skipWhitespace();
-			redirect = this.parseRedirect();
-			if (redirect == null) {
-				break;
-			}
-			redirects.push(redirect);
-		}
-		redir_arg = null;
-		if (redirects) {
-			redir_arg = redirects;
-		}
-		return new Until(condition, body, redir_arg);
+		return new Until(condition, body, this._collectRedirects());
 	}
 
 	parseFor() {
-		let body, redir_arg, redirect, redirects, var_name, word, words;
+		let body, var_name, word, words;
 		this.skipWhitespace();
 		if (this.peekWord() !== "for") {
 			return null;
@@ -7445,36 +7350,11 @@ class Parser {
 		if (!this.consumeWord("done")) {
 			throw new ParseError("Expected 'done' to close for loop", this.pos);
 		}
-		// Parse optional trailing redirections
-		redirects = [];
-		while (true) {
-			this.skipWhitespace();
-			redirect = this.parseRedirect();
-			if (redirect == null) {
-				break;
-			}
-			redirects.push(redirect);
-		}
-		redir_arg = null;
-		if (redirects) {
-			redir_arg = redirects;
-		}
-		return new For(var_name, words, body, redir_arg);
+		return new For(var_name, words, body, this._collectRedirects());
 	}
 
 	_parseForArith() {
-		let body,
-			brace,
-			ch,
-			cond,
-			current,
-			incr,
-			init,
-			paren_depth,
-			parts,
-			redir_arg,
-			redirect,
-			redirects;
+		let body, brace, ch, cond, current, incr, init, paren_depth, parts;
 		// We've already consumed 'for' and positioned at '(('
 		this.advance();
 		this.advance();
@@ -7549,25 +7429,11 @@ class Parser {
 		} else {
 			throw new ParseError("Expected 'do' or '{' in for loop", this.pos);
 		}
-		// Parse optional trailing redirections
-		redirects = [];
-		while (true) {
-			this.skipWhitespace();
-			redirect = this.parseRedirect();
-			if (redirect == null) {
-				break;
-			}
-			redirects.push(redirect);
-		}
-		redir_arg = null;
-		if (redirects) {
-			redir_arg = redirects;
-		}
-		return new ForArith(init, cond, incr, body, redir_arg);
+		return new ForArith(init, cond, incr, body, this._collectRedirects());
 	}
 
 	parseSelect() {
-		let body, brace, redir_arg, redirect, redirects, var_name, word, words;
+		let body, brace, var_name, word, words;
 		this.skipWhitespace();
 		if (this.peekWord() !== "select") {
 			return null;
@@ -7640,21 +7506,7 @@ class Parser {
 		} else {
 			throw new ParseError("Expected 'do' or '{' in select", this.pos);
 		}
-		// Parse optional trailing redirections
-		redirects = [];
-		while (true) {
-			this.skipWhitespace();
-			redirect = this.parseRedirect();
-			if (redirect == null) {
-				break;
-			}
-			redirects.push(redirect);
-		}
-		redir_arg = null;
-		if (redirects) {
-			redir_arg = redirects;
-		}
-		return new Select(var_name, words, body, redir_arg);
+		return new Select(var_name, words, body, this._collectRedirects());
 	}
 
 	_isCaseTerminator() {
@@ -7710,9 +7562,6 @@ class Parser {
 			pattern,
 			pattern_chars,
 			patterns,
-			redir_arg,
-			redirect,
-			redirects,
 			saved,
 			sc,
 			scan_depth,
@@ -7978,21 +7827,7 @@ class Parser {
 		if (!this.consumeWord("esac")) {
 			throw new ParseError("Expected 'esac' to close case statement", this.pos);
 		}
-		// Collect trailing redirects
-		redirects = [];
-		while (true) {
-			this.skipWhitespace();
-			redirect = this.parseRedirect();
-			if (redirect == null) {
-				break;
-			}
-			redirects.push(redirect);
-		}
-		redir_arg = null;
-		if (redirects) {
-			redir_arg = redirects;
-		}
-		return new Case(word, patterns, redir_arg);
+		return new Case(word, patterns, this._collectRedirects());
 	}
 
 	parseCoproc() {

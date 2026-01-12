@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Compare JS parser benchmarks between git refs.
- * Mirrors the Python benchmark comparison in bin/bench-compare.py
+ * Mirrors the Python benchmark comparison in bench-compare.py
  */
 
 const { execSync, spawnSync } = require('child_process');
@@ -10,7 +10,7 @@ const path = require('path');
 const os = require('os');
 
 const PROJECT_ROOT = path.join(__dirname, '..');
-const BENCH_SCRIPT = path.join(PROJECT_ROOT, 'bench', 'bench_parse.js');
+const BENCH_SCRIPT = path.join(__dirname, 'bench_parse.js');
 const PYPERF_DIR = path.join(PROJECT_ROOT, '.pyperf');
 const README = path.join(PROJECT_ROOT, 'README.md');
 
@@ -49,25 +49,14 @@ function runBenchmark(srcDir, outputFile, fast) {
   const args = ['--json'];
   if (fast) args.push('--fast');
 
-  // Read bench script and modify the require path
-  let benchCode = fs.readFileSync(BENCH_SCRIPT, 'utf8');
-  // Remove shebang if present
-  if (benchCode.startsWith('#!')) {
-    benchCode = benchCode.split('\n').slice(1).join('\n');
-  }
-  // Replace the require path
-  benchCode = benchCode.replace("require('../src/parable.js')", `require('${srcDir}/parable.js')`);
-
-  const tmpFile = path.join(os.tmpdir(), `bench_${Date.now()}.js`);
-  fs.writeFileSync(tmpFile, benchCode);
-
   const corpusPath = path.join(PROJECT_ROOT, 'tests', 'corpus', 'gnu-bash', 'tests.tests');
-  const result = spawnSync('node', [tmpFile, ...args], {
+  const parablePath = path.join(srcDir, 'parable.js');
+
+  const result = spawnSync('node', [BENCH_SCRIPT, ...args], {
     encoding: 'utf8',
     cwd: PROJECT_ROOT,
-    env: { ...process.env, CORPUS_PATH: corpusPath }
+    env: { ...process.env, CORPUS_PATH: corpusPath, PARABLE_PATH: parablePath }
   });
-  fs.unlinkSync(tmpFile);
 
   if (result.status !== 0) {
     console.error(result.stderr);

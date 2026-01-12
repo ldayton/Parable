@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
  * Benchmark Parable JS parser against GNU Bash test corpus.
- * Mirrors the Python benchmark in bench/bench_parse.py
+ * Uses tinybench for statistical rigor matching Python's pyperf.
+ *
+ * Setup: npm install (from bench/)
  */
 
 const fs = require('fs');
 const path = require('path');
-const { parse } = require('../src/parable.js');
 
-// Use environment variable for corpus path (for bench-compare.js), or default to relative path
 const CORPUS_PATH = process.env.CORPUS_PATH || path.join(__dirname, '..', 'tests', 'corpus', 'gnu-bash', 'tests.tests');
 
 function loadCorpus() {
@@ -28,7 +28,6 @@ function loadCorpus() {
       if (i < n && lines[i] === '---') {
         i++;
       }
-      // Skip expected output
       while (i < n && lines[i] !== '---' && !lines[i].startsWith('=== ')) {
         i++;
       }
@@ -43,53 +42,53 @@ function loadCorpus() {
   return sources;
 }
 
-function parseAll(sources) {
-  for (const src of sources) {
-    parse(src);
-  }
-}
-
-function benchmark(sources, iterations = 10, warmup = 3) {
-  // Warmup
-  for (let i = 0; i < warmup; i++) {
-    parseAll(sources);
-  }
-
-  // Benchmark
-  const times = [];
-  for (let i = 0; i < iterations; i++) {
-    const start = process.hrtime.bigint();
-    parseAll(sources);
-    const end = process.hrtime.bigint();
-    times.push(Number(end - start) / 1e6); // Convert to ms
-  }
-
-  return times;
-}
-
-function main() {
+async function main() {
   const args = process.argv.slice(2);
   const fast = args.includes('--fast');
-  const iterations = fast ? 5 : 20;
-  const warmup = fast ? 2 : 5;
+  const jsonOutput = args.includes('--json');
+
+  const { Bench } = await import('tinybench');
+
+  const parablePath = process.env.PARABLE_PATH || path.join(__dirname, '..', 'src', 'parable.js');
+  const { parse } = require(parablePath);
 
   const sources = loadCorpus();
   const totalLines = sources.reduce((sum, src) => sum + src.split('\n').length, 0);
   const totalBytes = sources.reduce((sum, src) => sum + src.length, 0);
 
-  const times = benchmark(sources, iterations, warmup);
-  const mean = times.reduce((a, b) => a + b, 0) / times.length;
-  const variance = times.reduce((sum, t) => sum + (t - mean) ** 2, 0) / times.length;
-  const stddev = Math.sqrt(variance);
+  function parseAll() {
+    for (const src of sources) {
+      parse(src);
+    }
+  }
 
-  console.log(`Corpus: ${sources.length} scripts, ${totalLines} lines, ${totalBytes} bytes`);
-  console.log(`gnu_bash_corpus: Mean +- std dev: ${mean.toFixed(1)} ms +- ${stddev.toFixed(1)} ms`);
+  const bench = new Bench({
+    warmup: fast ? 3 : 5,
+    iterations: fast ? 10 : 20,
+  });
 
-  // Output JSON for comparison tool
-  if (args.includes('--json')) {
-    const result = { mean, stddev, times, corpus: { scripts: sources.length, lines: totalLines, bytes: totalBytes } };
-    console.log(JSON.stringify(result));
+  bench.add('gnu_bash_corpus', parseAll);
+  await bench.run();
+
+  const task = bench.tasks[0];
+  const latency = task.result.latency;
+
+  // tinybench latency is in milliseconds
+  const mean = latency.mean;
+  const stddev = latency.sd;
+
+  if (!jsonOutput) {
+    console.log(`Corpus: ${sources.length} scripts, ${totalLines} lines, ${totalBytes} bytes`);
+    console.log(`gnu_bash_corpus: Mean +- std dev: ${mean.toFixed(1)} ms +- ${stddev.toFixed(1)} ms`);
+  }
+
+  if (jsonOutput) {
+    const output = { mean, stddev, corpus: { scripts: sources.length, lines: totalLines, bytes: totalBytes } };
+    console.log(JSON.stringify(output));
   }
 }
 
-main();
+main().catch(err => {
+  console.error(err);
+  process.exit(1);
+});

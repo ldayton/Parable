@@ -6,7 +6,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-BENCH_SCRIPT = Path(__file__).parent.parent / "bench" / "bench_parse.py"
+BENCH_SCRIPT = Path(__file__).parent / "bench_parse.py"
 PROJECT_ROOT = Path(__file__).parent.parent
 SRC_DIR = PROJECT_ROOT / "src"
 PYPERF_DIR = PROJECT_ROOT / ".pyperf"

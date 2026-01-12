@@ -143,29 +143,36 @@ cd Parable && uv pip install -e .
 ## Tests
 
 ```bash
-just test      # Run Python tests
-just test-js   # Run Javascript tests
-just test-all  # All Python versions (3.10-3.14)
+just test      # Python
+just test-js   # Javascript
 ```
+
+See [tests/README.md](tests/README.md) for options and coverage details.
 
 ## Benchmarks
 
 ```bash
-just bench  # Run benchmarks
+just bench     # Python
+just bench-js  # Javascript
 ```
+
+See [bench/README.md](bench/README.md) for comparison options.
 
 ## Project Structure
 
 ```
-src/parable.py    # Single-file Python parser with AST definitions
-src/parable.js    # Transpiled Javascript parser
+src/
+├── parable.py                   # Single-file Python parser
+└── parable.js                   # Transpiled Javascript parser
 
 tests/
-├── *.tests                      # Test cases in custom format
-└── corpus/
-    ├── gnu-bash/                # GNU Bash test corpus
-    ├── tree-sitter-bash/        # tree-sitter-bash corpus
-    └── oils/                    # Oils corpus
+├── bin/                         # Test runners
+├── parable/                     # Parable test cases
+└── corpus/                      # Validation corpus
+
+bench/                           # Benchmarks (npm install for JS)
+
+tools/transpiler/                # Python-to-JS transpiler
 ```
 
 ## License

@@ -2,7 +2,7 @@ set shell := ["bash", "-o", "pipefail", "-cu"]
 project := "parable"
 
 _test version *ARGS:
-    UV_PROJECT_ENVIRONMENT=.venv-{{version}} uv run --python {{version}} bin/run-tests.py {{ARGS}} 2>&1 | sed -u "s/^/[{{version}}] /" | tee /tmp/{{project}}-test-{{version}}.log
+    UV_PROJECT_ENVIRONMENT=.venv-{{version}} uv run --python {{version}} tests/bin/run-tests.py {{ARGS}} 2>&1 | sed -u "s/^/[{{version}}] /" | tee /tmp/{{project}}-test-{{version}}.log
 
 # Run tests on CPython 3.10
 test-cpy310 *ARGS: (_test "3.10" ARGS)
@@ -54,7 +54,7 @@ bench *ARGS:
     if [[ ${#refs[@]} -eq 0 ]]; then
         PYTHONPATH=src uvx --with pyperf python bench/bench_parse.py "${flags[@]}"
     else
-        uvx --with pyperf python bin/bench-compare.py "${refs[@]}" "${flags[@]}"
+        uvx --with pyperf python bench/bench-compare.py "${refs[@]}" "${flags[@]}"
     fi
 
 # Lint (--fix to apply changes)
@@ -78,19 +78,20 @@ check-dump-ast:
 
 # Check for banned Python constructions
 check-style:
-    python3 bin/check-style.py 2>&1 | sed -u "s/^/[style] /" | tee /tmp/{{project}}-style.log
+    python3 tools/transpiler/check-style.py 2>&1 | sed -u "s/^/[style] /" | tee /tmp/{{project}}-style.log
 
 # Transpile Python to JavaScript
 transpile:
-    python3 bin/transpile.py src/parable.py > src/parable.js && just fmt-js --fix
+    python3 tools/transpiler/transpile.py src/parable.py > src/parable.js && just fmt-js --fix
 
 # Run JavaScript tests
 test-js *ARGS:
-    node bin/run-js-tests.js {{ARGS}}
+    node tests/bin/run-js-tests.js {{ARGS}}
 
 # Run JS benchmarks, optionally comparing refs: bench-js [ref1] [ref2] [--fast]
 bench-js *ARGS:
     #!/usr/bin/env bash
+    [[ -d bench/node_modules ]] || npm --prefix bench install
     refs=()
     flags=()
     for arg in {{ARGS}}; do
@@ -103,7 +104,7 @@ bench-js *ARGS:
     if [[ ${#refs[@]} -eq 0 ]]; then
         node bench/bench_parse.js "${flags[@]}"
     else
-        node bin/bench-compare.js "${refs[@]}" "${flags[@]}"
+        node bench/bench-compare.js "${refs[@]}" "${flags[@]}"
     fi
 
 # Format JavaScript (--fix to apply changes)

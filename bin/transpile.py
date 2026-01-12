@@ -734,6 +734,19 @@ class JSTranspiler(ast.NodeVisitor):
         op = self.visit_op(node.op)
         return f"({left} {op} {right})"
 
+    def _is_set_expr(self, node: ast.expr) -> bool:
+        """Check if an expression is likely a set (use .has) vs list/string (use .includes)."""
+        if isinstance(node, ast.Set):
+            return True
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            if node.func.id == "set":
+                return True
+        if isinstance(node, ast.Name):
+            name = node.id
+            if name.isupper() or name.endswith(("_words", "_set", "_sets")):
+                return True
+        return False
+
     def visit_expr_Compare(self, node: ast.Compare) -> str:
         # Handle single comparison with in/not in specially
         if len(node.ops) == 1:
@@ -741,9 +754,13 @@ class JSTranspiler(ast.NodeVisitor):
             right = self.visit_expr(node.comparators[0])
             op = node.ops[0]
             if isinstance(op, ast.In):
-                return f"{right}.has({left})"
+                if self._is_set_expr(node.comparators[0]):
+                    return f"{right}.has({left})"
+                return f"{right}.includes({left})"
             if isinstance(op, ast.NotIn):
-                return f"!{right}.has({left})"
+                if self._is_set_expr(node.comparators[0]):
+                    return f"!{right}.has({left})"
+                return f"!{right}.includes({left})"
         result = self.visit_expr(node.left)
         for op, comparator in zip(node.ops, node.comparators, strict=True):
             op_str = self.visit_cmpop(op)

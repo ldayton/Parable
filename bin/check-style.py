@@ -25,7 +25,6 @@ Banned constructions:
     generator expression  (x for x in ...)          explicit loop
     global                global x                  pass as parameter
     hasattr               hasattr(x, 'y')           explicit field check
-    in/not in (list/str)  x in lst                  explicit loop (sets OK)
     loop else             for x: ... else:          use flag variable
     list comprehension    [x*2 for x in items]      explicit loop
     match/case            match x:                  if/elif chain
@@ -213,27 +212,6 @@ def check_file(filepath):
         if isinstance(node, ast.Call):
             if isinstance(node.func, ast.Name) and node.func.id == "zip":
                 errors.append((lineno, "zip(): use indexed loop"))
-
-        # in/not in (list/string) - banned for O(n) search, allowed for O(1) set lookup
-        if isinstance(node, ast.Compare):
-            for i, op in enumerate(node.ops):
-                if isinstance(op, (ast.In, ast.NotIn)):
-                    comparator = node.comparators[i]
-                    # Allow sets: {literal}, set(), UPPER_NAMES, or names ending in _words/_set/_sets
-                    is_set_literal = isinstance(comparator, ast.Set)
-                    is_set_call = (
-                        isinstance(comparator, ast.Call)
-                        and isinstance(comparator.func, ast.Name)
-                        and comparator.func.id == "set"
-                    )
-                    is_set_name = isinstance(comparator, ast.Name) and (
-                        comparator.id.isupper()
-                        or comparator.id.endswith("_words")
-                        or comparator.id.endswith("_set")
-                        or comparator.id.endswith("_sets")
-                    )
-                    if not (is_set_literal or is_set_call or is_set_name):
-                        errors.append((lineno, "in/not in (list/string): use .find() or loop"))
 
         # loop else (for...else, while...else) - Python-specific
         if isinstance(node, (ast.For, ast.While)):

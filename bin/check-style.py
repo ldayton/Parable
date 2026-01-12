@@ -7,7 +7,6 @@ Banned constructions:
 
     Construction          Example                   Use instead
     --------------------  ------------------------  --------------------------
-    ** exponentiation     2 ** 3                    pow() or multiplication
     // floor division     a // b                    int(a / b)
     *args / **kwargs      def f(*args):             explicit parameters
     all                   all(x for x in lst)       explicit loop with early return
@@ -216,10 +215,6 @@ def check_file(filepath):
                     errors.append((lineno, "or-default: use 'if x is None: x = ...' instead"))
                 if isinstance(val, ast.Constant) and val.value in (0, "", None, False):
                     errors.append((lineno, "or-default: use 'if x is None: x = ...' instead"))
-
-        # ** exponentiation
-        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
-            errors.append((lineno, "**: use pow() or explicit multiplication"))
 
         # // floor division
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.FloorDiv):

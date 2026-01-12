@@ -2744,6 +2744,23 @@ class Parser:
             redirects.append(redirect)
         return redirects if redirects else None
 
+    def _parse_loop_body(self, context: str) -> Node:
+        """Parse a loop body that can be either do/done or brace group."""
+        if self.peek() == "{":
+            brace = self.parse_brace_group()
+            if brace is None:
+                raise ParseError(f"Expected brace group body in {context}", pos=self.pos)
+            return brace.body
+        if self.consume_word("do"):
+            body = self.parse_list_until({"done"})
+            if body is None:
+                raise ParseError("Expected commands after 'do'", pos=self.pos)
+            self.skip_whitespace_and_newlines()
+            if not self.consume_word("done"):
+                raise ParseError(f"Expected 'done' to close {context}", pos=self.pos)
+            return body
+        raise ParseError(f"Expected 'do' or '{{' in {context}", pos=self.pos)
+
     def peek_word(self) -> str | None:
         """Peek at the next word without consuming it."""
         saved_pos = self.pos
@@ -6370,23 +6387,7 @@ class Parser:
             self.advance()
 
         self.skip_whitespace_and_newlines()
-
-        # Parse body - either do/done or brace group
-        if self.peek() == "{":
-            brace = self.parse_brace_group()
-            if brace is None:
-                raise ParseError("Expected brace group body in for loop", pos=self.pos)
-            # Unwrap the brace-group to match bash-oracle output format
-            body = brace.body
-        elif self.consume_word("do"):
-            body = self.parse_list_until({"done"})
-            if body is None:
-                raise ParseError("Expected commands after 'do'", pos=self.pos)
-            self.skip_whitespace_and_newlines()
-            if not self.consume_word("done"):
-                raise ParseError("Expected 'done' to close for loop", pos=self.pos)
-        else:
-            raise ParseError("Expected 'do' or '{' in for loop", pos=self.pos)
+        body = self._parse_loop_body("for loop")
         return ForArith(init, cond, incr, body, self._collect_redirects())
 
     def parse_select(self) -> Select | None:
@@ -6441,26 +6442,7 @@ class Parser:
 
         # Skip whitespace before body
         self.skip_whitespace_and_newlines()
-
-        # Parse body - either do/done or brace group
-        if self.peek() == "{":
-            brace = self.parse_brace_group()
-            if brace is None:
-                raise ParseError("Expected brace group body in select", pos=self.pos)
-            # Unwrap the brace-group to match bash-oracle output format
-            body = brace.body
-        elif self.consume_word("do"):
-            # Parse body (ends at 'done')
-            body = self.parse_list_until({"done"})
-            if body is None:
-                raise ParseError("Expected commands after 'do'", pos=self.pos)
-
-            # Expect 'done'
-            self.skip_whitespace_and_newlines()
-            if not self.consume_word("done"):
-                raise ParseError("Expected 'done' to close select", pos=self.pos)
-        else:
-            raise ParseError("Expected 'do' or '{' in select", pos=self.pos)
+        body = self._parse_loop_body("select")
         return Select(var_name, words, body, self._collect_redirects())
 
     def _is_case_terminator(self) -> bool:

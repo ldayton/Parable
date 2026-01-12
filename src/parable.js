@@ -3115,6 +3115,32 @@ class Parser {
 		return redirects ? redirects : null;
 	}
 
+	_parseLoopBody(context) {
+		let body, brace;
+		if (this.peek() === "{") {
+			brace = this.parseBraceGroup();
+			if (brace == null) {
+				throw new ParseError(
+					`Expected brace group body in ${context}`,
+					this.pos,
+				);
+			}
+			return brace.body;
+		}
+		if (this.consumeWord("do")) {
+			body = this.parseListUntil(new Set(["done"]));
+			if (body == null) {
+				throw new ParseError("Expected commands after 'do'", this.pos);
+			}
+			this.skipWhitespaceAndNewlines();
+			if (!this.consumeWord("done")) {
+				throw new ParseError(`Expected 'done' to close ${context}`, this.pos);
+			}
+			return body;
+		}
+		throw new ParseError(`Expected 'do' or '{' in ${context}`, this.pos);
+	}
+
 	peekWord() {
 		let ch, chars, saved_pos, word;
 		saved_pos = this.pos;
@@ -7354,7 +7380,7 @@ class Parser {
 	}
 
 	_parseForArith() {
-		let body, brace, ch, cond, current, incr, init, paren_depth, parts;
+		let body, ch, cond, current, incr, init, paren_depth, parts;
 		// We've already consumed 'for' and positioned at '(('
 		this.advance();
 		this.advance();
@@ -7409,31 +7435,12 @@ class Parser {
 			this.advance();
 		}
 		this.skipWhitespaceAndNewlines();
-		// Parse body - either do/done or brace group
-		if (this.peek() === "{") {
-			brace = this.parseBraceGroup();
-			if (brace == null) {
-				throw new ParseError("Expected brace group body in for loop", this.pos);
-			}
-			// Unwrap the brace-group to match bash-oracle output format
-			body = brace.body;
-		} else if (this.consumeWord("do")) {
-			body = this.parseListUntil(new Set(["done"]));
-			if (body == null) {
-				throw new ParseError("Expected commands after 'do'", this.pos);
-			}
-			this.skipWhitespaceAndNewlines();
-			if (!this.consumeWord("done")) {
-				throw new ParseError("Expected 'done' to close for loop", this.pos);
-			}
-		} else {
-			throw new ParseError("Expected 'do' or '{' in for loop", this.pos);
-		}
+		body = this._parseLoopBody("for loop");
 		return new ForArith(init, cond, incr, body, this._collectRedirects());
 	}
 
 	parseSelect() {
-		let body, brace, var_name, word, words;
+		let body, var_name, word, words;
 		this.skipWhitespace();
 		if (this.peekWord() !== "select") {
 			return null;
@@ -7484,28 +7491,7 @@ class Parser {
 		// Empty word list is allowed for select (unlike for)
 		// Skip whitespace before body
 		this.skipWhitespaceAndNewlines();
-		// Parse body - either do/done or brace group
-		if (this.peek() === "{") {
-			brace = this.parseBraceGroup();
-			if (brace == null) {
-				throw new ParseError("Expected brace group body in select", this.pos);
-			}
-			// Unwrap the brace-group to match bash-oracle output format
-			body = brace.body;
-		} else if (this.consumeWord("do")) {
-			// Parse body (ends at 'done')
-			body = this.parseListUntil(new Set(["done"]));
-			if (body == null) {
-				throw new ParseError("Expected commands after 'do'", this.pos);
-			}
-			// Expect 'done'
-			this.skipWhitespaceAndNewlines();
-			if (!this.consumeWord("done")) {
-				throw new ParseError("Expected 'done' to close select", this.pos);
-			}
-		} else {
-			throw new ParseError("Expected 'do' or '{' in select", this.pos);
-		}
+		body = this._parseLoopBody("select");
 		return new Select(var_name, words, body, this._collectRedirects());
 	}
 

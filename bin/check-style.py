@@ -37,7 +37,6 @@ Banned constructions:
     string multiply       "x" * 3                   loop or helper function
     star unpacking        a, *rest = lst            manual indexing
     try else              try: ... else:            move else code after try block
-    tuple unpacking       a, b = b, a               use temp variable
     walrus operator       if (x := foo()):          assign, then test
     with statement        with open(f) as x:        try/finally
     yield                 yield x                   return list or use callback
@@ -107,14 +106,6 @@ def check_file(filepath):
         # match/case (Python 3.10+)
         if isinstance(node, ast.Match):
             errors.append((lineno, "match/case: use if/elif chain instead"))
-
-        # tuple unpacking in assignment
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Tuple):
-                    errors.append(
-                        (lineno, "tuple unpacking: use temp variable and separate assignments")
-                    )
 
         # chained comparison: a < b < c
         if isinstance(node, ast.Compare):

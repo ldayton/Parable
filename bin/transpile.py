@@ -148,20 +148,28 @@ class JSTranspiler(ast.NodeVisitor):
             result = result[0].lower() + result[1:]
         return prefix + result
 
+    def _collect_names_from_target(self, target: ast.expr) -> set:
+        """Recursively collect variable names from an assignment target."""
+        names = set()
+        if isinstance(target, ast.Name):
+            names.add(target.id)
+        elif isinstance(target, ast.Tuple):
+            for elt in target.elts:
+                names.update(self._collect_names_from_target(elt))
+        return names
+
     def _collect_local_vars(self, stmts: list) -> set:
         """Collect all variable names assigned in a list of statements."""
         names = set()
         for stmt in stmts:
             if isinstance(stmt, ast.Assign):
                 for target in stmt.targets:
-                    if isinstance(target, ast.Name):
-                        names.add(target.id)
+                    names.update(self._collect_names_from_target(target))
             elif isinstance(stmt, ast.AnnAssign):
                 if isinstance(stmt.target, ast.Name) and stmt.value:
                     names.add(stmt.target.id)
             elif isinstance(stmt, ast.For):
-                if isinstance(stmt.target, ast.Name):
-                    names.add(stmt.target.id)
+                names.update(self._collect_names_from_target(stmt.target))
                 names.update(self._collect_local_vars(stmt.body))
                 names.update(self._collect_local_vars(stmt.orelse))
             elif isinstance(stmt, ast.While):

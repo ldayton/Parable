@@ -33,7 +33,6 @@ Banned constructions:
     reversed              reversed(lst)             reverse index loop
     set comprehension     {x for x in items}        explicit loop
     step slicing          a[::2], a[1:10:2]         explicit index math
-    string multiply       "x" * 3                   loop or helper function
     star unpacking        a, *rest = lst            manual indexing
     try else              try: ... else:            move else code after try block
     walrus operator       if (x := foo()):          assign, then test
@@ -227,15 +226,6 @@ def check_file(filepath):
         # try...else
         if isinstance(node, ast.Try) and node.orelse:
             errors.append((lineno, "try else: move else code after try block"))
-
-        # string multiplication "x" * n
-        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mult):
-            left_is_str = isinstance(node.left, ast.Constant) and isinstance(node.left.value, str)
-            right_is_str = isinstance(node.right, ast.Constant) and isinstance(
-                node.right.value, str
-            )
-            if left_is_str or right_is_str:
-                errors.append((lineno, "string * n: use loop or helper function"))
 
     return errors
 

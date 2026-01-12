@@ -707,6 +707,18 @@ class JSTranspiler(ast.NodeVisitor):
                 result.append("${" + self.visit_expr(part) + "}")
         return "`" + "".join(result) + "`"
 
+    def visit_expr_JoinedStr(self, node: ast.JoinedStr) -> str:
+        """Handle f-strings by converting to JS template literals."""
+        result = []
+        for part in node.values:
+            if isinstance(part, ast.Constant) and isinstance(part.value, str):
+                escaped = part.value.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
+                escaped = escaped.replace("\n", "\\n").replace("\t", "\\t")
+                result.append(escaped)
+            elif isinstance(part, ast.FormattedValue):
+                result.append("${" + self.visit_expr(part.value) + "}")
+        return "`" + "".join(result) + "`"
+
     def visit_expr_BinOp(self, node: ast.BinOp) -> str:
         # Check for string concatenation - convert to template literal
         if isinstance(node.op, ast.Add) and self._is_string_concat(node):

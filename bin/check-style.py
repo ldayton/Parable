@@ -22,7 +22,6 @@ Banned constructions:
     del statement         del x                     reassign or let go out of scope
     dict comprehension    {k: v for k, v in ...}    explicit loop
     enumerate             for i, x in enumerate()   manual index counter
-    f-strings             f"x={x}"                  "x=" + str(x)
     generator expression  (x for x in ...)          explicit loop
     global                global x                  pass as parameter
     hasattr               hasattr(x, 'y')           explicit field check
@@ -78,10 +77,6 @@ def check_file(filepath):
 
     for node in ast.walk(tree):
         lineno = getattr(node, "lineno", 0)
-
-        # f-strings
-        if isinstance(node, ast.JoinedStr):
-            errors.append((lineno, "f-string: use string concatenation or % formatting"))
 
         # list/dict/set comprehensions
         if isinstance(node, ast.ListComp):

@@ -37,7 +37,7 @@ lock-check:
 
 # Run all checks (tests, lint, format, lock, style) in parallel
 [parallel]
-check: test-all lint fmt lock-check check-dump-ast check-style test-js fmt-js
+check: test-all lint fmt lock-check check-dump-ast check-style check-transpile test-js fmt-js
 
 # Run benchmarks, optionally comparing refs: bench [ref1] [ref2] [--fast]
 bench *ARGS:
@@ -81,8 +81,20 @@ check-style:
     python3 tools/transpiler/check-style.py 2>&1 | sed -u "s/^/[style] /" | tee /tmp/{{project}}-style.log
 
 # Transpile Python to JavaScript
-transpile:
-    python3 tools/transpiler/transpile.py src/parable.py > src/parable.js && just fmt-js --fix
+transpile output="src/parable.js":
+    python3 tools/transpiler/transpile.py src/parable.py > {{output}} && \
+    npx -y @biomejs/biome format --write {{output}} >/dev/null 2>&1 && \
+    npx -y @biomejs/biome format --write {{output}} >/dev/null 2>&1
+
+# Check that parable.js is up-to-date with transpiler output
+check-transpile:
+    @just transpile /tmp/parable-transpile.js && \
+    if diff -q src/parable.js /tmp/parable-transpile.js >/dev/null 2>&1; then \
+        echo "[transpile] OK"; \
+    else \
+        echo "[transpile] FAIL: parable.js is out of date, run 'just transpile'" >&2; \
+        exit 1; \
+    fi
 
 # Run JavaScript tests
 test-js *ARGS:

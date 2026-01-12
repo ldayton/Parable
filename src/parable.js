@@ -370,22 +370,12 @@ class Word extends Node {
 			effective_in_dquote = in_double_quote && brace_depth === 0;
 			// Track quote state to avoid matching $' inside regular quotes
 			if (ch === "'" && !effective_in_dquote) {
-				// Check if this is start of $'...' ANSI-C string
-				if (!in_single_quote && i > 0 && value[i - 1] === "$") {
-					// This is handled below when we see $'
-					result.push(ch);
-					i += 1;
-				} else if (in_single_quote) {
-					// End of single-quoted string
-					in_single_quote = false;
-					result.push(ch);
-					i += 1;
-				} else {
-					// Start of regular single-quoted string
-					in_single_quote = true;
-					result.push(ch);
-					i += 1;
+				// Toggle quote state unless this is $' (handled below)
+				if (!(!in_single_quote && i > 0 && value[i - 1] === "$")) {
+					in_single_quote = !in_single_quote;
 				}
+				result.push(ch);
+				i += 1;
 			} else if (ch === '"' && !in_single_quote) {
 				in_double_quote = !in_double_quote;
 				result.push(ch);
@@ -5539,11 +5529,7 @@ class Parser {
 			c = this.peek();
 			// Single quotes - no escapes, just scan to closing quote
 			if (c === "'" && !in_double_quote) {
-				if (in_single_quote) {
-					in_single_quote = false;
-				} else {
-					in_single_quote = true;
-				}
+				in_single_quote = !in_single_quote;
 				arg_chars.push(this.advance());
 			} else if (c === '"' && !in_single_quote) {
 				// Double quotes - toggle state

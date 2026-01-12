@@ -331,21 +331,11 @@ class Word(Node):
             effective_in_dquote = in_double_quote and brace_depth == 0
             # Track quote state to avoid matching $' inside regular quotes
             if ch == "'" and not effective_in_dquote:
-                # Check if this is start of $'...' ANSI-C string
-                if not in_single_quote and i > 0 and value[i - 1] == "$":
-                    # This is handled below when we see $'
-                    result.append(ch)
-                    i += 1
-                elif in_single_quote:
-                    # End of single-quoted string
-                    in_single_quote = False
-                    result.append(ch)
-                    i += 1
-                else:
-                    # Start of regular single-quoted string
-                    in_single_quote = True
-                    result.append(ch)
-                    i += 1
+                # Toggle quote state unless this is $' (handled below)
+                if not (not in_single_quote and i > 0 and value[i - 1] == "$"):
+                    in_single_quote = not in_single_quote
+                result.append(ch)
+                i += 1
             elif ch == '"' and not in_single_quote:
                 in_double_quote = not in_double_quote
                 result.append(ch)
@@ -4796,10 +4786,7 @@ class Parser:
             c = self.peek()
             # Single quotes - no escapes, just scan to closing quote
             if c == "'" and not in_double_quote:
-                if in_single_quote:
-                    in_single_quote = False
-                else:
-                    in_single_quote = True
+                in_single_quote = not in_single_quote
                 arg_chars.append(self.advance())
             # Double quotes - toggle state
             elif c == '"' and not in_single_quote:

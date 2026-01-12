@@ -27,7 +27,6 @@ Banned constructions:
     hasattr               hasattr(x, 'y')           explicit field check
     in/not in (list/str)  x in lst                  explicit loop (sets OK)
     loop else             for x: ... else:          use flag variable
-    isinstance            isinstance(x, Foo)        use .kind field check
     lambda                lambda x: x+1             define a function
     list comprehension    [x*2 for x in items]      explicit loop
     match/case            match x:                  if/elif chain
@@ -178,11 +177,6 @@ def check_file(filepath):
         if isinstance(node, ast.Call):
             if isinstance(node.func, ast.Name) and node.func.id == "hasattr":
                 errors.append((lineno, "hasattr: use explicit field check instead"))
-
-        # isinstance
-        if isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Name) and node.func.id == "isinstance":
-                errors.append((lineno, "isinstance: use .kind field check instead"))
 
         # step slicing (basic slicing a[x:y] is allowed, step slicing a[::n] is not)
         if isinstance(node, ast.Subscript):

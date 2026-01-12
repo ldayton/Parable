@@ -7117,12 +7117,9 @@ class Parser {
 			inner_next,
 			next_word,
 			then_body;
-		this.skipWhitespace();
-		// Check for 'if' keyword
-		if (this.peekWord() !== "if") {
+		if (!this.consumeWord("if")) {
 			return null;
 		}
-		this.consumeWord("if");
 		// Parse condition (a list that ends at 'then')
 		condition = this.parseListUntil(new Set(["then"]));
 		if (condition == null) {
@@ -7222,11 +7219,9 @@ class Parser {
 
 	parseWhile() {
 		let body, condition;
-		this.skipWhitespace();
-		if (this.peekWord() !== "while") {
+		if (!this.consumeWord("while")) {
 			return null;
 		}
-		this.consumeWord("while");
 		// Parse condition (ends at 'do')
 		condition = this.parseListUntil(new Set(["do"]));
 		if (condition == null) {
@@ -7252,11 +7247,9 @@ class Parser {
 
 	parseUntil() {
 		let body, condition;
-		this.skipWhitespace();
-		if (this.peekWord() !== "until") {
+		if (!this.consumeWord("until")) {
 			return null;
 		}
-		this.consumeWord("until");
 		// Parse condition (ends at 'do')
 		condition = this.parseListUntil(new Set(["do"]));
 		if (condition == null) {
@@ -7282,11 +7275,9 @@ class Parser {
 
 	parseFor() {
 		let body, var_name, word, words;
-		this.skipWhitespace();
-		if (this.peekWord() !== "for") {
+		if (!this.consumeWord("for")) {
 			return null;
 		}
-		this.consumeWord("for");
 		this.skipWhitespace();
 		// Check for C-style for loop: for ((init; cond; incr))
 		if (
@@ -7418,11 +7409,9 @@ class Parser {
 
 	parseSelect() {
 		let body, var_name, word, words;
-		this.skipWhitespace();
-		if (this.peekWord() !== "select") {
+		if (!this.consumeWord("select")) {
 			return null;
 		}
-		this.consumeWord("select");
 		this.skipWhitespace();
 		// Parse variable name
 		var_name = this.peekWord();
@@ -7531,11 +7520,9 @@ class Parser {
 			scan_pos,
 			terminator,
 			word;
-		this.skipWhitespace();
-		if (this.peekWord() !== "case") {
+		if (!this.consumeWord("case")) {
 			return null;
 		}
-		this.consumeWord("case");
 		this.skipWhitespace();
 		// Parse the word to match
 		word = this.parseWord();
@@ -7795,14 +7782,9 @@ class Parser {
 
 	parseCoproc() {
 		let body, ch, name, next_word, potential_name, word_start;
-		this.skipWhitespace();
-		if (this.atEnd()) {
+		if (!this.consumeWord("coproc")) {
 			return null;
 		}
-		if (this.peekWord() !== "coproc") {
-			return null;
-		}
-		this.consumeWord("coproc");
 		this.skipWhitespace();
 		name = null;
 		// Check for compound command directly (no NAME)

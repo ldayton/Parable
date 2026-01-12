@@ -6085,13 +6085,8 @@ class Parser:
 
     def parse_if(self) -> If | None:
         """Parse an if statement: if list; then list [elif list; then list]* [else list] fi."""
-        self.skip_whitespace()
-
-        # Check for 'if' keyword
-        if self.peek_word() != "if":
+        if not self.consume_word("if"):
             return None
-
-        self.consume_word("if")
 
         # Parse condition (a list that ends at 'then')
         condition = self.parse_list_until({"then"})
@@ -6191,12 +6186,8 @@ class Parser:
 
     def parse_while(self) -> While | None:
         """Parse a while loop: while list; do list; done."""
-        self.skip_whitespace()
-
-        if self.peek_word() != "while":
+        if not self.consume_word("while"):
             return None
-
-        self.consume_word("while")
 
         # Parse condition (ends at 'do')
         condition = self.parse_list_until({"do"})
@@ -6221,12 +6212,8 @@ class Parser:
 
     def parse_until(self) -> Until | None:
         """Parse an until loop: until list; do list; done."""
-        self.skip_whitespace()
-
-        if self.peek_word() != "until":
+        if not self.consume_word("until"):
             return None
-
-        self.consume_word("until")
 
         # Parse condition (ends at 'do')
         condition = self.parse_list_until({"do"})
@@ -6251,12 +6238,8 @@ class Parser:
 
     def parse_for(self) -> For | ForArith | None:
         """Parse a for loop: for name [in words]; do list; done or C-style for ((;;))."""
-        self.skip_whitespace()
-
-        if self.peek_word() != "for":
+        if not self.consume_word("for"):
             return None
-
-        self.consume_word("for")
         self.skip_whitespace()
 
         # Check for C-style for loop: for ((init; cond; incr))
@@ -6377,12 +6360,8 @@ class Parser:
 
     def parse_select(self) -> Select | None:
         """Parse a select statement: select name [in words]; do list; done."""
-        self.skip_whitespace()
-
-        if self.peek_word() != "select":
+        if not self.consume_word("select"):
             return None
-
-        self.consume_word("select")
         self.skip_whitespace()
 
         # Parse variable name
@@ -6462,12 +6441,8 @@ class Parser:
 
     def parse_case(self) -> Case | None:
         """Parse a case statement: case word in pattern) commands;; ... esac."""
-        self.skip_whitespace()
-
-        if self.peek_word() != "case":
+        if not self.consume_word("case"):
             return None
-
-        self.consume_word("case")
         self.skip_whitespace()
 
         # Parse the word to match
@@ -6697,14 +6672,8 @@ class Parser:
         - For compound commands (brace group, if, while, etc.), extract NAME if present
         - For simple commands, don't extract NAME (treat everything as the command)
         """
-        self.skip_whitespace()
-        if self.at_end():
+        if not self.consume_word("coproc"):
             return None
-
-        if self.peek_word() != "coproc":
-            return None
-
-        self.consume_word("coproc")
         self.skip_whitespace()
 
         name = None

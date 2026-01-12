@@ -43,6 +43,10 @@ check: test-all lint fmt lock-check check-dump-ast check-style test-js fmt-js
 bench *ARGS:
     PYTHONPATH=src uvx --with pyperf python bench/bench_parse.py {{ARGS}}
 
+# Compare benchmarks against a git ref (SHA, branch, tag)
+bench-compare ref *ARGS:
+    uvx --with pyperf python bin/bench-compare.py {{ref}} {{ARGS}}
+
 # Lint (--fix to apply changes)
 lint *ARGS:
     uvx ruff check {{ if ARGS == "--fix" { "--fix" } else { "" } }} 2>&1 | sed -u "s/^/[lint] /" | tee /tmp/{{project}}-lint.log

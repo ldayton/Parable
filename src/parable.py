@@ -12,17 +12,10 @@ class ParseError(Exception):
 
     def _format_message(self) -> str:
         if self.line is not None and self.pos is not None:
-            return (
-                "Parse error at line "
-                + str(self.line)
-                + ", position "
-                + str(self.pos)
-                + ": "
-                + self.message
-            )
+            return f"Parse error at line {self.line}, position {self.pos}: {self.message}"
         elif self.pos is not None:
-            return "Parse error at position " + str(self.pos) + ": " + self.message
-        return "Parse error: " + self.message
+            return f"Parse error at position {self.pos}: {self.message}"
+        return f"Parse error: {self.message}"
 
 
 def _is_hex_digit(c: str) -> bool:
@@ -1019,11 +1012,8 @@ class HereDoc(Node):
         self.fd = fd
 
     def to_sexp(self) -> str:
-        if self.strip_tabs:
-            op = "<<-"
-        else:
-            op = "<<"
-        return '(redirect "' + op + '" "' + self.content + '")'
+        op = "<<-" if self.strip_tabs else "<<"
+        return f'(redirect "{op}" "{self.content}")'
 
 
 class Subshell(Node):
@@ -1240,32 +1230,14 @@ class ForArith(Node):
             for r in self.redirects:
                 redirect_parts.append(r.to_sexp())
             suffix = " " + " ".join(redirect_parts)
-        if self.init:
-            init_val = self.init
-        else:
-            init_val = "1"
-        if self.cond:
-            cond_val = _normalize_fd_redirects(self.cond)
-        else:
-            cond_val = "1"
-        if self.incr:
-            incr_val = self.incr
-        else:
-            incr_val = "1"
-        return (
-            '(arith-for (init (word "'
-            + format_arith_val(init_val)
-            + '")) '
-            + '(test (word "'
-            + format_arith_val(cond_val)
-            + '")) '
-            + '(step (word "'
-            + format_arith_val(incr_val)
-            + '")) '
-            + self.body.to_sexp()
-            + ")"
-            + suffix
-        )
+        init_val = self.init if self.init else "1"
+        cond_val = _normalize_fd_redirects(self.cond) if self.cond else "1"
+        incr_val = self.incr if self.incr else "1"
+        init_str = format_arith_val(init_val)
+        cond_str = format_arith_val(cond_val)
+        incr_str = format_arith_val(incr_val)
+        body_str = self.body.to_sexp()
+        return f'(arith-for (init (word "{init_str}")) (test (word "{cond_str}")) (step (word "{incr_str}")) {body_str}){suffix}'
 
 
 class Select(Node):
@@ -2227,12 +2199,9 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
     if node.kind == "function":
         name = node.name
         # Get the body content - if it's a BraceGroup, unwrap it
-        if node.body.kind == "brace-group":
-            body = _format_cmdsub_node(node.body.body, indent + 4)
-        else:
-            body = _format_cmdsub_node(node.body, indent + 4)
-        body = body.rstrip(";")  # Strip trailing semicolons
-        return "function " + name + " () \n{ \n" + inner_sp + body + "\n}"
+        inner_body = node.body.body if node.body.kind == "brace-group" else node.body
+        body = _format_cmdsub_node(inner_body, indent + 4).rstrip(";")
+        return f"function {name} () \n{{ \n{inner_sp}{body}\n}}"
     if node.kind == "subshell":
         body = _format_cmdsub_node(node.body, indent, in_procsub)
         redirects = ""

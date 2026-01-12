@@ -156,6 +156,8 @@ class JSTranspiler(ast.NodeVisitor):
         elif isinstance(target, ast.Tuple):
             for elt in target.elts:
                 names.update(self._collect_names_from_target(elt))
+        elif isinstance(target, ast.Starred):
+            names.update(self._collect_names_from_target(target.value))
         return names
 
     def _collect_local_vars(self, stmts: list) -> set:
@@ -858,6 +860,9 @@ class JSTranspiler(ast.NodeVisitor):
     def visit_expr_Tuple(self, node: ast.Tuple) -> str:
         elements = ", ".join(self.visit_expr(e) for e in node.elts)
         return f"[{elements}]"
+
+    def visit_expr_Starred(self, node: ast.Starred) -> str:
+        return f"...{self.visit_expr(node.value)}"
 
     def visit_expr_Set(self, node: ast.Set) -> str:
         elements = ", ".join(self.visit_expr(e) for e in node.elts)

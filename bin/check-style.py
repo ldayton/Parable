@@ -33,7 +33,6 @@ Banned constructions:
     reversed              reversed(lst)             reverse index loop
     set comprehension     {x for x in items}        explicit loop
     step slicing          a[::2], a[1:10:2]         explicit index math
-    star unpacking        a, *rest = lst            manual indexing
     try else              try: ... else:            move else code after try block
     walrus operator       if (x := foo()):          assign, then test
     with statement        with open(f) as x:        try/finally
@@ -127,14 +126,6 @@ def check_file(filepath):
         # nonlocal
         if isinstance(node, ast.Nonlocal):
             errors.append((lineno, "nonlocal: pass as parameter instead"))
-
-        # star unpacking in assignment: a, *rest = lst
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Tuple):
-                    for elt in target.elts:
-                        if isinstance(elt, ast.Starred):
-                            errors.append((lineno, "star unpacking: use manual indexing instead"))
 
         # async def
         if isinstance(node, ast.AsyncFunctionDef):

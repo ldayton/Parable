@@ -35,9 +35,16 @@ test-all: test-cpy test-pypy
 lock-check:
     uv lock --check 2>&1 | sed -u "s/^/[lock] /" | tee /tmp/{{project}}-lock.log
 
-# Run all checks (tests, lint, format, lock, style) in parallel
+# Ensure biome is installed (prevents race condition in parallel JS checks)
+_ensure-biome:
+    @npx -y @biomejs/biome --version >/dev/null 2>&1
+
+# Internal: run all parallel checks
 [parallel]
-check: test-all lint fmt lock-check check-dump-ast check-style check-transpile test-js fmt-js
+_check-parallel: test-all lint fmt lock-check check-dump-ast check-style check-transpile test-js fmt-js
+
+# Run all checks (tests, lint, format, lock, style) in parallel
+check: _ensure-biome _check-parallel
 
 # Run benchmarks, optionally comparing refs: bench [ref1] [ref2] [--fast]
 bench *ARGS:

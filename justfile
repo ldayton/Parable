@@ -39,13 +39,23 @@ lock-check:
 [parallel]
 check: test-all lint fmt lock-check check-dump-ast check-style test-js fmt-js
 
-# Run benchmarks (--fast for quick run)
+# Run benchmarks, optionally comparing refs: bench [ref1] [ref2] [--fast]
 bench *ARGS:
-    PYTHONPATH=src uvx --with pyperf python bench/bench_parse.py {{ARGS}}
-
-# Compare benchmarks against a git ref (SHA, branch, tag)
-bench-compare ref *ARGS:
-    uvx --with pyperf python bin/bench-compare.py {{ref}} {{ARGS}}
+    #!/usr/bin/env bash
+    refs=()
+    flags=()
+    for arg in {{ARGS}}; do
+        if [[ "$arg" == --* ]]; then
+            flags+=("$arg")
+        else
+            refs+=("$arg")
+        fi
+    done
+    if [[ ${#refs[@]} -eq 0 ]]; then
+        PYTHONPATH=src uvx --with pyperf python bench/bench_parse.py "${flags[@]}"
+    else
+        uvx --with pyperf python bin/bench-compare.py "${refs[@]}" "${flags[@]}"
+    fi
 
 # Lint (--fix to apply changes)
 lint *ARGS:
@@ -77,6 +87,24 @@ transpile:
 # Run JavaScript tests
 test-js *ARGS:
     node bin/run-js-tests.js {{ARGS}}
+
+# Run JS benchmarks, optionally comparing refs: bench-js [ref1] [ref2] [--fast]
+bench-js *ARGS:
+    #!/usr/bin/env bash
+    refs=()
+    flags=()
+    for arg in {{ARGS}}; do
+        if [[ "$arg" == --* ]]; then
+            flags+=("$arg")
+        else
+            refs+=("$arg")
+        fi
+    done
+    if [[ ${#refs[@]} -eq 0 ]]; then
+        node bench/bench_parse.js "${flags[@]}"
+    else
+        node bin/bench-compare.js "${refs[@]}" "${flags[@]}"
+    fi
 
 # Format JavaScript (--fix to apply changes)
 # Note: biome format is run twice due to https://github.com/biomejs/biome/issues/4383

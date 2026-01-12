@@ -20,7 +20,7 @@ Parse bash exactly as bash does. Python or Javascript, your choice. One file, ze
 
 **Python & JS from one source.** The Python implementation is the source of truth. A custom transpiler produces perfectly readable Javascript. Both implementations run against the same validation battery.
 
-**Fast as possible.** Pure Python and pure JS—no WASM, no FFI, no runtime dependencies. Hand-written recursive descent, not generated. Further gains would require a table-driven parser.
+**Fast as possible.** Pure Python and pure JS—no WASM, no FFI, no runtime dependencies. Hand-written recursive descent, not generated.
 
 ## Javascript
 

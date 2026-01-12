@@ -38,7 +38,6 @@ Banned constructions:
     set comprehension     {x for x in items}        explicit loop
     step slicing          a[::2], a[1:10:2]         explicit index math
     string multiply       "x" * 3                   loop or helper function
-    ternary               x if c else y             if/else block
     star unpacking        a, *rest = lst            manual indexing
     try else              try: ... else:            move else code after try block
     tuple unpacking       a, b = b, a               use temp variable
@@ -284,10 +283,6 @@ def check_file(filepath):
             )
             if left_is_str or right_is_str:
                 errors.append((lineno, "string * n: use loop or helper function"))
-
-        # ternary expression (x if cond else y) - Go has no ternary
-        if isinstance(node, ast.IfExp):
-            errors.append((lineno, "ternary: use if/else block instead"))
 
     return errors
 

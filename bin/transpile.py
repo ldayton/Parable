@@ -307,8 +307,8 @@ class JSTranspiler(ast.NodeVisitor):
 
     def _emit_if(self, node: ast.If, is_elif: bool):
         test = self.visit_expr(node.test)
-        # Handle self.attr truthiness checks - in Python [] is falsy but in JS it's truthy
-        # Only add length check for known array-like attributes
+        # Handle truthiness checks - in Python [] is falsy but in JS it's truthy
+        # Only add length check for known array-like attributes/variables
         array_attrs = {"redirects", "parts", "elements", "words", "patterns", "commands"}
         if (
             isinstance(node.test, ast.Attribute)
@@ -316,6 +316,8 @@ class JSTranspiler(ast.NodeVisitor):
             and node.test.value.id == "self"
             and node.test.attr in array_attrs
         ):
+            test = f"{test} && {test}.length"
+        elif isinstance(node.test, ast.Name) and node.test.id in array_attrs:
             test = f"{test} && {test}.length"
         if is_elif:
             self.emit_raw("    " * self.indent + f"}} else if ({test}) {{")

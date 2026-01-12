@@ -81,6 +81,16 @@ def _repeat_str(s: str, n: int) -> str:
     return "".join(result)
 
 
+def _append_redirects(base: str, redirects: list | None) -> str:
+    """Append redirect sexp strings to a base sexp string."""
+    if redirects:
+        parts = []
+        for r in redirects:
+            parts.append(r.to_sexp())
+        return base + " " + " ".join(parts)
+    return base
+
+
 class Node:
     """Base class for all AST nodes."""
 
@@ -1007,12 +1017,7 @@ class Subshell(Node):
 
     def to_sexp(self) -> str:
         base = "(subshell " + self.body.to_sexp() + ")"
-        if self.redirects:
-            redirect_parts = []
-            for r in self.redirects:
-                redirect_parts.append(r.to_sexp())
-            return base + " " + " ".join(redirect_parts)
-        return base
+        return _append_redirects(base, self.redirects)
 
 
 class BraceGroup(Node):
@@ -1028,12 +1033,7 @@ class BraceGroup(Node):
 
     def to_sexp(self) -> str:
         base = "(brace-group " + self.body.to_sexp() + ")"
-        if self.redirects:
-            redirect_parts = []
-            for r in self.redirects:
-                redirect_parts.append(r.to_sexp())
-            return base + " " + " ".join(redirect_parts)
-        return base
+        return _append_redirects(base, self.redirects)
 
 
 class If(Node):
@@ -1082,12 +1082,7 @@ class While(Node):
 
     def to_sexp(self) -> str:
         base = "(while " + self.condition.to_sexp() + " " + self.body.to_sexp() + ")"
-        if self.redirects:
-            redirect_parts = []
-            for r in self.redirects:
-                redirect_parts.append(r.to_sexp())
-            return base + " " + " ".join(redirect_parts)
-        return base
+        return _append_redirects(base, self.redirects)
 
 
 class Until(Node):
@@ -1107,12 +1102,7 @@ class Until(Node):
 
     def to_sexp(self) -> str:
         base = "(until " + self.condition.to_sexp() + " " + self.body.to_sexp() + ")"
-        if self.redirects:
-            redirect_parts = []
-            for r in self.redirects:
-                redirect_parts.append(r.to_sexp())
-            return base + " " + " ".join(redirect_parts)
-        return base
+        return _append_redirects(base, self.redirects)
 
 
 class For(Node):
@@ -1291,12 +1281,7 @@ class Case(Node):
         for p in self.patterns:
             parts.append(p.to_sexp())
         base = " ".join(parts) + ")"
-        if self.redirects:
-            redirect_parts = []
-            for r in self.redirects:
-                redirect_parts.append(r.to_sexp())
-            return base + " " + " ".join(redirect_parts)
-        return base
+        return _append_redirects(base, self.redirects)
 
 
 def _consume_single_quote(s: str, start: int) -> tuple:

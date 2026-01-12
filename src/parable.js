@@ -57,6 +57,18 @@ function _startsWithAt(s, pos, prefix) {
 	return s.startsWith(prefix, pos);
 }
 
+function _appendRedirects(base, redirects) {
+	let parts, r;
+	if (redirects && redirects.length) {
+		parts = [];
+		for (r of redirects) {
+			parts.push(r.toSexp());
+		}
+		return `${base} ${parts.join(" ")}`;
+	}
+	return base;
+}
+
 class Node {
 	toSexp() {
 		throw new Error("Not implemented");
@@ -1219,16 +1231,9 @@ class Subshell extends Node {
 	}
 
 	toSexp() {
-		let base, r, redirect_parts;
+		let base;
 		base = `(subshell ${this.body.toSexp()})`;
-		if (this.redirects && this.redirects.length) {
-			redirect_parts = [];
-			for (r of this.redirects) {
-				redirect_parts.push(r.toSexp());
-			}
-			return `${base} ${redirect_parts.join(" ")}`;
-		}
-		return base;
+		return _appendRedirects(base, this.redirects);
 	}
 }
 
@@ -1241,16 +1246,9 @@ class BraceGroup extends Node {
 	}
 
 	toSexp() {
-		let base, r, redirect_parts;
+		let base;
 		base = `(brace-group ${this.body.toSexp()})`;
-		if (this.redirects && this.redirects.length) {
-			redirect_parts = [];
-			for (r of this.redirects) {
-				redirect_parts.push(r.toSexp());
-			}
-			return `${base} ${redirect_parts.join(" ")}`;
-		}
-		return base;
+		return _appendRedirects(base, this.redirects);
 	}
 }
 
@@ -1294,16 +1292,9 @@ class While extends Node {
 	}
 
 	toSexp() {
-		let base, r, redirect_parts;
+		let base;
 		base = `(while ${this.condition.toSexp()} ${this.body.toSexp()})`;
-		if (this.redirects && this.redirects.length) {
-			redirect_parts = [];
-			for (r of this.redirects) {
-				redirect_parts.push(r.toSexp());
-			}
-			return `${base} ${redirect_parts.join(" ")}`;
-		}
-		return base;
+		return _appendRedirects(base, this.redirects);
 	}
 }
 
@@ -1320,16 +1311,9 @@ class Until extends Node {
 	}
 
 	toSexp() {
-		let base, r, redirect_parts;
+		let base;
 		base = `(until ${this.condition.toSexp()} ${this.body.toSexp()})`;
-		if (this.redirects && this.redirects.length) {
-			redirect_parts = [];
-			for (r of this.redirects) {
-				redirect_parts.push(r.toSexp());
-			}
-			return `${base} ${redirect_parts.join(" ")}`;
-		}
-		return base;
+		return _appendRedirects(base, this.redirects);
 	}
 }
 
@@ -1494,21 +1478,14 @@ class Case extends Node {
 	}
 
 	toSexp() {
-		let base, p, parts, r, redirect_parts;
+		let base, p, parts;
 		parts = [];
 		parts.push(`(case ${this.word.toSexp()}`);
 		for (p of this.patterns) {
 			parts.push(p.toSexp());
 		}
 		base = `${parts.join(" ")})`;
-		if (this.redirects && this.redirects.length) {
-			redirect_parts = [];
-			for (r of this.redirects) {
-				redirect_parts.push(r.toSexp());
-			}
-			return `${base} ${redirect_parts.join(" ")}`;
-		}
-		return base;
+		return _appendRedirects(base, this.redirects);
 	}
 }
 
@@ -2475,12 +2452,12 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 			redirects = redirect_parts.join(" ");
 		}
 		if (in_procsub) {
-			if (redirects) {
+			if (redirects && redirects.length) {
 				return `(${body}) ${redirects}`;
 			}
 			return `(${body})`;
 		}
-		if (redirects) {
+		if (redirects && redirects.length) {
 			return `( ${body} ) ${redirects}`;
 		}
 		return `( ${body} )`;
@@ -3619,7 +3596,7 @@ class Parser {
 		if (chars.length === 0) {
 			return null;
 		}
-		if (parts) {
+		if (parts && parts.length) {
 			return new Word(chars.join(""), parts);
 		} else {
 			return new Word(chars.join(""), null);
@@ -6886,7 +6863,7 @@ class Parser {
 			return null;
 		}
 		parts_arg = null;
-		if (parts) {
+		if (parts && parts.length) {
 			parts_arg = parts;
 		}
 		return new Word(chars.join(""), parts_arg);
@@ -7098,7 +7075,7 @@ class Parser {
 			return null;
 		}
 		parts_arg = null;
-		if (parts) {
+		if (parts && parts.length) {
 			parts_arg = parts;
 		}
 		return new Word(chars.join(""), parts_arg);

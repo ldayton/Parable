@@ -151,21 +151,25 @@ just test-all  # All Python versions (3.10-3.14)
 ## Benchmarks
 
 ```bash
-just bench  # Run benchmarks
+just bench     # Python benchmarks
+just bench-js  # Javascript benchmarks
 ```
 
 ## Project Structure
 
 ```
-src/parable.py    # Single-file Python parser with AST definitions
-src/parable.js    # Transpiled Javascript parser
+src/
+├── parable.py                   # Single-file Python parser
+└── parable.js                   # Transpiled Javascript parser
 
 tests/
+├── bin/                         # Test runners
 ├── *.tests                      # Test cases in custom format
-└── corpus/
-    ├── gnu-bash/                # GNU Bash test corpus
-    ├── tree-sitter-bash/        # tree-sitter-bash corpus
-    └── oils/                    # Oils corpus
+└── corpus/                      # Validation corpora
+
+bench/                           # Benchmarks (npm install for JS)
+
+tools/transpiler/                # Python-to-JS transpiler
 ```
 
 ## License

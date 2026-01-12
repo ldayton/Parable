@@ -2969,22 +2969,6 @@ function _isSemicolonNewlineBrace(c) {
 	return c === ";" || c === "\n" || c === "{";
 }
 
-function _isReservedWord(word) {
-	return RESERVED_WORDS.has(word);
-}
-
-function _isCompoundKeyword(word) {
-	return COMPOUND_KEYWORDS.has(word);
-}
-
-function _isCondUnaryOp(op) {
-	return COND_UNARY_OPS.has(op);
-}
-
-function _isCondBinaryOp(op) {
-	return COND_BINARY_OPS.has(op);
-}
-
 function _strContains(haystack, needle) {
 	return haystack.indexOf(needle) !== -1;
 }
@@ -6532,7 +6516,7 @@ class Parser {
 		}
 		this._condSkipWhitespace();
 		// Check if word1 is a unary operator
-		if (_isCondUnaryOp(word1.value)) {
+		if (COND_UNARY_OPS.has(word1.value)) {
 			// Unary test: -f file
 			operand = this._parseCondWord();
 			if (operand == null) {
@@ -6564,7 +6548,7 @@ class Parser {
 			// Peek at next word to see if it's a binary operator
 			saved_pos = this.pos;
 			op_word = this._parseCondWord();
-			if (op_word && _isCondBinaryOp(op_word.value)) {
+			if (op_word && COND_BINARY_OPS.has(op_word.value)) {
 				// Binary test: word1 op word2
 				this._condSkipWhitespace();
 				// For =~ operator, the RHS is a regex where ( ) are grouping, not conditional grouping
@@ -7812,7 +7796,7 @@ class Parser {
 		}
 		// Check for reserved word compounds directly
 		next_word = this.peekWord();
-		if (_isCompoundKeyword(next_word)) {
+		if (COMPOUND_KEYWORDS.has(next_word)) {
 			body = this.parseCompoundCommand();
 			if (body != null) {
 				return new Coproc(body, name);
@@ -7855,7 +7839,7 @@ class Parser {
 				if (body != null) {
 					return new Coproc(body, name);
 				}
-			} else if (_isCompoundKeyword(next_word)) {
+			} else if (COMPOUND_KEYWORDS.has(next_word)) {
 				// NAME followed by reserved compound - extract name
 				name = potential_name;
 				body = this.parseCompoundCommand();
@@ -7914,7 +7898,7 @@ class Parser {
 		// Check for POSIX form: name()
 		// We need to peek ahead to see if there's a () after the word
 		name = this.peekWord();
-		if (name == null || _isReservedWord(name)) {
+		if (name == null || RESERVED_WORDS.has(name)) {
 			return null;
 		}
 		// Assignment words (containing =) are not function definitions

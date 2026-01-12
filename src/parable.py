@@ -2628,22 +2628,6 @@ def _is_semicolon_newline_brace(c: str) -> bool:
     return c == ";" or c == "\n" or c == "{"
 
 
-def _is_reserved_word(word: str) -> bool:
-    return word in RESERVED_WORDS
-
-
-def _is_compound_keyword(word: str) -> bool:
-    return word in COMPOUND_KEYWORDS
-
-
-def _is_cond_unary_op(op: str) -> bool:
-    return op in COND_UNARY_OPS
-
-
-def _is_cond_binary_op(op: str) -> bool:
-    return op in COND_BINARY_OPS
-
-
 def _str_contains(haystack: str, needle: str) -> bool:
     """Check if haystack contains needle substring."""
     return haystack.find(needle) != -1
@@ -5645,7 +5629,7 @@ class Parser:
         self._cond_skip_whitespace()
 
         # Check if word1 is a unary operator
-        if _is_cond_unary_op(word1.value):
+        if word1.value in COND_UNARY_OPS:
             # Unary test: -f file
             operand = self._parse_cond_word()
             if operand is None:
@@ -5670,7 +5654,7 @@ class Parser:
             # Peek at next word to see if it's a binary operator
             saved_pos = self.pos
             op_word = self._parse_cond_word()
-            if op_word and _is_cond_binary_op(op_word.value):
+            if op_word and op_word.value in COND_BINARY_OPS:
                 # Binary test: word1 op word2
                 self._cond_skip_whitespace()
                 # For =~ operator, the RHS is a regex where ( ) are grouping, not conditional grouping
@@ -6697,7 +6681,7 @@ class Parser:
 
         # Check for reserved word compounds directly
         next_word = self.peek_word()
-        if _is_compound_keyword(next_word):
+        if next_word in COMPOUND_KEYWORDS:
             body = self.parse_compound_command()
             if body is not None:
                 return Coproc(body, name)
@@ -6734,7 +6718,7 @@ class Parser:
                     body = self.parse_subshell()
                 if body is not None:
                     return Coproc(body, name)
-            elif _is_compound_keyword(next_word):
+            elif next_word in COMPOUND_KEYWORDS:
                 # NAME followed by reserved compound - extract name
                 name = potential_name
                 body = self.parse_compound_command()
@@ -6799,7 +6783,7 @@ class Parser:
         # Check for POSIX form: name()
         # We need to peek ahead to see if there's a () after the word
         name = self.peek_word()
-        if name is None or _is_reserved_word(name):
+        if name is None or name in RESERVED_WORDS:
             return None
 
         # Assignment words (containing =) are not function definitions

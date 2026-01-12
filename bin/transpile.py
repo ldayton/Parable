@@ -190,6 +190,9 @@ class JSTranspiler(ast.NodeVisitor):
         if node.name in ("_substring", "_sublist", "_repeat_str"):
             return
         args = [self._safe_name(a.arg) for a in node.args.args if a.arg != "self"]
+        # Handle *args as rest parameter
+        if node.args.vararg:
+            args.append("..." + self._safe_name(node.args.vararg.arg))
         args_str = ", ".join(args)
         name = "constructor" if node.name == "__init__" else self._camel_case(node.name)
         if self.in_class_body and not self.in_method:
@@ -206,6 +209,8 @@ class JSTranspiler(ast.NodeVisitor):
         self.in_method = True
         # Collect all local variables and emit hoisted let declarations
         param_names = {a.arg for a in node.args.args if a.arg != "self"}
+        if node.args.vararg:
+            param_names.add(node.args.vararg.arg)
         local_vars = self._collect_local_vars(node.body) - param_names
         if local_vars:
             sorted_vars = sorted(self._safe_name(v) for v in local_vars)

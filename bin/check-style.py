@@ -8,7 +8,7 @@ Banned constructions:
     Construction          Example                   Use instead
     --------------------  ------------------------  --------------------------
     // floor division     a // b                    int(a / b)
-    *args / **kwargs      def f(*args):             explicit parameters
+    **kwargs              def f(**kwargs):          explicit parameters
     all                   all(x for x in lst)       explicit loop with early return
     any                   any(x for x in lst)       explicit loop with early return
     assert                assert x                  if not x: raise
@@ -96,10 +96,10 @@ def check_file(filepath):
         if isinstance(node, ast.With):
             errors.append((lineno, "with statement: use try/finally instead"))
 
-        # *args / **kwargs
+        # **kwargs (but *args is allowed - transpiles to rest params)
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if node.args.vararg or node.args.kwarg:
-                errors.append((lineno, "*args or **kwargs: use explicit parameters"))
+            if node.args.kwarg:
+                errors.append((lineno, "**kwargs: use explicit parameters"))
 
         # match/case (Python 3.10+)
         if isinstance(node, ast.Match):

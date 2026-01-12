@@ -1,79 +1,58 @@
 #!/usr/bin/env python3
-"""Microbenchmarks for Parable parser."""
+"""Benchmark Parable parser against GNU Bash test corpus."""
+
+import os
 
 import pyperf
 
 from parable import parse
 
-# Simple commands
-SIMPLE = "ls -la"
-SIMPLE_ARGS = "git log --oneline -n 10 --format='%h %s'"
+CORPUS_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "tests", "corpus", "gnu-bash", "tests.tests"
+)
 
-# Pipelines
-PIPELINE_SHORT = "ps aux | grep python"
-PIPELINE_LONG = "ps aux | grep python | awk '{print $2}' | head -10 | xargs kill"
 
-# Command lists
-LIST_AND = "cd /tmp && mkdir test && cd test"
-LIST_MIXED = "make build && make test || echo 'failed'"
+def load_corpus():
+    """Extract bash source from corpus file. Returns list of source strings."""
+    with open(CORPUS_PATH) as f:
+        lines = f.read().split("\n")
+    sources = []
+    i = 0
+    n = len(lines)
+    while i < n:
+        line = lines[i]
+        if line.startswith("=== "):
+            i += 1
+            input_lines = []
+            while i < n and lines[i] != "---":
+                input_lines.append(lines[i])
+                i += 1
+            if i < n and lines[i] == "---":
+                i += 1
+            # Skip expected output
+            while i < n and lines[i] != "---" and not lines[i].startswith("=== "):
+                i += 1
+            if i < n and lines[i] == "---":
+                i += 1
+            sources.append("\n".join(input_lines))
+        else:
+            i += 1
+    return sources
 
-# Redirects
-REDIRECT_SIMPLE = "ls > out.txt"
-REDIRECT_COMPLEX = "cmd 2>&1 | tee log.txt"
 
-# Substitutions
-CMDSUB_SIMPLE = "echo $(pwd)"
-CMDSUB_NESTED = "echo $(cat $(find . -name '*.py' | head -1))"
-
-# Here documents
-HEREDOC = """cat <<EOF
-line 1
-line 2
-line 3
-EOF"""
-
-# Quoting
-QUOTES_MIXED = """echo "hello $USER" 'literal $USER' $'tab\there'"""
-
-# Complex real-world
-COMPLEX_AWS = "aws ec2 describe-instances --filters 'Name=tag:Environment,Values=prod' --query 'Reservations[].Instances[].InstanceId' --output text"
-COMPLEX_DOCKER = "docker run -it --rm -v $(pwd):/app -e NODE_ENV=production node:18 npm run build"
-COMPLEX_FIND = "find . -type f -name '*.py' -exec grep -l 'TODO' {} \\;"
+def parse_all(sources):
+    """Parse all sources."""
+    for src in sources:
+        parse(src)
 
 
 def main():
+    sources = load_corpus()
     runner = pyperf.Runner()
-
-    # Simple
-    runner.bench_func("simple", parse, SIMPLE)
-    runner.bench_func("simple_args", parse, SIMPLE_ARGS)
-
-    # Pipelines
-    runner.bench_func("pipeline_short", parse, PIPELINE_SHORT)
-    runner.bench_func("pipeline_long", parse, PIPELINE_LONG)
-
-    # Command lists
-    runner.bench_func("list_and", parse, LIST_AND)
-    runner.bench_func("list_mixed", parse, LIST_MIXED)
-
-    # Redirects
-    runner.bench_func("redirect_simple", parse, REDIRECT_SIMPLE)
-    runner.bench_func("redirect_complex", parse, REDIRECT_COMPLEX)
-
-    # Substitutions
-    runner.bench_func("cmdsub_simple", parse, CMDSUB_SIMPLE)
-    runner.bench_func("cmdsub_nested", parse, CMDSUB_NESTED)
-
-    # Here documents
-    runner.bench_func("heredoc", parse, HEREDOC)
-
-    # Quoting
-    runner.bench_func("quotes_mixed", parse, QUOTES_MIXED)
-
-    # Complex real-world
-    runner.bench_func("complex_aws", parse, COMPLEX_AWS)
-    runner.bench_func("complex_docker", parse, COMPLEX_DOCKER)
-    runner.bench_func("complex_find", parse, COMPLEX_FIND)
+    runner.metadata["corpus_scripts"] = len(sources)
+    runner.metadata["corpus_lines"] = sum(src.count("\n") + 1 for src in sources)
+    runner.metadata["corpus_bytes"] = sum(len(src) for src in sources)
+    runner.bench_func("gnu_bash_corpus", parse_all, sources)
 
 
 if __name__ == "__main__":

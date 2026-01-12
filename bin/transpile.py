@@ -747,7 +747,9 @@ class JSTranspiler(ast.NodeVisitor):
         # Check for string multiplication - convert to .repeat()
         if isinstance(node.op, ast.Mult):
             left_is_str = isinstance(node.left, ast.Constant) and isinstance(node.left.value, str)
-            right_is_str = isinstance(node.right, ast.Constant) and isinstance(node.right.value, str)
+            right_is_str = isinstance(node.right, ast.Constant) and isinstance(
+                node.right.value, str
+            )
             if left_is_str:
                 return f"{self.visit_expr(node.left)}.repeat({self.visit_expr(node.right)})"
             if right_is_str:

@@ -27,7 +27,6 @@ Banned constructions:
     hasattr               hasattr(x, 'y')           explicit field check
     in/not in (list/str)  x in lst                  explicit loop (sets OK)
     loop else             for x: ... else:          use flag variable
-    lambda                lambda x: x+1             define a function
     list comprehension    [x*2 for x in items]      explicit loop
     match/case            match x:                  if/elif chain
     negative index        lst[-1]                   lst[len(lst)-1]
@@ -92,10 +91,6 @@ def check_file(filepath):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             if node.decorator_list:
                 errors.append((lineno, "decorator: call wrapper function manually"))
-
-        # lambda
-        if isinstance(node, ast.Lambda):
-            errors.append((lineno, "lambda: define a named function instead"))
 
         # walrus operator
         if isinstance(node, ast.NamedExpr):

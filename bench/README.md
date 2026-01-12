@@ -1,24 +1,52 @@
 # Benchmarks
 
-Parser benchmarks against the GNU Bash test corpus.
+Parser benchmarks against the GNU Bash test corpus (19,370 lines).
 
 ## Setup
 
 ```bash
-npm install  # from this directory
+cd bench && npm install
 ```
 
 ## Usage
 
 ```bash
-just bench           # Python benchmarks
-just bench-js        # JavaScript benchmarks
-just bench HEAD      # Compare Python: HEAD vs working tree
-just bench-js HEAD   # Compare JavaScript: HEAD vs working tree
-just bench a1b2c3 d4e5f6 --fast  # Compare two refs, quick mode
+just bench              # Run Python benchmark
+just bench-js           # Run JavaScript benchmark
+```
+
+### Comparing versions
+
+```bash
+just bench HEAD         # Compare HEAD vs working tree
+just bench HEAD~5       # Compare HEAD~5 vs working tree
+just bench abc123 def456  # Compare two commits
+```
+
+### Options
+
+- `--fast` — Fewer iterations for quick checks
+
+```bash
+just bench HEAD --fast
+just bench-js HEAD --fast
+```
+
+## Output
+
+Results are saved to `.pyperf/` with timestamps:
+
+```
+.pyperf/2026-01-12_162626_5c4e312_vs_current/
+├── 1_5c4e312.json
+└── 2_current.json
 ```
 
 ## Tools
 
-- **Python**: Uses [pyperf](https://pyperf.readthedocs.io/) for statistical rigor
-- **JavaScript**: Uses [tinybench](https://github.com/tinylibs/tinybench) for parity
+|         | Python                                   | JavaScript                                         |
+| ------- | ---------------------------------------- | -------------------------------------------------- |
+| Library | [pyperf](https://pyperf.readthedocs.io/) | [tinybench](https://github.com/tinylibs/tinybench) |
+| Warmup  | Calibrated                               | 5 runs                                             |
+| Samples | 20                                       | 20                                                 |
+| Stats   | Mean, stddev, outlier detection          | Mean, stddev                                       |

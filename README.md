@@ -143,17 +143,20 @@ cd Parable && uv pip install -e .
 ## Tests
 
 ```bash
-just test      # Run Python tests
-just test-js   # Run Javascript tests
-just test-all  # All Python versions (3.10-3.14)
+just test      # Python
+just test-js   # Javascript
 ```
+
+See [tests/README.md](tests/README.md) for options and coverage details.
 
 ## Benchmarks
 
 ```bash
-just bench     # Python benchmarks
-just bench-js  # Javascript benchmarks
+just bench     # Python
+just bench-js  # Javascript
 ```
+
+See [bench/README.md](bench/README.md) for comparison options.
 
 ## Project Structure
 
@@ -164,8 +167,8 @@ src/
 
 tests/
 ├── bin/                         # Test runners
-├── *.tests                      # Test cases in custom format
-└── corpus/                      # Validation corpora
+├── parable/                     # Parable test cases
+└── corpus/                      # Validation corpus
 
 bench/                           # Benchmarks (npm install for JS)
 

@@ -1224,11 +1224,7 @@ class HereDoc extends Node {
 
 	toSexp() {
 		let op;
-		if (this.strip_tabs) {
-			op = "<<-";
-		} else {
-			op = "<<";
-		}
+		op = this.strip_tabs ? "<<-" : "<<";
 		return `(redirect "${op}" "${this.content}")`;
 	}
 }
@@ -1413,7 +1409,16 @@ class ForArith extends Node {
 	}
 
 	toSexp() {
-		let cond_val, incr_val, init_val, r, redirect_parts, suffix;
+		let body_str,
+			cond_str,
+			cond_val,
+			incr_str,
+			incr_val,
+			init_str,
+			init_val,
+			r,
+			redirect_parts,
+			suffix;
 		// bash-oracle format: (arith-for (init (word "x")) (test (word "y")) (step (word "z")) body)
 		function formatArithVal(s) {
 			let val, w;
@@ -1433,22 +1438,14 @@ class ForArith extends Node {
 			}
 			suffix = ` ${redirect_parts.join(" ")}`;
 		}
-		if (this.init) {
-			init_val = this.init;
-		} else {
-			init_val = "1";
-		}
-		if (this.cond) {
-			cond_val = _normalizeFdRedirects(this.cond);
-		} else {
-			cond_val = "1";
-		}
-		if (this.incr) {
-			incr_val = this.incr;
-		} else {
-			incr_val = "1";
-		}
-		return `(arith-for (init (word "${formatArithVal(init_val)}")) (test (word "${formatArithVal(cond_val)}")) (step (word "${formatArithVal(incr_val)}")) ${this.body.toSexp()})${suffix}`;
+		init_val = this.init ? this.init : "1";
+		cond_val = this.cond ? _normalizeFdRedirects(this.cond) : "1";
+		incr_val = this.incr ? this.incr : "1";
+		init_str = formatArithVal(init_val);
+		cond_str = formatArithVal(cond_val);
+		incr_str = formatArithVal(incr_val);
+		body_str = this.body.toSexp();
+		return `(arith-for (init (word "${init_str}")) (test (word "${cond_str}")) (step (word "${incr_str}")) ${body_str})${suffix}`;
 	}
 }
 
@@ -2327,6 +2324,7 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 		cond,
 		else_body,
 		i,
+		inner_body,
 		inner_sp,
 		name,
 		p,
@@ -2481,12 +2479,8 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 	if (node.kind === "function") {
 		name = node.name;
 		// Get the body content - if it's a BraceGroup, unwrap it
-		if (node.body.kind === "brace-group") {
-			body = _formatCmdsubNode(node.body.body, indent + 4);
-		} else {
-			body = _formatCmdsubNode(node.body, indent + 4);
-		}
-		body = body.replace(/[;]+$/, "");
+		inner_body = node.body.kind === "brace-group" ? node.body.body : node.body;
+		body = _formatCmdsubNode(inner_body, indent + 4).replace(/[;]+$/, "");
 		return `function ${name} () \n{ \n${inner_sp}${body}\n}`;
 	}
 	if (node.kind === "subshell") {

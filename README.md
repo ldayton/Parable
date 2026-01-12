@@ -20,11 +20,11 @@ Parse bash exactly as bash does. Python or Javascript, your choice. One file, ze
 
 **Python & JS from one source.** The Python implementation is the source of truth. A custom transpiler produces perfectly readable Javascript. Both implementations run against the same validation battery.
 
-**Fast as possible.** Pure Python and pure JS—no WASM, no FFI, no runtime dependencies. Hand-written recursive descent, not generated. A strict high-performance subset of Python complete with micro-optimizations. Further gains would require a table-driven parser.
+**Fast as possible.** Pure Python and pure JS—no WASM, no FFI, no runtime dependencies. Hand-written recursive descent, not generated. Further gains would require a table-driven parser.
 
 ## Javascript
 
-The Python implementation is written in a high-performance subset of Python—no comprehensions, no decorators, no Python-specific idioms that would produce awkward Javascript. A custom transpiler rewrites this subset into perfectly readable JS: not minified, not obfuscated, not transmogrified, but clean code that looks like a human wrote it.
+The Python implementation uses idiomatic Python that transpiles naturally to idiomatic JavaScript: f-strings become template literals, ternaries stay ternaries, lambdas become arrow functions. A custom transpiler produces perfectly readable JS: not minified, not obfuscated, not transmogrified, but clean code that looks like a human wrote it.
 
 The Javascript output is then validated the same way as Python. Same tests, same bash AST comparisons, same edge cases. If Python parses it correctly, so does JS.
 
@@ -35,8 +35,7 @@ Bash's grammar is notoriously irregular. Existing tools make tradeoffs:
 - **bashlex** — Incomplete. Fails on [heredocs](https://github.com/idank/bashlex/issues/99), [arrays](https://github.com/idank/bashlex/issues/84), [arithmetic](https://github.com/idank/bashlex/issues/68), and [more](https://github.com/idank/bashlex/issues). Fine for simple scripts, breaks on real ones.
 - **Oils/OSH** — A whole shell, not an embeddable library. Makes [intentional parsing tradeoffs](https://github.com/oils-for-unix/oils/blob/master/doc/known-differences.md) for a cleaner language—fine for their goals, but won't predict what real bash does.
 - **tree-sitter-bash** — Editor-focused, not Python-native. [Many open parsing bugs](https://github.com/tree-sitter/tree-sitter-bash/issues).
-- **mvdan/sh** — Excellent, but Go. [Doesn't fully match bash](https://github.com/mvdan/sh#caveats).
-- **sh-syntax** — WASM port of mvdan/sh. Same limitations and not native JS.
+- **sh-syntax** — WASM port of mvdan/sh, not pure JS. [Doesn't fully match bash](https://github.com/mvdan/sh#caveats).
 
 Parable is the only Python & JS library that parses bash exactly as bash does—tested against bash's own AST. For security and sandboxing, 95% coverage is 100% inadequate.
 

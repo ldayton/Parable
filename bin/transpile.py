@@ -148,20 +148,30 @@ class JSTranspiler(ast.NodeVisitor):
             result = result[0].lower() + result[1:]
         return prefix + result
 
+    def _collect_names_from_target(self, target: ast.expr) -> set:
+        """Recursively collect variable names from an assignment target."""
+        names = set()
+        if isinstance(target, ast.Name):
+            names.add(target.id)
+        elif isinstance(target, ast.Tuple):
+            for elt in target.elts:
+                names.update(self._collect_names_from_target(elt))
+        elif isinstance(target, ast.Starred):
+            names.update(self._collect_names_from_target(target.value))
+        return names
+
     def _collect_local_vars(self, stmts: list) -> set:
         """Collect all variable names assigned in a list of statements."""
         names = set()
         for stmt in stmts:
             if isinstance(stmt, ast.Assign):
                 for target in stmt.targets:
-                    if isinstance(target, ast.Name):
-                        names.add(target.id)
+                    names.update(self._collect_names_from_target(target))
             elif isinstance(stmt, ast.AnnAssign):
                 if isinstance(stmt.target, ast.Name) and stmt.value:
                     names.add(stmt.target.id)
             elif isinstance(stmt, ast.For):
-                if isinstance(stmt.target, ast.Name):
-                    names.add(stmt.target.id)
+                names.update(self._collect_names_from_target(stmt.target))
                 names.update(self._collect_local_vars(stmt.body))
                 names.update(self._collect_local_vars(stmt.orelse))
             elif isinstance(stmt, ast.While):
@@ -182,6 +192,9 @@ class JSTranspiler(ast.NodeVisitor):
         if node.name in ("_substring", "_sublist", "_repeat_str"):
             return
         args = [self._safe_name(a.arg) for a in node.args.args if a.arg != "self"]
+        # Handle *args as rest parameter
+        if node.args.vararg:
+            args.append("..." + self._safe_name(node.args.vararg.arg))
         args_str = ", ".join(args)
         name = "constructor" if node.name == "__init__" else self._camel_case(node.name)
         if self.in_class_body and not self.in_method:
@@ -198,6 +211,8 @@ class JSTranspiler(ast.NodeVisitor):
         self.in_method = True
         # Collect all local variables and emit hoisted let declarations
         param_names = {a.arg for a in node.args.args if a.arg != "self"}
+        if node.args.vararg:
+            param_names.add(node.args.vararg.arg)
         local_vars = self._collect_local_vars(node.body) - param_names
         if local_vars:
             sorted_vars = sorted(self._safe_name(v) for v in local_vars)
@@ -707,6 +722,18 @@ class JSTranspiler(ast.NodeVisitor):
                 result.append("${" + self.visit_expr(part) + "}")
         return "`" + "".join(result) + "`"
 
+    def visit_expr_JoinedStr(self, node: ast.JoinedStr) -> str:
+        """Handle f-strings by converting to JS template literals."""
+        result = []
+        for part in node.values:
+            if isinstance(part, ast.Constant) and isinstance(part.value, str):
+                escaped = part.value.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
+                escaped = escaped.replace("\n", "\\n").replace("\t", "\\t")
+                result.append(escaped)
+            elif isinstance(part, ast.FormattedValue):
+                result.append("${" + self.visit_expr(part.value) + "}")
+        return "`" + "".join(result) + "`"
+
     def visit_expr_BinOp(self, node: ast.BinOp) -> str:
         # Check for string concatenation - convert to template literal
         if isinstance(node.op, ast.Add) and self._is_string_concat(node):
@@ -717,10 +744,33 @@ class JSTranspiler(ast.NodeVisitor):
             )
             if has_string:
                 return self._build_template_literal(parts)
+        # Check for string multiplication - convert to .repeat()
+        if isinstance(node.op, ast.Mult):
+            left_is_str = isinstance(node.left, ast.Constant) and isinstance(node.left.value, str)
+            right_is_str = isinstance(node.right, ast.Constant) and isinstance(
+                node.right.value, str
+            )
+            if left_is_str:
+                return f"{self.visit_expr(node.left)}.repeat({self.visit_expr(node.right)})"
+            if right_is_str:
+                return f"{self.visit_expr(node.right)}.repeat({self.visit_expr(node.left)})"
         left = self.visit_expr(node.left)
         right = self.visit_expr(node.right)
         op = self.visit_op(node.op)
         return f"({left} {op} {right})"
+
+    def _is_set_expr(self, node: ast.expr) -> bool:
+        """Check if an expression is likely a set (use .has) vs list/string (use .includes)."""
+        if isinstance(node, ast.Set):
+            return True
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            if node.func.id == "set":
+                return True
+        if isinstance(node, ast.Name):
+            name = node.id
+            if name.isupper() or name.endswith(("_words", "_set", "_sets")):
+                return True
+        return False
 
     def visit_expr_Compare(self, node: ast.Compare) -> str:
         # Handle single comparison with in/not in specially
@@ -729,9 +779,13 @@ class JSTranspiler(ast.NodeVisitor):
             right = self.visit_expr(node.comparators[0])
             op = node.ops[0]
             if isinstance(op, ast.In):
-                return f"{right}.has({left})"
+                if self._is_set_expr(node.comparators[0]):
+                    return f"{right}.has({left})"
+                return f"{right}.includes({left})"
             if isinstance(op, ast.NotIn):
-                return f"!{right}.has({left})"
+                if self._is_set_expr(node.comparators[0]):
+                    return f"!{right}.has({left})"
+                return f"!{right}.includes({left})"
         result = self.visit_expr(node.left)
         for op, comparator in zip(node.ops, node.comparators, strict=True):
             op_str = self.visit_cmpop(op)
@@ -789,6 +843,12 @@ class JSTranspiler(ast.NodeVisitor):
         orelse = self.visit_expr(node.orelse)
         return f"({test} ? {body} : {orelse})"
 
+    def visit_expr_Lambda(self, node: ast.Lambda) -> str:
+        args = [self._safe_name(a.arg) for a in node.args.args]
+        args_str = ", ".join(args)
+        body = self.visit_expr(node.body)
+        return f"(({args_str}) => {body})"
+
     def visit_expr_List(self, node: ast.List) -> str:
         elements = ", ".join(self.visit_expr(e) for e in node.elts)
         return f"[{elements}]"
@@ -802,6 +862,9 @@ class JSTranspiler(ast.NodeVisitor):
     def visit_expr_Tuple(self, node: ast.Tuple) -> str:
         elements = ", ".join(self.visit_expr(e) for e in node.elts)
         return f"[{elements}]"
+
+    def visit_expr_Starred(self, node: ast.Starred) -> str:
+        return f"...{self.visit_expr(node.value)}"
 
     def visit_expr_Set(self, node: ast.Set) -> str:
         elements = ", ".join(self.visit_expr(e) for e in node.elts)

@@ -36,7 +36,8 @@ def run_benchmark(src_dir, output_file, fast=False):
     cmd = [
         sys.executable,
         str(BENCH_SCRIPT),
-        "--output", str(output_file),
+        "--output",
+        str(output_file),
     ]
     if fast:
         cmd.append("--fast")
@@ -47,15 +48,15 @@ def run_benchmark(src_dir, output_file, fast=False):
 
 def compare_benchmarks(baseline, current):
     """Compare two benchmark files using pyperf."""
-    subprocess.run([
-        sys.executable, "-m", "pyperf", "compare_to",
-        str(baseline), str(current),
-        "--table"
-    ], check=True)
+    subprocess.run(
+        [sys.executable, "-m", "pyperf", "compare_to", str(baseline), str(current), "--table"],
+        check=True,
+    )
 
 
 def main():
     import argparse
+
     parser = argparse.ArgumentParser(description="Compare benchmarks against a git ref")
     parser.add_argument("ref", help="Git ref to compare against (SHA, branch, tag)")
     parser.add_argument("--fast", action="store_true", help="Quick run with fewer iterations")

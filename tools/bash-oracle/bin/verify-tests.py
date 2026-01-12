@@ -14,15 +14,11 @@ from testformat import parse_test_file  # noqa: E402
 ORACLE_PATH = SCRIPT_DIR / "bash-oracle"
 
 
-def get_oracle_output(input_text: str, extglob: bool = False) -> str | None:
+def get_oracle_output(input_text: str) -> str | None:
     """Get bash-oracle output for the given input."""
-    cmd = [str(ORACLE_PATH), "--dump-ast"]
-    if extglob:
-        cmd.extend(["-O", "extglob"])
     try:
         result = subprocess.run(
-            cmd,
-            input=input_text.encode("utf-8"),
+            [str(ORACLE_PATH), "-e", input_text],
             capture_output=True,
             timeout=5,
         )
@@ -58,12 +54,11 @@ def main():
 
     for test_file in test_files:
         test_cases = parse_test_file(test_file)
-        extglob = "extglob" in test_file.name
 
         for tc in test_cases:
             total += 1
 
-            oracle_output = get_oracle_output(tc.input, extglob=extglob)
+            oracle_output = get_oracle_output(tc.input)
 
             if oracle_output is None:
                 skipped += 1

@@ -1,0 +1,751 @@
+# Base: 637f5c8696a6adc9b4519f1cd74aa78492266b7f
+diff --git a/Makefile.in b/Makefile.in
+index c4a882f7..4399159f 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -113,7 +113,7 @@ OBJEXT = @OBJEXT@
+ VERSPROG = bashversion$(EXEEXT)
+ VERSOBJ = bashversion.$(OBJEXT)
+ 
+-Program = bash$(EXEEXT)
++Program = bash-oracle$(EXEEXT)
+ Version = @BASHVERS@
+ PatchLevel = `$(BUILD_DIR)/$(VERSPROG) -p`
+ RELSTATUS = @RELSTATUS@
+@@ -484,7 +484,7 @@ CSOURCES = shell.c eval.c parse.y general.c make_cmd.c print_cmd.c y.tab.c \
+ 	   input.c bashhist.c array.c arrayfunc.c assoc.c sig.c pathexp.c \
+ 	   unwind_prot.c siglist.c bashline.c bracecomp.c error.c \
+ 	   list.c stringlib.c locale.c findcmd.c redir.c \
+-	   pcomplete.c pcomplib.c syntax.c xmalloc.c
++	   pcomplete.c pcomplib.c syntax.c xmalloc.c dump_ast.c
+ 
+ HSOURCES = shell.h flags.h trap.h hashcmd.h hashlib.h jobs.h builtins.h \
+ 	   general.h variables.h config.h $(ALLOC_HEADERS) alias.h \
+@@ -493,7 +493,7 @@ HSOURCES = shell.h flags.h trap.h hashcmd.h hashlib.h jobs.h builtins.h \
+ 	   subst.h externs.h siglist.h bashhist.h bashline.h bashtypes.h \
+ 	   array.h arrayfunc.h sig.h mailcheck.h bashintl.h bashjmp.h \
+ 	   execute_cmd.h parser.h pathexp.h pathnames.h pcomplete.h assoc.h \
+-	   $(BASHINCFILES)
++	   dump_ast.h $(BASHINCFILES)
+ 
+ SOURCES	 = $(CSOURCES) $(HSOURCES) $(BUILTIN_DEFS)
+ 
+@@ -532,7 +532,7 @@ OBJECTS	 = shell.o eval.o y.tab.o general.o make_cmd.o print_cmd.o \
+ 	   trap.o input.o unwind_prot.o pathexp.o sig.o test.o version.o \
+ 	   alias.o $(ARRAY_O) arrayfunc.o assoc.o braces.o bracecomp.o bashhist.o \
+ 	   bashline.o $(SIGLIST_O) list.o stringlib.o locale.o findcmd.o redir.o \
+-	   pcomplete.o pcomplib.o syntax.o xmalloc.o $(SIGNAMES_O)
++	   pcomplete.o pcomplib.o syntax.o xmalloc.o dump_ast.o $(SIGNAMES_O)
+ 
+ # Where the source code of the shell builtins resides.
+ BUILTIN_SRCDIR=$(srcdir)/builtins
+diff --git a/dump_ast.c b/dump_ast.c
+new file mode 100644
+index 00000000..d05a4df8
+--- /dev/null
++++ b/dump_ast.c
+@@ -0,0 +1,351 @@
++/* dump_ast.c - Dump command AST as s-expressions */
++
++#include "config.h"
++#include <stdio.h>
++#include "bashtypes.h"
++#include "command.h"
++#include "y.tab.h"
++
++void dump_command(COMMAND *cmd);
++
++static void print_escaped(const char *s)
++{
++    if (!s) { printf("\"\""); return; }
++    putchar('"');
++    for (; *s; s++) {
++        switch (*s) {
++        case '"':  printf("\\\""); break;
++        case '\\': printf("\\\\"); break;
++        case '\n': printf("\\n"); break;
++        case '\t': printf("\\t"); break;
++        default:   putchar(*s); break;
++        }
++    }
++    putchar('"');
++}
++
++static void dump_word(WORD_DESC *word)
++{
++    printf("(word ");
++    print_escaped(word ? word->word : NULL);
++    printf(")");
++}
++
++static void dump_word_list(WORD_LIST *list)
++{
++    for (WORD_LIST *w = list; w; w = w->next) {
++        printf(" ");
++        dump_word(w->word);
++    }
++}
++
++static const char *connector_name(int c)
++{
++    switch (c) {
++    case '&':     return "background";
++    case '|':     return "pipe";
++    case BAR_AND: return "pipe-stderr";
++    case AND_AND: return "and";
++    case OR_OR:   return "or";
++    case ';':     return "semi";
++    case '\n':    return "newline";
++    default:      return "unknown";
++    }
++}
++
++static const char *redir_name(int instruction)
++{
++    switch (instruction) {
++    case r_output_direction:       return ">";
++    case r_input_direction:        return "<";
++    case r_inputa_direction:       return "<";
++    case r_appending_to:           return ">>";
++    case r_reading_until:          return "<<";
++    case r_reading_string:         return "<<<";
++    case r_duplicating_input:      return "<&";
++    case r_duplicating_output:     return ">&";
++    case r_duplicating_input_word: return "<&";
++    case r_duplicating_output_word: return ">&";
++    case r_deblank_reading_until:  return "<<-";
++    case r_close_this:             return ">&-";
++    case r_err_and_out:            return "&>";
++    case r_input_output:           return "<>";
++    case r_output_force:           return ">|";
++    case r_append_err_and_out:     return "&>>";
++    case r_move_input:             return "<&";
++    case r_move_output:            return ">&";
++    case r_move_input_word:        return "<&";
++    case r_move_output_word:       return ">&";
++    default:                       return "?";
++    }
++}
++
++static int redirect_takes_filename(int ri)
++{
++    switch (ri) {
++    case r_duplicating_input:
++    case r_duplicating_output:
++    case r_move_input:
++    case r_move_output:
++    case r_close_this:
++        return 0;  /* dest is an fd number */
++    default:
++        return 1;  /* dest is a filename */
++    }
++}
++
++static void dump_redirect(REDIRECT *r)
++{
++    printf("(redirect \"%s\"", redir_name(r->instruction));
++    if (redirect_takes_filename(r->instruction)) {
++        if (r->redirectee.filename)
++            printf(" \"%s\"", r->redirectee.filename->word);
++    } else {
++        printf(" %d", r->redirectee.dest);
++    }
++    printf(")");
++}
++
++static void dump_redirects(REDIRECT *r)
++{
++    for (; r; r = r->next) {
++        printf(" ");
++        dump_redirect(r);
++    }
++}
++
++static void dump_simple(SIMPLE_COM *cmd)
++{
++    printf("(command");
++    dump_word_list(cmd->words);
++    dump_redirects(cmd->redirects);
++    printf(")");
++}
++
++static void dump_for(FOR_COM *cmd)
++{
++    printf("(for ");
++    dump_word(cmd->name);
++    printf(" (in");
++    dump_word_list(cmd->map_list);
++    printf(") ");
++    dump_command(cmd->action);
++    printf(")");
++}
++
++#if defined(ARITH_FOR_COMMAND)
++static void dump_arith_for(ARITH_FOR_COM *cmd)
++{
++    printf("(arith-for (init");
++    dump_word_list(cmd->init);
++    printf(") (test");
++    dump_word_list(cmd->test);
++    printf(") (step");
++    dump_word_list(cmd->step);
++    printf(") ");
++    dump_command(cmd->action);
++    printf(")");
++}
++#endif
++
++static void dump_case(CASE_COM *cmd)
++{
++    printf("(case ");
++    dump_word(cmd->word);
++    for (PATTERN_LIST *p = cmd->clauses; p; p = p->next) {
++        printf(" (pattern (");
++        for (WORD_LIST *w = p->patterns; w; w = w->next) {
++            dump_word(w->word);
++            if (w->next) printf(" ");
++        }
++        printf(") ");
++        dump_command(p->action);
++        printf(")");
++    }
++    printf(")");
++}
++
++static void dump_while(WHILE_COM *cmd, const char *kw)
++{
++    printf("(%s ", kw);
++    dump_command(cmd->test);
++    printf(" ");
++    dump_command(cmd->action);
++    printf(")");
++}
++
++static void dump_if(IF_COM *cmd)
++{
++    printf("(if ");
++    dump_command(cmd->test);
++    printf(" ");
++    dump_command(cmd->true_case);
++    if (cmd->false_case) {
++        printf(" ");
++        dump_command(cmd->false_case);
++    }
++    printf(")");
++}
++
++#if defined(SELECT_COMMAND)
++static void dump_select(SELECT_COM *cmd)
++{
++    printf("(select ");
++    dump_word(cmd->name);
++    printf(" (in");
++    dump_word_list(cmd->map_list);
++    printf(") ");
++    dump_command(cmd->action);
++    printf(")");
++}
++#endif
++
++#if defined(DPAREN_ARITHMETIC)
++static void dump_arith(ARITH_COM *cmd)
++{
++    printf("(arith");
++    dump_word_list(cmd->exp);
++    printf(")");
++}
++#endif
++
++#if defined(COND_COMMAND)
++static void dump_cond(COND_COM *cmd)
++{
++    switch (cmd->type) {
++    case COND_AND:
++        printf("(cond-and ");
++        dump_cond(cmd->left);
++        printf(" ");
++        dump_cond(cmd->right);
++        printf(")");
++        break;
++    case COND_OR:
++        printf("(cond-or ");
++        dump_cond(cmd->left);
++        printf(" ");
++        dump_cond(cmd->right);
++        printf(")");
++        break;
++    case COND_UNARY:
++        printf("(cond-unary \"%s\" ", cmd->op->word);
++        dump_cond(cmd->left);
++        printf(")");
++        break;
++    case COND_BINARY:
++        printf("(cond-binary \"%s\" ", cmd->op->word);
++        dump_cond(cmd->left);
++        printf(" ");
++        dump_cond(cmd->right);
++        printf(")");
++        break;
++    case COND_TERM:
++        printf("(cond-term \"%s\")", cmd->op->word);
++        break;
++    case COND_EXPR:
++        printf("(cond-expr ");
++        dump_cond(cmd->left);
++        printf(")");
++        break;
++    }
++}
++#endif
++
++void dump_command(COMMAND *cmd)
++{
++    if (!cmd) { printf("()"); return; }
++
++    int need_close_neg = 0, need_close_time = 0;
++    if (cmd->flags & CMD_INVERT_RETURN) {
++        printf("(negation ");
++        need_close_neg = 1;
++    }
++    if (cmd->flags & CMD_TIME_PIPELINE) {
++        printf("(time%s ", (cmd->flags & CMD_TIME_POSIX) ? " -p" : "");
++        need_close_time = 1;
++    }
++
++    switch (cmd->type) {
++    case cm_simple:
++        dump_simple(cmd->value.Simple);
++        break;
++    case cm_for:
++        dump_for(cmd->value.For);
++        break;
++#if defined(ARITH_FOR_COMMAND)
++    case cm_arith_for:
++        dump_arith_for(cmd->value.ArithFor);
++        break;
++#endif
++    case cm_case:
++        dump_case(cmd->value.Case);
++        break;
++    case cm_while:
++        dump_while(cmd->value.While, "while");
++        break;
++    case cm_until:
++        dump_while(cmd->value.While, "until");
++        break;
++    case cm_if:
++        dump_if(cmd->value.If);
++        break;
++#if defined(SELECT_COMMAND)
++    case cm_select:
++        dump_select(cmd->value.Select);
++        break;
++#endif
++#if defined(DPAREN_ARITHMETIC)
++    case cm_arith:
++        dump_arith(cmd->value.Arith);
++        break;
++#endif
++#if defined(COND_COMMAND)
++    case cm_cond:
++        printf("(cond ");
++        dump_cond(cmd->value.Cond);
++        printf(")");
++        break;
++#endif
++    case cm_group:
++        printf("(brace-group ");
++        dump_command(cmd->value.Group->command);
++        printf(")");
++        break;
++    case cm_subshell:
++        printf("(subshell ");
++        dump_command(cmd->value.Subshell->command);
++        printf(")");
++        break;
++    case cm_function_def:
++        printf("(function \"%s\" ", cmd->value.Function_def->name->word);
++        dump_command(cmd->value.Function_def->command);
++        printf(")");
++        break;
++    case cm_coproc:
++        printf("(coproc");
++        if (cmd->value.Coproc->name)
++            printf(" \"%s\"", cmd->value.Coproc->name);
++        printf(" ");
++        dump_command(cmd->value.Coproc->command);
++        printf(")");
++        break;
++    case cm_connection:
++        printf("(%s ", connector_name(cmd->value.Connection->connector));
++        dump_command(cmd->value.Connection->first);
++        if (cmd->value.Connection->second) {
++            printf(" ");
++            dump_command(cmd->value.Connection->second);
++        }
++        printf(")");
++        break;
++    default:
++        printf("(unknown %d)", cmd->type);
++        break;
++    }
++
++    if (cmd->redirects && cmd->type != cm_simple)
++        dump_redirects(cmd->redirects);
++
++    if (need_close_time) printf(")");
++    if (need_close_neg) printf(")");
++}
+diff --git a/dump_ast.h b/dump_ast.h
+new file mode 100644
+index 00000000..0e7468c9
+--- /dev/null
++++ b/dump_ast.h
+@@ -0,0 +1,10 @@
++/* dump_ast.h - Dump command AST as s-expressions */
++
++#ifndef DUMP_AST_H
++#define DUMP_AST_H
++
++#include "command.h"
++
++extern void dump_command(COMMAND *cmd);
++
++#endif /* DUMP_AST_H */
+diff --git a/eval.c b/eval.c
+index bbf5d88b..d6e104f1 100644
+--- a/eval.c
++++ b/eval.c
+@@ -43,6 +43,7 @@
+ 
+ #include "input.h"
+ #include "execute_cmd.h"
++#include "dump_ast.h"
+ 
+ #if defined (HISTORY)
+ #  include "bashhist.h"
+@@ -148,6 +149,11 @@ reader_loop (void)
+ 	{
+ 	  if (interactive_shell == 0 && read_but_dont_execute)
+ 	    {
++	      if (dump_ast && global_command)
++		{
++		  dump_command (global_command);
++		  printf ("\n");
++		}
+ 	      set_exit_status (last_command_exit_value);
+ 	      dispose_command (global_command);
+ 	      global_command = (COMMAND *)NULL;
+diff --git a/execute_cmd.c b/execute_cmd.c
+index 070f5119..7e769f33 100644
+--- a/execute_cmd.c
++++ b/execute_cmd.c
+@@ -444,6 +444,10 @@ executing_line_number (void)
+ int
+ execute_command (COMMAND *command)
+ {
++#if defined (BASH_ORACLE)
++  fprintf (stderr, "FATAL: execute_command called in parse-only build\n");
++  exit (99);
++#else
+   struct fd_bitmap *bitmap;
+   int result;
+ 
+@@ -467,6 +471,7 @@ execute_command (COMMAND *command)
+ 
+   QUIT;
+   return (result);
++#endif /* BASH_ORACLE */
+ }
+ 
+ /* Return 1 if TYPE is a shell control structure type. */
+diff --git a/justfile b/justfile
+new file mode 100644
+index 00000000..4390e869
+--- /dev/null
++++ b/justfile
+@@ -0,0 +1,18 @@
++# Configure (run once, or after Makefile.in changes)
++configure:
++    ./configure
++
++# Build bash-oracle
++build:
++    make -j$(sysctl -n hw.ncpu) CFLAGS="-DBASH_ORACLE -O2"
++    strip bash-oracle
++
++# Clean build artifacts
++clean:
++    make clean
++
++# Generate patch file for Parable
++patchfile:
++    @echo "# Base: $(git rev-parse master)" > ~/source/Parable/tools/bash-oracle/bash-oracle.patch
++    @git diff master..HEAD >> ~/source/Parable/tools/bash-oracle/bash-oracle.patch
++    @echo "Wrote ~/source/Parable/tools/bash-oracle/bash-oracle.patch (base: $(git rev-parse --short master))"
+diff --git a/shell.c b/shell.c
+index e59029cc..9ca9cc65 100644
+--- a/shell.c
++++ b/shell.c
+@@ -69,6 +69,8 @@ extern int get_tty_state (void);
+ #include "input.h"
+ #include "execute_cmd.h"
+ #include "findcmd.h"
++#include "dump_ast.h"
++#include <dirent.h>
+ 
+ #if defined (USING_BASH_MALLOC) && defined (DEBUG) && !defined (DISABLE_MALLOC_WRAPPERS)
+ #  include <malloc/shmalloc.h>
+@@ -232,6 +234,14 @@ int no_line_editing = 1;	/* can't have line editing without readline */
+ int dump_translatable_strings;	/* Dump strings in $"...", don't execute. */
+ int dump_po_strings;		/* Dump strings in $"..." in po format */
+ #endif
++#if defined (BASH_ORACLE)
++int dump_ast = 1;		/* Dump AST as s-expressions, don't execute */
++#else
++int dump_ast = 0;		/* Dump AST as s-expressions, don't execute */
++#endif
++static char *oracle_input_dir = NULL;	/* Input directory for --write-tests */
++static char *oracle_output_dir = NULL;	/* Output directory for --write-tests */
++static char *oracle_expr = NULL;	/* Expression for -e */
+ int wordexp_only = 0;		/* Do word expansion only */
+ int protected_mode = 0;		/* No command substitution with --wordexp */
+ 
+@@ -260,6 +270,7 @@ static const struct {
+   { "dump-po-strings", Int, &dump_po_strings, (char **)0x0 },
+   { "dump-strings", Int, &dump_translatable_strings, (char **)0x0 },
+ #endif
++  { "dump-ast", Int, &dump_ast, (char **)0x0 },
+   { "help", Int, &want_initial_help, (char **)0x0 },
+   { "init-file", Charp, (int *)0x0, &bashrc_file },
+   { "login", Int, &make_login_shell, (char **)0x0 },
+@@ -396,6 +407,40 @@ main (int argc, char **argv, char **env)
+   USE_VAR(saverst);
+ #endif
+ 
++#if defined (BASH_ORACLE)
++  /* Handle bash-oracle CLI before any shell initialization */
++  if (argc < 2 || strcmp (argv[1], "--help") == 0)
++    {
++      printf ("Usage: %s [OPTIONS] FILE\n", argv[0]);
++      printf ("  FILE                    Parse FILE and print AST to stdout\n");
++      printf ("  -e BASH                 Parse BASH code and print AST to stdout\n");
++      printf ("  --write-tests IN OUT    Convert scripts in IN dir to .tests in OUT dir\n");
++      printf ("  --help                  Show this help\n");
++      exit (argc < 2 ? 1 : 0);
++    }
++  if (argc >= 2 && strcmp (argv[1], "--write-tests") == 0)
++    {
++      if (argc != 4)
++        {
++          fprintf (stderr, "Usage: %s --write-tests INDIR OUTDIR\n", argv[0]);
++          exit (2);
++        }
++      oracle_input_dir = argv[2];
++      oracle_output_dir = argv[3];
++      argc = 1;  /* Hide args from shell's option parsing */
++    }
++  if (argc >= 2 && strcmp (argv[1], "-e") == 0)
++    {
++      if (argc != 3)
++        {
++          fprintf (stderr, "Usage: %s -e BASH\n", argv[0]);
++          exit (2);
++        }
++      oracle_expr = argv[2];
++      argc = 1;  /* Hide args from shell's option parsing */
++    }
++#endif
++
+   /* Catch early SIGINTs. */
+   code = setjmp_nosigs (top_level);
+   if (code)
+@@ -510,6 +555,13 @@ main (int argc, char **argv, char **env)
+     read_but_dont_execute = 1;
+ #endif
+ 
++  if (dump_ast)
++    {
++      extern int extended_glob;
++      read_but_dont_execute = 1;
++      extended_glob = 1;  /* Enable extglob for AST dumping */
++    }
++
+   if (running_setuid && privileged_mode == 0)
+     disable_priv_mode ();
+ 
+@@ -831,6 +883,162 @@ main (int argc, char **argv, char **env)
+     exit_shell (pretty_print_loop ());
+ 
+   /* Read commands until exit condition. */
++  if (oracle_expr)
++    {
++      with_input_from_string (oracle_expr, "-e");
++      while (yyparse () == 0 && global_command)
++	{
++	  dump_command (global_command);
++	  printf ("\n");
++	  dispose_command (global_command);
++	  global_command = NULL;
++	}
++      exit_shell (0);
++    }
++
++  if (oracle_input_dir)
++    {
++      DIR *dir;
++      struct dirent *ent;
++      char inpath[PATH_MAX], outpath[PATH_MAX];
++      int file_count = 0, success_count = 0, error_count = 0;
++      FILE *orig_stdout = stdout;
++
++      dir = opendir (oracle_input_dir);
++      if (!dir)
++	{
++	  file_error (oracle_input_dir);
++	  exit_shell (1);
++	}
++      while ((ent = readdir (dir)) != NULL)
++	{
++	  FILE *outfile;
++	  char *src, *dot;
++	  size_t src_len;
++	  int fd, parse_ok;
++	  struct stat st;
++
++	  if (ent->d_name[0] == '.')
++	    continue;
++	  snprintf (inpath, sizeof (inpath), "%s/%s", oracle_input_dir, ent->d_name);
++	  if (file_isdir (inpath))
++	    continue;
++
++	  /* Read source file */
++	  fd = open (inpath, O_RDONLY);
++	  if (fd < 0)
++	    continue;
++	  if (fstat (fd, &st) < 0 || st.st_size == 0)
++	    {
++	      close (fd);
++	      continue;
++	    }
++	  src = malloc (st.st_size + 1);
++	  if (!src)
++	    {
++	      close (fd);
++	      continue;
++	    }
++	  src_len = read (fd, src, st.st_size);
++	  close (fd);
++	  src[src_len] = '\0';
++
++	  /* Check for binary file (contains null bytes) */
++	  int is_binary = 0;
++	  for (size_t i = 0; i < src_len; i++)
++	    {
++	      if (src[i] == '\0')
++		{
++		  is_binary = 1;
++		  break;
++		}
++	    }
++
++	  /* Build output path: strip extension, add .tests */
++	  dot = strrchr (ent->d_name, '.');
++	  if (dot)
++	    snprintf (outpath, sizeof (outpath), "%s/%.*s.tests",
++		      oracle_output_dir, (int)(dot - ent->d_name), ent->d_name);
++	  else
++	    snprintf (outpath, sizeof (outpath), "%s/%s.tests",
++		      oracle_output_dir, ent->d_name);
++
++	  /* Open output file */
++	  outfile = fopen (outpath, "w");
++	  if (!outfile)
++	    {
++	      free (src);
++	      continue;
++	    }
++
++	  /* Write header */
++	  fprintf (outfile, "=== %s\n", ent->d_name);
++	  /* Write source (strip trailing newlines) */
++	  while (src_len > 0 && src[src_len - 1] == '\n')
++	    src[--src_len] = '\0';
++	  fprintf (outfile, "%s\n", src);
++	  fprintf (outfile, "---\n");
++	  fflush (outfile);
++
++	  /* Redirect stdout to output file for AST dump */
++	  stdout = outfile;
++
++	  if (is_binary)
++	    {
++	      printf ("!error\n");
++	      error_count++;
++	    }
++	  else
++	    {
++	      /* Reset parser state */
++	      if (file_count > 0)
++		{
++		  unset_bash_input (0);
++		  EOF_Reached = 0;
++		  line_number = 0;
++		}
++
++	      /* Parse the file */
++	      shell_script_filename = inpath;
++	      open_shell_script (shell_script_filename);
++	      set_bash_input ();
++	      parse_ok = (yyparse () == 0 && global_command != NULL);
++
++	      if (parse_ok)
++		{
++		  dump_command (global_command);
++		  printf ("\n");
++		  success_count++;
++		}
++	      else
++		{
++		  printf ("!error\n");
++		  error_count++;
++		}
++	    }
++
++	  /* Restore stdout and finish file */
++	  stdout = orig_stdout;
++	  fprintf (outfile, "---\n");
++	  fclose (outfile);
++	  free (src);
++
++	  file_count++;
++	  if (file_count % 1000 == 0)
++	    fprintf (stderr, "Processed %d files...\n", file_count);
++
++	  if (global_command)
++	    {
++	      dispose_command (global_command);
++	      global_command = NULL;
++	    }
++	}
++      closedir (dir);
++      fprintf (stderr, "Done: %d files, %d success, %d errors\n",
++	       file_count, success_count, error_count);
++      exit_shell (0);
++    }
++
+   reader_loop ();
+   exit_shell (last_command_exit_value);
+ }
+diff --git a/shell.h b/shell.h
+index 74d6fd97..e7d5ef3e 100644
+--- a/shell.h
++++ b/shell.h
+@@ -114,6 +114,7 @@ extern const int default_compatibility_level;
+ extern int running_under_emacs;
+ 
+ extern int pretty_print_mode;
++extern int dump_ast;
+ 
+ extern int posixly_correct;
+ extern int no_line_editing;

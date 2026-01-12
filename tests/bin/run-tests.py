@@ -90,8 +90,8 @@ def run_test(test_input, test_expected):
 def main():
     # Find test directory
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    repo_root = os.path.dirname(script_dir)
-    test_dir = os.path.join(repo_root, "tests")
+    test_dir = os.path.dirname(script_dir)  # tests/
+    repo_root = os.path.dirname(test_dir)
 
     # Parse arguments
     verbose = False

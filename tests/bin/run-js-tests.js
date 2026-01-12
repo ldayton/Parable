@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
  * Simple test runner for the JavaScript parser.
- * Mirrors the Python test runner in bin/run-tests.py
+ * Mirrors the Python test runner in run-tests.py
  */
 
 const fs = require('fs');
 const path = require('path');
-const { parse, ParseError } = require('../src/parable.js');
+const { parse, ParseError } = require('../../src/parable.js');
 
 function findTestFiles(directory) {
   const result = [];
@@ -94,7 +94,7 @@ function runTest(testInput, testExpected) {
 }
 
 function main() {
-  const testDir = path.join(__dirname, '..', 'tests');
+  const testDir = path.join(__dirname, '..');
   const verbose = process.argv.includes('-v') || process.argv.includes('--verbose');
   let filterPattern = null;
   const filterIdx = process.argv.indexOf('-f');
@@ -111,7 +111,7 @@ function main() {
   
   for (const filepath of testFiles) {
     const tests = parseTestFile(filepath);
-    const relPath = path.relative(path.join(__dirname, '..'), filepath);
+    const relPath = path.relative(path.join(__dirname, '..', '..'), filepath);
     
     for (const { name, input, expected, lineNum } of tests) {
       if (filterPattern && !name.includes(filterPattern) && !relPath.includes(filterPattern)) {

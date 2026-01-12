@@ -845,12 +845,6 @@ class JSTranspiler(ast.NodeVisitor):
         orelse = self.visit_expr(node.orelse)
         return f"({test} ? {body} : {orelse})"
 
-    def visit_expr_Lambda(self, node: ast.Lambda) -> str:
-        args = [self._safe_name(a.arg) for a in node.args.args]
-        args_str = ", ".join(args)
-        body = self.visit_expr(node.body)
-        return f"(({args_str}) => {body})"
-
     def visit_expr_List(self, node: ast.List) -> str:
         elements = ", ".join(self.visit_expr(e) for e in node.elts)
         return f"[{elements}]"

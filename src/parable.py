@@ -45,29 +45,7 @@ ANSI_C_ESCAPES = {
 
 def _get_ansi_escape(c: str) -> int:
     """Look up simple ANSI-C escape byte value. Returns -1 if not found."""
-    if c == "a":
-        return 0x07
-    if c == "b":
-        return 0x08
-    if c == "e" or c == "E":
-        return 0x1B
-    if c == "f":
-        return 0x0C
-    if c == "n":
-        return 0x0A
-    if c == "r":
-        return 0x0D
-    if c == "t":
-        return 0x09
-    if c == "v":
-        return 0x0B
-    if c == "\\":
-        return 0x5C
-    if c == '"':
-        return 0x22
-    if c == "?":
-        return 0x3F
-    return -1
+    return ANSI_C_ESCAPES.get(c, -1)
 
 
 def _is_whitespace(c: str) -> bool:

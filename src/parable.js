@@ -27,41 +27,22 @@ function _isOctalDigit(c) {
 }
 
 // ANSI-C escape sequence byte values
+const ANSI_C_ESCAPES = {
+	a: 7,
+	b: 8,
+	e: 27,
+	E: 27,
+	f: 12,
+	n: 10,
+	r: 13,
+	t: 9,
+	v: 11,
+	"\\": 92,
+	'"': 34,
+	"?": 63,
+};
 function _getAnsiEscape(c) {
-	if (c === "a") {
-		return 7;
-	}
-	if (c === "b") {
-		return 8;
-	}
-	if (c === "e" || c === "E") {
-		return 27;
-	}
-	if (c === "f") {
-		return 12;
-	}
-	if (c === "n") {
-		return 10;
-	}
-	if (c === "r") {
-		return 13;
-	}
-	if (c === "t") {
-		return 9;
-	}
-	if (c === "v") {
-		return 11;
-	}
-	if (c === "\\") {
-		return 92;
-	}
-	if (c === '"') {
-		return 34;
-	}
-	if (c === "?") {
-		return 63;
-	}
-	return -1;
+	return ANSI_C_ESCAPES[c] ?? -1;
 }
 
 function _isWhitespace(c) {

@@ -511,9 +511,23 @@ class JSTranspiler(ast.NodeVisitor):
                 return f"{value}.{key}"
         return f"{value}[{self.visit_expr(node.slice)}]"
 
+    def _visit_callback_arg(self, arg: ast.expr) -> str:
+        """Visit an argument, adding .bind(this) for self method references used as callbacks."""
+        # Only add .bind(this) for parser methods passed as callbacks
+        if (
+            isinstance(arg, ast.Attribute)
+            and isinstance(arg.value, ast.Name)
+            and arg.value.id == "self"
+            and (arg.attr.startswith("_arith_parse_") or arg.attr.startswith("_parse_"))
+        ):
+            # Convert method name to camelCase and add bind
+            method_name = self._camel_case(arg.attr)
+            return f"this.{method_name}.bind(this)"
+        return self.visit_expr(arg)
+
     def visit_expr_Call(self, node: ast.Call) -> str:
         # Combine positional and keyword args (JS doesn't have kwargs, so treat as positional)
-        all_args = [self.visit_expr(a) for a in node.args]
+        all_args = [self._visit_callback_arg(a) for a in node.args]
         # Handle keyword args that skip positional defaults
         # Specific case: _format_cmdsub_node(x, in_procsub=True) -> FormatCmdsubNode(x, 0, true)
         for kw in node.keywords:
@@ -644,6 +658,9 @@ class JSTranspiler(ast.NodeVisitor):
                 if isinstance(attr_node, ast.Constant) and isinstance(attr_node.value, str):
                     key = attr_node.value
                     if key.isidentifier():
+                        # Convert snake_case to camelCase for self attributes
+                        if obj == "this" and "_" in key:
+                            key = self._camel_case(key)
                         if len(node.args) >= 3:
                             default = self.visit_expr(node.args[2])
                             return f"({obj}.{key} ?? {default})"

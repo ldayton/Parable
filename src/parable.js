@@ -4259,9 +4259,9 @@ class Parser {
 	_parseArithExpr(content) {
 		let result, saved_arith_len, saved_arith_pos, saved_arith_src;
 		// Save any existing arith context (for nested parsing)
-		saved_arith_src = this._arith_src ?? null;
-		saved_arith_pos = this._arith_pos ?? null;
-		saved_arith_len = this._arith_len ?? null;
+		saved_arith_src = this._arithSrc ?? null;
+		saved_arith_pos = this._arithPos ?? null;
+		saved_arith_len = this._arithLen ?? null;
 		this._arith_src = content;
 		this._arith_pos = 0;
 		this._arith_len = content.length;
@@ -4416,38 +4416,40 @@ class Parser {
 		return cond;
 	}
 
-	_arithParseLogicalOr() {
-		let left, right;
-		left = this._arithParseLogicalAnd();
+	_arithParseLeftAssoc(ops, parsefn) {
+		let left, matched, op;
+		left = parsefn();
 		while (true) {
 			this._arithSkipWs();
-			if (this._arithMatch("||")) {
-				this._arithConsume("||");
-				this._arithSkipWs();
-				right = this._arithParseLogicalAnd();
-				left = new ArithBinaryOp("||", left, right);
-			} else {
+			matched = false;
+			for (op of ops) {
+				if (this._arithMatch(op)) {
+					this._arithConsume(op);
+					this._arithSkipWs();
+					left = new ArithBinaryOp(op, left, parsefn());
+					matched = true;
+					break;
+				}
+			}
+			if (!matched) {
 				break;
 			}
 		}
 		return left;
 	}
 
+	_arithParseLogicalOr() {
+		return this._arithParseLeftAssoc(
+			["||"],
+			this._arithParseLogicalAnd.bind(this),
+		);
+	}
+
 	_arithParseLogicalAnd() {
-		let left, right;
-		left = this._arithParseBitwiseOr();
-		while (true) {
-			this._arithSkipWs();
-			if (this._arithMatch("&&")) {
-				this._arithConsume("&&");
-				this._arithSkipWs();
-				right = this._arithParseBitwiseOr();
-				left = new ArithBinaryOp("&&", left, right);
-			} else {
-				break;
-			}
-		}
-		return left;
+		return this._arithParseLeftAssoc(
+			["&&"],
+			this._arithParseBitwiseOr.bind(this),
+		);
 	}
 
 	_arithParseBitwiseOr() {
@@ -4513,25 +4515,10 @@ class Parser {
 	}
 
 	_arithParseEquality() {
-		let left, right;
-		left = this._arithParseComparison();
-		while (true) {
-			this._arithSkipWs();
-			if (this._arithMatch("==")) {
-				this._arithConsume("==");
-				this._arithSkipWs();
-				right = this._arithParseComparison();
-				left = new ArithBinaryOp("==", left, right);
-			} else if (this._arithMatch("!=")) {
-				this._arithConsume("!=");
-				this._arithSkipWs();
-				right = this._arithParseComparison();
-				left = new ArithBinaryOp("!=", left, right);
-			} else {
-				break;
-			}
-		}
-		return left;
+		return this._arithParseLeftAssoc(
+			["==", "!="],
+			this._arithParseComparison.bind(this),
+		);
 	}
 
 	_arithParseComparison() {

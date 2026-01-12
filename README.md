@@ -1,10 +1,10 @@
 <div align="center">
 <pre>
-////        \\\\                                      The wind blows where it will--
- ////              \\\\                                  you hear its sound, but you
- --------////  <strong>P A R A B L E</strong>  \\\\--------                don't know where it's from
-   \\\\         ////                                            or where it's going.
-\\\\        ////                                                          — John 3:8
+////        \\\\                              The wind blows where it will--
+ ////              \\\\                          you hear its sound, but you
+ --------////  <strong>P A R A B L E</strong>  \\\\--------        don't know where it's from
+   \\\\         ////                                    or where it's going.
+\\\\        ////                                                  — John 3:8
 </pre>
 </div>
 

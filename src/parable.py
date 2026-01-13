@@ -583,8 +583,8 @@ class Word(Node):
                 in_whitespace = False
                 normalized.append(ch)
                 i += 1
-        # Strip trailing space
-        return "".join(normalized).rstrip(" ")
+        # Strip trailing whitespace
+        return "".join(normalized).rstrip()
 
     def _strip_arith_line_continuations(self, value: str) -> str:
         """Strip backslash-newline (line continuation) from inside $((...))."""

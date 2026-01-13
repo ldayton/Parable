@@ -3,7 +3,7 @@
 One bug per iteration. Do not batch.
 
 1. **Run corpus** → `uv run python tools/bash-oracle/bin/run-corpus.py`
-2. **Pick first failure** → check `failures.txt`, test with Parable to see error type (parse error vs mismatch)
+2. **Pick last failure** → check `failures.txt`, take the LAST of the ten bugs, test with Parable to see error type (parse error vs mismatch)
 3. **Create MRE** → minimal bash that reproduces the issue
 4. **Get oracle output** → `~/source/bash-oracle/bash-oracle -e 'MRE'` (syntax errors output nothing, just error message to stderr)
 5. **Add failing test** → append to appropriate `tests/parable/*.tests`

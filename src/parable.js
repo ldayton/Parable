@@ -691,8 +691,8 @@ class Word extends Node {
 				i += 1;
 			}
 		}
-		// Strip trailing space
-		return normalized.join("").replace(/[ ]+$/, "");
+		// Strip trailing whitespace
+		return normalized.join("").trimEnd();
 	}
 
 	_stripArithLineContinuations(value) {

@@ -2547,7 +2547,9 @@ def _find_cmdsub_end(value: str, start: int) -> int:
             continue
         # Handle parens
         if c == "(":
-            depth += 1
+            # In case patterns, ( before pattern name is optional and not a grouping paren
+            if not (in_case_patterns and case_depth > 0):
+                depth += 1
         elif c == ")":
             # In case patterns, ) after pattern name is not a grouping paren
             if in_case_patterns and case_depth > 0:

@@ -2928,7 +2928,10 @@ function _findCmdsubEnd(value, start) {
 		}
 		// Handle parens
 		if (c === "(") {
-			depth += 1;
+			// In case patterns, ( before pattern name is optional and not a grouping paren
+			if (!(in_case_patterns && case_depth > 0)) {
+				depth += 1;
+			}
 		} else if (c === ")") {
 			// In case patterns, ) after pattern name is not a grouping paren
 			if (in_case_patterns && case_depth > 0) {

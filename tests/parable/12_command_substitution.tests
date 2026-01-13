@@ -194,6 +194,13 @@ x="$(case y in a) z ;; esac 2>/dev/null)"
 ---
 
 
+=== case with leading paren in cmdsub
+x="$(case y in (a) z;; esac)"
+---
+(command (word "x=\"$(case y in a)\n        z\n    ;;\nesac)\""))
+---
+
+
 # === In assignments ===
 
 === simple assignment with cmdsub

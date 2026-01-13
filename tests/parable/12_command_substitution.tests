@@ -651,3 +651,9 @@ x=$(if [[ ! ${y} ]]; then echo z; fi)
 ---
 (command (word "x=$(if [[ ! -n ${y} ]]; then\n    echo z;\nfi)"))
 ---
+
+=== nested for loop do indentation in cmdsub
+x=$(for a in b; do for c in d; do echo e; done; done)
+---
+(command (word "x=$(for a in b;\ndo\n    for c in d;\n    do\n        echo e;\n    done;\ndone)"))
+---

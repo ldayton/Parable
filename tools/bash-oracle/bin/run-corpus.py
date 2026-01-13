@@ -21,6 +21,16 @@ SKIP_FILES = {
     "001812__containerd__stargz-snapshotter__run-kind.tests",  # heredoc contains ---
     "002478__cloudfoundry-incubator__bosh-google-cpi-release__run-bats.tests",  # heredoc contains ---
     "003756__soltysh__kubernetes__create.tests",  # corpus expects $(! but oracle now outputs $(\!
+    "005160__LalatenduMohanty__kubernetes__apply.tests",  # heredoc contains ---
+    "005822__nriley__Pester__package-Pester.tests",  # heredoc contains ---
+    "006202__duncan-brown__pycbc__pycbc_build_eah.tests",  # heredoc contains ---
+    "006338__indashnet__InDashNet.Open.UN2000__import_openssl.tests",  # heredoc contains ---
+    "006655__FlexibleSUSY__FlexibleSUSY__test_CMSSMNoFV_GM2Calc.tests",  # heredoc contains ---
+    "007156__saikrishnar__Forced-Alignment__prepare_lang.tests",  # heredoc contains ---
+    "007160__liquidfridge__radio.liquidfridge.co.za__ops.tests",  # heredoc contains ---
+    "008821__sumitkgec__presto__run_on_docker.tests",  # heredoc contains ---
+    "009401__ratnikov__git__t4014-format-patch.tests",  # heredoc contains ---
+    "009474__ArchiFleKs__magnum__enable-ingress-traefik.tests",  # heredoc contains ---
 }
 
 

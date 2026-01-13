@@ -13,26 +13,22 @@ from parable import ParseError, parse  # noqa: E402
 
 CORPUS_DIR = os.path.expanduser("~/source/bigtable-bash/tests")
 FAILURES_FILE = os.path.join(SCRIPT_DIR, "failures.txt")
-HEREDOC_DASHES_FILE = os.path.join(SCRIPT_DIR, "heredoc-dashes.txt")
+NEGATION_CMDSUB_FILE = os.path.join(SCRIPT_DIR, "negation-cmdsub.txt")
 MAX_FAILURES = 10
 
 # Test files to skip (known issues to investigate later)
 SKIP_FILES = {
     "001629__Patlol__Handy-Install-Web-Server-ruTorrent-__util_listeusers.tests",
-    "003756__soltysh__kubernetes__create.tests",  # corpus expects $(! but oracle now outputs $(\!
-    "005160__LalatenduMohanty__kubernetes__apply.tests",  # corpus expects $(! but oracle now outputs $(\!
     "012091__johnchronis__exareme__exareme-admin.tests",  # very long expected output
     "012559__bbgw__kubernetes__test-cmd.tests",  # very long expected output
     "012773__Devindik__origin__git-sh-setup.tests",  # very long expected output
-    "014119__kyma-project__test-infra__integration-tests.tests",  # heredoc contains ---
 }
 
-# Files where heredoc contains --- which breaks the corpus test parser
-# (loaded from heredoc-dashes.txt)
-HEREDOC_DASHES_FILES: set[str] = set()
-if os.path.exists(HEREDOC_DASHES_FILE):
-    with open(HEREDOC_DASHES_FILE) as f:
-        HEREDOC_DASHES_FILES = {line.strip() for line in f if line.strip()}
+# Files where command substitution contains negation $(! ...) which oracle now escapes
+NEGATION_CMDSUB_FILES: set[str] = set()
+if os.path.exists(NEGATION_CMDSUB_FILE):
+    with open(NEGATION_CMDSUB_FILE) as f:
+        NEGATION_CMDSUB_FILES = {line.strip() for line in f if line.strip()}
 
 
 def parse_test_file(filepath):
@@ -48,16 +44,16 @@ def parse_test_file(filepath):
             name = line[4:].strip()
             i += 1
             input_lines = []
-            while i < n and lines[i] != "---":
+            while i < n and lines[i] != "c209da5127ac3b3fe0ac82c29cbe77df":
                 input_lines.append(lines[i])
                 i += 1
-            if i < n and lines[i] == "---":
+            if i < n and lines[i] == "c209da5127ac3b3fe0ac82c29cbe77df":
                 i += 1
             expected_lines = []
-            while i < n and lines[i] != "---" and not lines[i].startswith("=== "):
+            while i < n and lines[i] != "c209da5127ac3b3fe0ac82c29cbe77df" and not lines[i].startswith("=== "):
                 expected_lines.append(lines[i])
                 i += 1
-            if i < n and lines[i] == "---":
+            if i < n and lines[i] == "c209da5127ac3b3fe0ac82c29cbe77df":
                 i += 1
             while expected_lines and expected_lines[-1].strip() == "":
                 expected_lines.pop()
@@ -110,7 +106,7 @@ def main():
     failed = 0
 
     skipped = 0
-    all_skip_files = SKIP_FILES | HEREDOC_DASHES_FILES
+    all_skip_files = SKIP_FILES | NEGATION_CMDSUB_FILES
     with open(FAILURES_FILE, "w") as failures_f:
         for i, test_file in enumerate(test_files):
             if os.path.basename(test_file) in all_skip_files:

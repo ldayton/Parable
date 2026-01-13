@@ -538,16 +538,7 @@ class Word extends Node {
 	}
 
 	_normalizeArrayInner(inner) {
-		let brace_depth,
-			ch,
-			cmdsub_inner,
-			depth,
-			dq_content,
-			i,
-			in_whitespace,
-			j,
-			normalized,
-			normalized_cmdsub;
+		let brace_depth, ch, depth, dq_content, i, in_whitespace, j, normalized;
 		normalized = [];
 		i = 0;
 		in_whitespace = true;
@@ -640,7 +631,8 @@ class Word extends Node {
 				normalized.push(inner.slice(i, j));
 				i = j;
 			} else if (ch === "$" && i + 1 < inner.length && inner[i + 1] === "(") {
-				// Command substitution - find matching ) and normalize inside
+				// Command substitution - find matching ) and preserve as-is
+				// (formatting is handled later by _format_command_substitutions)
 				in_whitespace = false;
 				j = i + 2;
 				depth = 1;
@@ -669,10 +661,8 @@ class Word extends Node {
 					}
 					j += 1;
 				}
-				// Extract content inside $(...) and normalize it
-				cmdsub_inner = inner.slice(i + 2, j - 1);
-				normalized_cmdsub = this._normalizeArrayInner(cmdsub_inner);
-				normalized.push(`$(${normalized_cmdsub})`);
+				// Preserve command substitution as-is
+				normalized.push(inner.slice(i, j));
 				i = j;
 			} else if (ch === "$" && i + 1 < inner.length && inner[i + 1] === "{") {
 				// Start of ${...} expansion
@@ -757,11 +747,15 @@ class Word extends Node {
 
 	_collectCmdsubs(node) {
 		let condition,
+			elem,
+			elements,
 			expr,
 			false_value,
 			left,
 			node_kind,
 			operand,
+			p,
+			parts,
 			result,
 			right,
 			true_value;
@@ -769,6 +763,19 @@ class Word extends Node {
 		node_kind = node.kind ?? null;
 		if (node_kind === "cmdsub") {
 			result.push(node);
+		} else if (node_kind === "array") {
+			// Array node - collect from each element's parts
+			elements = node.elements ?? [];
+			for (elem of elements) {
+				parts = elem.parts ?? [];
+				for (p of parts) {
+					if ((p.kind ?? null) === "cmdsub") {
+						result.push(p);
+					} else {
+						result.push(...this._collectCmdsubs(p));
+					}
+				}
+			}
 		} else {
 			expr = node.expression ?? null;
 			if (expr != null) {

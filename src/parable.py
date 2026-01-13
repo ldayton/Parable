@@ -532,7 +532,8 @@ class Word(Node):
                 normalized.append(_substring(inner, i, j))
                 i = j
             elif ch == "$" and i + 1 < len(inner) and inner[i + 1] == "(":
-                # Command substitution - find matching ) and normalize inside
+                # Command substitution - find matching ) and preserve as-is
+                # (formatting is handled later by _format_command_substitutions)
                 in_whitespace = False
                 j = i + 2
                 depth = 1
@@ -555,10 +556,8 @@ class Word(Node):
                                 break
                             j += 1
                     j += 1
-                # Extract content inside $(...) and normalize it
-                cmdsub_inner = _substring(inner, i + 2, j - 1)
-                normalized_cmdsub = self._normalize_array_inner(cmdsub_inner)
-                normalized.append("$(" + normalized_cmdsub + ")")
+                # Preserve command substitution as-is
+                normalized.append(_substring(inner, i, j))
                 i = j
             elif ch == "$" and i + 1 < len(inner) and inner[i + 1] == "{":
                 # Start of ${...} expansion
@@ -632,6 +631,16 @@ class Word(Node):
         node_kind = getattr(node, "kind", None)
         if node_kind == "cmdsub":
             result.append(node)
+        elif node_kind == "array":
+            # Array node - collect from each element's parts
+            elements = getattr(node, "elements", [])
+            for elem in elements:
+                parts = getattr(elem, "parts", [])
+                for p in parts:
+                    if getattr(p, "kind", None) == "cmdsub":
+                        result.append(p)
+                    else:
+                        result.extend(self._collect_cmdsubs(p))
         else:
             expr = getattr(node, "expression", None)
             if expr is not None:

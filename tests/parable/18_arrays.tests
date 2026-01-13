@@ -355,3 +355,10 @@ arr=(\
 ---
 (command (word "arr=(\"a\" \"b\")"))
 ---
+
+
+=== array with pipeline in command substitution
+DEVS=($(ls -1 /dev/sd*|egrep foo))
+---
+(command (word "DEVS=($(ls -1 /dev/sd* | egrep foo))"))
+---

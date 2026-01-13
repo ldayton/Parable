@@ -75,9 +75,15 @@ def run_test(test_input, test_expected):
         nodes = parse(test_input)
         actual = " ".join(node.to_sexp() for node in nodes)
     except ParseError as e:
+        if normalize(test_expected) == "<error>":
+            return (True, "<error>", None)
         return (False, "<parse error>", str(e))
     except Exception as e:
         return (False, "<exception>", str(e))
+
+    # If we expected an error but got a successful parse, that's a failure
+    if normalize(test_expected) == "<error>":
+        return (False, actual, "Expected parse error but got successful parse")
 
     expected_norm = normalize(test_expected)
     actual_norm = normalize(actual)

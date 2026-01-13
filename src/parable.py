@@ -7084,6 +7084,10 @@ class Parser:
         # Check for reserved words
         word = self.peek_word()
 
+        # Reserved words that cannot start a statement (only valid in specific contexts)
+        if word in ("fi", "then", "elif", "else", "done", "esac", "do", "in"):
+            raise ParseError(f"Unexpected reserved word '{word}'", pos=self.pos)
+
         # If statement
         if word == "if":
             return self.parse_if()

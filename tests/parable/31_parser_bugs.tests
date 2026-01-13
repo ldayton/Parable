@@ -22,3 +22,10 @@ echo @(a|b)
 ---
 (command (word "echo") (word "@(a|b)"))
 ---
+
+
+=== standalone fi is syntax error
+fi
+---
+<error>
+---

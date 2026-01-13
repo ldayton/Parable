@@ -8258,6 +8258,12 @@ class Parser {
 		}
 		// Check for reserved words
 		word = this.peekWord();
+		// Reserved words that cannot start a statement (only valid in specific contexts)
+		if (
+			["fi", "then", "elif", "else", "done", "esac", "do", "in"].includes(word)
+		) {
+			throw new ParseError(`Unexpected reserved word '${word}'`, this.pos);
+		}
 		// If statement
 		if (word === "if") {
 			return this.parseIf();

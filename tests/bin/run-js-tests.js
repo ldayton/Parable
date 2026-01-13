@@ -80,6 +80,10 @@ function runTest(testInput, testExpected) {
     const nodes = parse(testInput);
     const actual = nodes.map(n => n.toSexp()).join(' ');
     const expectedNorm = normalize(testExpected);
+    // If we expected an error but got a successful parse, that's a failure
+    if (expectedNorm === '<error>') {
+      return { passed: false, actual, error: 'Expected parse error but got successful parse' };
+    }
     const actualNorm = normalize(actual);
     if (expectedNorm === actualNorm) {
       return { passed: true, actual, error: null };
@@ -87,6 +91,9 @@ function runTest(testInput, testExpected) {
     return { passed: false, actual, error: null };
   } catch (e) {
     if (e instanceof ParseError) {
+      if (normalize(testExpected) === '<error>') {
+        return { passed: true, actual: '<error>', error: null };
+      }
       return { passed: false, actual: '<parse error>', error: e.message };
     }
     return { passed: false, actual: '<exception>', error: e.message + '\n' + e.stack };

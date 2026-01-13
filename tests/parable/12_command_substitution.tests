@@ -187,6 +187,20 @@ echo $(case $x in a) echo a;; esac)
 ---
 
 
+=== case with redirect inside cmdsub
+x="$(case y in a) z ;; esac 2>/dev/null)"
+---
+(command (word "x=\"$(case y in a)\n        z\n    ;;\nesac 2> /dev/null)\""))
+---
+
+
+=== case with leading paren in cmdsub
+x="$(case y in (a) z;; esac)"
+---
+(command (word "x=\"$(case y in a)\n        z\n    ;;\nesac)\""))
+---
+
+
 # === In assignments ===
 
 === simple assignment with cmdsub
@@ -517,4 +531,117 @@ files=$(find . -name "*.txt")
 if cmd=$(command -v git); then echo found; fi
 ---
 (if (command (word "cmd=$(command -v git)")) (command (word "echo") (word "found")))
+---
+
+
+=== redirect before command in cmdsub
+echo $(<file cmd)
+---
+(command (word "echo") (word "$(cmd < file)"))
+---
+
+
+=== cmdsub with redirect in param expansion default
+ver=${GOVERSION:-$(<${file} jq -r .GoVersion)}
+---
+(command (word "ver=${GOVERSION:-$(jq -r .GoVersion < ${file})}"))
+---
+
+
+=== cmdsub with here-string in double quotes
+echo "[$(cmd <<< a)]"
+---
+(command (word "echo") (word "\"[$(cmd <<< a)]\""))
+---
+
+
+=== cmdsub inside single quotes within double quotes
+echo "a='$( cmd )'"
+---
+(command (word "echo") (word "\"a='$(cmd)'\""))
+---
+
+
+=== cmdsub with pipe-both operator
+x="$(cmd |& cat)"
+---
+(command (word "x=\"$(cmd 2>&1 | cat)\""))
+---
+
+
+=== cmdsub normalizes 1> to >
+x=$(cmd 1>/dev/null)
+---
+(command (word "x=$(cmd > /dev/null)"))
+---
+
+
+=== heredoc delimiter with closing paren on same line
+x=$(cat <<E
+hello
+E)
+---
+(command (word "x=$(cat <<E\nhello\nE\n)"))
+---
+
+
+=== while loop with redirect in cmdsub
+x=$(while true; do echo x;done < /f)
+---
+(command (word "x=$(while true; do\n    echo x;\ndone < /f)"))
+---
+
+
+=== C-style for loop in cmdsub
+x=$(for ((i=1; i<=n; i++)); do echo $i; done)
+---
+(command (word "x=$(for ((i=1; i<=n; i++))\ndo\n    echo $i;\ndone)"))
+---
+
+
+=== escaped dollar brace is not brace cmdsub
+x="\${ ${VAR}"
+---
+(command (word "x=\"\\${ ${VAR}\""))
+---
+
+
+=== conditional expression in loop inside cmdsub
+x=$(while [[ $a ]]; do echo x; done)
+---
+(command (word "x=$(while [[ -n $a ]]; do\n    echo x;\ndone)"))
+---
+
+
+=== negated command in cmdsub
+x=$(! cmd arg)
+---
+(command (word "x=$(\\! cmd arg)"))
+---
+
+
+=== time command in cmdsub
+x=$(time cmd arg)
+---
+(command (word "x=$(time cmd arg)"))
+---
+
+
+=== cmdsub with comment in array assignment
+informergen_external_apis=(
+$(
+  cd ${KUBE_ROOT}/staging/src
+  # because client-gen doesn't do policy/v1alpha1, we have to skip it too
+  find k8s.io/api -name types.go | xargs -n1 dirname | sort | grep -v pkg.apis.policy.v1alpha1
+)
+)
+---
+(command (word "informergen_external_apis=($(cd ${KUBE_ROOT}/staging/src\nfind k8s.io/api -name types.go | xargs -n1 dirname | sort | grep -v pkg.apis.policy.v1alpha1))"))
+---
+
+
+=== brace group with redirect in cmdsub pipeline
+x=$({ echo a; } 2>/dev/null | cat)
+---
+(command (word "x=$({ echo a; } 2> /dev/null | cat)"))
 ---

@@ -9,4 +9,6 @@ node_modules/
 .claude/
 dippy.toml
 tools/bash-oracle/bash-oracle
+tools/bash-oracle/bin/failures.txt
+tools/bash-oracle/bin/negation-cmdsub.txt
 .dippy

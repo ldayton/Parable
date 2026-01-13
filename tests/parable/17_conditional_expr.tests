@@ -324,3 +324,31 @@ line2"")))
 ---
 (cond (cond-binary "=~" (cond-term "$x") (cond-term "[]a-z]")))
 ---
+
+
+=== unary with command substitution containing redirect
+[[ -z "$(find foo 2>/dev/null)" ]]
+---
+(cond (cond-unary "-z" (cond-term ""$(find foo 2> /dev/null)"")))
+---
+
+
+=== pattern with POSIX character class
+[[ x = *[[:space:]]* ]]
+---
+(cond (cond-binary "=" (cond-term "x") (cond-term "*[[:space:]]*")))
+---
+
+
+=== dollar sign followed by empty string
+[[ "$LOCAL_DEV" == $"" ]]
+---
+(cond (cond-binary "==" (cond-term ""$LOCAL_DEV"") (cond-term """")))
+---
+
+
+=== regex with arithmetic expansion containing brackets
+[[ ! $UserInput =~ ^[0-$((${#arr[@]}-1))] ]]
+---
+(cond (cond-binary "=~" (cond-term "$UserInput") (cond-term "^[0-$((${#arr[@]}-1))]")))
+---

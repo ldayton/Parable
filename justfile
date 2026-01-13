@@ -104,7 +104,7 @@ check-transpile:
     fi
 
 # Run JavaScript tests
-test-js *ARGS:
+test-js *ARGS: check-transpile
     node tests/bin/run-js-tests.js {{ARGS}}
 
 # Run JS benchmarks, optionally comparing refs: bench-js [ref1] [ref2] [--fast]

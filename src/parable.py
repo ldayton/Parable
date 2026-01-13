@@ -368,27 +368,19 @@ class Word(Node):
                 # but keep them for pattern replacement operators
                 if brace_depth > 0 and expanded.startswith("'") and expanded.endswith("'"):
                     inner = _substring(expanded, 1, len(expanded) - 1)
-                    # Only strip if non-empty, no CTLESC, and after a default value operator
+                    # Only strip if non-empty and no CTLESC
                     if inner and inner.find("\x01") == -1:
-                        # Check what precedes - default value ops: :- := :+ :? - = + ?
-                        if len(result) >= 2:
-                            prev = "".join(_sublist(result, len(result) - 2, len(result)))
-                        else:
-                            prev = ""
-                        if (
-                            prev.endswith(":-")
-                            or prev.endswith(":=")
-                            or prev.endswith(":+")
-                            or prev.endswith(":?")
-                        ):
+                        # Check if we're in a pattern context (/, //, %, %%, #, ##)
+                        # by scanning backward for pattern operators
+                        result_str = "".join(result)
+                        in_pattern = False
+                        # Look for pattern operators after ${
+                        for op in ["//", "/", "%%", "%", "##", "#"]:
+                            if op in result_str:
+                                in_pattern = True
+                                break
+                        if not in_pattern:
                             expanded = inner
-                        elif len(result) >= 1:
-                            last = result[len(result) - 1]
-                            # Single char operators (not after :), but not /
-                            if (last == "-" or last == "=" or last == "+" or last == "?") and (
-                                len(result) < 2 or result[len(result) - 2] != ":"
-                            ):
-                                expanded = inner
                 result.append(expanded)
                 i = j
             else:

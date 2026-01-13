@@ -339,12 +339,13 @@ class Word extends Node {
 			expanded,
 			i,
 			in_double_quote,
+			in_pattern,
 			in_single_quote,
 			inner,
 			j,
-			last,
-			prev,
-			result;
+			op,
+			result,
+			result_str;
 		result = [];
 		i = 0;
 		in_single_quote = false;
@@ -414,33 +415,21 @@ class Word extends Node {
 					expanded.endsWith("'")
 				) {
 					inner = expanded.slice(1, expanded.length - 1);
-					// Only strip if non-empty, no CTLESC, and after a default value operator
+					// Only strip if non-empty and no CTLESC
 					if (inner && inner.indexOf("") === -1) {
-						// Check what precedes - default value ops: :- := :+ :? - = + ?
-						if (result.length >= 2) {
-							prev = result.slice(result.length - 2, result.length).join("");
-						} else {
-							prev = "";
-						}
-						if (
-							prev.endsWith(":-") ||
-							prev.endsWith(":=") ||
-							prev.endsWith(":+") ||
-							prev.endsWith(":?")
-						) {
-							expanded = inner;
-						} else if (result.length >= 1) {
-							last = result[result.length - 1];
-							// Single char operators (not after :), but not /
-							if (
-								(last === "-" ||
-									last === "=" ||
-									last === "+" ||
-									last === "?") &&
-								(result.length < 2 || result[result.length - 2] !== ":")
-							) {
-								expanded = inner;
+						// Check if we're in a pattern context (/, //, %, %%, #, ##)
+						// by scanning backward for pattern operators
+						result_str = result.join("");
+						in_pattern = false;
+						// Look for pattern operators after ${
+						for (op of ["//", "/", "%%", "%", "##", "#"]) {
+							if (result_str.includes(op)) {
+								in_pattern = true;
+								break;
 							}
+						}
+						if (!in_pattern) {
+							expanded = inner;
 						}
 					}
 				}

@@ -2413,10 +2413,21 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
                 word_vals.append(w.value)
             words = " ".join(word_vals)
             result = (
-                "for " + var + " in " + words + ";\ndo\n" + inner_sp + body + ";\n" + sp + "done"
+                "for "
+                + var
+                + " in "
+                + words
+                + ";\n"
+                + sp
+                + "do\n"
+                + inner_sp
+                + body
+                + ";\n"
+                + sp
+                + "done"
             )
         else:
-            result = "for " + var + ";\ndo\n" + inner_sp + body + ";\n" + sp + "done"
+            result = "for " + var + ";\n" + sp + "do\n" + inner_sp + body + ";\n" + sp + "done"
         if node.redirects:
             for r in node.redirects:
                 result = result + " " + _format_redirect(r)

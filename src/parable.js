@@ -2768,9 +2768,9 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 				word_vals.push(w.value);
 			}
 			words = word_vals.join(" ");
-			result = `for ${variable} in ${words};\ndo\n${inner_sp}${body};\n${sp}done`;
+			result = `for ${variable} in ${words};\n${sp}do\n${inner_sp}${body};\n${sp}done`;
 		} else {
-			result = `for ${variable};\ndo\n${inner_sp}${body};\n${sp}done`;
+			result = `for ${variable};\n${sp}do\n${inner_sp}${body};\n${sp}done`;
 		}
 		if (node.redirects && node.redirects.length) {
 			for (r of node.redirects) {

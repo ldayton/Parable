@@ -2521,6 +2521,33 @@ class Coproc extends Node {
 	}
 }
 
+function _formatCondBody(node) {
+	let kind, left_val, operand_val, right_val;
+	kind = node.kind;
+	if (kind === "unary-test") {
+		operand_val = node.operand.getCondFormattedValue();
+		return `${node.op} ${operand_val}`;
+	}
+	if (kind === "binary-test") {
+		left_val = node.left.getCondFormattedValue();
+		right_val = node.right.getCondFormattedValue();
+		return `${left_val} ${node.op} ${right_val}`;
+	}
+	if (kind === "cond-and") {
+		return `${_formatCondBody(node.left)} && ${_formatCondBody(node.right)}`;
+	}
+	if (kind === "cond-or") {
+		return `${_formatCondBody(node.left)} || ${_formatCondBody(node.right)}`;
+	}
+	if (kind === "cond-not") {
+		return `! ${_formatCondBody(node.body)}`;
+	}
+	if (kind === "cond-paren") {
+		return `( ${_formatCondBody(node.body)} )`;
+	}
+	return "";
+}
+
 function _formatCmdsubNode(node, indent, in_procsub) {
 	let body,
 		cmd,
@@ -2777,6 +2804,10 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 	}
 	if (node.kind === "arith-cmd") {
 		return `((${node.raw_content}))`;
+	}
+	if (node.kind === "cond-expr") {
+		body = _formatCondBody(node.body);
+		return `[[ ${body} ]]`;
 	}
 	// Fallback: return empty for unknown types
 	return "";

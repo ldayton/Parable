@@ -604,3 +604,10 @@ x="\${ ${VAR}"
 ---
 (command (word "x=\"\\${ ${VAR}\""))
 ---
+
+
+=== conditional expression in loop inside cmdsub
+x=$(while [[ $a ]]; do echo x; done)
+---
+(command (word "x=$(while [[ -n $a ]]; do\n    echo x;\ndone)"))
+---

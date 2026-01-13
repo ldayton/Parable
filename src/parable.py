@@ -2256,6 +2256,27 @@ class Coproc(Node):
         return '(coproc "' + name + '" ' + self.command.to_sexp() + ")"
 
 
+def _format_cond_body(node: Node) -> str:
+    """Format the body of a [[ ]] conditional expression."""
+    kind = node.kind
+    if kind == "unary-test":
+        operand_val = node.operand.get_cond_formatted_value()
+        return node.op + " " + operand_val
+    if kind == "binary-test":
+        left_val = node.left.get_cond_formatted_value()
+        right_val = node.right.get_cond_formatted_value()
+        return left_val + " " + node.op + " " + right_val
+    if kind == "cond-and":
+        return _format_cond_body(node.left) + " && " + _format_cond_body(node.right)
+    if kind == "cond-or":
+        return _format_cond_body(node.left) + " || " + _format_cond_body(node.right)
+    if kind == "cond-not":
+        return "! " + _format_cond_body(node.body)
+    if kind == "cond-paren":
+        return "( " + _format_cond_body(node.body) + " )"
+    return ""
+
+
 def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -> str:
     """Format an AST node for command substitution output (bash-oracle pretty-print format)."""
     sp = _repeat_str(" ", indent)
@@ -2435,6 +2456,9 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
         return "{ " + body + "; }"
     if node.kind == "arith-cmd":
         return "((" + node.raw_content + "))"
+    if node.kind == "cond-expr":
+        body = _format_cond_body(node.body)
+        return "[[ " + body + " ]]"
     # Fallback: return empty for unknown types
     return ""
 

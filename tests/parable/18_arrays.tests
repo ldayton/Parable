@@ -326,3 +326,39 @@ arr=(${foo:-default} ${#bar})
 ---
 (command (word "arr=(${foo:-default} ${#bar})"))
 ---
+
+=== array with comment
+arr=(
+    foo # comment
+)
+---
+(command (word "arr=(foo)"))
+---
+
+=== array with line continuation in value
+arr=([k]="a \
+b")
+---
+(command (word "arr=([k]=\"a b\")"))
+---
+
+=== array with command substitution whitespace
+arr=($( cmd ))
+---
+(command (word "arr=($(cmd))"))
+---
+
+=== array with top-level line continuation
+arr=(\
+"a" \
+ "b")
+---
+(command (word "arr=(\"a\" \"b\")"))
+---
+
+
+=== array with pipeline in command substitution
+DEVS=($(ls -1 /dev/sd*|egrep foo))
+---
+(command (word "DEVS=($(ls -1 /dev/sd* | egrep foo))"))
+---

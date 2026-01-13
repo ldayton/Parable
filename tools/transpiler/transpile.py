@@ -313,7 +313,6 @@ class JSTranspiler(ast.NodeVisitor):
         if (
             isinstance(node.test, ast.Attribute)
             and isinstance(node.test.value, ast.Name)
-            and node.test.value.id == "self"
             and node.test.attr in array_attrs
         ):
             test = f"{test} && {test}.length"

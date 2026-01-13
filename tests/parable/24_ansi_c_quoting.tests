@@ -302,3 +302,16 @@ echo $'start'"middle"'end'
 ---
 (command (word "echo") (word "'start'\"middle\"'end'"))
 ---
+
+=== ansi-c inside parameter expansion in double quotes
+x="${y:-"a"$'\nfoo'}"
+---
+(command (word "x=\"${y:-\"a\"\nfoo}\""))
+---
+
+
+=== ansi-c preserved inside backtick substitution
+x=`tr $'\n'`
+---
+(command (word "x=`tr $'\\n'`"))
+---

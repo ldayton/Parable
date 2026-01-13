@@ -1,0 +1,6 @@
+
+=== escaped dollar followed by cmdsub in double quotes
+echo "\$(A) $(B)"
+---
+(command (word "echo") (word "\"\\$(A) $(B)\""))
+---

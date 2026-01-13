@@ -205,6 +205,13 @@ echo $((16 >> 2))
 ---
 
 
+=== left shift inside command substitution
+x=$( echo $(( 1<<2 )) )
+---
+(command (word "x=$(echo $(( 1<<2 )))"))
+---
+
+
 === simple assignment
 echo $((x = 5))
 ---
@@ -728,4 +735,25 @@ i=0; while ((i++ < 10)); do echo $i; done
 (((n & (n - 1)) == 0))
 ---
 (arith (word "(n & (n - 1)) == 0"))
+---
+
+
+=== arithmetic with hex prefix and command substitution
+x=$((0x$(cmd 2>/dev/null)))
+---
+(command (word "x=$((0x$(cmd 2> /dev/null)))"))
+---
+
+
+=== hex number with variable expansion in arithmetic
+echo $(( (0x$x) ))
+---
+(command (word "echo") (word "$(( (0x$x) ))"))
+---
+
+
+=== parameter length in arithmetic
+a=$((#${x}))
+---
+(command (word "a=$((#${x}))"))
 ---

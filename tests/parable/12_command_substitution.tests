@@ -590,3 +590,10 @@ x=$(while true; do echo x;done < /f)
 ---
 (command (word "x=$(while true; do\n    echo x;\ndone < /f)"))
 ---
+
+
+=== C-style for loop in cmdsub
+x=$(for ((i=1; i<=n; i++)); do echo $i; done)
+---
+(command (word "x=$(for ((i=1; i<=n; i++))\ndo\n    echo $i;\ndone)"))
+---

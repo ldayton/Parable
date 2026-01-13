@@ -2693,6 +2693,16 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 		}
 		return result;
 	}
+	if (node.kind === "for-arith") {
+		body = _formatCmdsubNode(node.body, indent + 4);
+		result = `for ((${node.init}; ${node.cond}; ${node.incr}))\ndo\n${inner_sp}${body};\n${sp}done`;
+		if (node.redirects && node.redirects.length) {
+			for (r of node.redirects) {
+				result = `${result} ${_formatRedirect(r)}`;
+			}
+		}
+		return result;
+	}
 	if (node.kind === "case") {
 		word = node.word.value;
 		patterns = [];

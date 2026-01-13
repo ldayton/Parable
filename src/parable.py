@@ -2356,6 +2356,26 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
             for r in node.redirects:
                 result = result + " " + _format_redirect(r)
         return result
+    if node.kind == "for-arith":
+        body = _format_cmdsub_node(node.body, indent + 4)
+        result = (
+            "for (("
+            + node.init
+            + "; "
+            + node.cond
+            + "; "
+            + node.incr
+            + "))\ndo\n"
+            + inner_sp
+            + body
+            + ";\n"
+            + sp
+            + "done"
+        )
+        if node.redirects:
+            for r in node.redirects:
+                result = result + " " + _format_redirect(r)
+        return result
     if node.kind == "case":
         word = node.word.value
         patterns = []

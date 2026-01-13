@@ -482,16 +482,7 @@ class Word extends Node {
 	}
 
 	_normalizeArrayWhitespace(value) {
-		let brace_depth,
-			ch,
-			dq_content,
-			i,
-			in_whitespace,
-			inner,
-			j,
-			normalized,
-			prefix,
-			result;
+		let i, inner, prefix, result;
 		// Match array assignment pattern: name=( or name+=(
 		if (!value.endsWith(")")) {
 			return value;
@@ -521,7 +512,21 @@ class Word extends Node {
 		prefix = value.slice(0, i + 1);
 		// Extract content inside parentheses
 		inner = value.slice(prefix.length + 1, value.length - 1);
-		// Normalize whitespace while respecting quotes and expansions
+		result = this._normalizeArrayInner(inner);
+		return `${prefix}(${result})`;
+	}
+
+	_normalizeArrayInner(inner) {
+		let brace_depth,
+			ch,
+			cmdsub_inner,
+			depth,
+			dq_content,
+			i,
+			in_whitespace,
+			j,
+			normalized,
+			normalized_cmdsub;
 		normalized = [];
 		i = 0;
 		in_whitespace = true;
@@ -577,6 +582,72 @@ class Word extends Node {
 				in_whitespace = false;
 				normalized.push(inner.slice(i, i + 2));
 				i += 2;
+			} else if (
+				ch === "$" &&
+				i + 2 < inner.length &&
+				inner[i + 1] === "(" &&
+				inner[i + 2] === "("
+			) {
+				// Arithmetic expansion $(( - find matching )) and preserve as-is
+				in_whitespace = false;
+				j = i + 3;
+				depth = 1;
+				while (j < inner.length && depth > 0) {
+					if (
+						j + 1 < inner.length &&
+						inner[j] === "(" &&
+						inner[j + 1] === "("
+					) {
+						depth += 1;
+						j += 2;
+					} else if (
+						j + 1 < inner.length &&
+						inner[j] === ")" &&
+						inner[j + 1] === ")"
+					) {
+						depth -= 1;
+						j += 2;
+					} else {
+						j += 1;
+					}
+				}
+				normalized.push(inner.slice(i, j));
+				i = j;
+			} else if (ch === "$" && i + 1 < inner.length && inner[i + 1] === "(") {
+				// Command substitution - find matching ) and normalize inside
+				in_whitespace = false;
+				j = i + 2;
+				depth = 1;
+				while (j < inner.length && depth > 0) {
+					if (inner[j] === "(" && j > 0 && inner[j - 1] === "$") {
+						depth += 1;
+					} else if (inner[j] === ")") {
+						depth -= 1;
+					} else if (inner[j] === "'") {
+						j += 1;
+						while (j < inner.length && inner[j] !== "'") {
+							j += 1;
+						}
+					} else if (inner[j] === '"') {
+						j += 1;
+						while (j < inner.length) {
+							if (inner[j] === "\\" && j + 1 < inner.length) {
+								j += 2;
+								continue;
+							}
+							if (inner[j] === '"') {
+								break;
+							}
+							j += 1;
+						}
+					}
+					j += 1;
+				}
+				// Extract content inside $(...) and normalize it
+				cmdsub_inner = inner.slice(i + 2, j - 1);
+				normalized_cmdsub = this._normalizeArrayInner(cmdsub_inner);
+				normalized.push(`$(${normalized_cmdsub})`);
+				i = j;
 			} else if (ch === "$" && i + 1 < inner.length && inner[i + 1] === "{") {
 				// Start of ${...} expansion
 				in_whitespace = false;
@@ -605,8 +676,7 @@ class Word extends Node {
 			}
 		}
 		// Strip trailing space
-		result = normalized.join("").replace(/[ ]+$/, "");
-		return `${prefix}(${result})`;
+		return normalized.join("").replace(/[ ]+$/, "");
 	}
 
 	_stripArithLineContinuations(value) {

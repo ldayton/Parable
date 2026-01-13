@@ -341,3 +341,9 @@ b")
 ---
 (command (word "arr=([k]=\"a b\")"))
 ---
+
+=== array with command substitution whitespace
+arr=($( cmd ))
+---
+(command (word "arr=($(cmd))"))
+---

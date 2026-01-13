@@ -440,7 +440,11 @@ class Word(Node):
         prefix = _substring(value, 0, i + 1)  # e.g., "arr=" or "arr+="
         # Extract content inside parentheses
         inner = _substring(value, len(prefix) + 1, len(value) - 1)
-        # Normalize whitespace while respecting quotes and expansions
+        result = self._normalize_array_inner(inner)
+        return prefix + "(" + result + ")"
+
+    def _normalize_array_inner(self, inner: str) -> str:
+        """Normalize whitespace inside array content, handling nested constructs."""
         normalized = []
         i = 0
         in_whitespace = True  # Start true to skip leading whitespace
@@ -490,6 +494,51 @@ class Word(Node):
                 in_whitespace = False
                 normalized.append(_substring(inner, i, i + 2))
                 i += 2
+            elif ch == "$" and i + 2 < len(inner) and inner[i + 1] == "(" and inner[i + 2] == "(":
+                # Arithmetic expansion $(( - find matching )) and preserve as-is
+                in_whitespace = False
+                j = i + 3
+                depth = 1
+                while j < len(inner) and depth > 0:
+                    if j + 1 < len(inner) and inner[j] == "(" and inner[j + 1] == "(":
+                        depth += 1
+                        j += 2
+                    elif j + 1 < len(inner) and inner[j] == ")" and inner[j + 1] == ")":
+                        depth -= 1
+                        j += 2
+                    else:
+                        j += 1
+                normalized.append(_substring(inner, i, j))
+                i = j
+            elif ch == "$" and i + 1 < len(inner) and inner[i + 1] == "(":
+                # Command substitution - find matching ) and normalize inside
+                in_whitespace = False
+                j = i + 2
+                depth = 1
+                while j < len(inner) and depth > 0:
+                    if inner[j] == "(" and j > 0 and inner[j - 1] == "$":
+                        depth += 1
+                    elif inner[j] == ")":
+                        depth -= 1
+                    elif inner[j] == "'":
+                        j += 1
+                        while j < len(inner) and inner[j] != "'":
+                            j += 1
+                    elif inner[j] == '"':
+                        j += 1
+                        while j < len(inner):
+                            if inner[j] == "\\" and j + 1 < len(inner):
+                                j += 2
+                                continue
+                            if inner[j] == '"':
+                                break
+                            j += 1
+                    j += 1
+                # Extract content inside $(...) and normalize it
+                cmdsub_inner = _substring(inner, i + 2, j - 1)
+                normalized_cmdsub = self._normalize_array_inner(cmdsub_inner)
+                normalized.append("$(" + normalized_cmdsub + ")")
+                i = j
             elif ch == "$" and i + 1 < len(inner) and inner[i + 1] == "{":
                 # Start of ${...} expansion
                 in_whitespace = False
@@ -515,8 +564,7 @@ class Word(Node):
                 normalized.append(ch)
                 i += 1
         # Strip trailing space
-        result = "".join(normalized).rstrip(" ")
-        return prefix + "(" + result + ")"
+        return "".join(normalized).rstrip(" ")
 
     def _strip_arith_line_continuations(self, value: str) -> str:
         """Strip backslash-newline (line continuation) from inside $((...))."""

@@ -567,3 +567,10 @@ x="$(cmd |& cat)"
 ---
 (command (word "x=\"$(cmd 2>&1 | cat)\""))
 ---
+
+
+=== cmdsub normalizes 1> to >
+x=$(cmd 1>/dev/null)
+---
+(command (word "x=$(cmd > /dev/null)"))
+---

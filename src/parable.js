@@ -2765,6 +2765,12 @@ function _formatRedirect(r) {
 		return `${op + delim}\n${r.content}${r.delimiter}\n`;
 	}
 	op = r.op;
+	// Normalize default fd: 1> -> >, 0< -> <
+	if (op === "1>") {
+		op = ">";
+	} else if (op === "0<") {
+		op = "<";
+	}
 	target = r.target.value;
 	// For fd duplication (target starts with &), handle normalization
 	if (target.startsWith("&")) {

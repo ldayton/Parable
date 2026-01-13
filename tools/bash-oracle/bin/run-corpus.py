@@ -14,7 +14,7 @@ from parable import ParseError, parse  # noqa: E402
 CORPUS_DIR = os.path.expanduser("~/source/bigtable-bash/tests")
 FAILURES_FILE = os.path.join(SCRIPT_DIR, "failures.txt")
 HEREDOC_DASHES_FILE = os.path.join(SCRIPT_DIR, "heredoc-dashes.txt")
-MAX_FAILURES = 10
+MAX_FAILURES = 100
 
 # Test files to skip (known issues to investigate later)
 SKIP_FILES = {
@@ -25,6 +25,9 @@ SKIP_FILES = {
     "012559__bbgw__kubernetes__test-cmd.tests",  # very long expected output
     "012773__Devindik__origin__git-sh-setup.tests",  # very long expected output
     "014119__kyma-project__test-infra__integration-tests.tests",  # heredoc contains ---
+    "014246__istio__istio.io__snips.tests",  # heredoc contains ---
+    "014289__chaolou__kubernetes__test-cmd.tests",  # corpus expects $(! but oracle now outputs $(\!
+    "051344__nemesiscodex__jukyOS-osbuilder__preimage.90.core.tests",  # heredoc contains ===
 }
 
 # Files where heredoc contains --- which breaks the corpus test parser

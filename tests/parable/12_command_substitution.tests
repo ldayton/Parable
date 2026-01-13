@@ -645,3 +645,9 @@ x=$({ echo a; } 2>/dev/null | cat)
 ---
 (command (word "x=$({ echo a; } 2> /dev/null | cat)"))
 ---
+
+=== cond-not inside cmdsub
+x=$(if [[ ! ${y} ]]; then echo z; fi)
+---
+(command (word "x=$(if [[ ! -n ${y} ]]; then\n    echo z;\nfi)"))
+---

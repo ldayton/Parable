@@ -2546,7 +2546,7 @@ function _formatCondBody(node) {
 		return `${_formatCondBody(node.left)} || ${_formatCondBody(node.right)}`;
 	}
 	if (kind === "cond-not") {
-		return `! ${_formatCondBody(node.body)}`;
+		return `! ${_formatCondBody(node.operand)}`;
 	}
 	if (kind === "cond-paren") {
 		return `( ${_formatCondBody(node.body)} )`;

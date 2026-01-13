@@ -532,3 +532,10 @@ ver=${GOVERSION:-$(<${file} jq -r .GoVersion)}
 ---
 (command (word "ver=${GOVERSION:-$(jq -r .GoVersion < ${file})}"))
 ---
+
+
+=== cmdsub with here-string in double quotes
+echo "[$(cmd <<< a)]"
+---
+(command (word "echo") (word "\"[$(cmd <<< a)]\""))
+---

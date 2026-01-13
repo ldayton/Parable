@@ -2810,6 +2810,42 @@ function _findCmdsubEnd(value, start) {
 			}
 			continue;
 		}
+		// Handle here-strings (<<< word) - must check before heredocs
+		if (_startsWithAt(value, i, "<<<")) {
+			i += 3;
+			// Skip whitespace
+			while (i < value.length && (value[i] === " " || value[i] === "\t")) {
+				i += 1;
+			}
+			// Skip the word (may be quoted)
+			if (i < value.length && value[i] === '"') {
+				i += 1;
+				while (i < value.length && value[i] !== '"') {
+					if (value[i] === "\\" && i + 1 < value.length) {
+						i += 2;
+					} else {
+						i += 1;
+					}
+				}
+				if (i < value.length) {
+					i += 1;
+				}
+			} else if (i < value.length && value[i] === "'") {
+				i += 1;
+				while (i < value.length && value[i] !== "'") {
+					i += 1;
+				}
+				if (i < value.length) {
+					i += 1;
+				}
+			} else {
+				// Unquoted word - skip until whitespace or special char
+				while (i < value.length && !" \t\n;|&<>()".includes(value[i])) {
+					i += 1;
+				}
+			}
+			continue;
+		}
 		// Handle heredocs
 		if (_startsWithAt(value, i, "<<")) {
 			i = _skipHeredoc(value, i);

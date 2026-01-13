@@ -2459,6 +2459,33 @@ def _find_cmdsub_end(value: str, start: int) -> int:
             while i < len(value) and value[i] != "\n":
                 i += 1
             continue
+        # Handle here-strings (<<< word) - must check before heredocs
+        if _starts_with_at(value, i, "<<<"):
+            i += 3  # Skip <<<
+            # Skip whitespace
+            while i < len(value) and (value[i] == " " or value[i] == "\t"):
+                i += 1
+            # Skip the word (may be quoted)
+            if i < len(value) and value[i] == '"':
+                i += 1
+                while i < len(value) and value[i] != '"':
+                    if value[i] == "\\" and i + 1 < len(value):
+                        i += 2
+                    else:
+                        i += 1
+                if i < len(value):
+                    i += 1  # Skip closing quote
+            elif i < len(value) and value[i] == "'":
+                i += 1
+                while i < len(value) and value[i] != "'":
+                    i += 1
+                if i < len(value):
+                    i += 1  # Skip closing quote
+            else:
+                # Unquoted word - skip until whitespace or special char
+                while i < len(value) and value[i] not in " \t\n;|&<>()":
+                    i += 1
+            continue
         # Handle heredocs
         if _starts_with_at(value, i, "<<"):
             i = _skip_heredoc(value, i)

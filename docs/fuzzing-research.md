@@ -68,6 +68,110 @@ Given the setup (bash-oracle with `--dump-ast` and Parable producing comparable 
 
 5. **Prioritize edge cases from other bash parsers' bug trackers**—bashlex, tree-sitter-bash, mvdan/sh all have open issues documenting parsing discrepancies.
 
+## Practical Plan for Parable
+
+### Existing Infrastructure
+
+The differential testing infrastructure already exists:
+
+- **bash-oracle** at `~/source/bash/bash-oracle` with `-e <input>` flag dumps S-expression AST
+- **Parable** via `parse(input)[0].to_sexp()` produces matching S-expression format
+- **Comparison**: whitespace-normalized string equality (see `verify-tests.py`)
+- **Corpus**: ~20k lines across `.tests` files in `tests/parable/` and `tests/corpus/`
+
+The test format is simple:
+```
+=== test name
+bash input here
+---
+(expected s-expression)
+---
+```
+
+### Phase 1: Corpus Mutation (Start Here)
+
+Lowest friction, highest immediate value:
+
+1. Extract inputs from existing `.tests` files
+2. Apply 1-3 random character edits per input:
+   - Insert/delete/swap characters from: `${}()|&<>;"'\`` and whitespace
+   - Focus on boundaries: start/end of words, around operators
+3. Run both parsers on mutated input
+4. Log discrepancies: input, parable output, oracle output
+
+Most mutations produce garbage (both parsers reject). Some produce valid bash that parses differently. Those are the interesting cases.
+
+This is ~50 lines on top of `verify-tests.py`.
+
+### Phase 2: Targeted Edge Case Generation
+
+Focus on constructs known to cause parser divergence:
+
+**Heredoc boundaries:**
+```bash
+cat <<EOF$(cmd)
+cat <<-'EOF'
+cat << \EOF
+```
+
+**Nested expansions:**
+```bash
+${arr[@]:${start}:$((end-start))}
+${x:-${y:-${z:-default}}}
+echo "${foo:-"bar"}"
+```
+
+**Quoting interactions:**
+```bash
+$'escape\nsequences'
+$"locale strings"
+"mixed $var 'quotes'"
+```
+
+**Extglob ambiguity:**
+```bash
+case $x in @(a|b)) ;; esac   # )) looks like arithmetic
++(x)|?(y)                     # looks like subshell
+```
+
+**Arithmetic edge cases:**
+```bash
+$((x+++y))    # pre-increment or post-increment + y?
+$((a?b:c?d:e))
+```
+
+### Phase 3: Token-Level Mutation (Harder)
+
+Requires tokenizing bash first. Options:
+
+1. **Use Parable as tokenizer**: Parse successfully, mutate the token stream, serialize back. But Parable has no printer—you'd need to write one.
+
+2. **Simple lexer**: Write a minimal bash lexer that splits on metacharacters without full parsing. Mutate token boundaries. Cheaper than a full printer.
+
+3. **Steal from ShellFuzzer**: Their grammar is public; adapt their token categories.
+
+### Phase 4: Grammar-Based Generation (Real Project)
+
+Parable's parser *is* a grammar. Inverting it:
+
+- Instead of `parse()`, write `generate()` that walks the same grammar making random choices at each branch
+- Each production rule becomes a random choice weighted by coverage goals
+- This is a significant project—essentially writing a bash generator
+
+### The Hard Part
+
+The fuzzing loop is easy. Triaging discrepancies is hard:
+
+- When parsers disagree, which is wrong?
+- Some discrepancies are known limitations (e.g., `$(!)` handling)
+- Some are bash bugs, not Parable bugs
+- Manual investigation required for each unique discrepancy
+
+Consider bucketing discrepancies by:
+- Construct type (heredoc, expansion, arithmetic, etc.)
+- Error vs different-AST
+- Minimal reproducer (shrink the input)
+
 ## Tools Worth Investigating
 
 - **[Grammarinator](https://github.com/renatahodovan/grammarinator)** - Grammar-based fuzzer, found 100+ JS engine bugs

@@ -2326,11 +2326,19 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
     if node.kind == "while":
         cond = _format_cmdsub_node(node.condition, indent)
         body = _format_cmdsub_node(node.body, indent + 4)
-        return "while " + cond + "; do\n" + inner_sp + body + ";\n" + sp + "done"
+        result = "while " + cond + "; do\n" + inner_sp + body + ";\n" + sp + "done"
+        if node.redirects:
+            for r in node.redirects:
+                result = result + " " + _format_redirect(r)
+        return result
     if node.kind == "until":
         cond = _format_cmdsub_node(node.condition, indent)
         body = _format_cmdsub_node(node.body, indent + 4)
-        return "until " + cond + "; do\n" + inner_sp + body + ";\n" + sp + "done"
+        result = "until " + cond + "; do\n" + inner_sp + body + ";\n" + sp + "done"
+        if node.redirects:
+            for r in node.redirects:
+                result = result + " " + _format_redirect(r)
+        return result
     if node.kind == "for":
         var = node.var
         body = _format_cmdsub_node(node.body, indent + 4)
@@ -2339,8 +2347,15 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
             for w in node.words:
                 word_vals.append(w.value)
             words = " ".join(word_vals)
-            return "for " + var + " in " + words + ";\ndo\n" + inner_sp + body + ";\n" + sp + "done"
-        return "for " + var + ";\ndo\n" + inner_sp + body + ";\n" + sp + "done"
+            result = (
+                "for " + var + " in " + words + ";\ndo\n" + inner_sp + body + ";\n" + sp + "done"
+            )
+        else:
+            result = "for " + var + ";\ndo\n" + inner_sp + body + ";\n" + sp + "done"
+        if node.redirects:
+            for r in node.redirects:
+                result = result + " " + _format_redirect(r)
+        return result
     if node.kind == "case":
         word = node.word.value
         patterns = []

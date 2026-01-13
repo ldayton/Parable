@@ -2654,12 +2654,24 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 	if (node.kind === "while") {
 		cond = _formatCmdsubNode(node.condition, indent);
 		body = _formatCmdsubNode(node.body, indent + 4);
-		return `while ${cond}; do\n${inner_sp}${body};\n${sp}done`;
+		result = `while ${cond}; do\n${inner_sp}${body};\n${sp}done`;
+		if (node.redirects && node.redirects.length) {
+			for (r of node.redirects) {
+				result = `${result} ${_formatRedirect(r)}`;
+			}
+		}
+		return result;
 	}
 	if (node.kind === "until") {
 		cond = _formatCmdsubNode(node.condition, indent);
 		body = _formatCmdsubNode(node.body, indent + 4);
-		return `until ${cond}; do\n${inner_sp}${body};\n${sp}done`;
+		result = `until ${cond}; do\n${inner_sp}${body};\n${sp}done`;
+		if (node.redirects && node.redirects.length) {
+			for (r of node.redirects) {
+				result = `${result} ${_formatRedirect(r)}`;
+			}
+		}
+		return result;
 	}
 	if (node.kind === "for") {
 		variable = node.variable;
@@ -2670,9 +2682,16 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 				word_vals.push(w.value);
 			}
 			words = word_vals.join(" ");
-			return `for ${variable} in ${words};\ndo\n${inner_sp}${body};\n${sp}done`;
+			result = `for ${variable} in ${words};\ndo\n${inner_sp}${body};\n${sp}done`;
+		} else {
+			result = `for ${variable};\ndo\n${inner_sp}${body};\n${sp}done`;
 		}
-		return `for ${variable};\ndo\n${inner_sp}${body};\n${sp}done`;
+		if (node.redirects && node.redirects.length) {
+			for (r of node.redirects) {
+				result = `${result} ${_formatRedirect(r)}`;
+			}
+		}
+		return result;
 	}
 	if (node.kind === "case") {
 		word = node.word.value;

@@ -583,3 +583,10 @@ E)
 ---
 (command (word "x=$(cat <<E\nhello\nE\n)"))
 ---
+
+
+=== while loop with redirect in cmdsub
+x=$(while true; do echo x;done < /f)
+---
+(command (word "x=$(while true; do\n    echo x;\ndone < /f)"))
+---

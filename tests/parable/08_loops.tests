@@ -809,3 +809,9 @@ for i in 1 2; do for j in a b; do echo "$i$j"; if [ "$j" = "b" ]; then continue 
 ---
 (for (word "i") (in (word "1") (word "2")) (for (word "j") (in (word "a") (word "b")) (semi (command (word "echo") (word "\"$i$j\"")) (if (command (word "[") (word "\"$j\"") (word "=") (word "\"b\"") (word "]")) (command (word "continue") (word "2"))))))
 ---
+
+=== for loop with command substitution as variable name
+for $(echo i) in a b; do echo $i; done
+---
+(for (word "$(echo i)") (in (word "a") (word "b")) (command (word "echo") (word "$i")))
+---

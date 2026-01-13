@@ -6784,11 +6784,18 @@ class Parser:
         if self.peek() == "(" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
             return self._parse_for_arith()
 
-        # Parse variable name (bash allows reserved words as variable names in for loops)
-        var_name = self.peek_word()
-        if var_name is None:
-            raise ParseError("Expected variable name after 'for'", pos=self.pos)
-        self.consume_word(var_name)
+        # Parse variable name (bash allows reserved words and command substitutions as variable names)
+        if self.peek() == "$":
+            # Command substitution as variable name: for $(echo i) in ...
+            var_word = self.parse_word()
+            if var_word is None:
+                raise ParseError("Expected variable name after 'for'", pos=self.pos)
+            var_name = var_word.value
+        else:
+            var_name = self.peek_word()
+            if var_name is None:
+                raise ParseError("Expected variable name after 'for'", pos=self.pos)
+            self.consume_word(var_name)
 
         self.skip_whitespace()
 

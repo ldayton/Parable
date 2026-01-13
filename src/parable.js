@@ -7983,7 +7983,7 @@ class Parser {
 	}
 
 	parseFor() {
-		let body, var_name, word, words;
+		let body, var_name, var_word, word, words;
 		if (!this.consumeWord("for")) {
 			return null;
 		}
@@ -7996,12 +7996,21 @@ class Parser {
 		) {
 			return this._parseForArith();
 		}
-		// Parse variable name (bash allows reserved words as variable names in for loops)
-		var_name = this.peekWord();
-		if (var_name == null) {
-			throw new ParseError("Expected variable name after 'for'", this.pos);
+		// Parse variable name (bash allows reserved words and command substitutions as variable names)
+		if (this.peek() === "$") {
+			// Command substitution as variable name: for $(echo i) in ...
+			var_word = this.parseWord();
+			if (var_word == null) {
+				throw new ParseError("Expected variable name after 'for'", this.pos);
+			}
+			var_name = var_word.value;
+		} else {
+			var_name = this.peekWord();
+			if (var_name == null) {
+				throw new ParseError("Expected variable name after 'for'", this.pos);
+			}
+			this.consumeWord(var_name);
 		}
-		this.consumeWord(var_name);
 		this.skipWhitespace();
 		// Handle optional semicolon or newline before 'in' or 'do'
 		if (this.peek() === ";") {

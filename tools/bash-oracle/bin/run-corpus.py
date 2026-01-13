@@ -21,6 +21,7 @@ SKIP_FILES = {
     "001812__containerd__stargz-snapshotter__run-kind.tests",  # heredoc contains ---
     "002478__cloudfoundry-incubator__bosh-google-cpi-release__run-bats.tests",  # heredoc contains ---
     "003756__soltysh__kubernetes__create.tests",  # corpus expects $(! but oracle now outputs $(\!
+    "005160__LalatenduMohanty__kubernetes__apply.tests",  # corpus expects $(! but oracle now outputs $(\!
 }
 
 

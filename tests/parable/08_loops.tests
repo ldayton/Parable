@@ -821,3 +821,10 @@ for x in a b; { echo $x; }
 ---
 (for (word "x") (in (word "a") (word "b")) (command (word "echo") (word "$x")))
 ---
+
+=== for loop done with line continuation into pipe
+for i in x; do echo y; done\
+| cat
+---
+(pipe (for (word "i") (in (word "x")) (command (word "echo") (word "y"))) (command (word "cat")))
+---

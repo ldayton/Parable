@@ -2801,6 +2801,17 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 	if (node.kind === "brace-group") {
 		body = _formatCmdsubNode(node.body, indent);
 		body = body.replace(/[;]+$/, "");
+		redirects = "";
+		if (node.redirects && node.redirects.length) {
+			redirect_parts = [];
+			for (r of node.redirects) {
+				redirect_parts.push(_formatRedirect(r));
+			}
+			redirects = redirect_parts.join(" ");
+		}
+		if (redirects && redirects.length) {
+			return `{ ${body}; } ${redirects}`;
+		}
 		return `{ ${body}; }`;
 	}
 	if (node.kind === "arith-cmd") {

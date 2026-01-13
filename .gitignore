@@ -9,4 +9,5 @@ node_modules/
 .claude/
 dippy.toml
 tools/bash-oracle/bash-oracle
+tools/bash-oracle/bin/failures.txt
 .dippy

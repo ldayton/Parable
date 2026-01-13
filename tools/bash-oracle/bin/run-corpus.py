@@ -9,9 +9,10 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PARABLE_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(SCRIPT_DIR)))
 sys.path.insert(0, os.path.join(PARABLE_ROOT, "src"))
 
-from parable import ParseError, parse
+from parable import ParseError, parse  # noqa: E402
 
 CORPUS_DIR = os.path.expanduser("~/source/bigtable-bash/tests")
+FAILURES_FILE = os.path.join(SCRIPT_DIR, "failures.txt")
 MAX_FAILURES = 100
 
 
@@ -54,21 +55,21 @@ def normalize(s):
 
 def run_test(test_input, test_expected):
     """Run a single test. Returns (passed, actual)."""
-    if test_expected == "!error":
+    if test_expected == "<error>":
         try:
             nodes = parse(test_input)
             actual = " ".join(node.to_sexp() for node in nodes)
             return (False, actual)  # Expected error but got parse
         except ParseError:
-            return (True, "!error")
+            return (True, "<error>")
         except Exception:
-            return (True, "!error")
+            return (True, "<error>")
 
     try:
         nodes = parse(test_input)
         actual = " ".join(node.to_sexp() for node in nodes)
     except ParseError as e:
-        return (False, f"!error: {e}")
+        return (False, f"<error>: {e}")
     except Exception as e:
         return (False, f"!exception: {e}")
 
@@ -83,55 +84,34 @@ def main():
         sys.exit(1)
 
     test_files = sorted(
-        os.path.join(CORPUS_DIR, f)
-        for f in os.listdir(CORPUS_DIR)
-        if f.endswith(".tests")
+        os.path.join(CORPUS_DIR, f) for f in os.listdir(CORPUS_DIR) if f.endswith(".tests")
     )
-
-    total = 0
+    total_files = len(test_files)
     passed = 0
     failed = 0
-    failures = []
 
-    for test_file in test_files:
-        tests = parse_test_file(test_file)
-        for name, test_input, test_expected in tests:
-            total += 1
-            ok, actual = run_test(test_input, test_expected)
-            if ok:
-                passed += 1
-            else:
-                failed += 1
-                failures.append({
-                    "file": os.path.basename(test_file),
-                    "name": name,
-                    "input": test_input,
-                    "expected": test_expected,
-                    "actual": actual,
-                })
-                if len(failures) >= MAX_FAILURES:
-                    break
-        if len(failures) >= MAX_FAILURES:
-            break
+    with open(FAILURES_FILE, "w") as failures_f:
+        for i, test_file in enumerate(test_files):
+            tests = parse_test_file(test_file)
+            for _name, test_input, test_expected in tests:
+                ok, actual = run_test(test_input, test_expected)
+                if ok:
+                    passed += 1
+                else:
+                    failed += 1
+                    failures_f.write(test_file + "\n")
+                    failures_f.flush()
+                    if failed >= MAX_FAILURES:
+                        break
+            print(f"\r{i + 1}/{total_files} files ({failed} failures)", end="", flush=True)
+            if failed >= MAX_FAILURES:
+                break
 
-    # Print failures
-    for i, f in enumerate(failures, 1):
-        print(f"{'=' * 60}")
-        print(f"FAIL {i}: {f['file']} - {f['name']}")
-        print(f"{'=' * 60}")
-        print(f"Input:\n{f['input']}")
-        print(f"\nExpected:\n{f['expected']}")
-        print(f"\nActual:\n{f['actual']}")
-        print()
-
-    # Summary
-    print(f"{'=' * 60}")
-    print(f"Tested: {total} | Passed: {passed} | Failed: {failed}")
-    if len(failures) >= MAX_FAILURES:
-        print(f"(stopped after {MAX_FAILURES} failures)")
-    print(f"{'=' * 60}")
-
-    sys.exit(1 if failures else 0)
+    print()
+    if failed:
+        print(f"Failures written to {FAILURES_FILE}")
+    print(f"Passed: {passed} | Failed: {failed}")
+    sys.exit(1 if failed else 0)
 
 
 if __name__ == "__main__":

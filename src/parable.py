@@ -448,16 +448,19 @@ class Word(Node):
         prefix = _substring(value, 0, i + 1)  # e.g., "arr=" or "arr+="
         # Extract content inside parentheses
         inner = _substring(value, len(prefix) + 1, len(value) - 1)
-        # Normalize whitespace while respecting quotes
+        # Normalize whitespace while respecting quotes and expansions
         normalized = []
         i = 0
         in_whitespace = True  # Start true to skip leading whitespace
+        brace_depth = 0  # Track ${...} nesting
         while i < len(inner):
             ch = inner[i]
             if _is_whitespace(ch):
-                if not in_whitespace and normalized:
+                if not in_whitespace and normalized and brace_depth == 0:
                     normalized.append(" ")
                     in_whitespace = True
+                if brace_depth > 0:
+                    normalized.append(ch)
                 i += 1
             elif ch == "'":
                 # Single-quoted string - preserve as-is
@@ -485,6 +488,26 @@ class Word(Node):
                 in_whitespace = False
                 normalized.append(_substring(inner, i, i + 2))
                 i += 2
+            elif ch == "$" and i + 1 < len(inner) and inner[i + 1] == "{":
+                # Start of ${...} expansion
+                in_whitespace = False
+                normalized.append("${")
+                brace_depth += 1
+                i += 2
+            elif ch == "{" and brace_depth > 0:
+                # Nested brace inside expansion
+                normalized.append(ch)
+                brace_depth += 1
+                i += 1
+            elif ch == "}" and brace_depth > 0:
+                # End of expansion
+                normalized.append(ch)
+                brace_depth -= 1
+                i += 1
+            elif ch == "#" and brace_depth == 0:
+                # Comment - skip to end of line (only at top level)
+                while i < len(inner) and inner[i] != "\n":
+                    i += 1
             else:
                 in_whitespace = False
                 normalized.append(ch)
@@ -3607,9 +3630,8 @@ class Parser:
         elements = []
 
         while True:
-            # Skip whitespace and newlines between elements
-            while not self.at_end() and _is_whitespace(self.peek()):
-                self.advance()
+            # Skip whitespace, newlines, and comments between elements
+            self.skip_whitespace_and_newlines()
 
             if self.at_end():
                 raise ParseError("Unterminated array literal", pos=start)

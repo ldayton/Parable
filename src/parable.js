@@ -493,7 +493,7 @@ class Word extends Node {
 	}
 
 	_normalizeArrayWhitespace(value) {
-		let ch, i, in_whitespace, inner, j, normalized, prefix, result;
+		let brace_depth, ch, i, in_whitespace, inner, j, normalized, prefix, result;
 		// Match array assignment pattern: name=( or name+=(
 		if (!value.endsWith(")")) {
 			return value;
@@ -523,16 +523,20 @@ class Word extends Node {
 		prefix = value.slice(0, i + 1);
 		// Extract content inside parentheses
 		inner = value.slice(prefix.length + 1, value.length - 1);
-		// Normalize whitespace while respecting quotes
+		// Normalize whitespace while respecting quotes and expansions
 		normalized = [];
 		i = 0;
 		in_whitespace = true;
+		brace_depth = 0;
 		while (i < inner.length) {
 			ch = inner[i];
 			if (_isWhitespace(ch)) {
-				if (!in_whitespace && normalized) {
+				if (!in_whitespace && normalized && brace_depth === 0) {
 					normalized.push(" ");
 					in_whitespace = true;
+				}
+				if (brace_depth > 0) {
+					normalized.push(ch);
 				}
 				i += 1;
 			} else if (ch === "'") {
@@ -564,6 +568,27 @@ class Word extends Node {
 				in_whitespace = false;
 				normalized.push(inner.slice(i, i + 2));
 				i += 2;
+			} else if (ch === "$" && i + 1 < inner.length && inner[i + 1] === "{") {
+				// Start of ${...} expansion
+				in_whitespace = false;
+				normalized.push("${");
+				brace_depth += 1;
+				i += 2;
+			} else if (ch === "{" && brace_depth > 0) {
+				// Nested brace inside expansion
+				normalized.push(ch);
+				brace_depth += 1;
+				i += 1;
+			} else if (ch === "}" && brace_depth > 0) {
+				// End of expansion
+				normalized.push(ch);
+				brace_depth -= 1;
+				i += 1;
+			} else if (ch === "#" && brace_depth === 0) {
+				// Comment - skip to end of line (only at top level)
+				while (i < inner.length && inner[i] !== "\n") {
+					i += 1;
+				}
 			} else {
 				in_whitespace = false;
 				normalized.push(ch);
@@ -4149,10 +4174,8 @@ class Parser {
 		this.advance();
 		elements = [];
 		while (true) {
-			// Skip whitespace and newlines between elements
-			while (!this.atEnd() && _isWhitespace(this.peek())) {
-				this.advance();
-			}
+			// Skip whitespace, newlines, and comments between elements
+			this.skipWhitespaceAndNewlines();
 			if (this.atEnd()) {
 				throw new ParseError("Unterminated array literal", start);
 			}

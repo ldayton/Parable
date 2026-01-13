@@ -326,3 +326,11 @@ arr=(${foo:-default} ${#bar})
 ---
 (command (word "arr=(${foo:-default} ${#bar})"))
 ---
+
+=== array with comment
+arr=(
+    foo # comment
+)
+---
+(command (word "arr=(foo)"))
+---

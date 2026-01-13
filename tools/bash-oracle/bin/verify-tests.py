@@ -11,7 +11,7 @@ sys.path.insert(0, str(TESTS_DIR))
 
 from testformat import parse_test_file  # noqa: E402
 
-ORACLE_PATH = SCRIPT_DIR / "bash-oracle"
+ORACLE_PATH = Path.home() / "source" / "bash" / "bash-oracle"
 
 
 def get_oracle_output(input_text: str) -> str | None:

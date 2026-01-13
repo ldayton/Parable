@@ -4747,7 +4747,7 @@ class Parser {
 	}
 
 	_parseArithmeticExpansion() {
-		let c, content, content_start, depth, expr, start, text;
+		let c, content, content_start, depth, expr, first_close_pos, start, text;
 		if (this.atEnd() || this.peek() !== "$") {
 			return [null, ""];
 		}
@@ -4763,42 +4763,44 @@ class Parser {
 		this.advance();
 		this.advance();
 		this.advance();
-		// Find matching )) - need to track nested parens
-		// Must be )) with no space between - ') )' is command sub + subshell
+		// Find matching )) by tracking paren depth (starting at 2 for $(()
+		// The closing )) are: first ) that brings depth 2→1, and ) that brings 1→0
+		// Content excludes these UNLESS there's expression content between them
 		content_start = this.pos;
-		depth = 1;
+		depth = 2;
+		first_close_pos = null;
 		while (!this.atEnd() && depth > 0) {
 			c = this.peek();
 			if (c === "(") {
 				depth += 1;
 				this.advance();
 			} else if (c === ")") {
-				// Check for ))
-				if (
-					depth === 1 &&
-					this.pos + 1 < this.length &&
-					this.source[this.pos + 1] === ")"
-				) {
-					// Found the closing ))
-					break;
+				if (depth === 2) {
+					first_close_pos = this.pos;
 				}
 				depth -= 1;
 				if (depth === 0) {
-					// Closed with ) but next isn't ) - this is $( ( ... ) )
-					this.pos = start;
-					return [null, ""];
+					break;
 				}
 				this.advance();
 			} else {
+				if (depth === 1) {
+					// Content after first closing ), so include up to final )
+					first_close_pos = null;
+				}
 				this.advance();
 			}
 		}
-		if (this.atEnd() || depth !== 1) {
+		if (depth !== 0) {
 			this.pos = start;
 			return [null, ""];
 		}
-		content = this.source.slice(content_start, this.pos);
-		this.advance();
+		// Content ends at first_close_pos if set, else at final )
+		if (first_close_pos != null) {
+			content = this.source.slice(content_start, first_close_pos);
+		} else {
+			content = this.source.slice(content_start, this.pos);
+		}
 		this.advance();
 		text = this.source.slice(start, this.pos);
 		// Parse the arithmetic expression

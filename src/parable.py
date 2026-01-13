@@ -4123,38 +4123,41 @@ class Parser:
         self.advance()  # consume first (
         self.advance()  # consume second (
 
-        # Find matching )) - need to track nested parens
-        # Must be )) with no space between - ') )' is command sub + subshell
+        # Find matching )) by tracking paren depth (starting at 2 for $(()
+        # The closing )) are: first ) that brings depth 2→1, and ) that brings 1→0
+        # Content excludes these UNLESS there's expression content between them
         content_start = self.pos
-        depth = 1  # We're inside one level of (( already
+        depth = 2  # We consumed $((
+        first_close_pos: int | None = None  # Position of ) that brings depth 2→1
 
         while not self.at_end() and depth > 0:
             c = self.peek()
-
             if c == "(":
                 depth += 1
                 self.advance()
             elif c == ")":
-                # Check for ))
-                if depth == 1 and self.pos + 1 < self.length and self.source[self.pos + 1] == ")":
-                    # Found the closing ))
-                    break
+                if depth == 2:
+                    first_close_pos = self.pos
                 depth -= 1
                 if depth == 0:
-                    # Closed with ) but next isn't ) - this is $( ( ... ) )
-                    self.pos = start
-                    return None, ""
+                    break  # Don't advance past final )
                 self.advance()
             else:
+                if depth == 1:
+                    # Content after first closing ), so include up to final )
+                    first_close_pos = None
                 self.advance()
 
-        if self.at_end() or depth != 1:
+        if depth != 0:
             self.pos = start
             return None, ""
 
-        content = _substring(self.source, content_start, self.pos)
-        self.advance()  # consume first )
-        self.advance()  # consume second )
+        # Content ends at first_close_pos if set, else at final )
+        if first_close_pos is not None:
+            content = _substring(self.source, content_start, first_close_pos)
+        else:
+            content = _substring(self.source, content_start, self.pos)
+        self.advance()  # consume final )
 
         text = _substring(self.source, start, self.pos)
 

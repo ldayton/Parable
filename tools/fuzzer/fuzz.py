@@ -15,7 +15,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 from parable import ParseError, parse  # noqa: E402
 
 ORACLE_PATH = Path.home() / "source" / "bash-oracle" / "bash-oracle"
-MUTATION_CHARS = list('${}()|&<>;"\'\\` \t\n')
+MUTATION_CHARS = list("${}()|&<>;\"'\\` \t\n")
 
 
 @dataclass
@@ -165,7 +165,11 @@ def main():
     parser.add_argument("-o", "--output", type=Path, help="Output file for discrepancies")
     parser.add_argument("-s", "--seed", type=int, help="Random seed")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
-    parser.add_argument("--both-succeed", action="store_true", help="Only show cases where both parsers succeed but differ")
+    parser.add_argument(
+        "--both-succeed",
+        action="store_true",
+        help="Only show cases where both parsers succeed but differ",
+    )
     args = parser.parse_args()
 
     if args.seed is not None:
@@ -200,21 +204,31 @@ def main():
             seen_signatures.add(sig)
             discrepancies.append(d)
             if args.verbose:
-                print(f"\n[{i+1}] DISCREPANCY: {d.mutation_desc}")
+                print(f"\n[{i + 1}] DISCREPANCY: {d.mutation_desc}")
                 print(f"  Mutated:  {d.mutated!r}")
                 print(f"  Parable:  {d.parable_result}")
                 print(f"  Oracle:   {d.oracle_result}")
         if (i + 1) % 100 == 0:
-            print(f"\r{i+1}/{args.iterations} iterations, {len(discrepancies)} unique discrepancies", end="", flush=True)
+            print(
+                f"\r{i + 1}/{args.iterations} iterations, {len(discrepancies)} unique discrepancies",
+                end="",
+                flush=True,
+            )
     print()
 
     # Report
     print(f"\nFound {len(discrepancies)} unique discrepancies in {args.iterations} iterations")
 
     # Categorize
-    both_ok = [d for d in discrepancies if d.parable_result != "<error>" and d.oracle_result != "<error>"]
-    parable_err = [d for d in discrepancies if d.parable_result == "<error>" and d.oracle_result != "<error>"]
-    oracle_err = [d for d in discrepancies if d.parable_result != "<error>" and d.oracle_result == "<error>"]
+    both_ok = [
+        d for d in discrepancies if d.parable_result != "<error>" and d.oracle_result != "<error>"
+    ]
+    parable_err = [
+        d for d in discrepancies if d.parable_result == "<error>" and d.oracle_result != "<error>"
+    ]
+    oracle_err = [
+        d for d in discrepancies if d.parable_result != "<error>" and d.oracle_result == "<error>"
+    ]
     print(f"  Both succeed, different AST: {len(both_ok)}")
     print(f"  Parable errors, oracle succeeds: {len(parable_err)}")
     print(f"  Parable succeeds, oracle errors: {len(oracle_err)}")

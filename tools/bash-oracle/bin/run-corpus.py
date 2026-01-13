@@ -13,7 +13,7 @@ from parable import ParseError, parse  # noqa: E402
 
 CORPUS_DIR = os.path.expanduser("~/source/bigtable-bash/tests")
 FAILURES_FILE = os.path.join(SCRIPT_DIR, "failures.txt")
-MAX_FAILURES = 1
+MAX_FAILURES = 10
 
 # Test files to skip (known issues to investigate later)
 SKIP_FILES = {

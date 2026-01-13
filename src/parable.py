@@ -851,6 +851,8 @@ class Word(Node):
         """Return value with command substitutions formatted for cond-term output."""
         # Expand ANSI-C quotes
         value = self._expand_all_ansi_c_quotes(self.value)
+        # Strip $ from locale strings $"..."
+        value = self._strip_locale_string_dollars(value)
         # Format command substitutions
         value = self._format_command_substitutions(value)
         # Bash doubles CTLESC (\x01) characters in output
@@ -6235,6 +6237,30 @@ class Parser:
             elif ch == "\\" and self.pos + 1 < self.length:
                 chars.append(self.advance())
                 chars.append(self.advance())
+
+            # ANSI-C quoting $'...'
+            elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "'":
+                ansi_result = self._parse_ansi_c_quote()
+                ansi_node = ansi_result[0]
+                ansi_text = ansi_result[1]
+                if ansi_node:
+                    parts.append(ansi_node)
+                    chars.append(ansi_text)
+                else:
+                    chars.append(self.advance())
+
+            # Locale translation $"..."
+            elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == '"':
+                locale_result = self._parse_locale_string()
+                locale_node = locale_result[0]
+                locale_text = locale_result[1]
+                inner_parts = locale_result[2]
+                if locale_node:
+                    parts.append(locale_node)
+                    parts.extend(inner_parts)
+                    chars.append(locale_text)
+                else:
+                    chars.append(self.advance())
 
             # Arithmetic expansion $((...))
             elif (

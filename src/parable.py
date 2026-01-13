@@ -3796,6 +3796,11 @@ class Parser:
         if cmd is None:
             cmd = Empty()
 
+        # Ensure all content was consumed - if not, there's a syntax error
+        sub_parser.skip_whitespace_and_newlines()
+        if not sub_parser.at_end():
+            raise ParseError("Unexpected content in command substitution", pos=start)
+
         return CommandSubstitution(cmd), text
 
     def _is_word_boundary_before(self) -> bool:

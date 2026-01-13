@@ -811,13 +811,18 @@ class Word extends Node {
 	}
 
 	_formatCommandSubstitutions(value) {
-		let cmdsub_idx,
+		let c,
+			cmdsub_idx,
 			cmdsub_parts,
 			depth,
 			direction,
 			formatted,
 			has_brace_cmdsub,
+			has_untracked_cmdsub,
 			i,
+			idx,
+			in_double,
+			in_single,
 			inner,
 			j,
 			node,
@@ -843,10 +848,59 @@ class Word extends Node {
 		// Check if we have ${ or ${| brace command substitutions to format
 		has_brace_cmdsub =
 			value.indexOf("${ ") !== -1 || value.indexOf("${|") !== -1;
+		// Check if there's an untracked $( that isn't $((, skipping over ${...} and quotes
+		has_untracked_cmdsub = false;
+		idx = 0;
+		while (idx < value.length) {
+			if (_startsWithAt(value, idx, "${")) {
+				// Skip over parameter expansion
+				idx += 2;
+				depth = 1;
+				in_single = false;
+				in_double = false;
+				while (idx < value.length && depth > 0) {
+					c = value[idx];
+					if (c === "\\" && idx + 1 < value.length && !in_single) {
+						idx += 2;
+						continue;
+					}
+					if (c === "'" && !in_double) {
+						in_single = !in_single;
+					} else if (c === '"' && !in_single) {
+						in_double = !in_double;
+					} else if (!in_single && !in_double) {
+						if (c === "{") {
+							depth += 1;
+						} else if (c === "}") {
+							depth -= 1;
+						}
+					}
+					idx += 1;
+				}
+			} else if (value[idx] === "'") {
+				// Skip over single-quoted string (contents are literal)
+				idx += 1;
+				while (idx < value.length && value[idx] !== "'") {
+					idx += 1;
+				}
+				if (idx < value.length) {
+					idx += 1;
+				}
+			} else if (
+				_startsWithAt(value, idx, "$(") &&
+				!_startsWithAt(value, idx, "$((")
+			) {
+				has_untracked_cmdsub = true;
+				break;
+			} else {
+				idx += 1;
+			}
+		}
 		if (
 			cmdsub_parts.length === 0 &&
 			procsub_parts.length === 0 &&
-			!has_brace_cmdsub
+			!has_brace_cmdsub &&
+			!has_untracked_cmdsub
 		) {
 			return value;
 		}
@@ -856,23 +910,31 @@ class Word extends Node {
 		procsub_idx = 0;
 		while (i < value.length) {
 			// Check for $( command substitution (but not $(( arithmetic)
-			if (
-				_startsWithAt(value, i, "$(") &&
-				!_startsWithAt(value, i, "$((") &&
-				cmdsub_idx < cmdsub_parts.length
-			) {
+			if (_startsWithAt(value, i, "$(") && !_startsWithAt(value, i, "$((")) {
 				// Find matching close paren using bash-aware matching
 				j = _findCmdsubEnd(value, i + 2);
 				// Format this command substitution
-				node = cmdsub_parts[cmdsub_idx];
-				formatted = _formatCmdsubNode(node.command);
+				if (cmdsub_idx < cmdsub_parts.length) {
+					node = cmdsub_parts[cmdsub_idx];
+					formatted = _formatCmdsubNode(node.command);
+					cmdsub_idx += 1;
+				} else {
+					// No AST node (e.g., inside arithmetic) - parse content on the fly
+					inner = value.slice(i + 2, j - 1);
+					try {
+						parser = new Parser(inner);
+						parsed = parser.parseList();
+						formatted = parsed ? _formatCmdsubNode(parsed) : inner;
+					} catch (_) {
+						formatted = inner;
+					}
+				}
 				// Add space after $( if content starts with ( to avoid $((
 				if (formatted.startsWith("(")) {
 					result.push(`$( ${formatted})`);
 				} else {
 					result.push(`$(${formatted})`);
 				}
-				cmdsub_idx += 1;
 				i = j;
 			} else if (value[i] === "`" && cmdsub_idx < cmdsub_parts.length) {
 				// Check for backtick command substitution
@@ -943,6 +1005,45 @@ class Word extends Node {
 						result.push(value.slice(i, j));
 					}
 				}
+				i = j;
+			} else if (_startsWithAt(value, i, "${")) {
+				// Skip regular ${...} parameter expansions (don't look for cmdsubs inside)
+				// Find matching close brace, respecting nesting and quotes
+				j = i + 2;
+				depth = 1;
+				in_single = false;
+				in_double = false;
+				while (j < value.length && depth > 0) {
+					c = value[j];
+					if (c === "\\" && j + 1 < value.length && !in_single) {
+						j += 2;
+						continue;
+					}
+					if (c === "'" && !in_double) {
+						in_single = !in_single;
+					} else if (c === '"' && !in_single) {
+						in_double = !in_double;
+					} else if (!in_single && !in_double) {
+						if (c === "{") {
+							depth += 1;
+						} else if (c === "}") {
+							depth -= 1;
+						}
+					}
+					j += 1;
+				}
+				result.push(value.slice(i, j));
+				i = j;
+			} else if (value[i] === "'") {
+				// Skip single-quoted strings (contents are literal, don't look for cmdsubs)
+				j = i + 1;
+				while (j < value.length && value[j] !== "'") {
+					j += 1;
+				}
+				if (j < value.length) {
+					j += 1;
+				}
+				result.push(value.slice(i, j));
 				i = j;
 			} else {
 				result.push(value[i]);

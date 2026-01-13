@@ -729,3 +729,10 @@ i=0; while ((i++ < 10)); do echo $i; done
 ---
 (arith (word "(n & (n - 1)) == 0"))
 ---
+
+
+=== arithmetic with hex prefix and command substitution
+x=$((0x$(cmd 2>/dev/null)))
+---
+(command (word "x=$((0x$(cmd 2> /dev/null)))"))
+---

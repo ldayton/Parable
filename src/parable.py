@@ -680,7 +680,49 @@ class Word(Node):
                 cmdsub_parts.extend(self._collect_cmdsubs(p))
         # Check if we have ${ or ${| brace command substitutions to format
         has_brace_cmdsub = value.find("${ ") != -1 or value.find("${|") != -1
-        if not cmdsub_parts and not procsub_parts and not has_brace_cmdsub:
+        # Check if there's an untracked $( that isn't $((, skipping over ${...} and quotes
+        has_untracked_cmdsub = False
+        idx = 0
+        while idx < len(value):
+            if _starts_with_at(value, idx, "${"):
+                # Skip over parameter expansion
+                idx += 2
+                depth = 1
+                in_single = False
+                in_double = False
+                while idx < len(value) and depth > 0:
+                    c = value[idx]
+                    if c == "\\" and idx + 1 < len(value) and not in_single:
+                        idx += 2
+                        continue
+                    if c == "'" and not in_double:
+                        in_single = not in_single
+                    elif c == '"' and not in_single:
+                        in_double = not in_double
+                    elif not in_single and not in_double:
+                        if c == "{":
+                            depth += 1
+                        elif c == "}":
+                            depth -= 1
+                    idx += 1
+            elif value[idx] == "'":
+                # Skip over single-quoted string (contents are literal)
+                idx += 1
+                while idx < len(value) and value[idx] != "'":
+                    idx += 1
+                if idx < len(value):
+                    idx += 1  # skip closing quote
+            elif _starts_with_at(value, idx, "$(") and not _starts_with_at(value, idx, "$(("):
+                has_untracked_cmdsub = True
+                break
+            else:
+                idx += 1
+        if (
+            not cmdsub_parts
+            and not procsub_parts
+            and not has_brace_cmdsub
+            and not has_untracked_cmdsub
+        ):
             return value
         result = []
         i = 0
@@ -688,22 +730,28 @@ class Word(Node):
         procsub_idx = 0
         while i < len(value):
             # Check for $( command substitution (but not $(( arithmetic)
-            if (
-                _starts_with_at(value, i, "$(")
-                and not _starts_with_at(value, i, "$((")
-                and cmdsub_idx < len(cmdsub_parts)
-            ):
+            if _starts_with_at(value, i, "$(") and not _starts_with_at(value, i, "$(("):
                 # Find matching close paren using bash-aware matching
                 j = _find_cmdsub_end(value, i + 2)
                 # Format this command substitution
-                node = cmdsub_parts[cmdsub_idx]
-                formatted = _format_cmdsub_node(node.command)
+                if cmdsub_idx < len(cmdsub_parts):
+                    node = cmdsub_parts[cmdsub_idx]
+                    formatted = _format_cmdsub_node(node.command)
+                    cmdsub_idx += 1
+                else:
+                    # No AST node (e.g., inside arithmetic) - parse content on the fly
+                    inner = _substring(value, i + 2, j - 1)
+                    try:
+                        parser = Parser(inner)
+                        parsed = parser.parse_list()
+                        formatted = _format_cmdsub_node(parsed) if parsed else inner
+                    except Exception:
+                        formatted = inner
                 # Add space after $( if content starts with ( to avoid $((
                 if formatted.startswith("("):
                     result.append("$( " + formatted + ")")
                 else:
                     result.append("$(" + formatted + ")")
-                cmdsub_idx += 1
                 i = j
             # Check for backtick command substitution
             elif value[i] == "`" and cmdsub_idx < len(cmdsub_parts):
@@ -762,6 +810,39 @@ class Word(Node):
                             result.append("${ }")
                     except Exception:
                         result.append(_substring(value, i, j))
+                i = j
+            # Skip regular ${...} parameter expansions (don't look for cmdsubs inside)
+            elif _starts_with_at(value, i, "${"):
+                # Find matching close brace, respecting nesting and quotes
+                j = i + 2
+                depth = 1
+                in_single = False
+                in_double = False
+                while j < len(value) and depth > 0:
+                    c = value[j]
+                    if c == "\\" and j + 1 < len(value) and not in_single:
+                        j += 2
+                        continue
+                    if c == "'" and not in_double:
+                        in_single = not in_single
+                    elif c == '"' and not in_single:
+                        in_double = not in_double
+                    elif not in_single and not in_double:
+                        if c == "{":
+                            depth += 1
+                        elif c == "}":
+                            depth -= 1
+                    j += 1
+                result.append(_substring(value, i, j))
+                i = j
+            # Skip single-quoted strings (contents are literal, don't look for cmdsubs)
+            elif value[i] == "'":
+                j = i + 1
+                while j < len(value) and value[j] != "'":
+                    j += 1
+                if j < len(value):
+                    j += 1  # include closing quote
+                result.append(_substring(value, i, j))
                 i = j
             else:
                 result.append(value[i])

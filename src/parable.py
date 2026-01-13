@@ -6419,6 +6419,40 @@ class Parser:
                         if not self.at_end():
                             chars.append(self.advance())  # :
                             chars.append(self.advance())  # ]
+                    elif c == "$":
+                        # Handle parameter/arithmetic expansions inside bracket expression
+                        if self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                            # Could be $((...)) arithmetic or $(...) command substitution
+                            if self.pos + 2 < self.length and self.source[self.pos + 2] == "(":
+                                # Arithmetic expansion $((...))
+                                arith_result = self._parse_arithmetic_expansion()
+                                arith_node = arith_result[0]
+                                arith_text = arith_result[1]
+                                if arith_node:
+                                    parts.append(arith_node)
+                                    chars.append(arith_text)
+                                else:
+                                    chars.append(self.advance())
+                            else:
+                                # Command substitution $(...)
+                                cmdsub_result = self._parse_command_substitution()
+                                cmdsub_node = cmdsub_result[0]
+                                cmdsub_text = cmdsub_result[1]
+                                if cmdsub_node:
+                                    parts.append(cmdsub_node)
+                                    chars.append(cmdsub_text)
+                                else:
+                                    chars.append(self.advance())
+                        else:
+                            # Parameter expansion ${...} or $var
+                            param_result = self._parse_param_expansion()
+                            param_node = param_result[0]
+                            param_text = param_result[1]
+                            if param_node:
+                                parts.append(param_node)
+                                chars.append(param_text)
+                            else:
+                                chars.append(self.advance())
                     else:
                         chars.append(self.advance())
                 continue

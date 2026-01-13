@@ -7457,7 +7457,10 @@ class Parser {
 	}
 
 	_parseCondRegexWord() {
-		let c,
+		let arith_node,
+			arith_result,
+			arith_text,
+			c,
 			ch,
 			chars,
 			cmdsub_node,
@@ -7559,6 +7562,51 @@ class Parser {
 						if (!this.atEnd()) {
 							chars.push(this.advance());
 							chars.push(this.advance());
+						}
+					} else if (c === "$") {
+						// Handle parameter/arithmetic expansions inside bracket expression
+						if (
+							this.pos + 1 < this.length &&
+							this.source[this.pos + 1] === "("
+						) {
+							// Could be $((...)) arithmetic or $(...) command substitution
+							if (
+								this.pos + 2 < this.length &&
+								this.source[this.pos + 2] === "("
+							) {
+								// Arithmetic expansion $((...))
+								arith_result = this._parseArithmeticExpansion();
+								arith_node = arith_result[0];
+								arith_text = arith_result[1];
+								if (arith_node) {
+									parts.push(arith_node);
+									chars.push(arith_text);
+								} else {
+									chars.push(this.advance());
+								}
+							} else {
+								// Command substitution $(...)
+								cmdsub_result = this._parseCommandSubstitution();
+								cmdsub_node = cmdsub_result[0];
+								cmdsub_text = cmdsub_result[1];
+								if (cmdsub_node) {
+									parts.push(cmdsub_node);
+									chars.push(cmdsub_text);
+								} else {
+									chars.push(this.advance());
+								}
+							}
+						} else {
+							// Parameter expansion ${...} or $var
+							param_result = this._parseParamExpansion();
+							param_node = param_result[0];
+							param_text = param_result[1];
+							if (param_node) {
+								parts.push(param_node);
+								chars.push(param_text);
+							} else {
+								chars.push(this.advance());
+							}
 						}
 					} else {
 						chars.push(this.advance());

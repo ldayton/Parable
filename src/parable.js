@@ -482,7 +482,16 @@ class Word extends Node {
 	}
 
 	_normalizeArrayWhitespace(value) {
-		let brace_depth, ch, i, in_whitespace, inner, j, normalized, prefix, result;
+		let brace_depth,
+			ch,
+			dq_content,
+			i,
+			in_whitespace,
+			inner,
+			j,
+			normalized,
+			prefix,
+			result;
 		// Match array assignment pattern: name=( or name+=(
 		if (!value.endsWith(")")) {
 			return value;
@@ -538,20 +547,31 @@ class Word extends Node {
 				normalized.push(inner.slice(i, j + 1));
 				i = j + 1;
 			} else if (ch === '"') {
-				// Double-quoted string - preserve as-is
+				// Double-quoted string - strip line continuations
 				in_whitespace = false;
 				j = i + 1;
+				dq_content = ['"'];
 				while (j < inner.length) {
 					if (inner[j] === "\\" && j + 1 < inner.length) {
-						j += 2;
+						if (inner[j + 1] === "\n") {
+							// Skip line continuation
+							j += 2;
+						} else {
+							dq_content.push(inner[j]);
+							dq_content.push(inner[j + 1]);
+							j += 2;
+						}
 					} else if (inner[j] === '"') {
+						dq_content.push('"');
+						j += 1;
 						break;
 					} else {
+						dq_content.push(inner[j]);
 						j += 1;
 					}
 				}
-				normalized.push(inner.slice(i, j + 1));
-				i = j + 1;
+				normalized.push(dq_content.join(""));
+				i = j;
 			} else if (ch === "\\" && i + 1 < inner.length) {
 				// Escape sequence
 				in_whitespace = false;

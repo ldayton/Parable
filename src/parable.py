@@ -463,18 +463,28 @@ class Word(Node):
                 normalized.append(_substring(inner, i, j + 1))
                 i = j + 1
             elif ch == '"':
-                # Double-quoted string - preserve as-is
+                # Double-quoted string - strip line continuations
                 in_whitespace = False
                 j = i + 1
+                dq_content = ['"']
                 while j < len(inner):
                     if inner[j] == "\\" and j + 1 < len(inner):
-                        j += 2
+                        if inner[j + 1] == "\n":
+                            # Skip line continuation
+                            j += 2
+                        else:
+                            dq_content.append(inner[j])
+                            dq_content.append(inner[j + 1])
+                            j += 2
                     elif inner[j] == '"':
+                        dq_content.append('"')
+                        j += 1
                         break
                     else:
+                        dq_content.append(inner[j])
                         j += 1
-                normalized.append(_substring(inner, i, j + 1))
-                i = j + 1
+                normalized.append("".join(dq_content))
+                i = j
             elif ch == "\\" and i + 1 < len(inner):
                 # Escape sequence
                 in_whitespace = False

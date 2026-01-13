@@ -334,3 +334,10 @@ arr=(
 ---
 (command (word "arr=(foo)"))
 ---
+
+=== array with line continuation in value
+arr=([k]="a \
+b")
+---
+(command (word "arr=([k]=\"a b\")"))
+---

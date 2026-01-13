@@ -5237,6 +5237,11 @@ class Parser {
 			}
 			return expr;
 		}
+		// Parameter length #$var or #${...}
+		if (c === "#" && this._arithPeek(1) === "$") {
+			this._arithAdvance();
+			return this._arithParseExpansion();
+		}
 		// Parameter expansion ${...} or $var or $(...)
 		if (c === "$") {
 			return this._arithParseExpansion();

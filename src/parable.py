@@ -4502,6 +4502,11 @@ class Parser:
                 raise ParseError("Expected ')' in arithmetic expression", pos=self._arith_pos)
             return expr
 
+        # Parameter length #$var or #${...}
+        if c == "#" and self._arith_peek(1) == "$":
+            self._arith_advance()  # consume #
+            return self._arith_parse_expansion()
+
         # Parameter expansion ${...} or $var or $(...)
         if c == "$":
             return self._arith_parse_expansion()

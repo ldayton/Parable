@@ -18,7 +18,7 @@ Parse bash exactly as bash does. Python or Javascript, your choice. One file, ze
 
 **Match bash exactly.** Bash is the oracle. We patched GNU Bash 5.3 so it reveals its internal parse tree, then test against it. No spec interpretation, no "close enough"—if bash parses it one way, so do we. Bash always tells the truth, even when it's lying.
 
-**Portable performance.** Hand-written recursive descent—no generators, no native extensions. Pure Python and pure JS, zero dependencies, not even stdlib imports. The Python implementation is canonical; a custom transpiler produces idiomatic JavaScript. Both run the same tests.
+**Portable performance.** Hand-written recursive descent—no generators, no native extensions. Pure Python and pure JS, zero dependencies, not even stdlib imports. The Python implementation is canonical; a custom transpiler produces idiomatic Javascript. Both run the same tests.
 
 ## Javascript
 

@@ -347,3 +347,11 @@ arr=($( cmd ))
 ---
 (command (word "arr=($(cmd))"))
 ---
+
+=== array with top-level line continuation
+arr=(\
+"a" \
+ "b")
+---
+(command (word "arr=(\"a\" \"b\")"))
+---

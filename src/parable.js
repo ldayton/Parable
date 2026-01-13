@@ -578,10 +578,15 @@ class Word extends Node {
 				normalized.push(dq_content.join(""));
 				i = j;
 			} else if (ch === "\\" && i + 1 < inner.length) {
-				// Escape sequence
-				in_whitespace = false;
-				normalized.push(inner.slice(i, i + 2));
-				i += 2;
+				if (inner[i + 1] === "\n") {
+					// Line continuation - skip both backslash and newline
+					i += 2;
+				} else {
+					// Escape sequence - preserve
+					in_whitespace = false;
+					normalized.push(inner.slice(i, i + 2));
+					i += 2;
+				}
 			} else if (
 				ch === "$" &&
 				i + 2 < inner.length &&

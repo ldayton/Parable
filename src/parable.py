@@ -490,10 +490,14 @@ class Word(Node):
                 normalized.append("".join(dq_content))
                 i = j
             elif ch == "\\" and i + 1 < len(inner):
-                # Escape sequence
-                in_whitespace = False
-                normalized.append(_substring(inner, i, i + 2))
-                i += 2
+                if inner[i + 1] == "\n":
+                    # Line continuation - skip both backslash and newline
+                    i += 2
+                else:
+                    # Escape sequence - preserve
+                    in_whitespace = False
+                    normalized.append(_substring(inner, i, i + 2))
+                    i += 2
             elif ch == "$" and i + 2 < len(inner) and inner[i + 1] == "(" and inner[i + 2] == "(":
                 # Arithmetic expansion $(( - find matching )) and preserve as-is
                 in_whitespace = False

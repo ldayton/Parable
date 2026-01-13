@@ -1,3 +1,12 @@
+/**
+ * Parable.js - A recursive descent parser for bash.
+ *
+ * MIT License - https://github.com/ldayton/Parable
+ *
+ * import { parse } from './parable.js';
+ * const ast = parse("ps aux | grep python | awk '{print $2}'")
+ */
+
 class ParseError extends Error {
 	constructor(message, pos, line) {
 		super();

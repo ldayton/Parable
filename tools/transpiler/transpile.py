@@ -61,6 +61,32 @@ class JSTranspiler(ast.NodeVisitor):
         return False
 
     def visit_Module(self, node: ast.Module):
+        # Emit module docstring as JSDoc comment
+        if (
+            node.body
+            and isinstance(node.body[0], ast.Expr)
+            and isinstance(node.body[0].value, ast.Constant)
+            and isinstance(node.body[0].value.value, str)
+        ):
+            docstring = (
+                node.body[0]
+                .value.value.strip()
+                .replace("Parable -", "Parable.js -", 1)
+                .replace("from parable import parse", "import { parse } from './parable.js';")
+                .replace("ast = parse(", "const ast = parse(")
+            )
+            lines = docstring.split("\n")
+            if len(lines) == 1:
+                self.emit(f"/** {docstring} */")
+            else:
+                self.emit("/**")
+                for line in lines:
+                    if line.strip():
+                        self.emit(f" * {line}")
+                    else:
+                        self.emit(" *")
+                self.emit(" */")
+            self.emit("")
         for stmt in node.body:
             # Skip unused module-level variable definitions
             if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:

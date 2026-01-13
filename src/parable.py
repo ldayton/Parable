@@ -3141,6 +3141,9 @@ class Parser:
             # Stop at quotes - don't include in peek
             if _is_quote(ch):
                 break
+            # Stop at backslash-newline (line continuation)
+            if ch == "\\" and self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
+                break
             chars.append(self.advance())
 
         if chars:
@@ -3164,6 +3167,12 @@ class Parser:
         self.skip_whitespace()
         for _ in expected:
             self.advance()
+        # Skip trailing backslash-newline (line continuation)
+        while (
+            self.peek() == "\\" and self.pos + 1 < self.length and self.source[self.pos + 1] == "\n"
+        ):
+            self.advance()  # skip backslash
+            self.advance()  # skip newline
         return True
 
     def parse_word(self, at_command_start: bool = False) -> Word | None:

@@ -3612,6 +3612,14 @@ class Parser {
 			if (_isQuote(ch)) {
 				break;
 			}
+			// Stop at backslash-newline (line continuation)
+			if (
+				ch === "\\" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "\n"
+			) {
+				break;
+			}
 			chars.push(this.advance());
 		}
 		if (chars) {
@@ -3635,6 +3643,15 @@ class Parser {
 		// Actually consume the word
 		this.skipWhitespace();
 		for (_ of expected) {
+			this.advance();
+		}
+		// Skip trailing backslash-newline (line continuation)
+		while (
+			this.peek() === "\\" &&
+			this.pos + 1 < this.length &&
+			this.source[this.pos + 1] === "\n"
+		) {
+			this.advance();
 			this.advance();
 		}
 		return true;

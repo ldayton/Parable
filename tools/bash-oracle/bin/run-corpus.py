@@ -19,6 +19,7 @@ MAX_FAILURES = 1
 SKIP_FILES = {
     "001629__Patlol__Handy-Install-Web-Server-ruTorrent-__util_listeusers.tests",
     "001812__containerd__stargz-snapshotter__run-kind.tests",  # heredoc contains ---
+    "002478__cloudfoundry-incubator__bosh-google-cpi-release__run-bats.tests",  # heredoc contains ---
 }
 
 

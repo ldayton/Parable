@@ -205,6 +205,13 @@ echo $((16 >> 2))
 ---
 
 
+=== left shift inside command substitution
+x=$( echo $(( 1<<2 )) )
+---
+(command (word "x=$(echo $(( 1<<2 )))"))
+---
+
+
 === simple assignment
 echo $((x = 5))
 ---

@@ -2448,6 +2448,7 @@ def _find_cmdsub_end(value: str, start: int) -> int:
     in_double = False
     case_depth = 0  # Track nested case statements
     in_case_patterns = False  # After 'in' but before first ;; or esac
+    arith_depth = 0  # Track nested arithmetic expressions
     while i < len(value) and depth > 0:
         c = value[i]
         # Handle escapes
@@ -2519,8 +2520,18 @@ def _find_cmdsub_end(value: str, start: int) -> int:
                 while i < len(value) and value[i] not in " \t\n;|&<>()":
                     i += 1
             continue
-        # Handle heredocs
-        if _starts_with_at(value, i, "<<"):
+        # Handle arithmetic expressions $((
+        if _starts_with_at(value, i, "$(("):
+            arith_depth += 1
+            i += 3
+            continue
+        # Handle arithmetic close ))
+        if arith_depth > 0 and _starts_with_at(value, i, "))"):
+            arith_depth -= 1
+            i += 2
+            continue
+        # Handle heredocs (but not << inside arithmetic, which is shift operator)
+        if arith_depth == 0 and _starts_with_at(value, i, "<<"):
             i = _skip_heredoc(value, i)
             continue
         # Check for 'case' keyword
@@ -3381,6 +3392,7 @@ class Parser:
         content_start = self.pos
         depth = 1
         case_depth = 0  # Track nested case statements
+        arith_depth = 0  # Track nested arithmetic expressions
 
         while not self.at_end() and depth > 0:
             c = self.peek()
@@ -3467,8 +3479,38 @@ class Parser:
                     self.advance()
                 continue
 
-            # Heredoc - skip until delimiter line is found
-            if c == "<" and self.pos + 1 < self.length and self.source[self.pos + 1] == "<":
+            # Handle arithmetic expressions $((
+            if (
+                c == "$"
+                and self.pos + 2 < self.length
+                and self.source[self.pos + 1] == "("
+                and self.source[self.pos + 2] == "("
+            ):
+                arith_depth += 1
+                self.advance()  # $
+                self.advance()  # (
+                self.advance()  # (
+                continue
+
+            # Handle arithmetic close ))
+            if (
+                arith_depth > 0
+                and c == ")"
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == ")"
+            ):
+                arith_depth -= 1
+                self.advance()  # )
+                self.advance()  # )
+                continue
+
+            # Heredoc - skip until delimiter line is found (not inside arithmetic)
+            if (
+                arith_depth == 0
+                and c == "<"
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "<"
+            ):
                 self.advance()  # first <
                 self.advance()  # second <
                 # Check for <<- (strip tabs)

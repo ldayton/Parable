@@ -2794,13 +2794,22 @@ function _normalizeFdRedirects(s) {
 }
 
 function _findCmdsubEnd(value, start) {
-	let c, case_depth, depth, i, in_case_patterns, in_double, in_single, j;
+	let arith_depth,
+		c,
+		case_depth,
+		depth,
+		i,
+		in_case_patterns,
+		in_double,
+		in_single,
+		j;
 	depth = 1;
 	i = start;
 	in_single = false;
 	in_double = false;
 	case_depth = 0;
 	in_case_patterns = false;
+	arith_depth = 0;
 	while (i < value.length && depth > 0) {
 		c = value[i];
 		// Handle escapes
@@ -2890,8 +2899,20 @@ function _findCmdsubEnd(value, start) {
 			}
 			continue;
 		}
-		// Handle heredocs
-		if (_startsWithAt(value, i, "<<")) {
+		// Handle arithmetic expressions $((
+		if (_startsWithAt(value, i, "$((")) {
+			arith_depth += 1;
+			i += 3;
+			continue;
+		}
+		// Handle arithmetic close ))
+		if (arith_depth > 0 && _startsWithAt(value, i, "))")) {
+			arith_depth -= 1;
+			i += 2;
+			continue;
+		}
+		// Handle heredocs (but not << inside arithmetic, which is shift operator)
+		if (arith_depth === 0 && _startsWithAt(value, i, "<<")) {
 			i = _skipHeredoc(value, i);
 			continue;
 		}
@@ -3884,7 +3905,8 @@ class Parser {
 	}
 
 	_parseCommandSubstitution() {
-		let c,
+		let arith_depth,
+			c,
 			case_depth,
 			ch,
 			cmd,
@@ -3925,6 +3947,7 @@ class Parser {
 		content_start = this.pos;
 		depth = 1;
 		case_depth = 0;
+		arith_depth = 0;
 		while (!this.atEnd() && depth > 0) {
 			c = this.peek();
 			// Single-quoted string - no special chars inside
@@ -4024,8 +4047,34 @@ class Parser {
 				}
 				continue;
 			}
-			// Heredoc - skip until delimiter line is found
+			// Handle arithmetic expressions $((
 			if (
+				c === "$" &&
+				this.pos + 2 < this.length &&
+				this.source[this.pos + 1] === "(" &&
+				this.source[this.pos + 2] === "("
+			) {
+				arith_depth += 1;
+				this.advance();
+				this.advance();
+				this.advance();
+				continue;
+			}
+			// Handle arithmetic close ))
+			if (
+				arith_depth > 0 &&
+				c === ")" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === ")"
+			) {
+				arith_depth -= 1;
+				this.advance();
+				this.advance();
+				continue;
+			}
+			// Heredoc - skip until delimiter line is found (not inside arithmetic)
+			if (
+				arith_depth === 0 &&
 				c === "<" &&
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === "<"

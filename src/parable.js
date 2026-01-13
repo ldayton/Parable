@@ -1291,9 +1291,11 @@ class Redirect extends Node {
 		}
 		target_val = this.target.value;
 		// Expand ANSI-C $'...' quotes (converts escapes like \n to actual newline)
-		target_val = new Word(target_val)._expandAllAnsiCQuotes(target_val);
+		target_val = this.target._expandAllAnsiCQuotes(target_val);
 		// Strip $ from locale strings $"..."
-		target_val = target_val.replaceAll('$"', '"');
+		target_val = this.target._stripLocaleStringDollars(target_val);
+		// Format command/process substitutions (uses self.target for parts access)
+		target_val = this.target._formatCommandSubstitutions(target_val);
 		// For fd duplication, target starts with & (e.g., "&1", "&2", "&-")
 		if (target_val.startsWith("&")) {
 			// Determine the real operator

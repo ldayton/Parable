@@ -220,3 +220,10 @@ EOF
 ---
 (command (word "cat") (word "<(cat <<EOF\nhello\nEOF\n)"))
 ---
+
+
+=== process substitution in redirect with pipeline
+read x < <(cmd1|cmd2)
+---
+(command (word "read") (word "x") (redirect "<" "<(cmd1 | cmd2)"))
+---

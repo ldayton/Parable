@@ -1038,9 +1038,11 @@ class Redirect(Node):
                     op = _substring(op, j + 1, len(op))
         target_val = self.target.value
         # Expand ANSI-C $'...' quotes (converts escapes like \n to actual newline)
-        target_val = Word(target_val)._expand_all_ansi_c_quotes(target_val)
+        target_val = self.target._expand_all_ansi_c_quotes(target_val)
         # Strip $ from locale strings $"..."
-        target_val = target_val.replace('$"', '"')
+        target_val = self.target._strip_locale_string_dollars(target_val)
+        # Format command/process substitutions (uses self.target for parts access)
+        target_val = self.target._format_command_substitutions(target_val)
         # For fd duplication, target starts with & (e.g., "&1", "&2", "&-")
         if target_val.startswith("&"):
             # Determine the real operator

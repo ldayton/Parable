@@ -3591,10 +3591,21 @@ class Parser:
                         # Move position to end of line
                         self.pos = line_end
                         # Check if this line matches delimiter
-                        if line == delimiter or line.lstrip("\t") == delimiter:
+                        check_line = line.lstrip("\t")
+                        if check_line == delimiter:
                             # Skip newline after delimiter
                             if not self.at_end() and self.peek() == "\n":
                                 self.advance()
+                            break
+                        # Also check for delimiter followed by ) which closes cmdsub
+                        if (
+                            check_line.startswith(delimiter)
+                            and len(check_line) > len(delimiter)
+                            and check_line[len(delimiter)] == ")"
+                        ):
+                            # Position parser at the ) so it closes the cmdsub
+                            tabs_stripped = len(line) - len(check_line)
+                            self.pos = line_start + tabs_stripped + len(delimiter)
                             break
                         # Skip newline and continue
                         if not self.at_end() and self.peek() == "\n":

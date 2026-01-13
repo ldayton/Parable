@@ -574,3 +574,12 @@ x=$(cmd 1>/dev/null)
 ---
 (command (word "x=$(cmd > /dev/null)"))
 ---
+
+
+=== heredoc delimiter with closing paren on same line
+x=$(cat <<E
+hello
+E)
+---
+(command (word "x=$(cat <<E\nhello\nE\n)"))
+---

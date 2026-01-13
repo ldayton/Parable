@@ -3932,6 +3932,7 @@ class Parser {
 			c,
 			case_depth,
 			ch,
+			check_line,
 			cmd,
 			content,
 			content_start,
@@ -3949,6 +3950,7 @@ class Parser {
 			saved,
 			start,
 			sub_parser,
+			tabs_stripped,
 			tc,
 			temp_case_depth,
 			temp_depth,
@@ -4177,14 +4179,23 @@ class Parser {
 						// Move position to end of line
 						this.pos = line_end;
 						// Check if this line matches delimiter
-						if (
-							line === delimiter ||
-							line.replace(/^[\t]+/, "") === delimiter
-						) {
+						check_line = line.replace(/^[\t]+/, "");
+						if (check_line === delimiter) {
 							// Skip newline after delimiter
 							if (!this.atEnd() && this.peek() === "\n") {
 								this.advance();
 							}
+							break;
+						}
+						// Also check for delimiter followed by ) which closes cmdsub
+						if (
+							check_line.startsWith(delimiter) &&
+							check_line.length > delimiter.length &&
+							check_line[delimiter.length] === ")"
+						) {
+							// Position parser at the ) so it closes the cmdsub
+							tabs_stripped = line.length - check_line.length;
+							this.pos = line_start + tabs_stripped + delimiter.length;
 							break;
 						}
 						// Skip newline and continue

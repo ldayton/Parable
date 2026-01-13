@@ -5910,6 +5910,69 @@ class Parser:
             if ch == "|" and self.pos + 1 < self.length and self.source[self.pos + 1] == "|":
                 break
 
+            # Glob bracket expression [...] - consume until closing ]
+            # Handles [[:alpha:]], [^0-9], []a-z] (] as first char), etc.
+            if ch == "[":
+                chars.append(self.advance())  # consume [
+                # Handle negation [^
+                if not self.at_end() and self.peek() == "^":
+                    chars.append(self.advance())
+                # Handle ] as first char (literal ])
+                if not self.at_end() and self.peek() == "]":
+                    chars.append(self.advance())
+                # Consume until closing ]
+                while not self.at_end():
+                    c = self.peek()
+                    if c == "]":
+                        chars.append(self.advance())
+                        break
+                    if c == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == ":":
+                        # POSIX class like [:alpha:] inside bracket expression
+                        chars.append(self.advance())  # [
+                        chars.append(self.advance())  # :
+                        while not self.at_end() and not (
+                            self.peek() == ":"
+                            and self.pos + 1 < self.length
+                            and self.source[self.pos + 1] == "]"
+                        ):
+                            chars.append(self.advance())
+                        if not self.at_end():
+                            chars.append(self.advance())  # :
+                            chars.append(self.advance())  # ]
+                    elif (
+                        c == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == "="
+                    ):
+                        # Equivalence class like [=a=] inside bracket expression
+                        chars.append(self.advance())  # [
+                        chars.append(self.advance())  # =
+                        while not self.at_end() and not (
+                            self.peek() == "="
+                            and self.pos + 1 < self.length
+                            and self.source[self.pos + 1] == "]"
+                        ):
+                            chars.append(self.advance())
+                        if not self.at_end():
+                            chars.append(self.advance())  # =
+                            chars.append(self.advance())  # ]
+                    elif (
+                        c == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == "."
+                    ):
+                        # Collating symbol like [.ch.] inside bracket expression
+                        chars.append(self.advance())  # [
+                        chars.append(self.advance())  # .
+                        while not self.at_end() and not (
+                            self.peek() == "."
+                            and self.pos + 1 < self.length
+                            and self.source[self.pos + 1] == "]"
+                        ):
+                            chars.append(self.advance())
+                        if not self.at_end():
+                            chars.append(self.advance())  # .
+                            chars.append(self.advance())  # ]
+                    else:
+                        chars.append(self.advance())
+                continue
+
             # Single-quoted string
             if ch == "'":
                 self.advance()

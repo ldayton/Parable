@@ -331,3 +331,10 @@ line2"")))
 ---
 (cond (cond-unary "-z" (cond-term ""$(find foo 2> /dev/null)"")))
 ---
+
+
+=== pattern with POSIX character class
+[[ x = *[[:space:]]* ]]
+---
+(cond (cond-binary "=" (cond-term "x") (cond-term "*[[:space:]]*")))
+---

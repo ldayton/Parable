@@ -6927,6 +6927,97 @@ class Parser {
 			) {
 				break;
 			}
+			// Glob bracket expression [...] - consume until closing ]
+			// Handles [[:alpha:]], [^0-9], []a-z] (] as first char), etc.
+			if (ch === "[") {
+				chars.push(this.advance());
+				// Handle negation [^
+				if (!this.atEnd() && this.peek() === "^") {
+					chars.push(this.advance());
+				}
+				// Handle ] as first char (literal ])
+				if (!this.atEnd() && this.peek() === "]") {
+					chars.push(this.advance());
+				}
+				// Consume until closing ]
+				while (!this.atEnd()) {
+					c = this.peek();
+					if (c === "]") {
+						chars.push(this.advance());
+						break;
+					}
+					if (
+						c === "[" &&
+						this.pos + 1 < this.length &&
+						this.source[this.pos + 1] === ":"
+					) {
+						// POSIX class like [:alpha:] inside bracket expression
+						chars.push(this.advance());
+						chars.push(this.advance());
+						while (
+							!this.atEnd() &&
+							!(
+								this.peek() === ":" &&
+								this.pos + 1 < this.length &&
+								this.source[this.pos + 1] === "]"
+							)
+						) {
+							chars.push(this.advance());
+						}
+						if (!this.atEnd()) {
+							chars.push(this.advance());
+							chars.push(this.advance());
+						}
+					} else if (
+						c === "[" &&
+						this.pos + 1 < this.length &&
+						this.source[this.pos + 1] === "="
+					) {
+						// Equivalence class like [=a=] inside bracket expression
+						chars.push(this.advance());
+						chars.push(this.advance());
+						while (
+							!this.atEnd() &&
+							!(
+								this.peek() === "=" &&
+								this.pos + 1 < this.length &&
+								this.source[this.pos + 1] === "]"
+							)
+						) {
+							chars.push(this.advance());
+						}
+						if (!this.atEnd()) {
+							chars.push(this.advance());
+							chars.push(this.advance());
+						}
+					} else if (
+						c === "[" &&
+						this.pos + 1 < this.length &&
+						this.source[this.pos + 1] === "."
+					) {
+						// Collating symbol like [.ch.] inside bracket expression
+						chars.push(this.advance());
+						chars.push(this.advance());
+						while (
+							!this.atEnd() &&
+							!(
+								this.peek() === "." &&
+								this.pos + 1 < this.length &&
+								this.source[this.pos + 1] === "]"
+							)
+						) {
+							chars.push(this.advance());
+						}
+						if (!this.atEnd()) {
+							chars.push(this.advance());
+							chars.push(this.advance());
+						}
+					} else {
+						chars.push(this.advance());
+					}
+				}
+				continue;
+			}
 			// Single-quoted string
 			if (ch === "'") {
 				this.advance();

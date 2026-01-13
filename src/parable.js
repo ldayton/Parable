@@ -817,6 +817,7 @@ class Word extends Node {
 			depth,
 			direction,
 			formatted,
+			formatted_inner,
 			has_brace_cmdsub,
 			has_untracked_cmdsub,
 			i,
@@ -848,36 +849,11 @@ class Word extends Node {
 		// Check if we have ${ or ${| brace command substitutions to format
 		has_brace_cmdsub =
 			value.indexOf("${ ") !== -1 || value.indexOf("${|") !== -1;
-		// Check if there's an untracked $( that isn't $((, skipping over ${...} and quotes
+		// Check if there's an untracked $( that isn't $((, skipping over quotes only
 		has_untracked_cmdsub = false;
 		idx = 0;
 		while (idx < value.length) {
-			if (_startsWithAt(value, idx, "${")) {
-				// Skip over parameter expansion
-				idx += 2;
-				depth = 1;
-				in_single = false;
-				in_double = false;
-				while (idx < value.length && depth > 0) {
-					c = value[idx];
-					if (c === "\\" && idx + 1 < value.length && !in_single) {
-						idx += 2;
-						continue;
-					}
-					if (c === "'" && !in_double) {
-						in_single = !in_single;
-					} else if (c === '"' && !in_single) {
-						in_double = !in_double;
-					} else if (!in_single && !in_double) {
-						if (c === "{") {
-							depth += 1;
-						} else if (c === "}") {
-							depth -= 1;
-						}
-					}
-					idx += 1;
-				}
-			} else if (value[idx] === "'") {
+			if (value[idx] === "'") {
 				// Skip over single-quoted string (contents are literal)
 				idx += 1;
 				while (idx < value.length && value[idx] !== "'") {
@@ -1007,7 +983,7 @@ class Word extends Node {
 				}
 				i = j;
 			} else if (_startsWithAt(value, i, "${")) {
-				// Skip regular ${...} parameter expansions (don't look for cmdsubs inside)
+				// Process regular ${...} parameter expansions (recursively format cmdsubs inside)
 				// Find matching close brace, respecting nesting and quotes
 				j = i + 2;
 				depth = 1;
@@ -1032,7 +1008,10 @@ class Word extends Node {
 					}
 					j += 1;
 				}
-				result.push(value.slice(i, j));
+				// Recursively format any cmdsubs inside the param expansion
+				inner = value.slice(i + 2, j - 1);
+				formatted_inner = this._formatCommandSubstitutions(inner);
+				result.push(`\${${formatted_inner}}`);
 				i = j;
 			} else if (value[i] === "'") {
 				// Skip single-quoted strings (contents are literal, don't look for cmdsubs)

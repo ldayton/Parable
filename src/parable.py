@@ -680,32 +680,11 @@ class Word(Node):
                 cmdsub_parts.extend(self._collect_cmdsubs(p))
         # Check if we have ${ or ${| brace command substitutions to format
         has_brace_cmdsub = value.find("${ ") != -1 or value.find("${|") != -1
-        # Check if there's an untracked $( that isn't $((, skipping over ${...} and quotes
+        # Check if there's an untracked $( that isn't $((, skipping over quotes only
         has_untracked_cmdsub = False
         idx = 0
         while idx < len(value):
-            if _starts_with_at(value, idx, "${"):
-                # Skip over parameter expansion
-                idx += 2
-                depth = 1
-                in_single = False
-                in_double = False
-                while idx < len(value) and depth > 0:
-                    c = value[idx]
-                    if c == "\\" and idx + 1 < len(value) and not in_single:
-                        idx += 2
-                        continue
-                    if c == "'" and not in_double:
-                        in_single = not in_single
-                    elif c == '"' and not in_single:
-                        in_double = not in_double
-                    elif not in_single and not in_double:
-                        if c == "{":
-                            depth += 1
-                        elif c == "}":
-                            depth -= 1
-                    idx += 1
-            elif value[idx] == "'":
+            if value[idx] == "'":
                 # Skip over single-quoted string (contents are literal)
                 idx += 1
                 while idx < len(value) and value[idx] != "'":
@@ -811,7 +790,7 @@ class Word(Node):
                     except Exception:
                         result.append(_substring(value, i, j))
                 i = j
-            # Skip regular ${...} parameter expansions (don't look for cmdsubs inside)
+            # Process regular ${...} parameter expansions (recursively format cmdsubs inside)
             elif _starts_with_at(value, i, "${"):
                 # Find matching close brace, respecting nesting and quotes
                 j = i + 2
@@ -833,7 +812,10 @@ class Word(Node):
                         elif c == "}":
                             depth -= 1
                     j += 1
-                result.append(_substring(value, i, j))
+                # Recursively format any cmdsubs inside the param expansion
+                inner = _substring(value, i + 2, j - 1)
+                formatted_inner = self._format_command_substitutions(inner)
+                result.append("${" + formatted_inner + "}")
                 i = j
             # Skip single-quoted strings (contents are literal, don't look for cmdsubs)
             elif value[i] == "'":

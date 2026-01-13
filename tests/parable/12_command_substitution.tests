@@ -518,3 +518,17 @@ if cmd=$(command -v git); then echo found; fi
 ---
 (if (command (word "cmd=$(command -v git)")) (command (word "echo") (word "found")))
 ---
+
+
+=== redirect before command in cmdsub
+echo $(<file cmd)
+---
+(command (word "echo") (word "$(cmd < file)"))
+---
+
+
+=== cmdsub with redirect in param expansion default
+ver=${GOVERSION:-$(<${file} jq -r .GoVersion)}
+---
+(command (word "ver=${GOVERSION:-$(jq -r .GoVersion < ${file})}"))
+---

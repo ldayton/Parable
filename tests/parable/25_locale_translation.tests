@@ -217,3 +217,10 @@ echo $"a"$"b"$"c"
 ---
 (command (word "echo") (word "\"a\"\"b\"\"c\""))
 ---
+
+
+=== locale in command substitution assignment
+x=$(y=$"")
+---
+(command (word "x=$(y=\"\")"))
+---

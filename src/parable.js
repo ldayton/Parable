@@ -2420,6 +2420,8 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 		parts = [];
 		for (w of node.words) {
 			val = w._expandAllAnsiCQuotes(w.value);
+			// Strip $ from locale strings $"..." (quote-aware)
+			val = w._stripLocaleStringDollars(val);
 			val = w._formatCommandSubstitutions(val);
 			parts.push(val);
 		}

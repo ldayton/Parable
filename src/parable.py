@@ -2142,6 +2142,8 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
         parts = []
         for w in node.words:
             val = w._expand_all_ansi_c_quotes(w.value)
+            # Strip $ from locale strings $"..." (quote-aware)
+            val = w._strip_locale_string_dollars(val)
             val = w._format_command_substitutions(val)
             parts.append(val)
         for r in node.redirects:

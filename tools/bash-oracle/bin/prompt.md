@@ -20,6 +20,6 @@ One bug per iteration. Do not batch.
 === test name
 input code here
 ---
-expected sexp output (or <parse error> for syntax errors)
+expected sexp output (or <error> for syntax errors)
 ---
 ```

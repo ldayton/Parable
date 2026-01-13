@@ -2254,9 +2254,24 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
             parts.append(_format_redirect(r))
         return " ".join(parts)
     if node.kind == "pipeline":
+        # Build list of (cmd, needs_pipe_both_redirect) filtering out PipeBoth markers
+        cmds = []
+        i = 0
+        while i < len(node.commands):
+            cmd = node.commands[i]
+            if cmd.kind == "pipe-both":
+                i += 1
+                continue
+            # Check if next element is PipeBoth
+            needs_redirect = i + 1 < len(node.commands) and node.commands[i + 1].kind == "pipe-both"
+            cmds.append((cmd, needs_redirect))
+            i += 1
         cmd_parts = []
-        for cmd in node.commands:
-            cmd_parts.append(_format_cmdsub_node(cmd, indent))
+        for cmd, needs_redirect in cmds:
+            formatted = _format_cmdsub_node(cmd, indent)
+            if needs_redirect:
+                formatted = formatted + " 2>&1"
+            cmd_parts.append(formatted)
         return " | ".join(cmd_parts)
     if node.kind == "list":
         # Join commands with operators

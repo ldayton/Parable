@@ -546,3 +546,10 @@ echo "a='$( cmd )'"
 ---
 (command (word "echo") (word "\"a='$(cmd)'\""))
 ---
+
+
+=== cmdsub with pipe-both operator
+x="$(cmd |& cat)"
+---
+(command (word "x=\"$(cmd 2>&1 | cat)\""))
+---

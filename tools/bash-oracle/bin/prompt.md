@@ -11,7 +11,7 @@ One bug per iteration. Do not batch.
 7. **Fix the bug** → edit `src/parable.py`
 8. **Confirm it passes** → `just test`
 9. **Full check** → `just check` (includes transpile, all Python versions, JS)
-10. **Commit & push** → single bug per commit
+10. **Commit & push** → single bug per commit, commit and push together in one command
 11. **Loop** → reread this prompt, then back to step 1
 
 ## Test file format

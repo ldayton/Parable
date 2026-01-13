@@ -2503,12 +2503,15 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 	let body,
 		cmd,
 		cmd_parts,
+		cmds,
 		cond,
 		else_body,
+		formatted,
 		i,
 		inner_body,
 		inner_sp,
 		name,
+		needs_redirect,
 		p,
 		parts,
 		pat,
@@ -2556,9 +2559,29 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 		return parts.join(" ");
 	}
 	if (node.kind === "pipeline") {
+		// Build list of (cmd, needs_pipe_both_redirect) filtering out PipeBoth markers
+		cmds = [];
+		i = 0;
+		while (i < node.commands.length) {
+			cmd = node.commands[i];
+			if (cmd.kind === "pipe-both") {
+				i += 1;
+				continue;
+			}
+			// Check if next element is PipeBoth
+			needs_redirect =
+				i + 1 < node.commands.length &&
+				node.commands[i + 1].kind === "pipe-both";
+			cmds.push([cmd, needs_redirect]);
+			i += 1;
+		}
 		cmd_parts = [];
-		for (cmd of node.commands) {
-			cmd_parts.push(_formatCmdsubNode(cmd, indent));
+		for ([cmd, needs_redirect] of cmds) {
+			formatted = _formatCmdsubNode(cmd, indent);
+			if (needs_redirect) {
+				formatted = `${formatted} 2>&1`;
+			}
+			cmd_parts.push(formatted);
 		}
 		return cmd_parts.join(" | ");
 	}

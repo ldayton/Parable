@@ -2,7 +2,6 @@
 """Phase 1 fuzzer: corpus mutation for differential testing."""
 
 import argparse
-import os
 import random
 import subprocess
 import sys

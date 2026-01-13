@@ -2004,7 +2004,8 @@ class UnaryTest(Node):
     def to_sexp(self) -> str:
         # bash-oracle format: (cond-unary "-f" (cond-term "file"))
         # cond-term preserves content as-is (no backslash escaping)
-        return '(cond-unary "' + self.op + '" (cond-term "' + self.operand.value + '"))'
+        operand_val = self.operand.get_cond_formatted_value()
+        return '(cond-unary "' + self.op + '" (cond-term "' + operand_val + '"))'
 
 
 class BinaryTest(Node):

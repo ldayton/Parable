@@ -2257,9 +2257,11 @@ class UnaryTest extends Node {
 	}
 
 	toSexp() {
+		let operand_val;
 		// bash-oracle format: (cond-unary "-f" (cond-term "file"))
 		// cond-term preserves content as-is (no backslash escaping)
-		return `(cond-unary "${this.op}" (cond-term "${this.operand.value}"))`;
+		operand_val = this.operand.getCondFormattedValue();
+		return `(cond-unary "${this.op}" (cond-term "${operand_val}"))`;
 	}
 }
 

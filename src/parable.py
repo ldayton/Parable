@@ -2459,6 +2459,15 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
     if node.kind == "cond-expr":
         body = _format_cond_body(node.body)
         return "[[ " + body + " ]]"
+    if node.kind == "negation":
+        if node.pipeline:
+            return "\\! " + _format_cmdsub_node(node.pipeline, indent)
+        return "\\!"
+    if node.kind == "time":
+        prefix = "time -p " if node.posix else "time "
+        if node.pipeline:
+            return prefix + _format_cmdsub_node(node.pipeline, indent)
+        return prefix.rstrip()
     # Fallback: return empty for unknown types
     return ""
 

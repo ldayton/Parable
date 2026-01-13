@@ -2567,6 +2567,7 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 		pat_indent,
 		pattern_str,
 		patterns,
+		prefix,
 		r,
 		redirect_parts,
 		redirects,
@@ -2808,6 +2809,19 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 	if (node.kind === "cond-expr") {
 		body = _formatCondBody(node.body);
 		return `[[ ${body} ]]`;
+	}
+	if (node.kind === "negation") {
+		if (node.pipeline) {
+			return `\\! ${_formatCmdsubNode(node.pipeline, indent)}`;
+		}
+		return "\\!";
+	}
+	if (node.kind === "time") {
+		prefix = node.posix ? "time -p " : "time ";
+		if (node.pipeline) {
+			return prefix + _formatCmdsubNode(node.pipeline, indent);
+		}
+		return prefix.trimEnd();
 	}
 	// Fallback: return empty for unknown types
 	return "";

@@ -611,3 +611,17 @@ x=$(while [[ $a ]]; do echo x; done)
 ---
 (command (word "x=$(while [[ -n $a ]]; do\n    echo x;\ndone)"))
 ---
+
+
+=== negated command in cmdsub
+x=$(! cmd arg)
+---
+(command (word "x=$(\\! cmd arg)"))
+---
+
+
+=== time command in cmdsub
+x=$(time cmd arg)
+---
+(command (word "x=$(time cmd arg)"))
+---

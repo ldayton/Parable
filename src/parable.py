@@ -2346,7 +2346,13 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
                 patterns.append(pat + ")\n" + pat_indent + body + "\n" + term_indent + term)
             i += 1
         pattern_str = ("\n" + _repeat_str(" ", indent + 4)).join(patterns)
-        return "case " + word + " in" + pattern_str + "\n" + sp + "esac"
+        redirects = ""
+        if node.redirects:
+            redirect_parts = []
+            for r in node.redirects:
+                redirect_parts.append(_format_redirect(r))
+            redirects = " " + " ".join(redirect_parts)
+        return "case " + word + " in" + pattern_str + "\n" + sp + "esac" + redirects
     if node.kind == "function":
         name = node.name
         # Get the body content - if it's a BraceGroup, unwrap it

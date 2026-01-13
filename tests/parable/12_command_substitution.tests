@@ -187,6 +187,13 @@ echo $(case $x in a) echo a;; esac)
 ---
 
 
+=== case with redirect inside cmdsub
+x="$(case y in a) z ;; esac 2>/dev/null)"
+---
+(command (word "x=\"$(case y in a)\n        z\n    ;;\nesac 2> /dev/null)\""))
+---
+
+
 # === In assignments ===
 
 === simple assignment with cmdsub

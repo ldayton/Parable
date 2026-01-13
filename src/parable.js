@@ -2647,7 +2647,7 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 	if (node.kind === "for") {
 		variable = node.variable;
 		body = _formatCmdsubNode(node.body, indent + 4);
-		if (node.words) {
+		if (node.words && node.words.length) {
 			word_vals = [];
 			for (w of node.words) {
 				word_vals.push(w.value);
@@ -2681,7 +2681,15 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 			i += 1;
 		}
 		pattern_str = patterns.join(`\n${" ".repeat(indent + 4)}`);
-		return `case ${word} in${pattern_str}\n${sp}esac`;
+		redirects = "";
+		if (node.redirects && node.redirects.length) {
+			redirect_parts = [];
+			for (r of node.redirects) {
+				redirect_parts.push(_formatRedirect(r));
+			}
+			redirects = ` ${redirect_parts.join(" ")}`;
+		}
+		return `case ${word} in${pattern_str}\n${sp}esac${redirects}`;
 	}
 	if (node.kind === "function") {
 		name = node.name;
@@ -2693,7 +2701,7 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 	if (node.kind === "subshell") {
 		body = _formatCmdsubNode(node.body, indent, in_procsub);
 		redirects = "";
-		if (node.redirects) {
+		if (node.redirects && node.redirects.length) {
 			redirect_parts = [];
 			for (r of node.redirects) {
 				redirect_parts.push(_formatRedirect(r));

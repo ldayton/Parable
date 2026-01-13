@@ -1054,6 +1054,8 @@ class Word extends Node {
 		let value;
 		// Expand ANSI-C quotes
 		value = this._expandAllAnsiCQuotes(this.value);
+		// Strip $ from locale strings $"..."
+		value = this._stripLocaleStringDollars(value);
 		// Format command substitutions
 		value = this._formatCommandSubstitutions(value);
 		// Bash doubles CTLESC (\x01) characters in output
@@ -7045,7 +7047,10 @@ class Parser {
 	}
 
 	_parseCondWord() {
-		let arith_node,
+		let ansi_node,
+			ansi_result,
+			ansi_text,
+			arith_node,
 			arith_result,
 			arith_text,
 			c,
@@ -7055,6 +7060,10 @@ class Parser {
 			cmdsub_result,
 			cmdsub_text,
 			depth,
+			inner_parts,
+			locale_node,
+			locale_result,
+			locale_text,
 			next_c,
 			param_node,
 			param_result,
@@ -7332,6 +7341,38 @@ class Parser {
 				// Escape
 				chars.push(this.advance());
 				chars.push(this.advance());
+			} else if (
+				ch === "$" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "'"
+			) {
+				// ANSI-C quoting $'...'
+				ansi_result = this._parseAnsiCQuote();
+				ansi_node = ansi_result[0];
+				ansi_text = ansi_result[1];
+				if (ansi_node) {
+					parts.push(ansi_node);
+					chars.push(ansi_text);
+				} else {
+					chars.push(this.advance());
+				}
+			} else if (
+				ch === "$" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === '"'
+			) {
+				// Locale translation $"..."
+				locale_result = this._parseLocaleString();
+				locale_node = locale_result[0];
+				locale_text = locale_result[1];
+				inner_parts = locale_result[2];
+				if (locale_node) {
+					parts.push(locale_node);
+					parts.push(...inner_parts);
+					chars.push(locale_text);
+				} else {
+					chars.push(this.advance());
+				}
 			} else if (
 				ch === "$" &&
 				this.pos + 2 < this.length &&

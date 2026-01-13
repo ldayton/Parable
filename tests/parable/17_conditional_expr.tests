@@ -338,3 +338,10 @@ line2"")))
 ---
 (cond (cond-binary "=" (cond-term "x") (cond-term "*[[:space:]]*")))
 ---
+
+
+=== dollar sign followed by empty string
+[[ "$LOCAL_DEV" == $"" ]]
+---
+(cond (cond-binary "==" (cond-term ""$LOCAL_DEV"") (cond-term """")))
+---

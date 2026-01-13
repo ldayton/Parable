@@ -625,3 +625,23 @@ x=$(time cmd arg)
 ---
 (command (word "x=$(time cmd arg)"))
 ---
+
+
+=== cmdsub with comment in array assignment
+informergen_external_apis=(
+$(
+  cd ${KUBE_ROOT}/staging/src
+  # because client-gen doesn't do policy/v1alpha1, we have to skip it too
+  find k8s.io/api -name types.go | xargs -n1 dirname | sort | grep -v pkg.apis.policy.v1alpha1
+)
+)
+---
+(command (word "informergen_external_apis=($(cd ${KUBE_ROOT}/staging/src\nfind k8s.io/api -name types.go | xargs -n1 dirname | sort | grep -v pkg.apis.policy.v1alpha1))"))
+---
+
+
+=== brace group with redirect in cmdsub pipeline
+x=$({ echo a; } 2>/dev/null | cat)
+---
+(command (word "x=$({ echo a; } 2> /dev/null | cat)"))
+---

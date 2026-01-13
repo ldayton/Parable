@@ -583,8 +583,8 @@ class Word(Node):
                 in_whitespace = False
                 normalized.append(ch)
                 i += 1
-        # Strip trailing space
-        return "".join(normalized).rstrip(" ")
+        # Strip trailing whitespace
+        return "".join(normalized).rstrip()
 
     def _strip_arith_line_continuations(self, value: str) -> str:
         """Strip backslash-newline (line continuation) from inside $((...))."""
@@ -2455,6 +2455,14 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
     if node.kind == "brace-group":
         body = _format_cmdsub_node(node.body, indent)
         body = body.rstrip(";")  # Strip trailing semicolons before adding our own
+        redirects = ""
+        if node.redirects:
+            redirect_parts = []
+            for r in node.redirects:
+                redirect_parts.append(_format_redirect(r))
+            redirects = " ".join(redirect_parts)
+        if redirects:
+            return "{ " + body + "; } " + redirects
         return "{ " + body + "; }"
     if node.kind == "arith-cmd":
         return "((" + node.raw_content + "))"

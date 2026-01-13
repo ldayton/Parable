@@ -50,7 +50,11 @@ def parse_test_file(filepath):
             if i < n and lines[i] == "c209da5127ac3b3fe0ac82c29cbe77df":
                 i += 1
             expected_lines = []
-            while i < n and lines[i] != "c209da5127ac3b3fe0ac82c29cbe77df" and not lines[i].startswith("=== "):
+            while (
+                i < n
+                and lines[i] != "c209da5127ac3b3fe0ac82c29cbe77df"
+                and not lines[i].startswith("=== ")
+            ):
                 expected_lines.append(lines[i])
                 i += 1
             if i < n and lines[i] == "c209da5127ac3b3fe0ac82c29cbe77df":

@@ -823,6 +823,7 @@ class Word extends Node {
 			i,
 			idx,
 			in_double,
+			in_double_quote,
 			in_single,
 			inner,
 			j,
@@ -852,9 +853,14 @@ class Word extends Node {
 		// Check if there's an untracked $( that isn't $((, skipping over quotes only
 		has_untracked_cmdsub = false;
 		idx = 0;
+		in_double = false;
 		while (idx < value.length) {
-			if (value[idx] === "'") {
+			if (value[idx] === '"') {
+				in_double = !in_double;
+				idx += 1;
+			} else if (value[idx] === "'" && !in_double) {
 				// Skip over single-quoted string (contents are literal)
+				// But only when not inside double quotes
 				idx += 1;
 				while (idx < value.length && value[idx] !== "'") {
 					idx += 1;
@@ -884,6 +890,7 @@ class Word extends Node {
 		i = 0;
 		cmdsub_idx = 0;
 		procsub_idx = 0;
+		in_double_quote = false;
 		while (i < value.length) {
 			// Check for $( command substitution (but not $(( arithmetic)
 			if (_startsWithAt(value, i, "$(") && !_startsWithAt(value, i, "$((")) {
@@ -1013,8 +1020,14 @@ class Word extends Node {
 				formatted_inner = this._formatCommandSubstitutions(inner);
 				result.push(`\${${formatted_inner}}`);
 				i = j;
-			} else if (value[i] === "'") {
+			} else if (value[i] === '"') {
+				// Track double-quote state (single quotes inside double quotes are literal)
+				in_double_quote = !in_double_quote;
+				result.push(value[i]);
+				i += 1;
+			} else if (value[i] === "'" && !in_double_quote) {
 				// Skip single-quoted strings (contents are literal, don't look for cmdsubs)
+				// But only when NOT inside double quotes (where single quotes are literal)
 				j = i + 1;
 				while (j < value.length && value[j] !== "'") {
 					j += 1;

@@ -683,9 +683,14 @@ class Word(Node):
         # Check if there's an untracked $( that isn't $((, skipping over quotes only
         has_untracked_cmdsub = False
         idx = 0
+        in_double = False
         while idx < len(value):
-            if value[idx] == "'":
+            if value[idx] == '"':
+                in_double = not in_double
+                idx += 1
+            elif value[idx] == "'" and not in_double:
                 # Skip over single-quoted string (contents are literal)
+                # But only when not inside double quotes
                 idx += 1
                 while idx < len(value) and value[idx] != "'":
                     idx += 1
@@ -707,6 +712,7 @@ class Word(Node):
         i = 0
         cmdsub_idx = 0
         procsub_idx = 0
+        in_double_quote = False
         while i < len(value):
             # Check for $( command substitution (but not $(( arithmetic)
             if _starts_with_at(value, i, "$(") and not _starts_with_at(value, i, "$(("):
@@ -817,8 +823,14 @@ class Word(Node):
                 formatted_inner = self._format_command_substitutions(inner)
                 result.append("${" + formatted_inner + "}")
                 i = j
+            # Track double-quote state (single quotes inside double quotes are literal)
+            elif value[i] == '"':
+                in_double_quote = not in_double_quote
+                result.append(value[i])
+                i += 1
             # Skip single-quoted strings (contents are literal, don't look for cmdsubs)
-            elif value[i] == "'":
+            # But only when NOT inside double quotes (where single quotes are literal)
+            elif value[i] == "'" and not in_double_quote:
                 j = i + 1
                 while j < len(value) and value[j] != "'":
                     j += 1

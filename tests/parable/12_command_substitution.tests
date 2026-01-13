@@ -539,3 +539,10 @@ echo "[$(cmd <<< a)]"
 ---
 (command (word "echo") (word "\"[$(cmd <<< a)]\""))
 ---
+
+
+=== cmdsub inside single quotes within double quotes
+echo "a='$( cmd )'"
+---
+(command (word "echo") (word "\"a='$(cmd)'\""))
+---

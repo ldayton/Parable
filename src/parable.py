@@ -714,8 +714,12 @@ class Word(Node):
         procsub_idx = 0
         in_double_quote = False
         while i < len(value):
-            # Check for $( command substitution (but not $(( arithmetic)
-            if _starts_with_at(value, i, "$(") and not _starts_with_at(value, i, "$(("):
+            # Check for $( command substitution (but not $(( arithmetic or escaped \$()
+            if (
+                _starts_with_at(value, i, "$(")
+                and not _starts_with_at(value, i, "$((")
+                and (i == 0 or value[i - 1] != "\\")
+            ):
                 # Find matching close paren using bash-aware matching
                 j = _find_cmdsub_end(value, i + 2)
                 # Format this command substitution

@@ -892,8 +892,12 @@ class Word extends Node {
 		procsub_idx = 0;
 		in_double_quote = false;
 		while (i < value.length) {
-			// Check for $( command substitution (but not $(( arithmetic)
-			if (_startsWithAt(value, i, "$(") && !_startsWithAt(value, i, "$((")) {
+			// Check for $( command substitution (but not $(( arithmetic or escaped \$()
+			if (
+				_startsWithAt(value, i, "$(") &&
+				!_startsWithAt(value, i, "$((") &&
+				(i === 0 || value[i - 1] !== "\\")
+			) {
 				// Find matching close paren using bash-aware matching
 				j = _findCmdsubEnd(value, i + 2);
 				// Format this command substitution

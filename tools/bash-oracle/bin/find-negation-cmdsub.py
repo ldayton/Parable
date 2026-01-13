@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Find corpus test files where command substitutions contain negation $(! ...)."""
+"""Find corpus test files with negation patterns affected by oracle escaping."""
 
 import os
 
@@ -7,8 +7,8 @@ CORPUS_DIR = os.path.expanduser("~/source/bigtable-bash/tests")
 OUTPUT_FILE = os.path.join(os.path.dirname(__file__), "negation-cmdsub.txt")
 
 
-def has_negation_in_cmdsub(filepath):
-    """Check if file has $(! pattern in the input section."""
+def has_negation_pattern(filepath):
+    """Check if file has negation patterns that oracle escapes incorrectly."""
     with open(filepath) as f:
         content = f.read()
 
@@ -19,10 +19,15 @@ def has_negation_in_cmdsub(filepath):
         if line.startswith("==="):
             in_input = True
             continue
-        if in_input and line == "---":
+        if in_input and line == "c209da5127ac3b3fe0ac82c29cbe77df":
             break
-        if in_input and "$(!" in line:
-            return True
+        if in_input:
+            # $(! ...) - negation in command substitution
+            if "$(!" in line:
+                return True
+            # [[ ! - negation in conditional expression
+            if "[[ !" in line:
+                return True
 
     return False
 
@@ -37,12 +42,12 @@ def main():
 
         filepath = os.path.join(CORPUS_DIR, filename)
         try:
-            if has_negation_in_cmdsub(filepath):
+            if has_negation_pattern(filepath):
                 found.append(filename)
         except Exception:
             pass
 
-    print(f"\n\nFound {len(found)} files with $(! pattern")
+    print(f"\n\nFound {len(found)} files with negation patterns")
 
     with open(OUTPUT_FILE, "w") as f:
         for filename in found:

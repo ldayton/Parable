@@ -31,6 +31,7 @@ SKIP_FILES = {
     "008821__sumitkgec__presto__run_on_docker.tests",  # heredoc contains ---
     "009401__ratnikov__git__t4014-format-patch.tests",  # heredoc contains ---
     "009474__ArchiFleKs__magnum__enable-ingress-traefik.tests",  # heredoc contains ---
+    "011713__ljoli__ljoli.github.io__bb.tests",  # script contains ---
 }
 
 

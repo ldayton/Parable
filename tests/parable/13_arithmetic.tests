@@ -750,3 +750,10 @@ echo $(( (0x$x) ))
 ---
 (command (word "echo") (word "$(( (0x$x) ))"))
 ---
+
+
+=== parameter length in arithmetic
+a=$((#${x}))
+---
+(command (word "a=$((#${x}))"))
+---

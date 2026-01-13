@@ -308,3 +308,10 @@ x="${y:-"a"$'\nfoo'}"
 ---
 (command (word "x=\"${y:-\"a\"\nfoo}\""))
 ---
+
+
+=== ansi-c preserved inside backtick substitution
+x=`tr $'\n'`
+---
+(command (word "x=`tr $'\\n'`"))
+---

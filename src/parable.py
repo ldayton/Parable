@@ -312,9 +312,26 @@ class Word(Node):
         i = 0
         in_single_quote = False
         in_double_quote = False
+        in_backtick = False  # Track backtick substitutions - don't expand inside
         brace_depth = 0  # Track ${...} nesting - inside braces, $'...' is expanded
         while i < len(value):
             ch = value[i]
+            # Track backtick context - don't expand $'...' inside backticks
+            if ch == "`" and not in_single_quote:
+                in_backtick = not in_backtick
+                result.append(ch)
+                i += 1
+                continue
+            # Inside backticks, just copy everything as-is
+            if in_backtick:
+                if ch == "\\" and i + 1 < len(value):
+                    result.append(ch)
+                    result.append(value[i + 1])
+                    i += 2
+                else:
+                    result.append(ch)
+                    i += 1
+                continue
             # Track brace depth for parameter expansions
             if not in_single_quote:
                 if _starts_with_at(value, i, "${"):

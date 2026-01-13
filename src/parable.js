@@ -338,6 +338,7 @@ class Word extends Node {
 			effective_in_dquote,
 			expanded,
 			i,
+			in_backtick,
 			in_double_quote,
 			in_pattern,
 			in_single_quote,
@@ -350,9 +351,29 @@ class Word extends Node {
 		i = 0;
 		in_single_quote = false;
 		in_double_quote = false;
+		in_backtick = false;
 		brace_depth = 0;
 		while (i < value.length) {
 			ch = value[i];
+			// Track backtick context - don't expand $'...' inside backticks
+			if (ch === "`" && !in_single_quote) {
+				in_backtick = !in_backtick;
+				result.push(ch);
+				i += 1;
+				continue;
+			}
+			// Inside backticks, just copy everything as-is
+			if (in_backtick) {
+				if (ch === "\\" && i + 1 < value.length) {
+					result.push(ch);
+					result.push(value[i + 1]);
+					i += 2;
+				} else {
+					result.push(ch);
+					i += 1;
+				}
+				continue;
+			}
 			// Track brace depth for parameter expansions
 			if (!in_single_quote) {
 				if (_startsWithAt(value, i, "${")) {

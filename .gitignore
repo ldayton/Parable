@@ -10,6 +10,5 @@ node_modules/
 dippy.toml
 tools/bash-oracle/bash-oracle
 tools/bash-oracle/bin/failures.txt
-tools/bash-oracle/bin/heredoc-dashes.txt
 tools/bash-oracle/bin/negation-cmdsub.txt
 .dippy

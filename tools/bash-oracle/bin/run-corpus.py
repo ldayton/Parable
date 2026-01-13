@@ -13,7 +13,6 @@ from parable import ParseError, parse  # noqa: E402
 
 CORPUS_DIR = os.path.expanduser("~/source/bigtable-bash/tests")
 FAILURES_FILE = os.path.join(SCRIPT_DIR, "failures.txt")
-HEREDOC_DASHES_FILE = os.path.join(SCRIPT_DIR, "heredoc-dashes.txt")
 MAX_FAILURES = 100
 
 # Test files to skip (known issues to investigate later)
@@ -22,18 +21,8 @@ SKIP_FILES = {
     "012091__johnchronis__exareme__exareme-admin.tests",  # very long expected output
     "012559__bbgw__kubernetes__test-cmd.tests",  # very long expected output
     "012773__Devindik__origin__git-sh-setup.tests",  # very long expected output
-    "014119__kyma-project__test-infra__integration-tests.tests",  # heredoc contains ---
-    "014246__istio__istio.io__snips.tests",  # heredoc contains ---
     "014289__chaolou__kubernetes__test-cmd.tests",  # corpus expects $(! but oracle now outputs $(\!
-    "051344__nemesiscodex__jukyOS-osbuilder__preimage.90.core.tests",  # heredoc contains ===
 }
-
-# Files where heredoc contains --- which breaks the corpus test parser
-# (loaded from heredoc-dashes.txt)
-HEREDOC_DASHES_FILES: set[str] = set()
-if os.path.exists(HEREDOC_DASHES_FILE):
-    with open(HEREDOC_DASHES_FILE) as f:
-        HEREDOC_DASHES_FILES = {line.strip() for line in f if line.strip()}
 
 
 def parse_test_file(filepath):
@@ -111,10 +100,9 @@ def main():
     failed = 0
 
     skipped = 0
-    all_skip_files = SKIP_FILES | HEREDOC_DASHES_FILES
     with open(FAILURES_FILE, "w") as failures_f:
         for i, test_file in enumerate(test_files):
-            if os.path.basename(test_file) in all_skip_files:
+            if os.path.basename(test_file) in SKIP_FILES:
                 skipped += 1
                 continue
             tests = parse_test_file(test_file)

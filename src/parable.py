@@ -1,4 +1,11 @@
-"""Parable - A recursive descent parser for bash."""
+"""
+Parable - A recursive descent parser for bash.
+
+MIT License - https://github.com/ldayton/Parable
+
+from parable import parse
+ast = parse("ps aux | grep python | awk '{print $2}'")
+"""
 
 
 class ParseError(Exception):

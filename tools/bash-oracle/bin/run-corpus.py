@@ -32,6 +32,8 @@ SKIP_FILES = {
     "009401__ratnikov__git__t4014-format-patch.tests",  # heredoc contains ---
     "009474__ArchiFleKs__magnum__enable-ingress-traefik.tests",  # heredoc contains ---
     "011713__ljoli__ljoli.github.io__bb.tests",  # script contains ---
+    "012091__johnchronis__exareme__exareme-admin.tests",  # very long expected output
+    "012559__bbgw__kubernetes__test-cmd.tests",  # very long expected output
 }
 
 

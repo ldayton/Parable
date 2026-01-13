@@ -757,3 +757,10 @@ a=$((#${x}))
 ---
 (command (word "a=$((#${x}))"))
 ---
+
+
+=== triple paren arithmetic with trailing expression
+$(((1)*2)+1)
+---
+(command (word "$(((1)*2)+1)"))
+---

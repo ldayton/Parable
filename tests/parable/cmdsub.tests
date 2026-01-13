@@ -16,3 +16,9 @@ END
 ---
 (command (word "x=$(cat <<END |\nhello\nEND\n  wc)"))
 ---
+
+=== normalize 1>& to >& with variable target in cmdsub
+x=$(echo 1>&$fd)
+---
+(command (word "x=$(echo >&$fd)"))
+---

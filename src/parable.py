@@ -2545,11 +2545,21 @@ def _format_redirect(r: "Redirect | HereDoc") -> str:
         # Normalize N<&- to N>&- (close always uses >)
         if target == "&-" and op.endswith("<"):
             op = _substring(op, 0, len(op) - 1) + ">"
-        # Add default fd for bare >&N or <&N
-        if op == ">":
-            op = "1>"
-        elif op == "<":
-            op = "0<"
+        # Check if target is a literal fd (digit or -)
+        after_amp = _substring(target, 1, len(target))
+        is_literal_fd = after_amp == "-" or (len(after_amp) > 0 and after_amp[0].isdigit())
+        if is_literal_fd:
+            # Add default fd for bare >&N or <&N
+            if op == ">":
+                op = "1>"
+            elif op == "<":
+                op = "0<"
+        else:
+            # Variable target: use bare >& or <&
+            if op == "1>":
+                op = ">"
+            elif op == "0<":
+                op = "<"
         return op + target
     return op + " " + target
 

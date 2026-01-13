@@ -2892,7 +2892,7 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 }
 
 function _formatRedirect(r) {
-	let delim, op, target;
+	let after_amp, delim, is_literal_fd, op, target;
 	if (r.kind === "heredoc") {
 		// Include heredoc content: <<DELIM\ncontent\nDELIM\n
 		if (r.strip_tabs) {
@@ -2921,11 +2921,23 @@ function _formatRedirect(r) {
 		if (target === "&-" && op.endsWith("<")) {
 			op = `${op.slice(0, op.length - 1)}>`;
 		}
-		// Add default fd for bare >&N or <&N
-		if (op === ">") {
-			op = "1>";
-		} else if (op === "<") {
-			op = "0<";
+		// Check if target is a literal fd (digit or -)
+		after_amp = target.slice(1, target.length);
+		is_literal_fd =
+			after_amp === "-" ||
+			(after_amp.length > 0 && /^[0-9]+$/.test(after_amp[0]));
+		if (is_literal_fd) {
+			// Add default fd for bare >&N or <&N
+			if (op === ">") {
+				op = "1>";
+			} else if (op === "<") {
+				op = "0<";
+			}
+		} else if (op === "1>") {
+			// Variable target: use bare >& or <&
+			op = ">";
+		} else if (op === "0<") {
+			op = "<";
 		}
 		return op + target;
 	}

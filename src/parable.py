@@ -133,6 +133,9 @@ class Word(Node):
         value = value.replace("\x7f", "\x01\x7f")
         # Escape backslashes for s-expression output
         value = value.replace("\\", "\\\\")
+        # Double trailing escaped backslash (bash-oracle outputs \\\\ for trailing \)
+        if value.endswith("\\\\") and not value.endswith("\\\\\\\\"):
+            value = value + "\\\\"
         # Escape double quotes, newlines, and tabs
         escaped = value.replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
         return '(word "' + escaped + '")'

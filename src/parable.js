@@ -106,6 +106,10 @@ class Word extends Node {
 		value = value.replaceAll("", "");
 		// Escape backslashes for s-expression output
 		value = value.replaceAll("\\", "\\\\");
+		// Double trailing escaped backslash (bash-oracle outputs \\\\ for trailing \)
+		if (value.endsWith("\\\\") && !value.endsWith("\\\\\\\\")) {
+			value = `${value}\\\\`;
+		}
 		// Escape double quotes, newlines, and tabs
 		escaped = value
 			.replaceAll('"', '\\"')

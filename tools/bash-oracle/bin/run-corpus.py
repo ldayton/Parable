@@ -34,6 +34,8 @@ SKIP_FILES = {
     "011713__ljoli__ljoli.github.io__bb.tests",  # script contains ---
     "012091__johnchronis__exareme__exareme-admin.tests",  # very long expected output
     "012559__bbgw__kubernetes__test-cmd.tests",  # very long expected output
+    "012773__Devindik__origin__git-sh-setup.tests",  # very long expected output
+    "014119__kyma-project__test-infra__integration-tests.tests",  # heredoc contains ---
 }
 
 

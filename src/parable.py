@@ -2313,13 +2313,47 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
             needs_redirect = i + 1 < len(node.commands) and node.commands[i + 1].kind == "pipe-both"
             cmds.append((cmd, needs_redirect))
             i += 1
-        cmd_parts = []
-        for cmd, needs_redirect in cmds:
+        # Format pipeline, handling heredocs specially
+        result_parts = []
+        idx = 0
+        while idx < len(cmds):
+            cmd, needs_redirect = cmds[idx]
             formatted = _format_cmdsub_node(cmd, indent)
             if needs_redirect:
                 formatted = formatted + " 2>&1"
-            cmd_parts.append(formatted)
-        return " | ".join(cmd_parts)
+            is_last = idx == len(cmds) - 1
+            # Check if command has actual heredoc redirects
+            has_heredoc = False
+            if cmd.kind == "command" and cmd.redirects:
+                for r in cmd.redirects:
+                    if r.kind == "heredoc":
+                        has_heredoc = True
+                        break
+            if not is_last and has_heredoc:
+                # Heredoc present - insert pipe after heredoc delimiter, before content
+                # Pattern: "... <<DELIM\ncontent\nDELIM\n" -> "... <<DELIM |\ncontent\nDELIM\n"
+                first_nl = formatted.find("\n")
+                if first_nl != -1:
+                    formatted = formatted[:first_nl] + " |" + formatted[first_nl:]
+                result_parts.append(formatted)
+            else:
+                result_parts.append(formatted)
+            idx += 1
+        # Join with " | " for commands without heredocs, or just join if heredocs handled
+        result = ""
+        idx = 0
+        while idx < len(result_parts):
+            part = result_parts[idx]
+            if idx > 0:
+                # If previous part ends with heredoc (newline), add indented command
+                if result.endswith("\n"):
+                    result = result + "  " + part
+                else:
+                    result = result + " | " + part
+            else:
+                result = part
+            idx += 1
+        return result
     if node.kind == "list":
         # Join commands with operators
         result = []

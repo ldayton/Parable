@@ -2557,17 +2557,21 @@ function _formatCondBody(node) {
 function _formatCmdsubNode(node, indent, in_procsub) {
 	let body,
 		cmd,
-		cmd_parts,
 		cmds,
 		cond,
 		else_body,
+		first_nl,
 		formatted,
+		has_heredoc,
 		i,
+		idx,
 		inner_body,
 		inner_sp,
+		is_last,
 		name,
 		needs_redirect,
 		p,
+		part,
 		parts,
 		pat,
 		pat_indent,
@@ -2578,6 +2582,7 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 		redirect_parts,
 		redirects,
 		result,
+		result_parts,
 		s,
 		sp,
 		term,
@@ -2631,15 +2636,57 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 			cmds.push([cmd, needs_redirect]);
 			i += 1;
 		}
-		cmd_parts = [];
-		for ([cmd, needs_redirect] of cmds) {
+		// Format pipeline, handling heredocs specially
+		result_parts = [];
+		idx = 0;
+		while (idx < cmds.length) {
+			[cmd, needs_redirect] = cmds[idx];
 			formatted = _formatCmdsubNode(cmd, indent);
 			if (needs_redirect) {
 				formatted = `${formatted} 2>&1`;
 			}
-			cmd_parts.push(formatted);
+			is_last = idx === cmds.length - 1;
+			// Check if command has actual heredoc redirects
+			has_heredoc = false;
+			if (cmd.kind === "command" && cmd.redirects) {
+				for (r of cmd.redirects) {
+					if (r.kind === "heredoc") {
+						has_heredoc = true;
+						break;
+					}
+				}
+			}
+			if (!is_last && has_heredoc) {
+				// Heredoc present - insert pipe after heredoc delimiter, before content
+				// Pattern: "... <<DELIM\ncontent\nDELIM\n" -> "... <<DELIM |\ncontent\nDELIM\n"
+				first_nl = formatted.indexOf("\n");
+				if (first_nl !== -1) {
+					formatted = `${formatted.slice(0, first_nl)} |${formatted.slice(first_nl)}`;
+				}
+				result_parts.push(formatted);
+			} else {
+				result_parts.push(formatted);
+			}
+			idx += 1;
 		}
-		return cmd_parts.join(" | ");
+		// Join with " | " for commands without heredocs, or just join if heredocs handled
+		result = "";
+		idx = 0;
+		while (idx < result_parts.length) {
+			part = result_parts[idx];
+			if (idx > 0) {
+				// If previous part ends with heredoc (newline), add indented command
+				if (result.endsWith("\n")) {
+					result = `${result}  ${part}`;
+				} else {
+					result = `${result} | ${part}`;
+				}
+			} else {
+				result = part;
+			}
+			idx += 1;
+		}
+		return result;
 	}
 	if (node.kind === "list") {
 		// Join commands with operators

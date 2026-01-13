@@ -545,3 +545,15 @@ EOF
 (brace-group (command (word "cat") (redirect "<<" "content
 ")))
 ---
+
+
+=== heredoc with double backslash at end of line
+cat <<EOF
+test\\
+next
+EOF
+---
+(command (word "cat") (redirect "<<" "test\\
+next
+"))
+---

@@ -5352,10 +5352,20 @@ class Parser:
 
             # For unquoted heredocs, process backslash-newline before checking delimiter
             # Join continued lines to check the full logical line against delimiter
+            # Only odd number of trailing backslashes means continuation (even = literal)
             if not quoted:
-                while line.endswith("\\") and line_end < self.length:
-                    # Continue to next line
-                    line = _substring(line, 0, len(line) - 1)  # Remove backslash
+                while line_end < self.length:
+                    # Count trailing backslashes
+                    trailing_bs = 0
+                    for i in range(len(line) - 1, -1, -1):
+                        if line[i] == "\\":
+                            trailing_bs += 1
+                        else:
+                            break
+                    if trailing_bs % 2 == 0:
+                        break  # Even backslashes (including 0) - no continuation
+                    # Odd backslashes - line continuation
+                    line = _substring(line, 0, len(line) - 1)  # Remove the escaping backslash
                     line_end += 1  # Skip newline
                     next_line_start = line_end
                     while line_end < self.length and self.source[line_end] != "\n":

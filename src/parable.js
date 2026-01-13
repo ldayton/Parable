@@ -6125,13 +6125,15 @@ class Parser {
 			delimiter_chars,
 			depth,
 			heredoc_end,
+			i,
 			line,
 			line_end,
 			line_start,
 			next_ch,
 			next_line_start,
 			quoted,
-			scan_pos;
+			scan_pos,
+			trailing_bs;
 		this.skipWhitespace();
 		// Parse the delimiter, handling quoting (can be mixed like 'EOF'"2")
 		quoted = false;
@@ -6246,9 +6248,22 @@ class Parser {
 			line = this.source.slice(line_start, line_end);
 			// For unquoted heredocs, process backslash-newline before checking delimiter
 			// Join continued lines to check the full logical line against delimiter
+			// Only odd number of trailing backslashes means continuation (even = literal)
 			if (!quoted) {
-				while (line.endsWith("\\") && line_end < this.length) {
-					// Continue to next line
+				while (line_end < this.length) {
+					// Count trailing backslashes
+					trailing_bs = 0;
+					for (i = line.length - 1; i > -1; i--) {
+						if (line[i] === "\\") {
+							trailing_bs += 1;
+						} else {
+							break;
+						}
+					}
+					if (trailing_bs % 2 === 0) {
+						break;
+					}
+					// Odd backslashes - line continuation
 					line = line.slice(0, line.length - 1);
 					line_end += 1;
 					next_line_start = line_end;

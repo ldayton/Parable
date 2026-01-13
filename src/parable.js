@@ -4410,6 +4410,11 @@ class Parser {
 		if (cmd == null) {
 			cmd = new Empty();
 		}
+		// Ensure all content was consumed - if not, there's a syntax error
+		sub_parser.skipWhitespaceAndNewlines();
+		if (!sub_parser.atEnd()) {
+			throw new ParseError("Unexpected content in command substitution", start);
+		}
 		return [new CommandSubstitution(cmd), text];
 	}
 

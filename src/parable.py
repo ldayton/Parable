@@ -2551,6 +2551,10 @@ def _format_redirect(r: "Redirect | HereDoc") -> str:
     elif op == "0<":
         op = "<"
     target = r.target.value
+    # Expand ANSI-C $'...' quotes
+    target = r.target._expand_all_ansi_c_quotes(target)
+    # Strip $ from locale strings $"..."
+    target = r.target._strip_locale_string_dollars(target)
     # For fd duplication (target starts with &), handle normalization
     if target.startswith("&"):
         # Normalize N<&- to N>&- (close always uses >)

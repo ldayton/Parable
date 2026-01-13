@@ -2915,6 +2915,10 @@ function _formatRedirect(r) {
 		op = "<";
 	}
 	target = r.target.value;
+	// Expand ANSI-C $'...' quotes
+	target = r.target._expandAllAnsiCQuotes(target);
+	// Strip $ from locale strings $"..."
+	target = r.target._stripLocaleStringDollars(target);
 	// For fd duplication (target starts with &), handle normalization
 	if (target.startsWith("&")) {
 		// Normalize N<&- to N>&- (close always uses >)

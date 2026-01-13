@@ -315,3 +315,11 @@ x=`tr $'\n'`
 ---
 (command (word "x=`tr $'\\n'`"))
 ---
+
+
+=== ansi-c in redirect inside cmdsub formatting
+[[ $(x <<< $'a\nb') == y ]]
+---
+(cond (cond-binary "==" (cond-term "$(x <<< 'a
+b')") (cond-term "y")))
+---

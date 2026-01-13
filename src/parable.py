@@ -6829,8 +6829,16 @@ class Parser:
                     break
                 words.append(word)
 
-        # Skip to 'do'
+        # Skip to 'do' or '{'
         self.skip_whitespace_and_newlines()
+
+        # Check for brace group body as alternative to do/done
+        if self.peek() == "{":
+            # Bash allows: for x in a b; { cmd; }
+            brace_group = self.parse_brace_group()
+            if brace_group is None:
+                raise ParseError("Expected brace group in for loop", pos=self.pos)
+            return For(var_name, words, brace_group.body, self._collect_redirects())
 
         # Expect 'do'
         if not self.consume_word("do"):

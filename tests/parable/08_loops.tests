@@ -815,3 +815,9 @@ for $(echo i) in a b; do echo $i; done
 ---
 (for (word "$(echo i)") (in (word "a") (word "b")) (command (word "echo") (word "$i")))
 ---
+
+=== for loop with brace group body instead of do/done
+for x in a b; { echo $x; }
+---
+(for (word "x") (in (word "a") (word "b")) (command (word "echo") (word "$x")))
+---

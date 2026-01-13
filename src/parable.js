@@ -7983,7 +7983,7 @@ class Parser {
 	}
 
 	parseFor() {
-		let body, var_name, var_word, word, words;
+		let body, brace_group, var_name, var_word, word, words;
 		if (!this.consumeWord("for")) {
 			return null;
 		}
@@ -8046,8 +8046,22 @@ class Parser {
 				words.push(word);
 			}
 		}
-		// Skip to 'do'
+		// Skip to 'do' or '{'
 		this.skipWhitespaceAndNewlines();
+		// Check for brace group body as alternative to do/done
+		if (this.peek() === "{") {
+			// Bash allows: for x in a b; { cmd; }
+			brace_group = this.parseBraceGroup();
+			if (brace_group == null) {
+				throw new ParseError("Expected brace group in for loop", this.pos);
+			}
+			return new For(
+				var_name,
+				words,
+				brace_group.body,
+				this._collectRedirects(),
+			);
+		}
 		// Expect 'do'
 		if (!this.consumeWord("do")) {
 			throw new ParseError("Expected 'do' in for loop", this.pos);

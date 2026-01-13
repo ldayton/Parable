@@ -953,10 +953,11 @@ class Word extends Node {
 				procsub_idx += 1;
 				i = j;
 			} else if (
-				_startsWithAt(value, i, "${ ") ||
-				_startsWithAt(value, i, "${|")
+				(_startsWithAt(value, i, "${ ") || _startsWithAt(value, i, "${|")) &&
+				(i === 0 || value[i - 1] !== "\\")
 			) {
 				// Check for ${ (space) or ${| brace command substitution
+				// But not if the $ is escaped by a backslash
 				prefix = value.slice(i, i + 3);
 				// Find matching close brace
 				j = i + 3;
@@ -989,8 +990,12 @@ class Word extends Node {
 					}
 				}
 				i = j;
-			} else if (_startsWithAt(value, i, "${")) {
+			} else if (
+				_startsWithAt(value, i, "${") &&
+				(i === 0 || value[i - 1] !== "\\")
+			) {
 				// Process regular ${...} parameter expansions (recursively format cmdsubs inside)
+				// But not if the $ is escaped by a backslash
 				// Find matching close brace, respecting nesting and quotes
 				j = i + 2;
 				depth = 1;

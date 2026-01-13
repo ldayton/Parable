@@ -597,3 +597,10 @@ x=$(for ((i=1; i<=n; i++)); do echo $i; done)
 ---
 (command (word "x=$(for ((i=1; i<=n; i++))\ndo\n    echo $i;\ndone)"))
 ---
+
+
+=== escaped dollar brace is not brace cmdsub
+x="\${ ${VAR}"
+---
+(command (word "x=\"\\${ ${VAR}\""))
+---

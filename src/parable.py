@@ -768,7 +768,10 @@ class Word(Node):
                 procsub_idx += 1
                 i = j
             # Check for ${ (space) or ${| brace command substitution
-            elif _starts_with_at(value, i, "${ ") or _starts_with_at(value, i, "${|"):
+            # But not if the $ is escaped by a backslash
+            elif (_starts_with_at(value, i, "${ ") or _starts_with_at(value, i, "${|")) and (
+                i == 0 or value[i - 1] != "\\"
+            ):
                 prefix = _substring(value, i, i + 3)
                 # Find matching close brace
                 j = i + 3
@@ -797,7 +800,8 @@ class Word(Node):
                         result.append(_substring(value, i, j))
                 i = j
             # Process regular ${...} parameter expansions (recursively format cmdsubs inside)
-            elif _starts_with_at(value, i, "${"):
+            # But not if the $ is escaped by a backslash
+            elif _starts_with_at(value, i, "${") and (i == 0 or value[i - 1] != "\\"):
                 # Find matching close brace, respecting nesting and quotes
                 j = i + 2
                 depth = 1

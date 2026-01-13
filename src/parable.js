@@ -2243,6 +2243,23 @@ class ArithDeprecated extends Node {
 	}
 }
 
+class ArithConcat extends Node {
+	constructor(parts) {
+		super();
+		this.kind = "arith-concat";
+		this.parts = parts;
+	}
+
+	toSexp() {
+		let p, sexps;
+		sexps = [];
+		for (p of this.parts) {
+			sexps.push(p.toSexp());
+		}
+		return `(arith-concat ${sexps.join(" ")})`;
+	}
+}
+
 class AnsiCQuote extends Node {
 	constructor(content) {
 		super();
@@ -5418,7 +5435,7 @@ class Parser {
 	}
 
 	_arithParseNumberOrVar() {
-		let c, ch, chars;
+		let c, ch, chars, expansion, prefix;
 		this._arithSkipWs();
 		chars = [];
 		c = this._arithPeek();
@@ -5433,7 +5450,13 @@ class Parser {
 					break;
 				}
 			}
-			return new ArithNumber(chars.join(""));
+			prefix = chars.join("");
+			// Check if followed by $ expansion (e.g., 0x$var)
+			if (!this._arithAtEnd() && this._arithPeek() === "$") {
+				expansion = this._arithParseExpansion();
+				return new ArithConcat([new ArithNumber(prefix), expansion]);
+			}
+			return new ArithNumber(prefix);
 		}
 		// Variable name (starts with letter or _)
 		if (/^[a-zA-Z]$/.test(c) || c === "_") {

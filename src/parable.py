@@ -1979,6 +1979,22 @@ class ArithDeprecated(Node):
         return '(arith-deprecated "' + escaped + '")'
 
 
+class ArithConcat(Node):
+    """A concatenation of prefix + expansion in arithmetic (e.g., 0x$var)."""
+
+    parts: list[Node]
+
+    def __init__(self, parts: list[Node]):
+        self.kind = "arith-concat"
+        self.parts = parts
+
+    def to_sexp(self) -> str:
+        sexps = []
+        for p in self.parts:
+            sexps.append(p.to_sexp())
+        return "(arith-concat " + " ".join(sexps) + ")"
+
+
 class AnsiCQuote(Node):
     """An ANSI-C quoted string $'...'."""
 
@@ -4652,7 +4668,12 @@ class Parser:
                     chars.append(self._arith_advance())
                 else:
                     break
-            return ArithNumber("".join(chars))
+            prefix = "".join(chars)
+            # Check if followed by $ expansion (e.g., 0x$var)
+            if not self._arith_at_end() and self._arith_peek() == "$":
+                expansion = self._arith_parse_expansion()
+                return ArithConcat([ArithNumber(prefix), expansion])
+            return ArithNumber(prefix)
 
         # Variable name (starts with letter or _)
         if c.isalpha() or c == "_":

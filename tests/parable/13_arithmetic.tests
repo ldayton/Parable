@@ -743,3 +743,10 @@ x=$((0x$(cmd 2>/dev/null)))
 ---
 (command (word "x=$((0x$(cmd 2> /dev/null)))"))
 ---
+
+
+=== hex number with variable expansion in arithmetic
+echo $(( (0x$x) ))
+---
+(command (word "echo") (word "$(( (0x$x) ))"))
+---

@@ -202,6 +202,13 @@ echo foo | (grep foo) | wc -l
 ---
 
 
+=== subshell inside brace no space
+{(echo foo)}
+---
+(brace-group (subshell (command (word "echo") (word "foo"))))
+---
+
+
 # === Brace groups in pipelines ===
 
 === brace group in pipeline

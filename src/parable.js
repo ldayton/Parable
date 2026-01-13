@@ -7628,17 +7628,18 @@ class Parser {
 	}
 
 	parseBraceGroup() {
-		let body;
+		let body, next_ch;
 		this.skipWhitespace();
 		if (this.atEnd() || this.peek() !== "{") {
 			return null;
 		}
-		// Check that { is followed by whitespace (it's a reserved word)
-		if (
-			this.pos + 1 < this.length &&
-			!_isWhitespace(this.source[this.pos + 1])
-		) {
-			return null;
+		// Check that { is followed by whitespace or ( (it's a reserved word)
+		// {( is valid: brace group containing a subshell
+		if (this.pos + 1 < this.length) {
+			next_ch = this.source[this.pos + 1];
+			if (!_isWhitespace(next_ch) && next_ch !== "(") {
+				return null;
+			}
 		}
 		this.advance();
 		this.skipWhitespaceAndNewlines();

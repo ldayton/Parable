@@ -13,30 +13,26 @@ from parable import ParseError, parse  # noqa: E402
 
 CORPUS_DIR = os.path.expanduser("~/source/bigtable-bash/tests")
 FAILURES_FILE = os.path.join(SCRIPT_DIR, "failures.txt")
+HEREDOC_DASHES_FILE = os.path.join(SCRIPT_DIR, "heredoc-dashes.txt")
 MAX_FAILURES = 10
 
 # Test files to skip (known issues to investigate later)
 SKIP_FILES = {
     "001629__Patlol__Handy-Install-Web-Server-ruTorrent-__util_listeusers.tests",
-    "001812__containerd__stargz-snapshotter__run-kind.tests",  # heredoc contains ---
-    "002478__cloudfoundry-incubator__bosh-google-cpi-release__run-bats.tests",  # heredoc contains ---
     "003756__soltysh__kubernetes__create.tests",  # corpus expects $(! but oracle now outputs $(\!
-    "005160__LalatenduMohanty__kubernetes__apply.tests",  # heredoc contains ---
-    "005822__nriley__Pester__package-Pester.tests",  # heredoc contains ---
-    "006202__duncan-brown__pycbc__pycbc_build_eah.tests",  # heredoc contains ---
-    "006338__indashnet__InDashNet.Open.UN2000__import_openssl.tests",  # heredoc contains ---
-    "006655__FlexibleSUSY__FlexibleSUSY__test_CMSSMNoFV_GM2Calc.tests",  # heredoc contains ---
-    "007156__saikrishnar__Forced-Alignment__prepare_lang.tests",  # heredoc contains ---
-    "007160__liquidfridge__radio.liquidfridge.co.za__ops.tests",  # heredoc contains ---
-    "008821__sumitkgec__presto__run_on_docker.tests",  # heredoc contains ---
-    "009401__ratnikov__git__t4014-format-patch.tests",  # heredoc contains ---
-    "009474__ArchiFleKs__magnum__enable-ingress-traefik.tests",  # heredoc contains ---
-    "011713__ljoli__ljoli.github.io__bb.tests",  # script contains ---
+    "005160__LalatenduMohanty__kubernetes__apply.tests",  # corpus expects $(! but oracle now outputs $(\!
     "012091__johnchronis__exareme__exareme-admin.tests",  # very long expected output
     "012559__bbgw__kubernetes__test-cmd.tests",  # very long expected output
     "012773__Devindik__origin__git-sh-setup.tests",  # very long expected output
     "014119__kyma-project__test-infra__integration-tests.tests",  # heredoc contains ---
 }
+
+# Files where heredoc contains --- which breaks the corpus test parser
+# (loaded from heredoc-dashes.txt)
+HEREDOC_DASHES_FILES: set[str] = set()
+if os.path.exists(HEREDOC_DASHES_FILE):
+    with open(HEREDOC_DASHES_FILE) as f:
+        HEREDOC_DASHES_FILES = {line.strip() for line in f if line.strip()}
 
 
 def parse_test_file(filepath):
@@ -114,9 +110,10 @@ def main():
     failed = 0
 
     skipped = 0
+    all_skip_files = SKIP_FILES | HEREDOC_DASHES_FILES
     with open(FAILURES_FILE, "w") as failures_f:
         for i, test_file in enumerate(test_files):
-            if os.path.basename(test_file) in SKIP_FILES:
+            if os.path.basename(test_file) in all_skip_files:
                 skipped += 1
                 continue
             tests = parse_test_file(test_file)

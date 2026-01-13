@@ -2277,7 +2277,7 @@ def _format_cond_body(node: Node) -> str:
     if kind == "cond-or":
         return _format_cond_body(node.left) + " || " + _format_cond_body(node.right)
     if kind == "cond-not":
-        return "! " + _format_cond_body(node.body)
+        return "! " + _format_cond_body(node.operand)
     if kind == "cond-paren":
         return "( " + _format_cond_body(node.body) + " )"
     return ""

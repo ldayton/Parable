@@ -7421,6 +7421,8 @@ class Parser {
 			return null;
 		}
 		content = this.source.slice(content_start, this.pos);
+		// Strip backslash-newline line continuations
+		content = content.replaceAll("\\\n", "");
 		this.advance();
 		this.advance();
 		// Parse the arithmetic expression

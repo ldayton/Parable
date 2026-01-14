@@ -1,0 +1,6 @@
+=== backslash-newline in param expansion with & name
+${&:-\
+a}
+---
+(command (word "${&:-a}"))
+---

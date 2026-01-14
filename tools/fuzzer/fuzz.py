@@ -126,14 +126,14 @@ def run_oracle(input_text: str) -> str | None:
 
 
 def run_parable(input_text: str) -> str | None:
-    """Run Parable on input. Returns s-expr or None on error."""
+    """Run Parable on input. Returns s-expr, None on parse error, or <crash:...>."""
     try:
         nodes = parse(input_text)
         return " ".join(node.to_sexp() for node in nodes)
     except ParseError:
         return None
-    except Exception:
-        return None
+    except Exception as e:
+        return f"<crash: {type(e).__name__}: {e}>"
 
 
 def normalize(s: str) -> str:

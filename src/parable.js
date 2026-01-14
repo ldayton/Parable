@@ -982,6 +982,7 @@ class Word extends Node {
 			cmdsub_parts,
 			depth,
 			direction,
+			end,
 			extglob_depth,
 			formatted,
 			formatted_inner,
@@ -995,6 +996,7 @@ class Word extends Node {
 			inner,
 			j,
 			k,
+			m,
 			node,
 			p,
 			parsed,
@@ -1005,6 +1007,7 @@ class Word extends Node {
 			procsub_parts,
 			raw_content,
 			result,
+			suffix_ws,
 			terminator;
 		// Collect command substitutions from all parts, including nested ones
 		cmdsub_parts = [];
@@ -1158,6 +1161,7 @@ class Word extends Node {
 				if (node.command.kind === "subshell") {
 					raw_content = value.slice(i + 2, j - 1);
 					if (raw_content.startsWith("(")) {
+						// Preserve leading whitespace after (
 						k = 1;
 						while (k < raw_content.length && _isWhitespace(raw_content[k])) {
 							k += 1;
@@ -1165,6 +1169,16 @@ class Word extends Node {
 						prefix_ws = raw_content.slice(1, k);
 						if (prefix_ws && formatted.startsWith("(")) {
 							formatted = `(${prefix_ws}${formatted.slice(1)}`;
+						}
+						// Preserve trailing whitespace before )
+						end = raw_content.length - 1;
+						m = end;
+						while (m > 0 && _isWhitespace(raw_content[m - 1])) {
+							m -= 1;
+						}
+						suffix_ws = raw_content.slice(m, end);
+						if (suffix_ws && formatted.endsWith(")")) {
+							formatted = `${formatted.slice(0, -1) + suffix_ws})`;
 						}
 					}
 				}

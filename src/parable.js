@@ -3487,6 +3487,42 @@ function _isWordEndContext(c) {
 	);
 }
 
+function _isArrayAssignmentPrefix(chars) {
+	let depth, i;
+	if (chars.length === 0) {
+		return false;
+	}
+	if (!(/^[a-zA-Z]$/.test(chars[0]) || chars[0] === "_")) {
+		return false;
+	}
+	i = 1;
+	while (
+		i < chars.length &&
+		(/^[a-zA-Z0-9]$/.test(chars[i]) || chars[i] === "_")
+	) {
+		i += 1;
+	}
+	while (i < chars.length) {
+		if (chars[i] !== "[") {
+			return false;
+		}
+		depth = 1;
+		i += 1;
+		while (i < chars.length && depth > 0) {
+			if (chars[i] === "[") {
+				depth += 1;
+			} else if (chars[i] === "]") {
+				depth -= 1;
+			}
+			i += 1;
+		}
+		if (depth !== 0) {
+			return false;
+		}
+	}
+	return true;
+}
+
 function _isSpecialParamOrDigit(c) {
 	return _isSpecialParam(c) || _isDigit(c);
 }
@@ -3813,16 +3849,28 @@ class Parser {
 			// Only at command start (array assignments), not in argument position
 			// Only BEFORE = sign (key=1],a[1 should not track the [1 part)
 			// Only after identifier char (not [[ which is conditional keyword)
-			if (ch === "[" && chars && at_command_start && !seen_equals) {
-				prev_char = chars[chars.length - 1];
-				if (
-					/^[a-zA-Z0-9]$/.test(prev_char) ||
-					prev_char === "_" ||
-					prev_char === "]"
-				) {
+			if (ch === "[") {
+				if (bracket_depth > 0) {
 					bracket_depth += 1;
 					chars.push(this.advance());
 					continue;
+				}
+				if (
+					chars &&
+					at_command_start &&
+					!seen_equals &&
+					_isArrayAssignmentPrefix(chars)
+				) {
+					prev_char = chars[chars.length - 1];
+					if (
+						/^[a-zA-Z0-9]$/.test(prev_char) ||
+						prev_char === "_" ||
+						prev_char === "]"
+					) {
+						bracket_depth += 1;
+						chars.push(this.advance());
+						continue;
+					}
 				}
 			}
 			if (ch === "]" && bracket_depth > 0) {

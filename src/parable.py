@@ -3045,6 +3045,31 @@ def _is_word_end_context(c: str) -> bool:
     )
 
 
+def _is_array_assignment_prefix(chars: list[str]) -> bool:
+    """Check if chars form name or name[subscript]... for array assignments."""
+    if not chars:
+        return False
+    if not (chars[0].isalpha() or chars[0] == "_"):
+        return False
+    i = 1
+    while i < len(chars) and (chars[i].isalnum() or chars[i] == "_"):
+        i += 1
+    while i < len(chars):
+        if chars[i] != "[":
+            return False
+        depth = 1
+        i += 1
+        while i < len(chars) and depth > 0:
+            if chars[i] == "[":
+                depth += 1
+            elif chars[i] == "]":
+                depth -= 1
+            i += 1
+        if depth != 0:
+            return False
+    return True
+
+
 def _is_special_param_or_digit(c: str) -> bool:
     return _is_special_param(c) or _is_digit(c)
 
@@ -3298,12 +3323,22 @@ class Parser:
             # Only at command start (array assignments), not in argument position
             # Only BEFORE = sign (key=1],a[1 should not track the [1 part)
             # Only after identifier char (not [[ which is conditional keyword)
-            if ch == "[" and chars and at_command_start and not seen_equals:
-                prev_char = chars[len(chars) - 1]
-                if prev_char.isalnum() or (prev_char == "_" or prev_char == "]"):
+            if ch == "[":
+                if bracket_depth > 0:
                     bracket_depth += 1
                     chars.append(self.advance())
                     continue
+                if (
+                    chars
+                    and at_command_start
+                    and not seen_equals
+                    and _is_array_assignment_prefix(chars)
+                ):
+                    prev_char = chars[len(chars) - 1]
+                    if prev_char.isalnum() or (prev_char == "_" or prev_char == "]"):
+                        bracket_depth += 1
+                        chars.append(self.advance())
+                        continue
             if ch == "]" and bracket_depth > 0:
                 bracket_depth -= 1
                 chars.append(self.advance())

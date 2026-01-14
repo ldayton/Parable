@@ -666,19 +666,33 @@ class Word extends Node {
 	}
 
 	_normalizeArrayInner(inner) {
-		let brace_depth, ch, depth, dq_content, i, in_whitespace, j, normalized;
+		let brace_depth,
+			bracket_depth,
+			ch,
+			depth,
+			dq_content,
+			i,
+			in_whitespace,
+			j,
+			normalized;
 		normalized = [];
 		i = 0;
 		in_whitespace = true;
 		brace_depth = 0;
+		bracket_depth = 0;
 		while (i < inner.length) {
 			ch = inner[i];
 			if (_isWhitespace(ch)) {
-				if (!in_whitespace && normalized && brace_depth === 0) {
+				if (
+					!in_whitespace &&
+					normalized &&
+					brace_depth === 0 &&
+					bracket_depth === 0
+				) {
 					normalized.push(" ");
 					in_whitespace = true;
 				}
-				if (brace_depth > 0) {
+				if (brace_depth > 0 || bracket_depth > 0) {
 					normalized.push(ch);
 				}
 				i += 1;
@@ -851,6 +865,17 @@ class Word extends Node {
 				while (i < inner.length && inner[i] !== "\n") {
 					i += 1;
 				}
+			} else if (ch === "[") {
+				// Start of subscript [...] - preserve whitespace inside
+				in_whitespace = false;
+				normalized.push(ch);
+				bracket_depth += 1;
+				i += 1;
+			} else if (ch === "]" && bracket_depth > 0) {
+				// End of subscript
+				normalized.push(ch);
+				bracket_depth -= 1;
+				i += 1;
 			} else {
 				in_whitespace = false;
 				normalized.push(ch);

@@ -461,10 +461,21 @@ class Word(Node):
                 and not in_double_quote
                 and brace_depth == 0
             ):
-                # Locale string $"..." outside quotes - strip the $ and enter double quote
-                result.append('"')
-                in_double_quote = True
-                i += 2
+                # Count consecutive $ chars ending at i to check for $$ (PID param)
+                dollar_count = 1
+                j = i - 1
+                while j >= 0 and value[j] == "$":
+                    dollar_count += 1
+                    j -= 1
+                if dollar_count % 2 == 1:
+                    # Odd count: locale string $"..." - strip the $ and enter double quote
+                    result.append('"')
+                    in_double_quote = True
+                    i += 2
+                else:
+                    # Even count: this $ is part of $$ (PID), just append it
+                    result.append(ch)
+                    i += 1
             else:
                 result.append(ch)
                 i += 1

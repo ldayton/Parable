@@ -487,7 +487,14 @@ class Word extends Node {
 	}
 
 	_stripLocaleStringDollars(value) {
-		let brace_depth, ch, i, in_double_quote, in_single_quote, result;
+		let brace_depth,
+			ch,
+			dollar_count,
+			i,
+			in_double_quote,
+			in_single_quote,
+			j,
+			result;
 		result = [];
 		i = 0;
 		in_single_quote = false;
@@ -523,10 +530,23 @@ class Word extends Node {
 				!in_double_quote &&
 				brace_depth === 0
 			) {
-				// Locale string $"..." outside quotes - strip the $ and enter double quote
-				result.push('"');
-				in_double_quote = true;
-				i += 2;
+				// Count consecutive $ chars ending at i to check for $$ (PID param)
+				dollar_count = 1;
+				j = i - 1;
+				while (j >= 0 && value[j] === "$") {
+					dollar_count += 1;
+					j -= 1;
+				}
+				if (dollar_count % 2 === 1) {
+					// Odd count: locale string $"..." - strip the $ and enter double quote
+					result.push('"');
+					in_double_quote = true;
+					i += 2;
+				} else {
+					// Even count: this $ is part of $$ (PID), just append it
+					result.push(ch);
+					i += 1;
+				}
 			} else {
 				result.push(ch);
 				i += 1;

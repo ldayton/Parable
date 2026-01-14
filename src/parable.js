@@ -6681,7 +6681,8 @@ class Parser {
 	}
 
 	_parseHeredoc(fd, strip_tabs) {
-		let c,
+		let add_newline,
+			c,
 			ch,
 			check_line,
 			content,
@@ -6860,8 +6861,22 @@ class Parser {
 				content_lines.push(`${line}\n`);
 				scan_pos = line_end + 1;
 			} else {
-				// EOF - don't add trailing newline
-				content_lines.push(line);
+				// EOF - bash keeps the trailing newline unless escaped by an odd backslash
+				add_newline = true;
+				if (!quoted) {
+					trailing_bs = 0;
+					for (i = line.length - 1; i > -1; i--) {
+						if (line[i] === "\\") {
+							trailing_bs += 1;
+						} else {
+							break;
+						}
+					}
+					if (trailing_bs % 2 === 1) {
+						add_newline = false;
+					}
+				}
+				content_lines.push(line + (add_newline ? "\n" : ""));
 				scan_pos = this.length;
 			}
 		}

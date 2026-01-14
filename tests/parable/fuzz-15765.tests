@@ -1,0 +1,9 @@
+# Fuzzer-discovered parser discrepancy
+
+=== heredoc delimiter with trailing less-than
+<<E
+<
+---
+(command (redirect "<<" "<
+"))
+---

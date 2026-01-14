@@ -1,0 +1,5 @@
+=== redirect fd with equals suffix
+<&0=
+---
+(command (redirect "<&" "0="))
+---

@@ -2921,14 +2921,26 @@ def _skip_heredoc(value: str, start: int) -> int:
             i += 1
         delimiter = _substring(value, delim_start, i)
     else:
-        # Unquoted delimiter
-        while i < len(value) and not _is_whitespace(value[i]):
+        # Unquoted delimiter - stop at metacharacters like )
+        while i < len(value) and not _is_metachar(value[i]):
             i += 1
         delimiter = _substring(value, delim_start, i)
     # Skip to end of line (heredoc content starts on next line)
+    # But track paren depth - if we hit a ) at depth 0, it closes the cmdsub
+    paren_depth = 0
     while i < len(value) and value[i] != "\n":
+        if value[i] == "(":
+            paren_depth += 1
+        elif value[i] == ")":
+            if paren_depth == 0:
+                # This ) closes the enclosing command substitution, stop here
+                break
+            paren_depth -= 1
         i += 1
-    if i < len(value):
+    # If we stopped at ) (closing cmdsub), return here - no heredoc content
+    if i < len(value) and value[i] == ")":
+        return i
+    if i < len(value) and value[i] == "\n":
         i += 1  # Skip newline
     # Find the end delimiter on its own line
     while i < len(value):

@@ -984,7 +984,8 @@ class Word extends Node {
 			procsub_idx,
 			procsub_parts,
 			raw_content,
-			result;
+			result,
+			terminator;
 		// Collect command substitutions from all parts, including nested ones
 		cmdsub_parts = [];
 		procsub_parts = [];
@@ -1179,7 +1180,9 @@ class Word extends Node {
 						parsed = parser.parseList();
 						if (parsed) {
 							formatted = _formatCmdsubNode(parsed);
-							result.push(`${prefix + formatted}; }`);
+							formatted = formatted.replace(/[;]+$/, "");
+							terminator = formatted.endsWith(" &") ? " }" : "; }";
+							result.push(prefix + formatted + terminator);
 						} else {
 							result.push("${ }");
 						}

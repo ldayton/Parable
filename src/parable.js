@@ -3369,6 +3369,7 @@ function _skipHeredoc(value, start) {
 		line,
 		line_end,
 		line_start,
+		paren_depth,
 		quote_char,
 		stripped;
 	i = start + 2;
@@ -3403,17 +3404,32 @@ function _skipHeredoc(value, start) {
 		}
 		delimiter = value.slice(delim_start, i);
 	} else {
-		// Unquoted delimiter
-		while (i < value.length && !_isWhitespace(value[i])) {
+		// Unquoted delimiter - stop at metacharacters like )
+		while (i < value.length && !_isMetachar(value[i])) {
 			i += 1;
 		}
 		delimiter = value.slice(delim_start, i);
 	}
 	// Skip to end of line (heredoc content starts on next line)
+	// But track paren depth - if we hit a ) at depth 0, it closes the cmdsub
+	paren_depth = 0;
 	while (i < value.length && value[i] !== "\n") {
+		if (value[i] === "(") {
+			paren_depth += 1;
+		} else if (value[i] === ")") {
+			if (paren_depth === 0) {
+				// This ) closes the enclosing command substitution, stop here
+				break;
+			}
+			paren_depth -= 1;
+		}
 		i += 1;
 	}
-	if (i < value.length) {
+	// If we stopped at ) (closing cmdsub), return here - no heredoc content
+	if (i < value.length && value[i] === ")") {
+		return i;
+	}
+	if (i < value.length && value[i] === "\n") {
 		i += 1;
 	}
 	// Find the end delimiter on its own line

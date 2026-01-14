@@ -1,0 +1,5 @@
+=== heredoc in cmdsub inside dquote
+"$(<<a)"
+---
+(command (word "\"$(<<a\na\n)\""))
+---

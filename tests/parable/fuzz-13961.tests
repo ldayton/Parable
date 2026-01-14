@@ -1,0 +1,5 @@
+=== no space after >& in command substitution
+$(>&x)
+---
+(command (word "$(>&x)"))
+---

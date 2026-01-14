@@ -6371,7 +6371,7 @@ class Parser {
 				// These are NOT operators - the @/* is part of the indirect form
 				if (!this.atEnd() && _isAtOrStar(this.peek())) {
 					suffix = this.advance();
-					while (!this.atEnd() && _isWhitespaceNoNewline(this.peek())) {
+					while (!this.atEnd() && _isWhitespace(this.peek())) {
 						this.advance();
 					}
 					if (!this.atEnd() && this.peek() === "}") {

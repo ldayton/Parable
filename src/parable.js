@@ -6200,38 +6200,49 @@ class Parser {
 		// ${param} or ${param<op><arg>}
 		param = this._consumeParamName();
 		if (!param) {
-			// Unknown syntax like ${(M)...} (zsh) - consume until matching }
-			// Bash accepts these syntactically but fails at runtime
-			depth = 1;
-			content_start = this.pos;
-			while (!this.atEnd() && depth > 0) {
-				c = this.peek();
-				if (c === "{") {
-					depth += 1;
-					this.advance();
-				} else if (c === "}") {
-					depth -= 1;
-					if (depth === 0) {
-						break;
-					}
-					this.advance();
-				} else if (c === "\\") {
-					this.advance();
-					if (!this.atEnd()) {
+			// Allow empty parameter for simple operators like ${:-word}
+			if (
+				!this.atEnd() &&
+				("-=+?".includes(this.peek()) ||
+					(this.peek() === ":" &&
+						this.pos + 1 < this.length &&
+						_isSimpleParamOp(this.source[this.pos + 1])))
+			) {
+				param = "";
+			} else {
+				// Unknown syntax like ${(M)...} (zsh) - consume until matching }
+				// Bash accepts these syntactically but fails at runtime
+				depth = 1;
+				content_start = this.pos;
+				while (!this.atEnd() && depth > 0) {
+					c = this.peek();
+					if (c === "{") {
+						depth += 1;
+						this.advance();
+					} else if (c === "}") {
+						depth -= 1;
+						if (depth === 0) {
+							break;
+						}
+						this.advance();
+					} else if (c === "\\") {
+						this.advance();
+						if (!this.atEnd()) {
+							this.advance();
+						}
+					} else {
 						this.advance();
 					}
-				} else {
-					this.advance();
 				}
+				if (depth === 0) {
+					content = this.source.slice(content_start, this.pos);
+					this.advance();
+					text = this.source.slice(start, this.pos);
+					return [new ParamExpansion(content), text];
+				}
+				this.pos = start;
+				return [null, ""];
 			}
-			if (depth === 0) {
-				content = this.source.slice(content_start, this.pos);
-				this.advance();
-				text = this.source.slice(start, this.pos);
-				return [new ParamExpansion(content), text];
-			}
-			this.pos = start;
-			return [null, ""];
 		}
 		if (this.atEnd()) {
 			this.pos = start;

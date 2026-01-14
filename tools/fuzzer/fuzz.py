@@ -69,13 +69,16 @@ def parse_test_file(filepath: Path) -> list[str]:
 def mutate(s: str, num_mutations: int = 1) -> tuple[str, str]:
     """Apply random mutations. Returns (mutated_string, description)."""
     import re
+
     if not s:
         return s, "empty"
     # Protect $'...' and $"..." sequences from mutation
     protected = []
+
     def save(m):
         protected.append(m.group())
         return chr(len(protected))  # \x01, \x02, ...
+
     s = re.sub(r"\$'[^']*'", save, s)
     s = re.sub(r'\$"(?:[^"\\]|\\.)*"', save, s)
     # Mutate
@@ -139,13 +142,14 @@ def run_parable(input_text: str) -> str | None:
 def normalize(s: str) -> str:
     """Normalize for comparison, ignoring cosmetic differences."""
     import re
+
     # Collapse whitespace
     s = " ".join(s.split())
     # Normalize fd 1 redirects: 1> -> >, 1>& -> >&
-    s = re.sub(r'\b1>', '>', s)
-    s = re.sub(r'\b1>&', '>&', s)
+    s = re.sub(r"\b1>", ">", s)
+    s = re.sub(r"\b1>&", ">&", s)
     # Normalize indentation inside quoted strings (\\n followed by spaces)
-    s = re.sub(r'\\n\s+', r'\\n', s)
+    s = re.sub(r"\\n\s+", r"\\n", s)
     return s
 
 
@@ -191,6 +195,11 @@ def main():
         action="store_true",
         help="Only show cases where both parsers succeed but differ",
     )
+    parser.add_argument(
+        "--stop-after",
+        type=int,
+        help="Stop after finding N unique discrepancies",
+    )
     args = parser.parse_args()
 
     if args.seed is not None:
@@ -229,6 +238,9 @@ def main():
                 print(f"  Mutated:  {d.mutated!r}")
                 print(f"  Parable:  {d.parable_result}")
                 print(f"  Oracle:   {d.oracle_result}")
+            if args.stop_after and len(discrepancies) >= args.stop_after:
+                print(f"\nStopped after finding {args.stop_after} discrepancies")
+                break
         if (i + 1) % 100 == 0:
             print(
                 f"\r{i + 1}/{args.iterations} iterations, {len(discrepancies)} unique discrepancies",

@@ -6,25 +6,24 @@ All commands run from `~/source/Parable`.
 
 ## Steps
 
-1. **Run the fuzzer** until you have 10 unique discrepancies where both parsers succeed but produce different ASTs:
+1. **Run the fuzzer** to find 10 unique discrepancies where both parsers succeed but produce different ASTs:
    ```bash
-   uv run python ~/source/Parable/tools/fuzzer/fuzz.py -n 10000 --both-succeed -v
+   uv run python ~/source/Parable/tools/fuzzer/fuzz.py --both-succeed --stop-after 10 -v
    ```
-   Increase `-n` if needed. Stop when you have 10.
 
 2. **Pick one at random.** Not the first one. Roll a die or use Python:
    ```bash
    uv run python -c "import random; print(random.randint(0, 9))"
    ```
 
-3. **Create an MRE.** Shrink the input to the smallest string that still shows the discrepancy. Verify with (from repo root):
+3. **Create an MRE.** Shrink the input to the smallest string that still shows the discrepancy. Compare outputs:
    ```bash
-   ~/source/bash-oracle/bash-oracle -e 'INPUT'
-   uv run python -c "import sys; sys.path.insert(0, 'src'); from parable import parse; print(' '.join(n.to_sexp() for n in parse('INPUT')))"
+   ~/source/bash-oracle/bash-oracle -e 'INPUT'   # oracle
+   uv run bin/parable-dump.py 'INPUT'            # parable
    ```
    Keep removing characters until you can't anymore.
 
-4. **Add a failing test.** Find the appropriate `.tests` file in `tests/` and add:
+4. **Add a failing test** to `tests/parable/36_fuzzer.tests`:
    ```
    === descriptive name
    INPUT

@@ -1,0 +1,5 @@
+=== braced fd variable before &> is a word not fd variable
+{fd}&>1
+---
+(command (word "{fd}") (redirect "&>" "1"))
+---

@@ -5445,8 +5445,12 @@ class Parser:
                         arg = "".join(arg_chars)
                         text = _substring(self.source, start, self.pos)
                         return ParamIndirect(param, op, arg), text
-            self.pos = start
-            return None, ""
+                # Fell through - pattern didn't match, return None
+                self.pos = start
+                return None, ""
+            else:
+                # ${! followed by non-param char like | - fall through to regular parsing
+                self.pos = start + 2  # reset to just after ${
 
         # ${param} or ${param<op><arg>}
         param = self._consume_param_name()

@@ -32,15 +32,19 @@ a <<X
 ---
 (command (word "a") (redirect "<<" "\\"))
 ---
-
 === backslash-escaped dollar in quoted command substitution
 "\\$(a)$(b)"
 ---
 (command (word "\"\\\\$(a)$(b)\""))
 ---
-
 === brace-close before redirect operator
 {]}>a
 ---
 (command (word "{]}") (redirect ">" "a"))
+---
+
+=== space after bang in parameter expansion
+${! a}
+---
+(command (word "${! a}"))
 ---

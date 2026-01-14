@@ -959,7 +959,9 @@ class Word(Node):
                         parsed = parser.parse_list()
                         if parsed:
                             formatted = _format_cmdsub_node(parsed)
-                            result.append(prefix + formatted + "; }")
+                            formatted = formatted.rstrip(";")
+                            terminator = " }" if formatted.endswith(" &") else "; }"
+                            result.append(prefix + formatted + terminator)
                         else:
                             result.append("${ }")
                     except Exception:

@@ -3557,6 +3557,10 @@ function _isListTerminator(c) {
 	return c === "\n" || c === "|" || c === ";" || c === "(" || c === ")";
 }
 
+function _isNegationBoundary(c) {
+	return _isWhitespace(c) || c === ";" || c === "|" || c === ")";
+}
+
 function _isBackslashEscaped(value, idx) {
 	let bs_count, j;
 	bs_count = 0;
@@ -9284,13 +9288,13 @@ class Parser {
 						this.pos = saved;
 					}
 				}
-				this.skipWhitespace();
 			}
+			this.skipWhitespace();
 			// Check for ! after time
 			if (!this.atEnd() && this.peek() === "!") {
 				if (
 					this.pos + 1 >= this.length ||
-					_isWhitespace(this.source[this.pos + 1])
+					_isNegationBoundary(this.source[this.pos + 1])
 				) {
 					this.advance();
 					prefix_order = "time_negation";
@@ -9301,7 +9305,7 @@ class Parser {
 			// Check for '!' negation prefix (if no time yet)
 			if (
 				this.pos + 1 >= this.length ||
-				_isWhitespace(this.source[this.pos + 1])
+				_isNegationBoundary(this.source[this.pos + 1])
 			) {
 				this.advance();
 				this.skipWhitespace();

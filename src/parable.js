@@ -1516,9 +1516,14 @@ class HereDoc extends Node {
 	}
 
 	toSexp() {
-		let op;
+		let content, op;
 		op = this.strip_tabs ? "<<-" : "<<";
-		return `(redirect "${op}" "${this.content}")`;
+		content = this.content;
+		// Escape trailing backslash (would escape the closing quote otherwise)
+		if (content.endsWith("\\") && !content.endsWith("\\\\")) {
+			content = `${content}\\`;
+		}
+		return `(redirect "${op}" "${content}")`;
 	}
 }
 
@@ -6847,11 +6852,13 @@ class Parser {
 			if (strip_tabs) {
 				line = line.replace(/^[\t]+/, "");
 			}
-			content_lines.push(`${line}\n`);
-			// Move past the newline
+			// Only add newline if there was actually a newline in the source (not EOF)
 			if (line_end < this.length) {
+				content_lines.push(`${line}\n`);
 				scan_pos = line_end + 1;
 			} else {
+				// EOF - don't add trailing newline
+				content_lines.push(line);
 				scan_pos = this.length;
 			}
 		}

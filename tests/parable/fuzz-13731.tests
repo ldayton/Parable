@@ -1,0 +1,5 @@
+=== double-quoted braced param with bracket and space
+"${un[-"e f"}"
+---
+(command (word "\"${un[-\"e f\"}\""))
+---

@@ -5466,6 +5466,49 @@ class Parser:
         text = "${" + param + op + arg + "}"
         return ParamExpansion(param, op, arg), text
 
+    def _param_subscript_has_close(self, start_pos: int) -> bool:
+        """Check for a matching ] in a parameter subscript before closing }."""
+        depth = 1
+        i = start_pos + 1
+        in_single = False
+        in_double = False
+        while i < self.length:
+            c = self.source[i]
+            if in_single:
+                if c == "'":
+                    in_single = False
+                i += 1
+                continue
+            if in_double:
+                if c == "\\" and i + 1 < self.length:
+                    i += 2
+                    continue
+                if c == '"':
+                    in_double = False
+                i += 1
+                continue
+            if c == "'":
+                in_single = True
+                i += 1
+                continue
+            if c == '"':
+                in_double = True
+                i += 1
+                continue
+            if c == "\\":
+                i += 2
+                continue
+            if c == "}":
+                return False
+            if c == "[":
+                depth += 1
+            elif c == "]":
+                depth -= 1
+                if depth == 0:
+                    return True
+            i += 1
+        return False
+
     def _consume_param_name(self) -> str | None:
         """Consume a parameter name (variable name, special char, or array subscript)."""
         if self.at_end():
@@ -5493,6 +5536,8 @@ class Parser:
                 if c.isalnum() or c == "_":
                     name_chars.append(self.advance())
                 elif c == "[":
+                    if not self._param_subscript_has_close(self.pos):
+                        break
                     # Array subscript - track bracket depth
                     name_chars.append(self.advance())
                     bracket_depth = 1

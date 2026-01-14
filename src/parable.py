@@ -73,6 +73,16 @@ def _starts_with_at(s: str, pos: int, prefix: str) -> bool:
     return s.startswith(prefix, pos)
 
 
+def _count_consecutive_dollars_before(s: str, pos: int) -> int:
+    """Count consecutive '$' characters immediately before pos."""
+    count = 0
+    k = pos - 1
+    while k >= 0 and s[k] == "$":
+        count += 1
+        k -= 1
+    return count
+
+
 def _sublist(lst: list, start: int, end: int) -> list:
     """Extract sublist from start to end (exclusive)."""
     return lst[start:end]
@@ -364,8 +374,14 @@ class Word(Node):
             effective_in_dquote = in_double_quote
             # Track quote state to avoid matching $' inside regular quotes
             if ch == "'" and not effective_in_dquote:
-                # Toggle quote state unless this is $' (handled below)
-                if not (not in_single_quote and i > 0 and value[i - 1] == "$"):
+                # Toggle quote state unless this is $' that will be expanded as ANSI-C
+                is_ansi_c = (
+                    not in_single_quote
+                    and i > 0
+                    and value[i - 1] == "$"
+                    and _count_consecutive_dollars_before(value, i - 1) % 2 == 0
+                )
+                if not is_ansi_c:
                     in_single_quote = not in_single_quote
                 result.append(ch)
                 i += 1
@@ -382,7 +398,7 @@ class Word(Node):
                 _starts_with_at(value, i, "$'")
                 and not in_single_quote
                 and not effective_in_dquote
-                and (i == 0 or value[i - 1] != "$")
+                and _count_consecutive_dollars_before(value, i) % 2 == 0
             ):
                 # ANSI-C quoted string - find matching closing quote
                 j = i + 2

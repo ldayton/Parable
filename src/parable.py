@@ -483,7 +483,7 @@ class Word(Node):
 
     def _normalize_array_whitespace(self, value: str) -> str:
         """Normalize whitespace inside array assignments: arr=(a  b\tc) -> arr=(a b c)."""
-        # Match array assignment pattern: name=( or name+=(
+        # Match array assignment pattern: name=( or name+=( or name[sub]=( or name[sub]+=(
         # Parse identifier: starts with letter/underscore, then alnum/underscore
         i = 0
         if not (i < len(value) and (value[i].isalpha() or value[i] == "_")):
@@ -491,6 +491,18 @@ class Word(Node):
         i += 1
         while i < len(value) and (value[i].isalnum() or value[i] == "_"):
             i += 1
+        # Optional subscript(s): [...]
+        while i < len(value) and value[i] == "[":
+            depth = 1
+            i += 1
+            while i < len(value) and depth > 0:
+                if value[i] == "[":
+                    depth += 1
+                elif value[i] == "]":
+                    depth -= 1
+                i += 1
+            if depth != 0:
+                return value
         # Optional + for +=
         if i < len(value) and value[i] == "+":
             i += 1

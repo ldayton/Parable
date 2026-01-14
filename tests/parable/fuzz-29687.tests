@@ -1,0 +1,5 @@
+=== strip leading whitespace in subscripted array append
+a[0]+=( 1)
+---
+(command (word "a[0]+=(1)"))
+---

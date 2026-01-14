@@ -3503,7 +3503,7 @@ class Parser:
                     and _is_array_assignment_prefix(chars)
                 ):
                     prev_char = chars[len(chars) - 1]
-                    if prev_char.isalnum() or (prev_char == "_" or prev_char == "]"):
+                    if prev_char.isalnum() or prev_char == "_":
                         bracket_depth += 1
                         chars.append(self.advance())
                         continue

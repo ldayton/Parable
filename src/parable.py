@@ -5858,8 +5858,24 @@ class Parser:
                 content_lines.append(line + "\n")
                 scan_pos = line_end + 1
             else:
-                # EOF - don't add trailing newline
-                content_lines.append(line)
+                # EOF without a newline: bash treats the last line as newline-terminated,
+                # except for unquoted heredocs with an odd trailing backslash.
+                if line_start < line_end:
+                    if not quoted:
+                        trailing_bs = 0
+                        for i in range(len(line) - 1, -1, -1):
+                            if line[i] == "\\":
+                                trailing_bs += 1
+                            else:
+                                break
+                        if trailing_bs % 2 == 1:
+                            content_lines.append(line)
+                        else:
+                            content_lines.append(line + "\n")
+                    else:
+                        content_lines.append(line + "\n")
+                else:
+                    content_lines.append(line)
                 scan_pos = self.length
 
         # Join content (newlines already included per line)

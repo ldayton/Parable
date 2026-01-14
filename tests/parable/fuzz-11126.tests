@@ -1,0 +1,7 @@
+=== unterminated heredoc adds newline at eof
+cat <<EOF
+x
+---
+(command (word "cat") (redirect "<<" "x
+"))
+---

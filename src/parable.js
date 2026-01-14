@@ -6860,8 +6860,29 @@ class Parser {
 				content_lines.push(`${line}\n`);
 				scan_pos = line_end + 1;
 			} else {
-				// EOF - don't add trailing newline
-				content_lines.push(line);
+				// EOF without a newline: bash treats the last line as newline-terminated,
+				// except for unquoted heredocs with an odd trailing backslash.
+				if (line_start < line_end) {
+					if (!quoted) {
+						trailing_bs = 0;
+						for (i = line.length - 1; i > -1; i--) {
+							if (line[i] === "\\") {
+								trailing_bs += 1;
+							} else {
+								break;
+							}
+						}
+						if (trailing_bs % 2 === 1) {
+							content_lines.push(line);
+						} else {
+							content_lines.push(`${line}\n`);
+						}
+					} else {
+						content_lines.push(`${line}\n`);
+					}
+				} else {
+					content_lines.push(line);
+				}
 				scan_pos = this.length;
 			}
 		}

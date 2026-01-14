@@ -1,0 +1,5 @@
+=== pid variable followed by single-quoted string
+$$'x'
+---
+(command (word "$$'x'"))
+---

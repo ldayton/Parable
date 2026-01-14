@@ -431,7 +431,8 @@ class Word extends Node {
 			} else if (
 				_startsWithAt(value, i, "$'") &&
 				!in_single_quote &&
-				!effective_in_dquote
+				!effective_in_dquote &&
+				(i === 0 || value[i - 1] !== "$")
 			) {
 				// ANSI-C quoted string - find matching closing quote
 				j = i + 2;

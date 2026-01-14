@@ -379,7 +379,10 @@ class Word(Node):
                 result.append(value[i + 1])
                 i += 2
             elif (
-                _starts_with_at(value, i, "$'") and not in_single_quote and not effective_in_dquote
+                _starts_with_at(value, i, "$'")
+                and not in_single_quote
+                and not effective_in_dquote
+                and (i == 0 or value[i - 1] != "$")
             ):
                 # ANSI-C quoted string - find matching closing quote
                 j = i + 2

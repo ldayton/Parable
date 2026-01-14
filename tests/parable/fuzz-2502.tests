@@ -1,0 +1,8 @@
+# Fuzz 2502: preserve leading newline in arithmetic for init
+
+=== leading newline in for (( init ))
+for ((
+a;;)); do :; done
+---
+(arith-for (init (word "\na")) (test (word "1")) (step (word "1")) (command (word ":")))
+---

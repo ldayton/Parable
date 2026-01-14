@@ -25,6 +25,13 @@ a=(
 ---
 (command (word "a=()b"))
 ---
+
+=== trailing backslash at EOF in heredoc
+a <<X
+\
+---
+(command (word "a") (redirect "<<" "\\"))
+---
 === backslash-escaped dollar in quoted command substitution
 "\\$(a)$(b)"
 ---

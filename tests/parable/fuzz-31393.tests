@@ -1,0 +1,6 @@
+=== parameter expansion line continuation
+${:-\
+}
+---
+(command (word "${:-}"))
+---

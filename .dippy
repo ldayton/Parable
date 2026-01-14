@@ -27,3 +27,6 @@ allow-redirect /tmp/**
 
 #---- Javascript ----#
 allow node -e *
+
+#---- After ----#
+after git commit * "re-read ~/source/Parable/tools/fuzzer/prompt.md and continue to next iteration"

@@ -6032,6 +6032,9 @@ class Parser {
 		// ${!param} or ${!param<op><arg>} - indirect
 		if (ch === "!") {
 			this.advance();
+			while (!this.atEnd() && _isWhitespaceNoNewline(this.peek())) {
+				this.advance();
+			}
 			param = this._consumeParamName();
 			if (param) {
 				// Skip optional whitespace before closing brace

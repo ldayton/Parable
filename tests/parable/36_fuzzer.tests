@@ -31,3 +31,9 @@ a=(
 ---
 (command (word "{]}") (redirect ">" "a"))
 ---
+
+=== space after bang in parameter expansion
+${! a}
+---
+(command (word "${! a}"))
+---

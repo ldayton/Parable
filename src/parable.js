@@ -962,6 +962,7 @@ class Word extends Node {
 			cmdsub_parts,
 			depth,
 			direction,
+			extglob_depth,
 			formatted,
 			formatted_inner,
 			has_brace_cmdsub,
@@ -1042,7 +1043,27 @@ class Word extends Node {
 		cmdsub_idx = 0;
 		procsub_idx = 0;
 		in_double_quote = false;
+		extglob_depth = 0;
 		while (i < value.length) {
+			// Check for extglob start: @( ?( *( +( !(
+			if (
+				i > 0 &&
+				_isExtglobPrefix(value[i - 1]) &&
+				value[i] === "(" &&
+				!_isBackslashEscaped(value, i - 1)
+			) {
+				extglob_depth += 1;
+				result.push(value[i]);
+				i += 1;
+				continue;
+			}
+			// Track ) that closes extglob (but not inside cmdsub/procsub)
+			if (value[i] === ")" && extglob_depth > 0) {
+				extglob_depth -= 1;
+				result.push(value[i]);
+				i += 1;
+				continue;
+			}
 			// Check for $( command substitution (but not $(( arithmetic or escaped \$()
 			if (
 				_startsWithAt(value, i, "$(") &&
@@ -1051,6 +1072,15 @@ class Word extends Node {
 			) {
 				// Find matching close paren using bash-aware matching
 				j = _findCmdsubEnd(value, i + 2);
+				// Inside extglob: don't format, just copy raw content
+				if (extglob_depth > 0) {
+					result.push(value.slice(i, j));
+					if (cmdsub_idx < cmdsub_parts.length) {
+						cmdsub_idx += 1;
+					}
+					i = j;
+					continue;
+				}
 				// Format this command substitution
 				if (cmdsub_idx < cmdsub_parts.length) {
 					node = cmdsub_parts[cmdsub_idx];

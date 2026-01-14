@@ -841,7 +841,25 @@ class Word(Node):
         cmdsub_idx = 0
         procsub_idx = 0
         in_double_quote = False
+        extglob_depth = 0
         while i < len(value):
+            # Check for extglob start: @( ?( *( +( !(
+            if (
+                i > 0
+                and _is_extglob_prefix(value[i - 1])
+                and value[i] == "("
+                and not _is_backslash_escaped(value, i - 1)
+            ):
+                extglob_depth += 1
+                result.append(value[i])
+                i += 1
+                continue
+            # Track ) that closes extglob (but not inside cmdsub/procsub)
+            if value[i] == ")" and extglob_depth > 0:
+                extglob_depth -= 1
+                result.append(value[i])
+                i += 1
+                continue
             # Check for $( command substitution (but not $(( arithmetic or escaped \$()
             if (
                 _starts_with_at(value, i, "$(")
@@ -850,6 +868,13 @@ class Word(Node):
             ):
                 # Find matching close paren using bash-aware matching
                 j = _find_cmdsub_end(value, i + 2)
+                # Inside extglob: don't format, just copy raw content
+                if extglob_depth > 0:
+                    result.append(_substring(value, i, j))
+                    if cmdsub_idx < len(cmdsub_parts):
+                        cmdsub_idx += 1
+                    i = j
+                    continue
                 # Format this command substitution
                 if cmdsub_idx < len(cmdsub_parts):
                     node = cmdsub_parts[cmdsub_idx]

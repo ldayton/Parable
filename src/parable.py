@@ -1824,7 +1824,12 @@ class ArithmeticCommand(Node):
     def to_sexp(self) -> str:
         # bash-oracle format: (arith (word "content"))
         # Redirects are siblings: (arith (word "...")) (redirect ...)
-        escaped = self.raw_content.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+        escaped = (
+            self.raw_content.replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("\n", "\\n")
+            .replace("\t", "\\t")
+        )
         result = '(arith (word "' + escaped + '"))'
         if self.redirects:
             redirect_parts = []

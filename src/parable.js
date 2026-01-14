@@ -2129,7 +2129,8 @@ class ArithmeticCommand extends Node {
 		escaped = this.raw_content
 			.replaceAll("\\", "\\\\")
 			.replaceAll('"', '\\"')
-			.replaceAll("\n", "\\n");
+			.replaceAll("\n", "\\n")
+			.replaceAll("\t", "\\t");
 		result = `(arith (word "${escaped}"))`;
 		if (this.redirects && this.redirects.length) {
 			redirect_parts = [];

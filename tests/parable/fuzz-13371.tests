@@ -1,0 +1,7 @@
+# Fuzzer-discovered parser discrepancy
+
+=== arithmetic command preserves tab
+(( A[5] +=  	6))
+---
+(arith (word " A[5] +=  \t6"))
+---

@@ -25,3 +25,10 @@ a=(
 ---
 (command (word "a=()b"))
 ---
+
+=== trailing backslash at EOF in heredoc
+a <<X
+\
+---
+(command (word "a") (redirect "<<" "\\"))
+---

@@ -1235,7 +1235,11 @@ class HereDoc(Node):
 
     def to_sexp(self) -> str:
         op = "<<-" if self.strip_tabs else "<<"
-        return f'(redirect "{op}" "{self.content}")'
+        content = self.content
+        # Escape trailing backslash (would escape the closing quote otherwise)
+        if content.endswith("\\") and not content.endswith("\\\\"):
+            content = content + "\\"
+        return f'(redirect "{op}" "{content}")'
 
 
 class Subshell(Node):
@@ -5812,12 +5816,13 @@ class Parser:
             # Add line to content (with newline, since we consumed continuations above)
             if strip_tabs:
                 line = line.lstrip("\t")
-            content_lines.append(line + "\n")
-
-            # Move past the newline
+            # Only add newline if there was actually a newline in the source (not EOF)
             if line_end < self.length:
+                content_lines.append(line + "\n")
                 scan_pos = line_end + 1
             else:
+                # EOF - don't add trailing newline
+                content_lines.append(line)
                 scan_pos = self.length
 
         # Join content (newlines already included per line)

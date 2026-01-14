@@ -2766,6 +2766,7 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 		sp,
 		term,
 		term_indent,
+		terminator,
 		then_body,
 		val,
 		variable,
@@ -3033,6 +3034,8 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 	if (node.kind === "brace-group") {
 		body = _formatCmdsubNode(node.body, indent);
 		body = body.replace(/[;]+$/, "");
+		// Don't add semicolon after background operator
+		terminator = body.endsWith(" &") ? " }" : "; }";
 		redirects = "";
 		if (node.redirects && node.redirects.length) {
 			redirect_parts = [];
@@ -3042,9 +3045,9 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 			redirects = redirect_parts.join(" ");
 		}
 		if (redirects && redirects.length) {
-			return `{ ${body}; } ${redirects}`;
+			return `{ ${body}${terminator} ${redirects}`;
 		}
-		return `{ ${body}; }`;
+		return `{ ${body}${terminator}`;
 	}
 	if (node.kind === "arith-cmd") {
 		return `((${node.raw_content}))`;

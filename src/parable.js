@@ -2969,9 +2969,9 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 	}
 	if (node.kind === "negation") {
 		if (node.pipeline) {
-			return `\\! ${_formatCmdsubNode(node.pipeline, indent)}`;
+			return `! ${_formatCmdsubNode(node.pipeline, indent)}`;
 		}
-		return "\\!";
+		return "! ";
 	}
 	if (node.kind === "time") {
 		prefix = node.posix ? "time -p " : "time ";

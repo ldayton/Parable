@@ -616,7 +616,7 @@ x=$(while [[ $a ]]; do echo x; done)
 === negated command in cmdsub
 x=$(! cmd arg)
 ---
-(command (word "x=$(\\! cmd arg)"))
+(command (word "x=$(! cmd arg)"))
 ---
 
 

@@ -2609,8 +2609,8 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
         return "[[ " + body + " ]]"
     if node.kind == "negation":
         if node.pipeline:
-            return "\\! " + _format_cmdsub_node(node.pipeline, indent)
-        return "\\!"
+            return "! " + _format_cmdsub_node(node.pipeline, indent)
+        return "! "
     if node.kind == "time":
         prefix = "time -p " if node.posix else "time "
         if node.pipeline:

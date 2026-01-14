@@ -6300,6 +6300,8 @@ class Parser:
             return None
 
         content = _substring(self.source, content_start, self.pos)
+        # Strip backslash-newline line continuations
+        content = content.replace("\\\n", "")
         self.advance()  # consume first )
         self.advance()  # consume second )
 

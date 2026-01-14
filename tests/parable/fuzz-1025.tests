@@ -1,0 +1,5 @@
+=== whitespace in for loop variable command substitution
+for $( )i;do :;done
+---
+(for (word "$()i") (in (word "\"$@\"")) (command (word ":")))
+---

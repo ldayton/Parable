@@ -449,8 +449,6 @@ class Word(Node):
     def _normalize_array_whitespace(self, value: str) -> str:
         """Normalize whitespace inside array assignments: arr=(a  b\tc) -> arr=(a b c)."""
         # Match array assignment pattern: name=( or name+=(
-        if not value.endswith(")"):
-            return value
         # Parse identifier: starts with letter/underscore, then alnum/underscore
         i = 0
         if not (i < len(value) and (value[i].isalpha() or value[i] == "_")):
@@ -465,10 +463,56 @@ class Word(Node):
         if not (i + 1 < len(value) and value[i] == "=" and value[i + 1] == "("):
             return value
         prefix = _substring(value, 0, i + 1)  # e.g., "arr=" or "arr+="
+        open_paren_pos = i + 1
+        # Find matching closing paren
+        if value.endswith(")"):
+            close_paren_pos = len(value) - 1
+        else:
+            close_paren_pos = self._find_matching_paren(value, open_paren_pos)
+            if close_paren_pos < 0:
+                return value
         # Extract content inside parentheses
-        inner = _substring(value, len(prefix) + 1, len(value) - 1)
+        inner = _substring(value, open_paren_pos + 1, close_paren_pos)
+        suffix = _substring(value, close_paren_pos + 1, len(value))
         result = self._normalize_array_inner(inner)
-        return prefix + "(" + result + ")"
+        return prefix + "(" + result + ")" + suffix
+
+    def _find_matching_paren(self, value: str, open_pos: int) -> int:
+        """Find position of matching ) for ( at open_pos, handling quotes."""
+        if open_pos >= len(value) or value[open_pos] != "(":
+            return -1
+        i = open_pos + 1
+        depth = 1
+        while i < len(value) and depth > 0:
+            ch = value[i]
+            if ch == "'":
+                i += 1
+                while i < len(value) and value[i] != "'":
+                    i += 1
+                i += 1
+            elif ch == '"':
+                i += 1
+                while i < len(value):
+                    if value[i] == "\\" and i + 1 < len(value):
+                        i += 2
+                    elif value[i] == '"':
+                        i += 1
+                        break
+                    else:
+                        i += 1
+            elif ch == "\\" and i + 1 < len(value):
+                i += 2
+            elif ch == "(":
+                depth += 1
+                i += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    return i
+                i += 1
+            else:
+                i += 1
+        return -1
 
     def _normalize_array_inner(self, inner: str) -> str:
         """Normalize whitespace inside array content, handling nested constructs."""
@@ -5136,8 +5180,8 @@ class Parser:
                 self.advance()
                 text = _substring(self.source, start, self.pos)
                 return ParamLength(param), text
-            self.pos = start
-            return None, ""
+            # Not a simple length expansion - fall through to parse as regular expansion
+            self.pos = start + 2  # reset to just after ${
 
         # ${!param} or ${!param<op><arg>} - indirect
         if ch == "!":

@@ -5449,7 +5449,7 @@ class Parser:
                 # These are NOT operators - the @/* is part of the indirect form
                 if not self.at_end() and _is_at_or_star(self.peek()):
                     suffix = self.advance()
-                    while not self.at_end() and _is_whitespace_no_newline(self.peek()):
+                    while not self.at_end() and _is_whitespace(self.peek()):
                         self.advance()
                     if not self.at_end() and self.peek() == "}":
                         self.advance()

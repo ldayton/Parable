@@ -1,0 +1,6 @@
+=== newline in varprefix expansion
+${!x*
+}a
+---
+(command (word "${!x*\n}a"))
+---

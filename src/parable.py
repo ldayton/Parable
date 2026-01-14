@@ -1432,6 +1432,7 @@ class ForArith(Node):
             val = w._expand_all_ansi_c_quotes(s)
             val = w._strip_locale_string_dollars(val)
             val = val.replace("\\", "\\\\").replace('"', '\\"')
+            val = val.replace("\n", "\\n").replace("\t", "\\t")
             return val
 
         suffix = ""
@@ -7013,7 +7014,7 @@ class Parser:
                     # Check for closing ))
                     if self.pos + 1 < self.length and self.source[self.pos + 1] == ")":
                         # End of ((...)) - preserve trailing whitespace
-                        parts.append("".join(current).lstrip())
+                        parts.append("".join(current).lstrip(" \t"))
                         self.advance()  # consume first )
                         self.advance()  # consume second )
                         break
@@ -7021,7 +7022,7 @@ class Parser:
                         current.append(self.advance())
             elif ch == ";" and paren_depth == 0:
                 # Preserve trailing whitespace in expressions
-                parts.append("".join(current).lstrip())
+                parts.append("".join(current).lstrip(" \t"))
                 current = []
                 self.advance()  # consume ;
             else:

@@ -1697,6 +1697,7 @@ class ForArith extends Node {
 			val = w._expandAllAnsiCQuotes(s);
 			val = w._stripLocaleStringDollars(val);
 			val = val.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+			val = val.replaceAll("\n", "\\n").replaceAll("\t", "\\t");
 			return val;
 		}
 
@@ -8270,7 +8271,7 @@ class Parser {
 				) {
 					// Check for closing ))
 					// End of ((...)) - preserve trailing whitespace
-					parts.push(current.join("").trimStart());
+					parts.push(current.join("").replace(/^[ \t]+/, ""));
 					this.advance();
 					this.advance();
 					break;
@@ -8279,7 +8280,7 @@ class Parser {
 				}
 			} else if (ch === ";" && paren_depth === 0) {
 				// Preserve trailing whitespace in expressions
-				parts.push(current.join("").trimStart());
+				parts.push(current.join("").replace(/^[ \t]+/, ""));
 				current = [];
 				this.advance();
 			} else {

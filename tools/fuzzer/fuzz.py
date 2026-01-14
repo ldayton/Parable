@@ -68,8 +68,17 @@ def parse_test_file(filepath: Path) -> list[str]:
 
 def mutate(s: str, num_mutations: int = 1) -> tuple[str, str]:
     """Apply random mutations. Returns (mutated_string, description)."""
+    import re
     if not s:
         return s, "empty"
+    # Protect $'...' and $"..." sequences from mutation
+    protected = []
+    def save(m):
+        protected.append(m.group())
+        return chr(len(protected))  # \x01, \x02, ...
+    s = re.sub(r"\$'[^']*'", save, s)
+    s = re.sub(r'\$"(?:[^"\\]|\\.)*"', save, s)
+    # Mutate
     result = list(s)
     ops = []
     for _ in range(num_mutations):
@@ -92,7 +101,11 @@ def mutate(s: str, num_mutations: int = 1) -> tuple[str, str]:
             old = result[pos]
             result[pos] = random.choice(MUTATION_CHARS)
             ops.append(f"replace {old!r} with {result[pos]!r} at {pos}")
-    return "".join(result), "; ".join(ops) if ops else "no-op"
+    result_str = "".join(result)
+    # Restore protected sequences
+    for i, p in enumerate(protected):
+        result_str = result_str.replace(chr(i + 1), p)
+    return result_str, "; ".join(ops) if ops else "no-op"
 
 
 def run_oracle(input_text: str) -> str | None:

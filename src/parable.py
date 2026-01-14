@@ -562,13 +562,14 @@ class Word(Node):
         i = 0
         in_whitespace = True  # Start true to skip leading whitespace
         brace_depth = 0  # Track ${...} nesting
+        bracket_depth = 0  # Track [...] subscript nesting
         while i < len(inner):
             ch = inner[i]
             if _is_whitespace(ch):
-                if not in_whitespace and normalized and brace_depth == 0:
+                if not in_whitespace and normalized and brace_depth == 0 and bracket_depth == 0:
                     normalized.append(" ")
                     in_whitespace = True
-                if brace_depth > 0:
+                if brace_depth > 0 or bracket_depth > 0:
                     normalized.append(ch)
                 i += 1
             elif ch == "'":
@@ -703,6 +704,17 @@ class Word(Node):
                 # Comment - skip to end of line (only at top level, start of word)
                 while i < len(inner) and inner[i] != "\n":
                     i += 1
+            elif ch == "[":
+                # Start of subscript [...] - preserve whitespace inside
+                in_whitespace = False
+                normalized.append(ch)
+                bracket_depth += 1
+                i += 1
+            elif ch == "]" and bracket_depth > 0:
+                # End of subscript
+                normalized.append(ch)
+                bracket_depth -= 1
+                i += 1
             else:
                 in_whitespace = False
                 normalized.append(ch)

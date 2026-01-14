@@ -1564,6 +1564,8 @@ class Redirect extends Node {
 		target_val = this.target._stripLocaleStringDollars(target_val);
 		// Format command/process substitutions (uses self.target for parts access)
 		target_val = this.target._formatCommandSubstitutions(target_val);
+		// Strip line continuations (backslash-newline) from arithmetic expressions
+		target_val = this.target._stripArithLineContinuations(target_val);
 		// Escape trailing backslash (would escape the closing quote otherwise)
 		if (target_val.endsWith("\\") && !target_val.endsWith("\\\\")) {
 			target_val = `${target_val}\\`;

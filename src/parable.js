@@ -6154,6 +6154,10 @@ class Parser {
 				}
 				// Check for operator (e.g., ${!##} = indirect of # with # op)
 				op = this._consumeParamOperator();
+				if (op == null && !this.atEnd() && this.peek() !== "}") {
+					// Unknown operator - bash still parses these (fails at runtime)
+					op = this.advance();
+				}
 				if (op != null) {
 					// Parse argument until closing brace
 					arg_chars = [];

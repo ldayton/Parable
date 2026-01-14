@@ -6333,9 +6333,13 @@ class Parser {
 						return [new ParamIndirect(param, op, arg), text];
 					}
 				}
+				// Fell through - pattern didn't match, return None
+				this.pos = start;
+				return [null, ""];
+			} else {
+				// ${! followed by non-param char like | - fall through to regular parsing
+				this.pos = start + 2;
 			}
-			this.pos = start;
-			return [null, ""];
 		}
 		// ${param} or ${param<op><arg>}
 		param = this._consumeParamName();

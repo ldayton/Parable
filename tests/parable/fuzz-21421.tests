@@ -1,0 +1,7 @@
+=== pipe char after indirect bang not treated as operator
+a
+${!|y}
+---
+(command (word "a"))
+(command (word "${!|y}"))
+---

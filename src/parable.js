@@ -478,30 +478,41 @@ class Word extends Node {
 	}
 
 	_stripLocaleStringDollars(value) {
-		let ch, i, in_double_quote, in_single_quote, result;
+		let brace_depth, ch, i, in_double_quote, in_single_quote, result;
 		result = [];
 		i = 0;
 		in_single_quote = false;
 		in_double_quote = false;
+		brace_depth = 0;
 		while (i < value.length) {
 			ch = value[i];
-			if (ch === "'" && !in_double_quote) {
-				in_single_quote = !in_single_quote;
-				result.push(ch);
-				i += 1;
-			} else if (ch === '"' && !in_single_quote) {
-				in_double_quote = !in_double_quote;
-				result.push(ch);
-				i += 1;
-			} else if (ch === "\\" && i + 1 < value.length) {
+			if (ch === "\\" && i + 1 < value.length) {
 				// Escape - copy both chars
 				result.push(ch);
 				result.push(value[i + 1]);
 				i += 2;
+			} else if (_startsWithAt(value, i, "${") && !in_single_quote) {
+				brace_depth += 1;
+				result.push("$");
+				result.push("{");
+				i += 2;
+			} else if (ch === "}" && brace_depth > 0 && !in_single_quote) {
+				brace_depth -= 1;
+				result.push(ch);
+				i += 1;
+			} else if (ch === "'" && !in_double_quote && brace_depth === 0) {
+				in_single_quote = !in_single_quote;
+				result.push(ch);
+				i += 1;
+			} else if (ch === '"' && !in_single_quote && brace_depth === 0) {
+				in_double_quote = !in_double_quote;
+				result.push(ch);
+				i += 1;
 			} else if (
 				_startsWithAt(value, i, '$"') &&
 				!in_single_quote &&
-				!in_double_quote
+				!in_double_quote &&
+				brace_depth === 0
 			) {
 				// Locale string $"..." outside quotes - strip the $ and enter double quote
 				result.push('"');

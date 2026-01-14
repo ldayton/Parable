@@ -421,22 +421,37 @@ class Word(Node):
         i = 0
         in_single_quote = False
         in_double_quote = False
+        brace_depth = 0
         while i < len(value):
             ch = value[i]
-            if ch == "'" and not in_double_quote:
-                in_single_quote = not in_single_quote
-                result.append(ch)
-                i += 1
-            elif ch == '"' and not in_single_quote:
-                in_double_quote = not in_double_quote
-                result.append(ch)
-                i += 1
-            elif ch == "\\" and i + 1 < len(value):
+            if ch == "\\" and i + 1 < len(value):
                 # Escape - copy both chars
                 result.append(ch)
                 result.append(value[i + 1])
                 i += 2
-            elif _starts_with_at(value, i, '$"') and not in_single_quote and not in_double_quote:
+            elif _starts_with_at(value, i, "${") and not in_single_quote:
+                brace_depth += 1
+                result.append("$")
+                result.append("{")
+                i += 2
+            elif ch == "}" and brace_depth > 0 and not in_single_quote:
+                brace_depth -= 1
+                result.append(ch)
+                i += 1
+            elif ch == "'" and not in_double_quote and brace_depth == 0:
+                in_single_quote = not in_single_quote
+                result.append(ch)
+                i += 1
+            elif ch == '"' and not in_single_quote and brace_depth == 0:
+                in_double_quote = not in_double_quote
+                result.append(ch)
+                i += 1
+            elif (
+                _starts_with_at(value, i, '$"')
+                and not in_single_quote
+                and not in_double_quote
+                and brace_depth == 0
+            ):
                 # Locale string $"..." outside quotes - strip the $ and enter double quote
                 result.append('"')
                 in_double_quote = True

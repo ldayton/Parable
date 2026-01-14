@@ -1,0 +1,5 @@
+=== trailing backslash in redirect target
+>\
+---
+(command (redirect ">" "\\"))
+---

@@ -5858,8 +5858,18 @@ class Parser:
                 content_lines.append(line + "\n")
                 scan_pos = line_end + 1
             else:
-                # EOF - don't add trailing newline
-                content_lines.append(line)
+                # EOF - bash keeps the trailing newline unless escaped by an odd backslash
+                add_newline = True
+                if not quoted:
+                    trailing_bs = 0
+                    for i in range(len(line) - 1, -1, -1):
+                        if line[i] == "\\":
+                            trailing_bs += 1
+                        else:
+                            break
+                    if trailing_bs % 2 == 1:
+                        add_newline = False
+                content_lines.append(line + ("\n" if add_newline else ""))
                 scan_pos = self.length
 
         # Join content (newlines already included per line)

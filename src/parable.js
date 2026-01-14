@@ -936,7 +936,8 @@ class Word extends Node {
 				}
 			} else if (
 				_startsWithAt(value, idx, "$(") &&
-				!_startsWithAt(value, idx, "$((")
+				!_startsWithAt(value, idx, "$((") &&
+				!_isBackslashEscaped(value, idx)
 			) {
 				has_untracked_cmdsub = true;
 				break;
@@ -962,7 +963,7 @@ class Word extends Node {
 			if (
 				_startsWithAt(value, i, "$(") &&
 				!_startsWithAt(value, i, "$((") &&
-				(i === 0 || value[i - 1] !== "\\")
+				!_isBackslashEscaped(value, i)
 			) {
 				// Find matching close paren using bash-aware matching
 				j = _findCmdsubEnd(value, i + 2);
@@ -1024,7 +1025,7 @@ class Word extends Node {
 				i = j;
 			} else if (
 				(_startsWithAt(value, i, "${ ") || _startsWithAt(value, i, "${|")) &&
-				(i === 0 || value[i - 1] !== "\\")
+				!_isBackslashEscaped(value, i)
 			) {
 				// Check for ${ (space) or ${| brace command substitution
 				// But not if the $ is escaped by a backslash
@@ -1062,7 +1063,7 @@ class Word extends Node {
 				i = j;
 			} else if (
 				_startsWithAt(value, i, "${") &&
-				(i === 0 || value[i - 1] !== "\\")
+				!_isBackslashEscaped(value, i)
 			) {
 				// Process regular ${...} parameter expansions (recursively format cmdsubs inside)
 				// But not if the $ is escaped by a backslash
@@ -3500,6 +3501,17 @@ function _isEscapeCharInDquote(c) {
 
 function _isListTerminator(c) {
 	return c === "\n" || c === "|" || c === ";" || c === "(" || c === ")";
+}
+
+function _isBackslashEscaped(value, idx) {
+	let bs_count, j;
+	bs_count = 0;
+	j = idx - 1;
+	while (j >= 0 && value[j] === "\\") {
+		bs_count += 1;
+		j -= 1;
+	}
+	return bs_count % 2 === 1;
 }
 
 function _isSemicolonOrAmp(c) {

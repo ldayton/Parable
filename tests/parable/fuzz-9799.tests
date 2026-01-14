@@ -1,0 +1,5 @@
+=== time with empty pipeline in comsub
+$(time;)
+---
+(command (word "$(time )"))
+---

@@ -3060,7 +3060,7 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 		if (node.pipeline) {
 			return prefix + _formatCmdsubNode(node.pipeline, indent);
 		}
-		return prefix.trimEnd();
+		return prefix;
 	}
 	// Fallback: return empty for unknown types
 	return "";

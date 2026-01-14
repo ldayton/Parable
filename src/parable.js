@@ -757,8 +757,8 @@ class Word extends Node {
 				normalized.push(ch);
 				brace_depth -= 1;
 				i += 1;
-			} else if (ch === "#" && brace_depth === 0) {
-				// Comment - skip to end of line (only at top level)
+			} else if (ch === "#" && brace_depth === 0 && in_whitespace) {
+				// Comment - skip to end of line (only at top level, start of word)
 				while (i < inner.length && inner[i] !== "\n") {
 					i += 1;
 				}

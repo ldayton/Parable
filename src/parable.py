@@ -644,8 +644,8 @@ class Word(Node):
                 normalized.append(ch)
                 brace_depth -= 1
                 i += 1
-            elif ch == "#" and brace_depth == 0:
-                # Comment - skip to end of line (only at top level)
+            elif ch == "#" and brace_depth == 0 and in_whitespace:
+                # Comment - skip to end of line (only at top level, start of word)
                 while i < len(inner) and inner[i] != "\n":
                     i += 1
             else:

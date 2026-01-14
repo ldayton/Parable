@@ -5894,8 +5894,8 @@ class Parser:
         # they should be a separate word, not an fd. E.g., "2&>1" is command "2"
         # with redirect "&> 1", not fd 2 redirected.
         if ch == "&" and self.pos + 1 < self.length and self.source[self.pos + 1] == ">":
-            if fd is not None:
-                # We consumed digits that should be a word, not an fd
+            if fd is not None or varfd is not None:
+                # We consumed digits/varfd that should be a word, not an fd
                 # Restore position and let parse_word handle them
                 self.pos = start
                 return None

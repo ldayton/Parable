@@ -6926,8 +6926,8 @@ class Parser {
 			this.pos + 1 < this.length &&
 			this.source[this.pos + 1] === ">"
 		) {
-			if (fd != null) {
-				// We consumed digits that should be a word, not an fd
+			if (fd != null || varfd != null) {
+				// We consumed digits/varfd that should be a word, not an fd
 				// Restore position and let parse_word handle them
 				this.pos = start;
 				return null;

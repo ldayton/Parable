@@ -847,6 +847,15 @@ class Word(Node):
                 # Format this process substitution (with in_procsub=True for no-space subshells)
                 node = procsub_parts[procsub_idx]
                 formatted = _format_cmdsub_node(node.command, in_procsub=True)
+                if node.command.kind == "subshell":
+                    raw_content = _substring(value, i + 2, j - 1)
+                    if raw_content.startswith("("):
+                        k = 1
+                        while k < len(raw_content) and _is_whitespace(raw_content[k]):
+                            k += 1
+                        prefix_ws = _substring(raw_content, 1, k)
+                        if prefix_ws and formatted.startswith("("):
+                            formatted = "(" + prefix_ws + formatted[1:]
                 result.append(direction + "(" + formatted + ")")
                 procsub_idx += 1
                 i = j

@@ -1,0 +1,8 @@
+# Fuzz 22420: preserve newlines inside words
+
+=== newline inside word
+<((
+b))
+---
+(command (word "<((\nb))"))
+---

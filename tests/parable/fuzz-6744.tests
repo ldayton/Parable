@@ -1,0 +1,8 @@
+# Fuzz 6744: preserve space after ! before newline in command substitution
+
+=== command substitution negation newline
+$(!
+)
+---
+(command (word "$(! )"))
+---

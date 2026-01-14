@@ -5290,6 +5290,9 @@ class Parser:
                     return None, ""
                 # Check for operator (e.g., ${!##} = indirect of # with # op)
                 op = self._consume_param_operator()
+                if op is None and not self.at_end() and self.peek() != "}":
+                    # Unknown operator - bash still parses these (fails at runtime)
+                    op = self.advance()
                 if op is not None:
                     # Parse argument until closing brace
                     arg_chars = []

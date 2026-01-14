@@ -15,7 +15,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 from parable import ParseError, parse  # noqa: E402
 
 ORACLE_PATH = Path.home() / "source" / "bash-oracle" / "bash-oracle"
-MUTATION_CHARS = list("${}()|&<>;\"'\\` \t\n@")
+MUTATION_CHARS = list("${}()|&<>;\"'\\` \t\n@#![]:=")
 
 
 @dataclass

@@ -516,11 +516,8 @@ class Word extends Node {
 	}
 
 	_normalizeArrayWhitespace(value) {
-		let i, inner, prefix, result;
+		let close_paren_pos, i, inner, open_paren_pos, prefix, result, suffix;
 		// Match array assignment pattern: name=( or name+=(
-		if (!value.endsWith(")")) {
-			return value;
-		}
 		// Parse identifier: starts with letter/underscore, then alnum/underscore
 		i = 0;
 		if (
@@ -544,10 +541,66 @@ class Word extends Node {
 			return value;
 		}
 		prefix = value.slice(0, i + 1);
+		open_paren_pos = i + 1;
+		// Find matching closing paren
+		if (value.endsWith(")")) {
+			close_paren_pos = value.length - 1;
+		} else {
+			close_paren_pos = this._findMatchingParen(value, open_paren_pos);
+			if (close_paren_pos < 0) {
+				return value;
+			}
+		}
 		// Extract content inside parentheses
-		inner = value.slice(prefix.length + 1, value.length - 1);
+		inner = value.slice(open_paren_pos + 1, close_paren_pos);
+		suffix = value.slice(close_paren_pos + 1, value.length);
 		result = this._normalizeArrayInner(inner);
-		return `${prefix}(${result})`;
+		return `${prefix}(${result})${suffix}`;
+	}
+
+	_findMatchingParen(value, open_pos) {
+		let ch, depth, i;
+		if (open_pos >= value.length || value[open_pos] !== "(") {
+			return -1;
+		}
+		i = open_pos + 1;
+		depth = 1;
+		while (i < value.length && depth > 0) {
+			ch = value[i];
+			if (ch === "'") {
+				i += 1;
+				while (i < value.length && value[i] !== "'") {
+					i += 1;
+				}
+				i += 1;
+			} else if (ch === '"') {
+				i += 1;
+				while (i < value.length) {
+					if (value[i] === "\\" && i + 1 < value.length) {
+						i += 2;
+					} else if (value[i] === '"') {
+						i += 1;
+						break;
+					} else {
+						i += 1;
+					}
+				}
+			} else if (ch === "\\" && i + 1 < value.length) {
+				i += 2;
+			} else if (ch === "(") {
+				depth += 1;
+				i += 1;
+			} else if (ch === ")") {
+				depth -= 1;
+				if (depth === 0) {
+					return i;
+				}
+				i += 1;
+			} else {
+				i += 1;
+			}
+		}
+		return -1;
 	}
 
 	_normalizeArrayInner(inner) {
@@ -5973,8 +6026,8 @@ class Parser {
 				text = this.source.slice(start, this.pos);
 				return [new ParamLength(param), text];
 			}
-			this.pos = start;
-			return [null, ""];
+			// Not a simple length expansion - fall through to parse as regular expansion
+			this.pos = start + 2;
 		}
 		// ${!param} or ${!param<op><arg>} - indirect
 		if (ch === "!") {

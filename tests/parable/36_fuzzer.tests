@@ -12,3 +12,16 @@ echo $?\
 ---
 <error>
 ---
+
+=== semicolon in parameter length expansion
+${#a;b}
+---
+(command (word "${#a;b}"))
+---
+
+=== newline in array assignment with trailing text
+a=(
+)b
+---
+(command (word "a=()b"))
+---

@@ -1,0 +1,5 @@
+=== negation with empty command before list terminator
+!;
+---
+(negation (command))
+---

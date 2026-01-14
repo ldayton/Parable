@@ -3104,6 +3104,10 @@ def _is_list_terminator(c: str) -> bool:
     return c == "\n" or c == "|" or c == ";" or c == "(" or c == ")"
 
 
+def _is_negation_boundary(c: str) -> bool:
+    return _is_whitespace(c) or c == ";" or c == "|" or c == ")"
+
+
 def _is_backslash_escaped(value: str, idx: int) -> bool:
     """Return True if value[idx] is escaped by an odd number of backslashes."""
     bs_count = 0
@@ -7907,17 +7911,17 @@ class Parser:
                             self.pos = saved
                     else:
                         self.pos = saved
-                self.skip_whitespace()
+            self.skip_whitespace()
             # Check for ! after time
             if not self.at_end() and self.peek() == "!":
-                if self.pos + 1 >= self.length or _is_whitespace(self.source[self.pos + 1]):
+                if self.pos + 1 >= self.length or _is_negation_boundary(self.source[self.pos + 1]):
                     self.advance()
                     prefix_order = "time_negation"
                     self.skip_whitespace()
 
         # Check for '!' negation prefix (if no time yet)
         elif not self.at_end() and self.peek() == "!":
-            if self.pos + 1 >= self.length or _is_whitespace(self.source[self.pos + 1]):
+            if self.pos + 1 >= self.length or _is_negation_boundary(self.source[self.pos + 1]):
                 self.advance()
                 self.skip_whitespace()
                 # Recursively parse pipeline to handle ! ! cmd, ! time cmd, etc.

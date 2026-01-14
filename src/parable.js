@@ -2875,6 +2875,7 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 		inner_body,
 		inner_sp,
 		is_last,
+		last,
 		name,
 		needs_redirect,
 		p,
@@ -3013,7 +3014,15 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 					}
 					result.push("\n");
 				} else if (p.op === "&") {
-					result.push(" &");
+					// If previous command has heredoc, insert & before heredoc content
+					if (result.length > 0 && result[result.length - 1].includes("\n")) {
+						last = result[result.length - 1];
+						first_nl = last.indexOf("\n");
+						result[result.length - 1] =
+							`${last.slice(0, first_nl)} &${last.slice(first_nl)}`;
+					} else {
+						result.push(" &");
+					}
 				} else {
 					result.push(` ${p.op}`);
 				}
@@ -3032,6 +3041,10 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 		}
 		// Strip trailing ; or newline
 		s = result.join("");
+		// If we have & with heredoc (& before newline content), preserve trailing newline and add space
+		if (s.includes(" &\n") && s.endsWith("\n")) {
+			return `${s} `;
+		}
 		while (s.endsWith(";") || s.endsWith("\n")) {
 			s = s.slice(0, s.length - 1);
 		}

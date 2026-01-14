@@ -2593,7 +2593,13 @@ def _format_cmdsub_node(
                         continue
                     result.append("\n")
                 elif p.op == "&":
-                    result.append(" &")
+                    # If previous command has heredoc, insert & before heredoc content
+                    if result and "\n" in result[len(result) - 1]:
+                        last = result[len(result) - 1]
+                        first_nl = last.find("\n")
+                        result[len(result) - 1] = last[:first_nl] + " &" + last[first_nl:]
+                    else:
+                        result.append(" &")
                 else:
                     result.append(" " + p.op)
             else:
@@ -2602,6 +2608,9 @@ def _format_cmdsub_node(
                 result.append(_format_cmdsub_node(p, indent))
         # Strip trailing ; or newline
         s = "".join(result)
+        # If we have & with heredoc (& before newline content), preserve trailing newline and add space
+        if " &\n" in s and s.endswith("\n"):
+            return s + " "
         while s.endswith(";") or s.endswith("\n"):
             s = _substring(s, 0, len(s) - 1)
         return s

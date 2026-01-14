@@ -72,9 +72,9 @@ jobs:
         run: |
           FILE="${{ steps.claude.outputs.execution_file }}"
           if [ -f "$FILE" ]; then
-            COST=$(jq -r '.[-1].total_cost_usd // 0 | . * 100 | round / 100' "$FILE")
-            INPUT=$(jq -r '.[-1].usage.input_tokens // 0' "$FILE")
-            OUTPUT=$(jq -r '.[-1].usage.output_tokens // 0' "$FILE")
+            COST=$(jq -s '[.[] | select(.type == "result" and .subtype == "success")] | .[-1].total_cost_usd // 0 | . * 100 | round / 100' "$FILE")
+            INPUT=$(jq -s '[.[] | select(.type == "result" and .subtype == "success")] | .[-1].usage.input_tokens // 0' "$FILE")
+            OUTPUT=$(jq -s '[.[] | select(.type == "result" and .subtype == "success")] | .[-1].usage.output_tokens // 0' "$FILE")
           else
             COST=0
             INPUT=0

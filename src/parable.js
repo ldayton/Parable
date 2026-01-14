@@ -358,6 +358,7 @@ class Word extends Node {
 			inner,
 			j,
 			op,
+			quote_stack,
 			result,
 			result_str;
 		result = [];
@@ -366,6 +367,7 @@ class Word extends Node {
 		in_double_quote = false;
 		in_backtick = false;
 		brace_depth = 0;
+		quote_stack = [];
 		while (i < value.length) {
 			ch = value[i];
 			// Track backtick context - don't expand $'...' inside backticks
@@ -391,12 +393,18 @@ class Word extends Node {
 			if (!in_single_quote) {
 				if (_startsWithAt(value, i, "${")) {
 					brace_depth += 1;
+					quote_stack.push([in_single_quote, in_double_quote]);
+					in_single_quote = false;
+					in_double_quote = false;
 					result.push("${");
 					i += 2;
 					continue;
-				} else if (ch === "}" && brace_depth > 0) {
+				} else if (ch === "}" && brace_depth > 0 && !in_double_quote) {
 					brace_depth -= 1;
 					result.push(ch);
+					if (quote_stack) {
+						[in_single_quote, in_double_quote] = quote_stack.pop();
+					}
 					i += 1;
 					continue;
 				}

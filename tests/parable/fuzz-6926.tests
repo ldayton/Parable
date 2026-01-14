@@ -1,0 +1,5 @@
+=== $"..." inside parameter expansion
+${a:-$"x"}
+---
+(command (word "${a:-\"x\"}"))
+---

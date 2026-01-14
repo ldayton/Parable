@@ -1,0 +1,5 @@
+=== process substitution preserves trailing space before ))
+>((a ))
+---
+(command (word ">((a ))"))
+---

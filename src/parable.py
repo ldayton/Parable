@@ -5837,7 +5837,7 @@ class Parser:
                     if "[" in varname or "]" in varname:
                         left = varname.find("[")
                         right = varname.rfind("]")
-                        if left != -1 and right == len(varname) - 1 and right > left:
+                        if left != -1 and right == len(varname) - 1 and right > left + 1:
                             base = varname[:left]
                             if base and (base[0].isalpha() or base[0] == "_"):
                                 is_valid_varfd = True

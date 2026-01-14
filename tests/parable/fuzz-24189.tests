@@ -1,0 +1,5 @@
+=== brace with empty subscript before redirect is a word, not fd var
+{a[]}<x
+---
+(command (word "{a[]}") (redirect "<" "x"))
+---

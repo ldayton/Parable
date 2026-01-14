@@ -6835,7 +6835,11 @@ class Parser {
 					if (varname.includes("[") || varname.includes("]")) {
 						left = varname.indexOf("[");
 						right = varname.lastIndexOf("]");
-						if (left !== -1 && right === varname.length - 1 && right > left) {
+						if (
+							left !== -1 &&
+							right === varname.length - 1 &&
+							right > left + 1
+						) {
 							base = varname.slice(0, left);
 							if (
 								base.length > 0 &&

@@ -3408,7 +3408,8 @@ function _skipHeredoc(value, start) {
 		line_start,
 		paren_depth,
 		quote_char,
-		stripped;
+		stripped,
+		tabs_stripped;
 	i = start + 2;
 	// Handle <<- (strip tabs)
 	if (i < value.length && value[i] === "-") {
@@ -3491,6 +3492,16 @@ function _skipHeredoc(value, start) {
 			} else {
 				return line_end;
 			}
+		}
+		// Check if delimiter followed by ) which closes cmdsub
+		if (
+			stripped.startsWith(delimiter) &&
+			stripped.length > delimiter.length &&
+			stripped[delimiter.length] === ")"
+		) {
+			// Return position of the ) so caller can close the cmdsub
+			tabs_stripped = line.length - stripped.length;
+			return line_start + tabs_stripped + delimiter.length;
 		}
 		if (line_end < value.length) {
 			i = line_end + 1;

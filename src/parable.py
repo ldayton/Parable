@@ -3022,6 +3022,15 @@ def _skip_heredoc(value: str, start: int) -> int:
                 return line_end + 1
             else:
                 return line_end
+        # Check if delimiter followed by ) which closes cmdsub
+        if (
+            stripped.startswith(delimiter)
+            and len(stripped) > len(delimiter)
+            and stripped[len(delimiter)] == ")"
+        ):
+            # Return position of the ) so caller can close the cmdsub
+            tabs_stripped = len(line) - len(stripped)
+            return line_start + tabs_stripped + len(delimiter)
         if line_end < len(value):
             i = line_end + 1
         else:

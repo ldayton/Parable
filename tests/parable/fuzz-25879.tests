@@ -1,0 +1,5 @@
+=== recognize & as metachar after bare $
+$&
+---
+(background (command (word "$")))
+---

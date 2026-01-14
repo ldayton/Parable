@@ -3123,7 +3123,9 @@ def _is_redirect_char(c: str) -> bool:
 
 
 def _is_special_param(c: str) -> bool:
-    return c == "?" or c == "$" or c == "!" or c == "#" or c == "@" or c == "*" or c == "-"
+    return (
+        c == "?" or c == "$" or c == "!" or c == "#" or c == "@" or c == "*" or c == "-" or c == "&"
+    )
 
 
 def _is_digit(c: str) -> bool:

@@ -5204,6 +5204,8 @@ class Parser:
         # ${!param} or ${!param<op><arg>} - indirect
         if ch == "!":
             self.advance()
+            while not self.at_end() and _is_whitespace_no_newline(self.peek()):
+                self.advance()
             param = self._consume_param_name()
             if param:
                 # Skip optional whitespace before closing brace

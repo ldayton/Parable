@@ -7087,7 +7087,7 @@ class Parser {
 		"-ef",
 	]);
 	parseConditionalExpr() {
-		let body;
+		let body, next_pos;
 		this.skipWhitespace();
 		// Check for [[
 		if (
@@ -7095,6 +7095,18 @@ class Parser {
 			this.peek() !== "[" ||
 			this.pos + 1 >= this.length ||
 			this.source[this.pos + 1] !== "["
+		) {
+			return null;
+		}
+		next_pos = this.pos + 2;
+		if (
+			next_pos < this.length &&
+			!(
+				_isWhitespace(this.source[next_pos]) ||
+				(this.source[next_pos] === "\\" &&
+					next_pos + 1 < this.length &&
+					this.source[next_pos + 1] === "\n")
+			)
 		) {
 			return null;
 		}
@@ -9041,8 +9053,12 @@ class Parser {
 			this.pos + 1 < this.length &&
 			this.source[this.pos + 1] === "["
 		) {
-			return this.parseConditionalExpr();
+			result = this.parseConditionalExpr();
+			if (result != null) {
+				return result;
+			}
 		}
+		// Fall through to simple command if [[ is not a conditional keyword
 		// Check for reserved words
 		word = this.peekWord();
 		// Reserved words that cannot start a statement (only valid in specific contexts)

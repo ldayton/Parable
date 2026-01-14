@@ -6079,6 +6079,16 @@ class Parser:
             or self.source[self.pos + 1] != "["
         ):
             return None
+        next_pos = self.pos + 2
+        if next_pos < self.length and not (
+            _is_whitespace(self.source[next_pos])
+            or (
+                self.source[next_pos] == "\\"
+                and next_pos + 1 < self.length
+                and self.source[next_pos + 1] == "\n"
+            )
+        ):
+            return None
 
         self.advance()  # consume first [
         self.advance()  # consume second [
@@ -7701,7 +7711,10 @@ class Parser:
 
         # Conditional expression [[ ]] - check before reserved words
         if ch == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == "[":
-            return self.parse_conditional_expr()
+            result = self.parse_conditional_expr()
+            if result is not None:
+                return result
+            # Fall through to simple command if [[ is not a conditional keyword
 
         # Check for reserved words
         word = self.peek_word()

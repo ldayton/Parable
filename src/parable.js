@@ -409,8 +409,8 @@ class Word extends Node {
 					continue;
 				}
 			}
-			// Inside ${...}, we can expand $'...' even if originally in double quotes
-			effective_in_dquote = in_double_quote && brace_depth === 0;
+			// Double quotes inside ${...} still protect $'...' from expansion
+			effective_in_dquote = in_double_quote;
 			// Track quote state to avoid matching $' inside regular quotes
 			if (ch === "'" && !effective_in_dquote) {
 				// Toggle quote state unless this is $' (handled below)

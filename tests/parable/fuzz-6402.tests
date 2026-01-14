@@ -1,0 +1,5 @@
+=== dollar-single-quote inside double quotes in param expansion
+${a-"$'x'"}
+---
+(command (word "${a-\"$'x'\"}"))
+---

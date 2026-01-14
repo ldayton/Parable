@@ -2495,7 +2495,9 @@ def _format_cond_body(node: Node) -> str:
     return ""
 
 
-def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -> str:
+def _format_cmdsub_node(
+    node: Node, indent: int = 0, in_procsub: bool = False, compact_redirects: bool = False
+) -> str:
     """Format an AST node for command substitution output (bash-oracle pretty-print format)."""
     sp = _repeat_str(" ", indent)
     inner_sp = _repeat_str(" ", indent + 4)
@@ -2510,7 +2512,7 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
             val = w._format_command_substitutions(val)
             parts.append(val)
         for r in node.redirects:
-            parts.append(_format_redirect(r))
+            parts.append(_format_redirect(r, compact=compact_redirects))
         return " ".join(parts)
     if node.kind == "pipeline":
         # Build list of (cmd, needs_pipe_both_redirect) filtering out PipeBoth markers
@@ -2699,7 +2701,7 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
         body = _format_cmdsub_node(inner_body, indent + 4).rstrip(";")
         return f"function {name} () \n{{ \n{inner_sp}{body}\n}}"
     if node.kind == "subshell":
-        body = _format_cmdsub_node(node.body, indent, in_procsub)
+        body = _format_cmdsub_node(node.body, indent, in_procsub, compact_redirects=in_procsub)
         redirects = ""
         if node.redirects:
             redirect_parts = []
@@ -2745,7 +2747,7 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
     return ""
 
 
-def _format_redirect(r: "Redirect | HereDoc") -> str:
+def _format_redirect(r: "Redirect | HereDoc", compact: bool = False) -> str:
     """Format a redirect for command substitution output."""
     if r.kind == "heredoc":
         # Include heredoc content: <<DELIM\ncontent\nDELIM\n
@@ -2789,6 +2791,8 @@ def _format_redirect(r: "Redirect | HereDoc") -> str:
                 op = ">"
             elif op == "0<":
                 op = "<"
+        return op + target
+    if compact:
         return op + target
     return op + " " + target
 

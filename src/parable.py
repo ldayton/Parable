@@ -1265,6 +1265,8 @@ class Redirect(Node):
         target_val = self.target._strip_locale_string_dollars(target_val)
         # Format command/process substitutions (uses self.target for parts access)
         target_val = self.target._format_command_substitutions(target_val)
+        # Strip line continuations (backslash-newline) from arithmetic expressions
+        target_val = self.target._strip_arith_line_continuations(target_val)
         # Escape trailing backslash (would escape the closing quote otherwise)
         if target_val.endswith("\\") and not target_val.endswith("\\\\"):
             target_val = target_val + "\\"

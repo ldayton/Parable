@@ -1,0 +1,6 @@
+=== strip backslash-newline in redirect arith
+>$((1\
+2))
+---
+(command (redirect ">" "$((12))"))
+---

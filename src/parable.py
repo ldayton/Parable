@@ -750,7 +750,11 @@ class Word(Node):
                     idx += 1
                 if idx < len(value):
                     idx += 1  # skip closing quote
-            elif _starts_with_at(value, idx, "$(") and not _starts_with_at(value, idx, "$(("):
+            elif (
+                _starts_with_at(value, idx, "$(")
+                and not _starts_with_at(value, idx, "$((")
+                and not _is_backslash_escaped(value, idx)
+            ):
                 has_untracked_cmdsub = True
                 break
             else:
@@ -772,7 +776,7 @@ class Word(Node):
             if (
                 _starts_with_at(value, i, "$(")
                 and not _starts_with_at(value, i, "$((")
-                and (i == 0 or value[i - 1] != "\\")
+                and not _is_backslash_escaped(value, i)
             ):
                 # Find matching close paren using bash-aware matching
                 j = _find_cmdsub_end(value, i + 2)
@@ -827,9 +831,9 @@ class Word(Node):
                 i = j
             # Check for ${ (space) or ${| brace command substitution
             # But not if the $ is escaped by a backslash
-            elif (_starts_with_at(value, i, "${ ") or _starts_with_at(value, i, "${|")) and (
-                i == 0 or value[i - 1] != "\\"
-            ):
+            elif (
+                _starts_with_at(value, i, "${ ") or _starts_with_at(value, i, "${|")
+            ) and not _is_backslash_escaped(value, i):
                 prefix = _substring(value, i, i + 3)
                 # Find matching close brace
                 j = i + 3
@@ -859,7 +863,7 @@ class Word(Node):
                 i = j
             # Process regular ${...} parameter expansions (recursively format cmdsubs inside)
             # But not if the $ is escaped by a backslash
-            elif _starts_with_at(value, i, "${") and (i == 0 or value[i - 1] != "\\"):
+            elif _starts_with_at(value, i, "${") and not _is_backslash_escaped(value, i):
                 # Find matching close brace, respecting nesting and quotes
                 j = i + 2
                 depth = 1
@@ -3048,6 +3052,16 @@ def _is_escape_char_in_dquote(c: str) -> bool:
 
 def _is_list_terminator(c: str) -> bool:
     return c == "\n" or c == "|" or c == ";" or c == "(" or c == ")"
+
+
+def _is_backslash_escaped(value: str, idx: int) -> bool:
+    """Return True if value[idx] is escaped by an odd number of backslashes."""
+    bs_count = 0
+    j = idx - 1
+    while j >= 0 and value[j] == "\\":
+        bs_count += 1
+        j -= 1
+    return bs_count % 2 == 1
 
 
 def _is_semicolon_or_amp(c: str) -> bool:

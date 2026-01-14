@@ -26,6 +26,12 @@ a=(
 (command (word "a=()b"))
 ---
 
+=== backslash-escaped dollar in quoted command substitution
+"\\$(a)$(b)"
+---
+(command (word "\"\\\\$(a)$(b)\""))
+---
+
 === brace-close before redirect operator
 {]}>a
 ---

@@ -1,0 +1,5 @@
+=== compact redirect in subshell inside process substitution
+<((<=))
+---
+(command (word "<((<=))"))
+---

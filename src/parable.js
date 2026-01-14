@@ -2836,7 +2836,7 @@ function _formatCondBody(node) {
 	return "";
 }
 
-function _formatCmdsubNode(node, indent, in_procsub) {
+function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 	let body,
 		cmd,
 		cmds,
@@ -2883,6 +2883,9 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 	if (in_procsub == null) {
 		in_procsub = false;
 	}
+	if (compact_redirects == null) {
+		compact_redirects = false;
+	}
 	sp = " ".repeat(indent);
 	inner_sp = " ".repeat(indent + 4);
 	if (node.kind === "empty") {
@@ -2898,7 +2901,7 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 			parts.push(val);
 		}
 		for (r of node.redirects) {
-			parts.push(_formatRedirect(r));
+			parts.push(_formatRedirect(r, compact_redirects));
 		}
 		return parts.join(" ");
 	}
@@ -3114,7 +3117,7 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 		return `function ${name} () \n{ \n${inner_sp}${body}\n}`;
 	}
 	if (node.kind === "subshell") {
-		body = _formatCmdsubNode(node.body, indent, in_procsub);
+		body = _formatCmdsubNode(node.body, indent, in_procsub, in_procsub);
 		redirects = "";
 		if (node.redirects && node.redirects.length) {
 			redirect_parts = [];
@@ -3176,8 +3179,11 @@ function _formatCmdsubNode(node, indent, in_procsub) {
 	return "";
 }
 
-function _formatRedirect(r) {
+function _formatRedirect(r, compact) {
 	let after_amp, delim, is_literal_fd, op, target;
+	if (compact == null) {
+		compact = false;
+	}
 	if (r.kind === "heredoc") {
 		// Include heredoc content: <<DELIM\ncontent\nDELIM\n
 		if (r.strip_tabs) {
@@ -3228,6 +3234,9 @@ function _formatRedirect(r) {
 		} else if (op === "0<") {
 			op = "<";
 		}
+		return op + target;
+	}
+	if (compact) {
 		return op + target;
 	}
 	return `${op} ${target}`;

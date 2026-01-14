@@ -2225,10 +2225,14 @@ class ArithmeticCommand extends Node {
 	}
 
 	toSexp() {
-		let escaped, r, redirect_parts, redirect_sexps, result;
+		let escaped, formatted, r, redirect_parts, redirect_sexps, result;
 		// bash-oracle format: (arith (word "content"))
 		// Redirects are siblings: (arith (word "...")) (redirect ...)
-		escaped = this.raw_content
+		// Format command substitutions using Word's method
+		formatted = new Word(this.raw_content)._formatCommandSubstitutions(
+			this.raw_content,
+		);
+		escaped = formatted
 			.replaceAll("\\", "\\\\")
 			.replaceAll('"', '\\"')
 			.replaceAll("\n", "\\n")

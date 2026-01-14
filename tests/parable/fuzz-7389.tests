@@ -1,0 +1,5 @@
+=== param expansion locale strip should not drop dollars in braces
+"${unset="$"}"
+---
+(command (word "\"${unset=\"$\"}\""))
+---

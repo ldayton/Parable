@@ -749,6 +749,44 @@ class Word extends Node {
 				// Preserve command substitution as-is
 				normalized.push(inner.slice(i, j));
 				i = j;
+			} else if (
+				(ch === "<" || ch === ">") &&
+				i + 1 < inner.length &&
+				inner[i + 1] === "("
+			) {
+				// Process substitution <(...) or >(...) - find matching ) and preserve as-is
+				// (formatting is handled later by _format_command_substitutions)
+				in_whitespace = false;
+				j = i + 2;
+				depth = 1;
+				while (j < inner.length && depth > 0) {
+					if (inner[j] === "(") {
+						depth += 1;
+					} else if (inner[j] === ")") {
+						depth -= 1;
+					} else if (inner[j] === "'") {
+						j += 1;
+						while (j < inner.length && inner[j] !== "'") {
+							j += 1;
+						}
+					} else if (inner[j] === '"') {
+						j += 1;
+						while (j < inner.length) {
+							if (inner[j] === "\\" && j + 1 < inner.length) {
+								j += 2;
+								continue;
+							}
+							if (inner[j] === '"') {
+								break;
+							}
+							j += 1;
+						}
+					}
+					j += 1;
+				}
+				// Preserve process substitution as-is
+				normalized.push(inner.slice(i, j));
+				i = j;
 			} else if (ch === "$" && i + 1 < inner.length && inner[i + 1] === "{") {
 				// Start of ${...} expansion
 				in_whitespace = false;
@@ -895,6 +933,28 @@ class Word extends Node {
 		return result;
 	}
 
+	_collectProcsubs(node) {
+		let elem, elements, node_kind, p, parts, result;
+		result = [];
+		node_kind = node.kind ?? null;
+		if (node_kind === "procsub") {
+			result.push(node);
+		} else if (node_kind === "array") {
+			elements = node.elements ?? [];
+			for (elem of elements) {
+				parts = elem.parts ?? [];
+				for (p of parts) {
+					if ((p.kind ?? null) === "procsub") {
+						result.push(p);
+					} else {
+						result.push(...this._collectProcsubs(p));
+					}
+				}
+			}
+		}
+		return result;
+	}
+
 	_formatCommandSubstitutions(value) {
 		let c,
 			cmdsub_idx,
@@ -933,6 +993,7 @@ class Word extends Node {
 				procsub_parts.push(p);
 			} else {
 				cmdsub_parts.push(...this._collectCmdsubs(p));
+				procsub_parts.push(...this._collectProcsubs(p));
 			}
 		}
 		// Check if we have ${ or ${| brace command substitutions to format

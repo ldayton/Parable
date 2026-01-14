@@ -634,6 +634,34 @@ class Word(Node):
                 # Preserve command substitution as-is
                 normalized.append(_substring(inner, i, j))
                 i = j
+            elif (ch == "<" or ch == ">") and i + 1 < len(inner) and inner[i + 1] == "(":
+                # Process substitution <(...) or >(...) - find matching ) and preserve as-is
+                # (formatting is handled later by _format_command_substitutions)
+                in_whitespace = False
+                j = i + 2
+                depth = 1
+                while j < len(inner) and depth > 0:
+                    if inner[j] == "(":
+                        depth += 1
+                    elif inner[j] == ")":
+                        depth -= 1
+                    elif inner[j] == "'":
+                        j += 1
+                        while j < len(inner) and inner[j] != "'":
+                            j += 1
+                    elif inner[j] == '"':
+                        j += 1
+                        while j < len(inner):
+                            if inner[j] == "\\" and j + 1 < len(inner):
+                                j += 2
+                                continue
+                            if inner[j] == '"':
+                                break
+                            j += 1
+                    j += 1
+                # Preserve process substitution as-is
+                normalized.append(_substring(inner, i, j))
+                i = j
             elif ch == "$" and i + 1 < len(inner) and inner[i + 1] == "{":
                 # Start of ${...} expansion
                 in_whitespace = False
@@ -741,6 +769,23 @@ class Word(Node):
             result.extend(self._collect_cmdsubs(false_value))
         return result
 
+    def _collect_procsubs(self, node) -> list:
+        """Recursively collect ProcessSubstitution nodes from an AST node."""
+        result = []
+        node_kind = getattr(node, "kind", None)
+        if node_kind == "procsub":
+            result.append(node)
+        elif node_kind == "array":
+            elements = getattr(node, "elements", [])
+            for elem in elements:
+                parts = getattr(elem, "parts", [])
+                for p in parts:
+                    if getattr(p, "kind", None) == "procsub":
+                        result.append(p)
+                    else:
+                        result.extend(self._collect_procsubs(p))
+        return result
+
     def _format_command_substitutions(self, value: str) -> str:
         """Replace $(...) and >(...) / <(...) with bash-oracle-formatted AST output."""
         # Collect command substitutions from all parts, including nested ones
@@ -753,6 +798,7 @@ class Word(Node):
                 procsub_parts.append(p)
             else:
                 cmdsub_parts.extend(self._collect_cmdsubs(p))
+                procsub_parts.extend(self._collect_procsubs(p))
         # Check if we have ${ or ${| brace command substitutions to format
         has_brace_cmdsub = value.find("${ ") != -1 or value.find("${|") != -1
         # Check if there's an untracked $( that isn't $((, skipping over quotes only

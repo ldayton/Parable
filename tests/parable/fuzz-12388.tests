@@ -1,0 +1,5 @@
+=== pipe normalization in arith-for command substitution
+for (( $(a|b); ; )); do :; done
+---
+(arith-for (init (word "$(a | b)")) (test (word "1")) (step (word "1")) (command (word ":")))
+---

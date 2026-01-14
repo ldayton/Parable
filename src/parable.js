@@ -1889,6 +1889,7 @@ class ForArith extends Node {
 			w = new Word(s, []);
 			val = w._expandAllAnsiCQuotes(s);
 			val = w._stripLocaleStringDollars(val);
+			val = w._formatCommandSubstitutions(val);
 			val = val.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 			val = val.replaceAll("\n", "\\n").replaceAll("\t", "\\t");
 			return val;

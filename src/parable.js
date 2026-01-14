@@ -556,8 +556,15 @@ class Word extends Node {
 	}
 
 	_normalizeArrayWhitespace(value) {
-		let close_paren_pos, i, inner, open_paren_pos, prefix, result, suffix;
-		// Match array assignment pattern: name=( or name+=(
+		let close_paren_pos,
+			depth,
+			i,
+			inner,
+			open_paren_pos,
+			prefix,
+			result,
+			suffix;
+		// Match array assignment pattern: name=( or name+=( or name[sub]=( or name[sub]+=(
 		// Parse identifier: starts with letter/underscore, then alnum/underscore
 		i = 0;
 		if (
@@ -571,6 +578,22 @@ class Word extends Node {
 			(/^[a-zA-Z0-9]$/.test(value[i]) || value[i] === "_")
 		) {
 			i += 1;
+		}
+		// Optional subscript(s): [...]
+		while (i < value.length && value[i] === "[") {
+			depth = 1;
+			i += 1;
+			while (i < value.length && depth > 0) {
+				if (value[i] === "[") {
+					depth += 1;
+				} else if (value[i] === "]") {
+					depth -= 1;
+				}
+				i += 1;
+			}
+			if (depth !== 0) {
+				return value;
+			}
 		}
 		// Optional + for +=
 		if (i < value.length && value[i] === "+") {

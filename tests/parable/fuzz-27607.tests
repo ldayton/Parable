@@ -1,0 +1,5 @@
+=== word split after glob bracket with parameter expansion
+.a[ ${a[*]:-b}
+---
+(command (word ".a[") (word "${a[*]:-b}"))
+---

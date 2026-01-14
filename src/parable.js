@@ -3236,6 +3236,10 @@ function _formatRedirect(r, compact) {
 		}
 		return op + target;
 	}
+	// For >& and <& (fd dup operators), no space before target
+	if (op.endsWith("&")) {
+		return op + target;
+	}
 	if (compact) {
 		return op + target;
 	}

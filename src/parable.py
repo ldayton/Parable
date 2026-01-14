@@ -2792,6 +2792,9 @@ def _format_redirect(r: "Redirect | HereDoc", compact: bool = False) -> str:
             elif op == "0<":
                 op = "<"
         return op + target
+    # For >& and <& (fd dup operators), no space before target
+    if op.endswith("&"):
+        return op + target
     if compact:
         return op + target
     return op + " " + target

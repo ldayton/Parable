@@ -1139,7 +1139,7 @@ class Word extends Node {
 					try {
 						parser = new Parser(inner);
 						parsed = parser.parseList();
-						formatted = parsed ? _formatCmdsubNode(parsed) : inner;
+						formatted = parsed ? _formatCmdsubNode(parsed) : "";
 					} catch (_) {
 						formatted = inner;
 					}
@@ -1829,7 +1829,15 @@ class For extends Node {
 	}
 
 	toSexp() {
-		let r, redirect_parts, suffix, var_escaped, w, word_parts, word_strs;
+		let r,
+			redirect_parts,
+			suffix,
+			temp_word,
+			var_escaped,
+			var_formatted,
+			w,
+			word_parts,
+			word_strs;
 		// bash-oracle format: (for (word "var") (in (word "a") ...) body)
 		suffix = "";
 		if (this.redirects && this.redirects.length) {
@@ -1839,7 +1847,10 @@ class For extends Node {
 			}
 			suffix = ` ${redirect_parts.join(" ")}`;
 		}
-		var_escaped = this.variable.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+		// Format command substitutions in var (e.g., for $(echo i) normalizes whitespace)
+		temp_word = new Word(this.variable, []);
+		var_formatted = temp_word._formatCommandSubstitutions(this.variable);
+		var_escaped = var_formatted.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 		if (this.words == null) {
 			// No 'in' clause - bash-oracle implies (in (word "\"$@\""))
 			return `(for (word "${var_escaped}") (in (word "\\"$@\\"")) ${this.body.toSexp()})${suffix}`;

@@ -909,7 +909,7 @@ class Word(Node):
                     try:
                         parser = Parser(inner)
                         parsed = parser.parse_list()
-                        formatted = _format_cmdsub_node(parsed) if parsed else inner
+                        formatted = _format_cmdsub_node(parsed) if parsed else ""
                     except Exception:
                         formatted = inner
                 # Add space after $( if content starts with ( to avoid $((
@@ -1517,7 +1517,10 @@ class For(Node):
             for r in self.redirects:
                 redirect_parts.append(r.to_sexp())
             suffix = " " + " ".join(redirect_parts)
-        var_escaped = self.var.replace("\\", "\\\\").replace('"', '\\"')
+        # Format command substitutions in var (e.g., for $(echo i) normalizes whitespace)
+        temp_word = Word(self.var, [])
+        var_formatted = temp_word._format_command_substitutions(self.var)
+        var_escaped = var_formatted.replace("\\", "\\\\").replace('"', '\\"')
         if self.words is None:
             # No 'in' clause - bash-oracle implies (in (word "\"$@\""))
             return (

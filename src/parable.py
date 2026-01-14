@@ -1574,6 +1574,7 @@ class ForArith(Node):
             w = Word(s, [])
             val = w._expand_all_ansi_c_quotes(s)
             val = w._strip_locale_string_dollars(val)
+            val = w._format_command_substitutions(val)
             val = val.replace("\\", "\\\\").replace('"', '\\"')
             val = val.replace("\n", "\\n").replace("\t", "\\t")
             return val

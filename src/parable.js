@@ -527,8 +527,7 @@ class Word extends Node {
 			} else if (
 				_startsWithAt(value, i, '$"') &&
 				!in_single_quote &&
-				!in_double_quote &&
-				brace_depth === 0
+				!in_double_quote
 			) {
 				// Count consecutive $ chars ending at i to check for $$ (PID param)
 				dollar_count = 1;

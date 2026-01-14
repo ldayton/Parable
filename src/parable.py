@@ -455,12 +455,7 @@ class Word(Node):
                 in_double_quote = not in_double_quote
                 result.append(ch)
                 i += 1
-            elif (
-                _starts_with_at(value, i, '$"')
-                and not in_single_quote
-                and not in_double_quote
-                and brace_depth == 0
-            ):
+            elif _starts_with_at(value, i, '$"') and not in_single_quote and not in_double_quote:
                 # Count consecutive $ chars ending at i to check for $$ (PID param)
                 dollar_count = 1
                 j = i - 1

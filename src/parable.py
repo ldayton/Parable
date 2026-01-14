@@ -324,6 +324,7 @@ class Word(Node):
         in_double_quote = False
         in_backtick = False  # Track backtick substitutions - don't expand inside
         brace_depth = 0  # Track ${...} nesting - inside braces, $'...' is expanded
+        quote_stack: list[tuple[bool, bool]] = []
         while i < len(value):
             ch = value[i]
             # Track backtick context - don't expand $'...' inside backticks
@@ -346,12 +347,17 @@ class Word(Node):
             if not in_single_quote:
                 if _starts_with_at(value, i, "${"):
                     brace_depth += 1
+                    quote_stack.append((in_single_quote, in_double_quote))
+                    in_single_quote = False
+                    in_double_quote = False
                     result.append("${")
                     i += 2
                     continue
-                elif ch == "}" and brace_depth > 0:
+                elif ch == "}" and brace_depth > 0 and not in_double_quote:
                     brace_depth -= 1
                     result.append(ch)
+                    if quote_stack:
+                        in_single_quote, in_double_quote = quote_stack.pop()
                     i += 1
                     continue
             # Inside ${...}, we can expand $'...' even if originally in double quotes

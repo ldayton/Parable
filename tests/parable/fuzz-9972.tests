@@ -1,0 +1,5 @@
+=== redirect in procsub inside array assignment
+a=(<(<b))
+---
+(command (word "a=(<(< b))"))
+---

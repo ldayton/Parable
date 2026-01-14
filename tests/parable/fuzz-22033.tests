@@ -1,0 +1,5 @@
+=== redirect inside command substitution in arith
+(($(a>b c)))
+---
+(arith (word "$(a c > b)"))
+---

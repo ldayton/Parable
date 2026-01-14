@@ -1907,8 +1907,10 @@ class ArithmeticCommand(Node):
     def to_sexp(self) -> str:
         # bash-oracle format: (arith (word "content"))
         # Redirects are siblings: (arith (word "...")) (redirect ...)
+        # Format command substitutions using Word's method
+        formatted = Word(self.raw_content)._format_command_substitutions(self.raw_content)
         escaped = (
-            self.raw_content.replace("\\", "\\\\")
+            formatted.replace("\\", "\\\\")
             .replace('"', '\\"')
             .replace("\n", "\\n")
             .replace("\t", "\\t")

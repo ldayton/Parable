@@ -4300,9 +4300,13 @@ class Parser {
 				if (procsub_node) {
 					parts.push(procsub_node);
 					chars.push(procsub_text);
+				} else if (procsub_text) {
+					// Not a valid process substitution, treat full <(...) as literal
+					chars.push(procsub_text);
 				} else {
-					// Not a process substitution, treat as metacharacter
-					break;
+					// Couldn't parse at all, treat <( as literal chars
+					chars.push(this.advance());
+					chars.push(this.advance());
 				}
 			} else if (
 				ch === "(" &&
@@ -5023,6 +5027,11 @@ class Parser {
 		cmd = sub_parser.parseList();
 		if (cmd == null) {
 			cmd = new Empty();
+		}
+		// If content wasn't fully consumed, this isn't a valid process substitution
+		// Return the text so caller can treat it as literal characters
+		if (!sub_parser.atEnd()) {
+			return [null, text];
 		}
 		return [new ProcessSubstitution(direction, cmd), text];
 	}

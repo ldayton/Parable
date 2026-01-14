@@ -6597,7 +6597,8 @@ class Parser {
 			target,
 			varfd,
 			varname,
-			varname_chars;
+			varname_chars,
+			word_start;
 		this.skipWhitespace();
 		if (this.atEnd()) {
 			return null;
@@ -6793,6 +6794,7 @@ class Parser {
 				!this.atEnd() &&
 				(/^[0-9]+$/.test(this.peek()) || this.peek() === "-")
 			) {
+				word_start = this.pos;
 				fd_chars = [];
 				while (!this.atEnd() && /^[0-9]+$/.test(this.peek())) {
 					fd_chars.push(this.advance());
@@ -6806,7 +6808,22 @@ class Parser {
 				if (!this.atEnd() && this.peek() === "-") {
 					fd_target += this.advance();
 				}
-				target = new Word(`&${fd_target}`);
+				// If more word characters follow, treat the whole target as a word (e.g., <&0=)
+				if (!this.atEnd() && !_isMetachar(this.peek())) {
+					this.pos = word_start;
+					inner_word = this.parseWord();
+					if (inner_word != null) {
+						target = new Word(`&${inner_word.value}`);
+						target.parts = inner_word.parts;
+					} else {
+						throw new ParseError(
+							`Expected target for redirect ${op}`,
+							this.pos,
+						);
+					}
+				} else {
+					target = new Word(`&${fd_target}`);
+				}
 			} else {
 				// Could be &$var or &word - parse word and prepend &
 				inner_word = this.parseWord();

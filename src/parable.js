@@ -3630,6 +3630,18 @@ function _isSpecialParam(c) {
 	);
 }
 
+function _isSpecialParamUnbraced(c) {
+	return (
+		c === "?" ||
+		c === "$" ||
+		c === "!" ||
+		c === "#" ||
+		c === "@" ||
+		c === "*" ||
+		c === "-"
+	);
+}
+
 function _isDigit(c) {
 	return c >= "0" && c <= "9";
 }
@@ -6233,8 +6245,8 @@ class Parser {
 			return this._parseBracedParam(start);
 		}
 		// Simple expansion $var or $special
-		// Special parameters: ?$!#@*-0-9
-		if (_isSpecialParamOrDigit(ch) || ch === "#") {
+		// Special parameters: ?$!#@*-0-9 (but NOT & which is a shell metachar)
+		if (_isSpecialParamUnbraced(ch) || _isDigit(ch) || ch === "#") {
 			this.advance();
 			text = this.source.slice(start, this.pos);
 			return [new ParamExpansion(ch), text];

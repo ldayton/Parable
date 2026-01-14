@@ -3137,6 +3137,11 @@ def _is_special_param(c: str) -> bool:
     )
 
 
+def _is_special_param_unbraced(c: str) -> bool:
+    """Special params valid after bare $ (excludes & which is a shell metachar)."""
+    return c == "?" or c == "$" or c == "!" or c == "#" or c == "@" or c == "*" or c == "-"
+
+
 def _is_digit(c: str) -> bool:
     return c >= "0" and c <= "9"
 
@@ -5349,8 +5354,8 @@ class Parser:
             return self._parse_braced_param(start)
 
         # Simple expansion $var or $special
-        # Special parameters: ?$!#@*-0-9
-        if _is_special_param_or_digit(ch) or ch == "#":
+        # Special parameters: ?$!#@*-0-9 (but NOT & which is a shell metachar)
+        if _is_special_param_unbraced(ch) or _is_digit(ch) or ch == "#":
             self.advance()
             text = _substring(self.source, start, self.pos)
             return ParamExpansion(ch), text

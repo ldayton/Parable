@@ -6525,8 +6525,8 @@ class Parser {
 		} else if (fd != null) {
 			op = String(fd) + op;
 		}
-		this.skipWhitespace();
 		// Handle fd duplication targets like &1, &2, &-, &10-, &$var
+		// NOTE: No whitespace allowed between operator and & (e.g., <&- is valid, < &- is not)
 		if (!this.atEnd() && this.peek() === "&") {
 			this.advance();
 			// Parse the fd number or - for close, including move syntax like &10-
@@ -6559,6 +6559,7 @@ class Parser {
 				}
 			}
 		} else {
+			this.skipWhitespace();
 			target = this.parseWord();
 		}
 		if (target == null) {

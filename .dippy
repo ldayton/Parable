@@ -22,8 +22,12 @@ deny just test-all "Don't worry about other Python versions, `just test` and `ju
 #---- Bash ----#
 deny bash * "Use `~/source/bash-oracle/bash-oracle -e`"
 deny node tests/* "Use `just test-js`"
+allow ~/source/bash-oracle/bash-oracle *
 deny-redirect * "Redirects only allowed to /tmp/* or to stdin/stderr"
 allow-redirect /tmp/**
 
 #---- Javascript ----#
 allow node -e *
+
+#---- After ----#
+# after git commit * "re-read ~/source/Parable/tools/fuzzer/prompt.md and continue to next iteration"

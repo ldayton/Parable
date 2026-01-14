@@ -3757,6 +3757,74 @@ class Parser {
 		return true;
 	}
 
+	_hasArrayAssignmentSubscript(start) {
+		let c, depth, i, in_double, in_single;
+		i = start + 1;
+		depth = 1;
+		in_single = false;
+		in_double = false;
+		while (i < this.length) {
+			c = this.source[i];
+			if (in_single) {
+				if (c === "'") {
+					in_single = false;
+				}
+				i += 1;
+				continue;
+			}
+			if (in_double) {
+				if (c === "\\" && i + 1 < this.length) {
+					i += 2;
+					continue;
+				}
+				if (c === '"') {
+					in_double = false;
+				}
+				i += 1;
+				continue;
+			}
+			if (c === "'") {
+				in_single = true;
+				i += 1;
+				continue;
+			}
+			if (c === '"') {
+				in_double = true;
+				i += 1;
+				continue;
+			}
+			if (c === "\\" && i + 1 < this.length) {
+				i += 2;
+				continue;
+			}
+			if (c === "[") {
+				depth += 1;
+				i += 1;
+				continue;
+			}
+			if (c === "]") {
+				depth -= 1;
+				if (depth === 0) {
+					if (i + 1 < this.length && this.source[i + 1] === "=") {
+						return true;
+					}
+					if (
+						i + 2 < this.length &&
+						this.source[i + 1] === "+" &&
+						this.source[i + 2] === "="
+					) {
+						return true;
+					}
+					return false;
+				}
+				i += 1;
+				continue;
+			}
+			i += 1;
+		}
+		return false;
+	}
+
 	parseWord(at_command_start) {
 		let ansi_node,
 			ansi_result,
@@ -3813,12 +3881,18 @@ class Parser {
 			// Only at command start (array assignments), not in argument position
 			// Only BEFORE = sign (key=1],a[1 should not track the [1 part)
 			// Only after identifier char (not [[ which is conditional keyword)
+			if (ch === "[" && bracket_depth > 0) {
+				bracket_depth += 1;
+				chars.push(this.advance());
+				continue;
+			}
 			if (ch === "[" && chars && at_command_start && !seen_equals) {
 				prev_char = chars[chars.length - 1];
 				if (
-					/^[a-zA-Z0-9]$/.test(prev_char) ||
-					prev_char === "_" ||
-					prev_char === "]"
+					(/^[a-zA-Z0-9]$/.test(prev_char) ||
+						prev_char === "_" ||
+						prev_char === "]") &&
+					this._hasArrayAssignmentSubscript(this.pos)
 				) {
 					bracket_depth += 1;
 					chars.push(this.advance());

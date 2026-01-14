@@ -3272,6 +3272,60 @@ class Parser:
             self.advance()  # skip newline
         return True
 
+    def _has_array_assignment_subscript(self, start: int) -> bool:
+        """Return True if a '[' at start introduces an array subscript in an assignment word."""
+        i = start + 1
+        depth = 1
+        in_single = False
+        in_double = False
+
+        while i < self.length:
+            c = self.source[i]
+            if in_single:
+                if c == "'":
+                    in_single = False
+                i += 1
+                continue
+            if in_double:
+                if c == "\\" and i + 1 < self.length:
+                    i += 2
+                    continue
+                if c == '"':
+                    in_double = False
+                i += 1
+                continue
+            if c == "'":
+                in_single = True
+                i += 1
+                continue
+            if c == '"':
+                in_double = True
+                i += 1
+                continue
+            if c == "\\" and i + 1 < self.length:
+                i += 2
+                continue
+            if c == "[":
+                depth += 1
+                i += 1
+                continue
+            if c == "]":
+                depth -= 1
+                if depth == 0:
+                    if i + 1 < self.length and self.source[i + 1] == "=":
+                        return True
+                    if (
+                        i + 2 < self.length
+                        and self.source[i + 1] == "+"
+                        and self.source[i + 2] == "="
+                    ):
+                        return True
+                    return False
+                i += 1
+                continue
+            i += 1
+        return False
+
     def parse_word(self, at_command_start: bool = False) -> Word | None:
         """Parse a word token, detecting parameter expansions and command substitutions.
 
@@ -3298,9 +3352,15 @@ class Parser:
             # Only at command start (array assignments), not in argument position
             # Only BEFORE = sign (key=1],a[1 should not track the [1 part)
             # Only after identifier char (not [[ which is conditional keyword)
+            if ch == "[" and bracket_depth > 0:
+                bracket_depth += 1
+                chars.append(self.advance())
+                continue
             if ch == "[" and chars and at_command_start and not seen_equals:
                 prev_char = chars[len(chars) - 1]
-                if prev_char.isalnum() or (prev_char == "_" or prev_char == "]"):
+                if (
+                    prev_char.isalnum() or (prev_char == "_" or prev_char == "]")
+                ) and self._has_array_assignment_subscript(self.pos):
                     bracket_depth += 1
                     chars.append(self.advance())
                     continue

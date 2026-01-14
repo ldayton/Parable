@@ -1,0 +1,5 @@
+=== word split after unterminated bracket literal
+@a[ $((0))
+---
+(command (word "@a[") (word "$((0))"))
+---

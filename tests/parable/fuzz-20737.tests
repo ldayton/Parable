@@ -1,0 +1,5 @@
+=== $$ followed by double quote should not strip $
+: $$"x"
+---
+(command (word ":") (word "$$\"x\""))
+---

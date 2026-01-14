@@ -5814,6 +5814,7 @@ class Parser:
             self.advance()  # consume &
             # Parse the fd number or - for close, including move syntax like &10-
             if not self.at_end() and (self.peek().isdigit() or self.peek() == "-"):
+                word_start = self.pos
                 fd_chars = []
                 while not self.at_end() and self.peek().isdigit():
                     fd_chars.append(self.advance())
@@ -5824,7 +5825,17 @@ class Parser:
                 # Handle just - for close, or N- for move syntax
                 if not self.at_end() and self.peek() == "-":
                     fd_target += self.advance()  # consume the trailing -
-                target = Word("&" + fd_target)
+                # If more word characters follow, treat the whole target as a word (e.g., <&0=)
+                if not self.at_end() and not _is_metachar(self.peek()):
+                    self.pos = word_start
+                    inner_word = self.parse_word()
+                    if inner_word is not None:
+                        target = Word("&" + inner_word.value)
+                        target.parts = inner_word.parts
+                    else:
+                        raise ParseError("Expected target for redirect " + op, pos=self.pos)
+                else:
+                    target = Word("&" + fd_target)
             else:
                 # Could be &$var or &word - parse word and prepend &
                 inner_word = self.parse_word()

@@ -2630,7 +2630,7 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
         prefix = "time -p " if node.posix else "time "
         if node.pipeline:
             return prefix + _format_cmdsub_node(node.pipeline, indent)
-        return prefix.rstrip()
+        return prefix
     # Fallback: return empty for unknown types
     return ""
 

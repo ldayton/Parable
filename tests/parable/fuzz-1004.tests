@@ -1,0 +1,7 @@
+=== async command with preceding heredoc redirect
+$(<<E a&
+E
+)
+---
+(command (word "$(a <<E &\nE\n )"))
+---

@@ -1,0 +1,7 @@
+=== bracket after subscript is literal
+a[][
+y
+---
+(command (word "a[]["))
+(command (word "y"))
+---

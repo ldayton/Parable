@@ -4115,11 +4115,7 @@ class Parser {
 					_isArrayAssignmentPrefix(chars)
 				) {
 					prev_char = chars[chars.length - 1];
-					if (
-						/^[a-zA-Z0-9]$/.test(prev_char) ||
-						prev_char === "_" ||
-						prev_char === "]"
-					) {
+					if (/^[a-zA-Z0-9]$/.test(prev_char) || prev_char === "_") {
 						bracket_depth += 1;
 						chars.push(this.advance());
 						continue;

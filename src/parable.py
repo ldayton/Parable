@@ -2654,6 +2654,8 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
     if node.kind == "brace-group":
         body = _format_cmdsub_node(node.body, indent)
         body = body.rstrip(";")  # Strip trailing semicolons before adding our own
+        # Don't add semicolon after background operator
+        terminator = " }" if body.endswith(" &") else "; }"
         redirects = ""
         if node.redirects:
             redirect_parts = []
@@ -2661,8 +2663,8 @@ def _format_cmdsub_node(node: Node, indent: int = 0, in_procsub: bool = False) -
                 redirect_parts.append(_format_redirect(r))
             redirects = " ".join(redirect_parts)
         if redirects:
-            return "{ " + body + "; } " + redirects
-        return "{ " + body + "; }"
+            return "{ " + body + terminator + " " + redirects
+        return "{ " + body + terminator
     if node.kind == "arith-cmd":
         return "((" + node.raw_content + "))"
     if node.kind == "cond-expr":

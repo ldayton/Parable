@@ -1,0 +1,5 @@
+=== background in brace group inside command substitution
+$({ x& })
+---
+(command (word "$({ x & })"))
+---

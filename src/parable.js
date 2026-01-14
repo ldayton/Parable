@@ -6348,6 +6348,62 @@ class Parser {
 		return [new ParamExpansion(param, op, arg), text];
 	}
 
+	_paramSubscriptHasClose(start_pos) {
+		let c, depth, i, in_double, in_single;
+		depth = 1;
+		i = start_pos + 1;
+		in_single = false;
+		in_double = false;
+		while (i < this.length) {
+			c = this.source[i];
+			if (in_single) {
+				if (c === "'") {
+					in_single = false;
+				}
+				i += 1;
+				continue;
+			}
+			if (in_double) {
+				if (c === "\\" && i + 1 < this.length) {
+					i += 2;
+					continue;
+				}
+				if (c === '"') {
+					in_double = false;
+				}
+				i += 1;
+				continue;
+			}
+			if (c === "'") {
+				in_single = true;
+				i += 1;
+				continue;
+			}
+			if (c === '"') {
+				in_double = true;
+				i += 1;
+				continue;
+			}
+			if (c === "\\") {
+				i += 2;
+				continue;
+			}
+			if (c === "}") {
+				return false;
+			}
+			if (c === "[") {
+				depth += 1;
+			} else if (c === "]") {
+				depth -= 1;
+				if (depth === 0) {
+					return true;
+				}
+			}
+			i += 1;
+		}
+		return false;
+	}
+
 	_consumeParamName() {
 		let bracket_depth, c, ch, name_chars, sc;
 		if (this.atEnd()) {
@@ -6375,6 +6431,9 @@ class Parser {
 				if (/^[a-zA-Z0-9]$/.test(c) || c === "_") {
 					name_chars.push(this.advance());
 				} else if (c === "[") {
+					if (!this._paramSubscriptHasClose(this.pos)) {
+						break;
+					}
 					// Array subscript - track bracket depth
 					name_chars.push(this.advance());
 					bracket_depth = 1;

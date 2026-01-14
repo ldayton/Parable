@@ -1,0 +1,5 @@
+=== double-bracket word without space
+[[:"a" == b ]]
+---
+(command (word "[[:\"a\"") (word "==") (word "b") (word "]]"))
+---

@@ -1,0 +1,5 @@
+=== ansi-c quote after braced default with embedded quote
+"${y:-"}"$'\n'}"
+---
+(command (word "\"${y:-\"}\"\n}\""))
+---

@@ -1502,6 +1502,10 @@ class Redirect extends Node {
 		target_val = this.target._stripLocaleStringDollars(target_val);
 		// Format command/process substitutions (uses self.target for parts access)
 		target_val = this.target._formatCommandSubstitutions(target_val);
+		// Escape trailing backslash (would escape the closing quote otherwise)
+		if (target_val.endsWith("\\") && !target_val.endsWith("\\\\")) {
+			target_val = `${target_val}\\`;
+		}
 		// For fd duplication, target starts with & (e.g., "&1", "&2", "&-")
 		if (target_val.startsWith("&")) {
 			// Determine the real operator

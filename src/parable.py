@@ -1216,6 +1216,9 @@ class Redirect(Node):
         target_val = self.target._strip_locale_string_dollars(target_val)
         # Format command/process substitutions (uses self.target for parts access)
         target_val = self.target._format_command_substitutions(target_val)
+        # Escape trailing backslash (would escape the closing quote otherwise)
+        if target_val.endswith("\\") and not target_val.endswith("\\\\"):
+            target_val = target_val + "\\"
         # For fd duplication, target starts with & (e.g., "&1", "&2", "&-")
         if target_val.startswith("&"):
             # Determine the real operator

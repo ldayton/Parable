@@ -3630,6 +3630,18 @@ function _isSpecialParam(c) {
 	);
 }
 
+function _isSimpleSpecialParam(c) {
+	return (
+		c === "?" ||
+		c === "$" ||
+		c === "!" ||
+		c === "#" ||
+		c === "@" ||
+		c === "*" ||
+		c === "-"
+	);
+}
+
 function _isDigit(c) {
 	return c >= "0" && c <= "9";
 }
@@ -3708,6 +3720,10 @@ function _isArrayAssignmentPrefix(chars) {
 
 function _isSpecialParamOrDigit(c) {
 	return _isSpecialParam(c) || _isDigit(c);
+}
+
+function _isSimpleSpecialParamOrDigit(c) {
+	return _isSimpleSpecialParam(c) || _isDigit(c);
 }
 
 function _isParamExpansionOp(c) {
@@ -6242,8 +6258,8 @@ class Parser {
 			return this._parseBracedParam(start);
 		}
 		// Simple expansion $var or $special
-		// Special parameters: ?$!#@*-0-9
-		if (_isSpecialParamOrDigit(ch) || ch === "#") {
+		// Special parameters: ?$!#@*-0-9 (but not & which is the background operator)
+		if (_isSimpleSpecialParamOrDigit(ch) || ch === "#") {
 			this.advance();
 			text = this.source.slice(start, this.pos);
 			return [new ParamExpansion(ch), text];

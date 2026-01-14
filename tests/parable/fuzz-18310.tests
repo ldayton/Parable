@@ -1,0 +1,5 @@
+=== ampersand is not a special parameter
+$&
+---
+(background (command (word "$")))
+---

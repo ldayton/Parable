@@ -3137,6 +3137,15 @@ def _is_special_param(c: str) -> bool:
     )
 
 
+def _is_simple_special_param(c: str) -> bool:
+    """Special parameters valid for unbraced $X expansion in command context.
+
+    Unlike braced ${&} or arithmetic $(($&)), simple $& in command context
+    should not treat & as a special parameter since & is the background operator.
+    """
+    return c == "?" or c == "$" or c == "!" or c == "#" or c == "@" or c == "*" or c == "-"
+
+
 def _is_digit(c: str) -> bool:
     return c >= "0" and c <= "9"
 
@@ -3206,6 +3215,10 @@ def _is_array_assignment_prefix(chars: list[str]) -> bool:
 
 def _is_special_param_or_digit(c: str) -> bool:
     return _is_special_param(c) or _is_digit(c)
+
+
+def _is_simple_special_param_or_digit(c: str) -> bool:
+    return _is_simple_special_param(c) or _is_digit(c)
 
 
 def _is_param_expansion_op(c: str) -> bool:
@@ -5358,8 +5371,8 @@ class Parser:
             return self._parse_braced_param(start)
 
         # Simple expansion $var or $special
-        # Special parameters: ?$!#@*-0-9
-        if _is_special_param_or_digit(ch) or ch == "#":
+        # Special parameters: ?$!#@*-0-9 (but not & which is the background operator)
+        if _is_simple_special_param_or_digit(ch) or ch == "#":
             self.advance()
             text = _substring(self.source, start, self.pos)
             return ParamExpansion(ch), text

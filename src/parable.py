@@ -360,8 +360,8 @@ class Word(Node):
                         in_single_quote, in_double_quote = quote_stack.pop()
                     i += 1
                     continue
-            # Inside ${...}, we can expand $'...' even if originally in double quotes
-            effective_in_dquote = in_double_quote and brace_depth == 0
+            # Double quotes inside ${...} still protect $'...' from expansion
+            effective_in_dquote = in_double_quote
             # Track quote state to avoid matching $' inside regular quotes
             if ch == "'" and not effective_in_dquote:
                 # Toggle quote state unless this is $' (handled below)

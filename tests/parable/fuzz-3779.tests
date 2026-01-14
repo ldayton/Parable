@@ -1,0 +1,7 @@
+# Fuzz 3779: preserve # inside array literal element
+
+=== hash in array literal element
+a=(x#)
+---
+(command (word "a=(x#)"))
+---

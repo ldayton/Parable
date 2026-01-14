@@ -1,0 +1,6 @@
+=== heredoc in command substitution drops trailing content
+$(<<a
+a)x
+---
+(command (word "$(<<a\na\n)x"))
+---

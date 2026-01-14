@@ -1,0 +1,5 @@
+=== process substitution with unparseable content preserved literally
+<((a)b)
+---
+(command (word "<((a)b)"))
+---

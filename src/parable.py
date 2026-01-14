@@ -3699,9 +3699,13 @@ class Parser:
                 if procsub_node:
                     parts.append(procsub_node)
                     chars.append(procsub_text)
+                elif procsub_text:
+                    # Not a valid process substitution, treat full <(...) as literal
+                    chars.append(procsub_text)
                 else:
-                    # Not a process substitution, treat as metacharacter
-                    break
+                    # Couldn't parse at all, treat <( as literal chars
+                    chars.append(self.advance())  # <
+                    chars.append(self.advance())  # (
 
             # Array literal: name=(elements) or name+=(elements)
             elif (
@@ -4321,6 +4325,11 @@ class Parser:
         cmd = sub_parser.parse_list()
         if cmd is None:
             cmd = Empty()
+
+        # If content wasn't fully consumed, this isn't a valid process substitution
+        # Return the text so caller can treat it as literal characters
+        if not sub_parser.at_end():
+            return None, text
 
         return ProcessSubstitution(direction, cmd), text
 

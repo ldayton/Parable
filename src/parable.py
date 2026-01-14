@@ -5553,9 +5553,30 @@ class Parser:
                     varname_chars.append(self.advance())
                 else:
                     break
-            if not self.at_end() and self.peek() == "}" and varname_chars:
+            varname = "".join(varname_chars)
+            is_valid_varfd = False
+            if varname:
+                if varname[0].isalpha() or varname[0] == "_":
+                    if "[" in varname or "]" in varname:
+                        left = varname.find("[")
+                        right = varname.rfind("]")
+                        if left != -1 and right == len(varname) - 1 and right > left:
+                            base = varname[:left]
+                            if base and (base[0].isalpha() or base[0] == "_"):
+                                is_valid_varfd = True
+                                for c in base[1:]:
+                                    if not (c.isalnum() or c == "_"):
+                                        is_valid_varfd = False
+                                        break
+                    else:
+                        is_valid_varfd = True
+                        for c in varname[1:]:
+                            if not (c.isalnum() or c == "_"):
+                                is_valid_varfd = False
+                                break
+            if not self.at_end() and self.peek() == "}" and is_valid_varfd:
                 self.advance()  # consume }
-                varfd = "".join(varname_chars)
+                varfd = varname
             else:
                 # Not a valid variable fd, restore
                 self.pos = saved

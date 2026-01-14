@@ -6424,18 +6424,24 @@ class Parser {
 	}
 
 	parseRedirect() {
-		let ch,
+		let base,
+			c,
+			ch,
 			fd,
 			fd_chars,
 			fd_target,
 			inner_word,
+			is_valid_varfd,
+			left,
 			next_ch,
 			op,
+			right,
 			saved,
 			start,
 			strip_tabs,
 			target,
 			varfd,
+			varname,
 			varname_chars;
 		this.skipWhitespace();
 		if (this.atEnd()) {
@@ -6466,9 +6472,42 @@ class Parser {
 					break;
 				}
 			}
-			if (!this.atEnd() && this.peek() === "}" && varname_chars) {
+			varname = varname_chars.join("");
+			is_valid_varfd = false;
+			if (varname) {
+				if (/^[a-zA-Z]$/.test(varname[0]) || varname[0] === "_") {
+					if (varname.includes("[") || varname.includes("]")) {
+						left = varname.indexOf("[");
+						right = varname.lastIndexOf("]");
+						if (left !== -1 && right === varname.length - 1 && right > left) {
+							base = varname.slice(0, left);
+							if (
+								base.length > 0 &&
+								(/^[a-zA-Z]$/.test(base[0]) || base[0] === "_")
+							) {
+								is_valid_varfd = true;
+								for (c of base.slice(1)) {
+									if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
+										is_valid_varfd = false;
+										break;
+									}
+								}
+							}
+						}
+					} else {
+						is_valid_varfd = true;
+						for (c of varname.slice(1)) {
+							if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
+								is_valid_varfd = false;
+								break;
+							}
+						}
+					}
+				}
+			}
+			if (!this.atEnd() && this.peek() === "}" && is_valid_varfd) {
 				this.advance();
-				varfd = varname_chars.join("");
+				varfd = varname;
 			} else {
 				// Not a valid variable fd, restore
 				this.pos = saved;

@@ -1,0 +1,5 @@
+=== brace cmdsub with trailing background
+${ a&}
+---
+(command (word "${ a & }"))
+---

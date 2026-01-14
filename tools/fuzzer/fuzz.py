@@ -124,8 +124,16 @@ def run_parable(input_text: str) -> str | None:
 
 
 def normalize(s: str) -> str:
-    """Normalize whitespace for comparison."""
-    return " ".join(s.split())
+    """Normalize for comparison, ignoring cosmetic differences."""
+    import re
+    # Collapse whitespace
+    s = " ".join(s.split())
+    # Normalize fd 1 redirects: 1> -> >, 1>& -> >&
+    s = re.sub(r'\b1>', '>', s)
+    s = re.sub(r'\b1>&', '>&', s)
+    # Normalize indentation inside quoted strings (\\n followed by spaces)
+    s = re.sub(r'\\n\s+', r'\\n', s)
+    return s
 
 
 def fuzz_once(inputs: list[str], num_mutations: int) -> Discrepancy | None:

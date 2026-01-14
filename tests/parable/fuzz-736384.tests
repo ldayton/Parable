@@ -1,0 +1,7 @@
+# Fuzz 736384: preserve spaces in process substitution subshells
+
+=== process substitution subshell spacing
+$>(( "$x" ))
+---
+(command (word "$>(( \"$x\" ))"))
+---

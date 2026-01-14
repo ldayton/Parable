@@ -911,12 +911,14 @@ class Word extends Node {
 			in_double_quote,
 			in_single,
 			inner,
+			inner_raw,
 			j,
 			node,
 			p,
 			parsed,
 			parser,
 			prefix,
+			preserve_subshell_space,
 			procsub_idx,
 			procsub_parts,
 			result;
@@ -1038,7 +1040,24 @@ class Word extends Node {
 				j = _findCmdsubEnd(value, i + 2);
 				// Format this process substitution (with in_procsub=True for no-space subshells)
 				node = procsub_parts[procsub_idx];
-				formatted = _formatCmdsubNode(node.command, 0, true);
+				inner_raw = value.slice(i + 2, j - 1);
+				preserve_subshell_space = false;
+				if (
+					node.command.kind === "subshell" &&
+					inner_raw.length >= 3 &&
+					inner_raw[0] === "(" &&
+					inner_raw[inner_raw.length - 1] === ")" &&
+					(_isWhitespace(inner_raw[1]) ||
+						_isWhitespace(inner_raw[inner_raw.length - 2]))
+				) {
+					// Preserve explicit spacing inside subshells like ( cmd )
+					preserve_subshell_space = true;
+				}
+				formatted = _formatCmdsubNode(
+					node.command,
+					0,
+					!preserve_subshell_space,
+				);
 				result.push(`${direction}(${formatted})`);
 				procsub_idx += 1;
 				i = j;

@@ -846,7 +846,23 @@ class Word(Node):
                 j = _find_cmdsub_end(value, i + 2)
                 # Format this process substitution (with in_procsub=True for no-space subshells)
                 node = procsub_parts[procsub_idx]
-                formatted = _format_cmdsub_node(node.command, in_procsub=True)
+                inner_raw = _substring(value, i + 2, j - 1)
+                preserve_subshell_space = False
+                if (
+                    node.command.kind == "subshell"
+                    and len(inner_raw) >= 3
+                    and inner_raw[0] == "("
+                    and inner_raw[len(inner_raw) - 1] == ")"
+                    and (
+                        _is_whitespace(inner_raw[1])
+                        or _is_whitespace(inner_raw[len(inner_raw) - 2])
+                    )
+                ):
+                    # Preserve explicit spacing inside subshells like ( cmd )
+                    preserve_subshell_space = True
+                formatted = _format_cmdsub_node(
+                    node.command, in_procsub=not preserve_subshell_space
+                )
                 result.append(direction + "(" + formatted + ")")
                 procsub_idx += 1
                 i = j

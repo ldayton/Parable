@@ -1,0 +1,6 @@
+=== backslash-newline line continuation inside arithmetic
+((\
+1))
+---
+(arith (word "1"))
+---

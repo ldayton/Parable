@@ -912,13 +912,16 @@ class Word extends Node {
 			in_single,
 			inner,
 			j,
+			k,
 			node,
 			p,
 			parsed,
 			parser,
 			prefix,
+			prefix_ws,
 			procsub_idx,
 			procsub_parts,
+			raw_content,
 			result;
 		// Collect command substitutions from all parts, including nested ones
 		cmdsub_parts = [];
@@ -1039,6 +1042,19 @@ class Word extends Node {
 				// Format this process substitution (with in_procsub=True for no-space subshells)
 				node = procsub_parts[procsub_idx];
 				formatted = _formatCmdsubNode(node.command, 0, true);
+				if (node.command.kind === "subshell") {
+					raw_content = value.slice(i + 2, j - 1);
+					if (raw_content.startsWith("(")) {
+						k = 1;
+						while (k < raw_content.length && _isWhitespace(raw_content[k])) {
+							k += 1;
+						}
+						prefix_ws = raw_content.slice(1, k);
+						if (prefix_ws && formatted.startsWith("(")) {
+							formatted = `(${prefix_ws}${formatted.slice(1)}`;
+						}
+					}
+				}
 				result.push(`${direction}(${formatted})`);
 				procsub_idx += 1;
 				i = j;

@@ -59,6 +59,16 @@ Find and fix one parser bug using the fuzzer.
     gh pr create --title "fuzzer fix: <short description>" --body ""
     ```
 
+    Include this in the PR body:
+    ```
+    ## Summary
+    - Brief description bug and fix, include the MRE
+
+    ## Test plan
+    - [ ] New test added to `tests/parable/36_fuzzer.tests`
+    - [ ] `just check` passes
+    ```
+
 ## Notes
 
 - If the fuzzer finds no discrepancies, exit successfully with no changes

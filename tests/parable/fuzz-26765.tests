@@ -1,0 +1,5 @@
+=== ANSI-C quote after even number of dollar signs
+$$$'a'
+---
+(command (word "$$'a'"))
+---

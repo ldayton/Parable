@@ -66,6 +66,17 @@ function _startsWithAt(s, pos, prefix) {
 	return s.startsWith(prefix, pos);
 }
 
+function _countConsecutiveDollarsBefore(s, pos) {
+	let count, k;
+	count = 0;
+	k = pos - 1;
+	while (k >= 0 && s[k] === "$") {
+		count += 1;
+		k -= 1;
+	}
+	return count;
+}
+
 function _appendRedirects(base, redirects) {
 	let parts, r;
 	if (redirects && redirects.length) {
@@ -356,6 +367,7 @@ class Word extends Node {
 			in_pattern,
 			in_single_quote,
 			inner,
+			is_ansi_c,
 			j,
 			op,
 			quote_stack,
@@ -413,8 +425,13 @@ class Word extends Node {
 			effective_in_dquote = in_double_quote;
 			// Track quote state to avoid matching $' inside regular quotes
 			if (ch === "'" && !effective_in_dquote) {
-				// Toggle quote state unless this is $' (handled below)
-				if (!(!in_single_quote && i > 0 && value[i - 1] === "$")) {
+				// Toggle quote state unless this is $' that will be expanded as ANSI-C
+				is_ansi_c =
+					!in_single_quote &&
+					i > 0 &&
+					value[i - 1] === "$" &&
+					_countConsecutiveDollarsBefore(value, i - 1) % 2 === 0;
+				if (!is_ansi_c) {
 					in_single_quote = !in_single_quote;
 				}
 				result.push(ch);
@@ -432,7 +449,7 @@ class Word extends Node {
 				_startsWithAt(value, i, "$'") &&
 				!in_single_quote &&
 				!effective_in_dquote &&
-				(i === 0 || value[i - 1] !== "$")
+				_countConsecutiveDollarsBefore(value, i) % 2 === 0
 			) {
 				// ANSI-C quoted string - find matching closing quote
 				j = i + 2;

@@ -1,0 +1,6 @@
+=== newline in array subscript inside compound assignment
+a=([
+])
+---
+(command (word "a=([\n])"))
+---

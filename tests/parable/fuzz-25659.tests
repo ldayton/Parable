@@ -1,0 +1,5 @@
+=== normalize leading zeros in fd redirect targets
+>&02
+---
+(command (redirect ">&" 2))
+---

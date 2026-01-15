@@ -1167,11 +1167,21 @@ class Word(Node):
                         in_single = not in_single
                     elif c == '"' and not in_single:
                         in_double = not in_double
-                    elif not in_single and not in_double:
-                        if c == "{":
-                            depth += 1
-                        elif c == "}":
-                            depth -= 1
+                    elif not in_single:
+                        # Skip over $(...) command substitution (} inside is not closing brace)
+                        if (
+                            c == "$"
+                            and j + 1 < len(value)
+                            and value[j + 1] == "("
+                            and not (j + 2 < len(value) and value[j + 2] == "(")
+                        ):
+                            j = _find_cmdsub_end(value, j + 2)
+                            continue
+                        if not in_double:
+                            if c == "{":
+                                depth += 1
+                            elif c == "}":
+                                depth -= 1
                     j += 1
                 # Recursively format any cmdsubs inside the param expansion
                 inner = _substring(value, i + 2, j - 1)

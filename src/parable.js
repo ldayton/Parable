@@ -1453,11 +1453,23 @@ class Word extends Node {
 						in_single = !in_single;
 					} else if (c === '"' && !in_single) {
 						in_double = !in_double;
-					} else if (!in_single && !in_double) {
-						if (c === "{") {
-							depth += 1;
-						} else if (c === "}") {
-							depth -= 1;
+					} else if (!in_single) {
+						// Skip over $(...) command substitution (} inside is not closing brace)
+						if (
+							c === "$" &&
+							j + 1 < value.length &&
+							value[j + 1] === "(" &&
+							!(j + 2 < value.length && value[j + 2] === "(")
+						) {
+							j = _findCmdsubEnd(value, j + 2);
+							continue;
+						}
+						if (!in_double) {
+							if (c === "{") {
+								depth += 1;
+							} else if (c === "}") {
+								depth -= 1;
+							}
 						}
 					}
 					j += 1;

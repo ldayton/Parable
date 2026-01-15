@@ -1,0 +1,5 @@
+=== closing brace inside command substitution within parameter expansion
+${a-$(}a)}
+---
+(command (word "${a-$(}a)}"))
+---

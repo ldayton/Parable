@@ -3,6 +3,7 @@
 
 import os
 import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 # Add src to path for parable import
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -90,46 +91,69 @@ def run_test(test_input, test_expected):
     return (False, actual)
 
 
+def process_file(test_file):
+    """Process a single test file. Returns dict with counts and failures."""
+    if os.path.basename(test_file) in SKIP_FILES:
+        return {
+            "passed": 0,
+            "failed": 0,
+            "total": 0,
+            "skipped": 1,
+            "skipped_bang": 0,
+            "failures": [],
+        }
+    tests = parse_test_file(test_file)
+    passed = failed = total = skipped_bang = 0
+    failures = []
+    for _name, test_input, test_expected in tests:
+        total += 1
+        if "$(!" in test_input or "$(\\!" in test_expected:
+            skipped_bang += 1
+            continue
+        ok, _actual = run_test(test_input, test_expected)
+        if ok:
+            passed += 1
+        else:
+            failed += 1
+            failures.append(test_file)
+    return {
+        "passed": passed,
+        "failed": failed,
+        "total": total,
+        "skipped": 0,
+        "skipped_bang": skipped_bang,
+        "failures": failures,
+    }
+
+
 def main():
     if not os.path.isdir(CORPUS_DIR):
         print(f"Error: corpus not found at {CORPUS_DIR}", file=sys.stderr)
         sys.exit(1)
-
     test_files = sorted(
         os.path.join(CORPUS_DIR, f) for f in os.listdir(CORPUS_DIR) if f.endswith(".tests")
     )
     total_files = len(test_files)
-    passed = 0
-    failed = 0
-    total = 0
-    skipped = 0
-    skipped_bang = 0
-    with open(FAILURES_FILE, "w") as failures_f:
-        for i, test_file in enumerate(test_files):
-            if os.path.basename(test_file) in SKIP_FILES:
-                skipped += 1
-                continue
-            tests = parse_test_file(test_file)
-            for _name, test_input, test_expected in tests:
-                total += 1
-                # Skip tests with negation in command substitution (Parable escapes ! differently)
-                if "$(!" in test_input or "$(\\!" in test_expected:
-                    skipped_bang += 1
-                    continue
-                ok, actual = run_test(test_input, test_expected)
-                if ok:
-                    passed += 1
-                else:
-                    failed += 1
-                    failures_f.write(test_file + "\n")
-                    failures_f.flush()
-                    if failed >= MAX_FAILURES:
-                        break
+    passed = failed = total = skipped = skipped_bang = 0
+    all_failures = []
+    with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
+        futures = {executor.submit(process_file, f): f for f in test_files}
+        for i, future in enumerate(as_completed(futures)):
+            result = future.result()
+            passed += result["passed"]
+            failed += result["failed"]
+            total += result["total"]
+            skipped += result["skipped"]
+            skipped_bang += result["skipped_bang"]
+            all_failures.extend(result["failures"])
             print(f"\r{i + 1}/{total_files} files ({failed} failures)", end="", flush=True)
             if failed >= MAX_FAILURES:
+                executor.shutdown(cancel_futures=True)
                 break
-
     print()
+    with open(FAILURES_FILE, "w") as f:
+        for failure in all_failures[:MAX_FAILURES]:
+            f.write(failure + "\n")
     if failed:
         print(f"Failures written to {FAILURES_FILE}")
     print(

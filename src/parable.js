@@ -2915,6 +2915,7 @@ function _formatCondBody(node) {
 
 function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 	let body,
+		body_part,
 		cmd,
 		cmds,
 		cond,
@@ -3074,7 +3075,11 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 					result.push("\n");
 				} else if (p.op === "&") {
 					// If previous command has heredoc, insert & before heredoc content
-					if (result.length > 0 && result[result.length - 1].includes("\n")) {
+					if (
+						result.length > 0 &&
+						result[result.length - 1].includes("<<") &&
+						result[result.length - 1].includes("\n")
+					) {
 						last = result[result.length - 1];
 						first_nl = last.indexOf("\n");
 						result[result.length - 1] =
@@ -3187,11 +3192,12 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 			term = p.terminator;
 			pat_indent = " ".repeat(indent + 8);
 			term_indent = " ".repeat(indent + 4);
+			body_part = body ? `${pat_indent + body}\n` : "\n";
 			if (i === 0) {
 				// First pattern on same line as 'in'
-				patterns.push(` ${pat})\n${pat_indent}${body}\n${term_indent}${term}`);
+				patterns.push(` ${pat})\n${body_part}${term_indent}${term}`);
 			} else {
-				patterns.push(`${pat})\n${pat_indent}${body}\n${term_indent}${term}`);
+				patterns.push(`${pat})\n${body_part}${term_indent}${term}`);
 			}
 			i += 1;
 		}

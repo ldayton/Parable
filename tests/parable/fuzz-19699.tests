@@ -1,0 +1,5 @@
+=== preserve raw text in process substitution with nested parens
+<((+<1))
+---
+(command (word "<((+<1))"))
+---

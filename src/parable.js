@@ -2929,6 +2929,7 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 		variable,
 		w,
 		word,
+		word_parts,
 		word_vals,
 		words;
 	if (indent == null) {
@@ -2956,6 +2957,12 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 		}
 		for (r of node.redirects) {
 			parts.push(_formatRedirect(r, compact_redirects));
+		}
+		// In compact mode with words, don't add space before redirects
+		if (compact_redirects && node.words && node.redirects) {
+			word_parts = parts.slice(0, node.words.length);
+			redirect_parts = parts.slice(node.words.length);
+			return word_parts.join(" ") + redirect_parts.join("");
 		}
 		return parts.join(" ");
 	}

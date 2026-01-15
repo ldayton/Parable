@@ -2638,6 +2638,14 @@ def _format_cmdsub_node(
             idx += 1
         return result
     if node.kind == "list":
+        # Check if any command in the list has a heredoc redirect
+        has_heredoc = False
+        for p in node.parts:
+            if p.kind == "command" and p.redirects:
+                for r in p.redirects:
+                    if r.kind == "heredoc":
+                        has_heredoc = True
+                        break
         # Join commands with operators
         result = []
         for p in node.parts:
@@ -2667,13 +2675,16 @@ def _format_cmdsub_node(
                 if result and not result[len(result) - 1].endswith((" ", "\n")):
                     result.append(" ")
                 result.append(_format_cmdsub_node(p, indent))
-        # Strip trailing ; or newline
+        # Strip trailing ; or newline (but preserve heredoc's trailing newline)
         s = "".join(result)
         # If we have & with heredoc (& before newline content), preserve trailing newline and add space
         if " &\n" in s and s.endswith("\n"):
             return s + " "
-        while s.endswith(";") or s.endswith("\n"):
+        while s.endswith(";"):
             s = _substring(s, 0, len(s) - 1)
+        if not has_heredoc:
+            while s.endswith("\n"):
+                s = _substring(s, 0, len(s) - 1)
         return s
     if node.kind == "if":
         cond = _format_cmdsub_node(node.condition, indent)

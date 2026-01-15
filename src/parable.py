@@ -1392,13 +1392,20 @@ class Redirect(Node):
     def to_sexp(self) -> str:
         # Strip fd prefix from operator (e.g., "2>" -> ">", "{fd}>" -> ">")
         op = self.op.lstrip("0123456789")
-        # Strip {varname} prefix if present
+        # Strip {varname} or {varname[subscript]} prefix if present
         if op.startswith("{"):
             j = 1
             if j < len(op) and (op[j].isalpha() or op[j] == "_"):
                 j += 1
                 while j < len(op) and (op[j].isalnum() or op[j] == "_"):
                     j += 1
+                # Handle optional [subscript] part
+                if j < len(op) and op[j] == "[":
+                    j += 1
+                    while j < len(op) and op[j] != "]":
+                        j += 1
+                    if j < len(op) and op[j] == "]":
+                        j += 1
                 if j < len(op) and op[j] == "}":
                     op = _substring(op, j + 1, len(op))
         target_val = self.target.value

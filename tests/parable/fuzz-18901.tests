@@ -1,0 +1,5 @@
+=== fd var with subscript should not be treated as redirect prefix
+{a[0]}>&x
+---
+(command (redirect ">&" "x"))
+---

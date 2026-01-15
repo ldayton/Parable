@@ -1422,7 +1422,14 @@ class Word extends Node {
 						if (parsed) {
 							formatted = _formatCmdsubNode(parsed);
 							formatted = formatted.replace(/[;]+$/, "");
-							terminator = formatted.endsWith(" &") ? " }" : "; }";
+							// Preserve trailing newline from original if present
+							if (inner.replace(/[ \t]+$/, "").endsWith("\n")) {
+								terminator = "\n }";
+							} else if (formatted.endsWith(" &")) {
+								terminator = " }";
+							} else {
+								terminator = "; }";
+							}
 							result.push(prefix + formatted + terminator);
 						} else {
 							result.push("${ }");

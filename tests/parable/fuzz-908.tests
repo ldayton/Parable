@@ -1,0 +1,5 @@
+=== unterminated $[ arithmetic expansion
+$[
+---
+<error>
+---

@@ -1,0 +1,7 @@
+=== semicolon after heredoc in cmdsub should be dropped
+$(<<X;
+X
+a)
+---
+(command (word "$(<<X\nX\n a)"))
+---

@@ -3627,8 +3627,15 @@ class Parser:
             elif ch == '"':
                 self.advance()  # consume opening quote
                 chars.append('"')
-                while not self.at_end() and self.peek() != '"':
+                in_single_in_dquote = False  # Track single quotes from param subscripts
+                while not self.at_end() and (in_single_in_dquote or self.peek() != '"'):
                     c = self.peek()
+                    # Inside single-quoted section (from param subscript)
+                    if in_single_in_dquote:
+                        chars.append(self.advance())
+                        if c == "'":
+                            in_single_in_dquote = False
+                        continue
                     # Handle escape sequences in double quotes
                     if c == "\\" and self.pos + 1 < self.length:
                         next_c = self.source[self.pos + 1]
@@ -5659,10 +5666,36 @@ class Parser:
             else:
                 # Unknown syntax like ${(M)...} (zsh) - consume until matching }
                 # Bash accepts these syntactically but fails at runtime
+                # Must track quotes - inside subscripts, quotes span until closed
                 depth = 1
                 content_chars: list[str] = []
+                in_single = False
+                in_double_inner = False
                 while not self.at_end() and depth > 0:
                     c = self.peek()
+                    if in_single:
+                        content_chars.append(self.advance())
+                        if c == "'":
+                            in_single = False
+                        continue
+                    if in_double_inner:
+                        if c == "\\" and self.pos + 1 < self.length:
+                            content_chars.append(self.advance())
+                            if not self.at_end():
+                                content_chars.append(self.advance())
+                            continue
+                        content_chars.append(self.advance())
+                        if c == '"':
+                            in_double_inner = False
+                        continue
+                    if c == "'":
+                        in_single = True
+                        content_chars.append(self.advance())
+                        continue
+                    if c == '"':
+                        in_double_inner = True
+                        content_chars.append(self.advance())
+                        continue
                     if c == "{":
                         depth += 1
                         content_chars.append(self.advance())
@@ -5887,11 +5920,41 @@ class Parser:
                 elif c == "[":
                     if not self._param_subscript_has_close(self.pos):
                         break
-                    # Array subscript - track bracket depth
+                    # Array subscript - track bracket depth and quotes
                     name_chars.append(self.advance())
                     bracket_depth = 1
+                    in_single = False
+                    in_double_sub = False
                     while not self.at_end() and bracket_depth > 0:
                         sc = self.peek()
+                        if in_single:
+                            name_chars.append(self.advance())
+                            if sc == "'":
+                                in_single = False
+                            continue
+                        if in_double_sub:
+                            if sc == "\\" and self.pos + 1 < self.length:
+                                name_chars.append(self.advance())
+                                if not self.at_end():
+                                    name_chars.append(self.advance())
+                                continue
+                            name_chars.append(self.advance())
+                            if sc == '"':
+                                in_double_sub = False
+                            continue
+                        if sc == "'":
+                            in_single = True
+                            name_chars.append(self.advance())
+                            continue
+                        if sc == '"':
+                            in_double_sub = True
+                            name_chars.append(self.advance())
+                            continue
+                        if sc == "\\":
+                            name_chars.append(self.advance())
+                            if not self.at_end():
+                                name_chars.append(self.advance())
+                            continue
                         if sc == "[":
                             bracket_depth += 1
                         elif sc == "]":

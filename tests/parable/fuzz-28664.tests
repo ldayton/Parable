@@ -1,0 +1,6 @@
+=== heredoc delimiter with parameter expansion containing metachar
+<<${a>}
+${a>}
+---
+(command (redirect "<<" ""))
+---

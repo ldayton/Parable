@@ -5602,27 +5602,32 @@ class Parser:
                 # Unknown syntax like ${(M)...} (zsh) - consume until matching }
                 # Bash accepts these syntactically but fails at runtime
                 depth = 1
-                content_start = self.pos
+                content_chars: list[str] = []
                 while not self.at_end() and depth > 0:
                     c = self.peek()
                     if c == "{":
                         depth += 1
-                        self.advance()
+                        content_chars.append(self.advance())
                     elif c == "}":
                         depth -= 1
                         if depth == 0:
                             break
-                        self.advance()
+                        content_chars.append(self.advance())
                     elif c == "\\":
-                        self.advance()
-                        if not self.at_end():
+                        if self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
+                            # Line continuation - skip both backslash and newline
                             self.advance()
+                            self.advance()
+                        else:
+                            content_chars.append(self.advance())
+                            if not self.at_end():
+                                content_chars.append(self.advance())
                     else:
-                        self.advance()
+                        content_chars.append(self.advance())
                 if depth == 0:
-                    content = _substring(self.source, content_start, self.pos)
+                    content = "".join(content_chars)
                     self.advance()  # consume final }
-                    text = _substring(self.source, start, self.pos)
+                    text = "${" + content + "}"
                     return ParamExpansion(content), text
                 self.pos = start
                 return None, ""

@@ -6421,7 +6421,7 @@ class Parser {
 			c,
 			ch,
 			content,
-			content_start,
+			content_chars,
 			depth,
 			in_double_quote,
 			in_single_quote,
@@ -6577,31 +6577,40 @@ class Parser {
 				// Unknown syntax like ${(M)...} (zsh) - consume until matching }
 				// Bash accepts these syntactically but fails at runtime
 				depth = 1;
-				content_start = this.pos;
+				content_chars = [];
 				while (!this.atEnd() && depth > 0) {
 					c = this.peek();
 					if (c === "{") {
 						depth += 1;
-						this.advance();
+						content_chars.push(this.advance());
 					} else if (c === "}") {
 						depth -= 1;
 						if (depth === 0) {
 							break;
 						}
-						this.advance();
+						content_chars.push(this.advance());
 					} else if (c === "\\") {
-						this.advance();
-						if (!this.atEnd()) {
+						if (
+							this.pos + 1 < this.length &&
+							this.source[this.pos + 1] === "\n"
+						) {
+							// Line continuation - skip both backslash and newline
 							this.advance();
+							this.advance();
+						} else {
+							content_chars.push(this.advance());
+							if (!this.atEnd()) {
+								content_chars.push(this.advance());
+							}
 						}
 					} else {
-						this.advance();
+						content_chars.push(this.advance());
 					}
 				}
 				if (depth === 0) {
-					content = this.source.slice(content_start, this.pos);
+					content = content_chars.join("");
 					this.advance();
-					text = this.source.slice(start, this.pos);
+					text = `\${${content}}`;
 					return [new ParamExpansion(content), text];
 				}
 				this.pos = start;

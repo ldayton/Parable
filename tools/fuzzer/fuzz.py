@@ -35,7 +35,38 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 from parable import ParseError, parse  # noqa: E402
 
 ORACLE_PATH = Path.home() / "source" / "bash-oracle" / "bash-oracle"
-MUTATION_CHARS = list("${}()|&<>;\"'\\` \t\n@#![]:=")
+MUTATION_GROUPS = list("${}()|&<>;\"'\\` \t\n@#![]:=*?~/+-,%^") + ["0123456789"]
+INSERTION_PATTERNS = [
+    "$(",
+    "${",
+    "<(",
+    ">(",
+    "((",
+    "<<",  # openers
+    "))",
+    "}}",  # closers
+    ">&",
+    "2>",
+    "|&",  # redirects
+    "||",
+    "&&",  # logical
+    "$((",
+    "<<<",  # arithmetic, herestring
+]
+DELETION_PATTERNS = ["$(", "${", "<(", ">(", "((", "<<", "))", "}}", "||", "&&"]
+
+
+def pick_mutation_char() -> str:
+    """Pick a mutation char. Digits are weighted as a group, not individually."""
+    group = random.choice(MUTATION_GROUPS)
+    return random.choice(group) if len(group) > 1 else group
+
+
+def pick_insertion() -> str:
+    """Pick something to insert: single char or multi-char pattern."""
+    if random.random() < 0.2:
+        return random.choice(INSERTION_PATTERNS)
+    return pick_mutation_char()
 
 
 @dataclass
@@ -108,13 +139,23 @@ def mutate(s: str, num_mutations: int = 1) -> tuple[str, str]:
         op = random.choice(["insert", "delete", "swap", "replace"])
         if op == "insert" and len(result) > 0:
             pos = random.randint(0, len(result))
-            char = random.choice(MUTATION_CHARS)
-            result.insert(pos, char)
-            ops.append(f"insert {char!r} at {pos}")
+            insertion = pick_insertion()
+            for i, c in enumerate(insertion):
+                result.insert(pos + i, c)
+            ops.append(f"insert {insertion!r} at {pos}")
         elif op == "delete" and len(result) > 1:
-            pos = random.randint(0, len(result) - 1)
-            deleted = result.pop(pos)
-            ops.append(f"delete {deleted!r} at {pos}")
+            # Try to delete a multi-char pattern
+            result_str_tmp = "".join(result)
+            pattern = random.choice(DELETION_PATTERNS)
+            if pattern in result_str_tmp and random.random() < 0.3:
+                idx = result_str_tmp.index(pattern)
+                for _ in range(len(pattern)):
+                    result.pop(idx)
+                ops.append(f"delete {pattern!r} at {idx}")
+            else:
+                pos = random.randint(0, len(result) - 1)
+                deleted = result.pop(pos)
+                ops.append(f"delete {deleted!r} at {pos}")
         elif op == "swap" and len(result) > 1:
             pos = random.randint(0, len(result) - 2)
             result[pos], result[pos + 1] = result[pos + 1], result[pos]
@@ -122,7 +163,7 @@ def mutate(s: str, num_mutations: int = 1) -> tuple[str, str]:
         elif op == "replace" and len(result) > 0:
             pos = random.randint(0, len(result) - 1)
             old = result[pos]
-            result[pos] = random.choice(MUTATION_CHARS)
+            result[pos] = pick_mutation_char()
             ops.append(f"replace {old!r} with {result[pos]!r} at {pos}")
     result_str = "".join(result)
     # Restore protected sequences

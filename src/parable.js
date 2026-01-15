@@ -1173,8 +1173,11 @@ class Word extends Node {
 			in_double_quote,
 			in_single,
 			inner,
+			inner_to_parse,
 			is_procsub,
 			j,
+			k,
+			leading_ws,
 			node,
 			p,
 			parsed,
@@ -1373,19 +1376,32 @@ class Word extends Node {
 					direction = value[i];
 					j = _findCmdsubEnd(value, i + 2);
 					inner = value.slice(i + 2, j - 1);
+					// Preserve leading whitespace (bash keeps it in procsub inside arithmetic)
+					leading_ws = "";
+					inner_to_parse = inner;
+					k = 0;
+					while (k < inner.length && " \t".includes(inner[k])) {
+						k += 1;
+					}
+					if (k > 0) {
+						leading_ws = inner.slice(0, k);
+						inner_to_parse = inner.slice(k);
+					}
 					try {
-						parser = new Parser(inner);
+						parser = new Parser(inner_to_parse);
 						parsed = parser.parseList();
 						// Only use parsed result if parser consumed all input
-						if (parsed && parser.pos === inner.length) {
+						if (parsed && parser.pos === inner_to_parse.length) {
 							formatted = _formatCmdsubNode(parsed, 0, true);
 						} else {
 							formatted = inner;
+							leading_ws = "";
 						}
 					} catch (_) {
 						formatted = inner;
+						leading_ws = "";
 					}
-					result.push(`${direction}(${formatted})`);
+					result.push(`${direction}(${leading_ws}${formatted})`);
 					i = j;
 				} else {
 					// Not a process substitution (e.g., arithmetic comparison)

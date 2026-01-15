@@ -1,0 +1,5 @@
+=== octal escape \0nnn should consume at most 3 digits total
+$'\0007'
+---
+(command (word "''"))
+---

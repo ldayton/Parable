@@ -3687,6 +3687,7 @@ function _skipHeredoc(value, start) {
 	}
 	// Skip to end of line (heredoc content starts on next line)
 	// But track paren depth - if we hit a ) at depth 0, it closes the cmdsub
+	// Must handle quotes and backticks since newlines in them don't end the line
 	paren_depth = 0;
 	while (i < value.length && value[i] !== "\n") {
 		if (value[i] === "(") {
@@ -3697,6 +3698,32 @@ function _skipHeredoc(value, start) {
 				break;
 			}
 			paren_depth -= 1;
+		} else if (value[i] === "'") {
+			// Single-quoted string - skip to closing quote
+			i += 1;
+			while (i < value.length && value[i] !== "'") {
+				i += 1;
+			}
+		} else if (value[i] === '"') {
+			// Double-quoted string - skip to closing quote (with escapes)
+			i += 1;
+			while (i < value.length && value[i] !== '"') {
+				if (value[i] === "\\" && i + 1 < value.length) {
+					i += 2;
+				} else {
+					i += 1;
+				}
+			}
+		} else if (value[i] === "`") {
+			// Backtick command substitution - skip to closing backtick
+			i += 1;
+			while (i < value.length && value[i] !== "`") {
+				if (value[i] === "\\" && i + 1 < value.length) {
+					i += 2;
+				} else {
+					i += 1;
+				}
+			}
 		}
 		i += 1;
 	}
@@ -7623,6 +7650,16 @@ class Parser {
 				// Double-quoted string - skip to closing quote (with escapes)
 				line_end += 1;
 				while (line_end < this.length && this.source[line_end] !== '"') {
+					if (this.source[line_end] === "\\" && line_end + 1 < this.length) {
+						line_end += 2;
+					} else {
+						line_end += 1;
+					}
+				}
+			} else if (ch === "`") {
+				// Backtick command substitution - skip to closing backtick
+				line_end += 1;
+				while (line_end < this.length && this.source[line_end] !== "`") {
 					if (this.source[line_end] === "\\" && line_end + 1 < this.length) {
 						line_end += 2;
 					} else {

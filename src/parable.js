@@ -3173,6 +3173,7 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 		result,
 		result_parts,
 		s,
+		skipped_semi,
 		sp,
 		term,
 		term_indent,
@@ -3321,25 +3322,32 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 		}
 		// Join commands with operators
 		result = [];
+		skipped_semi = false;
 		for (p of node.parts) {
 			if (p.kind === "operator") {
 				if (p.op === ";") {
 					// Skip semicolon if previous command ends with heredoc (newline)
 					if (result.length > 0 && result[result.length - 1].endsWith("\n")) {
+						skipped_semi = true;
 						continue;
 					}
 					result.push(";");
+					skipped_semi = false;
 				} else if (p.op === "\n") {
 					// Skip newline if it follows a semicolon (redundant separator)
 					if (result.length > 0 && result[result.length - 1] === ";") {
+						skipped_semi = false;
 						continue;
 					}
-					// If previous ends with heredoc newline, add space instead
+					// If previous ends with heredoc newline
 					if (result.length > 0 && result[result.length - 1].endsWith("\n")) {
-						result.push(" ");
+						// Add space if semicolon was skipped, else newline
+						result.push(skipped_semi ? " " : "\n");
+						skipped_semi = false;
 						continue;
 					}
 					result.push("\n");
+					skipped_semi = false;
 				} else if (p.op === "&") {
 					// If previous command has heredoc, insert & before heredoc content
 					if (

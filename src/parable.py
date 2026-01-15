@@ -1363,7 +1363,7 @@ class Redirect(Node):
                 "-"
             )  # "&1" -> "1", "&1-" -> "1"
             if fd_target.isdigit():
-                return '(redirect "' + op + '" ' + fd_target + ")"
+                return '(redirect "' + op + '" ' + str(int(fd_target)) + ")"
             elif target_val == "&-":
                 return '(redirect ">&-" 0)'
             else:
@@ -1372,7 +1372,7 @@ class Redirect(Node):
         # Handle case where op is already >& or <&
         if op == ">&" or op == "<&":
             if target_val.isdigit():
-                return '(redirect "' + op + '" ' + target_val + ")"
+                return '(redirect "' + op + '" ' + str(int(target_val)) + ")"
             # Variable fd dup with move indicator (trailing -)
             target_val = target_val.rstrip("-")
             return '(redirect "' + op + '" "' + target_val + '")'

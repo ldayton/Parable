@@ -1051,6 +1051,7 @@ class Word extends Node {
 			formatted,
 			formatted_inner,
 			has_brace_cmdsub,
+			has_subs,
 			has_untracked_cmdsub,
 			i,
 			idx,
@@ -1225,24 +1226,39 @@ class Word extends Node {
 				if (node.command.kind === "subshell") {
 					raw_content = value.slice(i + 2, j - 1);
 					if (raw_content.startsWith("(")) {
-						// Preserve leading whitespace after (
-						k = 1;
-						while (k < raw_content.length && _isWhitespace(raw_content[k])) {
-							k += 1;
-						}
-						prefix_ws = raw_content.slice(1, k);
-						if (prefix_ws && formatted.startsWith("(")) {
-							formatted = `(${prefix_ws}${formatted.slice(1)}`;
-						}
-						// Preserve trailing whitespace before )
-						end = raw_content.length - 1;
-						m = end;
-						while (m > 0 && _isWhitespace(raw_content[m - 1])) {
-							m -= 1;
-						}
-						suffix_ws = raw_content.slice(m, end);
-						if (suffix_ws && formatted.endsWith(")")) {
-							formatted = `${formatted.slice(0, -1) + suffix_ws})`;
+						inner = raw_content.slice(1, raw_content.length - 1);
+						// Check if inner has substitutions that need formatting
+						has_subs =
+							inner.includes("$(") ||
+							inner.includes("`") ||
+							inner.includes("<(") ||
+							inner.includes(">(") ||
+							inner.includes("${ ") ||
+							inner.includes("${|");
+						if (!has_subs) {
+							// No nested substitutions, use raw content directly
+							// to preserve original whitespace around redirects
+							formatted = raw_content;
+						} else {
+							// Preserve leading whitespace after (
+							k = 1;
+							while (k < raw_content.length && _isWhitespace(raw_content[k])) {
+								k += 1;
+							}
+							prefix_ws = raw_content.slice(1, k);
+							if (prefix_ws && formatted.startsWith("(")) {
+								formatted = `(${prefix_ws}${formatted.slice(1)}`;
+							}
+							// Preserve trailing whitespace before )
+							end = raw_content.length - 1;
+							m = end;
+							while (m > 0 && _isWhitespace(raw_content[m - 1])) {
+								m -= 1;
+							}
+							suffix_ws = raw_content.slice(m, end);
+							if (suffix_ws && formatted.endsWith(")")) {
+								formatted = `${formatted.slice(0, -1) + suffix_ws})`;
+							}
 						}
 					}
 				}

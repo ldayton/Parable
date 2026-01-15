@@ -1,0 +1,5 @@
+=== process substitution with arithmetic preserves whitespace around operators
+<((1 < 2))
+---
+(command (word "<((1 < 2))"))
+---

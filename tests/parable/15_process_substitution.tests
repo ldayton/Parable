@@ -227,3 +227,15 @@ read x < <(cmd1|cmd2)
 ---
 (command (word "read") (word "x") (redirect "<" "<(cmd1 | cmd2)"))
 ---
+
+
+=== apostrophe in comment inside process substitution
+f() {
+  cat < <(
+    # it's a comment
+    echo
+  )
+}
+---
+(function "f" (brace-group (command (word "cat") (redirect "<" "<(echo)"))))
+---

@@ -5174,6 +5174,13 @@ class Parser {
 		depth = 1;
 		while (!this.atEnd() && depth > 0) {
 			c = this.peek();
+			// Comment - skip to end of line (quotes in comments are not special)
+			if (c === "#") {
+				while (!this.atEnd() && this.peek() !== "\n") {
+					this.advance();
+				}
+				continue;
+			}
 			// Single-quoted string
 			if (c === "'") {
 				this.advance();
@@ -5331,7 +5338,13 @@ class Parser {
 		this.advance();
 		text = this.source.slice(start, this.pos);
 		// Parse the arithmetic expression
-		expr = this._parseArithExpr(content);
+		// If parsing fails, this isn't arithmetic (e.g., $(((cmd))) is command sub + subshell)
+		try {
+			expr = this._parseArithExpr(content);
+		} catch (_) {
+			this.pos = start;
+			return [null, ""];
+		}
 		return [new ArithmeticExpansion(expr), text];
 	}
 

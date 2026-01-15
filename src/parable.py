@@ -4403,6 +4403,12 @@ class Parser:
         while not self.at_end() and depth > 0:
             c = self.peek()
 
+            # Comment - skip to end of line (quotes in comments are not special)
+            if c == "#":
+                while not self.at_end() and self.peek() != "\n":
+                    self.advance()
+                continue
+
             # Single-quoted string
             if c == "'":
                 self.advance()
@@ -4565,7 +4571,12 @@ class Parser:
         text = _substring(self.source, start, self.pos)
 
         # Parse the arithmetic expression
-        expr = self._parse_arith_expr(content)
+        # If parsing fails, this isn't arithmetic (e.g., $(((cmd))) is command sub + subshell)
+        try:
+            expr = self._parse_arith_expr(content)
+        except ParseError:
+            self.pos = start
+            return None, ""
         return ArithmeticExpansion(expr), text
 
     # ========== Arithmetic expression parser ==========

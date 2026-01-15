@@ -1,5 +1,23 @@
 #!/usr/bin/env python3
-"""Phase 1 fuzzer: corpus mutation for differential testing."""
+"""Phase 1 fuzzer: corpus mutation for differential testing.
+
+Mutates inputs from the test corpus (tests/**/*.tests) and compares Parable's
+parse results against bash-oracle to find discrepancies.
+
+Limitations:
+    Single-character mutations struggle to create structural combinations that
+    don't already exist in the corpus. Real-world corpora (like bigtable) find
+    bugs this fuzzer misses because they naturally contain diverse nesting.
+
+Potential improvements:
+
+    | Improvement             | Impact | Difficulty | Notes                          |
+    |-------------------------|--------|------------|--------------------------------|
+    | Targeted seeding        | Medium | Trivial    | Add tricky patterns to corpus  |
+    | Cross-pollination       | High   | Medium     | Graft subtrees between inputs  |
+    | Structural mutations    | High   | Medium     | Wrap exprs in $(), <(), etc.   |
+    | Grammar-aware generation| High   | High       | Different tool entirely        |
+"""
 
 import argparse
 import random

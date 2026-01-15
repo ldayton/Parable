@@ -1,0 +1,5 @@
+=== equals inside brackets not an assignment
+a[=] b[ ]=x
+---
+(command (word "a[=]") (word "b[") (word "]=x"))
+---

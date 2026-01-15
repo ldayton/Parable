@@ -35,7 +35,13 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 from parable import ParseError, parse  # noqa: E402
 
 ORACLE_PATH = Path.home() / "source" / "bash-oracle" / "bash-oracle"
-MUTATION_CHARS = list("${}()|&<>;\"'\\` \t\n@#![]:=")
+MUTATION_GROUPS = list("${}()|&<>;\"'\\` \t\n@#![]:=*?~/+-,") + ["0123456789"]
+
+
+def pick_mutation_char() -> str:
+    """Pick a mutation char. Digits are weighted as a group, not individually."""
+    group = random.choice(MUTATION_GROUPS)
+    return random.choice(group) if len(group) > 1 else group
 
 
 @dataclass
@@ -108,7 +114,7 @@ def mutate(s: str, num_mutations: int = 1) -> tuple[str, str]:
         op = random.choice(["insert", "delete", "swap", "replace"])
         if op == "insert" and len(result) > 0:
             pos = random.randint(0, len(result))
-            char = random.choice(MUTATION_CHARS)
+            char = pick_mutation_char()
             result.insert(pos, char)
             ops.append(f"insert {char!r} at {pos}")
         elif op == "delete" and len(result) > 1:
@@ -122,7 +128,7 @@ def mutate(s: str, num_mutations: int = 1) -> tuple[str, str]:
         elif op == "replace" and len(result) > 0:
             pos = random.randint(0, len(result) - 1)
             old = result[pos]
-            result[pos] = random.choice(MUTATION_CHARS)
+            result[pos] = pick_mutation_char()
             ops.append(f"replace {old!r} with {result[pos]!r} at {pos}")
     result_str = "".join(result)
     # Restore protected sequences

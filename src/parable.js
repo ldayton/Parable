@@ -5067,8 +5067,7 @@ class Parser {
 			}
 		}
 		if (this.atEnd()) {
-			this.pos = start;
-			return [null, ""];
+			throw new ParseError("Unterminated backtick", start);
 		}
 		this.advance();
 		text_chars.push("`");

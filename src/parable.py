@@ -1363,7 +1363,7 @@ class Redirect(Node):
                 "-"
             )  # "&1" -> "1", "&1-" -> "1"
             if fd_target.isdigit():
-                return '(redirect "' + op + '" ' + fd_target + ")"
+                return '(redirect "' + op + '" ' + str(int(fd_target)) + ")"
             elif target_val == "&-":
                 return '(redirect ">&-" 0)'
             else:
@@ -1372,7 +1372,10 @@ class Redirect(Node):
         # Handle case where op is already >& or <&
         if op == ">&" or op == "<&":
             if target_val.isdigit():
-                return '(redirect "' + op + '" ' + target_val + ")"
+                return '(redirect "' + op + '" ' + str(int(target_val)) + ")"
+            # Handle close: <& - or >& - (with space before -)
+            if target_val == "-":
+                return '(redirect ">&-" 0)'
             # Variable fd dup with move indicator (trailing -)
             target_val = target_val.rstrip("-")
             return '(redirect "' + op + '" "' + target_val + '")'
@@ -5266,7 +5269,7 @@ class Parser:
                 self.advance()
 
         if self.at_end() or depth != 0:
-            raise ParseError("Unterminated $[ arithmetic expansion", pos=start)
+            raise ParseError("Unterminated $[", pos=start)
 
         content = _substring(self.source, content_start, self.pos)
         self.advance()  # consume ]
@@ -6049,7 +6052,8 @@ class Parser:
                 if not self.at_end() and self.peek() == "-":
                     fd_target += self.advance()  # consume the trailing -
                 # If more word characters follow, treat the whole target as a word (e.g., <&0=)
-                if not self.at_end() and not _is_metachar(self.peek()):
+                # BUT: bare "-" (close syntax) is always complete - trailing chars are separate words
+                if fd_target != "-" and not self.at_end() and not _is_metachar(self.peek()):
                     self.pos = word_start
                     inner_word = self.parse_word()
                     if inner_word is not None:

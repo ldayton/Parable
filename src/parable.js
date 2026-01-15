@@ -1711,7 +1711,7 @@ class Redirect extends Node {
 			}
 			fd_target = target_val.slice(1, target_val.length).replace(/[-]+$/, "");
 			if (/^[0-9]+$/.test(fd_target)) {
-				return `(redirect "${op}" ${fd_target})`;
+				return `(redirect "${op}" ${parseInt(fd_target, 10)})`;
 			} else if (target_val === "&-") {
 				return '(redirect ">&-" 0)';
 			} else {
@@ -1722,7 +1722,11 @@ class Redirect extends Node {
 		// Handle case where op is already >& or <&
 		if (op === ">&" || op === "<&") {
 			if (/^[0-9]+$/.test(target_val)) {
-				return `(redirect "${op}" ${target_val})`;
+				return `(redirect "${op}" ${parseInt(target_val, 10)})`;
+			}
+			// Handle close: <& - or >& - (with space before -)
+			if (target_val === "-") {
+				return '(redirect ">&-" 0)';
 			}
 			// Variable fd dup with move indicator (trailing -)
 			target_val = target_val.replace(/[-]+$/, "");
@@ -6188,7 +6192,7 @@ class Parser {
 			}
 		}
 		if (this.atEnd() || depth !== 0) {
-			throw new ParseError("Unterminated $[ arithmetic expansion", start);
+			throw new ParseError("Unterminated $[", start);
 		}
 		content = this.source.slice(content_start, this.pos);
 		this.advance();
@@ -7136,7 +7140,8 @@ class Parser {
 					fd_target += this.advance();
 				}
 				// If more word characters follow, treat the whole target as a word (e.g., <&0=)
-				if (!this.atEnd() && !_isMetachar(this.peek())) {
+				// BUT: bare "-" (close syntax) is always complete - trailing chars are separate words
+				if (fd_target !== "-" && !this.atEnd() && !_isMetachar(this.peek())) {
 					this.pos = word_start;
 					inner_word = this.parseWord();
 					if (inner_word != null) {

@@ -1,0 +1,5 @@
+=== close redirect followed by word
+<&-0
+---
+(command (word "0") (redirect ">&-" 0))
+---

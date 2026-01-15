@@ -1,0 +1,5 @@
+=== space between <& and - should close stdin
+a <& -
+---
+(command (word "a") (redirect ">&-" 0))
+---

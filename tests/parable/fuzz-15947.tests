@@ -1,0 +1,5 @@
+=== time -p with semicolon should parse -p as flag
+time -p;
+---
+(time -p (command))
+---

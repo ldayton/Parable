@@ -1,0 +1,5 @@
+=== literal dollar sign in quoted pattern
+echo ${v#"$"}
+---
+(command (word "echo") (word "${v#\"$\"}"))
+---

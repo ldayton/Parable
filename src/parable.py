@@ -447,6 +447,8 @@ class Word(Node):
         in_single_quote = False
         in_double_quote = False
         brace_depth = 0
+        # Track quote state inside brace expansions separately
+        brace_in_double_quote = False
         while i < len(value):
             ch = value[i]
             if ch == "\\" and i + 1 < len(value):
@@ -456,10 +458,13 @@ class Word(Node):
                 i += 2
             elif _starts_with_at(value, i, "${") and not in_single_quote:
                 brace_depth += 1
+                brace_in_double_quote = False
                 result.append("$")
                 result.append("{")
                 i += 2
-            elif ch == "}" and brace_depth > 0 and not in_single_quote:
+            elif (
+                ch == "}" and brace_depth > 0 and not in_single_quote and not brace_in_double_quote
+            ):
                 brace_depth -= 1
                 result.append(ch)
                 i += 1
@@ -471,7 +476,17 @@ class Word(Node):
                 in_double_quote = not in_double_quote
                 result.append(ch)
                 i += 1
-            elif _starts_with_at(value, i, '$"') and not in_single_quote and not in_double_quote:
+            elif ch == '"' and not in_single_quote and brace_depth > 0:
+                # Toggle quote state inside brace expansion
+                brace_in_double_quote = not brace_in_double_quote
+                result.append(ch)
+                i += 1
+            elif (
+                _starts_with_at(value, i, '$"')
+                and not in_single_quote
+                and not in_double_quote
+                and not brace_in_double_quote
+            ):
                 # Count consecutive $ chars ending at i to check for $$ (PID param)
                 dollar_count = 1
                 j = i - 1
@@ -481,7 +496,10 @@ class Word(Node):
                 if dollar_count % 2 == 1:
                     # Odd count: locale string $"..." - strip the $ and enter double quote
                     result.append('"')
-                    in_double_quote = True
+                    if brace_depth > 0:
+                        brace_in_double_quote = True
+                    else:
+                        in_double_quote = True
                     i += 2
                 else:
                     # Even count: this $ is part of $$ (PID), just append it

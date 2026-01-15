@@ -1,0 +1,5 @@
+=== fd dup with double trailing dash
+:<&0--
+---
+(command (word ":") (redirect "<&" "0-"))
+---

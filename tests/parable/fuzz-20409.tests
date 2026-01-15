@@ -1,0 +1,5 @@
+=== bracket with pipe in case pattern is split by pattern separator
+case x in [a|b]) ;; esac
+---
+(case (word "x") (pattern ((word "[a") (word "b]")) ()))
+---

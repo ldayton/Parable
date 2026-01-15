@@ -9528,6 +9528,18 @@ class Parser {
 		if (result) {
 			return result;
 		}
+		// Arithmetic command ((...)) - check before subshell
+		if (
+			!this.atEnd() &&
+			this.peek() === "(" &&
+			this.pos + 1 < this.length &&
+			this.source[this.pos + 1] === "("
+		) {
+			result = this.parseArithmeticCommand();
+			if (result != null) {
+				return result;
+			}
+		}
 		result = this.parseSubshell();
 		if (result) {
 			return result;

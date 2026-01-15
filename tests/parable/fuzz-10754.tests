@@ -1,0 +1,5 @@
+=== arithmetic as function body
+a()((1))
+---
+(function "a" (arith (word "1")))
+---

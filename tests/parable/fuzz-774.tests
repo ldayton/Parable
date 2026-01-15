@@ -1,0 +1,5 @@
+=== heredoc with redirect on same line in command substitution
+"$(<<a <a)"
+---
+(command (word "\"$(<<a < a\na\n)\""))
+---

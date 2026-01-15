@@ -2987,10 +2987,12 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 		cmd,
 		cmds,
 		cond,
+		delim,
 		else_body,
 		first_nl,
 		formatted,
 		has_heredoc,
+		heredoc_content,
 		i,
 		idx,
 		inner_body,
@@ -2999,6 +3001,7 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 		last,
 		name,
 		needs_redirect,
+		op,
 		p,
 		part,
 		parts,
@@ -3048,16 +3051,32 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 			val = w._formatCommandSubstitutions(val);
 			parts.push(val);
 		}
+		// Collect heredoc content separately - it comes after all redirects
+		// Format: words <<DELIM other-redirects\ncontent\nDELIM\n
+		heredoc_content = [];
 		for (r of node.redirects) {
-			parts.push(_formatRedirect(r, compact_redirects));
+			if (r.kind === "heredoc") {
+				// Add just the operator and delimiter to parts
+				op = r.strip_tabs ? "<<-" : "<<";
+				delim = r.quoted ? `'${r.delimiter}'` : r.delimiter;
+				parts.push(op + delim);
+				// Save content for later
+				heredoc_content.push(`\n${r.content}${r.delimiter}\n`);
+			} else {
+				parts.push(_formatRedirect(r, compact_redirects));
+			}
 		}
 		// In compact mode with words, don't add space before redirects
 		if (compact_redirects && node.words && node.redirects) {
 			word_parts = parts.slice(0, node.words.length);
 			redirect_parts = parts.slice(node.words.length);
-			return word_parts.join(" ") + redirect_parts.join("");
+			return (
+				word_parts.join(" ") +
+				redirect_parts.join("") +
+				heredoc_content.join("")
+			);
 		}
-		return parts.join(" ");
+		return parts.join(" ") + heredoc_content.join("");
 	}
 	if (node.kind === "pipeline") {
 		// Build list of (cmd, needs_pipe_both_redirect) filtering out PipeBoth markers
@@ -7564,8 +7583,10 @@ class Parser {
 			line,
 			line_end,
 			line_start,
+			newline_pos,
 			next_ch,
 			next_line_start,
+			paren_depth,
 			quoted,
 			scan_pos,
 			trailing_bs;
@@ -7650,10 +7671,19 @@ class Parser {
 		// Find the end of the current line (command continues until newline)
 		// We need to mark where the heredoc content starts
 		// Must be quote-aware - newlines inside quoted strings don't end the line
+		// Also track paren depth - ) at depth 0 closes enclosing command substitution
 		line_end = this.pos;
+		paren_depth = 0;
 		while (line_end < this.length && this.source[line_end] !== "\n") {
 			ch = this.source[line_end];
-			if (ch === "'") {
+			if (ch === "(") {
+				paren_depth += 1;
+			} else if (ch === ")") {
+				if (paren_depth === 0) {
+					break;
+				}
+				paren_depth -= 1;
+			} else if (ch === "'") {
 				// Single-quoted string - skip to closing quote (no escapes)
 				line_end += 1;
 				while (line_end < this.length && this.source[line_end] !== "'") {
@@ -7694,7 +7724,14 @@ class Parser {
 		) {
 			content_start = this._pending_heredoc_end;
 		} else if (line_end < this.length) {
-			content_start = line_end + 1;
+			// If we stopped at ) instead of newline, find the newline first
+			newline_pos = line_end;
+			if (this.source[line_end] !== "\n") {
+				while (newline_pos < this.length && this.source[newline_pos] !== "\n") {
+					newline_pos += 1;
+				}
+			}
+			content_start = newline_pos < this.length ? newline_pos + 1 : this.length;
 		} else {
 			content_start = this.length;
 		}

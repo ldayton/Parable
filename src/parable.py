@@ -2625,14 +2625,25 @@ def _format_cmdsub_node(
             val = w._strip_locale_string_dollars(val)
             val = w._format_command_substitutions(val)
             parts.append(val)
+        # Collect heredoc content separately - it comes after all redirects
+        # Format: words <<DELIM other-redirects\ncontent\nDELIM\n
+        heredoc_content = []
         for r in node.redirects:
-            parts.append(_format_redirect(r, compact=compact_redirects))
+            if r.kind == "heredoc":
+                # Add just the operator and delimiter to parts
+                op = "<<-" if r.strip_tabs else "<<"
+                delim = "'" + r.delimiter + "'" if r.quoted else r.delimiter
+                parts.append(op + delim)
+                # Save content for later
+                heredoc_content.append("\n" + r.content + r.delimiter + "\n")
+            else:
+                parts.append(_format_redirect(r, compact=compact_redirects))
         # In compact mode with words, don't add space before redirects
         if compact_redirects and node.words and node.redirects:
             word_parts = parts[: len(node.words)]
             redirect_parts = parts[len(node.words) :]
-            return " ".join(word_parts) + "".join(redirect_parts)
-        return " ".join(parts)
+            return " ".join(word_parts) + "".join(redirect_parts) + "".join(heredoc_content)
+        return " ".join(parts) + "".join(heredoc_content)
     if node.kind == "pipeline":
         # Build list of (cmd, needs_pipe_both_redirect) filtering out PipeBoth markers
         cmds = []
@@ -6416,10 +6427,18 @@ class Parser:
         # Find the end of the current line (command continues until newline)
         # We need to mark where the heredoc content starts
         # Must be quote-aware - newlines inside quoted strings don't end the line
+        # Also track paren depth - ) at depth 0 closes enclosing command substitution
         line_end = self.pos
+        paren_depth = 0
         while line_end < self.length and self.source[line_end] != "\n":
             ch = self.source[line_end]
-            if ch == "'":
+            if ch == "(":
+                paren_depth += 1
+            elif ch == ")":
+                if paren_depth == 0:
+                    break  # This ) closes the enclosing command substitution
+                paren_depth -= 1
+            elif ch == "'":
                 # Single-quoted string - skip to closing quote (no escapes)
                 line_end += 1
                 while line_end < self.length and self.source[line_end] != "'":
@@ -6451,7 +6470,12 @@ class Parser:
         if self._pending_heredoc_end is not None and self._pending_heredoc_end > line_end:
             content_start = self._pending_heredoc_end
         elif line_end < self.length:
-            content_start = line_end + 1  # skip the newline
+            # If we stopped at ) instead of newline, find the newline first
+            newline_pos = line_end
+            if self.source[line_end] != "\n":
+                while newline_pos < self.length and self.source[newline_pos] != "\n":
+                    newline_pos += 1
+            content_start = newline_pos + 1 if newline_pos < self.length else self.length
         else:
             content_start = self.length
 

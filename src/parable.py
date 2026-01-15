@@ -6049,7 +6049,8 @@ class Parser:
                 if not self.at_end() and self.peek() == "-":
                     fd_target += self.advance()  # consume the trailing -
                 # If more word characters follow, treat the whole target as a word (e.g., <&0=)
-                if not self.at_end() and not _is_metachar(self.peek()):
+                # BUT: bare "-" (close syntax) is always complete - trailing chars are separate words
+                if fd_target != "-" and not self.at_end() and not _is_metachar(self.peek()):
                     self.pos = word_start
                     inner_word = self.parse_word()
                     if inner_word is not None:

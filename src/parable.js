@@ -1689,7 +1689,7 @@ class Redirect extends Node {
 	}
 
 	toSexp() {
-		let fd_target, j, op, target_val;
+		let fd_target, j, op, out_val, raw, target_val;
 		// Strip fd prefix from operator (e.g., "2>" -> ">", "{fd}>" -> ">")
 		op = this.op.replace(/^[0123456789]+/, "");
 		// Strip {varname} prefix if present
@@ -1729,15 +1729,21 @@ class Redirect extends Node {
 			} else if (op === "<") {
 				op = "<&";
 			}
-			fd_target = target_val.slice(1, target_val.length).replace(/[-]+$/, "");
-			if (/^[0-9]+$/.test(fd_target)) {
-				return `(redirect "${op}" ${parseInt(fd_target, 10)})`;
-			} else if (target_val === "&-") {
-				return '(redirect ">&-" 0)';
-			} else {
-				// Variable fd dup like >&$fd or >&$fd- (move) - strip the & and trailing -
-				return `(redirect "${op}" "${fd_target}")`;
+			raw = target_val.slice(1, target_val.length);
+			// Pure digits: dup fd N
+			if (/^[0-9]+$/.test(raw)) {
+				return `(redirect "${op}" ${parseInt(raw, 10)})`;
 			}
+			// Exact move syntax: N- (digits + exactly one dash)
+			if (raw.endsWith("-") && /^[0-9]+$/.test(raw.slice(0, -1))) {
+				return `(redirect "${op}" ${parseInt(raw.slice(0, -1), 10)})`;
+			}
+			if (target_val === "&-") {
+				return '(redirect ">&-" 0)';
+			}
+			// Variable/word target: strip exactly one trailing dash if present
+			fd_target = raw.endsWith("-") ? raw.slice(0, -1) : raw;
+			return `(redirect "${op}" "${fd_target}")`;
 		}
 		// Handle case where op is already >& or <&
 		if (op === ">&" || op === "<&") {
@@ -1748,9 +1754,16 @@ class Redirect extends Node {
 			if (target_val === "-") {
 				return '(redirect ">&-" 0)';
 			}
-			// Variable fd dup with move indicator (trailing -)
-			target_val = target_val.replace(/[-]+$/, "");
-			return `(redirect "${op}" "${target_val}")`;
+			// Exact move syntax: N- (digits + exactly one dash)
+			if (
+				target_val.endsWith("-") &&
+				/^[0-9]+$/.test(target_val.slice(0, -1))
+			) {
+				return `(redirect "${op}" ${parseInt(target_val.slice(0, -1), 10)})`;
+			}
+			// Variable/word target: strip exactly one trailing dash if present
+			out_val = target_val.endsWith("-") ? target_val.slice(0, -1) : target_val;
+			return `(redirect "${op}" "${out_val}")`;
 		}
 		return `(redirect "${op}" "${target_val}")`;
 	}

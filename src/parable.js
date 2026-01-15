@@ -1724,6 +1724,10 @@ class Redirect extends Node {
 			if (/^[0-9]+$/.test(target_val)) {
 				return `(redirect "${op}" ${parseInt(target_val, 10)})`;
 			}
+			// Handle close: <& - or >& - (with space before -)
+			if (target_val === "-") {
+				return '(redirect ">&-" 0)';
+			}
 			// Variable fd dup with move indicator (trailing -)
 			target_val = target_val.replace(/[-]+$/, "");
 			return `(redirect "${op}" "${target_val}")`;

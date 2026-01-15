@@ -1,0 +1,5 @@
+=== subshell pipe in process substitution
+<((a)|b)
+---
+(command (word "<((a)|b)"))
+---

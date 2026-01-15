@@ -5035,9 +5035,10 @@ class Parser {
 	}
 
 	_isAssignmentWord(word) {
-		let ch, i, in_double, in_single;
+		let bracket_depth, ch, i, in_double, in_single;
 		in_single = false;
 		in_double = false;
+		bracket_depth = 0;
 		i = 0;
 		while (i < word.value.length) {
 			ch = word.value[i];
@@ -5048,7 +5049,16 @@ class Parser {
 			} else if (ch === "\\" && !in_single && i + 1 < word.value.length) {
 				i += 1;
 				continue;
-			} else if (ch === "=" && !in_single && !in_double) {
+			} else if (ch === "[" && !in_single && !in_double) {
+				bracket_depth += 1;
+			} else if (ch === "]" && !in_single && !in_double) {
+				bracket_depth -= 1;
+			} else if (
+				ch === "=" &&
+				!in_single &&
+				!in_double &&
+				bracket_depth === 0
+			) {
 				return true;
 			}
 			i += 1;

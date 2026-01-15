@@ -1711,7 +1711,7 @@ class Redirect extends Node {
 			}
 			fd_target = target_val.slice(1, target_val.length).replace(/[-]+$/, "");
 			if (/^[0-9]+$/.test(fd_target)) {
-				return `(redirect "${op}" ${fd_target})`;
+				return `(redirect "${op}" ${parseInt(fd_target, 10)})`;
 			} else if (target_val === "&-") {
 				return '(redirect ">&-" 0)';
 			} else {
@@ -1722,7 +1722,7 @@ class Redirect extends Node {
 		// Handle case where op is already >& or <&
 		if (op === ">&" || op === "<&") {
 			if (/^[0-9]+$/.test(target_val)) {
-				return `(redirect "${op}" ${target_val})`;
+				return `(redirect "${op}" ${parseInt(target_val, 10)})`;
 			}
 			// Handle close: <& - or >& - (with space before -)
 			if (target_val === "-") {

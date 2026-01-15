@@ -3085,6 +3085,7 @@ def _skip_heredoc(value: str, start: int) -> int:
         delimiter = _substring(value, delim_start, i)
     # Skip to end of line (heredoc content starts on next line)
     # But track paren depth - if we hit a ) at depth 0, it closes the cmdsub
+    # Must handle quotes and backticks since newlines in them don't end the line
     paren_depth = 0
     while i < len(value) and value[i] != "\n":
         if value[i] == "(":
@@ -3094,6 +3095,27 @@ def _skip_heredoc(value: str, start: int) -> int:
                 # This ) closes the enclosing command substitution, stop here
                 break
             paren_depth -= 1
+        elif value[i] == "'":
+            # Single-quoted string - skip to closing quote
+            i += 1
+            while i < len(value) and value[i] != "'":
+                i += 1
+        elif value[i] == '"':
+            # Double-quoted string - skip to closing quote (with escapes)
+            i += 1
+            while i < len(value) and value[i] != '"':
+                if value[i] == "\\" and i + 1 < len(value):
+                    i += 2
+                else:
+                    i += 1
+        elif value[i] == "`":
+            # Backtick command substitution - skip to closing backtick
+            i += 1
+            while i < len(value) and value[i] != "`":
+                if value[i] == "\\" and i + 1 < len(value):
+                    i += 2
+                else:
+                    i += 1
         i += 1
     # If we stopped at ) (closing cmdsub), return here - no heredoc content
     if i < len(value) and value[i] == ")":
@@ -6282,6 +6304,14 @@ class Parser:
                 # Double-quoted string - skip to closing quote (with escapes)
                 line_end += 1
                 while line_end < self.length and self.source[line_end] != '"':
+                    if self.source[line_end] == "\\" and line_end + 1 < self.length:
+                        line_end += 2
+                    else:
+                        line_end += 1
+            elif ch == "`":
+                # Backtick command substitution - skip to closing backtick
+                line_end += 1
+                while line_end < self.length and self.source[line_end] != "`":
                     if self.source[line_end] == "\\" and line_end + 1 < self.length:
                         line_end += 2
                     else:

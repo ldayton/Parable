@@ -113,9 +113,15 @@ def mutate(s: str, num_mutations: int = 1) -> tuple[str, str]:
 
 def run_oracle(input_text: str) -> str | None:
     """Run bash-oracle on input. Returns s-expr or None on error/timeout."""
+    import tempfile
+
+    tmp_path = None
     try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".sh", delete=False) as f:
+            f.write(input_text)
+            tmp_path = Path(f.name)
         result = subprocess.run(
-            [str(ORACLE_PATH), "-e", input_text],
+            [str(ORACLE_PATH), str(tmp_path)],
             capture_output=True,
             timeout=5,
         )
@@ -126,6 +132,9 @@ def run_oracle(input_text: str) -> str | None:
         return None
     except FileNotFoundError:
         return None
+    finally:
+        if tmp_path:
+            tmp_path.unlink(missing_ok=True)
 
 
 def run_parable(input_text: str) -> str | None:

@@ -6634,6 +6634,14 @@ class Parser {
 							break;
 						}
 						content_chars.push(this.advance());
+					} else if (
+						c === "$" &&
+						this.pos + 1 < this.length &&
+						this.source[this.pos + 1] === "{"
+					) {
+						depth += 1;
+						content_chars.push(this.advance());
+						content_chars.push(this.advance());
 					} else if (c === "\\") {
 						if (
 							this.pos + 1 < this.length &&
@@ -6658,8 +6666,7 @@ class Parser {
 					text = `\${${content}}`;
 					return [new ParamExpansion(content), text];
 				}
-				this.pos = start;
-				return [null, ""];
+				throw new ParseError("Unclosed parameter expansion", start);
 			}
 		}
 		if (this.atEnd()) {
@@ -6856,7 +6863,15 @@ class Parser {
 		}
 		ch = this.peek();
 		// Special parameters
+		// But NOT $ followed by { - that's a nested ${...} expansion
 		if (_isSpecialParam(ch)) {
+			if (
+				ch === "$" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "{"
+			) {
+				return null;
+			}
 			this.advance();
 			return ch;
 		}

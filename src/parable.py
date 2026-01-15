@@ -5655,6 +5655,12 @@ class Parser:
                         if depth == 0:
                             break
                         content_chars.append(self.advance())
+                    elif (
+                        c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{"
+                    ):
+                        depth += 1
+                        content_chars.append(self.advance())  # $
+                        content_chars.append(self.advance())  # {
                     elif c == "\\":
                         if self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
                             # Line continuation - skip both backslash and newline
@@ -5671,8 +5677,7 @@ class Parser:
                     self.advance()  # consume final }
                     text = "${" + content + "}"
                     return ParamExpansion(content), text
-                self.pos = start
-                return None, ""
+                raise ParseError("Unclosed parameter expansion", pos=start)
 
         if self.at_end():
             self.pos = start
@@ -5842,7 +5847,10 @@ class Parser:
         ch = self.peek()
 
         # Special parameters
+        # But NOT $ followed by { - that's a nested ${...} expansion
         if _is_special_param(ch):
+            if ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
+                return None
             self.advance()
             return ch
 

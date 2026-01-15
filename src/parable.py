@@ -2760,7 +2760,7 @@ def _format_cmdsub_node(
         idx = 0
         while idx < len(cmds):
             cmd, needs_redirect = cmds[idx]
-            formatted = _format_cmdsub_node(cmd, indent)
+            formatted = _format_cmdsub_node(cmd, indent, in_procsub)
             if needs_redirect:
                 formatted = formatted + " 2>&1"
             is_last = idx == len(cmds) - 1
@@ -2782,6 +2782,8 @@ def _format_cmdsub_node(
                 result_parts.append(formatted)
             idx += 1
         # Join with " | " for commands without heredocs, or just join if heredocs handled
+        # In procsub, if first command is subshell, use compact "|" separator
+        compact_pipe = in_procsub and cmds and cmds[0][0].kind == "subshell"
         result = ""
         idx = 0
         while idx < len(result_parts):
@@ -2790,6 +2792,8 @@ def _format_cmdsub_node(
                 # If previous part ends with heredoc (newline), add indented command
                 if result.endswith("\n"):
                     result = result + "  " + part
+                elif compact_pipe:
+                    result = result + "|" + part
                 else:
                     result = result + " | " + part
             else:

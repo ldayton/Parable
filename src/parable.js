@@ -8613,6 +8613,7 @@ class Parser {
 		let arith_node,
 			arith_result,
 			arith_text,
+			bracket_will_close,
 			c,
 			ch,
 			chars,
@@ -8625,6 +8626,8 @@ class Parser {
 			paren_depth,
 			parts,
 			parts_arg,
+			sc,
+			scan,
 			start;
 		this._condSkipWhitespace();
 		if (this._condAtEnd()) {
@@ -8678,6 +8681,65 @@ class Parser {
 			// Regex character class [...] - consume until closing ]
 			// Handles [[:alpha:]], [^0-9], []a-z] (] as first char), etc.
 			if (ch === "[") {
+				// Lookahead: check if bracket expression will close properly
+				// before hitting ]] or ) (when inside paren group)
+				scan = this.pos + 1;
+				// Skip ^ for negation
+				if (scan < this.length && this.source[scan] === "^") {
+					scan += 1;
+				}
+				// Skip ] as first char (literal)
+				if (scan < this.length && this.source[scan] === "]") {
+					scan += 1;
+				}
+				bracket_will_close = false;
+				while (scan < this.length) {
+					sc = this.source[scan];
+					// Check for ]] - end of conditional
+					if (
+						sc === "]" &&
+						scan + 1 < this.length &&
+						this.source[scan + 1] === "]"
+					) {
+						break;
+					}
+					// Check for ) when inside paren group
+					if (sc === ")" && paren_depth > 0) {
+						break;
+					}
+					if (sc === "]") {
+						bracket_will_close = true;
+						break;
+					}
+					// Skip POSIX classes [:...:]
+					if (
+						sc === "[" &&
+						scan + 1 < this.length &&
+						this.source[scan + 1] === ":"
+					) {
+						scan += 2;
+						while (
+							scan < this.length &&
+							!(
+								this.source[scan] === ":" &&
+								scan + 1 < this.length &&
+								this.source[scan + 1] === "]"
+							)
+						) {
+							scan += 1;
+						}
+						if (scan < this.length) {
+							scan += 2;
+						}
+						continue;
+					}
+					scan += 1;
+				}
+				if (!bracket_will_close) {
+					// Treat [ as literal
+					chars.push(this.advance());
+					continue;
+				}
 				chars.push(this.advance());
 				// Handle negation [^
 				if (!this.atEnd() && this.peek() === "^") {

@@ -3104,6 +3104,7 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 		body_part,
 		cmd,
 		cmds,
+		compact_pipe,
 		cond,
 		else_body,
 		first_nl,
@@ -3215,7 +3216,7 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 		idx = 0;
 		while (idx < cmds.length) {
 			[cmd, needs_redirect] = cmds[idx];
-			formatted = _formatCmdsubNode(cmd, indent);
+			formatted = _formatCmdsubNode(cmd, indent, in_procsub);
 			if (needs_redirect) {
 				formatted = `${formatted} 2>&1`;
 			}
@@ -3244,6 +3245,8 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 			idx += 1;
 		}
 		// Join with " | " for commands without heredocs, or just join if heredocs handled
+		// In procsub, if first command is subshell, use compact "|" separator
+		compact_pipe = in_procsub && cmds && cmds[0][0].kind === "subshell";
 		result = "";
 		idx = 0;
 		while (idx < result_parts.length) {
@@ -3252,6 +3255,8 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 				// If previous part ends with heredoc (newline), add indented command
 				if (result.endsWith("\n")) {
 					result = `${result}  ${part}`;
+				} else if (compact_pipe) {
+					result = `${result}|${part}`;
 				} else {
 					result = `${result} | ${part}`;
 				}

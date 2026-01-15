@@ -1,0 +1,5 @@
+=== unclosed outer brace in nested parameter expansion
+${${x}
+---
+<error>
+---

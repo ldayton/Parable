@@ -2554,6 +2554,11 @@ def _format_cmdsub_node(
             parts.append(val)
         for r in node.redirects:
             parts.append(_format_redirect(r, compact=compact_redirects))
+        # In compact mode with words, don't add space before redirects
+        if compact_redirects and node.words and node.redirects:
+            word_parts = parts[: len(node.words)]
+            redirect_parts = parts[len(node.words) :]
+            return " ".join(word_parts) + "".join(redirect_parts)
         return " ".join(parts)
     if node.kind == "pipeline":
         # Build list of (cmd, needs_pipe_both_redirect) filtering out PipeBoth markers

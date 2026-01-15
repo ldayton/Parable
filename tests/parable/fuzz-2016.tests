@@ -1,0 +1,5 @@
+=== case statement with & after esac in command substitution
+$(case a in b);;esac&)
+---
+(command (word "$(case a in b)\n\n    ;;\nesac &)"))
+---

@@ -2651,7 +2651,11 @@ def _format_cmdsub_node(
                     result.append("\n")
                 elif p.op == "&":
                     # If previous command has heredoc, insert & before heredoc content
-                    if result and "\n" in result[len(result) - 1]:
+                    if (
+                        result
+                        and "<<" in result[len(result) - 1]
+                        and "\n" in result[len(result) - 1]
+                    ):
                         last = result[len(result) - 1]
                         first_nl = last.find("\n")
                         result[len(result) - 1] = last[:first_nl] + " &" + last[first_nl:]
@@ -2758,11 +2762,12 @@ def _format_cmdsub_node(
             term = p.terminator  # ;;, ;&, or ;;&
             pat_indent = _repeat_str(" ", indent + 8)
             term_indent = _repeat_str(" ", indent + 4)
+            body_part = pat_indent + body + "\n" if body else "\n"
             if i == 0:
                 # First pattern on same line as 'in'
-                patterns.append(" " + pat + ")\n" + pat_indent + body + "\n" + term_indent + term)
+                patterns.append(" " + pat + ")\n" + body_part + term_indent + term)
             else:
-                patterns.append(pat + ")\n" + pat_indent + body + "\n" + term_indent + term)
+                patterns.append(pat + ")\n" + body_part + term_indent + term)
             i += 1
         pattern_str = ("\n" + _repeat_str(" ", indent + 4)).join(patterns)
         redirects = ""

@@ -3381,6 +3381,25 @@ def _str_contains(haystack: str, needle: str) -> bool:
     return haystack.find(needle) != -1
 
 
+def _looks_like_assignment(s: str) -> bool:
+    """Check if s looks like an assignment (NAME=... or NAME+=...) where NAME is a valid variable name."""
+    eq_pos = s.find("=")
+    if eq_pos == -1:
+        return False
+    name = s[:eq_pos]
+    # Handle NAME+= (array append)
+    if name.endswith("+"):
+        name = name[:-1]
+    if not name:
+        return False
+    if not (name[0].isalpha() or name[0] == "_"):
+        return False
+    for c in name[1:]:
+        if not (c.isalnum() or c == "_"):
+            return False
+    return True
+
+
 class Parser:
     """Recursive descent parser for bash."""
 
@@ -7927,8 +7946,8 @@ class Parser:
         if name is None or name in RESERVED_WORDS:
             return None
 
-        # Assignment words (containing =) are not function definitions
-        if _str_contains(name, "="):
+        # Assignment words (NAME=...) are not function definitions
+        if _looks_like_assignment(name):
             return None
 
         # Save position after the name

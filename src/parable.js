@@ -3939,6 +3939,31 @@ function _strContains(haystack, needle) {
 	return haystack.indexOf(needle) !== -1;
 }
 
+function _looksLikeAssignment(s) {
+	let c, eq_pos, name;
+	eq_pos = s.indexOf("=");
+	if (eq_pos === -1) {
+		return false;
+	}
+	name = s.slice(0, eq_pos);
+	// Handle NAME+= (array append)
+	if (name.endsWith("+")) {
+		name = name.slice(0, -1);
+	}
+	if (!name) {
+		return false;
+	}
+	if (!(/^[a-zA-Z]$/.test(name[0]) || name[0] === "_")) {
+		return false;
+	}
+	for (c of name.slice(1)) {
+		if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
+			return false;
+		}
+	}
+	return true;
+}
+
 class Parser {
 	constructor(source) {
 		this.source = source;
@@ -9406,8 +9431,8 @@ class Parser {
 		if (name == null || RESERVED_WORDS.has(name)) {
 			return null;
 		}
-		// Assignment words (containing =) are not function definitions
-		if (_strContains(name, "=")) {
+		// Assignment words (NAME=...) are not function definitions
+		if (_looksLikeAssignment(name)) {
 			return null;
 		}
 		// Save position after the name

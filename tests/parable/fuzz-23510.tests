@@ -1,0 +1,6 @@
+=== function name containing }
+}=()
+(x)
+---
+(function "}=" (subshell (command (word "x"))))
+---

@@ -1,0 +1,6 @@
+=== brace cmdsub preserves trailing newline
+${ x*
+}a
+---
+(command (word "${ x*\n }a"))
+---

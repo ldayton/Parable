@@ -6654,6 +6654,9 @@ class Parser:
                 break
             if ch == "|" and self.pos + 1 < self.length and self.source[self.pos + 1] == "|":
                 break
+            # Semicolons are not valid inside conditionals
+            if ch == ";":
+                break
 
             # Glob bracket expression [...] - consume until closing ]
             # Handles [[:alpha:]], [^0-9], []a-z] (] as first char), etc.

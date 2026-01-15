@@ -1,0 +1,5 @@
+=== semicolon not allowed inside conditional expression
+[[ a == b;]]
+---
+<error>
+---

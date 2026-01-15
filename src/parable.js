@@ -7892,6 +7892,10 @@ class Parser {
 			) {
 				break;
 			}
+			// Semicolons are not valid inside conditionals
+			if (ch === ";") {
+				break;
+			}
 			// Glob bracket expression [...] - consume until closing ]
 			// Handles [[:alpha:]], [^0-9], []a-z] (] as first char), etc.
 			if (ch === "[") {

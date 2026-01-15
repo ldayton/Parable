@@ -481,9 +481,17 @@ class Word(Node):
                 expanded = self._expand_ansi_c_escapes(
                     _substring(ansi_str, 1, len(ansi_str))
                 )  # Pass 'hello\nworld'
-                # Inside ${...}, strip quotes for default/alternate value operators
-                # but keep them for pattern replacement operators
-                if brace_depth > 0 and expanded.startswith("'") and expanded.endswith("'"):
+                # Inside ${...} that's itself in double quotes, strip quotes for
+                # default/alternate value operators but keep for pattern operators
+                outer_in_dquote = (
+                    quote_stack[len(quote_stack) - 1][1] if len(quote_stack) > 0 else False
+                )
+                if (
+                    brace_depth > 0
+                    and outer_in_dquote
+                    and expanded.startswith("'")
+                    and expanded.endswith("'")
+                ):
                     inner = _substring(expanded, 1, len(expanded) - 1)
                     # Only strip if non-empty and no CTLESC
                     if inner and inner.find("\x01") == -1:

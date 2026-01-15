@@ -1,0 +1,6 @@
+=== backslash-newline in bad expansion with colon prefix
+${:x-\
+}
+---
+(command (word "${:x-}"))
+---

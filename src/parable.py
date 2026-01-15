@@ -2811,7 +2811,7 @@ def _format_cmdsub_node(
             else:
                 if result and not result[len(result) - 1].endswith((" ", "\n")):
                     result.append(" ")
-                result.append(_format_cmdsub_node(p, indent))
+                result.append(_format_cmdsub_node(p, indent, in_procsub, compact_redirects))
         # Strip trailing ; or newline (but preserve heredoc's trailing newline)
         s = "".join(result)
         # If we have & with heredoc (& before newline content), preserve trailing newline and add space

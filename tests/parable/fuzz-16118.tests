@@ -1,0 +1,6 @@
+=== subshell in process substitution with newline should not add spaces
+<((a)
+a)
+---
+(command (word "<((a)\na)"))
+---

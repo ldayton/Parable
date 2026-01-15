@@ -1,0 +1,5 @@
+=== negation before redirect
+!>x
+---
+(negation (command (redirect ">" "x")))
+---

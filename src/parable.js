@@ -3959,7 +3959,15 @@ function _isListTerminator(c) {
 }
 
 function _isNegationBoundary(c) {
-	return _isWhitespace(c) || c === ";" || c === "|" || c === ")" || c === "&";
+	return (
+		_isWhitespace(c) ||
+		c === ";" ||
+		c === "|" ||
+		c === ")" ||
+		c === "&" ||
+		c === ">" ||
+		c === "<"
+	);
 }
 
 function _isBackslashEscaped(value, idx) {

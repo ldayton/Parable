@@ -1,0 +1,5 @@
+=== unterminated old-style arithmetic is syntax error
+$[1
+---
+<error>
+---

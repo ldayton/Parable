@@ -5266,8 +5266,7 @@ class Parser:
                 self.advance()
 
         if self.at_end() or depth != 0:
-            self.pos = start
-            return None, ""
+            raise ParseError("Unterminated $[ arithmetic expansion", pos=start)
 
         content = _substring(self.source, content_start, self.pos)
         self.advance()  # consume ]

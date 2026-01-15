@@ -290,9 +290,9 @@ class Word(Node):
                         result.append(ord(inner[i]))
                         i += 1
                 elif c == "0":
-                    # Nul or octal \0 or \0NNN
+                    # Nul or octal \0 or \0NN (up to 3 digits total)
                     j = i + 2
-                    while j < len(inner) and j < i + 5 and _is_octal_digit(inner[j]):
+                    while j < len(inner) and j < i + 4 and _is_octal_digit(inner[j]):
                         j += 1
                     if j > i + 2:
                         byte_val = int(_substring(inner, i + 1, j), 8)

@@ -310,9 +310,9 @@ class Word extends Node {
 						i += 1;
 					}
 				} else if (c === "0") {
-					// Nul or octal \0 or \0NNN
+					// Nul or octal \0 or \0NN (up to 3 digits total)
 					j = i + 2;
-					while (j < inner.length && j < i + 5 && _isOctalDigit(inner[j])) {
+					while (j < inner.length && j < i + 4 && _isOctalDigit(inner[j])) {
 						j += 1;
 					}
 					if (j > i + 2) {

@@ -4249,6 +4249,7 @@ class Parser {
 			cmdsub_result,
 			cmdsub_text,
 			extglob_depth,
+			in_single_in_dquote,
 			inner_parts,
 			locale_node,
 			locale_result,
@@ -4330,8 +4331,17 @@ class Parser {
 				// Double-quoted string - expansions happen inside
 				this.advance();
 				chars.push('"');
-				while (!this.atEnd() && this.peek() !== '"') {
+				in_single_in_dquote = false;
+				while (!this.atEnd() && (in_single_in_dquote || this.peek() !== '"')) {
 					c = this.peek();
+					// Inside single-quoted section (from param subscript)
+					if (in_single_in_dquote) {
+						chars.push(this.advance());
+						if (c === "'") {
+							in_single_in_dquote = false;
+						}
+						continue;
+					}
 					// Handle escape sequences in double quotes
 					if (c === "\\" && this.pos + 1 < this.length) {
 						next_c = this.source[this.pos + 1];
@@ -6550,7 +6560,9 @@ class Parser {
 			content,
 			content_chars,
 			depth,
+			in_double_inner,
 			in_double_quote,
+			in_single,
 			in_single_quote,
 			next_c,
 			op,
@@ -6703,10 +6715,44 @@ class Parser {
 			} else {
 				// Unknown syntax like ${(M)...} (zsh) - consume until matching }
 				// Bash accepts these syntactically but fails at runtime
+				// Must track quotes - inside subscripts, quotes span until closed
 				depth = 1;
 				content_chars = [];
+				in_single = false;
+				in_double_inner = false;
 				while (!this.atEnd() && depth > 0) {
 					c = this.peek();
+					if (in_single) {
+						content_chars.push(this.advance());
+						if (c === "'") {
+							in_single = false;
+						}
+						continue;
+					}
+					if (in_double_inner) {
+						if (c === "\\" && this.pos + 1 < this.length) {
+							content_chars.push(this.advance());
+							if (!this.atEnd()) {
+								content_chars.push(this.advance());
+							}
+							continue;
+						}
+						content_chars.push(this.advance());
+						if (c === '"') {
+							in_double_inner = false;
+						}
+						continue;
+					}
+					if (c === "'") {
+						in_single = true;
+						content_chars.push(this.advance());
+						continue;
+					}
+					if (c === '"') {
+						in_double_inner = true;
+						content_chars.push(this.advance());
+						continue;
+					}
 					if (c === "{") {
 						depth += 1;
 						content_chars.push(this.advance());
@@ -6939,7 +6985,7 @@ class Parser {
 	}
 
 	_consumeParamName() {
-		let bracket_depth, c, ch, name_chars, sc;
+		let bracket_depth, c, ch, in_double_sub, in_single, name_chars, sc;
 		if (this.atEnd()) {
 			return null;
 		}
@@ -6976,11 +7022,51 @@ class Parser {
 					if (!this._paramSubscriptHasClose(this.pos)) {
 						break;
 					}
-					// Array subscript - track bracket depth
+					// Array subscript - track bracket depth and quotes
 					name_chars.push(this.advance());
 					bracket_depth = 1;
+					in_single = false;
+					in_double_sub = false;
 					while (!this.atEnd() && bracket_depth > 0) {
 						sc = this.peek();
+						if (in_single) {
+							name_chars.push(this.advance());
+							if (sc === "'") {
+								in_single = false;
+							}
+							continue;
+						}
+						if (in_double_sub) {
+							if (sc === "\\" && this.pos + 1 < this.length) {
+								name_chars.push(this.advance());
+								if (!this.atEnd()) {
+									name_chars.push(this.advance());
+								}
+								continue;
+							}
+							name_chars.push(this.advance());
+							if (sc === '"') {
+								in_double_sub = false;
+							}
+							continue;
+						}
+						if (sc === "'") {
+							in_single = true;
+							name_chars.push(this.advance());
+							continue;
+						}
+						if (sc === '"') {
+							in_double_sub = true;
+							name_chars.push(this.advance());
+							continue;
+						}
+						if (sc === "\\") {
+							name_chars.push(this.advance());
+							if (!this.atEnd()) {
+								name_chars.push(this.advance());
+							}
+							continue;
+						}
 						if (sc === "[") {
 							bracket_depth += 1;
 						} else if (sc === "]") {

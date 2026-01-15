@@ -1,0 +1,11 @@
+=== arithmetic with lone pipe operator
+echo $((|))
+---
+(command (word "echo") (word "$((|))"))
+---
+
+=== arithmetic with trailing pipe operator
+echo $((1|))
+---
+(command (word "echo") (word "$((1|))"))
+---

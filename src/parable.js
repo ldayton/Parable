@@ -2408,6 +2408,17 @@ class ArithNumber extends Node {
 	}
 }
 
+class ArithEmpty extends Node {
+	constructor() {
+		super();
+		this.kind = "empty";
+	}
+
+	toSexp() {
+		return "(empty)";
+	}
+}
+
 class ArithVar extends Node {
 	constructor(name) {
 		super();
@@ -5817,6 +5828,11 @@ class Parser {
 			}
 			escaped_char = this._arithAdvance();
 			return new ArithEscape(escaped_char);
+		}
+		// Check for end of expression or operators - bash allows missing operands
+		// (defers validation to runtime), so we return an empty node
+		if (this._arithAtEnd() || ")]:,?|&<>=!+-*/%^~".includes(c)) {
+			return new ArithEmpty();
 		}
 		// Number or variable
 		return this._arithParseNumberOrVar();

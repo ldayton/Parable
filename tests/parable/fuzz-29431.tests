@@ -1,0 +1,6 @@
+=== single quote spans subscript boundary
+"${[']}
+"${[']}"
+---
+(command (word "\"${[']}\n\"${[']}\""))
+---

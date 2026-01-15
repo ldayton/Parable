@@ -2029,6 +2029,16 @@ class ArithNumber(Node):
         return '(number "' + self.value + '")'
 
 
+class ArithEmpty(Node):
+    """A missing operand in arithmetic context (e.g., in $((|)) or $((1|)))."""
+
+    def __init__(self):
+        self.kind = "empty"
+
+    def to_sexp(self) -> str:
+        return "(empty)"
+
+
 class ArithVar(Node):
     """A variable reference in arithmetic context (without $)."""
 
@@ -4951,6 +4961,11 @@ class Parser:
                 )
             escaped_char = self._arith_advance()  # consume escaped character
             return ArithEscape(escaped_char)
+
+        # Check for end of expression or operators - bash allows missing operands
+        # (defers validation to runtime), so we return an empty node
+        if self._arith_at_end() or c in ")]:,?|&<>=!+-*/%^~":
+            return ArithEmpty()
 
         # Number or variable
         return self._arith_parse_number_or_var()

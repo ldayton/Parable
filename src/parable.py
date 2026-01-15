@@ -3321,7 +3321,7 @@ def _is_list_terminator(c: str) -> bool:
 
 
 def _is_negation_boundary(c: str) -> bool:
-    return _is_whitespace(c) or c == ";" or c == "|" or c == ")"
+    return _is_whitespace(c) or c == ";" or c == "|" or c == ")" or c == "&"
 
 
 def _is_backslash_escaped(value: str, idx: int) -> bool:

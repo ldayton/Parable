@@ -4304,8 +4304,7 @@ class Parser:
                 text_chars.append(ch)
 
         if self.at_end():
-            self.pos = start
-            return None, ""
+            raise ParseError("Unterminated backtick", pos=start)
 
         self.advance()  # consume closing `
         text_chars.append("`")  # closing backtick

@@ -1,0 +1,7 @@
+=== newlines at param expansion boundaries become spaces
+${
+a-
+}
+---
+(command (word "${ a-\n }"))
+---

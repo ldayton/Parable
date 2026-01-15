@@ -117,6 +117,8 @@ class Word extends Node {
 		value = this._normalizeArrayWhitespace(value);
 		// Format command substitutions with bash-oracle pretty-printing (before escaping)
 		value = this._formatCommandSubstitutions(value);
+		// Convert newlines at param expansion boundaries to spaces (bash behavior)
+		value = this._normalizeParamExpansionNewlines(value);
 		// Strip line continuations (backslash-newline) from arithmetic expressions
 		value = this._stripArithLineContinuations(value);
 		// Double CTLESC (0x01) bytes - bash-oracle uses this for quoting control chars
@@ -174,6 +176,80 @@ class Word extends Node {
 					// Outside double quotes (including single quotes): always double
 					result.push("");
 				}
+			}
+		}
+		return result.join("");
+	}
+
+	_normalizeParamExpansionNewlines(value) {
+		let c, ch, depth, had_leading_newline, i, in_double, in_single, result;
+		result = [];
+		i = 0;
+		in_single = false;
+		in_double = false;
+		while (i < value.length) {
+			c = value[i];
+			// Track quote state
+			if (c === "'" && !in_double) {
+				in_single = !in_single;
+				result.push(c);
+				i += 1;
+			} else if (c === '"' && !in_single) {
+				in_double = !in_double;
+				result.push(c);
+				i += 1;
+			} else if (
+				c === "$" &&
+				i + 1 < value.length &&
+				value[i + 1] === "{" &&
+				!in_single
+			) {
+				// Check for ${ param expansion
+				result.push("$");
+				result.push("{");
+				i += 2;
+				// Check for leading newline and convert to space
+				had_leading_newline = i < value.length && value[i] === "\n";
+				if (had_leading_newline) {
+					result.push(" ");
+					i += 1;
+				}
+				// Find matching close brace and process content
+				depth = 1;
+				while (i < value.length && depth > 0) {
+					ch = value[i];
+					if (ch === "\\" && i + 1 < value.length && !in_single) {
+						result.push(ch);
+						result.push(value[i + 1]);
+						i += 2;
+						continue;
+					}
+					if (ch === "'" && !in_double) {
+						in_single = !in_single;
+					} else if (ch === '"' && !in_single) {
+						in_double = !in_double;
+					} else if (!in_single && !in_double) {
+						if (ch === "{") {
+							depth += 1;
+						} else if (ch === "}") {
+							depth -= 1;
+							if (depth === 0) {
+								// Add trailing space if we had leading newline
+								if (had_leading_newline) {
+									result.push(" ");
+								}
+								result.push(ch);
+								i += 1;
+								break;
+							}
+						}
+					}
+					result.push(ch);
+					i += 1;
+				}
+			} else {
+				result.push(c);
+				i += 1;
 			}
 		}
 		return result.join("");

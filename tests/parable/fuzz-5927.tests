@@ -1,0 +1,7 @@
+=== heredoc with semicolon preserves trailing newline
+a=$(<<X;
+X
+)
+---
+(command (word "a=$(<<X\nX\n)"))
+---

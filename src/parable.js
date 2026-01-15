@@ -3060,6 +3060,18 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 		return result;
 	}
 	if (node.kind === "list") {
+		// Check if any command in the list has a heredoc redirect
+		has_heredoc = false;
+		for (p of node.parts) {
+			if (p.kind === "command" && p.redirects) {
+				for (r of p.redirects) {
+					if (r.kind === "heredoc") {
+						has_heredoc = true;
+						break;
+					}
+				}
+			}
+		}
 		// Join commands with operators
 		result = [];
 		for (p of node.parts) {
@@ -3098,14 +3110,19 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 				result.push(_formatCmdsubNode(p, indent));
 			}
 		}
-		// Strip trailing ; or newline
+		// Strip trailing ; or newline (but preserve heredoc's trailing newline)
 		s = result.join("");
 		// If we have & with heredoc (& before newline content), preserve trailing newline and add space
 		if (s.includes(" &\n") && s.endsWith("\n")) {
 			return `${s} `;
 		}
-		while (s.endsWith(";") || s.endsWith("\n")) {
+		while (s.endsWith(";")) {
 			s = s.slice(0, s.length - 1);
+		}
+		if (!has_heredoc) {
+			while (s.endsWith("\n")) {
+				s = s.slice(0, s.length - 1);
+			}
 		}
 		return s;
 	}

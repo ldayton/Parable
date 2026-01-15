@@ -2701,10 +2701,17 @@ def _format_cmdsub_node(
         for p in node.parts:
             if p.kind == "operator":
                 if p.op == ";":
+                    # Skip semicolon if previous command ends with heredoc (newline)
+                    if result and result[len(result) - 1].endswith("\n"):
+                        continue
                     result.append(";")
                 elif p.op == "\n":
                     # Skip newline if it follows a semicolon (redundant separator)
                     if result and result[len(result) - 1] == ";":
+                        continue
+                    # If previous ends with heredoc newline, add space instead
+                    if result and result[len(result) - 1].endswith("\n"):
+                        result.append(" ")
                         continue
                     result.append("\n")
                 elif p.op == "&":

@@ -3146,10 +3146,19 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 		for (p of node.parts) {
 			if (p.kind === "operator") {
 				if (p.op === ";") {
+					// Skip semicolon if previous command ends with heredoc (newline)
+					if (result.length > 0 && result[result.length - 1].endsWith("\n")) {
+						continue;
+					}
 					result.push(";");
 				} else if (p.op === "\n") {
 					// Skip newline if it follows a semicolon (redundant separator)
 					if (result.length > 0 && result[result.length - 1] === ";") {
+						continue;
+					}
+					// If previous ends with heredoc newline, add space instead
+					if (result.length > 0 && result[result.length - 1].endsWith("\n")) {
+						result.push(" ");
 						continue;
 					}
 					result.push("\n");

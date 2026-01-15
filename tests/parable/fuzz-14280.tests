@@ -1,0 +1,5 @@
+=== negation before background operator
+!&
+---
+(background (negation (command)))
+---

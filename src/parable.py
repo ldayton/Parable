@@ -141,6 +141,8 @@ class Word(Node):
         value = self._normalize_array_whitespace(value)
         # Format command substitutions with bash-oracle pretty-printing (before escaping)
         value = self._format_command_substitutions(value)
+        # Convert newlines at param expansion boundaries to spaces (bash behavior)
+        value = self._normalize_param_expansion_newlines(value)
         # Strip line continuations (backslash-newline) from arithmetic expressions
         value = self._strip_arith_line_continuations(value)
         # Double CTLESC (0x01) bytes - bash-oracle uses this for quoting control chars
@@ -188,6 +190,69 @@ class Word(Node):
                 else:
                     # Outside double quotes (including single quotes): always double
                     result.append("\x01")
+        return "".join(result)
+
+    def _normalize_param_expansion_newlines(self, value: str) -> str:
+        """Normalize newlines at param expansion boundaries.
+
+        When there's a newline immediately after ${, bash converts it to a space
+        and adds a trailing space before the closing }.
+        """
+        result = []
+        i = 0
+        in_single = False
+        in_double = False
+        while i < len(value):
+            c = value[i]
+            # Track quote state
+            if c == "'" and not in_double:
+                in_single = not in_single
+                result.append(c)
+                i += 1
+            elif c == '"' and not in_single:
+                in_double = not in_double
+                result.append(c)
+                i += 1
+            # Check for ${ param expansion
+            elif c == "$" and i + 1 < len(value) and value[i + 1] == "{" and not in_single:
+                result.append("$")
+                result.append("{")
+                i += 2
+                # Check for leading newline and convert to space
+                had_leading_newline = i < len(value) and value[i] == "\n"
+                if had_leading_newline:
+                    result.append(" ")
+                    i += 1
+                # Find matching close brace and process content
+                depth = 1
+                while i < len(value) and depth > 0:
+                    ch = value[i]
+                    if ch == "\\" and i + 1 < len(value) and not in_single:
+                        result.append(ch)
+                        result.append(value[i + 1])
+                        i += 2
+                        continue
+                    if ch == "'" and not in_double:
+                        in_single = not in_single
+                    elif ch == '"' and not in_single:
+                        in_double = not in_double
+                    elif not in_single and not in_double:
+                        if ch == "{":
+                            depth += 1
+                        elif ch == "}":
+                            depth -= 1
+                            if depth == 0:
+                                # Add trailing space if we had leading newline
+                                if had_leading_newline:
+                                    result.append(" ")
+                                result.append(ch)
+                                i += 1
+                                break
+                    result.append(ch)
+                    i += 1
+            else:
+                result.append(c)
+                i += 1
         return "".join(result)
 
     def _expand_ansi_c_escapes(self, value: str) -> str:

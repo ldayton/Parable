@@ -1,0 +1,5 @@
+=== for loop with in but missing semicolon before do
+for x in do :;done
+---
+<error>
+---

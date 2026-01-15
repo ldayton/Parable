@@ -1,0 +1,5 @@
+=== process substitution syntax inside double quotes is literal
+"<("
+---
+(command (word "\"<(\""))
+---

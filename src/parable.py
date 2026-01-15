@@ -2625,14 +2625,25 @@ def _format_cmdsub_node(
             val = w._strip_locale_string_dollars(val)
             val = w._format_command_substitutions(val)
             parts.append(val)
+        # Check for heredocs - their bodies need to come at the end
+        heredocs = []
         for r in node.redirects:
-            parts.append(_format_redirect(r, compact=compact_redirects))
+            if r.kind == "heredoc":
+                heredocs.append(r)
+        for r in node.redirects:
+            # For heredocs, output just the operator part; body comes at end
+            parts.append(_format_redirect(r, compact=compact_redirects, heredoc_op_only=True))
         # In compact mode with words, don't add space before redirects
         if compact_redirects and node.words and node.redirects:
             word_parts = parts[: len(node.words)]
             redirect_parts = parts[len(node.words) :]
-            return " ".join(word_parts) + "".join(redirect_parts)
-        return " ".join(parts)
+            result = " ".join(word_parts) + "".join(redirect_parts)
+        else:
+            result = " ".join(parts)
+        # Append heredoc bodies at the end
+        for h in heredocs:
+            result = result + _format_heredoc_body(h)
+        return result
     if node.kind == "pipeline":
         # Build list of (cmd, needs_pipe_both_redirect) filtering out PipeBoth markers
         cmds = []
@@ -2891,10 +2902,11 @@ def _format_cmdsub_node(
     return ""
 
 
-def _format_redirect(r: "Redirect | HereDoc", compact: bool = False) -> str:
+def _format_redirect(
+    r: "Redirect | HereDoc", compact: bool = False, heredoc_op_only: bool = False
+) -> str:
     """Format a redirect for command substitution output."""
     if r.kind == "heredoc":
-        # Include heredoc content: <<DELIM\ncontent\nDELIM\n
         if r.strip_tabs:
             op = "<<-"
         else:
@@ -2903,6 +2915,10 @@ def _format_redirect(r: "Redirect | HereDoc", compact: bool = False) -> str:
             delim = "'" + r.delimiter + "'"
         else:
             delim = r.delimiter
+        if heredoc_op_only:
+            # Just the operator part (<<DELIM), body comes separately
+            return op + delim
+        # Include heredoc content: <<DELIM\ncontent\nDELIM\n
         return op + delim + "\n" + r.content + r.delimiter + "\n"
     op = r.op
     # Normalize default fd: 1> -> >, 0< -> <
@@ -2942,6 +2958,11 @@ def _format_redirect(r: "Redirect | HereDoc", compact: bool = False) -> str:
     if compact:
         return op + target
     return op + " " + target
+
+
+def _format_heredoc_body(r: "HereDoc") -> str:
+    """Format just the heredoc body part (content + closing delimiter)."""
+    return "\n" + r.content + r.delimiter + "\n"
 
 
 def _normalize_fd_redirects(s: str) -> str:

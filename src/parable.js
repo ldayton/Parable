@@ -2990,7 +2990,9 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 		else_body,
 		first_nl,
 		formatted,
+		h,
 		has_heredoc,
+		heredocs,
 		i,
 		idx,
 		inner_body,
@@ -3048,16 +3050,30 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 			val = w._formatCommandSubstitutions(val);
 			parts.push(val);
 		}
+		// Check for heredocs - their bodies need to come at the end
+		heredocs = [];
 		for (r of node.redirects) {
-			parts.push(_formatRedirect(r, compact_redirects));
+			if (r.kind === "heredoc") {
+				heredocs.push(r);
+			}
+		}
+		for (r of node.redirects) {
+			// For heredocs, output just the operator part; body comes at end
+			parts.push(_formatRedirect(r, compact_redirects, true));
 		}
 		// In compact mode with words, don't add space before redirects
 		if (compact_redirects && node.words && node.redirects) {
 			word_parts = parts.slice(0, node.words.length);
 			redirect_parts = parts.slice(node.words.length);
-			return word_parts.join(" ") + redirect_parts.join("");
+			result = word_parts.join(" ") + redirect_parts.join("");
+		} else {
+			result = parts.join(" ");
 		}
-		return parts.join(" ");
+		// Append heredoc bodies at the end
+		for (h of heredocs) {
+			result = result + _formatHeredocBody(h);
+		}
+		return result;
 	}
 	if (node.kind === "pipeline") {
 		// Build list of (cmd, needs_pipe_both_redirect) filtering out PipeBoth markers
@@ -3367,13 +3383,15 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 	return "";
 }
 
-function _formatRedirect(r, compact) {
+function _formatRedirect(r, compact, heredoc_op_only) {
 	let after_amp, delim, is_literal_fd, op, target;
 	if (compact == null) {
 		compact = false;
 	}
+	if (heredoc_op_only == null) {
+		heredoc_op_only = false;
+	}
 	if (r.kind === "heredoc") {
-		// Include heredoc content: <<DELIM\ncontent\nDELIM\n
 		if (r.strip_tabs) {
 			op = "<<-";
 		} else {
@@ -3384,6 +3402,11 @@ function _formatRedirect(r, compact) {
 		} else {
 			delim = r.delimiter;
 		}
+		if (heredoc_op_only) {
+			// Just the operator part (<<DELIM), body comes separately
+			return op + delim;
+		}
+		// Include heredoc content: <<DELIM\ncontent\nDELIM\n
 		return `${op + delim}\n${r.content}${r.delimiter}\n`;
 	}
 	op = r.op;
@@ -3432,6 +3455,10 @@ function _formatRedirect(r, compact) {
 		return op + target;
 	}
 	return `${op} ${target}`;
+}
+
+function _formatHeredocBody(r) {
+	return `\n${r.content}${r.delimiter}\n`;
 }
 
 function _normalizeFdRedirects(s) {

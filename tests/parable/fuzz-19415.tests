@@ -1,0 +1,6 @@
+=== heredoc redirect in command substitution
+$(<<E>x
+E)
+---
+(command (word "$(<<E > x\nE\n)"))
+---

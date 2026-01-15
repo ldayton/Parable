@@ -985,21 +985,11 @@ class Word(Node):
                 if node.command.kind == "subshell":
                     raw_content = _substring(value, i + 2, j - 1)
                     if raw_content.startswith("("):
-                        # Preserve leading whitespace after (
-                        k = 1
-                        while k < len(raw_content) and _is_whitespace(raw_content[k]):
-                            k += 1
-                        prefix_ws = _substring(raw_content, 1, k)
-                        if prefix_ws and formatted.startswith("("):
-                            formatted = "(" + prefix_ws + formatted[1:]
-                        # Preserve trailing whitespace before )
-                        end = len(raw_content) - 1
-                        m = end
-                        while m > 0 and _is_whitespace(raw_content[m - 1]):
-                            m -= 1
-                        suffix_ws = _substring(raw_content, m, end)
-                        if suffix_ws and formatted.endswith(")"):
-                            formatted = formatted[:-1] + suffix_ws + ")"
+                        # Process substitution with nested subshell >((...)): preserve original
+                        result.append(direction + "(" + raw_content + ")")
+                        procsub_idx += 1
+                        i = j
+                        continue
                 result.append(direction + "(" + formatted + ")")
                 procsub_idx += 1
                 i = j

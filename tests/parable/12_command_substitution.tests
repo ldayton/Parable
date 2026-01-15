@@ -657,3 +657,10 @@ x=$(for a in b; do for c in d; do echo e; done; done)
 ---
 (command (word "x=$(for a in b;\ndo\n    for c in d;\n    do\n        echo e;\n    done;\ndone)"))
 ---
+
+
+=== subshell inside command substitution
+x=$(((echo hi)))
+---
+(command (word "x=$(((echo hi)))"))
+---

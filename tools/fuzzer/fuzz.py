@@ -37,11 +37,21 @@ from parable import ParseError, parse  # noqa: E402
 ORACLE_PATH = Path.home() / "source" / "bash-oracle" / "bash-oracle"
 MUTATION_GROUPS = list("${}()|&<>;\"'\\` \t\n@#![]:=*?~/+-,%^") + ["0123456789"]
 INSERTION_PATTERNS = [
-    "$(", "${", "<(", ">(", "((", "<<",  # openers
-    "))", "}}",  # closers
-    ">&", "2>", "|&",  # redirects
-    "||", "&&",  # logical
-    "$((", "<<<",  # arithmetic, herestring
+    "$(",
+    "${",
+    "<(",
+    ">(",
+    "((",
+    "<<",  # openers
+    "))",
+    "}}",  # closers
+    ">&",
+    "2>",
+    "|&",  # redirects
+    "||",
+    "&&",  # logical
+    "$((",
+    "<<<",  # arithmetic, herestring
 ]
 DELETION_PATTERNS = ["$(", "${", "<(", ">(", "((", "<<", "))", "}}", "||", "&&"]
 

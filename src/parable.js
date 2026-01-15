@@ -904,28 +904,35 @@ class Word extends Node {
 	}
 
 	_stripArithLineContinuations(value) {
-		let arith_content, depth, i, result, start;
+		let arith_content, content, depth, first_close_idx, i, result, start;
 		result = [];
 		i = 0;
 		while (i < value.length) {
 			// Check for $(( arithmetic expression
 			if (_startsWithAt(value, i, "$((")) {
-				// Find matching ))
 				start = i;
 				i += 3;
-				depth = 1;
+				depth = 2;
 				arith_content = [];
+				// Track position of first ) that brings depth 2→1
+				first_close_idx = null;
 				while (i < value.length && depth > 0) {
-					if (_startsWithAt(value, i, "((")) {
-						arith_content.push("((");
+					if (value[i] === "(") {
+						arith_content.push("(");
 						depth += 1;
-						i += 2;
-					} else if (_startsWithAt(value, i, "))")) {
+						i += 1;
+						if (depth > 1) {
+							first_close_idx = null;
+						}
+					} else if (value[i] === ")") {
+						if (depth === 2) {
+							first_close_idx = arith_content.length;
+						}
 						depth -= 1;
 						if (depth > 0) {
-							arith_content.push("))");
+							arith_content.push(")");
 						}
-						i += 2;
+						i += 1;
 					} else if (
 						value[i] === "\\" &&
 						i + 1 < value.length &&
@@ -933,16 +940,29 @@ class Word extends Node {
 					) {
 						// Skip backslash-newline (line continuation)
 						i += 2;
+						if (depth === 1) {
+							first_close_idx = null;
+						}
 					} else {
 						arith_content.push(value[i]);
 						i += 1;
+						if (depth === 1) {
+							first_close_idx = null;
+						}
 					}
 				}
 				if (depth === 0) {
-					// Found proper )) closing - this is arithmetic
-					result.push(`$((${arith_content.join("")}))`);
+					content = arith_content.join("");
+					if (first_close_idx != null) {
+						// Standard close: trim content, add ))
+						content = content.slice(0, first_close_idx);
+						result.push(`$((${content}))`);
+					} else {
+						// Content after first close: content has intermediate ), add single )
+						result.push(`$((${content})`);
+					}
 				} else {
-					// Didn't find )) - not arithmetic (likely $( + ( subshell), pass through
+					// Didn't close properly - pass through original
 					result.push(value.slice(start, i));
 				}
 			} else {

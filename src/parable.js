@@ -7140,7 +7140,8 @@ class Parser {
 					fd_target += this.advance();
 				}
 				// If more word characters follow, treat the whole target as a word (e.g., <&0=)
-				if (!this.atEnd() && !_isMetachar(this.peek())) {
+				// BUT: bare "-" (close syntax) is always complete - trailing chars are separate words
+				if (fd_target !== "-" && !this.atEnd() && !_isMetachar(this.peek())) {
 					this.pos = word_start;
 					inner_word = this.parseWord();
 					if (inner_word != null) {

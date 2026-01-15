@@ -1019,7 +1019,8 @@ class Word(Node):
                         raw_content = _substring(value, i + 2, j - 1)
                         if raw_content.startswith("("):
                             # Process substitution with nested subshell >((...)): preserve original
-                            result.append(direction + "(" + raw_content + ")")
+                            # Strip line continuations since this is word content
+                            result.append(direction + "(" + raw_content.replace("\\\n", "") + ")")
                             procsub_idx += 1
                             i = j
                             continue

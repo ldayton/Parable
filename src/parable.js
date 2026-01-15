@@ -1279,7 +1279,10 @@ class Word extends Node {
 						raw_content = value.slice(i + 2, j - 1);
 						if (raw_content.startsWith("(")) {
 							// Process substitution with nested subshell >((...)): preserve original
-							result.push(`${direction}(${raw_content})`);
+							// Strip line continuations since this is word content
+							result.push(
+								`${direction}(${raw_content.replaceAll("\\\n", "")})`,
+							);
 							procsub_idx += 1;
 							i = j;
 							continue;

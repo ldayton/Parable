@@ -1,0 +1,7 @@
+=== heredoc with backtick spanning lines
+<<E|`
+`
+E
+---
+(pipe (command (redirect "<<" "")) (command (word "`\n`")))
+---

@@ -86,26 +86,17 @@ def run_test(test_input, test_expected):
 def process_file(test_file):
     """Process a single test file. Returns dict with counts and failures."""
     tests = parse_test_file(test_file)
-    passed = failed = total = skipped_bang = 0
+    passed = failed = total = 0
     failures = []
     for _name, test_input, test_expected in tests:
         total += 1
-        if "$(!" not in test_input and "$(\\!" not in test_expected:
-            skipped_bang += 1
-            continue
         ok, _actual = run_test(test_input, test_expected)
         if ok:
             passed += 1
         else:
             failed += 1
             failures.append(test_file)
-    return {
-        "passed": passed,
-        "failed": failed,
-        "total": total,
-        "skipped_bang": skipped_bang,
-        "failures": failures,
-    }
+    return {"passed": passed, "failed": failed, "total": total, "failures": failures}
 
 
 def main():
@@ -125,7 +116,7 @@ def main():
         os.path.join(CORPUS_DIR, f) for f in os.listdir(CORPUS_DIR) if f.endswith(".tests")
     )
     total_files = len(test_files)
-    passed = failed = total = skipped_bang = 0
+    passed = failed = total = 0
     all_failures = []
     with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
         futures = {executor.submit(process_file, f): f for f in test_files}
@@ -134,7 +125,6 @@ def main():
             passed += result["passed"]
             failed += result["failed"]
             total += result["total"]
-            skipped_bang += result["skipped_bang"]
             all_failures.extend(result["failures"])
             print(f"\r{i + 1}/{total_files} files ({failed} failures)", end="", flush=True)
             if failed >= max_failures:
@@ -146,7 +136,7 @@ def main():
             f.write(failure + "\n")
     if failed:
         print(f"Failures written to {FAILURES_FILE}")
-    print(f"Total: {total} | Passed: {passed} | Failed: {failed} | Skipped \\!: {skipped_bang}")
+    print(f"Total: {total} | Passed: {passed} | Failed: {failed}")
     sys.exit(1 if failed else 0)
 
 

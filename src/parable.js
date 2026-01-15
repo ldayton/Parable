@@ -505,6 +505,7 @@ class Word extends Node {
 
 	_stripLocaleStringDollars(value) {
 		let brace_depth,
+			brace_in_double_quote,
 			ch,
 			dollar_count,
 			i,
@@ -517,6 +518,8 @@ class Word extends Node {
 		in_single_quote = false;
 		in_double_quote = false;
 		brace_depth = 0;
+		// Track quote state inside brace expansions separately
+		brace_in_double_quote = false;
 		while (i < value.length) {
 			ch = value[i];
 			if (ch === "\\" && i + 1 < value.length) {
@@ -526,10 +529,16 @@ class Word extends Node {
 				i += 2;
 			} else if (_startsWithAt(value, i, "${") && !in_single_quote) {
 				brace_depth += 1;
+				brace_in_double_quote = false;
 				result.push("$");
 				result.push("{");
 				i += 2;
-			} else if (ch === "}" && brace_depth > 0 && !in_single_quote) {
+			} else if (
+				ch === "}" &&
+				brace_depth > 0 &&
+				!in_single_quote &&
+				!brace_in_double_quote
+			) {
 				brace_depth -= 1;
 				result.push(ch);
 				i += 1;
@@ -541,10 +550,16 @@ class Word extends Node {
 				in_double_quote = !in_double_quote;
 				result.push(ch);
 				i += 1;
+			} else if (ch === '"' && !in_single_quote && brace_depth > 0) {
+				// Toggle quote state inside brace expansion
+				brace_in_double_quote = !brace_in_double_quote;
+				result.push(ch);
+				i += 1;
 			} else if (
 				_startsWithAt(value, i, '$"') &&
 				!in_single_quote &&
-				!in_double_quote
+				!in_double_quote &&
+				!brace_in_double_quote
 			) {
 				// Count consecutive $ chars ending at i to check for $$ (PID param)
 				dollar_count = 1;
@@ -556,7 +571,11 @@ class Word extends Node {
 				if (dollar_count % 2 === 1) {
 					// Odd count: locale string $"..." - strip the $ and enter double quote
 					result.push('"');
-					in_double_quote = true;
+					if (brace_depth > 0) {
+						brace_in_double_quote = true;
+					} else {
+						in_double_quote = true;
+					}
 					i += 2;
 				} else {
 					// Even count: this $ is part of $$ (PID), just append it

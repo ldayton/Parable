@@ -8640,7 +8640,7 @@ class Parser {
 	}
 
 	parseFor() {
-		let body, brace_group, var_name, var_word, word, words;
+		let body, brace_group, saw_delimiter, var_name, var_word, word, words;
 		if (!this.consumeWord("for")) {
 			return null;
 		}
@@ -8678,8 +8678,14 @@ class Parser {
 		words = null;
 		if (this.peekWord() === "in") {
 			this.consumeWord("in");
+			this.skipWhitespace();
+			// Check for immediate delimiter (;, newline) after 'in'
+			saw_delimiter = _isSemicolonOrNewline(this.peek());
+			if (this.peek() === ";") {
+				this.advance();
+			}
 			this.skipWhitespaceAndNewlines();
-			// Parse words until semicolon, newline, or 'do'
+			// Parse words until semicolon or newline (not 'do' directly)
 			words = [];
 			while (true) {
 				this.skipWhitespace();
@@ -8688,13 +8694,19 @@ class Parser {
 					break;
 				}
 				if (_isSemicolonOrNewline(this.peek())) {
+					saw_delimiter = true;
 					if (this.peek() === ";") {
 						this.advance();
 					}
 					break;
 				}
+				// 'do' only terminates if preceded by delimiter
 				if (this.peekWord() === "do") {
-					break;
+					if (saw_delimiter) {
+						break;
+					}
+					// 'for x in do' or 'for x in a b c do' is invalid
+					throw new ParseError("Expected ';' or newline before 'do'", this.pos);
 				}
 				word = this.parseWord();
 				if (word == null) {

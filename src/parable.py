@@ -7299,9 +7299,15 @@ class Parser:
         words = None
         if self.peek_word() == "in":
             self.consume_word("in")
-            self.skip_whitespace_and_newlines()  # Allow newlines after 'in'
+            self.skip_whitespace()  # Only skip whitespace, not newlines
 
-            # Parse words until semicolon, newline, or 'do'
+            # Check for immediate delimiter (;, newline) after 'in'
+            saw_delimiter = _is_semicolon_or_newline(self.peek())
+            if self.peek() == ";":
+                self.advance()
+            self.skip_whitespace_and_newlines()
+
+            # Parse words until semicolon or newline (not 'do' directly)
             words = []
             while True:
                 self.skip_whitespace()
@@ -7309,11 +7315,16 @@ class Parser:
                 if self.at_end():
                     break
                 if _is_semicolon_or_newline(self.peek()):
+                    saw_delimiter = True
                     if self.peek() == ";":
                         self.advance()  # consume semicolon
                     break
+                # 'do' only terminates if preceded by delimiter
                 if self.peek_word() == "do":
-                    break
+                    if saw_delimiter:
+                        break
+                    # 'for x in do' or 'for x in a b c do' is invalid
+                    raise ParseError("Expected ';' or newline before 'do'", pos=self.pos)
 
                 word = self.parse_word()
                 if word is None:

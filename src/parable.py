@@ -4282,9 +4282,10 @@ class Parser:
         return _is_word_start_context(prev)
 
     def _is_assignment_word(self, word: "Word") -> bool:
-        """Check if a word is an assignment (contains = outside of quotes)."""
+        """Check if a word is an assignment (contains = outside of quotes and brackets)."""
         in_single = False
         in_double = False
+        bracket_depth = 0
         i = 0
         while i < len(word.value):
             ch = word.value[i]
@@ -4295,7 +4296,11 @@ class Parser:
             elif ch == "\\" and not in_single and i + 1 < len(word.value):
                 i += 1  # Skip next char
                 continue
-            elif ch == "=" and not in_single and not in_double:
+            elif ch == "[" and not in_single and not in_double:
+                bracket_depth += 1
+            elif ch == "]" and not in_single and not in_double:
+                bracket_depth -= 1
+            elif ch == "=" and not in_single and not in_double and bracket_depth == 0:
                 return True
             i += 1
         return False

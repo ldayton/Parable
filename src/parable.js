@@ -3284,7 +3284,9 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 				) {
 					result.push(" ");
 				}
-				result.push(_formatCmdsubNode(p, indent));
+				result.push(
+					_formatCmdsubNode(p, indent, in_procsub, compact_redirects),
+				);
 			}
 		}
 		// Strip trailing ; or newline (but preserve heredoc's trailing newline)

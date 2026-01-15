@@ -1143,7 +1143,13 @@ class Word(Node):
                         if parsed:
                             formatted = _format_cmdsub_node(parsed)
                             formatted = formatted.rstrip(";")
-                            terminator = " }" if formatted.endswith(" &") else "; }"
+                            # Preserve trailing newline from original if present
+                            if inner.rstrip(" \t").endswith("\n"):
+                                terminator = "\n }"
+                            elif formatted.endswith(" &"):
+                                terminator = " }"
+                            else:
+                                terminator = "; }"
                             result.append(prefix + formatted + terminator)
                         else:
                             result.append("${ }")

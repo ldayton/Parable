@@ -1461,7 +1461,7 @@ class Word extends Node {
 			) {
 				// Process regular ${...} parameter expansions (recursively format cmdsubs inside)
 				// But not if the $ is escaped by a backslash
-				// Find matching close brace, respecting nesting and quotes
+				// Find matching close brace, respecting nesting, quotes, and cmdsubs
 				j = i + 2;
 				depth = 1;
 				in_single = false;
@@ -1477,6 +1477,14 @@ class Word extends Node {
 					} else if (c === '"' && !in_single) {
 						in_double = !in_double;
 					} else if (!in_single && !in_double) {
+						// Skip over $(...) command substitutions
+						if (
+							_startsWithAt(value, j, "$(") &&
+							!_startsWithAt(value, j, "$((")
+						) {
+							j = _findCmdsubEnd(value, j + 2);
+							continue;
+						}
 						if (c === "{") {
 							depth += 1;
 						} else if (c === "}") {

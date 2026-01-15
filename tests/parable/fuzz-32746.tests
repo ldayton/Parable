@@ -1,0 +1,5 @@
+=== process substitution in parameter expansion with ||
+${a+$<(b|| c)}
+---
+(command (word "${a+$<(b || c)}"))
+---

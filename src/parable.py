@@ -745,32 +745,47 @@ class Word(Node):
         while i < len(value):
             # Check for $(( arithmetic expression
             if _starts_with_at(value, i, "$(("):
-                # Find matching ))
                 start = i
                 i += 3
-                depth = 1
+                depth = 2  # Track single parens: $(( starts at depth 2
                 arith_content = []
+                # Track position of first ) that brings depth 2→1
+                first_close_idx: int | None = None
                 while i < len(value) and depth > 0:
-                    if _starts_with_at(value, i, "(("):
-                        arith_content.append("((")
+                    if value[i] == "(":
+                        arith_content.append("(")
                         depth += 1
-                        i += 2
-                    elif _starts_with_at(value, i, "))"):
+                        i += 1
+                        if depth > 1:
+                            first_close_idx = None  # Content after first close
+                    elif value[i] == ")":
+                        if depth == 2:
+                            first_close_idx = len(arith_content)
                         depth -= 1
                         if depth > 0:
-                            arith_content.append("))")
-                        i += 2
+                            arith_content.append(")")
+                        i += 1
                     elif value[i] == "\\" and i + 1 < len(value) and value[i + 1] == "\n":
                         # Skip backslash-newline (line continuation)
                         i += 2
+                        if depth == 1:
+                            first_close_idx = None  # Content after first close
                     else:
                         arith_content.append(value[i])
                         i += 1
+                        if depth == 1:
+                            first_close_idx = None  # Content after first close
                 if depth == 0:
-                    # Found proper )) closing - this is arithmetic
-                    result.append("$((" + "".join(arith_content) + "))")
+                    content = "".join(arith_content)
+                    if first_close_idx is not None:
+                        # Standard close: trim content, add ))
+                        content = content[:first_close_idx]
+                        result.append("$((" + content + "))")
+                    else:
+                        # Content after first close: content has intermediate ), add single )
+                        result.append("$((" + content + ")")
                 else:
-                    # Didn't find )) - not arithmetic (likely $( + ( subshell), pass through
+                    # Didn't close properly - pass through original
                     result.append(_substring(value, start, i))
             else:
                 result.append(value[i])

@@ -1,0 +1,6 @@
+=== line continuation inside arithmetic expression
+>$((1\
+)2)
+---
+(command (redirect ">" "$((1)2)"))
+---

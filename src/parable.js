@@ -10239,7 +10239,7 @@ class Parser {
 				this.advance();
 				if (!this.atEnd() && this.peek() === "p") {
 					this.advance();
-					if (this.atEnd() || _isWhitespace(this.peek())) {
+					if (this.atEnd() || _isMetachar(this.peek())) {
 						time_posix = true;
 					} else {
 						this.pos = saved;
@@ -10271,7 +10271,7 @@ class Parser {
 					this.advance();
 					if (!this.atEnd() && this.peek() === "p") {
 						this.advance();
-						if (this.atEnd() || _isWhitespace(this.peek())) {
+						if (this.atEnd() || _isMetachar(this.peek())) {
 							time_posix = true;
 						} else {
 							this.pos = saved;

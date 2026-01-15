@@ -3372,6 +3372,7 @@ function _normalizeFdRedirects(s) {
 
 function _findCmdsubEnd(value, start) {
 	let arith_depth,
+		arith_paren_depth,
 		c,
 		case_depth,
 		depth,
@@ -3387,6 +3388,7 @@ function _findCmdsubEnd(value, start) {
 	case_depth = 0;
 	in_case_patterns = false;
 	arith_depth = 0;
+	arith_paren_depth = 0;
 	while (i < value.length && depth > 0) {
 		c = value[i];
 		// Handle escapes
@@ -3482,8 +3484,12 @@ function _findCmdsubEnd(value, start) {
 			i += 3;
 			continue;
 		}
-		// Handle arithmetic close ))
-		if (arith_depth > 0 && _startsWithAt(value, i, "))")) {
+		// Handle arithmetic close )) - only when no inner grouping parens are open
+		if (
+			arith_depth > 0 &&
+			arith_paren_depth === 0 &&
+			_startsWithAt(value, i, "))")
+		) {
 			arith_depth -= 1;
 			i += 2;
 			continue;
@@ -3528,13 +3534,22 @@ function _findCmdsubEnd(value, start) {
 		if (c === "(") {
 			// In case patterns, ( before pattern name is optional and not a grouping paren
 			if (!(in_case_patterns && case_depth > 0)) {
-				depth += 1;
+				if (arith_depth > 0) {
+					arith_paren_depth += 1;
+				} else {
+					depth += 1;
+				}
 			}
 		} else if (c === ")") {
 			// In case patterns, ) after pattern name is not a grouping paren
 			if (in_case_patterns && case_depth > 0) {
 				// This ) is a case pattern terminator, skip it
+			} else if (arith_depth > 0) {
+				if (arith_paren_depth > 0) {
+					arith_paren_depth -= 1;
+				}
 			} else {
+				// else: single ) in arithmetic without matching ( - skip it
 				depth -= 1;
 			}
 		}

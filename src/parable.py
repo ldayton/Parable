@@ -2914,6 +2914,7 @@ def _find_cmdsub_end(value: str, start: int) -> int:
     case_depth = 0  # Track nested case statements
     in_case_patterns = False  # After 'in' but before first ;; or esac
     arith_depth = 0  # Track nested arithmetic expressions
+    arith_paren_depth = 0  # Track grouping parens inside arithmetic
     while i < len(value) and depth > 0:
         c = value[i]
         # Handle escapes
@@ -2990,8 +2991,8 @@ def _find_cmdsub_end(value: str, start: int) -> int:
             arith_depth += 1
             i += 3
             continue
-        # Handle arithmetic close ))
-        if arith_depth > 0 and _starts_with_at(value, i, "))"):
+        # Handle arithmetic close )) - only when no inner grouping parens are open
+        if arith_depth > 0 and arith_paren_depth == 0 and _starts_with_at(value, i, "))"):
             arith_depth -= 1
             i += 2
             continue
@@ -3025,12 +3026,19 @@ def _find_cmdsub_end(value: str, start: int) -> int:
         if c == "(":
             # In case patterns, ( before pattern name is optional and not a grouping paren
             if not (in_case_patterns and case_depth > 0):
-                depth += 1
+                if arith_depth > 0:
+                    arith_paren_depth += 1
+                else:
+                    depth += 1
         elif c == ")":
             # In case patterns, ) after pattern name is not a grouping paren
             if in_case_patterns and case_depth > 0:
                 # This ) is a case pattern terminator, skip it
                 pass
+            elif arith_depth > 0:
+                if arith_paren_depth > 0:
+                    arith_paren_depth -= 1
+                # else: single ) in arithmetic without matching ( - skip it
             else:
                 depth -= 1
         i += 1

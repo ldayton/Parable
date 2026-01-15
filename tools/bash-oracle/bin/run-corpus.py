@@ -16,14 +16,6 @@ from parable import ParseError, parse  # noqa: E402
 CORPUS_DIR = os.path.expanduser("~/source/bigtable-bash/tests")
 FAILURES_FILE = os.path.join(SCRIPT_DIR, "failures.txt")
 
-# Test files to skip (known issues to investigate later)
-SKIP_FILES = {
-    "001629__Patlol__Handy-Install-Web-Server-ruTorrent-__util_listeusers.tests",
-    "012091__johnchronis__exareme__exareme-admin.tests",  # very long expected output
-    "012559__bbgw__kubernetes__test-cmd.tests",  # very long expected output
-    "012773__Devindik__origin__git-sh-setup.tests",  # very long expected output
-}
-
 
 def parse_test_file(filepath):
     """Parse a .tests file. Returns list of (name, input, expected) tuples."""
@@ -93,15 +85,6 @@ def run_test(test_input, test_expected):
 
 def process_file(test_file):
     """Process a single test file. Returns dict with counts and failures."""
-    if os.path.basename(test_file) in SKIP_FILES:
-        return {
-            "passed": 0,
-            "failed": 0,
-            "total": 0,
-            "skipped": 1,
-            "skipped_bang": 0,
-            "failures": [],
-        }
     tests = parse_test_file(test_file)
     passed = failed = total = skipped_bang = 0
     failures = []
@@ -120,7 +103,6 @@ def process_file(test_file):
         "passed": passed,
         "failed": failed,
         "total": total,
-        "skipped": 0,
         "skipped_bang": skipped_bang,
         "failures": failures,
     }
@@ -143,7 +125,7 @@ def main():
         os.path.join(CORPUS_DIR, f) for f in os.listdir(CORPUS_DIR) if f.endswith(".tests")
     )
     total_files = len(test_files)
-    passed = failed = total = skipped = skipped_bang = 0
+    passed = failed = total = skipped_bang = 0
     all_failures = []
     with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
         futures = {executor.submit(process_file, f): f for f in test_files}
@@ -152,7 +134,6 @@ def main():
             passed += result["passed"]
             failed += result["failed"]
             total += result["total"]
-            skipped += result["skipped"]
             skipped_bang += result["skipped_bang"]
             all_failures.extend(result["failures"])
             print(f"\r{i + 1}/{total_files} files ({failed} failures)", end="", flush=True)
@@ -166,7 +147,7 @@ def main():
     if failed:
         print(f"Failures written to {FAILURES_FILE}")
     print(
-        f"Total: {total} | Passed: {passed} | Failed: {failed} | Skipped: {skipped} | Skipped \\!: {skipped_bang}"
+        f"Total: {total} | Passed: {passed} | Failed: {failed} | Skipped \\!: {skipped_bang}"
     )
     sys.exit(1 if failed else 0)
 

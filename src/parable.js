@@ -1152,11 +1152,12 @@ class Word extends Node {
 				has_untracked_cmdsub = true;
 				break;
 			} else if (
-				_startsWithAt(value, idx, "<(") ||
-				_startsWithAt(value, idx, ">(")
+				(_startsWithAt(value, idx, "<(") || _startsWithAt(value, idx, ">(")) &&
+				!in_double
 			) {
 				// Only treat as process substitution if not preceded by alphanumeric
 				// (e.g., "i<(3)" is arithmetic comparison, not process substitution)
+				// Also don't treat as process substitution inside double quotes
 				if (idx === 0 || !/^[a-zA-Z0-9]$/.test(value[idx - 1])) {
 					has_untracked_procsub = true;
 					break;
@@ -1261,10 +1262,10 @@ class Word extends Node {
 				cmdsub_idx += 1;
 				i = j;
 			} else if (
-				_startsWithAt(value, i, ">(") ||
-				_startsWithAt(value, i, "<(")
+				(_startsWithAt(value, i, ">(") || _startsWithAt(value, i, "<(")) &&
+				!in_double_quote
 			) {
-				// Check for >( or <( process substitution
+				// Check for >( or <( process substitution (not inside double quotes)
 				// Check if this is actually a process substitution or just comparison + parens
 				// Process substitution: not preceded by alphanumeric
 				is_procsub = i === 0 || !/^[a-zA-Z0-9]$/.test(value[i - 1]);

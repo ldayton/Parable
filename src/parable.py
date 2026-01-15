@@ -8034,6 +8034,17 @@ class Parser:
         if result:
             return result
 
+        # Arithmetic command ((...)) - check before subshell
+        if (
+            not self.at_end()
+            and self.peek() == "("
+            and self.pos + 1 < self.length
+            and self.source[self.pos + 1] == "("
+        ):
+            result = self.parse_arithmetic_command()
+            if result is not None:
+                return result
+
         result = self.parse_subshell()
         if result:
             return result

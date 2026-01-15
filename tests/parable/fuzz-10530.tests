@@ -1,0 +1,5 @@
+=== escaped backtick in backtick substitution should not close
+`\`
+---
+<error>
+---

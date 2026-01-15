@@ -13,10 +13,12 @@ Potential improvements:
 
     | Improvement             | Impact | Difficulty | Notes                          |
     |-------------------------|--------|------------|--------------------------------|
-    | Targeted seeding        | Medium | Trivial    | Add tricky patterns to corpus  |
     | Cross-pollination       | High   | Medium     | Graft subtrees between inputs  |
     | Structural mutations    | High   | Medium     | Wrap exprs in $(), <(), etc.   |
     | Grammar-aware generation| High   | High       | Different tool entirely        |
+
+    The corpus (tests/**/*.tests) is fed from tree-sitter, oils, gnu bash,
+    hand-written tests, bigtable discoveries, and fuzzer discoveries (fuzz-*.tests).
 """
 
 import argparse

@@ -1100,17 +1100,28 @@ class Word(Node):
                     direction = value[i]
                     j = _find_cmdsub_end(value, i + 2)
                     inner = _substring(value, i + 2, j - 1)
+                    # Preserve leading whitespace (bash keeps it in procsub inside arithmetic)
+                    leading_ws = ""
+                    inner_to_parse = inner
+                    k = 0
+                    while k < len(inner) and inner[k] in " \t":
+                        k += 1
+                    if k > 0:
+                        leading_ws = inner[:k]
+                        inner_to_parse = inner[k:]
                     try:
-                        parser = Parser(inner)
+                        parser = Parser(inner_to_parse)
                         parsed = parser.parse_list()
                         # Only use parsed result if parser consumed all input
-                        if parsed and parser.pos == len(inner):
+                        if parsed and parser.pos == len(inner_to_parse):
                             formatted = _format_cmdsub_node(parsed, in_procsub=True)
                         else:
                             formatted = inner
+                            leading_ws = ""  # Use raw inner, don't double whitespace
                     except Exception:
                         formatted = inner
-                    result.append(direction + "(" + formatted + ")")
+                        leading_ws = ""  # Use raw inner, don't double whitespace
+                    result.append(direction + "(" + leading_ws + formatted + ")")
                     i = j
                 else:
                     # Not a process substitution (e.g., arithmetic comparison)

@@ -1,0 +1,5 @@
+=== process substitution preserves leading whitespace in arithmetic
+$((<( a)))
+---
+(command (word "$((<( a)))"))
+---

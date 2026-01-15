@@ -7251,6 +7251,44 @@ class Parser:
             # Regex character class [...] - consume until closing ]
             # Handles [[:alpha:]], [^0-9], []a-z] (] as first char), etc.
             if ch == "[":
+                # Lookahead: check if bracket expression will close properly
+                # before hitting ]] or ) (when inside paren group)
+                scan = self.pos + 1  # position after [
+                # Skip ^ for negation
+                if scan < self.length and self.source[scan] == "^":
+                    scan += 1
+                # Skip ] as first char (literal)
+                if scan < self.length and self.source[scan] == "]":
+                    scan += 1
+                bracket_will_close = False
+                while scan < self.length:
+                    sc = self.source[scan]
+                    # Check for ]] - end of conditional
+                    if sc == "]" and scan + 1 < self.length and self.source[scan + 1] == "]":
+                        break  # Won't close before ]]
+                    # Check for ) when inside paren group
+                    if sc == ")" and paren_depth > 0:
+                        break  # Won't close before )
+                    if sc == "]":
+                        bracket_will_close = True
+                        break
+                    # Skip POSIX classes [:...:]
+                    if sc == "[" and scan + 1 < self.length and self.source[scan + 1] == ":":
+                        scan += 2  # skip [:
+                        while scan < self.length and not (
+                            self.source[scan] == ":"
+                            and scan + 1 < self.length
+                            and self.source[scan + 1] == "]"
+                        ):
+                            scan += 1
+                        if scan < self.length:
+                            scan += 2  # skip :]
+                        continue
+                    scan += 1
+                if not bracket_will_close:
+                    # Treat [ as literal
+                    chars.append(self.advance())
+                    continue
                 chars.append(self.advance())  # consume [
                 # Handle negation [^
                 if not self.at_end() and self.peek() == "^":

@@ -907,9 +907,12 @@ class Word(Node):
             ):
                 has_untracked_cmdsub = True
                 break
-            elif _starts_with_at(value, idx, "<(") or _starts_with_at(value, idx, ">("):
+            elif (
+                _starts_with_at(value, idx, "<(") or _starts_with_at(value, idx, ">(")
+            ) and not in_double:
                 # Only treat as process substitution if not preceded by alphanumeric
                 # (e.g., "i<(3)" is arithmetic comparison, not process substitution)
+                # Also don't treat as process substitution inside double quotes
                 if idx == 0 or not value[idx - 1].isalnum():
                     has_untracked_procsub = True
                     break
@@ -999,8 +1002,10 @@ class Word(Node):
                 result.append(_substring(value, i, j))
                 cmdsub_idx += 1
                 i = j
-            # Check for >( or <( process substitution
-            elif _starts_with_at(value, i, ">(") or _starts_with_at(value, i, "<("):
+            # Check for >( or <( process substitution (not inside double quotes)
+            elif (
+                _starts_with_at(value, i, ">(") or _starts_with_at(value, i, "<(")
+            ) and not in_double_quote:
                 # Check if this is actually a process substitution or just comparison + parens
                 # Process substitution: not preceded by alphanumeric
                 is_procsub = i == 0 or not value[i - 1].isalnum()

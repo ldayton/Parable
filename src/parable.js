@@ -446,6 +446,7 @@ class Word extends Node {
 			is_ansi_c,
 			j,
 			op,
+			outer_in_dquote,
 			quote_stack,
 			result,
 			result_str;
@@ -543,10 +544,15 @@ class Word extends Node {
 				ansi_str = value.slice(i, j);
 				// Strip the $ and expand escapes
 				expanded = this._expandAnsiCEscapes(ansi_str.slice(1, ansi_str.length));
-				// Inside ${...}, strip quotes for default/alternate value operators
-				// but keep them for pattern replacement operators
+				// Inside ${...} that's itself in double quotes, strip quotes for
+				// default/alternate value operators but keep for pattern operators
+				outer_in_dquote =
+					quote_stack.length > 0
+						? quote_stack[quote_stack.length - 1][1]
+						: false;
 				if (
 					brace_depth > 0 &&
+					outer_in_dquote &&
 					expanded.startsWith("'") &&
 					expanded.endsWith("'")
 				) {

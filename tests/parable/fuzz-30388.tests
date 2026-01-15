@@ -1,0 +1,5 @@
+=== ANSI-C string in param expansion default
+${a-$'x'}
+---
+(command (word "${a-'x'}"))
+---

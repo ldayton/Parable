@@ -1,0 +1,5 @@
+=== $(<) file read inside param expansion should include } in filename
+${x:-$(<})}
+---
+(command (word "${x:-$(< })}"))
+---

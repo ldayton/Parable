@@ -1170,7 +1170,7 @@ class Word(Node):
             # Process regular ${...} parameter expansions (recursively format cmdsubs inside)
             # But not if the $ is escaped by a backslash
             elif _starts_with_at(value, i, "${") and not _is_backslash_escaped(value, i):
-                # Find matching close brace, respecting nesting and quotes
+                # Find matching close brace, respecting nesting, quotes, and cmdsubs
                 j = i + 2
                 depth = 1
                 in_single = False
@@ -1185,6 +1185,10 @@ class Word(Node):
                     elif c == '"' and not in_single:
                         in_double = not in_double
                     elif not in_single and not in_double:
+                        # Skip over $(...) command substitutions
+                        if _starts_with_at(value, j, "$(") and not _starts_with_at(value, j, "$(("):
+                            j = _find_cmdsub_end(value, j + 2)
+                            continue
                         if c == "{":
                             depth += 1
                         elif c == "}":

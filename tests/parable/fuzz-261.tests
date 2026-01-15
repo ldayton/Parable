@@ -1,0 +1,5 @@
+=== failed process substitution with trailing content after $((
+>($(()b))
+---
+(command (word ">($(()b))"))
+---

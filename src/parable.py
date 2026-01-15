@@ -1373,6 +1373,9 @@ class Redirect(Node):
         if op == ">&" or op == "<&":
             if target_val.isdigit():
                 return '(redirect "' + op + '" ' + target_val + ")"
+            # Handle close: <& - or >& - (with space before -)
+            if target_val == "-":
+                return '(redirect ">&-" 0)'
             # Variable fd dup with move indicator (trailing -)
             target_val = target_val.rstrip("-")
             return '(redirect "' + op + '" "' + target_val + '")'

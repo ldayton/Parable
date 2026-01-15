@@ -6188,8 +6188,7 @@ class Parser {
 			}
 		}
 		if (this.atEnd() || depth !== 0) {
-			this.pos = start;
-			return [null, ""];
+			throw new ParseError("Unterminated $[", start);
 		}
 		content = this.source.slice(content_start, this.pos);
 		this.advance();

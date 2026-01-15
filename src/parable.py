@@ -6167,7 +6167,18 @@ class Parser:
                     raise ParseError("Expected target for redirect " + op, pos=self.pos)
         else:
             self.skip_whitespace()
-            target = self.parse_word()
+            # Handle >& - or <& - where space precedes the close syntax
+            # If op is >& or <& and next char is -, check for trailing word chars
+            # that should become a separate word (e.g., ">& -b" -> >&- + word "b")
+            if op in (">&", "<&") and not self.at_end() and self.peek() == "-":
+                if self.pos + 1 < self.length and not _is_metachar(self.source[self.pos + 1]):
+                    # Consume just the - as close target, leave rest for next word
+                    self.advance()
+                    target = Word("&-")
+                else:
+                    target = self.parse_word()
+            else:
+                target = self.parse_word()
 
         if target is None:
             raise ParseError("Expected target for redirect " + op, pos=self.pos)

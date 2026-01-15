@@ -1004,6 +1004,8 @@ class Word(Node):
                     raw_content = _substring(value, i + 2, j - 1)
                     if raw_content.startswith("("):
                         # Process substitution with nested subshell >((...)): preserve original
+                        # Strip line continuations (backslash-newline)
+                        raw_content = raw_content.replace("\\\n", "")
                         result.append(direction + "(" + raw_content + ")")
                         procsub_idx += 1
                         i = j

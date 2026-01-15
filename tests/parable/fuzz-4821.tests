@@ -1,0 +1,6 @@
+=== backslash-newline in >(( process substitution
+>((a\
+))
+---
+(command (word ">((a))"))
+---

@@ -5504,13 +5504,36 @@ class Parser:
                 # These are NOT operators - the @/* is part of the indirect form
                 if not self.at_end() and _is_at_or_star(self.peek()):
                     suffix = self.advance()
-                    while not self.at_end() and _is_whitespace(self.peek()):
-                        self.advance()
-                    if not self.at_end() and self.peek() == "}":
-                        self.advance()
+                    # Consume any trailing content until closing brace
+                    # Bash accepts this syntactically (fails at runtime)
+                    trailing = []
+                    depth = 1
+                    while not self.at_end() and depth > 0:
+                        c = self.peek()
+                        if (
+                            c == "$"
+                            and self.pos + 1 < self.length
+                            and self.source[self.pos + 1] == "{"
+                        ):
+                            depth += 1
+                            trailing.append(self.advance())
+                            trailing.append(self.advance())
+                        elif c == "}":
+                            depth -= 1
+                            if depth == 0:
+                                break
+                            trailing.append(self.advance())
+                        elif c == "\\":
+                            trailing.append(self.advance())
+                            if not self.at_end():
+                                trailing.append(self.advance())
+                        else:
+                            trailing.append(self.advance())
+                    if depth == 0:
+                        self.advance()  # consume final }
                         text = _substring(self.source, start, self.pos)
-                        return ParamIndirect(param + suffix), text
-                    # Not a valid prefix match, reset
+                        return ParamIndirect(param + suffix + "".join(trailing)), text
+                    # Unclosed brace
                     self.pos = start
                     return None, ""
                 # Check for operator (e.g., ${!##} = indirect of # with # op)

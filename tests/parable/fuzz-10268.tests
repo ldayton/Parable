@@ -1,0 +1,5 @@
+=== indirect prefix match with trailing content after whitespace
+${!a*	b}
+---
+(command (word "${!a*\tb}"))
+---

@@ -6420,7 +6420,8 @@ class Parser {
 			paren_depth,
 			pc,
 			suffix,
-			text;
+			text,
+			trailing;
 		if (this.atEnd()) {
 			this.pos = start;
 			return [null, ""];
@@ -6459,15 +6460,44 @@ class Parser {
 				// These are NOT operators - the @/* is part of the indirect form
 				if (!this.atEnd() && _isAtOrStar(this.peek())) {
 					suffix = this.advance();
-					while (!this.atEnd() && _isWhitespace(this.peek())) {
-						this.advance();
+					// Consume any trailing content until closing brace
+					// Bash accepts this syntactically (fails at runtime)
+					trailing = [];
+					depth = 1;
+					while (!this.atEnd() && depth > 0) {
+						c = this.peek();
+						if (
+							c === "$" &&
+							this.pos + 1 < this.length &&
+							this.source[this.pos + 1] === "{"
+						) {
+							depth += 1;
+							trailing.push(this.advance());
+							trailing.push(this.advance());
+						} else if (c === "}") {
+							depth -= 1;
+							if (depth === 0) {
+								break;
+							}
+							trailing.push(this.advance());
+						} else if (c === "\\") {
+							trailing.push(this.advance());
+							if (!this.atEnd()) {
+								trailing.push(this.advance());
+							}
+						} else {
+							trailing.push(this.advance());
+						}
 					}
-					if (!this.atEnd() && this.peek() === "}") {
+					if (depth === 0) {
 						this.advance();
 						text = this.source.slice(start, this.pos);
-						return [new ParamIndirect(param + suffix), text];
+						return [
+							new ParamIndirect(param + suffix + trailing.join("")),
+							text,
+						];
 					}
-					// Not a valid prefix match, reset
+					// Unclosed brace
 					this.pos = start;
 					return [null, ""];
 				}

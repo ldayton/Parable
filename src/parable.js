@@ -7287,7 +7287,23 @@ class Parser {
 			}
 		} else {
 			this.skipWhitespace();
-			target = this.parseWord();
+			// Handle >& - or <& - where space precedes the close syntax
+			// If op is >& or <& and next char is -, check for trailing word chars
+			// that should become a separate word (e.g., ">& -b" -> >&- + word "b")
+			if ([">&", "<&"].includes(op) && !this.atEnd() && this.peek() === "-") {
+				if (
+					this.pos + 1 < this.length &&
+					!_isMetachar(this.source[this.pos + 1])
+				) {
+					// Consume just the - as close target, leave rest for next word
+					this.advance();
+					target = new Word("&-");
+				} else {
+					target = this.parseWord();
+				}
+			} else {
+				target = this.parseWord();
+			}
 		}
 		if (target == null) {
 			throw new ParseError(`Expected target for redirect ${op}`, this.pos);

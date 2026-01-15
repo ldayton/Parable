@@ -8588,7 +8588,7 @@ class Parser:
                 self.advance()
                 if not self.at_end() and self.peek() == "p":
                     self.advance()
-                    if self.at_end() or _is_whitespace(self.peek()):
+                    if self.at_end() or _is_metachar(self.peek()):
                         time_posix = True
                     else:
                         self.pos = saved
@@ -8612,7 +8612,7 @@ class Parser:
                     self.advance()
                     if not self.at_end() and self.peek() == "p":
                         self.advance()
-                        if self.at_end() or _is_whitespace(self.peek()):
+                        if self.at_end() or _is_metachar(self.peek()):
                             time_posix = True
                         else:
                             self.pos = saved

@@ -1737,48 +1737,87 @@ class List extends Node {
 	}
 
 	_toSexpWithPrecedence(parts, op_names) {
-		let cmd, i, left, left_sexp, op, op_name, result, right, right_sexp;
+		let i, pos, result, seg, segments, semi_positions, start;
 		// Process operators by precedence: ; (lowest), then &, then && and ||
-		// Split on ; or \n first (rightmost for left-associativity)
-		for (i = parts.length - 2; i > 0; i--) {
+		// Use iterative approach to avoid stack overflow on large lists
+		// Find all ; or \n positions (may not be at regular intervals due to consecutive ops)
+		semi_positions = [];
+		for (i = 0; i < parts.length; i++) {
 			if (
 				parts[i].kind === "operator" &&
 				(parts[i].op === ";" || parts[i].op === "\n")
 			) {
-				left = parts.slice(0, i);
-				right = parts.slice(i + 1, parts.length);
-				if (left.length > 1) {
-					left_sexp = new List(left).toSexp();
-				} else {
-					left_sexp = left[0].toSexp();
-				}
-				if (right.length > 1) {
-					right_sexp = new List(right).toSexp();
-				} else {
-					right_sexp = right[0].toSexp();
-				}
-				return `(semi ${left_sexp} ${right_sexp})`;
+				semi_positions.push(i);
 			}
 		}
-		// Then split on & (rightmost for left-associativity)
-		for (i = parts.length - 2; i > 0; i--) {
+		if (semi_positions) {
+			// Split into segments at ; and \n positions, filtering empty/operator-only segments
+			segments = [];
+			start = 0;
+			for (pos of semi_positions) {
+				seg = parts.slice(start, pos);
+				if (seg.length > 0 && seg[0].kind !== "operator") {
+					segments.push(seg);
+				}
+				start = pos + 1;
+			}
+			// Final segment
+			seg = parts.slice(start, parts.length);
+			if (seg.length > 0 && seg[0].kind !== "operator") {
+				segments.push(seg);
+			}
+			if (!segments) {
+				return "()";
+			}
+			// Build left-associative result iteratively
+			result = this._toSexpAmpAndHigher(segments[0], op_names);
+			for (i = 1; i < segments.length; i++) {
+				result = `(semi ${result} ${this._toSexpAmpAndHigher(segments[i], op_names)})`;
+			}
+			return result;
+		}
+		// No ; or \n, handle & and higher
+		return this._toSexpAmpAndHigher(parts, op_names);
+	}
+
+	_toSexpAmpAndHigher(parts, op_names) {
+		let amp_positions, i, pos, result, segments, start;
+		// Handle & operator iteratively
+		if (parts.length === 1) {
+			return parts[0].toSexp();
+		}
+		amp_positions = [];
+		for (i = 1; i < parts.length - 1; i += 2) {
 			if (parts[i].kind === "operator" && parts[i].op === "&") {
-				left = parts.slice(0, i);
-				right = parts.slice(i + 1, parts.length);
-				if (left.length > 1) {
-					left_sexp = new List(left).toSexp();
-				} else {
-					left_sexp = left[0].toSexp();
-				}
-				if (right.length > 1) {
-					right_sexp = new List(right).toSexp();
-				} else {
-					right_sexp = right[0].toSexp();
-				}
-				return `(background ${left_sexp} ${right_sexp})`;
+				amp_positions.push(i);
 			}
 		}
-		// No ; or &, process high-prec ops (&&, ||) left-associatively
+		if (amp_positions) {
+			// Split into segments at & positions
+			segments = [];
+			start = 0;
+			for (pos of amp_positions) {
+				segments.push(parts.slice(start, pos));
+				start = pos + 1;
+			}
+			segments.push(parts.slice(start, parts.length));
+			// Build left-associative result iteratively
+			result = this._toSexpAndOr(segments[0], op_names);
+			for (i = 1; i < segments.length; i++) {
+				result = `(background ${result} ${this._toSexpAndOr(segments[i], op_names)})`;
+			}
+			return result;
+		}
+		// No &, handle && and ||
+		return this._toSexpAndOr(parts, op_names);
+	}
+
+	_toSexpAndOr(parts, op_names) {
+		let cmd, i, op, op_name, result;
+		// Process && and || left-associatively (already iterative)
+		if (parts.length === 1) {
+			return parts[0].toSexp();
+		}
 		result = parts[0].toSexp();
 		for (i = 1; i < parts.length - 1; i += 2) {
 			op = parts[i];

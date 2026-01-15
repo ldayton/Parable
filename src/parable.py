@@ -1380,35 +1380,75 @@ class List(Node):
 
     def _to_sexp_with_precedence(self, parts: list, op_names: dict) -> str:
         # Process operators by precedence: ; (lowest), then &, then && and ||
-        # Split on ; or \n first (rightmost for left-associativity)
-        for i in range(len(parts) - 2, 0, -2):
+        # Use iterative approach to avoid stack overflow on large lists
+        # Find all ; or \n positions (may not be at regular intervals due to consecutive ops)
+        semi_positions = []
+        for i in range(len(parts)):
             if parts[i].kind == "operator" and (parts[i].op == ";" or parts[i].op == "\n"):
-                left = _sublist(parts, 0, i)
-                right = _sublist(parts, i + 1, len(parts))
-                if len(left) > 1:
-                    left_sexp = List(left).to_sexp()
-                else:
-                    left_sexp = left[0].to_sexp()
-                if len(right) > 1:
-                    right_sexp = List(right).to_sexp()
-                else:
-                    right_sexp = right[0].to_sexp()
-                return "(semi " + left_sexp + " " + right_sexp + ")"
-        # Then split on & (rightmost for left-associativity)
-        for i in range(len(parts) - 2, 0, -2):
+                semi_positions.append(i)
+        if semi_positions:
+            # Split into segments at ; and \n positions, filtering empty/operator-only segments
+            segments = []
+            start = 0
+            for pos in semi_positions:
+                seg = _sublist(parts, start, pos)
+                if seg and seg[0].kind != "operator":
+                    segments.append(seg)
+                start = pos + 1
+            # Final segment
+            seg = _sublist(parts, start, len(parts))
+            if seg and seg[0].kind != "operator":
+                segments.append(seg)
+            if not segments:
+                return "()"
+            # Build left-associative result iteratively
+            result = self._to_sexp_amp_and_higher(segments[0], op_names)
+            for i in range(1, len(segments)):
+                result = (
+                    "(semi "
+                    + result
+                    + " "
+                    + self._to_sexp_amp_and_higher(segments[i], op_names)
+                    + ")"
+                )
+            return result
+        # No ; or \n, handle & and higher
+        return self._to_sexp_amp_and_higher(parts, op_names)
+
+    def _to_sexp_amp_and_higher(self, parts: list, op_names: dict) -> str:
+        # Handle & operator iteratively
+        if len(parts) == 1:
+            return parts[0].to_sexp()
+        amp_positions = []
+        for i in range(1, len(parts) - 1, 2):
             if parts[i].kind == "operator" and parts[i].op == "&":
-                left = _sublist(parts, 0, i)
-                right = _sublist(parts, i + 1, len(parts))
-                if len(left) > 1:
-                    left_sexp = List(left).to_sexp()
-                else:
-                    left_sexp = left[0].to_sexp()
-                if len(right) > 1:
-                    right_sexp = List(right).to_sexp()
-                else:
-                    right_sexp = right[0].to_sexp()
-                return "(background " + left_sexp + " " + right_sexp + ")"
-        # No ; or &, process high-prec ops (&&, ||) left-associatively
+                amp_positions.append(i)
+        if amp_positions:
+            # Split into segments at & positions
+            segments = []
+            start = 0
+            for pos in amp_positions:
+                segments.append(_sublist(parts, start, pos))
+                start = pos + 1
+            segments.append(_sublist(parts, start, len(parts)))
+            # Build left-associative result iteratively
+            result = self._to_sexp_and_or(segments[0], op_names)
+            for i in range(1, len(segments)):
+                result = (
+                    "(background "
+                    + result
+                    + " "
+                    + self._to_sexp_and_or(segments[i], op_names)
+                    + ")"
+                )
+            return result
+        # No &, handle && and ||
+        return self._to_sexp_and_or(parts, op_names)
+
+    def _to_sexp_and_or(self, parts: list, op_names: dict) -> str:
+        # Process && and || left-associatively (already iterative)
+        if len(parts) == 1:
+            return parts[0].to_sexp()
         result = parts[0].to_sexp()
         for i in range(1, len(parts) - 1, 2):
             op = parts[i]

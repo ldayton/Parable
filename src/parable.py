@@ -885,6 +885,7 @@ class Word(Node):
         has_brace_cmdsub = value.find("${ ") != -1 or value.find("${|") != -1
         # Check if there's an untracked $( that isn't $((, skipping over quotes only
         has_untracked_cmdsub = False
+        has_untracked_procsub = False
         idx = 0
         in_double = False
         while idx < len(value):
@@ -906,6 +907,13 @@ class Word(Node):
             ):
                 has_untracked_cmdsub = True
                 break
+            elif _starts_with_at(value, idx, "<(") or _starts_with_at(value, idx, ">("):
+                # Only treat as process substitution if not preceded by alphanumeric
+                # (e.g., "i<(3)" is arithmetic comparison, not process substitution)
+                if idx == 0 or not value[idx - 1].isalnum():
+                    has_untracked_procsub = True
+                    break
+                idx += 1
             else:
                 idx += 1
         if (
@@ -913,6 +921,7 @@ class Word(Node):
             and not procsub_parts
             and not has_brace_cmdsub
             and not has_untracked_cmdsub
+            and not has_untracked_procsub
         ):
             return value
         result = []
@@ -991,26 +1000,48 @@ class Word(Node):
                 cmdsub_idx += 1
                 i = j
             # Check for >( or <( process substitution
-            elif (
-                _starts_with_at(value, i, ">(") or _starts_with_at(value, i, "<(")
-            ) and procsub_idx < len(procsub_parts):
-                direction = value[i]
-                # Find matching close paren
-                j = _find_cmdsub_end(value, i + 2)
-                # Format this process substitution (with in_procsub=True for no-space subshells)
-                node = procsub_parts[procsub_idx]
-                formatted = _format_cmdsub_node(node.command, in_procsub=True)
-                if node.command.kind == "subshell":
-                    raw_content = _substring(value, i + 2, j - 1)
-                    if raw_content.startswith("("):
-                        # Process substitution with nested subshell >((...)): preserve original
-                        result.append(direction + "(" + raw_content + ")")
-                        procsub_idx += 1
-                        i = j
-                        continue
-                result.append(direction + "(" + formatted + ")")
-                procsub_idx += 1
-                i = j
+            elif _starts_with_at(value, i, ">(") or _starts_with_at(value, i, "<("):
+                # Check if this is actually a process substitution or just comparison + parens
+                # Process substitution: not preceded by alphanumeric
+                is_procsub = i == 0 or not value[i - 1].isalnum()
+                if procsub_idx < len(procsub_parts):
+                    # Have parsed AST node - use it
+                    direction = value[i]
+                    j = _find_cmdsub_end(value, i + 2)
+                    node = procsub_parts[procsub_idx]
+                    formatted = _format_cmdsub_node(node.command, in_procsub=True)
+                    if node.command.kind == "subshell":
+                        raw_content = _substring(value, i + 2, j - 1)
+                        if raw_content.startswith("("):
+                            # Process substitution with nested subshell >((...)): preserve original
+                            result.append(direction + "(" + raw_content + ")")
+                            procsub_idx += 1
+                            i = j
+                            continue
+                    procsub_idx += 1
+                    result.append(direction + "(" + formatted + ")")
+                    i = j
+                elif is_procsub:
+                    # No AST node but valid procsub context - parse content on the fly
+                    direction = value[i]
+                    j = _find_cmdsub_end(value, i + 2)
+                    inner = _substring(value, i + 2, j - 1)
+                    try:
+                        parser = Parser(inner)
+                        parsed = parser.parse_list()
+                        # Only use parsed result if parser consumed all input
+                        if parsed and parser.pos == len(inner):
+                            formatted = _format_cmdsub_node(parsed, in_procsub=True)
+                        else:
+                            formatted = inner
+                    except Exception:
+                        formatted = inner
+                    result.append(direction + "(" + formatted + ")")
+                    i = j
+                else:
+                    # Not a process substitution (e.g., arithmetic comparison)
+                    result.append(value[i])
+                    i += 1
             # Check for ${ (space) or ${| brace command substitution
             # But not if the $ is escaped by a backslash
             elif (

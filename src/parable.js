@@ -1090,12 +1090,14 @@ class Word extends Node {
 			formatted_inner,
 			has_brace_cmdsub,
 			has_untracked_cmdsub,
+			has_untracked_procsub,
 			i,
 			idx,
 			in_double,
 			in_double_quote,
 			in_single,
 			inner,
+			is_procsub,
 			j,
 			node,
 			p,
@@ -1125,6 +1127,7 @@ class Word extends Node {
 			value.indexOf("${ ") !== -1 || value.indexOf("${|") !== -1;
 		// Check if there's an untracked $( that isn't $((, skipping over quotes only
 		has_untracked_cmdsub = false;
+		has_untracked_procsub = false;
 		idx = 0;
 		in_double = false;
 		while (idx < value.length) {
@@ -1148,6 +1151,17 @@ class Word extends Node {
 			) {
 				has_untracked_cmdsub = true;
 				break;
+			} else if (
+				_startsWithAt(value, idx, "<(") ||
+				_startsWithAt(value, idx, ">(")
+			) {
+				// Only treat as process substitution if not preceded by alphanumeric
+				// (e.g., "i<(3)" is arithmetic comparison, not process substitution)
+				if (idx === 0 || !/^[a-zA-Z0-9]$/.test(value[idx - 1])) {
+					has_untracked_procsub = true;
+					break;
+				}
+				idx += 1;
 			} else {
 				idx += 1;
 			}
@@ -1156,7 +1170,8 @@ class Word extends Node {
 			cmdsub_parts.length === 0 &&
 			procsub_parts.length === 0 &&
 			!has_brace_cmdsub &&
-			!has_untracked_cmdsub
+			!has_untracked_cmdsub &&
+			!has_untracked_procsub
 		) {
 			return value;
 		}
@@ -1246,29 +1261,56 @@ class Word extends Node {
 				cmdsub_idx += 1;
 				i = j;
 			} else if (
-				(_startsWithAt(value, i, ">(") || _startsWithAt(value, i, "<(")) &&
-				procsub_idx < procsub_parts.length
+				_startsWithAt(value, i, ">(") ||
+				_startsWithAt(value, i, "<(")
 			) {
 				// Check for >( or <( process substitution
-				direction = value[i];
-				// Find matching close paren
-				j = _findCmdsubEnd(value, i + 2);
-				// Format this process substitution (with in_procsub=True for no-space subshells)
-				node = procsub_parts[procsub_idx];
-				formatted = _formatCmdsubNode(node.command, 0, true);
-				if (node.command.kind === "subshell") {
-					raw_content = value.slice(i + 2, j - 1);
-					if (raw_content.startsWith("(")) {
-						// Process substitution with nested subshell >((...)): preserve original
-						result.push(`${direction}(${raw_content})`);
-						procsub_idx += 1;
-						i = j;
-						continue;
+				// Check if this is actually a process substitution or just comparison + parens
+				// Process substitution: not preceded by alphanumeric
+				is_procsub = i === 0 || !/^[a-zA-Z0-9]$/.test(value[i - 1]);
+				if (procsub_idx < procsub_parts.length) {
+					// Have parsed AST node - use it
+					direction = value[i];
+					j = _findCmdsubEnd(value, i + 2);
+					node = procsub_parts[procsub_idx];
+					formatted = _formatCmdsubNode(node.command, 0, true);
+					if (node.command.kind === "subshell") {
+						raw_content = value.slice(i + 2, j - 1);
+						if (raw_content.startsWith("(")) {
+							// Process substitution with nested subshell >((...)): preserve original
+							result.push(`${direction}(${raw_content})`);
+							procsub_idx += 1;
+							i = j;
+							continue;
+						}
 					}
+					procsub_idx += 1;
+					result.push(`${direction}(${formatted})`);
+					i = j;
+				} else if (is_procsub) {
+					// No AST node but valid procsub context - parse content on the fly
+					direction = value[i];
+					j = _findCmdsubEnd(value, i + 2);
+					inner = value.slice(i + 2, j - 1);
+					try {
+						parser = new Parser(inner);
+						parsed = parser.parseList();
+						// Only use parsed result if parser consumed all input
+						if (parsed && parser.pos === inner.length) {
+							formatted = _formatCmdsubNode(parsed, 0, true);
+						} else {
+							formatted = inner;
+						}
+					} catch (_) {
+						formatted = inner;
+					}
+					result.push(`${direction}(${formatted})`);
+					i = j;
+				} else {
+					// Not a process substitution (e.g., arithmetic comparison)
+					result.push(value[i]);
+					i += 1;
 				}
-				result.push(`${direction}(${formatted})`);
-				procsub_idx += 1;
-				i = j;
 			} else if (
 				(_startsWithAt(value, i, "${ ") || _startsWithAt(value, i, "${|")) &&
 				!_isBackslashEscaped(value, i)

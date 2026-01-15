@@ -969,6 +969,7 @@ class Word(Node):
                 _starts_with_at(value, idx, "$(")
                 and not _starts_with_at(value, idx, "$((")
                 and not _is_backslash_escaped(value, idx)
+                and not _is_dollar_dollar_paren(value, idx)
             ):
                 has_untracked_cmdsub = True
                 break
@@ -1021,6 +1022,7 @@ class Word(Node):
                 _starts_with_at(value, i, "$(")
                 and not _starts_with_at(value, i, "$((")
                 and not _is_backslash_escaped(value, i)
+                and not _is_dollar_dollar_paren(value, i)
             ):
                 # Find matching close paren using bash-aware matching
                 j = _find_cmdsub_end(value, i + 2)
@@ -3542,6 +3544,21 @@ def _is_backslash_escaped(value: str, idx: int) -> bool:
         bs_count += 1
         j -= 1
     return bs_count % 2 == 1
+
+
+def _is_dollar_dollar_paren(value: str, idx: int) -> bool:
+    """Return True if $( at idx is actually $$( where $$ is PID, not command sub.
+
+    Count consecutive $ before idx. If odd, the $( is consumed by $$ (PID param).
+    E.g., $$(  -> $$ + ( literal (1 $ before, odd)
+          $$$( -> $$ + $( cmdsub (2 $ before, even)
+    """
+    dollar_count = 0
+    j = idx - 1
+    while j >= 0 and value[j] == "$":
+        dollar_count += 1
+        j -= 1
+    return dollar_count % 2 == 1
 
 
 def _is_semicolon_or_amp(c: str) -> bool:

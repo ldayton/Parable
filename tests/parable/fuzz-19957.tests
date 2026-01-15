@@ -1,7 +1,5 @@
-=== bracket after subscript is literal
-a[][
-y
+=== double dollar followed by open paren should be PID param plus literal paren
+"$$("
 ---
-(command (word "a[]["))
-(command (word "y"))
+(command (word "\"$$(\""))
 ---

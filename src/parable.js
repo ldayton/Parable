@@ -1223,7 +1223,8 @@ class Word extends Node {
 			} else if (
 				_startsWithAt(value, idx, "$(") &&
 				!_startsWithAt(value, idx, "$((") &&
-				!_isBackslashEscaped(value, idx)
+				!_isBackslashEscaped(value, idx) &&
+				!_isDollarDollarParen(value, idx)
 			) {
 				has_untracked_cmdsub = true;
 				break;
@@ -1282,7 +1283,8 @@ class Word extends Node {
 			if (
 				_startsWithAt(value, i, "$(") &&
 				!_startsWithAt(value, i, "$((") &&
-				!_isBackslashEscaped(value, i)
+				!_isBackslashEscaped(value, i) &&
+				!_isDollarDollarParen(value, i)
 			) {
 				// Find matching close paren using bash-aware matching
 				j = _findCmdsubEnd(value, i + 2);
@@ -4164,6 +4166,17 @@ function _isBackslashEscaped(value, idx) {
 		j -= 1;
 	}
 	return bs_count % 2 === 1;
+}
+
+function _isDollarDollarParen(value, idx) {
+	let dollar_count, j;
+	dollar_count = 0;
+	j = idx - 1;
+	while (j >= 0 && value[j] === "$") {
+		dollar_count += 1;
+		j -= 1;
+	}
+	return dollar_count % 2 === 1;
 }
 
 function _isSemicolonOrAmp(c) {

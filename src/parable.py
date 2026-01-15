@@ -1382,16 +1382,18 @@ class Redirect(Node):
                 op = ">&"
             elif op == "<":
                 op = "<&"
-            fd_target = _substring(target_val, 1, len(target_val)).rstrip(
-                "-"
-            )  # "&1" -> "1", "&1-" -> "1"
-            if fd_target.isdigit():
-                return '(redirect "' + op + '" ' + str(int(fd_target)) + ")"
-            elif target_val == "&-":
+            raw = _substring(target_val, 1, len(target_val))  # "&0--" -> "0--"
+            # Pure digits: dup fd N
+            if raw.isdigit():
+                return '(redirect "' + op + '" ' + str(int(raw)) + ")"
+            # Exact move syntax: N- (digits + exactly one dash)
+            if raw.endswith("-") and raw[:-1].isdigit():
+                return '(redirect "' + op + '" ' + str(int(raw[:-1])) + ")"
+            if target_val == "&-":
                 return '(redirect ">&-" 0)'
-            else:
-                # Variable fd dup like >&$fd or >&$fd- (move) - strip the & and trailing -
-                return '(redirect "' + op + '" "' + fd_target + '")'
+            # Variable/word target: strip exactly one trailing dash if present
+            fd_target = raw[:-1] if raw.endswith("-") else raw
+            return '(redirect "' + op + '" "' + fd_target + '")'
         # Handle case where op is already >& or <&
         if op == ">&" or op == "<&":
             if target_val.isdigit():
@@ -1399,9 +1401,12 @@ class Redirect(Node):
             # Handle close: <& - or >& - (with space before -)
             if target_val == "-":
                 return '(redirect ">&-" 0)'
-            # Variable fd dup with move indicator (trailing -)
-            target_val = target_val.rstrip("-")
-            return '(redirect "' + op + '" "' + target_val + '")'
+            # Exact move syntax: N- (digits + exactly one dash)
+            if target_val.endswith("-") and target_val[:-1].isdigit():
+                return '(redirect "' + op + '" ' + str(int(target_val[:-1])) + ")"
+            # Variable/word target: strip exactly one trailing dash if present
+            out_val = target_val[:-1] if target_val.endswith("-") else target_val
+            return '(redirect "' + op + '" "' + out_val + '")'
         return '(redirect "' + op + '" "' + target_val + '")'
 
 

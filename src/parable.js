@@ -1692,7 +1692,7 @@ class Redirect extends Node {
 		let fd_target, j, op, out_val, raw, target_val;
 		// Strip fd prefix from operator (e.g., "2>" -> ">", "{fd}>" -> ">")
 		op = this.op.replace(/^[0123456789]+/, "");
-		// Strip {varname} prefix if present
+		// Strip {varname} or {varname[subscript]} prefix if present
 		if (op.startsWith("{")) {
 			j = 1;
 			if (j < op.length && (/^[a-zA-Z]$/.test(op[j]) || op[j] === "_")) {
@@ -1702,6 +1702,16 @@ class Redirect extends Node {
 					(/^[a-zA-Z0-9]$/.test(op[j]) || op[j] === "_")
 				) {
 					j += 1;
+				}
+				// Handle optional [subscript] part
+				if (j < op.length && op[j] === "[") {
+					j += 1;
+					while (j < op.length && op[j] !== "]") {
+						j += 1;
+					}
+					if (j < op.length && op[j] === "]") {
+						j += 1;
+					}
 				}
 				if (j < op.length && op[j] === "}") {
 					op = op.slice(j + 1, op.length);

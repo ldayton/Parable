@@ -35,8 +35,15 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 from parable import ParseError, parse  # noqa: E402
 
 ORACLE_PATH = Path.home() / "source" / "bash-oracle" / "bash-oracle"
-MUTATION_GROUPS = list("${}()|&<>;\"'\\` \t\n@#![]:=*?~/+-,") + ["0123456789"]
-INSERTION_PATTERNS = ["$(", "${", "<(", ">(", "((", "<<"]
+MUTATION_GROUPS = list("${}()|&<>;\"'\\` \t\n@#![]:=*?~/+-,%^") + ["0123456789"]
+INSERTION_PATTERNS = [
+    "$(", "${", "<(", ">(", "((", "<<",  # openers
+    "))", "}}",  # closers
+    ">&", "2>", "|&",  # redirects
+    "||", "&&",  # logical
+    "$((", "<<<",  # arithmetic, herestring
+]
+DELETION_PATTERNS = ["$(", "${", "<(", ">(", "((", "<<", "))", "}}", "||", "&&"]
 
 
 def pick_mutation_char() -> str:
@@ -127,9 +134,18 @@ def mutate(s: str, num_mutations: int = 1) -> tuple[str, str]:
                 result.insert(pos + i, c)
             ops.append(f"insert {insertion!r} at {pos}")
         elif op == "delete" and len(result) > 1:
-            pos = random.randint(0, len(result) - 1)
-            deleted = result.pop(pos)
-            ops.append(f"delete {deleted!r} at {pos}")
+            # Try to delete a multi-char pattern
+            result_str_tmp = "".join(result)
+            pattern = random.choice(DELETION_PATTERNS)
+            if pattern in result_str_tmp and random.random() < 0.3:
+                idx = result_str_tmp.index(pattern)
+                for _ in range(len(pattern)):
+                    result.pop(idx)
+                ops.append(f"delete {pattern!r} at {idx}")
+            else:
+                pos = random.randint(0, len(result) - 1)
+                deleted = result.pop(pos)
+                ops.append(f"delete {deleted!r} at {pos}")
         elif op == "swap" and len(result) > 1:
             pos = random.randint(0, len(result) - 2)
             result[pos], result[pos + 1] = result[pos + 1], result[pos]

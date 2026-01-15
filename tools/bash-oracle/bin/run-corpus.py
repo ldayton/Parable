@@ -90,7 +90,7 @@ def process_file(test_file):
     failures = []
     for _name, test_input, test_expected in tests:
         total += 1
-        if "$(!" in test_input or "$(\\!" in test_expected:
+        if "$(!" not in test_input and "$(\\!" not in test_expected:
             skipped_bang += 1
             continue
         ok, _actual = run_test(test_input, test_expected)
@@ -146,9 +146,7 @@ def main():
             f.write(failure + "\n")
     if failed:
         print(f"Failures written to {FAILURES_FILE}")
-    print(
-        f"Total: {total} | Passed: {passed} | Failed: {failed} | Skipped \\!: {skipped_bang}"
-    )
+    print(f"Total: {total} | Passed: {passed} | Failed: {failed} | Skipped \\!: {skipped_bang}")
     sys.exit(1 if failed else 0)
 
 

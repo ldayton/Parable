@@ -2851,22 +2851,29 @@ def _format_cmdsub_node(
                         break
         # Join commands with operators
         result = []
+        skipped_semi = False
         for p in node.parts:
             if p.kind == "operator":
                 if p.op == ";":
                     # Skip semicolon if previous command ends with heredoc (newline)
                     if result and result[len(result) - 1].endswith("\n"):
+                        skipped_semi = True
                         continue
                     result.append(";")
+                    skipped_semi = False
                 elif p.op == "\n":
                     # Skip newline if it follows a semicolon (redundant separator)
                     if result and result[len(result) - 1] == ";":
+                        skipped_semi = False
                         continue
-                    # If previous ends with heredoc newline, add space instead
+                    # If previous ends with heredoc newline
                     if result and result[len(result) - 1].endswith("\n"):
-                        result.append(" ")
+                        # Add space if semicolon was skipped, else newline
+                        result.append(" " if skipped_semi else "\n")
+                        skipped_semi = False
                         continue
                     result.append("\n")
+                    skipped_semi = False
                 elif p.op == "&":
                     # If previous command has heredoc, insert & before heredoc content
                     if (

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run Parable against the bigtable-bash corpus and report failures."""
 
+import argparse
 import os
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -14,7 +15,6 @@ from parable import ParseError, parse  # noqa: E402
 
 CORPUS_DIR = os.path.expanduser("~/source/bigtable-bash/tests")
 FAILURES_FILE = os.path.join(SCRIPT_DIR, "failures.txt")
-MAX_FAILURES = 100
 
 # Test files to skip (known issues to investigate later)
 SKIP_FILES = {
@@ -127,6 +127,15 @@ def process_file(test_file):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Run Parable against bigtable-bash corpus")
+    parser.add_argument(
+        "--max-failures",
+        type=int,
+        help="Stop after N failures (default: run to completion)",
+    )
+    args = parser.parse_args()
+    max_failures = args.max_failures if args.max_failures is not None else sys.maxsize
+
     if not os.path.isdir(CORPUS_DIR):
         print(f"Error: corpus not found at {CORPUS_DIR}", file=sys.stderr)
         sys.exit(1)
@@ -147,12 +156,12 @@ def main():
             skipped_bang += result["skipped_bang"]
             all_failures.extend(result["failures"])
             print(f"\r{i + 1}/{total_files} files ({failed} failures)", end="", flush=True)
-            if failed >= MAX_FAILURES:
+            if failed >= max_failures:
                 executor.shutdown(cancel_futures=True)
                 break
     print()
     with open(FAILURES_FILE, "w") as f:
-        for failure in all_failures[:MAX_FAILURES]:
+        for failure in all_failures[:max_failures]:
             f.write(failure + "\n")
     if failed:
         print(f"Failures written to {FAILURES_FILE}")

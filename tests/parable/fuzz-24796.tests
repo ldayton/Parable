@@ -1,0 +1,7 @@
+=== unclosed bracket in regex paren group
+[[ a =~ ([:) ]]
+[[ b =~ [c] ]]
+---
+(cond (cond-binary "=~" (cond-term "a") (cond-term "([:)")))
+(cond (cond-binary "=~" (cond-term "b") (cond-term "[c]")))
+---

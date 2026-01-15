@@ -1,0 +1,5 @@
+=== process substitution with subshell redirect preserves original text
+>((1<= 2))
+---
+(command (word ">((1<= 2))"))
+---

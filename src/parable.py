@@ -1898,6 +1898,8 @@ def _consume_bracket_class(s: str, start: int, depth: int) -> tuple:
             break
         if s[scan_pos] == ")" and depth == 0:
             break
+        if s[scan_pos] == "|" and depth == 0:
+            break
         scan_pos += 1
     if not is_bracket:
         return (start + 1, ["["], False)
@@ -8073,8 +8075,8 @@ class Parser:
                         elif sc == ")" and scan_depth == 0:
                             # Hit pattern/extglob closer before finding ]
                             break
-                        elif sc == "|" and scan_depth == 0 and extglob_depth > 0:
-                            # Hit alternation in extglob - ] must be in this branch
+                        elif sc == "|" and scan_depth == 0:
+                            # Hit pattern separator (| in case pattern or extglob alternation)
                             break
                         scan_pos += 1
                     if is_char_class:

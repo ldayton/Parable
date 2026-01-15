@@ -2282,6 +2282,9 @@ function _consumeBracketClass(s, start, depth) {
 		if (s[scan_pos] === ")" && depth === 0) {
 			break;
 		}
+		if (s[scan_pos] === "|" && depth === 0) {
+			break;
+		}
 		scan_pos += 1;
 	}
 	if (!is_bracket) {
@@ -9671,8 +9674,8 @@ class Parser {
 						} else if (sc === ")" && scan_depth === 0) {
 							// Hit pattern/extglob closer before finding ]
 							break;
-						} else if (sc === "|" && scan_depth === 0 && extglob_depth > 0) {
-							// Hit alternation in extglob - ] must be in this branch
+						} else if (sc === "|" && scan_depth === 0) {
+							// Hit pattern separator (| in case pattern or extglob alternation)
 							break;
 						}
 						scan_pos += 1;

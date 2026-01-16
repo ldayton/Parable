@@ -11805,16 +11805,26 @@ class Parser {
 			return [new Empty()];
 		}
 		// bash-oracle strips trailing backslash at EOF when there was a newline
-		// inside single quotes earlier in the input
+		// inside single quotes and the last word is on the same line as other content
+		// (not on its own line after a newline)
 		if (
 			this._saw_newline_in_single_quote &&
 			this.source &&
-			this.source[this.source.length - 1] === "\\" &&
-			(this.source.length < 2 || this.source[this.source.length - 2] !== "\n")
+			this.source[this.source.length - 1] === "\\"
 		) {
-			this._stripTrailingBackslashFromLastWord(results);
+			// Check if the last word started on its own line (after a newline)
+			// If so, keep the backslash. Otherwise, strip it as line continuation.
+			if (!this._lastWordOnOwnLine(results)) {
+				this._stripTrailingBackslashFromLastWord(results);
+			}
 		}
 		return results;
+	}
+
+	_lastWordOnOwnLine(nodes) {
+		// If we have multiple top-level nodes, they were separated by newlines,
+		// so the last node is on its own line
+		return nodes.length >= 2;
 	}
 
 	_stripTrailingBackslashFromLastWord(nodes) {

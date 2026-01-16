@@ -4097,35 +4097,39 @@ def _skip_heredoc(value: str, start: int) -> int:
     # But track paren depth - if we hit a ) at depth 0, it closes the cmdsub
     # Must handle quotes and backticks since newlines in them don't end the line
     paren_depth = 0
+    quote = QuoteState()
+    in_backtick = False
     while i < len(value) and value[i] != "\n":
-        if value[i] == "(":
+        c = value[i]
+        # Handle escapes (in double quotes or backticks)
+        if c == "\\" and i + 1 < len(value) and (quote.double or in_backtick):
+            i += 2
+            continue
+        # Track quote state
+        if c == "'" and not quote.double and not in_backtick:
+            quote.single = not quote.single
+            i += 1
+            continue
+        if c == '"' and not quote.single and not in_backtick:
+            quote.double = not quote.double
+            i += 1
+            continue
+        if c == "`" and not quote.single:
+            in_backtick = not in_backtick
+            i += 1
+            continue
+        # Skip content inside quotes/backticks
+        if quote.single or quote.double or in_backtick:
+            i += 1
+            continue
+        # Track paren depth
+        if c == "(":
             paren_depth += 1
-        elif value[i] == ")":
+        elif c == ")":
             if paren_depth == 0:
                 # This ) closes the enclosing command substitution, stop here
                 break
             paren_depth -= 1
-        elif value[i] == "'":
-            # Single-quoted string - skip to closing quote
-            i += 1
-            while i < len(value) and value[i] != "'":
-                i += 1
-        elif value[i] == '"':
-            # Double-quoted string - skip to closing quote (with escapes)
-            i += 1
-            while i < len(value) and value[i] != '"':
-                if value[i] == "\\" and i + 1 < len(value):
-                    i += 2
-                else:
-                    i += 1
-        elif value[i] == "`":
-            # Backtick command substitution - skip to closing backtick
-            i += 1
-            while i < len(value) and value[i] != "`":
-                if value[i] == "\\" and i + 1 < len(value):
-                    i += 2
-                else:
-                    i += 1
         i += 1
     # If we stopped at ) (closing cmdsub), return here - no heredoc content
     if i < len(value) and value[i] == ")":

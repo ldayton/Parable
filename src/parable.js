@@ -4821,15 +4821,18 @@ function _findCmdsubEnd(value, start) {
 }
 
 function _skipHeredoc(value, start) {
-	let delim_start,
+	let c,
+		delim_start,
 		delimiter,
 		i,
+		in_backtick,
 		j,
 		line,
 		line_end,
 		line_start,
 		next_line_start,
 		paren_depth,
+		quote,
 		quote_char,
 		stripped,
 		tabs_stripped,
@@ -4879,41 +4882,45 @@ function _skipHeredoc(value, start) {
 	// But track paren depth - if we hit a ) at depth 0, it closes the cmdsub
 	// Must handle quotes and backticks since newlines in them don't end the line
 	paren_depth = 0;
+	quote = new QuoteState();
+	in_backtick = false;
 	while (i < value.length && value[i] !== "\n") {
-		if (value[i] === "(") {
+		c = value[i];
+		// Handle escapes (in double quotes or backticks)
+		if (c === "\\" && i + 1 < value.length && (quote.double || in_backtick)) {
+			i += 2;
+			continue;
+		}
+		// Track quote state
+		if (c === "'" && !quote.double && !in_backtick) {
+			quote.single = !quote.single;
+			i += 1;
+			continue;
+		}
+		if (c === '"' && !quote.single && !in_backtick) {
+			quote.double = !quote.double;
+			i += 1;
+			continue;
+		}
+		if (c === "`" && !quote.single) {
+			in_backtick = !in_backtick;
+			i += 1;
+			continue;
+		}
+		// Skip content inside quotes/backticks
+		if (quote.single || quote.double || in_backtick) {
+			i += 1;
+			continue;
+		}
+		// Track paren depth
+		if (c === "(") {
 			paren_depth += 1;
-		} else if (value[i] === ")") {
+		} else if (c === ")") {
 			if (paren_depth === 0) {
 				// This ) closes the enclosing command substitution, stop here
 				break;
 			}
 			paren_depth -= 1;
-		} else if (value[i] === "'") {
-			// Single-quoted string - skip to closing quote
-			i += 1;
-			while (i < value.length && value[i] !== "'") {
-				i += 1;
-			}
-		} else if (value[i] === '"') {
-			// Double-quoted string - skip to closing quote (with escapes)
-			i += 1;
-			while (i < value.length && value[i] !== '"') {
-				if (value[i] === "\\" && i + 1 < value.length) {
-					i += 2;
-				} else {
-					i += 1;
-				}
-			}
-		} else if (value[i] === "`") {
-			// Backtick command substitution - skip to closing backtick
-			i += 1;
-			while (i < value.length && value[i] !== "`") {
-				if (value[i] === "\\" && i + 1 < value.length) {
-					i += 2;
-				} else {
-					i += 1;
-				}
-			}
 		}
 		i += 1;
 	}

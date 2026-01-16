@@ -1891,6 +1891,7 @@ class Word extends Node {
 	_normalizeExtglobWhitespace(value) {
 		let current_part,
 			depth,
+			has_pipe,
 			i,
 			in_double_quote,
 			part_content,
@@ -1921,6 +1922,7 @@ class Word extends Node {
 					depth = 1;
 					pattern_parts = [];
 					current_part = [];
+					has_pipe = false;
 					while (i < value.length && depth > 0) {
 						if (value[i] === "\\" && i + 1 < value.length) {
 							// Escaped character, keep as-is
@@ -1936,11 +1938,13 @@ class Word extends Node {
 							if (depth === 0) {
 								// End of pattern
 								part_content = current_part.join("");
-								// Don't strip if this looks like a process substitution with heredoc
+								// Only strip if this is an alternation pattern (has |) or contains heredoc
 								if (part_content.includes("<<")) {
 									pattern_parts.push(part_content);
-								} else {
+								} else if (has_pipe) {
 									pattern_parts.push(part_content.trim());
+								} else {
+									pattern_parts.push(part_content);
 								}
 								break;
 							}
@@ -1948,6 +1952,7 @@ class Word extends Node {
 							i += 1;
 						} else if (value[i] === "|" && depth === 1) {
 							// Top-level pipe separator
+							has_pipe = true;
 							part_content = current_part.join("");
 							// Don't strip if this looks like a process substitution with heredoc
 							if (part_content.includes("<<")) {

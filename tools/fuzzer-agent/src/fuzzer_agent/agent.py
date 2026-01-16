@@ -9,6 +9,7 @@ from pathlib import Path
 
 import structlog
 from strands import Agent
+from strands.agent.conversation_manager import SlidingWindowConversationManager
 from strands.models import BedrockModel
 
 from .tools import shell
@@ -113,11 +114,21 @@ class FuzzerFixer:
             f"## Fuzzer Agent\n\n| | |\n|---|---|\n| **Model** | `{self.model_name}` |\n| **Base SHA** | `{base_sha}` |\n"
         )
         self.log.info("agent_start", model=self.model_name, base_sha=base_sha)
-        model = BedrockModel(model_id=self.model_id, region_name="us-east-2")
+        model = BedrockModel(
+            model_id=self.model_id,
+            region_name="us-east-2",
+            temperature=0.2,
+            max_tokens=4096,
+        )
         agent = Agent(
             model=model,
             system_prompt=self.system_prompt,
             tools=self.tools,
+            conversation_manager=SlidingWindowConversationManager(
+                window_size=40,
+                should_truncate_results=True,
+                per_turn=True,
+            ),
         )
         prompt = "Find and fix one parser bug using the fuzzer."
         stderr_capture = io.StringIO()

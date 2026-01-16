@@ -4797,6 +4797,50 @@ class Parser:
             raise ParseError("Unterminated single quote", pos=start)
         chars.append(self.advance())  # closing quote
 
+    def _parse_dollar_expansion(self, chars: list, parts: list) -> bool:
+        """Handle $ expansions. Returns True if expansion parsed, False if bare $."""
+        # Check $(( -> arithmetic expansion
+        if (
+            self.pos + 2 < self.length
+            and self.source[self.pos + 1] == "("
+            and self.source[self.pos + 2] == "("
+        ):
+            result = self._parse_arithmetic_expansion()
+            if result[0]:
+                parts.append(result[0])
+                chars.append(result[1])
+                return True
+            # Not arithmetic (e.g., '$( ( ... ) )' is command sub + subshell)
+            result = self._parse_command_substitution()
+            if result[0]:
+                parts.append(result[0])
+                chars.append(result[1])
+                return True
+            return False
+        # Check $[ -> deprecated arithmetic
+        if self.pos + 1 < self.length and self.source[self.pos + 1] == "[":
+            result = self._parse_deprecated_arithmetic()
+            if result[0]:
+                parts.append(result[0])
+                chars.append(result[1])
+                return True
+            return False
+        # Check $( -> command substitution
+        if self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+            result = self._parse_command_substitution()
+            if result[0]:
+                parts.append(result[0])
+                chars.append(result[1])
+                return True
+            return False
+        # Otherwise -> parameter expansion
+        result = self._parse_param_expansion()
+        if result[0]:
+            parts.append(result[0])
+            chars.append(result[1])
+            return True
+        return False
+
     def parse_word(
         self, at_command_start: bool = False, in_array_literal: bool = False
     ) -> Word | None:
@@ -4885,63 +4929,10 @@ class Parser:
                         else:
                             chars.append(self.advance())  # backslash
                             chars.append(self.advance())  # escaped char
-                    # Handle arithmetic expansion $((...))
-                    elif (
-                        c == "$"
-                        and self.pos + 2 < self.length
-                        and self.source[self.pos + 1] == "("
-                        and self.source[self.pos + 2] == "("
-                    ):
-                        arith_result = self._parse_arithmetic_expansion()
-                        arith_node = arith_result[0]
-                        arith_text = arith_result[1]
-                        if arith_node:
-                            parts.append(arith_node)
-                            chars.append(arith_text)
-                        else:
-                            # Not arithmetic - try command substitution
-                            cmdsub_result = self._parse_command_substitution()
-                            cmdsub_node = cmdsub_result[0]
-                            cmdsub_text = cmdsub_result[1]
-                            if cmdsub_node:
-                                parts.append(cmdsub_node)
-                                chars.append(cmdsub_text)
-                            else:
-                                chars.append(self.advance())
-                    # Handle deprecated arithmetic expansion $[expr]
-                    elif (
-                        c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "["
-                    ):
-                        arith_result = self._parse_deprecated_arithmetic()
-                        arith_node = arith_result[0]
-                        arith_text = arith_result[1]
-                        if arith_node:
-                            parts.append(arith_node)
-                            chars.append(arith_text)
-                        else:
-                            chars.append(self.advance())
-                    # Handle command substitution $(...)
-                    elif (
-                        c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "("
-                    ):
-                        cmdsub_result = self._parse_command_substitution()
-                        cmdsub_node = cmdsub_result[0]
-                        cmdsub_text = cmdsub_result[1]
-                        if cmdsub_node:
-                            parts.append(cmdsub_node)
-                            chars.append(cmdsub_text)
-                        else:
-                            chars.append(self.advance())
-                    # Handle parameter expansion inside double quotes
+                    # Handle dollar expansions
                     elif c == "$":
-                        param_result = self._parse_param_expansion()
-                        param_node = param_result[0]
-                        param_text = param_result[1]
-                        if param_node:
-                            parts.append(param_node)
-                            chars.append(param_text)
-                        else:
-                            chars.append(self.advance())  # just $
+                        if not self._parse_dollar_expansion(chars, parts):
+                            chars.append(self.advance())  # bare $
                     # Handle backtick command substitution
                     elif c == "`":
                         cmdsub_result = self._parse_backtick_substitution()
@@ -4993,63 +4984,10 @@ class Parser:
                 else:
                     chars.append(self.advance())
 
-            # Arithmetic expansion $((...)) - try before command substitution
-            # If it fails (returns None), fall through to command substitution
-            elif (
-                ch == "$"
-                and self.pos + 2 < self.length
-                and self.source[self.pos + 1] == "("
-                and self.source[self.pos + 2] == "("
-            ):
-                arith_result = self._parse_arithmetic_expansion()
-                arith_node = arith_result[0]
-                arith_text = arith_result[1]
-                if arith_node:
-                    parts.append(arith_node)
-                    chars.append(arith_text)
-                else:
-                    # Not arithmetic (e.g., '$( ( ... ) )' is command sub + subshell)
-                    cmdsub_result = self._parse_command_substitution()
-                    cmdsub_node = cmdsub_result[0]
-                    cmdsub_text = cmdsub_result[1]
-                    if cmdsub_node:
-                        parts.append(cmdsub_node)
-                        chars.append(cmdsub_text)
-                    else:
-                        chars.append(self.advance())
-
-            # Deprecated arithmetic expansion $[expr]
-            elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "[":
-                arith_result = self._parse_deprecated_arithmetic()
-                arith_node = arith_result[0]
-                arith_text = arith_result[1]
-                if arith_node:
-                    parts.append(arith_node)
-                    chars.append(arith_text)
-                else:
-                    chars.append(self.advance())
-
-            # Command substitution $(...)
-            elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
-                cmdsub_result = self._parse_command_substitution()
-                cmdsub_node = cmdsub_result[0]
-                cmdsub_text = cmdsub_result[1]
-                if cmdsub_node:
-                    parts.append(cmdsub_node)
-                    chars.append(cmdsub_text)
-                else:
-                    chars.append(self.advance())
-
-            # Parameter expansion $var or ${...}
+            # Dollar expansions (arithmetic, command sub, parameter expansion)
             elif ch == "$":
-                param_result = self._parse_param_expansion()
-                param_node = param_result[0]
-                param_text = param_result[1]
-                if param_node:
-                    parts.append(param_node)
-                    chars.append(param_text)
-                else:
-                    chars.append(self.advance())  # just $
+                if not self._parse_dollar_expansion(chars, parts):
+                    chars.append(self.advance())  # bare $
 
             # Backtick command substitution
             elif ch == "`":
@@ -8530,46 +8468,8 @@ class Parser:
                             chars.append(self.advance())
                             chars.append(self.advance())
                     elif c == "$":
-                        # Handle expansions inside double quotes
-                        if (
-                            self.pos + 2 < self.length
-                            and self.source[self.pos + 1] == "("
-                            and self.source[self.pos + 2] == "("
-                        ):
-                            arith_result = self._parse_arithmetic_expansion()
-                            arith_node = arith_result[0]
-                            arith_text = arith_result[1]
-                            if arith_node:
-                                parts.append(arith_node)
-                                chars.append(arith_text)
-                            else:
-                                # Not arithmetic - try command substitution
-                                cmdsub_result = self._parse_command_substitution()
-                                cmdsub_node = cmdsub_result[0]
-                                cmdsub_text = cmdsub_result[1]
-                                if cmdsub_node:
-                                    parts.append(cmdsub_node)
-                                    chars.append(cmdsub_text)
-                                else:
-                                    chars.append(self.advance())
-                        elif self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
-                            cmdsub_result = self._parse_command_substitution()
-                            cmdsub_node = cmdsub_result[0]
-                            cmdsub_text = cmdsub_result[1]
-                            if cmdsub_node:
-                                parts.append(cmdsub_node)
-                                chars.append(cmdsub_text)
-                            else:
-                                chars.append(self.advance())
-                        else:
-                            param_result = self._parse_param_expansion()
-                            param_node = param_result[0]
-                            param_text = param_result[1]
-                            if param_node:
-                                parts.append(param_node)
-                                chars.append(param_text)
-                            else:
-                                chars.append(self.advance())
+                        if not self._parse_dollar_expansion(chars, parts):
+                            chars.append(self.advance())
                     else:
                         chars.append(self.advance())
                 if self.at_end():
@@ -8605,42 +8505,9 @@ class Parser:
                 else:
                     chars.append(self.advance())
 
-            # Arithmetic expansion $((...))
-            elif (
-                ch == "$"
-                and self.pos + 2 < self.length
-                and self.source[self.pos + 1] == "("
-                and self.source[self.pos + 2] == "("
-            ):
-                arith_result = self._parse_arithmetic_expansion()
-                arith_node = arith_result[0]
-                arith_text = arith_result[1]
-                if arith_node:
-                    parts.append(arith_node)
-                    chars.append(arith_text)
-                else:
-                    chars.append(self.advance())
-
-            # Command substitution $(...)
-            elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
-                cmdsub_result = self._parse_command_substitution()
-                cmdsub_node = cmdsub_result[0]
-                cmdsub_text = cmdsub_result[1]
-                if cmdsub_node:
-                    parts.append(cmdsub_node)
-                    chars.append(cmdsub_text)
-                else:
-                    chars.append(self.advance())
-
-            # Parameter expansion $var or ${...}
+            # Dollar expansions (arithmetic, command sub, parameter expansion)
             elif ch == "$":
-                param_result = self._parse_param_expansion()
-                param_node = param_result[0]
-                param_text = param_result[1]
-                if param_node:
-                    parts.append(param_node)
-                    chars.append(param_text)
-                else:
+                if not self._parse_dollar_expansion(chars, parts):
                     chars.append(self.advance())
 
             # Process substitution <(...) or >(...)
@@ -8800,39 +8667,8 @@ class Parser:
                             chars.append(self.advance())  # :
                             chars.append(self.advance())  # ]
                     elif c == "$":
-                        # Handle parameter/arithmetic expansions inside bracket expression
-                        if self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
-                            # Could be $((...)) arithmetic or $(...) command substitution
-                            if self.pos + 2 < self.length and self.source[self.pos + 2] == "(":
-                                # Arithmetic expansion $((...))
-                                arith_result = self._parse_arithmetic_expansion()
-                                arith_node = arith_result[0]
-                                arith_text = arith_result[1]
-                                if arith_node:
-                                    parts.append(arith_node)
-                                    chars.append(arith_text)
-                                else:
-                                    chars.append(self.advance())
-                            else:
-                                # Command substitution $(...)
-                                cmdsub_result = self._parse_command_substitution()
-                                cmdsub_node = cmdsub_result[0]
-                                cmdsub_text = cmdsub_result[1]
-                                if cmdsub_node:
-                                    parts.append(cmdsub_node)
-                                    chars.append(cmdsub_text)
-                                else:
-                                    chars.append(self.advance())
-                        else:
-                            # Parameter expansion ${...} or $var
-                            param_result = self._parse_param_expansion()
-                            param_node = param_result[0]
-                            param_text = param_result[1]
-                            if param_node:
-                                parts.append(param_node)
-                                chars.append(param_text)
-                            else:
-                                chars.append(self.advance())
+                        if not self._parse_dollar_expansion(chars, parts):
+                            chars.append(self.advance())
                     else:
                         chars.append(self.advance())
                 continue
@@ -8863,13 +8699,7 @@ class Parser:
                         chars.append(self.advance())
                         chars.append(self.advance())
                     elif c == "$":
-                        param_result = self._parse_param_expansion()
-                        param_node = param_result[0]
-                        param_text = param_result[1]
-                        if param_node:
-                            parts.append(param_node)
-                            chars.append(param_text)
-                        else:
+                        if not self._parse_dollar_expansion(chars, parts):
                             chars.append(self.advance())
                     else:
                         chars.append(self.advance())
@@ -8878,24 +8708,9 @@ class Parser:
                 chars.append(self.advance())
                 continue
 
-            # Command substitution $(...) or parameter expansion $var or ${...}
+            # Dollar expansions
             if ch == "$":
-                # Try command substitution first
-                if self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
-                    cmdsub_result = self._parse_command_substitution()
-                    cmdsub_node = cmdsub_result[0]
-                    cmdsub_text = cmdsub_result[1]
-                    if cmdsub_node:
-                        parts.append(cmdsub_node)
-                        chars.append(cmdsub_text)
-                        continue
-                param_result = self._parse_param_expansion()
-                param_node = param_result[0]
-                param_text = param_result[1]
-                if param_node:
-                    parts.append(param_node)
-                    chars.append(param_text)
-                else:
+                if not self._parse_dollar_expansion(chars, parts):
                     chars.append(self.advance())
                 continue
 

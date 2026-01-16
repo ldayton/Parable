@@ -5803,13 +5803,63 @@ class Parser {
 		chars.push(this.advance());
 	}
 
+	_parseDollarExpansion(chars, parts) {
+		let result;
+		// Check $(( -> arithmetic expansion
+		if (
+			this.pos + 2 < this.length &&
+			this.source[this.pos + 1] === "(" &&
+			this.source[this.pos + 2] === "("
+		) {
+			result = this._parseArithmeticExpansion();
+			if (result[0]) {
+				parts.push(result[0]);
+				chars.push(result[1]);
+				return true;
+			}
+			// Not arithmetic (e.g., '$( ( ... ) )' is command sub + subshell)
+			result = this._parseCommandSubstitution();
+			if (result[0]) {
+				parts.push(result[0]);
+				chars.push(result[1]);
+				return true;
+			}
+			return false;
+		}
+		// Check $[ -> deprecated arithmetic
+		if (this.pos + 1 < this.length && this.source[this.pos + 1] === "[") {
+			result = this._parseDeprecatedArithmetic();
+			if (result[0]) {
+				parts.push(result[0]);
+				chars.push(result[1]);
+				return true;
+			}
+			return false;
+		}
+		// Check $( -> command substitution
+		if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
+			result = this._parseCommandSubstitution();
+			if (result[0]) {
+				parts.push(result[0]);
+				chars.push(result[1]);
+				return true;
+			}
+			return false;
+		}
+		// Otherwise -> parameter expansion
+		result = this._parseParamExpansion();
+		if (result[0]) {
+			parts.push(result[0]);
+			chars.push(result[1]);
+			return true;
+		}
+		return false;
+	}
+
 	parseWord(at_command_start, in_array_literal) {
 		let ansi_node,
 			ansi_result,
 			ansi_text,
-			arith_node,
-			arith_result,
-			arith_text,
 			array_node,
 			array_result,
 			array_text,
@@ -5828,9 +5878,6 @@ class Parser {
 			locale_text,
 			next_c,
 			next_ch,
-			param_node,
-			param_result,
-			param_text,
 			paren_depth,
 			parts,
 			pc,
@@ -5930,70 +5977,9 @@ class Parser {
 							chars.push(this.advance());
 							chars.push(this.advance());
 						}
-					} else if (
-						c === "$" &&
-						this.pos + 2 < this.length &&
-						this.source[this.pos + 1] === "(" &&
-						this.source[this.pos + 2] === "("
-					) {
-						// Handle arithmetic expansion $((...))
-						arith_result = this._parseArithmeticExpansion();
-						arith_node = arith_result[0];
-						arith_text = arith_result[1];
-						if (arith_node) {
-							parts.push(arith_node);
-							chars.push(arith_text);
-						} else {
-							// Not arithmetic - try command substitution
-							cmdsub_result = this._parseCommandSubstitution();
-							cmdsub_node = cmdsub_result[0];
-							cmdsub_text = cmdsub_result[1];
-							if (cmdsub_node) {
-								parts.push(cmdsub_node);
-								chars.push(cmdsub_text);
-							} else {
-								chars.push(this.advance());
-							}
-						}
-					} else if (
-						c === "$" &&
-						this.pos + 1 < this.length &&
-						this.source[this.pos + 1] === "["
-					) {
-						// Handle deprecated arithmetic expansion $[expr]
-						arith_result = this._parseDeprecatedArithmetic();
-						arith_node = arith_result[0];
-						arith_text = arith_result[1];
-						if (arith_node) {
-							parts.push(arith_node);
-							chars.push(arith_text);
-						} else {
-							chars.push(this.advance());
-						}
-					} else if (
-						c === "$" &&
-						this.pos + 1 < this.length &&
-						this.source[this.pos + 1] === "("
-					) {
-						// Handle command substitution $(...)
-						cmdsub_result = this._parseCommandSubstitution();
-						cmdsub_node = cmdsub_result[0];
-						cmdsub_text = cmdsub_result[1];
-						if (cmdsub_node) {
-							parts.push(cmdsub_node);
-							chars.push(cmdsub_text);
-						} else {
-							chars.push(this.advance());
-						}
 					} else if (c === "$") {
-						// Handle parameter expansion inside double quotes
-						param_result = this._parseParamExpansion();
-						param_node = param_result[0];
-						param_text = param_result[1];
-						if (param_node) {
-							parts.push(param_node);
-							chars.push(param_text);
-						} else {
+						// Handle dollar expansions
+						if (!this._parseDollarExpansion(chars, parts)) {
 							chars.push(this.advance());
 						}
 					} else if (c === "`") {
@@ -6058,71 +6044,9 @@ class Parser {
 				} else {
 					chars.push(this.advance());
 				}
-			} else if (
-				ch === "$" &&
-				this.pos + 2 < this.length &&
-				this.source[this.pos + 1] === "(" &&
-				this.source[this.pos + 2] === "("
-			) {
-				// Arithmetic expansion $((...)) - try before command substitution
-				// If it fails (returns None), fall through to command substitution
-				arith_result = this._parseArithmeticExpansion();
-				arith_node = arith_result[0];
-				arith_text = arith_result[1];
-				if (arith_node) {
-					parts.push(arith_node);
-					chars.push(arith_text);
-				} else {
-					// Not arithmetic (e.g., '$( ( ... ) )' is command sub + subshell)
-					cmdsub_result = this._parseCommandSubstitution();
-					cmdsub_node = cmdsub_result[0];
-					cmdsub_text = cmdsub_result[1];
-					if (cmdsub_node) {
-						parts.push(cmdsub_node);
-						chars.push(cmdsub_text);
-					} else {
-						chars.push(this.advance());
-					}
-				}
-			} else if (
-				ch === "$" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "["
-			) {
-				// Deprecated arithmetic expansion $[expr]
-				arith_result = this._parseDeprecatedArithmetic();
-				arith_node = arith_result[0];
-				arith_text = arith_result[1];
-				if (arith_node) {
-					parts.push(arith_node);
-					chars.push(arith_text);
-				} else {
-					chars.push(this.advance());
-				}
-			} else if (
-				ch === "$" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "("
-			) {
-				// Command substitution $(...)
-				cmdsub_result = this._parseCommandSubstitution();
-				cmdsub_node = cmdsub_result[0];
-				cmdsub_text = cmdsub_result[1];
-				if (cmdsub_node) {
-					parts.push(cmdsub_node);
-					chars.push(cmdsub_text);
-				} else {
-					chars.push(this.advance());
-				}
 			} else if (ch === "$") {
-				// Parameter expansion $var or ${...}
-				param_result = this._parseParamExpansion();
-				param_node = param_result[0];
-				param_text = param_result[1];
-				if (param_node) {
-					parts.push(param_node);
-					chars.push(param_text);
-				} else {
+				// Dollar expansions (arithmetic, command sub, parameter expansion)
+				if (!this._parseDollarExpansion(chars, parts)) {
 					chars.push(this.advance());
 				}
 			} else if (ch === "`") {
@@ -10134,9 +10058,6 @@ class Parser {
 		let ansi_node,
 			ansi_result,
 			ansi_text,
-			arith_node,
-			arith_result,
-			arith_text,
 			c,
 			ch,
 			chars,
@@ -10150,9 +10071,6 @@ class Parser {
 			locale_text,
 			next_c,
 			next_ch,
-			param_node,
-			param_result,
-			param_text,
 			parts,
 			parts_arg,
 			procsub_node,
@@ -10380,53 +10298,8 @@ class Parser {
 							chars.push(this.advance());
 						}
 					} else if (c === "$") {
-						// Handle expansions inside double quotes
-						if (
-							this.pos + 2 < this.length &&
-							this.source[this.pos + 1] === "(" &&
-							this.source[this.pos + 2] === "("
-						) {
-							arith_result = this._parseArithmeticExpansion();
-							arith_node = arith_result[0];
-							arith_text = arith_result[1];
-							if (arith_node) {
-								parts.push(arith_node);
-								chars.push(arith_text);
-							} else {
-								// Not arithmetic - try command substitution
-								cmdsub_result = this._parseCommandSubstitution();
-								cmdsub_node = cmdsub_result[0];
-								cmdsub_text = cmdsub_result[1];
-								if (cmdsub_node) {
-									parts.push(cmdsub_node);
-									chars.push(cmdsub_text);
-								} else {
-									chars.push(this.advance());
-								}
-							}
-						} else if (
-							this.pos + 1 < this.length &&
-							this.source[this.pos + 1] === "("
-						) {
-							cmdsub_result = this._parseCommandSubstitution();
-							cmdsub_node = cmdsub_result[0];
-							cmdsub_text = cmdsub_result[1];
-							if (cmdsub_node) {
-								parts.push(cmdsub_node);
-								chars.push(cmdsub_text);
-							} else {
-								chars.push(this.advance());
-							}
-						} else {
-							param_result = this._parseParamExpansion();
-							param_node = param_result[0];
-							param_text = param_result[1];
-							if (param_node) {
-								parts.push(param_node);
-								chars.push(param_text);
-							} else {
-								chars.push(this.advance());
-							}
+						if (!this._parseDollarExpansion(chars, parts)) {
+							chars.push(this.advance());
 						}
 					} else {
 						chars.push(this.advance());
@@ -10472,46 +10345,9 @@ class Parser {
 				} else {
 					chars.push(this.advance());
 				}
-			} else if (
-				ch === "$" &&
-				this.pos + 2 < this.length &&
-				this.source[this.pos + 1] === "(" &&
-				this.source[this.pos + 2] === "("
-			) {
-				// Arithmetic expansion $((...))
-				arith_result = this._parseArithmeticExpansion();
-				arith_node = arith_result[0];
-				arith_text = arith_result[1];
-				if (arith_node) {
-					parts.push(arith_node);
-					chars.push(arith_text);
-				} else {
-					chars.push(this.advance());
-				}
-			} else if (
-				ch === "$" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "("
-			) {
-				// Command substitution $(...)
-				cmdsub_result = this._parseCommandSubstitution();
-				cmdsub_node = cmdsub_result[0];
-				cmdsub_text = cmdsub_result[1];
-				if (cmdsub_node) {
-					parts.push(cmdsub_node);
-					chars.push(cmdsub_text);
-				} else {
-					chars.push(this.advance());
-				}
 			} else if (ch === "$") {
-				// Parameter expansion $var or ${...}
-				param_result = this._parseParamExpansion();
-				param_node = param_result[0];
-				param_text = param_result[1];
-				if (param_node) {
-					parts.push(param_node);
-					chars.push(param_text);
-				} else {
+				// Dollar expansions (arithmetic, command sub, parameter expansion)
+				if (!this._parseDollarExpansion(chars, parts)) {
 					chars.push(this.advance());
 				}
 			} else if (
@@ -10560,19 +10396,10 @@ class Parser {
 	}
 
 	_parseCondRegexWord() {
-		let arith_node,
-			arith_result,
-			arith_text,
-			bracket_will_close,
+		let bracket_will_close,
 			c,
 			ch,
 			chars,
-			cmdsub_node,
-			cmdsub_result,
-			cmdsub_text,
-			param_node,
-			param_result,
-			param_text,
 			paren_depth,
 			parts,
 			parts_arg,
@@ -10737,49 +10564,8 @@ class Parser {
 							chars.push(this.advance());
 						}
 					} else if (c === "$") {
-						// Handle parameter/arithmetic expansions inside bracket expression
-						if (
-							this.pos + 1 < this.length &&
-							this.source[this.pos + 1] === "("
-						) {
-							// Could be $((...)) arithmetic or $(...) command substitution
-							if (
-								this.pos + 2 < this.length &&
-								this.source[this.pos + 2] === "("
-							) {
-								// Arithmetic expansion $((...))
-								arith_result = this._parseArithmeticExpansion();
-								arith_node = arith_result[0];
-								arith_text = arith_result[1];
-								if (arith_node) {
-									parts.push(arith_node);
-									chars.push(arith_text);
-								} else {
-									chars.push(this.advance());
-								}
-							} else {
-								// Command substitution $(...)
-								cmdsub_result = this._parseCommandSubstitution();
-								cmdsub_node = cmdsub_result[0];
-								cmdsub_text = cmdsub_result[1];
-								if (cmdsub_node) {
-									parts.push(cmdsub_node);
-									chars.push(cmdsub_text);
-								} else {
-									chars.push(this.advance());
-								}
-							}
-						} else {
-							// Parameter expansion ${...} or $var
-							param_result = this._parseParamExpansion();
-							param_node = param_result[0];
-							param_text = param_result[1];
-							if (param_node) {
-								parts.push(param_node);
-								chars.push(param_text);
-							} else {
-								chars.push(this.advance());
-							}
+						if (!this._parseDollarExpansion(chars, parts)) {
+							chars.push(this.advance());
 						}
 					} else {
 						chars.push(this.advance());
@@ -10819,13 +10605,7 @@ class Parser {
 						chars.push(this.advance());
 						chars.push(this.advance());
 					} else if (c === "$") {
-						param_result = this._parseParamExpansion();
-						param_node = param_result[0];
-						param_text = param_result[1];
-						if (param_node) {
-							parts.push(param_node);
-							chars.push(param_text);
-						} else {
+						if (!this._parseDollarExpansion(chars, parts)) {
 							chars.push(this.advance());
 						}
 					} else {
@@ -10838,26 +10618,9 @@ class Parser {
 				chars.push(this.advance());
 				continue;
 			}
-			// Command substitution $(...) or parameter expansion $var or ${...}
+			// Dollar expansions
 			if (ch === "$") {
-				// Try command substitution first
-				if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
-					cmdsub_result = this._parseCommandSubstitution();
-					cmdsub_node = cmdsub_result[0];
-					cmdsub_text = cmdsub_result[1];
-					if (cmdsub_node) {
-						parts.push(cmdsub_node);
-						chars.push(cmdsub_text);
-						continue;
-					}
-				}
-				param_result = this._parseParamExpansion();
-				param_node = param_result[0];
-				param_text = param_result[1];
-				if (param_node) {
-					parts.push(param_node);
-					chars.push(param_text);
-				} else {
+				if (!this._parseDollarExpansion(chars, parts)) {
 					chars.push(this.advance());
 				}
 				continue;

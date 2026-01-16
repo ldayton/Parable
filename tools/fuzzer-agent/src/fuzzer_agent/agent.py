@@ -126,54 +126,64 @@ class FuzzerFixer:
             f"## Fuzzer Agent\n\n| | |\n|---|---|\n| **Model** | `{self.model_name}` |\n| **Base SHA** | `{base_sha}` |\n"
         )
         self.log.info("agent_start", model=self.model_name, base_sha=base_sha)
-        if self.model_name in AZURE_MODELS:
-            from azure.identity import DefaultAzureCredential
-
-            credential = DefaultAzureCredential()
-            token = credential.get_token("https://cognitiveservices.azure.com/.default")
-            model = LiteLLMModel(
-                model_id=self.model_id,
-                params={"temperature": 0.2, "max_tokens": 4096, "azure_ad_token": token.token},
-            )
-        elif self.model_name in GCP_MODELS:
-            model = LiteLLMModel(
-                model_id=self.model_id,
-                params={
-                    "temperature": 0.2,
-                    "max_tokens": 4096,
-                    "vertex_project": os.environ["VERTEXAI_PROJECT"],
-                    "vertex_location": os.environ["VERTEXAI_LOCATION"],
-                },
-            )
-        else:
-            model = BedrockModel(
-                model_id=self.model_id,
-                region_name="us-east-2",
-                temperature=0.2,
-                max_tokens=4096,
-            )
-        agent = Agent(
-            model=model,
-            system_prompt=self.system_prompt,
-            tools=self.tools,
-            conversation_manager=SlidingWindowConversationManager(
-                window_size=40,
-                should_truncate_results=False,
-                per_turn=True,
-            ),
-        )
-        prompt = "Find and fix one parser bug using the fuzzer."
-        stderr_capture = io.StringIO()
         start_time = time.time()
+        agent = None
+        response = None
+        error = None
+        exit_code = 2
         try:
+            if self.model_name in AZURE_MODELS:
+                from azure.identity import DefaultAzureCredential
+
+                credential = DefaultAzureCredential()
+                token = credential.get_token("https://cognitiveservices.azure.com/.default")
+                model = LiteLLMModel(
+                    model_id=self.model_id,
+                    params={"temperature": 0.2, "max_tokens": 4096, "azure_ad_token": token.token},
+                )
+            elif self.model_name in GCP_MODELS:
+                model = LiteLLMModel(
+                    model_id=self.model_id,
+                    params={
+                        "temperature": 0.2,
+                        "max_tokens": 4096,
+                        "vertex_project": os.environ["VERTEXAI_PROJECT"],
+                        "vertex_location": os.environ["VERTEXAI_LOCATION"],
+                    },
+                )
+            else:
+                model = BedrockModel(
+                    model_id=self.model_id,
+                    region_name="us-east-2",
+                    temperature=0.2,
+                    max_tokens=4096,
+                )
+            agent = Agent(
+                model=model,
+                system_prompt=self.system_prompt,
+                tools=self.tools,
+                conversation_manager=SlidingWindowConversationManager(
+                    window_size=40,
+                    should_truncate_results=False,
+                    per_turn=True,
+                ),
+            )
+            stderr_capture = io.StringIO()
             with redirect_stderr(stderr_capture):
-                response = agent(prompt)
-            duration = time.time() - start_time
+                response = agent("Find and fix one parser bug using the fuzzer.")
             for line in stderr_capture.getvalue().splitlines():
                 if line.strip():
                     self.log.warning("agent_stderr", message=line)
             output = str(response).lower() if response else ""
-            # Extract metrics safely
+            if "no discrepancies" in output or "no bugs found" in output:
+                exit_code = 1
+            elif "merge successful" in output or "gh pr create" in str(response):
+                exit_code = 0
+        except (Exception, KeyboardInterrupt) as e:
+            error = e
+            self.log.error("agent_failed", error=str(e))
+        finally:
+            duration = time.time() - start_time
             input_tokens = 0
             output_tokens = 0
             try:
@@ -182,9 +192,15 @@ class FuzzerFixer:
                     output_tokens = response.metrics.accumulated_usage.get("outputTokens", 0)
             except Exception:
                 pass
+            if input_tokens == 0 and output_tokens == 0 and agent is not None:
+                try:
+                    usage = agent.event_loop_metrics.accumulated_usage
+                    input_tokens = usage.get("inputTokens", 0)
+                    output_tokens = usage.get("outputTokens", 0)
+                except Exception:
+                    pass
             cost = self._calculate_cost(input_tokens, output_tokens)
             final_sha = self._get_git_sha()
-            # Read MRE if written
             mre = ""
             mre_path = Path("/tmp/mre.txt")
             try:
@@ -192,13 +208,15 @@ class FuzzerFixer:
                     mre = mre_path.read_text().strip()
             except Exception:
                 pass
-            # Write final summary
             summary = f"| **Final SHA** | `{final_sha}` |\n"
             summary += f"| **Tokens** | {input_tokens:,} in / {output_tokens:,} out |\n"
             summary += f"| **Cost** | ${cost:.2f} |\n"
             summary += f"| **Duration** | {duration:.1f}s |\n"
             if mre:
                 summary += f"\n### MRE\n```bash\n{mre}\n```\n"
+            if error:
+                error_msg = str(error).replace("`", "'")
+                summary += f"\n### Error\n```\n{error_msg}\n```\n"
             self._write_summary(summary)
             self.log.info(
                 "agent_complete",
@@ -206,15 +224,6 @@ class FuzzerFixer:
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 cost=round(cost, 4),
+                exit_code=exit_code,
             )
-            # Determine exit code based on agent output
-            if "no discrepancies" in output or "no bugs found" in output:
-                return 1
-            if "merge successful" in output or "gh pr create" in str(response):
-                return 0
-            return 2
-        except Exception as e:
-            self.log.error("agent_failed", error=str(e))
-            error_msg = str(e).replace("`", "'")  # Escape backticks for markdown
-            self._write_summary(f"\n### Error\n```\n{error_msg}\n```\n")
-            return 2
+        return exit_code

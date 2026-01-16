@@ -606,6 +606,7 @@ class Word(Node):
         bracket_depth = 0  # Track [...] subscripts inside braces
         # Track quote state inside brace expansions separately
         brace_in_double_quote = False
+        brace_in_single_quote = False
         bracket_in_double_quote = False  # Track quotes inside brackets
         while i < len(value):
             ch = value[i]
@@ -614,14 +615,23 @@ class Word(Node):
                 result.append(ch)
                 result.append(value[i + 1])
                 i += 2
-            elif _starts_with_at(value, i, "${") and not in_single_quote:
+            elif (
+                _starts_with_at(value, i, "${")
+                and not in_single_quote
+                and not brace_in_single_quote
+            ):
                 brace_depth += 1
                 brace_in_double_quote = False
+                brace_in_single_quote = False
                 result.append("$")
                 result.append("{")
                 i += 2
             elif (
-                ch == "}" and brace_depth > 0 and not in_single_quote and not brace_in_double_quote
+                ch == "}"
+                and brace_depth > 0
+                and not in_single_quote
+                and not brace_in_double_quote
+                and not brace_in_single_quote
             ):
                 brace_depth -= 1
                 result.append(ch)
@@ -657,14 +667,24 @@ class Word(Node):
                 bracket_in_double_quote = not bracket_in_double_quote
                 result.append(ch)
                 i += 1
-            elif ch == '"' and not in_single_quote and brace_depth > 0:
+            elif (
+                ch == '"' and not in_single_quote and not brace_in_single_quote and brace_depth > 0
+            ):
                 # Toggle quote state inside brace expansion
                 brace_in_double_quote = not brace_in_double_quote
                 result.append(ch)
                 i += 1
             elif (
+                ch == "'" and not in_double_quote and not brace_in_double_quote and brace_depth > 0
+            ):
+                # Toggle single quote state inside brace expansion
+                brace_in_single_quote = not brace_in_single_quote
+                result.append(ch)
+                i += 1
+            elif (
                 _starts_with_at(value, i, '$"')
                 and not in_single_quote
+                and not brace_in_single_quote
                 and (brace_depth > 0 or bracket_depth > 0 or not in_double_quote)
                 and not brace_in_double_quote
                 and not bracket_in_double_quote

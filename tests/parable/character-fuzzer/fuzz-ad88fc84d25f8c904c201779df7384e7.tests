@@ -1,0 +1,5 @@
+=== preserve $" inside single quotes in parameter expansion
+${a:-'$"'}
+---
+(command (word "${a:-'$\"'}"))
+---

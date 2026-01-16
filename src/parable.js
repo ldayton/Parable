@@ -694,6 +694,7 @@ class Word extends Node {
 	_stripLocaleStringDollars(value) {
 		let brace_depth,
 			brace_in_double_quote,
+			brace_in_single_quote,
 			bracket_depth,
 			bracket_in_double_quote,
 			ch,
@@ -710,6 +711,7 @@ class Word extends Node {
 		bracket_depth = 0;
 		// Track quote state inside brace expansions separately
 		brace_in_double_quote = false;
+		brace_in_single_quote = false;
 		bracket_in_double_quote = false;
 		while (i < value.length) {
 			ch = value[i];
@@ -718,9 +720,14 @@ class Word extends Node {
 				result.push(ch);
 				result.push(value[i + 1]);
 				i += 2;
-			} else if (_startsWithAt(value, i, "${") && !in_single_quote) {
+			} else if (
+				_startsWithAt(value, i, "${") &&
+				!in_single_quote &&
+				!brace_in_single_quote
+			) {
 				brace_depth += 1;
 				brace_in_double_quote = false;
+				brace_in_single_quote = false;
 				result.push("$");
 				result.push("{");
 				i += 2;
@@ -728,7 +735,8 @@ class Word extends Node {
 				ch === "}" &&
 				brace_depth > 0 &&
 				!in_single_quote &&
-				!brace_in_double_quote
+				!brace_in_double_quote &&
+				!brace_in_single_quote
 			) {
 				brace_depth -= 1;
 				result.push(ch);
@@ -767,14 +775,30 @@ class Word extends Node {
 				bracket_in_double_quote = !bracket_in_double_quote;
 				result.push(ch);
 				i += 1;
-			} else if (ch === '"' && !in_single_quote && brace_depth > 0) {
+			} else if (
+				ch === '"' &&
+				!in_single_quote &&
+				!brace_in_single_quote &&
+				brace_depth > 0
+			) {
 				// Toggle quote state inside brace expansion
 				brace_in_double_quote = !brace_in_double_quote;
 				result.push(ch);
 				i += 1;
 			} else if (
+				ch === "'" &&
+				!in_double_quote &&
+				!brace_in_double_quote &&
+				brace_depth > 0
+			) {
+				// Toggle single quote state inside brace expansion
+				brace_in_single_quote = !brace_in_single_quote;
+				result.push(ch);
+				i += 1;
+			} else if (
 				_startsWithAt(value, i, '$"') &&
 				!in_single_quote &&
+				!brace_in_single_quote &&
 				(brace_depth > 0 || bracket_depth > 0 || !in_double_quote) &&
 				!brace_in_double_quote &&
 				!bracket_in_double_quote

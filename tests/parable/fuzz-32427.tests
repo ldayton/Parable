@@ -1,0 +1,5 @@
+=== preserve > inside process substitution in arith-for
+for ((<(a>b);;));do :;done
+---
+(arith-for (init (word "<(a>b)")) (test (word "1")) (step (word "1")) (command (word ":")))
+---

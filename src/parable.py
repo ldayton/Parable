@@ -1207,7 +1207,7 @@ class Word(Node):
                     procsub_idx += 1
                     result.append(direction + "(" + formatted + ")")
                     i = j
-                elif is_procsub:
+                elif is_procsub and len(self.parts):
                     # No AST node but valid procsub context - parse content on the fly
                     direction = value[i]
                     j = _find_cmdsub_end(value, i + 2)

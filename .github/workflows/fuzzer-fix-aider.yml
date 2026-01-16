@@ -86,7 +86,7 @@ jobs:
           set -e
           echo "$output"
           echo "$output" > ../../.fuzzer-output.txt
-          if echo "$output" | grep -q "Found discrepancy"; then
+          if echo "$output" | grep -q "Stopped after finding"; then
             echo "found=true" >> $GITHUB_OUTPUT
           else
             echo "found=false" >> $GITHUB_OUTPUT

@@ -984,10 +984,13 @@ class Word extends Node {
 					i += 1;
 				}
 			} else if (ch === "[") {
-				// Start of subscript [...] - preserve whitespace inside
+				// Only start subscript tracking if at word start (for [key]=val patterns)
+				// Mid-word [ like a[ is literal, not a subscript
+				if (in_whitespace) {
+					bracket_depth += 1;
+				}
 				in_whitespace = false;
 				normalized.push(ch);
-				bracket_depth += 1;
 				i += 1;
 			} else if (ch === "]" && bracket_depth > 0) {
 				// End of subscript

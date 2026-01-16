@@ -812,10 +812,12 @@ class Word(Node):
                 while i < len(inner) and inner[i] != "\n":
                     i += 1
             elif ch == "[":
-                # Start of subscript [...] - preserve whitespace inside
+                # Only start subscript tracking if at word start (for [key]=val patterns)
+                # Mid-word [ like a[ is literal, not a subscript
+                if in_whitespace:
+                    bracket_depth += 1
                 in_whitespace = False
                 normalized.append(ch)
-                bracket_depth += 1
                 i += 1
             elif ch == "]" and bracket_depth > 0:
                 # End of subscript

@@ -4739,6 +4739,26 @@ class Parser:
             else:
                 break
 
+    def _at_list_terminating_bracket(self) -> bool:
+        """Check if we're at a bracket that terminates a list (closing subshell or brace group).
+
+        Returns True for ')' always (since it's a metachar).
+        Returns True for '}' only if it's standalone (followed by word-end context or EOF).
+        This handles cases like 'a&}}' where '}}' is a word, not a brace-group closer.
+        """
+        if self.at_end():
+            return False
+        ch = self.peek()
+        if ch == ")":
+            return True
+        if ch == "}":
+            # } is only a list terminator if standalone (not part of a word like }})
+            next_pos = self.pos + 1
+            if next_pos >= self.length:
+                return True  # } at EOF is standalone
+            return _is_word_end_context(self.source[next_pos])
+        return False
+
     def _collect_redirects(self) -> list | None:
         """Collect trailing redirects after a compound command."""
         redirects = []
@@ -10387,7 +10407,7 @@ class Parser:
 
             # Newline acts as implicit semicolon if followed by more commands
             if op is None and has_newline:
-                if not self.at_end() and not _is_right_bracket(self.peek()):
+                if not self.at_end() and not self._at_list_terminating_bracket():
                     op = "\n"  # Newline separator (distinct from explicit ;)
 
             if op is None:
@@ -10405,14 +10425,14 @@ class Parser:
             # For & at end of list, don't require another command
             if op == "&":
                 self.skip_whitespace()
-                if self.at_end() or _is_right_bracket(self.peek()):
+                if self.at_end() or self._at_list_terminating_bracket():
                     break
                 # Newline after & - in compound commands, skip it (& acts as separator)
                 # At top level, newline terminates (separate commands)
                 if self.peek() == "\n":
                     if newline_as_separator:
                         self.skip_whitespace_and_newlines()
-                        if self.at_end() or _is_right_bracket(self.peek()):
+                        if self.at_end() or self._at_list_terminating_bracket():
                             break
                     else:
                         break  # Top-level: newline ends this list
@@ -10420,7 +10440,7 @@ class Parser:
             # For ; at end of list, don't require another command
             if op == ";":
                 self.skip_whitespace()
-                if self.at_end() or _is_right_bracket(self.peek()):
+                if self.at_end() or self._at_list_terminating_bracket():
                     break
                 # Newline after ; means continue to see if more commands follow
                 if self.peek() == "\n":

@@ -1326,6 +1326,7 @@ class Word extends Node {
 			extglob_depth,
 			formatted,
 			formatted_inner,
+			has_arith,
 			has_brace_cmdsub,
 			has_untracked_cmdsub,
 			has_untracked_procsub,
@@ -1356,11 +1357,14 @@ class Word extends Node {
 		// Collect command substitutions from all parts, including nested ones
 		cmdsub_parts = [];
 		procsub_parts = [];
+		has_arith = false;
 		for (p of this.parts) {
 			if (p.kind === "cmdsub") {
 				cmdsub_parts.push(p);
 			} else if (p.kind === "procsub") {
 				procsub_parts.push(p);
+			} else if (p.kind === "arith") {
+				has_arith = true;
 			} else {
 				cmdsub_parts.push(...this._collectCmdsubs(p));
 				procsub_parts.push(...this._collectProcsubs(p));
@@ -1470,7 +1474,12 @@ class Word extends Node {
 				continue;
 			}
 			// Track $((...)) arithmetic - inside it, >( and <( are not process subs
-			if (_startsWithAt(value, i, "$((") && !_isBackslashEscaped(value, i)) {
+			// But skip if this is actually $( ( (command substitution with subshell)
+			if (
+				_startsWithAt(value, i, "$((") &&
+				!_isBackslashEscaped(value, i) &&
+				has_arith
+			) {
 				arith_depth += 1;
 				arith_paren_depth += 2;
 				result.push("$((");
@@ -1504,6 +1513,19 @@ class Word extends Node {
 				}
 			}
 			// Check for $( command substitution (but not $(( arithmetic or escaped \$()
+			// Special case: $(( without arithmetic nodes - preserve as-is
+			if (_startsWithAt(value, i, "$((") && !has_arith) {
+				// This looks like $(( but wasn't parsed as arithmetic
+				// It's actually $( ( ... ) ) - preserve original text
+				j = _findCmdsubEnd(value, i + 2);
+				result.push(value.slice(i, j));
+				if (cmdsub_idx < cmdsub_parts.length) {
+					cmdsub_idx += 1;
+				}
+				i = j;
+				continue;
+			}
+			// Regular command substitution
 			if (
 				_startsWithAt(value, i, "$(") &&
 				!_startsWithAt(value, i, "$((") &&

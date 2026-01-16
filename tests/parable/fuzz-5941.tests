@@ -1,0 +1,7 @@
+=== heredoc with || after delimiter in command substitution
+$(<<E ||
+E
+c)
+---
+(command (word "$(<<E || \nE\n c)"))
+---

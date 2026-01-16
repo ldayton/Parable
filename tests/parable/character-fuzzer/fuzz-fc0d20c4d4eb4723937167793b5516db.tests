@@ -1,0 +1,5 @@
+=== arithmetic with semicolon in nested command substitution
+$(($($((1);))+1))
+---
+(command (word "$(($($((1);))+1))"))
+---

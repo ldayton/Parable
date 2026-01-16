@@ -785,7 +785,7 @@ class Word(Node):
         return prefix + "(" + result + ")" + suffix
 
     def _find_matching_paren(self, value: str, open_pos: int) -> int:
-        """Find position of matching ) for ( at open_pos, handling quotes."""
+        """Find position of matching ) for ( at open_pos, handling quotes and comments."""
         if open_pos >= len(value) or value[open_pos] != "(":
             return -1
         i = open_pos + 1
@@ -807,6 +807,10 @@ class Word(Node):
                         break
                     else:
                         i += 1
+            elif ch == "#":
+                # Comment - skip to end of line (but not the newline itself)
+                while i < len(value) and value[i] != "\n":
+                    i += 1
             elif ch == "\\" and i + 1 < len(value):
                 i += 2
             elif ch == "(":

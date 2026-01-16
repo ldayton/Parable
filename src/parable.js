@@ -970,6 +970,11 @@ class Word extends Node {
 						i += 1;
 					}
 				}
+			} else if (ch === "#") {
+				// Comment - skip to end of line (but not the newline itself)
+				while (i < value.length && value[i] !== "\n") {
+					i += 1;
+				}
 			} else if (ch === "\\" && i + 1 < value.length) {
 				i += 2;
 			} else if (ch === "(") {

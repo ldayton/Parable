@@ -4616,6 +4616,7 @@ class Parser {
 		this.pos = 0;
 		this.length = source.length;
 		this._pending_heredoc_end = null;
+		this._saw_newline_in_single_quote = false;
 	}
 
 	atEnd() {
@@ -4901,7 +4902,11 @@ class Parser {
 				this.advance();
 				chars.push("'");
 				while (!this.atEnd() && this.peek() !== "'") {
-					chars.push(this.advance());
+					c = this.advance();
+					if (c === "\n") {
+						this._saw_newline_in_single_quote = true;
+					}
+					chars.push(c);
 				}
 				if (this.atEnd()) {
 					throw new ParseError("Unterminated single quote", start);
@@ -11111,7 +11116,52 @@ class Parser {
 		if (results.length === 0) {
 			return [new Empty()];
 		}
+		// bash-oracle strips trailing backslash at EOF when there was a newline
+		// inside single quotes earlier in the input
+		if (
+			this._saw_newline_in_single_quote &&
+			this.source &&
+			this.source[this.source.length - 1] === "\\" &&
+			(this.source.length < 2 || this.source[this.source.length - 2] !== "\n")
+		) {
+			this._stripTrailingBackslashFromLastWord(results);
+		}
 		return results;
+	}
+
+	_stripTrailingBackslashFromLastWord(nodes) {
+		let last_node, last_word;
+		if (!nodes) {
+			return;
+		}
+		last_node = nodes[nodes.length - 1];
+		// Find the last Word in the structure
+		last_word = this._findLastWord(last_node);
+		if (last_word && last_word.value.endsWith("\\")) {
+			last_word.value = last_word.value.slice(0, last_word.value.length - 1);
+		}
+	}
+
+	_findLastWord(node) {
+		if (node instanceof Word) {
+			return node;
+		}
+		if (node instanceof Command) {
+			if (node.words && node.words.length) {
+				return node.words[node.words.length - 1];
+			}
+		}
+		if (node instanceof Pipeline) {
+			if (node.commands && node.commands.length) {
+				return this._findLastWord(node.commands[node.commands.length - 1]);
+			}
+		}
+		if (node instanceof List) {
+			if (node.parts && node.parts.length) {
+				return this._findLastWord(node.parts[node.parts.length - 1]);
+			}
+		}
+		return null;
 	}
 }
 

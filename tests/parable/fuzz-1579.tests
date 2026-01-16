@@ -1,0 +1,6 @@
+=== trailing backslash after single-quoted newline is stripped
+'
+' x\
+---
+(command (word "'\n'") (word "x"))
+---

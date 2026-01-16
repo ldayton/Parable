@@ -11469,7 +11469,13 @@ class Parser {
 	}
 
 	parseListUntil(stop_words) {
-		let at_case_terminator, has_newline, op, parts, pipeline;
+		let at_case_terminator,
+			has_newline,
+			is_standalone_brace,
+			next_pos,
+			op,
+			parts,
+			pipeline;
 		// Check if we're already at a stop word
 		this.skipWhitespaceAndNewlines();
 		if (stop_words.has(this.peekWord())) {
@@ -11501,10 +11507,22 @@ class Parser {
 			// Newline acts as implicit semicolon if followed by more commands
 			if (op == null && has_newline) {
 				// Check if there's another command (not a stop word)
+				// } is only a terminator if it's standalone (closing brace group), not part of a word
+				is_standalone_brace = false;
+				if (!this.atEnd() && this.peek() === "}") {
+					next_pos = this.pos + 1;
+					if (
+						next_pos >= this.length ||
+						_isWordEndContext(this.source[next_pos])
+					) {
+						is_standalone_brace = true;
+					}
+				}
 				if (
 					!this.atEnd() &&
 					!stop_words.has(this.peekWord()) &&
-					!_isRightBracket(this.peek())
+					this.peek() !== ")" &&
+					!is_standalone_brace
 				) {
 					op = "\n";
 				}
@@ -11516,10 +11534,23 @@ class Parser {
 			if (op === "&") {
 				parts.push(new Operator(op));
 				this.skipWhitespaceAndNewlines();
+				// Check for standalone } (closing brace), not } as part of a word
+				is_standalone_brace = false;
+				if (!this.atEnd() && this.peek() === "}") {
+					next_pos = this.pos + 1;
+					if (
+						next_pos >= this.length ||
+						_isWordEndContext(this.source[next_pos])
+					) {
+						is_standalone_brace = true;
+					}
+				}
 				if (
 					this.atEnd() ||
 					stop_words.has(this.peekWord()) ||
-					_isNewlineOrRightBracket(this.peek())
+					this.peek() === "\n" ||
+					this.peek() === ")" ||
+					is_standalone_brace
 				) {
 					break;
 				}
@@ -11532,10 +11563,23 @@ class Parser {
 					this.peek() === ";" &&
 					this.pos + 1 < this.length &&
 					_isSemicolonOrAmp(this.source[this.pos + 1]);
+				// Check for standalone } (closing brace), not } as part of a word
+				is_standalone_brace = false;
+				if (!this.atEnd() && this.peek() === "}") {
+					next_pos = this.pos + 1;
+					if (
+						next_pos >= this.length ||
+						_isWordEndContext(this.source[next_pos])
+					) {
+						is_standalone_brace = true;
+					}
+				}
 				if (
 					this.atEnd() ||
 					stop_words.has(this.peekWord()) ||
-					_isNewlineOrRightBracket(this.peek()) ||
+					this.peek() === "\n" ||
+					this.peek() === ")" ||
+					is_standalone_brace ||
 					at_case_terminator
 				) {
 					// Don't include trailing semicolon - it's just a terminator

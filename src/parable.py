@@ -9539,10 +9539,17 @@ class Parser:
             # Newline acts as implicit semicolon if followed by more commands
             if op is None and has_newline:
                 # Check if there's another command (not a stop word)
+                # } is only a terminator if it's standalone (closing brace group), not part of a word
+                is_standalone_brace = False
+                if not self.at_end() and self.peek() == "}":
+                    next_pos = self.pos + 1
+                    if next_pos >= self.length or _is_word_end_context(self.source[next_pos]):
+                        is_standalone_brace = True
                 if (
                     not self.at_end()
                     and self.peek_word() not in stop_words
-                    and not _is_right_bracket(self.peek())
+                    and self.peek() != ")"
+                    and not is_standalone_brace
                 ):
                     op = "\n"  # Newline separator (distinct from explicit ;)
 
@@ -9553,10 +9560,18 @@ class Parser:
             if op == "&":
                 parts.append(Operator(op))
                 self.skip_whitespace_and_newlines()
+                # Check for standalone } (closing brace), not } as part of a word
+                is_standalone_brace = False
+                if not self.at_end() and self.peek() == "}":
+                    next_pos = self.pos + 1
+                    if next_pos >= self.length or _is_word_end_context(self.source[next_pos]):
+                        is_standalone_brace = True
                 if (
                     self.at_end()
                     or self.peek_word() in stop_words
-                    or _is_newline_or_right_bracket(self.peek())
+                    or self.peek() == "\n"
+                    or self.peek() == ")"
+                    or is_standalone_brace
                 ):
                     break
 
@@ -9569,10 +9584,18 @@ class Parser:
                     and self.pos + 1 < self.length
                     and _is_semicolon_or_amp(self.source[self.pos + 1])
                 )
+                # Check for standalone } (closing brace), not } as part of a word
+                is_standalone_brace = False
+                if not self.at_end() and self.peek() == "}":
+                    next_pos = self.pos + 1
+                    if next_pos >= self.length or _is_word_end_context(self.source[next_pos]):
+                        is_standalone_brace = True
                 if (
                     self.at_end()
                     or self.peek_word() in stop_words
-                    or _is_newline_or_right_bracket(self.peek())
+                    or self.peek() == "\n"
+                    or self.peek() == ")"
+                    or is_standalone_brace
                     or at_case_terminator
                 ):
                     # Don't include trailing semicolon - it's just a terminator

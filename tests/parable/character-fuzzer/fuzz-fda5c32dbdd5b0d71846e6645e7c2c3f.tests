@@ -1,0 +1,5 @@
+=== process substitution with background and redirect missing spaces
+>(a& >b)
+---
+(command (word ">(a & > b)"))
+---

@@ -42,12 +42,19 @@ def main():
     parser.add_argument(
         "--prices", action="store_true", help="Fetch live pricing from AWS and exit"
     )
+    parser.add_argument(
+        "--claude", action="store_true", help="Use Claude Agent SDK instead of Strands"
+    )
     args = parser.parse_args()
     if args.prices:
         from .pricing import main as pricing_main
 
         pricing_main()
         sys.exit(0)
+    if args.claude:
+        from .claude_agent import ClaudeFuzzerFixer
+
+        sys.exit(ClaudeFuzzerFixer().run())
     sys.exit(FuzzerFixer(model=args.model).run())
 
 

@@ -1,0 +1,5 @@
+=== heredoc in command sub within double quotes followed by second command sub
+"$(<<a)$(x)"
+---
+(command (word "\"$(<<a\na\n)$(x)\""))
+---

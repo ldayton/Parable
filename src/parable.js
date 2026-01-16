@@ -1505,7 +1505,7 @@ class Word extends Node {
 					procsub_idx += 1;
 					result.push(`${direction}(${formatted})`);
 					i = j;
-				} else if (is_procsub) {
+				} else if (is_procsub && this.parts.length) {
 					// No AST node but valid procsub context - parse content on the fly
 					direction = value[i];
 					j = _findCmdsubEnd(value, i + 2);

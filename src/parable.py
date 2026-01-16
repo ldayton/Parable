@@ -3540,6 +3540,9 @@ def _find_heredoc_content_end(source: str, start: int, delimiters: list[tuple[st
         return start
     pos = start
     for delimiter, strip_tabs in delimiters:
+        # Skip whitespace on the same line (e.g., tabs/spaces after closing paren)
+        while pos < len(source) and source[pos] in " \t":
+            pos += 1
         if pos >= len(source) or source[pos] != "\n":
             break
         pos += 1

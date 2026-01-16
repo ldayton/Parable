@@ -3694,31 +3694,6 @@ def _format_heredoc_body(r: "HereDoc") -> str:
     return "\n" + r.content + r.delimiter + "\n"
 
 
-def _normalize_fd_redirects(s: str) -> str:
-    """Normalize fd redirects in a raw string: >&2 -> 1>&2, <&N -> 0<&N."""
-    # Match >&N or <&N not preceded by a digit, add default fd
-    result = []
-    i = 0
-    while i < len(s):
-        # Check for >&N or <&N
-        if i + 2 < len(s) and s[i + 1] == "&" and s[i + 2].isdigit():
-            prev_is_digit = i > 0 and s[i - 1].isdigit()
-            prev_is_same_op = i > 0 and s[i - 1] == s[i]
-            if s[i] == ">" and not prev_is_digit and not prev_is_same_op:
-                result.append("1>&")
-                result.append(s[i + 2])
-                i += 3
-                continue
-            elif s[i] == "<" and not prev_is_digit and not prev_is_same_op:
-                result.append("0<&")
-                result.append(s[i + 2])
-                i += 3
-                continue
-        result.append(s[i])
-        i += 1
-    return "".join(result)
-
-
 def _find_cmdsub_end(value: str, start: int) -> int:
     """Find the end of a $(...) command substitution, handling case statements.
 
@@ -4278,11 +4253,6 @@ RESERVED_WORDS = {
     "coproc",
 }
 
-# Metacharacters that break words (unquoted)
-# Note: {} are NOT metacharacters - they're only special at command position
-# for brace groups. In words like {a,b,c}, braces are literal.
-METACHAR = set(" \t\n|&;()<>")
-
 COND_UNARY_OPS = {
     "-a",
     "-b",
@@ -4484,10 +4454,6 @@ def _is_semicolon_or_newline(c: str) -> bool:
     return c == ";" or c == "\n"
 
 
-def _is_right_bracket(c: str) -> bool:
-    return c == ")" or c == "}"
-
-
 def _is_word_start_context(c: str) -> bool:
     """Check if char is a valid context for starting a word (whitespace or metachar except >)."""
     return (
@@ -4633,17 +4599,8 @@ def _is_newline_or_right_paren(c: str) -> bool:
     return c == "\n" or c == ")"
 
 
-def _is_newline_or_right_bracket(c: str) -> bool:
-    return c == "\n" or c == ")" or c == "}"
-
-
 def _is_semicolon_newline_brace(c: str) -> bool:
     return c == ";" or c == "\n" or c == "{"
-
-
-def _str_contains(haystack: str, needle: str) -> bool:
-    """Check if haystack contains needle substring."""
-    return haystack.find(needle) != -1
 
 
 def _looks_like_assignment(s: str) -> bool:

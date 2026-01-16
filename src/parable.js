@@ -4415,34 +4415,6 @@ function _formatHeredocBody(r) {
 	return `\n${r.content}${r.delimiter}\n`;
 }
 
-function _normalizeFdRedirects(s) {
-	let i, prev_is_digit, prev_is_same_op, result;
-	// Match >&N or <&N not preceded by a digit, add default fd
-	result = [];
-	i = 0;
-	while (i < s.length) {
-		// Check for >&N or <&N
-		if (i + 2 < s.length && s[i + 1] === "&" && /^[0-9]+$/.test(s[i + 2])) {
-			prev_is_digit = i > 0 && /^[0-9]+$/.test(s[i - 1]);
-			prev_is_same_op = i > 0 && s[i - 1] === s[i];
-			if (s[i] === ">" && !prev_is_digit && !prev_is_same_op) {
-				result.push("1>&");
-				result.push(s[i + 2]);
-				i += 3;
-				continue;
-			} else if (s[i] === "<" && !prev_is_digit && !prev_is_same_op) {
-				result.push("0<&");
-				result.push(s[i + 2]);
-				i += 3;
-				continue;
-			}
-		}
-		result.push(s[i]);
-		i += 1;
-	}
-	return result.join("");
-}
-
 function _findCmdsubEnd(value, start) {
 	let arith_depth,
 		arith_paren_depth,
@@ -5173,9 +5145,6 @@ const RESERVED_WORDS = new Set([
 	"function",
 	"coproc",
 ]);
-// Metacharacters that break words (unquoted)
-// Note: {} are NOT metacharacters - they're only special at command position
-// for brace groups. In words like {a,b,c}, braces are literal.
 const COND_UNARY_OPS = new Set([
 	"-a",
 	"-b",
@@ -5414,10 +5383,6 @@ function _isSemicolonOrNewline(c) {
 	return c === ";" || c === "\n";
 }
 
-function _isRightBracket(c) {
-	return c === ")" || c === "}";
-}
-
 function _isWordStartContext(c) {
 	return (
 		c === " " ||
@@ -5577,16 +5542,8 @@ function _isNewlineOrRightParen(c) {
 	return c === "\n" || c === ")";
 }
 
-function _isNewlineOrRightBracket(c) {
-	return c === "\n" || c === ")" || c === "}";
-}
-
 function _isSemicolonNewlineBrace(c) {
 	return c === ";" || c === "\n" || c === "{";
-}
-
-function _strContains(haystack, needle) {
-	return haystack.indexOf(needle) !== -1;
 }
 
 function _looksLikeAssignment(s) {

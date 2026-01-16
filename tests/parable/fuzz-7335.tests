@@ -1,0 +1,5 @@
+=== process substitution with leading whitespace before subshell
+<( (a))
+---
+(command (word "<( ( a ))"))
+---

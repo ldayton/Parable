@@ -1182,11 +1182,25 @@ class Word(Node):
                     formatted = _format_cmdsub_node(node.command, 0, True, False, True)
                     if node.command.kind == "subshell":
                         raw_content = _substring(value, i + 2, j - 1)
-                        if raw_content.startswith("("):
-                            # Process substitution with nested subshell >((...)): preserve original
-                            # Strip line continuations (backslash-newline)
-                            raw_content = raw_content.replace("\\\n", "")
-                            result.append(direction + "(" + raw_content + ")")
+                        # Extract leading whitespace
+                        leading_ws_end = 0
+                        while (
+                            leading_ws_end < len(raw_content)
+                            and raw_content[leading_ws_end] in " \t\n"
+                        ):
+                            leading_ws_end += 1
+                        leading_ws = raw_content[:leading_ws_end]
+                        stripped = raw_content[leading_ws_end:]
+                        if stripped.startswith("("):
+                            if leading_ws:
+                                # Leading whitespace before subshell: normalize ws + format subshell with spaces
+                                normalized_ws = leading_ws.replace("\n", " ").replace("\t", " ")
+                                spaced = _format_cmdsub_node(node.command, in_procsub=False)
+                                result.append(direction + "(" + normalized_ws + spaced + ")")
+                            else:
+                                # No leading whitespace - preserve original raw content
+                                raw_content = raw_content.replace("\\\n", "")
+                                result.append(direction + "(" + raw_content + ")")
                             procsub_idx += 1
                             i = j
                             continue

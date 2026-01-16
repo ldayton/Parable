@@ -1358,6 +1358,16 @@ class Word extends Node {
 				// Check if this is actually a process substitution or just comparison + parens
 				// Process substitution: not preceded by alphanumeric
 				is_procsub = i === 0 || !/^[a-zA-Z0-9]$/.test(value[i - 1]);
+				// Inside extglob: don't format, just copy raw content
+				if (extglob_depth > 0) {
+					j = _findCmdsubEnd(value, i + 2);
+					result.push(value.slice(i, j));
+					if (procsub_idx < procsub_parts.length) {
+						procsub_idx += 1;
+					}
+					i = j;
+					continue;
+				}
 				if (procsub_idx < procsub_parts.length) {
 					// Have parsed AST node - use it
 					direction = value[i];

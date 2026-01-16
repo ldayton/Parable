@@ -504,7 +504,8 @@ class Word extends Node {
 	}
 
 	_expandAllAnsiCQuotes(value) {
-		let ansi_str,
+		let after_brace,
+			ansi_str,
 			brace_depth,
 			ch,
 			effective_in_dquote,
@@ -517,7 +518,9 @@ class Word extends Node {
 			inner,
 			is_ansi_c,
 			j,
+			last_brace_idx,
 			op,
+			op_idx,
 			outer_in_dquote,
 			quote_stack,
 			result,
@@ -632,14 +635,22 @@ class Word extends Node {
 					// Only strip if non-empty and no CTLESC
 					if (inner && inner.indexOf("") === -1) {
 						// Check if we're in a pattern context (/, //, %, %%, #, ##)
-						// by scanning backward for pattern operators
+						// Pattern operators come after the variable name, not at the start
 						result_str = result.join("");
 						in_pattern = false;
-						// Look for pattern operators after ${
-						for (op of ["//", "/", "%%", "%", "##", "#"]) {
-							if (result_str.includes(op)) {
-								in_pattern = true;
-								break;
+						// Find the last ${
+						last_brace_idx = result_str.lastIndexOf("${");
+						if (last_brace_idx >= 0) {
+							// Get the content after ${
+							after_brace = result_str.slice(last_brace_idx + 2);
+							// Pattern operators should come after at least one character (the var name)
+							// Check for valid pattern syntax: ${var%pattern} not ${%...}
+							for (op of ["//", "/", "%%", "%", "##", "#"]) {
+								op_idx = after_brace.indexOf(op);
+								if (op_idx > 0) {
+									in_pattern = true;
+									break;
+								}
 							}
 						}
 						if (!in_pattern) {

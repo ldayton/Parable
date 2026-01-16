@@ -559,14 +559,23 @@ class Word(Node):
                     # Only strip if non-empty and no CTLESC
                     if inner and inner.find("\x01") == -1:
                         # Check if we're in a pattern context (/, //, %, %%, #, ##)
-                        # by scanning backward for pattern operators
+                        # Pattern operators come after the variable name, not at the start
                         result_str = "".join(result)
                         in_pattern = False
-                        # Look for pattern operators after ${
-                        for op in ["//", "/", "%%", "%", "##", "#"]:
-                            if op in result_str:
-                                in_pattern = True
-                                break
+                        # Find the last ${
+                        last_brace_idx = result_str.rfind("${")
+                        if last_brace_idx >= 0:
+                            # Get the content after ${
+                            after_brace = result_str[last_brace_idx + 2 :]
+                            # Pattern operators should come after at least one character (the var name)
+                            # Check for valid pattern syntax: ${var%pattern} not ${%...}
+                            for op in ["//", "/", "%%", "%", "##", "#"]:
+                                op_idx = after_brace.find(op)
+                                if (
+                                    op_idx > 0
+                                ):  # op_idx > 0 means there's a var name before the operator
+                                    in_pattern = True
+                                    break
                         if not in_pattern:
                             expanded = inner
                 result.append(expanded)

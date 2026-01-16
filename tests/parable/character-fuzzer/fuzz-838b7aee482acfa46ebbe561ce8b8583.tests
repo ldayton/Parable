@@ -1,0 +1,5 @@
+=== single-quoted string inside parameter expansion in double quotes
+"${%$'b'}"
+---
+(command (word "\"${%b}\""))
+---

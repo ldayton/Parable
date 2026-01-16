@@ -5530,6 +5530,9 @@ function _isValidIdentifier(name) {
 	return true;
 }
 
+// Word parsing context constants
+const WORD_CTX_COND = 1;
+const WORD_CTX_REGEX = 2;
 class Parser {
 	constructor(source, in_process_sub) {
 		if (in_process_sub == null) {
@@ -5974,6 +5977,74 @@ class Parser {
 			}
 		}
 		return true;
+	}
+
+	_isWordTerminator(ctx, ch, bracket_depth, paren_depth) {
+		if (bracket_depth == null) {
+			bracket_depth = 0;
+		}
+		if (paren_depth == null) {
+			paren_depth = 0;
+		}
+		if (ctx === WORD_CTX_REGEX) {
+			if (
+				ch === "]" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "]"
+			) {
+				return true;
+			}
+			if (
+				ch === "&" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "&"
+			) {
+				return true;
+			}
+			if (ch === ")" && paren_depth === 0) {
+				return true;
+			}
+			return _isWhitespace(ch) && paren_depth === 0;
+		}
+		if (ctx === WORD_CTX_COND) {
+			if (
+				ch === "]" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "]"
+			) {
+				return true;
+			}
+			if (_isParen(ch)) {
+				return true;
+			}
+			if (
+				ch === "&" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "&"
+			) {
+				return true;
+			}
+			if (
+				ch === "|" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "|"
+			) {
+				return true;
+			}
+			if (ch === ";") {
+				return true;
+			}
+			// < and > terminate unless followed by ( (process sub)
+			if (
+				_isRedirectChar(ch) &&
+				!(this.pos + 1 < this.length && this.source[this.pos + 1] === "(")
+			) {
+				return true;
+			}
+			return _isWhitespaceNoNewline(ch);
+		}
+		// WORD_CTX_NORMAL
+		return _isMetachar(ch) && bracket_depth === 0;
 	}
 
 	_scanDoubleQuote(chars, parts, start, handle_line_continuation) {

@@ -4590,6 +4590,12 @@ def _is_valid_identifier(name: str) -> bool:
     return True
 
 
+# Word parsing context constants
+WORD_CTX_NORMAL = 0  # Regular command context
+WORD_CTX_COND = 1  # Inside [[ ]]
+WORD_CTX_REGEX = 2  # RHS of =~ in [[ ]]
+
+
 class Parser:
     """Recursive descent parser for bash."""
 
@@ -4896,6 +4902,38 @@ class Parser:
             else:
                 chars.append(self.advance())
         return True
+
+    def _is_word_terminator(
+        self, ctx: int, ch: str, bracket_depth: int = 0, paren_depth: int = 0
+    ) -> bool:
+        """Check if character terminates word in given context."""
+        if ctx == WORD_CTX_REGEX:
+            if ch == "]" and self.pos + 1 < self.length and self.source[self.pos + 1] == "]":
+                return True
+            if ch == "&" and self.pos + 1 < self.length and self.source[self.pos + 1] == "&":
+                return True
+            if ch == ")" and paren_depth == 0:
+                return True
+            return _is_whitespace(ch) and paren_depth == 0
+        if ctx == WORD_CTX_COND:
+            if ch == "]" and self.pos + 1 < self.length and self.source[self.pos + 1] == "]":
+                return True
+            if _is_paren(ch):
+                return True
+            if ch == "&" and self.pos + 1 < self.length and self.source[self.pos + 1] == "&":
+                return True
+            if ch == "|" and self.pos + 1 < self.length and self.source[self.pos + 1] == "|":
+                return True
+            if ch == ";":
+                return True
+            # < and > terminate unless followed by ( (process sub)
+            if _is_redirect_char(ch) and not (
+                self.pos + 1 < self.length and self.source[self.pos + 1] == "("
+            ):
+                return True
+            return _is_whitespace_no_newline(ch)
+        # WORD_CTX_NORMAL
+        return _is_metachar(ch) and bracket_depth == 0
 
     def _scan_double_quote(
         self, chars: list, parts: list, start: int, handle_line_continuation: bool = True

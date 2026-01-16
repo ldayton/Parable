@@ -1,0 +1,5 @@
+=== arithmetic expansion with escaped brackets should split words
+$[\[] [\]]
+---
+(command (word "$[\\[]") (word "[\\]]"))
+---

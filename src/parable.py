@@ -6228,13 +6228,14 @@ class Parser:
         while not self.at_end() and depth > 0:
             c = self.peek()
 
-            if c == "[":
+            if c == "[" and not _is_backslash_escaped(self.source, self.pos):
                 depth += 1
                 self.advance()
             elif c == "]":
-                depth -= 1
-                if depth == 0:
-                    break
+                if not _is_backslash_escaped(self.source, self.pos):
+                    depth -= 1
+                    if depth == 0:
+                        break
                 self.advance()
             else:
                 self.advance()

@@ -7442,13 +7442,15 @@ class Parser {
 		depth = 1;
 		while (!this.atEnd() && depth > 0) {
 			c = this.peek();
-			if (c === "[") {
+			if (c === "[" && !_isBackslashEscaped(this.source, this.pos)) {
 				depth += 1;
 				this.advance();
 			} else if (c === "]") {
-				depth -= 1;
-				if (depth === 0) {
-					break;
+				if (!_isBackslashEscaped(this.source, this.pos)) {
+					depth -= 1;
+					if (depth === 0) {
+						break;
+					}
 				}
 				this.advance();
 			} else {

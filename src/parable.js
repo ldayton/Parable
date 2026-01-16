@@ -10555,7 +10555,11 @@ class Parser {
 				if (procsub_node) {
 					parts.push(procsub_node);
 					chars.push(procsub_text);
+				} else if (procsub_text) {
+					// Not a valid process substitution, treat full <(...) as literal
+					chars.push(procsub_text);
 				} else {
+					// Couldn't parse at all, treat <( as literal chars
 					chars.push(this.advance());
 				}
 			} else if (ch === "`") {

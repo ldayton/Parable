@@ -1,0 +1,6 @@
+=== array assignment with quoted bracket consumes newline looking for matching bracket
+a=(['a]'=c)
+x=([]'0']]=y)
+---
+(command (word "a=(['a]'=c)\nx=([]'0']]=y)"))
+---

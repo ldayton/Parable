@@ -5213,7 +5213,7 @@ class Parser {
 		return true;
 	}
 
-	parseWord(at_command_start) {
+	parseWord(at_command_start, in_array_literal) {
 		let ansi_node,
 			ansi_result,
 			ansi_text,
@@ -5253,6 +5253,9 @@ class Parser {
 		if (at_command_start == null) {
 			at_command_start = false;
 		}
+		if (in_array_literal == null) {
+			in_array_literal = false;
+		}
 		this.skipWhitespace();
 		if (this.atEnd()) {
 			return null;
@@ -5270,6 +5273,7 @@ class Parser {
 			// Only at command start (array assignments), not in argument position
 			// Only BEFORE = sign (key=1],a[1 should not track the [1 part)
 			// Only after identifier char (not [[ which is conditional keyword)
+			// Also track in array elements like ([key]=val) to match brackets properly
 			if (ch === "[") {
 				if (bracket_depth > 0) {
 					bracket_depth += 1;
@@ -5288,6 +5292,14 @@ class Parser {
 						chars.push(this.advance());
 						continue;
 					}
+				}
+				// Track brackets at start of word for array elements: ['key']=val or [key]=val
+				// This ensures we find the matching ] even across newlines
+				// Only applies when inside array literal (to avoid tracking [ in other contexts)
+				if (chars.length === 0 && !seen_equals && in_array_literal) {
+					bracket_depth += 1;
+					chars.push(this.advance());
+					continue;
 				}
 			}
 			if (ch === "]" && bracket_depth > 0) {
@@ -5568,12 +5580,14 @@ class Parser {
 			} else if (
 				ch === "(" &&
 				chars &&
+				bracket_depth === 0 &&
 				(chars[chars.length - 1] === "=" ||
 					(chars.length >= 2 &&
 						chars[chars.length - 2] === "+" &&
 						chars[chars.length - 1] === "="))
 			) {
 				// Array literal: name=(elements) or name+=(elements)
+				// But not when inside brackets, as that would be part of array element
 				array_result = this._parseArrayLiteral();
 				array_node = array_result[0];
 				array_text = array_result[1];
@@ -6386,7 +6400,7 @@ class Parser {
 				break;
 			}
 			// Parse an element word
-			word = this.parseWord();
+			word = this.parseWord(false, true);
 			if (word == null) {
 				// Might be a closing paren or error
 				if (this.peek() === ")") {

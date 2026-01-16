@@ -1,0 +1,6 @@
+=== newline after bracket in array should be converted to space
+a=(a[
+b)
+---
+(command (word "a=(a[ b)"))
+---

@@ -4372,6 +4372,18 @@ class Parser {
 		return ch;
 	}
 
+	_isBangFollowedByProcsub() {
+		let next_char;
+		if (this.pos + 2 >= this.length) {
+			return false;
+		}
+		next_char = this.source[this.pos + 1];
+		if (next_char !== ">" && next_char !== "<") {
+			return false;
+		}
+		return this.source[this.pos + 2] === "(";
+	}
+
 	skipWhitespace() {
 		let ch;
 		while (!this.atEnd()) {
@@ -10376,8 +10388,9 @@ class Parser {
 			// Check for ! after time
 			if (!this.atEnd() && this.peek() === "!") {
 				if (
-					this.pos + 1 >= this.length ||
-					_isNegationBoundary(this.source[this.pos + 1])
+					(this.pos + 1 >= this.length ||
+						_isNegationBoundary(this.source[this.pos + 1])) &&
+					!this._isBangFollowedByProcsub()
 				) {
 					this.advance();
 					prefix_order = "time_negation";
@@ -10387,8 +10400,9 @@ class Parser {
 		} else if (!this.atEnd() && this.peek() === "!") {
 			// Check for '!' negation prefix (if no time yet)
 			if (
-				this.pos + 1 >= this.length ||
-				_isNegationBoundary(this.source[this.pos + 1])
+				(this.pos + 1 >= this.length ||
+					_isNegationBoundary(this.source[this.pos + 1])) &&
+				!this._isBangFollowedByProcsub()
 			) {
 				this.advance();
 				this.skipWhitespace();

@@ -3728,7 +3728,7 @@ function _formatCmdsubNode(
 		return `function ${name} () \n{ \n${inner_sp}${body}\n}`;
 	}
 	if (node.kind === "subshell") {
-		body = _formatCmdsubNode(node.body, indent, in_procsub, in_procsub);
+		body = _formatCmdsubNode(node.body, indent, in_procsub, compact_redirects);
 		redirects = "";
 		if (node.redirects && node.redirects.length) {
 			redirect_parts = [];

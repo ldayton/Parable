@@ -5610,6 +5610,8 @@ class Parser {
 		content = this.source.slice(content_start, this.pos);
 		this.advance();
 		text = this.source.slice(start, this.pos);
+		// Strip line continuations (backslash-newline) from text used for word construction
+		text = text.replaceAll("\\\n", "");
 		// Parse the content as a command list
 		sub_parser = new Parser(content);
 		cmd = sub_parser.parseList();

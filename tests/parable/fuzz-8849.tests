@@ -1,0 +1,6 @@
+=== backslash-newline in nested parens
+$>((1\
+)2)
+---
+(command (word "$>((1)2)"))
+---

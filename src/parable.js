@@ -9794,6 +9794,7 @@ class Parser {
 			locale_result,
 			locale_text,
 			next_c,
+			next_ch,
 			param_node,
 			param_result,
 			param_text,
@@ -9898,6 +9899,19 @@ class Parser {
 			// Glob bracket expression [...] - consume until closing ]
 			// Handles [[:alpha:]], [^0-9], []a-z] (] as first char), etc.
 			if (ch === "[") {
+				// Check if [ is immediately followed by whitespace or terminator
+				// If so, treat [ as literal, not as bracket expression start
+				if (this.pos + 1 >= this.length) {
+					// [ at EOF is literal
+					chars.push(this.advance());
+					continue;
+				}
+				next_ch = this.source[this.pos + 1];
+				if (_isWhitespaceNoNewline(next_ch)) {
+					// [ followed by whitespace is literal
+					chars.push(this.advance());
+					continue;
+				}
 				chars.push(this.advance());
 				// Handle negation [^
 				if (!this.atEnd() && this.peek() === "^") {

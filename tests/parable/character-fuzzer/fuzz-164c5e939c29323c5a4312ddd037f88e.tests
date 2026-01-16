@@ -1,0 +1,5 @@
+=== preserve space in process substitution within arithmetic expansion
+((<( )))
+---
+(arith (word "<( )"))
+---

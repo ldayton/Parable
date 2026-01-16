@@ -3160,8 +3160,6 @@ def _format_cmdsub_node(
             formatted = _format_cmdsub_node(
                 cmd, indent, in_procsub, False, procsub_first and idx == 0
             )
-            if needs_redirect:
-                formatted = formatted + " 2>&1"
             is_last = idx == len(cmds) - 1
             # Check if command has actual heredoc redirects
             has_heredoc = False
@@ -3170,6 +3168,16 @@ def _format_cmdsub_node(
                     if r.kind == "heredoc":
                         has_heredoc = True
                         break
+            # Add 2>&1 for |& pipes - before heredoc body if present
+            if needs_redirect:
+                if has_heredoc:
+                    first_nl = formatted.find("\n")
+                    if first_nl != -1:
+                        formatted = formatted[:first_nl] + " 2>&1" + formatted[first_nl:]
+                    else:
+                        formatted = formatted + " 2>&1"
+                else:
+                    formatted = formatted + " 2>&1"
             if not is_last and has_heredoc:
                 # Heredoc present - insert pipe after heredoc delimiter, before content
                 # Pattern: "... <<DELIM\ncontent\nDELIM\n" -> "... <<DELIM |\ncontent\nDELIM\n"

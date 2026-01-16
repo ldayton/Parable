@@ -3744,9 +3744,6 @@ function _formatCmdsubNode(
 				false,
 				procsub_first && idx === 0,
 			);
-			if (needs_redirect) {
-				formatted = `${formatted} 2>&1`;
-			}
 			is_last = idx === cmds.length - 1;
 			// Check if command has actual heredoc redirects
 			has_heredoc = false;
@@ -3756,6 +3753,19 @@ function _formatCmdsubNode(
 						has_heredoc = true;
 						break;
 					}
+				}
+			}
+			// Add 2>&1 for |& pipes - before heredoc body if present
+			if (needs_redirect) {
+				if (has_heredoc) {
+					first_nl = formatted.indexOf("\n");
+					if (first_nl !== -1) {
+						formatted = `${formatted.slice(0, first_nl)} 2>&1${formatted.slice(first_nl)}`;
+					} else {
+						formatted = `${formatted} 2>&1`;
+					}
+				} else {
+					formatted = `${formatted} 2>&1`;
 				}
 			}
 			if (!is_last && has_heredoc) {

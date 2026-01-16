@@ -199,6 +199,7 @@ class ClaudeFuzzerFixer:
             allowed_tools=["Bash", "Read", "Write", "Edit", "Glob", "Grep"],
             permission_mode="acceptEdits",
             cwd=str(REPO_ROOT),
+            settings='{"attribution": {"commit": "", "pr": ""}}',
         )
         output = ""
         result_msg = None

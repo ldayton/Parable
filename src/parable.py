@@ -7896,13 +7896,23 @@ class Parser:
                         # Parameter expansion embedded in delimiter
                         delimiter_chars.append(self.advance())  # $
                         delimiter_chars.append(self.advance())  # {
-                        depth = 1
-                        while not self.at_end() and depth > 0:
+                        depth = 0
+                        while not self.at_end():
                             c = self.peek()
                             if c == "{":
                                 depth += 1
                             elif c == "}":
+                                # Consume the closing brace
+                                delimiter_chars.append(self.advance())
+                                if depth == 0:
+                                    # Outer expansion closed
+                                    break
                                 depth -= 1
+                                # After closing inner brace, check if next is metachar
+                                # If so, the expansion ends here (bash behavior)
+                                if depth == 0 and not self.at_end() and _is_metachar(self.peek()):
+                                    break
+                                continue
                             delimiter_chars.append(self.advance())
                 elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "[":
                     # Check if this is $$[ where $$ is PID and [ ends delimiter

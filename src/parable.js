@@ -4135,7 +4135,8 @@ function _formatCmdsubNode(
 				result = `for ${variable} in ;\n${sp}do\n${inner_sp}${body};\n${sp}done`;
 			}
 		} else {
-			result = `for ${variable};\n${sp}do\n${inner_sp}${body};\n${sp}done`;
+			// No 'in' clause - bash implies 'in "$@"'
+			result = `for ${variable} in "$@";\n${sp}do\n${inner_sp}${body};\n${sp}done`;
 		}
 		if (node.redirects && node.redirects.length) {
 			for (r of node.redirects) {

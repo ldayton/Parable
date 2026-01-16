@@ -1,0 +1,5 @@
+=== backslash followed by $$ before double quotes
+\$$""
+---
+(command (word "\\$\"\""))
+---

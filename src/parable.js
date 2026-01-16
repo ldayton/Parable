@@ -678,7 +678,6 @@ class Word extends Node {
 			i,
 			in_double_quote,
 			in_single_quote,
-			j,
 			result;
 		result = [];
 		i = 0;
@@ -758,12 +757,7 @@ class Word extends Node {
 				!bracket_in_double_quote
 			) {
 				// Count consecutive $ chars ending at i to check for $$ (PID param)
-				dollar_count = 1;
-				j = i - 1;
-				while (j >= 0 && value[j] === "$") {
-					dollar_count += 1;
-					j -= 1;
-				}
+				dollar_count = 1 + _countConsecutiveDollarsBefore(value, i);
 				if (dollar_count % 2 === 1) {
 					// Odd count: locale string $"..." - strip the $ and enter double quote
 					result.push('"');

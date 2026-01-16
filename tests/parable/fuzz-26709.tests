@@ -1,0 +1,5 @@
+=== process substitution syntax inside $[] arithmetic should not be special
+$[>(]
+---
+(command (word "$[>(]"))
+---

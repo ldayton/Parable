@@ -78,7 +78,8 @@ class FuzzerFixer:
         base = (PROMPTS_DIR / "fuzzer-fix-base.md").read_text()
         local = (PROMPTS_DIR / "fuzzer-fix-local.md").read_text()
         mre_instruction = "\n\n**Important:** After finding an MRE, write it to `/tmp/mre.txt` (just the bash code, no explanation).\n"
-        return f"{base}\n\n{local}{mre_instruction}"
+        cwd_note = f"**Working directory:** `{REPO_ROOT}` (Parable repo root). All commands run here. Use relative paths.\n\n"
+        return f"{cwd_note}{base}\n\n{local}{mre_instruction}"
 
     def _write_summary(self, content: str) -> None:
         """Append to GitHub Actions job summary if running in CI."""

@@ -9636,7 +9636,6 @@ class Parser {
 					heredoc.strip_tabs,
 				);
 				if (matches) {
-					heredoc.delimiter_found = true;
 					this.pos = line_end < this.length ? line_end + 1 : line_end;
 					break;
 				}

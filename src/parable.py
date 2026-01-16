@@ -5505,11 +5505,7 @@ class Parser:
 
     def _skip_heredoc_in_cmdsub(self) -> bool:
         """Skip heredoc/here-string in command substitution. Returns True if skipped."""
-        if (
-            self.pos + 1 >= self.length
-            or self.peek() != "<"
-            or self.source[self.pos + 1] != "<"
-        ):
+        if self.pos + 1 >= self.length or self.peek() != "<" or self.source[self.pos + 1] != "<":
             return False
         self.advance()  # first <
         self.advance()  # second <
@@ -5518,11 +5514,7 @@ class Parser:
             self.advance()  # third <
             while not self.at_end() and _is_whitespace_no_newline(self.peek()):
                 self.advance()
-            while (
-                not self.at_end()
-                and not _is_whitespace(self.peek())
-                and self.peek() not in "()"
-            ):
+            while not self.at_end() and not _is_whitespace(self.peek()) and self.peek() not in "()":
                 if self.peek() == "\\" and self.pos + 1 < self.length:
                     self.advance()
                     self.advance()
@@ -7937,7 +7929,6 @@ class Parser:
                     line, heredoc.delimiter, heredoc.strip_tabs
                 )
                 if matches:
-                    heredoc.delimiter_found = True
                     self.pos = line_end + 1 if line_end < self.length else line_end
                     break
                 # At EOF with line starting with delimiter - heredoc terminates (process sub case)

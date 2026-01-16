@@ -4,12 +4,50 @@ import argparse
 import sys
 
 from .agent import MODELS, FuzzerFixer
+from .pricing import CLAUDE_PRICING, OTHER_PRICING
+
+MODEL_PRICES = {**CLAUDE_PRICING, **OTHER_PRICING}
+
+
+def _build_model_table() -> str:
+    lines = [
+        "models (per 1M tokens):",
+        "  model          input    output",
+        "  -------------- -------- --------",
+    ]
+    for model in MODELS:
+        inp, out = MODEL_PRICES.get(model, (0.0, 0.0))
+        lines.append(f"  {model:<14} ${inp:<7.2f} ${out:<7.2f}")
+    lines.append("")
+    lines.append("prices may be outdated. use --prices to fetch latest from AWS.")
+    lines.append("claude prices require manual update: aws.amazon.com/bedrock/pricing")
+    lines.append("")
+    lines.append("exit codes: 0 (fixed + PR), 1 (no bugs), 2 (failed)")
+    return "\n".join(lines)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Autonomous fuzzer bug fixing agent")
-    parser.add_argument("--model", default="sonnet-45", choices=MODELS.keys(), help="Model to use")
+    parser = argparse.ArgumentParser(
+        description="Autonomous fuzzer bug fixing agent",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=_build_model_table(),
+    )
+    parser.add_argument(
+        "--model",
+        default="sonnet-45",
+        metavar="MODEL",
+        choices=MODELS.keys(),
+        help="Model to use (default: sonnet-45)",
+    )
+    parser.add_argument(
+        "--prices", action="store_true", help="Fetch live pricing from AWS and exit"
+    )
     args = parser.parse_args()
+    if args.prices:
+        from .pricing import main as pricing_main
+
+        pricing_main()
+        sys.exit(0)
     sys.exit(FuzzerFixer(model=args.model).run())
 
 

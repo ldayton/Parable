@@ -98,6 +98,41 @@ def _repeat_str(s: str, n: int) -> str:
     return "".join(result)
 
 
+def _strip_line_continuations_comment_aware(text: str) -> str:
+    """Strip backslash-newline line continuations, preserving newlines in comments.
+
+    In comments, backslash-newline is replaced with just newline (to keep the comment
+    terminator). Outside comments, backslash-newline is fully removed.
+    """
+    result = []
+    i = 0
+    in_comment = False
+    in_single = False
+    in_double = False
+    while i < len(text):
+        c = text[i]
+        if c == "\\" and i + 1 < len(text) and text[i + 1] == "\n":
+            if in_comment:
+                result.append("\n")
+            i += 2
+            in_comment = False
+            continue
+        if c == "\n":
+            in_comment = False
+            result.append(c)
+            i += 1
+            continue
+        if c == "'" and not in_double and not in_comment:
+            in_single = not in_single
+        elif c == '"' and not in_single and not in_comment:
+            in_double = not in_double
+        elif c == "#" and not in_single and not in_double:
+            in_comment = True
+        result.append(c)
+        i += 1
+    return "".join(result)
+
+
 def _append_redirects(base: str, redirects: list | None) -> str:
     """Append redirect sexp strings to a base sexp string."""
     if redirects:
@@ -4800,7 +4835,8 @@ class Parser:
 
         text = _substring(self.source, start, self.pos)
         # Strip line continuations (backslash-newline) from text used for word construction
-        text = text.replace("\\\n", "")
+        # Use comment-aware stripping to preserve newlines that terminate comments
+        text = _strip_line_continuations_comment_aware(text)
 
         # Parse the content as a command list
         sub_parser = Parser(content)

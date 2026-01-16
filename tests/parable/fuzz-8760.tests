@@ -1,0 +1,5 @@
+=== brace command substitution with tab whitespace
+${	a;}
+---
+(command (word "${ a; }"))
+---

@@ -1,0 +1,7 @@
+=== heredoc body after cmdsub with trailing content not captured
+$(a <<E)c
+b
+E
+---
+(command (word "$(a <<E\nb\nE\n)c"))
+---

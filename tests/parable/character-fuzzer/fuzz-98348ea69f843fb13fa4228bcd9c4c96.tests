@@ -1,0 +1,7 @@
+=== backslash-newline after escaped backslash in arithmetic expansion
+echo $((\(
+\
+2))
+---
+(command (word "echo") (word "$((\\(\n2))"))
+---

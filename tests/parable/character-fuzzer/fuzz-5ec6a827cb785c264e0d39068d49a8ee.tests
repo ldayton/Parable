@@ -1,0 +1,5 @@
+=== parameter expansion with $"..." in subscript should strip dollar sign
+"${ev[$"ev1"]}"
+---
+(command (word "\"${ev[\"ev1\"]}\""))
+---

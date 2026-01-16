@@ -568,8 +568,10 @@ class Word(Node):
         in_single_quote = False
         in_double_quote = False
         brace_depth = 0
+        bracket_depth = 0  # Track [...] subscripts inside braces
         # Track quote state inside brace expansions separately
         brace_in_double_quote = False
+        bracket_in_double_quote = False  # Track quotes inside brackets
         while i < len(value):
             ch = value[i]
             if ch == "\\" and i + 1 < len(value):
@@ -589,12 +591,35 @@ class Word(Node):
                 brace_depth -= 1
                 result.append(ch)
                 i += 1
+            elif (
+                ch == "[" and brace_depth > 0 and not in_single_quote and not brace_in_double_quote
+            ):
+                # Start of subscript inside brace expansion
+                bracket_depth += 1
+                bracket_in_double_quote = False
+                result.append(ch)
+                i += 1
+            elif (
+                ch == "]"
+                and bracket_depth > 0
+                and not in_single_quote
+                and not bracket_in_double_quote
+            ):
+                # End of subscript
+                bracket_depth -= 1
+                result.append(ch)
+                i += 1
             elif ch == "'" and not in_double_quote and brace_depth == 0:
                 in_single_quote = not in_single_quote
                 result.append(ch)
                 i += 1
             elif ch == '"' and not in_single_quote and brace_depth == 0:
                 in_double_quote = not in_double_quote
+                result.append(ch)
+                i += 1
+            elif ch == '"' and not in_single_quote and bracket_depth > 0:
+                # Toggle quote state inside bracket (subscript)
+                bracket_in_double_quote = not bracket_in_double_quote
                 result.append(ch)
                 i += 1
             elif ch == '"' and not in_single_quote and brace_depth > 0:
@@ -605,8 +630,9 @@ class Word(Node):
             elif (
                 _starts_with_at(value, i, '$"')
                 and not in_single_quote
-                and not in_double_quote
+                and (brace_depth > 0 or bracket_depth > 0 or not in_double_quote)
                 and not brace_in_double_quote
+                and not bracket_in_double_quote
             ):
                 # Count consecutive $ chars ending at i to check for $$ (PID param)
                 dollar_count = 1
@@ -617,7 +643,9 @@ class Word(Node):
                 if dollar_count % 2 == 1:
                     # Odd count: locale string $"..." - strip the $ and enter double quote
                     result.append('"')
-                    if brace_depth > 0:
+                    if bracket_depth > 0:
+                        bracket_in_double_quote = True
+                    elif brace_depth > 0:
                         brace_in_double_quote = True
                     else:
                         in_double_quote = True
@@ -6625,6 +6653,16 @@ class Parser:
                         if sc == "'":
                             in_single = True
                             name_chars.append(self.advance())
+                            continue
+                        if (
+                            sc == "$"
+                            and self.pos + 1 < self.length
+                            and self.source[self.pos + 1] == '"'
+                        ):
+                            # Locale string $"..." - strip the $ and enter double quote
+                            self.advance()  # skip $
+                            in_double_sub = True
+                            name_chars.append(self.advance())  # append "
                             continue
                         if sc == '"':
                             in_double_sub = True

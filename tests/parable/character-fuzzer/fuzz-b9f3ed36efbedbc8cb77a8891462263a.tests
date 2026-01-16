@@ -1,0 +1,5 @@
+=== process substitution pipeline in parameter expansion
+${a<(b|c)}
+---
+(command (word "${a<(b | c)}"))
+---

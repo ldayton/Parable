@@ -7247,6 +7247,18 @@ class Parser:
 
         self.advance()  # consume final }
         arg = "".join(arg_chars)
+        # Format process substitution content within param expansion
+        # When op is < or > and arg is (...), parse and format the inner command
+        if op in ("<", ">") and arg.startswith("(") and arg.endswith(")"):
+            inner = arg[1:-1]
+            try:
+                sub_parser = Parser(inner, in_process_sub=True)
+                parsed = sub_parser.parse_list()
+                if parsed and sub_parser.at_end():
+                    formatted = _format_cmdsub_node(parsed, 0, True, False, True)
+                    arg = "(" + formatted + ")"
+            except Exception:
+                pass  # Keep original arg if parsing fails
         # Reconstruct text from parsed components (handles line continuation removal)
         text = "${" + param + op + arg + "}"
         return ParamExpansion(param, op, arg), text

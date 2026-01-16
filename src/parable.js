@@ -8261,15 +8261,19 @@ class Parser {
 			content_chars,
 			depth,
 			dollar_count,
+			formatted,
 			in_double_inner,
 			in_double_quote,
 			in_single,
 			in_single_quote,
+			inner,
 			next_c,
 			op,
 			param,
 			paren_depth,
+			parsed,
 			pc,
+			sub_parser,
 			suffix,
 			text,
 			trailing;
@@ -8732,6 +8736,19 @@ class Parser {
 		}
 		this.advance();
 		arg = arg_chars.join("");
+		// Format process substitution content within param expansion
+		// When op is < or > and arg is (...), parse and format the inner command
+		if (["<", ">"].includes(op) && arg.startsWith("(") && arg.endsWith(")")) {
+			inner = arg.slice(1, -1);
+			try {
+				sub_parser = new Parser(inner, true);
+				parsed = sub_parser.parseList();
+				if (parsed && sub_parser.atEnd()) {
+					formatted = _formatCmdsubNode(parsed, 0, true, false, true);
+					arg = `(${formatted})`;
+				}
+			} catch (_) {}
+		}
 		// Reconstruct text from parsed components (handles line continuation removal)
 		text = `\${${param}${op}${arg}}`;
 		return [new ParamExpansion(param, op, arg), text];

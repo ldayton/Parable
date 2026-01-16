@@ -2611,7 +2611,7 @@ class ForArith extends Node {
 			suffix = ` ${redirect_parts.join(" ")}`;
 		}
 		init_val = this.init ? this.init : "1";
-		cond_val = this.cond ? _normalizeFdRedirects(this.cond) : "1";
+		cond_val = this.cond ? this.cond : "1";
 		incr_val = this.incr ? this.incr : "1";
 		init_str = formatArithVal(init_val);
 		cond_str = formatArithVal(cond_val);

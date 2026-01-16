@@ -1,0 +1,5 @@
+=== redirect <&- in command substitution with pipe should close fd 0 not fd 1
+a=$(a | ((a) <&- | a))
+---
+(command (word "a=$(a | ( ( a ) 0>&- | a ))"))
+---

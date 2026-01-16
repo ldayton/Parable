@@ -5803,6 +5803,179 @@ class Parser {
 		chars.push(this.advance());
 	}
 
+	_scanBracketExpression(chars, parts, for_regex, paren_depth) {
+		let bracket_will_close, c, next_ch, sc, scan;
+		if (for_regex == null) {
+			for_regex = false;
+		}
+		if (paren_depth == null) {
+			paren_depth = 0;
+		}
+		if (for_regex) {
+			// Regex mode: lookahead to check if bracket will close before terminators
+			scan = this.pos + 1;
+			if (scan < this.length && this.source[scan] === "^") {
+				scan += 1;
+			}
+			if (scan < this.length && this.source[scan] === "]") {
+				scan += 1;
+			}
+			bracket_will_close = false;
+			while (scan < this.length) {
+				sc = this.source[scan];
+				if (
+					sc === "]" &&
+					scan + 1 < this.length &&
+					this.source[scan + 1] === "]"
+				) {
+					break;
+				}
+				if (sc === ")" && paren_depth > 0) {
+					break;
+				}
+				if (
+					sc === "&" &&
+					scan + 1 < this.length &&
+					this.source[scan + 1] === "&"
+				) {
+					break;
+				}
+				if (sc === "]") {
+					bracket_will_close = true;
+					break;
+				}
+				if (
+					sc === "[" &&
+					scan + 1 < this.length &&
+					this.source[scan + 1] === ":"
+				) {
+					scan += 2;
+					while (
+						scan < this.length &&
+						!(
+							this.source[scan] === ":" &&
+							scan + 1 < this.length &&
+							this.source[scan + 1] === "]"
+						)
+					) {
+						scan += 1;
+					}
+					if (scan < this.length) {
+						scan += 2;
+					}
+					continue;
+				}
+				scan += 1;
+			}
+			if (!bracket_will_close) {
+				return false;
+			}
+		} else {
+			// Cond mode: check for [ followed by whitespace/operators
+			if (this.pos + 1 >= this.length) {
+				return false;
+			}
+			next_ch = this.source[this.pos + 1];
+			if (
+				_isWhitespaceNoNewline(next_ch) ||
+				next_ch === "&" ||
+				next_ch === "|"
+			) {
+				return false;
+			}
+		}
+		chars.push(this.advance());
+		// Handle negation [^
+		if (!this.atEnd() && this.peek() === "^") {
+			chars.push(this.advance());
+		}
+		// Handle ] as first char (literal ])
+		if (!this.atEnd() && this.peek() === "]") {
+			chars.push(this.advance());
+		}
+		// Consume until closing ]
+		while (!this.atEnd()) {
+			c = this.peek();
+			if (c === "]") {
+				chars.push(this.advance());
+				break;
+			}
+			if (
+				c === "[" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === ":"
+			) {
+				chars.push(this.advance());
+				chars.push(this.advance());
+				while (
+					!this.atEnd() &&
+					!(
+						this.peek() === ":" &&
+						this.pos + 1 < this.length &&
+						this.source[this.pos + 1] === "]"
+					)
+				) {
+					chars.push(this.advance());
+				}
+				if (!this.atEnd()) {
+					chars.push(this.advance());
+					chars.push(this.advance());
+				}
+			} else if (
+				!for_regex &&
+				c === "[" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "="
+			) {
+				chars.push(this.advance());
+				chars.push(this.advance());
+				while (
+					!this.atEnd() &&
+					!(
+						this.peek() === "=" &&
+						this.pos + 1 < this.length &&
+						this.source[this.pos + 1] === "]"
+					)
+				) {
+					chars.push(this.advance());
+				}
+				if (!this.atEnd()) {
+					chars.push(this.advance());
+					chars.push(this.advance());
+				}
+			} else if (
+				!for_regex &&
+				c === "[" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "."
+			) {
+				chars.push(this.advance());
+				chars.push(this.advance());
+				while (
+					!this.atEnd() &&
+					!(
+						this.peek() === "." &&
+						this.pos + 1 < this.length &&
+						this.source[this.pos + 1] === "]"
+					)
+				) {
+					chars.push(this.advance());
+				}
+				if (!this.atEnd()) {
+					chars.push(this.advance());
+					chars.push(this.advance());
+				}
+			} else if (for_regex && c === "$") {
+				if (!this._parseDollarExpansion(chars, parts)) {
+					chars.push(this.advance());
+				}
+			} else {
+				chars.push(this.advance());
+			}
+		}
+		return true;
+	}
+
 	_scanDoubleQuote(chars, parts, start, handle_line_continuation) {
 		let c, next_c;
 		if (handle_line_continuation == null) {
@@ -10100,7 +10273,6 @@ class Parser {
 			locale_node,
 			locale_result,
 			locale_text,
-			next_ch,
 			parts,
 			parts_arg,
 			procsub_node,
@@ -10200,111 +10372,12 @@ class Parser {
 				break;
 			}
 			// Glob bracket expression [...] - consume until closing ]
-			// Handles [[:alpha:]], [^0-9], []a-z] (] as first char), etc.
 			if (ch === "[") {
-				// Check if [ is immediately followed by whitespace or terminator
-				// If so, treat [ as literal, not as bracket expression start
-				if (this.pos + 1 >= this.length) {
-					// [ at EOF is literal
-					chars.push(this.advance());
+				if (this._scanBracketExpression(chars, parts)) {
 					continue;
 				}
-				next_ch = this.source[this.pos + 1];
-				if (
-					_isWhitespaceNoNewline(next_ch) ||
-					next_ch === "&" ||
-					next_ch === "|"
-				) {
-					// [ followed by whitespace or operator is literal
-					chars.push(this.advance());
-					continue;
-				}
+				// [ is literal, consume it
 				chars.push(this.advance());
-				// Handle negation [^
-				if (!this.atEnd() && this.peek() === "^") {
-					chars.push(this.advance());
-				}
-				// Handle ] as first char (literal ])
-				if (!this.atEnd() && this.peek() === "]") {
-					chars.push(this.advance());
-				}
-				// Consume until closing ]
-				while (!this.atEnd()) {
-					c = this.peek();
-					if (c === "]") {
-						chars.push(this.advance());
-						break;
-					}
-					if (
-						c === "[" &&
-						this.pos + 1 < this.length &&
-						this.source[this.pos + 1] === ":"
-					) {
-						// POSIX class like [:alpha:] inside bracket expression
-						chars.push(this.advance());
-						chars.push(this.advance());
-						while (
-							!this.atEnd() &&
-							!(
-								this.peek() === ":" &&
-								this.pos + 1 < this.length &&
-								this.source[this.pos + 1] === "]"
-							)
-						) {
-							chars.push(this.advance());
-						}
-						if (!this.atEnd()) {
-							chars.push(this.advance());
-							chars.push(this.advance());
-						}
-					} else if (
-						c === "[" &&
-						this.pos + 1 < this.length &&
-						this.source[this.pos + 1] === "="
-					) {
-						// Equivalence class like [=a=] inside bracket expression
-						chars.push(this.advance());
-						chars.push(this.advance());
-						while (
-							!this.atEnd() &&
-							!(
-								this.peek() === "=" &&
-								this.pos + 1 < this.length &&
-								this.source[this.pos + 1] === "]"
-							)
-						) {
-							chars.push(this.advance());
-						}
-						if (!this.atEnd()) {
-							chars.push(this.advance());
-							chars.push(this.advance());
-						}
-					} else if (
-						c === "[" &&
-						this.pos + 1 < this.length &&
-						this.source[this.pos + 1] === "."
-					) {
-						// Collating symbol like [.ch.] inside bracket expression
-						chars.push(this.advance());
-						chars.push(this.advance());
-						while (
-							!this.atEnd() &&
-							!(
-								this.peek() === "." &&
-								this.pos + 1 < this.length &&
-								this.source[this.pos + 1] === "]"
-							)
-						) {
-							chars.push(this.advance());
-						}
-						if (!this.atEnd()) {
-							chars.push(this.advance());
-							chars.push(this.advance());
-						}
-					} else {
-						chars.push(this.advance());
-					}
-				}
 				continue;
 			}
 			// Single-quoted string
@@ -10402,16 +10475,7 @@ class Parser {
 	}
 
 	_parseCondRegexWord() {
-		let bracket_will_close,
-			c,
-			ch,
-			chars,
-			paren_depth,
-			parts,
-			parts_arg,
-			sc,
-			scan,
-			start;
+		let ch, chars, paren_depth, parts, parts_arg, start;
 		this._condSkipWhitespace();
 		if (this._condAtEnd()) {
 			return null;
@@ -10462,121 +10526,12 @@ class Parser {
 				break;
 			}
 			// Regex character class [...] - consume until closing ]
-			// Handles [[:alpha:]], [^0-9], []a-z] (] as first char), etc.
 			if (ch === "[") {
-				// Lookahead: check if bracket expression will close properly
-				// before hitting ]] or ) (when inside paren group)
-				scan = this.pos + 1;
-				// Skip ^ for negation
-				if (scan < this.length && this.source[scan] === "^") {
-					scan += 1;
-				}
-				// Skip ] as first char (literal)
-				if (scan < this.length && this.source[scan] === "]") {
-					scan += 1;
-				}
-				bracket_will_close = false;
-				while (scan < this.length) {
-					sc = this.source[scan];
-					// Check for ]] - end of conditional
-					if (
-						sc === "]" &&
-						scan + 1 < this.length &&
-						this.source[scan + 1] === "]"
-					) {
-						break;
-					}
-					// Check for ) when inside paren group
-					if (sc === ")" && paren_depth > 0) {
-						break;
-					}
-					// Check for && - this terminates the regex even inside brackets
-					if (
-						sc === "&" &&
-						scan + 1 < this.length &&
-						this.source[scan + 1] === "&"
-					) {
-						break;
-					}
-					if (sc === "]") {
-						bracket_will_close = true;
-						break;
-					}
-					// Skip POSIX classes [:...:]
-					if (
-						sc === "[" &&
-						scan + 1 < this.length &&
-						this.source[scan + 1] === ":"
-					) {
-						scan += 2;
-						while (
-							scan < this.length &&
-							!(
-								this.source[scan] === ":" &&
-								scan + 1 < this.length &&
-								this.source[scan + 1] === "]"
-							)
-						) {
-							scan += 1;
-						}
-						if (scan < this.length) {
-							scan += 2;
-						}
-						continue;
-					}
-					scan += 1;
-				}
-				if (!bracket_will_close) {
-					// Treat [ as literal
-					chars.push(this.advance());
+				if (this._scanBracketExpression(chars, parts, true, paren_depth)) {
 					continue;
 				}
+				// [ is literal, consume it
 				chars.push(this.advance());
-				// Handle negation [^
-				if (!this.atEnd() && this.peek() === "^") {
-					chars.push(this.advance());
-				}
-				// Handle ] as first char (literal ])
-				if (!this.atEnd() && this.peek() === "]") {
-					chars.push(this.advance());
-				}
-				// Consume until closing ]
-				while (!this.atEnd()) {
-					c = this.peek();
-					if (c === "]") {
-						chars.push(this.advance());
-						break;
-					}
-					if (
-						c === "[" &&
-						this.pos + 1 < this.length &&
-						this.source[this.pos + 1] === ":"
-					) {
-						// POSIX class like [:alpha:] inside bracket expression
-						chars.push(this.advance());
-						chars.push(this.advance());
-						while (
-							!this.atEnd() &&
-							!(
-								this.peek() === ":" &&
-								this.pos + 1 < this.length &&
-								this.source[this.pos + 1] === "]"
-							)
-						) {
-							chars.push(this.advance());
-						}
-						if (!this.atEnd()) {
-							chars.push(this.advance());
-							chars.push(this.advance());
-						}
-					} else if (c === "$") {
-						if (!this._parseDollarExpansion(chars, parts)) {
-							chars.push(this.advance());
-						}
-					} else {
-						chars.push(this.advance());
-					}
-				}
 				continue;
 			}
 			// Word terminators - space/tab ends the regex (unless inside parens), as does &&

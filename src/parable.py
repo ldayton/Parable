@@ -4797,6 +4797,106 @@ class Parser:
             raise ParseError("Unterminated single quote", pos=start)
         chars.append(self.advance())  # closing quote
 
+    def _scan_bracket_expression(
+        self, chars: list, parts: list, for_regex: bool = False, paren_depth: int = 0
+    ) -> bool:
+        """Scan [...] bracket expression. Returns True if consumed, False if [ is literal."""
+        if for_regex:
+            # Regex mode: lookahead to check if bracket will close before terminators
+            scan = self.pos + 1
+            if scan < self.length and self.source[scan] == "^":
+                scan += 1
+            if scan < self.length and self.source[scan] == "]":
+                scan += 1
+            bracket_will_close = False
+            while scan < self.length:
+                sc = self.source[scan]
+                if sc == "]" and scan + 1 < self.length and self.source[scan + 1] == "]":
+                    break
+                if sc == ")" and paren_depth > 0:
+                    break
+                if sc == "&" and scan + 1 < self.length and self.source[scan + 1] == "&":
+                    break
+                if sc == "]":
+                    bracket_will_close = True
+                    break
+                if sc == "[" and scan + 1 < self.length and self.source[scan + 1] == ":":
+                    scan += 2
+                    while scan < self.length and not (
+                        self.source[scan] == ":"
+                        and scan + 1 < self.length
+                        and self.source[scan + 1] == "]"
+                    ):
+                        scan += 1
+                    if scan < self.length:
+                        scan += 2
+                    continue
+                scan += 1
+            if not bracket_will_close:
+                return False
+        else:
+            # Cond mode: check for [ followed by whitespace/operators
+            if self.pos + 1 >= self.length:
+                return False
+            next_ch = self.source[self.pos + 1]
+            if _is_whitespace_no_newline(next_ch) or next_ch == "&" or next_ch == "|":
+                return False
+        chars.append(self.advance())  # consume [
+        # Handle negation [^
+        if not self.at_end() and self.peek() == "^":
+            chars.append(self.advance())
+        # Handle ] as first char (literal ])
+        if not self.at_end() and self.peek() == "]":
+            chars.append(self.advance())
+        # Consume until closing ]
+        while not self.at_end():
+            c = self.peek()
+            if c == "]":
+                chars.append(self.advance())
+                break
+            if c == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == ":":
+                chars.append(self.advance())  # [
+                chars.append(self.advance())  # :
+                while not self.at_end() and not (
+                    self.peek() == ":"
+                    and self.pos + 1 < self.length
+                    and self.source[self.pos + 1] == "]"
+                ):
+                    chars.append(self.advance())
+                if not self.at_end():
+                    chars.append(self.advance())  # :
+                    chars.append(self.advance())  # ]
+            elif not for_regex and c == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == "=":
+                chars.append(self.advance())  # [
+                chars.append(self.advance())  # =
+                while not self.at_end() and not (
+                    self.peek() == "="
+                    and self.pos + 1 < self.length
+                    and self.source[self.pos + 1] == "]"
+                ):
+                    chars.append(self.advance())
+                if not self.at_end():
+                    chars.append(self.advance())  # =
+                    chars.append(self.advance())  # ]
+            elif not for_regex and c == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == ".":
+                chars.append(self.advance())  # [
+                chars.append(self.advance())  # .
+                while not self.at_end() and not (
+                    self.peek() == "."
+                    and self.pos + 1 < self.length
+                    and self.source[self.pos + 1] == "]"
+                ):
+                    chars.append(self.advance())
+                if not self.at_end():
+                    chars.append(self.advance())  # .
+                    chars.append(self.advance())  # ]
+            elif for_regex and c == "$":
+                if not self._parse_dollar_expansion(chars, parts):
+                    chars.append(self.advance())
+            else:
+                chars.append(self.advance())
+        return True
+
     def _scan_double_quote(
         self, chars: list, parts: list, start: int, handle_line_continuation: bool = True
     ) -> None:
@@ -8398,77 +8498,11 @@ class Parser:
                 break
 
             # Glob bracket expression [...] - consume until closing ]
-            # Handles [[:alpha:]], [^0-9], []a-z] (] as first char), etc.
             if ch == "[":
-                # Check if [ is immediately followed by whitespace or terminator
-                # If so, treat [ as literal, not as bracket expression start
-                if self.pos + 1 >= self.length:
-                    # [ at EOF is literal
-                    chars.append(self.advance())
+                if self._scan_bracket_expression(chars, parts):
                     continue
-                next_ch = self.source[self.pos + 1]
-                if _is_whitespace_no_newline(next_ch) or next_ch == "&" or next_ch == "|":
-                    # [ followed by whitespace or operator is literal
-                    chars.append(self.advance())
-                    continue
-                chars.append(self.advance())  # consume [
-                # Handle negation [^
-                if not self.at_end() and self.peek() == "^":
-                    chars.append(self.advance())
-                # Handle ] as first char (literal ])
-                if not self.at_end() and self.peek() == "]":
-                    chars.append(self.advance())
-                # Consume until closing ]
-                while not self.at_end():
-                    c = self.peek()
-                    if c == "]":
-                        chars.append(self.advance())
-                        break
-                    if c == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == ":":
-                        # POSIX class like [:alpha:] inside bracket expression
-                        chars.append(self.advance())  # [
-                        chars.append(self.advance())  # :
-                        while not self.at_end() and not (
-                            self.peek() == ":"
-                            and self.pos + 1 < self.length
-                            and self.source[self.pos + 1] == "]"
-                        ):
-                            chars.append(self.advance())
-                        if not self.at_end():
-                            chars.append(self.advance())  # :
-                            chars.append(self.advance())  # ]
-                    elif (
-                        c == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == "="
-                    ):
-                        # Equivalence class like [=a=] inside bracket expression
-                        chars.append(self.advance())  # [
-                        chars.append(self.advance())  # =
-                        while not self.at_end() and not (
-                            self.peek() == "="
-                            and self.pos + 1 < self.length
-                            and self.source[self.pos + 1] == "]"
-                        ):
-                            chars.append(self.advance())
-                        if not self.at_end():
-                            chars.append(self.advance())  # =
-                            chars.append(self.advance())  # ]
-                    elif (
-                        c == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == "."
-                    ):
-                        # Collating symbol like [.ch.] inside bracket expression
-                        chars.append(self.advance())  # [
-                        chars.append(self.advance())  # .
-                        while not self.at_end() and not (
-                            self.peek() == "."
-                            and self.pos + 1 < self.length
-                            and self.source[self.pos + 1] == "]"
-                        ):
-                            chars.append(self.advance())
-                        if not self.at_end():
-                            chars.append(self.advance())  # .
-                            chars.append(self.advance())  # ]
-                    else:
-                        chars.append(self.advance())
+                # [ is literal, consume it
+                chars.append(self.advance())
                 continue
 
             # Single-quoted string
@@ -8602,80 +8636,11 @@ class Parser:
                 break
 
             # Regex character class [...] - consume until closing ]
-            # Handles [[:alpha:]], [^0-9], []a-z] (] as first char), etc.
             if ch == "[":
-                # Lookahead: check if bracket expression will close properly
-                # before hitting ]] or ) (when inside paren group)
-                scan = self.pos + 1  # position after [
-                # Skip ^ for negation
-                if scan < self.length and self.source[scan] == "^":
-                    scan += 1
-                # Skip ] as first char (literal)
-                if scan < self.length and self.source[scan] == "]":
-                    scan += 1
-                bracket_will_close = False
-                while scan < self.length:
-                    sc = self.source[scan]
-                    # Check for ]] - end of conditional
-                    if sc == "]" and scan + 1 < self.length and self.source[scan + 1] == "]":
-                        break  # Won't close before ]]
-                    # Check for ) when inside paren group
-                    if sc == ")" and paren_depth > 0:
-                        break  # Won't close before )
-                    # Check for && - this terminates the regex even inside brackets
-                    if sc == "&" and scan + 1 < self.length and self.source[scan + 1] == "&":
-                        break  # Won't close before &&
-                    if sc == "]":
-                        bracket_will_close = True
-                        break
-                    # Skip POSIX classes [:...:]
-                    if sc == "[" and scan + 1 < self.length and self.source[scan + 1] == ":":
-                        scan += 2  # skip [:
-                        while scan < self.length and not (
-                            self.source[scan] == ":"
-                            and scan + 1 < self.length
-                            and self.source[scan + 1] == "]"
-                        ):
-                            scan += 1
-                        if scan < self.length:
-                            scan += 2  # skip :]
-                        continue
-                    scan += 1
-                if not bracket_will_close:
-                    # Treat [ as literal
-                    chars.append(self.advance())
+                if self._scan_bracket_expression(chars, parts, for_regex=True, paren_depth=paren_depth):
                     continue
-                chars.append(self.advance())  # consume [
-                # Handle negation [^
-                if not self.at_end() and self.peek() == "^":
-                    chars.append(self.advance())
-                # Handle ] as first char (literal ])
-                if not self.at_end() and self.peek() == "]":
-                    chars.append(self.advance())
-                # Consume until closing ]
-                while not self.at_end():
-                    c = self.peek()
-                    if c == "]":
-                        chars.append(self.advance())
-                        break
-                    if c == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == ":":
-                        # POSIX class like [:alpha:] inside bracket expression
-                        chars.append(self.advance())  # [
-                        chars.append(self.advance())  # :
-                        while not self.at_end() and not (
-                            self.peek() == ":"
-                            and self.pos + 1 < self.length
-                            and self.source[self.pos + 1] == "]"
-                        ):
-                            chars.append(self.advance())
-                        if not self.at_end():
-                            chars.append(self.advance())  # :
-                            chars.append(self.advance())  # ]
-                    elif c == "$":
-                        if not self._parse_dollar_expansion(chars, parts):
-                            chars.append(self.advance())
-                    else:
-                        chars.append(self.advance())
+                # [ is literal, consume it
+                chars.append(self.advance())
                 continue
 
             # Word terminators - space/tab ends the regex (unless inside parens), as does &&

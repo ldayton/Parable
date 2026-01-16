@@ -3950,6 +3950,17 @@ def _extract_heredoc_delimiters(content: str) -> list[tuple[str, bool]]:
             continue
         if content[i] == "<" and i + 1 < len(content) and content[i + 1] == "<":
             i += 2
+            # Check for <<< (here-string) - skip it, not a heredoc
+            if i < len(content) and content[i] == "<":
+                i += 1
+                # Skip whitespace and word
+                while i < len(content) and _is_whitespace_no_newline(content[i]):
+                    i += 1
+                while (
+                    i < len(content) and not _is_whitespace(content[i]) and content[i] not in "()"
+                ):
+                    i += 1
+                continue
             strip_tabs = False
             if i < len(content) and content[i] == "-":
                 strip_tabs = True
@@ -5069,6 +5080,33 @@ class Parser:
             ):
                 self.advance()  # first <
                 self.advance()  # second <
+                # Check for <<< (here-string) - just skip the word and continue
+                if not self.at_end() and self.peek() == "<":
+                    self.advance()  # third <
+                    # Skip whitespace before word
+                    while not self.at_end() and _is_whitespace_no_newline(self.peek()):
+                        self.advance()
+                    # Skip the here-string word
+                    while (
+                        not self.at_end()
+                        and not _is_whitespace(self.peek())
+                        and self.peek() not in "()"
+                    ):
+                        if self.peek() == "\\" and self.pos + 1 < self.length:
+                            self.advance()
+                            self.advance()
+                        elif self.peek() in "\"'":
+                            quote = self.peek()
+                            self.advance()
+                            while not self.at_end() and self.peek() != quote:
+                                if quote == '"' and self.peek() == "\\":
+                                    self.advance()
+                                self.advance()
+                            if not self.at_end():
+                                self.advance()
+                        else:
+                            self.advance()
+                    continue
                 # Check for <<- (strip tabs)
                 if not self.at_end() and self.peek() == "-":
                     self.advance()

@@ -1285,8 +1285,23 @@ class Word(Node):
                             procsub_idx += 1
                             i = j
                             continue
+                    # Check if this is a list with & operator and newlines before &
+                    # In that case, preserve raw content to avoid losing newlines
+                    raw_content = _substring(value, i + 2, j - 1)
+                    if (
+                        node.command.kind == "list"
+                        and node.command.parts
+                        and node.command.parts[len(node.command.parts) - 1].kind == "operator"
+                        and node.command.parts[len(node.command.parts) - 1].op == "&"
+                        and raw_content.endswith("&")
+                        and "\n" in raw_content[: raw_content.rfind("&")]
+                    ):
+                        # Preserve raw content for lists with & and newlines before &
+                        raw_content = raw_content.replace("\\\n", "")
+                        result.append(direction + "(" + raw_content + ")")
+                    else:
+                        result.append(direction + "(" + formatted + ")")
                     procsub_idx += 1
-                    result.append(direction + "(" + formatted + ")")
                     i = j
                 elif is_procsub and len(self.parts):
                     # No AST node but valid procsub context - parse content on the fly
@@ -1310,8 +1325,9 @@ class Word(Node):
                     try:
                         parser = Parser(inner_to_parse)
                         parsed = parser.parse_list()
-                        # Only use parsed result if parser consumed all input
-                        if parsed and parser.pos == len(inner_to_parse):
+                        # Only use parsed result if parser consumed all input and no newlines in content
+                        # (newlines would be lost during formatting)
+                        if parsed and parser.pos == len(inner_to_parse) and "\n" not in inner:
                             compact = _starts_with_subshell(parsed)
                             formatted = _format_cmdsub_node(parsed, 0, True, compact, True)
                         else:

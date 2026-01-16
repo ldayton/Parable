@@ -3117,6 +3117,8 @@ def _format_cmdsub_node(
             val = w._expand_all_ansi_c_quotes(w.value)
             # Strip $ from locale strings $"..." (quote-aware)
             val = w._strip_locale_string_dollars(val)
+            # Normalize whitespace in array assignments
+            val = w._normalize_array_whitespace(val)
             val = w._format_command_substitutions(val)
             parts.append(val)
         # Check for heredocs - their bodies need to come at the end

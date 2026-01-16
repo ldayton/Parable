@@ -1369,6 +1369,7 @@ class Word extends Node {
 			inner,
 			is_procsub,
 			j,
+			leading_brace,
 			leading_ws,
 			leading_ws_end,
 			node,
@@ -1381,6 +1382,7 @@ class Word extends Node {
 			procsub_parts,
 			raw_content,
 			raw_stripped,
+			rest,
 			result,
 			spaced,
 			stripped,
@@ -1578,13 +1580,40 @@ class Word extends Node {
 					continue;
 				}
 				// Format this command substitution
+				inner = value.slice(i + 2, j - 1);
+				// Check if content starts with } followed by keyword - these were stripped during parsing
+				// but should be preserved in output. Don't do this for { which is likely a brace group.
+				leading_brace = "";
+				if (inner.length > 0 && inner.length > 1 && inner[0] === "}") {
+					// Only add } if it was followed by a keyword that got stripped
+					rest = inner.slice(1);
+					if (
+						rest.startsWith("case") ||
+						rest.startsWith("if") ||
+						rest.startsWith("while") ||
+						rest.startsWith("until") ||
+						rest.startsWith("for") ||
+						rest.startsWith("select") ||
+						rest.startsWith("function")
+					) {
+						leading_brace = "}";
+					}
+				}
 				if (cmdsub_idx < cmdsub_parts.length) {
 					node = cmdsub_parts[cmdsub_idx];
-					formatted = _formatCmdsubNode(node.command);
+					formatted = leading_brace + _formatCmdsubNode(node.command);
 					cmdsub_idx += 1;
+					// If leading } was stripped and formatting introduces newlines, use original
+					// This preserves compact format for }case and similar constructs
+					if (
+						leading_brace &&
+						formatted.includes("\n") &&
+						!inner.includes("\n")
+					) {
+						formatted = inner;
+					}
 				} else {
 					// No AST node (e.g., inside arithmetic) - parse content on the fly
-					inner = value.slice(i + 2, j - 1);
 					try {
 						parser = new Parser(inner);
 						parsed = parser.parseList();
@@ -4989,7 +5018,9 @@ function _isWordStartContext(c) {
 		c === "&" ||
 		c === "<" ||
 		c === "(" ||
-		c === "{"
+		c === "{" ||
+		c === ")" ||
+		c === "}"
 	);
 }
 
@@ -5376,16 +5407,33 @@ class Parser {
 	}
 
 	consumeWord(expected) {
-		let _, saved_pos, word;
+		let _, has_leading_brace, keyword_word, saved_pos, word;
 		saved_pos = this.pos;
 		this.skipWhitespace();
 		word = this.peekWord();
-		if (word !== expected) {
+		// In command substitutions, strip leading } for keyword matching
+		// Don't strip { because it's used for brace groups
+		keyword_word = word;
+		has_leading_brace = false;
+		if (
+			word != null &&
+			this._in_process_sub &&
+			word.length > 1 &&
+			word[0] === "}"
+		) {
+			keyword_word = word.slice(1);
+			has_leading_brace = true;
+		}
+		if (keyword_word !== expected) {
 			this.pos = saved_pos;
 			return false;
 		}
 		// Actually consume the word
 		this.skipWhitespace();
+		// If there's a leading } or {, skip it first
+		if (has_leading_brace) {
+			this.advance();
+		}
 		for (_ of expected) {
 			this.advance();
 		}
@@ -11694,7 +11742,7 @@ class Parser {
 	}
 
 	parseCompoundCommand() {
-		let ch, func, result, word;
+		let ch, func, keyword_word, result, word;
 		this.skipWhitespace();
 		if (this.atEnd()) {
 			return null;
@@ -11738,42 +11786,58 @@ class Parser {
 		// Fall through to simple command if [[ is not a conditional keyword
 		// Check for reserved words
 		word = this.peekWord();
+		// In command substitutions, strip leading } for keyword matching
+		// Don't strip { because it's used for brace groups
+		keyword_word = word;
+		if (
+			word != null &&
+			this._in_process_sub &&
+			word.length > 1 &&
+			word[0] === "}"
+		) {
+			keyword_word = word.slice(1);
+		}
 		// Reserved words that cannot start a statement (only valid in specific contexts)
 		if (
-			["fi", "then", "elif", "else", "done", "esac", "do", "in"].includes(word)
+			["fi", "then", "elif", "else", "done", "esac", "do", "in"].includes(
+				keyword_word,
+			)
 		) {
-			throw new ParseError(`Unexpected reserved word '${word}'`, this.pos);
+			throw new ParseError(
+				`Unexpected reserved word '${keyword_word}'`,
+				this.pos,
+			);
 		}
 		// If statement
-		if (word === "if") {
+		if (keyword_word === "if") {
 			return this.parseIf();
 		}
 		// While loop
-		if (word === "while") {
+		if (keyword_word === "while") {
 			return this.parseWhile();
 		}
 		// Until loop
-		if (word === "until") {
+		if (keyword_word === "until") {
 			return this.parseUntil();
 		}
 		// For loop
-		if (word === "for") {
+		if (keyword_word === "for") {
 			return this.parseFor();
 		}
 		// Select statement
-		if (word === "select") {
+		if (keyword_word === "select") {
 			return this.parseSelect();
 		}
 		// Case statement
-		if (word === "case") {
+		if (keyword_word === "case") {
 			return this.parseCase();
 		}
 		// Function definition (function keyword form)
-		if (word === "function") {
+		if (keyword_word === "function") {
 			return this.parseFunction();
 		}
 		// Coproc
-		if (word === "coproc") {
+		if (keyword_word === "coproc") {
 			return this.parseCoproc();
 		}
 		// Try POSIX function definition (name() form) before simple command

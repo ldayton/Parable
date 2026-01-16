@@ -7865,6 +7865,51 @@ class Parser {
 					}
 					delimiter_chars.push(this.advance());
 				}
+			} else if (ch === "`") {
+				// Backtick command substitution embedded in delimiter
+				// Note: In bash, backtick closes command sub even with unclosed quotes inside
+				delimiter_chars.push(this.advance());
+				while (!this.atEnd() && this.peek() !== "`") {
+					c = this.peek();
+					if (c === "'") {
+						// Single-quoted string inside backtick - skip to closing quote or `
+						delimiter_chars.push(this.advance());
+						while (
+							!this.atEnd() &&
+							this.peek() !== "'" &&
+							this.peek() !== "`"
+						) {
+							delimiter_chars.push(this.advance());
+						}
+						if (!this.atEnd() && this.peek() === "'") {
+							delimiter_chars.push(this.advance());
+						}
+					} else if (c === '"') {
+						// Double-quoted string inside backtick - skip to closing quote or `
+						delimiter_chars.push(this.advance());
+						while (
+							!this.atEnd() &&
+							this.peek() !== '"' &&
+							this.peek() !== "`"
+						) {
+							if (this.peek() === "\\" && this.pos + 1 < this.length) {
+								delimiter_chars.push(this.advance());
+							}
+							delimiter_chars.push(this.advance());
+						}
+						if (!this.atEnd() && this.peek() === '"') {
+							delimiter_chars.push(this.advance());
+						}
+					} else if (c === "\\" && this.pos + 1 < this.length) {
+						delimiter_chars.push(this.advance());
+						delimiter_chars.push(this.advance());
+					} else {
+						delimiter_chars.push(this.advance());
+					}
+				}
+				if (!this.atEnd()) {
+					delimiter_chars.push(this.advance());
+				}
 			} else {
 				delimiter_chars.push(this.advance());
 			}

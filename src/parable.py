@@ -594,6 +594,26 @@ class Word(Node):
                                     if op_start.startswith(op):
                                         in_pattern = True
                                         break
+                                # If no operator at start and the first char is NOT a known
+                                # bash operator character, also check if any operator exists
+                                # later (handles cases like ${x{%...} where { precedes the operator)
+                                # Known operator start chars: % # / ^ , ~ : + - = ?
+                                if not in_pattern and op_start and op_start[0] not in "%#/^,~:+-=?":
+                                    for op in [
+                                        "//",
+                                        "%%",
+                                        "##",
+                                        "/",
+                                        "%",
+                                        "#",
+                                        "^",
+                                        "^^",
+                                        ",",
+                                        ",,",
+                                    ]:
+                                        if op in op_start:
+                                            in_pattern = True
+                                            break
                             # Handle invalid variable names (var_name_len = 0) where first char is not a pattern operator
                             # but there's a pattern operator later (e.g., ${>%$'b'})
                             elif var_name_len == 0 and len(after_brace) > 1:

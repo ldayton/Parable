@@ -3711,9 +3711,98 @@ def _find_cmdsub_end(value: str, start: int) -> int:
                     depth += 1
         elif c == ")":
             # In case patterns, ) after pattern name is not a grouping paren
-            if in_case_patterns and case_depth > 0:
-                # This ) is a case pattern terminator, skip it
-                pass
+            if in_case_patterns and case_depth > 0 and depth > 1:
+                # This might be a case pattern terminator, but check if there's an esac
+                # If we're at depth 1 (outermost level), this ) might close the cmdsub
+                # Do lookahead to find if there's an esac for this case
+                lookahead_i = i + 1
+                lookahead_case_depth = case_depth
+                found_esac = False
+                while lookahead_i < len(value):
+                    lookahead_c = value[lookahead_i]
+                    if lookahead_c == "'" or lookahead_c == '"':
+                        # Skip quoted strings in lookahead
+                        quote = lookahead_c
+                        lookahead_i += 1
+                        while lookahead_i < len(value) and value[lookahead_i] != quote:
+                            if lookahead_c == '"' and value[lookahead_i] == "\\":
+                                lookahead_i += 1
+                            lookahead_i += 1
+                        if lookahead_i < len(value):
+                            lookahead_i += 1
+                    elif _starts_with_at(value, lookahead_i, "case") and _is_word_boundary(
+                        value, lookahead_i, 4
+                    ):
+                        lookahead_case_depth += 1
+                        lookahead_i += 4
+                    elif _starts_with_at(value, lookahead_i, "esac") and _is_word_boundary(
+                        value, lookahead_i, 4
+                    ):
+                        lookahead_case_depth -= 1
+                        if lookahead_case_depth == 0:
+                            found_esac = True
+                            break
+                        lookahead_i += 4
+                    elif lookahead_c == "(":
+                        lookahead_i += 1
+                    elif lookahead_c == ")":
+                        # Hit another ) before finding esac - stop lookahead
+                        if lookahead_case_depth > 0:
+                            lookahead_i += 1
+                        else:
+                            break
+                    else:
+                        lookahead_i += 1
+                if found_esac:
+                    # This ) is a case pattern terminator, skip it
+                    pass
+                else:
+                    # No esac found, this ) closes the command substitution
+                    depth -= 1
+            elif in_case_patterns and case_depth > 0:
+                # At depth 1, check for esac (same lookahead logic)
+                # If no esac, this ) closes the cmdsub
+                lookahead_i = i + 1
+                lookahead_case_depth = case_depth
+                found_esac = False
+                while lookahead_i < len(value):
+                    lookahead_c = value[lookahead_i]
+                    if lookahead_c == "'" or lookahead_c == '"':
+                        quote = lookahead_c
+                        lookahead_i += 1
+                        while lookahead_i < len(value) and value[lookahead_i] != quote:
+                            if lookahead_c == '"' and value[lookahead_i] == "\\":
+                                lookahead_i += 1
+                            lookahead_i += 1
+                        if lookahead_i < len(value):
+                            lookahead_i += 1
+                    elif _starts_with_at(value, lookahead_i, "case") and _is_word_boundary(
+                        value, lookahead_i, 4
+                    ):
+                        lookahead_case_depth += 1
+                        lookahead_i += 4
+                    elif _starts_with_at(value, lookahead_i, "esac") and _is_word_boundary(
+                        value, lookahead_i, 4
+                    ):
+                        lookahead_case_depth -= 1
+                        if lookahead_case_depth == 0:
+                            found_esac = True
+                            break
+                        lookahead_i += 4
+                    elif lookahead_c == ")":
+                        # Hit another ) before finding esac - stop lookahead
+                        if lookahead_case_depth > 0:
+                            lookahead_i += 1
+                        else:
+                            break
+                    else:
+                        lookahead_i += 1
+                if found_esac:
+                    # This ) is a case pattern terminator, skip it
+                    pass
+                else:
+                    # No esac found, this ) closes the command substitution
+                    depth -= 1
             elif arith_depth > 0:
                 if arith_paren_depth > 0:
                     arith_paren_depth -= 1
@@ -4088,6 +4177,7 @@ def _is_word_start_context(c: str) -> bool:
         or c == "&"
         or c == "<"
         or c == "("
+        or c == "{"
     )
 
 

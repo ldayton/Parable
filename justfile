@@ -1,8 +1,9 @@
 set shell := ["bash", "-o", "pipefail", "-cu"]
 project := "parable"
+run_id := `head -c 16 /dev/urandom | xxd -p`
 
 _test version *ARGS:
-    UV_PROJECT_ENVIRONMENT=.venv-{{version}} uv run --python {{version}} tests/bin/run-tests.py {{ARGS}} 2>&1 | sed -u "s/^/[{{version}}] /" | tee /tmp/{{project}}-test-{{version}}.log
+    UV_PROJECT_ENVIRONMENT=.venv-{{version}} uv run --python {{version}} tests/bin/run-tests.py {{ARGS}} 2>&1 | sed -u "s/^/[{{version}}] /" | tee /tmp/{{project}}-{{run_id}}-test-{{version}}.log
 
 # Run tests on CPython 3.10
 test-cpy310 *ARGS: (_test "3.10" ARGS)
@@ -33,7 +34,7 @@ test-all: test-cpy test-pypy
 
 # Verify lock file is up to date
 lock-check:
-    uv lock --check 2>&1 | sed -u "s/^/[lock] /" | tee /tmp/{{project}}-lock.log
+    uv lock --check 2>&1 | sed -u "s/^/[lock] /" | tee /tmp/{{project}}-{{run_id}}-lock.log
 
 # Ensure biome is installed (prevents race condition in parallel JS checks)
 _ensure-biome:
@@ -66,11 +67,11 @@ bench *ARGS:
 
 # Lint (--fix to apply changes)
 lint *ARGS:
-    uvx ruff check {{ if ARGS == "--fix" { "--fix" } else { "" } }} 2>&1 | sed -u "s/^/[lint] /" | tee /tmp/{{project}}-lint.log
+    uvx ruff check {{ if ARGS == "--fix" { "--fix" } else { "" } }} 2>&1 | sed -u "s/^/[lint] /" | tee /tmp/{{project}}-{{run_id}}-lint.log
 
 # Format (--fix to apply changes)
 fmt *ARGS:
-    uvx ruff format {{ if ARGS == "--fix" { "" } else { "--check" } }} 2>&1 | sed -u "s/^/[fmt] /" | tee /tmp/{{project}}-fmt.log
+    uvx ruff format {{ if ARGS == "--fix" { "" } else { "--check" } }} 2>&1 | sed -u "s/^/[fmt] /" | tee /tmp/{{project}}-{{run_id}}-fmt.log
 
 # Verify parable-dump.py works
 check-dump-ast:
@@ -85,7 +86,7 @@ check-dump-ast:
 
 # Check for banned Python constructions
 check-style:
-    uv run --directory tools/transpiler transpiler --check-style "$(pwd)/src" 2>&1 | sed -u "s/^/[style] /" | tee /tmp/{{project}}-style.log
+    uv run --directory tools/transpiler transpiler --check-style "$(pwd)/src" 2>&1 | sed -u "s/^/[style] /" | tee /tmp/{{project}}-{{run_id}}-style.log
 
 # Transpile Python to JavaScript
 transpile output="src/parable.js":
@@ -95,8 +96,8 @@ transpile output="src/parable.js":
 
 # Check that parable.js is up-to-date with transpiler output
 check-transpile:
-    @just transpile /tmp/parable-transpile.js && \
-    if diff -q src/parable.js /tmp/parable-transpile.js >/dev/null 2>&1; then \
+    @just transpile /tmp/{{project}}-{{run_id}}-transpile.js && \
+    if diff -q src/parable.js /tmp/{{project}}-{{run_id}}-transpile.js >/dev/null 2>&1; then \
         echo "[transpile] OK"; \
     else \
         echo "[transpile] FAIL: parable.js is out of date, run 'just transpile'" >&2; \
@@ -129,5 +130,5 @@ bench-js *ARGS:
 # Format JavaScript (--fix to apply changes)
 # Note: biome format is run twice due to https://github.com/biomejs/biome/issues/4383
 fmt-js *ARGS:
-    npx -y @biomejs/biome format {{ if ARGS == "--fix" { "--write" } else { "" } }} src/parable.js 2>&1 | sed -u "s/^/[fmt-js] /" | tee /tmp/{{project}}-fmt-js.log
+    npx -y @biomejs/biome format {{ if ARGS == "--fix" { "--write" } else { "" } }} src/parable.js 2>&1 | sed -u "s/^/[fmt-js] /" | tee /tmp/{{project}}-{{run_id}}-fmt-js.log
     {{ if ARGS == "--fix" { "npx -y @biomejs/biome format --write src/parable.js >/dev/null 2>&1 || true" } else { "" } }}

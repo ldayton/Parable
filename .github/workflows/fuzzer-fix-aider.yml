@@ -81,6 +81,8 @@ jobs:
           } > .aider-prompt.md
 
       - name: Run Aider
+        id: aider
+        continue-on-error: true
         uses: mirrajabi/aider-github-action@v1.1.0
         timeout-minutes: 30
         with:
@@ -89,6 +91,20 @@ jobs:
           branch: ${{ github.ref_name }}
           model: ${{ inputs.model }}
           aider_args: '--yes --read .aider-prompt.md --message "Follow the instructions in the prompt file."'
+
+      - name: Check for Aider errors
+        run: |
+          if [ -f .aider.chat.history.md ]; then
+            if grep -qiE '(BadRequestError|credit balance|invalid.*api.?key|authentication|unauthorized|rate.?limit)' .aider.chat.history.md; then
+              echo "::error::Aider encountered an API error"
+              grep -iE '(BadRequestError|credit balance|invalid.*api.?key|authentication|unauthorized|rate.?limit)' .aider.chat.history.md
+              exit 1
+            fi
+          fi
+          if [ "${{ steps.aider.outcome }}" = "failure" ]; then
+            echo "::error::Aider step failed"
+            exit 1
+          fi
 
       - name: Job summary
         if: always()

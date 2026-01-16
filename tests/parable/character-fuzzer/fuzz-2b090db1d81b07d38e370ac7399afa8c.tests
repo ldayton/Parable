@@ -1,0 +1,5 @@
+=== coproc with invalid name followed by arithmetic expression
+coproc +(())
+---
+(coproc "COPROC" (command (word "+(())")))
+---

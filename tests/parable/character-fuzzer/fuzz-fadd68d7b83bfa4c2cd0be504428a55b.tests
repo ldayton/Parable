@@ -1,0 +1,6 @@
+=== backslash-newline in arithmetic expansion
+$((\\
+1))
+---
+(command (word "$((\\\\\n1))"))
+---

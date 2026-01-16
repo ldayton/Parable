@@ -1,0 +1,5 @@
+=== space after <( in arithmetic expression
+((<( a)))
+---
+(arith (word "<( a)"))
+---

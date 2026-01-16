@@ -1,0 +1,6 @@
+=== process substitution with backslash-newline in comment
+>(#\
+),
+---
+(command (word ">(),"))
+---

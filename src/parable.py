@@ -4321,11 +4321,14 @@ class Parser:
             self.advance()  # skip newline
         return True
 
-    def parse_word(self, at_command_start: bool = False) -> Word | None:
+    def parse_word(
+        self, at_command_start: bool = False, in_array_literal: bool = False
+    ) -> Word | None:
         """Parse a word token, detecting parameter expansions and command substitutions.
 
         at_command_start: When True, preserve spaces inside brackets for array
         assignments like a[1 + 2]=. When False, spaces break the word.
+        in_array_literal: When True, track brackets at start of word for [key]=val patterns.
         """
         self.skip_whitespace()
 
@@ -4347,6 +4350,7 @@ class Parser:
             # Only at command start (array assignments), not in argument position
             # Only BEFORE = sign (key=1],a[1 should not track the [1 part)
             # Only after identifier char (not [[ which is conditional keyword)
+            # Also track in array elements like ([key]=val) to match brackets properly
             if ch == "[":
                 if bracket_depth > 0:
                     bracket_depth += 1
@@ -4363,6 +4367,13 @@ class Parser:
                         bracket_depth += 1
                         chars.append(self.advance())
                         continue
+                # Track brackets at start of word for array elements: ['key']=val or [key]=val
+                # This ensures we find the matching ] even across newlines
+                # Only applies when inside array literal (to avoid tracking [ in other contexts)
+                if not chars and not seen_equals and in_array_literal:
+                    bracket_depth += 1
+                    chars.append(self.advance())
+                    continue
             if ch == "]" and bracket_depth > 0:
                 bracket_depth -= 1
                 chars.append(self.advance())
@@ -4604,9 +4615,11 @@ class Parser:
                     chars.append(self.advance())  # (
 
             # Array literal: name=(elements) or name+=(elements)
+            # But not when inside brackets, as that would be part of array element
             elif (
                 ch == "("
                 and chars
+                and bracket_depth == 0
                 and (
                     chars[len(chars) - 1] == "="
                     or (
@@ -5304,7 +5317,7 @@ class Parser:
                 break
 
             # Parse an element word
-            word = self.parse_word()
+            word = self.parse_word(False, True)  # at_command_start=False, in_array_literal=True
             if word is None:
                 # Might be a closing paren or error
                 if self.peek() == ")":

@@ -8247,77 +8247,165 @@ class Parser {
 		// Parse the delimiter, handling quoting (can be mixed like 'EOF'"2")
 		quoted = false;
 		delimiter_chars = [];
-		while (!this.atEnd() && !_isMetachar(this.peek())) {
-			ch = this.peek();
-			if (ch === '"') {
-				quoted = true;
-				this.advance();
-				while (!this.atEnd() && this.peek() !== '"') {
-					delimiter_chars.push(this.advance());
-				}
-				if (!this.atEnd()) {
+		while (true) {
+			while (!this.atEnd() && !_isMetachar(this.peek())) {
+				ch = this.peek();
+				if (ch === '"') {
+					quoted = true;
 					this.advance();
-				}
-			} else if (ch === "'") {
-				quoted = true;
-				this.advance();
-				while (!this.atEnd() && this.peek() !== "'") {
-					delimiter_chars.push(this.advance());
-				}
-				if (!this.atEnd()) {
-					this.advance();
-				}
-			} else if (ch === "\\") {
-				this.advance();
-				if (!this.atEnd()) {
-					next_ch = this.peek();
-					if (next_ch === "\n") {
-						// Backslash-newline: continue delimiter on next line
-						this.advance();
-					} else {
-						// Regular escape - quotes the next char
-						quoted = true;
+					while (!this.atEnd() && this.peek() !== '"') {
 						delimiter_chars.push(this.advance());
 					}
-				}
-			} else if (
-				ch === "$" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "'"
-			) {
-				// ANSI-C quoting $'...' - skip $ and quotes, expand escapes
-				quoted = true;
-				this.advance();
-				this.advance();
-				while (!this.atEnd() && this.peek() !== "'") {
-					c = this.peek();
-					if (c === "\\" && this.pos + 1 < this.length) {
+					if (!this.atEnd()) {
 						this.advance();
-						esc = this.peek();
-						// Handle ANSI-C escapes using the lookup table
-						esc_val = _getAnsiEscape(esc);
-						if (esc_val >= 0) {
-							delimiter_chars.push(String.fromCodePoint(esc_val));
+					}
+				} else if (ch === "'") {
+					quoted = true;
+					this.advance();
+					while (!this.atEnd() && this.peek() !== "'") {
+						delimiter_chars.push(this.advance());
+					}
+					if (!this.atEnd()) {
+						this.advance();
+					}
+				} else if (ch === "\\") {
+					this.advance();
+					if (!this.atEnd()) {
+						next_ch = this.peek();
+						if (next_ch === "\n") {
+							// Backslash-newline: continue delimiter on next line
 							this.advance();
-						} else if (esc === "'") {
-							delimiter_chars.push(this.advance());
 						} else {
-							// Other escapes - just use the escaped char
+							// Regular escape - quotes the next char
+							quoted = true;
 							delimiter_chars.push(this.advance());
 						}
-					} else {
+					}
+				} else if (
+					ch === "$" &&
+					this.pos + 1 < this.length &&
+					this.source[this.pos + 1] === "'"
+				) {
+					// ANSI-C quoting $'...' - skip $ and quotes, expand escapes
+					quoted = true;
+					this.advance();
+					this.advance();
+					while (!this.atEnd() && this.peek() !== "'") {
+						c = this.peek();
+						if (c === "\\" && this.pos + 1 < this.length) {
+							this.advance();
+							esc = this.peek();
+							// Handle ANSI-C escapes using the lookup table
+							esc_val = _getAnsiEscape(esc);
+							if (esc_val >= 0) {
+								delimiter_chars.push(String.fromCodePoint(esc_val));
+								this.advance();
+							} else if (esc === "'") {
+								delimiter_chars.push(this.advance());
+							} else {
+								// Other escapes - just use the escaped char
+								delimiter_chars.push(this.advance());
+							}
+						} else {
+							delimiter_chars.push(this.advance());
+						}
+					}
+					if (!this.atEnd()) {
+						this.advance();
+					}
+				} else if (
+					ch === "$" &&
+					this.pos + 1 < this.length &&
+					this.source[this.pos + 1] === "("
+				) {
+					// Command substitution embedded in delimiter
+					delimiter_chars.push(this.advance());
+					delimiter_chars.push(this.advance());
+					depth = 1;
+					while (!this.atEnd() && depth > 0) {
+						c = this.peek();
+						if (c === "(") {
+							depth += 1;
+						} else if (c === ")") {
+							depth -= 1;
+						}
 						delimiter_chars.push(this.advance());
 					}
+				} else if (
+					ch === "$" &&
+					this.pos + 1 < this.length &&
+					this.source[this.pos + 1] === "{"
+				) {
+					// Parameter expansion embedded in delimiter
+					delimiter_chars.push(this.advance());
+					delimiter_chars.push(this.advance());
+					depth = 1;
+					while (!this.atEnd() && depth > 0) {
+						c = this.peek();
+						if (c === "{") {
+							depth += 1;
+						} else if (c === "}") {
+							depth -= 1;
+						}
+						delimiter_chars.push(this.advance());
+					}
+				} else if (ch === "`") {
+					// Backtick command substitution embedded in delimiter
+					// Note: In bash, backtick closes command sub even with unclosed quotes inside
+					delimiter_chars.push(this.advance());
+					while (!this.atEnd() && this.peek() !== "`") {
+						c = this.peek();
+						if (c === "'") {
+							// Single-quoted string inside backtick - skip to closing quote or `
+							delimiter_chars.push(this.advance());
+							while (
+								!this.atEnd() &&
+								this.peek() !== "'" &&
+								this.peek() !== "`"
+							) {
+								delimiter_chars.push(this.advance());
+							}
+							if (!this.atEnd() && this.peek() === "'") {
+								delimiter_chars.push(this.advance());
+							}
+						} else if (c === '"') {
+							// Double-quoted string inside backtick - skip to closing quote or `
+							delimiter_chars.push(this.advance());
+							while (
+								!this.atEnd() &&
+								this.peek() !== '"' &&
+								this.peek() !== "`"
+							) {
+								if (this.peek() === "\\" && this.pos + 1 < this.length) {
+									delimiter_chars.push(this.advance());
+								}
+								delimiter_chars.push(this.advance());
+							}
+							if (!this.atEnd() && this.peek() === '"') {
+								delimiter_chars.push(this.advance());
+							}
+						} else if (c === "\\" && this.pos + 1 < this.length) {
+							delimiter_chars.push(this.advance());
+							delimiter_chars.push(this.advance());
+						} else {
+							delimiter_chars.push(this.advance());
+						}
+					}
+					if (!this.atEnd()) {
+						delimiter_chars.push(this.advance());
+					}
+				} else {
+					delimiter_chars.push(this.advance());
 				}
-				if (!this.atEnd()) {
-					this.advance();
-				}
-			} else if (
-				ch === "$" &&
+			}
+			// Check for process substitution syntax <( or >( which is part of delimiter
+			if (
+				!this.atEnd() &&
+				"<>".includes(this.peek()) &&
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === "("
 			) {
-				// Command substitution embedded in delimiter
+				// Process substitution embedded in delimiter
 				delimiter_chars.push(this.advance());
 				delimiter_chars.push(this.advance());
 				depth = 1;
@@ -8330,72 +8418,9 @@ class Parser {
 					}
 					delimiter_chars.push(this.advance());
 				}
-			} else if (
-				ch === "$" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "{"
-			) {
-				// Parameter expansion embedded in delimiter
-				delimiter_chars.push(this.advance());
-				delimiter_chars.push(this.advance());
-				depth = 1;
-				while (!this.atEnd() && depth > 0) {
-					c = this.peek();
-					if (c === "{") {
-						depth += 1;
-					} else if (c === "}") {
-						depth -= 1;
-					}
-					delimiter_chars.push(this.advance());
-				}
-			} else if (ch === "`") {
-				// Backtick command substitution embedded in delimiter
-				// Note: In bash, backtick closes command sub even with unclosed quotes inside
-				delimiter_chars.push(this.advance());
-				while (!this.atEnd() && this.peek() !== "`") {
-					c = this.peek();
-					if (c === "'") {
-						// Single-quoted string inside backtick - skip to closing quote or `
-						delimiter_chars.push(this.advance());
-						while (
-							!this.atEnd() &&
-							this.peek() !== "'" &&
-							this.peek() !== "`"
-						) {
-							delimiter_chars.push(this.advance());
-						}
-						if (!this.atEnd() && this.peek() === "'") {
-							delimiter_chars.push(this.advance());
-						}
-					} else if (c === '"') {
-						// Double-quoted string inside backtick - skip to closing quote or `
-						delimiter_chars.push(this.advance());
-						while (
-							!this.atEnd() &&
-							this.peek() !== '"' &&
-							this.peek() !== "`"
-						) {
-							if (this.peek() === "\\" && this.pos + 1 < this.length) {
-								delimiter_chars.push(this.advance());
-							}
-							delimiter_chars.push(this.advance());
-						}
-						if (!this.atEnd() && this.peek() === '"') {
-							delimiter_chars.push(this.advance());
-						}
-					} else if (c === "\\" && this.pos + 1 < this.length) {
-						delimiter_chars.push(this.advance());
-						delimiter_chars.push(this.advance());
-					} else {
-						delimiter_chars.push(this.advance());
-					}
-				}
-				if (!this.atEnd()) {
-					delimiter_chars.push(this.advance());
-				}
-			} else {
-				delimiter_chars.push(this.advance());
+				continue;
 			}
+			break;
 		}
 		delimiter = delimiter_chars.join("");
 		// Find the end of the current line (command continues until newline)

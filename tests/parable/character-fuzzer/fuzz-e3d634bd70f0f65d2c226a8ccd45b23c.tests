@@ -1,0 +1,5 @@
+=== here-string operator in unterminated brace expansion
+${<<(}
+---
+(command (word "${<<(}"))
+---

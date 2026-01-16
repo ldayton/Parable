@@ -788,8 +788,13 @@ class Word extends Node {
 		bracket_in_double_quote = false;
 		while (i < value.length) {
 			ch = value[i];
-			if (ch === "\\" && i + 1 < value.length) {
-				// Escape - copy both chars
+			if (
+				ch === "\\" &&
+				i + 1 < value.length &&
+				!in_single_quote &&
+				!brace_in_single_quote
+			) {
+				// Escape - copy both chars (but NOT inside single quotes where \ is literal)
 				result.push(ch);
 				result.push(value[i + 1]);
 				i += 2;
@@ -2137,8 +2142,11 @@ class Word extends Node {
 					}
 					// Join parts with " | "
 					result.push(pattern_parts.join(" | "));
-					result.push(")");
-					i += 1;
+					// Only append closing ) if we found one (depth == 0)
+					if (depth === 0) {
+						result.push(")");
+						i += 1;
+					}
 					continue;
 				}
 			}
@@ -5713,6 +5721,26 @@ class Parser {
 				break;
 			}
 		}
+	}
+
+	_atListTerminatingBracket() {
+		let ch, next_pos;
+		if (this.atEnd()) {
+			return false;
+		}
+		ch = this.peek();
+		if (ch === ")") {
+			return true;
+		}
+		if (ch === "}") {
+			// } is only a list terminator if standalone (not part of a word like }})
+			next_pos = this.pos + 1;
+			if (next_pos >= this.length) {
+				return true;
+			}
+			return _isWordEndContext(this.source[next_pos]);
+		}
+		return false;
 	}
 
 	_collectRedirects() {
@@ -9595,13 +9623,25 @@ class Parser {
 						// Parameter expansion embedded in delimiter
 						delimiter_chars.push(this.advance());
 						delimiter_chars.push(this.advance());
-						depth = 1;
-						while (!this.atEnd() && depth > 0) {
+						depth = 0;
+						while (!this.atEnd()) {
 							c = this.peek();
 							if (c === "{") {
 								depth += 1;
 							} else if (c === "}") {
+								// Consume the closing brace
+								delimiter_chars.push(this.advance());
+								if (depth === 0) {
+									// Outer expansion closed
+									break;
+								}
 								depth -= 1;
+								// After closing inner brace, check if next is metachar
+								// If so, the expansion ends here (bash behavior)
+								if (depth === 0 && !this.atEnd() && _isMetachar(this.peek())) {
+									break;
+								}
+								continue;
 							}
 							delimiter_chars.push(this.advance());
 						}
@@ -12597,7 +12637,7 @@ class Parser {
 			op = this.parseListOperator();
 			// Newline acts as implicit semicolon if followed by more commands
 			if (op == null && has_newline) {
-				if (!this.atEnd() && !_isRightBracket(this.peek())) {
+				if (!this.atEnd() && !this._atListTerminatingBracket()) {
 					op = "\n";
 				}
 			}
@@ -12618,7 +12658,7 @@ class Parser {
 			// For & at end of list, don't require another command
 			if (op === "&") {
 				this.skipWhitespace();
-				if (this.atEnd() || _isRightBracket(this.peek())) {
+				if (this.atEnd() || this._atListTerminatingBracket()) {
 					break;
 				}
 				// Newline after & - in compound commands, skip it (& acts as separator)
@@ -12626,7 +12666,7 @@ class Parser {
 				if (this.peek() === "\n") {
 					if (newline_as_separator) {
 						this.skipWhitespaceAndNewlines();
-						if (this.atEnd() || _isRightBracket(this.peek())) {
+						if (this.atEnd() || this._atListTerminatingBracket()) {
 							break;
 						}
 					} else {
@@ -12637,7 +12677,7 @@ class Parser {
 			// For ; at end of list, don't require another command
 			if (op === ";") {
 				this.skipWhitespace();
-				if (this.atEnd() || _isRightBracket(this.peek())) {
+				if (this.atEnd() || this._atListTerminatingBracket()) {
 					break;
 				}
 				// Newline after ; means continue to see if more commands follow

@@ -1,0 +1,7 @@
+=== heredoc with trailing single quote in comment
+x<< y #'
+z
+---
+(command (word "x") (redirect "<<" "z
+"))
+---

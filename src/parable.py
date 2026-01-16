@@ -4982,6 +4982,14 @@ class Parser:
                 bracket_depth -= 1
             elif ch == "=" and not in_single and not in_double and bracket_depth == 0:
                 return True
+            elif (
+                not in_single
+                and not in_double
+                and bracket_depth == 0
+                and not (ch.isalnum() or ch == "_")
+            ):
+                # Invalid char in identifier part before =
+                return False
             i += 1
         return False
 

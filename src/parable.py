@@ -4690,6 +4690,10 @@ class Parser:
                                 delimiter_chars.append(self.advance())
                 delimiter = "".join(delimiter_chars)
                 if delimiter:
+                    # Check if ) immediately follows (closes cmdsub with empty heredoc)
+                    if not self.at_end() and self.peek() == ")":
+                        # Heredoc has no content - will be resolved later
+                        continue
                     # Skip to end of current line
                     while not self.at_end() and self.peek() != "\n":
                         self.advance()

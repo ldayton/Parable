@@ -5574,6 +5574,11 @@ class Parser {
 				}
 				delimiter = delimiter_chars.join("");
 				if (delimiter) {
+					// Check if ) immediately follows (closes cmdsub with empty heredoc)
+					if (!this.atEnd() && this.peek() === ")") {
+						// Heredoc has no content - will be resolved later
+						continue;
+					}
 					// Skip to end of current line
 					while (!this.atEnd() && this.peek() !== "\n") {
 						this.advance();

@@ -5356,8 +5356,47 @@ class Parser:
         depth = 1
         case_depth = 0  # Track nested case statements
         arith_depth = 0  # Track nested arithmetic expressions
+        # Heredoc state tracking - tracks when we're inside heredoc content
+        pending_heredocs: list[tuple[str, bool]] = []  # (delimiter, strip_tabs)
+        in_heredoc_body = False
+        current_heredoc_delim = ""
+        current_heredoc_strip = False
 
         while not self.at_end() and depth > 0:
+            # When in heredoc body, scan for delimiter line by line
+            if in_heredoc_body:
+                line_start = self.pos
+                line_end = line_start
+                while line_end < self.length and self.source[line_end] != "\n":
+                    line_end += 1
+                line = _substring(self.source, line_start, line_end)
+                check_line = line.lstrip("\t") if current_heredoc_strip else line
+                if check_line == current_heredoc_delim:
+                    # Found delimiter line
+                    self.pos = line_end
+                    if self.pos < self.length and self.source[self.pos] == "\n":
+                        self.advance()
+                    in_heredoc_body = False
+                    if len(pending_heredocs) > 0:
+                        current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
+                        in_heredoc_body = True
+                elif (
+                    check_line.startswith(current_heredoc_delim)
+                    and len(check_line) > len(current_heredoc_delim)
+                ):
+                    # Delimiter with trailing content (e.g., "EOF)" where ) follows delimiter)
+                    tabs_stripped = len(line) - len(check_line)
+                    self.pos = line_start + tabs_stripped + len(current_heredoc_delim)
+                    in_heredoc_body = False
+                    if len(pending_heredocs) > 0:
+                        current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
+                        in_heredoc_body = True
+                else:
+                    # Not the delimiter, skip this line
+                    self.pos = line_end
+                    if self.pos < self.length and self.source[self.pos] == "\n":
+                        self.advance()
+                continue
             c = self.peek()
 
             # ANSI-C quoted string $'...' - handle escape sequences
@@ -5490,8 +5529,93 @@ class Parser:
                 self._skip_backtick_parser()
                 continue
 
-            # Heredoc - skip until delimiter line is found (not inside arithmetic)
-            if arith_depth == 0 and c == "<" and self._skip_heredoc_in_cmdsub():
+            # Heredoc declaration - parse delimiter and track (not inside arithmetic)
+            if (
+                arith_depth == 0
+                and c == "<"
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "<"
+            ):
+                # Check for here-string <<< first (no body to track)
+                if self.pos + 2 < self.length and self.source[self.pos + 2] == "<":
+                    self.advance()  # <
+                    self.advance()  # <
+                    self.advance()  # <
+                    # Skip whitespace and here-string word
+                    while not self.at_end() and _is_whitespace_no_newline(self.peek()):
+                        self.advance()
+                    while (
+                        not self.at_end()
+                        and not _is_whitespace(self.peek())
+                        and self.peek() not in "()"
+                    ):
+                        if self.peek() == "\\" and self.pos + 1 < self.length:
+                            self.advance()
+                            self.advance()
+                        elif self.peek() in "\"'":
+                            quote = self.peek()
+                            self.advance()
+                            while not self.at_end() and self.peek() != quote:
+                                if quote == '"' and self.peek() == "\\":
+                                    self.advance()
+                                self.advance()
+                            if not self.at_end():
+                                self.advance()
+                        else:
+                            self.advance()
+                    continue
+                # It's a heredoc <<
+                self.advance()  # <
+                self.advance()  # <
+                strip_tabs = False
+                if not self.at_end() and self.peek() == "-":
+                    strip_tabs = True
+                    self.advance()
+                # Skip whitespace before delimiter
+                while not self.at_end() and _is_whitespace_no_newline(self.peek()):
+                    self.advance()
+                # Parse delimiter (handling quoting)
+                delimiter_chars: list[str] = []
+                if not self.at_end():
+                    ch = self.peek()
+                    if _is_quote(ch):
+                        quote = self.advance()
+                        while not self.at_end() and self.peek() != quote:
+                            delimiter_chars.append(self.advance())
+                        if not self.at_end():
+                            self.advance()  # closing quote
+                    elif ch == "\\":
+                        self.advance()
+                        if not self.at_end():
+                            delimiter_chars.append(self.advance())
+                        while not self.at_end() and not _is_metachar(self.peek()):
+                            delimiter_chars.append(self.advance())
+                    else:
+                        while not self.at_end() and not _is_metachar(self.peek()):
+                            ch = self.peek()
+                            if _is_quote(ch):
+                                quote = self.advance()
+                                while not self.at_end() and self.peek() != quote:
+                                    delimiter_chars.append(self.advance())
+                                if not self.at_end():
+                                    self.advance()
+                            elif ch == "\\":
+                                self.advance()
+                                if not self.at_end():
+                                    delimiter_chars.append(self.advance())
+                            else:
+                                delimiter_chars.append(self.advance())
+                delimiter = "".join(delimiter_chars)
+                if delimiter:
+                    pending_heredocs.append((delimiter, strip_tabs))
+                continue
+
+            # Newline - check if we should enter heredoc body mode
+            if c == "\n":
+                self.advance()
+                if len(pending_heredocs) > 0:
+                    current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
+                    in_heredoc_body = True
                 continue
 
             # Track case/esac for pattern terminator handling

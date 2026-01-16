@@ -6574,23 +6574,34 @@ class Parser {
 			arith_depth,
 			c,
 			case_depth,
+			ch,
 			check_line,
 			cmd,
 			content,
 			content_start,
+			current_heredoc_delim,
+			current_heredoc_strip,
 			delim,
+			delimiter,
+			delimiter_chars,
 			depth,
 			found_in_content,
 			heredoc_delimiters,
 			heredoc_end,
 			heredoc_scan_pos,
 			heredoc_start,
+			in_heredoc_body,
 			line,
+			line_end,
+			line_start,
 			nc,
 			nested_depth,
+			pending_heredocs,
+			quote,
 			start,
 			strip_tabs,
 			sub_parser,
+			tabs_stripped,
 			text,
 			text_end;
 		if (this.atEnd() || this.peek() !== "$") {
@@ -6611,7 +6622,55 @@ class Parser {
 		depth = 1;
 		case_depth = 0;
 		arith_depth = 0;
+		// Heredoc state tracking - tracks when we're inside heredoc content
+		pending_heredocs = [];
+		in_heredoc_body = false;
+		current_heredoc_delim = "";
+		current_heredoc_strip = false;
 		while (!this.atEnd() && depth > 0) {
+			// When in heredoc body, scan for delimiter line by line
+			if (in_heredoc_body) {
+				line_start = this.pos;
+				line_end = line_start;
+				while (line_end < this.length && this.source[line_end] !== "\n") {
+					line_end += 1;
+				}
+				line = this.source.slice(line_start, line_end);
+				check_line = current_heredoc_strip ? line.replace(/^[\t]+/, "") : line;
+				if (check_line === current_heredoc_delim) {
+					// Found delimiter line
+					this.pos = line_end;
+					if (this.pos < this.length && this.source[this.pos] === "\n") {
+						this.advance();
+					}
+					in_heredoc_body = false;
+					if (pending_heredocs.length > 0) {
+						[current_heredoc_delim, current_heredoc_strip] =
+							pending_heredocs.pop(0);
+						in_heredoc_body = true;
+					}
+				} else if (
+					check_line.startsWith(current_heredoc_delim) &&
+					check_line.length > current_heredoc_delim.length
+				) {
+					// Delimiter with trailing content (e.g., "EOF)" where ) follows delimiter)
+					tabs_stripped = line.length - check_line.length;
+					this.pos = line_start + tabs_stripped + current_heredoc_delim.length;
+					in_heredoc_body = false;
+					if (pending_heredocs.length > 0) {
+						[current_heredoc_delim, current_heredoc_strip] =
+							pending_heredocs.pop(0);
+						in_heredoc_body = true;
+					}
+				} else {
+					// Not the delimiter, skip this line
+					this.pos = line_end;
+					if (this.pos < this.length && this.source[this.pos] === "\n") {
+						this.advance();
+					}
+				}
+				continue;
+			}
 			c = this.peek();
 			// ANSI-C quoted string $'...' - handle escape sequences
 			if (
@@ -6765,8 +6824,116 @@ class Parser {
 				this._skipBacktickParser();
 				continue;
 			}
-			// Heredoc - skip until delimiter line is found (not inside arithmetic)
-			if (arith_depth === 0 && c === "<" && this._skipHeredocInCmdsub()) {
+			// Heredoc declaration - parse delimiter and track (not inside arithmetic)
+			if (
+				arith_depth === 0 &&
+				c === "<" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "<"
+			) {
+				// Check for here-string <<< first (no body to track)
+				if (this.pos + 2 < this.length && this.source[this.pos + 2] === "<") {
+					this.advance();
+					this.advance();
+					this.advance();
+					// Skip whitespace and here-string word
+					while (!this.atEnd() && _isWhitespaceNoNewline(this.peek())) {
+						this.advance();
+					}
+					while (
+						!this.atEnd() &&
+						!_isWhitespace(this.peek()) &&
+						!"()".includes(this.peek())
+					) {
+						if (this.peek() === "\\" && this.pos + 1 < this.length) {
+							this.advance();
+							this.advance();
+						} else if ("\"'".includes(this.peek())) {
+							quote = this.peek();
+							this.advance();
+							while (!this.atEnd() && this.peek() !== quote) {
+								if (quote === '"' && this.peek() === "\\") {
+									this.advance();
+								}
+								this.advance();
+							}
+							if (!this.atEnd()) {
+								this.advance();
+							}
+						} else {
+							this.advance();
+						}
+					}
+					continue;
+				}
+				// It's a heredoc <<
+				this.advance();
+				this.advance();
+				strip_tabs = false;
+				if (!this.atEnd() && this.peek() === "-") {
+					strip_tabs = true;
+					this.advance();
+				}
+				// Skip whitespace before delimiter
+				while (!this.atEnd() && _isWhitespaceNoNewline(this.peek())) {
+					this.advance();
+				}
+				// Parse delimiter (handling quoting)
+				delimiter_chars = [];
+				if (!this.atEnd()) {
+					ch = this.peek();
+					if (_isQuote(ch)) {
+						quote = this.advance();
+						while (!this.atEnd() && this.peek() !== quote) {
+							delimiter_chars.push(this.advance());
+						}
+						if (!this.atEnd()) {
+							this.advance();
+						}
+					} else if (ch === "\\") {
+						this.advance();
+						if (!this.atEnd()) {
+							delimiter_chars.push(this.advance());
+						}
+						while (!this.atEnd() && !_isMetachar(this.peek())) {
+							delimiter_chars.push(this.advance());
+						}
+					} else {
+						while (!this.atEnd() && !_isMetachar(this.peek())) {
+							ch = this.peek();
+							if (_isQuote(ch)) {
+								quote = this.advance();
+								while (!this.atEnd() && this.peek() !== quote) {
+									delimiter_chars.push(this.advance());
+								}
+								if (!this.atEnd()) {
+									this.advance();
+								}
+							} else if (ch === "\\") {
+								this.advance();
+								if (!this.atEnd()) {
+									delimiter_chars.push(this.advance());
+								}
+							} else {
+								delimiter_chars.push(this.advance());
+							}
+						}
+					}
+				}
+				delimiter = delimiter_chars.join("");
+				if (delimiter) {
+					pending_heredocs.push([delimiter, strip_tabs]);
+				}
+				continue;
+			}
+			// Newline - check if we should enter heredoc body mode
+			if (c === "\n") {
+				this.advance();
+				if (pending_heredocs.length > 0) {
+					[current_heredoc_delim, current_heredoc_strip] =
+						pending_heredocs.pop(0);
+					in_heredoc_body = true;
+				}
 				continue;
 			}
 			// Track case/esac for pattern terminator handling

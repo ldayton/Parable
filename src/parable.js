@@ -5930,6 +5930,14 @@ class Parser {
 				bracket_depth === 0
 			) {
 				return true;
+			} else if (
+				!in_single &&
+				!in_double &&
+				bracket_depth === 0 &&
+				!(/^[a-zA-Z0-9]$/.test(ch) || ch === "_")
+			) {
+				// Invalid char in identifier part before =
+				return false;
 			}
 			i += 1;
 		}

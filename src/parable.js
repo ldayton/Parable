@@ -695,6 +695,33 @@ class Word extends Node {
 										break;
 									}
 								}
+								// If no operator at start and the first char is NOT a known
+								// bash operator character, also check if any operator exists
+								// later (handles cases like ${x{%...} where { precedes the operator)
+								// Known operator start chars: % # / ^ , ~ : + - = ?
+								if (
+									!in_pattern &&
+									op_start &&
+									!"%#/^,~:+-=?".includes(op_start[0])
+								) {
+									for (op of [
+										"//",
+										"%%",
+										"##",
+										"/",
+										"%",
+										"#",
+										"^",
+										"^^",
+										",",
+										",,",
+									]) {
+										if (op_start.includes(op)) {
+											in_pattern = true;
+											break;
+										}
+									}
+								}
 							} else if (var_name_len === 0 && after_brace.length > 1) {
 								// Handle invalid variable names (var_name_len = 0) where first char is not a pattern operator
 								// but there's a pattern operator later (e.g., ${>%$'b'})

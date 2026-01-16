@@ -1165,7 +1165,9 @@ class Word extends Node {
 	}
 
 	_formatCommandSubstitutions(value) {
-		let c,
+		let arith_depth,
+			arith_paren_depth,
+			c,
 			cmdsub_idx,
 			cmdsub_parts,
 			deprecated_arith_depth,
@@ -1275,6 +1277,8 @@ class Word extends Node {
 		in_double_quote = false;
 		extglob_depth = 0;
 		deprecated_arith_depth = 0;
+		arith_depth = 0;
+		arith_paren_depth = 0;
 		while (i < value.length) {
 			// Check for extglob start: @( ?( *( +( !(
 			if (
@@ -1307,6 +1311,40 @@ class Word extends Node {
 				result.push(value[i]);
 				i += 1;
 				continue;
+			}
+			// Track $((...)) arithmetic - inside it, >( and <( are not process subs
+			if (_startsWithAt(value, i, "$((") && !_isBackslashEscaped(value, i)) {
+				arith_depth += 1;
+				arith_paren_depth += 2;
+				result.push("$((");
+				i += 3;
+				continue;
+			}
+			// Track )) that closes arithmetic (only when no inner parens open)
+			if (
+				arith_depth > 0 &&
+				arith_paren_depth === 2 &&
+				_startsWithAt(value, i, "))")
+			) {
+				arith_depth -= 1;
+				arith_paren_depth -= 2;
+				result.push("))");
+				i += 2;
+				continue;
+			}
+			// Track ( and ) inside arithmetic
+			if (arith_depth > 0) {
+				if (value[i] === "(") {
+					arith_paren_depth += 1;
+					result.push(value[i]);
+					i += 1;
+					continue;
+				} else if (value[i] === ")") {
+					arith_paren_depth -= 1;
+					result.push(value[i]);
+					i += 1;
+					continue;
+				}
 			}
 			// Check for $( command substitution (but not $(( arithmetic or escaped \$()
 			if (
@@ -1371,9 +1409,10 @@ class Word extends Node {
 			} else if (
 				(_startsWithAt(value, i, ">(") || _startsWithAt(value, i, "<(")) &&
 				!in_double_quote &&
-				deprecated_arith_depth === 0
+				deprecated_arith_depth === 0 &&
+				arith_depth === 0
 			) {
-				// Check for >( or <( process substitution (not inside double quotes or $[...])
+				// Check for >( or <( process substitution (not inside double quotes, $[...], or $((...)))
 				// Check if this is actually a process substitution or just comparison + parens
 				// Process substitution: not preceded by alphanumeric
 				is_procsub = i === 0 || !/^[a-zA-Z0-9]$/.test(value[i - 1]);

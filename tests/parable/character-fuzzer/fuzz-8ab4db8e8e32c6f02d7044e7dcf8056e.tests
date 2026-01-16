@@ -1,0 +1,7 @@
+=== extglob pattern a*() not parsed as function
+a*()
+{ :; }
+---
+(command (word "a*()"))
+(brace-group (command (word ":")))
+---

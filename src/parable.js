@@ -824,6 +824,7 @@ class Word extends Node {
 			bracket_depth,
 			ch,
 			depth,
+			dq_brace_depth,
 			dq_content,
 			i,
 			in_whitespace,
@@ -861,9 +862,11 @@ class Word extends Node {
 				i = j + 1;
 			} else if (ch === '"') {
 				// Double-quoted string - strip line continuations
+				// Track ${...} nesting since quotes inside expansions don't end the string
 				in_whitespace = false;
 				j = i + 1;
 				dq_content = ['"'];
+				dq_brace_depth = 0;
 				while (j < inner.length) {
 					if (inner[j] === "\\" && j + 1 < inner.length) {
 						if (inner[j + 1] === "\n") {
@@ -874,7 +877,21 @@ class Word extends Node {
 							dq_content.push(inner[j + 1]);
 							j += 2;
 						}
-					} else if (inner[j] === '"') {
+					} else if (
+						inner[j] === "$" &&
+						j + 1 < inner.length &&
+						inner[j + 1] === "{"
+					) {
+						// Start of ${...} expansion
+						dq_content.push("${");
+						dq_brace_depth += 1;
+						j += 2;
+					} else if (inner[j] === "}" && dq_brace_depth > 0) {
+						// End of ${...} expansion
+						dq_content.push("}");
+						dq_brace_depth -= 1;
+						j += 1;
+					} else if (inner[j] === '"' && dq_brace_depth === 0) {
 						dq_content.push('"');
 						j += 1;
 						break;
@@ -1206,6 +1223,7 @@ class Word extends Node {
 			c,
 			cmdsub_idx,
 			cmdsub_parts,
+			compact,
 			deprecated_arith_depth,
 			depth,
 			direction,
@@ -1471,7 +1489,8 @@ class Word extends Node {
 					direction = value[i];
 					j = _findCmdsubEnd(value, i + 2);
 					node = procsub_parts[procsub_idx];
-					formatted = _formatCmdsubNode(node.command, 0, true, false, true);
+					compact = _startsWithSubshell(node.command);
+					formatted = _formatCmdsubNode(node.command, 0, true, compact, true);
 					if (node.command.kind === "subshell") {
 						raw_content = value.slice(i + 2, j - 1);
 						// Extract leading whitespace
@@ -1526,7 +1545,8 @@ class Word extends Node {
 						parsed = parser.parseList();
 						// Only use parsed result if parser consumed all input
 						if (parsed && parser.pos === inner_to_parse.length) {
-							formatted = _formatCmdsubNode(parsed, 0, true, false, true);
+							compact = _startsWithSubshell(parsed);
+							formatted = _formatCmdsubNode(parsed, 0, true, compact, true);
 						} else {
 							formatted = inner;
 							leading_ws = "";
@@ -3268,6 +3288,28 @@ function _formatCondBody(node) {
 	return "";
 }
 
+function _startsWithSubshell(node) {
+	let p;
+	if (node.kind === "subshell") {
+		return true;
+	}
+	if (node.kind === "list") {
+		for (p of node.parts) {
+			if (p.kind !== "operator") {
+				return _startsWithSubshell(p);
+			}
+		}
+		return false;
+	}
+	if (node.kind === "pipeline") {
+		if (node.commands && node.commands.length) {
+			return _startsWithSubshell(node.commands[0]);
+		}
+		return false;
+	}
+	return false;
+}
+
 function _formatCmdsubNode(
 	node,
 	indent,
@@ -3855,7 +3897,11 @@ function _findCmdsubEnd(value, start) {
 		in_case_patterns,
 		in_double,
 		in_single,
-		j;
+		is_valid_arith,
+		j,
+		scan_c,
+		scan_i,
+		scan_paren;
 	depth = 1;
 	i = start;
 	in_single = false;
@@ -3954,9 +4000,34 @@ function _findCmdsubEnd(value, start) {
 			continue;
 		}
 		// Handle arithmetic expressions $((
+		// Only treat as arithmetic if there's no ; before )) at top level
+		// (semicolon isn't valid in arithmetic, so $((x;y)) is actually $((...);...))
 		if (_startsWithAt(value, i, "$((")) {
-			arith_depth += 1;
-			i += 3;
+			is_valid_arith = true;
+			scan_paren = 0;
+			for (scan_i = i + 3; scan_i < value.length; scan_i++) {
+				scan_c = value[scan_i];
+				if (scan_c === "(") {
+					scan_paren += 1;
+				} else if (scan_c === ")") {
+					if (scan_paren > 0) {
+						scan_paren -= 1;
+					} else if (scan_i + 1 < value.length && value[scan_i + 1] === ")") {
+						break;
+					}
+				} else if (scan_c === ";" && scan_paren === 0) {
+					is_valid_arith = false;
+					break;
+				}
+			}
+			if (is_valid_arith) {
+				arith_depth += 1;
+				i += 3;
+				continue;
+			}
+			// else: not valid arithmetic, treat $( as nested cmdsub and ( as paren
+			j = _findCmdsubEnd(value, i + 2);
+			i = j;
 			continue;
 		}
 		// Handle arithmetic close )) - only when no inner grouping parens are open
@@ -5574,6 +5645,11 @@ class Parser {
 				}
 				delimiter = delimiter_chars.join("");
 				if (delimiter) {
+					// Check if ) immediately follows (closes cmdsub with empty heredoc)
+					if (!this.atEnd() && this.peek() === ")") {
+						// Heredoc has no content - will be resolved later
+						continue;
+					}
 					// Skip to end of current line
 					while (!this.atEnd() && this.peek() !== "\n") {
 						this.advance();
@@ -8328,7 +8404,13 @@ class Parser {
 		line_end = this.pos;
 		while (line_end < this.length && this.source[line_end] !== "\n") {
 			ch = this.source[line_end];
-			if (ch === "'") {
+			if (ch === "#") {
+				// Comment - skip to end of line (don't parse quotes in comments)
+				while (line_end < this.length && this.source[line_end] !== "\n") {
+					line_end += 1;
+				}
+				break;
+			} else if (ch === "'") {
 				// Single-quoted string - skip to closing quote (no escapes)
 				line_end += 1;
 				while (line_end < this.length && this.source[line_end] !== "'") {
@@ -10463,7 +10545,7 @@ class Parser {
 	}
 
 	parseFunction() {
-		let body, name, name_start, saved_pos;
+		let body, has_whitespace, name, name_start, pos_after_name, saved_pos;
 		this.skipWhitespace();
 		if (this.atEnd()) {
 			return null;
@@ -10527,7 +10609,15 @@ class Parser {
 			return null;
 		}
 		// Check for () - whitespace IS allowed between name and (
+		// But if name ends with extglob prefix (*?@+!) and () is adjacent,
+		// it's an extglob pattern, not a function definition
+		pos_after_name = this.pos;
 		this.skipWhitespace();
+		has_whitespace = this.pos > pos_after_name;
+		if (!has_whitespace && name && "*?@+!".includes(name[name.length - 1])) {
+			this.pos = saved_pos;
+			return null;
+		}
 		if (this.atEnd() || this.peek() !== "(") {
 			this.pos = saved_pos;
 			return null;

@@ -635,8 +635,8 @@ class Word extends Node {
 					expanded.endsWith("'")
 				) {
 					inner = expanded.slice(1, expanded.length - 1);
-					// Only strip if non-empty and no CTLESC
-					if (inner && inner.indexOf("") === -1) {
+					// Only strip if no CTLESC (empty inner is OK for $'')
+					if (inner.indexOf("") === -1) {
 						// Check if we're in a pattern context (%, %%, #, ##, /, //)
 						// For pattern operators, keep quotes; for others (like ~), strip them
 						result_str = result.join("");

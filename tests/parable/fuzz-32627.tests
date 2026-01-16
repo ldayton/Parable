@@ -1,0 +1,5 @@
+=== arithmetic with quoted process substitution start
+(( '<(' ))
+---
+(arith (word " '<(' "))
+---

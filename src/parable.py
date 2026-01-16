@@ -6826,8 +6826,30 @@ class Parser:
 
         while not self.at_end() and depth > 0:
             c = self.peek()
-
-            if c == "(":
+            # Skip single-quoted strings (parens inside don't count)
+            if c == "'":
+                self.advance()
+                while not self.at_end() and self.peek() != "'":
+                    self.advance()
+                if not self.at_end():
+                    self.advance()  # consume closing '
+            # Skip double-quoted strings (parens inside don't count)
+            elif c == '"':
+                self.advance()
+                while not self.at_end():
+                    if self.peek() == "\\" and self.pos + 1 < self.length:
+                        self.advance()
+                        self.advance()
+                    elif self.peek() == '"':
+                        self.advance()
+                        break
+                    else:
+                        self.advance()
+            # Handle backslash escapes outside quotes
+            elif c == "\\" and self.pos + 1 < self.length:
+                self.advance()
+                self.advance()
+            elif c == "(":
                 depth += 1
                 self.advance()
             elif c == ")":

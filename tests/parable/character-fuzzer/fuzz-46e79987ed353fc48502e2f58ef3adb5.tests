@@ -1,0 +1,7 @@
+=== heredoc delimiter followed by tab and content
+cat <<E
+EOF
+---
+(command (word "cat") (redirect "<<" "EOF
+"))
+---

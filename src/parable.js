@@ -8246,6 +8246,7 @@ class Parser {
 		let add_newline,
 			c,
 			ch,
+			char_after_delim,
 			check_line,
 			content,
 			content_lines,
@@ -8555,12 +8556,21 @@ class Parser {
 			}
 			// At EOF with line starting with delimiter - heredoc terminates (process sub case)
 			// e.g. <(<<a\na ) - the "a " line starts with delimiter "a" and we're at EOF
+			// Only match if there's a word boundary after the delimiter (whitespace or metachar)
 			if (line_end >= this.length && check_line.startsWith(delimiter)) {
-				// Adjust line_end to point just past the delimiter, not the whole line
-				// This allows remaining content after delimiter to be parsed
-				tabs_stripped = line.length - check_line.length;
-				line_end = line_start + tabs_stripped + delimiter.length;
-				break;
+				// Check if there's a proper word boundary after the delimiter
+				char_after_delim = null;
+				if (check_line.length > delimiter.length) {
+					char_after_delim = check_line[delimiter.length];
+				}
+				// Only treat as delimiter if followed by whitespace/metachar or is exact match
+				if (char_after_delim == null || _isMetachar(char_after_delim)) {
+					// Adjust line_end to point just past the delimiter, not the whole line
+					// This allows remaining content after delimiter to be parsed
+					tabs_stripped = line.length - check_line.length;
+					line_end = line_start + tabs_stripped + delimiter.length;
+					break;
+				}
 			}
 			// Add line to content (with newline, since we consumed continuations above)
 			if (strip_tabs) {

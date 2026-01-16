@@ -1,0 +1,5 @@
+=== case statement with leading } in command substitution
+"$(}case x in x)esac)"
+---
+(command (word "\"$(}case x in x)esac)\""))
+---

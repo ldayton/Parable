@@ -1,0 +1,7 @@
+=== heredoc delimiter must match exactly, not with trailing space
+x<<E
+E 
+---
+(command (word "x") (redirect "<<" "E 
+"))
+---

@@ -4757,6 +4757,22 @@ function _extractHeredocDelimiters(content) {
 			content[i + 1] === "<"
 		) {
 			i += 2;
+			// Check for <<< (here-string) - skip it, not a heredoc
+			if (i < content.length && content[i] === "<") {
+				i += 1;
+				// Skip whitespace and word
+				while (i < content.length && _isWhitespaceNoNewline(content[i])) {
+					i += 1;
+				}
+				while (
+					i < content.length &&
+					!_isWhitespace(content[i]) &&
+					!"()".includes(content[i])
+				) {
+					i += 1;
+				}
+				continue;
+			}
 			strip_tabs = false;
 			if (i < content.length && content[i] === "-") {
 				strip_tabs = true;
@@ -6117,6 +6133,40 @@ class Parser {
 			) {
 				this.advance();
 				this.advance();
+				// Check for <<< (here-string) - just skip the word and continue
+				if (!this.atEnd() && this.peek() === "<") {
+					this.advance();
+					// Skip whitespace before word
+					while (!this.atEnd() && _isWhitespaceNoNewline(this.peek())) {
+						this.advance();
+					}
+					// Skip the here-string word
+					while (
+						!this.atEnd() &&
+						!_isWhitespace(this.peek()) &&
+						!"()".includes(this.peek())
+					) {
+						if (this.peek() === "\\" && this.pos + 1 < this.length) {
+							this.advance();
+							this.advance();
+						} else if ("\"'".includes(this.peek())) {
+							quote = this.peek();
+							this.advance();
+							while (!this.atEnd() && this.peek() !== quote) {
+								if (quote === '"' && this.peek() === "\\") {
+									this.advance();
+								}
+								this.advance();
+							}
+							if (!this.atEnd()) {
+								this.advance();
+							}
+						} else {
+							this.advance();
+						}
+					}
+					continue;
+				}
 				// Check for <<- (strip tabs)
 				if (!this.atEnd() && this.peek() === "-") {
 					this.advance();

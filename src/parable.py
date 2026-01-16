@@ -276,6 +276,9 @@ class Word(Node):
                 while i < len(value) and depth > 0:
                     ch = value[i]
                     if ch == "\\" and i + 1 < len(value) and not in_single:
+                        if value[i + 1] == "\n":
+                            i += 2
+                            continue
                         result.append(ch)
                         result.append(value[i + 1])
                         i += 2

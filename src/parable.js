@@ -266,6 +266,10 @@ class Word extends Node {
 				while (i < value.length && depth > 0) {
 					ch = value[i];
 					if (ch === "\\" && i + 1 < value.length && !in_single) {
+						if (value[i + 1] === "\n") {
+							i += 2;
+							continue;
+						}
 						result.push(ch);
 						result.push(value[i + 1]);
 						i += 2;

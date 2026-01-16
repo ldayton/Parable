@@ -1,0 +1,6 @@
+=== backslash-newline in parameter expansion
+${a\
+}
+---
+(command (word "${a}"))
+---

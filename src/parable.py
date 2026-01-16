@@ -7098,8 +7098,8 @@ class Parser:
                 # Count consecutive $ chars to check for $$ (PID param)
                 dollar_count = 1 + _count_consecutive_dollars_before(self.source, self.pos)
                 if dollar_count % 2 == 1:
-                    # Odd count: locale/ANSI-C string - skip the $ and treat as operator
-                    self.advance()  # skip $
+                    # Odd count: locale/ANSI-C string - don't consume $, let argument loop handle it
+                    # The $ needs to be preserved for _expand_all_ansi_c_quotes to process $'...'
                     op = ""  # empty operator means no operator
                 else:
                     # Even count: this $ is part of $$ (PID), treat as unknown operator

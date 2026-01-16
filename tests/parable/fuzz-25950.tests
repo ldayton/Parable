@@ -1,0 +1,5 @@
+=== arithmetic with cmdsub followed by operator and hash
+$(($(a)+#))
+---
+(command (word "$(($(a)+#))"))
+---

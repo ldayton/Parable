@@ -6341,8 +6341,8 @@ class Parser {
 		}
 		// Check for end of expression or operators - bash allows missing operands
 		// (defers validation to runtime), so we return an empty node
-		// Include {} which bash accepts syntactically but fails at runtime
-		if (this._arithAtEnd() || ")]:,?|&<>=!+-*/%^~{}".includes(c)) {
+		// Include #{} which bash accepts syntactically but fails at runtime
+		if (this._arithAtEnd() || ")]:,?|&<>=!+-*/%^~#{}".includes(c)) {
 			return new ArithEmpty();
 		}
 		// Number or variable

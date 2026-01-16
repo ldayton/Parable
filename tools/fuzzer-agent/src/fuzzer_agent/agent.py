@@ -126,7 +126,7 @@ class FuzzerFixer:
             tools=self.tools,
             conversation_manager=SlidingWindowConversationManager(
                 window_size=40,
-                should_truncate_results=True,
+                should_truncate_results=False,
                 per_turn=True,
             ),
         )

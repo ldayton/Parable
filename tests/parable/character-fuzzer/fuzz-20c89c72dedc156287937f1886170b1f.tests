@@ -1,0 +1,5 @@
+=== && in unquoted regex pattern terminates the regex
+[[ x =~ [&&] ]]
+---
+(cond (cond-and (cond-binary "=~" (cond-term "x") (cond-term "[")) (cond-unary "-n" (cond-term "]"))))
+---

@@ -7892,6 +7892,11 @@ class Parser:
                     # Check for ) when inside paren group
                     if sc == ")" and paren_depth > 0:
                         break  # Won't close before )
+                    # Check for && or || - these terminate the regex even inside brackets
+                    if sc == "&" and scan + 1 < self.length and self.source[scan + 1] == "&":
+                        break  # Won't close before &&
+                    if sc == "|" and scan + 1 < self.length and self.source[scan + 1] == "|":
+                        break  # Won't close before ||
                     if sc == "]":
                         bracket_will_close = True
                         break

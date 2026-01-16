@@ -3191,7 +3191,7 @@ def _format_cmdsub_node(
         body = _format_cmdsub_node(inner_body, indent + 4).rstrip(";")
         return f"function {name} () \n{{ \n{inner_sp}{body}\n}}"
     if node.kind == "subshell":
-        body = _format_cmdsub_node(node.body, indent, in_procsub, compact_redirects=in_procsub)
+        body = _format_cmdsub_node(node.body, indent, in_procsub, compact_redirects)
         redirects = ""
         if node.redirects:
             redirect_parts = []

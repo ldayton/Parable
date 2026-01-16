@@ -4766,6 +4766,8 @@ class Parser:
         self.advance()  # consume final )
 
         text = _substring(self.source, start, self.pos)
+        # Strip line continuations (backslash-newline) from text used for word construction
+        text = text.replace("\\\n", "")
 
         # Parse the content as a command list
         sub_parser = Parser(content)

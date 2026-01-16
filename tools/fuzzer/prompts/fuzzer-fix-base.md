@@ -12,12 +12,19 @@ Find and fix one parser bug using the fuzzer.
    cd tools/fuzzer && uv run fuzzer --character --both-succeed --stop-after 1 -n 100000 -v
    ```
 
-3. **Create an MRE.** Shrink the input to the smallest string that still shows the discrepancy:
+3. **Create an MRE** using delta debugging to automatically minimize the input:
+   ```bash
+   cd tools/fuzzer && uv run fuzzer --minimize 'FAILING_INPUT'
+   ```
+   This outputs the smallest string that still shows the discrepancy.
+
+   If minimize times out or fails, manually shrink by removing characters while verifying the discrepancy persists:
    ```bash
    ~/source/bash-oracle/bash-oracle -e 'INPUT'   # oracle
    uv run bin/parable-dump.py 'INPUT'            # parable
    ```
-   Keep removing characters until you can't anymore.
+
+   **Always verify the MRE** before proceeding - check that both parsers succeed but produce different output.
 
 4. **Add a failing test** to `tests/parable/character-fuzzer/fuzz-$FUZZ_ID.tests`:
    ```

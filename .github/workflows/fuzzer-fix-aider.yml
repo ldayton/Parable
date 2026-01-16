@@ -72,15 +72,47 @@ jobs:
               ;;
           esac
 
+      - name: Generate fuzz ID
+        id: fuzz
+        run: echo "id=$(openssl rand -hex 16)" >> $GITHUB_OUTPUT
+
+      - name: Run fuzzer
+        id: fuzzer
+        run: |
+          cd tools/fuzzer
+          set +e
+          output=$(uv run fuzzer --character --both-succeed --stop-after 1 -n 100000 -v 2>&1)
+          exit_code=$?
+          set -e
+          echo "$output"
+          echo "$output" > ../../.fuzzer-output.txt
+          if echo "$output" | grep -q "Found discrepancy"; then
+            echo "found=true" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Combine prompts
+        if: steps.fuzzer.outputs.found == 'true'
         run: |
           {
+            echo "# Fuzzer Fix Task"
+            echo ""
+            echo "FUZZ_ID: ${{ steps.fuzz.outputs.id }}"
+            echo ""
+            echo "## Fuzzer Output"
+            echo ""
+            echo '```'
+            cat .fuzzer-output.txt
+            echo '```'
+            echo ""
             cat tools/fuzzer/prompts/fuzzer-fix-base.md
             echo ""
             cat tools/fuzzer/prompts/fuzzer-fix-workflow.md
           } > .aider-prompt.md
 
       - name: Run Aider
+        if: steps.fuzzer.outputs.found == 'true'
         id: aider
         continue-on-error: true
         uses: mirrajabi/aider-github-action@v1.1.0
@@ -93,6 +125,7 @@ jobs:
           aider_args: '--yes --read .aider-prompt.md --message "Follow the instructions in the prompt file."'
 
       - name: Check for Aider errors
+        if: steps.fuzzer.outputs.found == 'true'
         run: |
           if [ -f .aider.chat.history.md ]; then
             if grep -qiE '(BadRequestError|credit balance|invalid.*api.?key|authentication|unauthorized|rate.?limit)' .aider.chat.history.md; then
@@ -106,6 +139,13 @@ jobs:
             exit 1
           fi
 
+      - name: Verify fix
+        if: steps.fuzzer.outputs.found == 'true'
+        run: |
+          just fmt --fix
+          just lint --fix
+          just check
+
       - name: Job summary
         if: always()
         run: |
@@ -118,6 +158,7 @@ jobs:
           echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Branch** | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Model** | ${{ inputs.model }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Discrepancy found** | ${{ steps.fuzzer.outputs.found }} |" >> $GITHUB_STEP_SUMMARY
 
       - name: Create Pull Request
         if: hashFiles('pr-body.md') != ''

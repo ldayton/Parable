@@ -648,6 +648,8 @@ class Word(Node):
                 _starts_with_at(value, i, "${")
                 and not in_single_quote
                 and not brace_in_single_quote
+                # Don't treat ${ as brace expansion if preceded by $ (it's $$ + literal {)
+                and (i == 0 or value[i - 1] != "$")
             ):
                 brace_depth += 1
                 brace_in_double_quote = False

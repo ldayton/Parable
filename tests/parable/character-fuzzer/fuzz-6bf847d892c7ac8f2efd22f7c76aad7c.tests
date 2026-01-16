@@ -1,0 +1,5 @@
+=== dollar sign before closing quote in brace expansion
+"$${$"
+---
+(command (word "\"$${$\""))
+---

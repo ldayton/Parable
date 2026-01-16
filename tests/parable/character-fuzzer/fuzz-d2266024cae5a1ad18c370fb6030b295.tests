@@ -1,0 +1,5 @@
+=== function syntax inside unclosed parameter expansion
+a${:b() { c; }
+---
+(command (word "a${:b() { c; }"))
+---

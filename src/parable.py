@@ -6412,17 +6412,15 @@ class Parser:
                             raise ParseError("Unterminated backtick", pos=backtick_start)
                         content_chars.append(self.advance())
                         continue
-                    if c == "}":
+                    if c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
+                        depth += 1
+                        content_chars.append(self.advance())  # $
+                        content_chars.append(self.advance())  # {
+                    elif c == "}":
                         depth -= 1
                         if depth == 0:
                             break
                         content_chars.append(self.advance())
-                    elif (
-                        c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{"
-                    ):
-                        depth += 1
-                        content_chars.append(self.advance())  # $
-                        content_chars.append(self.advance())  # {
                     elif c == "\\":
                         if self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
                             # Line continuation - skip both backslash and newline
@@ -9033,6 +9031,22 @@ class Parser:
 
         name = _substring(self.source, name_start, self.pos)
         if not name:
+            self.pos = saved_pos
+            return None
+
+        # Check if name contains unclosed parameter expansion ${...}
+        # If so, () is inside the expansion, not function definition syntax
+        brace_depth = 0
+        i = 0
+        while i < len(name):
+            if i + 1 < len(name) and name[i] == "$" and name[i + 1] == "{":
+                brace_depth += 1
+                i += 2
+                continue
+            if name[i] == "}":
+                brace_depth -= 1
+            i += 1
+        if brace_depth > 0:
             self.pos = saved_pos
             return None
 

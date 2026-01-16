@@ -1335,7 +1335,8 @@ class Word(Node):
                         # Starts with subshell and formatting would change it - preserve original
                         result.append(direction + "(" + raw_stripped + ")")
                     else:
-                        result.append(direction + "(" + formatted + ")")
+                        final_output = direction + "(" + formatted + ")"
+                        result.append(final_output)
                     procsub_idx += 1
                     i = j
                 elif is_procsub and len(self.parts):
@@ -1927,6 +1928,7 @@ class HereDoc(Node):
     strip_tabs: bool = False
     quoted: bool = False
     fd: int | None = None
+    complete: bool = True
 
     def __init__(
         self,
@@ -1935,6 +1937,7 @@ class HereDoc(Node):
         strip_tabs: bool = False,
         quoted: bool = False,
         fd: int = None,
+        complete: bool = True,
     ):
         self.kind = "heredoc"
         self.delimiter = delimiter
@@ -1942,6 +1945,7 @@ class HereDoc(Node):
         self.strip_tabs = strip_tabs
         self.quoted = quoted
         self.fd = fd
+        self.complete = complete
 
     def to_sexp(self) -> str:
         op = "<<-" if self.strip_tabs else "<<"
@@ -4029,12 +4033,36 @@ def _find_heredoc_content_end(
             while line_end < len(source) and source[line_end] != "\n":
                 line_end += 1
             line = _substring(source, line_start, line_end)
+            # Handle backslash-newline continuation (join continued lines)
+            while line_end < len(source):
+                trailing_bs = 0
+                for j in range(len(line) - 1, -1, -1):
+                    if line[j] == "\\":
+                        trailing_bs += 1
+                    else:
+                        break
+                if trailing_bs % 2 == 0:
+                    break  # Even backslashes (including 0) - no continuation
+                # Odd backslashes - line continuation
+                line = line[:-1]  # Remove trailing backslash
+                line_end += 1  # Skip newline
+                next_line_start = line_end
+                while line_end < len(source) and source[line_end] != "\n":
+                    line_end += 1
+                line = line + _substring(source, next_line_start, line_end)
             if strip_tabs:
                 line_stripped = line.lstrip("\t")
             else:
                 line_stripped = line
             if line_stripped == delimiter:
                 pos = line_end + 1 if line_end < len(source) else line_end
+                break
+            # Check if line starts with delimiter followed by other content
+            # This handles cases like "a?&)" where "a" is delimiter and "?&)" continues the process sub
+            if line_stripped.startswith(delimiter) and len(line_stripped) > len(delimiter):
+                # Return position right after the delimiter
+                tabs_stripped = len(line) - len(line_stripped)
+                pos = line_start + tabs_stripped + len(delimiter)
                 break
             pos = line_end + 1 if line_end < len(source) else line_end
     return content_start, pos
@@ -7786,6 +7814,7 @@ class Parser:
         # Find the delimiter line
         content_lines = []
         scan_pos = content_start
+        delimiter_found = False
 
         while scan_pos < self.length:
             # Find end of current line
@@ -7825,75 +7854,10 @@ class Parser:
 
             if _normalize_heredoc_delimiter(check_line) == _normalize_heredoc_delimiter(delimiter):
                 # Found the end - update parser position past the heredoc
-                # In command substitutions, bash treats semicolons on the next line after the
-                # delimiter as whitespace (word separators) until a natural boundary like
-                # a closing brace or paren. Convert those semicolons to spaces.
-                if (
-                    self._in_process_sub
-                    and line_end < self.length
-                    and self.source[line_end] == "\n"
-                ):
-                    # Skip newline and scan the next line
-                    next_start = line_end + 1
-                    if next_start < self.length:
-                        # Find end of the next line (up to newline or end-of-block marker)
-                        content_end = next_start
-                        depth = 0
-                        while content_end < self.length:
-                            ch = self.source[content_end]
-                            if ch == "{" or ch == "(":
-                                depth += 1
-                            elif ch == "}" or ch == ")":
-                                if depth == 0:
-                                    # Reached end of current block
-                                    break
-                                depth -= 1
-                            elif ch == "\n" and depth == 0:
-                                # End of line at current depth
-                                break
-                            content_end += 1
-                        # Replace semicolons with spaces, but preserve semicolons before }/)
-                        # since those are syntactically required terminators
-                        if content_end > next_start:
-                            remaining = _substring(self.source, next_start, content_end)
-                            # Build converted string, checking each semicolon
-                            converted_chars = []
-                            for i in range(len(remaining)):
-                                ch = remaining[i]
-                                if ch == ";":
-                                    # Check if this semicolon is followed by (optional whitespace and) }/)
-                                    # Look ahead to see what follows
-                                    j = i + 1
-                                    while j < len(remaining) and remaining[j] in " \t":
-                                        j += 1
-                                    # Check if we reached end (which means }/){next_start + j) follows in source
-                                    if j >= len(remaining):
-                                        # At end of remaining, check what follows in original source
-                                        if (
-                                            content_end < self.length
-                                            and self.source[content_end] in "})"
-                                        ):
-                                            # Semicolon before }/), preserve it
-                                            converted_chars.append(ch)
-                                        else:
-                                            # Convert to space
-                                            converted_chars.append(" ")
-                                    elif remaining[j] in "})":
-                                        # Semicolon before }/), preserve it
-                                        converted_chars.append(ch)
-                                    else:
-                                        # Convert to space
-                                        converted_chars.append(" ")
-                                else:
-                                    converted_chars.append(ch)
-                            converted = "".join(converted_chars)
-                            self.source = (
-                                _substring(self.source, 0, next_start)
-                                + converted
-                                + _substring(self.source, content_end, self.length)
-                            )
-                            # Update length since we modified source
-                            self.length = len(self.source)
+                # We need to consume the heredoc content from the input
+                # But we can't do that here because we haven't finished parsing the command line
+                # Store the heredoc info and let the command parser handle it
+                delimiter_found = True
                 break
 
             # At EOF with line starting with delimiter - heredoc terminates (process sub case)
@@ -7951,7 +7915,7 @@ class Parser:
         else:
             self._pending_heredoc_end = max(self._pending_heredoc_end, heredoc_end)
 
-        return HereDoc(delimiter, content, strip_tabs, quoted, fd)
+        return HereDoc(delimiter, content, strip_tabs, quoted, fd, delimiter_found)
 
     def parse_command(self) -> Command | None:
         """Parse a simple command (sequence of words and redirections)."""

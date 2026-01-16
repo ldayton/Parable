@@ -1355,6 +1355,7 @@ class Word extends Node {
 			depth,
 			direction,
 			extglob_depth,
+			final_output,
 			formatted,
 			formatted_inner,
 			has_arith,
@@ -1688,7 +1689,8 @@ class Word extends Node {
 						// Starts with subshell and formatting would change it - preserve original
 						result.push(`${direction}(${raw_stripped})`);
 					} else {
-						result.push(`${direction}(${formatted})`);
+						final_output = `${direction}(${formatted})`;
+						result.push(final_output);
 					}
 					procsub_idx += 1;
 					i = j;
@@ -2416,7 +2418,7 @@ class Redirect extends Node {
 }
 
 class HereDoc extends Node {
-	constructor(delimiter, content, strip_tabs, quoted, fd) {
+	constructor(delimiter, content, strip_tabs, quoted, fd, complete) {
 		super();
 		if (strip_tabs == null) {
 			strip_tabs = false;
@@ -2424,12 +2426,16 @@ class HereDoc extends Node {
 		if (quoted == null) {
 			quoted = false;
 		}
+		if (complete == null) {
+			complete = true;
+		}
 		this.kind = "heredoc";
 		this.delimiter = delimiter;
 		this.content = content;
 		this.strip_tabs = strip_tabs;
 		this.quoted = quoted;
 		this.fd = fd;
+		this.complete = complete;
 	}
 
 	toSexp() {
@@ -4814,12 +4820,16 @@ function _extractHeredocDelimiters(content) {
 function _findHeredocContentEnd(source, start, delimiters) {
 	let content_start,
 		delimiter,
+		j,
 		line,
 		line_end,
 		line_start,
 		line_stripped,
+		next_line_start,
 		pos,
-		strip_tabs;
+		strip_tabs,
+		tabs_stripped,
+		trailing_bs;
 	if (!delimiters) {
 		return [start, start];
 	}
@@ -4841,6 +4851,28 @@ function _findHeredocContentEnd(source, start, delimiters) {
 				line_end += 1;
 			}
 			line = source.slice(line_start, line_end);
+			// Handle backslash-newline continuation (join continued lines)
+			while (line_end < source.length) {
+				trailing_bs = 0;
+				for (j = line.length - 1; j > -1; j--) {
+					if (line[j] === "\\") {
+						trailing_bs += 1;
+					} else {
+						break;
+					}
+				}
+				if (trailing_bs % 2 === 0) {
+					break;
+				}
+				// Odd backslashes - line continuation
+				line = line.slice(0, -1);
+				line_end += 1;
+				next_line_start = line_end;
+				while (line_end < source.length && source[line_end] !== "\n") {
+					line_end += 1;
+				}
+				line = line + source.slice(next_line_start, line_end);
+			}
 			if (strip_tabs) {
 				line_stripped = line.replace(/^[\t]+/, "");
 			} else {
@@ -4848,6 +4880,17 @@ function _findHeredocContentEnd(source, start, delimiters) {
 			}
 			if (line_stripped === delimiter) {
 				pos = line_end < source.length ? line_end + 1 : line_end;
+				break;
+			}
+			// Check if line starts with delimiter followed by other content
+			// This handles cases like "a?&)" where "a" is delimiter and "?&)" continues the process sub
+			if (
+				line_stripped.startsWith(delimiter) &&
+				line_stripped.length > delimiter.length
+			) {
+				// Return position right after the delimiter
+				tabs_stripped = line.length - line_stripped.length;
+				pos = line_start + tabs_stripped + delimiter.length;
 				break;
 			}
 			pos = line_end < source.length ? line_end + 1 : line_end;
@@ -9111,13 +9154,11 @@ class Parser {
 			ch,
 			check_line,
 			content,
-			content_end,
 			content_lines,
 			content_start,
-			converted,
-			converted_chars,
 			delimiter,
 			delimiter_chars,
+			delimiter_found,
 			depth,
 			dollar_count,
 			esc,
@@ -9130,11 +9171,9 @@ class Parser {
 			line_start,
 			next_ch,
 			next_line_start,
-			next_start,
 			normalized_check_line,
 			normalized_delimiter,
 			quoted,
-			remaining,
 			scan_pos,
 			tabs_stripped,
 			trailing_bs;
@@ -9433,6 +9472,7 @@ class Parser {
 		// Find the delimiter line
 		content_lines = [];
 		scan_pos = content_start;
+		delimiter_found = false;
 		while (scan_pos < this.length) {
 			// Find end of current line
 			line_start = scan_pos;
@@ -9478,85 +9518,10 @@ class Parser {
 				_normalizeHeredocDelimiter(delimiter)
 			) {
 				// Found the end - update parser position past the heredoc
-				// In command substitutions, bash treats semicolons on the next line after the
-				// delimiter as whitespace (word separators) until a natural boundary like
-				// a closing brace or paren. Convert those semicolons to spaces.
-				if (
-					this._in_process_sub &&
-					line_end < this.length &&
-					this.source[line_end] === "\n"
-				) {
-					// Skip newline and scan the next line
-					next_start = line_end + 1;
-					if (next_start < this.length) {
-						// Find end of the next line (up to newline or end-of-block marker)
-						content_end = next_start;
-						depth = 0;
-						while (content_end < this.length) {
-							ch = this.source[content_end];
-							if (ch === "{" || ch === "(") {
-								depth += 1;
-							} else if (ch === "}" || ch === ")") {
-								if (depth === 0) {
-									// Reached end of current block
-									break;
-								}
-								depth -= 1;
-							} else if (ch === "\n" && depth === 0) {
-								// End of line at current depth
-								break;
-							}
-							content_end += 1;
-						}
-						// Replace semicolons with spaces, but preserve semicolons before }/)
-						// since those are syntactically required terminators
-						if (content_end > next_start) {
-							remaining = this.source.slice(next_start, content_end);
-							// Build converted string, checking each semicolon
-							converted_chars = [];
-							for (i = 0; i < remaining.length; i++) {
-								ch = remaining[i];
-								if (ch === ";") {
-									// Check if this semicolon is followed by (optional whitespace and) }/)
-									// Look ahead to see what follows
-									j = i + 1;
-									while (j < remaining.length && " \t".includes(remaining[j])) {
-										j += 1;
-									}
-									// Check if we reached end (which means }/){next_start + j) follows in source
-									if (j >= remaining.length) {
-										// At end of remaining, check what follows in original source
-										if (
-											content_end < this.length &&
-											"})".includes(this.source[content_end])
-										) {
-											// Semicolon before }/), preserve it
-											converted_chars.push(ch);
-										} else {
-											// Convert to space
-											converted_chars.push(" ");
-										}
-									} else if ("})".includes(remaining[j])) {
-										// Semicolon before }/), preserve it
-										converted_chars.push(ch);
-									} else {
-										// Convert to space
-										converted_chars.push(" ");
-									}
-								} else {
-									converted_chars.push(ch);
-								}
-							}
-							converted = converted_chars.join("");
-							this.source =
-								this.source.slice(0, next_start) +
-								converted +
-								this.source.slice(content_end, this.length);
-							// Update length since we modified source
-							this.length = this.source.length;
-						}
-					}
-				}
+				// We need to consume the heredoc content from the input
+				// But we can't do that here because we haven't finished parsing the command line
+				// Store the heredoc info and let the command parser handle it
+				delimiter_found = true;
 				break;
 			}
 			// At EOF with line starting with delimiter - heredoc terminates (process sub case)
@@ -9622,7 +9587,14 @@ class Parser {
 				heredoc_end,
 			);
 		}
-		return new HereDoc(delimiter, content, strip_tabs, quoted, fd);
+		return new HereDoc(
+			delimiter,
+			content,
+			strip_tabs,
+			quoted,
+			fd,
+			delimiter_found,
+		);
 	}
 
 	parseCommand() {

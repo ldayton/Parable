@@ -2495,12 +2495,16 @@ class Redirect extends Node {
 				op = "<&";
 			}
 			raw = target_val.slice(1, target_val.length);
-			// Pure digits: dup fd N
-			if (/^[0-9]+$/.test(raw)) {
+			// Pure digits: dup fd N (must be <= INT_MAX to be a valid fd)
+			if (/^[0-9]+$/.test(raw) && parseInt(raw, 10) <= 2147483647) {
 				return `(redirect "${op}" ${parseInt(raw, 10)})`;
 			}
-			// Exact move syntax: N- (digits + exactly one dash)
-			if (raw.endsWith("-") && /^[0-9]+$/.test(raw.slice(0, -1))) {
+			// Exact move syntax: N- (digits + exactly one dash, N <= INT_MAX)
+			if (
+				raw.endsWith("-") &&
+				/^[0-9]+$/.test(raw.slice(0, -1)) &&
+				parseInt(raw.slice(0, -1), 10) <= 2147483647
+			) {
 				return `(redirect "${op}" ${parseInt(raw.slice(0, -1), 10)})`;
 			}
 			if (target_val === "&-") {
@@ -2512,17 +2516,22 @@ class Redirect extends Node {
 		}
 		// Handle case where op is already >& or <&
 		if (op === ">&" || op === "<&") {
-			if (/^[0-9]+$/.test(target_val)) {
+			// Valid fd number must be digits and <= INT_MAX (2147483647)
+			if (
+				/^[0-9]+$/.test(target_val) &&
+				parseInt(target_val, 10) <= 2147483647
+			) {
 				return `(redirect "${op}" ${parseInt(target_val, 10)})`;
 			}
 			// Handle close: <& - or >& - (with space before -)
 			if (target_val === "-") {
 				return '(redirect ">&-" 0)';
 			}
-			// Exact move syntax: N- (digits + exactly one dash)
+			// Exact move syntax: N- (digits + exactly one dash, N <= INT_MAX)
 			if (
 				target_val.endsWith("-") &&
-				/^[0-9]+$/.test(target_val.slice(0, -1))
+				/^[0-9]+$/.test(target_val.slice(0, -1)) &&
+				parseInt(target_val.slice(0, -1), 10) <= 2147483647
 			) {
 				return `(redirect "${op}" ${parseInt(target_val.slice(0, -1), 10)})`;
 			}

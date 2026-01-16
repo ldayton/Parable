@@ -1971,11 +1971,11 @@ class Redirect(Node):
             elif op == "<":
                 op = "<&"
             raw = _substring(target_val, 1, len(target_val))  # "&0--" -> "0--"
-            # Pure digits: dup fd N
-            if raw.isdigit():
+            # Pure digits: dup fd N (must be <= INT_MAX to be a valid fd)
+            if raw.isdigit() and int(raw) <= 2147483647:
                 return '(redirect "' + op + '" ' + str(int(raw)) + ")"
-            # Exact move syntax: N- (digits + exactly one dash)
-            if raw.endswith("-") and raw[:-1].isdigit():
+            # Exact move syntax: N- (digits + exactly one dash, N <= INT_MAX)
+            if raw.endswith("-") and raw[:-1].isdigit() and int(raw[:-1]) <= 2147483647:
                 return '(redirect "' + op + '" ' + str(int(raw[:-1])) + ")"
             if target_val == "&-":
                 return '(redirect ">&-" 0)'
@@ -1984,13 +1984,18 @@ class Redirect(Node):
             return '(redirect "' + op + '" "' + fd_target + '")'
         # Handle case where op is already >& or <&
         if op == ">&" or op == "<&":
-            if target_val.isdigit():
+            # Valid fd number must be digits and <= INT_MAX (2147483647)
+            if target_val.isdigit() and int(target_val) <= 2147483647:
                 return '(redirect "' + op + '" ' + str(int(target_val)) + ")"
             # Handle close: <& - or >& - (with space before -)
             if target_val == "-":
                 return '(redirect ">&-" 0)'
-            # Exact move syntax: N- (digits + exactly one dash)
-            if target_val.endswith("-") and target_val[:-1].isdigit():
+            # Exact move syntax: N- (digits + exactly one dash, N <= INT_MAX)
+            if (
+                target_val.endswith("-")
+                and target_val[:-1].isdigit()
+                and int(target_val[:-1]) <= 2147483647
+            ):
                 return '(redirect "' + op + '" ' + str(int(target_val[:-1])) + ")"
             # Variable/word target: strip exactly one trailing dash if present
             out_val = target_val[:-1] if target_val.endswith("-") else target_val

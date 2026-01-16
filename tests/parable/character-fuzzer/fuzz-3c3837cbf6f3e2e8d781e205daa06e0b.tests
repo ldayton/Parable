@@ -1,0 +1,5 @@
+=== redirect target exceeding INT_MAX should be treated as string
+x>&2147483648
+---
+(command (word "x") (redirect ">&" "2147483648"))
+---

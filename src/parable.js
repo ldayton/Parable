@@ -3855,7 +3855,11 @@ function _findCmdsubEnd(value, start) {
 		in_case_patterns,
 		in_double,
 		in_single,
-		j;
+		is_valid_arith,
+		j,
+		scan_c,
+		scan_i,
+		scan_paren;
 	depth = 1;
 	i = start;
 	in_single = false;
@@ -3954,9 +3958,34 @@ function _findCmdsubEnd(value, start) {
 			continue;
 		}
 		// Handle arithmetic expressions $((
+		// Only treat as arithmetic if there's no ; before )) at top level
+		// (semicolon isn't valid in arithmetic, so $((x;y)) is actually $((...);...))
 		if (_startsWithAt(value, i, "$((")) {
-			arith_depth += 1;
-			i += 3;
+			is_valid_arith = true;
+			scan_paren = 0;
+			for (scan_i = i + 3; scan_i < value.length; scan_i++) {
+				scan_c = value[scan_i];
+				if (scan_c === "(") {
+					scan_paren += 1;
+				} else if (scan_c === ")") {
+					if (scan_paren > 0) {
+						scan_paren -= 1;
+					} else if (scan_i + 1 < value.length && value[scan_i + 1] === ")") {
+						break;
+					}
+				} else if (scan_c === ";" && scan_paren === 0) {
+					is_valid_arith = false;
+					break;
+				}
+			}
+			if (is_valid_arith) {
+				arith_depth += 1;
+				i += 3;
+				continue;
+			}
+			// else: not valid arithmetic, treat $( as nested cmdsub and ( as paren
+			j = _findCmdsubEnd(value, i + 2);
+			i = j;
 			continue;
 		}
 		// Handle arithmetic close )) - only when no inner grouping parens are open

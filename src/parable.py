@@ -3369,9 +3369,30 @@ def _find_cmdsub_end(value: str, start: int) -> int:
                     i += 1
             continue
         # Handle arithmetic expressions $((
+        # Only treat as arithmetic if there's no ; before )) at top level
+        # (semicolon isn't valid in arithmetic, so $((x;y)) is actually $((...);...))
         if _starts_with_at(value, i, "$(("):
-            arith_depth += 1
-            i += 3
+            is_valid_arith = True
+            scan_paren = 0
+            for scan_i in range(i + 3, len(value)):
+                scan_c = value[scan_i]
+                if scan_c == "(":
+                    scan_paren += 1
+                elif scan_c == ")":
+                    if scan_paren > 0:
+                        scan_paren -= 1
+                    elif scan_i + 1 < len(value) and value[scan_i + 1] == ")":
+                        break  # Found )) at top level, valid arithmetic
+                elif scan_c == ";" and scan_paren == 0:
+                    is_valid_arith = False
+                    break
+            if is_valid_arith:
+                arith_depth += 1
+                i += 3
+                continue
+            # else: not valid arithmetic, treat $( as nested cmdsub and ( as paren
+            j = _find_cmdsub_end(value, i + 2)
+            i = j
             continue
         # Handle arithmetic close )) - only when no inner grouping parens are open
         if arith_depth > 0 and arith_paren_depth == 0 and _starts_with_at(value, i, "))"):

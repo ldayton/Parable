@@ -4049,74 +4049,6 @@ def _skip_heredoc(value: str, start: int) -> int:
     return i
 
 
-def _extract_heredoc_delimiters(content: str) -> list[tuple[str, bool]]:
-    """Extract heredoc delimiters from content string.
-    Returns list of (delimiter, strip_tabs) tuples.
-    """
-    delimiters = []
-    i = 0
-    while i < len(content):
-        if content[i] == "'":
-            i += 1
-            while i < len(content) and content[i] != "'":
-                i += 1
-            if i < len(content):
-                i += 1
-            continue
-        if content[i] == '"':
-            i += 1
-            while i < len(content) and content[i] != '"':
-                if content[i] == "\\" and i + 1 < len(content):
-                    i += 2
-                    continue
-                i += 1
-            if i < len(content):
-                i += 1
-            continue
-        if content[i] == "<" and i + 1 < len(content) and content[i + 1] == "<":
-            i += 2
-            # Check for <<< (here-string) - skip it, not a heredoc
-            if i < len(content) and content[i] == "<":
-                i += 1
-                # Skip whitespace and word
-                while i < len(content) and _is_whitespace_no_newline(content[i]):
-                    i += 1
-                while (
-                    i < len(content) and not _is_whitespace(content[i]) and content[i] not in "()"
-                ):
-                    i += 1
-                continue
-            strip_tabs = False
-            if i < len(content) and content[i] == "-":
-                strip_tabs = True
-                i += 1
-            while i < len(content) and _is_whitespace_no_newline(content[i]):
-                i += 1
-            if i < len(content) and (content[i] == '"' or content[i] == "'"):
-                quote = content[i]
-                i += 1
-                delim_start = i
-                while i < len(content) and content[i] != quote:
-                    i += 1
-                delimiters.append((_substring(content, delim_start, i), strip_tabs))
-                if i < len(content):
-                    i += 1
-            elif i < len(content) and content[i] == "\\":
-                i += 1
-                delim_start = i
-                while i < len(content) and not _is_whitespace(content[i]):
-                    i += 1
-                delimiters.append((_substring(content, delim_start, i), strip_tabs))
-            else:
-                delim_start = i
-                while i < len(content) and not _is_metachar(content[i]):
-                    i += 1
-                delimiters.append((_substring(content, delim_start, i), strip_tabs))
-            continue
-        i += 1
-    return delimiters
-
-
 def _find_heredoc_content_end(
     source: str, start: int, delimiters: list[tuple[str, bool]]
 ) -> tuple[int, int]:
@@ -5356,8 +5288,46 @@ class Parser:
         depth = 1
         case_depth = 0  # Track nested case statements
         arith_depth = 0  # Track nested arithmetic expressions
+        # Heredoc state tracking - tracks when we're inside heredoc content
+        pending_heredocs: list[tuple[str, bool]] = []  # (delimiter, strip_tabs)
+        in_heredoc_body = False
+        current_heredoc_delim = ""
+        current_heredoc_strip = False
 
         while not self.at_end() and depth > 0:
+            # When in heredoc body, scan for delimiter line by line
+            if in_heredoc_body:
+                line_start = self.pos
+                line_end = line_start
+                while line_end < self.length and self.source[line_end] != "\n":
+                    line_end += 1
+                line = _substring(self.source, line_start, line_end)
+                check_line = line.lstrip("\t") if current_heredoc_strip else line
+                if check_line == current_heredoc_delim:
+                    # Found delimiter line
+                    self.pos = line_end
+                    if self.pos < self.length and self.source[self.pos] == "\n":
+                        self.advance()
+                    in_heredoc_body = False
+                    if len(pending_heredocs) > 0:
+                        current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
+                        in_heredoc_body = True
+                elif check_line.startswith(current_heredoc_delim) and len(check_line) > len(
+                    current_heredoc_delim
+                ):
+                    # Delimiter with trailing content (e.g., "EOF)" where ) follows delimiter)
+                    tabs_stripped = len(line) - len(check_line)
+                    self.pos = line_start + tabs_stripped + len(current_heredoc_delim)
+                    in_heredoc_body = False
+                    if len(pending_heredocs) > 0:
+                        current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
+                        in_heredoc_body = True
+                else:
+                    # Not the delimiter, skip this line
+                    self.pos = line_end
+                    if self.pos < self.length and self.source[self.pos] == "\n":
+                        self.advance()
+                continue
             c = self.peek()
 
             # ANSI-C quoted string $'...' - handle escape sequences
@@ -5490,8 +5460,93 @@ class Parser:
                 self._skip_backtick_parser()
                 continue
 
-            # Heredoc - skip until delimiter line is found (not inside arithmetic)
-            if arith_depth == 0 and c == "<" and self._skip_heredoc_in_cmdsub():
+            # Heredoc declaration - parse delimiter and track (not inside arithmetic)
+            if (
+                arith_depth == 0
+                and c == "<"
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "<"
+            ):
+                # Check for here-string <<< first (no body to track)
+                if self.pos + 2 < self.length and self.source[self.pos + 2] == "<":
+                    self.advance()  # <
+                    self.advance()  # <
+                    self.advance()  # <
+                    # Skip whitespace and here-string word
+                    while not self.at_end() and _is_whitespace_no_newline(self.peek()):
+                        self.advance()
+                    while (
+                        not self.at_end()
+                        and not _is_whitespace(self.peek())
+                        and self.peek() not in "()"
+                    ):
+                        if self.peek() == "\\" and self.pos + 1 < self.length:
+                            self.advance()
+                            self.advance()
+                        elif self.peek() in "\"'":
+                            quote = self.peek()
+                            self.advance()
+                            while not self.at_end() and self.peek() != quote:
+                                if quote == '"' and self.peek() == "\\":
+                                    self.advance()
+                                self.advance()
+                            if not self.at_end():
+                                self.advance()
+                        else:
+                            self.advance()
+                    continue
+                # It's a heredoc <<
+                self.advance()  # <
+                self.advance()  # <
+                strip_tabs = False
+                if not self.at_end() and self.peek() == "-":
+                    strip_tabs = True
+                    self.advance()
+                # Skip whitespace before delimiter
+                while not self.at_end() and _is_whitespace_no_newline(self.peek()):
+                    self.advance()
+                # Parse delimiter (handling quoting)
+                delimiter_chars: list[str] = []
+                if not self.at_end():
+                    ch = self.peek()
+                    if _is_quote(ch):
+                        quote = self.advance()
+                        while not self.at_end() and self.peek() != quote:
+                            delimiter_chars.append(self.advance())
+                        if not self.at_end():
+                            self.advance()  # closing quote
+                    elif ch == "\\":
+                        self.advance()
+                        if not self.at_end():
+                            delimiter_chars.append(self.advance())
+                        while not self.at_end() and not _is_metachar(self.peek()):
+                            delimiter_chars.append(self.advance())
+                    else:
+                        while not self.at_end() and not _is_metachar(self.peek()):
+                            ch = self.peek()
+                            if _is_quote(ch):
+                                quote = self.advance()
+                                while not self.at_end() and self.peek() != quote:
+                                    delimiter_chars.append(self.advance())
+                                if not self.at_end():
+                                    self.advance()
+                            elif ch == "\\":
+                                self.advance()
+                                if not self.at_end():
+                                    delimiter_chars.append(self.advance())
+                            else:
+                                delimiter_chars.append(self.advance())
+                delimiter = "".join(delimiter_chars)
+                if delimiter:
+                    pending_heredocs.append((delimiter, strip_tabs))
+                continue
+
+            # Newline - check if we should enter heredoc body mode
+            if c == "\n":
+                self.advance()
+                if len(pending_heredocs) > 0:
+                    current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
+                    in_heredoc_body = True
                 continue
 
             # Track case/esac for pattern terminator handling
@@ -5533,38 +5588,19 @@ class Parser:
         # Save position after ) for text (before skipping heredoc content)
         text_end = self.pos
 
-        # Check for heredocs in content whose bodies follow the )
-        # This handles cases like $(cmd <<X) or $(cmd <<X)c where ) is followed by content then newline
-        # Look ahead for a newline - heredoc content starts after the first newline
-        heredoc_scan_pos = self.pos
-        while heredoc_scan_pos < self.length and self.source[heredoc_scan_pos] != "\n":
-            heredoc_scan_pos += 1
-        if heredoc_scan_pos < self.length:
-            # Filter to only heredocs that weren't already consumed during parsing
-            all_heredoc_delimiters = _extract_heredoc_delimiters(content)
-            heredoc_delimiters = []
-            for delim, strip_tabs in all_heredoc_delimiters:
-                # Check if this delimiter was already consumed (appears on its own line in content)
-                found_in_content = False
-                for line in content.split("\n"):
-                    check_line = line.lstrip("\t") if strip_tabs else line
-                    if check_line == delim:
-                        found_in_content = True
-                        break
-                if not found_in_content:
-                    heredoc_delimiters.append((delim, strip_tabs))
-
-            if heredoc_delimiters:
-                heredoc_start, heredoc_end = _find_heredoc_content_end(
-                    self.source, self.pos, heredoc_delimiters
-                )
-                if heredoc_end > heredoc_start:
-                    content = content + _substring(self.source, heredoc_start, heredoc_end)
-                    # Mark that heredoc content following the ) needs to be skipped
-                    if self._cmdsub_heredoc_end is None:
-                        self._cmdsub_heredoc_end = heredoc_end
-                    else:
-                        self._cmdsub_heredoc_end = max(self._cmdsub_heredoc_end, heredoc_end)
+        # Check for heredocs whose bodies follow the )
+        # pending_heredocs contains heredocs declared inside but with bodies after the )
+        if len(pending_heredocs) > 0:
+            heredoc_start, heredoc_end = _find_heredoc_content_end(
+                self.source, self.pos, pending_heredocs
+            )
+            if heredoc_end > heredoc_start:
+                content = content + _substring(self.source, heredoc_start, heredoc_end)
+                # Mark that heredoc content following the ) needs to be skipped
+                if self._cmdsub_heredoc_end is None:
+                    self._cmdsub_heredoc_end = heredoc_end
+                else:
+                    self._cmdsub_heredoc_end = max(self._cmdsub_heredoc_end, heredoc_end)
 
         text = _substring(self.source, start, text_end)
 
@@ -5656,102 +5692,6 @@ class Parser:
         """Check if esac closes all cases before a ) closes the cmdsub."""
         return _lookahead_for_esac(self.source, self.pos + 1, case_depth)
 
-    def _skip_heredoc_in_cmdsub(self) -> bool:
-        """Skip heredoc/here-string in command substitution. Returns True if skipped."""
-        if self.pos + 1 >= self.length or self.peek() != "<" or self.source[self.pos + 1] != "<":
-            return False
-        self.advance()  # first <
-        self.advance()  # second <
-        # Here-string (<<<)
-        if not self.at_end() and self.peek() == "<":
-            self.advance()  # third <
-            while not self.at_end() and _is_whitespace_no_newline(self.peek()):
-                self.advance()
-            while not self.at_end() and not _is_whitespace(self.peek()) and self.peek() not in "()":
-                if self.peek() == "\\" and self.pos + 1 < self.length:
-                    self.advance()
-                    self.advance()
-                elif self.peek() in "\"'":
-                    quote = self.peek()
-                    self.advance()
-                    while not self.at_end() and self.peek() != quote:
-                        if quote == '"' and self.peek() == "\\":
-                            self.advance()
-                        self.advance()
-                    if not self.at_end():
-                        self.advance()
-                else:
-                    self.advance()
-            return True
-        # Handle <<- (strip tabs)
-        if not self.at_end() and self.peek() == "-":
-            self.advance()
-        # Skip whitespace before delimiter
-        while not self.at_end() and _is_whitespace_no_newline(self.peek()):
-            self.advance()
-        # Parse delimiter (handle quoting)
-        delimiter_chars = []
-        if not self.at_end():
-            ch = self.peek()
-            if _is_quote(ch):
-                quote = self.advance()
-                while not self.at_end() and self.peek() != quote:
-                    delimiter_chars.append(self.advance())
-                if not self.at_end():
-                    self.advance()  # closing quote
-            elif ch == "\\":
-                self.advance()
-                if not self.at_end():
-                    delimiter_chars.append(self.advance())
-                while not self.at_end() and not _is_metachar(self.peek()):
-                    delimiter_chars.append(self.advance())
-            else:
-                # Unquoted delimiter with possible embedded quotes
-                while not self.at_end() and not _is_metachar(self.peek()):
-                    ch = self.peek()
-                    if _is_quote(ch):
-                        quote = self.advance()
-                        while not self.at_end() and self.peek() != quote:
-                            delimiter_chars.append(self.advance())
-                        if not self.at_end():
-                            self.advance()
-                    elif ch == "\\":
-                        self.advance()
-                        if not self.at_end():
-                            delimiter_chars.append(self.advance())
-                    else:
-                        delimiter_chars.append(self.advance())
-        delimiter = "".join(delimiter_chars)
-        if delimiter:
-            # Check if ) immediately follows (closes cmdsub with empty heredoc)
-            if not self.at_end() and self.peek() == ")":
-                return True
-            # Skip to end of current line
-            while not self.at_end() and self.peek() != "\n":
-                self.advance()
-            if not self.at_end() and self.peek() == "\n":
-                self.advance()
-            # Skip lines until we find the delimiter
-            while not self.at_end():
-                line_start = self.pos
-                line_end = self.pos
-                while line_end < self.length and self.source[line_end] != "\n":
-                    line_end += 1
-                line = _substring(self.source, line_start, line_end)
-                self.pos = line_end
-                check_line = line.lstrip("\t")
-                if check_line == delimiter:
-                    if not self.at_end() and self.peek() == "\n":
-                        self.advance()
-                    break
-                if check_line.startswith(delimiter) and len(check_line) > len(delimiter):
-                    tabs_stripped = len(line) - len(check_line)
-                    self.pos = line_start + tabs_stripped + len(delimiter)
-                    break
-                if not self.at_end() and self.peek() == "\n":
-                    self.advance()
-        return True
-
     def _skip_backtick_parser(self) -> None:
         """Skip past a backtick command substitution."""
         self.pos = _skip_backtick(self.source, self.pos)
@@ -5773,10 +5713,66 @@ class Parser:
         # other \X -> \X (backslash is literal)
         # content_chars: what gets parsed as the inner command
         # text_chars: what appears in the word representation (with line continuations removed)
-        content_chars = []
+        content_chars: list[str] = []
         text_chars = ["`"]  # opening backtick
-        while not self.at_end() and self.peek() != "`":
+        # Heredoc state tracking
+        pending_heredocs: list[tuple[str, bool]] = []
+        in_heredoc_body = False
+        current_heredoc_delim = ""
+        current_heredoc_strip = False
+
+        while not self.at_end() and (in_heredoc_body or self.peek() != "`"):
+            # When in heredoc body, scan for delimiter line by line (no escape processing)
+            if in_heredoc_body:
+                line_start = self.pos
+                line_end = line_start
+                while line_end < self.length and self.source[line_end] != "\n":
+                    line_end += 1
+                line = _substring(self.source, line_start, line_end)
+                check_line = line.lstrip("\t") if current_heredoc_strip else line
+                if check_line == current_heredoc_delim:
+                    # Found delimiter - add line to content and exit body mode
+                    for ch in line:
+                        content_chars.append(ch)
+                        text_chars.append(ch)
+                    self.pos = line_end
+                    if self.pos < self.length and self.source[self.pos] == "\n":
+                        content_chars.append("\n")
+                        text_chars.append("\n")
+                        self.advance()
+                    in_heredoc_body = False
+                    if len(pending_heredocs) > 0:
+                        current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
+                        in_heredoc_body = True
+                elif check_line.startswith(current_heredoc_delim) and len(check_line) > len(
+                    current_heredoc_delim
+                ):
+                    # Delimiter with trailing content
+                    tabs_stripped = len(line) - len(check_line)
+                    end_pos = tabs_stripped + len(current_heredoc_delim)
+                    for i in range(end_pos):
+                        content_chars.append(line[i])
+                        text_chars.append(line[i])
+                    self.pos = line_start + end_pos
+                    in_heredoc_body = False
+                    if len(pending_heredocs) > 0:
+                        current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
+                        in_heredoc_body = True
+                else:
+                    # Not delimiter - add line and newline to content
+                    for ch in line:
+                        content_chars.append(ch)
+                        text_chars.append(ch)
+                    self.pos = line_end
+                    if self.pos < self.length and self.source[self.pos] == "\n":
+                        content_chars.append("\n")
+                        text_chars.append("\n")
+                        self.advance()
+                continue
+
             c = self.peek()
+
+            # Escape handling
             if c == "\\" and self.pos + 1 < self.length:
                 next_c = self.source[self.pos + 1]
                 if next_c == "\n":
@@ -5796,10 +5792,157 @@ class Parser:
                     ch = self.advance()
                     content_chars.append(ch)
                     text_chars.append(ch)
-            else:
+                continue
+
+            # Heredoc declaration
+            if c == "<" and self.pos + 1 < self.length and self.source[self.pos + 1] == "<":
+                # Check for here-string <<<
+                if self.pos + 2 < self.length and self.source[self.pos + 2] == "<":
+                    content_chars.append(self.advance())  # <
+                    text_chars.append("<")
+                    content_chars.append(self.advance())  # <
+                    text_chars.append("<")
+                    content_chars.append(self.advance())  # <
+                    text_chars.append("<")
+                    # Skip whitespace and here-string word
+                    while not self.at_end() and _is_whitespace_no_newline(self.peek()):
+                        ch = self.advance()
+                        content_chars.append(ch)
+                        text_chars.append(ch)
+                    while (
+                        not self.at_end()
+                        and not _is_whitespace(self.peek())
+                        and self.peek() not in "()"
+                    ):
+                        if self.peek() == "\\" and self.pos + 1 < self.length:
+                            ch = self.advance()
+                            content_chars.append(ch)
+                            text_chars.append(ch)
+                            ch = self.advance()
+                            content_chars.append(ch)
+                            text_chars.append(ch)
+                        elif self.peek() in "\"'":
+                            quote = self.peek()
+                            ch = self.advance()
+                            content_chars.append(ch)
+                            text_chars.append(ch)
+                            while not self.at_end() and self.peek() != quote:
+                                if quote == '"' and self.peek() == "\\":
+                                    ch = self.advance()
+                                    content_chars.append(ch)
+                                    text_chars.append(ch)
+                                ch = self.advance()
+                                content_chars.append(ch)
+                                text_chars.append(ch)
+                            if not self.at_end():
+                                ch = self.advance()
+                                content_chars.append(ch)
+                                text_chars.append(ch)
+                        else:
+                            ch = self.advance()
+                            content_chars.append(ch)
+                            text_chars.append(ch)
+                    continue
+                # Heredoc <<
+                content_chars.append(self.advance())  # <
+                text_chars.append("<")
+                content_chars.append(self.advance())  # <
+                text_chars.append("<")
+                strip_tabs = False
+                if not self.at_end() and self.peek() == "-":
+                    strip_tabs = True
+                    content_chars.append(self.advance())
+                    text_chars.append("-")
+                # Skip whitespace
+                while not self.at_end() and _is_whitespace_no_newline(self.peek()):
+                    ch = self.advance()
+                    content_chars.append(ch)
+                    text_chars.append(ch)
+                # Parse delimiter
+                delimiter_chars: list[str] = []
+                if not self.at_end():
+                    ch = self.peek()
+                    if _is_quote(ch):
+                        quote = self.advance()
+                        content_chars.append(quote)
+                        text_chars.append(quote)
+                        while not self.at_end() and self.peek() != quote:
+                            dch = self.advance()
+                            content_chars.append(dch)
+                            text_chars.append(dch)
+                            delimiter_chars.append(dch)
+                        if not self.at_end():
+                            closing = self.advance()
+                            content_chars.append(closing)
+                            text_chars.append(closing)
+                    elif ch == "\\":
+                        esc = self.advance()
+                        content_chars.append(esc)
+                        text_chars.append(esc)
+                        if not self.at_end():
+                            dch = self.advance()
+                            content_chars.append(dch)
+                            text_chars.append(dch)
+                            delimiter_chars.append(dch)
+                        while not self.at_end() and not _is_metachar(self.peek()):
+                            dch = self.advance()
+                            content_chars.append(dch)
+                            text_chars.append(dch)
+                            delimiter_chars.append(dch)
+                    else:
+                        # Stop at backtick (closes substitution) or metachar
+                        while (
+                            not self.at_end()
+                            and not _is_metachar(self.peek())
+                            and self.peek() != "`"
+                        ):
+                            ch = self.peek()
+                            if _is_quote(ch):
+                                quote = self.advance()
+                                content_chars.append(quote)
+                                text_chars.append(quote)
+                                while not self.at_end() and self.peek() != quote:
+                                    dch = self.advance()
+                                    content_chars.append(dch)
+                                    text_chars.append(dch)
+                                    delimiter_chars.append(dch)
+                                if not self.at_end():
+                                    closing = self.advance()
+                                    content_chars.append(closing)
+                                    text_chars.append(closing)
+                            elif ch == "\\":
+                                esc = self.advance()
+                                content_chars.append(esc)
+                                text_chars.append(esc)
+                                if not self.at_end():
+                                    dch = self.advance()
+                                    content_chars.append(dch)
+                                    text_chars.append(dch)
+                                    delimiter_chars.append(dch)
+                            else:
+                                dch = self.advance()
+                                content_chars.append(dch)
+                                text_chars.append(dch)
+                                delimiter_chars.append(dch)
+                delimiter = "".join(delimiter_chars)
+                if delimiter:
+                    pending_heredocs.append((delimiter, strip_tabs))
+                continue
+
+            # Newline - check for heredoc body mode
+            if c == "\n":
                 ch = self.advance()
                 content_chars.append(ch)
                 text_chars.append(ch)
+                if len(pending_heredocs) > 0:
+                    current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
+                    in_heredoc_body = True
+                continue
+
+            # Regular character
+            ch = self.advance()
+            content_chars.append(ch)
+            text_chars.append(ch)
 
         if self.at_end():
             raise ParseError("Unterminated backtick", pos=start)
@@ -5808,6 +5951,18 @@ class Parser:
         text_chars.append("`")  # closing backtick
         text = "".join(text_chars)
         content = "".join(content_chars)
+
+        # Check for heredocs whose bodies follow the closing backtick
+        if len(pending_heredocs) > 0:
+            heredoc_start, heredoc_end = _find_heredoc_content_end(
+                self.source, self.pos, pending_heredocs
+            )
+            if heredoc_end > heredoc_start:
+                content = content + _substring(self.source, heredoc_start, heredoc_end)
+                if self._cmdsub_heredoc_end is None:
+                    self._cmdsub_heredoc_end = heredoc_end
+                else:
+                    self._cmdsub_heredoc_end = max(self._cmdsub_heredoc_end, heredoc_end)
 
         # Parse the content as a command list
         sub_parser = Parser(content)
@@ -5837,8 +5992,47 @@ class Parser:
         # Find matching ) - track nested parens and handle quotes
         content_start = self.pos
         depth = 1
+        # Heredoc state tracking
+        pending_heredocs: list[tuple[str, bool]] = []
+        in_heredoc_body = False
+        current_heredoc_delim = ""
+        current_heredoc_strip = False
 
         while not self.at_end() and depth > 0:
+            # When in heredoc body, scan for delimiter line by line
+            if in_heredoc_body:
+                line_start = self.pos
+                line_end = line_start
+                while line_end < self.length and self.source[line_end] != "\n":
+                    line_end += 1
+                line = _substring(self.source, line_start, line_end)
+                check_line = line.lstrip("\t") if current_heredoc_strip else line
+                if check_line == current_heredoc_delim:
+                    # Found delimiter line
+                    self.pos = line_end
+                    if self.pos < self.length and self.source[self.pos] == "\n":
+                        self.advance()
+                    in_heredoc_body = False
+                    if len(pending_heredocs) > 0:
+                        current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
+                        in_heredoc_body = True
+                elif check_line.startswith(current_heredoc_delim) and len(check_line) > len(
+                    current_heredoc_delim
+                ):
+                    # Delimiter with trailing content
+                    tabs_stripped = len(line) - len(check_line)
+                    self.pos = line_start + tabs_stripped + len(current_heredoc_delim)
+                    in_heredoc_body = False
+                    if len(pending_heredocs) > 0:
+                        current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
+                        in_heredoc_body = True
+                else:
+                    # Not the delimiter, skip this line
+                    self.pos = line_end
+                    if self.pos < self.length and self.source[self.pos] == "\n":
+                        self.advance()
+                continue
+
             c = self.peek()
 
             # Comment - skip to end of line (quotes in comments are not special)
@@ -5873,6 +6067,90 @@ class Parser:
                 self.advance()
                 continue
 
+            # Heredoc declaration
+            if c == "<" and self.pos + 1 < self.length and self.source[self.pos + 1] == "<":
+                # Check for here-string <<<
+                if self.pos + 2 < self.length and self.source[self.pos + 2] == "<":
+                    self.advance()  # <
+                    self.advance()  # <
+                    self.advance()  # <
+                    # Skip whitespace and here-string word
+                    while not self.at_end() and _is_whitespace_no_newline(self.peek()):
+                        self.advance()
+                    while (
+                        not self.at_end()
+                        and not _is_whitespace(self.peek())
+                        and self.peek() not in "()"
+                    ):
+                        if self.peek() == "\\" and self.pos + 1 < self.length:
+                            self.advance()
+                            self.advance()
+                        elif self.peek() in "\"'":
+                            quote = self.peek()
+                            self.advance()
+                            while not self.at_end() and self.peek() != quote:
+                                if quote == '"' and self.peek() == "\\":
+                                    self.advance()
+                                self.advance()
+                            if not self.at_end():
+                                self.advance()
+                        else:
+                            self.advance()
+                    continue
+                # Heredoc <<
+                self.advance()  # <
+                self.advance()  # <
+                strip_tabs = False
+                if not self.at_end() and self.peek() == "-":
+                    strip_tabs = True
+                    self.advance()
+                # Skip whitespace
+                while not self.at_end() and _is_whitespace_no_newline(self.peek()):
+                    self.advance()
+                # Parse delimiter
+                delimiter_chars: list[str] = []
+                if not self.at_end():
+                    ch = self.peek()
+                    if _is_quote(ch):
+                        quote = self.advance()
+                        while not self.at_end() and self.peek() != quote:
+                            delimiter_chars.append(self.advance())
+                        if not self.at_end():
+                            self.advance()  # closing quote
+                    elif ch == "\\":
+                        self.advance()
+                        if not self.at_end():
+                            delimiter_chars.append(self.advance())
+                        while not self.at_end() and not _is_metachar(self.peek()):
+                            delimiter_chars.append(self.advance())
+                    else:
+                        while not self.at_end() and not _is_metachar(self.peek()):
+                            ch = self.peek()
+                            if _is_quote(ch):
+                                quote = self.advance()
+                                while not self.at_end() and self.peek() != quote:
+                                    delimiter_chars.append(self.advance())
+                                if not self.at_end():
+                                    self.advance()
+                            elif ch == "\\":
+                                self.advance()
+                                if not self.at_end():
+                                    delimiter_chars.append(self.advance())
+                            else:
+                                delimiter_chars.append(self.advance())
+                delimiter = "".join(delimiter_chars)
+                if delimiter:
+                    pending_heredocs.append((delimiter, strip_tabs))
+                continue
+
+            # Newline - check for heredoc body mode
+            if c == "\n":
+                self.advance()
+                if len(pending_heredocs) > 0:
+                    current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
+                    in_heredoc_body = True
+                continue
+
             # Nested parentheses (including nested process substitutions)
             if c == "(":
                 depth += 1
@@ -5893,11 +6171,10 @@ class Parser:
         # Save position after ) for text (before skipping heredoc content)
         text_end = self.pos
 
-        # Check for heredocs in content - their bodies follow the )
-        heredoc_delimiters = _extract_heredoc_delimiters(content)
-        if heredoc_delimiters:
+        # Check for heredocs whose bodies follow the )
+        if len(pending_heredocs) > 0:
             heredoc_start, heredoc_end = _find_heredoc_content_end(
-                self.source, self.pos, heredoc_delimiters
+                self.source, self.pos, pending_heredocs
             )
             if heredoc_end > heredoc_start:
                 content = content + _substring(self.source, heredoc_start, heredoc_end)

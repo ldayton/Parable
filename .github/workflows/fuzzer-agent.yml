@@ -34,10 +34,11 @@ jobs:
 
       - uses: extractions/setup-just@v2
 
-      - name: Clone bash-oracle
+      - name: Download bash-oracle
         run: |
-          mkdir -p ~/source
-          git clone --depth 1 https://github.com/anthropics/bash-oracle.git ~/source/bash-oracle
+          mkdir -p ~/source/bash-oracle
+          curl -sSf -o ~/source/bash-oracle/bash-oracle https://ldayton-parable.s3.amazonaws.com/bash-oracle
+          chmod +x ~/source/bash-oracle/bash-oracle
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4

@@ -1,0 +1,5 @@
+=== tab in array assignment index
+a=([''[]''	])
+---
+(command (word "a=([''[]''\t])"))
+---

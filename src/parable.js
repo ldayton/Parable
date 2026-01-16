@@ -1213,7 +1213,8 @@ class Word extends Node {
 			} else if (ch === "[") {
 				// Only start subscript tracking if at word start (for [key]=val patterns)
 				// Mid-word [ like a[ is literal, not a subscript
-				if (in_whitespace) {
+				// But if already inside brackets, track nested brackets
+				if (in_whitespace || bracket_depth > 0) {
 					bracket_depth += 1;
 				}
 				in_whitespace = false;

@@ -5674,6 +5674,28 @@ class Parser {
 		arith_depth = 0;
 		while (!this.atEnd() && depth > 0) {
 			c = this.peek();
+			// ANSI-C quoted string $'...' - handle escape sequences
+			if (
+				c === "$" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "'"
+			) {
+				this.advance();
+				this.advance();
+				while (!this.atEnd()) {
+					if (this.peek() === "'") {
+						this.advance();
+						break;
+					}
+					if (this.peek() === "\\" && this.pos + 1 < this.length) {
+						this.advance();
+						this.advance();
+					} else {
+						this.advance();
+					}
+				}
+				continue;
+			}
 			// Single-quoted string - no special chars inside
 			if (c === "'") {
 				this.advance();

@@ -4743,6 +4743,21 @@ class Parser:
         while not self.at_end() and depth > 0:
             c = self.peek()
 
+            # ANSI-C quoted string $'...' - handle escape sequences
+            if c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "'":
+                self.advance()  # $
+                self.advance()  # '
+                while not self.at_end():
+                    if self.peek() == "'":
+                        self.advance()
+                        break
+                    if self.peek() == "\\" and self.pos + 1 < self.length:
+                        self.advance()  # backslash
+                        self.advance()  # escaped char
+                    else:
+                        self.advance()
+                continue
+
             # Single-quoted string - no special chars inside
             if c == "'":
                 self.advance()

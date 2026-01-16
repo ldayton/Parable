@@ -3135,6 +3135,16 @@ def _format_cmdsub_node(
                     if r.kind == "heredoc":
                         has_heredoc = True
                         break
+            elif p.kind == "pipeline":
+                # Check commands within the pipeline
+                for cmd in p.commands:
+                    if cmd.kind == "command" and cmd.redirects:
+                        for r in cmd.redirects:
+                            if r.kind == "heredoc":
+                                has_heredoc = True
+                                break
+                    if has_heredoc:
+                        break
         # Join commands with operators
         result = []
         skipped_semi = False

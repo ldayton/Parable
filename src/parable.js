@@ -3698,6 +3698,21 @@ function _formatCmdsubNode(
 						break;
 					}
 				}
+			} else if (p.kind === "pipeline") {
+				// Check commands within the pipeline
+				for (cmd of p.commands) {
+					if (cmd.kind === "command" && cmd.redirects) {
+						for (r of cmd.redirects) {
+							if (r.kind === "heredoc") {
+								has_heredoc = true;
+								break;
+							}
+						}
+					}
+					if (has_heredoc) {
+						break;
+					}
+				}
 			}
 		}
 		// Join commands with operators

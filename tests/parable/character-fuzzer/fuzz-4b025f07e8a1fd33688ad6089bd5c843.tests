@@ -1,0 +1,7 @@
+=== trailing backslash at EOF stripped from redirect target with single-quoted newline
+<'
+'\
+---
+(command (redirect "<" "'
+'"))
+---

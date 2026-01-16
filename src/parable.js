@@ -12665,10 +12665,18 @@ class Parser {
 	}
 
 	_findLastWord(node) {
+		let last_redirect;
 		if (node instanceof Word) {
 			return node;
 		}
 		if (node instanceof Command) {
+			// Redirects come after words in s-expression output, so check redirects first
+			if (node.redirects && node.redirects.length) {
+				last_redirect = node.redirects[node.redirects.length - 1];
+				if (last_redirect instanceof Redirect) {
+					return last_redirect.target;
+				}
+			}
 			if (node.words && node.words.length) {
 				return node.words[node.words.length - 1];
 			}

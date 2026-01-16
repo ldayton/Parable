@@ -5657,38 +5657,19 @@ class Parser:
         # Save position after ) for text (before skipping heredoc content)
         text_end = self.pos
 
-        # Check for heredocs in content whose bodies follow the )
-        # This handles cases like $(cmd <<X) or $(cmd <<X)c where ) is followed by content then newline
-        # Look ahead for a newline - heredoc content starts after the first newline
-        heredoc_scan_pos = self.pos
-        while heredoc_scan_pos < self.length and self.source[heredoc_scan_pos] != "\n":
-            heredoc_scan_pos += 1
-        if heredoc_scan_pos < self.length:
-            # Filter to only heredocs that weren't already consumed during parsing
-            all_heredoc_delimiters = _extract_heredoc_delimiters(content)
-            heredoc_delimiters = []
-            for delim, strip_tabs in all_heredoc_delimiters:
-                # Check if this delimiter was already consumed (appears on its own line in content)
-                found_in_content = False
-                for line in content.split("\n"):
-                    check_line = line.lstrip("\t") if strip_tabs else line
-                    if check_line == delim:
-                        found_in_content = True
-                        break
-                if not found_in_content:
-                    heredoc_delimiters.append((delim, strip_tabs))
-
-            if heredoc_delimiters:
-                heredoc_start, heredoc_end = _find_heredoc_content_end(
-                    self.source, self.pos, heredoc_delimiters
-                )
-                if heredoc_end > heredoc_start:
-                    content = content + _substring(self.source, heredoc_start, heredoc_end)
-                    # Mark that heredoc content following the ) needs to be skipped
-                    if self._cmdsub_heredoc_end is None:
-                        self._cmdsub_heredoc_end = heredoc_end
-                    else:
-                        self._cmdsub_heredoc_end = max(self._cmdsub_heredoc_end, heredoc_end)
+        # Check for heredocs whose bodies follow the )
+        # pending_heredocs contains heredocs declared inside but with bodies after the )
+        if len(pending_heredocs) > 0:
+            heredoc_start, heredoc_end = _find_heredoc_content_end(
+                self.source, self.pos, pending_heredocs
+            )
+            if heredoc_end > heredoc_start:
+                content = content + _substring(self.source, heredoc_start, heredoc_end)
+                # Mark that heredoc content following the ) needs to be skipped
+                if self._cmdsub_heredoc_end is None:
+                    self._cmdsub_heredoc_end = heredoc_end
+                else:
+                    self._cmdsub_heredoc_end = max(self._cmdsub_heredoc_end, heredoc_end)
 
         text = _substring(self.source, start, text_end)
 

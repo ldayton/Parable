@@ -6570,8 +6570,7 @@ class Parser {
 	}
 
 	_parseCommandSubstitution() {
-		let all_heredoc_delimiters,
-			arith_depth,
+		let arith_depth,
 			c,
 			case_depth,
 			ch,
@@ -6581,14 +6580,10 @@ class Parser {
 			content_start,
 			current_heredoc_delim,
 			current_heredoc_strip,
-			delim,
 			delimiter,
 			delimiter_chars,
 			depth,
-			found_in_content,
-			heredoc_delimiters,
 			heredoc_end,
-			heredoc_scan_pos,
 			heredoc_start,
 			in_heredoc_body,
 			line,
@@ -6978,51 +6973,24 @@ class Parser {
 		this.advance();
 		// Save position after ) for text (before skipping heredoc content)
 		text_end = this.pos;
-		// Check for heredocs in content whose bodies follow the )
-		// This handles cases like $(cmd <<X) or $(cmd <<X)c where ) is followed by content then newline
-		// Look ahead for a newline - heredoc content starts after the first newline
-		heredoc_scan_pos = this.pos;
-		while (
-			heredoc_scan_pos < this.length &&
-			this.source[heredoc_scan_pos] !== "\n"
-		) {
-			heredoc_scan_pos += 1;
-		}
-		if (heredoc_scan_pos < this.length) {
-			// Filter to only heredocs that weren't already consumed during parsing
-			all_heredoc_delimiters = _extractHeredocDelimiters(content);
-			heredoc_delimiters = [];
-			for ([delim, strip_tabs] of all_heredoc_delimiters) {
-				// Check if this delimiter was already consumed (appears on its own line in content)
-				found_in_content = false;
-				for (line of content.split("\n")) {
-					check_line = strip_tabs ? line.replace(/^[\t]+/, "") : line;
-					if (check_line === delim) {
-						found_in_content = true;
-						break;
-					}
-				}
-				if (!found_in_content) {
-					heredoc_delimiters.push([delim, strip_tabs]);
-				}
-			}
-			if (heredoc_delimiters) {
-				[heredoc_start, heredoc_end] = _findHeredocContentEnd(
-					this.source,
-					this.pos,
-					heredoc_delimiters,
-				);
-				if (heredoc_end > heredoc_start) {
-					content = content + this.source.slice(heredoc_start, heredoc_end);
-					// Mark that heredoc content following the ) needs to be skipped
-					if (this._cmdsub_heredoc_end == null) {
-						this._cmdsub_heredoc_end = heredoc_end;
-					} else {
-						this._cmdsub_heredoc_end = Math.max(
-							this._cmdsub_heredoc_end,
-							heredoc_end,
-						);
-					}
+		// Check for heredocs whose bodies follow the )
+		// pending_heredocs contains heredocs declared inside but with bodies after the )
+		if (pending_heredocs.length > 0) {
+			[heredoc_start, heredoc_end] = _findHeredocContentEnd(
+				this.source,
+				this.pos,
+				pending_heredocs,
+			);
+			if (heredoc_end > heredoc_start) {
+				content = content + this.source.slice(heredoc_start, heredoc_end);
+				// Mark that heredoc content following the ) needs to be skipped
+				if (this._cmdsub_heredoc_end == null) {
+					this._cmdsub_heredoc_end = heredoc_end;
+				} else {
+					this._cmdsub_heredoc_end = Math.max(
+						this._cmdsub_heredoc_end,
+						heredoc_end,
+					);
 				}
 			}
 		}

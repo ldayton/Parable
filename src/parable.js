@@ -12510,7 +12510,7 @@ class Parser {
 			}
 			// If no newline and not at end, we have unparsed content
 			if (!found_newline && !this.atEnd()) {
-				throw new ParseError("Parser not fully implemented yet", this.pos);
+				throw new ParseError("Syntax error", this.pos);
 			}
 		}
 		if (results.length === 0) {

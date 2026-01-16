@@ -10333,7 +10333,7 @@ class Parser:
 
             # If no newline and not at end, we have unparsed content
             if not found_newline and not self.at_end():
-                raise ParseError("Parser not fully implemented yet", pos=self.pos)
+                raise ParseError("Syntax error", pos=self.pos)
 
         if not results:
             return [Empty()]

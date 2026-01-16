@@ -2139,7 +2139,7 @@ class ForArith(Node):
                 redirect_parts.append(r.to_sexp())
             suffix = " " + " ".join(redirect_parts)
         init_val = self.init if self.init else "1"
-        cond_val = _normalize_fd_redirects(self.cond) if self.cond else "1"
+        cond_val = self.cond if self.cond else "1"
         incr_val = self.incr if self.incr else "1"
         init_str = format_arith_val(init_val)
         cond_str = format_arith_val(cond_val)

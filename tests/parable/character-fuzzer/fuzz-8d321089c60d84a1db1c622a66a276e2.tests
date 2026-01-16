@@ -1,0 +1,5 @@
+=== regex pattern with || should not be parsed as conditional OR
+[[ a =~ x||$ ]]
+---
+(cond (cond-binary "=~" (cond-term "a") (cond-term "x||$")))
+---

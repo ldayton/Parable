@@ -1047,6 +1047,8 @@ class Word(Node):
         in_double_quote = False
         extglob_depth = 0
         deprecated_arith_depth = 0  # Track $[...] depth
+        arith_depth = 0  # Track $((...)) depth
+        arith_paren_depth = 0  # Track paren depth inside arithmetic
         while i < len(value):
             # Check for extglob start: @( ?( *( +( !(
             if (
@@ -1076,6 +1078,32 @@ class Word(Node):
                 result.append(value[i])
                 i += 1
                 continue
+            # Track $((...)) arithmetic - inside it, >( and <( are not process subs
+            if _starts_with_at(value, i, "$((") and not _is_backslash_escaped(value, i):
+                arith_depth += 1
+                arith_paren_depth += 2  # For the two opening parens
+                result.append("$((")
+                i += 3
+                continue
+            # Track )) that closes arithmetic (only when no inner parens open)
+            if arith_depth > 0 and arith_paren_depth == 2 and _starts_with_at(value, i, "))"):
+                arith_depth -= 1
+                arith_paren_depth -= 2
+                result.append("))")
+                i += 2
+                continue
+            # Track ( and ) inside arithmetic
+            if arith_depth > 0:
+                if value[i] == "(":
+                    arith_paren_depth += 1
+                    result.append(value[i])
+                    i += 1
+                    continue
+                elif value[i] == ")":
+                    arith_paren_depth -= 1
+                    result.append(value[i])
+                    i += 1
+                    continue
             # Check for $( command substitution (but not $(( arithmetic or escaped \$()
             if (
                 _starts_with_at(value, i, "$(")
@@ -1128,11 +1156,12 @@ class Word(Node):
                 result.append(_substring(value, i, j))
                 cmdsub_idx += 1
                 i = j
-            # Check for >( or <( process substitution (not inside double quotes or $[...])
+            # Check for >( or <( process substitution (not inside double quotes, $[...], or $((...)))
             elif (
                 (_starts_with_at(value, i, ">(") or _starts_with_at(value, i, "<("))
                 and not in_double_quote
                 and deprecated_arith_depth == 0
+                and arith_depth == 0
             ):
                 # Check if this is actually a process substitution or just comparison + parens
                 # Process substitution: not preceded by alphanumeric

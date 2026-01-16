@@ -29,12 +29,17 @@ Include this in the PR body:
 
 **Merging the PR:**
 
-Once the PR is created, squash merge and delete the remote branch immediately:
+Once the PR is created, wait for the "Just Check" GitHub workflow to pass:
+```bash
+gh pr checks <PR#> --watch
+```
+
+After the workflow passes, squash merge and delete the remote branch:
 ```bash
 gh pr merge <PR#> --squash --delete-branch
 ```
 
-**Important:** Do NOT wait for GitHub workflow checks to complete. As long as `just check` passes locally, that's the only standard required. Merge immediately after creating the PR.
+**Important:** GitHub requires the "Just Check" workflow to pass before allowing the merge. Do not attempt to merge until the checks complete successfully.
 
 **If the merge fails due to conflicts:**
 

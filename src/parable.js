@@ -824,6 +824,7 @@ class Word extends Node {
 			bracket_depth,
 			ch,
 			depth,
+			dq_brace_depth,
 			dq_content,
 			i,
 			in_whitespace,
@@ -861,9 +862,11 @@ class Word extends Node {
 				i = j + 1;
 			} else if (ch === '"') {
 				// Double-quoted string - strip line continuations
+				// Track ${...} nesting since quotes inside expansions don't end the string
 				in_whitespace = false;
 				j = i + 1;
 				dq_content = ['"'];
+				dq_brace_depth = 0;
 				while (j < inner.length) {
 					if (inner[j] === "\\" && j + 1 < inner.length) {
 						if (inner[j + 1] === "\n") {
@@ -874,7 +877,21 @@ class Word extends Node {
 							dq_content.push(inner[j + 1]);
 							j += 2;
 						}
-					} else if (inner[j] === '"') {
+					} else if (
+						inner[j] === "$" &&
+						j + 1 < inner.length &&
+						inner[j + 1] === "{"
+					) {
+						// Start of ${...} expansion
+						dq_content.push("${");
+						dq_brace_depth += 1;
+						j += 2;
+					} else if (inner[j] === "}" && dq_brace_depth > 0) {
+						// End of ${...} expansion
+						dq_content.push("}");
+						dq_brace_depth -= 1;
+						j += 1;
+					} else if (inner[j] === '"' && dq_brace_depth === 0) {
 						dq_content.push('"');
 						j += 1;
 						break;

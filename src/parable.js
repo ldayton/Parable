@@ -12679,11 +12679,19 @@ class Parser {
 	}
 
 	_findLastWord(node) {
-		let last_redirect;
+		let last_redirect, last_word;
 		if (node instanceof Word) {
 			return node;
 		}
 		if (node instanceof Command) {
+			// For trailing backslash stripping, prioritize words ending with backslash
+			// since that's the word we need to strip from
+			if (node.words && node.words.length) {
+				last_word = node.words[node.words.length - 1];
+				if (last_word.value.endsWith("\\")) {
+					return last_word;
+				}
+			}
 			// Redirects come after words in s-expression output, so check redirects first
 			if (node.redirects && node.redirects.length) {
 				last_redirect = node.redirects[node.redirects.length - 1];

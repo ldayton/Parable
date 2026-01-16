@@ -10466,6 +10466,12 @@ class Parser:
         if isinstance(node, Word):
             return node
         if isinstance(node, Command):
+            # For trailing backslash stripping, prioritize words ending with backslash
+            # since that's the word we need to strip from
+            if node.words:
+                last_word = node.words[len(node.words) - 1]
+                if last_word.value.endswith("\\"):
+                    return last_word
             # Redirects come after words in s-expression output, so check redirects first
             if node.redirects:
                 last_redirect = node.redirects[len(node.redirects) - 1]

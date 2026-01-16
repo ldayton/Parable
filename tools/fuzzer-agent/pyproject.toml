@@ -18,6 +18,7 @@ dependencies = [
 
 [project.scripts]
 fuzzer-agent = "fuzzer_agent.cli:main"
+fuzzer-agent-loop = "fuzzer_agent.unattended:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -8590,29 +8590,63 @@ class Parser {
 		// NOTE: No whitespace allowed between operator and & (e.g., <&- is valid, < &- is not)
 		if (!this.atEnd() && this.peek() === "&") {
 			this.advance();
-			// Parse the fd number or - for close, including move syntax like &10-
-			if (
-				!this.atEnd() &&
-				(/^[0-9]+$/.test(this.peek()) || this.peek() === "-")
-			) {
-				word_start = this.pos;
-				fd_chars = [];
-				while (!this.atEnd() && /^[0-9]+$/.test(this.peek())) {
-					fd_chars.push(this.advance());
-				}
-				if (fd_chars) {
-					fd_target = fd_chars.join("");
+			// Skip whitespace after & to check what follows
+			this.skipWhitespace();
+			// Check for "& -" followed by non-metachar (e.g., "3>& -5" -> 3>&- + word "5")
+			if (!this.atEnd() && this.peek() === "-") {
+				if (
+					this.pos + 1 < this.length &&
+					!_isMetachar(this.source[this.pos + 1])
+				) {
+					// Consume just the - as close target, leave rest for next word
+					this.advance();
+					target = new Word("&-");
 				} else {
-					fd_target = "";
+					// Set target to None to fall through to normal parsing
+					target = null;
 				}
-				// Handle just - for close, or N- for move syntax
-				if (!this.atEnd() && this.peek() === "-") {
-					fd_target += this.advance();
-				}
-				// If more word characters follow, treat the whole target as a word (e.g., <&0=)
-				// BUT: bare "-" (close syntax) is always complete - trailing chars are separate words
-				if (fd_target !== "-" && !this.atEnd() && !_isMetachar(this.peek())) {
-					this.pos = word_start;
+			} else {
+				target = null;
+			}
+			// If we didn't handle close syntax above, continue with normal parsing
+			if (target == null) {
+				if (
+					!this.atEnd() &&
+					(/^[0-9]+$/.test(this.peek()) || this.peek() === "-")
+				) {
+					word_start = this.pos;
+					fd_chars = [];
+					while (!this.atEnd() && /^[0-9]+$/.test(this.peek())) {
+						fd_chars.push(this.advance());
+					}
+					if (fd_chars) {
+						fd_target = fd_chars.join("");
+					} else {
+						fd_target = "";
+					}
+					// Handle just - for close, or N- for move syntax
+					if (!this.atEnd() && this.peek() === "-") {
+						fd_target += this.advance();
+					}
+					// If more word characters follow, treat the whole target as a word (e.g., <&0=)
+					// BUT: bare "-" (close syntax) is always complete - trailing chars are separate words
+					if (fd_target !== "-" && !this.atEnd() && !_isMetachar(this.peek())) {
+						this.pos = word_start;
+						inner_word = this.parseWord();
+						if (inner_word != null) {
+							target = new Word(`&${inner_word.value}`);
+							target.parts = inner_word.parts;
+						} else {
+							throw new ParseError(
+								`Expected target for redirect ${op}`,
+								this.pos,
+							);
+						}
+					} else {
+						target = new Word(`&${fd_target}`);
+					}
+				} else {
+					// Could be &$var or &word - parse word and prepend &
 					inner_word = this.parseWord();
 					if (inner_word != null) {
 						target = new Word(`&${inner_word.value}`);
@@ -8623,17 +8657,6 @@ class Parser {
 							this.pos,
 						);
 					}
-				} else {
-					target = new Word(`&${fd_target}`);
-				}
-			} else {
-				// Could be &$var or &word - parse word and prepend &
-				inner_word = this.parseWord();
-				if (inner_word != null) {
-					target = new Word(`&${inner_word.value}`);
-					target.parts = inner_word.parts;
-				} else {
-					throw new ParseError(`Expected target for redirect ${op}`, this.pos);
 				}
 			}
 		} else {

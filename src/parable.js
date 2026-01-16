@@ -4267,13 +4267,22 @@ function _findCmdsubEnd(value, start) {
 			continue;
 		}
 		// Handle arithmetic expressions $((
-		// Only treat as arithmetic if there's no ; before )) at top level
-		// (semicolon isn't valid in arithmetic, so $((x;y)) is actually $((...);...))
+		// Check for valid arithmetic by scanning for closing )) at top level
 		if (_startsWithAt(value, i, "$((")) {
 			is_valid_arith = true;
 			scan_paren = 0;
-			for (scan_i = i + 3; scan_i < value.length; scan_i++) {
+			scan_i = i + 3;
+			while (scan_i < value.length) {
 				scan_c = value[scan_i];
+				// Skip over $( command subs - their parens shouldn't count
+				if (
+					scan_c === "$" &&
+					scan_i + 1 < value.length &&
+					value[scan_i + 1] === "("
+				) {
+					scan_i = _findCmdsubEnd(value, scan_i + 2);
+					continue;
+				}
 				if (scan_c === "(") {
 					scan_paren += 1;
 				} else if (scan_c === ")") {
@@ -4286,10 +4295,8 @@ function _findCmdsubEnd(value, start) {
 						is_valid_arith = false;
 						break;
 					}
-				} else if (scan_c === ";" && scan_paren === 0) {
-					is_valid_arith = false;
-					break;
 				}
+				scan_i += 1;
 			}
 			if (is_valid_arith) {
 				arith_depth += 1;
@@ -7097,8 +7104,8 @@ class Parser {
 		}
 		// Check for end of expression or operators - bash allows missing operands
 		// (defers validation to runtime), so we return an empty node
-		// Include #{} which bash accepts syntactically but fails at runtime
-		if (this._arithAtEnd() || ")]:,?|&<>=!+-*/%^~#{}".includes(c)) {
+		// Include #{} and ; which bash accepts syntactically but fails at runtime
+		if (this._arithAtEnd() || ")]:,;?|&<>=!+-*/%^~#{}".includes(c)) {
 			return new ArithEmpty();
 		}
 		// Number or variable

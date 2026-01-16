@@ -3597,13 +3597,17 @@ def _find_cmdsub_end(value: str, start: int) -> int:
                     i += 1
             continue
         # Handle arithmetic expressions $((
-        # Only treat as arithmetic if there's no ; before )) at top level
-        # (semicolon isn't valid in arithmetic, so $((x;y)) is actually $((...);...))
+        # Check for valid arithmetic by scanning for closing )) at top level
         if _starts_with_at(value, i, "$(("):
             is_valid_arith = True
             scan_paren = 0
-            for scan_i in range(i + 3, len(value)):
+            scan_i = i + 3
+            while scan_i < len(value):
                 scan_c = value[scan_i]
+                # Skip over $( command subs - their parens shouldn't count
+                if scan_c == "$" and scan_i + 1 < len(value) and value[scan_i + 1] == "(":
+                    scan_i = _find_cmdsub_end(value, scan_i + 2)
+                    continue
                 if scan_c == "(":
                     scan_paren += 1
                 elif scan_c == ")":
@@ -3615,9 +3619,7 @@ def _find_cmdsub_end(value: str, start: int) -> int:
                         # Single ) at top level without following ) - not valid arithmetic
                         is_valid_arith = False
                         break
-                elif scan_c == ";" and scan_paren == 0:
-                    is_valid_arith = False
-                    break
+                scan_i += 1
             if is_valid_arith:
                 arith_depth += 1
                 i += 3
@@ -5937,8 +5939,8 @@ class Parser:
 
         # Check for end of expression or operators - bash allows missing operands
         # (defers validation to runtime), so we return an empty node
-        # Include #{} which bash accepts syntactically but fails at runtime
-        if self._arith_at_end() or c in ")]:,?|&<>=!+-*/%^~#{}":
+        # Include #{} and ; which bash accepts syntactically but fails at runtime
+        if self._arith_at_end() or c in ")]:,;?|&<>=!+-*/%^~#{}":
             return ArithEmpty()
 
         # Number or variable

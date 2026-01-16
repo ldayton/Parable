@@ -1377,10 +1377,14 @@ class Word extends Node {
 				(_startsWithAt(value, idx, "<(") || _startsWithAt(value, idx, ">(")) &&
 				!in_double
 			) {
-				// Only treat as process substitution if not preceded by alphanumeric
+				// Only treat as process substitution if not preceded by alphanumeric or quote
 				// (e.g., "i<(3)" is arithmetic comparison, not process substitution)
-				// Also don't treat as process substitution inside double quotes
-				if (idx === 0 || !/^[a-zA-Z0-9]$/.test(value[idx - 1])) {
+				// Also don't treat as process substitution inside double quotes or after quotes
+				if (
+					idx === 0 ||
+					(!/^[a-zA-Z0-9]$/.test(value[idx - 1]) &&
+						!"\"'".includes(value[idx - 1]))
+				) {
 					has_untracked_procsub = true;
 					break;
 				}
@@ -1542,8 +1546,11 @@ class Word extends Node {
 			) {
 				// Check for >( or <( process substitution (not inside double quotes, $[...], or $((...)))
 				// Check if this is actually a process substitution or just comparison + parens
-				// Process substitution: not preceded by alphanumeric
-				is_procsub = i === 0 || !/^[a-zA-Z0-9]$/.test(value[i - 1]);
+				// Process substitution: not preceded by alphanumeric or quote
+				is_procsub =
+					i === 0 ||
+					(!/^[a-zA-Z0-9]$/.test(value[i - 1]) &&
+						!"\"'".includes(value[i - 1]));
 				// Inside extglob: don't format, just copy raw content
 				if (extglob_depth > 0) {
 					j = _findCmdsubEnd(value, i + 2);

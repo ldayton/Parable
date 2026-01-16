@@ -1,0 +1,5 @@
+=== unmatched bracket with brace should split words correctly
+A}= a[b c
+---
+(command (word "A}=") (word "a[b") (word "c"))
+---

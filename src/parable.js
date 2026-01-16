@@ -5669,6 +5669,26 @@ class Parser {
 		}
 	}
 
+	_atListTerminatingBracket() {
+		let ch, next_pos;
+		if (this.atEnd()) {
+			return false;
+		}
+		ch = this.peek();
+		if (ch === ")") {
+			return true;
+		}
+		if (ch === "}") {
+			// } is only a list terminator if standalone (not part of a word like }})
+			next_pos = this.pos + 1;
+			if (next_pos >= this.length) {
+				return true;
+			}
+			return _isWordEndContext(this.source[next_pos]);
+		}
+		return false;
+	}
+
 	_collectRedirects() {
 		let redirect, redirects;
 		redirects = [];
@@ -12551,7 +12571,7 @@ class Parser {
 			op = this.parseListOperator();
 			// Newline acts as implicit semicolon if followed by more commands
 			if (op == null && has_newline) {
-				if (!this.atEnd() && !_isRightBracket(this.peek())) {
+				if (!this.atEnd() && !this._atListTerminatingBracket()) {
 					op = "\n";
 				}
 			}
@@ -12572,7 +12592,7 @@ class Parser {
 			// For & at end of list, don't require another command
 			if (op === "&") {
 				this.skipWhitespace();
-				if (this.atEnd() || _isRightBracket(this.peek())) {
+				if (this.atEnd() || this._atListTerminatingBracket()) {
 					break;
 				}
 				// Newline after & - in compound commands, skip it (& acts as separator)
@@ -12580,7 +12600,7 @@ class Parser {
 				if (this.peek() === "\n") {
 					if (newline_as_separator) {
 						this.skipWhitespaceAndNewlines();
-						if (this.atEnd() || _isRightBracket(this.peek())) {
+						if (this.atEnd() || this._atListTerminatingBracket()) {
 							break;
 						}
 					} else {
@@ -12591,7 +12611,7 @@ class Parser {
 			// For ; at end of list, don't require another command
 			if (op === ";") {
 				this.skipWhitespace();
-				if (this.atEnd() || _isRightBracket(this.peek())) {
+				if (this.atEnd() || this._atListTerminatingBracket()) {
 					break;
 				}
 				// Newline after ; means continue to see if more commands follow

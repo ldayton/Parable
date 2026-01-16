@@ -3794,6 +3794,9 @@ function _formatRedirect(r, compact, heredoc_op_only) {
 		} else {
 			op = "<<";
 		}
+		if (r.fd != null && r.fd !== 0) {
+			op = String(r.fd) + op;
+		}
 		if (r.quoted) {
 			delim = `'${r.delimiter}'`;
 		} else {

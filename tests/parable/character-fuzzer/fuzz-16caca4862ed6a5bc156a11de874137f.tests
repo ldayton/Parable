@@ -1,0 +1,7 @@
+=== heredoc with explicit fd inside command substitution
+$(2<<E
+E
+)
+---
+(command (word "$(2<<E\nE\n)"))
+---

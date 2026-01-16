@@ -1,0 +1,5 @@
+=== process substitution syntax in here-doc delimiter is literal
+<<a<()
+---
+(command (redirect "<<" ""))
+---

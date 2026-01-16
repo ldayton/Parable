@@ -6900,8 +6900,27 @@ class Parser:
         quoted = False
         delimiter_chars = []
 
-        while not self.at_end() and not _is_metachar(self.peek()):
+        while not self.at_end():
             ch = self.peek()
+            # Check for process substitution syntax <( or >( first - these are literal in delimiters
+            if (
+                (ch == "<" or ch == ">")
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "("
+            ):
+                delimiter_chars.append(self.advance())  # < or >
+                delimiter_chars.append(self.advance())  # (
+                depth = 1
+                while not self.at_end() and depth > 0:
+                    c = self.peek()
+                    if c == "(":
+                        depth += 1
+                    elif c == ")":
+                        depth -= 1
+                    delimiter_chars.append(self.advance())
+                continue
+            if _is_metachar(ch):
+                break
             if ch == '"':
                 quoted = True
                 self.advance()

@@ -8247,8 +8247,31 @@ class Parser {
 		// Parse the delimiter, handling quoting (can be mixed like 'EOF'"2")
 		quoted = false;
 		delimiter_chars = [];
-		while (!this.atEnd() && !_isMetachar(this.peek())) {
+		while (!this.atEnd()) {
 			ch = this.peek();
+			// Check for process substitution syntax <( or >( first - these are literal in delimiters
+			if (
+				(ch === "<" || ch === ">") &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "("
+			) {
+				delimiter_chars.push(this.advance());
+				delimiter_chars.push(this.advance());
+				depth = 1;
+				while (!this.atEnd() && depth > 0) {
+					c = this.peek();
+					if (c === "(") {
+						depth += 1;
+					} else if (c === ")") {
+						depth -= 1;
+					}
+					delimiter_chars.push(this.advance());
+				}
+				continue;
+			}
+			if (_isMetachar(ch)) {
+				break;
+			}
 			if (ch === '"') {
 				quoted = true;
 				this.advance();

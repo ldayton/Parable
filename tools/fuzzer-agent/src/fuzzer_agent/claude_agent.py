@@ -199,7 +199,6 @@ class ClaudeFuzzerFixer:
             allowed_tools=["Bash", "Read", "Write", "Edit", "Glob", "Grep"],
             permission_mode="acceptEdits",
             cwd=str(REPO_ROOT),
-            max_turns=50,
         )
         output = ""
         result_msg = None

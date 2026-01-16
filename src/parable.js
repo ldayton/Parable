@@ -6095,6 +6095,7 @@ class Parser {
 			found_in_content,
 			heredoc_delimiters,
 			heredoc_end,
+			heredoc_scan_pos,
 			heredoc_start,
 			line,
 			line_end,
@@ -6534,9 +6535,16 @@ class Parser {
 		// Save position after ) for text (before skipping heredoc content)
 		text_end = this.pos;
 		// Check for heredocs in content whose bodies follow the )
-		// This handles cases like $(cmd <<X) where ) immediately follows <<X
-		// Only process if there's a newline after ) - otherwise no heredoc content exists
-		if (!this.atEnd() && this.peek() === "\n") {
+		// This handles cases like $(cmd <<X) or $(cmd <<X)c where ) is followed by content then newline
+		// Look ahead for a newline - heredoc content starts after the first newline
+		heredoc_scan_pos = this.pos;
+		while (
+			heredoc_scan_pos < this.length &&
+			this.source[heredoc_scan_pos] !== "\n"
+		) {
+			heredoc_scan_pos += 1;
+		}
+		if (heredoc_scan_pos < this.length) {
 			// Filter to only heredocs that weren't already consumed during parsing
 			all_heredoc_delimiters = _extractHeredocDelimiters(content);
 			heredoc_delimiters = [];

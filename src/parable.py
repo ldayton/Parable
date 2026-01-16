@@ -5419,9 +5419,12 @@ class Parser:
         text_end = self.pos
 
         # Check for heredocs in content whose bodies follow the )
-        # This handles cases like $(cmd <<X) where ) immediately follows <<X
-        # Only process if there's a newline after ) - otherwise no heredoc content exists
-        if not self.at_end() and self.peek() == "\n":
+        # This handles cases like $(cmd <<X) or $(cmd <<X)c where ) is followed by content then newline
+        # Look ahead for a newline - heredoc content starts after the first newline
+        heredoc_scan_pos = self.pos
+        while heredoc_scan_pos < self.length and self.source[heredoc_scan_pos] != "\n":
+            heredoc_scan_pos += 1
+        if heredoc_scan_pos < self.length:
             # Filter to only heredocs that weren't already consumed during parsing
             all_heredoc_delimiters = _extract_heredoc_delimiters(content)
             heredoc_delimiters = []

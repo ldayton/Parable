@@ -1,0 +1,5 @@
+=== heredoc delimiter with $$[ should end at bracket
+<< $$[>]
+---
+(command (redirect "<<" "") (redirect ">" "]"))
+---

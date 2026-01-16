@@ -1,0 +1,5 @@
+=== conditional with bracket-percent term in binary comparison
+[[ [% = ] ]]
+---
+(cond (cond-binary "=" (cond-term "[%") (cond-term "]")))
+---

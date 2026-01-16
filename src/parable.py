@@ -8619,6 +8619,10 @@ class Parser:
                     if c == "]":
                         chars.append(self.advance())
                         break
+                    # Whitespace terminates bracket expressions in [[ ]] conditionals
+                    # e.g., [[ [% = ] ]] parses as [% (word) = (op) ] (word), not [% = ] as one bracket expr
+                    if _is_whitespace_no_newline(c):
+                        break
                     if c == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == ":":
                         # POSIX class like [:alpha:] inside bracket expression
                         chars.append(self.advance())  # [

@@ -10493,6 +10493,11 @@ class Parser {
 						chars.push(this.advance());
 						break;
 					}
+					// Whitespace terminates bracket expressions in [[ ]] conditionals
+					// e.g., [[ [% = ] ]] parses as [% (word) = (op) ] (word), not [% = ] as one bracket expr
+					if (_isWhitespaceNoNewline(c)) {
+						break;
+					}
 					if (
 						c === "[" &&
 						this.pos + 1 < this.length &&

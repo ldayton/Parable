@@ -4165,6 +4165,18 @@ def _looks_like_assignment(s: str) -> bool:
     return True
 
 
+def _is_valid_identifier(name: str) -> bool:
+    """Check if name is a valid bash identifier (variable/function name)."""
+    if not name:
+        return False
+    if not (name[0].isalpha() or name[0] == "_"):
+        return False
+    for c in name[1:]:
+        if not (c.isalnum() or c == "_"):
+            return False
+    return True
+
+
 class Parser:
     """Recursive descent parser for bash."""
 
@@ -9047,27 +9059,26 @@ class Parser:
                 ch = self.peek()
             next_word = self.peek_word()
 
-            if ch == "{":
-                # NAME { ... } - extract name
-                name = potential_name
-                body = self.parse_brace_group()
-                if body is not None:
-                    return Coproc(body, name)
-            elif ch == "(":
-                # NAME ( ... ) - extract name
-                name = potential_name
-                if self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
-                    body = self.parse_arithmetic_command()
-                else:
-                    body = self.parse_subshell()
-                if body is not None:
-                    return Coproc(body, name)
-            elif next_word in COMPOUND_KEYWORDS:
-                # NAME followed by reserved compound - extract name
-                name = potential_name
-                body = self.parse_compound_command()
-                if body is not None:
-                    return Coproc(body, name)
+            if _is_valid_identifier(potential_name):
+                # Valid identifier followed by compound command - extract name
+                if ch == "{":
+                    name = potential_name
+                    body = self.parse_brace_group()
+                    if body is not None:
+                        return Coproc(body, name)
+                elif ch == "(":
+                    name = potential_name
+                    if self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                        body = self.parse_arithmetic_command()
+                    else:
+                        body = self.parse_subshell()
+                    if body is not None:
+                        return Coproc(body, name)
+                elif next_word in COMPOUND_KEYWORDS:
+                    name = potential_name
+                    body = self.parse_compound_command()
+                    if body is not None:
+                        return Coproc(body, name)
 
             # Not followed by compound - restore position and parse as simple command
             self.pos = word_start

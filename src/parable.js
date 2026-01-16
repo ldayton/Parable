@@ -4947,6 +4947,22 @@ function _looksLikeAssignment(s) {
 	return true;
 }
 
+function _isValidIdentifier(name) {
+	let c;
+	if (!name) {
+		return false;
+	}
+	if (!(/^[a-zA-Z]$/.test(name[0]) || name[0] === "_")) {
+		return false;
+	}
+	for (c of name.slice(1)) {
+		if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
+			return false;
+		}
+	}
+	return true;
+}
+
 class Parser {
 	constructor(source, in_process_sub) {
 		if (in_process_sub == null) {
@@ -9327,7 +9343,8 @@ class Parser {
 		// Check if next token is a binary operator
 		if (
 			!this._condAtEnd() &&
-			this.peek() !== "&" && this.peek() !== "|" &&
+			this.peek() !== "&" &&
+			this.peek() !== "|" &&
 			this.peek() !== ")"
 		) {
 			// Handle < and > as binary operators (they terminate words)
@@ -10902,30 +10919,30 @@ class Parser {
 				ch = this.peek();
 			}
 			next_word = this.peekWord();
-			if (ch === "{") {
-				// NAME { ... } - extract name
-				name = potential_name;
-				body = this.parseBraceGroup();
-				if (body != null) {
-					return new Coproc(body, name);
-				}
-			} else if (ch === "(") {
-				// NAME ( ... ) - extract name
-				name = potential_name;
-				if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
-					body = this.parseArithmeticCommand();
-				} else {
-					body = this.parseSubshell();
-				}
-				if (body != null) {
-					return new Coproc(body, name);
-				}
-			} else if (COMPOUND_KEYWORDS.has(next_word)) {
-				// NAME followed by reserved compound - extract name
-				name = potential_name;
-				body = this.parseCompoundCommand();
-				if (body != null) {
-					return new Coproc(body, name);
+			if (_isValidIdentifier(potential_name)) {
+				// Valid identifier followed by compound command - extract name
+				if (ch === "{") {
+					name = potential_name;
+					body = this.parseBraceGroup();
+					if (body != null) {
+						return new Coproc(body, name);
+					}
+				} else if (ch === "(") {
+					name = potential_name;
+					if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
+						body = this.parseArithmeticCommand();
+					} else {
+						body = this.parseSubshell();
+					}
+					if (body != null) {
+						return new Coproc(body, name);
+					}
+				} else if (COMPOUND_KEYWORDS.has(next_word)) {
+					name = potential_name;
+					body = this.parseCompoundCommand();
+					if (body != null) {
+						return new Coproc(body, name);
+					}
 				}
 			}
 			// Not followed by compound - restore position and parse as simple command

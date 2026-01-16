@@ -5255,7 +5255,39 @@ class Parser:
         content = _substring(self.source, content_start, self.pos)
         self.advance()  # consume final )
 
-        text = _substring(self.source, start, self.pos)
+        # Save position after ) for text (before skipping heredoc content)
+        text_end = self.pos
+
+        # Check for heredocs in content whose bodies follow the )
+        # This handles cases like $(cmd <<X) where ) immediately follows <<X
+        # Only process if there's a newline after ) - otherwise no heredoc content exists
+        if not self.at_end() and self.peek() == "\n":
+            # Filter to only heredocs that weren't already consumed during parsing
+            all_heredoc_delimiters = _extract_heredoc_delimiters(content)
+            heredoc_delimiters = []
+            for delim, strip_tabs in all_heredoc_delimiters:
+                # Check if this delimiter was already consumed (appears on its own line in content)
+                found_in_content = False
+                for line in content.split("\n"):
+                    check_line = line.lstrip("\t") if strip_tabs else line
+                    if check_line == delim:
+                        found_in_content = True
+                        break
+                if not found_in_content:
+                    heredoc_delimiters.append((delim, strip_tabs))
+
+            if heredoc_delimiters:
+                heredoc_start, heredoc_end = _find_heredoc_content_end(
+                    self.source, self.pos, heredoc_delimiters
+                )
+                if heredoc_end > heredoc_start:
+                    content = content + _substring(self.source, heredoc_start, heredoc_end)
+                    if self._pending_heredoc_end is None:
+                        self._pending_heredoc_end = heredoc_end
+                    else:
+                        self._pending_heredoc_end = max(self._pending_heredoc_end, heredoc_end)
+
+        text = _substring(self.source, start, text_end)
 
         # Parse the content as a command list
         sub_parser = Parser(content, in_process_sub=True)

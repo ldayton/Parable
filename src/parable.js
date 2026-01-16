@@ -3865,13 +3865,16 @@ function _skipHeredoc(value, start) {
 	let delim_start,
 		delimiter,
 		i,
+		j,
 		line,
 		line_end,
 		line_start,
+		next_line_start,
 		paren_depth,
 		quote_char,
 		stripped,
-		tabs_stripped;
+		tabs_stripped,
+		trailing_bs;
 	i = start + 2;
 	// Handle <<- (strip tabs)
 	if (i < value.length && value[i] === "-") {
@@ -3968,6 +3971,28 @@ function _skipHeredoc(value, start) {
 			line_end += 1;
 		}
 		line = value.slice(line_start, line_end);
+		// Handle backslash-newline continuation (join continued lines)
+		while (line_end < value.length) {
+			trailing_bs = 0;
+			for (j = line.length - 1; j > -1; j--) {
+				if (line[j] === "\\") {
+					trailing_bs += 1;
+				} else {
+					break;
+				}
+			}
+			if (trailing_bs % 2 === 0) {
+				break;
+			}
+			// Odd backslashes - line continuation
+			line = line.slice(0, -1);
+			line_end += 1;
+			next_line_start = line_end;
+			while (line_end < value.length && value[line_end] !== "\n") {
+				line_end += 1;
+			}
+			line = line + value.slice(next_line_start, line_end);
+		}
 		// Check if this line is the delimiter (possibly with leading tabs for <<-)
 		if (start + 2 < value.length && value[start + 2] === "-") {
 			stripped = line.replace(/^[\t]+/, "");

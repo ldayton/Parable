@@ -3372,6 +3372,23 @@ def _skip_heredoc(value: str, start: int) -> int:
         while line_end < len(value) and value[line_end] != "\n":
             line_end += 1
         line = _substring(value, line_start, line_end)
+        # Handle backslash-newline continuation (join continued lines)
+        while line_end < len(value):
+            trailing_bs = 0
+            for j in range(len(line) - 1, -1, -1):
+                if line[j] == "\\":
+                    trailing_bs += 1
+                else:
+                    break
+            if trailing_bs % 2 == 0:
+                break  # Even backslashes (including 0) - no continuation
+            # Odd backslashes - line continuation
+            line = line[:-1]  # Remove trailing backslash
+            line_end += 1  # Skip newline
+            next_line_start = line_end
+            while line_end < len(value) and value[line_end] != "\n":
+                line_end += 1
+            line = line + _substring(value, next_line_start, line_end)
         # Check if this line is the delimiter (possibly with leading tabs for <<-)
         if start + 2 < len(value) and value[start + 2] == "-":
             stripped = line.lstrip("\t")

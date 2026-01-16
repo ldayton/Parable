@@ -1598,8 +1598,25 @@ class Word extends Node {
 							continue;
 						}
 					}
+					// Check if this is a list with & operator and newlines before &
+					// In that case, preserve raw content to avoid losing newlines
+					raw_content = value.slice(i + 2, j - 1);
+					if (
+						node.command.kind === "list" &&
+						node.command.parts &&
+						node.command.parts[node.command.parts.length - 1].kind ===
+							"operator" &&
+						node.command.parts[node.command.parts.length - 1].op === "&" &&
+						raw_content.endsWith("&") &&
+						raw_content.slice(0, raw_content.lastIndexOf("&")).includes("\n")
+					) {
+						// Preserve raw content for lists with & and newlines before &
+						raw_content = raw_content.replaceAll("\\\n", "");
+						result.push(`${direction}(${raw_content})`);
+					} else {
+						result.push(`${direction}(${formatted})`);
+					}
 					procsub_idx += 1;
-					result.push(`${direction}(${formatted})`);
 					i = j;
 				} else if (is_procsub && this.parts.length) {
 					// No AST node but valid procsub context - parse content on the fly
@@ -1629,8 +1646,13 @@ class Word extends Node {
 					try {
 						parser = new Parser(inner_to_parse);
 						parsed = parser.parseList();
-						// Only use parsed result if parser consumed all input
-						if (parsed && parser.pos === inner_to_parse.length) {
+						// Only use parsed result if parser consumed all input and no newlines in content
+						// (newlines would be lost during formatting)
+						if (
+							parsed &&
+							parser.pos === inner_to_parse.length &&
+							!inner.includes("\n")
+						) {
 							compact = _startsWithSubshell(parsed);
 							formatted = _formatCmdsubNode(parsed, 0, true, compact, true);
 						} else {

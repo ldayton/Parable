@@ -34,6 +34,8 @@ Once the PR is created, wait for the "Just Check" GitHub workflow to pass:
 gh pr checks <PR#> --watch
 ```
 
+**Note:** If this fails with "no checks reported", wait a few seconds for GitHub to start the workflow, then retry the command.
+
 After the workflow passes, squash merge and delete the remote branch:
 ```bash
 gh pr merge <PR#> --squash --delete-branch

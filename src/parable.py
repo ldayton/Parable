@@ -1306,18 +1306,18 @@ class Word(Node):
                         # Starts with subshell and formatting would change it - preserve original
                         result.append(direction + "(" + raw_stripped + ")")
                     else:
-                        # Check if list contains semicolon operators
-                        has_semicolon = False
+                        # Check if list contains operators that need formatting
+                        has_operator_needing_spaces = False
                         if node.command.kind == "list" and node.command.parts:
                             for p in node.command.parts:
-                                if p.kind == "operator" and p.op in (";", "\n"):
-                                    has_semicolon = True
+                                if p.kind == "operator" and p.op in (";", "\n", "&&", "||", "&"):
+                                    has_operator_needing_spaces = True
                                     break
-                        # For lists without newlines or semicolons, preserve raw content
+                        # For lists without newlines or operators that need spaces, preserve raw content
                         if (
                             node.command.kind == "list"
                             and "\n" not in raw_stripped
-                            and not has_semicolon
+                            and not has_operator_needing_spaces
                         ):
                             result.append(direction + "(" + raw_stripped + ")")
                         else:

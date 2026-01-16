@@ -10463,6 +10463,11 @@ class Parser:
         if isinstance(node, Word):
             return node
         if isinstance(node, Command):
+            # Redirects come after words in s-expression output, so check redirects first
+            if node.redirects:
+                last_redirect = node.redirects[len(node.redirects) - 1]
+                if isinstance(last_redirect, Redirect):
+                    return last_redirect.target
             if node.words:
                 return node.words[len(node.words) - 1]
         if isinstance(node, Pipeline):

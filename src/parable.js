@@ -8649,11 +8649,13 @@ class Parser {
 			delimiter,
 			delimiter_chars,
 			depth,
+			dollar_count,
 			esc,
 			esc_val,
 			had_continuation,
 			heredoc_end,
 			i,
+			j,
 			line,
 			line_end,
 			line_start,
@@ -8775,18 +8777,31 @@ class Parser {
 					this.pos + 1 < this.length &&
 					this.source[this.pos + 1] === "["
 				) {
-					// Arithmetic expansion $[...] embedded in delimiter
-					delimiter_chars.push(this.advance());
-					delimiter_chars.push(this.advance());
-					depth = 1;
-					while (!this.atEnd() && depth > 0) {
-						c = this.peek();
-						if (c === "[") {
-							depth += 1;
-						} else if (c === "]") {
-							depth -= 1;
-						}
+					// Check if this is $$[ where $$ is PID and [ ends delimiter
+					dollar_count = 0;
+					j = this.pos - 1;
+					while (j >= 0 && this.source[j] === "$") {
+						dollar_count += 1;
+						j -= 1;
+					}
+					if (dollar_count % 2 === 1) {
+						// Odd number of $ before: this $ pairs with previous to form $$
+						// Don't consume the [, let it end the delimiter
 						delimiter_chars.push(this.advance());
+					} else {
+						// Arithmetic expansion $[...] embedded in delimiter
+						delimiter_chars.push(this.advance());
+						delimiter_chars.push(this.advance());
+						depth = 1;
+						while (!this.atEnd() && depth > 0) {
+							c = this.peek();
+							if (c === "[") {
+								depth += 1;
+							} else if (c === "]") {
+								depth -= 1;
+							}
+							delimiter_chars.push(this.advance());
+						}
 					}
 				} else if (ch === "`") {
 					// Backtick command substitution embedded in delimiter

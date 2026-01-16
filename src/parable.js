@@ -5530,6 +5530,10 @@ function _isValidIdentifier(name) {
 	return true;
 }
 
+// Word parsing context constants
+const WORD_CTX_NORMAL = 0;
+const WORD_CTX_COND = 1;
+const WORD_CTX_REGEX = 2;
 class Parser {
 	constructor(source, in_process_sub) {
 		if (in_process_sub == null) {
@@ -5784,68 +5788,419 @@ class Parser {
 		return true;
 	}
 
-	parseWord(at_command_start, in_array_literal) {
-		let ansi_node,
-			ansi_result,
-			ansi_text,
-			arith_node,
-			arith_result,
-			arith_text,
-			array_node,
+	_scanSingleQuote(chars, start, track_newline) {
+		let c;
+		if (track_newline == null) {
+			track_newline = false;
+		}
+		chars.push("'");
+		while (!this.atEnd() && this.peek() !== "'") {
+			c = this.advance();
+			if (track_newline && c === "\n") {
+				this._saw_newline_in_single_quote = true;
+			}
+			chars.push(c);
+		}
+		if (this.atEnd()) {
+			throw new ParseError("Unterminated single quote", start);
+		}
+		chars.push(this.advance());
+	}
+
+	_scanBracketExpression(chars, parts, for_regex, paren_depth) {
+		let bracket_will_close, c, next_ch, sc, scan;
+		if (for_regex == null) {
+			for_regex = false;
+		}
+		if (paren_depth == null) {
+			paren_depth = 0;
+		}
+		if (for_regex) {
+			// Regex mode: lookahead to check if bracket will close before terminators
+			scan = this.pos + 1;
+			if (scan < this.length && this.source[scan] === "^") {
+				scan += 1;
+			}
+			if (scan < this.length && this.source[scan] === "]") {
+				scan += 1;
+			}
+			bracket_will_close = false;
+			while (scan < this.length) {
+				sc = this.source[scan];
+				if (
+					sc === "]" &&
+					scan + 1 < this.length &&
+					this.source[scan + 1] === "]"
+				) {
+					break;
+				}
+				if (sc === ")" && paren_depth > 0) {
+					break;
+				}
+				if (
+					sc === "&" &&
+					scan + 1 < this.length &&
+					this.source[scan + 1] === "&"
+				) {
+					break;
+				}
+				if (sc === "]") {
+					bracket_will_close = true;
+					break;
+				}
+				if (
+					sc === "[" &&
+					scan + 1 < this.length &&
+					this.source[scan + 1] === ":"
+				) {
+					scan += 2;
+					while (
+						scan < this.length &&
+						!(
+							this.source[scan] === ":" &&
+							scan + 1 < this.length &&
+							this.source[scan + 1] === "]"
+						)
+					) {
+						scan += 1;
+					}
+					if (scan < this.length) {
+						scan += 2;
+					}
+					continue;
+				}
+				scan += 1;
+			}
+			if (!bracket_will_close) {
+				return false;
+			}
+		} else {
+			// Cond mode: check for [ followed by whitespace/operators
+			if (this.pos + 1 >= this.length) {
+				return false;
+			}
+			next_ch = this.source[this.pos + 1];
+			if (
+				_isWhitespaceNoNewline(next_ch) ||
+				next_ch === "&" ||
+				next_ch === "|"
+			) {
+				return false;
+			}
+		}
+		chars.push(this.advance());
+		// Handle negation [^
+		if (!this.atEnd() && this.peek() === "^") {
+			chars.push(this.advance());
+		}
+		// Handle ] as first char (literal ])
+		if (!this.atEnd() && this.peek() === "]") {
+			chars.push(this.advance());
+		}
+		// Consume until closing ]
+		while (!this.atEnd()) {
+			c = this.peek();
+			if (c === "]") {
+				chars.push(this.advance());
+				break;
+			}
+			if (
+				c === "[" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === ":"
+			) {
+				chars.push(this.advance());
+				chars.push(this.advance());
+				while (
+					!this.atEnd() &&
+					!(
+						this.peek() === ":" &&
+						this.pos + 1 < this.length &&
+						this.source[this.pos + 1] === "]"
+					)
+				) {
+					chars.push(this.advance());
+				}
+				if (!this.atEnd()) {
+					chars.push(this.advance());
+					chars.push(this.advance());
+				}
+			} else if (
+				!for_regex &&
+				c === "[" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "="
+			) {
+				chars.push(this.advance());
+				chars.push(this.advance());
+				while (
+					!this.atEnd() &&
+					!(
+						this.peek() === "=" &&
+						this.pos + 1 < this.length &&
+						this.source[this.pos + 1] === "]"
+					)
+				) {
+					chars.push(this.advance());
+				}
+				if (!this.atEnd()) {
+					chars.push(this.advance());
+					chars.push(this.advance());
+				}
+			} else if (
+				!for_regex &&
+				c === "[" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "."
+			) {
+				chars.push(this.advance());
+				chars.push(this.advance());
+				while (
+					!this.atEnd() &&
+					!(
+						this.peek() === "." &&
+						this.pos + 1 < this.length &&
+						this.source[this.pos + 1] === "]"
+					)
+				) {
+					chars.push(this.advance());
+				}
+				if (!this.atEnd()) {
+					chars.push(this.advance());
+					chars.push(this.advance());
+				}
+			} else if (for_regex && c === "$") {
+				if (!this._parseDollarExpansion(chars, parts)) {
+					chars.push(this.advance());
+				}
+			} else {
+				chars.push(this.advance());
+			}
+		}
+		return true;
+	}
+
+	_isWordTerminator(ctx, ch, bracket_depth, paren_depth) {
+		if (bracket_depth == null) {
+			bracket_depth = 0;
+		}
+		if (paren_depth == null) {
+			paren_depth = 0;
+		}
+		if (ctx === WORD_CTX_REGEX) {
+			if (
+				ch === "]" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "]"
+			) {
+				return true;
+			}
+			if (
+				ch === "&" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "&"
+			) {
+				return true;
+			}
+			if (ch === ")" && paren_depth === 0) {
+				return true;
+			}
+			return _isWhitespace(ch) && paren_depth === 0;
+		}
+		if (ctx === WORD_CTX_COND) {
+			if (
+				ch === "]" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "]"
+			) {
+				return true;
+			}
+			// ) always terminates, but ( is handled in the loop for extglob
+			if (ch === ")") {
+				return true;
+			}
+			if (
+				ch === "&" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "&"
+			) {
+				return true;
+			}
+			if (
+				ch === "|" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "|"
+			) {
+				return true;
+			}
+			if (ch === ";") {
+				return true;
+			}
+			// < and > terminate unless followed by ( (process sub)
+			if (
+				_isRedirectChar(ch) &&
+				!(this.pos + 1 < this.length && this.source[this.pos + 1] === "(")
+			) {
+				return true;
+			}
+			return _isWhitespaceNoNewline(ch);
+		}
+		// WORD_CTX_NORMAL
+		// < and > don't terminate if followed by ( (process substitution)
+		if (
+			_isRedirectChar(ch) &&
+			this.pos + 1 < this.length &&
+			this.source[this.pos + 1] === "("
+		) {
+			return false;
+		}
+		return _isMetachar(ch) && bracket_depth === 0;
+	}
+
+	_scanDoubleQuote(chars, parts, start, handle_line_continuation) {
+		let c, next_c;
+		if (handle_line_continuation == null) {
+			handle_line_continuation = true;
+		}
+		chars.push('"');
+		while (!this.atEnd() && this.peek() !== '"') {
+			c = this.peek();
+			if (c === "\\" && this.pos + 1 < this.length) {
+				next_c = this.source[this.pos + 1];
+				if (handle_line_continuation && next_c === "\n") {
+					this.advance();
+					this.advance();
+				} else {
+					chars.push(this.advance());
+					chars.push(this.advance());
+				}
+			} else if (c === "$") {
+				if (!this._parseDollarExpansion(chars, parts)) {
+					chars.push(this.advance());
+				}
+			} else {
+				chars.push(this.advance());
+			}
+		}
+		if (this.atEnd()) {
+			throw new ParseError("Unterminated double quote", start);
+		}
+		chars.push(this.advance());
+	}
+
+	_parseDollarExpansion(chars, parts) {
+		let result;
+		// Check $(( -> arithmetic expansion
+		if (
+			this.pos + 2 < this.length &&
+			this.source[this.pos + 1] === "(" &&
+			this.source[this.pos + 2] === "("
+		) {
+			result = this._parseArithmeticExpansion();
+			if (result[0]) {
+				parts.push(result[0]);
+				chars.push(result[1]);
+				return true;
+			}
+			// Not arithmetic (e.g., '$( ( ... ) )' is command sub + subshell)
+			result = this._parseCommandSubstitution();
+			if (result[0]) {
+				parts.push(result[0]);
+				chars.push(result[1]);
+				return true;
+			}
+			return false;
+		}
+		// Check $[ -> deprecated arithmetic
+		if (this.pos + 1 < this.length && this.source[this.pos + 1] === "[") {
+			result = this._parseDeprecatedArithmetic();
+			if (result[0]) {
+				parts.push(result[0]);
+				chars.push(result[1]);
+				return true;
+			}
+			return false;
+		}
+		// Check $( -> command substitution
+		if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
+			result = this._parseCommandSubstitution();
+			if (result[0]) {
+				parts.push(result[0]);
+				chars.push(result[1]);
+				return true;
+			}
+			return false;
+		}
+		// Otherwise -> parameter expansion
+		result = this._parseParamExpansion();
+		if (result[0]) {
+			parts.push(result[0]);
+			chars.push(result[1]);
+			return true;
+		}
+		return false;
+	}
+
+	_parseWordInternal(ctx, at_command_start, in_array_literal) {
+		let ansi_result,
 			array_result,
-			array_text,
 			bracket_depth,
 			c,
 			ch,
 			chars,
-			cmdsub_node,
 			cmdsub_result,
-			cmdsub_text,
+			depth,
 			extglob_depth,
+			for_regex,
+			handle_line_continuation,
 			in_single_in_dquote,
-			inner_parts,
-			locale_node,
+			inner_paren_depth,
 			locale_result,
-			locale_text,
 			next_c,
 			next_ch,
-			param_node,
-			param_result,
-			param_text,
 			paren_depth,
 			parts,
 			pc,
 			prev_char,
-			procsub_node,
 			procsub_result,
-			procsub_text,
 			seen_equals,
-			start;
+			start,
+			track_newline;
 		if (at_command_start == null) {
 			at_command_start = false;
 		}
 		if (in_array_literal == null) {
 			in_array_literal = false;
 		}
-		this.skipWhitespace();
-		if (this.atEnd()) {
-			return null;
-		}
 		start = this.pos;
 		chars = [];
 		parts = [];
 		bracket_depth = 0;
 		seen_equals = false;
+		paren_depth = 0;
 		while (!this.atEnd()) {
 			ch = this.peek();
-			// Track bracket depth for array subscripts like a[1+2]=3
-			// Inside brackets, metacharacters like | and ( are literal
-			// Only track [ after we've seen some chars (so [ -f file ] still works)
-			// Only at command start (array assignments), not in argument position
-			// Only BEFORE = sign (key=1],a[1 should not track the [1 part)
-			// Only after identifier char (not [[ which is conditional keyword)
-			// Also track in array elements like ([key]=val) to match brackets properly
-			if (ch === "[") {
+			// REGEX: Backslash-newline continuation (check first)
+			if (ctx === WORD_CTX_REGEX) {
+				if (
+					ch === "\\" &&
+					this.pos + 1 < this.length &&
+					this.source[this.pos + 1] === "\n"
+				) {
+					this.advance();
+					this.advance();
+					continue;
+				}
+			}
+			// Check termination for COND and REGEX contexts (NORMAL checks at end)
+			if (
+				ctx !== WORD_CTX_NORMAL &&
+				this._isWordTerminator(ctx, ch, bracket_depth, paren_depth)
+			) {
+				break;
+			}
+			// NORMAL: Array subscript tracking
+			if (ctx === WORD_CTX_NORMAL && ch === "[") {
 				if (bracket_depth > 0) {
 					bracket_depth += 1;
 					chars.push(this.advance());
@@ -5864,317 +6219,243 @@ class Parser {
 						continue;
 					}
 				}
-				// Track brackets at start of word for array elements: ['key']=val or [key]=val
-				// This ensures we find the matching ] even across newlines
-				// Only applies when inside array literal (to avoid tracking [ in other contexts)
 				if (chars.length === 0 && !seen_equals && in_array_literal) {
 					bracket_depth += 1;
 					chars.push(this.advance());
 					continue;
 				}
 			}
-			if (ch === "]" && bracket_depth > 0) {
+			if (ctx === WORD_CTX_NORMAL && ch === "]" && bracket_depth > 0) {
 				bracket_depth -= 1;
 				chars.push(this.advance());
 				continue;
 			}
-			if (ch === "=" && bracket_depth === 0) {
+			if (ctx === WORD_CTX_NORMAL && ch === "=" && bracket_depth === 0) {
 				seen_equals = true;
 			}
-			// Single-quoted string - no expansion
-			if (ch === "'") {
-				this.advance();
-				chars.push("'");
-				while (!this.atEnd() && this.peek() !== "'") {
-					c = this.advance();
-					if (c === "\n") {
-						this._saw_newline_in_single_quote = true;
-					}
-					chars.push(c);
+			// REGEX: Track paren depth
+			if (ctx === WORD_CTX_REGEX && ch === "(") {
+				paren_depth += 1;
+				chars.push(this.advance());
+				continue;
+			}
+			if (ctx === WORD_CTX_REGEX && ch === ")") {
+				if (paren_depth > 0) {
+					paren_depth -= 1;
+					chars.push(this.advance());
+					continue;
 				}
-				if (this.atEnd()) {
-					throw new ParseError("Unterminated single quote", start);
+				break;
+			}
+			// COND/REGEX: Bracket expressions
+			if ([WORD_CTX_COND, WORD_CTX_REGEX].includes(ctx) && ch === "[") {
+				for_regex = ctx === WORD_CTX_REGEX;
+				if (this._scanBracketExpression(chars, parts, for_regex, paren_depth)) {
+					continue;
 				}
 				chars.push(this.advance());
-			} else if (ch === '"') {
-				// Double-quoted string - expansions happen inside
-				this.advance();
-				chars.push('"');
-				in_single_in_dquote = false;
-				while (!this.atEnd() && (in_single_in_dquote || this.peek() !== '"')) {
-					c = this.peek();
-					// Inside single-quoted section (from param subscript)
-					if (in_single_in_dquote) {
+				continue;
+			}
+			// COND: Extglob patterns or ( terminates
+			if (ctx === WORD_CTX_COND && ch === "(") {
+				if (chars.length > 0 && _isExtglobPrefix(chars[chars.length - 1])) {
+					chars.push(this.advance());
+					depth = 1;
+					while (!this.atEnd() && depth > 0) {
+						c = this.peek();
+						if (c === "(") {
+							depth += 1;
+						} else if (c === ")") {
+							depth -= 1;
+						}
 						chars.push(this.advance());
-						if (c === "'") {
-							in_single_in_dquote = false;
-						}
-						continue;
 					}
-					// Handle escape sequences in double quotes
-					if (c === "\\" && this.pos + 1 < this.length) {
-						next_c = this.source[this.pos + 1];
-						if (next_c === "\n") {
-							// Line continuation - skip both backslash and newline
-							this.advance();
-							this.advance();
-						} else {
-							chars.push(this.advance());
-							chars.push(this.advance());
-						}
-					} else if (
-						c === "$" &&
-						this.pos + 2 < this.length &&
-						this.source[this.pos + 1] === "(" &&
-						this.source[this.pos + 2] === "("
+					continue;
+				} else {
+					// ( without extglob prefix terminates the word
+					break;
+				}
+			}
+			// REGEX: Space inside parens is part of pattern
+			if (ctx === WORD_CTX_REGEX && _isWhitespace(ch) && paren_depth > 0) {
+				chars.push(this.advance());
+				continue;
+			}
+			// Single-quoted string
+			if (ch === "'") {
+				this.advance();
+				track_newline = ctx === WORD_CTX_NORMAL;
+				this._scanSingleQuote(chars, start, track_newline);
+				continue;
+			}
+			// Double-quoted string
+			if (ch === '"') {
+				this.advance();
+				if (ctx === WORD_CTX_NORMAL) {
+					// NORMAL has special in_single_in_dquote and backtick handling
+					chars.push('"');
+					in_single_in_dquote = false;
+					while (
+						!this.atEnd() &&
+						(in_single_in_dquote || this.peek() !== '"')
 					) {
-						// Handle arithmetic expansion $((...))
-						arith_result = this._parseArithmeticExpansion();
-						arith_node = arith_result[0];
-						arith_text = arith_result[1];
-						if (arith_node) {
-							parts.push(arith_node);
-							chars.push(arith_text);
-						} else {
-							// Not arithmetic - try command substitution
-							cmdsub_result = this._parseCommandSubstitution();
-							cmdsub_node = cmdsub_result[0];
-							cmdsub_text = cmdsub_result[1];
-							if (cmdsub_node) {
-								parts.push(cmdsub_node);
-								chars.push(cmdsub_text);
+						c = this.peek();
+						if (in_single_in_dquote) {
+							chars.push(this.advance());
+							if (c === "'") {
+								in_single_in_dquote = false;
+							}
+							continue;
+						}
+						if (c === "\\" && this.pos + 1 < this.length) {
+							next_c = this.source[this.pos + 1];
+							if (next_c === "\n") {
+								this.advance();
+								this.advance();
+							} else {
+								chars.push(this.advance());
+								chars.push(this.advance());
+							}
+						} else if (c === "$") {
+							if (!this._parseDollarExpansion(chars, parts)) {
+								chars.push(this.advance());
+							}
+						} else if (c === "`") {
+							cmdsub_result = this._parseBacktickSubstitution();
+							if (cmdsub_result[0]) {
+								parts.push(cmdsub_result[0]);
+								chars.push(cmdsub_result[1]);
 							} else {
 								chars.push(this.advance());
 							}
-						}
-					} else if (
-						c === "$" &&
-						this.pos + 1 < this.length &&
-						this.source[this.pos + 1] === "["
-					) {
-						// Handle deprecated arithmetic expansion $[expr]
-						arith_result = this._parseDeprecatedArithmetic();
-						arith_node = arith_result[0];
-						arith_text = arith_result[1];
-						if (arith_node) {
-							parts.push(arith_node);
-							chars.push(arith_text);
 						} else {
 							chars.push(this.advance());
 						}
-					} else if (
-						c === "$" &&
-						this.pos + 1 < this.length &&
-						this.source[this.pos + 1] === "("
-					) {
-						// Handle command substitution $(...)
-						cmdsub_result = this._parseCommandSubstitution();
-						cmdsub_node = cmdsub_result[0];
-						cmdsub_text = cmdsub_result[1];
-						if (cmdsub_node) {
-							parts.push(cmdsub_node);
-							chars.push(cmdsub_text);
-						} else {
-							chars.push(this.advance());
-						}
-					} else if (c === "$") {
-						// Handle parameter expansion inside double quotes
-						param_result = this._parseParamExpansion();
-						param_node = param_result[0];
-						param_text = param_result[1];
-						if (param_node) {
-							parts.push(param_node);
-							chars.push(param_text);
-						} else {
-							chars.push(this.advance());
-						}
-					} else if (c === "`") {
-						// Handle backtick command substitution
-						cmdsub_result = this._parseBacktickSubstitution();
-						cmdsub_node = cmdsub_result[0];
-						cmdsub_text = cmdsub_result[1];
-						if (cmdsub_node) {
-							parts.push(cmdsub_node);
-							chars.push(cmdsub_text);
-						} else {
-							chars.push(this.advance());
-						}
-					} else {
-						chars.push(this.advance());
 					}
+					if (this.atEnd()) {
+						throw new ParseError("Unterminated double quote", start);
+					}
+					chars.push(this.advance());
+				} else {
+					handle_line_continuation = ctx === WORD_CTX_COND;
+					this._scanDoubleQuote(chars, parts, start, handle_line_continuation);
 				}
-				if (this.atEnd()) {
-					throw new ParseError("Unterminated double quote", start);
-				}
-				chars.push(this.advance());
-			} else if (ch === "\\" && this.pos + 1 < this.length) {
-				// Escape outside quotes
+				continue;
+			}
+			// Escape
+			if (ch === "\\" && this.pos + 1 < this.length) {
 				next_ch = this.source[this.pos + 1];
-				if (next_ch === "\n") {
-					// Line continuation - skip both backslash and newline
+				if (ctx !== WORD_CTX_REGEX && next_ch === "\n") {
 					this.advance();
 					this.advance();
 				} else {
 					chars.push(this.advance());
 					chars.push(this.advance());
 				}
-			} else if (
+				continue;
+			}
+			// NORMAL/COND: ANSI-C quoting $'...'
+			if (
+				ctx !== WORD_CTX_REGEX &&
 				ch === "$" &&
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === "'"
 			) {
-				// ANSI-C quoting $'...'
 				ansi_result = this._parseAnsiCQuote();
-				ansi_node = ansi_result[0];
-				ansi_text = ansi_result[1];
-				if (ansi_node) {
-					parts.push(ansi_node);
-					chars.push(ansi_text);
+				if (ansi_result[0]) {
+					parts.push(ansi_result[0]);
+					chars.push(ansi_result[1]);
 				} else {
 					chars.push(this.advance());
 				}
-			} else if (
+				continue;
+			}
+			// NORMAL/COND: Locale translation $"..."
+			if (
+				ctx !== WORD_CTX_REGEX &&
 				ch === "$" &&
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === '"'
 			) {
-				// Locale translation $"..."
 				locale_result = this._parseLocaleString();
-				locale_node = locale_result[0];
-				locale_text = locale_result[1];
-				inner_parts = locale_result[2];
-				if (locale_node) {
-					parts.push(locale_node);
-					parts.push(...inner_parts);
-					chars.push(locale_text);
+				if (locale_result[0]) {
+					parts.push(locale_result[0]);
+					parts.push(...locale_result[2]);
+					chars.push(locale_result[1]);
 				} else {
 					chars.push(this.advance());
 				}
-			} else if (
-				ch === "$" &&
-				this.pos + 2 < this.length &&
-				this.source[this.pos + 1] === "(" &&
-				this.source[this.pos + 2] === "("
-			) {
-				// Arithmetic expansion $((...)) - try before command substitution
-				// If it fails (returns None), fall through to command substitution
-				arith_result = this._parseArithmeticExpansion();
-				arith_node = arith_result[0];
-				arith_text = arith_result[1];
-				if (arith_node) {
-					parts.push(arith_node);
-					chars.push(arith_text);
-				} else {
-					// Not arithmetic (e.g., '$( ( ... ) )' is command sub + subshell)
-					cmdsub_result = this._parseCommandSubstitution();
-					cmdsub_node = cmdsub_result[0];
-					cmdsub_text = cmdsub_result[1];
-					if (cmdsub_node) {
-						parts.push(cmdsub_node);
-						chars.push(cmdsub_text);
-					} else {
-						chars.push(this.advance());
-					}
-				}
-			} else if (
-				ch === "$" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "["
-			) {
-				// Deprecated arithmetic expansion $[expr]
-				arith_result = this._parseDeprecatedArithmetic();
-				arith_node = arith_result[0];
-				arith_text = arith_result[1];
-				if (arith_node) {
-					parts.push(arith_node);
-					chars.push(arith_text);
-				} else {
+				continue;
+			}
+			// Dollar expansions
+			if (ch === "$") {
+				if (!this._parseDollarExpansion(chars, parts)) {
 					chars.push(this.advance());
 				}
-			} else if (
-				ch === "$" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "("
-			) {
-				// Command substitution $(...)
-				cmdsub_result = this._parseCommandSubstitution();
-				cmdsub_node = cmdsub_result[0];
-				cmdsub_text = cmdsub_result[1];
-				if (cmdsub_node) {
-					parts.push(cmdsub_node);
-					chars.push(cmdsub_text);
-				} else {
-					chars.push(this.advance());
-				}
-			} else if (ch === "$") {
-				// Parameter expansion $var or ${...}
-				param_result = this._parseParamExpansion();
-				param_node = param_result[0];
-				param_text = param_result[1];
-				if (param_node) {
-					parts.push(param_node);
-					chars.push(param_text);
-				} else {
-					chars.push(this.advance());
-				}
-			} else if (ch === "`") {
-				// Backtick command substitution
+				continue;
+			}
+			// NORMAL/COND: Backtick command substitution
+			if (ctx !== WORD_CTX_REGEX && ch === "`") {
 				cmdsub_result = this._parseBacktickSubstitution();
-				cmdsub_node = cmdsub_result[0];
-				cmdsub_text = cmdsub_result[1];
-				if (cmdsub_node) {
-					parts.push(cmdsub_node);
-					chars.push(cmdsub_text);
+				if (cmdsub_result[0]) {
+					parts.push(cmdsub_result[0]);
+					chars.push(cmdsub_result[1]);
 				} else {
 					chars.push(this.advance());
 				}
-			} else if (
+				continue;
+			}
+			// NORMAL/COND: Process substitution <(...) or >(...)
+			if (
+				ctx !== WORD_CTX_REGEX &&
 				_isRedirectChar(ch) &&
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === "("
 			) {
-				// Process substitution <(...) or >(...)
 				procsub_result = this._parseProcessSubstitution();
-				procsub_node = procsub_result[0];
-				procsub_text = procsub_result[1];
-				if (procsub_node) {
-					parts.push(procsub_node);
-					chars.push(procsub_text);
-				} else if (procsub_text) {
-					// Not a valid process substitution, treat full <(...) as literal
-					chars.push(procsub_text);
+				if (procsub_result[0]) {
+					parts.push(procsub_result[0]);
+					chars.push(procsub_result[1]);
+				} else if (procsub_result[1]) {
+					chars.push(procsub_result[1]);
 				} else {
-					// Couldn't parse at all, treat <( as literal chars
 					chars.push(this.advance());
-					chars.push(this.advance());
+					if (ctx === WORD_CTX_NORMAL) {
+						chars.push(this.advance());
+					}
 				}
-			} else if (
+				continue;
+			}
+			// NORMAL: Array literal
+			if (
+				ctx === WORD_CTX_NORMAL &&
 				ch === "(" &&
 				chars &&
-				bracket_depth === 0 &&
-				(chars[chars.length - 1] === "=" ||
+				bracket_depth === 0
+			) {
+				if (
+					chars[chars.length - 1] === "=" ||
 					(chars.length >= 2 &&
 						chars[chars.length - 2] === "+" &&
-						chars[chars.length - 1] === "="))
-			) {
-				// Array literal: name=(elements) or name+=(elements)
-				// But not when inside brackets, as that would be part of array element
-				array_result = this._parseArrayLiteral();
-				array_node = array_result[0];
-				array_text = array_result[1];
-				if (array_node) {
-					parts.push(array_node);
-					chars.push(array_text);
-				} else {
-					// Unexpected: ( without matching )
-					break;
+						chars[chars.length - 1] === "=")
+				) {
+					array_result = this._parseArrayLiteral();
+					if (array_result[0]) {
+						parts.push(array_result[0]);
+						chars.push(array_result[1]);
+					} else {
+						break;
+					}
+					continue;
 				}
-			} else if (
+			}
+			// NORMAL: Extglob pattern @(), ?(), *(), +(), !()
+			if (
+				ctx === WORD_CTX_NORMAL &&
 				_isExtglobPrefix(ch) &&
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === "("
 			) {
-				// Extglob pattern @(), ?(), *(), +(), !()
 				chars.push(this.advance());
 				chars.push(this.advance());
 				extglob_depth = 1;
@@ -6191,7 +6472,6 @@ class Parser {
 							this.pos + 1 < this.length &&
 							this.source[this.pos + 1] === "\n"
 						) {
-							// Backslash-newline is line continuation - skip both
 							this.advance();
 							this.advance();
 						} else {
@@ -6224,24 +6504,21 @@ class Parser {
 						this.pos + 1 < this.length &&
 						this.source[this.pos + 1] === "("
 					) {
-						// $() or $(()) inside extglob
 						chars.push(this.advance());
 						chars.push(this.advance());
 						if (!this.atEnd() && this.peek() === "(") {
-							// $(()) arithmetic
 							chars.push(this.advance());
-							paren_depth = 2;
-							while (!this.atEnd() && paren_depth > 0) {
+							inner_paren_depth = 2;
+							while (!this.atEnd() && inner_paren_depth > 0) {
 								pc = this.peek();
 								if (pc === "(") {
-									paren_depth += 1;
+									inner_paren_depth += 1;
 								} else if (pc === ")") {
-									paren_depth -= 1;
+									inner_paren_depth -= 1;
 								}
 								chars.push(this.advance());
 							}
 						} else {
-							// $() command sub - count as nested paren
 							extglob_depth += 1;
 						}
 					} else if (
@@ -6249,7 +6526,6 @@ class Parser {
 						this.pos + 1 < this.length &&
 						this.source[this.pos + 1] === "("
 					) {
-						// Nested extglob
 						chars.push(this.advance());
 						chars.push(this.advance());
 						extglob_depth += 1;
@@ -6257,22 +6533,40 @@ class Parser {
 						chars.push(this.advance());
 					}
 				}
-			} else if (_isMetachar(ch) && bracket_depth === 0) {
-				// Metacharacter ends the word (unless inside brackets like a[x|y]=1)
-				break;
-			} else {
-				// Regular character (including metacharacters inside brackets)
-				chars.push(this.advance());
+				continue;
 			}
+			// NORMAL: Metacharacter terminates word (unless inside brackets)
+			if (ctx === WORD_CTX_NORMAL && _isMetachar(ch) && bracket_depth === 0) {
+				break;
+			}
+			// Regular character
+			chars.push(this.advance());
 		}
 		if (chars.length === 0) {
 			return null;
 		}
 		if (parts && parts.length) {
 			return new Word(chars.join(""), parts);
-		} else {
-			return new Word(chars.join(""), null);
 		}
+		return new Word(chars.join(""), null);
+	}
+
+	parseWord(at_command_start, in_array_literal) {
+		if (at_command_start == null) {
+			at_command_start = false;
+		}
+		if (in_array_literal == null) {
+			in_array_literal = false;
+		}
+		this.skipWhitespace();
+		if (this.atEnd()) {
+			return null;
+		}
+		return this._parseWordInternal(
+			WORD_CTX_NORMAL,
+			at_command_start,
+			in_array_literal,
+		);
 	}
 
 	_parseCommandSubstitution() {
@@ -10123,34 +10417,7 @@ class Parser {
 	}
 
 	_parseCondWord() {
-		let ansi_node,
-			ansi_result,
-			ansi_text,
-			arith_node,
-			arith_result,
-			arith_text,
-			c,
-			ch,
-			chars,
-			cmdsub_node,
-			cmdsub_result,
-			cmdsub_text,
-			depth,
-			inner_parts,
-			locale_node,
-			locale_result,
-			locale_text,
-			next_c,
-			next_ch,
-			param_node,
-			param_result,
-			param_text,
-			parts,
-			parts_arg,
-			procsub_node,
-			procsub_result,
-			procsub_text,
-			start;
+		let c;
 		this._condSkipWhitespace();
 		if (this._condAtEnd()) {
 			return null;
@@ -10160,8 +10427,6 @@ class Parser {
 		if (_isParen(c)) {
 			return null;
 		}
-		// Note: ! alone is handled by _parse_cond_term() as negation operator
-		// Here we allow ! as a word so it can be used as pattern in binary tests
 		if (
 			c === "&" &&
 			this.pos + 1 < this.length &&
@@ -10176,709 +10441,15 @@ class Parser {
 		) {
 			return null;
 		}
-		start = this.pos;
-		chars = [];
-		parts = [];
-		while (!this.atEnd()) {
-			ch = this.peek();
-			// End of conditional
-			if (
-				ch === "]" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "]"
-			) {
-				break;
-			}
-			// Word terminators in conditionals
-			if (_isWhitespaceNoNewline(ch)) {
-				break;
-			}
-			// < and > are string comparison operators in [[ ]], terminate words
-			// But <(...) and >(...) are process substitution - don't break
-			if (
-				_isRedirectChar(ch) &&
-				!(this.pos + 1 < this.length && this.source[this.pos + 1] === "(")
-			) {
-				break;
-			}
-			// ( and ) end words unless part of extended glob: @(...), ?(...), *(...), +(...), !(...)
-			if (ch === "(") {
-				// Check if this is an extended glob (preceded by @, ?, *, +, or !)
-				if (chars.length > 0 && _isExtglobPrefix(chars[chars.length - 1])) {
-					// Extended glob - consume the parenthesized content
-					chars.push(this.advance());
-					depth = 1;
-					while (!this.atEnd() && depth > 0) {
-						c = this.peek();
-						if (c === "(") {
-							depth += 1;
-						} else if (c === ")") {
-							depth -= 1;
-						}
-						chars.push(this.advance());
-					}
-					continue;
-				} else {
-					break;
-				}
-			}
-			if (ch === ")") {
-				break;
-			}
-			if (
-				ch === "&" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "&"
-			) {
-				break;
-			}
-			if (
-				ch === "|" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "|"
-			) {
-				break;
-			}
-			// Semicolons are not valid inside conditionals
-			if (ch === ";") {
-				break;
-			}
-			// Glob bracket expression [...] - consume until closing ]
-			// Handles [[:alpha:]], [^0-9], []a-z] (] as first char), etc.
-			if (ch === "[") {
-				// Check if [ is immediately followed by whitespace or terminator
-				// If so, treat [ as literal, not as bracket expression start
-				if (this.pos + 1 >= this.length) {
-					// [ at EOF is literal
-					chars.push(this.advance());
-					continue;
-				}
-				next_ch = this.source[this.pos + 1];
-				if (
-					_isWhitespaceNoNewline(next_ch) ||
-					next_ch === "&" ||
-					next_ch === "|"
-				) {
-					// [ followed by whitespace or operator is literal
-					chars.push(this.advance());
-					continue;
-				}
-				chars.push(this.advance());
-				// Handle negation [^
-				if (!this.atEnd() && this.peek() === "^") {
-					chars.push(this.advance());
-				}
-				// Handle ] as first char (literal ])
-				if (!this.atEnd() && this.peek() === "]") {
-					chars.push(this.advance());
-				}
-				// Consume until closing ]
-				while (!this.atEnd()) {
-					c = this.peek();
-					if (c === "]") {
-						chars.push(this.advance());
-						break;
-					}
-					if (
-						c === "[" &&
-						this.pos + 1 < this.length &&
-						this.source[this.pos + 1] === ":"
-					) {
-						// POSIX class like [:alpha:] inside bracket expression
-						chars.push(this.advance());
-						chars.push(this.advance());
-						while (
-							!this.atEnd() &&
-							!(
-								this.peek() === ":" &&
-								this.pos + 1 < this.length &&
-								this.source[this.pos + 1] === "]"
-							)
-						) {
-							chars.push(this.advance());
-						}
-						if (!this.atEnd()) {
-							chars.push(this.advance());
-							chars.push(this.advance());
-						}
-					} else if (
-						c === "[" &&
-						this.pos + 1 < this.length &&
-						this.source[this.pos + 1] === "="
-					) {
-						// Equivalence class like [=a=] inside bracket expression
-						chars.push(this.advance());
-						chars.push(this.advance());
-						while (
-							!this.atEnd() &&
-							!(
-								this.peek() === "=" &&
-								this.pos + 1 < this.length &&
-								this.source[this.pos + 1] === "]"
-							)
-						) {
-							chars.push(this.advance());
-						}
-						if (!this.atEnd()) {
-							chars.push(this.advance());
-							chars.push(this.advance());
-						}
-					} else if (
-						c === "[" &&
-						this.pos + 1 < this.length &&
-						this.source[this.pos + 1] === "."
-					) {
-						// Collating symbol like [.ch.] inside bracket expression
-						chars.push(this.advance());
-						chars.push(this.advance());
-						while (
-							!this.atEnd() &&
-							!(
-								this.peek() === "." &&
-								this.pos + 1 < this.length &&
-								this.source[this.pos + 1] === "]"
-							)
-						) {
-							chars.push(this.advance());
-						}
-						if (!this.atEnd()) {
-							chars.push(this.advance());
-							chars.push(this.advance());
-						}
-					} else {
-						chars.push(this.advance());
-					}
-				}
-				continue;
-			}
-			// Single-quoted string
-			if (ch === "'") {
-				this.advance();
-				chars.push("'");
-				while (!this.atEnd() && this.peek() !== "'") {
-					chars.push(this.advance());
-				}
-				if (this.atEnd()) {
-					throw new ParseError("Unterminated single quote", start);
-				}
-				chars.push(this.advance());
-			} else if (ch === '"') {
-				// Double-quoted string
-				this.advance();
-				chars.push('"');
-				while (!this.atEnd() && this.peek() !== '"') {
-					c = this.peek();
-					if (c === "\\" && this.pos + 1 < this.length) {
-						next_c = this.source[this.pos + 1];
-						if (next_c === "\n") {
-							// Line continuation - skip both backslash and newline
-							this.advance();
-							this.advance();
-						} else {
-							chars.push(this.advance());
-							chars.push(this.advance());
-						}
-					} else if (c === "$") {
-						// Handle expansions inside double quotes
-						if (
-							this.pos + 2 < this.length &&
-							this.source[this.pos + 1] === "(" &&
-							this.source[this.pos + 2] === "("
-						) {
-							arith_result = this._parseArithmeticExpansion();
-							arith_node = arith_result[0];
-							arith_text = arith_result[1];
-							if (arith_node) {
-								parts.push(arith_node);
-								chars.push(arith_text);
-							} else {
-								// Not arithmetic - try command substitution
-								cmdsub_result = this._parseCommandSubstitution();
-								cmdsub_node = cmdsub_result[0];
-								cmdsub_text = cmdsub_result[1];
-								if (cmdsub_node) {
-									parts.push(cmdsub_node);
-									chars.push(cmdsub_text);
-								} else {
-									chars.push(this.advance());
-								}
-							}
-						} else if (
-							this.pos + 1 < this.length &&
-							this.source[this.pos + 1] === "("
-						) {
-							cmdsub_result = this._parseCommandSubstitution();
-							cmdsub_node = cmdsub_result[0];
-							cmdsub_text = cmdsub_result[1];
-							if (cmdsub_node) {
-								parts.push(cmdsub_node);
-								chars.push(cmdsub_text);
-							} else {
-								chars.push(this.advance());
-							}
-						} else {
-							param_result = this._parseParamExpansion();
-							param_node = param_result[0];
-							param_text = param_result[1];
-							if (param_node) {
-								parts.push(param_node);
-								chars.push(param_text);
-							} else {
-								chars.push(this.advance());
-							}
-						}
-					} else {
-						chars.push(this.advance());
-					}
-				}
-				if (this.atEnd()) {
-					throw new ParseError("Unterminated double quote", start);
-				}
-				chars.push(this.advance());
-			} else if (ch === "\\" && this.pos + 1 < this.length) {
-				// Escape
-				chars.push(this.advance());
-				chars.push(this.advance());
-			} else if (
-				ch === "$" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "'"
-			) {
-				// ANSI-C quoting $'...'
-				ansi_result = this._parseAnsiCQuote();
-				ansi_node = ansi_result[0];
-				ansi_text = ansi_result[1];
-				if (ansi_node) {
-					parts.push(ansi_node);
-					chars.push(ansi_text);
-				} else {
-					chars.push(this.advance());
-				}
-			} else if (
-				ch === "$" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === '"'
-			) {
-				// Locale translation $"..."
-				locale_result = this._parseLocaleString();
-				locale_node = locale_result[0];
-				locale_text = locale_result[1];
-				inner_parts = locale_result[2];
-				if (locale_node) {
-					parts.push(locale_node);
-					parts.push(...inner_parts);
-					chars.push(locale_text);
-				} else {
-					chars.push(this.advance());
-				}
-			} else if (
-				ch === "$" &&
-				this.pos + 2 < this.length &&
-				this.source[this.pos + 1] === "(" &&
-				this.source[this.pos + 2] === "("
-			) {
-				// Arithmetic expansion $((...))
-				arith_result = this._parseArithmeticExpansion();
-				arith_node = arith_result[0];
-				arith_text = arith_result[1];
-				if (arith_node) {
-					parts.push(arith_node);
-					chars.push(arith_text);
-				} else {
-					chars.push(this.advance());
-				}
-			} else if (
-				ch === "$" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "("
-			) {
-				// Command substitution $(...)
-				cmdsub_result = this._parseCommandSubstitution();
-				cmdsub_node = cmdsub_result[0];
-				cmdsub_text = cmdsub_result[1];
-				if (cmdsub_node) {
-					parts.push(cmdsub_node);
-					chars.push(cmdsub_text);
-				} else {
-					chars.push(this.advance());
-				}
-			} else if (ch === "$") {
-				// Parameter expansion $var or ${...}
-				param_result = this._parseParamExpansion();
-				param_node = param_result[0];
-				param_text = param_result[1];
-				if (param_node) {
-					parts.push(param_node);
-					chars.push(param_text);
-				} else {
-					chars.push(this.advance());
-				}
-			} else if (
-				_isRedirectChar(ch) &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "("
-			) {
-				// Process substitution <(...) or >(...)
-				procsub_result = this._parseProcessSubstitution();
-				procsub_node = procsub_result[0];
-				procsub_text = procsub_result[1];
-				if (procsub_node) {
-					parts.push(procsub_node);
-					chars.push(procsub_text);
-				} else if (procsub_text) {
-					// Not a valid process substitution, treat full <(...) as literal
-					chars.push(procsub_text);
-				} else {
-					// Couldn't parse at all, treat <( as literal chars
-					chars.push(this.advance());
-				}
-			} else if (ch === "`") {
-				// Backtick command substitution
-				cmdsub_result = this._parseBacktickSubstitution();
-				cmdsub_node = cmdsub_result[0];
-				cmdsub_text = cmdsub_result[1];
-				if (cmdsub_node) {
-					parts.push(cmdsub_node);
-					chars.push(cmdsub_text);
-				} else {
-					chars.push(this.advance());
-				}
-			} else {
-				// Regular character
-				chars.push(this.advance());
-			}
-		}
-		if (chars.length === 0) {
-			return null;
-		}
-		parts_arg = null;
-		if (parts && parts.length) {
-			parts_arg = parts;
-		}
-		return new Word(chars.join(""), parts_arg);
+		return this._parseWordInternal(WORD_CTX_COND);
 	}
 
 	_parseCondRegexWord() {
-		let arith_node,
-			arith_result,
-			arith_text,
-			bracket_will_close,
-			c,
-			ch,
-			chars,
-			cmdsub_node,
-			cmdsub_result,
-			cmdsub_text,
-			param_node,
-			param_result,
-			param_text,
-			paren_depth,
-			parts,
-			parts_arg,
-			sc,
-			scan,
-			start;
 		this._condSkipWhitespace();
 		if (this._condAtEnd()) {
 			return null;
 		}
-		start = this.pos;
-		chars = [];
-		parts = [];
-		paren_depth = 0;
-		while (!this.atEnd()) {
-			ch = this.peek();
-			// End of conditional
-			if (
-				ch === "]" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "]"
-			) {
-				break;
-			}
-			// Backslash-newline continuation (check before space/escape handling)
-			if (
-				ch === "\\" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "\n"
-			) {
-				this.advance();
-				this.advance();
-				continue;
-			}
-			// Escape sequences - consume both characters (including escaped spaces)
-			if (ch === "\\" && this.pos + 1 < this.length) {
-				chars.push(this.advance());
-				chars.push(this.advance());
-				continue;
-			}
-			// Track regex grouping parentheses
-			if (ch === "(") {
-				paren_depth += 1;
-				chars.push(this.advance());
-				continue;
-			}
-			if (ch === ")") {
-				if (paren_depth > 0) {
-					paren_depth -= 1;
-					chars.push(this.advance());
-					continue;
-				}
-				// Unmatched ) - probably end of pattern
-				break;
-			}
-			// Regex character class [...] - consume until closing ]
-			// Handles [[:alpha:]], [^0-9], []a-z] (] as first char), etc.
-			if (ch === "[") {
-				// Lookahead: check if bracket expression will close properly
-				// before hitting ]] or ) (when inside paren group)
-				scan = this.pos + 1;
-				// Skip ^ for negation
-				if (scan < this.length && this.source[scan] === "^") {
-					scan += 1;
-				}
-				// Skip ] as first char (literal)
-				if (scan < this.length && this.source[scan] === "]") {
-					scan += 1;
-				}
-				bracket_will_close = false;
-				while (scan < this.length) {
-					sc = this.source[scan];
-					// Check for ]] - end of conditional
-					if (
-						sc === "]" &&
-						scan + 1 < this.length &&
-						this.source[scan + 1] === "]"
-					) {
-						break;
-					}
-					// Check for ) when inside paren group
-					if (sc === ")" && paren_depth > 0) {
-						break;
-					}
-					// Check for && - this terminates the regex even inside brackets
-					if (
-						sc === "&" &&
-						scan + 1 < this.length &&
-						this.source[scan + 1] === "&"
-					) {
-						break;
-					}
-					if (sc === "]") {
-						bracket_will_close = true;
-						break;
-					}
-					// Skip POSIX classes [:...:]
-					if (
-						sc === "[" &&
-						scan + 1 < this.length &&
-						this.source[scan + 1] === ":"
-					) {
-						scan += 2;
-						while (
-							scan < this.length &&
-							!(
-								this.source[scan] === ":" &&
-								scan + 1 < this.length &&
-								this.source[scan + 1] === "]"
-							)
-						) {
-							scan += 1;
-						}
-						if (scan < this.length) {
-							scan += 2;
-						}
-						continue;
-					}
-					scan += 1;
-				}
-				if (!bracket_will_close) {
-					// Treat [ as literal
-					chars.push(this.advance());
-					continue;
-				}
-				chars.push(this.advance());
-				// Handle negation [^
-				if (!this.atEnd() && this.peek() === "^") {
-					chars.push(this.advance());
-				}
-				// Handle ] as first char (literal ])
-				if (!this.atEnd() && this.peek() === "]") {
-					chars.push(this.advance());
-				}
-				// Consume until closing ]
-				while (!this.atEnd()) {
-					c = this.peek();
-					if (c === "]") {
-						chars.push(this.advance());
-						break;
-					}
-					if (
-						c === "[" &&
-						this.pos + 1 < this.length &&
-						this.source[this.pos + 1] === ":"
-					) {
-						// POSIX class like [:alpha:] inside bracket expression
-						chars.push(this.advance());
-						chars.push(this.advance());
-						while (
-							!this.atEnd() &&
-							!(
-								this.peek() === ":" &&
-								this.pos + 1 < this.length &&
-								this.source[this.pos + 1] === "]"
-							)
-						) {
-							chars.push(this.advance());
-						}
-						if (!this.atEnd()) {
-							chars.push(this.advance());
-							chars.push(this.advance());
-						}
-					} else if (c === "$") {
-						// Handle parameter/arithmetic expansions inside bracket expression
-						if (
-							this.pos + 1 < this.length &&
-							this.source[this.pos + 1] === "("
-						) {
-							// Could be $((...)) arithmetic or $(...) command substitution
-							if (
-								this.pos + 2 < this.length &&
-								this.source[this.pos + 2] === "("
-							) {
-								// Arithmetic expansion $((...))
-								arith_result = this._parseArithmeticExpansion();
-								arith_node = arith_result[0];
-								arith_text = arith_result[1];
-								if (arith_node) {
-									parts.push(arith_node);
-									chars.push(arith_text);
-								} else {
-									chars.push(this.advance());
-								}
-							} else {
-								// Command substitution $(...)
-								cmdsub_result = this._parseCommandSubstitution();
-								cmdsub_node = cmdsub_result[0];
-								cmdsub_text = cmdsub_result[1];
-								if (cmdsub_node) {
-									parts.push(cmdsub_node);
-									chars.push(cmdsub_text);
-								} else {
-									chars.push(this.advance());
-								}
-							}
-						} else {
-							// Parameter expansion ${...} or $var
-							param_result = this._parseParamExpansion();
-							param_node = param_result[0];
-							param_text = param_result[1];
-							if (param_node) {
-								parts.push(param_node);
-								chars.push(param_text);
-							} else {
-								chars.push(this.advance());
-							}
-						}
-					} else {
-						chars.push(this.advance());
-					}
-				}
-				continue;
-			}
-			// Word terminators - space/tab ends the regex (unless inside parens), as does &&
-			if (_isWhitespace(ch) && paren_depth === 0) {
-				break;
-			}
-			if (_isWhitespace(ch) && paren_depth > 0) {
-				// Space inside regex parens is part of the pattern
-				chars.push(this.advance());
-				continue;
-			}
-			if (
-				ch === "&" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "&"
-			) {
-				break;
-			}
-			// Single-quoted string
-			if (ch === "'") {
-				this.advance();
-				chars.push("'");
-				while (!this.atEnd() && this.peek() !== "'") {
-					chars.push(this.advance());
-				}
-				if (this.atEnd()) {
-					throw new ParseError("Unterminated single quote", start);
-				}
-				chars.push(this.advance());
-				continue;
-			}
-			// Double-quoted string
-			if (ch === '"') {
-				this.advance();
-				chars.push('"');
-				while (!this.atEnd() && this.peek() !== '"') {
-					c = this.peek();
-					if (c === "\\" && this.pos + 1 < this.length) {
-						chars.push(this.advance());
-						chars.push(this.advance());
-					} else if (c === "$") {
-						param_result = this._parseParamExpansion();
-						param_node = param_result[0];
-						param_text = param_result[1];
-						if (param_node) {
-							parts.push(param_node);
-							chars.push(param_text);
-						} else {
-							chars.push(this.advance());
-						}
-					} else {
-						chars.push(this.advance());
-					}
-				}
-				if (this.atEnd()) {
-					throw new ParseError("Unterminated double quote", start);
-				}
-				chars.push(this.advance());
-				continue;
-			}
-			// Command substitution $(...) or parameter expansion $var or ${...}
-			if (ch === "$") {
-				// Try command substitution first
-				if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
-					cmdsub_result = this._parseCommandSubstitution();
-					cmdsub_node = cmdsub_result[0];
-					cmdsub_text = cmdsub_result[1];
-					if (cmdsub_node) {
-						parts.push(cmdsub_node);
-						chars.push(cmdsub_text);
-						continue;
-					}
-				}
-				param_result = this._parseParamExpansion();
-				param_node = param_result[0];
-				param_text = param_result[1];
-				if (param_node) {
-					parts.push(param_node);
-					chars.push(param_text);
-				} else {
-					chars.push(this.advance());
-				}
-				continue;
-			}
-			// Regular character (including ( ) which are regex grouping)
-			chars.push(this.advance());
-		}
-		if (chars.length === 0) {
-			return null;
-		}
-		parts_arg = null;
-		if (parts && parts.length) {
-			parts_arg = parts;
-		}
-		return new Word(chars.join(""), parts_arg);
+		return this._parseWordInternal(WORD_CTX_REGEX);
 	}
 
 	parseBraceGroup() {

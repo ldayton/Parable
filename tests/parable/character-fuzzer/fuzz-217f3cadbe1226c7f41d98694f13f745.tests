@@ -1,0 +1,7 @@
+=== semicolon after heredoc in command substitution treated as command separator
+$(a <<E
+E
+b;c)
+---
+(command (word "$(a <<E\nE\n\nb c)"))
+---

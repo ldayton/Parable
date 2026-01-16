@@ -3225,6 +3225,14 @@ def _format_cmdsub_node(
                     if result and result[len(result) - 1].endswith("\n"):
                         skipped_semi = True
                         continue
+                    # Skip semicolon after pattern: heredoc, newline, command
+                    if (
+                        len(result) >= 3
+                        and result[len(result) - 2] == "\n"
+                        and result[len(result) - 3].endswith("\n")
+                    ):
+                        skipped_semi = True
+                        continue
                     result.append(";")
                     skipped_semi = False
                 elif p.op == "\n":

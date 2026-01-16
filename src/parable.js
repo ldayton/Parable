@@ -3828,6 +3828,15 @@ function _formatCmdsubNode(
 						skipped_semi = true;
 						continue;
 					}
+					// Skip semicolon after pattern: heredoc, newline, command
+					if (
+						result.length >= 3 &&
+						result[result.length - 2] === "\n" &&
+						result[result.length - 3].endsWith("\n")
+					) {
+						skipped_semi = true;
+						continue;
+					}
 					result.push(";");
 					skipped_semi = false;
 				} else if (p.op === "\n") {

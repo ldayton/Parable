@@ -1,0 +1,5 @@
+=== whitespace stripped in array assignment inside command substitution
+$(x=( ))
+---
+(command (word "$(x=())"))
+---

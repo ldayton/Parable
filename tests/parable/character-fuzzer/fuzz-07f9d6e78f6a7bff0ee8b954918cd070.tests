@@ -1,0 +1,6 @@
+=== trailing backslash after single-quoted newline with space
+'
+'a \
+---
+(command (word "'\n'a"))
+---

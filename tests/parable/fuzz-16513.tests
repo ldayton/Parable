@@ -1,0 +1,9 @@
+=== heredoc with quote in backtick command substitution
+: <<`'
+`
+
+
+---
+(command (word ":") (redirect "<<" "
+"))
+---

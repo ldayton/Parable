@@ -6649,6 +6649,35 @@ class Parser:
                     elif c == "}":
                         depth -= 1
                     delimiter_chars.append(self.advance())
+            elif ch == "`":
+                # Backtick command substitution embedded in delimiter
+                # Note: In bash, backtick closes command sub even with unclosed quotes inside
+                delimiter_chars.append(self.advance())  # `
+                while not self.at_end() and self.peek() != "`":
+                    c = self.peek()
+                    if c == "'":
+                        # Single-quoted string inside backtick - skip to closing quote or `
+                        delimiter_chars.append(self.advance())  # '
+                        while not self.at_end() and self.peek() != "'" and self.peek() != "`":
+                            delimiter_chars.append(self.advance())
+                        if not self.at_end() and self.peek() == "'":
+                            delimiter_chars.append(self.advance())  # closing '
+                    elif c == '"':
+                        # Double-quoted string inside backtick - skip to closing quote or `
+                        delimiter_chars.append(self.advance())  # "
+                        while not self.at_end() and self.peek() != '"' and self.peek() != "`":
+                            if self.peek() == "\\" and self.pos + 1 < self.length:
+                                delimiter_chars.append(self.advance())  # backslash
+                            delimiter_chars.append(self.advance())
+                        if not self.at_end() and self.peek() == '"':
+                            delimiter_chars.append(self.advance())  # closing "
+                    elif c == "\\" and self.pos + 1 < self.length:
+                        delimiter_chars.append(self.advance())  # backslash
+                        delimiter_chars.append(self.advance())  # escaped char
+                    else:
+                        delimiter_chars.append(self.advance())
+                if not self.at_end():
+                    delimiter_chars.append(self.advance())  # closing `
             else:
                 delimiter_chars.append(self.advance())
 

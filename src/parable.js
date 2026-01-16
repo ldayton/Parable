@@ -4222,12 +4222,17 @@ function _findCmdsubEnd(value, start) {
 		c,
 		case_depth,
 		depth,
+		found_esac,
 		i,
 		in_case_patterns,
 		in_double,
 		in_single,
 		is_valid_arith,
 		j,
+		lookahead_c,
+		lookahead_case_depth,
+		lookahead_i,
+		quote,
 		scan_c,
 		scan_i,
 		scan_paren;
@@ -4428,8 +4433,116 @@ function _findCmdsubEnd(value, start) {
 			}
 		} else if (c === ")") {
 			// In case patterns, ) after pattern name is not a grouping paren
-			if (in_case_patterns && case_depth > 0) {
-				// This ) is a case pattern terminator, skip it
+			if (in_case_patterns && case_depth > 0 && depth > 1) {
+				// This might be a case pattern terminator, but check if there's an esac
+				// If we're at depth 1 (outermost level), this ) might close the cmdsub
+				// Do lookahead to find if there's an esac for this case
+				lookahead_i = i + 1;
+				lookahead_case_depth = case_depth;
+				found_esac = false;
+				while (lookahead_i < value.length) {
+					lookahead_c = value[lookahead_i];
+					if (lookahead_c === "'" || lookahead_c === '"') {
+						// Skip quoted strings in lookahead
+						quote = lookahead_c;
+						lookahead_i += 1;
+						while (lookahead_i < value.length && value[lookahead_i] !== quote) {
+							if (lookahead_c === '"' && value[lookahead_i] === "\\") {
+								lookahead_i += 1;
+							}
+							lookahead_i += 1;
+						}
+						if (lookahead_i < value.length) {
+							lookahead_i += 1;
+						}
+					} else if (
+						_startsWithAt(value, lookahead_i, "case") &&
+						_isWordBoundary(value, lookahead_i, 4)
+					) {
+						lookahead_case_depth += 1;
+						lookahead_i += 4;
+					} else if (
+						_startsWithAt(value, lookahead_i, "esac") &&
+						_isWordBoundary(value, lookahead_i, 4)
+					) {
+						lookahead_case_depth -= 1;
+						if (lookahead_case_depth === 0) {
+							found_esac = true;
+							break;
+						}
+						lookahead_i += 4;
+					} else if (lookahead_c === "(") {
+						lookahead_i += 1;
+					} else if (lookahead_c === ")") {
+						// Hit another ) before finding esac - stop lookahead
+						if (lookahead_case_depth > 0) {
+							lookahead_i += 1;
+						} else {
+							break;
+						}
+					} else {
+						lookahead_i += 1;
+					}
+				}
+				if (found_esac) {
+					// This ) is a case pattern terminator, skip it
+				} else {
+					// No esac found, this ) closes the command substitution
+					depth -= 1;
+				}
+			} else if (in_case_patterns && case_depth > 0) {
+				// At depth 1, check for esac (same lookahead logic)
+				// If no esac, this ) closes the cmdsub
+				lookahead_i = i + 1;
+				lookahead_case_depth = case_depth;
+				found_esac = false;
+				while (lookahead_i < value.length) {
+					lookahead_c = value[lookahead_i];
+					if (lookahead_c === "'" || lookahead_c === '"') {
+						quote = lookahead_c;
+						lookahead_i += 1;
+						while (lookahead_i < value.length && value[lookahead_i] !== quote) {
+							if (lookahead_c === '"' && value[lookahead_i] === "\\") {
+								lookahead_i += 1;
+							}
+							lookahead_i += 1;
+						}
+						if (lookahead_i < value.length) {
+							lookahead_i += 1;
+						}
+					} else if (
+						_startsWithAt(value, lookahead_i, "case") &&
+						_isWordBoundary(value, lookahead_i, 4)
+					) {
+						lookahead_case_depth += 1;
+						lookahead_i += 4;
+					} else if (
+						_startsWithAt(value, lookahead_i, "esac") &&
+						_isWordBoundary(value, lookahead_i, 4)
+					) {
+						lookahead_case_depth -= 1;
+						if (lookahead_case_depth === 0) {
+							found_esac = true;
+							break;
+						}
+						lookahead_i += 4;
+					} else if (lookahead_c === ")") {
+						// Hit another ) before finding esac - stop lookahead
+						if (lookahead_case_depth > 0) {
+							lookahead_i += 1;
+						} else {
+							break;
+						}
+					} else {
+						lookahead_i += 1;
+					}
+				}
+				if (found_esac) {
+					// This ) is a case pattern terminator, skip it
+				} else {
+					// No esac found, this ) closes the command substitution
+					depth -= 1;
+				}
 			} else if (arith_depth > 0) {
 				if (arith_paren_depth > 0) {
 					arith_paren_depth -= 1;
@@ -4891,7 +5004,8 @@ function _isWordStartContext(c) {
 		c === "|" ||
 		c === "&" ||
 		c === "<" ||
-		c === "("
+		c === "(" ||
+		c === "{"
 	);
 }
 

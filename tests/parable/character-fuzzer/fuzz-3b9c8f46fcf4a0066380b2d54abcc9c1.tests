@@ -1,0 +1,4 @@
+=== $$ before quoted string in parameter expansion
+${$$""}
+---
+(command (word "${$$\"\"}"))

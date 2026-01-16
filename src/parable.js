@@ -1837,17 +1837,27 @@ class Word extends Node {
 		let current_part,
 			depth,
 			i,
+			in_double_quote,
 			part_content,
 			pattern_parts,
 			prefix_char,
 			result;
 		result = [];
 		i = 0;
+		in_double_quote = false;
 		while (i < value.length) {
+			// Track double-quote state
+			if (value[i] === '"') {
+				in_double_quote = !in_double_quote;
+				result.push(value[i]);
+				i += 1;
+				continue;
+			}
 			// Check for >( or <( pattern (process substitution-like in regex)
+			// Only process these patterns when NOT inside double quotes
 			if (i + 1 < value.length && value[i + 1] === "(") {
 				prefix_char = value[i];
-				if ("><".includes(prefix_char)) {
+				if ("><".includes(prefix_char) && !in_double_quote) {
 					// Found pattern start
 					result.push(prefix_char);
 					result.push("(");

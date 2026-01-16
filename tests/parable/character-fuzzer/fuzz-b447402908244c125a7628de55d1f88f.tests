@@ -1,0 +1,5 @@
+=== process substitution operator in double-quoted conditional
+[[ "<(x" ]]
+---
+(cond (cond-unary "-n" (cond-term ""<(x"")))
+---

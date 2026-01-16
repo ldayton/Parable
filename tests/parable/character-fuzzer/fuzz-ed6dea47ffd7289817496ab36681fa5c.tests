@@ -1,0 +1,5 @@
+=== heredoc with |& in command substitution
+"$(a<<d|&b)"
+---
+(command (word "\"$(a <<d 2>&1 |\nd\n  b)\""))
+---

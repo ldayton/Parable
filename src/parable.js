@@ -1159,6 +1159,7 @@ class Word extends Node {
 
 	_stripArithLineContinuations(value) {
 		let arith_content,
+			closing,
 			content,
 			depth,
 			first_close_idx,
@@ -1203,6 +1204,10 @@ class Word extends Node {
 						// Count preceding backslashes in arith_content
 						num_backslashes = 0;
 						j = arith_content.length - 1;
+						// Skip trailing newlines before counting backslashes
+						while (j >= 0 && arith_content[j] === "\n") {
+							j -= 1;
+						}
 						while (j >= 0 && arith_content[j] === "\\") {
 							num_backslashes += 1;
 							j -= 1;
@@ -1227,12 +1232,15 @@ class Word extends Node {
 						}
 					}
 				}
-				if (depth === 0) {
+				if (depth === 0 || (depth === 1 && first_close_idx != null)) {
 					content = arith_content.join("");
 					if (first_close_idx != null) {
 						// Standard close: trim content, add ))
 						content = content.slice(0, first_close_idx);
-						result.push(`$((${content}))`);
+						// If depth==1, we only found one closing paren, add )
+						// If depth==0, we found both closing parens, add ))
+						closing = depth === 0 ? "))" : ")";
+						result.push(`$((${content}${closing}`);
 					} else {
 						// Content after first close: content has intermediate ), add single )
 						result.push(`$((${content})`);

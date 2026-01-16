@@ -1,0 +1,5 @@
+=== parameter expansion with nested command substitution in @() - no closing brace
+@(${$(a))
+---
+(command (word "@(${$(a))"))
+---

@@ -1,0 +1,7 @@
+=== heredoc content inside process substitution
+<(x<<E)
+a
+E
+---
+(command (word "<(x <<E\na\nE\n)"))
+---

@@ -1455,9 +1455,17 @@ class Word(Node):
         """Normalize whitespace around | in >() and <() patterns for regex contexts."""
         result = []
         i = 0
+        in_double_quote = False
         while i < len(value):
+            # Track double quotes
+            if value[i] == '"':
+                in_double_quote = not in_double_quote
+                result.append(value[i])
+                i += 1
+                continue
             # Check for >( or <( pattern (process substitution-like in regex)
-            if i + 1 < len(value) and value[i + 1] == "(":
+            # But not inside double quotes
+            if i + 1 < len(value) and value[i + 1] == "(" and not in_double_quote:
                 prefix_char = value[i]
                 if prefix_char in "><":
                     # Found pattern start

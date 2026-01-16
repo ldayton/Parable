@@ -1,0 +1,5 @@
+=== process substitution in dquotes inside conditional
+[[ "<(" ]]
+---
+(cond (cond-unary "-n" (cond-term ""<("")))
+---

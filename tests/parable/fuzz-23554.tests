@@ -1,0 +1,7 @@
+=== heredoc in process substitution with whitespace before newline
+<(<<D)	
+x
+D
+---
+(command (word "<(<<D\nx\nD\n)"))
+---

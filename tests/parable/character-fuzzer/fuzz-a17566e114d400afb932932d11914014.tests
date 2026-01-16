@@ -1,0 +1,8 @@
+=== heredoc delimiter in command sub with commands after redirect
+echo "$(cat<<X a; echo b
+line
+X
+)"
+---
+(command (word "echo") (word "\"$(cat a <<X\nline\nX\n echo b)\""))
+---

@@ -1333,7 +1333,6 @@ class Word extends Node {
 			formatted,
 			formatted_inner,
 			has_brace_cmdsub,
-			has_operator_needing_spaces,
 			has_untracked_cmdsub,
 			has_untracked_procsub,
 			i,
@@ -1657,29 +1656,7 @@ class Word extends Node {
 						// Starts with subshell and formatting would change it - preserve original
 						result.push(`${direction}(${raw_stripped})`);
 					} else {
-						// Check if list contains operators that need formatting
-						has_operator_needing_spaces = false;
-						if (node.command.kind === "list" && node.command.parts) {
-							for (p of node.command.parts) {
-								if (
-									p.kind === "operator" &&
-									[";", "\n", "&&", "||", "&"].includes(p.op)
-								) {
-									has_operator_needing_spaces = true;
-									break;
-								}
-							}
-						}
-						// For lists without newlines or operators that need spaces, preserve raw content
-						if (
-							node.command.kind === "list" &&
-							!raw_stripped.includes("\n") &&
-							!has_operator_needing_spaces
-						) {
-							result.push(`${direction}(${raw_stripped})`);
-						} else {
-							result.push(`${direction}(${formatted})`);
-						}
+						result.push(`${direction}(${formatted})`);
 					}
 					procsub_idx += 1;
 					i = j;

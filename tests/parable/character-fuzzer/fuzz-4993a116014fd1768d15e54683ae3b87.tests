@@ -1,0 +1,7 @@
+=== backslash after quoted newline and line continuation
+'
+'\
+\
+---
+(command (word "'\n'\\\\"))
+---

@@ -1,0 +1,5 @@
+=== brace-close before redirect operator
+{]}>a
+---
+(command (word "{]}") (redirect ">" "a"))
+---

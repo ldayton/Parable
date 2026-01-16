@@ -1,0 +1,5 @@
+=== trailing backslash escape
+echo $?\
+---
+(command (word "echo") (word "$?\\\\"))
+---

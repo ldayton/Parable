@@ -8,13 +8,14 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 # Add src to path for parable import
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PARABLE_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(SCRIPT_DIR)))
+PARABLE_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(SCRIPT_DIR))))
 sys.path.insert(0, os.path.join(PARABLE_ROOT, "src"))
 
 from parable import ParseError, parse  # noqa: E402
 
 CORPUS_DIR = os.path.expanduser("~/source/bigtable-bash/tests")
-FAILURES_FILE = os.path.join(SCRIPT_DIR, "failures.txt")
+TOOL_DIR = os.path.dirname(os.path.dirname(SCRIPT_DIR))  # tools/bash-oracle
+FAILURES_FILE = os.path.join(TOOL_DIR, "failures.txt")
 
 
 def parse_test_file(filepath):

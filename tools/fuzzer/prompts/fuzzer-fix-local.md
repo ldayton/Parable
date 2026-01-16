@@ -20,7 +20,7 @@ Find and fix one parser bug using the fuzzer.
 
 4. **Run the fuzzer** to find a discrepancy where both parsers succeed but differ:
    ```bash
-   uv run python tools/fuzzer/fuzz.py --both-succeed --stop-after 1 -n 100000 -v
+   cd tools/fuzzer && uv run fuzzer --character --both-succeed --stop-after 1 -n 100000 -v
    ```
 
 5. **Create an MRE.** Shrink the input to the smallest string that still shows the discrepancy:

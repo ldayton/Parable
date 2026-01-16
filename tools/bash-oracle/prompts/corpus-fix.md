@@ -1,6 +1,6 @@
 # Corpus Bug Fix Workflow
 
-One bug per iteration. Do not batch. Failures are already in `tools/bash-oracle/bin/failures.txt`.
+One bug per iteration. Do not batch. Failures are already in `tools/bash-oracle/failures.txt`.
 
 1. **Pick failure** → take the NEXT bug from `failures.txt`. Test with Parable to see error type (parse error vs mismatch)
 2. **Create MRE** → minimal bash that reproduces the issue

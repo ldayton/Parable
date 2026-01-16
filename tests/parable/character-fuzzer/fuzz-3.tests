@@ -1,0 +1,5 @@
+=== semicolon in parameter length expansion
+${#a;b}
+---
+(command (word "${#a;b}"))
+---

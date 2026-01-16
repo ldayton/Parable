@@ -3,15 +3,64 @@
 
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
-TESTS_DIR = SCRIPT_DIR.parent.parent / "tests"
-sys.path.insert(0, str(TESTS_DIR))
-
-from testformat import parse_test_file  # noqa: E402
-
+REPO_ROOT = SCRIPT_DIR.parent.parent.parent.parent
 ORACLE_PATH = Path.home() / "source" / "bash" / "bash-oracle"
+
+
+@dataclass
+class TestCase:
+    file: Path
+    line: int
+    name: str
+    input: str
+    expected: str
+
+
+def parse_test_file(filepath: Path) -> list[TestCase]:
+    """Parse a .tests file. Returns list of TestCase objects."""
+    tests = []
+    lines = filepath.read_text().split("\n")
+    i = 0
+    n = len(lines)
+    while i < n:
+        line = lines[i]
+        if line.startswith("#") or line.strip() == "":
+            i += 1
+            continue
+        if line.startswith("=== "):
+            name = line[4:].strip()
+            start_line = i + 1
+            i += 1
+            input_lines = []
+            while i < n and lines[i] != "---":
+                input_lines.append(lines[i])
+                i += 1
+            if i < n and lines[i] == "---":
+                i += 1
+            expected_lines = []
+            while i < n and lines[i] != "---" and not lines[i].startswith("=== "):
+                expected_lines.append(lines[i])
+                i += 1
+            if i < n and lines[i] == "---":
+                i += 1
+            while expected_lines and expected_lines[-1].strip() == "":
+                expected_lines.pop()
+            tests.append(
+                TestCase(
+                    file=filepath,
+                    line=start_line,
+                    name=name,
+                    input="\n".join(input_lines),
+                    expected="\n".join(expected_lines),
+                )
+            )
+        else:
+            i += 1
+    return tests
 
 
 def get_oracle_output(input_text: str) -> str | None:
@@ -40,7 +89,7 @@ def main():
         print("Build it with: cd tools/bash-oracle && just build", file=sys.stderr)
         sys.exit(1)
 
-    tests_dir = Path(__file__).parent.parent.parent / "tests"
+    tests_dir = REPO_ROOT / "tests"
 
     # Collect all test files recursively
     test_files = sorted(tests_dir.glob("**/*.tests"))

@@ -85,11 +85,11 @@ check-dump-ast:
 
 # Check for banned Python constructions
 check-style:
-    python3 tools/transpiler/check-style.py 2>&1 | sed -u "s/^/[style] /" | tee /tmp/{{project}}-style.log
+    uv run --directory tools/transpiler transpiler --check-style "$(pwd)/src" 2>&1 | sed -u "s/^/[style] /" | tee /tmp/{{project}}-style.log
 
 # Transpile Python to JavaScript
 transpile output="src/parable.js":
-    python3 tools/transpiler/transpile.py src/parable.py > {{output}} && \
+    uv run --directory tools/transpiler transpiler --transpile "$(pwd)/src/parable.py" > {{output}} && \
     npx -y @biomejs/biome format --write {{output}} >/dev/null 2>&1 && \
     npx -y @biomejs/biome format --write {{output}} >/dev/null 2>&1
 

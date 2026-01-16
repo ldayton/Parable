@@ -1,0 +1,5 @@
+=== backslash-escaped dollar in quoted command substitution
+"\\$(a)$(b)"
+---
+(command (word "\"\\\\$(a)$(b)\""))
+---

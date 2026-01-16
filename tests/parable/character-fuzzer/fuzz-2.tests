@@ -1,0 +1,5 @@
+=== space between redirect operator and ampersand
+< &-
+---
+<error>
+---

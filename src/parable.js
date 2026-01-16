@@ -4581,6 +4581,38 @@ function _skipBacktick(value, start) {
 	return i;
 }
 
+function _isValidArithmeticStart(value, start) {
+	let scan_c, scan_i, scan_paren;
+	scan_paren = 0;
+	scan_i = start + 3;
+	while (scan_i < value.length) {
+		scan_c = value[scan_i];
+		// Skip over $( command subs - their parens shouldn't count
+		if (
+			scan_c === "$" &&
+			scan_i + 1 < value.length &&
+			value[scan_i + 1] === "("
+		) {
+			scan_i = _findCmdsubEnd(value, scan_i + 2);
+			continue;
+		}
+		if (scan_c === "(") {
+			scan_paren += 1;
+		} else if (scan_c === ")") {
+			if (scan_paren > 0) {
+				scan_paren -= 1;
+			} else if (scan_i + 1 < value.length && value[scan_i + 1] === ")") {
+				return true;
+			} else {
+				// Single ) at top level without following ) - not valid arithmetic
+				return false;
+			}
+		}
+		scan_i += 1;
+	}
+	return false;
+}
+
 function _findCmdsubEnd(value, start) {
 	let arith_depth,
 		arith_paren_depth,
@@ -4589,12 +4621,8 @@ function _findCmdsubEnd(value, start) {
 		depth,
 		i,
 		in_case_patterns,
-		is_valid_arith,
 		j,
-		quote,
-		scan_c,
-		scan_i,
-		scan_paren;
+		quote;
 	depth = 1;
 	i = start;
 	quote = new QuoteState();
@@ -4694,43 +4722,13 @@ function _findCmdsubEnd(value, start) {
 			continue;
 		}
 		// Handle arithmetic expressions $((
-		// Check for valid arithmetic by scanning for closing )) at top level
 		if (_startsWithAt(value, i, "$((")) {
-			is_valid_arith = true;
-			scan_paren = 0;
-			scan_i = i + 3;
-			while (scan_i < value.length) {
-				scan_c = value[scan_i];
-				// Skip over $( command subs - their parens shouldn't count
-				if (
-					scan_c === "$" &&
-					scan_i + 1 < value.length &&
-					value[scan_i + 1] === "("
-				) {
-					scan_i = _findCmdsubEnd(value, scan_i + 2);
-					continue;
-				}
-				if (scan_c === "(") {
-					scan_paren += 1;
-				} else if (scan_c === ")") {
-					if (scan_paren > 0) {
-						scan_paren -= 1;
-					} else if (scan_i + 1 < value.length && value[scan_i + 1] === ")") {
-						break;
-					} else {
-						// Single ) at top level without following ) - not valid arithmetic
-						is_valid_arith = false;
-						break;
-					}
-				}
-				scan_i += 1;
-			}
-			if (is_valid_arith) {
+			if (_isValidArithmeticStart(value, i)) {
 				arith_depth += 1;
 				i += 3;
 				continue;
 			}
-			// else: not valid arithmetic, treat $( as nested cmdsub and ( as paren
+			// Not valid arithmetic, treat $( as nested cmdsub and ( as paren
 			j = _findCmdsubEnd(value, i + 2);
 			i = j;
 			continue;

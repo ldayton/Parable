@@ -3868,6 +3868,35 @@ def _skip_backtick(value: str, start: int) -> int:
     return i
 
 
+def _is_valid_arithmetic_start(value: str, start: int) -> bool:
+    """Check if $(( at position starts a valid arithmetic expression.
+
+    Scans forward looking for )) at the top paren level (excluding nested $()).
+    Returns True if valid arithmetic, False if this is actually $( ( ... ) )
+    (command substitution containing a subshell).
+    """
+    scan_paren = 0
+    scan_i = start + 3  # Skip past $((
+    while scan_i < len(value):
+        scan_c = value[scan_i]
+        # Skip over $( command subs - their parens shouldn't count
+        if scan_c == "$" and scan_i + 1 < len(value) and value[scan_i + 1] == "(":
+            scan_i = _find_cmdsub_end(value, scan_i + 2)
+            continue
+        if scan_c == "(":
+            scan_paren += 1
+        elif scan_c == ")":
+            if scan_paren > 0:
+                scan_paren -= 1
+            elif scan_i + 1 < len(value) and value[scan_i + 1] == ")":
+                return True  # Found )) at top level, valid arithmetic
+            else:
+                # Single ) at top level without following ) - not valid arithmetic
+                return False
+        scan_i += 1
+    return False  # Never found ))
+
+
 def _find_cmdsub_end(value: str, start: int) -> int:
     """Find the end of a $(...) command substitution, handling case statements.
 
@@ -3957,34 +3986,12 @@ def _find_cmdsub_end(value: str, start: int) -> int:
                     i += 1
             continue
         # Handle arithmetic expressions $((
-        # Check for valid arithmetic by scanning for closing )) at top level
         if _starts_with_at(value, i, "$(("):
-            is_valid_arith = True
-            scan_paren = 0
-            scan_i = i + 3
-            while scan_i < len(value):
-                scan_c = value[scan_i]
-                # Skip over $( command subs - their parens shouldn't count
-                if scan_c == "$" and scan_i + 1 < len(value) and value[scan_i + 1] == "(":
-                    scan_i = _find_cmdsub_end(value, scan_i + 2)
-                    continue
-                if scan_c == "(":
-                    scan_paren += 1
-                elif scan_c == ")":
-                    if scan_paren > 0:
-                        scan_paren -= 1
-                    elif scan_i + 1 < len(value) and value[scan_i + 1] == ")":
-                        break  # Found )) at top level, valid arithmetic
-                    else:
-                        # Single ) at top level without following ) - not valid arithmetic
-                        is_valid_arith = False
-                        break
-                scan_i += 1
-            if is_valid_arith:
+            if _is_valid_arithmetic_start(value, i):
                 arith_depth += 1
                 i += 3
                 continue
-            # else: not valid arithmetic, treat $( as nested cmdsub and ( as paren
+            # Not valid arithmetic, treat $( as nested cmdsub and ( as paren
             j = _find_cmdsub_end(value, i + 2)
             i = j
             continue

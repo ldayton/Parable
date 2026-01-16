@@ -1,0 +1,5 @@
+=== backslash-newline inside extglob should be stripped
+<*(\
+)
+---
+(command (redirect "<" "*()"))

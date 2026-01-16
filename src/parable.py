@@ -4108,6 +4108,100 @@ def _is_quote(c: str) -> bool:
     return c == "'" or c == '"'
 
 
+def _collapse_whitespace(s: str) -> str:
+    """Collapse consecutive tabs/spaces to single space and strip."""
+    result = []
+    prev_was_ws = False
+    for c in s:
+        if c == " " or c == "\t":
+            if not prev_was_ws:
+                result.append(" ")
+            prev_was_ws = True
+        else:
+            result.append(c)
+            prev_was_ws = False
+    joined = "".join(result)
+    return joined.strip(" \t")
+
+
+def _normalize_heredoc_delimiter(delimiter: str) -> str:
+    """Normalize heredoc delimiter for matching."""
+    result = []
+    i = 0
+    while i < len(delimiter):
+        # Handle command substitution $(...)
+        if i + 1 < len(delimiter) and delimiter[i : i + 2] == "$(":
+            result.append("$(")
+            i += 2
+            depth = 1
+            inner = []
+            while i < len(delimiter) and depth > 0:
+                if delimiter[i] == "(":
+                    depth += 1
+                    inner.append(delimiter[i])
+                elif delimiter[i] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        inner_str = "".join(inner)
+                        inner_str = _collapse_whitespace(inner_str)
+                        result.append(inner_str)
+                        result.append(")")
+                    else:
+                        inner.append(delimiter[i])
+                else:
+                    inner.append(delimiter[i])
+                i += 1
+        # Handle parameter expansion ${...}
+        elif i + 1 < len(delimiter) and delimiter[i : i + 2] == "${":
+            result.append("${")
+            i += 2
+            depth = 1
+            inner = []
+            while i < len(delimiter) and depth > 0:
+                if delimiter[i] == "{":
+                    depth += 1
+                    inner.append(delimiter[i])
+                elif delimiter[i] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        inner_str = "".join(inner)
+                        inner_str = _collapse_whitespace(inner_str)
+                        result.append(inner_str)
+                        result.append("}")
+                    else:
+                        inner.append(delimiter[i])
+                else:
+                    inner.append(delimiter[i])
+                i += 1
+        # Handle process substitution <(...) and >(...)
+        elif i + 1 < len(delimiter) and delimiter[i] in "<>" and delimiter[i + 1] == "(":
+            result.append(delimiter[i])
+            result.append("(")
+            i += 2
+            depth = 1
+            inner = []
+            while i < len(delimiter) and depth > 0:
+                if delimiter[i] == "(":
+                    depth += 1
+                    inner.append(delimiter[i])
+                elif delimiter[i] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        inner_str = "".join(inner)
+                        inner_str = _collapse_whitespace(inner_str)
+                        result.append(inner_str)
+                        result.append(")")
+                    else:
+                        inner.append(delimiter[i])
+                else:
+                    inner.append(delimiter[i])
+                i += 1
+        else:
+            result.append(delimiter[i])
+            i += 1
+    return "".join(result)
+
+
 def _is_metachar(c: str) -> bool:
     return (
         c == " "
@@ -7679,7 +7773,7 @@ class Parser:
             if strip_tabs:
                 check_line = line.lstrip("\t")
 
-            if check_line == delimiter:
+            if _normalize_heredoc_delimiter(check_line) == _normalize_heredoc_delimiter(delimiter):
                 # Found the end - update parser position past the heredoc
                 # We need to consume the heredoc content from the input
                 # But we can't do that here because we haven't finished parsing the command line
@@ -7690,9 +7784,11 @@ class Parser:
             # e.g. <(<<a\na ) - the "a " line starts with delimiter "a" and we're at EOF
             # In command substitutions, bash accepts the delimiter prefix and treats
             # remaining characters as subsequent commands (e.g., <<X\nXb → X is delimiter, b is command)
+            normalized_delimiter = _normalize_heredoc_delimiter(delimiter)
+            normalized_check_line = _normalize_heredoc_delimiter(check_line)
             if (
                 line_end >= self.length
-                and check_line.startswith(delimiter)
+                and normalized_check_line.startswith(normalized_delimiter)
                 and self._in_process_sub
             ):
                 # At EOF in process/command sub, treat delimiter prefix as matching

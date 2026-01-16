@@ -4919,6 +4919,118 @@ function _isQuote(c) {
 	return c === "'" || c === '"';
 }
 
+function _collapseWhitespace(s) {
+	let c, joined, prev_was_ws, result;
+	result = [];
+	prev_was_ws = false;
+	for (c of s) {
+		if (c === " " || c === "\t") {
+			if (!prev_was_ws) {
+				result.push(" ");
+			}
+			prev_was_ws = true;
+		} else {
+			result.push(c);
+			prev_was_ws = false;
+		}
+	}
+	joined = result.join("");
+	return joined.trim(" \t");
+}
+
+function _normalizeHeredocDelimiter(delimiter) {
+	let depth, i, inner, inner_str, result;
+	result = [];
+	i = 0;
+	while (i < delimiter.length) {
+		// Handle command substitution $(...)
+		if (i + 1 < delimiter.length && delimiter.slice(i, i + 2) === "$(") {
+			result.push("$(");
+			i += 2;
+			depth = 1;
+			inner = [];
+			while (i < delimiter.length && depth > 0) {
+				if (delimiter[i] === "(") {
+					depth += 1;
+					inner.push(delimiter[i]);
+				} else if (delimiter[i] === ")") {
+					depth -= 1;
+					if (depth === 0) {
+						inner_str = inner.join("");
+						inner_str = _collapseWhitespace(inner_str);
+						result.push(inner_str);
+						result.push(")");
+					} else {
+						inner.push(delimiter[i]);
+					}
+				} else {
+					inner.push(delimiter[i]);
+				}
+				i += 1;
+			}
+		} else if (i + 1 < delimiter.length && delimiter.slice(i, i + 2) === "${") {
+			// Handle parameter expansion ${...}
+			result.push("${");
+			i += 2;
+			depth = 1;
+			inner = [];
+			while (i < delimiter.length && depth > 0) {
+				if (delimiter[i] === "{") {
+					depth += 1;
+					inner.push(delimiter[i]);
+				} else if (delimiter[i] === "}") {
+					depth -= 1;
+					if (depth === 0) {
+						inner_str = inner.join("");
+						inner_str = _collapseWhitespace(inner_str);
+						result.push(inner_str);
+						result.push("}");
+					} else {
+						inner.push(delimiter[i]);
+					}
+				} else {
+					inner.push(delimiter[i]);
+				}
+				i += 1;
+			}
+		} else if (
+			i + 1 < delimiter.length &&
+			"<>".includes(delimiter[i]) &&
+			delimiter[i + 1] === "("
+		) {
+			// Handle process substitution <(...) and >(...)
+			result.push(delimiter[i]);
+			result.push("(");
+			i += 2;
+			depth = 1;
+			inner = [];
+			while (i < delimiter.length && depth > 0) {
+				if (delimiter[i] === "(") {
+					depth += 1;
+					inner.push(delimiter[i]);
+				} else if (delimiter[i] === ")") {
+					depth -= 1;
+					if (depth === 0) {
+						inner_str = inner.join("");
+						inner_str = _collapseWhitespace(inner_str);
+						result.push(inner_str);
+						result.push(")");
+					} else {
+						inner.push(delimiter[i]);
+					}
+				} else {
+					inner.push(delimiter[i]);
+				}
+				i += 1;
+			}
+		} else {
+			result.push(delimiter[i]);
+			i += 1;
+		}
+	}
+	return result.join("");
+}
+
 function _isMetachar(c) {
 	return (
 		c === " " ||
@@ -8951,6 +9063,8 @@ class Parser {
 			line_start,
 			next_ch,
 			next_line_start,
+			normalized_check_line,
+			normalized_delimiter,
 			quoted,
 			scan_pos,
 			tabs_stripped,
@@ -9290,7 +9404,10 @@ class Parser {
 			if (strip_tabs) {
 				check_line = line.replace(/^[\t]+/, "");
 			}
-			if (check_line === delimiter) {
+			if (
+				_normalizeHeredocDelimiter(check_line) ===
+				_normalizeHeredocDelimiter(delimiter)
+			) {
 				// Found the end - update parser position past the heredoc
 				// We need to consume the heredoc content from the input
 				// But we can't do that here because we haven't finished parsing the command line
@@ -9301,9 +9418,11 @@ class Parser {
 			// e.g. <(<<a\na ) - the "a " line starts with delimiter "a" and we're at EOF
 			// In command substitutions, bash accepts the delimiter prefix and treats
 			// remaining characters as subsequent commands (e.g., <<X\nXb → X is delimiter, b is command)
+			normalized_delimiter = _normalizeHeredocDelimiter(delimiter);
+			normalized_check_line = _normalizeHeredocDelimiter(check_line);
 			if (
 				line_end >= this.length &&
-				check_line.startsWith(delimiter) &&
+				normalized_check_line.startsWith(normalized_delimiter) &&
 				this._in_process_sub
 			) {
 				// At EOF in process/command sub, treat delimiter prefix as matching

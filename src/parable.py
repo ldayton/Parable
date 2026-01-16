@@ -7964,11 +7964,9 @@ class Parser:
                     # Check for ) when inside paren group
                     if sc == ")" and paren_depth > 0:
                         break  # Won't close before )
-                    # Check for && or || - these terminate the regex even inside brackets
+                    # Check for && - this terminates the regex even inside brackets
                     if sc == "&" and scan + 1 < self.length and self.source[scan + 1] == "&":
                         break  # Won't close before &&
-                    if sc == "|" and scan + 1 < self.length and self.source[scan + 1] == "|":
-                        break  # Won't close before ||
                     if sc == "]":
                         bracket_will_close = True
                         break
@@ -8053,7 +8051,7 @@ class Parser:
                         chars.append(self.advance())
                 continue
 
-            # Word terminators - space/tab ends the regex (unless inside parens), as do && and ||
+            # Word terminators - space/tab ends the regex (unless inside parens), as does &&
             if _is_whitespace(ch) and paren_depth == 0:
                 break
             if _is_whitespace(ch) and paren_depth > 0:
@@ -8061,8 +8059,6 @@ class Parser:
                 chars.append(self.advance())
                 continue
             if ch == "&" and self.pos + 1 < self.length and self.source[self.pos + 1] == "&":
-                break
-            if ch == "|" and self.pos + 1 < self.length and self.source[self.pos + 1] == "|":
                 break
 
             # Single-quoted string

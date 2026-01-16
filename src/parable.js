@@ -9576,18 +9576,11 @@ class Parser {
 					if (sc === ")" && paren_depth > 0) {
 						break;
 					}
-					// Check for && or || - these terminate the regex even inside brackets
+					// Check for && - this terminates the regex even inside brackets
 					if (
 						sc === "&" &&
 						scan + 1 < this.length &&
 						this.source[scan + 1] === "&"
-					) {
-						break;
-					}
-					if (
-						sc === "|" &&
-						scan + 1 < this.length &&
-						this.source[scan + 1] === "|"
 					) {
 						break;
 					}
@@ -9713,7 +9706,7 @@ class Parser {
 				}
 				continue;
 			}
-			// Word terminators - space/tab ends the regex (unless inside parens), as do && and ||
+			// Word terminators - space/tab ends the regex (unless inside parens), as does &&
 			if (_isWhitespace(ch) && paren_depth === 0) {
 				break;
 			}
@@ -9726,13 +9719,6 @@ class Parser {
 				ch === "&" &&
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === "&"
-			) {
-				break;
-			}
-			if (
-				ch === "|" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "|"
 			) {
 				break;
 			}

@@ -2006,6 +2006,7 @@ class Word extends Node {
 
 	_normalizeExtglobWhitespace(value) {
 		let current_part,
+			deprecated_arith_depth,
 			depth,
 			has_pipe,
 			i,
@@ -2017,6 +2018,7 @@ class Word extends Node {
 		result = [];
 		i = 0;
 		in_double_quote = false;
+		deprecated_arith_depth = 0;
 		while (i < value.length) {
 			// Track double-quote state
 			if (value[i] === '"') {
@@ -2025,11 +2027,28 @@ class Word extends Node {
 				i += 1;
 				continue;
 			}
+			// Track deprecated arithmetic $[...] - inside it, >( and <( are not procsub
+			if (_startsWithAt(value, i, "$[") && !_isBackslashEscaped(value, i)) {
+				deprecated_arith_depth += 1;
+				result.push(value[i]);
+				i += 1;
+				continue;
+			}
+			if (value[i] === "]" && deprecated_arith_depth > 0) {
+				deprecated_arith_depth -= 1;
+				result.push(value[i]);
+				i += 1;
+				continue;
+			}
 			// Check for >( or <( pattern (process substitution-like in regex)
-			// Only process these patterns when NOT inside double quotes
+			// Only process these patterns when NOT inside double quotes or $[...]
 			if (i + 1 < value.length && value[i + 1] === "(") {
 				prefix_char = value[i];
-				if ("><".includes(prefix_char) && !in_double_quote) {
+				if (
+					"><".includes(prefix_char) &&
+					!in_double_quote &&
+					deprecated_arith_depth === 0
+				) {
 					// Found pattern start
 					result.push(prefix_char);
 					result.push("(");

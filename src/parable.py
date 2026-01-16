@@ -1573,6 +1573,7 @@ class Word(Node):
         result = []
         i = 0
         in_double_quote = False
+        deprecated_arith_depth = 0  # Track $[...] depth
         while i < len(value):
             # Track double-quote state
             if value[i] == '"':
@@ -1580,11 +1581,22 @@ class Word(Node):
                 result.append(value[i])
                 i += 1
                 continue
+            # Track deprecated arithmetic $[...] - inside it, >( and <( are not procsub
+            if _starts_with_at(value, i, "$[") and not _is_backslash_escaped(value, i):
+                deprecated_arith_depth += 1
+                result.append(value[i])
+                i += 1
+                continue
+            if value[i] == "]" and deprecated_arith_depth > 0:
+                deprecated_arith_depth -= 1
+                result.append(value[i])
+                i += 1
+                continue
             # Check for >( or <( pattern (process substitution-like in regex)
-            # Only process these patterns when NOT inside double quotes
+            # Only process these patterns when NOT inside double quotes or $[...]
             if i + 1 < len(value) and value[i + 1] == "(":
                 prefix_char = value[i]
-                if prefix_char in "><" and not in_double_quote:
+                if prefix_char in "><" and not in_double_quote and deprecated_arith_depth == 0:
                     # Found pattern start
                     result.append(prefix_char)
                     result.append("(")

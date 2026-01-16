@@ -1,0 +1,8 @@
+=== heredoc with ANSI-C quoted delimiter $'...'
+<<$'E'
+a
+E
+---
+(command (redirect "<<" "a
+"))
+---

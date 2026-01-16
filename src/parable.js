@@ -8033,6 +8033,8 @@ class Parser {
 			delimiter,
 			delimiter_chars,
 			depth,
+			esc,
+			esc_val,
 			heredoc_end,
 			i,
 			line,
@@ -8079,6 +8081,38 @@ class Parser {
 						quoted = true;
 						delimiter_chars.push(this.advance());
 					}
+				}
+			} else if (
+				ch === "$" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "'"
+			) {
+				// ANSI-C quoting $'...' - skip $ and quotes, expand escapes
+				quoted = true;
+				this.advance();
+				this.advance();
+				while (!this.atEnd() && this.peek() !== "'") {
+					c = this.peek();
+					if (c === "\\" && this.pos + 1 < this.length) {
+						this.advance();
+						esc = this.peek();
+						// Handle ANSI-C escapes using the lookup table
+						esc_val = _getAnsiEscape(esc);
+						if (esc_val >= 0) {
+							delimiter_chars.push(String.fromCodePoint(esc_val));
+							this.advance();
+						} else if (esc === "'") {
+							delimiter_chars.push(this.advance());
+						} else {
+							// Other escapes - just use the escaped char
+							delimiter_chars.push(this.advance());
+						}
+					} else {
+						delimiter_chars.push(this.advance());
+					}
+				}
+				if (!this.atEnd()) {
+					this.advance();
 				}
 			} else if (
 				ch === "$" &&

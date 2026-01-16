@@ -1226,7 +1226,9 @@ class Word extends Node {
 			j,
 			k,
 			leading_ws,
+			leading_ws_end,
 			node,
+			normalized_ws,
 			p,
 			parsed,
 			parser,
@@ -1235,6 +1237,8 @@ class Word extends Node {
 			procsub_parts,
 			raw_content,
 			result,
+			spaced,
+			stripped,
 			terminator;
 		// Collect command substitutions from all parts, including nested ones
 		cmdsub_parts = [];
@@ -1470,11 +1474,29 @@ class Word extends Node {
 					formatted = _formatCmdsubNode(node.command, 0, true);
 					if (node.command.kind === "subshell") {
 						raw_content = value.slice(i + 2, j - 1);
-						if (raw_content.startsWith("(")) {
-							// Process substitution with nested subshell >((...)): preserve original
-							// Strip line continuations (backslash-newline)
-							raw_content = raw_content.replaceAll("\\\n", "");
-							result.push(`${direction}(${raw_content})`);
+						// Extract leading whitespace
+						leading_ws_end = 0;
+						while (
+							leading_ws_end < raw_content.length &&
+							" \t\n".includes(raw_content[leading_ws_end])
+						) {
+							leading_ws_end += 1;
+						}
+						leading_ws = raw_content.slice(0, leading_ws_end);
+						stripped = raw_content.slice(leading_ws_end);
+						if (stripped.startsWith("(")) {
+							if (leading_ws) {
+								// Leading whitespace before subshell: normalize ws + format subshell with spaces
+								normalized_ws = leading_ws
+									.replaceAll("\n", " ")
+									.replaceAll("\t", " ");
+								spaced = _formatCmdsubNode(node.command, 0, false);
+								result.push(`${direction}(${normalized_ws}${spaced})`);
+							} else {
+								// No leading whitespace - preserve original raw content
+								raw_content = raw_content.replaceAll("\\\n", "");
+								result.push(`${direction}(${raw_content})`);
+							}
 							procsub_idx += 1;
 							i = j;
 							continue;

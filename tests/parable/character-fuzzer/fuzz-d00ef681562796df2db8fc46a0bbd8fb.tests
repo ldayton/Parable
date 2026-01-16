@@ -1,0 +1,6 @@
+=== process substitution with escaped backslash before newline
+>(\\
+)2
+---
+(command (word ">(\\\\)2"))
+---

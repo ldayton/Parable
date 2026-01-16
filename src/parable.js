@@ -89,7 +89,14 @@ function _countConsecutiveDollarsBefore(s, pos) {
 }
 
 function _stripLineContinuationsCommentAware(text) {
-	let c, i, in_comment, in_double, in_single, result;
+	let c,
+		i,
+		in_comment,
+		in_double,
+		in_single,
+		j,
+		num_preceding_backslashes,
+		result;
 	result = [];
 	i = 0;
 	in_comment = false;
@@ -98,13 +105,27 @@ function _stripLineContinuationsCommentAware(text) {
 	while (i < text.length) {
 		c = text[i];
 		if (c === "\\" && i + 1 < text.length && text[i + 1] === "\n") {
-			if (in_comment) {
-				result.push("\n");
+			// Count preceding backslashes to determine if this backslash is escaped
+			num_preceding_backslashes = 0;
+			j = i - 1;
+			while (j >= 0 && text[j] === "\\") {
+				num_preceding_backslashes += 1;
+				j -= 1;
 			}
-			i += 2;
-			in_comment = false;
-			continue;
+			// If there's an even number of preceding backslashes (including 0),
+			// this backslash escapes the newline (line continuation)
+			// If odd, this backslash is itself escaped
+			if (num_preceding_backslashes % 2 === 0) {
+				// Line continuation
+				if (in_comment) {
+					result.push("\n");
+				}
+				i += 2;
+				in_comment = false;
+				continue;
+			}
 		}
+		// else: backslash is escaped, don't treat as line continuation, fall through
 		if (c === "\n") {
 			in_comment = false;
 			result.push(c);
@@ -115,7 +136,7 @@ function _stripLineContinuationsCommentAware(text) {
 			in_single = !in_single;
 		} else if (c === '"' && !in_single && !in_comment) {
 			in_double = !in_double;
-		} else if (c === "#" && !in_single && !in_double) {
+		} else if (c === "#" && !in_single && !in_comment) {
 			in_comment = true;
 		}
 		result.push(c);

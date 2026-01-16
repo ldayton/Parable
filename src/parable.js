@@ -1165,6 +1165,7 @@ class Word extends Node {
 		let c,
 			cmdsub_idx,
 			cmdsub_parts,
+			deprecated_arith_depth,
 			depth,
 			direction,
 			extglob_depth,
@@ -1270,6 +1271,7 @@ class Word extends Node {
 		procsub_idx = 0;
 		in_double_quote = false;
 		extglob_depth = 0;
+		deprecated_arith_depth = 0;
 		while (i < value.length) {
 			// Check for extglob start: @( ?( *( +( !(
 			if (
@@ -1286,6 +1288,19 @@ class Word extends Node {
 			// Track ) that closes extglob (but not inside cmdsub/procsub)
 			if (value[i] === ")" && extglob_depth > 0) {
 				extglob_depth -= 1;
+				result.push(value[i]);
+				i += 1;
+				continue;
+			}
+			// Track deprecated arithmetic $[...] - inside it, >( and <( are not procsub
+			if (_startsWithAt(value, i, "$[") && !_isBackslashEscaped(value, i)) {
+				deprecated_arith_depth += 1;
+				result.push(value[i]);
+				i += 1;
+				continue;
+			}
+			if (value[i] === "]" && deprecated_arith_depth > 0) {
+				deprecated_arith_depth -= 1;
 				result.push(value[i]);
 				i += 1;
 				continue;
@@ -1352,9 +1367,10 @@ class Word extends Node {
 				i = j;
 			} else if (
 				(_startsWithAt(value, i, ">(") || _startsWithAt(value, i, "<(")) &&
-				!in_double_quote
+				!in_double_quote &&
+				deprecated_arith_depth === 0
 			) {
-				// Check for >( or <( process substitution (not inside double quotes)
+				// Check for >( or <( process substitution (not inside double quotes or $[...])
 				// Check if this is actually a process substitution or just comparison + parens
 				// Process substitution: not preceded by alphanumeric
 				is_procsub = i === 0 || !/^[a-zA-Z0-9]$/.test(value[i - 1]);

@@ -3437,25 +3437,31 @@ def _format_cmdsub_node(
     if node.kind == "for":
         var = node.var
         body = _format_cmdsub_node(node.body, indent + 4)
-        if node.words:
+        if node.words is not None:
             word_vals = []
             for w in node.words:
                 word_vals.append(w.value)
             words = " ".join(word_vals)
-            result = (
-                "for "
-                + var
-                + " in "
-                + words
-                + ";\n"
-                + sp
-                + "do\n"
-                + inner_sp
-                + body
-                + ";\n"
-                + sp
-                + "done"
-            )
+            if words:
+                result = (
+                    "for "
+                    + var
+                    + " in "
+                    + words
+                    + ";\n"
+                    + sp
+                    + "do\n"
+                    + inner_sp
+                    + body
+                    + ";\n"
+                    + sp
+                    + "done"
+                )
+            else:
+                # Empty 'in' clause: for var in ;
+                result = (
+                    "for " + var + " in ;\n" + sp + "do\n" + inner_sp + body + ";\n" + sp + "done"
+                )
         else:
             result = "for " + var + ";\n" + sp + "do\n" + inner_sp + body + ";\n" + sp + "done"
         if node.redirects:

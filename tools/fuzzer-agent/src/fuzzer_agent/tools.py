@@ -15,19 +15,17 @@ _CLEAN_ENV = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
 
 
 @tool
-def shell(command: str, cwd: str | None = None) -> str:
-    """Execute any shell command.
+def shell(command: str) -> str:
+    """Execute a shell command in the Parable repo root.
 
     Args:
         command: The shell command to execute.
-        cwd: Working directory for the command. Defaults to Parable repo root.
 
     Returns:
         Combined stdout and stderr from the command, or error message on failure.
     """
-    if cwd is None:
-        cwd = str(REPO_ROOT)
-    log.info("shell", command=command, cwd=cwd)
+    cwd = str(REPO_ROOT)
+    log.info("shell", command=command)
     try:
         result = subprocess.run(
             command,

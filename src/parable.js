@@ -1079,51 +1079,53 @@ class Word extends Node {
 	}
 
 	_findMatchingParen(value, open_pos) {
-		let ch, depth, i;
+		let ch, depth, i, quote;
 		if (open_pos >= value.length || value[open_pos] !== "(") {
 			return -1;
 		}
 		i = open_pos + 1;
 		depth = 1;
+		quote = new QuoteState();
 		while (i < value.length && depth > 0) {
 			ch = value[i];
-			if (ch === "'") {
+			// Handle escapes (only meaningful outside single quotes)
+			if (ch === "\\" && i + 1 < value.length && !quote.single) {
+				i += 2;
+				continue;
+			}
+			// Track quote state
+			if (ch === "'" && !quote.double) {
+				quote.single = !quote.single;
 				i += 1;
-				while (i < value.length && value[i] !== "'") {
-					i += 1;
-				}
+				continue;
+			}
+			if (ch === '"' && !quote.single) {
+				quote.double = !quote.double;
 				i += 1;
-			} else if (ch === '"') {
+				continue;
+			}
+			// Skip content inside quotes
+			if (quote.single || quote.double) {
 				i += 1;
-				while (i < value.length) {
-					if (value[i] === "\\" && i + 1 < value.length) {
-						i += 2;
-					} else if (value[i] === '"') {
-						i += 1;
-						break;
-					} else {
-						i += 1;
-					}
-				}
-			} else if (ch === "#") {
-				// Comment - skip to end of line (but not the newline itself)
+				continue;
+			}
+			// Handle comments (only outside quotes)
+			if (ch === "#") {
 				while (i < value.length && value[i] !== "\n") {
 					i += 1;
 				}
-			} else if (ch === "\\" && i + 1 < value.length) {
-				i += 2;
-			} else if (ch === "(") {
+				continue;
+			}
+			// Track paren depth
+			if (ch === "(") {
 				depth += 1;
-				i += 1;
 			} else if (ch === ")") {
 				depth -= 1;
 				if (depth === 0) {
 					return i;
 				}
-				i += 1;
-			} else {
-				i += 1;
 			}
+			i += 1;
 		}
 		return -1;
 	}

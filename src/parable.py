@@ -935,39 +935,39 @@ class Word(Node):
             return -1
         i = open_pos + 1
         depth = 1
+        quote = QuoteState()
         while i < len(value) and depth > 0:
             ch = value[i]
-            if ch == "'":
+            # Handle escapes (only meaningful outside single quotes)
+            if ch == "\\" and i + 1 < len(value) and not quote.single:
+                i += 2
+                continue
+            # Track quote state
+            if ch == "'" and not quote.double:
+                quote.single = not quote.single
                 i += 1
-                while i < len(value) and value[i] != "'":
-                    i += 1
+                continue
+            if ch == '"' and not quote.single:
+                quote.double = not quote.double
                 i += 1
-            elif ch == '"':
+                continue
+            # Skip content inside quotes
+            if quote.single or quote.double:
                 i += 1
-                while i < len(value):
-                    if value[i] == "\\" and i + 1 < len(value):
-                        i += 2
-                    elif value[i] == '"':
-                        i += 1
-                        break
-                    else:
-                        i += 1
-            elif ch == "#":
-                # Comment - skip to end of line (but not the newline itself)
+                continue
+            # Handle comments (only outside quotes)
+            if ch == "#":
                 while i < len(value) and value[i] != "\n":
                     i += 1
-            elif ch == "\\" and i + 1 < len(value):
-                i += 2
-            elif ch == "(":
+                continue
+            # Track paren depth
+            if ch == "(":
                 depth += 1
-                i += 1
             elif ch == ")":
                 depth -= 1
                 if depth == 0:
                     return i
-                i += 1
-            else:
-                i += 1
+            i += 1
         return -1
 
     def _normalize_array_inner(self, inner: str) -> str:

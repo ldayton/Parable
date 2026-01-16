@@ -1,0 +1,9 @@
+=== heredoc delimiter must match exactly, not as prefix
+cat <<EO
+hello
+EOF
+---
+(command (word "cat") (redirect "<<" "hello
+EOF
+"))
+---

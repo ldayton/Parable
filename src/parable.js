@@ -8263,6 +8263,7 @@ class Parser {
 			next_ch,
 			next_line_start,
 			quoted,
+			rest,
 			scan_pos,
 			tabs_stripped,
 			trailing_bs;
@@ -8554,17 +8555,17 @@ class Parser {
 				break;
 			}
 			// At EOF with line starting with delimiter - heredoc terminates (process sub case)
-			// e.g. <(<<a\na ) - the "a " line starts with delimiter "a" followed by whitespace
-			if (
-				line_end >= this.length &&
-				check_line.startsWith(delimiter) &&
-				check_line.slice(delimiter.length).trim() === ""
-			) {
-				// Adjust line_end to point just past the delimiter, not the whole line
-				// This allows remaining content after delimiter to be parsed
-				tabs_stripped = line.length - check_line.length;
-				line_end = line_start + tabs_stripped + delimiter.length;
-				break;
+			// e.g. <(<<a\na ) - the "a " line starts with delimiter "a" and we're at EOF
+			if (line_end >= this.length && check_line.startsWith(delimiter)) {
+				// Only match if delimiter is exact or followed by whitespace then ) (for process sub)
+				rest = check_line.slice(delimiter.length).trimStart();
+				if (rest === "" || (rest.length > 0 && rest[0] === ")")) {
+					// Adjust line_end to point just past the delimiter, not the whole line
+					// This allows remaining content after delimiter to be parsed
+					tabs_stripped = line.length - check_line.length;
+					line_end = line_start + tabs_stripped + delimiter.length;
+					break;
+				}
 			}
 			// Add line to content (with newline, since we consumed continuations above)
 			if (strip_tabs) {

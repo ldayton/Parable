@@ -1,0 +1,5 @@
+=== assignment detection stops after redirect
+a[ ]= <x a[ ]=
+---
+(command (word "a[ ]=") (word "a[") (word "]=") (redirect "<" "x"))
+---

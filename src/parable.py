@@ -7384,12 +7384,15 @@ class Parser:
             # Otherwise parse a word
             # Allow array assignments like a[1 + 2]= in prefix position (before first non-assignment)
             # Check if all previous words were assignments (contain = not inside quotes)
+            # and no redirects have been seen (redirects break assignment context)
             all_assignments = True
             for w in words:
                 if not self._is_assignment_word(w):
                     all_assignments = False
                     break
-            word = self.parse_word(at_command_start=not words or all_assignments)
+            word = self.parse_word(
+                at_command_start=not words or (all_assignments and len(redirects) == 0)
+            )
             if word is None:
                 break
             words.append(word)

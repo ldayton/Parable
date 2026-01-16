@@ -1,0 +1,5 @@
+=== handle space after & in close redirect before digit
+(: 3>& -5)
+---
+(subshell (command (word ":") (word "5") (redirect ">&-" 0)))
+---

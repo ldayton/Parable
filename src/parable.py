@@ -4059,12 +4059,13 @@ def _looks_like_assignment(s: str) -> bool:
 class Parser:
     """Recursive descent parser for bash."""
 
-    def __init__(self, source: str):
+    def __init__(self, source: str, in_process_sub: bool = False):
         self.source = source
         self.pos = 0
         self.length = len(source)
         self._pending_heredoc_end = None
         self._saw_newline_in_single_quote = False
+        self._in_process_sub = in_process_sub
 
     def at_end(self) -> bool:
         """Check if we've reached the end of input."""
@@ -5155,7 +5156,7 @@ class Parser:
         text = _strip_line_continuations_comment_aware(text)
 
         # Parse the content as a command list
-        sub_parser = Parser(content)
+        sub_parser = Parser(content, in_process_sub=True)
         cmd = sub_parser.parse_list()
         if cmd is None:
             cmd = Empty()
@@ -7263,10 +7264,15 @@ class Parser:
 
             # At EOF with line starting with delimiter - heredoc terminates (process sub case)
             # e.g. <(<<a\na ) - the "a " line starts with delimiter "a" and we're at EOF
-            if line_end >= self.length and check_line.startswith(delimiter):
-                # Only match if delimiter is exact or followed by whitespace then ) (for process sub)
-                rest = check_line[len(delimiter) :].lstrip()
-                if rest == "" or (rest and rest[0] == ")"):
+            if (
+                line_end >= self.length
+                and check_line.startswith(delimiter)
+                and self._in_process_sub
+            ):
+                # Only match if delimiter is exact or followed by whitespace/punctuation
+                rest = check_line[len(delimiter) :]
+                # In process sub, accept: exact match, whitespace only, or whitespace + )
+                if rest == "" or rest.lstrip() == "" or rest.lstrip().startswith(")"):
                     # Adjust line_end to point just past the delimiter, not the whole line
                     # This allows remaining content after delimiter to be parsed
                     tabs_stripped = len(line) - len(check_line)

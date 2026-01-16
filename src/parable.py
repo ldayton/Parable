@@ -8337,8 +8337,8 @@ class Parser:
                     chars.append(self.advance())
                     continue
                 next_ch = self.source[self.pos + 1]
-                if _is_whitespace_no_newline(next_ch):
-                    # [ followed by whitespace is literal
+                if _is_whitespace_no_newline(next_ch) or next_ch == "&" or next_ch == "|":
+                    # [ followed by whitespace or operator is literal
                     chars.append(self.advance())
                     continue
                 chars.append(self.advance())  # consume [

@@ -1,0 +1,5 @@
+=== && should be parsed as operator not literal in conditional
+[[ [&&] ]]
+---
+(cond (cond-and (cond-unary "-n" (cond-term "[")) (cond-unary "-n" (cond-term "]"))))
+---

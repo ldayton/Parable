@@ -1206,6 +1206,7 @@ class Word extends Node {
 			c,
 			cmdsub_idx,
 			cmdsub_parts,
+			compact,
 			deprecated_arith_depth,
 			depth,
 			direction,
@@ -1471,7 +1472,8 @@ class Word extends Node {
 					direction = value[i];
 					j = _findCmdsubEnd(value, i + 2);
 					node = procsub_parts[procsub_idx];
-					formatted = _formatCmdsubNode(node.command, 0, true, false, true);
+					compact = _startsWithSubshell(node.command);
+					formatted = _formatCmdsubNode(node.command, 0, true, compact, true);
 					if (node.command.kind === "subshell") {
 						raw_content = value.slice(i + 2, j - 1);
 						// Extract leading whitespace
@@ -1526,7 +1528,8 @@ class Word extends Node {
 						parsed = parser.parseList();
 						// Only use parsed result if parser consumed all input
 						if (parsed && parser.pos === inner_to_parse.length) {
-							formatted = _formatCmdsubNode(parsed, 0, true, false, true);
+							compact = _startsWithSubshell(parsed);
+							formatted = _formatCmdsubNode(parsed, 0, true, compact, true);
 						} else {
 							formatted = inner;
 							leading_ws = "";
@@ -3266,6 +3269,28 @@ function _formatCondBody(node) {
 		return `( ${_formatCondBody(node.body)} )`;
 	}
 	return "";
+}
+
+function _startsWithSubshell(node) {
+	let p;
+	if (node.kind === "subshell") {
+		return true;
+	}
+	if (node.kind === "list") {
+		for (p of node.parts) {
+			if (p.kind !== "operator") {
+				return _startsWithSubshell(p);
+			}
+		}
+		return false;
+	}
+	if (node.kind === "pipeline") {
+		if (node.commands && node.commands.length) {
+			return _startsWithSubshell(node.commands[0]);
+		}
+		return false;
+	}
+	return false;
 }
 
 function _formatCmdsubNode(

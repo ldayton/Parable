@@ -1,5 +1,11 @@
 ## Local: Git Setup and PR Creation
 
+**Pre-flight check** (run once at the start):
+```bash
+gh api repos/:owner/:repo --jq '.permissions.push'
+```
+If this returns `false`, the token lacks push permissions and PRs will fail. Stop and report the error.
+
 **Before starting** (after step 1 in base):
 ```bash
 git switch main
@@ -29,12 +35,23 @@ Include this in the PR body:
 
 **Merging the PR:**
 
-Once the PR is created, wait for the "Just Check" GitHub workflow to pass:
+Once the PR is created, wait for CI to register (max 5 attempts):
 ```bash
-gh pr checks <PR#> --watch
+for i in 1 2 3 4 5; do
+  sleep 10
+  STATUS=$(gh pr view <PR#> --json statusCheckRollup --jq '.statusCheckRollup | length')
+  if [ "$STATUS" -gt 0 ]; then
+    echo "CI registered, waiting for completion..."
+    gh pr checks <PR#> --watch
+    break
+  fi
+  echo "Attempt $i: no checks yet..."
+  if [ "$i" -eq 5 ]; then
+    echo "ERROR: CI never started after 5 attempts. This usually means the PR was created by a bot token and GitHub is blocking workflow triggers. A human must manually trigger the workflow or merge the PR."
+    exit 1
+  fi
+done
 ```
-
-**Note:** If this fails with "no checks reported", wait a few seconds for GitHub to start the workflow, then retry the command.
 
 After the workflow passes, squash merge and delete the remote branch:
 ```bash

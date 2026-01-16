@@ -1,5 +1,6 @@
 """Shell tool for the fuzzer agent."""
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -8,6 +9,9 @@ from strands import tool
 
 log = structlog.get_logger()
 REPO_ROOT = Path(__file__).parent.parent.parent.parent.parent
+
+# Clean environment for subprocesses (avoid uv venv mismatch warnings)
+_CLEAN_ENV = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
 
 
 @tool
@@ -32,6 +36,7 @@ def shell(command: str, cwd: str | None = None) -> str:
             capture_output=True,
             text=True,
             timeout=300,
+            env=_CLEAN_ENV,
         )
         output = result.stdout + result.stderr
         if result.returncode != 0:

@@ -1,0 +1,5 @@
+=== heredoc delimiter with $[...] containing redirect operators
+<< $[>&]
+---
+(command (redirect "<<" ""))
+---

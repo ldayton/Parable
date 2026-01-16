@@ -1,0 +1,5 @@
+=== process substitution with heredoc followed by tab and word
+<(<<E)	x
+---
+(command (word "<(<<E\nE\n)") (word "x"))
+---

@@ -3615,6 +3615,9 @@ function _formatCmdsubNode(
 	if (procsub_first == null) {
 		procsub_first = false;
 	}
+	if (node == null) {
+		return "";
+	}
 	sp = " ".repeat(indent);
 	inner_sp = " ".repeat(indent + 4);
 	if (node.kind === "empty") {

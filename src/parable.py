@@ -3067,6 +3067,8 @@ def _format_cmdsub_node(
     procsub_first: bool = False,
 ) -> str:
     """Format an AST node for command substitution output (bash-oracle pretty-print format)."""
+    if node is None:
+        return ""
     sp = _repeat_str(" ", indent)
     inner_sp = _repeat_str(" ", indent + 4)
     if node.kind == "empty":
@@ -5000,7 +5002,11 @@ class Parser:
                     while not self.at_end():
                         line_start = self.pos
                         line_end = self.pos
-                        while line_end < self.length and self.source[line_end] != "\n" and self.source[line_end] != ")":
+                        while (
+                            line_end < self.length
+                            and self.source[line_end] != "\n"
+                            and self.source[line_end] != ")"
+                        ):
                             line_end += 1
                         # If we hit ) before newline, heredoc is incomplete - position at ) and break
                         if line_end < self.length and self.source[line_end] == ")":

@@ -1265,13 +1265,27 @@ class Word(Node):
                     i = j
                     continue
                 # Format this command substitution
+                inner = _substring(value, i + 2, j - 1)
+                # Check if content starts with } followed by keyword - these were stripped during parsing
+                # but should be preserved in output. Don't do this for { which is likely a brace group.
+                leading_brace = ""
+                if inner and len(inner) > 1 and inner[0] == "}":
+                    # Only add } if it was followed by a keyword that got stripped
+                    rest = inner[1:]
+                    if rest.startswith(
+                        ("case", "if", "while", "until", "for", "select", "function")
+                    ):
+                        leading_brace = "}"
                 if cmdsub_idx < len(cmdsub_parts):
                     node = cmdsub_parts[cmdsub_idx]
-                    formatted = _format_cmdsub_node(node.command)
+                    formatted = leading_brace + _format_cmdsub_node(node.command)
                     cmdsub_idx += 1
+                    # If leading } was stripped and formatting introduces newlines, use original
+                    # This preserves compact format for }case and similar constructs
+                    if leading_brace and "\n" in formatted and "\n" not in inner:
+                        formatted = inner
                 else:
                     # No AST node (e.g., inside arithmetic) - parse content on the fly
-                    inner = _substring(value, i + 2, j - 1)
                     try:
                         parser = Parser(inner)
                         parsed = parser.parse_list()
@@ -4344,6 +4358,8 @@ def _is_word_start_context(c: str) -> bool:
         or c == "<"
         or c == "("
         or c == "{"
+        or c == ")"
+        or c == "}"
     )
 
 
@@ -4665,12 +4681,23 @@ class Parser:
         self.skip_whitespace()
 
         word = self.peek_word()
-        if word != expected:
+        # In command substitutions, strip leading } for keyword matching
+        # Don't strip { because it's used for brace groups
+        keyword_word = word
+        has_leading_brace = False
+        if word is not None and self._in_process_sub and len(word) > 1 and word[0] == "}":
+            keyword_word = word[1:]
+            has_leading_brace = True
+
+        if keyword_word != expected:
             self.pos = saved_pos
             return False
 
         # Actually consume the word
         self.skip_whitespace()
+        # If there's a leading } or {, skip it first
+        if has_leading_brace:
+            self.advance()
         for _ in expected:
             self.advance()
         # Skip trailing backslash-newline (line continuation)
@@ -9936,40 +9963,46 @@ class Parser:
         # Check for reserved words
         word = self.peek_word()
 
+        # In command substitutions, strip leading } for keyword matching
+        # Don't strip { because it's used for brace groups
+        keyword_word = word
+        if word is not None and self._in_process_sub and len(word) > 1 and word[0] == "}":
+            keyword_word = word[1:]
+
         # Reserved words that cannot start a statement (only valid in specific contexts)
-        if word in ("fi", "then", "elif", "else", "done", "esac", "do", "in"):
-            raise ParseError(f"Unexpected reserved word '{word}'", pos=self.pos)
+        if keyword_word in ("fi", "then", "elif", "else", "done", "esac", "do", "in"):
+            raise ParseError(f"Unexpected reserved word '{keyword_word}'", pos=self.pos)
 
         # If statement
-        if word == "if":
+        if keyword_word == "if":
             return self.parse_if()
 
         # While loop
-        if word == "while":
+        if keyword_word == "while":
             return self.parse_while()
 
         # Until loop
-        if word == "until":
+        if keyword_word == "until":
             return self.parse_until()
 
         # For loop
-        if word == "for":
+        if keyword_word == "for":
             return self.parse_for()
 
         # Select statement
-        if word == "select":
+        if keyword_word == "select":
             return self.parse_select()
 
         # Case statement
-        if word == "case":
+        if keyword_word == "case":
             return self.parse_case()
 
         # Function definition (function keyword form)
-        if word == "function":
+        if keyword_word == "function":
             return self.parse_function()
 
         # Coproc
-        if word == "coproc":
+        if keyword_word == "coproc":
             return self.parse_coproc()
 
         # Try POSIX function definition (name() form) before simple command

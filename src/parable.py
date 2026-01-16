@@ -4785,6 +4785,18 @@ class Parser:
             self.advance()  # skip newline
         return True
 
+    def _scan_single_quote(self, chars: list, start: int, track_newline: bool = False) -> None:
+        """Scan single-quoted string content. Assumes opening quote already consumed."""
+        chars.append("'")
+        while not self.at_end() and self.peek() != "'":
+            c = self.advance()
+            if track_newline and c == "\n":
+                self._saw_newline_in_single_quote = True
+            chars.append(c)
+        if self.at_end():
+            raise ParseError("Unterminated single quote", pos=start)
+        chars.append(self.advance())  # closing quote
+
     def parse_word(
         self, at_command_start: bool = False, in_array_literal: bool = False
     ) -> Word | None:
@@ -4848,15 +4860,7 @@ class Parser:
             # Single-quoted string - no expansion
             if ch == "'":
                 self.advance()  # consume opening quote
-                chars.append("'")
-                while not self.at_end() and self.peek() != "'":
-                    c = self.advance()
-                    if c == "\n":
-                        self._saw_newline_in_single_quote = True
-                    chars.append(c)
-                if self.at_end():
-                    raise ParseError("Unterminated single quote", pos=start)
-                chars.append(self.advance())  # consume closing quote
+                self._scan_single_quote(chars, start, track_newline=True)
 
             # Double-quoted string - expansions happen inside
             elif ch == '"':
@@ -8508,12 +8512,7 @@ class Parser:
             # Single-quoted string
             if ch == "'":
                 self.advance()
-                chars.append("'")
-                while not self.at_end() and self.peek() != "'":
-                    chars.append(self.advance())
-                if self.at_end():
-                    raise ParseError("Unterminated single quote", pos=start)
-                chars.append(self.advance())
+                self._scan_single_quote(chars, start)
 
             # Double-quoted string
             elif ch == '"':
@@ -8851,12 +8850,7 @@ class Parser:
             # Single-quoted string
             if ch == "'":
                 self.advance()
-                chars.append("'")
-                while not self.at_end() and self.peek() != "'":
-                    chars.append(self.advance())
-                if self.at_end():
-                    raise ParseError("Unterminated single quote", pos=start)
-                chars.append(self.advance())
+                self._scan_single_quote(chars, start)
                 continue
 
             # Double-quoted string

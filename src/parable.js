@@ -5784,6 +5784,25 @@ class Parser {
 		return true;
 	}
 
+	_scanSingleQuote(chars, start, track_newline) {
+		let c;
+		if (track_newline == null) {
+			track_newline = false;
+		}
+		chars.push("'");
+		while (!this.atEnd() && this.peek() !== "'") {
+			c = this.advance();
+			if (track_newline && c === "\n") {
+				this._saw_newline_in_single_quote = true;
+			}
+			chars.push(c);
+		}
+		if (this.atEnd()) {
+			throw new ParseError("Unterminated single quote", start);
+		}
+		chars.push(this.advance());
+	}
+
 	parseWord(at_command_start, in_array_literal) {
 		let ansi_node,
 			ansi_result,
@@ -5884,18 +5903,7 @@ class Parser {
 			// Single-quoted string - no expansion
 			if (ch === "'") {
 				this.advance();
-				chars.push("'");
-				while (!this.atEnd() && this.peek() !== "'") {
-					c = this.advance();
-					if (c === "\n") {
-						this._saw_newline_in_single_quote = true;
-					}
-					chars.push(c);
-				}
-				if (this.atEnd()) {
-					throw new ParseError("Unterminated single quote", start);
-				}
-				chars.push(this.advance());
+				this._scanSingleQuote(chars, start, true);
 			} else if (ch === '"') {
 				// Double-quoted string - expansions happen inside
 				this.advance();
@@ -10354,14 +10362,7 @@ class Parser {
 			// Single-quoted string
 			if (ch === "'") {
 				this.advance();
-				chars.push("'");
-				while (!this.atEnd() && this.peek() !== "'") {
-					chars.push(this.advance());
-				}
-				if (this.atEnd()) {
-					throw new ParseError("Unterminated single quote", start);
-				}
-				chars.push(this.advance());
+				this._scanSingleQuote(chars, start);
 			} else if (ch === '"') {
 				// Double-quoted string
 				this.advance();
@@ -10805,14 +10806,7 @@ class Parser {
 			// Single-quoted string
 			if (ch === "'") {
 				this.advance();
-				chars.push("'");
-				while (!this.atEnd() && this.peek() !== "'") {
-					chars.push(this.advance());
-				}
-				if (this.atEnd()) {
-					throw new ParseError("Unterminated single quote", start);
-				}
-				chars.push(this.advance());
+				this._scanSingleQuote(chars, start);
 				continue;
 			}
 			// Double-quoted string

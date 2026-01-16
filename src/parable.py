@@ -1268,6 +1268,11 @@ class Word(Node):
                     # No AST node but valid procsub context - parse content on the fly
                     direction = value[i]
                     j = _find_cmdsub_end(value, i + 2)
+                    # Check if we found a valid closing ) - if not, treat as literal characters
+                    if j > len(value) or (j > 0 and j <= len(value) and value[j - 1] != ")"):
+                        result.append(value[i])
+                        i += 1
+                        continue
                     inner = _substring(value, i + 2, j - 1)
                     # Preserve leading whitespace (bash keeps it in procsub inside arithmetic)
                     leading_ws = ""

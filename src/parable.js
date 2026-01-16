@@ -1576,6 +1576,15 @@ class Word extends Node {
 					// No AST node but valid procsub context - parse content on the fly
 					direction = value[i];
 					j = _findCmdsubEnd(value, i + 2);
+					// Check if we found a valid closing ) - if not, treat as literal characters
+					if (
+						j > value.length ||
+						(j > 0 && j <= value.length && value[j - 1] !== ")")
+					) {
+						result.push(value[i]);
+						i += 1;
+						continue;
+					}
 					inner = value.slice(i + 2, j - 1);
 					// Preserve leading whitespace (bash keeps it in procsub inside arithmetic)
 					leading_ws = "";

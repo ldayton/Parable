@@ -1,0 +1,5 @@
+=== ansi-c quoted string with escaped quote followed by process substitution and carriage return
+$'\'<(\r'
+---
+(command (word "''\\''<('"))
+---

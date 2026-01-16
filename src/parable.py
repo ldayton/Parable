@@ -544,8 +544,7 @@ class Word(Node):
                 expanded = self._expand_ansi_c_escapes(
                     _substring(ansi_str, 1, len(ansi_str))
                 )  # Pass 'hello\nworld'
-                # Inside ${...} that's itself in double quotes, strip quotes for
-                # default/alternate value operators but keep for pattern operators
+                # Inside ${...} that's itself in double quotes, check if quotes should be stripped
                 outer_in_dquote = (
                     quote_stack[len(quote_stack) - 1][1] if len(quote_stack) > 0 else False
                 )
@@ -558,8 +557,8 @@ class Word(Node):
                     inner = _substring(expanded, 1, len(expanded) - 1)
                     # Only strip if non-empty and no CTLESC
                     if inner and inner.find("\x01") == -1:
-                        # Check if we're in a pattern context (/, //, %, %%, #, ##)
-                        # Pattern operators come after the variable name, not at the start
+                        # Check if we're in a pattern context (%, %%, #, ##, /, //)
+                        # For pattern operators, keep quotes; for others (like ~), strip them
                         result_str = "".join(result)
                         in_pattern = False
                         # Find the last ${
@@ -567,15 +566,27 @@ class Word(Node):
                         if last_brace_idx >= 0:
                             # Get the content after ${
                             after_brace = result_str[last_brace_idx + 2 :]
-                            # Pattern operators should come after at least one character (the var name)
-                            # Check for valid pattern syntax: ${var%pattern} not ${%...}
-                            for op in ["//", "/", "%%", "%", "##", "#"]:
-                                op_idx = after_brace.find(op)
-                                if (
-                                    op_idx > 0
-                                ):  # op_idx > 0 means there's a var name before the operator
-                                    in_pattern = True
-                                    break
+                            # Parse variable name to find where operator starts
+                            var_name_len = 0
+                            if after_brace:
+                                # Special parameters like $, @, *, etc.
+                                if after_brace[0] in "@*#?-$!0123456789_":
+                                    var_name_len = 1
+                                # Regular variable names
+                                elif after_brace[0].isalpha() or after_brace[0] == "_":
+                                    while var_name_len < len(after_brace):
+                                        c = after_brace[var_name_len]
+                                        if not (c.isalnum() or c == "_"):
+                                            break
+                                        var_name_len += 1
+                            # Check if operator immediately after variable name is a pattern operator
+                            if var_name_len > 0 and var_name_len < len(after_brace):
+                                op_start = after_brace[var_name_len:]
+                                # Check if it starts with a pattern operator
+                                for op in ["//", "%%", "##", "/", "%", "#"]:
+                                    if op_start.startswith(op):
+                                        in_pattern = True
+                                        break
                         if not in_pattern:
                             expanded = inner
                 result.append(expanded)
@@ -6728,6 +6739,25 @@ class Parser:
                 depth += 1
                 arg_chars.append(self.advance())  # $
                 arg_chars.append(self.advance())  # {
+            # ANSI-C quoted string $'...' - scan to matching ' with escapes
+            elif (
+                c == "$"
+                and not in_single_quote
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "'"
+            ):
+                arg_chars.append(self.advance())  # $
+                arg_chars.append(self.advance())  # opening '
+                # Scan to closing ' handling escape sequences
+                while not self.at_end() and self.peek() != "'":
+                    if self.peek() == "\\":
+                        arg_chars.append(self.advance())  # backslash
+                        if not self.at_end():
+                            arg_chars.append(self.advance())  # escaped char
+                    else:
+                        arg_chars.append(self.advance())
+                if not self.at_end():
+                    arg_chars.append(self.advance())  # closing '
             # Locale string $"..." - strip $ and enter double quote
             elif (
                 c == "$"

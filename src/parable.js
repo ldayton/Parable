@@ -507,6 +507,7 @@ class Word extends Node {
 		let after_brace,
 			ansi_str,
 			brace_depth,
+			c,
 			ch,
 			effective_in_dquote,
 			expanded,
@@ -520,11 +521,12 @@ class Word extends Node {
 			j,
 			last_brace_idx,
 			op,
-			op_idx,
+			op_start,
 			outer_in_dquote,
 			quote_stack,
 			result,
-			result_str;
+			result_str,
+			var_name_len;
 		result = [];
 		i = 0;
 		in_single_quote = false;
@@ -619,8 +621,7 @@ class Word extends Node {
 				ansi_str = value.slice(i, j);
 				// Strip the $ and expand escapes
 				expanded = this._expandAnsiCEscapes(ansi_str.slice(1, ansi_str.length));
-				// Inside ${...} that's itself in double quotes, strip quotes for
-				// default/alternate value operators but keep for pattern operators
+				// Inside ${...} that's itself in double quotes, check if quotes should be stripped
 				outer_in_dquote =
 					quote_stack.length > 0
 						? quote_stack[quote_stack.length - 1][1]
@@ -634,8 +635,8 @@ class Word extends Node {
 					inner = expanded.slice(1, expanded.length - 1);
 					// Only strip if non-empty and no CTLESC
 					if (inner && inner.indexOf("") === -1) {
-						// Check if we're in a pattern context (/, //, %, %%, #, ##)
-						// Pattern operators come after the variable name, not at the start
+						// Check if we're in a pattern context (%, %%, #, ##, /, //)
+						// For pattern operators, keep quotes; for others (like ~), strip them
 						result_str = result.join("");
 						in_pattern = false;
 						// Find the last ${
@@ -643,13 +644,35 @@ class Word extends Node {
 						if (last_brace_idx >= 0) {
 							// Get the content after ${
 							after_brace = result_str.slice(last_brace_idx + 2);
-							// Pattern operators should come after at least one character (the var name)
-							// Check for valid pattern syntax: ${var%pattern} not ${%...}
-							for (op of ["//", "/", "%%", "%", "##", "#"]) {
-								op_idx = after_brace.indexOf(op);
-								if (op_idx > 0) {
-									in_pattern = true;
-									break;
+							// Parse variable name to find where operator starts
+							var_name_len = 0;
+							if (after_brace) {
+								// Special parameters like $, @, *, etc.
+								if ("@*#?-$!0123456789_".includes(after_brace[0])) {
+									var_name_len = 1;
+								} else if (
+									/^[a-zA-Z]$/.test(after_brace[0]) ||
+									after_brace[0] === "_"
+								) {
+									// Regular variable names
+									while (var_name_len < after_brace.length) {
+										c = after_brace[var_name_len];
+										if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
+											break;
+										}
+										var_name_len += 1;
+									}
+								}
+							}
+							// Check if operator immediately after variable name is a pattern operator
+							if (var_name_len > 0 && var_name_len < after_brace.length) {
+								op_start = after_brace.slice(var_name_len);
+								// Check if it starts with a pattern operator
+								for (op of ["//", "%%", "##", "/", "%", "#"]) {
+									if (op_start.startsWith(op)) {
+										in_pattern = true;
+										break;
+									}
 								}
 							}
 						}
@@ -8039,6 +8062,29 @@ class Parser {
 				depth += 1;
 				arg_chars.push(this.advance());
 				arg_chars.push(this.advance());
+			} else if (
+				c === "$" &&
+				!in_single_quote &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "'"
+			) {
+				// ANSI-C quoted string $'...' - scan to matching ' with escapes
+				arg_chars.push(this.advance());
+				arg_chars.push(this.advance());
+				// Scan to closing ' handling escape sequences
+				while (!this.atEnd() && this.peek() !== "'") {
+					if (this.peek() === "\\") {
+						arg_chars.push(this.advance());
+						if (!this.atEnd()) {
+							arg_chars.push(this.advance());
+						}
+					} else {
+						arg_chars.push(this.advance());
+					}
+				}
+				if (!this.atEnd()) {
+					arg_chars.push(this.advance());
+				}
 			} else if (
 				c === "$" &&
 				!in_single_quote &&

@@ -1,0 +1,5 @@
+=== ANSI-C quoted string in tilde parameter expansion pattern should be processed
+"${x~%$'b'}"
+---
+(command (word "\"${x~%b}\""))
+---

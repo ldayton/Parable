@@ -9491,6 +9491,21 @@ class Parser {
 					if (sc === ")" && paren_depth > 0) {
 						break;
 					}
+					// Check for && or || - these terminate the regex even inside brackets
+					if (
+						sc === "&" &&
+						scan + 1 < this.length &&
+						this.source[scan + 1] === "&"
+					) {
+						break;
+					}
+					if (
+						sc === "|" &&
+						scan + 1 < this.length &&
+						this.source[scan + 1] === "|"
+					) {
+						break;
+					}
 					if (sc === "]") {
 						bracket_will_close = true;
 						break;

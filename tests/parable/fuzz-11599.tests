@@ -1,0 +1,5 @@
+=== brace inside subscript in variable fd
+{a[{]}>y
+---
+(command (redirect ">" "y"))
+---

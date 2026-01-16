@@ -7560,6 +7560,7 @@ class Parser {
 			fd,
 			fd_chars,
 			fd_target,
+			in_bracket,
 			inner_word,
 			is_valid_varfd,
 			left,
@@ -7586,18 +7587,20 @@ class Parser {
 			saved = this.pos;
 			this.advance();
 			varname_chars = [];
-			while (
-				!this.atEnd() &&
-				this.peek() !== "}" &&
-				!_isRedirectChar(this.peek())
-			) {
+			in_bracket = false;
+			while (!this.atEnd() && !_isRedirectChar(this.peek())) {
 				ch = this.peek();
-				if (
-					/^[a-zA-Z0-9]$/.test(ch) ||
-					ch === "_" ||
-					ch === "[" ||
-					ch === "]"
-				) {
+				if (ch === "}" && !in_bracket) {
+					break;
+				} else if (ch === "[") {
+					in_bracket = true;
+					varname_chars.push(this.advance());
+				} else if (ch === "]") {
+					in_bracket = false;
+					varname_chars.push(this.advance());
+				} else if (/^[a-zA-Z0-9]$/.test(ch) || ch === "_") {
+					varname_chars.push(this.advance());
+				} else if (in_bracket) {
 					varname_chars.push(this.advance());
 				} else {
 					break;

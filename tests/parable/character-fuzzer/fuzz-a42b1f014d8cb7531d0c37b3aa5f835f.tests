@@ -1,0 +1,5 @@
+=== ANSI-C quote after @% in double-quoted param expansion loses quotes
+"${x@%$'a'}"
+---
+(command (word "\"${x@%'a'}\""))
+---

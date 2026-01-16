@@ -1,0 +1,5 @@
+=== arithmetic expansion with brace group in process substitution
+[[ <((1){) ]]
+---
+(cond (cond-unary "-n" (cond-term "<((1){)")))
+---

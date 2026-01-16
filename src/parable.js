@@ -8405,6 +8405,24 @@ class Parser {
 						}
 						delimiter_chars.push(this.advance());
 					}
+				} else if (
+					ch === "$" &&
+					this.pos + 1 < this.length &&
+					this.source[this.pos + 1] === "["
+				) {
+					// Arithmetic expansion $[...] embedded in delimiter
+					delimiter_chars.push(this.advance());
+					delimiter_chars.push(this.advance());
+					depth = 1;
+					while (!this.atEnd() && depth > 0) {
+						c = this.peek();
+						if (c === "[") {
+							depth += 1;
+						} else if (c === "]") {
+							depth -= 1;
+						}
+						delimiter_chars.push(this.advance());
+					}
 				} else if (ch === "`") {
 					// Backtick command substitution embedded in delimiter
 					// Note: In bash, backtick closes command sub even with unclosed quotes inside

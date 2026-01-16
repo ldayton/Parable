@@ -1,0 +1,5 @@
+=== empty cmdsub in arith expansion with param expansion
+$(($())#)
+---
+(command (word "$(($())#)"))
+---

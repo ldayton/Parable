@@ -659,8 +659,13 @@ class Word(Node):
         bracket_in_double_quote = False  # Track quotes inside brackets
         while i < len(value):
             ch = value[i]
-            if ch == "\\" and i + 1 < len(value):
-                # Escape - copy both chars
+            if (
+                ch == "\\"
+                and i + 1 < len(value)
+                and not in_single_quote
+                and not brace_in_single_quote
+            ):
+                # Escape - copy both chars (but NOT inside single quotes where \ is literal)
                 result.append(ch)
                 result.append(value[i + 1])
                 i += 2

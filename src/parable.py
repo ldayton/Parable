@@ -6960,7 +6960,12 @@ class Parser:
         line_end = self.pos
         while line_end < self.length and self.source[line_end] != "\n":
             ch = self.source[line_end]
-            if ch == "'":
+            if ch == "#":
+                # Comment - skip to end of line (don't parse quotes in comments)
+                while line_end < self.length and self.source[line_end] != "\n":
+                    line_end += 1
+                break
+            elif ch == "'":
                 # Single-quoted string - skip to closing quote (no escapes)
                 line_end += 1
                 while line_end < self.length and self.source[line_end] != "'":

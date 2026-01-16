@@ -4359,28 +4359,28 @@ function _extractHeredocDelimiters(content) {
 }
 
 function _findHeredocContentEnd(source, start, delimiters) {
-	let delimiter,
+	let content_start,
+		delimiter,
 		line,
 		line_end,
 		line_start,
 		line_stripped,
 		pos,
-		strip_tabs,
-		ws_start;
+		strip_tabs;
 	if (!delimiters) {
-		return start;
+		return [start, start];
 	}
 	pos = start;
-	for ([delimiter, strip_tabs] of delimiters) {
-		// Skip whitespace on the same line (e.g., tabs/spaces after closing paren)
-		ws_start = pos;
-		while (pos < source.length && " \t".includes(source[pos])) {
-			pos += 1;
-		}
-		if (pos >= source.length || source[pos] !== "\n") {
-			return ws_start;
-		}
+	// Skip to end of current line (including non-whitespace)
+	while (pos < source.length && source[pos] !== "\n") {
 		pos += 1;
+	}
+	if (pos >= source.length) {
+		return [start, start];
+	}
+	content_start = pos;
+	pos += 1;
+	for ([delimiter, strip_tabs] of delimiters) {
 		while (pos < source.length) {
 			line_start = pos;
 			line_end = pos;
@@ -4400,7 +4400,7 @@ function _findHeredocContentEnd(source, start, delimiters) {
 			pos = line_end < source.length ? line_end + 1 : line_end;
 		}
 	}
-	return pos;
+	return [content_start, pos];
 }
 
 function _isWordBoundary(s, pos, word_len) {
@@ -5988,6 +5988,7 @@ class Parser {
 			direction,
 			heredoc_delimiters,
 			heredoc_end,
+			heredoc_start,
 			start,
 			sub_parser,
 			text,
@@ -6067,14 +6068,22 @@ class Parser {
 		// Check for heredocs in content - their bodies follow the )
 		heredoc_delimiters = _extractHeredocDelimiters(content);
 		if (heredoc_delimiters) {
-			heredoc_end = _findHeredocContentEnd(
+			[heredoc_start, heredoc_end] = _findHeredocContentEnd(
 				this.source,
 				this.pos,
 				heredoc_delimiters,
 			);
-			if (heredoc_end > this.pos) {
-				content = content + this.source.slice(this.pos, heredoc_end);
-				this.pos = heredoc_end;
+			if (heredoc_end > heredoc_start) {
+				content = content + this.source.slice(heredoc_start, heredoc_end);
+				// Use pending mechanism to skip heredoc after current line is parsed
+				if (this._pending_heredoc_end == null) {
+					this._pending_heredoc_end = heredoc_end;
+				} else {
+					this._pending_heredoc_end = Math.max(
+						this._pending_heredoc_end,
+						heredoc_end,
+					);
+				}
 			}
 		}
 		text = this.source.slice(start, text_end);

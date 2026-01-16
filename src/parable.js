@@ -7583,9 +7583,21 @@ class Parser {
 		// Parse operator
 		op = this._consumeParamOperator();
 		if (op == null) {
-			// Unknown operator - bash still parses these (fails at runtime)
-			// Treat the current char as the operator
-			op = this.advance();
+			// Check for $" or $' which should have $ stripped (locale/ANSI-C quotes)
+			if (
+				!this.atEnd() &&
+				this.peek() === "$" &&
+				this.pos + 1 < this.length &&
+				['"', "'"].includes(this.source[this.pos + 1])
+			) {
+				// Skip the $ and treat the rest as an unknown operator
+				this.advance();
+				op = "";
+			} else {
+				// Unknown operator - bash still parses these (fails at runtime)
+				// Treat the current char as the operator
+				op = this.advance();
+			}
 		}
 		// Parse argument (everything until closing brace)
 		// Track quote state and nesting
@@ -7624,6 +7636,17 @@ class Parser {
 				// Nested ${...} - increase depth (outside single quotes)
 				depth += 1;
 				arg_chars.push(this.advance());
+				arg_chars.push(this.advance());
+			} else if (
+				c === "$" &&
+				!in_single_quote &&
+				!in_double_quote &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === '"'
+			) {
+				// Locale string $"..." - strip $ and enter double quote
+				this.advance();
+				in_double_quote = true;
 				arg_chars.push(this.advance());
 			} else if (
 				c === "$" &&

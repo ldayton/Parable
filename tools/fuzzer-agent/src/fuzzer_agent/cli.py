@@ -4,9 +4,9 @@ import argparse
 import sys
 
 from .agent import MODELS, FuzzerFixer
-from .pricing import AZURE_PRICING, CLAUDE_PRICING, OTHER_PRICING
+from .pricing import AZURE_PRICING, CLAUDE_PRICING, GCP_PRICING, OTHER_PRICING
 
-MODEL_PRICES = {**CLAUDE_PRICING, **OTHER_PRICING, **AZURE_PRICING}
+MODEL_PRICES = {**CLAUDE_PRICING, **OTHER_PRICING, **AZURE_PRICING, **GCP_PRICING}
 
 
 def _build_model_table() -> str:

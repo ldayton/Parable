@@ -53,6 +53,14 @@ AZURE_PRICING: dict[str, tuple[float, float]] = {
     "gpt-4o-mini": (0.15, 0.60),
 }
 
+# GCP Vertex AI pricing (hardcoded, no public API)
+# Source: https://cloud.google.com/vertex-ai/generative-ai/pricing
+GCP_PRICING: dict[str, tuple[float, float]] = {
+    "gemini-2.0-flash": (0.10, 0.40),
+    "gemini-2.5-flash": (0.15, 0.60),
+    "gemini-2.5-pro": (1.25, 10.00),
+}
+
 # Azure OpenAI models to fetch (skuName pattern -> our name)
 AZURE_MODELS = {
     "gpt 4.5 0227": "gpt-4.5",
@@ -173,7 +181,7 @@ def get_all_pricing() -> dict[str, tuple[float, float]]:
     """Get pricing for all models, combining API and hardcoded values."""
     import concurrent.futures
 
-    prices = {**CLAUDE_PRICING, **AZURE_PRICING}
+    prices = {**CLAUDE_PRICING, **AZURE_PRICING, **GCP_PRICING}
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         aws_future = executor.submit(fetch_bedrock_pricing)
         azure_future = executor.submit(fetch_azure_pricing)
@@ -198,6 +206,8 @@ def _get_provider(model: str) -> str:
         return "Amazon"
     if model.startswith("gpt"):
         return "OpenAI"
+    if model.startswith("gemini"):
+        return "Google"
     return "Unknown"
 
 
@@ -209,7 +219,10 @@ def main() -> None:
     print(f"\n{'Provider':<10} {'Model':<15} {'Input/1M':<10} {'Output/1M':<10} {'Live':<4}")
     print("-" * 54)
     all_models = sorted(
-        set(CLAUDE_PRICING.keys()) | set(API_MODELS.values()) | set(AZURE_PRICING.keys()),
+        set(CLAUDE_PRICING.keys())
+        | set(API_MODELS.values())
+        | set(AZURE_PRICING.keys())
+        | set(GCP_PRICING.keys()),
         key=lambda m: (_get_provider(m), m),
     )
     for model in all_models:

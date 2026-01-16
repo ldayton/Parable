@@ -13,10 +13,10 @@ from strands.agent.conversation_manager import SlidingWindowConversationManager
 from strands.models import BedrockModel
 from strands.models.litellm import LiteLLMModel
 
-from .pricing import AZURE_PRICING, CLAUDE_PRICING, OTHER_PRICING
+from .pricing import AZURE_PRICING, CLAUDE_PRICING, GCP_PRICING, OTHER_PRICING
 from .tools import shell
 
-MODEL_PRICING = {**CLAUDE_PRICING, **OTHER_PRICING, **AZURE_PRICING}
+MODEL_PRICING = {**CLAUDE_PRICING, **OTHER_PRICING, **AZURE_PRICING, **GCP_PRICING}
 
 # Bedrock model IDs
 BEDROCK_MODELS = {
@@ -45,7 +45,14 @@ AZURE_MODELS = {
     "gpt-4o-mini": "azure/gpt-4o-mini",
 }
 
-MODELS = {**BEDROCK_MODELS, **AZURE_MODELS}
+# GCP Vertex AI model IDs
+GCP_MODELS = {
+    "gemini-2.0-flash": "vertex_ai/gemini-2.0-flash",
+    "gemini-2.5-flash": "vertex_ai/gemini-2.5-flash",
+    "gemini-2.5-pro": "vertex_ai/gemini-2.5-pro",
+}
+
+MODELS = {**BEDROCK_MODELS, **AZURE_MODELS, **GCP_MODELS}
 
 # Path to repo root (fuzzer-agent/src/fuzzer_agent -> repo root)
 REPO_ROOT = Path(__file__).parent.parent.parent.parent.parent
@@ -120,6 +127,16 @@ class FuzzerFixer:
             model = LiteLLMModel(
                 model_id=self.model_id,
                 params={"temperature": 0.2, "max_tokens": 4096, "azure_ad_token": token.token},
+            )
+        elif self.model_name in GCP_MODELS:
+            model = LiteLLMModel(
+                model_id=self.model_id,
+                params={
+                    "temperature": 0.2,
+                    "max_tokens": 4096,
+                    "vertex_project": os.environ["VERTEXAI_PROJECT"],
+                    "vertex_location": os.environ["VERTEXAI_LOCATION"],
+                },
             )
         else:
             model = BedrockModel(

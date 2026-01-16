@@ -9,6 +9,9 @@ on:
         default: 'sonnet-4.5'
         type: choice
         options:
+          - gemini-2.0-flash
+          - gemini-2.5-flash
+          - gemini-2.5-pro
           - gpt-4.1
           - gpt-4.1-mini
           - gpt-4.1-nano
@@ -59,6 +62,13 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Configure GCP credentials
+        if: startsWith(inputs.model, 'gemini-')
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
       - name: Configure git
         run: |
           git config user.name "github-actions[bot]"
@@ -68,6 +78,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PAT }}
           AZURE_API_BASE: ${{ secrets.AZURE_API_BASE }}
+          VERTEXAI_PROJECT: ${{ secrets.VERTEXAI_PROJECT }}
+          VERTEXAI_LOCATION: ${{ secrets.VERTEXAI_LOCATION }}
         run: |
           cd tools/fuzzer-agent
           uv run fuzzer-agent --model ${{ inputs.model }}

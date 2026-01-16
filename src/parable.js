@@ -4545,6 +4545,22 @@ function _findCmdsubEnd(value, start) {
 			i += 2;
 			continue;
 		}
+		// Handle backtick command substitution - skip to closing backtick
+		// Must handle this before heredoc check to avoid treating << inside backticks as heredoc
+		if (c === "`") {
+			i += 1;
+			while (i < value.length && value[i] !== "`") {
+				if (value[i] === "\\" && i + 1 < value.length) {
+					i += 2;
+				} else {
+					i += 1;
+				}
+			}
+			if (i < value.length) {
+				i += 1;
+			}
+			continue;
+		}
 		// Handle heredocs (but not << inside arithmetic, which is shift operator)
 		if (arith_depth === 0 && _startsWithAt(value, i, "<<")) {
 			i = _skipHeredoc(value, i);
@@ -6451,6 +6467,23 @@ class Parser {
 				arith_depth -= 1;
 				this.advance();
 				this.advance();
+				continue;
+			}
+			// Backtick command substitution - skip to closing backtick
+			// Must handle this before heredoc check to avoid treating << inside backticks as heredoc
+			if (c === "`") {
+				this.advance();
+				while (!this.atEnd() && this.peek() !== "`") {
+					if (this.peek() === "\\" && this.pos + 1 < this.length) {
+						this.advance();
+						this.advance();
+					} else {
+						this.advance();
+					}
+				}
+				if (!this.atEnd()) {
+					this.advance();
+				}
 				continue;
 			}
 			// Heredoc - skip until delimiter line is found (not inside arithmetic)

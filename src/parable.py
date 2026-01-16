@@ -3791,6 +3791,18 @@ def _find_cmdsub_end(value: str, start: int) -> int:
             arith_depth -= 1
             i += 2
             continue
+        # Handle backtick command substitution - skip to closing backtick
+        # Must handle this before heredoc check to avoid treating << inside backticks as heredoc
+        if c == "`":
+            i += 1  # Skip opening `
+            while i < len(value) and value[i] != "`":
+                if value[i] == "\\" and i + 1 < len(value):
+                    i += 2
+                else:
+                    i += 1
+            if i < len(value):
+                i += 1  # Skip closing `
+            continue
         # Handle heredocs (but not << inside arithmetic, which is shift operator)
         if arith_depth == 0 and _starts_with_at(value, i, "<<"):
             i = _skip_heredoc(value, i)
@@ -5328,6 +5340,20 @@ class Parser:
                 arith_depth -= 1
                 self.advance()  # )
                 self.advance()  # )
+                continue
+
+            # Backtick command substitution - skip to closing backtick
+            # Must handle this before heredoc check to avoid treating << inside backticks as heredoc
+            if c == "`":
+                self.advance()  # opening `
+                while not self.at_end() and self.peek() != "`":
+                    if self.peek() == "\\" and self.pos + 1 < self.length:
+                        self.advance()  # backslash
+                        self.advance()  # escaped char
+                    else:
+                        self.advance()
+                if not self.at_end():
+                    self.advance()  # closing `
                 continue
 
             # Heredoc - skip until delimiter line is found (not inside arithmetic)

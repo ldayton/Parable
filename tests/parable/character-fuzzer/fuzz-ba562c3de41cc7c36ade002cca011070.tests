@@ -1,0 +1,6 @@
+=== heredoc delimiter in backtick command substitution inside double quotes
+"$(`<<`
+)"
+---
+(command (word "\"$(`<<`)\""))
+---

@@ -63,3 +63,10 @@ gh pr merge <PR#> --squash --delete-branch
    ```bash
    gh pr merge <PR#> --squash --delete-branch
    ```
+
+**After successful merge:**
+
+Output a success message in the format:
+```
+🚀 merge successful: <PR URL>
+```

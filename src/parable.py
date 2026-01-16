@@ -408,7 +408,7 @@ class Word(Node):
                     while j < len(inner) and j < i + 4 and _is_octal_digit(inner[j]):
                         j += 1
                     if j > i + 2:
-                        byte_val = int(_substring(inner, i + 1, j), 8)
+                        byte_val = int(_substring(inner, i + 1, j), 8) & 0xFF
                         if byte_val == 0:
                             # NUL truncates string
                             return "'" + result.decode("utf-8", errors="replace") + "'"
@@ -418,11 +418,11 @@ class Word(Node):
                         # Just \0 - NUL truncates string
                         return "'" + result.decode("utf-8", errors="replace") + "'"
                 elif c >= "1" and c <= "7":
-                    # Octal escape \NNN (1-3 digits) - raw byte
+                    # Octal escape \NNN (1-3 digits) - raw byte, wraps at 256
                     j = i + 1
                     while j < len(inner) and j < i + 4 and _is_octal_digit(inner[j]):
                         j += 1
-                    byte_val = int(_substring(inner, i + 1, j), 8)
+                    byte_val = int(_substring(inner, i + 1, j), 8) & 0xFF
                     if byte_val == 0:
                         # NUL truncates string
                         return "'" + result.decode("utf-8", errors="replace") + "'"

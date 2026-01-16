@@ -439,7 +439,7 @@ class Word extends Node {
 						j += 1;
 					}
 					if (j > i + 2) {
-						byte_val = parseInt(inner.slice(i + 1, j), 8);
+						byte_val = parseInt(inner.slice(i + 1, j), 8) & 255;
 						if (byte_val === 0) {
 							// NUL truncates string
 							return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
@@ -451,12 +451,12 @@ class Word extends Node {
 						return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
 					}
 				} else if (c >= "1" && c <= "7") {
-					// Octal escape \NNN (1-3 digits) - raw byte
+					// Octal escape \NNN (1-3 digits) - raw byte, wraps at 256
 					j = i + 1;
 					while (j < inner.length && j < i + 4 && _isOctalDigit(inner[j])) {
 						j += 1;
 					}
-					byte_val = parseInt(inner.slice(i + 1, j), 8);
+					byte_val = parseInt(inner.slice(i + 1, j), 8) & 255;
 					if (byte_val === 0) {
 						// NUL truncates string
 						return `'${new TextDecoder().decode(new Uint8Array(result))}'`;

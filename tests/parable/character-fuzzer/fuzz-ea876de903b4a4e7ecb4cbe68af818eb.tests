@@ -1,0 +1,5 @@
+=== octal escape overflow wraps modulo 256
+$'\555'
+---
+(command (word "'m'"))
+---

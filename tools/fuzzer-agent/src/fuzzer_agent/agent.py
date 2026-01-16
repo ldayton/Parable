@@ -1,7 +1,6 @@
 """Fuzzer bug fixing agent using Strands."""
 
 import io
-import os
 import time
 from contextlib import redirect_stderr
 from pathlib import Path

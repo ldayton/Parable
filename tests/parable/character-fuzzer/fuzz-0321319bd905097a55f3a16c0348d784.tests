@@ -1,0 +1,5 @@
+=== parameter expansion with ] in default value, followed by braces and unquoted text
+echo ${]a:-G]{} K }
+---
+(command (word "echo") (word "${]a:-G]{}") (word "K") (word "}"))
+---

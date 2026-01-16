@@ -1,0 +1,5 @@
+=== semicolon in arith expansion with command substitution
+$(($() +;3))
+---
+(command (word "$(($() +;3))"))
+---

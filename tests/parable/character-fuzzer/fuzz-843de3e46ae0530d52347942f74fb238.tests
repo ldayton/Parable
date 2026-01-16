@@ -1,0 +1,5 @@
+=== heredoc delimiter containing process substitution syntax
+<<x<()
+---
+(command (redirect "<<" ""))
+---

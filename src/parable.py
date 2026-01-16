@@ -1360,6 +1360,7 @@ class Word(Node):
                 elif is_procsub:
                     # Process substitution but no parts (failed to parse or in arithmetic context)
                     # Strip leading whitespace after >( or <( to match bash behavior
+                    # But preserve if content is only whitespace
                     direction = value[i]
                     j = _find_cmdsub_end(value, i + 2)
                     if j > len(value) or (j > 0 and j <= len(value) and value[j - 1] != ")"):
@@ -1368,9 +1369,13 @@ class Word(Node):
                         i += 1
                         continue
                     inner = _substring(value, i + 2, j - 1)
-                    # Strip leading whitespace
-                    stripped = inner.lstrip(" \t")
-                    result.append(direction + "(" + stripped + ")")
+                    # Only strip leading whitespace if there's non-whitespace content
+                    if inner.strip():
+                        stripped = inner.lstrip(" \t")
+                        result.append(direction + "(" + stripped + ")")
+                    else:
+                        # Content is only whitespace - preserve as-is
+                        result.append(direction + "(" + inner + ")")
                     i = j
                 else:
                     # Not a process substitution (e.g., arithmetic comparison)

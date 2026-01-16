@@ -769,8 +769,10 @@ class Word extends Node {
 			} else if (
 				_startsWithAt(value, i, "${") &&
 				!in_single_quote &&
-				!brace_in_single_quote
+				!brace_in_single_quote &&
+				(i === 0 || value[i - 1] !== "$")
 			) {
+				// Don't treat ${ as brace expansion if preceded by $ (it's $$ + literal {)
 				brace_depth += 1;
 				brace_in_double_quote = false;
 				brace_in_single_quote = false;

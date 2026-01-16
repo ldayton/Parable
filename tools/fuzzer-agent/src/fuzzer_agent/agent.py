@@ -11,29 +11,15 @@ import structlog
 from strands import Agent
 from strands.agent.conversation_manager import SlidingWindowConversationManager
 from strands.models import BedrockModel
+from strands.models.litellm import LiteLLMModel
 
+from .pricing import AZURE_PRICING, CLAUDE_PRICING, OTHER_PRICING
 from .tools import shell
 
-# Pricing per 1M tokens (input, output)
-MODEL_PRICING = {
-    "haiku-3": (0.25, 1.25),
-    "haiku-35": (0.80, 4.00),
-    "haiku-45": (1.00, 5.00),
-    "sonnet-35": (3.00, 15.00),
-    "sonnet-37": (3.00, 15.00),
-    "sonnet-4": (3.00, 15.00),
-    "sonnet-45": (3.00, 15.00),
-    "opus-4": (15.00, 75.00),
-    "opus-41": (15.00, 75.00),
-    "opus-45": (15.00, 75.00),
-    "llama-33-70b": (0.99, 0.99),
-    "llama-32-90b": (0.99, 0.99),
-    "llama-31-70b": (0.99, 0.99),
-    "nova-pro": (0.80, 3.20),
-    "nova-premier": (2.50, 10.00),
-}
+MODEL_PRICING = {**CLAUDE_PRICING, **OTHER_PRICING, **AZURE_PRICING}
 
-MODELS = {
+# Bedrock model IDs
+BEDROCK_MODELS = {
     "haiku-3": "anthropic.claude-3-haiku-20240307-v1:0",
     "haiku-35": "anthropic.claude-3-5-haiku-20241022-v1:0",
     "haiku-45": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
@@ -48,6 +34,18 @@ MODELS = {
     "llama-31-70b": "meta.llama3-1-70b-instruct-v1:0",
     "nova-pro": "amazon.nova-pro-v1:0",
 }
+
+# Azure OpenAI model IDs (deployment names, configure via AZURE_API_KEY/BASE/VERSION)
+AZURE_MODELS = {
+    "gpt-4.5": "azure/gpt-4.5",
+    "gpt-4.1": "azure/gpt-4.1",
+    "gpt-4.1-mini": "azure/gpt-4.1-mini",
+    "gpt-4.1-nano": "azure/gpt-4.1-nano",
+    "gpt-4o": "azure/gpt-4o",
+    "gpt-4o-mini": "azure/gpt-4o-mini",
+}
+
+MODELS = {**BEDROCK_MODELS, **AZURE_MODELS}
 
 # Path to repo root (fuzzer-agent/src/fuzzer_agent -> repo root)
 REPO_ROOT = Path(__file__).parent.parent.parent.parent.parent
@@ -114,12 +112,18 @@ class FuzzerFixer:
             f"## Fuzzer Agent\n\n| | |\n|---|---|\n| **Model** | `{self.model_name}` |\n| **Base SHA** | `{base_sha}` |\n"
         )
         self.log.info("agent_start", model=self.model_name, base_sha=base_sha)
-        model = BedrockModel(
-            model_id=self.model_id,
-            region_name="us-east-2",
-            temperature=0.2,
-            max_tokens=4096,
-        )
+        if self.model_name in AZURE_MODELS:
+            model = LiteLLMModel(
+                model_id=self.model_id,
+                params={"temperature": 0.2, "max_tokens": 4096},
+            )
+        else:
+            model = BedrockModel(
+                model_id=self.model_id,
+                region_name="us-east-2",
+                temperature=0.2,
+                max_tokens=4096,
+            )
         agent = Agent(
             model=model,
             system_prompt=self.system_prompt,

@@ -5,6 +5,8 @@ description = "Autonomous fuzzer bug fixing agent for Parable"
 requires-python = ">=3.14"
 dependencies = [
     "boto3>=1.35.0",
+    "litellm>=1.72.0",
+    "requests>=2.32.0",
     "strands-agents>=1.22.0",
     "strands-agents-tools>=0.2.19",
     "structlog>=25.5.0",

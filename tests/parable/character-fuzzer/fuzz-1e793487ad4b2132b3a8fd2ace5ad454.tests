@@ -1,0 +1,5 @@
+=== unclosed backtick inside parameter expansion
+${a`b}
+---
+<error>
+---

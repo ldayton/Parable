@@ -74,10 +74,23 @@ def _starts_with_at(s: str, pos: int, prefix: str) -> bool:
 
 
 def _count_consecutive_dollars_before(s: str, pos: int) -> int:
-    """Count consecutive '$' characters immediately before pos."""
+    """Count consecutive '$' characters immediately before pos.
+
+    Stops counting when hitting a '$' that is preceded by an unescaped backslash,
+    since escaped dollars don't participate in dollar sequences like $$.
+    """
     count = 0
     k = pos - 1
     while k >= 0 and s[k] == "$":
+        # Check if this dollar is escaped by counting preceding backslashes
+        bs_count = 0
+        j = k - 1
+        while j >= 0 and s[j] == "\\":
+            bs_count += 1
+            j -= 1
+        if bs_count % 2 == 1:
+            # Odd number of backslashes means the dollar is escaped, stop counting
+            break
         count += 1
         k -= 1
     return count

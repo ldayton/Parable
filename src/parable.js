@@ -67,10 +67,21 @@ function _startsWithAt(s, pos, prefix) {
 }
 
 function _countConsecutiveDollarsBefore(s, pos) {
-	let count, k;
+	let bs_count, count, j, k;
 	count = 0;
 	k = pos - 1;
 	while (k >= 0 && s[k] === "$") {
+		// Check if this dollar is escaped by counting preceding backslashes
+		bs_count = 0;
+		j = k - 1;
+		while (j >= 0 && s[j] === "\\") {
+			bs_count += 1;
+			j -= 1;
+		}
+		if (bs_count % 2 === 1) {
+			// Odd number of backslashes means the dollar is escaped, stop counting
+			break;
+		}
 		count += 1;
 		k -= 1;
 	}

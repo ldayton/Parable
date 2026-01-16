@@ -1,0 +1,5 @@
+=== backslash-escaped dollar followed by ANSI-C quoting
+\$$''
+---
+(command (word "\\$''"))
+---

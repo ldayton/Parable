@@ -111,6 +111,77 @@ def _repeat_str(s: str, n: int) -> str:
     return "".join(result)
 
 
+class QuoteState:
+    """Unified quote state tracker for parsing.
+
+    Tracks single and double quote state, with stack support for nested contexts
+    like command substitutions inside parameter expansions.
+    """
+
+    def __init__(self):
+        self.single = False
+        self.double = False
+        self._stack: list[tuple[bool, bool]] = []
+
+    def toggle_single(self) -> None:
+        """Toggle single quote state if not inside double quotes."""
+        if not self.double:
+            self.single = not self.single
+
+    def toggle_double(self) -> None:
+        """Toggle double quote state if not inside single quotes."""
+        if not self.single:
+            self.double = not self.double
+
+    def push(self) -> None:
+        """Push current state onto stack and reset for nested context."""
+        self._stack.append((self.single, self.double))
+        self.single = False
+        self.double = False
+
+    def pop(self) -> None:
+        """Restore quote state from stack."""
+        if self._stack:
+            self.single, self.double = self._stack.pop()
+
+    def in_quotes(self) -> bool:
+        """Return True if inside any quotes."""
+        return self.single or self.double
+
+    def process_char(self, c: str, prev_escaped: bool = False) -> None:
+        """Process a character, updating quote state.
+
+        Args:
+            c: The character to process
+            prev_escaped: True if character is preceded by an unescaped backslash
+        """
+        if prev_escaped:
+            return
+        if c == "'" and not self.double:
+            self.single = not self.single
+        elif c == '"' and not self.single:
+            self.double = not self.double
+
+    def copy(self) -> "QuoteState":
+        """Create a copy of this quote state."""
+        qs = QuoteState()
+        qs.single = self.single
+        qs.double = self.double
+        qs._stack = list(self._stack)
+        return qs
+
+    def outer_double(self) -> bool:
+        """Return True if the outer (parent) context is in double quotes."""
+        if len(self._stack) == 0:
+            return False
+        return self._stack[len(self._stack) - 1][1]
+
+    @property
+    def depth(self) -> int:
+        """Return the current stack depth."""
+        return len(self._stack)
+
+
 def _strip_line_continuations_comment_aware(text: str) -> str:
     """Strip backslash-newline line continuations, preserving newlines in comments.
 
@@ -120,8 +191,7 @@ def _strip_line_continuations_comment_aware(text: str) -> str:
     result = []
     i = 0
     in_comment = False
-    in_single = False
-    in_double = False
+    quote = QuoteState()
     while i < len(text):
         c = text[i]
         if c == "\\" and i + 1 < len(text) and text[i + 1] == "\n":
@@ -147,11 +217,11 @@ def _strip_line_continuations_comment_aware(text: str) -> str:
             result.append(c)
             i += 1
             continue
-        if c == "'" and not in_double and not in_comment:
-            in_single = not in_single
-        elif c == '"' and not in_single and not in_comment:
-            in_double = not in_double
-        elif c == "#" and not in_single and not in_comment:
+        if c == "'" and not quote.double and not in_comment:
+            quote.single = not quote.single
+        elif c == '"' and not quote.single and not in_comment:
+            quote.double = not quote.double
+        elif c == "#" and not quote.single and not in_comment:
             in_comment = True
         result.append(c)
         i += 1
@@ -226,19 +296,18 @@ class Word(Node):
     def _double_ctlesc_smart(self, value: str) -> str:
         """Double CTLESC bytes unless escaped by backslash inside double quotes."""
         result = []
-        in_single = False
-        in_double = False
+        quote = QuoteState()
         for c in value:
             # Track quote state
-            if c == "'" and not in_double:
-                in_single = not in_single
-            elif c == '"' and not in_single:
-                in_double = not in_double
+            if c == "'" and not quote.double:
+                quote.single = not quote.single
+            elif c == '"' and not quote.single:
+                quote.double = not quote.double
             result.append(c)
             if c == "\x01":
                 # Only count backslashes in double-quoted context (where they escape)
                 # In single quotes, backslashes are literal, so always double CTLESC
-                if in_double:
+                if quote.double:
                     bs_count = 0
                     for j in range(len(result) - 2, -1, -1):
                         if result[j] == "\\":
@@ -260,21 +329,20 @@ class Word(Node):
         """
         result = []
         i = 0
-        in_single = False
-        in_double = False
+        quote = QuoteState()
         while i < len(value):
             c = value[i]
             # Track quote state
-            if c == "'" and not in_double:
-                in_single = not in_single
+            if c == "'" and not quote.double:
+                quote.single = not quote.single
                 result.append(c)
                 i += 1
-            elif c == '"' and not in_single:
-                in_double = not in_double
+            elif c == '"' and not quote.single:
+                quote.double = not quote.double
                 result.append(c)
                 i += 1
             # Check for ${ param expansion
-            elif c == "$" and i + 1 < len(value) and value[i + 1] == "{" and not in_single:
+            elif c == "$" and i + 1 < len(value) and value[i + 1] == "{" and not quote.single:
                 result.append("$")
                 result.append("{")
                 i += 2
@@ -287,7 +355,7 @@ class Word(Node):
                 depth = 1
                 while i < len(value) and depth > 0:
                     ch = value[i]
-                    if ch == "\\" and i + 1 < len(value) and not in_single:
+                    if ch == "\\" and i + 1 < len(value) and not quote.single:
                         if value[i + 1] == "\n":
                             i += 2
                             continue
@@ -295,11 +363,11 @@ class Word(Node):
                         result.append(value[i + 1])
                         i += 2
                         continue
-                    if ch == "'" and not in_double:
-                        in_single = not in_single
-                    elif ch == '"' and not in_single:
-                        in_double = not in_double
-                    elif not in_single and not in_double:
+                    if ch == "'" and not quote.double:
+                        quote.single = not quote.single
+                    elif ch == '"' and not quote.single:
+                        quote.double = not quote.double
+                    elif not quote.in_quotes():
                         if ch == "{":
                             depth += 1
                         elif ch == "}":
@@ -458,15 +526,13 @@ class Word(Node):
         """Find and expand ALL $'...' ANSI-C quoted strings in value."""
         result = []
         i = 0
-        in_single_quote = False
-        in_double_quote = False
+        quote = QuoteState()
         in_backtick = False  # Track backtick substitutions - don't expand inside
         brace_depth = 0  # Track ${...} nesting - inside braces, $'...' is expanded
-        quote_stack: list[tuple[bool, bool]] = []
         while i < len(value):
             ch = value[i]
             # Track backtick context - don't expand $'...' inside backticks
-            if ch == "`" and not in_single_quote:
+            if ch == "`" and not quote.single:
                 in_backtick = not in_backtick
                 result.append(ch)
                 i += 1
@@ -482,49 +548,46 @@ class Word(Node):
                     i += 1
                 continue
             # Track brace depth for parameter expansions
-            if not in_single_quote:
+            if not quote.single:
                 if _starts_with_at(value, i, "${"):
                     brace_depth += 1
-                    quote_stack.append((in_single_quote, in_double_quote))
-                    in_single_quote = False
-                    in_double_quote = False
+                    quote.push()
                     result.append("${")
                     i += 2
                     continue
-                elif ch == "}" and brace_depth > 0 and not in_double_quote:
+                elif ch == "}" and brace_depth > 0 and not quote.double:
                     brace_depth -= 1
                     result.append(ch)
-                    if quote_stack:
-                        in_single_quote, in_double_quote = quote_stack.pop()
+                    quote.pop()
                     i += 1
                     continue
             # Double quotes inside ${...} still protect $'...' from expansion
-            effective_in_dquote = in_double_quote
+            effective_in_dquote = quote.double
             # Track quote state to avoid matching $' inside regular quotes
             if ch == "'" and not effective_in_dquote:
                 # Toggle quote state unless this is $' that will be expanded as ANSI-C
                 is_ansi_c = (
-                    not in_single_quote
+                    not quote.single
                     and i > 0
                     and value[i - 1] == "$"
                     and _count_consecutive_dollars_before(value, i - 1) % 2 == 0
                 )
                 if not is_ansi_c:
-                    in_single_quote = not in_single_quote
+                    quote.single = not quote.single
                 result.append(ch)
                 i += 1
-            elif ch == '"' and not in_single_quote:
-                in_double_quote = not in_double_quote
+            elif ch == '"' and not quote.single:
+                quote.double = not quote.double
                 result.append(ch)
                 i += 1
-            elif ch == "\\" and i + 1 < len(value) and not in_single_quote:
+            elif ch == "\\" and i + 1 < len(value) and not quote.single:
                 # Backslash escape - skip both chars to avoid misinterpreting \" or \'
                 result.append(ch)
                 result.append(value[i + 1])
                 i += 2
             elif (
                 _starts_with_at(value, i, "$'")
-                and not in_single_quote
+                and not quote.single
                 and not effective_in_dquote
                 and _count_consecutive_dollars_before(value, i) % 2 == 0
             ):
@@ -545,9 +608,7 @@ class Word(Node):
                     _substring(ansi_str, 1, len(ansi_str))
                 )  # Pass 'hello\nworld'
                 # Inside ${...} that's itself in double quotes, check if quotes should be stripped
-                outer_in_dquote = (
-                    quote_stack[len(quote_stack) - 1][1] if len(quote_stack) > 0 else False
-                )
+                outer_in_dquote = quote.outer_double()
                 if (
                     brace_depth > 0
                     and outer_in_dquote
@@ -1188,12 +1249,12 @@ class Word(Node):
         has_untracked_cmdsub = False
         has_untracked_procsub = False
         idx = 0
-        in_double = False
+        scan_quote = QuoteState()
         while idx < len(value):
             if value[idx] == '"':
-                in_double = not in_double
+                scan_quote.double = not scan_quote.double
                 idx += 1
-            elif value[idx] == "'" and not in_double:
+            elif value[idx] == "'" and not scan_quote.double:
                 # Skip over single-quoted string (contents are literal)
                 # But only when not inside double quotes
                 idx += 1
@@ -1211,7 +1272,7 @@ class Word(Node):
                 break
             elif (
                 _starts_with_at(value, idx, "<(") or _starts_with_at(value, idx, ">(")
-            ) and not in_double:
+            ) and not scan_quote.double:
                 # Only treat as process substitution if not preceded by alphanumeric or quote
                 # (e.g., "i<(3)" is arithmetic comparison, not process substitution)
                 # Also don't treat as process substitution inside double quotes or after quotes
@@ -1236,7 +1297,7 @@ class Word(Node):
         i = 0
         cmdsub_idx = 0
         procsub_idx = 0
-        in_double_quote = False
+        main_quote = QuoteState()
         extglob_depth = 0
         deprecated_arith_depth = 0  # Track $[...] depth
         arith_depth = 0  # Track $((...)) depth
@@ -1381,7 +1442,7 @@ class Word(Node):
             # Check for >( or <( process substitution (not inside double quotes, $[...], or $((...)))
             elif (
                 (_starts_with_at(value, i, ">(") or _starts_with_at(value, i, "<("))
-                and not in_double_quote
+                and not main_quote.double
                 and deprecated_arith_depth == 0
                 and arith_depth == 0
             ):
@@ -1536,18 +1597,17 @@ class Word(Node):
                 # Find matching close brace, respecting nesting, quotes, and cmdsubs
                 j = i + 2
                 depth = 1
-                in_single = False
-                in_double = False
+                brace_quote = QuoteState()
                 while j < len(value) and depth > 0:
                     c = value[j]
-                    if c == "\\" and j + 1 < len(value) and not in_single:
+                    if c == "\\" and j + 1 < len(value) and not brace_quote.single:
                         j += 2
                         continue
-                    if c == "'" and not in_double:
-                        in_single = not in_single
-                    elif c == '"' and not in_single:
-                        in_double = not in_double
-                    elif not in_single and not in_double:
+                    if c == "'" and not brace_quote.double:
+                        brace_quote.single = not brace_quote.single
+                    elif c == '"' and not brace_quote.single:
+                        brace_quote.double = not brace_quote.double
+                    elif not brace_quote.in_quotes():
                         # Skip over $(...) command substitutions
                         if _starts_with_at(value, j, "$(") and not _starts_with_at(value, j, "$(("):
                             j = _find_cmdsub_end(value, j + 2)
@@ -1575,12 +1635,12 @@ class Word(Node):
                 i = j
             # Track double-quote state (single quotes inside double quotes are literal)
             elif value[i] == '"':
-                in_double_quote = not in_double_quote
+                main_quote.double = not main_quote.double
                 result.append(value[i])
                 i += 1
             # Skip single-quoted strings (contents are literal, don't look for cmdsubs)
             # But only when NOT inside double quotes (where single quotes are literal)
-            elif value[i] == "'" and not in_double_quote:
+            elif value[i] == "'" and not main_quote.double:
                 j = i + 1
                 while j < len(value) and value[j] != "'":
                     j += 1
@@ -1597,12 +1657,12 @@ class Word(Node):
         """Normalize whitespace around | in >() and <() patterns for regex contexts."""
         result = []
         i = 0
-        in_double_quote = False
+        extglob_quote = QuoteState()
         deprecated_arith_depth = 0  # Track $[...] depth
         while i < len(value):
             # Track double-quote state
             if value[i] == '"':
-                in_double_quote = not in_double_quote
+                extglob_quote.double = not extglob_quote.double
                 result.append(value[i])
                 i += 1
                 continue
@@ -1621,7 +1681,7 @@ class Word(Node):
             # Only process these patterns when NOT inside double quotes or $[...]
             if i + 1 < len(value) and value[i + 1] == "(":
                 prefix_char = value[i]
-                if prefix_char in "><" and not in_double_quote and deprecated_arith_depth == 0:
+                if prefix_char in "><" and not extglob_quote.double and deprecated_arith_depth == 0:
                     # Found pattern start
                     result.append(prefix_char)
                     result.append("(")
@@ -3753,8 +3813,7 @@ def _find_cmdsub_end(value: str, start: int) -> int:
     """
     depth = 1
     i = start
-    in_single = False
-    in_double = False
+    quote = QuoteState()
     case_depth = 0  # Track nested case statements
     in_case_patterns = False  # After 'in' but before first ;; or esac
     arith_depth = 0  # Track nested arithmetic expressions
@@ -3762,22 +3821,22 @@ def _find_cmdsub_end(value: str, start: int) -> int:
     while i < len(value) and depth > 0:
         c = value[i]
         # Handle escapes
-        if c == "\\" and i + 1 < len(value) and not in_single:
+        if c == "\\" and i + 1 < len(value) and not quote.single:
             i += 2
             continue
         # Handle quotes
-        if c == "'" and not in_double:
-            in_single = not in_single
+        if c == "'" and not quote.double:
+            quote.single = not quote.single
             i += 1
             continue
-        if c == '"' and not in_single:
-            in_double = not in_double
+        if c == '"' and not quote.single:
+            quote.double = not quote.double
             i += 1
             continue
-        if in_single:
+        if quote.single:
             i += 1
             continue
-        if in_double:
+        if quote.double:
             # Inside double quotes, $() command substitution is still active
             if _starts_with_at(value, i, "$(") and not _starts_with_at(value, i, "$(("):
                 # Recursively find end of nested command substitution
@@ -5640,31 +5699,25 @@ class Parser:
         # Assignment must start with identifier (letter or underscore), not quoted
         if not word.value or not (word.value[0].isalpha() or word.value[0] == "_"):
             return False
-        in_single = False
-        in_double = False
+        quote = QuoteState()
         bracket_depth = 0
         i = 0
         while i < len(word.value):
             ch = word.value[i]
-            if ch == "'" and not in_double:
-                in_single = not in_single
-            elif ch == '"' and not in_single:
-                in_double = not in_double
-            elif ch == "\\" and not in_single and i + 1 < len(word.value):
+            if ch == "'" and not quote.double:
+                quote.single = not quote.single
+            elif ch == '"' and not quote.single:
+                quote.double = not quote.double
+            elif ch == "\\" and not quote.single and i + 1 < len(word.value):
                 i += 1  # Skip next char
                 continue
-            elif ch == "[" and not in_single and not in_double:
+            elif ch == "[" and not quote.in_quotes():
                 bracket_depth += 1
-            elif ch == "]" and not in_single and not in_double:
+            elif ch == "]" and not quote.in_quotes():
                 bracket_depth -= 1
-            elif ch == "=" and not in_single and not in_double and bracket_depth == 0:
+            elif ch == "=" and not quote.in_quotes() and bracket_depth == 0:
                 return True
-            elif (
-                not in_single
-                and not in_double
-                and bracket_depth == 0
-                and not (ch.isalnum() or ch == "_")
-            ):
+            elif not quote.in_quotes() and bracket_depth == 0 and not (ch.isalnum() or ch == "_"):
                 # Invalid char in identifier part before =
                 return False
             i += 1
@@ -7394,16 +7447,15 @@ class Parser:
                 # Must track quotes - inside subscripts, quotes span until closed
                 depth = 1
                 content_chars: list[str] = []
-                in_single = False
-                in_double_inner = False
+                inner_quote = QuoteState()
                 while not self.at_end() and depth > 0:
                     c = self.peek()
-                    if in_single:
+                    if inner_quote.single:
                         content_chars.append(self.advance())
                         if c == "'":
-                            in_single = False
+                            inner_quote.single = False
                         continue
-                    if in_double_inner:
+                    if inner_quote.double:
                         if c == "\\" and self.pos + 1 < self.length:
                             content_chars.append(self.advance())
                             if not self.at_end():
@@ -7411,14 +7463,14 @@ class Parser:
                             continue
                         content_chars.append(self.advance())
                         if c == '"':
-                            in_double_inner = False
+                            inner_quote.double = False
                         continue
                     if c == "'":
-                        in_single = True
+                        inner_quote.single = True
                         content_chars.append(self.advance())
                         continue
                     if c == '"':
-                        in_double_inner = True
+                        inner_quote.double = True
                         content_chars.append(self.advance())
                         continue
                     if c == "`":
@@ -7523,20 +7575,19 @@ class Parser:
         # Track quote state and nesting
         arg_chars = []
         depth = 1
-        in_single_quote = False
-        in_double_quote = False
+        quote = QuoteState()
         while not self.at_end() and depth > 0:
             c = self.peek()
             # Single quotes - no escapes, just scan to closing quote
-            if c == "'" and not in_double_quote:
-                in_single_quote = not in_single_quote
+            if c == "'" and not quote.double:
+                quote.single = not quote.single
                 arg_chars.append(self.advance())
             # Double quotes - toggle state
-            elif c == '"' and not in_single_quote:
-                in_double_quote = not in_double_quote
+            elif c == '"' and not quote.single:
+                quote.double = not quote.double
                 arg_chars.append(self.advance())
             # Escape - skip next char (line continuation removes both)
-            elif c == "\\" and not in_single_quote:
+            elif c == "\\" and not quote.single:
                 if self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
                     # Line continuation - skip both backslash and newline
                     self.advance()
@@ -7548,7 +7599,7 @@ class Parser:
             # Nested ${...} - increase depth (outside single quotes)
             elif (
                 c == "$"
-                and not in_single_quote
+                and not quote.single
                 and self.pos + 1 < self.length
                 and self.source[self.pos + 1] == "{"
             ):
@@ -7558,7 +7609,7 @@ class Parser:
             # ANSI-C quoted string $'...' - scan to matching ' with escapes
             elif (
                 c == "$"
-                and not in_single_quote
+                and not quote.single
                 and self.pos + 1 < self.length
                 and self.source[self.pos + 1] == "'"
             ):
@@ -7577,8 +7628,8 @@ class Parser:
             # Locale string $"..." - strip $ and enter double quote
             elif (
                 c == "$"
-                and not in_single_quote
-                and not in_double_quote
+                and not quote.single
+                and not quote.double
                 and self.pos + 1 < self.length
                 and self.source[self.pos + 1] == '"'
             ):
@@ -7587,7 +7638,7 @@ class Parser:
                 if dollar_count % 2 == 1:
                     # Odd count: locale string $"..." - strip the $ and enter double quote
                     self.advance()  # skip $
-                    in_double_quote = True
+                    quote.double = True
                     arg_chars.append(self.advance())  # append "
                 else:
                     # Even count: this $ is part of $$ (PID), keep it
@@ -7595,7 +7646,7 @@ class Parser:
             # Command substitution $(...) - scan to matching )
             elif (
                 c == "$"
-                and not in_single_quote
+                and not quote.single
                 and self.pos + 1 < self.length
                 and self.source[self.pos + 1] == "("
             ):
@@ -7615,7 +7666,7 @@ class Parser:
                         continue
                     arg_chars.append(self.advance())
             # Backtick command substitution - scan to matching `
-            elif c == "`" and not in_single_quote:
+            elif c == "`" and not quote.single:
                 backtick_start = self.pos
                 arg_chars.append(self.advance())  # opening `
                 while not self.at_end() and self.peek() != "`":
@@ -7630,10 +7681,10 @@ class Parser:
                 arg_chars.append(self.advance())  # closing `
             # Closing brace - handle depth for nested ${...}
             elif c == "}":
-                if in_single_quote:
+                if quote.single:
                     # Inside single quotes, } is literal
                     arg_chars.append(self.advance())
-                elif in_double_quote:
+                elif quote.double:
                     # Inside double quotes, } can close nested ${...}
                     if depth > 1:
                         depth -= 1
@@ -7674,29 +7725,28 @@ class Parser:
         """Check for a matching ] in a parameter subscript before closing }."""
         depth = 1
         i = start_pos + 1
-        in_single = False
-        in_double = False
+        quote = QuoteState()
         while i < self.length:
             c = self.source[i]
-            if in_single:
+            if quote.single:
                 if c == "'":
-                    in_single = False
+                    quote.single = False
                 i += 1
                 continue
-            if in_double:
+            if quote.double:
                 if c == "\\" and i + 1 < self.length:
                     i += 2
                     continue
                 if c == '"':
-                    in_double = False
+                    quote.double = False
                 i += 1
                 continue
             if c == "'":
-                in_single = True
+                quote.single = True
                 i += 1
                 continue
             if c == '"':
-                in_double = True
+                quote.double = True
                 i += 1
                 continue
             if c == "\\":
@@ -7748,16 +7798,15 @@ class Parser:
                     # Array subscript - track bracket depth and quotes
                     name_chars.append(self.advance())
                     bracket_depth = 1
-                    in_single = False
-                    in_double_sub = False
+                    subscript_quote = QuoteState()
                     while not self.at_end() and bracket_depth > 0:
                         sc = self.peek()
-                        if in_single:
+                        if subscript_quote.single:
                             name_chars.append(self.advance())
                             if sc == "'":
-                                in_single = False
+                                subscript_quote.single = False
                             continue
-                        if in_double_sub:
+                        if subscript_quote.double:
                             if sc == "\\" and self.pos + 1 < self.length:
                                 name_chars.append(self.advance())
                                 if not self.at_end():
@@ -7765,10 +7814,10 @@ class Parser:
                                 continue
                             name_chars.append(self.advance())
                             if sc == '"':
-                                in_double_sub = False
+                                subscript_quote.double = False
                             continue
                         if sc == "'":
-                            in_single = True
+                            subscript_quote.single = True
                             name_chars.append(self.advance())
                             continue
                         if (
@@ -7778,11 +7827,11 @@ class Parser:
                         ):
                             # Locale string $"..." - strip the $ and enter double quote
                             self.advance()  # skip $
-                            in_double_sub = True
+                            subscript_quote.double = True
                             name_chars.append(self.advance())  # append "
                             continue
                         if sc == '"':
-                            in_double_sub = True
+                            subscript_quote.double = True
                             name_chars.append(self.advance())
                             continue
                         if sc == "\\":

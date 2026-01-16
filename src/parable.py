@@ -5486,66 +5486,8 @@ class Parser:
                 depth += 1
             elif c == ")":
                 # In case statement, ) after pattern is a terminator, not a paren
-                # Only decrement depth if we're not in a case pattern position
                 if case_depth > 0 and depth == 1:
-                    # This ) might be a case pattern terminator, not closing the $(
-                    # Look ahead to see if there's still content that needs esac
-                    saved = self.pos
-                    self.advance()  # skip this )
-                    # Scan ahead to see if we find esac that closes our case
-                    # before finding a ) that could close our $(
-                    temp_depth = 0
-                    temp_case_depth = case_depth  # Track nested cases in lookahead
-                    found_esac = False
-                    while not self.at_end():
-                        tc = self.peek()
-                        if tc == "'" or tc == '"':
-                            # Skip quoted strings
-                            q = tc
-                            self.advance()
-                            while not self.at_end() and self.peek() != q:
-                                if q == '"' and self.peek() == "\\":
-                                    self.advance()
-                                self.advance()
-                            if not self.at_end():
-                                self.advance()
-                        elif (
-                            tc == "c"
-                            and self._is_word_boundary_before()
-                            and self._lookahead_keyword("case")
-                        ):
-                            # Nested case in lookahead
-                            temp_case_depth += 1
-                            self._skip_keyword("case")
-                        elif (
-                            tc == "e"
-                            and self._is_word_boundary_before()
-                            and self._lookahead_keyword("esac")
-                        ):
-                            temp_case_depth -= 1
-                            if temp_case_depth == 0:
-                                # All cases are closed
-                                found_esac = True
-                                break
-                            self._skip_keyword("esac")
-                        elif tc == "(":
-                            temp_depth += 1
-                            self.advance()
-                        elif tc == ")":
-                            # In case, ) is a pattern terminator, not a closer
-                            if temp_case_depth > 0:
-                                self.advance()
-                            elif temp_depth > 0:
-                                temp_depth -= 1
-                                self.advance()
-                            else:
-                                # Found a ) that could be our closer
-                                break
-                        else:
-                            self.advance()
-                    self.pos = saved
-                    if found_esac:
-                        # This ) is a case pattern terminator, not our closer
+                    if self._lookahead_for_esac_parser(case_depth):
                         self.advance()
                         continue
                 depth -= 1
@@ -5670,6 +5612,10 @@ class Parser:
         """Skip over a keyword."""
         for _ in keyword:
             self.advance()
+
+    def _lookahead_for_esac_parser(self, case_depth: int) -> bool:
+        """Check if esac closes all cases before a ) closes the cmdsub."""
+        return _lookahead_for_esac(self.source, self.pos + 1, case_depth)
 
     def _parse_backtick_substitution(self) -> tuple[Node | None, str]:
         """Parse a `...` command substitution.

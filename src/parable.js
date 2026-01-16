@@ -6283,7 +6283,6 @@ class Parser {
 			delimiter,
 			delimiter_chars,
 			depth,
-			found_esac,
 			found_in_content,
 			heredoc_delimiters,
 			heredoc_end,
@@ -6294,16 +6293,11 @@ class Parser {
 			line_start,
 			nc,
 			nested_depth,
-			q,
 			quote,
-			saved,
 			start,
 			strip_tabs,
 			sub_parser,
 			tabs_stripped,
-			tc,
-			temp_case_depth,
-			temp_depth,
 			text,
 			text_end;
 		if (this.atEnd() || this.peek() !== "$") {
@@ -6658,73 +6652,8 @@ class Parser {
 				depth += 1;
 			} else if (c === ")") {
 				// In case statement, ) after pattern is a terminator, not a paren
-				// Only decrement depth if we're not in a case pattern position
 				if (case_depth > 0 && depth === 1) {
-					// This ) might be a case pattern terminator, not closing the $(
-					// Look ahead to see if there's still content that needs esac
-					saved = this.pos;
-					this.advance();
-					// Scan ahead to see if we find esac that closes our case
-					// before finding a ) that could close our $(
-					temp_depth = 0;
-					temp_case_depth = case_depth;
-					found_esac = false;
-					while (!this.atEnd()) {
-						tc = this.peek();
-						if (tc === "'" || tc === '"') {
-							// Skip quoted strings
-							q = tc;
-							this.advance();
-							while (!this.atEnd() && this.peek() !== q) {
-								if (q === '"' && this.peek() === "\\") {
-									this.advance();
-								}
-								this.advance();
-							}
-							if (!this.atEnd()) {
-								this.advance();
-							}
-						} else if (
-							tc === "c" &&
-							this._isWordBoundaryBefore() &&
-							this._lookaheadKeyword("case")
-						) {
-							// Nested case in lookahead
-							temp_case_depth += 1;
-							this._skipKeyword("case");
-						} else if (
-							tc === "e" &&
-							this._isWordBoundaryBefore() &&
-							this._lookaheadKeyword("esac")
-						) {
-							temp_case_depth -= 1;
-							if (temp_case_depth === 0) {
-								// All cases are closed
-								found_esac = true;
-								break;
-							}
-							this._skipKeyword("esac");
-						} else if (tc === "(") {
-							temp_depth += 1;
-							this.advance();
-						} else if (tc === ")") {
-							// In case, ) is a pattern terminator, not a closer
-							if (temp_case_depth > 0) {
-								this.advance();
-							} else if (temp_depth > 0) {
-								temp_depth -= 1;
-								this.advance();
-							} else {
-								// Found a ) that could be our closer
-								break;
-							}
-						} else {
-							this.advance();
-						}
-					}
-					this.pos = saved;
-					if (found_esac) {
-						// This ) is a case pattern terminator, not our closer
+					if (this._lookaheadForEsacParser(case_depth)) {
 						this.advance();
 						continue;
 					}
@@ -6884,6 +6813,10 @@ class Parser {
 		for (_ of keyword) {
 			this.advance();
 		}
+	}
+
+	_lookaheadForEsacParser(case_depth) {
+		return _lookaheadForEsac(this.source, this.pos + 1, case_depth);
 	}
 
 	_parseBacktickSubstitution() {

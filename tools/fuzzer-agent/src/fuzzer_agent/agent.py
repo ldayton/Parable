@@ -18,9 +18,8 @@ from .tools import shell
 
 MODEL_PRICING = {**CLAUDE_PRICING, **OTHER_PRICING, **AZURE_PRICING, **GCP_PRICING}
 
-# Bedrock model IDs (deepseek-r1 excluded: doesn't support tool use)
+# Bedrock model IDs (DeepSeek models excluded: Bedrock Converse API doesn't support their tool use)
 BEDROCK_MODELS = {
-    "deepseek-v3.1": "us.deepseek.deepseek-v3-1-v1:0",
     "haiku-3": "anthropic.claude-3-haiku-20240307-v1:0",
     "haiku-3.5": "anthropic.claude-3-5-haiku-20241022-v1:0",
     "haiku-4.5": "us.anthropic.claude-haiku-4-5-20251001-v1:0",

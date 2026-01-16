@@ -7144,11 +7144,14 @@ class Parser:
             # At EOF with line starting with delimiter - heredoc terminates (process sub case)
             # e.g. <(<<a\na ) - the "a " line starts with delimiter "a" and we're at EOF
             if line_end >= self.length and check_line.startswith(delimiter):
-                # Adjust line_end to point just past the delimiter, not the whole line
-                # This allows remaining content after delimiter to be parsed
-                tabs_stripped = len(line) - len(check_line)
-                line_end = line_start + tabs_stripped + len(delimiter)
-                break
+                # Only match if delimiter is exact or followed by whitespace then ) (for process sub)
+                rest = check_line[len(delimiter) :].lstrip()
+                if rest == "" or (rest and rest[0] == ")"):
+                    # Adjust line_end to point just past the delimiter, not the whole line
+                    # This allows remaining content after delimiter to be parsed
+                    tabs_stripped = len(line) - len(check_line)
+                    line_end = line_start + tabs_stripped + len(delimiter)
+                    break
 
             # Add line to content (with newline, since we consumed continuations above)
             if strip_tabs:

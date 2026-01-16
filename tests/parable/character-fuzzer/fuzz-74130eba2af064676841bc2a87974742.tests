@@ -1,0 +1,5 @@
+=== background in pipe after here-document inside command substitution
+"$(<<d|b&)"
+---
+(command (word "\"$(<<d |\nd\n  b &)\""))
+---

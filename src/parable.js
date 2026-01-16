@@ -3991,15 +3991,21 @@ function _formatCmdsubNode(
 					skipped_semi = false;
 				} else if (p.op === "&") {
 					// If previous command has heredoc, insert & before heredoc content
+					// But if it's a pipeline (contains |), append at end instead
 					if (
 						result.length > 0 &&
 						result[result.length - 1].includes("<<") &&
 						result[result.length - 1].includes("\n")
 					) {
 						last = result[result.length - 1];
-						first_nl = last.indexOf("\n");
-						result[result.length - 1] =
-							`${last.slice(0, first_nl)} &${last.slice(first_nl)}`;
+						// If this is a pipeline (has |), append & at the end
+						if (last.includes(" |") || last.startsWith("|")) {
+							result[result.length - 1] = `${last} &`;
+						} else {
+							first_nl = last.indexOf("\n");
+							result[result.length - 1] =
+								`${last.slice(0, first_nl)} &${last.slice(first_nl)}`;
+						}
 					} else {
 						result.push(" &");
 					}

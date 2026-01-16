@@ -10096,8 +10096,12 @@ class Parser {
 					continue;
 				}
 				next_ch = this.source[this.pos + 1];
-				if (_isWhitespaceNoNewline(next_ch)) {
-					// [ followed by whitespace is literal
+				if (
+					_isWhitespaceNoNewline(next_ch) ||
+					next_ch === "&" ||
+					next_ch === "|"
+				) {
+					// [ followed by whitespace or operator is literal
 					chars.push(this.advance());
 					continue;
 				}

@@ -3496,12 +3496,13 @@ def _normalize_fd_redirects(s: str) -> str:
         # Check for >&N or <&N
         if i + 2 < len(s) and s[i + 1] == "&" and s[i + 2].isdigit():
             prev_is_digit = i > 0 and s[i - 1].isdigit()
-            if s[i] == ">" and not prev_is_digit:
+            prev_is_same_op = i > 0 and s[i - 1] == s[i]
+            if s[i] == ">" and not prev_is_digit and not prev_is_same_op:
                 result.append("1>&")
                 result.append(s[i + 2])
                 i += 3
                 continue
-            elif s[i] == "<" and not prev_is_digit:
+            elif s[i] == "<" and not prev_is_digit and not prev_is_same_op:
                 result.append("0<&")
                 result.append(s[i + 2])
                 i += 3

@@ -3694,6 +3694,58 @@ def _format_heredoc_body(r: "HereDoc") -> str:
     return "\n" + r.content + r.delimiter + "\n"
 
 
+def _lookahead_for_esac(value: str, start: int, case_depth: int) -> bool:
+    """Look ahead from start to find if esac closes all cases before a closing ).
+
+    Returns True if we find esac that brings case_depth to 0.
+    Returns False if we hit a ) that would close the command substitution.
+    """
+    i = start
+    depth = case_depth
+    while i < len(value):
+        c = value[i]
+        if c == "'" or c == '"':
+            quote = c
+            i += 1
+            while i < len(value) and value[i] != quote:
+                if c == '"' and value[i] == "\\":
+                    i += 1
+                i += 1
+            if i < len(value):
+                i += 1
+        elif _starts_with_at(value, i, "case") and _is_word_boundary(value, i, 4):
+            depth += 1
+            i += 4
+        elif _starts_with_at(value, i, "esac") and _is_word_boundary(value, i, 4):
+            depth -= 1
+            if depth == 0:
+                return True
+            i += 4
+        elif c == "(":
+            i += 1
+        elif c == ")":
+            if depth > 0:
+                i += 1
+            else:
+                break
+        else:
+            i += 1
+    return False
+
+
+def _skip_backtick(value: str, start: int) -> int:
+    """Skip past a backtick command substitution. Returns position after closing `."""
+    i = start + 1  # Skip opening `
+    while i < len(value) and value[i] != "`":
+        if value[i] == "\\" and i + 1 < len(value):
+            i += 2
+        else:
+            i += 1
+    if i < len(value):
+        i += 1  # Skip closing `
+    return i
+
+
 def _find_cmdsub_end(value: str, start: int) -> int:
     """Find the end of a $(...) command substitution, handling case statements.
 
@@ -3823,14 +3875,7 @@ def _find_cmdsub_end(value: str, start: int) -> int:
         # Handle backtick command substitution - skip to closing backtick
         # Must handle this before heredoc check to avoid treating << inside backticks as heredoc
         if c == "`":
-            i += 1  # Skip opening `
-            while i < len(value) and value[i] != "`":
-                if value[i] == "\\" and i + 1 < len(value):
-                    i += 2
-                else:
-                    i += 1
-            if i < len(value):
-                i += 1  # Skip closing `
+            i = _skip_backtick(value, i)
             continue
         # Handle heredocs (but not << inside arithmetic, which is shift operator)
         if arith_depth == 0 and _starts_with_at(value, i, "<<"):
@@ -3868,97 +3913,8 @@ def _find_cmdsub_end(value: str, start: int) -> int:
                     depth += 1
         elif c == ")":
             # In case patterns, ) after pattern name is not a grouping paren
-            if in_case_patterns and case_depth > 0 and depth > 1:
-                # This might be a case pattern terminator, but check if there's an esac
-                # If we're at depth 1 (outermost level), this ) might close the cmdsub
-                # Do lookahead to find if there's an esac for this case
-                lookahead_i = i + 1
-                lookahead_case_depth = case_depth
-                found_esac = False
-                while lookahead_i < len(value):
-                    lookahead_c = value[lookahead_i]
-                    if lookahead_c == "'" or lookahead_c == '"':
-                        # Skip quoted strings in lookahead
-                        quote = lookahead_c
-                        lookahead_i += 1
-                        while lookahead_i < len(value) and value[lookahead_i] != quote:
-                            if lookahead_c == '"' and value[lookahead_i] == "\\":
-                                lookahead_i += 1
-                            lookahead_i += 1
-                        if lookahead_i < len(value):
-                            lookahead_i += 1
-                    elif _starts_with_at(value, lookahead_i, "case") and _is_word_boundary(
-                        value, lookahead_i, 4
-                    ):
-                        lookahead_case_depth += 1
-                        lookahead_i += 4
-                    elif _starts_with_at(value, lookahead_i, "esac") and _is_word_boundary(
-                        value, lookahead_i, 4
-                    ):
-                        lookahead_case_depth -= 1
-                        if lookahead_case_depth == 0:
-                            found_esac = True
-                            break
-                        lookahead_i += 4
-                    elif lookahead_c == "(":
-                        lookahead_i += 1
-                    elif lookahead_c == ")":
-                        # Hit another ) before finding esac - stop lookahead
-                        if lookahead_case_depth > 0:
-                            lookahead_i += 1
-                        else:
-                            break
-                    else:
-                        lookahead_i += 1
-                if found_esac:
-                    # This ) is a case pattern terminator, skip it
-                    pass
-                else:
-                    # No esac found, this ) closes the command substitution
-                    depth -= 1
-            elif in_case_patterns and case_depth > 0:
-                # At depth 1, check for esac (same lookahead logic)
-                # If no esac, this ) closes the cmdsub
-                lookahead_i = i + 1
-                lookahead_case_depth = case_depth
-                found_esac = False
-                while lookahead_i < len(value):
-                    lookahead_c = value[lookahead_i]
-                    if lookahead_c == "'" or lookahead_c == '"':
-                        quote = lookahead_c
-                        lookahead_i += 1
-                        while lookahead_i < len(value) and value[lookahead_i] != quote:
-                            if lookahead_c == '"' and value[lookahead_i] == "\\":
-                                lookahead_i += 1
-                            lookahead_i += 1
-                        if lookahead_i < len(value):
-                            lookahead_i += 1
-                    elif _starts_with_at(value, lookahead_i, "case") and _is_word_boundary(
-                        value, lookahead_i, 4
-                    ):
-                        lookahead_case_depth += 1
-                        lookahead_i += 4
-                    elif _starts_with_at(value, lookahead_i, "esac") and _is_word_boundary(
-                        value, lookahead_i, 4
-                    ):
-                        lookahead_case_depth -= 1
-                        if lookahead_case_depth == 0:
-                            found_esac = True
-                            break
-                        lookahead_i += 4
-                    elif lookahead_c == ")":
-                        # Hit another ) before finding esac - stop lookahead
-                        if lookahead_case_depth > 0:
-                            lookahead_i += 1
-                        else:
-                            break
-                    else:
-                        lookahead_i += 1
-                if found_esac:
-                    # This ) is a case pattern terminator, skip it
-                    pass
-                else:
-                    # No esac found, this ) closes the command substitution
+            if in_case_patterns and case_depth > 0:
+                if not _lookahead_for_esac(value, i + 1, case_depth):
                     depth -= 1
             elif arith_depth > 0:
                 if arith_paren_depth > 0:
@@ -5356,7 +5312,9 @@ class Parser:
                 continue
 
             # Comment - skip until newline
-            if c == "#" and self._is_word_boundary_before():
+            # Must match _find_cmdsub_end's logic: { and } are NOT comment starters
+            # (they appear in ${#var} parameter length syntax)
+            if c == "#" and self._is_comment_start_context():
                 while not self.at_end() and self.peek() != "\n":
                     self.advance()
                 continue
@@ -5389,131 +5347,11 @@ class Parser:
             # Backtick command substitution - skip to closing backtick
             # Must handle this before heredoc check to avoid treating << inside backticks as heredoc
             if c == "`":
-                self.advance()  # opening `
-                while not self.at_end() and self.peek() != "`":
-                    if self.peek() == "\\" and self.pos + 1 < self.length:
-                        self.advance()  # backslash
-                        self.advance()  # escaped char
-                    else:
-                        self.advance()
-                if not self.at_end():
-                    self.advance()  # closing `
+                self._skip_backtick_parser()
                 continue
 
             # Heredoc - skip until delimiter line is found (not inside arithmetic)
-            if (
-                arith_depth == 0
-                and c == "<"
-                and self.pos + 1 < self.length
-                and self.source[self.pos + 1] == "<"
-            ):
-                self.advance()  # first <
-                self.advance()  # second <
-                # Check for <<< (here-string) - just skip the word and continue
-                if not self.at_end() and self.peek() == "<":
-                    self.advance()  # third <
-                    # Skip whitespace before word
-                    while not self.at_end() and _is_whitespace_no_newline(self.peek()):
-                        self.advance()
-                    # Skip the here-string word
-                    while (
-                        not self.at_end()
-                        and not _is_whitespace(self.peek())
-                        and self.peek() not in "()"
-                    ):
-                        if self.peek() == "\\" and self.pos + 1 < self.length:
-                            self.advance()
-                            self.advance()
-                        elif self.peek() in "\"'":
-                            quote = self.peek()
-                            self.advance()
-                            while not self.at_end() and self.peek() != quote:
-                                if quote == '"' and self.peek() == "\\":
-                                    self.advance()
-                                self.advance()
-                            if not self.at_end():
-                                self.advance()
-                        else:
-                            self.advance()
-                    continue
-                # Check for <<- (strip tabs)
-                if not self.at_end() and self.peek() == "-":
-                    self.advance()
-                # Skip whitespace before delimiter
-                while not self.at_end() and _is_whitespace_no_newline(self.peek()):
-                    self.advance()
-                # Parse delimiter (handle quoting)
-                delimiter_chars = []
-                if not self.at_end():
-                    ch = self.peek()
-                    if _is_quote(ch):
-                        quote = self.advance()
-                        while not self.at_end() and self.peek() != quote:
-                            delimiter_chars.append(self.advance())
-                        if not self.at_end():
-                            self.advance()  # closing quote
-                    elif ch == "\\":
-                        self.advance()
-                        # Backslash quotes - first char can be special, then read word
-                        if not self.at_end():
-                            delimiter_chars.append(self.advance())
-                        while not self.at_end() and not _is_metachar(self.peek()):
-                            delimiter_chars.append(self.advance())
-                    else:
-                        # Unquoted delimiter with possible embedded quotes
-                        while not self.at_end() and not _is_metachar(self.peek()):
-                            ch = self.peek()
-                            if _is_quote(ch):
-                                quote = self.advance()
-                                while not self.at_end() and self.peek() != quote:
-                                    delimiter_chars.append(self.advance())
-                                if not self.at_end():
-                                    self.advance()
-                            elif ch == "\\":
-                                self.advance()
-                                if not self.at_end():
-                                    delimiter_chars.append(self.advance())
-                            else:
-                                delimiter_chars.append(self.advance())
-                delimiter = "".join(delimiter_chars)
-                if delimiter:
-                    # Check if ) immediately follows (closes cmdsub with empty heredoc)
-                    if not self.at_end() and self.peek() == ")":
-                        # Heredoc has no content - will be resolved later
-                        continue
-                    # Skip to end of current line
-                    while not self.at_end() and self.peek() != "\n":
-                        self.advance()
-                    # Skip newline
-                    if not self.at_end() and self.peek() == "\n":
-                        self.advance()
-                    # Skip lines until we find the delimiter
-                    while not self.at_end():
-                        line_start = self.pos
-                        line_end = self.pos
-                        # Scan to end of line - heredoc content can contain )
-                        while line_end < self.length and self.source[line_end] != "\n":
-                            line_end += 1
-                        line = _substring(self.source, line_start, line_end)
-                        # Move position to end of line
-                        self.pos = line_end
-                        # Check if this line matches delimiter
-                        check_line = line.lstrip("\t")
-                        if check_line == delimiter:
-                            # Skip newline after delimiter
-                            if not self.at_end() and self.peek() == "\n":
-                                self.advance()
-                            break
-                        # Also check for delimiter followed by other content
-                        # (e.g., "Xb)" where X is delimiter and b) continues the cmdsub)
-                        if check_line.startswith(delimiter) and len(check_line) > len(delimiter):
-                            # Position parser right after the delimiter
-                            tabs_stripped = len(line) - len(check_line)
-                            self.pos = line_start + tabs_stripped + len(delimiter)
-                            break
-                        # Skip newline and continue
-                        if not self.at_end() and self.peek() == "\n":
-                            self.advance()
+            if arith_depth == 0 and c == "<" and self._skip_heredoc_in_cmdsub():
                 continue
 
             # Track case/esac for pattern terminator handling
@@ -5536,66 +5374,8 @@ class Parser:
                 depth += 1
             elif c == ")":
                 # In case statement, ) after pattern is a terminator, not a paren
-                # Only decrement depth if we're not in a case pattern position
                 if case_depth > 0 and depth == 1:
-                    # This ) might be a case pattern terminator, not closing the $(
-                    # Look ahead to see if there's still content that needs esac
-                    saved = self.pos
-                    self.advance()  # skip this )
-                    # Scan ahead to see if we find esac that closes our case
-                    # before finding a ) that could close our $(
-                    temp_depth = 0
-                    temp_case_depth = case_depth  # Track nested cases in lookahead
-                    found_esac = False
-                    while not self.at_end():
-                        tc = self.peek()
-                        if tc == "'" or tc == '"':
-                            # Skip quoted strings
-                            q = tc
-                            self.advance()
-                            while not self.at_end() and self.peek() != q:
-                                if q == '"' and self.peek() == "\\":
-                                    self.advance()
-                                self.advance()
-                            if not self.at_end():
-                                self.advance()
-                        elif (
-                            tc == "c"
-                            and self._is_word_boundary_before()
-                            and self._lookahead_keyword("case")
-                        ):
-                            # Nested case in lookahead
-                            temp_case_depth += 1
-                            self._skip_keyword("case")
-                        elif (
-                            tc == "e"
-                            and self._is_word_boundary_before()
-                            and self._lookahead_keyword("esac")
-                        ):
-                            temp_case_depth -= 1
-                            if temp_case_depth == 0:
-                                # All cases are closed
-                                found_esac = True
-                                break
-                            self._skip_keyword("esac")
-                        elif tc == "(":
-                            temp_depth += 1
-                            self.advance()
-                        elif tc == ")":
-                            # In case, ) is a pattern terminator, not a closer
-                            if temp_case_depth > 0:
-                                self.advance()
-                            elif temp_depth > 0:
-                                temp_depth -= 1
-                                self.advance()
-                            else:
-                                # Found a ) that could be our closer
-                                break
-                        else:
-                            self.advance()
-                    self.pos = saved
-                    if found_esac:
-                        # This ) is a case pattern terminator, not our closer
+                    if self._lookahead_for_esac_parser(case_depth):
                         self.advance()
                         continue
                 depth -= 1
@@ -5668,6 +5448,17 @@ class Parser:
         prev = self.source[self.pos - 1]
         return _is_word_start_context(prev)
 
+    def _is_comment_start_context(self) -> bool:
+        """Check if # at current position should start a comment.
+
+        Unlike _is_word_boundary_before, this excludes { and } since
+        ${#var} uses # for parameter length, not comments.
+        """
+        if self.pos == 0:
+            return True
+        prev = self.source[self.pos - 1]
+        return prev in " \t\n;|&()"
+
     def _is_assignment_word(self, word: "Word") -> bool:
         """Check if a word is an assignment (name=value) where name is a valid identifier."""
         # Assignment must start with identifier (letter or underscore), not quoted
@@ -5720,6 +5511,110 @@ class Parser:
         """Skip over a keyword."""
         for _ in keyword:
             self.advance()
+
+    def _lookahead_for_esac_parser(self, case_depth: int) -> bool:
+        """Check if esac closes all cases before a ) closes the cmdsub."""
+        return _lookahead_for_esac(self.source, self.pos + 1, case_depth)
+
+    def _skip_heredoc_in_cmdsub(self) -> bool:
+        """Skip heredoc/here-string in command substitution. Returns True if skipped."""
+        if self.pos + 1 >= self.length or self.peek() != "<" or self.source[self.pos + 1] != "<":
+            return False
+        self.advance()  # first <
+        self.advance()  # second <
+        # Here-string (<<<)
+        if not self.at_end() and self.peek() == "<":
+            self.advance()  # third <
+            while not self.at_end() and _is_whitespace_no_newline(self.peek()):
+                self.advance()
+            while not self.at_end() and not _is_whitespace(self.peek()) and self.peek() not in "()":
+                if self.peek() == "\\" and self.pos + 1 < self.length:
+                    self.advance()
+                    self.advance()
+                elif self.peek() in "\"'":
+                    quote = self.peek()
+                    self.advance()
+                    while not self.at_end() and self.peek() != quote:
+                        if quote == '"' and self.peek() == "\\":
+                            self.advance()
+                        self.advance()
+                    if not self.at_end():
+                        self.advance()
+                else:
+                    self.advance()
+            return True
+        # Handle <<- (strip tabs)
+        if not self.at_end() and self.peek() == "-":
+            self.advance()
+        # Skip whitespace before delimiter
+        while not self.at_end() and _is_whitespace_no_newline(self.peek()):
+            self.advance()
+        # Parse delimiter (handle quoting)
+        delimiter_chars = []
+        if not self.at_end():
+            ch = self.peek()
+            if _is_quote(ch):
+                quote = self.advance()
+                while not self.at_end() and self.peek() != quote:
+                    delimiter_chars.append(self.advance())
+                if not self.at_end():
+                    self.advance()  # closing quote
+            elif ch == "\\":
+                self.advance()
+                if not self.at_end():
+                    delimiter_chars.append(self.advance())
+                while not self.at_end() and not _is_metachar(self.peek()):
+                    delimiter_chars.append(self.advance())
+            else:
+                # Unquoted delimiter with possible embedded quotes
+                while not self.at_end() and not _is_metachar(self.peek()):
+                    ch = self.peek()
+                    if _is_quote(ch):
+                        quote = self.advance()
+                        while not self.at_end() and self.peek() != quote:
+                            delimiter_chars.append(self.advance())
+                        if not self.at_end():
+                            self.advance()
+                    elif ch == "\\":
+                        self.advance()
+                        if not self.at_end():
+                            delimiter_chars.append(self.advance())
+                    else:
+                        delimiter_chars.append(self.advance())
+        delimiter = "".join(delimiter_chars)
+        if delimiter:
+            # Check if ) immediately follows (closes cmdsub with empty heredoc)
+            if not self.at_end() and self.peek() == ")":
+                return True
+            # Skip to end of current line
+            while not self.at_end() and self.peek() != "\n":
+                self.advance()
+            if not self.at_end() and self.peek() == "\n":
+                self.advance()
+            # Skip lines until we find the delimiter
+            while not self.at_end():
+                line_start = self.pos
+                line_end = self.pos
+                while line_end < self.length and self.source[line_end] != "\n":
+                    line_end += 1
+                line = _substring(self.source, line_start, line_end)
+                self.pos = line_end
+                check_line = line.lstrip("\t")
+                if check_line == delimiter:
+                    if not self.at_end() and self.peek() == "\n":
+                        self.advance()
+                    break
+                if check_line.startswith(delimiter) and len(check_line) > len(delimiter):
+                    tabs_stripped = len(line) - len(check_line)
+                    self.pos = line_start + tabs_stripped + len(delimiter)
+                    break
+                if not self.at_end() and self.peek() == "\n":
+                    self.advance()
+        return True
+
+    def _skip_backtick_parser(self) -> None:
+        """Skip past a backtick command substitution."""
+        self.pos = _skip_backtick(self.source, self.pos)
 
     def _parse_backtick_substitution(self) -> tuple[Node | None, str]:
         """Parse a `...` command substitution.
@@ -8047,7 +7942,6 @@ class Parser:
                     line, heredoc.delimiter, heredoc.strip_tabs
                 )
                 if matches:
-                    heredoc.delimiter_found = True
                     self.pos = line_end + 1 if line_end < self.length else line_end
                     break
                 # At EOF with line starting with delimiter - heredoc terminates (process sub case)
@@ -10439,7 +10333,7 @@ class Parser:
 
             # If no newline and not at end, we have unparsed content
             if not found_newline and not self.at_end():
-                raise ParseError("Parser not fully implemented yet", pos=self.pos)
+                raise ParseError("Syntax error", pos=self.pos)
 
         if not results:
             return [Empty()]

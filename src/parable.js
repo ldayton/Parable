@@ -4776,6 +4776,12 @@ class Parser {
 			) {
 				break;
 			}
+			// Handle backslash escaping next character (even metacharacters)
+			if (ch === "\\" && this.pos + 1 < this.length) {
+				chars.push(this.advance());
+				chars.push(this.advance());
+				continue;
+			}
 			chars.push(this.advance());
 		}
 		if (chars) {

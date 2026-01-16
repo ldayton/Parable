@@ -24,6 +24,8 @@ Banned constructions:
     generator expression  (x for x in ...)          explicit loop
     global                global x                  pass as parameter
     hasattr               hasattr(x, 'y')           explicit field check
+    import                import x                  not allowed (self-contained)
+    import from           from x import y           not allowed (self-contained)
     loop else             for x: ... else:          use flag variable
     list comprehension    [x*2 for x in items]      explicit loop
     match/case            match x:                  if/elif chain
@@ -217,6 +219,14 @@ def check_file(filepath):
         # try...else
         if isinstance(node, ast.Try) and node.orelse:
             errors.append((lineno, "try else: move else code after try block"))
+
+        # import
+        if isinstance(node, ast.Import):
+            errors.append((lineno, "import: not allowed, code must be self-contained"))
+
+        # from ... import
+        if isinstance(node, ast.ImportFrom):
+            errors.append((lineno, "from import: not allowed, code must be self-contained"))
 
     return errors
 

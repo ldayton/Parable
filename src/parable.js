@@ -1438,6 +1438,7 @@ class Word extends Node {
 			formatted_inner,
 			has_arith,
 			has_brace_cmdsub,
+			has_param_with_procsub_pattern,
 			has_untracked_cmdsub,
 			has_untracked_procsub,
 			i,
@@ -1538,12 +1539,16 @@ class Word extends Node {
 				idx += 1;
 			}
 		}
+		// Check if ${...} contains <( or >( patterns that need normalization
+		has_param_with_procsub_pattern =
+			value.includes("${") && (value.includes("<(") || value.includes(">("));
 		if (
 			cmdsub_parts.length === 0 &&
 			procsub_parts.length === 0 &&
 			!has_brace_cmdsub &&
 			!has_untracked_cmdsub &&
-			!has_untracked_procsub
+			!has_untracked_procsub &&
+			!has_param_with_procsub_pattern
 		) {
 			return value;
 		}
@@ -1964,6 +1969,8 @@ class Word extends Node {
 					inner = value.slice(i + 2, j - 1);
 				}
 				formatted_inner = this._formatCommandSubstitutions(inner);
+				// Normalize <( and >( patterns in param expansion (for pipe alternation)
+				formatted_inner = this._normalizeExtglobWhitespace(formatted_inner);
 				// Only append closing } if we found one in the input
 				if (depth === 0) {
 					result.push(`\${${formatted_inner}}`);
@@ -2060,17 +2067,23 @@ class Word extends Node {
 							current_part.push(value[i]);
 							i += 1;
 						} else if (value[i] === "|" && depth === 1) {
-							// Top-level pipe separator
-							has_pipe = true;
-							part_content = current_part.join("");
-							// Don't strip if this looks like a process substitution with heredoc
-							if (part_content.includes("<<")) {
-								pattern_parts.push(part_content);
+							// Check for || (OR operator) - keep as single token
+							if (i + 1 < value.length && value[i + 1] === "|") {
+								current_part.push("||");
+								i += 2;
 							} else {
-								pattern_parts.push(part_content.trim());
+								// Top-level pipe separator
+								has_pipe = true;
+								part_content = current_part.join("");
+								// Don't strip if this looks like a process substitution with heredoc
+								if (part_content.includes("<<")) {
+									pattern_parts.push(part_content);
+								} else {
+									pattern_parts.push(part_content.trim());
+								}
+								current_part = [];
+								i += 1;
 							}
-							current_part = [];
-							i += 1;
 						} else {
 							current_part.push(value[i]);
 							i += 1;

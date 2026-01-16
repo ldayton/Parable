@@ -1196,12 +1196,15 @@ class Word(Node):
                 idx += 1
             else:
                 idx += 1
+        # Check if ${...} contains <( or >( patterns that need normalization
+        has_param_with_procsub_pattern = "${" in value and ("<(" in value or ">(" in value)
         if (
             not cmdsub_parts
             and not procsub_parts
             and not has_brace_cmdsub
             and not has_untracked_cmdsub
             and not has_untracked_procsub
+            and not has_param_with_procsub_pattern
         ):
             return value
         result = []
@@ -1536,6 +1539,8 @@ class Word(Node):
                 else:
                     inner = _substring(value, i + 2, j - 1)
                 formatted_inner = self._format_command_substitutions(inner)
+                # Normalize <( and >( patterns in param expansion (for pipe alternation)
+                formatted_inner = self._normalize_extglob_whitespace(formatted_inner)
                 # Only append closing } if we found one in the input
                 if depth == 0:
                     result.append("${" + formatted_inner + "}")
@@ -1615,16 +1620,21 @@ class Word(Node):
                             current_part.append(value[i])
                             i += 1
                         elif value[i] == "|" and depth == 1:
-                            # Top-level pipe separator
-                            has_pipe = True
-                            part_content = "".join(current_part)
-                            # Don't strip if this looks like a process substitution with heredoc
-                            if "<<" in part_content:
-                                pattern_parts.append(part_content)
+                            # Check for || (OR operator) - keep as single token
+                            if i + 1 < len(value) and value[i + 1] == "|":
+                                current_part.append("||")
+                                i += 2
                             else:
-                                pattern_parts.append(part_content.strip())
-                            current_part = []
-                            i += 1
+                                # Top-level pipe separator
+                                has_pipe = True
+                                part_content = "".join(current_part)
+                                # Don't strip if this looks like a process substitution with heredoc
+                                if "<<" in part_content:
+                                    pattern_parts.append(part_content)
+                                else:
+                                    pattern_parts.append(part_content.strip())
+                                current_part = []
+                                i += 1
                         else:
                             current_part.append(value[i])
                             i += 1

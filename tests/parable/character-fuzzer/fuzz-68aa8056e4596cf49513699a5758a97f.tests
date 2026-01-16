@@ -1,0 +1,5 @@
+=== heredoc delimiter with backslash-escaped dollar followed by dollar-bracket
+<<\$$[>]
+---
+(command (redirect "<<" ""))
+---

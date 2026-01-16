@@ -9482,6 +9482,10 @@ class Parser {
 						dollar_count += 1;
 						j -= 1;
 					}
+					// If preceded by backslash, first dollar was escaped
+					if (j >= 0 && this.source[j] === "\\") {
+						dollar_count -= 1;
+					}
 					if (dollar_count % 2 === 1) {
 						// Odd number of $ before: this $ pairs with previous to form $$
 						// Don't consume the {, let it end the delimiter
@@ -9512,6 +9516,10 @@ class Parser {
 					while (j >= 0 && this.source[j] === "$") {
 						dollar_count += 1;
 						j -= 1;
+					}
+					// If preceded by backslash, first dollar was escaped
+					if (j >= 0 && this.source[j] === "\\") {
+						dollar_count -= 1;
 					}
 					if (dollar_count % 2 === 1) {
 						// Odd number of $ before: this $ pairs with previous to form $$

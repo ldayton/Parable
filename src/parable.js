@@ -7606,10 +7606,7 @@ class Parser {
 						content_chars.push(this.advance());
 						continue;
 					}
-					if (c === "{") {
-						depth += 1;
-						content_chars.push(this.advance());
-					} else if (c === "}") {
+					if (c === "}") {
 						depth -= 1;
 						if (depth === 0) {
 							break;

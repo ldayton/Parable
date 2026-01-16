@@ -6404,10 +6404,7 @@ class Parser:
                             raise ParseError("Unterminated backtick", pos=backtick_start)
                         content_chars.append(self.advance())
                         continue
-                    if c == "{":
-                        depth += 1
-                        content_chars.append(self.advance())
-                    elif c == "}":
+                    if c == "}":
                         depth -= 1
                         if depth == 0:
                             break

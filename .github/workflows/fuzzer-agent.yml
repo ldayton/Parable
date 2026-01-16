@@ -1,4 +1,5 @@
 name: Fuzzer Agent
+run-name: Fuzzer Agent - ${{ inputs.model }}
 
 on:
   workflow_dispatch:

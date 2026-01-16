@@ -6900,60 +6900,123 @@ class Parser:
         quoted = False
         delimiter_chars = []
 
-        while not self.at_end() and not _is_metachar(self.peek()):
-            ch = self.peek()
-            if ch == '"':
-                quoted = True
-                self.advance()
-                while not self.at_end() and self.peek() != '"':
-                    delimiter_chars.append(self.advance())
-                if not self.at_end():
+        while True:
+            while not self.at_end() and not _is_metachar(self.peek()):
+                ch = self.peek()
+                if ch == '"':
+                    quoted = True
                     self.advance()
-            elif ch == "'":
-                quoted = True
-                self.advance()
-                while not self.at_end() and self.peek() != "'":
-                    delimiter_chars.append(self.advance())
-                if not self.at_end():
-                    self.advance()
-            elif ch == "\\":
-                self.advance()
-                if not self.at_end():
-                    next_ch = self.peek()
-                    if next_ch == "\n":
-                        # Backslash-newline: continue delimiter on next line
-                        self.advance()  # skip the newline
-                    else:
-                        # Regular escape - quotes the next char
-                        quoted = True
+                    while not self.at_end() and self.peek() != '"':
                         delimiter_chars.append(self.advance())
-            elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "'":
-                # ANSI-C quoting $'...' - skip $ and quotes, expand escapes
-                quoted = True
-                self.advance()  # skip $
-                self.advance()  # skip opening '
-                while not self.at_end() and self.peek() != "'":
-                    c = self.peek()
-                    if c == "\\" and self.pos + 1 < self.length:
-                        self.advance()  # skip backslash
-                        esc = self.peek()
-                        # Handle ANSI-C escapes using the lookup table
-                        esc_val = _get_ansi_escape(esc)
-                        if esc_val >= 0:
-                            delimiter_chars.append(chr(esc_val))
-                            self.advance()
-                        elif esc == "'":
-                            delimiter_chars.append(self.advance())
+                    if not self.at_end():
+                        self.advance()
+                elif ch == "'":
+                    quoted = True
+                    self.advance()
+                    while not self.at_end() and self.peek() != "'":
+                        delimiter_chars.append(self.advance())
+                    if not self.at_end():
+                        self.advance()
+                elif ch == "\\":
+                    self.advance()
+                    if not self.at_end():
+                        next_ch = self.peek()
+                        if next_ch == "\n":
+                            # Backslash-newline: continue delimiter on next line
+                            self.advance()  # skip the newline
                         else:
-                            # Other escapes - just use the escaped char
+                            # Regular escape - quotes the next char
+                            quoted = True
                             delimiter_chars.append(self.advance())
-                    else:
+                elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "'":
+                    # ANSI-C quoting $'...' - skip $ and quotes, expand escapes
+                    quoted = True
+                    self.advance()  # skip $
+                    self.advance()  # skip opening '
+                    while not self.at_end() and self.peek() != "'":
+                        c = self.peek()
+                        if c == "\\" and self.pos + 1 < self.length:
+                            self.advance()  # skip backslash
+                            esc = self.peek()
+                            # Handle ANSI-C escapes using the lookup table
+                            esc_val = _get_ansi_escape(esc)
+                            if esc_val >= 0:
+                                delimiter_chars.append(chr(esc_val))
+                                self.advance()
+                            elif esc == "'":
+                                delimiter_chars.append(self.advance())
+                            else:
+                                # Other escapes - just use the escaped char
+                                delimiter_chars.append(self.advance())
+                        else:
+                            delimiter_chars.append(self.advance())
+                    if not self.at_end():
+                        self.advance()  # skip closing '
+                elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                    # Command substitution embedded in delimiter
+                    delimiter_chars.append(self.advance())  # $
+                    delimiter_chars.append(self.advance())  # (
+                    depth = 1
+                    while not self.at_end() and depth > 0:
+                        c = self.peek()
+                        if c == "(":
+                            depth += 1
+                        elif c == ")":
+                            depth -= 1
                         delimiter_chars.append(self.advance())
-                if not self.at_end():
-                    self.advance()  # skip closing '
-            elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
-                # Command substitution embedded in delimiter
-                delimiter_chars.append(self.advance())  # $
+                elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
+                    # Parameter expansion embedded in delimiter
+                    delimiter_chars.append(self.advance())  # $
+                    delimiter_chars.append(self.advance())  # {
+                    depth = 1
+                    while not self.at_end() and depth > 0:
+                        c = self.peek()
+                        if c == "{":
+                            depth += 1
+                        elif c == "}":
+                            depth -= 1
+                        delimiter_chars.append(self.advance())
+                elif ch == "`":
+                    # Backtick command substitution embedded in delimiter
+                    # Note: In bash, backtick closes command sub even with unclosed quotes inside
+                    delimiter_chars.append(self.advance())  # `
+                    while not self.at_end() and self.peek() != "`":
+                        c = self.peek()
+                        if c == "'":
+                            # Single-quoted string inside backtick - skip to closing quote or `
+                            delimiter_chars.append(self.advance())  # '
+                            while not self.at_end() and self.peek() != "'" and self.peek() != "`":
+                                delimiter_chars.append(self.advance())
+                            if not self.at_end() and self.peek() == "'":
+                                delimiter_chars.append(self.advance())  # closing '
+                        elif c == '"':
+                            # Double-quoted string inside backtick - skip to closing quote or `
+                            delimiter_chars.append(self.advance())  # "
+                            while not self.at_end() and self.peek() != '"' and self.peek() != "`":
+                                if self.peek() == "\\" and self.pos + 1 < self.length:
+                                    delimiter_chars.append(self.advance())  # backslash
+                                delimiter_chars.append(self.advance())
+                            if not self.at_end() and self.peek() == '"':
+                                delimiter_chars.append(self.advance())  # closing "
+                        elif c == "\\" and self.pos + 1 < self.length:
+                            delimiter_chars.append(self.advance())  # backslash
+                            delimiter_chars.append(self.advance())  # escaped char
+                        else:
+                            delimiter_chars.append(self.advance())
+                    if not self.at_end():
+                        delimiter_chars.append(self.advance())  # closing `
+                else:
+                    delimiter_chars.append(self.advance())
+
+            # Check for process substitution syntax <( or >( which is part of delimiter
+            if (
+                not self.at_end()
+                and self.peek() in "<>"
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "("
+            ):
+                # Process substitution embedded in delimiter
+                delimiter_chars.append(self.advance())  # < or >
                 delimiter_chars.append(self.advance())  # (
                 depth = 1
                 while not self.at_end() and depth > 0:
@@ -6963,49 +7026,8 @@ class Parser:
                     elif c == ")":
                         depth -= 1
                     delimiter_chars.append(self.advance())
-            elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
-                # Parameter expansion embedded in delimiter
-                delimiter_chars.append(self.advance())  # $
-                delimiter_chars.append(self.advance())  # {
-                depth = 1
-                while not self.at_end() and depth > 0:
-                    c = self.peek()
-                    if c == "{":
-                        depth += 1
-                    elif c == "}":
-                        depth -= 1
-                    delimiter_chars.append(self.advance())
-            elif ch == "`":
-                # Backtick command substitution embedded in delimiter
-                # Note: In bash, backtick closes command sub even with unclosed quotes inside
-                delimiter_chars.append(self.advance())  # `
-                while not self.at_end() and self.peek() != "`":
-                    c = self.peek()
-                    if c == "'":
-                        # Single-quoted string inside backtick - skip to closing quote or `
-                        delimiter_chars.append(self.advance())  # '
-                        while not self.at_end() and self.peek() != "'" and self.peek() != "`":
-                            delimiter_chars.append(self.advance())
-                        if not self.at_end() and self.peek() == "'":
-                            delimiter_chars.append(self.advance())  # closing '
-                    elif c == '"':
-                        # Double-quoted string inside backtick - skip to closing quote or `
-                        delimiter_chars.append(self.advance())  # "
-                        while not self.at_end() and self.peek() != '"' and self.peek() != "`":
-                            if self.peek() == "\\" and self.pos + 1 < self.length:
-                                delimiter_chars.append(self.advance())  # backslash
-                            delimiter_chars.append(self.advance())
-                        if not self.at_end() and self.peek() == '"':
-                            delimiter_chars.append(self.advance())  # closing "
-                    elif c == "\\" and self.pos + 1 < self.length:
-                        delimiter_chars.append(self.advance())  # backslash
-                        delimiter_chars.append(self.advance())  # escaped char
-                    else:
-                        delimiter_chars.append(self.advance())
-                if not self.at_end():
-                    delimiter_chars.append(self.advance())  # closing `
-            else:
-                delimiter_chars.append(self.advance())
+                continue  # Try to collect more delimiter characters
+            break
 
         delimiter = "".join(delimiter_chars)
 

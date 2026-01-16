@@ -11,43 +11,48 @@ import structlog
 from strands import Agent
 from strands.agent.conversation_manager import SlidingWindowConversationManager
 from strands.models import BedrockModel
+from strands.models.litellm import LiteLLMModel
 
+from .pricing import AZURE_PRICING, CLAUDE_PRICING, GCP_PRICING, OTHER_PRICING
 from .tools import shell
 
-# Pricing per 1M tokens (input, output)
-MODEL_PRICING = {
-    "haiku-3": (0.25, 1.25),
-    "haiku-35": (0.80, 4.00),
-    "haiku-45": (1.00, 5.00),
-    "sonnet-35": (3.00, 15.00),
-    "sonnet-37": (3.00, 15.00),
-    "sonnet-4": (3.00, 15.00),
-    "sonnet-45": (3.00, 15.00),
-    "opus-4": (15.00, 75.00),
-    "opus-41": (15.00, 75.00),
-    "opus-45": (15.00, 75.00),
-    "llama-33-70b": (0.99, 0.99),
-    "llama-32-90b": (0.99, 0.99),
-    "llama-31-70b": (0.99, 0.99),
-    "nova-pro": (0.80, 3.20),
-    "nova-premier": (2.50, 10.00),
-}
+MODEL_PRICING = {**CLAUDE_PRICING, **OTHER_PRICING, **AZURE_PRICING, **GCP_PRICING}
 
-MODELS = {
+# Bedrock model IDs
+BEDROCK_MODELS = {
     "haiku-3": "anthropic.claude-3-haiku-20240307-v1:0",
-    "haiku-35": "anthropic.claude-3-5-haiku-20241022-v1:0",
-    "haiku-45": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "haiku-3.5": "anthropic.claude-3-5-haiku-20241022-v1:0",
+    "haiku-4.5": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
     "sonnet-3": "anthropic.claude-3-sonnet-20240229-v1:0",
-    "sonnet-35": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    "sonnet-3.5": "anthropic.claude-3-5-sonnet-20241022-v2:0",
     "sonnet-4": "us.anthropic.claude-sonnet-4-20250514-v1:0",
-    "sonnet-45": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    "sonnet-4.5": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
     "opus-4": "us.anthropic.claude-opus-4-20250514-v1:0",
-    "opus-45": "us.anthropic.claude-opus-4-5-20251101-v1:0",
-    "llama-33-70b": "meta.llama3-3-70b-instruct-v1:0",
-    "llama-32-90b": "meta.llama3-2-90b-instruct-v1:0",
-    "llama-31-70b": "meta.llama3-1-70b-instruct-v1:0",
+    "opus-4.5": "us.anthropic.claude-opus-4-5-20251101-v1:0",
+    "llama-3.3-70b": "meta.llama3-3-70b-instruct-v1:0",
+    "llama-3.2-90b": "meta.llama3-2-90b-instruct-v1:0",
+    "llama-3.1-70b": "meta.llama3-1-70b-instruct-v1:0",
     "nova-pro": "amazon.nova-pro-v1:0",
 }
+
+# Azure OpenAI model IDs (deployment names, configure via AZURE_API_BASE)
+AZURE_MODELS = {
+    "gpt-4.5": "azure/gpt-4.5",
+    "gpt-4.1": "azure/gpt-4.1",
+    "gpt-4.1-mini": "azure/gpt-4.1-mini",
+    "gpt-4.1-nano": "azure/gpt-4.1-nano",
+    "gpt-4o": "azure/gpt-4o",
+    "gpt-4o-mini": "azure/gpt-4o-mini",
+}
+
+# GCP Vertex AI model IDs
+GCP_MODELS = {
+    "gemini-2.0-flash": "vertex_ai/gemini-2.0-flash",
+    "gemini-2.5-flash": "vertex_ai/gemini-2.5-flash",
+    "gemini-2.5-pro": "vertex_ai/gemini-2.5-pro",
+}
+
+MODELS = {**BEDROCK_MODELS, **AZURE_MODELS, **GCP_MODELS}
 
 # Path to repo root (fuzzer-agent/src/fuzzer_agent -> repo root)
 REPO_ROOT = Path(__file__).parent.parent.parent.parent.parent
@@ -57,7 +62,7 @@ PROMPTS_DIR = REPO_ROOT / "tools" / "fuzzer" / "prompts"
 class FuzzerFixer:
     """Agent that finds and fixes fuzzer bugs in Parable."""
 
-    def __init__(self, model: str = "sonnet-45"):
+    def __init__(self, model: str = "sonnet-4.5"):
         self.log = structlog.get_logger()
         self.model_name = model
         self.model_id = MODELS[model]
@@ -114,12 +119,32 @@ class FuzzerFixer:
             f"## Fuzzer Agent\n\n| | |\n|---|---|\n| **Model** | `{self.model_name}` |\n| **Base SHA** | `{base_sha}` |\n"
         )
         self.log.info("agent_start", model=self.model_name, base_sha=base_sha)
-        model = BedrockModel(
-            model_id=self.model_id,
-            region_name="us-east-2",
-            temperature=0.2,
-            max_tokens=4096,
-        )
+        if self.model_name in AZURE_MODELS:
+            from azure.identity import DefaultAzureCredential
+
+            credential = DefaultAzureCredential()
+            token = credential.get_token("https://cognitiveservices.azure.com/.default")
+            model = LiteLLMModel(
+                model_id=self.model_id,
+                params={"temperature": 0.2, "max_tokens": 4096, "azure_ad_token": token.token},
+            )
+        elif self.model_name in GCP_MODELS:
+            model = LiteLLMModel(
+                model_id=self.model_id,
+                params={
+                    "temperature": 0.2,
+                    "max_tokens": 4096,
+                    "vertex_project": os.environ["VERTEXAI_PROJECT"],
+                    "vertex_location": os.environ["VERTEXAI_LOCATION"],
+                },
+            )
+        else:
+            model = BedrockModel(
+                model_id=self.model_id,
+                region_name="us-east-2",
+                temperature=0.2,
+                max_tokens=4096,
+            )
         agent = Agent(
             model=model,
             system_prompt=self.system_prompt,

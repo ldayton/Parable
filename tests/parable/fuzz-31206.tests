@@ -1,0 +1,6 @@
+=== exclamation in process substitution with line continuation
+!>($(a\
+))
+---
+(command (word "!>($(a))"))
+---

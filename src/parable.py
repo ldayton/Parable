@@ -3737,6 +3737,15 @@ class Parser:
         self.pos += 1
         return ch
 
+    def _is_bang_followed_by_procsub(self) -> bool:
+        """Check if ! at current position is followed by >( or <( process substitution."""
+        if self.pos + 2 >= self.length:
+            return False
+        next_char = self.source[self.pos + 1]
+        if next_char != ">" and next_char != "<":
+            return False
+        return self.source[self.pos + 2] == "("
+
     def skip_whitespace(self) -> None:
         """Skip spaces, tabs, comments, and backslash-newline continuations."""
         while not self.at_end():
@@ -8744,14 +8753,18 @@ class Parser:
             self.skip_whitespace()
             # Check for ! after time
             if not self.at_end() and self.peek() == "!":
-                if self.pos + 1 >= self.length or _is_negation_boundary(self.source[self.pos + 1]):
+                if (
+                    self.pos + 1 >= self.length or _is_negation_boundary(self.source[self.pos + 1])
+                ) and not self._is_bang_followed_by_procsub():
                     self.advance()
                     prefix_order = "time_negation"
                     self.skip_whitespace()
 
         # Check for '!' negation prefix (if no time yet)
         elif not self.at_end() and self.peek() == "!":
-            if self.pos + 1 >= self.length or _is_negation_boundary(self.source[self.pos + 1]):
+            if (
+                self.pos + 1 >= self.length or _is_negation_boundary(self.source[self.pos + 1])
+            ) and not self._is_bang_followed_by_procsub():
                 self.advance()
                 self.skip_whitespace()
                 # Recursively parse pipeline to handle ! ! cmd, ! time cmd, etc.

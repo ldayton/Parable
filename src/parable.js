@@ -5252,6 +5252,19 @@ function _collapseWhitespace(s) {
 	return joined.trim(" \t");
 }
 
+function _countTrailingBackslashes(s) {
+	let count, i;
+	count = 0;
+	for (i = s.length - 1; i > -1; i--) {
+		if (s[i] === "\\") {
+			count += 1;
+		} else {
+			break;
+		}
+	}
+	return count;
+}
+
 function _normalizeHeredocDelimiter(delimiter) {
 	let depth, i, inner, inner_str, result;
 	result = [];
@@ -5625,7 +5638,10 @@ class Parser {
 		this.source = source;
 		this.pos = 0;
 		this.length = source.length;
-		this._pending_heredoc_end = null;
+		this._pending_heredocs = [];
+		// Track heredoc content that was consumed into command/process substitutions
+		// and needs to be skipped when we reach a newline
+		this._cmdsub_heredoc_end = null;
 		this._saw_newline_in_single_quote = false;
 		this._in_process_sub = in_process_sub;
 	}
@@ -5694,14 +5710,16 @@ class Parser {
 			ch = this.peek();
 			if (_isWhitespace(ch)) {
 				this.advance();
-				// After advancing past a newline, skip any pending heredoc content
+				// After advancing past a newline, gather pending heredoc content
 				if (ch === "\n") {
+					this._gatherHeredocBodies();
+					// Skip heredoc content consumed by command/process substitutions
 					if (
-						this._pending_heredoc_end != null &&
-						this._pending_heredoc_end > this.pos
+						this._cmdsub_heredoc_end != null &&
+						this._cmdsub_heredoc_end > this.pos
 					) {
-						this.pos = this._pending_heredoc_end;
-						this._pending_heredoc_end = null;
+						this.pos = this._cmdsub_heredoc_end;
+						this._cmdsub_heredoc_end = null;
 					}
 				}
 			} else if (ch === "#") {
@@ -6867,11 +6885,12 @@ class Parser {
 				);
 				if (heredoc_end > heredoc_start) {
 					content = content + this.source.slice(heredoc_start, heredoc_end);
-					if (this._pending_heredoc_end == null) {
-						this._pending_heredoc_end = heredoc_end;
+					// Mark that heredoc content following the ) needs to be skipped
+					if (this._cmdsub_heredoc_end == null) {
+						this._cmdsub_heredoc_end = heredoc_end;
 					} else {
-						this._pending_heredoc_end = Math.max(
-							this._pending_heredoc_end,
+						this._cmdsub_heredoc_end = Math.max(
+							this._cmdsub_heredoc_end,
 							heredoc_end,
 						);
 					}
@@ -7138,12 +7157,12 @@ class Parser {
 			);
 			if (heredoc_end > heredoc_start) {
 				content = content + this.source.slice(heredoc_start, heredoc_end);
-				// Use pending mechanism to skip heredoc after current line is parsed
-				if (this._pending_heredoc_end == null) {
-					this._pending_heredoc_end = heredoc_end;
+				// Mark that heredoc content following the ) needs to be skipped
+				if (this._cmdsub_heredoc_end == null) {
+					this._cmdsub_heredoc_end = heredoc_end;
 				} else {
-					this._pending_heredoc_end = Math.max(
-						this._pending_heredoc_end,
+					this._cmdsub_heredoc_end = Math.max(
+						this._cmdsub_heredoc_end,
 						heredoc_end,
 					);
 				}
@@ -9478,37 +9497,18 @@ class Parser {
 		return new Redirect(op, target);
 	}
 
-	_parseHeredoc(fd, strip_tabs) {
-		let add_newline,
-			c,
+	_parseHeredocDelimiter() {
+		let c,
 			ch,
-			check_line,
-			content,
-			content_lines,
-			content_start,
-			delimiter,
 			delimiter_chars,
-			delimiter_found,
 			depth,
 			dollar_count,
 			esc,
 			esc_val,
-			heredoc_end,
-			i,
 			j,
-			line,
-			line_end,
-			line_start,
 			next_ch,
-			next_line_start,
-			normalized_check_line,
-			normalized_delimiter,
-			quoted,
-			scan_pos,
-			tabs_stripped,
-			trailing_bs;
+			quoted;
 		this.skipWhitespace();
-		// Parse the delimiter, handling quoting (can be mixed like 'EOF'"2")
 		quoted = false;
 		delimiter_chars = [];
 		while (true) {
@@ -9754,197 +9754,112 @@ class Parser {
 			}
 			break;
 		}
-		delimiter = delimiter_chars.join("");
-		// Find the end of the current line (command continues until newline)
-		// We need to mark where the heredoc content starts
-		// Must be quote-aware - newlines inside quoted strings don't end the line
+		return [delimiter_chars.join(""), quoted];
+	}
+
+	_readHeredocLine(quoted) {
+		let line, line_end, line_start, next_line_start, trailing_bs;
+		line_start = this.pos;
 		line_end = this.pos;
 		while (line_end < this.length && this.source[line_end] !== "\n") {
-			ch = this.source[line_end];
-			if (ch === "#") {
-				// Comment - skip to end of line (don't parse quotes in comments)
+			line_end += 1;
+		}
+		line = this.source.slice(line_start, line_end);
+		if (!quoted) {
+			while (line_end < this.length) {
+				trailing_bs = _countTrailingBackslashes(line);
+				if (trailing_bs % 2 === 0) {
+					break;
+				}
+				line = line.slice(0, line.length - 1);
+				line_end += 1;
+				next_line_start = line_end;
 				while (line_end < this.length && this.source[line_end] !== "\n") {
 					line_end += 1;
 				}
-				break;
-			} else if (ch === "'") {
-				// Single-quoted string - skip to closing quote (no escapes)
-				line_end += 1;
-				while (line_end < this.length && this.source[line_end] !== "'") {
-					line_end += 1;
-				}
-			} else if (ch === '"') {
-				// Double-quoted string - skip to closing quote (with escapes)
-				line_end += 1;
-				while (line_end < this.length && this.source[line_end] !== '"') {
-					if (this.source[line_end] === "\\" && line_end + 1 < this.length) {
-						line_end += 2;
-					} else {
-						line_end += 1;
-					}
-				}
-			} else if (ch === "`") {
-				// Backtick command substitution - skip to closing backtick
-				line_end += 1;
-				while (line_end < this.length && this.source[line_end] !== "`") {
-					if (this.source[line_end] === "\\" && line_end + 1 < this.length) {
-						line_end += 2;
-					} else {
-						line_end += 1;
-					}
-				}
-			} else if (ch === "\\") {
-				if (line_end + 1 < this.length) {
-					// Backslash escape - skip both chars
-					line_end += 2;
-					continue;
-				} else {
-					// Backslash at EOF - treat as attempted line continuation
-					// Bash consumes this without an error
-					line_end += 1;
+				line = line + this.source.slice(next_line_start, line_end);
+			}
+		}
+		return [line, line_end];
+	}
+
+	_lineMatchesDelimiter(line, delimiter, strip_tabs) {
+		let check_line, normalized_check, normalized_delim;
+		check_line = strip_tabs ? line.replace(/^[\t]+/, "") : line;
+		normalized_check = _normalizeHeredocDelimiter(check_line);
+		normalized_delim = _normalizeHeredocDelimiter(delimiter);
+		return [normalized_check === normalized_delim, check_line];
+	}
+
+	_gatherHeredocBodies() {
+		let add_newline,
+			check_line,
+			content_lines,
+			heredoc,
+			line,
+			line_end,
+			line_start,
+			matches,
+			normalized_check,
+			normalized_delim,
+			tabs_stripped;
+		for (heredoc of this._pending_heredocs) {
+			content_lines = [];
+			line_start = this.pos;
+			while (this.pos < this.length) {
+				line_start = this.pos;
+				[line, line_end] = this._readHeredocLine(heredoc.quoted);
+				[matches, check_line] = this._lineMatchesDelimiter(
+					line,
+					heredoc.delimiter,
+					heredoc.strip_tabs,
+				);
+				if (matches) {
+					heredoc.delimiter_found = true;
+					this.pos = line_end < this.length ? line_end + 1 : line_end;
 					break;
 				}
-			}
-			line_end += 1;
-		}
-		// Find heredoc content starting position
-		// If there's already a pending heredoc, this one's content starts after that
-		if (
-			this._pending_heredoc_end != null &&
-			this._pending_heredoc_end > line_end
-		) {
-			content_start = this._pending_heredoc_end;
-		} else if (line_end < this.length) {
-			content_start = line_end + 1;
-		} else {
-			content_start = this.length;
-		}
-		// Find the delimiter line
-		content_lines = [];
-		scan_pos = content_start;
-		delimiter_found = false;
-		while (scan_pos < this.length) {
-			// Find end of current line
-			line_start = scan_pos;
-			line_end = scan_pos;
-			while (line_end < this.length && this.source[line_end] !== "\n") {
-				line_end += 1;
-			}
-			line = this.source.slice(line_start, line_end);
-			// For unquoted heredocs, process backslash-newline before checking delimiter
-			// Join continued lines to check the full logical line against delimiter
-			// Only odd number of trailing backslashes means continuation (even = literal)
-			if (!quoted) {
-				while (line_end < this.length) {
-					// Count trailing backslashes
-					trailing_bs = 0;
-					for (i = line.length - 1; i > -1; i--) {
-						if (line[i] === "\\") {
-							trailing_bs += 1;
-						} else {
-							break;
-						}
-					}
-					if (trailing_bs % 2 === 0) {
-						break;
-					}
-					// Odd backslashes - line continuation
-					line = line.slice(0, line.length - 1);
-					line_end += 1;
-					next_line_start = line_end;
-					while (line_end < this.length && this.source[line_end] !== "\n") {
-						line_end += 1;
-					}
-					line = line + this.source.slice(next_line_start, line_end);
+				// At EOF with line starting with delimiter - heredoc terminates (process sub case)
+				normalized_check = _normalizeHeredocDelimiter(check_line);
+				normalized_delim = _normalizeHeredocDelimiter(heredoc.delimiter);
+				if (
+					line_end >= this.length &&
+					normalized_check.startsWith(normalized_delim) &&
+					this._in_process_sub
+				) {
+					tabs_stripped = line.length - check_line.length;
+					this.pos = line_start + tabs_stripped + heredoc.delimiter.length;
+					break;
 				}
-			}
-			// Check if this line is the delimiter
-			check_line = line;
-			if (strip_tabs) {
-				check_line = line.replace(/^[\t]+/, "");
-			}
-			if (
-				_normalizeHeredocDelimiter(check_line) ===
-				_normalizeHeredocDelimiter(delimiter)
-			) {
-				// Found the end - update parser position past the heredoc
-				// We need to consume the heredoc content from the input
-				// But we can't do that here because we haven't finished parsing the command line
-				// Store the heredoc info and let the command parser handle it
-				delimiter_found = true;
-				break;
-			}
-			// At EOF with line starting with delimiter - heredoc terminates (process sub case)
-			// e.g. <(<<a\na ) - the "a " line starts with delimiter "a" and we're at EOF
-			// In command substitutions, bash accepts the delimiter prefix and treats
-			// remaining characters as subsequent commands (e.g., <<X\nXb → X is delimiter, b is command)
-			normalized_delimiter = _normalizeHeredocDelimiter(delimiter);
-			normalized_check_line = _normalizeHeredocDelimiter(check_line);
-			if (
-				line_end >= this.length &&
-				normalized_check_line.startsWith(normalized_delimiter) &&
-				this._in_process_sub
-			) {
-				// At EOF in process/command sub, treat delimiter prefix as matching
-				// Adjust line_end to point just past the delimiter, not the whole line
-				// This allows remaining content after delimiter to be parsed as commands
-				tabs_stripped = line.length - check_line.length;
-				line_end = line_start + tabs_stripped + delimiter.length;
-				break;
-			}
-			// Add line to content (with newline, since we consumed continuations above)
-			if (strip_tabs) {
-				line = line.replace(/^[\t]+/, "");
-			}
-			// Only add newline if there was actually a newline in the source (not EOF)
-			if (line_end < this.length) {
-				content_lines.push(`${line}\n`);
-				scan_pos = line_end + 1;
-			} else {
-				// EOF - bash keeps the trailing newline unless escaped by an odd backslash
-				add_newline = true;
-				if (!quoted) {
-					trailing_bs = 0;
-					for (i = line.length - 1; i > -1; i--) {
-						if (line[i] === "\\") {
-							trailing_bs += 1;
-						} else {
-							break;
-						}
-					}
-					if (trailing_bs % 2 === 1) {
+				// Add line to content
+				if (heredoc.strip_tabs) {
+					line = line.replace(/^[\t]+/, "");
+				}
+				if (line_end < this.length) {
+					content_lines.push(`${line}\n`);
+					this.pos = line_end + 1;
+				} else {
+					// EOF - bash keeps trailing newline unless escaped by odd backslash
+					add_newline = true;
+					if (!heredoc.quoted && _countTrailingBackslashes(line) % 2 === 1) {
 						add_newline = false;
 					}
+					content_lines.push(line + (add_newline ? "\n" : ""));
+					this.pos = this.length;
 				}
-				content_lines.push(line + (add_newline ? "\n" : ""));
-				scan_pos = this.length;
 			}
+			heredoc.content = content_lines.join("");
 		}
-		// Join content (newlines already included per line)
-		content = content_lines.join("");
-		// Store the position where heredoc content ends so we can skip it later
-		// line_end points to the end of the delimiter line (after any continuations)
-		heredoc_end = line_end;
-		if (heredoc_end < this.length && this.source[heredoc_end] === "\n") {
-			heredoc_end += 1;
-		}
-		// Register this heredoc's end position
-		if (this._pending_heredoc_end == null) {
-			this._pending_heredoc_end = heredoc_end;
-		} else {
-			this._pending_heredoc_end = Math.max(
-				this._pending_heredoc_end,
-				heredoc_end,
-			);
-		}
-		return new HereDoc(
-			delimiter,
-			content,
-			strip_tabs,
-			quoted,
-			fd,
-			delimiter_found,
-		);
+		this._pending_heredocs = [];
+	}
+
+	_parseHeredoc(fd, strip_tabs) {
+		let delimiter, heredoc, quoted;
+		[delimiter, quoted] = this._parseHeredocDelimiter();
+		// Create stub HereDoc with empty content - will be filled in later
+		heredoc = new HereDoc(delimiter, "", strip_tabs, quoted, fd, false);
+		this._pending_heredocs.push(heredoc);
+		return heredoc;
 	}
 
 	parseCommand() {
@@ -12166,13 +12081,14 @@ class Parser {
 			while (!this.atEnd() && this.peek() === "\n") {
 				has_newline = true;
 				this.advance();
-				// Skip past any pending heredoc content after newline
+				// Gather pending heredoc content after newline
+				this._gatherHeredocBodies();
 				if (
-					this._pending_heredoc_end != null &&
-					this._pending_heredoc_end > this.pos
+					this._cmdsub_heredoc_end != null &&
+					this._cmdsub_heredoc_end > this.pos
 				) {
-					this.pos = this._pending_heredoc_end;
-					this._pending_heredoc_end = null;
+					this.pos = this._cmdsub_heredoc_end;
+					this._cmdsub_heredoc_end = null;
 				}
 				this.skipWhitespace();
 			}
@@ -12620,13 +12536,14 @@ class Parser {
 					break;
 				}
 				this.advance();
-				// Skip past any pending heredoc content after newline
+				// Gather pending heredoc content after newline
+				this._gatherHeredocBodies();
 				if (
-					this._pending_heredoc_end != null &&
-					this._pending_heredoc_end > this.pos
+					this._cmdsub_heredoc_end != null &&
+					this._cmdsub_heredoc_end > this.pos
 				) {
-					this.pos = this._pending_heredoc_end;
-					this._pending_heredoc_end = null;
+					this.pos = this._cmdsub_heredoc_end;
+					this._cmdsub_heredoc_end = null;
 				}
 				this.skipWhitespace();
 			}
@@ -12749,13 +12666,14 @@ class Parser {
 			while (!this.atEnd() && this.peek() === "\n") {
 				found_newline = true;
 				this.advance();
-				// Skip past any pending heredoc content after newline
+				// Gather pending heredoc content after newline
+				this._gatherHeredocBodies();
 				if (
-					this._pending_heredoc_end != null &&
-					this._pending_heredoc_end > this.pos
+					this._cmdsub_heredoc_end != null &&
+					this._cmdsub_heredoc_end > this.pos
 				) {
-					this.pos = this._pending_heredoc_end;
-					this._pending_heredoc_end = null;
+					this.pos = this._cmdsub_heredoc_end;
+					this._cmdsub_heredoc_end = null;
 				}
 				this.skipWhitespace();
 			}

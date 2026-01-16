@@ -1,0 +1,6 @@
+=== heredoc in process substitution terminated by ) on delimiter line
+<(<<a
+a )
+---
+(command (word "<(<<a\na\n)"))
+---

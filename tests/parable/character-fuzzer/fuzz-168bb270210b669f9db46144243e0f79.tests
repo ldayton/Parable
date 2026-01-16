@@ -1,0 +1,5 @@
+=== brace-group with redirect immediately after opening brace
+case x in a){<b;};& c)d;;esac
+---
+(case (word "x") (pattern ((word "a")) (brace-group (command (redirect "<" "b")))) (pattern ((word "c")) (command (word "d"))))
+---

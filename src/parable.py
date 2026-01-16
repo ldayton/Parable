@@ -8062,11 +8062,12 @@ class Parser:
         if self.at_end() or self.peek() != "{":
             return None
 
-        # Check that { is followed by whitespace or ( (it's a reserved word)
+        # Check that { is followed by whitespace or a valid command starter
         # {( is valid: brace group containing a subshell
+        # {< and {> are valid: brace group starting with a redirect
         if self.pos + 1 < self.length:
             next_ch = self.source[self.pos + 1]
-            if not _is_whitespace(next_ch) and next_ch != "(":
+            if not _is_whitespace(next_ch) and next_ch not in "(<>":
                 return None
 
         self.advance()  # consume {

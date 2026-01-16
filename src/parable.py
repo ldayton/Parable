@@ -7170,39 +7170,53 @@ class Parser:
         # NOTE: No whitespace allowed between operator and & (e.g., <&- is valid, < &- is not)
         if not self.at_end() and self.peek() == "&":
             self.advance()  # consume &
-            # Parse the fd number or - for close, including move syntax like &10-
-            if not self.at_end() and (self.peek().isdigit() or self.peek() == "-"):
-                word_start = self.pos
-                fd_chars = []
-                while not self.at_end() and self.peek().isdigit():
-                    fd_chars.append(self.advance())
-                if fd_chars:
-                    fd_target = "".join(fd_chars)
+            # Skip whitespace after & to check what follows
+            self.skip_whitespace()
+            # Check for "& -" followed by non-metachar (e.g., "3>& -5" -> 3>&- + word "5")
+            if not self.at_end() and self.peek() == "-":
+                if self.pos + 1 < self.length and not _is_metachar(self.source[self.pos + 1]):
+                    # Consume just the - as close target, leave rest for next word
+                    self.advance()
+                    target = Word("&-")
                 else:
-                    fd_target = ""
-                # Handle just - for close, or N- for move syntax
-                if not self.at_end() and self.peek() == "-":
-                    fd_target += self.advance()  # consume the trailing -
-                # If more word characters follow, treat the whole target as a word (e.g., <&0=)
-                # BUT: bare "-" (close syntax) is always complete - trailing chars are separate words
-                if fd_target != "-" and not self.at_end() and not _is_metachar(self.peek()):
-                    self.pos = word_start
+                    # Set target to None to fall through to normal parsing
+                    target = None
+            else:
+                target = None
+            # If we didn't handle close syntax above, continue with normal parsing
+            if target is None:
+                if not self.at_end() and (self.peek().isdigit() or self.peek() == "-"):
+                    word_start = self.pos
+                    fd_chars = []
+                    while not self.at_end() and self.peek().isdigit():
+                        fd_chars.append(self.advance())
+                    if fd_chars:
+                        fd_target = "".join(fd_chars)
+                    else:
+                        fd_target = ""
+                    # Handle just - for close, or N- for move syntax
+                    if not self.at_end() and self.peek() == "-":
+                        fd_target += self.advance()  # consume the trailing -
+                    # If more word characters follow, treat the whole target as a word (e.g., <&0=)
+                    # BUT: bare "-" (close syntax) is always complete - trailing chars are separate words
+                    if fd_target != "-" and not self.at_end() and not _is_metachar(self.peek()):
+                        self.pos = word_start
+                        inner_word = self.parse_word()
+                        if inner_word is not None:
+                            target = Word("&" + inner_word.value)
+                            target.parts = inner_word.parts
+                        else:
+                            raise ParseError("Expected target for redirect " + op, pos=self.pos)
+                    else:
+                        target = Word("&" + fd_target)
+                else:
+                    # Could be &$var or &word - parse word and prepend &
                     inner_word = self.parse_word()
                     if inner_word is not None:
                         target = Word("&" + inner_word.value)
                         target.parts = inner_word.parts
                     else:
                         raise ParseError("Expected target for redirect " + op, pos=self.pos)
-                else:
-                    target = Word("&" + fd_target)
-            else:
-                # Could be &$var or &word - parse word and prepend &
-                inner_word = self.parse_word()
-                if inner_word is not None:
-                    target = Word("&" + inner_word.value)
-                    target.parts = inner_word.parts
-                else:
-                    raise ParseError("Expected target for redirect " + op, pos=self.pos)
         else:
             self.skip_whitespace()
             # Handle >& - or <& - where space precedes the close syntax

@@ -4028,6 +4028,10 @@ function _findCmdsubEnd(value, start) {
 						scan_paren -= 1;
 					} else if (scan_i + 1 < value.length && value[scan_i + 1] === ")") {
 						break;
+					} else {
+						// Single ) at top level without following ) - not valid arithmetic
+						is_valid_arith = false;
+						break;
 					}
 				} else if (scan_c === ";" && scan_paren === 0) {
 					is_valid_arith = false;

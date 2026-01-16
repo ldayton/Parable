@@ -1,0 +1,5 @@
+=== nested arith expansion with command sub and invalid syntax
+$(($($((0)0))))
+---
+(command (word "$(($($((0)0))))"))
+---

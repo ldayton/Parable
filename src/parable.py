@@ -6779,9 +6779,15 @@ class Parser:
                 and self.pos + 1 < self.length
                 and self.source[self.pos + 1] in ('"', "'")
             ):
-                # Skip the $ and treat the rest as an unknown operator
-                self.advance()  # skip $
-                op = ""  # empty operator means no operator
+                # Count consecutive $ chars to check for $$ (PID param)
+                dollar_count = 1 + _count_consecutive_dollars_before(self.source, self.pos)
+                if dollar_count % 2 == 1:
+                    # Odd count: locale/ANSI-C string - skip the $ and treat as operator
+                    self.advance()  # skip $
+                    op = ""  # empty operator means no operator
+                else:
+                    # Even count: this $ is part of $$ (PID), treat as unknown operator
+                    op = self.advance()
             elif not self.at_end() and self.peek() == "`":
                 # Backtick requires matching closing backtick
                 backtick_pos = self.pos
@@ -6865,9 +6871,16 @@ class Parser:
                 and self.pos + 1 < self.length
                 and self.source[self.pos + 1] == '"'
             ):
-                self.advance()  # skip $
-                in_double_quote = True
-                arg_chars.append(self.advance())  # append "
+                # Count consecutive $ chars to check for $$ (PID param)
+                dollar_count = 1 + _count_consecutive_dollars_before(self.source, self.pos)
+                if dollar_count % 2 == 1:
+                    # Odd count: locale string $"..." - strip the $ and enter double quote
+                    self.advance()  # skip $
+                    in_double_quote = True
+                    arg_chars.append(self.advance())  # append "
+                else:
+                    # Even count: this $ is part of $$ (PID), keep it
+                    arg_chars.append(self.advance())  # keep $
             # Command substitution $(...) - scan to matching )
             elif (
                 c == "$"

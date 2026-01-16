@@ -7851,6 +7851,7 @@ class Parser {
 			content,
 			content_chars,
 			depth,
+			dollar_count,
 			in_double_inner,
 			in_double_quote,
 			in_single,
@@ -8124,9 +8125,17 @@ class Parser {
 				this.pos + 1 < this.length &&
 				['"', "'"].includes(this.source[this.pos + 1])
 			) {
-				// Skip the $ and treat the rest as an unknown operator
-				this.advance();
-				op = "";
+				// Count consecutive $ chars to check for $$ (PID param)
+				dollar_count =
+					1 + _countConsecutiveDollarsBefore(this.source, this.pos);
+				if (dollar_count % 2 === 1) {
+					// Odd count: locale/ANSI-C string - skip the $ and treat as operator
+					this.advance();
+					op = "";
+				} else {
+					// Even count: this $ is part of $$ (PID), treat as unknown operator
+					op = this.advance();
+				}
 			} else if (!this.atEnd() && this.peek() === "`") {
 				// Backtick requires matching closing backtick
 				backtick_pos = this.pos;
@@ -8221,9 +8230,18 @@ class Parser {
 				this.source[this.pos + 1] === '"'
 			) {
 				// Locale string $"..." - strip $ and enter double quote
-				this.advance();
-				in_double_quote = true;
-				arg_chars.push(this.advance());
+				// Count consecutive $ chars to check for $$ (PID param)
+				dollar_count =
+					1 + _countConsecutiveDollarsBefore(this.source, this.pos);
+				if (dollar_count % 2 === 1) {
+					// Odd count: locale string $"..." - strip the $ and enter double quote
+					this.advance();
+					in_double_quote = true;
+					arg_chars.push(this.advance());
+				} else {
+					// Even count: this $ is part of $$ (PID), keep it
+					arg_chars.push(this.advance());
+				}
 			} else if (
 				c === "$" &&
 				!in_single_quote &&

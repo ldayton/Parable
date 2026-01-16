@@ -9721,11 +9721,12 @@ class Parser {
 		if (this.atEnd() || this.peek() !== "{") {
 			return null;
 		}
-		// Check that { is followed by whitespace or ( (it's a reserved word)
+		// Check that { is followed by whitespace or a valid command starter
 		// {( is valid: brace group containing a subshell
+		// {< and {> are valid: brace group starting with a redirect
 		if (this.pos + 1 < this.length) {
 			next_ch = this.source[this.pos + 1];
-			if (!_isWhitespace(next_ch) && next_ch !== "(") {
+			if (!_isWhitespace(next_ch) && !"(<>".includes(next_ch)) {
 				return null;
 			}
 		}

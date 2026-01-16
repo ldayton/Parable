@@ -1,0 +1,7 @@
+=== invalid function name with dollar sign should be parsed as command
+a$()
+{ :; }
+---
+(command (word "a$()"))
+(brace-group (command (word ":")))
+---

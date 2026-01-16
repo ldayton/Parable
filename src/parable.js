@@ -10842,10 +10842,12 @@ class Parser {
 		// Check for () - whitespace IS allowed between name and (
 		// But if name ends with extglob prefix (*?@+!) and () is adjacent,
 		// it's an extglob pattern, not a function definition
+		// Similarly, if name ends with $ and () is adjacent, it's a command
+		// substitution, not a function definition
 		pos_after_name = this.pos;
 		this.skipWhitespace();
 		has_whitespace = this.pos > pos_after_name;
-		if (!has_whitespace && name && "*?@+!".includes(name[name.length - 1])) {
+		if (!has_whitespace && name && "*?@+!$".includes(name[name.length - 1])) {
 			this.pos = saved_pos;
 			return null;
 		}

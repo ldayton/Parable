@@ -9039,10 +9039,12 @@ class Parser:
         # Check for () - whitespace IS allowed between name and (
         # But if name ends with extglob prefix (*?@+!) and () is adjacent,
         # it's an extglob pattern, not a function definition
+        # Similarly, if name ends with $ and () is adjacent, it's a command
+        # substitution, not a function definition
         pos_after_name = self.pos
         self.skip_whitespace()
         has_whitespace = self.pos > pos_after_name
-        if not has_whitespace and name and name[len(name) - 1] in "*?@+!":
+        if not has_whitespace and name and name[len(name) - 1] in "*?@+!$":
             self.pos = saved_pos
             return None
 

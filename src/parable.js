@@ -2137,8 +2137,11 @@ class Word extends Node {
 					}
 					// Join parts with " | "
 					result.push(pattern_parts.join(" | "));
-					result.push(")");
-					i += 1;
+					// Only append closing ) if we found one (depth == 0)
+					if (depth === 0) {
+						result.push(")");
+						i += 1;
+					}
 					continue;
 				}
 			}

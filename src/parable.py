@@ -1672,8 +1672,10 @@ class Word(Node):
                             i += 1
                     # Join parts with " | "
                     result.append(" | ".join(pattern_parts))
-                    result.append(")")
-                    i += 1
+                    # Only append closing ) if we found one (depth == 0)
+                    if depth == 0:
+                        result.append(")")
+                        i += 1
                     continue
             result.append(value[i])
             i += 1

@@ -1,0 +1,5 @@
+=== dollar single quote inside parameter expansion
+"${$''}"
+---
+(command (word "\"${}\""))
+---

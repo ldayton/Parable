@@ -705,3 +705,48 @@ EOF
 ---
 (command (word "amu=$({ cat <<EOF\nline1\nEOF\n\ncat file; })"))
 ---
+
+
+# Parameter length ${#var} inside command substitution
+# The # after { must not be treated as a comment
+
+=== param length inside cmdsub
+echo $(echo ${#var})
+---
+(command (word "echo") (word "$(echo ${#var})"))
+---
+
+
+=== param length at start of cmdsub
+echo $(${#x})
+---
+(command (word "echo") (word "$(${#x})"))
+---
+
+
+=== array length inside cmdsub
+echo $(echo ${#arr[@]})
+---
+(command (word "echo") (word "$(echo ${#arr[@]})"))
+---
+
+
+=== param length in assignment inside cmdsub
+x=$(y=${#z}; echo $y)
+---
+(command (word "x=$(y=${#z}; echo $y)"))
+---
+
+
+=== multiple param lengths inside cmdsub
+echo $(echo ${#a} ${#b})
+---
+(command (word "echo") (word "$(echo ${#a} ${#b})"))
+---
+
+
+=== param length nested in inner cmdsub
+echo $(echo $(echo ${#var}))
+---
+(command (word "echo") (word "$(echo $(echo ${#var}))"))
+---

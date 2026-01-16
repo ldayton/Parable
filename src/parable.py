@@ -5312,7 +5312,9 @@ class Parser:
                 continue
 
             # Comment - skip until newline
-            if c == "#" and self._is_word_boundary_before():
+            # Must match _find_cmdsub_end's logic: { and } are NOT comment starters
+            # (they appear in ${#var} parameter length syntax)
+            if c == "#" and self._is_comment_start_context():
                 while not self.at_end() and self.peek() != "\n":
                     self.advance()
                 continue
@@ -5445,6 +5447,17 @@ class Parser:
             return True
         prev = self.source[self.pos - 1]
         return _is_word_start_context(prev)
+
+    def _is_comment_start_context(self) -> bool:
+        """Check if # at current position should start a comment.
+
+        Unlike _is_word_boundary_before, this excludes { and } since
+        ${#var} uses # for parameter length, not comments.
+        """
+        if self.pos == 0:
+            return True
+        prev = self.source[self.pos - 1]
+        return prev in " \t\n;|&()"
 
     def _is_assignment_word(self, word: "Word") -> bool:
         """Check if a word is an assignment (name=value) where name is a valid identifier."""

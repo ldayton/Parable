@@ -6432,7 +6432,9 @@ class Parser {
 				continue;
 			}
 			// Comment - skip until newline
-			if (c === "#" && this._isWordBoundaryBefore()) {
+			// Must match _find_cmdsub_end's logic: { and } are NOT comment starters
+			// (they appear in ${#var} parameter length syntax)
+			if (c === "#" && this._isCommentStartContext()) {
 				while (!this.atEnd() && this.peek() !== "\n") {
 					this.advance();
 				}
@@ -6585,6 +6587,15 @@ class Parser {
 		}
 		prev = this.source[this.pos - 1];
 		return _isWordStartContext(prev);
+	}
+
+	_isCommentStartContext() {
+		let prev;
+		if (this.pos === 0) {
+			return true;
+		}
+		prev = this.source[this.pos - 1];
+		return " \t\n;|&()".includes(prev);
 	}
 
 	_isAssignmentWord(word) {

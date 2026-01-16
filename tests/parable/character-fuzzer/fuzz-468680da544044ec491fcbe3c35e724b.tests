@@ -1,0 +1,5 @@
+=== process substitution with arithmetic expansion and trailing space
+[[ <(( 1 ) ) ]]
+---
+(cond (cond-unary "-n" (cond-term "<(( 1 ) )")))
+---

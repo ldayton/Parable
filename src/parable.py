@@ -1504,6 +1504,7 @@ class Word(Node):
                     depth = 1
                     pattern_parts = []
                     current_part = []
+                    has_pipe = False
                     while i < len(value) and depth > 0:
                         if value[i] == "\\" and i + 1 < len(value):
                             # Escaped character, keep as-is
@@ -1519,16 +1520,19 @@ class Word(Node):
                             if depth == 0:
                                 # End of pattern
                                 part_content = "".join(current_part)
-                                # Don't strip if this looks like a process substitution with heredoc
+                                # Only strip if this is an alternation pattern (has |) or contains heredoc
                                 if "<<" in part_content:
                                     pattern_parts.append(part_content)
-                                else:
+                                elif has_pipe:
                                     pattern_parts.append(part_content.strip())
+                                else:
+                                    pattern_parts.append(part_content)
                                 break
                             current_part.append(value[i])
                             i += 1
                         elif value[i] == "|" and depth == 1:
                             # Top-level pipe separator
+                            has_pipe = True
                             part_content = "".join(current_part)
                             # Don't strip if this looks like a process substitution with heredoc
                             if "<<" in part_content:

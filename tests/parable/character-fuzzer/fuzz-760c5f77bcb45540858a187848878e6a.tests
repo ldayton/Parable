@@ -1,0 +1,6 @@
+=== heredoc delimiter with trailing chars in command substitution
+"$(a<<X
+Xb)"
+---
+(command (word "\"$(a <<X\nX\n\nb)\""))
+---

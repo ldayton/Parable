@@ -3739,10 +3739,13 @@ def _skip_heredoc(value: str, start: int) -> int:
     # Find the end delimiter on its own line
     while i < len(value):
         line_start = i
-        # Find end of this line
+        # Find end of this line (stop at newline or ) which closes cmdsub)
         line_end = i
-        while line_end < len(value) and value[line_end] != "\n":
+        while line_end < len(value) and value[line_end] != "\n" and value[line_end] != ")":
             line_end += 1
+        # If we hit ) before newline, heredoc is incomplete - return position of )
+        if line_end < len(value) and value[line_end] == ")":
+            return line_end
         line = _substring(value, line_start, line_end)
         # Handle backslash-newline continuation (join continued lines)
         while line_end < len(value):
@@ -4987,8 +4990,12 @@ class Parser:
                     while not self.at_end():
                         line_start = self.pos
                         line_end = self.pos
-                        while line_end < self.length and self.source[line_end] != "\n":
+                        while line_end < self.length and self.source[line_end] != "\n" and self.source[line_end] != ")":
                             line_end += 1
+                        # If we hit ) before newline, heredoc is incomplete - position at ) and break
+                        if line_end < self.length and self.source[line_end] == ")":
+                            self.pos = line_end
+                            break
                         line = _substring(self.source, line_start, line_end)
                         # Move position to end of line
                         self.pos = line_end
@@ -5111,7 +5118,7 @@ class Parser:
         text = _substring(self.source, start, self.pos)
 
         # Parse the content as a command list
-        sub_parser = Parser(content)
+        sub_parser = Parser(content, in_process_sub=True)
         cmd = sub_parser.parse_list()
         if cmd is None:
             cmd = Empty()
@@ -7454,30 +7461,19 @@ class Parser:
 
             # At EOF with line starting with delimiter - heredoc terminates (process sub case)
             # e.g. <(<<a\na ) - the "a " line starts with delimiter "a" and we're at EOF
+            # In command substitutions, bash accepts the delimiter prefix and treats
+            # remaining characters as subsequent commands (e.g., <<X\nXb → X is delimiter, b is command)
             if (
                 line_end >= self.length
                 and check_line.startswith(delimiter)
                 and self._in_process_sub
             ):
-                # Only match if delimiter is exact or followed by whitespace/punctuation
-                rest = check_line[len(delimiter) :]
-                # In process sub, accept: exact match, whitespace only, or whitespace + )
-                # Also accept if there was backslash-newline continuation (line was joined)
-                # In that case, end heredoc after the original line with escaped newline preserved
-                had_continuation = check_line != _substring(
-                    self.source, line_start, min(line_start + len(check_line), self.length)
-                )
-                if (
-                    rest == ""
-                    or rest.lstrip() == ""
-                    or rest.lstrip().startswith(")")
-                    or had_continuation
-                ):
-                    # Adjust line_end to point just past the delimiter, not the whole line
-                    # This allows remaining content after delimiter to be parsed
-                    tabs_stripped = len(line) - len(check_line)
-                    line_end = line_start + tabs_stripped + len(delimiter)
-                    break
+                # At EOF in process/command sub, treat delimiter prefix as matching
+                # Adjust line_end to point just past the delimiter, not the whole line
+                # This allows remaining content after delimiter to be parsed as commands
+                tabs_stripped = len(line) - len(check_line)
+                line_end = line_start + tabs_stripped + len(delimiter)
+                break
 
             # Add line to content (with newline, since we consumed continuations above)
             if strip_tabs:

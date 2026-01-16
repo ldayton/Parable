@@ -667,8 +667,23 @@ class Word extends Node {
 							// Check if operator immediately after variable name is a pattern operator
 							if (var_name_len > 0 && var_name_len < after_brace.length) {
 								op_start = after_brace.slice(var_name_len);
+								// Skip @ prefix if present (handles @%, @#, @/ etc.)
+								if (op_start.startsWith("@") && op_start.length > 1) {
+									op_start = op_start.slice(1);
+								}
 								// Check if it starts with a pattern operator
-								for (op of ["//", "%%", "##", "/", "%", "#"]) {
+								for (op of [
+									"//",
+									"%%",
+									"##",
+									"/",
+									"%",
+									"#",
+									"^",
+									"^^",
+									",",
+									",,",
+								]) {
 									if (op_start.startsWith(op)) {
 										in_pattern = true;
 										break;

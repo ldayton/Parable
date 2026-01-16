@@ -4124,7 +4124,7 @@ function _formatHeredocBody(r) {
 }
 
 function _normalizeFdRedirects(s) {
-	let i, prev_is_digit, result;
+	let i, prev_is_digit, prev_is_same_op, result;
 	// Match >&N or <&N not preceded by a digit, add default fd
 	result = [];
 	i = 0;
@@ -4132,12 +4132,13 @@ function _normalizeFdRedirects(s) {
 		// Check for >&N or <&N
 		if (i + 2 < s.length && s[i + 1] === "&" && /^[0-9]+$/.test(s[i + 2])) {
 			prev_is_digit = i > 0 && /^[0-9]+$/.test(s[i - 1]);
-			if (s[i] === ">" && !prev_is_digit) {
+			prev_is_same_op = i > 0 && s[i - 1] === s[i];
+			if (s[i] === ">" && !prev_is_digit && !prev_is_same_op) {
 				result.push("1>&");
 				result.push(s[i + 2]);
 				i += 3;
 				continue;
-			} else if (s[i] === "<" && !prev_is_digit) {
+			} else if (s[i] === "<" && !prev_is_digit && !prev_is_same_op) {
 				result.push("0<&");
 				result.push(s[i + 2]);
 				i += 3;

@@ -1,0 +1,5 @@
+=== handle <<& in arith-for test expression
+for ((;i<<&0;)); do :; done
+---
+(arith-for (init (word "1")) (test (word "i<<&0")) (step (word "1")) (command (word ":")))
+---

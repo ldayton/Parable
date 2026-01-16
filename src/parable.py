@@ -125,11 +125,23 @@ def _strip_line_continuations_comment_aware(text: str) -> str:
     while i < len(text):
         c = text[i]
         if c == "\\" and i + 1 < len(text) and text[i + 1] == "\n":
-            if in_comment:
-                result.append("\n")
-            i += 2
-            in_comment = False
-            continue
+            # Count preceding backslashes to determine if this backslash is escaped
+            num_preceding_backslashes = 0
+            j = i - 1
+            while j >= 0 and text[j] == "\\":
+                num_preceding_backslashes += 1
+                j -= 1
+            # If there's an even number of preceding backslashes (including 0),
+            # this backslash escapes the newline (line continuation)
+            # If odd, this backslash is itself escaped
+            if num_preceding_backslashes % 2 == 0:
+                # Line continuation
+                if in_comment:
+                    result.append("\n")
+                i += 2
+                in_comment = False
+                continue
+            # else: backslash is escaped, don't treat as line continuation, fall through
         if c == "\n":
             in_comment = False
             result.append(c)
@@ -139,7 +151,7 @@ def _strip_line_continuations_comment_aware(text: str) -> str:
             in_single = not in_single
         elif c == '"' and not in_single and not in_comment:
             in_double = not in_double
-        elif c == "#" and not in_single and not in_double:
+        elif c == "#" and not in_single and not in_comment:
             in_comment = True
         result.append(c)
         i += 1

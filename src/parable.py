@@ -4872,7 +4872,12 @@ class Parser:
                 if not self.at_end():
                     chars.append(self.advance())  # :
                     chars.append(self.advance())  # ]
-            elif not for_regex and c == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == "=":
+            elif (
+                not for_regex
+                and c == "["
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "="
+            ):
                 chars.append(self.advance())  # [
                 chars.append(self.advance())  # =
                 while not self.at_end() and not (
@@ -4884,7 +4889,12 @@ class Parser:
                 if not self.at_end():
                     chars.append(self.advance())  # =
                     chars.append(self.advance())  # ]
-            elif not for_regex and c == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == ".":
+            elif (
+                not for_regex
+                and c == "["
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "."
+            ):
                 chars.append(self.advance())  # [
                 chars.append(self.advance())  # .
                 while not self.at_end() and not (
@@ -4935,7 +4945,11 @@ class Parser:
             return _is_whitespace_no_newline(ch)
         # WORD_CTX_NORMAL
         # < and > don't terminate if followed by ( (process substitution)
-        if _is_redirect_char(ch) and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+        if (
+            _is_redirect_char(ch)
+            and self.pos + 1 < self.length
+            and self.source[self.pos + 1] == "("
+        ):
             return False
         return _is_metachar(ch) and bracket_depth == 0
 
@@ -5026,7 +5040,9 @@ class Parser:
                     self.advance()
                     continue
             # Check termination for COND and REGEX contexts (NORMAL checks at end)
-            if ctx != WORD_CTX_NORMAL and self._is_word_terminator(ctx, ch, bracket_depth, paren_depth):
+            if ctx != WORD_CTX_NORMAL and self._is_word_terminator(
+                ctx, ch, bracket_depth, paren_depth
+            ):
                 break
             # NORMAL: Array subscript tracking
             if ctx == WORD_CTX_NORMAL and ch == "[":
@@ -5069,7 +5085,9 @@ class Parser:
             # COND/REGEX: Bracket expressions
             if ctx in (WORD_CTX_COND, WORD_CTX_REGEX) and ch == "[":
                 for_regex = ctx == WORD_CTX_REGEX
-                if self._scan_bracket_expression(chars, parts, for_regex=for_regex, paren_depth=paren_depth):
+                if self._scan_bracket_expression(
+                    chars, parts, for_regex=for_regex, paren_depth=paren_depth
+                ):
                     continue
                 chars.append(self.advance())
                 continue
@@ -5151,7 +5169,12 @@ class Parser:
                     chars.append(self.advance())
                 continue
             # NORMAL/COND: ANSI-C quoting $'...'
-            if ctx != WORD_CTX_REGEX and ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "'":
+            if (
+                ctx != WORD_CTX_REGEX
+                and ch == "$"
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "'"
+            ):
                 ansi_result = self._parse_ansi_c_quote()
                 if ansi_result[0]:
                     parts.append(ansi_result[0])
@@ -5160,7 +5183,12 @@ class Parser:
                     chars.append(self.advance())
                 continue
             # NORMAL/COND: Locale translation $"..."
-            if ctx != WORD_CTX_REGEX and ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == '"':
+            if (
+                ctx != WORD_CTX_REGEX
+                and ch == "$"
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == '"'
+            ):
                 locale_result = self._parse_locale_string()
                 if locale_result[0]:
                     parts.append(locale_result[0])
@@ -5184,7 +5212,12 @@ class Parser:
                     chars.append(self.advance())
                 continue
             # NORMAL/COND: Process substitution <(...) or >(...)
-            if ctx != WORD_CTX_REGEX and _is_redirect_char(ch) and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+            if (
+                ctx != WORD_CTX_REGEX
+                and _is_redirect_char(ch)
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "("
+            ):
                 procsub_result = self._parse_process_substitution()
                 if procsub_result[0]:
                     parts.append(procsub_result[0])
@@ -5199,7 +5232,9 @@ class Parser:
             # NORMAL: Array literal
             if ctx == WORD_CTX_NORMAL and ch == "(" and chars and bracket_depth == 0:
                 if chars[len(chars) - 1] == "=" or (
-                    len(chars) >= 2 and chars[len(chars) - 2] == "+" and chars[len(chars) - 1] == "="
+                    len(chars) >= 2
+                    and chars[len(chars) - 2] == "+"
+                    and chars[len(chars) - 1] == "="
                 ):
                     array_result = self._parse_array_literal()
                     if array_result[0]:
@@ -5209,7 +5244,12 @@ class Parser:
                         break
                     continue
             # NORMAL: Extglob pattern @(), ?(), *(), +(), !()
-            if ctx == WORD_CTX_NORMAL and _is_extglob_prefix(ch) and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+            if (
+                ctx == WORD_CTX_NORMAL
+                and _is_extglob_prefix(ch)
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "("
+            ):
                 chars.append(self.advance())  # @, ?, *, +, or !
                 chars.append(self.advance())  # (
                 extglob_depth = 1
@@ -5243,7 +5283,9 @@ class Parser:
                             chars.append(self.advance())
                         if not self.at_end():
                             chars.append(self.advance())
-                    elif c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                    elif (
+                        c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "("
+                    ):
                         chars.append(self.advance())  # $
                         chars.append(self.advance())  # (
                         if not self.at_end() and self.peek() == "(":
@@ -5258,7 +5300,11 @@ class Parser:
                                 chars.append(self.advance())
                         else:
                             extglob_depth += 1
-                    elif _is_extglob_prefix(c) and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                    elif (
+                        _is_extglob_prefix(c)
+                        and self.pos + 1 < self.length
+                        and self.source[self.pos + 1] == "("
+                    ):
                         chars.append(self.advance())  # @, ?, *, +, or !
                         chars.append(self.advance())  # (
                         extglob_depth += 1

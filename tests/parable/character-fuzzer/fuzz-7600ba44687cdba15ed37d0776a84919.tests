@@ -1,0 +1,5 @@
+=== preserve &+ without spaces after nested parentheses in process substitution
+<((0)&+)
+---
+(command (word "<((0)&+)"))
+---

@@ -7817,9 +7817,75 @@ class Parser:
 
             if _normalize_heredoc_delimiter(check_line) == _normalize_heredoc_delimiter(delimiter):
                 # Found the end - update parser position past the heredoc
-                # We need to consume the heredoc content from the input
-                # But we can't do that here because we haven't finished parsing the command line
-                # Store the heredoc info and let the command parser handle it
+                # In command substitutions, bash treats semicolons on the next line after the
+                # delimiter as whitespace (word separators) until a natural boundary like
+                # a closing brace or paren. Convert those semicolons to spaces.
+                if (
+                    self._in_process_sub
+                    and line_end < self.length
+                    and self.source[line_end] == "\n"
+                ):
+                    # Skip newline and scan the next line
+                    next_start = line_end + 1
+                    if next_start < self.length:
+                        # Find end of the next line (up to newline or end-of-block marker)
+                        content_end = next_start
+                        depth = 0
+                        while content_end < self.length:
+                            ch = self.source[content_end]
+                            if ch == "{" or ch == "(":
+                                depth += 1
+                            elif ch == "}" or ch == ")":
+                                if depth == 0:
+                                    # Reached end of current block
+                                    break
+                                depth -= 1
+                            elif ch == "\n" and depth == 0:
+                                # End of line at current depth
+                                break
+                            content_end += 1
+                        # Replace semicolons with spaces, but preserve semicolons before }/)
+                        # since those are syntactically required terminators
+                        if content_end > next_start:
+                            remaining = _substring(self.source, next_start, content_end)
+                            # Build converted string, checking each semicolon
+                            converted_chars = []
+                            for i in range(len(remaining)):
+                                ch = remaining[i]
+                                if ch == ";":
+                                    # Check if this semicolon is followed by (optional whitespace and) }/)
+                                    # Look ahead to see what follows
+                                    j = i + 1
+                                    while j < len(remaining) and remaining[j] in " \t":
+                                        j += 1
+                                    # Check if we reached end (which means }/){next_start + j) follows in source
+                                    if j >= len(remaining):
+                                        # At end of remaining, check what follows in original source
+                                        if (
+                                            content_end < self.length
+                                            and self.source[content_end] in "})"
+                                        ):
+                                            # Semicolon before }/), preserve it
+                                            converted_chars.append(ch)
+                                        else:
+                                            # Convert to space
+                                            converted_chars.append(" ")
+                                    elif remaining[j] in "})":
+                                        # Semicolon before }/), preserve it
+                                        converted_chars.append(ch)
+                                    else:
+                                        # Convert to space
+                                        converted_chars.append(" ")
+                                else:
+                                    converted_chars.append(ch)
+                            converted = "".join(converted_chars)
+                            self.source = (
+                                _substring(self.source, 0, next_start)
+                                + converted
+                                + _substring(self.source, content_end, self.length)
+                            )
+                            # Update length since we modified source
+                            self.length = len(self.source)
                 break
 
             # At EOF with line starting with delimiter - heredoc terminates (process sub case)

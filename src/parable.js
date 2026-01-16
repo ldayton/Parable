@@ -9102,8 +9102,11 @@ class Parser {
 			ch,
 			check_line,
 			content,
+			content_end,
 			content_lines,
 			content_start,
+			converted,
+			converted_chars,
 			delimiter,
 			delimiter_chars,
 			depth,
@@ -9118,9 +9121,11 @@ class Parser {
 			line_start,
 			next_ch,
 			next_line_start,
+			next_start,
 			normalized_check_line,
 			normalized_delimiter,
 			quoted,
+			remaining,
 			scan_pos,
 			tabs_stripped,
 			trailing_bs;
@@ -9464,9 +9469,85 @@ class Parser {
 				_normalizeHeredocDelimiter(delimiter)
 			) {
 				// Found the end - update parser position past the heredoc
-				// We need to consume the heredoc content from the input
-				// But we can't do that here because we haven't finished parsing the command line
-				// Store the heredoc info and let the command parser handle it
+				// In command substitutions, bash treats semicolons on the next line after the
+				// delimiter as whitespace (word separators) until a natural boundary like
+				// a closing brace or paren. Convert those semicolons to spaces.
+				if (
+					this._in_process_sub &&
+					line_end < this.length &&
+					this.source[line_end] === "\n"
+				) {
+					// Skip newline and scan the next line
+					next_start = line_end + 1;
+					if (next_start < this.length) {
+						// Find end of the next line (up to newline or end-of-block marker)
+						content_end = next_start;
+						depth = 0;
+						while (content_end < this.length) {
+							ch = this.source[content_end];
+							if (ch === "{" || ch === "(") {
+								depth += 1;
+							} else if (ch === "}" || ch === ")") {
+								if (depth === 0) {
+									// Reached end of current block
+									break;
+								}
+								depth -= 1;
+							} else if (ch === "\n" && depth === 0) {
+								// End of line at current depth
+								break;
+							}
+							content_end += 1;
+						}
+						// Replace semicolons with spaces, but preserve semicolons before }/)
+						// since those are syntactically required terminators
+						if (content_end > next_start) {
+							remaining = this.source.slice(next_start, content_end);
+							// Build converted string, checking each semicolon
+							converted_chars = [];
+							for (i = 0; i < remaining.length; i++) {
+								ch = remaining[i];
+								if (ch === ";") {
+									// Check if this semicolon is followed by (optional whitespace and) }/)
+									// Look ahead to see what follows
+									j = i + 1;
+									while (j < remaining.length && " \t".includes(remaining[j])) {
+										j += 1;
+									}
+									// Check if we reached end (which means }/){next_start + j) follows in source
+									if (j >= remaining.length) {
+										// At end of remaining, check what follows in original source
+										if (
+											content_end < this.length &&
+											"})".includes(this.source[content_end])
+										) {
+											// Semicolon before }/), preserve it
+											converted_chars.push(ch);
+										} else {
+											// Convert to space
+											converted_chars.push(" ");
+										}
+									} else if ("})".includes(remaining[j])) {
+										// Semicolon before }/), preserve it
+										converted_chars.push(ch);
+									} else {
+										// Convert to space
+										converted_chars.push(" ");
+									}
+								} else {
+									converted_chars.push(ch);
+								}
+							}
+							converted = converted_chars.join("");
+							this.source =
+								this.source.slice(0, next_start) +
+								converted +
+								this.source.slice(content_end, this.length);
+							// Update length since we modified source
+							this.length = this.source.length;
+						}
+					}
+				}
 				break;
 			}
 			// At EOF with line starting with delimiter - heredoc terminates (process sub case)

@@ -1,0 +1,7 @@
+=== semicolon after heredoc in command substitution
+$(:<<E
+E
+a;b)
+---
+(command (word "$(: <<E\nE\n\na b)"))
+---

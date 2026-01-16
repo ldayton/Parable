@@ -8871,6 +8871,7 @@ class Parser {
 			// Otherwise parse a word
 			// Allow array assignments like a[1 + 2]= in prefix position (before first non-assignment)
 			// Check if all previous words were assignments (contain = not inside quotes)
+			// and no redirects have been seen (redirects break assignment context)
 			all_assignments = true;
 			for (w of words) {
 				if (!this._isAssignmentWord(w)) {
@@ -8878,7 +8879,9 @@ class Parser {
 					break;
 				}
 			}
-			word = this.parseWord(!words || all_assignments);
+			word = this.parseWord(
+				!words || (all_assignments && redirects.length === 0),
+			);
 			if (word == null) {
 				break;
 			}

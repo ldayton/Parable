@@ -1,0 +1,6 @@
+=== heredoc with command substitution spanning lines
+<<o $(
+)
+---
+(command (word "$()") (redirect "<<" ""))
+---

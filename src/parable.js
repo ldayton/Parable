@@ -9753,6 +9753,24 @@ class Parser {
 						line_end += 1;
 					}
 				}
+			} else if (
+				ch === "$" &&
+				line_end + 1 < this.length &&
+				this.source[line_end + 1] === "("
+			) {
+				// Command substitution $(...) - skip to matching close paren
+				line_end += 2;
+				depth = 1;
+				while (line_end < this.length && depth > 0) {
+					c = this.source[line_end];
+					if (c === "(") {
+						depth += 1;
+					} else if (c === ")") {
+						depth -= 1;
+					}
+					line_end += 1;
+				}
+				continue;
 			} else if (ch === "\\") {
 				if (line_end + 1 < this.length) {
 					// Backslash escape - skip both chars

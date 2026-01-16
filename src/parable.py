@@ -8017,6 +8017,18 @@ class Parser:
                         line_end += 2
                     else:
                         line_end += 1
+            elif ch == "$" and line_end + 1 < self.length and self.source[line_end + 1] == "(":
+                # Command substitution $(...) - skip to matching close paren
+                line_end += 2  # skip $(
+                depth = 1
+                while line_end < self.length and depth > 0:
+                    c = self.source[line_end]
+                    if c == "(":
+                        depth += 1
+                    elif c == ")":
+                        depth -= 1
+                    line_end += 1
+                continue  # don't increment again
             elif ch == "\\":
                 if line_end + 1 < self.length:
                     # Backslash escape - skip both chars

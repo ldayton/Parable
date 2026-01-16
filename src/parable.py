@@ -6385,6 +6385,20 @@ class Parser:
                         in_double_inner = True
                         content_chars.append(self.advance())
                         continue
+                    if c == "`":
+                        backtick_start = self.pos
+                        content_chars.append(self.advance())
+                        while not self.at_end() and self.peek() != "`":
+                            bc = self.peek()
+                            if bc == "\\" and self.pos + 1 < self.length:
+                                next_c = self.source[self.pos + 1]
+                                if _is_escape_char_in_dquote(next_c):
+                                    content_chars.append(self.advance())
+                            content_chars.append(self.advance())
+                        if self.at_end():
+                            raise ParseError("Unterminated backtick", pos=backtick_start)
+                        content_chars.append(self.advance())
+                        continue
                     if c == "{":
                         depth += 1
                         content_chars.append(self.advance())
@@ -6440,6 +6454,21 @@ class Parser:
                 # Skip the $ and treat the rest as an unknown operator
                 self.advance()  # skip $
                 op = ""  # empty operator means no operator
+            elif not self.at_end() and self.peek() == "`":
+                # Backtick requires matching closing backtick
+                backtick_pos = self.pos
+                self.advance()  # consume opening `
+                while not self.at_end() and self.peek() != "`":
+                    bc = self.peek()
+                    if bc == "\\" and self.pos + 1 < self.length:
+                        next_c = self.source[self.pos + 1]
+                        if _is_escape_char_in_dquote(next_c):
+                            self.advance()  # backslash
+                    self.advance()
+                if self.at_end():
+                    raise ParseError("Unterminated backtick", pos=backtick_pos)
+                self.advance()  # closing `
+                op = "`"  # treat as operator for now, bash will error at runtime
             else:
                 # Unknown operator - bash still parses these (fails at runtime)
                 # Treat the current char as the operator
@@ -6516,6 +6545,7 @@ class Parser:
                     arg_chars.append(self.advance())
             # Backtick command substitution - scan to matching `
             elif c == "`" and not in_single_quote:
+                backtick_start = self.pos
                 arg_chars.append(self.advance())  # opening `
                 while not self.at_end() and self.peek() != "`":
                     bc = self.peek()
@@ -6524,8 +6554,9 @@ class Parser:
                         if _is_escape_char_in_dquote(next_c):
                             arg_chars.append(self.advance())  # backslash
                     arg_chars.append(self.advance())
-                if not self.at_end():
-                    arg_chars.append(self.advance())  # closing `
+                if self.at_end():
+                    raise ParseError("Unterminated backtick", pos=backtick_start)
+                arg_chars.append(self.advance())  # closing `
             # Closing brace - handle depth for nested ${...}
             elif c == "}":
                 if in_single_quote:

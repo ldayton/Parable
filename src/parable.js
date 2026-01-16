@@ -7377,6 +7377,8 @@ class Parser {
 	_parseBracedParam(start) {
 		let arg,
 			arg_chars,
+			backtick_pos,
+			backtick_start,
 			bc,
 			c,
 			ch,
@@ -7576,6 +7578,25 @@ class Parser {
 						content_chars.push(this.advance());
 						continue;
 					}
+					if (c === "`") {
+						backtick_start = this.pos;
+						content_chars.push(this.advance());
+						while (!this.atEnd() && this.peek() !== "`") {
+							bc = this.peek();
+							if (bc === "\\" && this.pos + 1 < this.length) {
+								next_c = this.source[this.pos + 1];
+								if (_isEscapeCharInDquote(next_c)) {
+									content_chars.push(this.advance());
+								}
+							}
+							content_chars.push(this.advance());
+						}
+						if (this.atEnd()) {
+							throw new ParseError("Unterminated backtick", backtick_start);
+						}
+						content_chars.push(this.advance());
+						continue;
+					}
 					if (c === "{") {
 						depth += 1;
 						content_chars.push(this.advance());
@@ -7643,6 +7664,25 @@ class Parser {
 				// Skip the $ and treat the rest as an unknown operator
 				this.advance();
 				op = "";
+			} else if (!this.atEnd() && this.peek() === "`") {
+				// Backtick requires matching closing backtick
+				backtick_pos = this.pos;
+				this.advance();
+				while (!this.atEnd() && this.peek() !== "`") {
+					bc = this.peek();
+					if (bc === "\\" && this.pos + 1 < this.length) {
+						next_c = this.source[this.pos + 1];
+						if (_isEscapeCharInDquote(next_c)) {
+							this.advance();
+						}
+					}
+					this.advance();
+				}
+				if (this.atEnd()) {
+					throw new ParseError("Unterminated backtick", backtick_pos);
+				}
+				this.advance();
+				op = "`";
 			} else {
 				// Unknown operator - bash still parses these (fails at runtime)
 				// Treat the current char as the operator
@@ -7725,6 +7765,7 @@ class Parser {
 				}
 			} else if (c === "`" && !in_single_quote) {
 				// Backtick command substitution - scan to matching `
+				backtick_start = this.pos;
 				arg_chars.push(this.advance());
 				while (!this.atEnd() && this.peek() !== "`") {
 					bc = this.peek();
@@ -7736,9 +7777,10 @@ class Parser {
 					}
 					arg_chars.push(this.advance());
 				}
-				if (!this.atEnd()) {
-					arg_chars.push(this.advance());
+				if (this.atEnd()) {
+					throw new ParseError("Unterminated backtick", backtick_start);
 				}
+				arg_chars.push(this.advance());
 			} else if (c === "}") {
 				// Closing brace - handle depth for nested ${...}
 				if (in_single_quote) {

@@ -7288,17 +7288,28 @@ class Parser:
                             depth -= 1
                         delimiter_chars.append(self.advance())
                 elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "[":
-                    # Arithmetic expansion $[...] embedded in delimiter
-                    delimiter_chars.append(self.advance())  # $
-                    delimiter_chars.append(self.advance())  # [
-                    depth = 1
-                    while not self.at_end() and depth > 0:
-                        c = self.peek()
-                        if c == "[":
-                            depth += 1
-                        elif c == "]":
-                            depth -= 1
-                        delimiter_chars.append(self.advance())
+                    # Check if this is $$[ where $$ is PID and [ ends delimiter
+                    dollar_count = 0
+                    j = self.pos - 1
+                    while j >= 0 and self.source[j] == "$":
+                        dollar_count += 1
+                        j -= 1
+                    if dollar_count % 2 == 1:
+                        # Odd number of $ before: this $ pairs with previous to form $$
+                        # Don't consume the [, let it end the delimiter
+                        delimiter_chars.append(self.advance())  # $
+                    else:
+                        # Arithmetic expansion $[...] embedded in delimiter
+                        delimiter_chars.append(self.advance())  # $
+                        delimiter_chars.append(self.advance())  # [
+                        depth = 1
+                        while not self.at_end() and depth > 0:
+                            c = self.peek()
+                            if c == "[":
+                                depth += 1
+                            elif c == "]":
+                                depth -= 1
+                            delimiter_chars.append(self.advance())
                 elif ch == "`":
                     # Backtick command substitution embedded in delimiter
                     # Note: In bash, backtick closes command sub even with unclosed quotes inside

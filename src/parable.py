@@ -2915,11 +2915,29 @@ def _format_cmdsub_node(
                     else:
                         result.append(" &")
                 else:
-                    result.append(" " + p.op)
+                    # For || and &&, insert before heredoc content like we do for &
+                    if (
+                        result
+                        and "<<" in result[len(result) - 1]
+                        and "\n" in result[len(result) - 1]
+                    ):
+                        last = result[len(result) - 1]
+                        first_nl = last.find("\n")
+                        result[len(result) - 1] = (
+                            last[:first_nl] + " " + p.op + " " + last[first_nl:]
+                        )
+                    else:
+                        result.append(" " + p.op)
             else:
                 if result and not result[len(result) - 1].endswith((" ", "\n")):
                     result.append(" ")
-                result.append(_format_cmdsub_node(p, indent, in_procsub, compact_redirects))
+                formatted_cmd = _format_cmdsub_node(p, indent, in_procsub, compact_redirects)
+                # After heredoc with || or && inserted, add leading space to next command
+                if len(result) > 0:
+                    last = result[len(result) - 1]
+                    if " || \n" in last or " && \n" in last:
+                        formatted_cmd = " " + formatted_cmd
+                result.append(formatted_cmd)
         # Strip trailing ; or newline (but preserve heredoc's trailing newline)
         s = "".join(result)
         # If we have & with heredoc (& before newline content), preserve trailing newline and add space

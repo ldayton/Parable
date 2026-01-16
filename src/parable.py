@@ -4797,6 +4797,30 @@ class Parser:
             raise ParseError("Unterminated single quote", pos=start)
         chars.append(self.advance())  # closing quote
 
+    def _scan_double_quote(
+        self, chars: list, parts: list, start: int, handle_line_continuation: bool = True
+    ) -> None:
+        """Scan double-quoted string with expansions. Assumes opening quote consumed."""
+        chars.append('"')
+        while not self.at_end() and self.peek() != '"':
+            c = self.peek()
+            if c == "\\" and self.pos + 1 < self.length:
+                next_c = self.source[self.pos + 1]
+                if handle_line_continuation and next_c == "\n":
+                    self.advance()
+                    self.advance()
+                else:
+                    chars.append(self.advance())
+                    chars.append(self.advance())
+            elif c == "$":
+                if not self._parse_dollar_expansion(chars, parts):
+                    chars.append(self.advance())
+            else:
+                chars.append(self.advance())
+        if self.at_end():
+            raise ParseError("Unterminated double quote", pos=start)
+        chars.append(self.advance())
+
     def _parse_dollar_expansion(self, chars: list, parts: list) -> bool:
         """Handle $ expansions. Returns True if expansion parsed, False if bare $."""
         # Check $(( -> arithmetic expansion
@@ -8455,26 +8479,7 @@ class Parser:
             # Double-quoted string
             elif ch == '"':
                 self.advance()
-                chars.append('"')
-                while not self.at_end() and self.peek() != '"':
-                    c = self.peek()
-                    if c == "\\" and self.pos + 1 < self.length:
-                        next_c = self.source[self.pos + 1]
-                        if next_c == "\n":
-                            # Line continuation - skip both backslash and newline
-                            self.advance()
-                            self.advance()
-                        else:
-                            chars.append(self.advance())
-                            chars.append(self.advance())
-                    elif c == "$":
-                        if not self._parse_dollar_expansion(chars, parts):
-                            chars.append(self.advance())
-                    else:
-                        chars.append(self.advance())
-                if self.at_end():
-                    raise ParseError("Unterminated double quote", pos=start)
-                chars.append(self.advance())
+                self._scan_double_quote(chars, parts, start)
 
             # Escape
             elif ch == "\\" and self.pos + 1 < self.length:
@@ -8692,20 +8697,7 @@ class Parser:
             # Double-quoted string
             if ch == '"':
                 self.advance()
-                chars.append('"')
-                while not self.at_end() and self.peek() != '"':
-                    c = self.peek()
-                    if c == "\\" and self.pos + 1 < self.length:
-                        chars.append(self.advance())
-                        chars.append(self.advance())
-                    elif c == "$":
-                        if not self._parse_dollar_expansion(chars, parts):
-                            chars.append(self.advance())
-                    else:
-                        chars.append(self.advance())
-                if self.at_end():
-                    raise ParseError("Unterminated double quote", pos=start)
-                chars.append(self.advance())
+                self._scan_double_quote(chars, parts, start, handle_line_continuation=False)
                 continue
 
             # Dollar expansions

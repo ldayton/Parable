@@ -5803,6 +5803,37 @@ class Parser {
 		chars.push(this.advance());
 	}
 
+	_scanDoubleQuote(chars, parts, start, handle_line_continuation) {
+		let c, next_c;
+		if (handle_line_continuation == null) {
+			handle_line_continuation = true;
+		}
+		chars.push('"');
+		while (!this.atEnd() && this.peek() !== '"') {
+			c = this.peek();
+			if (c === "\\" && this.pos + 1 < this.length) {
+				next_c = this.source[this.pos + 1];
+				if (handle_line_continuation && next_c === "\n") {
+					this.advance();
+					this.advance();
+				} else {
+					chars.push(this.advance());
+					chars.push(this.advance());
+				}
+			} else if (c === "$") {
+				if (!this._parseDollarExpansion(chars, parts)) {
+					chars.push(this.advance());
+				}
+			} else {
+				chars.push(this.advance());
+			}
+		}
+		if (this.atEnd()) {
+			throw new ParseError("Unterminated double quote", start);
+		}
+		chars.push(this.advance());
+	}
+
 	_parseDollarExpansion(chars, parts) {
 		let result;
 		// Check $(( -> arithmetic expansion
@@ -10069,7 +10100,6 @@ class Parser {
 			locale_node,
 			locale_result,
 			locale_text,
-			next_c,
 			next_ch,
 			parts,
 			parts_arg,
@@ -10284,31 +10314,7 @@ class Parser {
 			} else if (ch === '"') {
 				// Double-quoted string
 				this.advance();
-				chars.push('"');
-				while (!this.atEnd() && this.peek() !== '"') {
-					c = this.peek();
-					if (c === "\\" && this.pos + 1 < this.length) {
-						next_c = this.source[this.pos + 1];
-						if (next_c === "\n") {
-							// Line continuation - skip both backslash and newline
-							this.advance();
-							this.advance();
-						} else {
-							chars.push(this.advance());
-							chars.push(this.advance());
-						}
-					} else if (c === "$") {
-						if (!this._parseDollarExpansion(chars, parts)) {
-							chars.push(this.advance());
-						}
-					} else {
-						chars.push(this.advance());
-					}
-				}
-				if (this.atEnd()) {
-					throw new ParseError("Unterminated double quote", start);
-				}
-				chars.push(this.advance());
+				this._scanDoubleQuote(chars, parts, start);
 			} else if (ch === "\\" && this.pos + 1 < this.length) {
 				// Escape
 				chars.push(this.advance());
@@ -10598,24 +10604,7 @@ class Parser {
 			// Double-quoted string
 			if (ch === '"') {
 				this.advance();
-				chars.push('"');
-				while (!this.atEnd() && this.peek() !== '"') {
-					c = this.peek();
-					if (c === "\\" && this.pos + 1 < this.length) {
-						chars.push(this.advance());
-						chars.push(this.advance());
-					} else if (c === "$") {
-						if (!this._parseDollarExpansion(chars, parts)) {
-							chars.push(this.advance());
-						}
-					} else {
-						chars.push(this.advance());
-					}
-				}
-				if (this.atEnd()) {
-					throw new ParseError("Unterminated double quote", start);
-				}
-				chars.push(this.advance());
+				this._scanDoubleQuote(chars, parts, start, false);
 				continue;
 			}
 			// Dollar expansions

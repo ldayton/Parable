@@ -1,0 +1,7 @@
+=== heredoc in process substitution inside conditional missing final newline
+[[ <(<<x) ]]
+---
+(cond (cond-unary "-n" (cond-term "<(<<x
+x
+)")))
+---

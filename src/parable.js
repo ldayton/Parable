@@ -1809,7 +1809,13 @@ class Word extends Node {
 	}
 
 	_normalizeExtglobWhitespace(value) {
-		let current_part, depth, i, pattern_parts, prefix_char, result;
+		let current_part,
+			depth,
+			i,
+			part_content,
+			pattern_parts,
+			prefix_char,
+			result;
 		result = [];
 		i = 0;
 		while (i < value.length) {
@@ -1839,14 +1845,26 @@ class Word extends Node {
 							depth -= 1;
 							if (depth === 0) {
 								// End of pattern
-								pattern_parts.push(current_part.join("").trim());
+								part_content = current_part.join("");
+								// Don't strip if this looks like a process substitution with heredoc
+								if (part_content.includes("<<")) {
+									pattern_parts.push(part_content);
+								} else {
+									pattern_parts.push(part_content.trim());
+								}
 								break;
 							}
 							current_part.push(value[i]);
 							i += 1;
 						} else if (value[i] === "|" && depth === 1) {
 							// Top-level pipe separator
-							pattern_parts.push(current_part.join("").trim());
+							part_content = current_part.join("");
+							// Don't strip if this looks like a process substitution with heredoc
+							if (part_content.includes("<<")) {
+								pattern_parts.push(part_content);
+							} else {
+								pattern_parts.push(part_content.trim());
+							}
 							current_part = [];
 							i += 1;
 						} else {

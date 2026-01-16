@@ -4234,6 +4234,10 @@ function _findHeredocContentEnd(source, start, delimiters) {
 	}
 	pos = start;
 	for ([delimiter, strip_tabs] of delimiters) {
+		// Skip whitespace on the same line (e.g., tabs/spaces after closing paren)
+		while (pos < source.length && " \t".includes(source[pos])) {
+			pos += 1;
+		}
 		if (pos >= source.length || source[pos] !== "\n") {
 			break;
 		}

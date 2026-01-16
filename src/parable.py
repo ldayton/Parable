@@ -6411,9 +6411,20 @@ class Parser:
             saved = self.pos
             self.advance()  # consume {
             varname_chars = []
-            while not self.at_end() and (self.peek() != "}" and not _is_redirect_char(self.peek())):
+            in_bracket = False
+            while not self.at_end() and not _is_redirect_char(self.peek()):
                 ch = self.peek()
-                if ch.isalnum() or (ch == "_" or ch == "[" or ch == "]"):
+                if ch == "}" and not in_bracket:
+                    break
+                elif ch == "[":
+                    in_bracket = True
+                    varname_chars.append(self.advance())
+                elif ch == "]":
+                    in_bracket = False
+                    varname_chars.append(self.advance())
+                elif ch.isalnum() or ch == "_":
+                    varname_chars.append(self.advance())
+                elif in_bracket:
                     varname_chars.append(self.advance())
                 else:
                     break

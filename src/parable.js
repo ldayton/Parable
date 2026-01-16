@@ -4453,8 +4453,10 @@ function _findCmdsubEnd(value, start) {
 		}
 		// Handle comments - skip from # to end of line
 		// Only treat # as comment if preceded by whitespace or at start
+		// Don't treat # as comment inside arithmetic expressions (arith_depth > 0)
 		if (
 			c === "#" &&
+			arith_depth === 0 &&
 			(i === start ||
 				value[i - 1] === " " ||
 				value[i - 1] === "\t" ||

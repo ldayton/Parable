@@ -1,0 +1,5 @@
+=== nested arithmetic expansion with hash inside command substitution
+$(($($((#)))))
+---
+(command (word "$(($($((#)))))"))
+---

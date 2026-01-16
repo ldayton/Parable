@@ -4122,13 +4122,18 @@ function _formatCmdsubNode(
 	if (node.kind === "for") {
 		variable = node.variable;
 		body = _formatCmdsubNode(node.body, indent + 4);
-		if (node.words && node.words.length) {
+		if (node.words != null) {
 			word_vals = [];
 			for (w of node.words) {
 				word_vals.push(w.value);
 			}
 			words = word_vals.join(" ");
-			result = `for ${variable} in ${words};\n${sp}do\n${inner_sp}${body};\n${sp}done`;
+			if (words && words.length) {
+				result = `for ${variable} in ${words};\n${sp}do\n${inner_sp}${body};\n${sp}done`;
+			} else {
+				// Empty 'in' clause: for var in ;
+				result = `for ${variable} in ;\n${sp}do\n${inner_sp}${body};\n${sp}done`;
+			}
 		} else {
 			result = `for ${variable};\n${sp}do\n${inner_sp}${body};\n${sp}done`;
 		}

@@ -1179,7 +1179,8 @@ class Word(Node):
                     direction = value[i]
                     j = _find_cmdsub_end(value, i + 2)
                     node = procsub_parts[procsub_idx]
-                    formatted = _format_cmdsub_node(node.command, 0, True, False, True)
+                    compact = _starts_with_subshell(node.command)
+                    formatted = _format_cmdsub_node(node.command, 0, True, compact, True)
                     if node.command.kind == "subshell":
                         raw_content = _substring(value, i + 2, j - 1)
                         # Extract leading whitespace
@@ -1226,7 +1227,8 @@ class Word(Node):
                         parsed = parser.parse_list()
                         # Only use parsed result if parser consumed all input
                         if parsed and parser.pos == len(inner_to_parse):
-                            formatted = _format_cmdsub_node(parsed, 0, True, False, True)
+                            compact = _starts_with_subshell(parsed)
+                            formatted = _format_cmdsub_node(parsed, 0, True, compact, True)
                         else:
                             formatted = inner
                             leading_ws = ""  # Use raw inner, don't double whitespace
@@ -2851,6 +2853,22 @@ def _format_cond_body(node: Node) -> str:
     if kind == "cond-paren":
         return "( " + _format_cond_body(node.body) + " )"
     return ""
+
+
+def _starts_with_subshell(node: "Node") -> bool:
+    """Check if a node starts with a subshell (for compact redirect formatting in procsub)."""
+    if node.kind == "subshell":
+        return True
+    if node.kind == "list":
+        for p in node.parts:
+            if p.kind != "operator":
+                return _starts_with_subshell(p)
+        return False
+    if node.kind == "pipeline":
+        if node.commands:
+            return _starts_with_subshell(node.commands[0])
+        return False
+    return False
 
 
 def _format_cmdsub_node(

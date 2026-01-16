@@ -1261,8 +1261,8 @@ class Word(Node):
                     node = procsub_parts[procsub_idx]
                     compact = _starts_with_subshell(node.command)
                     formatted = _format_cmdsub_node(node.command, 0, True, compact, True)
+                    raw_content = _substring(value, i + 2, j - 1)
                     if node.command.kind == "subshell":
-                        raw_content = _substring(value, i + 2, j - 1)
                         # Extract leading whitespace
                         leading_ws_end = 0
                         while (
@@ -1285,9 +1285,11 @@ class Word(Node):
                             procsub_idx += 1
                             i = j
                             continue
+                    # Extract raw content for further checks
+                    raw_content = _substring(value, i + 2, j - 1)
+                    raw_stripped = raw_content.replace("\\\n", "")
                     # Check if this is a list with & operator and newlines before &
                     # In that case, preserve raw content to avoid losing newlines
-                    raw_content = _substring(value, i + 2, j - 1)
                     if (
                         node.command.kind == "list"
                         and node.command.parts
@@ -1297,8 +1299,12 @@ class Word(Node):
                         and "\n" in raw_content[: raw_content.rfind("&")]
                     ):
                         # Preserve raw content for lists with & and newlines before &
-                        raw_content = raw_content.replace("\\\n", "")
-                        result.append(direction + "(" + raw_content + ")")
+                        result.append(direction + "(" + raw_stripped + ")")
+                    # Check for pattern: subshell followed by operator with no space (e.g., "(0)&+")
+                    # In this case, preserve original to match bash-oracle behavior
+                    elif _starts_with_subshell(node.command) and formatted != raw_stripped:
+                        # Starts with subshell and formatting would change it - preserve original
+                        result.append(direction + "(" + raw_stripped + ")")
                     else:
                         result.append(direction + "(" + formatted + ")")
                     procsub_idx += 1

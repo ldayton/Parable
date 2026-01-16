@@ -1345,6 +1345,7 @@ class Word extends Node {
 			procsub_idx,
 			procsub_parts,
 			raw_content,
+			raw_stripped,
 			result,
 			spaced,
 			stripped,
@@ -1589,8 +1590,8 @@ class Word extends Node {
 					node = procsub_parts[procsub_idx];
 					compact = _startsWithSubshell(node.command);
 					formatted = _formatCmdsubNode(node.command, 0, true, compact, true);
+					raw_content = value.slice(i + 2, j - 1);
 					if (node.command.kind === "subshell") {
-						raw_content = value.slice(i + 2, j - 1);
 						// Extract leading whitespace
 						leading_ws_end = 0;
 						while (
@@ -1619,9 +1620,11 @@ class Word extends Node {
 							continue;
 						}
 					}
+					// Extract raw content for further checks
+					raw_content = value.slice(i + 2, j - 1);
+					raw_stripped = raw_content.replaceAll("\\\n", "");
 					// Check if this is a list with & operator and newlines before &
 					// In that case, preserve raw content to avoid losing newlines
-					raw_content = value.slice(i + 2, j - 1);
 					if (
 						node.command.kind === "list" &&
 						node.command.parts &&
@@ -1632,8 +1635,15 @@ class Word extends Node {
 						raw_content.slice(0, raw_content.lastIndexOf("&")).includes("\n")
 					) {
 						// Preserve raw content for lists with & and newlines before &
-						raw_content = raw_content.replaceAll("\\\n", "");
-						result.push(`${direction}(${raw_content})`);
+						result.push(`${direction}(${raw_stripped})`);
+					} else if (
+						_startsWithSubshell(node.command) &&
+						formatted !== raw_stripped
+					) {
+						// Check for pattern: subshell followed by operator with no space (e.g., "(0)&+")
+						// In this case, preserve original to match bash-oracle behavior
+						// Starts with subshell and formatting would change it - preserve original
+						result.push(`${direction}(${raw_stripped})`);
 					} else {
 						result.push(`${direction}(${formatted})`);
 					}
@@ -9317,8 +9327,7 @@ class Parser {
 		// Check if next token is a binary operator
 		if (
 			!this._condAtEnd() &&
-			this.peek() !== "&" &&
-			this.peek() !== "|" &&
+			this.peek() !== "&" && this.peek() !== "|" &&
 			this.peek() !== ")"
 		) {
 			// Handle < and > as binary operators (they terminate words)

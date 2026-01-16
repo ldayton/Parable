@@ -3818,18 +3818,28 @@ def _lookahead_for_esac(value: str, start: int, case_depth: int) -> bool:
     """
     i = start
     depth = case_depth
+    quote = QuoteState()
     while i < len(value):
         c = value[i]
-        if c == "'" or c == '"':
-            quote = c
+        # Handle escapes (only in double quotes)
+        if c == "\\" and i + 1 < len(value) and quote.double:
+            i += 2
+            continue
+        # Track quote state
+        if c == "'" and not quote.double:
+            quote.single = not quote.single
             i += 1
-            while i < len(value) and value[i] != quote:
-                if c == '"' and value[i] == "\\":
-                    i += 1
-                i += 1
-            if i < len(value):
-                i += 1
-        elif _starts_with_at(value, i, "case") and _is_word_boundary(value, i, 4):
+            continue
+        if c == '"' and not quote.single:
+            quote.double = not quote.double
+            i += 1
+            continue
+        # Skip content inside quotes
+        if quote.single or quote.double:
+            i += 1
+            continue
+        # Check for case/esac keywords
+        if _starts_with_at(value, i, "case") and _is_word_boundary(value, i, 4):
             depth += 1
             i += 4
         elif _starts_with_at(value, i, "esac") and _is_word_boundary(value, i, 4):

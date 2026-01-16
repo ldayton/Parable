@@ -4518,24 +4518,32 @@ function _lookaheadForEsac(value, start, case_depth) {
 	let c, depth, i, quote;
 	i = start;
 	depth = case_depth;
+	quote = new QuoteState();
 	while (i < value.length) {
 		c = value[i];
-		if (c === "'" || c === '"') {
-			quote = c;
+		// Handle escapes (only in double quotes)
+		if (c === "\\" && i + 1 < value.length && quote.double) {
+			i += 2;
+			continue;
+		}
+		// Track quote state
+		if (c === "'" && !quote.double) {
+			quote.single = !quote.single;
 			i += 1;
-			while (i < value.length && value[i] !== quote) {
-				if (c === '"' && value[i] === "\\") {
-					i += 1;
-				}
-				i += 1;
-			}
-			if (i < value.length) {
-				i += 1;
-			}
-		} else if (
-			_startsWithAt(value, i, "case") &&
-			_isWordBoundary(value, i, 4)
-		) {
+			continue;
+		}
+		if (c === '"' && !quote.single) {
+			quote.double = !quote.double;
+			i += 1;
+			continue;
+		}
+		// Skip content inside quotes
+		if (quote.single || quote.double) {
+			i += 1;
+			continue;
+		}
+		// Check for case/esac keywords
+		if (_startsWithAt(value, i, "case") && _isWordBoundary(value, i, 4)) {
 			depth += 1;
 			i += 4;
 		} else if (

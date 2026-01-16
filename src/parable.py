@@ -3694,31 +3694,6 @@ def _format_heredoc_body(r: "HereDoc") -> str:
     return "\n" + r.content + r.delimiter + "\n"
 
 
-def _normalize_fd_redirects(s: str) -> str:
-    """Normalize fd redirects in a raw string: >&2 -> 1>&2, <&N -> 0<&N."""
-    # Match >&N or <&N not preceded by a digit, add default fd
-    result = []
-    i = 0
-    while i < len(s):
-        # Check for >&N or <&N
-        if i + 2 < len(s) and s[i + 1] == "&" and s[i + 2].isdigit():
-            prev_is_digit = i > 0 and s[i - 1].isdigit()
-            prev_is_same_op = i > 0 and s[i - 1] == s[i]
-            if s[i] == ">" and not prev_is_digit and not prev_is_same_op:
-                result.append("1>&")
-                result.append(s[i + 2])
-                i += 3
-                continue
-            elif s[i] == "<" and not prev_is_digit and not prev_is_same_op:
-                result.append("0<&")
-                result.append(s[i + 2])
-                i += 3
-                continue
-        result.append(s[i])
-        i += 1
-    return "".join(result)
-
-
 def _find_cmdsub_end(value: str, start: int) -> int:
     """Find the end of a $(...) command substitution, handling case statements.
 
@@ -4278,11 +4253,6 @@ RESERVED_WORDS = {
     "coproc",
 }
 
-# Metacharacters that break words (unquoted)
-# Note: {} are NOT metacharacters - they're only special at command position
-# for brace groups. In words like {a,b,c}, braces are literal.
-METACHAR = set(" \t\n|&;()<>")
-
 COND_UNARY_OPS = {
     "-a",
     "-b",
@@ -4351,6 +4321,17 @@ def _collapse_whitespace(s: str) -> str:
             prev_was_ws = False
     joined = "".join(result)
     return joined.strip(" \t")
+
+
+def _count_trailing_backslashes(s: str) -> int:
+    """Count trailing backslashes in a string."""
+    count = 0
+    for i in range(len(s) - 1, -1, -1):
+        if s[i] == "\\":
+            count += 1
+        else:
+            break
+    return count
 
 
 def _normalize_heredoc_delimiter(delimiter: str) -> str:
@@ -4471,10 +4452,6 @@ def _is_digit(c: str) -> bool:
 
 def _is_semicolon_or_newline(c: str) -> bool:
     return c == ";" or c == "\n"
-
-
-def _is_right_bracket(c: str) -> bool:
-    return c == ")" or c == "}"
 
 
 def _is_word_start_context(c: str) -> bool:
@@ -4622,17 +4599,8 @@ def _is_newline_or_right_paren(c: str) -> bool:
     return c == "\n" or c == ")"
 
 
-def _is_newline_or_right_bracket(c: str) -> bool:
-    return c == "\n" or c == ")" or c == "}"
-
-
 def _is_semicolon_newline_brace(c: str) -> bool:
     return c == ";" or c == "\n" or c == "{"
-
-
-def _str_contains(haystack: str, needle: str) -> bool:
-    """Check if haystack contains needle substring."""
-    return haystack.find(needle) != -1
 
 
 def _looks_like_assignment(s: str) -> bool:
@@ -4673,7 +4641,10 @@ class Parser:
         self.source = source
         self.pos = 0
         self.length = len(source)
-        self._pending_heredoc_end = None
+        self._pending_heredocs: list[HereDoc] = []
+        # Track heredoc content that was consumed into command/process substitutions
+        # and needs to be skipped when we reach a newline
+        self._cmdsub_heredoc_end: int | None = None
         self._saw_newline_in_single_quote = False
         self._in_process_sub = in_process_sub
 
@@ -4727,14 +4698,13 @@ class Parser:
             ch = self.peek()
             if _is_whitespace(ch):
                 self.advance()
-                # After advancing past a newline, skip any pending heredoc content
+                # After advancing past a newline, gather pending heredoc content
                 if ch == "\n":
-                    if (
-                        self._pending_heredoc_end is not None
-                        and self._pending_heredoc_end > self.pos
-                    ):
-                        self.pos = self._pending_heredoc_end
-                        self._pending_heredoc_end = None
+                    self._gather_heredoc_bodies()
+                    # Skip heredoc content consumed by command/process substitutions
+                    if self._cmdsub_heredoc_end is not None and self._cmdsub_heredoc_end > self.pos:
+                        self.pos = self._cmdsub_heredoc_end
+                        self._cmdsub_heredoc_end = None
             elif ch == "#":
                 # Skip comment to end of line
                 while not self.at_end() and self.peek() != "\n":
@@ -5670,10 +5640,11 @@ class Parser:
                 )
                 if heredoc_end > heredoc_start:
                     content = content + _substring(self.source, heredoc_start, heredoc_end)
-                    if self._pending_heredoc_end is None:
-                        self._pending_heredoc_end = heredoc_end
+                    # Mark that heredoc content following the ) needs to be skipped
+                    if self._cmdsub_heredoc_end is None:
+                        self._cmdsub_heredoc_end = heredoc_end
                     else:
-                        self._pending_heredoc_end = max(self._pending_heredoc_end, heredoc_end)
+                        self._cmdsub_heredoc_end = max(self._cmdsub_heredoc_end, heredoc_end)
 
         text = _substring(self.source, start, text_end)
 
@@ -5895,11 +5866,11 @@ class Parser:
             )
             if heredoc_end > heredoc_start:
                 content = content + _substring(self.source, heredoc_start, heredoc_end)
-                # Use pending mechanism to skip heredoc after current line is parsed
-                if self._pending_heredoc_end is None:
-                    self._pending_heredoc_end = heredoc_end
+                # Mark that heredoc content following the ) needs to be skipped
+                if self._cmdsub_heredoc_end is None:
+                    self._cmdsub_heredoc_end = heredoc_end
                 else:
-                    self._pending_heredoc_end = max(self._pending_heredoc_end, heredoc_end)
+                    self._cmdsub_heredoc_end = max(self._cmdsub_heredoc_end, heredoc_end)
 
         text = _substring(self.source, start, text_end)
         # Strip line continuations (backslash-newline) from text used for word construction
@@ -7830,13 +7801,15 @@ class Parser:
 
         return Redirect(op, target)
 
-    def _parse_heredoc(self, fd: int | None, strip_tabs: bool) -> HereDoc:
-        """Parse a here document <<DELIM ... DELIM."""
-        self.skip_whitespace()
+    def _parse_heredoc_delimiter(self) -> tuple[str, bool]:
+        """Parse heredoc delimiter, handling quoting (can be mixed like 'EOF'"2").
 
-        # Parse the delimiter, handling quoting (can be mixed like 'EOF'"2")
+        Returns (delimiter, quoted) where delimiter is the raw delimiter string
+        and quoted is True if any part was quoted (suppresses expansion).
+        """
+        self.skip_whitespace()
         quoted = False
-        delimiter_chars = []
+        delimiter_chars: list[str] = []
 
         while True:
             while not self.at_end() and not _is_metachar(self.peek()):
@@ -8020,166 +7993,101 @@ class Parser:
                 continue  # Try to collect more delimiter characters
             break
 
-        delimiter = "".join(delimiter_chars)
+        return "".join(delimiter_chars), quoted
 
-        # Find the end of the current line (command continues until newline)
-        # We need to mark where the heredoc content starts
-        # Must be quote-aware - newlines inside quoted strings don't end the line
+    def _read_heredoc_line(self, quoted: bool) -> tuple[str, int]:
+        """Read a heredoc line, handling backslash-newline continuation for unquoted heredocs.
+
+        Returns (line_content, line_end_pos) where line_content is the logical line
+        (with continuations joined) and line_end_pos is the position after the final newline.
+        """
+        line_start = self.pos
         line_end = self.pos
         while line_end < self.length and self.source[line_end] != "\n":
-            ch = self.source[line_end]
-            if ch == "#":
-                # Comment - skip to end of line (don't parse quotes in comments)
+            line_end += 1
+        line = _substring(self.source, line_start, line_end)
+        if not quoted:
+            while line_end < self.length:
+                trailing_bs = _count_trailing_backslashes(line)
+                if trailing_bs % 2 == 0:
+                    break  # Even backslashes - no continuation
+                line = _substring(line, 0, len(line) - 1)  # Remove escaping backslash
+                line_end += 1  # Skip newline
+                next_line_start = line_end
                 while line_end < self.length and self.source[line_end] != "\n":
                     line_end += 1
-                break
-            elif ch == "'":
-                # Single-quoted string - skip to closing quote (no escapes)
-                line_end += 1
-                while line_end < self.length and self.source[line_end] != "'":
-                    line_end += 1
-            elif ch == '"':
-                # Double-quoted string - skip to closing quote (with escapes)
-                line_end += 1
-                while line_end < self.length and self.source[line_end] != '"':
-                    if self.source[line_end] == "\\" and line_end + 1 < self.length:
-                        line_end += 2
-                    else:
-                        line_end += 1
-            elif ch == "`":
-                # Backtick command substitution - skip to closing backtick
-                line_end += 1
-                while line_end < self.length and self.source[line_end] != "`":
-                    if self.source[line_end] == "\\" and line_end + 1 < self.length:
-                        line_end += 2
-                    else:
-                        line_end += 1
-            elif ch == "\\":
-                if line_end + 1 < self.length:
-                    # Backslash escape - skip both chars
-                    line_end += 2
-                    continue
-                else:
-                    # Backslash at EOF - treat as attempted line continuation
-                    # Bash consumes this without an error
-                    line_end += 1
+                line = line + _substring(self.source, next_line_start, line_end)
+        return line, line_end
+
+    def _line_matches_delimiter(
+        self, line: str, delimiter: str, strip_tabs: bool
+    ) -> tuple[bool, str]:
+        """Check if line matches the heredoc delimiter.
+
+        Returns (matches, check_line) where check_line is the line after tab stripping.
+        """
+        check_line = line.lstrip("\t") if strip_tabs else line
+        normalized_check = _normalize_heredoc_delimiter(check_line)
+        normalized_delim = _normalize_heredoc_delimiter(delimiter)
+        return normalized_check == normalized_delim, check_line
+
+    def _gather_heredoc_bodies(self) -> None:
+        """Gather content for all pending heredocs after command line ends.
+
+        Called after a newline is consumed. Reads content for each pending heredoc
+        in order, advancing self.pos past all heredoc content.
+        """
+        for heredoc in self._pending_heredocs:
+            content_lines: list[str] = []
+            line_start = self.pos
+            while self.pos < self.length:
+                line_start = self.pos
+                line, line_end = self._read_heredoc_line(heredoc.quoted)
+                matches, check_line = self._line_matches_delimiter(
+                    line, heredoc.delimiter, heredoc.strip_tabs
+                )
+                if matches:
+                    heredoc.delimiter_found = True
+                    self.pos = line_end + 1 if line_end < self.length else line_end
                     break
-            line_end += 1
-
-        # Find heredoc content starting position
-        # If there's already a pending heredoc, this one's content starts after that
-        if self._pending_heredoc_end is not None and self._pending_heredoc_end > line_end:
-            content_start = self._pending_heredoc_end
-        elif line_end < self.length:
-            content_start = line_end + 1  # skip the newline
-        else:
-            content_start = self.length
-
-        # Find the delimiter line
-        content_lines = []
-        scan_pos = content_start
-        delimiter_found = False
-
-        while scan_pos < self.length:
-            # Find end of current line
-            line_start = scan_pos
-            line_end = scan_pos
-            while line_end < self.length and self.source[line_end] != "\n":
-                line_end += 1
-
-            line = _substring(self.source, line_start, line_end)
-
-            # For unquoted heredocs, process backslash-newline before checking delimiter
-            # Join continued lines to check the full logical line against delimiter
-            # Only odd number of trailing backslashes means continuation (even = literal)
-            if not quoted:
-                while line_end < self.length:
-                    # Count trailing backslashes
-                    trailing_bs = 0
-                    for i in range(len(line) - 1, -1, -1):
-                        if line[i] == "\\":
-                            trailing_bs += 1
-                        else:
-                            break
-                    if trailing_bs % 2 == 0:
-                        break  # Even backslashes (including 0) - no continuation
-                    # Odd backslashes - line continuation
-                    line = _substring(line, 0, len(line) - 1)  # Remove the escaping backslash
-                    line_end += 1  # Skip newline
-                    next_line_start = line_end
-                    while line_end < self.length and self.source[line_end] != "\n":
-                        line_end += 1
-                    line = line + _substring(self.source, next_line_start, line_end)
-
-            # Check if this line is the delimiter
-            check_line = line
-            if strip_tabs:
-                check_line = line.lstrip("\t")
-
-            if _normalize_heredoc_delimiter(check_line) == _normalize_heredoc_delimiter(delimiter):
-                # Found the end - update parser position past the heredoc
-                # We need to consume the heredoc content from the input
-                # But we can't do that here because we haven't finished parsing the command line
-                # Store the heredoc info and let the command parser handle it
-                delimiter_found = True
-                break
-
-            # At EOF with line starting with delimiter - heredoc terminates (process sub case)
-            # e.g. <(<<a\na ) - the "a " line starts with delimiter "a" and we're at EOF
-            # In command substitutions, bash accepts the delimiter prefix and treats
-            # remaining characters as subsequent commands (e.g., <<X\nXb → X is delimiter, b is command)
-            normalized_delimiter = _normalize_heredoc_delimiter(delimiter)
-            normalized_check_line = _normalize_heredoc_delimiter(check_line)
-            if (
-                line_end >= self.length
-                and normalized_check_line.startswith(normalized_delimiter)
-                and self._in_process_sub
-            ):
-                # At EOF in process/command sub, treat delimiter prefix as matching
-                # Adjust line_end to point just past the delimiter, not the whole line
-                # This allows remaining content after delimiter to be parsed as commands
-                tabs_stripped = len(line) - len(check_line)
-                line_end = line_start + tabs_stripped + len(delimiter)
-                break
-
-            # Add line to content (with newline, since we consumed continuations above)
-            if strip_tabs:
-                line = line.lstrip("\t")
-            # Only add newline if there was actually a newline in the source (not EOF)
-            if line_end < self.length:
-                content_lines.append(line + "\n")
-                scan_pos = line_end + 1
-            else:
-                # EOF - bash keeps the trailing newline unless escaped by an odd backslash
-                add_newline = True
-                if not quoted:
-                    trailing_bs = 0
-                    for i in range(len(line) - 1, -1, -1):
-                        if line[i] == "\\":
-                            trailing_bs += 1
-                        else:
-                            break
-                    if trailing_bs % 2 == 1:
+                # At EOF with line starting with delimiter - heredoc terminates (process sub case)
+                normalized_check = _normalize_heredoc_delimiter(check_line)
+                normalized_delim = _normalize_heredoc_delimiter(heredoc.delimiter)
+                if (
+                    line_end >= self.length
+                    and normalized_check.startswith(normalized_delim)
+                    and self._in_process_sub
+                ):
+                    tabs_stripped = len(line) - len(check_line)
+                    self.pos = line_start + tabs_stripped + len(heredoc.delimiter)
+                    break
+                # Add line to content
+                if heredoc.strip_tabs:
+                    line = line.lstrip("\t")
+                if line_end < self.length:
+                    content_lines.append(line + "\n")
+                    self.pos = line_end + 1
+                else:
+                    # EOF - bash keeps trailing newline unless escaped by odd backslash
+                    add_newline = True
+                    if not heredoc.quoted and _count_trailing_backslashes(line) % 2 == 1:
                         add_newline = False
-                content_lines.append(line + ("\n" if add_newline else ""))
-                scan_pos = self.length
+                    content_lines.append(line + ("\n" if add_newline else ""))
+                    self.pos = self.length
+            heredoc.content = "".join(content_lines)
+        self._pending_heredocs = []
 
-        # Join content (newlines already included per line)
-        content = "".join(content_lines)
+    def _parse_heredoc(self, fd: int | None, strip_tabs: bool) -> HereDoc:
+        """Parse a here document <<DELIM ... DELIM.
 
-        # Store the position where heredoc content ends so we can skip it later
-        # line_end points to the end of the delimiter line (after any continuations)
-        heredoc_end = line_end
-        if heredoc_end < self.length and self.source[heredoc_end] == "\n":
-            heredoc_end += 1  # past the newline
-
-        # Register this heredoc's end position
-        if self._pending_heredoc_end is None:
-            self._pending_heredoc_end = heredoc_end
-        else:
-            self._pending_heredoc_end = max(self._pending_heredoc_end, heredoc_end)
-
-        return HereDoc(delimiter, content, strip_tabs, quoted, fd, delimiter_found)
+        Parses the delimiter only. Content is gathered later by _gather_heredoc_bodies
+        after the command line is complete.
+        """
+        delimiter, quoted = self._parse_heredoc_delimiter()
+        # Create stub HereDoc with empty content - will be filled in later
+        heredoc = HereDoc(delimiter, "", strip_tabs, quoted, fd, False)
+        self._pending_heredocs.append(heredoc)
+        return heredoc
 
     def parse_command(self) -> Command | None:
         """Parse a simple command (sequence of words and redirections)."""
@@ -10027,10 +9935,11 @@ class Parser:
             while not self.at_end() and self.peek() == "\n":
                 has_newline = True
                 self.advance()
-                # Skip past any pending heredoc content after newline
-                if self._pending_heredoc_end is not None and self._pending_heredoc_end > self.pos:
-                    self.pos = self._pending_heredoc_end
-                    self._pending_heredoc_end = None
+                # Gather pending heredoc content after newline
+                self._gather_heredoc_bodies()
+                if self._cmdsub_heredoc_end is not None and self._cmdsub_heredoc_end > self.pos:
+                    self.pos = self._cmdsub_heredoc_end
+                    self._cmdsub_heredoc_end = None
                 self.skip_whitespace()
 
             op = self.parse_list_operator()
@@ -10410,10 +10319,11 @@ class Parser:
                 if not newline_as_separator:
                     break
                 self.advance()
-                # Skip past any pending heredoc content after newline
-                if self._pending_heredoc_end is not None and self._pending_heredoc_end > self.pos:
-                    self.pos = self._pending_heredoc_end
-                    self._pending_heredoc_end = None
+                # Gather pending heredoc content after newline
+                self._gather_heredoc_bodies()
+                if self._cmdsub_heredoc_end is not None and self._cmdsub_heredoc_end > self.pos:
+                    self.pos = self._cmdsub_heredoc_end
+                    self._cmdsub_heredoc_end = None
                 self.skip_whitespace()
 
             # If we hit a newline and not treating them as separators, stop
@@ -10520,10 +10430,11 @@ class Parser:
             while not self.at_end() and self.peek() == "\n":
                 found_newline = True
                 self.advance()
-                # Skip past any pending heredoc content after newline
-                if self._pending_heredoc_end is not None and self._pending_heredoc_end > self.pos:
-                    self.pos = self._pending_heredoc_end
-                    self._pending_heredoc_end = None
+                # Gather pending heredoc content after newline
+                self._gather_heredoc_bodies()
+                if self._cmdsub_heredoc_end is not None and self._cmdsub_heredoc_end > self.pos:
+                    self.pos = self._cmdsub_heredoc_end
+                    self._cmdsub_heredoc_end = None
                 self.skip_whitespace()
 
             # If no newline and not at end, we have unparsed content

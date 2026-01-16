@@ -955,7 +955,9 @@ class Word(Node):
                 cmdsub_parts.extend(self._collect_cmdsubs(p))
                 procsub_parts.extend(self._collect_procsubs(p))
         # Check if we have ${ or ${| brace command substitutions to format
-        has_brace_cmdsub = value.find("${ ") != -1 or value.find("${|") != -1
+        has_brace_cmdsub = (
+            value.find("${ ") != -1 or value.find("${\t") != -1 or value.find("${|") != -1
+        )
         # Check if there's an untracked $( that isn't $((, skipping over quotes only
         has_untracked_cmdsub = False
         has_untracked_procsub = False
@@ -1135,12 +1137,14 @@ class Word(Node):
                     # Not a process substitution (e.g., arithmetic comparison)
                     result.append(value[i])
                     i += 1
-            # Check for ${ (space) or ${| brace command substitution
+            # Check for ${ (space/tab) or ${| brace command substitution
             # But not if the $ is escaped by a backslash
             elif (
-                _starts_with_at(value, i, "${ ") or _starts_with_at(value, i, "${|")
+                _starts_with_at(value, i, "${ ")
+                or _starts_with_at(value, i, "${\t")
+                or _starts_with_at(value, i, "${|")
             ) and not _is_backslash_escaped(value, i):
-                prefix = _substring(value, i, i + 3)
+                prefix = _substring(value, i, i + 3).replace("\t", " ")
                 # Find matching close brace
                 j = i + 3
                 depth = 1
@@ -1157,7 +1161,7 @@ class Word(Node):
                     result.append("${ }")
                 else:
                     try:
-                        parser = Parser(inner.lstrip(" |"))
+                        parser = Parser(inner.lstrip(" \t|"))
                         parsed = parser.parse_list()
                         if parsed:
                             formatted = _format_cmdsub_node(parsed)

@@ -1209,7 +1209,9 @@ class Word extends Node {
 		}
 		// Check if we have ${ or ${| brace command substitutions to format
 		has_brace_cmdsub =
-			value.indexOf("${ ") !== -1 || value.indexOf("${|") !== -1;
+			value.indexOf("${ ") !== -1 ||
+			value.indexOf("${\t") !== -1 ||
+			value.indexOf("${|") !== -1;
 		// Check if there's an untracked $( that isn't $((, skipping over quotes only
 		has_untracked_cmdsub = false;
 		has_untracked_procsub = false;
@@ -1415,12 +1417,14 @@ class Word extends Node {
 					i += 1;
 				}
 			} else if (
-				(_startsWithAt(value, i, "${ ") || _startsWithAt(value, i, "${|")) &&
+				(_startsWithAt(value, i, "${ ") ||
+					_startsWithAt(value, i, "${\t") ||
+					_startsWithAt(value, i, "${|")) &&
 				!_isBackslashEscaped(value, i)
 			) {
-				// Check for ${ (space) or ${| brace command substitution
+				// Check for ${ (space/tab) or ${| brace command substitution
 				// But not if the $ is escaped by a backslash
-				prefix = value.slice(i, i + 3);
+				prefix = value.slice(i, i + 3).replaceAll("\t", " ");
 				// Find matching close brace
 				j = i + 3;
 				depth = 1;
@@ -1439,7 +1443,7 @@ class Word extends Node {
 					result.push("${ }");
 				} else {
 					try {
-						parser = new Parser(inner.replace(/^[ |]+/, ""));
+						parser = new Parser(inner.replace(/^[ \t|]+/, ""));
 						parsed = parser.parseList();
 						if (parsed) {
 							formatted = _formatCmdsubNode(parsed);

@@ -4,9 +4,9 @@ import argparse
 import sys
 
 from .agent import MODELS, FuzzerFixer
-from .pricing import CLAUDE_PRICING, OTHER_PRICING
+from .pricing import AZURE_PRICING, CLAUDE_PRICING, GCP_PRICING, OTHER_PRICING
 
-MODEL_PRICES = {**CLAUDE_PRICING, **OTHER_PRICING}
+MODEL_PRICES = {**CLAUDE_PRICING, **OTHER_PRICING, **AZURE_PRICING, **GCP_PRICING}
 
 
 def _build_model_table() -> str:
@@ -34,10 +34,10 @@ def main():
     )
     parser.add_argument(
         "--model",
-        default="sonnet-45",
+        default="sonnet-4.5",
         metavar="MODEL",
         choices=MODELS.keys(),
-        help="Model to use (default: sonnet-45)",
+        help="Model to use (default: sonnet-4.5)",
     )
     parser.add_argument(
         "--prices", action="store_true", help="Fetch live pricing from AWS and exit"

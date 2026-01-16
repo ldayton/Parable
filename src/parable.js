@@ -1342,10 +1342,8 @@ class Word extends Node {
 			in_double_quote,
 			in_single,
 			inner,
-			inner_to_parse,
 			is_procsub,
 			j,
-			k,
 			leading_ws,
 			leading_ws_end,
 			node,
@@ -1697,38 +1695,44 @@ class Word extends Node {
 						continue;
 					}
 					inner = value.slice(i + 2, j - 1);
-					// Preserve leading whitespace (bash keeps it in procsub inside arithmetic)
-					leading_ws = "";
-					inner_to_parse = inner;
-					k = 0;
-					while (k < inner.length && " \t".includes(inner[k])) {
-						k += 1;
-					}
-					if (k > 0) {
-						leading_ws = inner.slice(0, k);
-						inner_to_parse = inner.slice(k);
-					}
 					try {
-						parser = new Parser(inner_to_parse);
+						parser = new Parser(inner);
 						parsed = parser.parseList();
 						// Only use parsed result if parser consumed all input and no newlines in content
 						// (newlines would be lost during formatting)
 						if (
 							parsed &&
-							parser.pos === inner_to_parse.length &&
+							parser.pos === inner.length &&
 							!inner.includes("\n")
 						) {
 							compact = _startsWithSubshell(parsed);
 							formatted = _formatCmdsubNode(parsed, 0, true, compact, true);
 						} else {
 							formatted = inner;
-							leading_ws = "";
 						}
 					} catch (_) {
 						formatted = inner;
-						leading_ws = "";
 					}
-					result.push(`${direction}(${leading_ws}${formatted})`);
+					result.push(`${direction}(${formatted})`);
+					i = j;
+				} else if (is_procsub) {
+					// Process substitution but no parts (failed to parse or in arithmetic context)
+					// Strip leading whitespace after >( or <( to match bash behavior
+					direction = value[i];
+					j = _findCmdsubEnd(value, i + 2);
+					if (
+						j > value.length ||
+						(j > 0 && j <= value.length && value[j - 1] !== ")")
+					) {
+						// Couldn't find closing paren, treat as literal
+						result.push(value[i]);
+						i += 1;
+						continue;
+					}
+					inner = value.slice(i + 2, j - 1);
+					// Strip leading whitespace
+					stripped = inner.replace(/^[ \t]+/, "");
+					result.push(`${direction}(${stripped})`);
 					i = j;
 				} else {
 					// Not a process substitution (e.g., arithmetic comparison)

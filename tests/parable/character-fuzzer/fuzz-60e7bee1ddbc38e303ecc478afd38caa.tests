@@ -1,0 +1,5 @@
+=== tab in quoted array subscript inside array assignment
+a=("${b["	"]}")
+---
+(command (word "a=(\"${b[\"\t\"]}\")"))
+---

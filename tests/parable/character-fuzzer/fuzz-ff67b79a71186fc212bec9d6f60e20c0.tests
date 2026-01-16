@@ -1,0 +1,6 @@
+=== preserve no space after redirect in process substitution
+<((0)
+>x)
+---
+(command (word "<((0)\n>x)"))
+---

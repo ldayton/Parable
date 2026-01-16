@@ -724,9 +724,11 @@ class Word(Node):
                 i = j + 1
             elif ch == '"':
                 # Double-quoted string - strip line continuations
+                # Track ${...} nesting since quotes inside expansions don't end the string
                 in_whitespace = False
                 j = i + 1
                 dq_content = ['"']
+                dq_brace_depth = 0
                 while j < len(inner):
                     if inner[j] == "\\" and j + 1 < len(inner):
                         if inner[j + 1] == "\n":
@@ -736,7 +738,17 @@ class Word(Node):
                             dq_content.append(inner[j])
                             dq_content.append(inner[j + 1])
                             j += 2
-                    elif inner[j] == '"':
+                    elif inner[j] == "$" and j + 1 < len(inner) and inner[j + 1] == "{":
+                        # Start of ${...} expansion
+                        dq_content.append("${")
+                        dq_brace_depth += 1
+                        j += 2
+                    elif inner[j] == "}" and dq_brace_depth > 0:
+                        # End of ${...} expansion
+                        dq_content.append("}")
+                        dq_brace_depth -= 1
+                        j += 1
+                    elif inner[j] == '"' and dq_brace_depth == 0:
                         dq_content.append('"')
                         j += 1
                         break
@@ -1179,7 +1191,8 @@ class Word(Node):
                     direction = value[i]
                     j = _find_cmdsub_end(value, i + 2)
                     node = procsub_parts[procsub_idx]
-                    formatted = _format_cmdsub_node(node.command, 0, True, False, True)
+                    compact = _starts_with_subshell(node.command)
+                    formatted = _format_cmdsub_node(node.command, 0, True, compact, True)
                     if node.command.kind == "subshell":
                         raw_content = _substring(value, i + 2, j - 1)
                         # Extract leading whitespace
@@ -1226,7 +1239,8 @@ class Word(Node):
                         parsed = parser.parse_list()
                         # Only use parsed result if parser consumed all input
                         if parsed and parser.pos == len(inner_to_parse):
-                            formatted = _format_cmdsub_node(parsed, 0, True, False, True)
+                            compact = _starts_with_subshell(parsed)
+                            formatted = _format_cmdsub_node(parsed, 0, True, compact, True)
                         else:
                             formatted = inner
                             leading_ws = ""  # Use raw inner, don't double whitespace
@@ -2853,6 +2867,22 @@ def _format_cond_body(node: Node) -> str:
     return ""
 
 
+def _starts_with_subshell(node: "Node") -> bool:
+    """Check if a node starts with a subshell (for compact redirect formatting in procsub)."""
+    if node.kind == "subshell":
+        return True
+    if node.kind == "list":
+        for p in node.parts:
+            if p.kind != "operator":
+                return _starts_with_subshell(p)
+        return False
+    if node.kind == "pipeline":
+        if node.commands:
+            return _starts_with_subshell(node.commands[0])
+        return False
+    return False
+
+
 def _format_cmdsub_node(
     node: Node,
     indent: int = 0,
@@ -3369,9 +3399,30 @@ def _find_cmdsub_end(value: str, start: int) -> int:
                     i += 1
             continue
         # Handle arithmetic expressions $((
+        # Only treat as arithmetic if there's no ; before )) at top level
+        # (semicolon isn't valid in arithmetic, so $((x;y)) is actually $((...);...))
         if _starts_with_at(value, i, "$(("):
-            arith_depth += 1
-            i += 3
+            is_valid_arith = True
+            scan_paren = 0
+            for scan_i in range(i + 3, len(value)):
+                scan_c = value[scan_i]
+                if scan_c == "(":
+                    scan_paren += 1
+                elif scan_c == ")":
+                    if scan_paren > 0:
+                        scan_paren -= 1
+                    elif scan_i + 1 < len(value) and value[scan_i + 1] == ")":
+                        break  # Found )) at top level, valid arithmetic
+                elif scan_c == ";" and scan_paren == 0:
+                    is_valid_arith = False
+                    break
+            if is_valid_arith:
+                arith_depth += 1
+                i += 3
+                continue
+            # else: not valid arithmetic, treat $( as nested cmdsub and ( as paren
+            j = _find_cmdsub_end(value, i + 2)
+            i = j
             continue
         # Handle arithmetic close )) - only when no inner grouping parens are open
         if arith_depth > 0 and arith_paren_depth == 0 and _starts_with_at(value, i, "))"):
@@ -4690,6 +4741,10 @@ class Parser:
                                 delimiter_chars.append(self.advance())
                 delimiter = "".join(delimiter_chars)
                 if delimiter:
+                    # Check if ) immediately follows (closes cmdsub with empty heredoc)
+                    if not self.at_end() and self.peek() == ")":
+                        # Heredoc has no content - will be resolved later
+                        continue
                     # Skip to end of current line
                     while not self.at_end() and self.peek() != "\n":
                         self.advance()
@@ -6960,7 +7015,12 @@ class Parser:
         line_end = self.pos
         while line_end < self.length and self.source[line_end] != "\n":
             ch = self.source[line_end]
-            if ch == "'":
+            if ch == "#":
+                # Comment - skip to end of line (don't parse quotes in comments)
+                while line_end < self.length and self.source[line_end] != "\n":
+                    line_end += 1
+                break
+            elif ch == "'":
                 # Single-quoted string - skip to closing quote (no escapes)
                 line_end += 1
                 while line_end < self.length and self.source[line_end] != "'":
@@ -8790,7 +8850,15 @@ class Parser:
             return None
 
         # Check for () - whitespace IS allowed between name and (
+        # But if name ends with extglob prefix (*?@+!) and () is adjacent,
+        # it's an extglob pattern, not a function definition
+        pos_after_name = self.pos
         self.skip_whitespace()
+        has_whitespace = self.pos > pos_after_name
+        if not has_whitespace and name and name[len(name) - 1] in "*?@+!":
+            self.pos = saved_pos
+            return None
+
         if self.at_end() or self.peek() != "(":
             self.pos = saved_pos
             return None

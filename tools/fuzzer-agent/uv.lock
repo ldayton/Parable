@@ -365,6 +365,7 @@ name = "fuzzer-agent"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "boto3" },
     { name = "strands-agents" },
     { name = "strands-agents-tools" },
     { name = "structlog" },
@@ -372,6 +373,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "boto3", specifier = ">=1.35.0" },
     { name = "strands-agents", specifier = ">=1.22.0" },
     { name = "strands-agents-tools", specifier = ">=0.2.19" },
     { name = "structlog", specifier = ">=25.5.0" },

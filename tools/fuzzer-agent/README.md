@@ -2,11 +2,15 @@
 
 Strands SDK agent that autonomously finds and fixes fuzzer bugs.
 
-```bash
-uv run fuzzer-agent --model haiku-35
-uv run fuzzer-agent --model sonnet-45
 ```
+usage: fuzzer-agent [-h] [--model MODEL] [--prices]
 
-Exit codes: 0 (fixed + PR created), 1 (no bugs found), 2 (agent failed).
+Autonomous fuzzer bug fixing agent
 
-Requires AWS credentials for Bedrock.
+options:
+  -h, --help     show this help message and exit
+  --model MODEL  Model to use (default: sonnet-45)
+  --prices       Fetch live pricing from AWS and exit
+
+exit codes: 0 (fixed + PR), 1 (no bugs), 2 (failed)
+```

@@ -3428,6 +3428,10 @@ def _find_cmdsub_end(value: str, start: int) -> int:
                         scan_paren -= 1
                     elif scan_i + 1 < len(value) and value[scan_i + 1] == ")":
                         break  # Found )) at top level, valid arithmetic
+                    else:
+                        # Single ) at top level without following ) - not valid arithmetic
+                        is_valid_arith = False
+                        break
                 elif scan_c == ";" and scan_paren == 0:
                     is_valid_arith = False
                     break

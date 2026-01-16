@@ -8115,7 +8115,34 @@ class Parser {
 		depth = 1;
 		while (!this.atEnd() && depth > 0) {
 			c = this.peek();
-			if (c === "(") {
+			// Skip single-quoted strings (parens inside don't count)
+			if (c === "'") {
+				this.advance();
+				while (!this.atEnd() && this.peek() !== "'") {
+					this.advance();
+				}
+				if (!this.atEnd()) {
+					this.advance();
+				}
+			} else if (c === '"') {
+				// Skip double-quoted strings (parens inside don't count)
+				this.advance();
+				while (!this.atEnd()) {
+					if (this.peek() === "\\" && this.pos + 1 < this.length) {
+						this.advance();
+						this.advance();
+					} else if (this.peek() === '"') {
+						this.advance();
+						break;
+					} else {
+						this.advance();
+					}
+				}
+			} else if (c === "\\" && this.pos + 1 < this.length) {
+				// Handle backslash escapes outside quotes
+				this.advance();
+				this.advance();
+			} else if (c === "(") {
 				depth += 1;
 				this.advance();
 			} else if (c === ")") {

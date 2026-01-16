@@ -5351,119 +5351,7 @@ class Parser:
                 continue
 
             # Heredoc - skip until delimiter line is found (not inside arithmetic)
-            if (
-                arith_depth == 0
-                and c == "<"
-                and self.pos + 1 < self.length
-                and self.source[self.pos + 1] == "<"
-            ):
-                self.advance()  # first <
-                self.advance()  # second <
-                # Check for <<< (here-string) - just skip the word and continue
-                if not self.at_end() and self.peek() == "<":
-                    self.advance()  # third <
-                    # Skip whitespace before word
-                    while not self.at_end() and _is_whitespace_no_newline(self.peek()):
-                        self.advance()
-                    # Skip the here-string word
-                    while (
-                        not self.at_end()
-                        and not _is_whitespace(self.peek())
-                        and self.peek() not in "()"
-                    ):
-                        if self.peek() == "\\" and self.pos + 1 < self.length:
-                            self.advance()
-                            self.advance()
-                        elif self.peek() in "\"'":
-                            quote = self.peek()
-                            self.advance()
-                            while not self.at_end() and self.peek() != quote:
-                                if quote == '"' and self.peek() == "\\":
-                                    self.advance()
-                                self.advance()
-                            if not self.at_end():
-                                self.advance()
-                        else:
-                            self.advance()
-                    continue
-                # Check for <<- (strip tabs)
-                if not self.at_end() and self.peek() == "-":
-                    self.advance()
-                # Skip whitespace before delimiter
-                while not self.at_end() and _is_whitespace_no_newline(self.peek()):
-                    self.advance()
-                # Parse delimiter (handle quoting)
-                delimiter_chars = []
-                if not self.at_end():
-                    ch = self.peek()
-                    if _is_quote(ch):
-                        quote = self.advance()
-                        while not self.at_end() and self.peek() != quote:
-                            delimiter_chars.append(self.advance())
-                        if not self.at_end():
-                            self.advance()  # closing quote
-                    elif ch == "\\":
-                        self.advance()
-                        # Backslash quotes - first char can be special, then read word
-                        if not self.at_end():
-                            delimiter_chars.append(self.advance())
-                        while not self.at_end() and not _is_metachar(self.peek()):
-                            delimiter_chars.append(self.advance())
-                    else:
-                        # Unquoted delimiter with possible embedded quotes
-                        while not self.at_end() and not _is_metachar(self.peek()):
-                            ch = self.peek()
-                            if _is_quote(ch):
-                                quote = self.advance()
-                                while not self.at_end() and self.peek() != quote:
-                                    delimiter_chars.append(self.advance())
-                                if not self.at_end():
-                                    self.advance()
-                            elif ch == "\\":
-                                self.advance()
-                                if not self.at_end():
-                                    delimiter_chars.append(self.advance())
-                            else:
-                                delimiter_chars.append(self.advance())
-                delimiter = "".join(delimiter_chars)
-                if delimiter:
-                    # Check if ) immediately follows (closes cmdsub with empty heredoc)
-                    if not self.at_end() and self.peek() == ")":
-                        # Heredoc has no content - will be resolved later
-                        continue
-                    # Skip to end of current line
-                    while not self.at_end() and self.peek() != "\n":
-                        self.advance()
-                    # Skip newline
-                    if not self.at_end() and self.peek() == "\n":
-                        self.advance()
-                    # Skip lines until we find the delimiter
-                    while not self.at_end():
-                        line_start = self.pos
-                        line_end = self.pos
-                        # Scan to end of line - heredoc content can contain )
-                        while line_end < self.length and self.source[line_end] != "\n":
-                            line_end += 1
-                        line = _substring(self.source, line_start, line_end)
-                        # Move position to end of line
-                        self.pos = line_end
-                        # Check if this line matches delimiter
-                        check_line = line.lstrip("\t")
-                        if check_line == delimiter:
-                            # Skip newline after delimiter
-                            if not self.at_end() and self.peek() == "\n":
-                                self.advance()
-                            break
-                        # Also check for delimiter followed by other content
-                        # (e.g., "Xb)" where X is delimiter and b) continues the cmdsub)
-                        if check_line.startswith(delimiter) and len(check_line) > len(delimiter):
-                            # Position parser right after the delimiter
-                            tabs_stripped = len(line) - len(check_line)
-                            self.pos = line_start + tabs_stripped + len(delimiter)
-                            break
-                        # Skip newline and continue
-                        if not self.at_end() and self.peek() == "\n":
-                            self.advance()
+            if arith_depth == 0 and c == "<" and self._skip_heredoc_in_cmdsub():
                 continue
 
             # Track case/esac for pattern terminator handling
@@ -5616,6 +5504,110 @@ class Parser:
     def _lookahead_for_esac_parser(self, case_depth: int) -> bool:
         """Check if esac closes all cases before a ) closes the cmdsub."""
         return _lookahead_for_esac(self.source, self.pos + 1, case_depth)
+
+    def _skip_heredoc_in_cmdsub(self) -> bool:
+        """Skip heredoc/here-string in command substitution. Returns True if skipped."""
+        if (
+            self.pos + 1 >= self.length
+            or self.peek() != "<"
+            or self.source[self.pos + 1] != "<"
+        ):
+            return False
+        self.advance()  # first <
+        self.advance()  # second <
+        # Here-string (<<<)
+        if not self.at_end() and self.peek() == "<":
+            self.advance()  # third <
+            while not self.at_end() and _is_whitespace_no_newline(self.peek()):
+                self.advance()
+            while (
+                not self.at_end()
+                and not _is_whitespace(self.peek())
+                and self.peek() not in "()"
+            ):
+                if self.peek() == "\\" and self.pos + 1 < self.length:
+                    self.advance()
+                    self.advance()
+                elif self.peek() in "\"'":
+                    quote = self.peek()
+                    self.advance()
+                    while not self.at_end() and self.peek() != quote:
+                        if quote == '"' and self.peek() == "\\":
+                            self.advance()
+                        self.advance()
+                    if not self.at_end():
+                        self.advance()
+                else:
+                    self.advance()
+            return True
+        # Handle <<- (strip tabs)
+        if not self.at_end() and self.peek() == "-":
+            self.advance()
+        # Skip whitespace before delimiter
+        while not self.at_end() and _is_whitespace_no_newline(self.peek()):
+            self.advance()
+        # Parse delimiter (handle quoting)
+        delimiter_chars = []
+        if not self.at_end():
+            ch = self.peek()
+            if _is_quote(ch):
+                quote = self.advance()
+                while not self.at_end() and self.peek() != quote:
+                    delimiter_chars.append(self.advance())
+                if not self.at_end():
+                    self.advance()  # closing quote
+            elif ch == "\\":
+                self.advance()
+                if not self.at_end():
+                    delimiter_chars.append(self.advance())
+                while not self.at_end() and not _is_metachar(self.peek()):
+                    delimiter_chars.append(self.advance())
+            else:
+                # Unquoted delimiter with possible embedded quotes
+                while not self.at_end() and not _is_metachar(self.peek()):
+                    ch = self.peek()
+                    if _is_quote(ch):
+                        quote = self.advance()
+                        while not self.at_end() and self.peek() != quote:
+                            delimiter_chars.append(self.advance())
+                        if not self.at_end():
+                            self.advance()
+                    elif ch == "\\":
+                        self.advance()
+                        if not self.at_end():
+                            delimiter_chars.append(self.advance())
+                    else:
+                        delimiter_chars.append(self.advance())
+        delimiter = "".join(delimiter_chars)
+        if delimiter:
+            # Check if ) immediately follows (closes cmdsub with empty heredoc)
+            if not self.at_end() and self.peek() == ")":
+                return True
+            # Skip to end of current line
+            while not self.at_end() and self.peek() != "\n":
+                self.advance()
+            if not self.at_end() and self.peek() == "\n":
+                self.advance()
+            # Skip lines until we find the delimiter
+            while not self.at_end():
+                line_start = self.pos
+                line_end = self.pos
+                while line_end < self.length and self.source[line_end] != "\n":
+                    line_end += 1
+                line = _substring(self.source, line_start, line_end)
+                self.pos = line_end
+                check_line = line.lstrip("\t")
+                if check_line == delimiter:
+                    if not self.at_end() and self.peek() == "\n":
+                        self.advance()
+                    break
+                if check_line.startswith(delimiter) and len(check_line) > len(delimiter):
+                    tabs_stripped = len(line) - len(check_line)
+                    self.pos = line_start + tabs_stripped + len(delimiter)
+                    break
+                if not self.at_end() and self.peek() == "\n":
+                    self.advance()
+        return True
 
     def _parse_backtick_substitution(self) -> tuple[Node | None, str]:
         """Parse a `...` command substitution.

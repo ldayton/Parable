@@ -6274,14 +6274,11 @@ class Parser {
 			arith_depth,
 			c,
 			case_depth,
-			ch,
 			check_line,
 			cmd,
 			content,
 			content_start,
 			delim,
-			delimiter,
-			delimiter_chars,
 			depth,
 			found_in_content,
 			heredoc_delimiters,
@@ -6289,15 +6286,11 @@ class Parser {
 			heredoc_scan_pos,
 			heredoc_start,
 			line,
-			line_end,
-			line_start,
 			nc,
 			nested_depth,
-			quote,
 			start,
 			strip_tabs,
 			sub_parser,
-			tabs_stripped,
 			text,
 			text_end;
 		if (this.atEnd() || this.peek() !== "$") {
@@ -6482,152 +6475,7 @@ class Parser {
 				continue;
 			}
 			// Heredoc - skip until delimiter line is found (not inside arithmetic)
-			if (
-				arith_depth === 0 &&
-				c === "<" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "<"
-			) {
-				this.advance();
-				this.advance();
-				// Check for <<< (here-string) - just skip the word and continue
-				if (!this.atEnd() && this.peek() === "<") {
-					this.advance();
-					// Skip whitespace before word
-					while (!this.atEnd() && _isWhitespaceNoNewline(this.peek())) {
-						this.advance();
-					}
-					// Skip the here-string word
-					while (
-						!this.atEnd() &&
-						!_isWhitespace(this.peek()) &&
-						!"()".includes(this.peek())
-					) {
-						if (this.peek() === "\\" && this.pos + 1 < this.length) {
-							this.advance();
-							this.advance();
-						} else if ("\"'".includes(this.peek())) {
-							quote = this.peek();
-							this.advance();
-							while (!this.atEnd() && this.peek() !== quote) {
-								if (quote === '"' && this.peek() === "\\") {
-									this.advance();
-								}
-								this.advance();
-							}
-							if (!this.atEnd()) {
-								this.advance();
-							}
-						} else {
-							this.advance();
-						}
-					}
-					continue;
-				}
-				// Check for <<- (strip tabs)
-				if (!this.atEnd() && this.peek() === "-") {
-					this.advance();
-				}
-				// Skip whitespace before delimiter
-				while (!this.atEnd() && _isWhitespaceNoNewline(this.peek())) {
-					this.advance();
-				}
-				// Parse delimiter (handle quoting)
-				delimiter_chars = [];
-				if (!this.atEnd()) {
-					ch = this.peek();
-					if (_isQuote(ch)) {
-						quote = this.advance();
-						while (!this.atEnd() && this.peek() !== quote) {
-							delimiter_chars.push(this.advance());
-						}
-						if (!this.atEnd()) {
-							this.advance();
-						}
-					} else if (ch === "\\") {
-						this.advance();
-						// Backslash quotes - first char can be special, then read word
-						if (!this.atEnd()) {
-							delimiter_chars.push(this.advance());
-						}
-						while (!this.atEnd() && !_isMetachar(this.peek())) {
-							delimiter_chars.push(this.advance());
-						}
-					} else {
-						// Unquoted delimiter with possible embedded quotes
-						while (!this.atEnd() && !_isMetachar(this.peek())) {
-							ch = this.peek();
-							if (_isQuote(ch)) {
-								quote = this.advance();
-								while (!this.atEnd() && this.peek() !== quote) {
-									delimiter_chars.push(this.advance());
-								}
-								if (!this.atEnd()) {
-									this.advance();
-								}
-							} else if (ch === "\\") {
-								this.advance();
-								if (!this.atEnd()) {
-									delimiter_chars.push(this.advance());
-								}
-							} else {
-								delimiter_chars.push(this.advance());
-							}
-						}
-					}
-				}
-				delimiter = delimiter_chars.join("");
-				if (delimiter) {
-					// Check if ) immediately follows (closes cmdsub with empty heredoc)
-					if (!this.atEnd() && this.peek() === ")") {
-						// Heredoc has no content - will be resolved later
-						continue;
-					}
-					// Skip to end of current line
-					while (!this.atEnd() && this.peek() !== "\n") {
-						this.advance();
-					}
-					// Skip newline
-					if (!this.atEnd() && this.peek() === "\n") {
-						this.advance();
-					}
-					// Skip lines until we find the delimiter
-					while (!this.atEnd()) {
-						line_start = this.pos;
-						line_end = this.pos;
-						// Scan to end of line - heredoc content can contain )
-						while (line_end < this.length && this.source[line_end] !== "\n") {
-							line_end += 1;
-						}
-						line = this.source.slice(line_start, line_end);
-						// Move position to end of line
-						this.pos = line_end;
-						// Check if this line matches delimiter
-						check_line = line.replace(/^[\t]+/, "");
-						if (check_line === delimiter) {
-							// Skip newline after delimiter
-							if (!this.atEnd() && this.peek() === "\n") {
-								this.advance();
-							}
-							break;
-						}
-						// Also check for delimiter followed by other content
-						// (e.g., "Xb)" where X is delimiter and b) continues the cmdsub)
-						if (
-							check_line.startsWith(delimiter) &&
-							check_line.length > delimiter.length
-						) {
-							// Position parser right after the delimiter
-							tabs_stripped = line.length - check_line.length;
-							this.pos = line_start + tabs_stripped + delimiter.length;
-							break;
-						}
-						// Skip newline and continue
-						if (!this.atEnd() && this.peek() === "\n") {
-							this.advance();
-						}
-					}
-				}
+			if (arith_depth === 0 && c === "<" && this._skipHeredocInCmdsub()) {
 				continue;
 			}
 			// Track case/esac for pattern terminator handling
@@ -6817,6 +6665,153 @@ class Parser {
 
 	_lookaheadForEsacParser(case_depth) {
 		return _lookaheadForEsac(this.source, this.pos + 1, case_depth);
+	}
+
+	_skipHeredocInCmdsub() {
+		let ch,
+			check_line,
+			delimiter,
+			delimiter_chars,
+			line,
+			line_end,
+			line_start,
+			quote,
+			tabs_stripped;
+		if (
+			this.pos + 1 >= this.length ||
+			this.peek() !== "<" ||
+			this.source[this.pos + 1] !== "<"
+		) {
+			return false;
+		}
+		this.advance();
+		this.advance();
+		// Here-string (<<<)
+		if (!this.atEnd() && this.peek() === "<") {
+			this.advance();
+			while (!this.atEnd() && _isWhitespaceNoNewline(this.peek())) {
+				this.advance();
+			}
+			while (
+				!this.atEnd() &&
+				!_isWhitespace(this.peek()) &&
+				!"()".includes(this.peek())
+			) {
+				if (this.peek() === "\\" && this.pos + 1 < this.length) {
+					this.advance();
+					this.advance();
+				} else if ("\"'".includes(this.peek())) {
+					quote = this.peek();
+					this.advance();
+					while (!this.atEnd() && this.peek() !== quote) {
+						if (quote === '"' && this.peek() === "\\") {
+							this.advance();
+						}
+						this.advance();
+					}
+					if (!this.atEnd()) {
+						this.advance();
+					}
+				} else {
+					this.advance();
+				}
+			}
+			return true;
+		}
+		// Handle <<- (strip tabs)
+		if (!this.atEnd() && this.peek() === "-") {
+			this.advance();
+		}
+		// Skip whitespace before delimiter
+		while (!this.atEnd() && _isWhitespaceNoNewline(this.peek())) {
+			this.advance();
+		}
+		// Parse delimiter (handle quoting)
+		delimiter_chars = [];
+		if (!this.atEnd()) {
+			ch = this.peek();
+			if (_isQuote(ch)) {
+				quote = this.advance();
+				while (!this.atEnd() && this.peek() !== quote) {
+					delimiter_chars.push(this.advance());
+				}
+				if (!this.atEnd()) {
+					this.advance();
+				}
+			} else if (ch === "\\") {
+				this.advance();
+				if (!this.atEnd()) {
+					delimiter_chars.push(this.advance());
+				}
+				while (!this.atEnd() && !_isMetachar(this.peek())) {
+					delimiter_chars.push(this.advance());
+				}
+			} else {
+				// Unquoted delimiter with possible embedded quotes
+				while (!this.atEnd() && !_isMetachar(this.peek())) {
+					ch = this.peek();
+					if (_isQuote(ch)) {
+						quote = this.advance();
+						while (!this.atEnd() && this.peek() !== quote) {
+							delimiter_chars.push(this.advance());
+						}
+						if (!this.atEnd()) {
+							this.advance();
+						}
+					} else if (ch === "\\") {
+						this.advance();
+						if (!this.atEnd()) {
+							delimiter_chars.push(this.advance());
+						}
+					} else {
+						delimiter_chars.push(this.advance());
+					}
+				}
+			}
+		}
+		delimiter = delimiter_chars.join("");
+		if (delimiter) {
+			// Check if ) immediately follows (closes cmdsub with empty heredoc)
+			if (!this.atEnd() && this.peek() === ")") {
+				return true;
+			}
+			// Skip to end of current line
+			while (!this.atEnd() && this.peek() !== "\n") {
+				this.advance();
+			}
+			if (!this.atEnd() && this.peek() === "\n") {
+				this.advance();
+			}
+			// Skip lines until we find the delimiter
+			while (!this.atEnd()) {
+				line_start = this.pos;
+				line_end = this.pos;
+				while (line_end < this.length && this.source[line_end] !== "\n") {
+					line_end += 1;
+				}
+				line = this.source.slice(line_start, line_end);
+				this.pos = line_end;
+				check_line = line.replace(/^[\t]+/, "");
+				if (check_line === delimiter) {
+					if (!this.atEnd() && this.peek() === "\n") {
+						this.advance();
+					}
+					break;
+				}
+				if (
+					check_line.startsWith(delimiter) &&
+					check_line.length > delimiter.length
+				) {
+					tabs_stripped = line.length - check_line.length;
+					this.pos = line_start + tabs_stripped + delimiter.length;
+					break;
+				}
+				if (!this.atEnd() && this.peek() === "\n") {
+					this.advance();
+				}
+			}
+		}
+		return true;
 	}
 
 	_parseBacktickSubstitution() {

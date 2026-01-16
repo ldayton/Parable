@@ -1,0 +1,5 @@
+=== normalize whitespace in extglob-like regex patterns
+[[ x =~ >(a|  b) ]]
+---
+(cond (cond-binary "=~" (cond-term "x") (cond-term ">(a | b)")))
+---

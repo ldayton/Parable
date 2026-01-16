@@ -1408,6 +1408,58 @@ class Word(Node):
                 i += 1
         return "".join(result)
 
+    def _normalize_extglob_whitespace(self, value: str) -> str:
+        """Normalize whitespace around | in >() and <() patterns for regex contexts."""
+        result = []
+        i = 0
+        while i < len(value):
+            # Check for >( or <( pattern (process substitution-like in regex)
+            if i + 1 < len(value) and value[i + 1] == "(":
+                prefix_char = value[i]
+                if prefix_char in "><":
+                    # Found pattern start
+                    result.append(prefix_char)
+                    result.append("(")
+                    i += 2
+                    # Process content until matching )
+                    depth = 1
+                    pattern_parts = []
+                    current_part = []
+                    while i < len(value) and depth > 0:
+                        if value[i] == "\\" and i + 1 < len(value):
+                            # Escaped character, keep as-is
+                            current_part.append(value[i : i + 2])
+                            i += 2
+                            continue
+                        elif value[i] == "(":
+                            depth += 1
+                            current_part.append(value[i])
+                            i += 1
+                        elif value[i] == ")":
+                            depth -= 1
+                            if depth == 0:
+                                # End of pattern
+                                pattern_parts.append("".join(current_part).strip())
+                                break
+                            current_part.append(value[i])
+                            i += 1
+                        elif value[i] == "|" and depth == 1:
+                            # Top-level pipe separator
+                            pattern_parts.append("".join(current_part).strip())
+                            current_part = []
+                            i += 1
+                        else:
+                            current_part.append(value[i])
+                            i += 1
+                    # Join parts with " | "
+                    result.append(" | ".join(pattern_parts))
+                    result.append(")")
+                    i += 1
+                    continue
+            result.append(value[i])
+            i += 1
+        return "".join(result)
+
     def get_cond_formatted_value(self) -> str:
         """Return value with command substitutions formatted for cond-term output."""
         # Expand ANSI-C quotes
@@ -1416,6 +1468,8 @@ class Word(Node):
         value = self._strip_locale_string_dollars(value)
         # Format command substitutions
         value = self._format_command_substitutions(value)
+        # Normalize whitespace in extglob-like patterns
+        value = self._normalize_extglob_whitespace(value)
         # Bash doubles CTLESC (\x01) characters in output
         value = value.replace("\x01", "\x01\x01")
         return value.rstrip("\n")

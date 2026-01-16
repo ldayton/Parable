@@ -1765,6 +1765,65 @@ class Word extends Node {
 		return result.join("");
 	}
 
+	_normalizeExtglobWhitespace(value) {
+		let current_part, depth, i, pattern_parts, prefix_char, result;
+		result = [];
+		i = 0;
+		while (i < value.length) {
+			// Check for >( or <( pattern (process substitution-like in regex)
+			if (i + 1 < value.length && value[i + 1] === "(") {
+				prefix_char = value[i];
+				if ("><".includes(prefix_char)) {
+					// Found pattern start
+					result.push(prefix_char);
+					result.push("(");
+					i += 2;
+					// Process content until matching )
+					depth = 1;
+					pattern_parts = [];
+					current_part = [];
+					while (i < value.length && depth > 0) {
+						if (value[i] === "\\" && i + 1 < value.length) {
+							// Escaped character, keep as-is
+							current_part.push(value.slice(i, i + 2));
+							i += 2;
+							continue;
+						} else if (value[i] === "(") {
+							depth += 1;
+							current_part.push(value[i]);
+							i += 1;
+						} else if (value[i] === ")") {
+							depth -= 1;
+							if (depth === 0) {
+								// End of pattern
+								pattern_parts.push(current_part.join("").trim());
+								break;
+							}
+							current_part.push(value[i]);
+							i += 1;
+						} else if (value[i] === "|" && depth === 1) {
+							// Top-level pipe separator
+							pattern_parts.push(current_part.join("").trim());
+							current_part = [];
+							i += 1;
+						} else {
+							current_part.push(value[i]);
+							i += 1;
+						}
+					}
+					// Join parts with " | "
+					result.push(pattern_parts.join(" | "));
+					result.push(")");
+					i += 1;
+					continue;
+				}
+			}
+			result.push(value[i]);
+			i += 1;
+		}
+		return result.join("");
+	}
+
 	getCondFormattedValue() {
 		let value;
 		// Expand ANSI-C quotes
@@ -1773,6 +1832,8 @@ class Word extends Node {
 		value = this._stripLocaleStringDollars(value);
 		// Format command substitutions
 		value = this._formatCommandSubstitutions(value);
+		// Normalize whitespace in extglob-like patterns
+		value = this._normalizeExtglobWhitespace(value);
 		// Bash doubles CTLESC (\x01) characters in output
 		value = value.replaceAll("", "");
 		return value.replace(/[\n]+$/, "");

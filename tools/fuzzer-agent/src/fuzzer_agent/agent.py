@@ -188,7 +188,7 @@ class FuzzerFixer:
             # Write final summary
             summary = f"| **Final SHA** | `{final_sha}` |\n"
             summary += f"| **Tokens** | {input_tokens:,} in / {output_tokens:,} out |\n"
-            summary += f"| **Cost** | ${cost:.4f} |\n"
+            summary += f"| **Cost** | ${cost:.2f} |\n"
             summary += f"| **Duration** | {duration:.1f}s |\n"
             if mre:
                 summary += f"\n### MRE\n```bash\n{mre}\n```\n"
@@ -203,7 +203,7 @@ class FuzzerFixer:
             # Determine exit code based on agent output
             if "no discrepancies" in output or "no bugs found" in output:
                 return 1
-            if "gh pr create" in str(response) or "created" in output:
+            if "merge successful" in output or "gh pr create" in str(response):
                 return 0
             return 2
         except Exception as e:

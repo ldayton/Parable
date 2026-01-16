@@ -869,33 +869,28 @@ class Word extends Node {
 
 	_stripLocaleStringDollars(value) {
 		let brace_depth,
-			brace_in_double_quote,
-			brace_in_single_quote,
+			brace_quote,
 			bracket_depth,
 			bracket_in_double_quote,
 			ch,
 			dollar_count,
 			i,
-			in_double_quote,
-			in_single_quote,
+			quote,
 			result;
 		result = [];
 		i = 0;
-		in_single_quote = false;
-		in_double_quote = false;
 		brace_depth = 0;
 		bracket_depth = 0;
-		// Track quote state inside brace expansions separately
-		brace_in_double_quote = false;
-		brace_in_single_quote = false;
+		quote = new QuoteState();
+		brace_quote = new QuoteState();
 		bracket_in_double_quote = false;
 		while (i < value.length) {
 			ch = value[i];
 			if (
 				ch === "\\" &&
 				i + 1 < value.length &&
-				!in_single_quote &&
-				!brace_in_single_quote
+				!quote.single &&
+				!brace_quote.single
 			) {
 				// Escape - copy both chars (but NOT inside single quotes where \ is literal)
 				result.push(ch);
@@ -903,23 +898,23 @@ class Word extends Node {
 				i += 2;
 			} else if (
 				_startsWithAt(value, i, "${") &&
-				!in_single_quote &&
-				!brace_in_single_quote &&
+				!quote.single &&
+				!brace_quote.single &&
 				(i === 0 || value[i - 1] !== "$")
 			) {
 				// Don't treat ${ as brace expansion if preceded by $ (it's $$ + literal {)
 				brace_depth += 1;
-				brace_in_double_quote = false;
-				brace_in_single_quote = false;
+				brace_quote.double = false;
+				brace_quote.single = false;
 				result.push("$");
 				result.push("{");
 				i += 2;
 			} else if (
 				ch === "}" &&
 				brace_depth > 0 &&
-				!in_single_quote &&
-				!brace_in_double_quote &&
-				!brace_in_single_quote
+				!quote.single &&
+				!brace_quote.double &&
+				!brace_quote.single
 			) {
 				brace_depth -= 1;
 				result.push(ch);
@@ -927,8 +922,8 @@ class Word extends Node {
 			} else if (
 				ch === "[" &&
 				brace_depth > 0 &&
-				!in_single_quote &&
-				!brace_in_double_quote
+				!quote.single &&
+				!brace_quote.double
 			) {
 				// Start of subscript inside brace expansion
 				bracket_depth += 1;
@@ -938,52 +933,52 @@ class Word extends Node {
 			} else if (
 				ch === "]" &&
 				bracket_depth > 0 &&
-				!in_single_quote &&
+				!quote.single &&
 				!bracket_in_double_quote
 			) {
 				// End of subscript
 				bracket_depth -= 1;
 				result.push(ch);
 				i += 1;
-			} else if (ch === "'" && !in_double_quote && brace_depth === 0) {
-				in_single_quote = !in_single_quote;
+			} else if (ch === "'" && !quote.double && brace_depth === 0) {
+				quote.single = !quote.single;
 				result.push(ch);
 				i += 1;
-			} else if (ch === '"' && !in_single_quote && brace_depth === 0) {
-				in_double_quote = !in_double_quote;
+			} else if (ch === '"' && !quote.single && brace_depth === 0) {
+				quote.double = !quote.double;
 				result.push(ch);
 				i += 1;
-			} else if (ch === '"' && !in_single_quote && bracket_depth > 0) {
+			} else if (ch === '"' && !quote.single && bracket_depth > 0) {
 				// Toggle quote state inside bracket (subscript)
 				bracket_in_double_quote = !bracket_in_double_quote;
 				result.push(ch);
 				i += 1;
 			} else if (
 				ch === '"' &&
-				!in_single_quote &&
-				!brace_in_single_quote &&
+				!quote.single &&
+				!brace_quote.single &&
 				brace_depth > 0
 			) {
 				// Toggle quote state inside brace expansion
-				brace_in_double_quote = !brace_in_double_quote;
+				brace_quote.double = !brace_quote.double;
 				result.push(ch);
 				i += 1;
 			} else if (
 				ch === "'" &&
-				!in_double_quote &&
-				!brace_in_double_quote &&
+				!quote.double &&
+				!brace_quote.double &&
 				brace_depth > 0
 			) {
 				// Toggle single quote state inside brace expansion
-				brace_in_single_quote = !brace_in_single_quote;
+				brace_quote.single = !brace_quote.single;
 				result.push(ch);
 				i += 1;
 			} else if (
 				_startsWithAt(value, i, '$"') &&
-				!in_single_quote &&
-				!brace_in_single_quote &&
-				(brace_depth > 0 || bracket_depth > 0 || !in_double_quote) &&
-				!brace_in_double_quote &&
+				!quote.single &&
+				!brace_quote.single &&
+				(brace_depth > 0 || bracket_depth > 0 || !quote.double) &&
+				!brace_quote.double &&
 				!bracket_in_double_quote
 			) {
 				// Count consecutive $ chars ending at i to check for $$ (PID param)
@@ -994,9 +989,9 @@ class Word extends Node {
 					if (bracket_depth > 0) {
 						bracket_in_double_quote = true;
 					} else if (brace_depth > 0) {
-						brace_in_double_quote = true;
+						brace_quote.double = true;
 					} else {
-						in_double_quote = true;
+						quote.double = true;
 					}
 					i += 2;
 				} else {

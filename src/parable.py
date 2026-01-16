@@ -769,21 +769,18 @@ class Word(Node):
         """Strip $ from locale strings $"..." while tracking quote context."""
         result = []
         i = 0
-        in_single_quote = False
-        in_double_quote = False
         brace_depth = 0
-        bracket_depth = 0  # Track [...] subscripts inside braces
-        # Track quote state inside brace expansions separately
-        brace_in_double_quote = False
-        brace_in_single_quote = False
-        bracket_in_double_quote = False  # Track quotes inside brackets
+        bracket_depth = 0
+        quote = QuoteState()  # Top-level quote state
+        brace_quote = QuoteState()  # Quote state inside ${...}
+        bracket_in_double_quote = False  # Quote state inside [...] (only double tracked)
         while i < len(value):
             ch = value[i]
             if (
                 ch == "\\"
                 and i + 1 < len(value)
-                and not in_single_quote
-                and not brace_in_single_quote
+                and not quote.single
+                and not brace_quote.single
             ):
                 # Escape - copy both chars (but NOT inside single quotes where \ is literal)
                 result.append(ch)
@@ -791,29 +788,29 @@ class Word(Node):
                 i += 2
             elif (
                 _starts_with_at(value, i, "${")
-                and not in_single_quote
-                and not brace_in_single_quote
+                and not quote.single
+                and not brace_quote.single
                 # Don't treat ${ as brace expansion if preceded by $ (it's $$ + literal {)
                 and (i == 0 or value[i - 1] != "$")
             ):
                 brace_depth += 1
-                brace_in_double_quote = False
-                brace_in_single_quote = False
+                brace_quote.double = False
+                brace_quote.single = False
                 result.append("$")
                 result.append("{")
                 i += 2
             elif (
                 ch == "}"
                 and brace_depth > 0
-                and not in_single_quote
-                and not brace_in_double_quote
-                and not brace_in_single_quote
+                and not quote.single
+                and not brace_quote.double
+                and not brace_quote.single
             ):
                 brace_depth -= 1
                 result.append(ch)
                 i += 1
             elif (
-                ch == "[" and brace_depth > 0 and not in_single_quote and not brace_in_double_quote
+                ch == "[" and brace_depth > 0 and not quote.single and not brace_quote.double
             ):
                 # Start of subscript inside brace expansion
                 bracket_depth += 1
@@ -823,46 +820,46 @@ class Word(Node):
             elif (
                 ch == "]"
                 and bracket_depth > 0
-                and not in_single_quote
+                and not quote.single
                 and not bracket_in_double_quote
             ):
                 # End of subscript
                 bracket_depth -= 1
                 result.append(ch)
                 i += 1
-            elif ch == "'" and not in_double_quote and brace_depth == 0:
-                in_single_quote = not in_single_quote
+            elif ch == "'" and not quote.double and brace_depth == 0:
+                quote.single = not quote.single
                 result.append(ch)
                 i += 1
-            elif ch == '"' and not in_single_quote and brace_depth == 0:
-                in_double_quote = not in_double_quote
+            elif ch == '"' and not quote.single and brace_depth == 0:
+                quote.double = not quote.double
                 result.append(ch)
                 i += 1
-            elif ch == '"' and not in_single_quote and bracket_depth > 0:
+            elif ch == '"' and not quote.single and bracket_depth > 0:
                 # Toggle quote state inside bracket (subscript)
                 bracket_in_double_quote = not bracket_in_double_quote
                 result.append(ch)
                 i += 1
             elif (
-                ch == '"' and not in_single_quote and not brace_in_single_quote and brace_depth > 0
+                ch == '"' and not quote.single and not brace_quote.single and brace_depth > 0
             ):
                 # Toggle quote state inside brace expansion
-                brace_in_double_quote = not brace_in_double_quote
+                brace_quote.double = not brace_quote.double
                 result.append(ch)
                 i += 1
             elif (
-                ch == "'" and not in_double_quote and not brace_in_double_quote and brace_depth > 0
+                ch == "'" and not quote.double and not brace_quote.double and brace_depth > 0
             ):
                 # Toggle single quote state inside brace expansion
-                brace_in_single_quote = not brace_in_single_quote
+                brace_quote.single = not brace_quote.single
                 result.append(ch)
                 i += 1
             elif (
                 _starts_with_at(value, i, '$"')
-                and not in_single_quote
-                and not brace_in_single_quote
-                and (brace_depth > 0 or bracket_depth > 0 or not in_double_quote)
-                and not brace_in_double_quote
+                and not quote.single
+                and not brace_quote.single
+                and (brace_depth > 0 or bracket_depth > 0 or not quote.double)
+                and not brace_quote.double
                 and not bracket_in_double_quote
             ):
                 # Count consecutive $ chars ending at i to check for $$ (PID param)
@@ -873,9 +870,9 @@ class Word(Node):
                     if bracket_depth > 0:
                         bracket_in_double_quote = True
                     elif brace_depth > 0:
-                        brace_in_double_quote = True
+                        brace_quote.double = True
                     else:
-                        in_double_quote = True
+                        quote.double = True
                     i += 2
                 else:
                     # Even count: this $ is part of $$ (PID), just append it

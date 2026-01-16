@@ -2,19 +2,24 @@ Find and fix one parser bug using the fuzzer.
 
 ## Steps
 
-1. **Run the fuzzer** to find a discrepancy where both parsers succeed but differ:
+1. **Pick a unique ID for this run:**
    ```bash
-   cd tools/fuzzer && uv run fuzzer --character --both-succeed --stop-after 1 -v
+   FUZZ_ID=$(openssl rand -hex 16)
    ```
 
-2. **Create an MRE.** Shrink the input to the smallest string that still shows the discrepancy:
+2. **Run the fuzzer** to find a discrepancy where both parsers succeed but differ:
+   ```bash
+   cd tools/fuzzer && uv run fuzzer --character --both-succeed --stop-after 1 -n 100000 -v
+   ```
+
+3. **Create an MRE.** Shrink the input to the smallest string that still shows the discrepancy:
    ```bash
    ~/source/bash-oracle/bash-oracle -e 'INPUT'   # oracle
    uv run bin/parable-dump.py 'INPUT'            # parable
    ```
    Keep removing characters until you can't anymore.
 
-3. **Add a failing test** to `tests/parable/36_fuzzer.tests`:
+4. **Add a failing test** to `tests/parable/character-fuzzer/fuzz-$FUZZ_ID.tests`:
    ```
    === descriptive name
    INPUT
@@ -23,16 +28,16 @@ Find and fix one parser bug using the fuzzer.
    ---
    ```
 
-4. **Verify the test fails:**
+5. **Verify the test fails:**
    ```bash
    just fmt --fix
    just lint --fix
    just test
    ```
 
-5. **Fix the bug** in `src/parable.py`. The fix should make Parable match bash-oracle.
+6. **Fix the bug** in `src/parable.py`. The fix should make Parable match bash-oracle.
 
-6. **Run the full check:**
+7. **Run the full check:**
    ```bash
    just fmt --fix
    just lint --fix
@@ -40,19 +45,8 @@ Find and fix one parser bug using the fuzzer.
    ```
    This MUST pass before you are done.
 
-7. **Write PR description** to `pr-body.md`:
-   ```markdown
-   ## Summary
-   - Brief description of the bug and fix
-
-   ## Test plan
-   - [ ] New test added to `tests/parable/36_fuzzer.tests`
-   - [ ] `just check` passes
-   ```
-
 ## Notes
 
 - If the fuzzer finds no discrepancies, exit successfully with no changes
 - If the MRE turns out to be a bash-oracle bug (not Parable), try again with the fuzzer
 - ONLY modify files directly related to the fix
-- Do NOT create a git commit or PR (the workflow handles this)

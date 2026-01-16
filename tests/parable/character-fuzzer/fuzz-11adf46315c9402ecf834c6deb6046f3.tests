@@ -1,0 +1,5 @@
+=== process substitution with && operator
+<(a&&b)
+---
+(command (word "<(a && b)"))
+---

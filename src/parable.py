@@ -3150,6 +3150,8 @@ def _format_redirect(
     target = r.target._expand_all_ansi_c_quotes(target)
     # Strip $ from locale strings $"..."
     target = r.target._strip_locale_string_dollars(target)
+    # Format command/process substitutions
+    target = r.target._format_command_substitutions(target)
     # For fd duplication (target starts with &), handle normalization
     if target.startswith("&"):
         # Normalize N<&- to N>&- (close always uses >)

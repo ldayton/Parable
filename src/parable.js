@@ -3671,6 +3671,8 @@ function _formatRedirect(r, compact, heredoc_op_only) {
 	target = r.target._expandAllAnsiCQuotes(target);
 	// Strip $ from locale strings $"..."
 	target = r.target._stripLocaleStringDollars(target);
+	// Format command/process substitutions
+	target = r.target._formatCommandSubstitutions(target);
 	// For fd duplication (target starts with &), handle normalization
 	if (target.startsWith("&")) {
 		// Normalize N<&- to N>&- (close always uses >)

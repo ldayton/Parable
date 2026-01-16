@@ -35,7 +35,7 @@ BEDROCK_MODELS = {
     "nova-pro": "amazon.nova-pro-v1:0",
 }
 
-# Azure OpenAI model IDs (deployment names, configure via AZURE_API_KEY/BASE/VERSION)
+# Azure OpenAI model IDs (deployment names, configure via AZURE_API_BASE)
 AZURE_MODELS = {
     "gpt-4.5": "azure/gpt-4.5",
     "gpt-4.1": "azure/gpt-4.1",
@@ -113,9 +113,12 @@ class FuzzerFixer:
         )
         self.log.info("agent_start", model=self.model_name, base_sha=base_sha)
         if self.model_name in AZURE_MODELS:
+            from azure.identity import DefaultAzureCredential
+            credential = DefaultAzureCredential()
+            token = credential.get_token("https://cognitiveservices.azure.com/.default")
             model = LiteLLMModel(
                 model_id=self.model_id,
-                params={"temperature": 0.2, "max_tokens": 4096},
+                params={"temperature": 0.2, "max_tokens": 4096, "azure_ad_token": token.token},
             )
         else:
             model = BedrockModel(

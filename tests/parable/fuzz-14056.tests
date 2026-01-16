@@ -1,0 +1,7 @@
+=== bracket after space following equals-prefixed word should not preserve newlines
+= b[
+c
+---
+(command (word "=") (word "b["))
+(command (word "c"))
+---

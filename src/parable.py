@@ -4623,7 +4623,10 @@ class Parser:
         return _is_word_start_context(prev)
 
     def _is_assignment_word(self, word: "Word") -> bool:
-        """Check if a word is an assignment (contains = outside of quotes and brackets)."""
+        """Check if a word is an assignment (name=value) where name is a valid identifier."""
+        # Assignment must start with identifier (letter or underscore), not quoted
+        if not word.value or not (word.value[0].isalpha() or word.value[0] == "_"):
+            return False
         in_single = False
         in_double = False
         bracket_depth = 0

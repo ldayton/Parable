@@ -3712,16 +3712,21 @@ def _find_cmdsub_end(value: str, start: int) -> int:
             continue
         # Handle comments - skip from # to end of line
         # Only treat # as comment if preceded by whitespace or at start
-        if c == "#" and (
-            i == start
-            or value[i - 1] == " "
-            or value[i - 1] == "\t"
-            or value[i - 1] == "\n"
-            or value[i - 1] == ";"
-            or value[i - 1] == "|"
-            or value[i - 1] == "&"
-            or value[i - 1] == "("
-            or value[i - 1] == ")"
+        # Don't treat # as comment inside arithmetic expressions (arith_depth > 0)
+        if (
+            c == "#"
+            and arith_depth == 0
+            and (
+                i == start
+                or value[i - 1] == " "
+                or value[i - 1] == "\t"
+                or value[i - 1] == "\n"
+                or value[i - 1] == ";"
+                or value[i - 1] == "|"
+                or value[i - 1] == "&"
+                or value[i - 1] == "("
+                or value[i - 1] == ")"
+            )
         ):
             while i < len(value) and value[i] != "\n":
                 i += 1

@@ -4346,9 +4346,14 @@ class Parser:
                         chars.append(self.advance())
                         extglob_depth += 1
                     elif c == "\\":
-                        chars.append(self.advance())
-                        if not self.at_end():
+                        # Skip line continuation (backslash-newline)
+                        if self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
+                            self.advance()  # skip backslash
+                            self.advance()  # skip newline
+                        else:
                             chars.append(self.advance())
+                            if not self.at_end():
+                                chars.append(self.advance())
                     elif c == "'":
                         chars.append(self.advance())
                         while not self.at_end() and self.peek() != "'":

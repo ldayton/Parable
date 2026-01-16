@@ -5131,9 +5131,18 @@ class Parser {
 						chars.push(this.advance());
 						extglob_depth += 1;
 					} else if (c === "\\") {
-						chars.push(this.advance());
-						if (!this.atEnd()) {
+						// Skip line continuation (backslash-newline)
+						if (
+							this.pos + 1 < this.length &&
+							this.source[this.pos + 1] === "\n"
+						) {
+							this.advance();
+							this.advance();
+						} else {
 							chars.push(this.advance());
+							if (!this.atEnd()) {
+								chars.push(this.advance());
+							}
 						}
 					} else if (c === "'") {
 						chars.push(this.advance());

@@ -1,0 +1,6 @@
+=== line continuation in double-paren glob pattern
+*((\
+))
+---
+(command (word "*(())"))
+---

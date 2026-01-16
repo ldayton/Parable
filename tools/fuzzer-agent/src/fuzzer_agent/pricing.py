@@ -1,12 +1,13 @@
-"""Fetch model pricing from AWS and Azure APIs.
+"""Fetch model pricing from AWS, Azure, and GCP APIs.
 
 Claude models use hardcoded values because AWS Pricing API is incomplete
 (missing output token prices and newer models).
 
 Sources:
-- AWS Pricing API: Nova, Llama models
+- AWS Pricing API: Nova, Llama, DeepSeek models
 - AWS Bedrock pricing page: Claude models (manually verified)
 - Azure Retail Prices API: Azure OpenAI models
+- GCP Cloud Billing API: Vertex AI Gemini models
 """
 
 import json
@@ -15,6 +16,7 @@ from collections import defaultdict
 
 import boto3
 import requests
+from tabulate import tabulate
 
 REGION = "US East (Ohio)"
 
@@ -33,8 +35,9 @@ CLAUDE_PRICING: dict[str, tuple[float, float]] = {
     "opus-4.5": (5.00, 25.00),
 }
 
-# Non-Claude pricing (fetched 2026-01-16, can be refreshed with --prices)
+# Non-Claude Bedrock pricing (fetched 2026-01-16, can be refreshed with --prices)
 OTHER_PRICING: dict[str, tuple[float, float]] = {
+    "deepseek-r1": (1.35, 5.40),
     "llama-3.1-70b": (0.72, 0.72),
     "llama-3.2-90b": (0.72, 0.72),
     "llama-3.3-70b": (0.72, 0.72),
@@ -51,14 +54,19 @@ AZURE_PRICING: dict[str, tuple[float, float]] = {
     "gpt-4.1-nano": (0.10, 0.40),
     "gpt-4o": (2.50, 10.00),
     "gpt-4o-mini": (0.15, 0.60),
+    "gpt-5": (1.25, 10.00),
+    "gpt-5.1": (1.25, 10.00),
+    "gpt-5.2": (1.75, 14.00),
 }
 
-# GCP Vertex AI pricing (hardcoded, no public API)
+# GCP Vertex AI fallback pricing (used if API fetch fails)
 # Source: https://cloud.google.com/vertex-ai/generative-ai/pricing
 GCP_PRICING: dict[str, tuple[float, float]] = {
     "gemini-2.0-flash": (0.10, 0.40),
     "gemini-2.5-flash": (0.15, 0.60),
     "gemini-2.5-pro": (1.25, 10.00),
+    "gemini-3-flash": (0.50, 3.00),
+    "gemini-3-pro": (2.00, 12.00),
 }
 
 # Azure OpenAI models to fetch (skuName pattern -> our name)
@@ -69,16 +77,29 @@ AZURE_MODELS = {
     "gpt 4.1": "gpt-4.1",
     "gpt-4o-mini-0718": "gpt-4o-mini",
     "gpt-4o-0806": "gpt-4o",
+    "gpt 5.2": "gpt-5.2",
+    "gpt 5.1": "gpt-5.1",
+    "gpt 5": "gpt-5",
 }
 
 # Models to fetch from AWS Pricing API (API name -> our name)
 API_MODELS = {
+    "DeepSeek V3.1": "deepseek-v3.1",
     "Nova Micro": "nova-micro",
     "Nova Lite": "nova-lite",
     "Nova Pro": "nova-pro",
     "Llama 3.3 70B": "llama-3.3-70b",
     "Llama 3.2 90B": "llama-3.2-90b",
     "Llama 3.1 70B": "llama-3.1-70b",
+}
+
+# GCP Vertex AI models to fetch (SKU description pattern -> our name)
+GCP_MODELS = {
+    "Gemini 2.0 Flash": "gemini-2.0-flash",
+    "Gemini 2.5 Flash": "gemini-2.5-flash",
+    "Gemini 2.5 Pro": "gemini-2.5-pro",
+    "Gemini 3 Flash": "gemini-3-flash",
+    "Gemini 3 Pro": "gemini-3-pro",
 }
 
 
@@ -177,14 +198,60 @@ def fetch_azure_pricing() -> dict[str, tuple[float, float]]:
     return result
 
 
+def fetch_gcp_pricing() -> dict[str, tuple[float, float]]:
+    """Fetch GCP Vertex AI pricing from Cloud Billing API. Returns {model: (input, output)} per 1M tokens."""
+    from google.cloud import billing_v1
+
+    client = billing_v1.CloudCatalogClient()
+    # Find Vertex AI service
+    vertex_service = None
+    for service in client.list_services():
+        if "Vertex AI" in service.display_name:
+            vertex_service = service.name
+            break
+    if not vertex_service:
+        return {}
+    # Fetch SKUs for Vertex AI
+    prices: dict[str, dict[str, float]] = defaultdict(dict)
+    for sku in client.list_skus(parent=vertex_service):
+        desc = sku.description
+        # Match Gemini models
+        model_name = None
+        for pattern, our_name in GCP_MODELS.items():
+            if pattern in desc:
+                model_name = our_name
+                break
+        if not model_name:
+            continue
+        # Get pricing (first tier, USD)
+        for tier in sku.pricing_info:
+            for rate in tier.pricing_expression.tiered_rates:
+                price_per_unit = rate.unit_price.units + rate.unit_price.nanos / 1e9
+                # Pricing is per 1K characters, convert to per 1M tokens (approx 4 chars/token)
+                # Actually GCP uses per 1K tokens for Gemini
+                price_per_1m = price_per_unit * 1000
+                if "Input" in desc or "input" in desc:
+                    prices[model_name]["input"] = price_per_1m
+                elif "Output" in desc or "output" in desc:
+                    prices[model_name]["output"] = price_per_1m
+                break
+    # Convert to our format
+    result: dict[str, tuple[float, float]] = {}
+    for model, p in prices.items():
+        if "input" in p and "output" in p:
+            result[model] = (p["input"], p["output"])
+    return result
+
+
 def get_all_pricing() -> dict[str, tuple[float, float]]:
     """Get pricing for all models, combining API and hardcoded values."""
     import concurrent.futures
 
-    prices = {**CLAUDE_PRICING, **AZURE_PRICING, **GCP_PRICING}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+    prices = {**CLAUDE_PRICING, **OTHER_PRICING, **AZURE_PRICING, **GCP_PRICING}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
         aws_future = executor.submit(fetch_bedrock_pricing)
         azure_future = executor.submit(fetch_azure_pricing)
+        gcp_future = executor.submit(fetch_gcp_pricing)
         try:
             prices.update(aws_future.result(timeout=30))
         except Exception as e:
@@ -193,6 +260,10 @@ def get_all_pricing() -> dict[str, tuple[float, float]]:
             prices.update(azure_future.result(timeout=30))
         except Exception as e:
             print(f"Warning: Could not fetch Azure pricing: {e}", file=sys.stderr)
+        try:
+            prices.update(gcp_future.result(timeout=30))
+        except Exception as e:
+            print(f"Warning: Could not fetch GCP pricing: {e}", file=sys.stderr)
     return prices
 
 
@@ -200,6 +271,8 @@ def _get_provider(model: str) -> str:
     """Get provider name for a model."""
     if model.startswith(("haiku", "sonnet", "opus")):
         return "Anthropic"
+    if model.startswith("deepseek"):
+        return "DeepSeek"
     if model.startswith("llama"):
         return "Meta"
     if model.startswith("nova"):
@@ -211,29 +284,55 @@ def _get_provider(model: str) -> str:
     return "Unknown"
 
 
+def _get_host(model: str) -> str:
+    """Get cloud host for a model."""
+    if model in AZURE_PRICING:
+        return "Azure"
+    if model in GCP_PRICING:
+        return "GCP"
+    return "AWS"
+
+
 def main() -> None:
     """Fetch and print pricing for all models."""
-    print("Fetching pricing from AWS and Azure...", file=sys.stderr)
+    print("Fetching pricing from AWS, Azure, and GCP...", file=sys.stderr)
     prices = get_all_pricing()
-    live_models = set(API_MODELS.values()) | set(AZURE_MODELS.values())
-    print(f"\n{'Provider':<10} {'Model':<15} {'Input/1M':<10} {'Output/1M':<10} {'Live':<4}")
-    print("-" * 54)
+    live_models = set(API_MODELS.values()) | set(AZURE_MODELS.values()) | set(GCP_MODELS.values())
     all_models = sorted(
         set(CLAUDE_PRICING.keys())
+        | set(OTHER_PRICING.keys())
         | set(API_MODELS.values())
         | set(AZURE_PRICING.keys())
         | set(GCP_PRICING.keys()),
         key=lambda m: (_get_provider(m), m),
     )
+    rows = []
     for model in all_models:
         if model in prices:
             input_price, output_price = prices[model]
             live = "✓" if model in live_models else ""
-            print(
-                f"{_get_provider(model):<10} {model:<15} ${input_price:<9.2f} ${output_price:<9.2f} {live}"
+            rows.append(
+                [
+                    _get_provider(model),
+                    _get_host(model),
+                    model,
+                    f"${input_price:.2f}",
+                    f"${output_price:.2f}",
+                    live,
+                ]
             )
         else:
-            print(f"{_get_provider(model):<10} {model:<15} {'(not found)':<10} {'(not found)':<10}")
+            rows.append(
+                [_get_provider(model), _get_host(model), model, "(not found)", "(not found)", ""]
+            )
+    print()
+    print(
+        tabulate(
+            rows,
+            headers=["Provider", "Host", "Model", "Input/1M", "Output/1M", "Live"],
+            tablefmt="fancy_grid",
+        )
+    )
 
 
 if __name__ == "__main__":

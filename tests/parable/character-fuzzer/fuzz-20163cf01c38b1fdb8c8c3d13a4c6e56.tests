@@ -1,0 +1,8 @@
+=== case pattern with command starting with }
+case x in a)
+echo C
+}continue
+;;esac
+---
+(case (word "x") (pattern ((word "a")) (semi (command (word "echo") (word "C")) (command (word "}continue")))))
+---

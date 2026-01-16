@@ -1,0 +1,6 @@
+=== heredoc with newline delimiter and trailing backslash
+<<'
+' y\
+---
+(command (word "y") (redirect "<<" ""))
+---

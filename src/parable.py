@@ -7259,7 +7259,10 @@ class Parser:
                     quoted = True
                     self.advance()
                     while not self.at_end() and self.peek() != "'":
-                        delimiter_chars.append(self.advance())
+                        c = self.advance()
+                        if c == "\n":
+                            self._saw_newline_in_single_quote = True
+                        delimiter_chars.append(c)
                     if not self.at_end():
                         self.advance()
                 elif ch == "\\":
@@ -7431,10 +7434,16 @@ class Parser:
                         line_end += 2
                     else:
                         line_end += 1
-            elif ch == "\\" and line_end + 1 < self.length:
-                # Backslash escape - skip both chars
-                line_end += 2
-                continue
+            elif ch == "\\":
+                if line_end + 1 < self.length:
+                    # Backslash escape - skip both chars
+                    line_end += 2
+                    continue
+                else:
+                    # Backslash at EOF - treat as attempted line continuation
+                    # Bash consumes this without an error
+                    line_end += 1
+                    break
             line_end += 1
 
         # Find heredoc content starting position

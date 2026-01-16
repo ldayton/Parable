@@ -8731,7 +8731,11 @@ class Parser {
 					quoted = true;
 					this.advance();
 					while (!this.atEnd() && this.peek() !== "'") {
-						delimiter_chars.push(this.advance());
+						c = this.advance();
+						if (c === "\n") {
+							this._saw_newline_in_single_quote = true;
+						}
+						delimiter_chars.push(c);
 					}
 					if (!this.atEnd()) {
 						this.advance();
@@ -8960,10 +8964,17 @@ class Parser {
 						line_end += 1;
 					}
 				}
-			} else if (ch === "\\" && line_end + 1 < this.length) {
-				// Backslash escape - skip both chars
-				line_end += 2;
-				continue;
+			} else if (ch === "\\") {
+				if (line_end + 1 < this.length) {
+					// Backslash escape - skip both chars
+					line_end += 2;
+					continue;
+				} else {
+					// Backslash at EOF - treat as attempted line continuation
+					// Bash consumes this without an error
+					line_end += 1;
+					break;
+				}
 			}
 			line_end += 1;
 		}

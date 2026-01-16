@@ -1,0 +1,5 @@
+=== for loop without in clause inside command substitution
+$(for n do for c do e;done done)
+---
+(command (word "$(for n in \"$@\";\ndo\n    for c in \"$@\";\n    do\n        e;\n    done;\ndone)"))
+---

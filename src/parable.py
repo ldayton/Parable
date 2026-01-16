@@ -3463,7 +3463,10 @@ def _format_cmdsub_node(
                     "for " + var + " in ;\n" + sp + "do\n" + inner_sp + body + ";\n" + sp + "done"
                 )
         else:
-            result = "for " + var + ";\n" + sp + "do\n" + inner_sp + body + ";\n" + sp + "done"
+            # No 'in' clause - bash implies 'in "$@"'
+            result = (
+                "for " + var + ' in "$@";\n' + sp + "do\n" + inner_sp + body + ";\n" + sp + "done"
+            )
         if node.redirects:
             for r in node.redirects:
                 result = result + " " + _format_redirect(r)

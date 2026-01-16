@@ -1,0 +1,5 @@
+=== process substitution after escaped quote in dollar-quoted string
+$'\'>('
+---
+(command (word "''\\''>('"))
+---

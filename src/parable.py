@@ -1079,10 +1079,10 @@ class Word(Node):
             elif (
                 _starts_with_at(value, idx, "<(") or _starts_with_at(value, idx, ">(")
             ) and not in_double:
-                # Only treat as process substitution if not preceded by alphanumeric
+                # Only treat as process substitution if not preceded by alphanumeric or quote
                 # (e.g., "i<(3)" is arithmetic comparison, not process substitution)
-                # Also don't treat as process substitution inside double quotes
-                if idx == 0 or not value[idx - 1].isalnum():
+                # Also don't treat as process substitution inside double quotes or after quotes
+                if idx == 0 or (not value[idx - 1].isalnum() and value[idx - 1] not in "\"'"):
                     has_untracked_procsub = True
                     break
                 idx += 1
@@ -1220,8 +1220,8 @@ class Word(Node):
                 and arith_depth == 0
             ):
                 # Check if this is actually a process substitution or just comparison + parens
-                # Process substitution: not preceded by alphanumeric
-                is_procsub = i == 0 or not value[i - 1].isalnum()
+                # Process substitution: not preceded by alphanumeric or quote
+                is_procsub = i == 0 or (not value[i - 1].isalnum() and value[i - 1] not in "\"'")
                 # Inside extglob: don't format, just copy raw content
                 if extglob_depth > 0:
                     j = _find_cmdsub_end(value, i + 2)

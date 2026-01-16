@@ -659,11 +659,7 @@ class Word(Node):
                 and not bracket_in_double_quote
             ):
                 # Count consecutive $ chars ending at i to check for $$ (PID param)
-                dollar_count = 1
-                j = i - 1
-                while j >= 0 and value[j] == "$":
-                    dollar_count += 1
-                    j -= 1
+                dollar_count = 1 + _count_consecutive_dollars_before(value, i)
                 if dollar_count % 2 == 1:
                     # Odd count: locale string $"..." - strip the $ and enter double quote
                     result.append('"')

@@ -7256,13 +7256,33 @@ class Parser {
 	_parseBacktickSubstitution() {
 		let c,
 			ch,
+			check_line,
+			closing,
 			cmd,
 			content,
 			content_chars,
+			current_heredoc_delim,
+			current_heredoc_strip,
+			dch,
+			delimiter,
+			delimiter_chars,
+			end_pos,
+			esc,
 			escaped,
+			heredoc_end,
+			heredoc_start,
+			i,
+			in_heredoc_body,
+			line,
+			line_end,
+			line_start,
 			next_c,
+			pending_heredocs,
+			quote,
 			start,
+			strip_tabs,
 			sub_parser,
+			tabs_stripped,
 			text,
 			text_chars;
 		if (this.atEnd() || this.peek() !== "`") {
@@ -7278,8 +7298,74 @@ class Parser {
 		// text_chars: what appears in the word representation (with line continuations removed)
 		content_chars = [];
 		text_chars = ["`"];
-		while (!this.atEnd() && this.peek() !== "`") {
+		// Heredoc state tracking
+		pending_heredocs = [];
+		in_heredoc_body = false;
+		current_heredoc_delim = "";
+		current_heredoc_strip = false;
+		while (!this.atEnd() && (in_heredoc_body || this.peek() !== "`")) {
+			// When in heredoc body, scan for delimiter line by line (no escape processing)
+			if (in_heredoc_body) {
+				line_start = this.pos;
+				line_end = line_start;
+				while (line_end < this.length && this.source[line_end] !== "\n") {
+					line_end += 1;
+				}
+				line = this.source.slice(line_start, line_end);
+				check_line = current_heredoc_strip ? line.replace(/^[\t]+/, "") : line;
+				if (check_line === current_heredoc_delim) {
+					// Found delimiter - add line to content and exit body mode
+					for (ch of line) {
+						content_chars.push(ch);
+						text_chars.push(ch);
+					}
+					this.pos = line_end;
+					if (this.pos < this.length && this.source[this.pos] === "\n") {
+						content_chars.push("\n");
+						text_chars.push("\n");
+						this.advance();
+					}
+					in_heredoc_body = false;
+					if (pending_heredocs.length > 0) {
+						[current_heredoc_delim, current_heredoc_strip] =
+							pending_heredocs.pop(0);
+						in_heredoc_body = true;
+					}
+				} else if (
+					check_line.startsWith(current_heredoc_delim) &&
+					check_line.length > current_heredoc_delim.length
+				) {
+					// Delimiter with trailing content
+					tabs_stripped = line.length - check_line.length;
+					end_pos = tabs_stripped + current_heredoc_delim.length;
+					for (i = 0; i < end_pos; i++) {
+						content_chars.push(line[i]);
+						text_chars.push(line[i]);
+					}
+					this.pos = line_start + end_pos;
+					in_heredoc_body = false;
+					if (pending_heredocs.length > 0) {
+						[current_heredoc_delim, current_heredoc_strip] =
+							pending_heredocs.pop(0);
+						in_heredoc_body = true;
+					}
+				} else {
+					// Not delimiter - add line and newline to content
+					for (ch of line) {
+						content_chars.push(ch);
+						text_chars.push(ch);
+					}
+					this.pos = line_end;
+					if (this.pos < this.length && this.source[this.pos] === "\n") {
+						content_chars.push("\n");
+						text_chars.push("\n");
+						this.advance();
+					}
+				}
+				continue;
+			}
 			c = this.peek();
+			// Escape handling
 			if (c === "\\" && this.pos + 1 < this.length) {
 				next_c = this.source[this.pos + 1];
 				if (next_c === "\n") {
@@ -7300,11 +7386,184 @@ class Parser {
 					content_chars.push(ch);
 					text_chars.push(ch);
 				}
-			} else {
+				continue;
+			}
+			// Heredoc declaration
+			if (
+				c === "<" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "<"
+			) {
+				// Check for here-string <<<
+				if (this.pos + 2 < this.length && this.source[this.pos + 2] === "<") {
+					content_chars.push(this.advance());
+					text_chars.push("<");
+					content_chars.push(this.advance());
+					text_chars.push("<");
+					content_chars.push(this.advance());
+					text_chars.push("<");
+					// Skip whitespace and here-string word
+					while (!this.atEnd() && _isWhitespaceNoNewline(this.peek())) {
+						ch = this.advance();
+						content_chars.push(ch);
+						text_chars.push(ch);
+					}
+					while (
+						!this.atEnd() &&
+						!_isWhitespace(this.peek()) &&
+						!"()".includes(this.peek())
+					) {
+						if (this.peek() === "\\" && this.pos + 1 < this.length) {
+							ch = this.advance();
+							content_chars.push(ch);
+							text_chars.push(ch);
+							ch = this.advance();
+							content_chars.push(ch);
+							text_chars.push(ch);
+						} else if ("\"'".includes(this.peek())) {
+							quote = this.peek();
+							ch = this.advance();
+							content_chars.push(ch);
+							text_chars.push(ch);
+							while (!this.atEnd() && this.peek() !== quote) {
+								if (quote === '"' && this.peek() === "\\") {
+									ch = this.advance();
+									content_chars.push(ch);
+									text_chars.push(ch);
+								}
+								ch = this.advance();
+								content_chars.push(ch);
+								text_chars.push(ch);
+							}
+							if (!this.atEnd()) {
+								ch = this.advance();
+								content_chars.push(ch);
+								text_chars.push(ch);
+							}
+						} else {
+							ch = this.advance();
+							content_chars.push(ch);
+							text_chars.push(ch);
+						}
+					}
+					continue;
+				}
+				// Heredoc <<
+				content_chars.push(this.advance());
+				text_chars.push("<");
+				content_chars.push(this.advance());
+				text_chars.push("<");
+				strip_tabs = false;
+				if (!this.atEnd() && this.peek() === "-") {
+					strip_tabs = true;
+					content_chars.push(this.advance());
+					text_chars.push("-");
+				}
+				// Skip whitespace
+				while (!this.atEnd() && _isWhitespaceNoNewline(this.peek())) {
+					ch = this.advance();
+					content_chars.push(ch);
+					text_chars.push(ch);
+				}
+				// Parse delimiter
+				delimiter_chars = [];
+				if (!this.atEnd()) {
+					ch = this.peek();
+					if (_isQuote(ch)) {
+						quote = this.advance();
+						content_chars.push(quote);
+						text_chars.push(quote);
+						while (!this.atEnd() && this.peek() !== quote) {
+							dch = this.advance();
+							content_chars.push(dch);
+							text_chars.push(dch);
+							delimiter_chars.push(dch);
+						}
+						if (!this.atEnd()) {
+							closing = this.advance();
+							content_chars.push(closing);
+							text_chars.push(closing);
+						}
+					} else if (ch === "\\") {
+						esc = this.advance();
+						content_chars.push(esc);
+						text_chars.push(esc);
+						if (!this.atEnd()) {
+							dch = this.advance();
+							content_chars.push(dch);
+							text_chars.push(dch);
+							delimiter_chars.push(dch);
+						}
+						while (!this.atEnd() && !_isMetachar(this.peek())) {
+							dch = this.advance();
+							content_chars.push(dch);
+							text_chars.push(dch);
+							delimiter_chars.push(dch);
+						}
+					} else {
+						// Stop at backtick (closes substitution) or metachar
+						while (
+							!this.atEnd() &&
+							!_isMetachar(this.peek()) &&
+							this.peek() !== "`"
+						) {
+							ch = this.peek();
+							if (_isQuote(ch)) {
+								quote = this.advance();
+								content_chars.push(quote);
+								text_chars.push(quote);
+								while (!this.atEnd() && this.peek() !== quote) {
+									dch = this.advance();
+									content_chars.push(dch);
+									text_chars.push(dch);
+									delimiter_chars.push(dch);
+								}
+								if (!this.atEnd()) {
+									closing = this.advance();
+									content_chars.push(closing);
+									text_chars.push(closing);
+								}
+							} else if (ch === "\\") {
+								esc = this.advance();
+								content_chars.push(esc);
+								text_chars.push(esc);
+								if (!this.atEnd()) {
+									dch = this.advance();
+									content_chars.push(dch);
+									text_chars.push(dch);
+									delimiter_chars.push(dch);
+								}
+							} else {
+								dch = this.advance();
+								content_chars.push(dch);
+								text_chars.push(dch);
+								delimiter_chars.push(dch);
+							}
+						}
+					}
+				}
+				delimiter = delimiter_chars.join("");
+				if (delimiter) {
+					pending_heredocs.push([delimiter, strip_tabs]);
+				}
+				continue;
+			}
+			// Newline - check for heredoc body mode
+			if (c === "\n") {
 				ch = this.advance();
 				content_chars.push(ch);
 				text_chars.push(ch);
+				if (pending_heredocs.length > 0) {
+					[current_heredoc_delim, current_heredoc_strip] =
+						pending_heredocs.pop(0);
+					in_heredoc_body = true;
+				}
+				continue;
 			}
+			// Regular character
+			ch = this.advance();
+			content_chars.push(ch);
+			text_chars.push(ch);
 		}
 		if (this.atEnd()) {
 			throw new ParseError("Unterminated backtick", start);
@@ -7313,6 +7572,25 @@ class Parser {
 		text_chars.push("`");
 		text = text_chars.join("");
 		content = content_chars.join("");
+		// Check for heredocs whose bodies follow the closing backtick
+		if (pending_heredocs.length > 0) {
+			[heredoc_start, heredoc_end] = _findHeredocContentEnd(
+				this.source,
+				this.pos,
+				pending_heredocs,
+			);
+			if (heredoc_end > heredoc_start) {
+				content = content + this.source.slice(heredoc_start, heredoc_end);
+				if (this._cmdsub_heredoc_end == null) {
+					this._cmdsub_heredoc_end = heredoc_end;
+				} else {
+					this._cmdsub_heredoc_end = Math.max(
+						this._cmdsub_heredoc_end,
+						heredoc_end,
+					);
+				}
+			}
+		}
 		// Parse the content as a command list
 		sub_parser = new Parser(content);
 		cmd = sub_parser.parseList();

@@ -5878,10 +5878,67 @@ class Parser:
         # other \X -> \X (backslash is literal)
         # content_chars: what gets parsed as the inner command
         # text_chars: what appears in the word representation (with line continuations removed)
-        content_chars = []
+        content_chars: list[str] = []
         text_chars = ["`"]  # opening backtick
-        while not self.at_end() and self.peek() != "`":
+        # Heredoc state tracking
+        pending_heredocs: list[tuple[str, bool]] = []
+        in_heredoc_body = False
+        current_heredoc_delim = ""
+        current_heredoc_strip = False
+
+        while not self.at_end() and (in_heredoc_body or self.peek() != "`"):
+            # When in heredoc body, scan for delimiter line by line (no escape processing)
+            if in_heredoc_body:
+                line_start = self.pos
+                line_end = line_start
+                while line_end < self.length and self.source[line_end] != "\n":
+                    line_end += 1
+                line = _substring(self.source, line_start, line_end)
+                check_line = line.lstrip("\t") if current_heredoc_strip else line
+                if check_line == current_heredoc_delim:
+                    # Found delimiter - add line to content and exit body mode
+                    for ch in line:
+                        content_chars.append(ch)
+                        text_chars.append(ch)
+                    self.pos = line_end
+                    if self.pos < self.length and self.source[self.pos] == "\n":
+                        content_chars.append("\n")
+                        text_chars.append("\n")
+                        self.advance()
+                    in_heredoc_body = False
+                    if len(pending_heredocs) > 0:
+                        current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
+                        in_heredoc_body = True
+                elif (
+                    check_line.startswith(current_heredoc_delim)
+                    and len(check_line) > len(current_heredoc_delim)
+                ):
+                    # Delimiter with trailing content
+                    tabs_stripped = len(line) - len(check_line)
+                    end_pos = tabs_stripped + len(current_heredoc_delim)
+                    for i in range(end_pos):
+                        content_chars.append(line[i])
+                        text_chars.append(line[i])
+                    self.pos = line_start + end_pos
+                    in_heredoc_body = False
+                    if len(pending_heredocs) > 0:
+                        current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
+                        in_heredoc_body = True
+                else:
+                    # Not delimiter - add line and newline to content
+                    for ch in line:
+                        content_chars.append(ch)
+                        text_chars.append(ch)
+                    self.pos = line_end
+                    if self.pos < self.length and self.source[self.pos] == "\n":
+                        content_chars.append("\n")
+                        text_chars.append("\n")
+                        self.advance()
+                continue
+
             c = self.peek()
+
+            # Escape handling
             if c == "\\" and self.pos + 1 < self.length:
                 next_c = self.source[self.pos + 1]
                 if next_c == "\n":
@@ -5901,10 +5958,157 @@ class Parser:
                     ch = self.advance()
                     content_chars.append(ch)
                     text_chars.append(ch)
-            else:
+                continue
+
+            # Heredoc declaration
+            if c == "<" and self.pos + 1 < self.length and self.source[self.pos + 1] == "<":
+                # Check for here-string <<<
+                if self.pos + 2 < self.length and self.source[self.pos + 2] == "<":
+                    content_chars.append(self.advance())  # <
+                    text_chars.append("<")
+                    content_chars.append(self.advance())  # <
+                    text_chars.append("<")
+                    content_chars.append(self.advance())  # <
+                    text_chars.append("<")
+                    # Skip whitespace and here-string word
+                    while not self.at_end() and _is_whitespace_no_newline(self.peek()):
+                        ch = self.advance()
+                        content_chars.append(ch)
+                        text_chars.append(ch)
+                    while (
+                        not self.at_end()
+                        and not _is_whitespace(self.peek())
+                        and self.peek() not in "()"
+                    ):
+                        if self.peek() == "\\" and self.pos + 1 < self.length:
+                            ch = self.advance()
+                            content_chars.append(ch)
+                            text_chars.append(ch)
+                            ch = self.advance()
+                            content_chars.append(ch)
+                            text_chars.append(ch)
+                        elif self.peek() in "\"'":
+                            quote = self.peek()
+                            ch = self.advance()
+                            content_chars.append(ch)
+                            text_chars.append(ch)
+                            while not self.at_end() and self.peek() != quote:
+                                if quote == '"' and self.peek() == "\\":
+                                    ch = self.advance()
+                                    content_chars.append(ch)
+                                    text_chars.append(ch)
+                                ch = self.advance()
+                                content_chars.append(ch)
+                                text_chars.append(ch)
+                            if not self.at_end():
+                                ch = self.advance()
+                                content_chars.append(ch)
+                                text_chars.append(ch)
+                        else:
+                            ch = self.advance()
+                            content_chars.append(ch)
+                            text_chars.append(ch)
+                    continue
+                # Heredoc <<
+                content_chars.append(self.advance())  # <
+                text_chars.append("<")
+                content_chars.append(self.advance())  # <
+                text_chars.append("<")
+                strip_tabs = False
+                if not self.at_end() and self.peek() == "-":
+                    strip_tabs = True
+                    content_chars.append(self.advance())
+                    text_chars.append("-")
+                # Skip whitespace
+                while not self.at_end() and _is_whitespace_no_newline(self.peek()):
+                    ch = self.advance()
+                    content_chars.append(ch)
+                    text_chars.append(ch)
+                # Parse delimiter
+                delimiter_chars: list[str] = []
+                if not self.at_end():
+                    ch = self.peek()
+                    if _is_quote(ch):
+                        quote = self.advance()
+                        content_chars.append(quote)
+                        text_chars.append(quote)
+                        while not self.at_end() and self.peek() != quote:
+                            dch = self.advance()
+                            content_chars.append(dch)
+                            text_chars.append(dch)
+                            delimiter_chars.append(dch)
+                        if not self.at_end():
+                            closing = self.advance()
+                            content_chars.append(closing)
+                            text_chars.append(closing)
+                    elif ch == "\\":
+                        esc = self.advance()
+                        content_chars.append(esc)
+                        text_chars.append(esc)
+                        if not self.at_end():
+                            dch = self.advance()
+                            content_chars.append(dch)
+                            text_chars.append(dch)
+                            delimiter_chars.append(dch)
+                        while not self.at_end() and not _is_metachar(self.peek()):
+                            dch = self.advance()
+                            content_chars.append(dch)
+                            text_chars.append(dch)
+                            delimiter_chars.append(dch)
+                    else:
+                        # Stop at backtick (closes substitution) or metachar
+                        while (
+                            not self.at_end()
+                            and not _is_metachar(self.peek())
+                            and self.peek() != "`"
+                        ):
+                            ch = self.peek()
+                            if _is_quote(ch):
+                                quote = self.advance()
+                                content_chars.append(quote)
+                                text_chars.append(quote)
+                                while not self.at_end() and self.peek() != quote:
+                                    dch = self.advance()
+                                    content_chars.append(dch)
+                                    text_chars.append(dch)
+                                    delimiter_chars.append(dch)
+                                if not self.at_end():
+                                    closing = self.advance()
+                                    content_chars.append(closing)
+                                    text_chars.append(closing)
+                            elif ch == "\\":
+                                esc = self.advance()
+                                content_chars.append(esc)
+                                text_chars.append(esc)
+                                if not self.at_end():
+                                    dch = self.advance()
+                                    content_chars.append(dch)
+                                    text_chars.append(dch)
+                                    delimiter_chars.append(dch)
+                            else:
+                                dch = self.advance()
+                                content_chars.append(dch)
+                                text_chars.append(dch)
+                                delimiter_chars.append(dch)
+                delimiter = "".join(delimiter_chars)
+                if delimiter:
+                    pending_heredocs.append((delimiter, strip_tabs))
+                continue
+
+            # Newline - check for heredoc body mode
+            if c == "\n":
                 ch = self.advance()
                 content_chars.append(ch)
                 text_chars.append(ch)
+                if len(pending_heredocs) > 0:
+                    current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
+                    in_heredoc_body = True
+                continue
+
+            # Regular character
+            ch = self.advance()
+            content_chars.append(ch)
+            text_chars.append(ch)
 
         if self.at_end():
             raise ParseError("Unterminated backtick", pos=start)
@@ -5913,6 +6117,18 @@ class Parser:
         text_chars.append("`")  # closing backtick
         text = "".join(text_chars)
         content = "".join(content_chars)
+
+        # Check for heredocs whose bodies follow the closing backtick
+        if len(pending_heredocs) > 0:
+            heredoc_start, heredoc_end = _find_heredoc_content_end(
+                self.source, self.pos, pending_heredocs
+            )
+            if heredoc_end > heredoc_start:
+                content = content + _substring(self.source, heredoc_start, heredoc_end)
+                if self._cmdsub_heredoc_end is None:
+                    self._cmdsub_heredoc_end = heredoc_end
+                else:
+                    self._cmdsub_heredoc_end = max(self._cmdsub_heredoc_end, heredoc_end)
 
         # Parse the content as a command list
         sub_parser = Parser(content)

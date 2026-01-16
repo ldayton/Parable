@@ -5580,6 +5580,26 @@ class Parser {
 		return ch;
 	}
 
+	peekAt(offset) {
+		let pos;
+		pos = this.pos + offset;
+		if (pos < 0 || pos >= this.length) {
+			return "";
+		}
+		return this.source[pos];
+	}
+
+	lookahead(n) {
+		return this.source.slice(this.pos, this.pos + n);
+	}
+
+	matchKeyword(keyword) {
+		if (!_startsWithAt(this.source, this.pos, keyword)) {
+			return false;
+		}
+		return _isWordBoundary(this.source, this.pos, keyword.length);
+	}
+
 	_isBangFollowedByProcsub() {
 		let next_char;
 		if (this.pos + 2 >= this.length) {
@@ -5603,11 +5623,7 @@ class Parser {
 				while (!this.atEnd() && this.peek() !== "\n") {
 					this.advance();
 				}
-			} else if (
-				ch === "\\" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "\n"
-			) {
+			} else if (ch === "\\" && this.peekAt(1) === "\n") {
 				// Backslash-newline is line continuation - skip both
 				this.advance();
 				this.advance();
@@ -5640,11 +5656,7 @@ class Parser {
 				while (!this.atEnd() && this.peek() !== "\n") {
 					this.advance();
 				}
-			} else if (
-				ch === "\\" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "\n"
-			) {
+			} else if (ch === "\\" && this.peekAt(1) === "\n") {
 				// Backslash-newline is line continuation - skip both
 				this.advance();
 				this.advance();

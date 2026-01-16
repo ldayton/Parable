@@ -4690,6 +4690,26 @@ class Parser:
         self.pos += 1
         return ch
 
+    def peek_at(self, offset: int) -> str:
+        """Peek at character at offset from current position.
+
+        Returns empty string if position is out of bounds.
+        """
+        pos = self.pos + offset
+        if pos < 0 or pos >= self.length:
+            return ""
+        return self.source[pos]
+
+    def lookahead(self, n: int) -> str:
+        """Return next n characters without consuming."""
+        return _substring(self.source, self.pos, self.pos + n)
+
+    def match_keyword(self, keyword: str) -> bool:
+        """Check if current position matches keyword with word boundary."""
+        if not _starts_with_at(self.source, self.pos, keyword):
+            return False
+        return _is_word_boundary(self.source, self.pos, len(keyword))
+
     def _is_bang_followed_by_procsub(self) -> bool:
         """Check if ! at current position is followed by >( or <( process substitution."""
         if self.pos + 2 >= self.length:
@@ -4709,7 +4729,7 @@ class Parser:
                 # Skip comment to end of line (but not the newline itself)
                 while not self.at_end() and self.peek() != "\n":
                     self.advance()
-            elif ch == "\\" and self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
+            elif ch == "\\" and self.peek_at(1) == "\n":
                 # Backslash-newline is line continuation - skip both
                 self.advance()
                 self.advance()
@@ -4733,7 +4753,7 @@ class Parser:
                 # Skip comment to end of line
                 while not self.at_end() and self.peek() != "\n":
                     self.advance()
-            elif ch == "\\" and self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
+            elif ch == "\\" and self.peek_at(1) == "\n":
                 # Backslash-newline is line continuation - skip both
                 self.advance()
                 self.advance()

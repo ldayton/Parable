@@ -4029,7 +4029,7 @@ function _formatCmdsubNode(
 }
 
 function _formatRedirect(r, compact, heredoc_op_only) {
-	let after_amp, delim, is_literal_fd, op, target;
+	let after_amp, delim, is_literal_fd, op, target, was_input_close;
 	if (compact == null) {
 		compact = false;
 	}
@@ -4074,7 +4074,9 @@ function _formatRedirect(r, compact, heredoc_op_only) {
 	// For fd duplication (target starts with &), handle normalization
 	if (target.startsWith("&")) {
 		// Normalize N<&- to N>&- (close always uses >)
+		was_input_close = false;
 		if (target === "&-" && op.endsWith("<")) {
+			was_input_close = true;
 			op = `${op.slice(0, op.length - 1)}>`;
 		}
 		// Check if target is a literal fd (digit or -)
@@ -4085,7 +4087,8 @@ function _formatRedirect(r, compact, heredoc_op_only) {
 		if (is_literal_fd) {
 			// Add default fd for bare >&N or <&N
 			if (op === ">") {
-				op = "1>";
+				// If we normalized from <&-, use fd 0 (stdin), otherwise fd 1 (stdout)
+				op = was_input_close ? "0>" : "1>";
 			} else if (op === "<") {
 				op = "0<";
 			}

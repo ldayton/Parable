@@ -3445,7 +3445,9 @@ def _format_redirect(
     # For fd duplication (target starts with &), handle normalization
     if target.startswith("&"):
         # Normalize N<&- to N>&- (close always uses >)
+        was_input_close = False
         if target == "&-" and op.endswith("<"):
+            was_input_close = True
             op = _substring(op, 0, len(op) - 1) + ">"
         # Check if target is a literal fd (digit or -)
         after_amp = _substring(target, 1, len(target))
@@ -3453,7 +3455,8 @@ def _format_redirect(
         if is_literal_fd:
             # Add default fd for bare >&N or <&N
             if op == ">":
-                op = "1>"
+                # If we normalized from <&-, use fd 0 (stdin), otherwise fd 1 (stdout)
+                op = "0>" if was_input_close else "1>"
             elif op == "<":
                 op = "0<"
         else:

@@ -1,0 +1,7 @@
+=== process substitution with heredoc and tab-indented content
+<(<<D)@
+	a
+D
+---
+(command (word "<(<<D\n\ta\nD\n)@"))
+---

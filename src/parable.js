@@ -1481,6 +1481,7 @@ class Word extends Node {
 		has_brace_cmdsub =
 			value.indexOf("${ ") !== -1 ||
 			value.indexOf("${\t") !== -1 ||
+			value.indexOf("${\n") !== -1 ||
 			value.indexOf("${|") !== -1;
 		// Check if there's an untracked $( that isn't $((, skipping over quotes only
 		has_untracked_cmdsub = false;
@@ -1859,12 +1860,16 @@ class Word extends Node {
 			} else if (
 				(_startsWithAt(value, i, "${ ") ||
 					_startsWithAt(value, i, "${\t") ||
+					_startsWithAt(value, i, "${\n") ||
 					_startsWithAt(value, i, "${|")) &&
 				!_isBackslashEscaped(value, i)
 			) {
-				// Check for ${ (space/tab) or ${| brace command substitution
+				// Check for ${ (space/tab/newline) or ${| brace command substitution
 				// But not if the $ is escaped by a backslash
-				prefix = value.slice(i, i + 3).replaceAll("\t", " ");
+				prefix = value
+					.slice(i, i + 3)
+					.replaceAll("\t", " ")
+					.replaceAll("\n", " ");
 				// Find matching close brace
 				j = i + 3;
 				depth = 1;
@@ -1883,7 +1888,7 @@ class Word extends Node {
 					result.push("${ }");
 				} else {
 					try {
-						parser = new Parser(inner.replace(/^[ \t|]+/, ""));
+						parser = new Parser(inner.replace(/^[ \t\n|]+/, ""));
 						parsed = parser.parseList();
 						if (parsed) {
 							formatted = _formatCmdsubNode(parsed);

@@ -5099,12 +5099,37 @@ class Parser:
         # Check for heredocs in content - their bodies follow the )
         heredoc_delimiters = _extract_heredoc_delimiters(content)
         if heredoc_delimiters:
-            heredoc_end = _find_heredoc_content_end(self.source, self.pos, heredoc_delimiters)
-            if heredoc_end > self.pos:
-                content = content + _substring(self.source, self.pos, heredoc_end)
-                self.pos = heredoc_end
+            # Find the newline - heredoc content starts on next line
+            heredoc_line_start = self.pos
+            while heredoc_line_start < self.length and self.source[heredoc_line_start] != "\n":
+                heredoc_line_start += 1
+            # Check if there's heredoc content after the newline
+            if heredoc_line_start < self.length:
+                heredoc_end = _find_heredoc_content_end(
+                    self.source, heredoc_line_start, heredoc_delimiters
+                )
+                if heredoc_end > heredoc_line_start:
+                    # Add heredoc content to parsed content
+                    content = content + _substring(self.source, heredoc_line_start, heredoc_end)
+                    # Construct text: <(content_before_paren + heredoc + ) + non_whitespace_chars_on_same_line
+                    text_before_paren = _substring(self.source, start, text_end - 1)  # exclude )
+                    heredoc_text = _substring(self.source, heredoc_line_start, heredoc_end)
+                    # Skip whitespace, but include non-whitespace chars after )
+                    chars_after_paren_start = text_end
+                    while (
+                        chars_after_paren_start < heredoc_line_start
+                        and self.source[chars_after_paren_start] in " \t"
+                    ):
+                        chars_after_paren_start += 1
+                    chars_after_paren = _substring(
+                        self.source, chars_after_paren_start, heredoc_line_start
+                    )
+                    text = text_before_paren + heredoc_text + ")" + chars_after_paren
+                    # Update position to after heredoc content
+                    self.pos = heredoc_end
 
-        text = _substring(self.source, start, text_end)
+        if not heredoc_delimiters or self.pos == text_end:
+            text = _substring(self.source, start, text_end)
         # Strip line continuations (backslash-newline) from text used for word construction
         # Use comment-aware stripping to preserve newlines that terminate comments
         text = _strip_line_continuations_comment_aware(text)

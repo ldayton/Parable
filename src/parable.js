@@ -5981,6 +5981,8 @@ class Parser {
 
 	_parseProcessSubstitution() {
 		let c,
+			chars_after_paren,
+			chars_after_paren_start,
 			cmd,
 			content,
 			content_start,
@@ -5988,9 +5990,12 @@ class Parser {
 			direction,
 			heredoc_delimiters,
 			heredoc_end,
+			heredoc_line_start,
+			heredoc_text,
 			start,
 			sub_parser,
 			text,
+			text_before_paren,
 			text_end;
 		if (this.atEnd() || !_isRedirectChar(this.peek())) {
 			return [null, ""];
@@ -6067,17 +6072,49 @@ class Parser {
 		// Check for heredocs in content - their bodies follow the )
 		heredoc_delimiters = _extractHeredocDelimiters(content);
 		if (heredoc_delimiters) {
-			heredoc_end = _findHeredocContentEnd(
-				this.source,
-				this.pos,
-				heredoc_delimiters,
-			);
-			if (heredoc_end > this.pos) {
-				content = content + this.source.slice(this.pos, heredoc_end);
-				this.pos = heredoc_end;
+			// Find the newline - heredoc content starts on next line
+			heredoc_line_start = this.pos;
+			while (
+				heredoc_line_start < this.length &&
+				this.source[heredoc_line_start] !== "\n"
+			) {
+				heredoc_line_start += 1;
+			}
+			// Check if there's heredoc content after the newline
+			if (heredoc_line_start < this.length) {
+				heredoc_end = _findHeredocContentEnd(
+					this.source,
+					heredoc_line_start,
+					heredoc_delimiters,
+				);
+				if (heredoc_end > heredoc_line_start) {
+					// Add heredoc content to parsed content
+					content =
+						content + this.source.slice(heredoc_line_start, heredoc_end);
+					// Construct text: <(content_before_paren + heredoc + ) + non_whitespace_chars_on_same_line
+					text_before_paren = this.source.slice(start, text_end - 1);
+					heredoc_text = this.source.slice(heredoc_line_start, heredoc_end);
+					// Skip whitespace, but include non-whitespace chars after )
+					chars_after_paren_start = text_end;
+					while (
+						chars_after_paren_start < heredoc_line_start &&
+						" \t".includes(this.source[chars_after_paren_start])
+					) {
+						chars_after_paren_start += 1;
+					}
+					chars_after_paren = this.source.slice(
+						chars_after_paren_start,
+						heredoc_line_start,
+					);
+					text = `${text_before_paren + heredoc_text})${chars_after_paren}`;
+					// Update position to after heredoc content
+					this.pos = heredoc_end;
+				}
 			}
 		}
-		text = this.source.slice(start, text_end);
+		if (!heredoc_delimiters || this.pos === text_end) {
+			text = this.source.slice(start, text_end);
+		}
 		// Strip line continuations (backslash-newline) from text used for word construction
 		// Use comment-aware stripping to preserve newlines that terminate comments
 		text = _stripLineContinuationsCommentAware(text);

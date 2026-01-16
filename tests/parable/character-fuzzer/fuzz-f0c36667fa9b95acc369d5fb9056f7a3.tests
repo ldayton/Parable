@@ -1,0 +1,7 @@
+=== heredoc in process sub followed by [ should include heredoc content
+<(<<D)[
+x
+D
+---
+(command (word "<(<<D\nx\nD\n)["))
+---

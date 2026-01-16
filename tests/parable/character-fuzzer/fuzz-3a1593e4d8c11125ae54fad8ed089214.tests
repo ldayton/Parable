@@ -1,0 +1,5 @@
+=== dollar sign before double quote inside parameter expansion
+"${x$"y"}"
+---
+(command (word "\"${x\"y\"}\""))
+---

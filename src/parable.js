@@ -4474,7 +4474,10 @@ function _skipHeredoc(value, start) {
 		// Backslash-quoted delimiter like <<\EOF
 		i += 1;
 		delim_start = i;
-		while (i < value.length && !_isWhitespace(value[i])) {
+		if (i < value.length) {
+			i += 1;
+		}
+		while (i < value.length && !_isMetachar(value[i])) {
 			i += 1;
 		}
 		delimiter = value.slice(delim_start, i);

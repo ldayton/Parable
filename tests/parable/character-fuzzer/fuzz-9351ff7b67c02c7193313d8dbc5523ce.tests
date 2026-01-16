@@ -1,0 +1,5 @@
+=== locale translation $"" should consume dollar sign
+'\'$""
+---
+(command (word "'\\'\"\""))
+---

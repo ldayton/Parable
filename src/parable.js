@@ -761,8 +761,13 @@ class Word extends Node {
 		bracket_in_double_quote = false;
 		while (i < value.length) {
 			ch = value[i];
-			if (ch === "\\" && i + 1 < value.length) {
-				// Escape - copy both chars
+			if (
+				ch === "\\" &&
+				i + 1 < value.length &&
+				!in_single_quote &&
+				!brace_in_single_quote
+			) {
+				// Escape - copy both chars (but NOT inside single quotes where \ is literal)
 				result.push(ch);
 				result.push(value[i + 1]);
 				i += 2;

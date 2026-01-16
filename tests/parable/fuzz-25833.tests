@@ -1,0 +1,5 @@
+=== arithmetic with brace and command substitution
+$((}a $()))
+---
+(command (word "$((}a $()))"))
+---

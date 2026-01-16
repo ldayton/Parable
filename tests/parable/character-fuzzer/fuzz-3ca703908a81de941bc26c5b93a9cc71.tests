@@ -1,0 +1,5 @@
+=== arith with bracket and nested cmdsub
+$(([$(x)))
+---
+(command (word "$(([$(x)))"))
+---

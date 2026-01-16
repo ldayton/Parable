@@ -7279,7 +7279,17 @@ class Parser:
                 # Only match if delimiter is exact or followed by whitespace/punctuation
                 rest = check_line[len(delimiter) :]
                 # In process sub, accept: exact match, whitespace only, or whitespace + )
-                if rest == "" or rest.lstrip() == "" or rest.lstrip().startswith(")"):
+                # Also accept if there was backslash-newline continuation (line was joined)
+                # In that case, end heredoc after the original line with escaped newline preserved
+                had_continuation = check_line != _substring(
+                    self.source, line_start, min(line_start + len(check_line), self.length)
+                )
+                if (
+                    rest == ""
+                    or rest.lstrip() == ""
+                    or rest.lstrip().startswith(")")
+                    or had_continuation
+                ):
                     # Adjust line_end to point just past the delimiter, not the whole line
                     # This allows remaining content after delimiter to be parsed
                     tabs_stripped = len(line) - len(check_line)

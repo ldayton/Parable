@@ -8395,6 +8395,7 @@ class Parser {
 			depth,
 			esc,
 			esc_val,
+			had_continuation,
 			heredoc_end,
 			i,
 			line,
@@ -8722,10 +8723,19 @@ class Parser {
 				// Only match if delimiter is exact or followed by whitespace/punctuation
 				rest = check_line.slice(delimiter.length);
 				// In process sub, accept: exact match, whitespace only, or whitespace + )
+				// Also accept if there was backslash-newline continuation (line was joined)
+				// In that case, end heredoc after the original line with escaped newline preserved
+				had_continuation =
+					check_line !==
+					this.source.slice(
+						line_start,
+						Math.min(line_start + check_line.length, this.length),
+					);
 				if (
 					rest === "" ||
 					rest.trimStart() === "" ||
-					rest.trimStart().startsWith(")")
+					rest.trimStart().startsWith(")") ||
+					had_continuation
 				) {
 					// Adjust line_end to point just past the delimiter, not the whole line
 					// This allows remaining content after delimiter to be parsed

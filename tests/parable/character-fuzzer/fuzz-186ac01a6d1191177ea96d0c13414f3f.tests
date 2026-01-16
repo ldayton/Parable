@@ -1,0 +1,7 @@
+=== backslash-newline in heredoc within process substitution
+<(<<a
+a\
+[)
+---
+(command (word "<(<<a\na\n\n[)"))
+---

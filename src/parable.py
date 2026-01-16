@@ -3619,10 +3619,10 @@ def _format_redirect(
         is_literal_fd = after_amp == "-" or (len(after_amp) > 0 and after_amp[0].isdigit())
         if is_literal_fd:
             # Add default fd for bare >&N or <&N
-            if op == ">":
+            if op == ">" or op == ">&":
                 # If we normalized from <&-, use fd 0 (stdin), otherwise fd 1 (stdout)
                 op = "0>" if was_input_close else "1>"
-            elif op == "<":
+            elif op == "<" or op == "<&":
                 op = "0<"
         else:
             # Variable target: use bare >& or <&

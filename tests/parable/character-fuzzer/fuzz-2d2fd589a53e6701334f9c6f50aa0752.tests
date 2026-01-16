@@ -1,0 +1,5 @@
+=== >&space-minus should be 1>&-
+$(>& -"")
+---
+(command (word "$(\"\" 1>&-)"))
+---

@@ -4319,10 +4319,10 @@ function _formatRedirect(r, compact, heredoc_op_only) {
 			(after_amp.length > 0 && /^[0-9]+$/.test(after_amp[0]));
 		if (is_literal_fd) {
 			// Add default fd for bare >&N or <&N
-			if (op === ">") {
+			if (op === ">" || op === ">&") {
 				// If we normalized from <&-, use fd 0 (stdin), otherwise fd 1 (stdout)
 				op = was_input_close ? "0>" : "1>";
-			} else if (op === "<") {
+			} else if (op === "<" || op === "<&") {
 				op = "0<";
 			}
 		} else if (op === "1>") {

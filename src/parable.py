@@ -1179,7 +1179,7 @@ class Word(Node):
                     direction = value[i]
                     j = _find_cmdsub_end(value, i + 2)
                     node = procsub_parts[procsub_idx]
-                    formatted = _format_cmdsub_node(node.command, in_procsub=True)
+                    formatted = _format_cmdsub_node(node.command, 0, True, False, True)
                     if node.command.kind == "subshell":
                         raw_content = _substring(value, i + 2, j - 1)
                         if raw_content.startswith("("):
@@ -1212,7 +1212,7 @@ class Word(Node):
                         parsed = parser.parse_list()
                         # Only use parsed result if parser consumed all input
                         if parsed and parser.pos == len(inner_to_parse):
-                            formatted = _format_cmdsub_node(parsed, in_procsub=True)
+                            formatted = _format_cmdsub_node(parsed, 0, True, False, True)
                         else:
                             formatted = inner
                             leading_ws = ""  # Use raw inner, don't double whitespace
@@ -2840,7 +2840,11 @@ def _format_cond_body(node: Node) -> str:
 
 
 def _format_cmdsub_node(
-    node: Node, indent: int = 0, in_procsub: bool = False, compact_redirects: bool = False
+    node: Node,
+    indent: int = 0,
+    in_procsub: bool = False,
+    compact_redirects: bool = False,
+    procsub_first: bool = False,
 ) -> str:
     """Format an AST node for command substitution output (bash-oracle pretty-print format)."""
     sp = _repeat_str(" ", indent)
@@ -2892,7 +2896,10 @@ def _format_cmdsub_node(
         idx = 0
         while idx < len(cmds):
             cmd, needs_redirect = cmds[idx]
-            formatted = _format_cmdsub_node(cmd, indent, in_procsub)
+            # Only first command in pipeline inherits procsub_first
+            formatted = _format_cmdsub_node(
+                cmd, indent, in_procsub, False, procsub_first and idx == 0
+            )
             if needs_redirect:
                 formatted = formatted + " 2>&1"
             is_last = idx == len(cmds) - 1
@@ -2944,6 +2951,7 @@ def _format_cmdsub_node(
         # Join commands with operators
         result = []
         skipped_semi = False
+        cmd_count = 0  # Track number of non-operator commands seen
         for p in node.parts:
             if p.kind == "operator":
                 if p.op == ";":
@@ -2995,13 +3003,17 @@ def _format_cmdsub_node(
             else:
                 if result and not result[len(result) - 1].endswith((" ", "\n")):
                     result.append(" ")
-                formatted_cmd = _format_cmdsub_node(p, indent, in_procsub, compact_redirects)
+                # Only first command in list inherits procsub_first
+                formatted_cmd = _format_cmdsub_node(
+                    p, indent, in_procsub, compact_redirects, procsub_first and cmd_count == 0
+                )
                 # After heredoc with || or && inserted, add leading space to next command
                 if len(result) > 0:
                     last = result[len(result) - 1]
                     if " || \n" in last or " && \n" in last:
                         formatted_cmd = " " + formatted_cmd
                 result.append(formatted_cmd)
+                cmd_count += 1
         # Strip trailing ; or newline (but preserve heredoc's trailing newline)
         s = "".join(result)
         # If we have & with heredoc (& before newline content), preserve trailing newline and add space
@@ -3129,7 +3141,8 @@ def _format_cmdsub_node(
             for r in node.redirects:
                 redirect_parts.append(_format_redirect(r))
             redirects = " ".join(redirect_parts)
-        if in_procsub:
+        # Use compact format only when subshell is at the start of a procsub
+        if procsub_first:
             if redirects:
                 return "(" + body + ") " + redirects
             return "(" + body + ")"

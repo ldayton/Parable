@@ -1,0 +1,5 @@
+=== process substitution with pipe inside parameter expansion
+${u<(o|r)y}
+---
+(command (word "${u<(o | r)y}"))
+---

@@ -594,6 +594,26 @@ class Word(Node):
                                     if op_start.startswith(op):
                                         in_pattern = True
                                         break
+                                # If no operator at start and the first char is NOT a known
+                                # bash operator character, also check if any operator exists
+                                # later (handles cases like ${x{%...} where { precedes the operator)
+                                # Known operator start chars: % # / ^ , ~ : + - = ?
+                                if not in_pattern and op_start and op_start[0] not in "%#/^,~:+-=?":
+                                    for op in [
+                                        "//",
+                                        "%%",
+                                        "##",
+                                        "/",
+                                        "%",
+                                        "#",
+                                        "^",
+                                        "^^",
+                                        ",",
+                                        ",,",
+                                    ]:
+                                        if op in op_start:
+                                            in_pattern = True
+                                            break
                             # Handle invalid variable names (var_name_len = 0) where first char is not a pattern operator
                             # but there's a pattern operator later (e.g., ${>%$'b'})
                             elif var_name_len == 0 and len(after_brace) > 1:
@@ -988,7 +1008,8 @@ class Word(Node):
             elif ch == "[":
                 # Only start subscript tracking if at word start (for [key]=val patterns)
                 # Mid-word [ like a[ is literal, not a subscript
-                if in_whitespace:
+                # But if already inside brackets, track nested brackets
+                if in_whitespace or bracket_depth > 0:
                     bracket_depth += 1
                 in_whitespace = False
                 normalized.append(ch)
@@ -1195,12 +1216,15 @@ class Word(Node):
                 idx += 1
             else:
                 idx += 1
+        # Check if ${...} contains <( or >( patterns that need normalization
+        has_param_with_procsub_pattern = "${" in value and ("<(" in value or ">(" in value)
         if (
             not cmdsub_parts
             and not procsub_parts
             and not has_brace_cmdsub
             and not has_untracked_cmdsub
             and not has_untracked_procsub
+            and not has_param_with_procsub_pattern
         ):
             return value
         result = []
@@ -1535,6 +1559,8 @@ class Word(Node):
                 else:
                     inner = _substring(value, i + 2, j - 1)
                 formatted_inner = self._format_command_substitutions(inner)
+                # Normalize <( and >( patterns in param expansion (for pipe alternation)
+                formatted_inner = self._normalize_extglob_whitespace(formatted_inner)
                 # Only append closing } if we found one in the input
                 if depth == 0:
                     result.append("${" + formatted_inner + "}")
@@ -1567,6 +1593,7 @@ class Word(Node):
         result = []
         i = 0
         in_double_quote = False
+        deprecated_arith_depth = 0  # Track $[...] depth
         while i < len(value):
             # Track double-quote state
             if value[i] == '"':
@@ -1574,11 +1601,22 @@ class Word(Node):
                 result.append(value[i])
                 i += 1
                 continue
+            # Track deprecated arithmetic $[...] - inside it, >( and <( are not procsub
+            if _starts_with_at(value, i, "$[") and not _is_backslash_escaped(value, i):
+                deprecated_arith_depth += 1
+                result.append(value[i])
+                i += 1
+                continue
+            if value[i] == "]" and deprecated_arith_depth > 0:
+                deprecated_arith_depth -= 1
+                result.append(value[i])
+                i += 1
+                continue
             # Check for >( or <( pattern (process substitution-like in regex)
-            # Only process these patterns when NOT inside double quotes
+            # Only process these patterns when NOT inside double quotes or $[...]
             if i + 1 < len(value) and value[i + 1] == "(":
                 prefix_char = value[i]
-                if prefix_char in "><" and not in_double_quote:
+                if prefix_char in "><" and not in_double_quote and deprecated_arith_depth == 0:
                     # Found pattern start
                     result.append(prefix_char)
                     result.append("(")
@@ -1614,16 +1652,21 @@ class Word(Node):
                             current_part.append(value[i])
                             i += 1
                         elif value[i] == "|" and depth == 1:
-                            # Top-level pipe separator
-                            has_pipe = True
-                            part_content = "".join(current_part)
-                            # Don't strip if this looks like a process substitution with heredoc
-                            if "<<" in part_content:
-                                pattern_parts.append(part_content)
+                            # Check for || (OR operator) - keep as single token
+                            if i + 1 < len(value) and value[i + 1] == "|":
+                                current_part.append("||")
+                                i += 2
                             else:
-                                pattern_parts.append(part_content.strip())
-                            current_part = []
-                            i += 1
+                                # Top-level pipe separator
+                                has_pipe = True
+                                part_content = "".join(current_part)
+                                # Don't strip if this looks like a process substitution with heredoc
+                                if "<<" in part_content:
+                                    pattern_parts.append(part_content)
+                                else:
+                                    pattern_parts.append(part_content.strip())
+                                current_part = []
+                                i += 1
                         else:
                             current_part.append(value[i])
                             i += 1
@@ -3437,27 +3480,36 @@ def _format_cmdsub_node(
     if node.kind == "for":
         var = node.var
         body = _format_cmdsub_node(node.body, indent + 4)
-        if node.words:
+        if node.words is not None:
             word_vals = []
             for w in node.words:
                 word_vals.append(w.value)
             words = " ".join(word_vals)
-            result = (
-                "for "
-                + var
-                + " in "
-                + words
-                + ";\n"
-                + sp
-                + "do\n"
-                + inner_sp
-                + body
-                + ";\n"
-                + sp
-                + "done"
-            )
+            if words:
+                result = (
+                    "for "
+                    + var
+                    + " in "
+                    + words
+                    + ";\n"
+                    + sp
+                    + "do\n"
+                    + inner_sp
+                    + body
+                    + ";\n"
+                    + sp
+                    + "done"
+                )
+            else:
+                # Empty 'in' clause: for var in ;
+                result = (
+                    "for " + var + " in ;\n" + sp + "do\n" + inner_sp + body + ";\n" + sp + "done"
+                )
         else:
-            result = "for " + var + ";\n" + sp + "do\n" + inner_sp + body + ";\n" + sp + "done"
+            # No 'in' clause - bash implies 'in "$@"'
+            result = (
+                "for " + var + ' in "$@";\n' + sp + "do\n" + inner_sp + body + ";\n" + sp + "done"
+            )
         if node.redirects:
             for r in node.redirects:
                 result = result + " " + _format_redirect(r)
@@ -3610,10 +3662,10 @@ def _format_redirect(
         is_literal_fd = after_amp == "-" or (len(after_amp) > 0 and after_amp[0].isdigit())
         if is_literal_fd:
             # Add default fd for bare >&N or <&N
-            if op == ">":
+            if op == ">" or op == ">&":
                 # If we normalized from <&-, use fd 0 (stdin), otherwise fd 1 (stdout)
                 op = "0>" if was_input_close else "1>"
-            elif op == "<":
+            elif op == "<" or op == "<&":
                 op = "0<"
         else:
             # Variable target: use bare >& or <&
@@ -3703,16 +3755,21 @@ def _find_cmdsub_end(value: str, start: int) -> int:
             continue
         # Handle comments - skip from # to end of line
         # Only treat # as comment if preceded by whitespace or at start
-        if c == "#" and (
-            i == start
-            or value[i - 1] == " "
-            or value[i - 1] == "\t"
-            or value[i - 1] == "\n"
-            or value[i - 1] == ";"
-            or value[i - 1] == "|"
-            or value[i - 1] == "&"
-            or value[i - 1] == "("
-            or value[i - 1] == ")"
+        # Don't treat # as comment inside arithmetic expressions (arith_depth > 0)
+        if (
+            c == "#"
+            and arith_depth == 0
+            and (
+                i == start
+                or value[i - 1] == " "
+                or value[i - 1] == "\t"
+                or value[i - 1] == "\n"
+                or value[i - 1] == ";"
+                or value[i - 1] == "|"
+                or value[i - 1] == "&"
+                or value[i - 1] == "("
+                or value[i - 1] == ")"
+            )
         ):
             while i < len(value) and value[i] != "\n":
                 i += 1
@@ -3780,6 +3837,18 @@ def _find_cmdsub_end(value: str, start: int) -> int:
         if arith_depth > 0 and arith_paren_depth == 0 and _starts_with_at(value, i, "))"):
             arith_depth -= 1
             i += 2
+            continue
+        # Handle backtick command substitution - skip to closing backtick
+        # Must handle this before heredoc check to avoid treating << inside backticks as heredoc
+        if c == "`":
+            i += 1  # Skip opening `
+            while i < len(value) and value[i] != "`":
+                if value[i] == "\\" and i + 1 < len(value):
+                    i += 2
+                else:
+                    i += 1
+            if i < len(value):
+                i += 1  # Skip closing `
             continue
         # Handle heredocs (but not << inside arithmetic, which is shift operator)
         if arith_depth == 0 and _starts_with_at(value, i, "<<"):
@@ -5318,6 +5387,20 @@ class Parser:
                 arith_depth -= 1
                 self.advance()  # )
                 self.advance()  # )
+                continue
+
+            # Backtick command substitution - skip to closing backtick
+            # Must handle this before heredoc check to avoid treating << inside backticks as heredoc
+            if c == "`":
+                self.advance()  # opening `
+                while not self.at_end() and self.peek() != "`":
+                    if self.peek() == "\\" and self.pos + 1 < self.length:
+                        self.advance()  # backslash
+                        self.advance()  # escaped char
+                    else:
+                        self.advance()
+                if not self.at_end():
+                    self.advance()  # closing `
                 continue
 
             # Heredoc - skip until delimiter line is found (not inside arithmetic)
@@ -7092,8 +7175,8 @@ class Parser:
                 # Count consecutive $ chars to check for $$ (PID param)
                 dollar_count = 1 + _count_consecutive_dollars_before(self.source, self.pos)
                 if dollar_count % 2 == 1:
-                    # Odd count: locale/ANSI-C string - skip the $ and treat as operator
-                    self.advance()  # skip $
+                    # Odd count: locale/ANSI-C string - don't consume $, let argument loop handle it
+                    # The $ needs to be preserved for _expand_all_ansi_c_quotes to process $'...'
                     op = ""  # empty operator means no operator
                 else:
                     # Even count: this $ is part of $$ (PID), treat as unknown operator
@@ -7802,6 +7885,9 @@ class Parser:
                     while j >= 0 and self.source[j] == "$":
                         dollar_count += 1
                         j -= 1
+                    # If preceded by backslash, first dollar was escaped
+                    if j >= 0 and self.source[j] == "\\":
+                        dollar_count -= 1
                     if dollar_count % 2 == 1:
                         # Odd number of $ before: this $ pairs with previous to form $$
                         # Don't consume the {, let it end the delimiter
@@ -7825,6 +7911,9 @@ class Parser:
                     while j >= 0 and self.source[j] == "$":
                         dollar_count += 1
                         j -= 1
+                    # If preceded by backslash, first dollar was escaped
+                    if j >= 0 and self.source[j] == "\\":
+                        dollar_count -= 1
                     if dollar_count % 2 == 1:
                         # Odd number of $ before: this $ pairs with previous to form $$
                         # Don't consume the [, let it end the delimiter
@@ -10451,6 +10540,17 @@ class Parser:
         if isinstance(node, Word):
             return node
         if isinstance(node, Command):
+            # For trailing backslash stripping, prioritize words ending with backslash
+            # since that's the word we need to strip from
+            if node.words:
+                last_word = node.words[len(node.words) - 1]
+                if last_word.value.endswith("\\"):
+                    return last_word
+            # Redirects come after words in s-expression output, so check redirects first
+            if node.redirects:
+                last_redirect = node.redirects[len(node.redirects) - 1]
+                if isinstance(last_redirect, Redirect):
+                    return last_redirect.target
             if node.words:
                 return node.words[len(node.words) - 1]
         if isinstance(node, Pipeline):

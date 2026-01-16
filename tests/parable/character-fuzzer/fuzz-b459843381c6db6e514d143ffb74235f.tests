@@ -1,0 +1,5 @@
+=== pattern operator after non-variable char in double-quoted parameter expansion
+"${x{%$''}"
+---
+(command (word "\"${x{%''}\""))
+---

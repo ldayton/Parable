@@ -1,0 +1,5 @@
+=== process substitution inside arithmetic in parameter expansion
+${$[>(]}
+---
+(command (word "${$[>(]}"))
+---

@@ -1,0 +1,7 @@
+=== trailing backslash after redirect should be line continuation
+<'
+' \
+---
+(command (redirect "<" "'
+'"))
+---

@@ -695,6 +695,33 @@ class Word extends Node {
 										break;
 									}
 								}
+								// If no operator at start and the first char is NOT a known
+								// bash operator character, also check if any operator exists
+								// later (handles cases like ${x{%...} where { precedes the operator)
+								// Known operator start chars: % # / ^ , ~ : + - = ?
+								if (
+									!in_pattern &&
+									op_start &&
+									!"%#/^,~:+-=?".includes(op_start[0])
+								) {
+									for (op of [
+										"//",
+										"%%",
+										"##",
+										"/",
+										"%",
+										"#",
+										"^",
+										"^^",
+										",",
+										",,",
+									]) {
+										if (op_start.includes(op)) {
+											in_pattern = true;
+											break;
+										}
+									}
+								}
 							} else if (var_name_len === 0 && after_brace.length > 1) {
 								// Handle invalid variable names (var_name_len = 0) where first char is not a pattern operator
 								// but there's a pattern operator later (e.g., ${>%$'b'})
@@ -1213,7 +1240,8 @@ class Word extends Node {
 			} else if (ch === "[") {
 				// Only start subscript tracking if at word start (for [key]=val patterns)
 				// Mid-word [ like a[ is literal, not a subscript
-				if (in_whitespace) {
+				// But if already inside brackets, track nested brackets
+				if (in_whitespace || bracket_depth > 0) {
 					bracket_depth += 1;
 				}
 				in_whitespace = false;
@@ -1437,6 +1465,7 @@ class Word extends Node {
 			formatted_inner,
 			has_arith,
 			has_brace_cmdsub,
+			has_param_with_procsub_pattern,
 			has_untracked_cmdsub,
 			has_untracked_procsub,
 			i,
@@ -1537,12 +1566,16 @@ class Word extends Node {
 				idx += 1;
 			}
 		}
+		// Check if ${...} contains <( or >( patterns that need normalization
+		has_param_with_procsub_pattern =
+			value.includes("${") && (value.includes("<(") || value.includes(">("));
 		if (
 			cmdsub_parts.length === 0 &&
 			procsub_parts.length === 0 &&
 			!has_brace_cmdsub &&
 			!has_untracked_cmdsub &&
-			!has_untracked_procsub
+			!has_untracked_procsub &&
+			!has_param_with_procsub_pattern
 		) {
 			return value;
 		}
@@ -1963,6 +1996,8 @@ class Word extends Node {
 					inner = value.slice(i + 2, j - 1);
 				}
 				formatted_inner = this._formatCommandSubstitutions(inner);
+				// Normalize <( and >( patterns in param expansion (for pipe alternation)
+				formatted_inner = this._normalizeExtglobWhitespace(formatted_inner);
 				// Only append closing } if we found one in the input
 				if (depth === 0) {
 					result.push(`\${${formatted_inner}}`);
@@ -1998,6 +2033,7 @@ class Word extends Node {
 
 	_normalizeExtglobWhitespace(value) {
 		let current_part,
+			deprecated_arith_depth,
 			depth,
 			has_pipe,
 			i,
@@ -2009,6 +2045,7 @@ class Word extends Node {
 		result = [];
 		i = 0;
 		in_double_quote = false;
+		deprecated_arith_depth = 0;
 		while (i < value.length) {
 			// Track double-quote state
 			if (value[i] === '"') {
@@ -2017,11 +2054,28 @@ class Word extends Node {
 				i += 1;
 				continue;
 			}
+			// Track deprecated arithmetic $[...] - inside it, >( and <( are not procsub
+			if (_startsWithAt(value, i, "$[") && !_isBackslashEscaped(value, i)) {
+				deprecated_arith_depth += 1;
+				result.push(value[i]);
+				i += 1;
+				continue;
+			}
+			if (value[i] === "]" && deprecated_arith_depth > 0) {
+				deprecated_arith_depth -= 1;
+				result.push(value[i]);
+				i += 1;
+				continue;
+			}
 			// Check for >( or <( pattern (process substitution-like in regex)
-			// Only process these patterns when NOT inside double quotes
+			// Only process these patterns when NOT inside double quotes or $[...]
 			if (i + 1 < value.length && value[i + 1] === "(") {
 				prefix_char = value[i];
-				if ("><".includes(prefix_char) && !in_double_quote) {
+				if (
+					"><".includes(prefix_char) &&
+					!in_double_quote &&
+					deprecated_arith_depth === 0
+				) {
 					// Found pattern start
 					result.push(prefix_char);
 					result.push("(");
@@ -2059,17 +2113,23 @@ class Word extends Node {
 							current_part.push(value[i]);
 							i += 1;
 						} else if (value[i] === "|" && depth === 1) {
-							// Top-level pipe separator
-							has_pipe = true;
-							part_content = current_part.join("");
-							// Don't strip if this looks like a process substitution with heredoc
-							if (part_content.includes("<<")) {
-								pattern_parts.push(part_content);
+							// Check for || (OR operator) - keep as single token
+							if (i + 1 < value.length && value[i + 1] === "|") {
+								current_part.push("||");
+								i += 2;
 							} else {
-								pattern_parts.push(part_content.trim());
+								// Top-level pipe separator
+								has_pipe = true;
+								part_content = current_part.join("");
+								// Don't strip if this looks like a process substitution with heredoc
+								if (part_content.includes("<<")) {
+									pattern_parts.push(part_content);
+								} else {
+									pattern_parts.push(part_content.trim());
+								}
+								current_part = [];
+								i += 1;
 							}
-							current_part = [];
-							i += 1;
 						} else {
 							current_part.push(value[i]);
 							i += 1;
@@ -4122,15 +4182,21 @@ function _formatCmdsubNode(
 	if (node.kind === "for") {
 		variable = node.variable;
 		body = _formatCmdsubNode(node.body, indent + 4);
-		if (node.words && node.words.length) {
+		if (node.words != null) {
 			word_vals = [];
 			for (w of node.words) {
 				word_vals.push(w.value);
 			}
 			words = word_vals.join(" ");
-			result = `for ${variable} in ${words};\n${sp}do\n${inner_sp}${body};\n${sp}done`;
+			if (words && words.length) {
+				result = `for ${variable} in ${words};\n${sp}do\n${inner_sp}${body};\n${sp}done`;
+			} else {
+				// Empty 'in' clause: for var in ;
+				result = `for ${variable} in ;\n${sp}do\n${inner_sp}${body};\n${sp}done`;
+			}
 		} else {
-			result = `for ${variable};\n${sp}do\n${inner_sp}${body};\n${sp}done`;
+			// No 'in' clause - bash implies 'in "$@"'
+			result = `for ${variable} in "$@";\n${sp}do\n${inner_sp}${body};\n${sp}done`;
 		}
 		if (node.redirects && node.redirects.length) {
 			for (r of node.redirects) {
@@ -4313,10 +4379,10 @@ function _formatRedirect(r, compact, heredoc_op_only) {
 			(after_amp.length > 0 && /^[0-9]+$/.test(after_amp[0]));
 		if (is_literal_fd) {
 			// Add default fd for bare >&N or <&N
-			if (op === ">") {
+			if (op === ">" || op === ">&") {
 				// If we normalized from <&-, use fd 0 (stdin), otherwise fd 1 (stdout)
 				op = was_input_close ? "0>" : "1>";
-			} else if (op === "<") {
+			} else if (op === "<" || op === "<&") {
 				op = "0<";
 			}
 		} else if (op === "1>") {
@@ -4433,8 +4499,10 @@ function _findCmdsubEnd(value, start) {
 		}
 		// Handle comments - skip from # to end of line
 		// Only treat # as comment if preceded by whitespace or at start
+		// Don't treat # as comment inside arithmetic expressions (arith_depth > 0)
 		if (
 			c === "#" &&
+			arith_depth === 0 &&
 			(i === start ||
 				value[i - 1] === " " ||
 				value[i - 1] === "\t" ||
@@ -4536,6 +4604,22 @@ function _findCmdsubEnd(value, start) {
 		) {
 			arith_depth -= 1;
 			i += 2;
+			continue;
+		}
+		// Handle backtick command substitution - skip to closing backtick
+		// Must handle this before heredoc check to avoid treating << inside backticks as heredoc
+		if (c === "`") {
+			i += 1;
+			while (i < value.length && value[i] !== "`") {
+				if (value[i] === "\\" && i + 1 < value.length) {
+					i += 2;
+				} else {
+					i += 1;
+				}
+			}
+			if (i < value.length) {
+				i += 1;
+			}
 			continue;
 		}
 		// Handle heredocs (but not << inside arithmetic, which is shift operator)
@@ -6444,6 +6528,23 @@ class Parser {
 				arith_depth -= 1;
 				this.advance();
 				this.advance();
+				continue;
+			}
+			// Backtick command substitution - skip to closing backtick
+			// Must handle this before heredoc check to avoid treating << inside backticks as heredoc
+			if (c === "`") {
+				this.advance();
+				while (!this.atEnd() && this.peek() !== "`") {
+					if (this.peek() === "\\" && this.pos + 1 < this.length) {
+						this.advance();
+						this.advance();
+					} else {
+						this.advance();
+					}
+				}
+				if (!this.atEnd()) {
+					this.advance();
+				}
 				continue;
 			}
 			// Heredoc - skip until delimiter line is found (not inside arithmetic)
@@ -8562,8 +8663,8 @@ class Parser {
 				dollar_count =
 					1 + _countConsecutiveDollarsBefore(this.source, this.pos);
 				if (dollar_count % 2 === 1) {
-					// Odd count: locale/ANSI-C string - skip the $ and treat as operator
-					this.advance();
+					// Odd count: locale/ANSI-C string - don't consume $, let argument loop handle it
+					// The $ needs to be preserved for _expand_all_ansi_c_quotes to process $'...'
 					op = "";
 				} else {
 					// Even count: this $ is part of $$ (PID), treat as unknown operator
@@ -9482,6 +9583,10 @@ class Parser {
 						dollar_count += 1;
 						j -= 1;
 					}
+					// If preceded by backslash, first dollar was escaped
+					if (j >= 0 && this.source[j] === "\\") {
+						dollar_count -= 1;
+					}
 					if (dollar_count % 2 === 1) {
 						// Odd number of $ before: this $ pairs with previous to form $$
 						// Don't consume the {, let it end the delimiter
@@ -9512,6 +9617,10 @@ class Parser {
 					while (j >= 0 && this.source[j] === "$") {
 						dollar_count += 1;
 						j -= 1;
+					}
+					// If preceded by backslash, first dollar was escaped
+					if (j >= 0 && this.source[j] === "\\") {
+						dollar_count -= 1;
 					}
 					if (dollar_count % 2 === 1) {
 						// Odd number of $ before: this $ pairs with previous to form $$
@@ -12665,10 +12774,26 @@ class Parser {
 	}
 
 	_findLastWord(node) {
+		let last_redirect, last_word;
 		if (node instanceof Word) {
 			return node;
 		}
 		if (node instanceof Command) {
+			// For trailing backslash stripping, prioritize words ending with backslash
+			// since that's the word we need to strip from
+			if (node.words && node.words.length) {
+				last_word = node.words[node.words.length - 1];
+				if (last_word.value.endsWith("\\")) {
+					return last_word;
+				}
+			}
+			// Redirects come after words in s-expression output, so check redirects first
+			if (node.redirects && node.redirects.length) {
+				last_redirect = node.redirects[node.redirects.length - 1];
+				if (last_redirect instanceof Redirect) {
+					return last_redirect.target;
+				}
+			}
 			if (node.words && node.words.length) {
 				return node.words[node.words.length - 1];
 			}

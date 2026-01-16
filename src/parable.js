@@ -4508,18 +4508,10 @@ function _skipHeredoc(value, start) {
 	// Find the end delimiter on its own line
 	while (i < value.length) {
 		line_start = i;
-		// Find end of this line (stop at newline or ) which closes cmdsub)
+		// Find end of this line - heredoc content can contain )
 		line_end = i;
-		while (
-			line_end < value.length &&
-			value[line_end] !== "\n" &&
-			value[line_end] !== ")"
-		) {
+		while (line_end < value.length && value[line_end] !== "\n") {
 			line_end += 1;
-		}
-		// If we hit ) before newline, heredoc is incomplete - return position of )
-		if (line_end < value.length && value[line_end] === ")") {
-			return line_end;
 		}
 		line = value.slice(line_start, line_end);
 		// Handle backslash-newline continuation (join continued lines)
@@ -4558,13 +4550,10 @@ function _skipHeredoc(value, start) {
 				return line_end;
 			}
 		}
-		// Check if delimiter followed by ) which closes cmdsub
-		if (
-			stripped.startsWith(delimiter) &&
-			stripped.length > delimiter.length &&
-			stripped[delimiter.length] === ")"
-		) {
-			// Return position of the ) so caller can close the cmdsub
+		// Check if line starts with delimiter followed by other content
+		// This handles cases like "Xb)" where X is delimiter and b) continues the cmdsub
+		if (stripped.startsWith(delimiter) && stripped.length > delimiter.length) {
+			// Return position right after the delimiter
 			tabs_stripped = line.length - stripped.length;
 			return line_start + tabs_stripped + delimiter.length;
 		}
@@ -6034,17 +6023,9 @@ class Parser {
 					while (!this.atEnd()) {
 						line_start = this.pos;
 						line_end = this.pos;
-						while (
-							line_end < this.length &&
-							this.source[line_end] !== "\n" &&
-							this.source[line_end] !== ")"
-						) {
+						// Scan to end of line - heredoc content can contain )
+						while (line_end < this.length && this.source[line_end] !== "\n") {
 							line_end += 1;
-						}
-						// If we hit ) before newline, heredoc is incomplete - position at ) and break
-						if (line_end < this.length && this.source[line_end] === ")") {
-							this.pos = line_end;
-							break;
 						}
 						line = this.source.slice(line_start, line_end);
 						// Move position to end of line
@@ -6058,13 +6039,13 @@ class Parser {
 							}
 							break;
 						}
-						// Also check for delimiter followed by ) which closes cmdsub
+						// Also check for delimiter followed by other content
+						// (e.g., "Xb)" where X is delimiter and b) continues the cmdsub)
 						if (
 							check_line.startsWith(delimiter) &&
-							check_line.length > delimiter.length &&
-							check_line[delimiter.length] === ")"
+							check_line.length > delimiter.length
 						) {
-							// Position parser at the ) so it closes the cmdsub
+							// Position parser right after the delimiter
 							tabs_stripped = line.length - check_line.length;
 							this.pos = line_start + tabs_stripped + delimiter.length;
 							break;

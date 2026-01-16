@@ -3776,13 +3776,10 @@ def _skip_heredoc(value: str, start: int) -> int:
     # Find the end delimiter on its own line
     while i < len(value):
         line_start = i
-        # Find end of this line (stop at newline or ) which closes cmdsub)
+        # Find end of this line - heredoc content can contain )
         line_end = i
-        while line_end < len(value) and value[line_end] != "\n" and value[line_end] != ")":
+        while line_end < len(value) and value[line_end] != "\n":
             line_end += 1
-        # If we hit ) before newline, heredoc is incomplete - return position of )
-        if line_end < len(value) and value[line_end] == ")":
-            return line_end
         line = _substring(value, line_start, line_end)
         # Handle backslash-newline continuation (join continued lines)
         while line_end < len(value):
@@ -3812,13 +3809,10 @@ def _skip_heredoc(value: str, start: int) -> int:
                 return line_end + 1
             else:
                 return line_end
-        # Check if delimiter followed by ) which closes cmdsub
-        if (
-            stripped.startswith(delimiter)
-            and len(stripped) > len(delimiter)
-            and stripped[len(delimiter)] == ")"
-        ):
-            # Return position of the ) so caller can close the cmdsub
+        # Check if line starts with delimiter followed by other content
+        # This handles cases like "Xb)" where X is delimiter and b) continues the cmdsub
+        if stripped.startswith(delimiter) and len(stripped) > len(delimiter):
+            # Return position right after the delimiter
             tabs_stripped = len(line) - len(stripped)
             return line_start + tabs_stripped + len(delimiter)
         if line_end < len(value):
@@ -5027,16 +5021,9 @@ class Parser:
                     while not self.at_end():
                         line_start = self.pos
                         line_end = self.pos
-                        while (
-                            line_end < self.length
-                            and self.source[line_end] != "\n"
-                            and self.source[line_end] != ")"
-                        ):
+                        # Scan to end of line - heredoc content can contain )
+                        while line_end < self.length and self.source[line_end] != "\n":
                             line_end += 1
-                        # If we hit ) before newline, heredoc is incomplete - position at ) and break
-                        if line_end < self.length and self.source[line_end] == ")":
-                            self.pos = line_end
-                            break
                         line = _substring(self.source, line_start, line_end)
                         # Move position to end of line
                         self.pos = line_end
@@ -5047,13 +5034,10 @@ class Parser:
                             if not self.at_end() and self.peek() == "\n":
                                 self.advance()
                             break
-                        # Also check for delimiter followed by ) which closes cmdsub
-                        if (
-                            check_line.startswith(delimiter)
-                            and len(check_line) > len(delimiter)
-                            and check_line[len(delimiter)] == ")"
-                        ):
-                            # Position parser at the ) so it closes the cmdsub
+                        # Also check for delimiter followed by other content
+                        # (e.g., "Xb)" where X is delimiter and b) continues the cmdsub)
+                        if check_line.startswith(delimiter) and len(check_line) > len(delimiter):
+                            # Position parser right after the delimiter
                             tabs_stripped = len(line) - len(check_line)
                             self.pos = line_start + tabs_stripped + len(delimiter)
                             break

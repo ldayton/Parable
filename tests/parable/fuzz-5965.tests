@@ -1,0 +1,5 @@
+=== subshell spacing preserved in process substitution
+a<(b;( x ))
+---
+(command (word "a<(b; ( x ))"))
+---

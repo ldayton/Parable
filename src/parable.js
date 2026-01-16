@@ -1467,7 +1467,7 @@ class Word extends Node {
 					direction = value[i];
 					j = _findCmdsubEnd(value, i + 2);
 					node = procsub_parts[procsub_idx];
-					formatted = _formatCmdsubNode(node.command, 0, true);
+					formatted = _formatCmdsubNode(node.command, 0, true, false, true);
 					if (node.command.kind === "subshell") {
 						raw_content = value.slice(i + 2, j - 1);
 						if (raw_content.startsWith("(")) {
@@ -1504,7 +1504,7 @@ class Word extends Node {
 						parsed = parser.parseList();
 						// Only use parsed result if parser consumed all input
 						if (parsed && parser.pos === inner_to_parse.length) {
-							formatted = _formatCmdsubNode(parsed, 0, true);
+							formatted = _formatCmdsubNode(parsed, 0, true, false, true);
 						} else {
 							formatted = inner;
 							leading_ws = "";
@@ -3246,10 +3246,17 @@ function _formatCondBody(node) {
 	return "";
 }
 
-function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
+function _formatCmdsubNode(
+	node,
+	indent,
+	in_procsub,
+	compact_redirects,
+	procsub_first,
+) {
 	let body,
 		body_part,
 		cmd,
+		cmd_count,
 		cmds,
 		compact_pipe,
 		cond,
@@ -3303,6 +3310,9 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 	}
 	if (compact_redirects == null) {
 		compact_redirects = false;
+	}
+	if (procsub_first == null) {
+		procsub_first = false;
 	}
 	sp = " ".repeat(indent);
 	inner_sp = " ".repeat(indent + 4);
@@ -3365,7 +3375,14 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 		idx = 0;
 		while (idx < cmds.length) {
 			[cmd, needs_redirect] = cmds[idx];
-			formatted = _formatCmdsubNode(cmd, indent, in_procsub);
+			// Only first command in pipeline inherits procsub_first
+			formatted = _formatCmdsubNode(
+				cmd,
+				indent,
+				in_procsub,
+				false,
+				procsub_first && idx === 0,
+			);
 			if (needs_redirect) {
 				formatted = `${formatted} 2>&1`;
 			}
@@ -3432,6 +3449,7 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 		// Join commands with operators
 		result = [];
 		skipped_semi = false;
+		cmd_count = 0;
 		for (p of node.parts) {
 			if (p.kind === "operator") {
 				if (p.op === ";") {
@@ -3494,11 +3512,13 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 				) {
 					result.push(" ");
 				}
+				// Only first command in list inherits procsub_first
 				formatted_cmd = _formatCmdsubNode(
 					p,
 					indent,
 					in_procsub,
 					compact_redirects,
+					procsub_first && cmd_count === 0,
 				);
 				// After heredoc with || or && inserted, add leading space to next command
 				if (result.length > 0) {
@@ -3508,6 +3528,7 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 					}
 				}
 				result.push(formatted_cmd);
+				cmd_count += 1;
 			}
 		}
 		// Strip trailing ; or newline (but preserve heredoc's trailing newline)
@@ -3641,7 +3662,8 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 			}
 			redirects = redirect_parts.join(" ");
 		}
-		if (in_procsub) {
+		// Use compact format only when subshell is at the start of a procsub
+		if (procsub_first) {
 			if (redirects && redirects.length) {
 				return `(${body}) ${redirects}`;
 			}

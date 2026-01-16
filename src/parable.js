@@ -4045,6 +4045,114 @@ function _skipHeredoc(value, start) {
 	return i;
 }
 
+function _extractHeredocDelimiters(content) {
+	let delim_start, delimiters, i, quote, strip_tabs;
+	delimiters = [];
+	i = 0;
+	while (i < content.length) {
+		if (content[i] === "'") {
+			i += 1;
+			while (i < content.length && content[i] !== "'") {
+				i += 1;
+			}
+			if (i < content.length) {
+				i += 1;
+			}
+			continue;
+		}
+		if (content[i] === '"') {
+			i += 1;
+			while (i < content.length && content[i] !== '"') {
+				if (content[i] === "\\" && i + 1 < content.length) {
+					i += 2;
+					continue;
+				}
+				i += 1;
+			}
+			if (i < content.length) {
+				i += 1;
+			}
+			continue;
+		}
+		if (
+			content[i] === "<" &&
+			i + 1 < content.length &&
+			content[i + 1] === "<"
+		) {
+			i += 2;
+			strip_tabs = false;
+			if (i < content.length && content[i] === "-") {
+				strip_tabs = true;
+				i += 1;
+			}
+			while (i < content.length && _isWhitespaceNoNewline(content[i])) {
+				i += 1;
+			}
+			if (i < content.length && (content[i] === '"' || content[i] === "'")) {
+				quote = content[i];
+				i += 1;
+				delim_start = i;
+				while (i < content.length && content[i] !== quote) {
+					i += 1;
+				}
+				delimiters.push([content.slice(delim_start, i), strip_tabs]);
+				if (i < content.length) {
+					i += 1;
+				}
+			} else if (i < content.length && content[i] === "\\") {
+				i += 1;
+				delim_start = i;
+				while (i < content.length && !_isWhitespace(content[i])) {
+					i += 1;
+				}
+				delimiters.push([content.slice(delim_start, i), strip_tabs]);
+			} else {
+				delim_start = i;
+				while (i < content.length && !_isMetachar(content[i])) {
+					i += 1;
+				}
+				delimiters.push([content.slice(delim_start, i), strip_tabs]);
+			}
+			continue;
+		}
+		i += 1;
+	}
+	return delimiters;
+}
+
+function _findHeredocContentEnd(source, start, delimiters) {
+	let delimiter, line, line_end, line_start, line_stripped, pos, strip_tabs;
+	if (!delimiters) {
+		return start;
+	}
+	pos = start;
+	for ([delimiter, strip_tabs] of delimiters) {
+		if (pos >= source.length || source[pos] !== "\n") {
+			break;
+		}
+		pos += 1;
+		while (pos < source.length) {
+			line_start = pos;
+			line_end = pos;
+			while (line_end < source.length && source[line_end] !== "\n") {
+				line_end += 1;
+			}
+			line = source.slice(line_start, line_end);
+			if (strip_tabs) {
+				line_stripped = line.replace(/^[\t]+/, "");
+			} else {
+				line_stripped = line;
+			}
+			if (line_stripped === delimiter) {
+				pos = line_end < source.length ? line_end + 1 : line_end;
+				break;
+			}
+			pos = line_end < source.length ? line_end + 1 : line_end;
+		}
+	}
+	return pos;
+}
+
 function _isWordBoundary(s, pos, word_len) {
 	let end;
 	// Check character before
@@ -5596,9 +5704,12 @@ class Parser {
 			content_start,
 			depth,
 			direction,
+			heredoc_delimiters,
+			heredoc_end,
 			start,
 			sub_parser,
-			text;
+			text,
+			text_end;
 		if (this.atEnd() || !_isRedirectChar(this.peek())) {
 			return [null, ""];
 		}
@@ -5669,7 +5780,22 @@ class Parser {
 		}
 		content = this.source.slice(content_start, this.pos);
 		this.advance();
-		text = this.source.slice(start, this.pos);
+		// Save position after ) for text (before skipping heredoc content)
+		text_end = this.pos;
+		// Check for heredocs in content - their bodies follow the )
+		heredoc_delimiters = _extractHeredocDelimiters(content);
+		if (heredoc_delimiters) {
+			heredoc_end = _findHeredocContentEnd(
+				this.source,
+				this.pos,
+				heredoc_delimiters,
+			);
+			if (heredoc_end > this.pos) {
+				content = content + this.source.slice(this.pos, heredoc_end);
+				this.pos = heredoc_end;
+			}
+		}
+		text = this.source.slice(start, text_end);
 		// Strip line continuations (backslash-newline) from text used for word construction
 		text = text.replaceAll("\\\n", "");
 		// Parse the content as a command list

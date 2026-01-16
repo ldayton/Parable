@@ -1913,9 +1913,20 @@ class Word extends Node {
 					j += 1;
 				}
 				// Recursively format any cmdsubs inside the param expansion
-				inner = value.slice(i + 2, j - 1);
+				// When depth > 0 (unclosed ${), include all remaining chars
+				if (depth > 0) {
+					inner = value.slice(i + 2, j);
+				} else {
+					inner = value.slice(i + 2, j - 1);
+				}
 				formatted_inner = this._formatCommandSubstitutions(inner);
-				result.push(`\${${formatted_inner}}`);
+				// Only append closing } if we found one in the input
+				if (depth === 0) {
+					result.push(`\${${formatted_inner}}`);
+				} else {
+					// Unclosed ${...} - output without closing brace
+					result.push(`\${${formatted_inner}`);
+				}
 				i = j;
 			} else if (value[i] === '"') {
 				// Track double-quote state (single quotes inside double quotes are literal)

@@ -24,14 +24,22 @@ def main():
         from .generator import main as generator_main
 
         generator_main()
+    elif "--minimize" in args:
+        args.remove("--minimize")
+        sys.argv = [sys.argv[0]] + args
+        from .minimize import main as minimize_main
+
+        minimize_main()
     else:
         print("Usage: fuzzer --structural [options]")
         print("       fuzzer --character [options]")
         print("       fuzzer --generator [options]")
+        print("       fuzzer --minimize INPUT")
         print()
         print("  --structural  Structural fuzzer: wraps inputs in $(), <(), etc.")
         print("  --character   Character mutation fuzzer: random char mutations")
         print("  --generator   Generator fuzzer: generates scripts from scratch")
+        print("  --minimize    Minimize a discrepancy to its MRE via delta debugging")
         print()
         print("Run with -h after mode flag for mode-specific options.")
         sys.exit(1)

@@ -1,0 +1,5 @@
+=== single bracket with character class pattern
+[[ [ = [[::]] ]]
+---
+(cond (cond-binary "=" (cond-term "[") (cond-term "[[::]]")))
+---

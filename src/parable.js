@@ -4359,18 +4359,26 @@ function _extractHeredocDelimiters(content) {
 }
 
 function _findHeredocContentEnd(source, start, delimiters) {
-	let delimiter, line, line_end, line_start, line_stripped, pos, strip_tabs;
+	let delimiter,
+		line,
+		line_end,
+		line_start,
+		line_stripped,
+		pos,
+		strip_tabs,
+		ws_start;
 	if (!delimiters) {
 		return start;
 	}
 	pos = start;
 	for ([delimiter, strip_tabs] of delimiters) {
 		// Skip whitespace on the same line (e.g., tabs/spaces after closing paren)
+		ws_start = pos;
 		while (pos < source.length && " \t".includes(source[pos])) {
 			pos += 1;
 		}
 		if (pos >= source.length || source[pos] !== "\n") {
-			break;
+			return ws_start;
 		}
 		pos += 1;
 		while (pos < source.length) {

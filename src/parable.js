@@ -9623,13 +9623,25 @@ class Parser {
 						// Parameter expansion embedded in delimiter
 						delimiter_chars.push(this.advance());
 						delimiter_chars.push(this.advance());
-						depth = 1;
-						while (!this.atEnd() && depth > 0) {
+						depth = 0;
+						while (!this.atEnd()) {
 							c = this.peek();
 							if (c === "{") {
 								depth += 1;
 							} else if (c === "}") {
+								// Consume the closing brace
+								delimiter_chars.push(this.advance());
+								if (depth === 0) {
+									// Outer expansion closed
+									break;
+								}
 								depth -= 1;
+								// After closing inner brace, check if next is metachar
+								// If so, the expansion ends here (bash behavior)
+								if (depth === 0 && !this.atEnd() && _isMetachar(this.peek())) {
+									break;
+								}
+								continue;
 							}
 							delimiter_chars.push(this.advance());
 						}

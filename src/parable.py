@@ -582,8 +582,11 @@ class Word(Node):
                             # Check if operator immediately after variable name is a pattern operator
                             if var_name_len > 0 and var_name_len < len(after_brace):
                                 op_start = after_brace[var_name_len:]
+                                # Skip @ prefix if present (handles @%, @#, @/ etc.)
+                                if op_start.startswith("@") and len(op_start) > 1:
+                                    op_start = op_start[1:]
                                 # Check if it starts with a pattern operator
-                                for op in ["//", "%%", "##", "/", "%", "#"]:
+                                for op in ["//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"]:
                                     if op_start.startswith(op):
                                         in_pattern = True
                                         break

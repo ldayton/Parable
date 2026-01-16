@@ -1,0 +1,5 @@
+=== strip leading whitespace in process substitution used as redirect target
+$(><( a))
+---
+(command (word "$(> <(a))"))
+---

@@ -1,0 +1,7 @@
+=== redirect operator in brace expansion body
+${
+<-
+}
+---
+(command (word "${ < -\n }"))
+---

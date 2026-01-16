@@ -53,7 +53,7 @@ jobs:
 
       - name: Run fuzzer agent
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PAT }}
         run: |
           cd tools/fuzzer-agent
           uv run fuzzer-agent --model ${{ inputs.model }}

@@ -1,0 +1,6 @@
+=== nested brace expansion with newline inside outer expansion
+${a${b}
+x}
+---
+(command (word "${a${b}\nx}"))
+---

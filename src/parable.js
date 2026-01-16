@@ -4472,10 +4472,18 @@ function _skipHeredoc(value, start) {
 	// Find the end delimiter on its own line
 	while (i < value.length) {
 		line_start = i;
-		// Find end of this line
+		// Find end of this line (stop at newline or ) which closes cmdsub)
 		line_end = i;
-		while (line_end < value.length && value[line_end] !== "\n") {
+		while (
+			line_end < value.length &&
+			value[line_end] !== "\n" &&
+			value[line_end] !== ")"
+		) {
 			line_end += 1;
+		}
+		// If we hit ) before newline, heredoc is incomplete - return position of )
+		if (line_end < value.length && value[line_end] === ")") {
+			return line_end;
 		}
 		line = value.slice(line_start, line_end);
 		// Handle backslash-newline continuation (join continued lines)
@@ -5990,8 +5998,17 @@ class Parser {
 					while (!this.atEnd()) {
 						line_start = this.pos;
 						line_end = this.pos;
-						while (line_end < this.length && this.source[line_end] !== "\n") {
+						while (
+							line_end < this.length &&
+							this.source[line_end] !== "\n" &&
+							this.source[line_end] !== ")"
+						) {
 							line_end += 1;
+						}
+						// If we hit ) before newline, heredoc is incomplete - position at ) and break
+						if (line_end < this.length && this.source[line_end] === ")") {
+							this.pos = line_end;
+							break;
 						}
 						line = this.source.slice(line_start, line_end);
 						// Move position to end of line
@@ -6131,7 +6148,7 @@ class Parser {
 		this.advance();
 		text = this.source.slice(start, this.pos);
 		// Parse the content as a command list
-		sub_parser = new Parser(content);
+		sub_parser = new Parser(content, true);
 		cmd = sub_parser.parseList();
 		if (cmd == null) {
 			cmd = new Empty();
@@ -8651,7 +8668,6 @@ class Parser {
 			depth,
 			esc,
 			esc_val,
-			had_continuation,
 			heredoc_end,
 			i,
 			line,
@@ -8660,7 +8676,6 @@ class Parser {
 			next_ch,
 			next_line_start,
 			quoted,
-			rest,
 			scan_pos,
 			tabs_stripped,
 			trailing_bs;
@@ -8971,34 +8986,19 @@ class Parser {
 			}
 			// At EOF with line starting with delimiter - heredoc terminates (process sub case)
 			// e.g. <(<<a\na ) - the "a " line starts with delimiter "a" and we're at EOF
+			// In command substitutions, bash accepts the delimiter prefix and treats
+			// remaining characters as subsequent commands (e.g., <<X\nXb → X is delimiter, b is command)
 			if (
 				line_end >= this.length &&
 				check_line.startsWith(delimiter) &&
 				this._in_process_sub
 			) {
-				// Only match if delimiter is exact or followed by whitespace/punctuation
-				rest = check_line.slice(delimiter.length);
-				// In process sub, accept: exact match, whitespace only, or whitespace + )
-				// Also accept if there was backslash-newline continuation (line was joined)
-				// In that case, end heredoc after the original line with escaped newline preserved
-				had_continuation =
-					check_line !==
-					this.source.slice(
-						line_start,
-						Math.min(line_start + check_line.length, this.length),
-					);
-				if (
-					rest === "" ||
-					rest.trimStart() === "" ||
-					rest.trimStart().startsWith(")") ||
-					had_continuation
-				) {
-					// Adjust line_end to point just past the delimiter, not the whole line
-					// This allows remaining content after delimiter to be parsed
-					tabs_stripped = line.length - check_line.length;
-					line_end = line_start + tabs_stripped + delimiter.length;
-					break;
-				}
+				// At EOF in process/command sub, treat delimiter prefix as matching
+				// Adjust line_end to point just past the delimiter, not the whole line
+				// This allows remaining content after delimiter to be parsed as commands
+				tabs_stripped = line.length - check_line.length;
+				line_end = line_start + tabs_stripped + delimiter.length;
+				break;
 			}
 			// Add line to content (with newline, since we consumed continuations above)
 			if (strip_tabs) {

@@ -66,6 +66,17 @@ def run(max_iterations: int | None = None) -> int:
             time.sleep(backoff)
             backoff = min(backoff * 2, MAX_BACKOFF)
             continue
+        # Fix origin to point to GitHub instead of local repo
+        github_url = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        if github_url:
+            subprocess.run(
+                ["git", "-C", str(clone_target), "remote", "set-url", "origin", github_url],
+                capture_output=True,
+            )
         # Create TMPDIR for the subprocess
         agent_tmpdir = tempfile.mkdtemp(prefix="fuzzer-tmp-")
         agent_dir = clone_target / "tools" / "fuzzer-agent"

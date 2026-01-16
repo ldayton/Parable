@@ -70,14 +70,13 @@ jobs:
         if: always()
         run: |
           FILE="${{ steps.claude.outputs.execution_file }}"
+          COST=0
+          INPUT=0
+          OUTPUT=0
           if [ -f "$FILE" ]; then
-            COST=$(jq -s '[.[] | select(.type == "result" and .subtype == "success")] | .[-1].total_cost_usd // 0 | . * 100 | round / 100' "$FILE")
-            INPUT=$(jq -s '[.[] | select(.type == "result" and .subtype == "success")] | .[-1].usage.input_tokens // 0' "$FILE")
-            OUTPUT=$(jq -s '[.[] | select(.type == "result" and .subtype == "success")] | .[-1].usage.output_tokens // 0' "$FILE")
-          else
-            COST=0
-            INPUT=0
-            OUTPUT=0
+            COST=$(jq -s '[.[] | objects | select(.type == "result" and .subtype == "success")] | .[-1].total_cost_usd // 0 | . * 100 | round / 100' "$FILE" 2>/dev/null) || COST=0
+            INPUT=$(jq -s '[.[] | objects | select(.type == "result" and .subtype == "success")] | .[-1].usage.input_tokens // 0' "$FILE" 2>/dev/null) || INPUT=0
+            OUTPUT=$(jq -s '[.[] | objects | select(.type == "result" and .subtype == "success")] | .[-1].usage.output_tokens // 0' "$FILE" 2>/dev/null) || OUTPUT=0
           fi
           echo "## Fuzzer Fix #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

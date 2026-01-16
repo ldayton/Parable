@@ -1,0 +1,8 @@
+=== here-string in command substitution with whitespace before closing paren
+$(<<< a
+ )
+b
+---
+(command (word "$(<<< a)"))
+(command (word "b"))
+---

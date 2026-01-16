@@ -182,6 +182,68 @@ class QuoteState:
         return len(self._stack)
 
 
+class ParseContext:
+    """Context for parsing state within a specific scope.
+
+    Tracks context type, nesting depths, and quote state for a single parsing scope.
+    Used with ContextStack to manage nested contexts like command substitutions,
+    arithmetic expressions, and case patterns.
+    """
+
+    # Context kind constants
+    NORMAL = 0
+    COMMAND_SUB = 1
+    ARITHMETIC = 2
+    CASE_PATTERN = 3
+    BRACE_EXPANSION = 4
+
+    def __init__(self, kind: int = 0):
+        self.kind = kind
+        self.paren_depth = 0
+        self.brace_depth = 0
+        self.bracket_depth = 0
+        self.quote = QuoteState()
+
+
+class ContextStack:
+    """Stack of parsing contexts for tracking nested scopes.
+
+    Maintains a stack of ParseContext objects to handle nested structures like
+    command substitutions inside arithmetic expressions inside case patterns.
+    Always has at least one context (NORMAL) on the stack.
+    """
+
+    def __init__(self):
+        self._stack: list[ParseContext] = [ParseContext()]
+
+    @property
+    def current(self) -> ParseContext:
+        """Return the current (topmost) context."""
+        return self._stack[len(self._stack) - 1]
+
+    def push(self, kind: int) -> None:
+        """Push a new context onto the stack."""
+        self._stack.append(ParseContext(kind))
+
+    def pop(self) -> ParseContext:
+        """Pop and return the top context. Never pops the base context."""
+        if len(self._stack) > 1:
+            return self._stack.pop()
+        return self._stack[0]
+
+    def in_context(self, kind: int) -> bool:
+        """Return True if any context in the stack has the given kind."""
+        for ctx in self._stack:
+            if ctx.kind == kind:
+                return True
+        return False
+
+    @property
+    def depth(self) -> int:
+        """Return the current stack depth."""
+        return len(self._stack)
+
+
 def _strip_line_continuations_comment_aware(text: str) -> str:
     """Strip backslash-newline line continuations, preserving newlines in comments.
 
@@ -4600,6 +4662,8 @@ class Parser:
         self._cmdsub_heredoc_end: int | None = None
         self._saw_newline_in_single_quote = False
         self._in_process_sub = in_process_sub
+        # Context stack for tracking nested parsing scopes
+        self._ctx = ContextStack()
 
     def at_end(self) -> bool:
         """Check if we've reached the end of input."""

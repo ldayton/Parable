@@ -158,6 +158,60 @@ class QuoteState {
 	}
 }
 
+class ParseContext {
+	// Context kind constants
+	NORMAL = 0;
+	COMMAND_SUB = 1;
+	ARITHMETIC = 2;
+	CASE_PATTERN = 3;
+	BRACE_EXPANSION = 4;
+	constructor(kind) {
+		if (kind == null) {
+			kind = 0;
+		}
+		this.kind = kind;
+		this.paren_depth = 0;
+		this.brace_depth = 0;
+		this.bracket_depth = 0;
+		this.quote = new QuoteState();
+	}
+}
+
+class ContextStack {
+	constructor() {
+		this._stack = [new ParseContext()];
+	}
+
+	current() {
+		return this._stack[this._stack.length - 1];
+	}
+
+	push(kind) {
+		this._stack.push(new ParseContext(kind));
+	}
+
+	pop() {
+		if (this._stack.length > 1) {
+			return this._stack.pop();
+		}
+		return this._stack[0];
+	}
+
+	inContext(kind) {
+		let ctx;
+		for (ctx of this._stack) {
+			if (ctx.kind === kind) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	depth() {
+		return this._stack.length;
+	}
+}
+
 function _stripLineContinuationsCommentAware(text) {
 	let c, i, in_comment, j, num_preceding_backslashes, quote, result;
 	result = [];
@@ -5503,6 +5557,8 @@ class Parser {
 		this._cmdsub_heredoc_end = null;
 		this._saw_newline_in_single_quote = false;
 		this._in_process_sub = in_process_sub;
+		// Context stack for tracking nested parsing scopes
+		this._ctx = new ContextStack();
 	}
 
 	atEnd() {

@@ -724,9 +724,11 @@ class Word(Node):
                 i = j + 1
             elif ch == '"':
                 # Double-quoted string - strip line continuations
+                # Track ${...} nesting since quotes inside expansions don't end the string
                 in_whitespace = False
                 j = i + 1
                 dq_content = ['"']
+                dq_brace_depth = 0
                 while j < len(inner):
                     if inner[j] == "\\" and j + 1 < len(inner):
                         if inner[j + 1] == "\n":
@@ -736,7 +738,17 @@ class Word(Node):
                             dq_content.append(inner[j])
                             dq_content.append(inner[j + 1])
                             j += 2
-                    elif inner[j] == '"':
+                    elif inner[j] == "$" and j + 1 < len(inner) and inner[j + 1] == "{":
+                        # Start of ${...} expansion
+                        dq_content.append("${")
+                        dq_brace_depth += 1
+                        j += 2
+                    elif inner[j] == "}" and dq_brace_depth > 0:
+                        # End of ${...} expansion
+                        dq_content.append("}")
+                        dq_brace_depth -= 1
+                        j += 1
+                    elif inner[j] == '"' and dq_brace_depth == 0:
                         dq_content.append('"')
                         j += 1
                         break

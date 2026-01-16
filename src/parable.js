@@ -88,20 +88,136 @@ function _countConsecutiveDollarsBefore(s, pos) {
 	return count;
 }
 
+class QuoteState {
+	constructor() {
+		this.single = false;
+		this.double = false;
+		this._stack = [];
+	}
+
+	toggleSingle() {
+		if (!this.double) {
+			this.single = !this.single;
+		}
+	}
+
+	toggleDouble() {
+		if (!this.single) {
+			this.double = !this.double;
+		}
+	}
+
+	push() {
+		this._stack.push([this.single, this.double]);
+		this.single = false;
+		this.double = false;
+	}
+
+	pop() {
+		if (this._stack) {
+			[this.single, this.double] = this._stack.pop();
+		}
+	}
+
+	inQuotes() {
+		return this.single || this.double;
+	}
+
+	processChar(c, prev_escaped) {
+		if (prev_escaped == null) {
+			prev_escaped = false;
+		}
+		if (prev_escaped) {
+			return;
+		}
+		if (c === "'" && !this.double) {
+			this.single = !this.single;
+		} else if (c === '"' && !this.single) {
+			this.double = !this.double;
+		}
+	}
+
+	copy() {
+		let qs;
+		qs = new QuoteState();
+		qs.single = this.single;
+		qs.double = this.double;
+		qs._stack = Array.from(this._stack);
+		return qs;
+	}
+
+	outerDouble() {
+		if (this._stack.length === 0) {
+			return false;
+		}
+		return this._stack[this._stack.length - 1][1];
+	}
+
+	getDepth() {
+		return this._stack.length;
+	}
+}
+
+class ParseContext {
+	// Context kind constants
+	NORMAL = 0;
+	COMMAND_SUB = 1;
+	ARITHMETIC = 2;
+	CASE_PATTERN = 3;
+	BRACE_EXPANSION = 4;
+	constructor(kind) {
+		if (kind == null) {
+			kind = 0;
+		}
+		this.kind = kind;
+		this.paren_depth = 0;
+		this.brace_depth = 0;
+		this.bracket_depth = 0;
+		this.quote = new QuoteState();
+	}
+}
+
+class ContextStack {
+	constructor() {
+		this._stack = [new ParseContext()];
+	}
+
+	getCurrent() {
+		return this._stack[this._stack.length - 1];
+	}
+
+	push(kind) {
+		this._stack.push(new ParseContext(kind));
+	}
+
+	pop() {
+		if (this._stack.length > 1) {
+			return this._stack.pop();
+		}
+		return this._stack[0];
+	}
+
+	inContext(kind) {
+		let ctx;
+		for (ctx of this._stack) {
+			if (ctx.kind === kind) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	getDepth() {
+		return this._stack.length;
+	}
+}
+
 function _stripLineContinuationsCommentAware(text) {
-	let c,
-		i,
-		in_comment,
-		in_double,
-		in_single,
-		j,
-		num_preceding_backslashes,
-		result;
+	let c, i, in_comment, j, num_preceding_backslashes, quote, result;
 	result = [];
 	i = 0;
 	in_comment = false;
-	in_single = false;
-	in_double = false;
+	quote = new QuoteState();
 	while (i < text.length) {
 		c = text[i];
 		if (c === "\\" && i + 1 < text.length && text[i + 1] === "\n") {
@@ -132,11 +248,11 @@ function _stripLineContinuationsCommentAware(text) {
 			i += 1;
 			continue;
 		}
-		if (c === "'" && !in_double && !in_comment) {
-			in_single = !in_single;
-		} else if (c === '"' && !in_single && !in_comment) {
-			in_double = !in_double;
-		} else if (c === "#" && !in_single && !in_comment) {
+		if (c === "'" && !quote.double && !in_comment) {
+			quote.single = !quote.single;
+		} else if (c === '"' && !quote.single && !in_comment) {
+			quote.double = !quote.double;
+		} else if (c === "#" && !quote.single && !in_comment) {
 			in_comment = true;
 		}
 		result.push(c);
@@ -213,22 +329,21 @@ class Word extends Node {
 	}
 
 	_doubleCtlescSmart(value) {
-		let bs_count, c, in_double, in_single, j, result;
+		let bs_count, c, j, quote, result;
 		result = [];
-		in_single = false;
-		in_double = false;
+		quote = new QuoteState();
 		for (c of value) {
 			// Track quote state
-			if (c === "'" && !in_double) {
-				in_single = !in_single;
-			} else if (c === '"' && !in_single) {
-				in_double = !in_double;
+			if (c === "'" && !quote.double) {
+				quote.single = !quote.single;
+			} else if (c === '"' && !quote.single) {
+				quote.double = !quote.double;
 			}
 			result.push(c);
 			if (c === "") {
 				// Only count backslashes in double-quoted context (where they escape)
 				// In single quotes, backslashes are literal, so always double CTLESC
-				if (in_double) {
+				if (quote.double) {
 					bs_count = 0;
 					for (j = result.length - 2; j > -1; j--) {
 						if (result[j] === "\\") {
@@ -250,27 +365,26 @@ class Word extends Node {
 	}
 
 	_normalizeParamExpansionNewlines(value) {
-		let c, ch, depth, had_leading_newline, i, in_double, in_single, result;
+		let c, ch, depth, had_leading_newline, i, quote, result;
 		result = [];
 		i = 0;
-		in_single = false;
-		in_double = false;
+		quote = new QuoteState();
 		while (i < value.length) {
 			c = value[i];
 			// Track quote state
-			if (c === "'" && !in_double) {
-				in_single = !in_single;
+			if (c === "'" && !quote.double) {
+				quote.single = !quote.single;
 				result.push(c);
 				i += 1;
-			} else if (c === '"' && !in_single) {
-				in_double = !in_double;
+			} else if (c === '"' && !quote.single) {
+				quote.double = !quote.double;
 				result.push(c);
 				i += 1;
 			} else if (
 				c === "$" &&
 				i + 1 < value.length &&
 				value[i + 1] === "{" &&
-				!in_single
+				!quote.single
 			) {
 				// Check for ${ param expansion
 				result.push("$");
@@ -286,7 +400,7 @@ class Word extends Node {
 				depth = 1;
 				while (i < value.length && depth > 0) {
 					ch = value[i];
-					if (ch === "\\" && i + 1 < value.length && !in_single) {
+					if (ch === "\\" && i + 1 < value.length && !quote.single) {
 						if (value[i + 1] === "\n") {
 							i += 2;
 							continue;
@@ -296,11 +410,11 @@ class Word extends Node {
 						i += 2;
 						continue;
 					}
-					if (ch === "'" && !in_double) {
-						in_single = !in_single;
-					} else if (ch === '"' && !in_single) {
-						in_double = !in_double;
-					} else if (!in_single && !in_double) {
+					if (ch === "'" && !quote.double) {
+						quote.single = !quote.single;
+					} else if (ch === '"' && !quote.single) {
+						quote.double = !quote.double;
+					} else if (!quote.inQuotes()) {
 						if (ch === "{") {
 							depth += 1;
 						} else if (ch === "}") {
@@ -514,9 +628,7 @@ class Word extends Node {
 			first_char,
 			i,
 			in_backtick,
-			in_double_quote,
 			in_pattern,
-			in_single_quote,
 			inner,
 			is_ansi_c,
 			j,
@@ -524,22 +636,20 @@ class Word extends Node {
 			op,
 			op_start,
 			outer_in_dquote,
-			quote_stack,
+			quote,
 			rest,
 			result,
 			result_str,
 			var_name_len;
 		result = [];
 		i = 0;
-		in_single_quote = false;
-		in_double_quote = false;
+		quote = new QuoteState();
 		in_backtick = false;
 		brace_depth = 0;
-		quote_stack = [];
 		while (i < value.length) {
 			ch = value[i];
 			// Track backtick context - don't expand $'...' inside backticks
-			if (ch === "`" && !in_single_quote) {
+			if (ch === "`" && !quote.single) {
 				in_backtick = !in_backtick;
 				result.push(ch);
 				i += 1;
@@ -558,52 +668,48 @@ class Word extends Node {
 				continue;
 			}
 			// Track brace depth for parameter expansions
-			if (!in_single_quote) {
+			if (!quote.single) {
 				if (_startsWithAt(value, i, "${")) {
 					brace_depth += 1;
-					quote_stack.push([in_single_quote, in_double_quote]);
-					in_single_quote = false;
-					in_double_quote = false;
+					quote.push();
 					result.push("${");
 					i += 2;
 					continue;
-				} else if (ch === "}" && brace_depth > 0 && !in_double_quote) {
+				} else if (ch === "}" && brace_depth > 0 && !quote.double) {
 					brace_depth -= 1;
 					result.push(ch);
-					if (quote_stack) {
-						[in_single_quote, in_double_quote] = quote_stack.pop();
-					}
+					quote.pop();
 					i += 1;
 					continue;
 				}
 			}
 			// Double quotes inside ${...} still protect $'...' from expansion
-			effective_in_dquote = in_double_quote;
+			effective_in_dquote = quote.double;
 			// Track quote state to avoid matching $' inside regular quotes
 			if (ch === "'" && !effective_in_dquote) {
 				// Toggle quote state unless this is $' that will be expanded as ANSI-C
 				is_ansi_c =
-					!in_single_quote &&
+					!quote.single &&
 					i > 0 &&
 					value[i - 1] === "$" &&
 					_countConsecutiveDollarsBefore(value, i - 1) % 2 === 0;
 				if (!is_ansi_c) {
-					in_single_quote = !in_single_quote;
+					quote.single = !quote.single;
 				}
 				result.push(ch);
 				i += 1;
-			} else if (ch === '"' && !in_single_quote) {
-				in_double_quote = !in_double_quote;
+			} else if (ch === '"' && !quote.single) {
+				quote.double = !quote.double;
 				result.push(ch);
 				i += 1;
-			} else if (ch === "\\" && i + 1 < value.length && !in_single_quote) {
+			} else if (ch === "\\" && i + 1 < value.length && !quote.single) {
 				// Backslash escape - skip both chars to avoid misinterpreting \" or \'
 				result.push(ch);
 				result.push(value[i + 1]);
 				i += 2;
 			} else if (
 				_startsWithAt(value, i, "$'") &&
-				!in_single_quote &&
+				!quote.single &&
 				!effective_in_dquote &&
 				_countConsecutiveDollarsBefore(value, i) % 2 === 0
 			) {
@@ -624,10 +730,7 @@ class Word extends Node {
 				// Strip the $ and expand escapes
 				expanded = this._expandAnsiCEscapes(ansi_str.slice(1, ansi_str.length));
 				// Inside ${...} that's itself in double quotes, check if quotes should be stripped
-				outer_in_dquote =
-					quote_stack.length > 0
-						? quote_stack[quote_stack.length - 1][1]
-						: false;
+				outer_in_dquote = quote.outerDouble();
 				if (
 					brace_depth > 0 &&
 					outer_in_dquote &&
@@ -1457,6 +1560,7 @@ class Word extends Node {
 	_formatCommandSubstitutions(value, in_arith) {
 		let arith_depth,
 			arith_paren_depth,
+			brace_quote,
 			c,
 			cmdsub_idx,
 			cmdsub_parts,
@@ -1475,15 +1579,13 @@ class Word extends Node {
 			has_untracked_procsub,
 			i,
 			idx,
-			in_double,
-			in_double_quote,
-			in_single,
 			inner,
 			is_procsub,
 			j,
 			leading_brace,
 			leading_ws,
 			leading_ws_end,
+			main_quote,
 			node,
 			normalized_ws,
 			p,
@@ -1496,6 +1598,7 @@ class Word extends Node {
 			raw_stripped,
 			rest,
 			result,
+			scan_quote,
 			spaced,
 			stripped,
 			terminator;
@@ -1528,12 +1631,12 @@ class Word extends Node {
 		has_untracked_cmdsub = false;
 		has_untracked_procsub = false;
 		idx = 0;
-		in_double = false;
+		scan_quote = new QuoteState();
 		while (idx < value.length) {
 			if (value[idx] === '"') {
-				in_double = !in_double;
+				scan_quote.double = !scan_quote.double;
 				idx += 1;
-			} else if (value[idx] === "'" && !in_double) {
+			} else if (value[idx] === "'" && !scan_quote.double) {
 				// Skip over single-quoted string (contents are literal)
 				// But only when not inside double quotes
 				idx += 1;
@@ -1553,7 +1656,7 @@ class Word extends Node {
 				break;
 			} else if (
 				(_startsWithAt(value, idx, "<(") || _startsWithAt(value, idx, ">(")) &&
-				!in_double
+				!scan_quote.double
 			) {
 				// Only treat as process substitution if not preceded by alphanumeric or quote
 				// (e.g., "i<(3)" is arithmetic comparison, not process substitution)
@@ -1588,7 +1691,7 @@ class Word extends Node {
 		i = 0;
 		cmdsub_idx = 0;
 		procsub_idx = 0;
-		in_double_quote = false;
+		main_quote = new QuoteState();
 		extglob_depth = 0;
 		deprecated_arith_depth = 0;
 		arith_depth = 0;
@@ -1767,7 +1870,7 @@ class Word extends Node {
 				i = j;
 			} else if (
 				(_startsWithAt(value, i, ">(") || _startsWithAt(value, i, "<(")) &&
-				!in_double_quote &&
+				!main_quote.double &&
 				deprecated_arith_depth === 0 &&
 				arith_depth === 0
 			) {
@@ -1964,19 +2067,18 @@ class Word extends Node {
 				// Find matching close brace, respecting nesting, quotes, and cmdsubs
 				j = i + 2;
 				depth = 1;
-				in_single = false;
-				in_double = false;
+				brace_quote = new QuoteState();
 				while (j < value.length && depth > 0) {
 					c = value[j];
-					if (c === "\\" && j + 1 < value.length && !in_single) {
+					if (c === "\\" && j + 1 < value.length && !brace_quote.single) {
 						j += 2;
 						continue;
 					}
-					if (c === "'" && !in_double) {
-						in_single = !in_single;
-					} else if (c === '"' && !in_single) {
-						in_double = !in_double;
-					} else if (!in_single && !in_double) {
+					if (c === "'" && !brace_quote.double) {
+						brace_quote.single = !brace_quote.single;
+					} else if (c === '"' && !brace_quote.single) {
+						brace_quote.double = !brace_quote.double;
+					} else if (!brace_quote.inQuotes()) {
 						// Skip over $(...) command substitutions
 						if (
 							_startsWithAt(value, j, "$(") &&
@@ -2013,10 +2115,10 @@ class Word extends Node {
 				i = j;
 			} else if (value[i] === '"') {
 				// Track double-quote state (single quotes inside double quotes are literal)
-				in_double_quote = !in_double_quote;
+				main_quote.double = !main_quote.double;
 				result.push(value[i]);
 				i += 1;
-			} else if (value[i] === "'" && !in_double_quote) {
+			} else if (value[i] === "'" && !main_quote.double) {
 				// Skip single-quoted strings (contents are literal, don't look for cmdsubs)
 				// But only when NOT inside double quotes (where single quotes are literal)
 				j = i + 1;
@@ -2040,21 +2142,21 @@ class Word extends Node {
 		let current_part,
 			deprecated_arith_depth,
 			depth,
+			extglob_quote,
 			has_pipe,
 			i,
-			in_double_quote,
 			part_content,
 			pattern_parts,
 			prefix_char,
 			result;
 		result = [];
 		i = 0;
-		in_double_quote = false;
+		extglob_quote = new QuoteState();
 		deprecated_arith_depth = 0;
 		while (i < value.length) {
 			// Track double-quote state
 			if (value[i] === '"') {
-				in_double_quote = !in_double_quote;
+				extglob_quote.double = !extglob_quote.double;
 				result.push(value[i]);
 				i += 1;
 				continue;
@@ -2078,7 +2180,7 @@ class Word extends Node {
 				prefix_char = value[i];
 				if (
 					"><".includes(prefix_char) &&
-					!in_double_quote &&
+					!extglob_quote.double &&
 					deprecated_arith_depth === 0
 				) {
 					// Found pattern start
@@ -4479,6 +4581,38 @@ function _skipBacktick(value, start) {
 	return i;
 }
 
+function _isValidArithmeticStart(value, start) {
+	let scan_c, scan_i, scan_paren;
+	scan_paren = 0;
+	scan_i = start + 3;
+	while (scan_i < value.length) {
+		scan_c = value[scan_i];
+		// Skip over $( command subs - their parens shouldn't count
+		if (
+			scan_c === "$" &&
+			scan_i + 1 < value.length &&
+			value[scan_i + 1] === "("
+		) {
+			scan_i = _findCmdsubEnd(value, scan_i + 2);
+			continue;
+		}
+		if (scan_c === "(") {
+			scan_paren += 1;
+		} else if (scan_c === ")") {
+			if (scan_paren > 0) {
+				scan_paren -= 1;
+			} else if (scan_i + 1 < value.length && value[scan_i + 1] === ")") {
+				return true;
+			} else {
+				// Single ) at top level without following ) - not valid arithmetic
+				return false;
+			}
+		}
+		scan_i += 1;
+	}
+	return false;
+}
+
 function _findCmdsubEnd(value, start) {
 	let arith_depth,
 		arith_paren_depth,
@@ -4487,17 +4621,11 @@ function _findCmdsubEnd(value, start) {
 		depth,
 		i,
 		in_case_patterns,
-		in_double,
-		in_single,
-		is_valid_arith,
 		j,
-		scan_c,
-		scan_i,
-		scan_paren;
+		quote;
 	depth = 1;
 	i = start;
-	in_single = false;
-	in_double = false;
+	quote = new QuoteState();
 	case_depth = 0;
 	in_case_patterns = false;
 	arith_depth = 0;
@@ -4505,26 +4633,26 @@ function _findCmdsubEnd(value, start) {
 	while (i < value.length && depth > 0) {
 		c = value[i];
 		// Handle escapes
-		if (c === "\\" && i + 1 < value.length && !in_single) {
+		if (c === "\\" && i + 1 < value.length && !quote.single) {
 			i += 2;
 			continue;
 		}
 		// Handle quotes
-		if (c === "'" && !in_double) {
-			in_single = !in_single;
+		if (c === "'" && !quote.double) {
+			quote.single = !quote.single;
 			i += 1;
 			continue;
 		}
-		if (c === '"' && !in_single) {
-			in_double = !in_double;
+		if (c === '"' && !quote.single) {
+			quote.double = !quote.double;
 			i += 1;
 			continue;
 		}
-		if (in_single) {
+		if (quote.single) {
 			i += 1;
 			continue;
 		}
-		if (in_double) {
+		if (quote.double) {
 			// Inside double quotes, $() command substitution is still active
 			if (_startsWithAt(value, i, "$(") && !_startsWithAt(value, i, "$((")) {
 				// Recursively find end of nested command substitution
@@ -4594,43 +4722,13 @@ function _findCmdsubEnd(value, start) {
 			continue;
 		}
 		// Handle arithmetic expressions $((
-		// Check for valid arithmetic by scanning for closing )) at top level
 		if (_startsWithAt(value, i, "$((")) {
-			is_valid_arith = true;
-			scan_paren = 0;
-			scan_i = i + 3;
-			while (scan_i < value.length) {
-				scan_c = value[scan_i];
-				// Skip over $( command subs - their parens shouldn't count
-				if (
-					scan_c === "$" &&
-					scan_i + 1 < value.length &&
-					value[scan_i + 1] === "("
-				) {
-					scan_i = _findCmdsubEnd(value, scan_i + 2);
-					continue;
-				}
-				if (scan_c === "(") {
-					scan_paren += 1;
-				} else if (scan_c === ")") {
-					if (scan_paren > 0) {
-						scan_paren -= 1;
-					} else if (scan_i + 1 < value.length && value[scan_i + 1] === ")") {
-						break;
-					} else {
-						// Single ) at top level without following ) - not valid arithmetic
-						is_valid_arith = false;
-						break;
-					}
-				}
-				scan_i += 1;
-			}
-			if (is_valid_arith) {
+			if (_isValidArithmeticStart(value, i)) {
 				arith_depth += 1;
 				i += 3;
 				continue;
 			}
-			// else: not valid arithmetic, treat $( as nested cmdsub and ( as paren
+			// Not valid arithmetic, treat $( as nested cmdsub and ( as paren
 			j = _findCmdsubEnd(value, i + 2);
 			i = j;
 			continue;
@@ -5457,6 +5555,8 @@ class Parser {
 		this._cmdsub_heredoc_end = null;
 		this._saw_newline_in_single_quote = false;
 		this._in_process_sub = in_process_sub;
+		// Context stack for tracking nested parsing scopes
+		this._ctx = new ContextStack();
 	}
 
 	atEnd() {
@@ -5478,6 +5578,26 @@ class Parser {
 		ch = this.source[this.pos];
 		this.pos += 1;
 		return ch;
+	}
+
+	peekAt(offset) {
+		let pos;
+		pos = this.pos + offset;
+		if (pos < 0 || pos >= this.length) {
+			return "";
+		}
+		return this.source[pos];
+	}
+
+	lookahead(n) {
+		return this.source.slice(this.pos, this.pos + n);
+	}
+
+	matchKeyword(keyword) {
+		if (!_startsWithAt(this.source, this.pos, keyword)) {
+			return false;
+		}
+		return _isWordBoundary(this.source, this.pos, keyword.length);
 	}
 
 	_isBangFollowedByProcsub() {
@@ -5503,11 +5623,7 @@ class Parser {
 				while (!this.atEnd() && this.peek() !== "\n") {
 					this.advance();
 				}
-			} else if (
-				ch === "\\" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "\n"
-			) {
+			} else if (ch === "\\" && this.peekAt(1) === "\n") {
 				// Backslash-newline is line continuation - skip both
 				this.advance();
 				this.advance();
@@ -5540,11 +5656,7 @@ class Parser {
 				while (!this.atEnd() && this.peek() !== "\n") {
 					this.advance();
 				}
-			} else if (
-				ch === "\\" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "\n"
-			) {
+			} else if (ch === "\\" && this.peekAt(1) === "\n") {
 				// Backslash-newline is line continuation - skip both
 				this.advance();
 				this.advance();
@@ -6937,7 +7049,7 @@ class Parser {
 	}
 
 	_isAssignmentWord(word) {
-		let bracket_depth, ch, i, in_double, in_single;
+		let bracket_depth, ch, i, quote;
 		// Assignment must start with identifier (letter or underscore), not quoted
 		if (
 			!word.value ||
@@ -6945,33 +7057,26 @@ class Parser {
 		) {
 			return false;
 		}
-		in_single = false;
-		in_double = false;
+		quote = new QuoteState();
 		bracket_depth = 0;
 		i = 0;
 		while (i < word.value.length) {
 			ch = word.value[i];
-			if (ch === "'" && !in_double) {
-				in_single = !in_single;
-			} else if (ch === '"' && !in_single) {
-				in_double = !in_double;
-			} else if (ch === "\\" && !in_single && i + 1 < word.value.length) {
+			if (ch === "'" && !quote.double) {
+				quote.single = !quote.single;
+			} else if (ch === '"' && !quote.single) {
+				quote.double = !quote.double;
+			} else if (ch === "\\" && !quote.single && i + 1 < word.value.length) {
 				i += 1;
 				continue;
-			} else if (ch === "[" && !in_single && !in_double) {
+			} else if (ch === "[" && !quote.inQuotes()) {
 				bracket_depth += 1;
-			} else if (ch === "]" && !in_single && !in_double) {
+			} else if (ch === "]" && !quote.inQuotes()) {
 				bracket_depth -= 1;
-			} else if (
-				ch === "=" &&
-				!in_single &&
-				!in_double &&
-				bracket_depth === 0
-			) {
+			} else if (ch === "=" && !quote.inQuotes() && bracket_depth === 0) {
 				return true;
 			} else if (
-				!in_single &&
-				!in_double &&
+				!quote.inQuotes() &&
 				bracket_depth === 0 &&
 				!(/^[a-zA-Z0-9]$/.test(ch) || ch === "_")
 			) {
@@ -8902,17 +9007,15 @@ class Parser {
 			depth,
 			dollar_count,
 			formatted,
-			in_double_inner,
-			in_double_quote,
-			in_single,
-			in_single_quote,
 			inner,
+			inner_quote,
 			next_c,
 			op,
 			param,
 			paren_depth,
 			parsed,
 			pc,
+			quote,
 			sub_parser,
 			suffix,
 			text,
@@ -9063,18 +9166,17 @@ class Parser {
 				// Must track quotes - inside subscripts, quotes span until closed
 				depth = 1;
 				content_chars = [];
-				in_single = false;
-				in_double_inner = false;
+				inner_quote = new QuoteState();
 				while (!this.atEnd() && depth > 0) {
 					c = this.peek();
-					if (in_single) {
+					if (inner_quote.single) {
 						content_chars.push(this.advance());
 						if (c === "'") {
-							in_single = false;
+							inner_quote.single = false;
 						}
 						continue;
 					}
-					if (in_double_inner) {
+					if (inner_quote.double) {
 						if (c === "\\" && this.pos + 1 < this.length) {
 							content_chars.push(this.advance());
 							if (!this.atEnd()) {
@@ -9084,17 +9186,17 @@ class Parser {
 						}
 						content_chars.push(this.advance());
 						if (c === '"') {
-							in_double_inner = false;
+							inner_quote.double = false;
 						}
 						continue;
 					}
 					if (c === "'") {
-						in_single = true;
+						inner_quote.single = true;
 						content_chars.push(this.advance());
 						continue;
 					}
 					if (c === '"') {
-						in_double_inner = true;
+						inner_quote.double = true;
 						content_chars.push(this.advance());
 						continue;
 					}
@@ -9226,19 +9328,18 @@ class Parser {
 		// Track quote state and nesting
 		arg_chars = [];
 		depth = 1;
-		in_single_quote = false;
-		in_double_quote = false;
+		quote = new QuoteState();
 		while (!this.atEnd() && depth > 0) {
 			c = this.peek();
 			// Single quotes - no escapes, just scan to closing quote
-			if (c === "'" && !in_double_quote) {
-				in_single_quote = !in_single_quote;
+			if (c === "'" && !quote.double) {
+				quote.single = !quote.single;
 				arg_chars.push(this.advance());
-			} else if (c === '"' && !in_single_quote) {
+			} else if (c === '"' && !quote.single) {
 				// Double quotes - toggle state
-				in_double_quote = !in_double_quote;
+				quote.double = !quote.double;
 				arg_chars.push(this.advance());
-			} else if (c === "\\" && !in_single_quote) {
+			} else if (c === "\\" && !quote.single) {
 				// Escape - skip next char (line continuation removes both)
 				if (this.pos + 1 < this.length && this.source[this.pos + 1] === "\n") {
 					// Line continuation - skip both backslash and newline
@@ -9252,7 +9353,7 @@ class Parser {
 				}
 			} else if (
 				c === "$" &&
-				!in_single_quote &&
+				!quote.single &&
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === "{"
 			) {
@@ -9262,7 +9363,7 @@ class Parser {
 				arg_chars.push(this.advance());
 			} else if (
 				c === "$" &&
-				!in_single_quote &&
+				!quote.single &&
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === "'"
 			) {
@@ -9285,8 +9386,8 @@ class Parser {
 				}
 			} else if (
 				c === "$" &&
-				!in_single_quote &&
-				!in_double_quote &&
+				!quote.single &&
+				!quote.double &&
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === '"'
 			) {
@@ -9297,7 +9398,7 @@ class Parser {
 				if (dollar_count % 2 === 1) {
 					// Odd count: locale string $"..." - strip the $ and enter double quote
 					this.advance();
-					in_double_quote = true;
+					quote.double = true;
 					arg_chars.push(this.advance());
 				} else {
 					// Even count: this $ is part of $$ (PID), keep it
@@ -9305,7 +9406,7 @@ class Parser {
 				}
 			} else if (
 				c === "$" &&
-				!in_single_quote &&
+				!quote.single &&
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === "("
 			) {
@@ -9328,7 +9429,7 @@ class Parser {
 					}
 					arg_chars.push(this.advance());
 				}
-			} else if (c === "`" && !in_single_quote) {
+			} else if (c === "`" && !quote.single) {
 				// Backtick command substitution - scan to matching `
 				backtick_start = this.pos;
 				arg_chars.push(this.advance());
@@ -9348,10 +9449,10 @@ class Parser {
 				arg_chars.push(this.advance());
 			} else if (c === "}") {
 				// Closing brace - handle depth for nested ${...}
-				if (in_single_quote) {
+				if (quote.single) {
 					// Inside single quotes, } is literal
 					arg_chars.push(this.advance());
-				} else if (in_double_quote) {
+				} else if (quote.double) {
 					// Inside double quotes, } can close nested ${...}
 					if (depth > 1) {
 						depth -= 1;
@@ -9395,38 +9496,37 @@ class Parser {
 	}
 
 	_paramSubscriptHasClose(start_pos) {
-		let c, depth, i, in_double, in_single;
+		let c, depth, i, quote;
 		depth = 1;
 		i = start_pos + 1;
-		in_single = false;
-		in_double = false;
+		quote = new QuoteState();
 		while (i < this.length) {
 			c = this.source[i];
-			if (in_single) {
+			if (quote.single) {
 				if (c === "'") {
-					in_single = false;
+					quote.single = false;
 				}
 				i += 1;
 				continue;
 			}
-			if (in_double) {
+			if (quote.double) {
 				if (c === "\\" && i + 1 < this.length) {
 					i += 2;
 					continue;
 				}
 				if (c === '"') {
-					in_double = false;
+					quote.double = false;
 				}
 				i += 1;
 				continue;
 			}
 			if (c === "'") {
-				in_single = true;
+				quote.single = true;
 				i += 1;
 				continue;
 			}
 			if (c === '"') {
-				in_double = true;
+				quote.double = true;
 				i += 1;
 				continue;
 			}
@@ -9451,7 +9551,7 @@ class Parser {
 	}
 
 	_consumeParamName() {
-		let bracket_depth, c, ch, in_double_sub, in_single, name_chars, sc;
+		let bracket_depth, c, ch, name_chars, sc, subscript_quote;
 		if (this.atEnd()) {
 			return null;
 		}
@@ -9491,18 +9591,17 @@ class Parser {
 					// Array subscript - track bracket depth and quotes
 					name_chars.push(this.advance());
 					bracket_depth = 1;
-					in_single = false;
-					in_double_sub = false;
+					subscript_quote = new QuoteState();
 					while (!this.atEnd() && bracket_depth > 0) {
 						sc = this.peek();
-						if (in_single) {
+						if (subscript_quote.single) {
 							name_chars.push(this.advance());
 							if (sc === "'") {
-								in_single = false;
+								subscript_quote.single = false;
 							}
 							continue;
 						}
-						if (in_double_sub) {
+						if (subscript_quote.double) {
 							if (sc === "\\" && this.pos + 1 < this.length) {
 								name_chars.push(this.advance());
 								if (!this.atEnd()) {
@@ -9512,12 +9611,12 @@ class Parser {
 							}
 							name_chars.push(this.advance());
 							if (sc === '"') {
-								in_double_sub = false;
+								subscript_quote.double = false;
 							}
 							continue;
 						}
 						if (sc === "'") {
-							in_single = true;
+							subscript_quote.single = true;
 							name_chars.push(this.advance());
 							continue;
 						}
@@ -9528,12 +9627,12 @@ class Parser {
 						) {
 							// Locale string $"..." - strip the $ and enter double quote
 							this.advance();
-							in_double_sub = true;
+							subscript_quote.double = true;
 							name_chars.push(this.advance());
 							continue;
 						}
 						if (sc === '"') {
-							in_double_sub = true;
+							subscript_quote.double = true;
 							name_chars.push(this.advance());
 							continue;
 						}

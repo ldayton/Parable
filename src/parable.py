@@ -9866,16 +9866,25 @@ class Parser:
             return [Empty()]
 
         # bash-oracle strips trailing backslash at EOF when there was a newline
-        # inside single quotes earlier in the input
+        # inside single quotes and the last word is on the same line as other content
+        # (not on its own line after a newline)
         if (
             self._saw_newline_in_single_quote
             and self.source
             and self.source[len(self.source) - 1] == "\\"
-            and (len(self.source) < 2 or self.source[len(self.source) - 2] != "\n")
         ):
-            self._strip_trailing_backslash_from_last_word(results)
+            # Check if the last word started on its own line (after a newline)
+            # If so, keep the backslash. Otherwise, strip it as line continuation.
+            if not self._last_word_on_own_line(results):
+                self._strip_trailing_backslash_from_last_word(results)
 
         return results
+
+    def _last_word_on_own_line(self, nodes: list[Node]) -> bool:
+        """Check if the last word is on its own line (after a newline with no other content)."""
+        # If we have multiple top-level nodes, they were separated by newlines,
+        # so the last node is on its own line
+        return len(nodes) >= 2
 
     def _strip_trailing_backslash_from_last_word(self, nodes: list[Node]) -> None:
         """Strip trailing backslash from the last word in the AST."""

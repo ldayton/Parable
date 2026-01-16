@@ -1,0 +1,8 @@
+=== trailing backslash after squoted string with newline
+'x
+y'
+ra\
+---
+(command (word "'x\ny'"))
+(command (word "ra\\\\"))
+---

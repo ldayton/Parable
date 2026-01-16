@@ -4463,6 +4463,22 @@ function _lookaheadForEsac(value, start, case_depth) {
 	return false;
 }
 
+function _skipBacktick(value, start) {
+	let i;
+	i = start + 1;
+	while (i < value.length && value[i] !== "`") {
+		if (value[i] === "\\" && i + 1 < value.length) {
+			i += 2;
+		} else {
+			i += 1;
+		}
+	}
+	if (i < value.length) {
+		i += 1;
+	}
+	return i;
+}
+
 function _findCmdsubEnd(value, start) {
 	let arith_depth,
 		arith_paren_depth,
@@ -4632,17 +4648,7 @@ function _findCmdsubEnd(value, start) {
 		// Handle backtick command substitution - skip to closing backtick
 		// Must handle this before heredoc check to avoid treating << inside backticks as heredoc
 		if (c === "`") {
-			i += 1;
-			while (i < value.length && value[i] !== "`") {
-				if (value[i] === "\\" && i + 1 < value.length) {
-					i += 2;
-				} else {
-					i += 1;
-				}
-			}
-			if (i < value.length) {
-				i += 1;
-			}
+			i = _skipBacktick(value, i);
 			continue;
 		}
 		// Handle heredocs (but not << inside arithmetic, which is shift operator)
@@ -6460,18 +6466,7 @@ class Parser {
 			// Backtick command substitution - skip to closing backtick
 			// Must handle this before heredoc check to avoid treating << inside backticks as heredoc
 			if (c === "`") {
-				this.advance();
-				while (!this.atEnd() && this.peek() !== "`") {
-					if (this.peek() === "\\" && this.pos + 1 < this.length) {
-						this.advance();
-						this.advance();
-					} else {
-						this.advance();
-					}
-				}
-				if (!this.atEnd()) {
-					this.advance();
-				}
+				this._skipBacktickParser();
 				continue;
 			}
 			// Heredoc - skip until delimiter line is found (not inside arithmetic)
@@ -6812,6 +6807,10 @@ class Parser {
 			}
 		}
 		return true;
+	}
+
+	_skipBacktickParser() {
+		this.pos = _skipBacktick(this.source, this.pos);
 	}
 
 	_parseBacktickSubstitution() {

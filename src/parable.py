@@ -3733,6 +3733,19 @@ def _lookahead_for_esac(value: str, start: int, case_depth: int) -> bool:
     return False
 
 
+def _skip_backtick(value: str, start: int) -> int:
+    """Skip past a backtick command substitution. Returns position after closing `."""
+    i = start + 1  # Skip opening `
+    while i < len(value) and value[i] != "`":
+        if value[i] == "\\" and i + 1 < len(value):
+            i += 2
+        else:
+            i += 1
+    if i < len(value):
+        i += 1  # Skip closing `
+    return i
+
+
 def _find_cmdsub_end(value: str, start: int) -> int:
     """Find the end of a $(...) command substitution, handling case statements.
 
@@ -3862,14 +3875,7 @@ def _find_cmdsub_end(value: str, start: int) -> int:
         # Handle backtick command substitution - skip to closing backtick
         # Must handle this before heredoc check to avoid treating << inside backticks as heredoc
         if c == "`":
-            i += 1  # Skip opening `
-            while i < len(value) and value[i] != "`":
-                if value[i] == "\\" and i + 1 < len(value):
-                    i += 2
-                else:
-                    i += 1
-            if i < len(value):
-                i += 1  # Skip closing `
+            i = _skip_backtick(value, i)
             continue
         # Handle heredocs (but not << inside arithmetic, which is shift operator)
         if arith_depth == 0 and _starts_with_at(value, i, "<<"):
@@ -5339,15 +5345,7 @@ class Parser:
             # Backtick command substitution - skip to closing backtick
             # Must handle this before heredoc check to avoid treating << inside backticks as heredoc
             if c == "`":
-                self.advance()  # opening `
-                while not self.at_end() and self.peek() != "`":
-                    if self.peek() == "\\" and self.pos + 1 < self.length:
-                        self.advance()  # backslash
-                        self.advance()  # escaped char
-                    else:
-                        self.advance()
-                if not self.at_end():
-                    self.advance()  # closing `
+                self._skip_backtick_parser()
                 continue
 
             # Heredoc - skip until delimiter line is found (not inside arithmetic)
@@ -5608,6 +5606,10 @@ class Parser:
                 if not self.at_end() and self.peek() == "\n":
                     self.advance()
         return True
+
+    def _skip_backtick_parser(self) -> None:
+        """Skip past a backtick command substitution."""
+        self.pos = _skip_backtick(self.source, self.pos)
 
     def _parse_backtick_substitution(self) -> tuple[Node | None, str]:
         """Parse a `...` command substitution.

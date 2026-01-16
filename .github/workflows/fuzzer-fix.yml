@@ -51,16 +51,15 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
-      - name: Read prompt
-        id: prompt
-        run: echo "content=$(cat prompts/fuzzer-fix.md | jq -Rs .)" >> $GITHUB_OUTPUT
-
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
         with:
           use_bedrock: "true"
-          prompt: ${{ fromJson(steps.prompt.outputs.content) }}
+          prompt: |
+            Read and follow the instructions in:
+            1. tools/fuzzer/prompts/fuzzer-fix-base.md
+            2. tools/fuzzer/prompts/fuzzer-fix-workflow.md
           github_token: ${{ secrets.GITHUB_TOKEN }}
           show_full_output: "true"
           claude_args: |

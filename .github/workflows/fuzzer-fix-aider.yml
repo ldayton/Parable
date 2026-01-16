@@ -7,10 +7,10 @@ on:
       model:
         description: 'Model'
         type: choice
-        default: 'claude-sonnet-4'
+        default: 'claude-opus-4-5'
         options:
-          - claude-opus-4
-          - claude-sonnet-4
+          - claude-opus-4-5
+          - claude-sonnet-4-5
           - gpt-4.1
           - o3
           - gemini-2.5-pro
@@ -73,13 +73,12 @@ jobs:
           esac
 
       - name: Combine prompts
-        id: prompt
         run: |
           {
             cat tools/fuzzer/prompts/fuzzer-fix-base.md
             echo ""
             cat tools/fuzzer/prompts/fuzzer-fix-workflow.md
-          } > /tmp/combined-prompt.md
+          } > .aider-prompt.md
 
       - name: Run Aider
         uses: mirrajabi/aider-github-action@v1.1.0
@@ -89,7 +88,7 @@ jobs:
           api_key_env_value: ${{ steps.api-key.outputs.env_value }}
           branch: ${{ github.ref_name }}
           model: ${{ inputs.model }}
-          aider_args: '--yes --read /tmp/combined-prompt.md --message "Follow the instructions in the prompt file."'
+          aider_args: '--yes --read .aider-prompt.md --message "Follow the instructions in the prompt file."'
 
       - name: Job summary
         if: always()

@@ -580,7 +580,11 @@ class Word(Node):
                                             break
                                         var_name_len += 1
                             # Check if operator immediately after variable name is a pattern operator
-                            if var_name_len > 0 and var_name_len < len(after_brace):
+                            if (
+                                var_name_len > 0
+                                and var_name_len < len(after_brace)
+                                and after_brace[0] not in "#?-"
+                            ):
                                 op_start = after_brace[var_name_len:]
                                 # Skip @ prefix if present (handles @%, @#, @/ etc.)
                                 if op_start.startswith("@") and len(op_start) > 1:
@@ -590,6 +594,28 @@ class Word(Node):
                                     if op_start.startswith(op):
                                         in_pattern = True
                                         break
+                            # Handle invalid variable names (var_name_len = 0) where first char is not a pattern operator
+                            # but there's a pattern operator later (e.g., ${>%$'b'})
+                            elif var_name_len == 0 and len(after_brace) > 1:
+                                first_char = after_brace[0]
+                                # If first char is not itself a pattern operator, check for pattern ops after it
+                                if first_char not in "%#/^,":
+                                    rest = after_brace[1:]
+                                    for op in [
+                                        "//",
+                                        "%%",
+                                        "##",
+                                        "/",
+                                        "%",
+                                        "#",
+                                        "^",
+                                        "^^",
+                                        ",",
+                                        ",,",
+                                    ]:
+                                        if op in rest:
+                                            in_pattern = True
+                                            break
                         if not in_pattern:
                             expanded = inner
                 result.append(expanded)

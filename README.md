@@ -170,7 +170,10 @@ tests/
 
 bench/                           # Benchmarks (npm install for JS)
 
-tools/transpiler/                # Python-to-JS transpiler
+tools/
+├── bash-oracle/                 # Patched bash + corpus utilities
+├── fuzzer/                      # Differential fuzzers
+└── transpiler/                  # Python-to-JS transpiler
 ```
 
 ## License

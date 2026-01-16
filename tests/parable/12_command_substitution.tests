@@ -664,3 +664,44 @@ x=$(((echo hi)))
 ---
 (command (word "x=$(((echo hi)))"))
 ---
+
+=== heredoc with pipe in cmdsub
+x=$(cat <<EOF |
+hello
+EOF
+cmd)
+---
+(command (word "x=$(cat <<EOF |\nhello\nEOF\n  cmd)"))
+---
+
+=== heredoc with pipe in cmdsub
+x=$(cat <<END | wc
+hello
+END
+)
+---
+(command (word "x=$(cat <<END |\nhello\nEND\n  wc)"))
+---
+
+=== normalize 1>& to >& with variable target in cmdsub
+x=$(echo 1>&$fd)
+---
+(command (word "x=$(echo >&$fd)"))
+---
+
+=== escaped dollar followed by cmdsub in double quotes
+echo "\$(A) $(B)"
+---
+(command (word "echo") (word "\"\\$(A) $(B)\""))
+---
+# MRE: Whitespace after heredoc delimiter in command substitution
+# Parable preserves leading spaces, bash normalizes to newline
+
+=== heredoc followed by indented command in cmdsub
+amu=$({ cat <<EOF
+line1
+EOF
+  cat file; })
+---
+(command (word "amu=$({ cat <<EOF\nline1\nEOF\n\ncat file; })"))
+---

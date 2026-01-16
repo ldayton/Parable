@@ -37,10 +37,27 @@ The patch modifies bash to:
 4. Gut `execute_command()` as a failsafe
 5. Output s-expressions matching Parable's AST format
 
+## Helper Scripts
+
+```bash
+cd tools/bash-oracle
+
+# Verify test expectations against bash-oracle
+uv run oracle --verify-tests
+
+# Run Parable against bigtable-bash corpus
+uv run oracle --run-corpus
+
+# Convert test corpora
+uv run oracle --convert-gnu-bash
+uv run oracle --convert-oils
+uv run oracle --convert-tree-sitter
+```
+
 ## Files
 
 - `bash-oracle.patch` - Patch for bash (generated via `just patchfile` in bash repo)
-- `bin/` - Helper scripts for test corpus conversion
+- `src/oracle/` - Helper scripts for test corpus conversion
 
 ## Updating the patch
 

@@ -1,0 +1,12 @@
+[project]
+name = "fuzzer"
+version = "0.1.0"
+description = "Fuzzers for Parable bash parser"
+requires-python = ">=3.14"
+
+[project.scripts]
+fuzzer = "fuzzer:main"
+
+[build-system]
+requires = ["uv_build>=0.9.26"]
+build-backend = "uv_build"

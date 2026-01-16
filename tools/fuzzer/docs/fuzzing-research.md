@@ -76,7 +76,7 @@ The differential testing infrastructure already exists:
 
 - **bash-oracle** at `~/source/bash/bash-oracle` with `-e <input>` flag dumps S-expression AST
 - **Parable** via `parse(input)[0].to_sexp()` produces matching S-expression format
-- **Comparison**: whitespace-normalized string equality (see `verify-tests.py`)
+- **Comparison**: whitespace-normalized string equality (see `tools/fuzzer/src/fuzzer/common.py`)
 - **Corpus**: ~20k lines across `.tests` files in `tests/parable/` and `tests/corpus/`
 
 The test format is simple:
@@ -88,20 +88,16 @@ bash input here
 ---
 ```
 
-### Phase 1: Corpus Mutation (Start Here)
+### Phase 1: Corpus Mutation (Implemented)
 
-Lowest friction, highest immediate value:
+The character mutation fuzzer is implemented in `tools/fuzzer`:
 
-1. Extract inputs from existing `.tests` files
-2. Apply 1-3 random character edits per input:
-   - Insert/delete/swap characters from: `${}()|&<>;"'\`` and whitespace
-   - Focus on boundaries: start/end of words, around operators
-3. Run both parsers on mutated input
-4. Log discrepancies: input, parable output, oracle output
+```bash
+cd tools/fuzzer
+uv run fuzzer --character --both-succeed --stop-after 5 -v
+```
 
-Most mutations produce garbage (both parsers reject). Some produce valid bash that parses differently. Those are the interesting cases.
-
-This is ~50 lines on top of `verify-tests.py`.
+It extracts inputs from `.tests` files, applies random character mutations, and compares Parable vs bash-oracle.
 
 ### Phase 2: Targeted Edge Case Generation
 
@@ -140,6 +136,18 @@ $((x+++y))    # pre-increment or post-increment + y?
 $((a?b:c?d:e))
 ```
 
+### Phase 2.5: Structural Fuzzing (Implemented)
+
+The structural fuzzer wraps corpus inputs in structural contexts that character mutation can't easily generate:
+
+```bash
+cd tools/fuzzer
+uv run fuzzer --structural --list-transforms
+uv run fuzzer --structural --both-succeed --stop-after 5 -v
+```
+
+Transforms include wrapping in `$()`, `<()`, `{ }`, subshells, pipelines, etc.
+
 ### Phase 3: Token-Level Mutation (Harder)
 
 Requires tokenizing bash first. Options:
@@ -150,13 +158,16 @@ Requires tokenizing bash first. Options:
 
 3. **Steal from ShellFuzzer**: Their grammar is public; adapt their token categories.
 
-### Phase 4: Grammar-Based Generation (Real Project)
+### Phase 4: Grammar-Based Generation (Scaffolded)
 
-Parable's parser *is* a grammar. Inverting it:
+The generator fuzzer scaffolding is in place:
 
-- Instead of `parse()`, write `generate()` that walks the same grammar making random choices at each branch
-- Each production rule becomes a random choice weighted by coverage goals
-- This is a significant project—essentially writing a bash generator
+```bash
+cd tools/fuzzer
+uv run fuzzer --generator -n 1000 -v
+```
+
+Currently uses trivial templates. To expand: invert Parable's grammar so `generate()` walks the same rules making random choices at each branch.
 
 ### The Hard Part
 

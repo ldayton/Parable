@@ -3217,6 +3217,7 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 		else_body,
 		first_nl,
 		formatted,
+		formatted_cmd,
 		h,
 		has_heredoc,
 		heredocs,
@@ -3431,6 +3432,16 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 					} else {
 						result.push(" &");
 					}
+				} else if (
+					result.length > 0 &&
+					result[result.length - 1].includes("<<") &&
+					result[result.length - 1].includes("\n")
+				) {
+					// For || and &&, insert before heredoc content like we do for &
+					last = result[result.length - 1];
+					first_nl = last.indexOf("\n");
+					result[result.length - 1] =
+						`${last.slice(0, first_nl)} ${p.op} ${last.slice(first_nl)}`;
 				} else {
 					result.push(` ${p.op}`);
 				}
@@ -3444,9 +3455,20 @@ function _formatCmdsubNode(node, indent, in_procsub, compact_redirects) {
 				) {
 					result.push(" ");
 				}
-				result.push(
-					_formatCmdsubNode(p, indent, in_procsub, compact_redirects),
+				formatted_cmd = _formatCmdsubNode(
+					p,
+					indent,
+					in_procsub,
+					compact_redirects,
 				);
+				// After heredoc with || or && inserted, add leading space to next command
+				if (result.length > 0) {
+					last = result[result.length - 1];
+					if (last.includes(" || \n") || last.includes(" && \n")) {
+						formatted_cmd = ` ${formatted_cmd}`;
+					}
+				}
+				result.push(formatted_cmd);
 			}
 		}
 		// Strip trailing ; or newline (but preserve heredoc's trailing newline)

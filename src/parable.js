@@ -3602,6 +3602,11 @@ function _formatCmdsubNode(
 						formatted_cmd = ` ${formatted_cmd}`;
 					}
 				}
+				// When semicolon was skipped due to heredoc, add leading space
+				if (skipped_semi) {
+					formatted_cmd = ` ${formatted_cmd}`;
+					skipped_semi = false;
+				}
 				result.push(formatted_cmd);
 				cmd_count += 1;
 			}

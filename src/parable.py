@@ -3069,6 +3069,10 @@ def _format_cmdsub_node(
                     last = result[len(result) - 1]
                     if " || \n" in last or " && \n" in last:
                         formatted_cmd = " " + formatted_cmd
+                # When semicolon was skipped due to heredoc, add leading space
+                if skipped_semi:
+                    formatted_cmd = " " + formatted_cmd
+                    skipped_semi = False
                 result.append(formatted_cmd)
                 cmd_count += 1
         # Strip trailing ; or newline (but preserve heredoc's trailing newline)

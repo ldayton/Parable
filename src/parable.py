@@ -1328,30 +1328,34 @@ class Word(Node):
                         i += 1
                         continue
                     inner = _substring(value, i + 2, j - 1)
-                    # Preserve leading whitespace (bash keeps it in procsub inside arithmetic)
-                    leading_ws = ""
-                    inner_to_parse = inner
-                    k = 0
-                    while k < len(inner) and inner[k] in " \t":
-                        k += 1
-                    if k > 0:
-                        leading_ws = inner[:k]
-                        inner_to_parse = inner[k:]
                     try:
-                        parser = Parser(inner_to_parse)
+                        parser = Parser(inner)
                         parsed = parser.parse_list()
                         # Only use parsed result if parser consumed all input and no newlines in content
                         # (newlines would be lost during formatting)
-                        if parsed and parser.pos == len(inner_to_parse) and "\n" not in inner:
+                        if parsed and parser.pos == len(inner) and "\n" not in inner:
                             compact = _starts_with_subshell(parsed)
                             formatted = _format_cmdsub_node(parsed, 0, True, compact, True)
                         else:
                             formatted = inner
-                            leading_ws = ""  # Use raw inner, don't double whitespace
                     except Exception:
                         formatted = inner
-                        leading_ws = ""  # Use raw inner, don't double whitespace
-                    result.append(direction + "(" + leading_ws + formatted + ")")
+                    result.append(direction + "(" + formatted + ")")
+                    i = j
+                elif is_procsub:
+                    # Process substitution but no parts (failed to parse or in arithmetic context)
+                    # Strip leading whitespace after >( or <( to match bash behavior
+                    direction = value[i]
+                    j = _find_cmdsub_end(value, i + 2)
+                    if j > len(value) or (j > 0 and j <= len(value) and value[j - 1] != ")"):
+                        # Couldn't find closing paren, treat as literal
+                        result.append(value[i])
+                        i += 1
+                        continue
+                    inner = _substring(value, i + 2, j - 1)
+                    # Strip leading whitespace
+                    stripped = inner.lstrip(" \t")
+                    result.append(direction + "(" + stripped + ")")
                     i = j
                 else:
                     # Not a process substitution (e.g., arithmetic comparison)

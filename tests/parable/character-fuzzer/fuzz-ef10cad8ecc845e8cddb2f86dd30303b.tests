@@ -1,0 +1,5 @@
+=== strip space after >( in process substitution with $?()
+>( $?())
+---
+(command (word ">($?())"))
+---

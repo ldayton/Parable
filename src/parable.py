@@ -3742,7 +3742,9 @@ def _skip_heredoc(value: str, start: int) -> int:
         # Backslash-quoted delimiter like <<\EOF
         i += 1
         delim_start = i
-        while i < len(value) and not _is_whitespace(value[i]):
+        if i < len(value):
+            i += 1
+        while i < len(value) and not _is_metachar(value[i]):
             i += 1
         delimiter = _substring(value, delim_start, i)
     else:

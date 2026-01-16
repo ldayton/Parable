@@ -1,0 +1,5 @@
+=== heredoc in command substitution with backslash missing closing quote
+"$(<<\\)"
+---
+(command (word "\"$(<<'\\'\n\\\n)\""))
+---

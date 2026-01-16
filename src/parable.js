@@ -4791,12 +4791,16 @@ function _looksLikeAssignment(s) {
 }
 
 class Parser {
-	constructor(source) {
+	constructor(source, in_process_sub) {
+		if (in_process_sub == null) {
+			in_process_sub = false;
+		}
 		this.source = source;
 		this.pos = 0;
 		this.length = source.length;
 		this._pending_heredoc_end = null;
 		this._saw_newline_in_single_quote = false;
+		this._in_process_sub = in_process_sub;
 	}
 
 	atEnd() {
@@ -6132,7 +6136,7 @@ class Parser {
 		// Use comment-aware stripping to preserve newlines that terminate comments
 		text = _stripLineContinuationsCommentAware(text);
 		// Parse the content as a command list
-		sub_parser = new Parser(content);
+		sub_parser = new Parser(content, true);
 		cmd = sub_parser.parseList();
 		if (cmd == null) {
 			cmd = new Empty();
@@ -8700,10 +8704,19 @@ class Parser {
 			}
 			// At EOF with line starting with delimiter - heredoc terminates (process sub case)
 			// e.g. <(<<a\na ) - the "a " line starts with delimiter "a" and we're at EOF
-			if (line_end >= this.length && check_line.startsWith(delimiter)) {
-				// Only match if delimiter is exact or followed by whitespace then ) (for process sub)
-				rest = check_line.slice(delimiter.length).trimStart();
-				if (rest === "" || (rest.length > 0 && rest[0] === ")")) {
+			if (
+				line_end >= this.length &&
+				check_line.startsWith(delimiter) &&
+				this._in_process_sub
+			) {
+				// Only match if delimiter is exact or followed by whitespace/punctuation
+				rest = check_line.slice(delimiter.length);
+				// In process sub, accept: exact match, whitespace only, or whitespace + )
+				if (
+					rest === "" ||
+					rest.trimStart() === "" ||
+					rest.trimStart().startsWith(")")
+				) {
 					// Adjust line_end to point just past the delimiter, not the whole line
 					// This allows remaining content after delimiter to be parsed
 					tabs_stripped = line.length - check_line.length;

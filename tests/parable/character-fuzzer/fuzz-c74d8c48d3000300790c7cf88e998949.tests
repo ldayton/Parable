@@ -1,0 +1,6 @@
+=== heredoc delimiter with tab before closing paren
+cat <<$(a	)
+$(a)
+---
+(command (word "cat") (redirect "<<" ""))
+---

@@ -77,6 +77,42 @@ function _countConsecutiveDollarsBefore(s, pos) {
 	return count;
 }
 
+function _stripLineContinuationsCommentAware(text) {
+	let c, i, in_comment, in_double, in_single, result;
+	result = [];
+	i = 0;
+	in_comment = false;
+	in_single = false;
+	in_double = false;
+	while (i < text.length) {
+		c = text[i];
+		if (c === "\\" && i + 1 < text.length && text[i + 1] === "\n") {
+			if (in_comment) {
+				result.push("\n");
+			}
+			i += 2;
+			in_comment = false;
+			continue;
+		}
+		if (c === "\n") {
+			in_comment = false;
+			result.push(c);
+			i += 1;
+			continue;
+		}
+		if (c === "'" && !in_double && !in_comment) {
+			in_single = !in_single;
+		} else if (c === '"' && !in_single && !in_comment) {
+			in_double = !in_double;
+		} else if (c === "#" && !in_single && !in_double) {
+			in_comment = true;
+		}
+		result.push(c);
+		i += 1;
+	}
+	return result.join("");
+}
+
 function _appendRedirects(base, redirects) {
 	let parts, r;
 	if (redirects && redirects.length) {
@@ -5688,7 +5724,8 @@ class Parser {
 		this.advance();
 		text = this.source.slice(start, this.pos);
 		// Strip line continuations (backslash-newline) from text used for word construction
-		text = text.replaceAll("\\\n", "");
+		// Use comment-aware stripping to preserve newlines that terminate comments
+		text = _stripLineContinuationsCommentAware(text);
 		// Parse the content as a command list
 		sub_parser = new Parser(content);
 		cmd = sub_parser.parseList();

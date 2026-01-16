@@ -8134,7 +8134,7 @@ class Parser {
 					varname_chars.push(this.advance());
 				} else if (/^[a-zA-Z0-9]$/.test(ch) || ch === "_") {
 					varname_chars.push(this.advance());
-				} else if (in_bracket) {
+				} else if (in_bracket && !_isMetachar(ch)) {
 					varname_chars.push(this.advance());
 				} else {
 					break;

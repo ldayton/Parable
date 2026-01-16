@@ -6836,7 +6836,7 @@ class Parser:
                     varname_chars.append(self.advance())
                 elif ch.isalnum() or ch == "_":
                     varname_chars.append(self.advance())
-                elif in_bracket:
+                elif in_bracket and not _is_metachar(ch):
                     varname_chars.append(self.advance())
                 else:
                     break

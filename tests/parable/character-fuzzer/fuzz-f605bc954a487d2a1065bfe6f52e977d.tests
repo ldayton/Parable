@@ -1,0 +1,5 @@
+=== pipe in parameter expansion subscript with redirect
+{x[|]}>a
+---
+(pipe (command (word "{x[")) (command (word "]}") (redirect ">" "a")))
+---

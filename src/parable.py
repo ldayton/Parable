@@ -9874,10 +9874,15 @@ class Parser:
         # bash-oracle strips trailing backslash at EOF when there was a newline
         # inside single quotes and the last word is on the same line as other content
         # (not on its own line after a newline)
+        # Exception: keep backslash if it's on a continuation line (preceded by \<newline>)
         if (
             self._saw_newline_in_single_quote
             and self.source
             and self.source[len(self.source) - 1] == "\\"
+            and not (
+                len(self.source) >= 3
+                and self.source[len(self.source) - 3 : len(self.source) - 1] == "\\\n"
+            )
         ):
             # Check if the last word started on its own line (after a newline)
             # If so, keep the backslash. Otherwise, strip it as line continuation.

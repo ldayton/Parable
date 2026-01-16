@@ -1,0 +1,6 @@
+=== preserve newline before background in process substitution
+<((
+b)&)
+---
+(command (word "<((\nb)&)"))
+---

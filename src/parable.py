@@ -3247,6 +3247,8 @@ def _format_redirect(
             op = "<<-"
         else:
             op = "<<"
+        if r.fd is not None and r.fd != 0:
+            op = str(r.fd) + op
         if r.quoted:
             delim = "'" + r.delimiter + "'"
         else:

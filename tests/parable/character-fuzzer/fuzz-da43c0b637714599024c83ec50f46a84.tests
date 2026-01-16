@@ -1,0 +1,5 @@
+=== process substitution with subshell and redirect preserves spacing
+a<(b;( >>x ))
+---
+(command (word "a<(b; ( >> x ))"))
+---

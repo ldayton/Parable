@@ -8264,6 +8264,7 @@ class Parser {
 			next_line_start,
 			quoted,
 			scan_pos,
+			tabs_stripped,
 			trailing_bs;
 		this.skipWhitespace();
 		// Parse the delimiter, handling quoting (can be mixed like 'EOF'"2")
@@ -8552,6 +8553,15 @@ class Parser {
 				// Store the heredoc info and let the command parser handle it
 				break;
 			}
+			// At EOF with line starting with delimiter - heredoc terminates (process sub case)
+			// e.g. <(<<a\na ) - the "a " line starts with delimiter "a" and we're at EOF
+			if (line_end >= this.length && check_line.startsWith(delimiter)) {
+				// Adjust line_end to point just past the delimiter, not the whole line
+				// This allows remaining content after delimiter to be parsed
+				tabs_stripped = line.length - check_line.length;
+				line_end = line_start + tabs_stripped + delimiter.length;
+				break;
+			}
 			// Add line to content (with newline, since we consumed continuations above)
 			if (strip_tabs) {
 				line = line.replace(/^[\t]+/, "");
@@ -8585,7 +8595,7 @@ class Parser {
 		// Store the position where heredoc content ends so we can skip it later
 		// line_end points to the end of the delimiter line (after any continuations)
 		heredoc_end = line_end;
-		if (heredoc_end < this.length) {
+		if (heredoc_end < this.length && this.source[heredoc_end] === "\n") {
 			heredoc_end += 1;
 		}
 		// Register this heredoc's end position

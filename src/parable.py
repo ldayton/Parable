@@ -7141,6 +7141,15 @@ class Parser:
                 # Store the heredoc info and let the command parser handle it
                 break
 
+            # At EOF with line starting with delimiter - heredoc terminates (process sub case)
+            # e.g. <(<<a\na ) - the "a " line starts with delimiter "a" and we're at EOF
+            if line_end >= self.length and check_line.startswith(delimiter):
+                # Adjust line_end to point just past the delimiter, not the whole line
+                # This allows remaining content after delimiter to be parsed
+                tabs_stripped = len(line) - len(check_line)
+                line_end = line_start + tabs_stripped + len(delimiter)
+                break
+
             # Add line to content (with newline, since we consumed continuations above)
             if strip_tabs:
                 line = line.lstrip("\t")
@@ -7169,7 +7178,7 @@ class Parser:
         # Store the position where heredoc content ends so we can skip it later
         # line_end points to the end of the delimiter line (after any continuations)
         heredoc_end = line_end
-        if heredoc_end < self.length:
+        if heredoc_end < self.length and self.source[heredoc_end] == "\n":
             heredoc_end += 1  # past the newline
 
         # Register this heredoc's end position

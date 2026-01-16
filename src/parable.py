@@ -6967,6 +6967,14 @@ class Parser:
                     raise ParseError("Unterminated backtick", pos=backtick_pos)
                 self.advance()  # closing `
                 op = "`"  # treat as operator for now, bash will error at runtime
+            elif (
+                not self.at_end()
+                and self.peek() == "$"
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "{"
+            ):
+                # Nested ${...} - don't consume $ as operator, let argument loop handle it
+                op = ""
             else:
                 # Unknown operator - bash still parses these (fails at runtime)
                 # Treat the current char as the operator

@@ -8365,6 +8365,14 @@ class Parser {
 				}
 				this.advance();
 				op = "`";
+			} else if (
+				!this.atEnd() &&
+				this.peek() === "$" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "{"
+			) {
+				// Nested ${...} - don't consume $ as operator, let argument loop handle it
+				op = "";
 			} else {
 				// Unknown operator - bash still parses these (fails at runtime)
 				// Treat the current char as the operator

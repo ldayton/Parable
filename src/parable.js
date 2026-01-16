@@ -635,6 +635,8 @@ class Word extends Node {
 	_stripLocaleStringDollars(value) {
 		let brace_depth,
 			brace_in_double_quote,
+			bracket_depth,
+			bracket_in_double_quote,
 			ch,
 			dollar_count,
 			i,
@@ -647,8 +649,10 @@ class Word extends Node {
 		in_single_quote = false;
 		in_double_quote = false;
 		brace_depth = 0;
+		bracket_depth = 0;
 		// Track quote state inside brace expansions separately
 		brace_in_double_quote = false;
+		bracket_in_double_quote = false;
 		while (i < value.length) {
 			ch = value[i];
 			if (ch === "\\" && i + 1 < value.length) {
@@ -671,12 +675,38 @@ class Word extends Node {
 				brace_depth -= 1;
 				result.push(ch);
 				i += 1;
+			} else if (
+				ch === "[" &&
+				brace_depth > 0 &&
+				!in_single_quote &&
+				!brace_in_double_quote
+			) {
+				// Start of subscript inside brace expansion
+				bracket_depth += 1;
+				bracket_in_double_quote = false;
+				result.push(ch);
+				i += 1;
+			} else if (
+				ch === "]" &&
+				bracket_depth > 0 &&
+				!in_single_quote &&
+				!bracket_in_double_quote
+			) {
+				// End of subscript
+				bracket_depth -= 1;
+				result.push(ch);
+				i += 1;
 			} else if (ch === "'" && !in_double_quote && brace_depth === 0) {
 				in_single_quote = !in_single_quote;
 				result.push(ch);
 				i += 1;
 			} else if (ch === '"' && !in_single_quote && brace_depth === 0) {
 				in_double_quote = !in_double_quote;
+				result.push(ch);
+				i += 1;
+			} else if (ch === '"' && !in_single_quote && bracket_depth > 0) {
+				// Toggle quote state inside bracket (subscript)
+				bracket_in_double_quote = !bracket_in_double_quote;
 				result.push(ch);
 				i += 1;
 			} else if (ch === '"' && !in_single_quote && brace_depth > 0) {
@@ -687,8 +717,9 @@ class Word extends Node {
 			} else if (
 				_startsWithAt(value, i, '$"') &&
 				!in_single_quote &&
-				!in_double_quote &&
-				!brace_in_double_quote
+				(brace_depth > 0 || bracket_depth > 0 || !in_double_quote) &&
+				!brace_in_double_quote &&
+				!bracket_in_double_quote
 			) {
 				// Count consecutive $ chars ending at i to check for $$ (PID param)
 				dollar_count = 1;
@@ -700,7 +731,9 @@ class Word extends Node {
 				if (dollar_count % 2 === 1) {
 					// Odd count: locale string $"..." - strip the $ and enter double quote
 					result.push('"');
-					if (brace_depth > 0) {
+					if (bracket_depth > 0) {
+						bracket_in_double_quote = true;
+					} else if (brace_depth > 0) {
 						brace_in_double_quote = true;
 					} else {
 						in_double_quote = true;
@@ -7861,6 +7894,17 @@ class Parser {
 						}
 						if (sc === "'") {
 							in_single = true;
+							name_chars.push(this.advance());
+							continue;
+						}
+						if (
+							sc === "$" &&
+							this.pos + 1 < this.length &&
+							this.source[this.pos + 1] === '"'
+						) {
+							// Locale string $"..." - strip the $ and enter double quote
+							this.advance();
+							in_double_sub = true;
 							name_chars.push(this.advance());
 							continue;
 						}

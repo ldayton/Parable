@@ -6385,9 +6385,20 @@ class Parser:
         # Parse operator
         op = self._consume_param_operator()
         if op is None:
-            # Unknown operator - bash still parses these (fails at runtime)
-            # Treat the current char as the operator
-            op = self.advance()
+            # Check for $" or $' which should have $ stripped (locale/ANSI-C quotes)
+            if (
+                not self.at_end()
+                and self.peek() == "$"
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] in ('"', "'")
+            ):
+                # Skip the $ and treat the rest as an unknown operator
+                self.advance()  # skip $
+                op = ""  # empty operator means no operator
+            else:
+                # Unknown operator - bash still parses these (fails at runtime)
+                # Treat the current char as the operator
+                op = self.advance()
 
         # Parse argument (everything until closing brace)
         # Track quote state and nesting
@@ -6425,6 +6436,17 @@ class Parser:
                 depth += 1
                 arg_chars.append(self.advance())  # $
                 arg_chars.append(self.advance())  # {
+            # Locale string $"..." - strip $ and enter double quote
+            elif (
+                c == "$"
+                and not in_single_quote
+                and not in_double_quote
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == '"'
+            ):
+                self.advance()  # skip $
+                in_double_quote = True
+                arg_chars.append(self.advance())  # append "
             # Command substitution $(...) - scan to matching )
             elif (
                 c == "$"

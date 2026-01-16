@@ -1682,25 +1682,9 @@ class Word extends Node {
 					// Extract raw content for further checks
 					raw_content = value.slice(i + 2, j - 1);
 					raw_stripped = raw_content.replaceAll("\\\n", "");
-					// Check if this is a list with & operator and newlines before &
-					// In that case, preserve raw content to avoid losing newlines
-					if (
-						node.command.kind === "list" &&
-						node.command.parts &&
-						node.command.parts[node.command.parts.length - 1].kind ===
-							"operator" &&
-						node.command.parts[node.command.parts.length - 1].op === "&" &&
-						raw_content.endsWith("&") &&
-						raw_content.slice(0, raw_content.lastIndexOf("&")).includes("\n")
-					) {
-						// Preserve raw content for lists with & and newlines before &
-						result.push(`${direction}(${raw_stripped})`);
-					} else if (
-						_startsWithSubshell(node.command) &&
-						formatted !== raw_stripped
-					) {
-						// Check for pattern: subshell followed by operator with no space (e.g., "(0)&+")
-						// In this case, preserve original to match bash-oracle behavior
+					// Check for pattern: subshell followed by operator with no space (e.g., "(0)&+")
+					// In this case, preserve original to match bash-oracle behavior
+					if (_startsWithSubshell(node.command) && formatted !== raw_stripped) {
 						// Starts with subshell and formatting would change it - preserve original
 						result.push(`${direction}(${raw_stripped})`);
 					} else {

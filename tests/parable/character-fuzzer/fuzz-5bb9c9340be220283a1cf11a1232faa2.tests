@@ -1,0 +1,6 @@
+=== newline before background in process substitution
+<(
+b&)
+---
+(command (word "<(b &)"))
+---

@@ -1109,7 +1109,15 @@ class Word extends Node {
 	}
 
 	_stripArithLineContinuations(value) {
-		let arith_content, content, depth, first_close_idx, i, result, start;
+		let arith_content,
+			content,
+			depth,
+			first_close_idx,
+			i,
+			j,
+			num_backslashes,
+			result,
+			start;
 		result = [];
 		i = 0;
 		while (i < value.length) {
@@ -1143,8 +1151,22 @@ class Word extends Node {
 						i + 1 < value.length &&
 						value[i + 1] === "\n"
 					) {
-						// Skip backslash-newline (line continuation)
-						i += 2;
+						// Count preceding backslashes in arith_content
+						num_backslashes = 0;
+						j = arith_content.length - 1;
+						while (j >= 0 && arith_content[j] === "\\") {
+							num_backslashes += 1;
+							j -= 1;
+						}
+						// If odd number of preceding backslashes, this backslash is escaped
+						if (num_backslashes % 2 === 1) {
+							arith_content.push("\\");
+							arith_content.push("\n");
+							i += 2;
+						} else {
+							// Skip backslash-newline (line continuation)
+							i += 2;
+						}
 						if (depth === 1) {
 							first_close_idx = null;
 						}

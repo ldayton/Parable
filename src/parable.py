@@ -950,8 +950,20 @@ class Word(Node):
                             arith_content.append(")")
                         i += 1
                     elif value[i] == "\\" and i + 1 < len(value) and value[i + 1] == "\n":
-                        # Skip backslash-newline (line continuation)
-                        i += 2
+                        # Count preceding backslashes in arith_content
+                        num_backslashes = 0
+                        j = len(arith_content) - 1
+                        while j >= 0 and arith_content[j] == "\\":
+                            num_backslashes += 1
+                            j -= 1
+                        # If odd number of preceding backslashes, this backslash is escaped
+                        if num_backslashes % 2 == 1:
+                            arith_content.append("\\")
+                            arith_content.append("\n")
+                            i += 2
+                        else:
+                            # Skip backslash-newline (line continuation)
+                            i += 2
                         if depth == 1:
                             first_close_idx = None  # Content after first close
                     else:

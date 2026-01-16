@@ -1068,11 +1068,14 @@ class Word(Node):
         # Collect command substitutions from all parts, including nested ones
         cmdsub_parts = []
         procsub_parts = []
+        has_arith = False  # Track if we have any arithmetic expansion nodes
         for p in self.parts:
             if p.kind == "cmdsub":
                 cmdsub_parts.append(p)
             elif p.kind == "procsub":
                 procsub_parts.append(p)
+            elif p.kind == "arith":
+                has_arith = True
             else:
                 cmdsub_parts.extend(self._collect_cmdsubs(p))
                 procsub_parts.extend(self._collect_procsubs(p))
@@ -1164,7 +1167,12 @@ class Word(Node):
                 i += 1
                 continue
             # Track $((...)) arithmetic - inside it, >( and <( are not process subs
-            if _starts_with_at(value, i, "$((") and not _is_backslash_escaped(value, i):
+            # But skip if this is actually $( ( (command substitution with subshell)
+            if (
+                _starts_with_at(value, i, "$((")
+                and not _is_backslash_escaped(value, i)
+                and has_arith
+            ):
                 arith_depth += 1
                 arith_paren_depth += 2  # For the two opening parens
                 result.append("$((")
@@ -1190,6 +1198,17 @@ class Word(Node):
                     i += 1
                     continue
             # Check for $( command substitution (but not $(( arithmetic or escaped \$()
+            # Special case: $(( without arithmetic nodes - preserve as-is
+            if _starts_with_at(value, i, "$((") and not has_arith:
+                # This looks like $(( but wasn't parsed as arithmetic
+                # It's actually $( ( ... ) ) - preserve original text
+                j = _find_cmdsub_end(value, i + 2)
+                result.append(_substring(value, i, j))
+                if cmdsub_idx < len(cmdsub_parts):
+                    cmdsub_idx += 1
+                i = j
+                continue
+            # Regular command substitution
             if (
                 _starts_with_at(value, i, "$(")
                 and not _starts_with_at(value, i, "$((")

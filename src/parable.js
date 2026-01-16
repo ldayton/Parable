@@ -7614,19 +7614,19 @@ class Parser {
 						content_chars.push(this.advance());
 						continue;
 					}
-					if (c === "}") {
-						depth -= 1;
-						if (depth === 0) {
-							break;
-						}
-						content_chars.push(this.advance());
-					} else if (
+					if (
 						c === "$" &&
 						this.pos + 1 < this.length &&
 						this.source[this.pos + 1] === "{"
 					) {
 						depth += 1;
 						content_chars.push(this.advance());
+						content_chars.push(this.advance());
+					} else if (c === "}") {
+						depth -= 1;
+						if (depth === 0) {
+							break;
+						}
 						content_chars.push(this.advance());
 					} else if (c === "\\") {
 						if (
@@ -10776,7 +10776,14 @@ class Parser {
 	}
 
 	parseFunction() {
-		let body, has_whitespace, name, name_start, pos_after_name, saved_pos;
+		let body,
+			brace_depth,
+			has_whitespace,
+			i,
+			name,
+			name_start,
+			pos_after_name,
+			saved_pos;
 		this.skipWhitespace();
 		if (this.atEnd()) {
 			return null;
@@ -10836,6 +10843,25 @@ class Parser {
 		}
 		name = this.source.slice(name_start, this.pos);
 		if (!name) {
+			this.pos = saved_pos;
+			return null;
+		}
+		// Check if name contains unclosed parameter expansion ${...}
+		// If so, () is inside the expansion, not function definition syntax
+		brace_depth = 0;
+		i = 0;
+		while (i < name.length) {
+			if (i + 1 < name.length && name[i] === "$" && name[i + 1] === "{") {
+				brace_depth += 1;
+				i += 2;
+				continue;
+			}
+			if (name[i] === "}") {
+				brace_depth -= 1;
+			}
+			i += 1;
+		}
+		if (brace_depth > 0) {
 			this.pos = saved_pos;
 			return null;
 		}

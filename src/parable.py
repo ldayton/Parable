@@ -3475,6 +3475,91 @@ def _skip_heredoc(value: str, start: int) -> int:
     return i
 
 
+def _extract_heredoc_delimiters(content: str) -> list[tuple[str, bool]]:
+    """Extract heredoc delimiters from content string.
+    Returns list of (delimiter, strip_tabs) tuples.
+    """
+    delimiters = []
+    i = 0
+    while i < len(content):
+        if content[i] == "'":
+            i += 1
+            while i < len(content) and content[i] != "'":
+                i += 1
+            if i < len(content):
+                i += 1
+            continue
+        if content[i] == '"':
+            i += 1
+            while i < len(content) and content[i] != '"':
+                if content[i] == "\\" and i + 1 < len(content):
+                    i += 2
+                    continue
+                i += 1
+            if i < len(content):
+                i += 1
+            continue
+        if content[i] == "<" and i + 1 < len(content) and content[i + 1] == "<":
+            i += 2
+            strip_tabs = False
+            if i < len(content) and content[i] == "-":
+                strip_tabs = True
+                i += 1
+            while i < len(content) and _is_whitespace_no_newline(content[i]):
+                i += 1
+            if i < len(content) and (content[i] == '"' or content[i] == "'"):
+                quote = content[i]
+                i += 1
+                delim_start = i
+                while i < len(content) and content[i] != quote:
+                    i += 1
+                delimiters.append((_substring(content, delim_start, i), strip_tabs))
+                if i < len(content):
+                    i += 1
+            elif i < len(content) and content[i] == "\\":
+                i += 1
+                delim_start = i
+                while i < len(content) and not _is_whitespace(content[i]):
+                    i += 1
+                delimiters.append((_substring(content, delim_start, i), strip_tabs))
+            else:
+                delim_start = i
+                while i < len(content) and not _is_metachar(content[i]):
+                    i += 1
+                delimiters.append((_substring(content, delim_start, i), strip_tabs))
+            continue
+        i += 1
+    return delimiters
+
+
+def _find_heredoc_content_end(source: str, start: int, delimiters: list[tuple[str, bool]]) -> int:
+    """Find position after all heredoc content in source starting at start.
+    delimiters is list of (delimiter, strip_tabs) tuples.
+    """
+    if not delimiters:
+        return start
+    pos = start
+    for delimiter, strip_tabs in delimiters:
+        if pos >= len(source) or source[pos] != "\n":
+            break
+        pos += 1
+        while pos < len(source):
+            line_start = pos
+            line_end = pos
+            while line_end < len(source) and source[line_end] != "\n":
+                line_end += 1
+            line = _substring(source, line_start, line_end)
+            if strip_tabs:
+                line_stripped = line.lstrip("\t")
+            else:
+                line_stripped = line
+            if line_stripped == delimiter:
+                pos = line_end + 1 if line_end < len(source) else line_end
+                break
+            pos = line_end + 1 if line_end < len(source) else line_end
+    return pos
+
+
 def _is_word_boundary(s: str, pos: int, word_len: int) -> bool:
     """Check if the word at pos is a standalone word (not part of larger word)."""
     # Check character before
@@ -4844,7 +4929,18 @@ class Parser:
         content = _substring(self.source, content_start, self.pos)
         self.advance()  # consume final )
 
-        text = _substring(self.source, start, self.pos)
+        # Save position after ) for text (before skipping heredoc content)
+        text_end = self.pos
+
+        # Check for heredocs in content - their bodies follow the )
+        heredoc_delimiters = _extract_heredoc_delimiters(content)
+        if heredoc_delimiters:
+            heredoc_end = _find_heredoc_content_end(self.source, self.pos, heredoc_delimiters)
+            if heredoc_end > self.pos:
+                content = content + _substring(self.source, self.pos, heredoc_end)
+                self.pos = heredoc_end
+
+        text = _substring(self.source, start, text_end)
         # Strip line continuations (backslash-newline) from text used for word construction
         # Use comment-aware stripping to preserve newlines that terminate comments
         text = _strip_line_continuations_comment_aware(text)

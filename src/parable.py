@@ -3944,6 +3944,7 @@ class Parser:
         self.pos = 0
         self.length = len(source)
         self._pending_heredoc_end = None
+        self._saw_newline_in_single_quote = False
 
     def at_end(self) -> bool:
         """Check if we've reached the end of input."""
@@ -4150,7 +4151,10 @@ class Parser:
                 self.advance()  # consume opening quote
                 chars.append("'")
                 while not self.at_end() and self.peek() != "'":
-                    chars.append(self.advance())
+                    c = self.advance()
+                    if c == "\n":
+                        self._saw_newline_in_single_quote = True
+                    chars.append(c)
                 if self.at_end():
                     raise ParseError("Unterminated single quote", pos=start)
                 chars.append(self.advance())  # consume closing quote
@@ -9342,7 +9346,42 @@ class Parser:
         if not results:
             return [Empty()]
 
+        # bash-oracle strips trailing backslash at EOF when there was a newline
+        # inside single quotes earlier in the input
+        if (
+            self._saw_newline_in_single_quote
+            and self.source
+            and self.source[len(self.source) - 1] == "\\"
+            and (len(self.source) < 2 or self.source[len(self.source) - 2] != "\n")
+        ):
+            self._strip_trailing_backslash_from_last_word(results)
+
         return results
+
+    def _strip_trailing_backslash_from_last_word(self, nodes: list[Node]) -> None:
+        """Strip trailing backslash from the last word in the AST."""
+        if not nodes:
+            return
+        last_node = nodes[len(nodes) - 1]
+        # Find the last Word in the structure
+        last_word = self._find_last_word(last_node)
+        if last_word and last_word.value.endswith("\\"):
+            last_word.value = _substring(last_word.value, 0, len(last_word.value) - 1)
+
+    def _find_last_word(self, node: Node) -> Word | None:
+        """Recursively find the last Word in a node structure."""
+        if isinstance(node, Word):
+            return node
+        if isinstance(node, Command):
+            if node.words:
+                return node.words[len(node.words) - 1]
+        if isinstance(node, Pipeline):
+            if node.commands:
+                return self._find_last_word(node.commands[len(node.commands) - 1])
+        if isinstance(node, List):
+            if node.parts:
+                return self._find_last_word(node.parts[len(node.parts) - 1])
+        return None
 
 
 def parse(source: str) -> list[Node]:

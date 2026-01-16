@@ -3,3 +3,9 @@ $(for c in ; do e; done)
 ---
 (command (word "$(for c in ;\ndo\n    e;\ndone)"))
 ---
+
+=== ANSI-C quoting inside parameter expansion
+"${x$''}"
+---
+(command (word "\"${x}\""))
+---

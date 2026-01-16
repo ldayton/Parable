@@ -18,6 +18,14 @@ Find and fix one parser bug using the fuzzer.
    ```
    This outputs the smallest string that still shows the discrepancy.
 
+   If minimize times out or fails, manually shrink by removing characters while verifying the discrepancy persists:
+   ```bash
+   ~/source/bash-oracle/bash-oracle -e 'INPUT'   # oracle
+   uv run bin/parable-dump.py 'INPUT'            # parable
+   ```
+
+   **Always verify the MRE** before proceeding - check that both parsers succeed but produce different output.
+
 4. **Add a failing test** to `tests/parable/character-fuzzer/fuzz-$FUZZ_ID.tests`:
    ```
    === descriptive name

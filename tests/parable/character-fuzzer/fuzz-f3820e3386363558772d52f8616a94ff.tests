@@ -1,0 +1,5 @@
+=== dollar-single-quote in parameter expansion pattern should be literal
+"${>%$'b'}"
+---
+(command (word "\"${>%'b'}\""))
+---

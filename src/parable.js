@@ -511,6 +511,7 @@ class Word extends Node {
 			ch,
 			effective_in_dquote,
 			expanded,
+			first_char,
 			i,
 			in_backtick,
 			in_double_quote,
@@ -524,6 +525,7 @@ class Word extends Node {
 			op_start,
 			outer_in_dquote,
 			quote_stack,
+			rest,
 			result,
 			result_str,
 			var_name_len;
@@ -665,7 +667,11 @@ class Word extends Node {
 								}
 							}
 							// Check if operator immediately after variable name is a pattern operator
-							if (var_name_len > 0 && var_name_len < after_brace.length) {
+							if (
+								var_name_len > 0 &&
+								var_name_len < after_brace.length &&
+								!"#?-".includes(after_brace[0])
+							) {
 								op_start = after_brace.slice(var_name_len);
 								// Skip @ prefix if present (handles @%, @#, @/ etc.)
 								if (op_start.startsWith("@") && op_start.length > 1) {
@@ -687,6 +693,31 @@ class Word extends Node {
 									if (op_start.startsWith(op)) {
 										in_pattern = true;
 										break;
+									}
+								}
+							} else if (var_name_len === 0 && after_brace.length > 1) {
+								// Handle invalid variable names (var_name_len = 0) where first char is not a pattern operator
+								// but there's a pattern operator later (e.g., ${>%$'b'})
+								first_char = after_brace[0];
+								// If first char is not itself a pattern operator, check for pattern ops after it
+								if (!"%#/^,".includes(first_char)) {
+									rest = after_brace.slice(1);
+									for (op of [
+										"//",
+										"%%",
+										"##",
+										"/",
+										"%",
+										"#",
+										"^",
+										"^^",
+										",",
+										",,",
+									]) {
+										if (rest.includes(op)) {
+											in_pattern = true;
+											break;
+										}
 									}
 								}
 							}

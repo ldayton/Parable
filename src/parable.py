@@ -4013,6 +4013,11 @@ class Parser:
             # Stop at backslash-newline (line continuation)
             if ch == "\\" and self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
                 break
+            # Handle backslash escaping next character (even metacharacters)
+            if ch == "\\" and self.pos + 1 < self.length:
+                chars.append(self.advance())  # backslash
+                chars.append(self.advance())  # escaped char
+                continue
             chars.append(self.advance())
 
         if chars:

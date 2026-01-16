@@ -1,0 +1,5 @@
+=== backslash-escaped semicolon in for loop variable name
+for \; do :; done
+---
+(for (word "\\;") (in (word "\"$@\"")) (command (word ":")))
+---

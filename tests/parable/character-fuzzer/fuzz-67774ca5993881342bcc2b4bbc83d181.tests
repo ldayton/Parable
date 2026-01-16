@@ -1,0 +1,6 @@
+=== heredoc in command substitution with immediate closing paren
+a=$(b <<X)
+c
+---
+(command (word "a=$(b <<X\nc\nX\n)"))
+---

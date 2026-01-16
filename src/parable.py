@@ -3787,9 +3787,8 @@ def _skip_heredoc(value: str, start: int) -> int:
                 else:
                     i += 1
         i += 1
-    # If we stopped at ) (closing cmdsub), return here - no heredoc content
-    if i < len(value) and value[i] == ")":
-        return i
+    # If we stopped at ) (closing cmdsub), still need to read heredoc content
+    # The content comes from lines after the heredoc opener, not before the )
     if i < len(value) and value[i] == "\n":
         i += 1  # Skip newline
     # Find the end delimiter on its own line
@@ -5026,9 +5025,9 @@ class Parser:
                                 delimiter_chars.append(self.advance())
                 delimiter = "".join(delimiter_chars)
                 if delimiter:
-                    # Check if ) immediately follows (closes cmdsub with empty heredoc)
+                    # Check if ) immediately follows (closes cmdsub before heredoc content)
                     if not self.at_end() and self.peek() == ")":
-                        # Heredoc has no content - will be resolved later
+                        # Heredoc content will come after the ) - handle in post-processing
                         continue
                     # Skip to end of current line
                     while not self.at_end() and self.peek() != "\n":
@@ -5159,7 +5158,39 @@ class Parser:
         content = _substring(self.source, content_start, self.pos)
         self.advance()  # consume final )
 
-        text = _substring(self.source, start, self.pos)
+        # Save position after ) for text (before skipping heredoc content)
+        text_end = self.pos
+
+        # Check for heredocs in content - their bodies may follow the )
+        # This handles cases like $(cmd <<X) where ) immediately follows <<X
+        # Filter to only heredocs that weren't already consumed during parsing
+        all_heredoc_delimiters = _extract_heredoc_delimiters(content)
+        heredoc_delimiters = []
+        for delim, strip_tabs in all_heredoc_delimiters:
+            # Check if this delimiter was already consumed (appears on its own line in content)
+            found_in_content = False
+            for line in content.split("\n"):
+                check_line = line.lstrip("\t") if strip_tabs else line
+                if check_line == delim:
+                    found_in_content = True
+                    break
+            if not found_in_content:
+                # Heredoc content not yet consumed, needs post-processing
+                heredoc_delimiters.append((delim, strip_tabs))
+
+        if heredoc_delimiters:
+            heredoc_start, heredoc_end = _find_heredoc_content_end(
+                self.source, self.pos, heredoc_delimiters
+            )
+            if heredoc_end > heredoc_start:
+                content = content + _substring(self.source, heredoc_start, heredoc_end)
+                # Use pending mechanism to skip heredoc after current line is parsed
+                if self._pending_heredoc_end is None:
+                    self._pending_heredoc_end = heredoc_end
+                else:
+                    self._pending_heredoc_end = max(self._pending_heredoc_end, heredoc_end)
+
+        text = _substring(self.source, start, text_end)
 
         # Parse the content as a command list
         sub_parser = Parser(content, in_process_sub=True)

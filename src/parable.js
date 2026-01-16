@@ -4533,10 +4533,8 @@ function _skipHeredoc(value, start) {
 		}
 		i += 1;
 	}
-	// If we stopped at ) (closing cmdsub), return here - no heredoc content
-	if (i < value.length && value[i] === ")") {
-		return i;
-	}
+	// If we stopped at ) (closing cmdsub), still need to read heredoc content
+	// The content comes from lines after the heredoc opener, not before the )
 	if (i < value.length && value[i] === "\n") {
 		i += 1;
 	}
@@ -5787,7 +5785,8 @@ class Parser {
 	}
 
 	_parseCommandSubstitution() {
-		let arith_depth,
+		let all_heredoc_delimiters,
+			arith_depth,
 			c,
 			case_depth,
 			ch,
@@ -5795,10 +5794,15 @@ class Parser {
 			cmd,
 			content,
 			content_start,
+			delim,
 			delimiter,
 			delimiter_chars,
 			depth,
 			found_esac,
+			found_in_content,
+			heredoc_delimiters,
+			heredoc_end,
+			heredoc_start,
 			line,
 			line_end,
 			line_start,
@@ -5808,12 +5812,14 @@ class Parser {
 			quote,
 			saved,
 			start,
+			strip_tabs,
 			sub_parser,
 			tabs_stripped,
 			tc,
 			temp_case_depth,
 			temp_depth,
-			text;
+			text,
+			text_end;
 		if (this.atEnd() || this.peek() !== "$") {
 			return [null, ""];
 		}
@@ -6041,9 +6047,9 @@ class Parser {
 				}
 				delimiter = delimiter_chars.join("");
 				if (delimiter) {
-					// Check if ) immediately follows (closes cmdsub with empty heredoc)
+					// Check if ) immediately follows (closes cmdsub before heredoc content)
 					if (!this.atEnd() && this.peek() === ")") {
-						// Heredoc has no content - will be resolved later
+						// Heredoc content will come after the ) - handle in post-processing
 						continue;
 					}
 					// Skip to end of current line
@@ -6198,7 +6204,48 @@ class Parser {
 		}
 		content = this.source.slice(content_start, this.pos);
 		this.advance();
-		text = this.source.slice(start, this.pos);
+		// Save position after ) for text (before skipping heredoc content)
+		text_end = this.pos;
+		// Check for heredocs in content - their bodies may follow the )
+		// This handles cases like $(cmd <<X) where ) immediately follows <<X
+		// Filter to only heredocs that weren't already consumed during parsing
+		all_heredoc_delimiters = _extractHeredocDelimiters(content);
+		heredoc_delimiters = [];
+		for ([delim, strip_tabs] of all_heredoc_delimiters) {
+			// Check if this delimiter was already consumed (appears on its own line in content)
+			found_in_content = false;
+			for (line of content.split("\n")) {
+				check_line = strip_tabs ? line.replace(/^[\t]+/, "") : line;
+				if (check_line === delim) {
+					found_in_content = true;
+					break;
+				}
+			}
+			if (!found_in_content) {
+				// Heredoc content not yet consumed, needs post-processing
+				heredoc_delimiters.push([delim, strip_tabs]);
+			}
+		}
+		if (heredoc_delimiters) {
+			[heredoc_start, heredoc_end] = _findHeredocContentEnd(
+				this.source,
+				this.pos,
+				heredoc_delimiters,
+			);
+			if (heredoc_end > heredoc_start) {
+				content = content + this.source.slice(heredoc_start, heredoc_end);
+				// Use pending mechanism to skip heredoc after current line is parsed
+				if (this._pending_heredoc_end == null) {
+					this._pending_heredoc_end = heredoc_end;
+				} else {
+					this._pending_heredoc_end = Math.max(
+						this._pending_heredoc_end,
+						heredoc_end,
+					);
+				}
+			}
+		}
+		text = this.source.slice(start, text_end);
 		// Parse the content as a command list
 		sub_parser = new Parser(content, true);
 		cmd = sub_parser.parseList();

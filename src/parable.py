@@ -6644,6 +6644,30 @@ class Parser:
                         # Regular escape - quotes the next char
                         quoted = True
                         delimiter_chars.append(self.advance())
+            elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "'":
+                # ANSI-C quoting $'...' - skip $ and quotes, expand escapes
+                quoted = True
+                self.advance()  # skip $
+                self.advance()  # skip opening '
+                while not self.at_end() and self.peek() != "'":
+                    c = self.peek()
+                    if c == "\\" and self.pos + 1 < self.length:
+                        self.advance()  # skip backslash
+                        esc = self.peek()
+                        # Handle ANSI-C escapes using the lookup table
+                        esc_val = _get_ansi_escape(esc)
+                        if esc_val >= 0:
+                            delimiter_chars.append(chr(esc_val))
+                            self.advance()
+                        elif esc == "'":
+                            delimiter_chars.append(self.advance())
+                        else:
+                            # Other escapes - just use the escaped char
+                            delimiter_chars.append(self.advance())
+                    else:
+                        delimiter_chars.append(self.advance())
+                if not self.at_end():
+                    self.advance()  # skip closing '
             elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
                 # Command substitution embedded in delimiter
                 delimiter_chars.append(self.advance())  # $

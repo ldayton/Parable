@@ -1473,13 +1473,23 @@ class Word(Node):
                             depth -= 1
                             if depth == 0:
                                 # End of pattern
-                                pattern_parts.append("".join(current_part).strip())
+                                part_content = "".join(current_part)
+                                # Don't strip if this looks like a process substitution with heredoc
+                                if "<<" in part_content:
+                                    pattern_parts.append(part_content)
+                                else:
+                                    pattern_parts.append(part_content.strip())
                                 break
                             current_part.append(value[i])
                             i += 1
                         elif value[i] == "|" and depth == 1:
                             # Top-level pipe separator
-                            pattern_parts.append("".join(current_part).strip())
+                            part_content = "".join(current_part)
+                            # Don't strip if this looks like a process substitution with heredoc
+                            if "<<" in part_content:
+                                pattern_parts.append(part_content)
+                            else:
+                                pattern_parts.append(part_content.strip())
                             current_part = []
                             i += 1
                         else:

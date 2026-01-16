@@ -1,0 +1,5 @@
+=== heredoc with ${ in delimiter followed by redirect
+<<$${>&}
+---
+(command (redirect "<<" "") (redirect ">&" "}"))
+---

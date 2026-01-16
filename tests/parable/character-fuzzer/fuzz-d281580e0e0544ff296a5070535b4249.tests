@@ -1,0 +1,6 @@
+=== unterminated heredoc in command substitution with text after closing paren
+export "$(ec
+ho ${key} | tr [:lower:] [:uppe<<r:])=${p_key#*=}"
+---
+(command (word "export") (word "\"$(ec\nho ${key} | tr [:lower:] [:uppe <<r:]\nr:]\n)=${p_key#*=}\""))
+---

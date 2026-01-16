@@ -1,0 +1,5 @@
+=== handle ) in command substitution with invalid case statement
+"$(case@ in)esac)"
+---
+(command (word "\"$(case@ in)esac)\""))
+---

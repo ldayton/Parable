@@ -1580,7 +1580,12 @@ class Word extends Node {
 				// Format this command substitution
 				if (cmdsub_idx < cmdsub_parts.length) {
 					node = cmdsub_parts[cmdsub_idx];
-					formatted = _formatCmdsubNode(node.command);
+					// Use raw content if parsing was incomplete
+					if (node.raw_content != null) {
+						formatted = node.raw_content;
+					} else {
+						formatted = _formatCmdsubNode(node.command);
+					}
 					cmdsub_idx += 1;
 				} else {
 					// No AST node (e.g., inside arithmetic) - parse content on the fly
@@ -3025,10 +3030,11 @@ class ParamIndirect extends Node {
 }
 
 class CommandSubstitution extends Node {
-	constructor(command) {
+	constructor(command, raw_content) {
 		super();
 		this.kind = "cmdsub";
 		this.command = command;
+		this.raw_content = raw_content;
 	}
 
 	toSexp() {
@@ -5928,6 +5934,8 @@ class Parser {
 			nested_depth,
 			q,
 			quote,
+			raw_content,
+			remaining,
 			saved,
 			start,
 			sub_parser,
@@ -6238,7 +6246,8 @@ class Parser {
 			} else if (c === ")") {
 				// In case statement, ) after pattern is a terminator, not a paren
 				// Only decrement depth if we're not in a case pattern position
-				if (case_depth > 0 && depth === 1) {
+				// Also check for esac ahead even without case, since bash does this
+				if (depth === 1) {
 					// This ) might be a case pattern terminator, not closing the $(
 					// Look ahead to see if there's still content that needs esac
 					saved = this.pos;
@@ -6271,11 +6280,13 @@ class Parser {
 							// Nested case in lookahead
 							temp_case_depth += 1;
 							this._skipKeyword("case");
-						} else if (
-							tc === "e" &&
-							this._isWordBoundaryBefore() &&
-							this._lookaheadKeyword("esac")
-						) {
+						} else if (tc === "e" && this._lookaheadKeyword("esac")) {
+							if (temp_case_depth === 0) {
+								// Found esac without matching case - still significant
+								// because bash treats ) before esac as non-closing
+								found_esac = true;
+								break;
+							}
 							temp_case_depth -= 1;
 							if (temp_case_depth === 0) {
 								// All cases are closed
@@ -6327,12 +6338,25 @@ class Parser {
 		if (cmd == null) {
 			cmd = new Empty();
 		}
-		// Ensure all content was consumed - if not, there's a syntax error
+		// Check if all content was consumed
+		// If not, check if it's the specific pattern of )esac that bash accepts
 		sub_parser.skipWhitespaceAndNewlines();
+		raw_content = null;
 		if (!sub_parser.atEnd()) {
-			throw new ParseError("Unexpected content in command substitution", start);
+			remaining = content.slice(sub_parser.pos);
+			// Only use raw content if remaining starts with )esac pattern
+			// This handles the bash quirk where ) before esac doesn't close cmdsub
+			if (remaining.startsWith(")esac")) {
+				raw_content = content;
+			} else {
+				// Other syntax errors should still fail
+				throw new ParseError(
+					"Unexpected content in command substitution",
+					start,
+				);
+			}
 		}
-		return [new CommandSubstitution(cmd), text];
+		return [new CommandSubstitution(cmd, raw_content), text];
 	}
 
 	_isWordBoundaryBefore() {

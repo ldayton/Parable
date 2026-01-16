@@ -1244,7 +1244,11 @@ class Word(Node):
                 # Format this command substitution
                 if cmdsub_idx < len(cmdsub_parts):
                     node = cmdsub_parts[cmdsub_idx]
-                    formatted = _format_cmdsub_node(node.command)
+                    # Use raw content if parsing was incomplete
+                    if node.raw_content is not None:
+                        formatted = node.raw_content
+                    else:
+                        formatted = _format_cmdsub_node(node.command)
                     cmdsub_idx += 1
                 else:
                     # No AST node (e.g., inside arithmetic) - parse content on the fly
@@ -2501,10 +2505,12 @@ class CommandSubstitution(Node):
     """A command substitution $(...) or `...`."""
 
     command: Node
+    raw_content: str | None  # Raw content if parsing was incomplete
 
-    def __init__(self, command: Node):
+    def __init__(self, command: Node, raw_content: str | None = None):
         self.kind = "cmdsub"
         self.command = command
+        self.raw_content = raw_content
 
     def to_sexp(self) -> str:
         return "(cmdsub " + self.command.to_sexp() + ")"
@@ -5182,7 +5188,8 @@ class Parser:
             elif c == ")":
                 # In case statement, ) after pattern is a terminator, not a paren
                 # Only decrement depth if we're not in a case pattern position
-                if case_depth > 0 and depth == 1:
+                # Also check for esac ahead even without case, since bash does this
+                if depth == 1:
                     # This ) might be a case pattern terminator, not closing the $(
                     # Look ahead to see if there's still content that needs esac
                     saved = self.pos
@@ -5212,11 +5219,12 @@ class Parser:
                             # Nested case in lookahead
                             temp_case_depth += 1
                             self._skip_keyword("case")
-                        elif (
-                            tc == "e"
-                            and self._is_word_boundary_before()
-                            and self._lookahead_keyword("esac")
-                        ):
+                        elif tc == "e" and self._lookahead_keyword("esac"):
+                            if temp_case_depth == 0:
+                                # Found esac without matching case - still significant
+                                # because bash treats ) before esac as non-closing
+                                found_esac = True
+                                break
                             temp_case_depth -= 1
                             if temp_case_depth == 0:
                                 # All cases are closed
@@ -5263,12 +5271,21 @@ class Parser:
         if cmd is None:
             cmd = Empty()
 
-        # Ensure all content was consumed - if not, there's a syntax error
+        # Check if all content was consumed
+        # If not, check if it's the specific pattern of )esac that bash accepts
         sub_parser.skip_whitespace_and_newlines()
+        raw_content = None
         if not sub_parser.at_end():
-            raise ParseError("Unexpected content in command substitution", pos=start)
+            remaining = content[sub_parser.pos :]
+            # Only use raw content if remaining starts with )esac pattern
+            # This handles the bash quirk where ) before esac doesn't close cmdsub
+            if remaining.startswith(")esac"):
+                raw_content = content
+            else:
+                # Other syntax errors should still fail
+                raise ParseError("Unexpected content in command substitution", pos=start)
 
-        return CommandSubstitution(cmd), text
+        return CommandSubstitution(cmd, raw_content), text
 
     def _is_word_boundary_before(self) -> bool:
         """Check if current position is at a word boundary (preceded by space/newline/start)."""

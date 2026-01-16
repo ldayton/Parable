@@ -3686,6 +3686,8 @@ function _formatCmdsubNode(
 			val = w._expandAllAnsiCQuotes(w.value);
 			// Strip $ from locale strings $"..." (quote-aware)
 			val = w._stripLocaleStringDollars(val);
+			// Normalize whitespace in array assignments
+			val = w._normalizeArrayWhitespace(val);
 			val = w._formatCommandSubstitutions(val);
 			parts.push(val);
 		}

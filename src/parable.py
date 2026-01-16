@@ -8670,8 +8670,12 @@ class Parser:
                 if procsub_node:
                     parts.append(procsub_node)
                     chars.append(procsub_text)
+                elif procsub_text:
+                    # Not a valid process substitution, treat full <(...) as literal
+                    chars.append(procsub_text)
                 else:
-                    chars.append(self.advance())
+                    # Couldn't parse at all, treat <( as literal chars
+                    chars.append(self.advance())  # <
 
             # Backtick command substitution
             elif ch == "`":

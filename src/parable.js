@@ -5531,6 +5531,7 @@ function _isValidIdentifier(name) {
 }
 
 // Word parsing context constants
+const WORD_CTX_NORMAL = 0;
 const WORD_CTX_COND = 1;
 const WORD_CTX_REGEX = 2;
 class Parser {
@@ -6129,6 +6130,406 @@ class Parser {
 			return true;
 		}
 		return false;
+	}
+
+	_parseWordInternal(ctx, at_command_start, in_array_literal) {
+		let ansi_result,
+			array_result,
+			bracket_depth,
+			c,
+			ch,
+			chars,
+			cmdsub_result,
+			depth,
+			extglob_depth,
+			for_regex,
+			handle_line_continuation,
+			in_single_in_dquote,
+			inner_paren_depth,
+			locale_result,
+			next_c,
+			next_ch,
+			paren_depth,
+			parts,
+			pc,
+			prev_char,
+			procsub_result,
+			seen_equals,
+			start,
+			track_newline;
+		if (at_command_start == null) {
+			at_command_start = false;
+		}
+		if (in_array_literal == null) {
+			in_array_literal = false;
+		}
+		start = this.pos;
+		chars = [];
+		parts = [];
+		bracket_depth = 0;
+		seen_equals = false;
+		paren_depth = 0;
+		while (!this.atEnd()) {
+			ch = this.peek();
+			// REGEX: Backslash-newline continuation (check first)
+			if (ctx === WORD_CTX_REGEX) {
+				if (
+					ch === "\\" &&
+					this.pos + 1 < this.length &&
+					this.source[this.pos + 1] === "\n"
+				) {
+					this.advance();
+					this.advance();
+					continue;
+				}
+			}
+			// Check termination based on context
+			if (this._isWordTerminator(ctx, ch, bracket_depth, paren_depth)) {
+				break;
+			}
+			// NORMAL: Array subscript tracking
+			if (ctx === WORD_CTX_NORMAL && ch === "[") {
+				if (bracket_depth > 0) {
+					bracket_depth += 1;
+					chars.push(this.advance());
+					continue;
+				}
+				if (
+					chars &&
+					at_command_start &&
+					!seen_equals &&
+					_isArrayAssignmentPrefix(chars)
+				) {
+					prev_char = chars[chars.length - 1];
+					if (/^[a-zA-Z0-9]$/.test(prev_char) || prev_char === "_") {
+						bracket_depth += 1;
+						chars.push(this.advance());
+						continue;
+					}
+				}
+				if (chars.length === 0 && !seen_equals && in_array_literal) {
+					bracket_depth += 1;
+					chars.push(this.advance());
+					continue;
+				}
+			}
+			if (ctx === WORD_CTX_NORMAL && ch === "]" && bracket_depth > 0) {
+				bracket_depth -= 1;
+				chars.push(this.advance());
+				continue;
+			}
+			if (ctx === WORD_CTX_NORMAL && ch === "=" && bracket_depth === 0) {
+				seen_equals = true;
+			}
+			// REGEX: Track paren depth
+			if (ctx === WORD_CTX_REGEX && ch === "(") {
+				paren_depth += 1;
+				chars.push(this.advance());
+				continue;
+			}
+			if (ctx === WORD_CTX_REGEX && ch === ")") {
+				if (paren_depth > 0) {
+					paren_depth -= 1;
+					chars.push(this.advance());
+					continue;
+				}
+				break;
+			}
+			// COND/REGEX: Bracket expressions
+			if ([WORD_CTX_COND, WORD_CTX_REGEX].includes(ctx) && ch === "[") {
+				for_regex = ctx === WORD_CTX_REGEX;
+				if (this._scanBracketExpression(chars, parts, for_regex, paren_depth)) {
+					continue;
+				}
+				chars.push(this.advance());
+				continue;
+			}
+			// COND: Extglob patterns
+			if (ctx === WORD_CTX_COND && ch === "(") {
+				if (chars.length > 0 && _isExtglobPrefix(chars[chars.length - 1])) {
+					chars.push(this.advance());
+					depth = 1;
+					while (!this.atEnd() && depth > 0) {
+						c = this.peek();
+						if (c === "(") {
+							depth += 1;
+						} else if (c === ")") {
+							depth -= 1;
+						}
+						chars.push(this.advance());
+					}
+					continue;
+				}
+			}
+			// REGEX: Space inside parens is part of pattern
+			if (ctx === WORD_CTX_REGEX && _isWhitespace(ch) && paren_depth > 0) {
+				chars.push(this.advance());
+				continue;
+			}
+			// Single-quoted string
+			if (ch === "'") {
+				this.advance();
+				track_newline = ctx === WORD_CTX_NORMAL;
+				this._scanSingleQuote(chars, start, track_newline);
+				continue;
+			}
+			// Double-quoted string
+			if (ch === '"') {
+				this.advance();
+				if (ctx === WORD_CTX_NORMAL) {
+					// NORMAL has special in_single_in_dquote and backtick handling
+					chars.push('"');
+					in_single_in_dquote = false;
+					while (
+						!this.atEnd() &&
+						(in_single_in_dquote || this.peek() !== '"')
+					) {
+						c = this.peek();
+						if (in_single_in_dquote) {
+							chars.push(this.advance());
+							if (c === "'") {
+								in_single_in_dquote = false;
+							}
+							continue;
+						}
+						if (c === "\\" && this.pos + 1 < this.length) {
+							next_c = this.source[this.pos + 1];
+							if (next_c === "\n") {
+								this.advance();
+								this.advance();
+							} else {
+								chars.push(this.advance());
+								chars.push(this.advance());
+							}
+						} else if (c === "$") {
+							if (!this._parseDollarExpansion(chars, parts)) {
+								chars.push(this.advance());
+							}
+						} else if (c === "`") {
+							cmdsub_result = this._parseBacktickSubstitution();
+							if (cmdsub_result[0]) {
+								parts.push(cmdsub_result[0]);
+								chars.push(cmdsub_result[1]);
+							} else {
+								chars.push(this.advance());
+							}
+						} else {
+							chars.push(this.advance());
+						}
+					}
+					if (this.atEnd()) {
+						throw new ParseError("Unterminated double quote", start);
+					}
+					chars.push(this.advance());
+				} else {
+					handle_line_continuation = ctx === WORD_CTX_COND;
+					this._scanDoubleQuote(chars, parts, start, handle_line_continuation);
+				}
+				continue;
+			}
+			// Escape
+			if (ch === "\\" && this.pos + 1 < this.length) {
+				next_ch = this.source[this.pos + 1];
+				if (ctx !== WORD_CTX_REGEX && next_ch === "\n") {
+					this.advance();
+					this.advance();
+				} else {
+					chars.push(this.advance());
+					chars.push(this.advance());
+				}
+				continue;
+			}
+			// NORMAL/COND: ANSI-C quoting $'...'
+			if (
+				ctx !== WORD_CTX_REGEX &&
+				ch === "$" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "'"
+			) {
+				ansi_result = this._parseAnsiCQuote();
+				if (ansi_result[0]) {
+					parts.push(ansi_result[0]);
+					chars.push(ansi_result[1]);
+				} else {
+					chars.push(this.advance());
+				}
+				continue;
+			}
+			// NORMAL/COND: Locale translation $"..."
+			if (
+				ctx !== WORD_CTX_REGEX &&
+				ch === "$" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === '"'
+			) {
+				locale_result = this._parseLocaleString();
+				if (locale_result[0]) {
+					parts.push(locale_result[0]);
+					parts.push(...locale_result[2]);
+					chars.push(locale_result[1]);
+				} else {
+					chars.push(this.advance());
+				}
+				continue;
+			}
+			// Dollar expansions
+			if (ch === "$") {
+				if (!this._parseDollarExpansion(chars, parts)) {
+					chars.push(this.advance());
+				}
+				continue;
+			}
+			// NORMAL/COND: Backtick command substitution
+			if (ctx !== WORD_CTX_REGEX && ch === "`") {
+				cmdsub_result = this._parseBacktickSubstitution();
+				if (cmdsub_result[0]) {
+					parts.push(cmdsub_result[0]);
+					chars.push(cmdsub_result[1]);
+				} else {
+					chars.push(this.advance());
+				}
+				continue;
+			}
+			// NORMAL/COND: Process substitution <(...) or >(...)
+			if (
+				ctx !== WORD_CTX_REGEX &&
+				_isRedirectChar(ch) &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "("
+			) {
+				procsub_result = this._parseProcessSubstitution();
+				if (procsub_result[0]) {
+					parts.push(procsub_result[0]);
+					chars.push(procsub_result[1]);
+				} else if (procsub_result[1]) {
+					chars.push(procsub_result[1]);
+				} else {
+					chars.push(this.advance());
+					if (ctx === WORD_CTX_NORMAL) {
+						chars.push(this.advance());
+					}
+				}
+				continue;
+			}
+			// NORMAL: Array literal
+			if (
+				ctx === WORD_CTX_NORMAL &&
+				ch === "(" &&
+				chars &&
+				bracket_depth === 0
+			) {
+				if (
+					chars[chars.length - 1] === "=" ||
+					(chars.length >= 2 &&
+						chars[chars.length - 2] === "+" &&
+						chars[chars.length - 1] === "=")
+				) {
+					array_result = this._parseArrayLiteral();
+					if (array_result[0]) {
+						parts.push(array_result[0]);
+						chars.push(array_result[1]);
+					} else {
+						break;
+					}
+					continue;
+				}
+			}
+			// NORMAL: Extglob pattern @(), ?(), *(), +(), !()
+			if (
+				ctx === WORD_CTX_NORMAL &&
+				_isExtglobPrefix(ch) &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "("
+			) {
+				chars.push(this.advance());
+				chars.push(this.advance());
+				extglob_depth = 1;
+				while (!this.atEnd() && extglob_depth > 0) {
+					c = this.peek();
+					if (c === ")") {
+						chars.push(this.advance());
+						extglob_depth -= 1;
+					} else if (c === "(") {
+						chars.push(this.advance());
+						extglob_depth += 1;
+					} else if (c === "\\") {
+						if (
+							this.pos + 1 < this.length &&
+							this.source[this.pos + 1] === "\n"
+						) {
+							this.advance();
+							this.advance();
+						} else {
+							chars.push(this.advance());
+							if (!this.atEnd()) {
+								chars.push(this.advance());
+							}
+						}
+					} else if (c === "'") {
+						chars.push(this.advance());
+						while (!this.atEnd() && this.peek() !== "'") {
+							chars.push(this.advance());
+						}
+						if (!this.atEnd()) {
+							chars.push(this.advance());
+						}
+					} else if (c === '"') {
+						chars.push(this.advance());
+						while (!this.atEnd() && this.peek() !== '"') {
+							if (this.peek() === "\\" && this.pos + 1 < this.length) {
+								chars.push(this.advance());
+							}
+							chars.push(this.advance());
+						}
+						if (!this.atEnd()) {
+							chars.push(this.advance());
+						}
+					} else if (
+						c === "$" &&
+						this.pos + 1 < this.length &&
+						this.source[this.pos + 1] === "("
+					) {
+						chars.push(this.advance());
+						chars.push(this.advance());
+						if (!this.atEnd() && this.peek() === "(") {
+							chars.push(this.advance());
+							inner_paren_depth = 2;
+							while (!this.atEnd() && inner_paren_depth > 0) {
+								pc = this.peek();
+								if (pc === "(") {
+									inner_paren_depth += 1;
+								} else if (pc === ")") {
+									inner_paren_depth -= 1;
+								}
+								chars.push(this.advance());
+							}
+						} else {
+							extglob_depth += 1;
+						}
+					} else if (
+						_isExtglobPrefix(c) &&
+						this.pos + 1 < this.length &&
+						this.source[this.pos + 1] === "("
+					) {
+						chars.push(this.advance());
+						chars.push(this.advance());
+						extglob_depth += 1;
+					} else {
+						chars.push(this.advance());
+					}
+				}
+				continue;
+			}
+			// Regular character
+			chars.push(this.advance());
+		}
+		if (chars.length === 0) {
+			return null;
+		}
+		if (parts && parts.length) {
+			return new Word(chars.join(""), parts);
+		}
+		return new Word(chars.join(""), null);
 	}
 
 	parseWord(at_command_start, in_array_literal) {

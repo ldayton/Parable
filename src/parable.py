@@ -981,6 +981,9 @@ class Word(Node):
                         # Count preceding backslashes in arith_content
                         num_backslashes = 0
                         j = len(arith_content) - 1
+                        # Skip trailing newlines before counting backslashes
+                        while j >= 0 and arith_content[j] == "\n":
+                            j -= 1
                         while j >= 0 and arith_content[j] == "\\":
                             num_backslashes += 1
                             j -= 1
@@ -999,12 +1002,15 @@ class Word(Node):
                         i += 1
                         if depth == 1:
                             first_close_idx = None  # Content after first close
-                if depth == 0:
+                if depth == 0 or (depth == 1 and first_close_idx is not None):
                     content = "".join(arith_content)
                     if first_close_idx is not None:
                         # Standard close: trim content, add ))
                         content = content[:first_close_idx]
-                        result.append("$((" + content + "))")
+                        # If depth==1, we only found one closing paren, add )
+                        # If depth==0, we found both closing parens, add ))
+                        closing = "))" if depth == 0 else ")"
+                        result.append("$((" + content + closing)
                     else:
                         # Content after first close: content has intermediate ), add single )
                         result.append("$((" + content + ")")

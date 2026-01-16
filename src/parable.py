@@ -176,8 +176,7 @@ class QuoteState:
             return False
         return self._stack[len(self._stack) - 1][1]
 
-    @property
-    def depth(self) -> int:
+    def get_depth(self) -> int:
         """Return the current stack depth."""
         return len(self._stack)
 
@@ -216,8 +215,7 @@ class ContextStack:
     def __init__(self):
         self._stack: list[ParseContext] = [ParseContext()]
 
-    @property
-    def current(self) -> ParseContext:
+    def get_current(self) -> ParseContext:
         """Return the current (topmost) context."""
         return self._stack[len(self._stack) - 1]
 
@@ -238,8 +236,7 @@ class ContextStack:
                 return True
         return False
 
-    @property
-    def depth(self) -> int:
+    def get_depth(self) -> int:
         """Return the current stack depth."""
         return len(self._stack)
 

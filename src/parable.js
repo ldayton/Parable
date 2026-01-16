@@ -153,7 +153,7 @@ class QuoteState {
 		return this._stack[this._stack.length - 1][1];
 	}
 
-	depth() {
+	getDepth() {
 		return this._stack.length;
 	}
 }
@@ -182,7 +182,7 @@ class ContextStack {
 		this._stack = [new ParseContext()];
 	}
 
-	current() {
+	getCurrent() {
 		return this._stack[this._stack.length - 1];
 	}
 
@@ -207,7 +207,7 @@ class ContextStack {
 		return false;
 	}
 
-	depth() {
+	getDepth() {
 		return this._stack.length;
 	}
 }

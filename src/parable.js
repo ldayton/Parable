@@ -1336,7 +1336,7 @@ class Word extends Node {
 		return result;
 	}
 
-	_formatCommandSubstitutions(value) {
+	_formatCommandSubstitutions(value, in_arith) {
 		let arith_depth,
 			arith_paren_depth,
 			c,
@@ -1377,6 +1377,9 @@ class Word extends Node {
 			spaced,
 			stripped,
 			terminator;
+		if (in_arith == null) {
+			in_arith = false;
+		}
 		// Collect command substitutions from all parts, including nested ones
 		cmdsub_parts = [];
 		procsub_parts = [];
@@ -1733,8 +1736,6 @@ class Word extends Node {
 					i = j;
 				} else if (is_procsub) {
 					// Process substitution but no parts (failed to parse or in arithmetic context)
-					// Strip leading whitespace after >( or <( to match bash behavior
-					// But preserve if content is only whitespace
 					direction = value[i];
 					j = _findCmdsubEnd(value, i + 2);
 					if (
@@ -1747,12 +1748,13 @@ class Word extends Node {
 						continue;
 					}
 					inner = value.slice(i + 2, j - 1);
-					// Only strip leading whitespace if there's non-whitespace content
-					if (inner.trim()) {
+					// In arithmetic context, preserve whitespace; otherwise strip leading whitespace
+					if (in_arith) {
+						result.push(`${direction}(${inner})`);
+					} else if (inner.trim()) {
 						stripped = inner.replace(/^[ \t]+/, "");
 						result.push(`${direction}(${stripped})`);
 					} else {
-						// Content is only whitespace - preserve as-is
 						result.push(`${direction}(${inner})`);
 					}
 					i = j;
@@ -3063,6 +3065,7 @@ class ArithmeticCommand extends Node {
 		// Format command substitutions using Word's method
 		formatted = new Word(this.raw_content)._formatCommandSubstitutions(
 			this.raw_content,
+			true,
 		);
 		escaped = formatted
 			.replaceAll("\\", "\\\\")

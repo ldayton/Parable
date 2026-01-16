@@ -1074,7 +1074,7 @@ class Word(Node):
                         result.extend(self._collect_procsubs(p))
         return result
 
-    def _format_command_substitutions(self, value: str) -> str:
+    def _format_command_substitutions(self, value: str, in_arith: bool = False) -> str:
         """Replace $(...) and >(...) / <(...) with bash-oracle-formatted AST output."""
         # Collect command substitutions from all parts, including nested ones
         cmdsub_parts = []
@@ -1370,8 +1370,6 @@ class Word(Node):
                     i = j
                 elif is_procsub:
                     # Process substitution but no parts (failed to parse or in arithmetic context)
-                    # Strip leading whitespace after >( or <( to match bash behavior
-                    # But preserve if content is only whitespace
                     direction = value[i]
                     j = _find_cmdsub_end(value, i + 2)
                     if j > len(value) or (j > 0 and j <= len(value) and value[j - 1] != ")"):
@@ -1380,12 +1378,13 @@ class Word(Node):
                         i += 1
                         continue
                     inner = _substring(value, i + 2, j - 1)
-                    # Only strip leading whitespace if there's non-whitespace content
-                    if inner.strip():
+                    # In arithmetic context, preserve whitespace; otherwise strip leading whitespace
+                    if in_arith:
+                        result.append(direction + "(" + inner + ")")
+                    elif inner.strip():
                         stripped = inner.lstrip(" \t")
                         result.append(direction + "(" + stripped + ")")
                     else:
-                        # Content is only whitespace - preserve as-is
                         result.append(direction + "(" + inner + ")")
                     i = j
                 else:
@@ -2541,7 +2540,9 @@ class ArithmeticCommand(Node):
         # bash-oracle format: (arith (word "content"))
         # Redirects are siblings: (arith (word "...")) (redirect ...)
         # Format command substitutions using Word's method
-        formatted = Word(self.raw_content)._format_command_substitutions(self.raw_content)
+        formatted = Word(self.raw_content)._format_command_substitutions(
+            self.raw_content, in_arith=True
+        )
         escaped = (
             formatted.replace("\\", "\\\\")
             .replace('"', '\\"')

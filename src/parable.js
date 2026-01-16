@@ -1711,6 +1711,7 @@ class Word extends Node {
 				} else if (is_procsub) {
 					// Process substitution but no parts (failed to parse or in arithmetic context)
 					// Strip leading whitespace after >( or <( to match bash behavior
+					// But preserve if content is only whitespace
 					direction = value[i];
 					j = _findCmdsubEnd(value, i + 2);
 					if (
@@ -1723,9 +1724,14 @@ class Word extends Node {
 						continue;
 					}
 					inner = value.slice(i + 2, j - 1);
-					// Strip leading whitespace
-					stripped = inner.replace(/^[ \t]+/, "");
-					result.push(`${direction}(${stripped})`);
+					// Only strip leading whitespace if there's non-whitespace content
+					if (inner.trim()) {
+						stripped = inner.replace(/^[ \t]+/, "");
+						result.push(`${direction}(${stripped})`);
+					} else {
+						// Content is only whitespace - preserve as-is
+						result.push(`${direction}(${inner})`);
+					}
 					i = j;
 				} else {
 					// Not a process substitution (e.g., arithmetic comparison)

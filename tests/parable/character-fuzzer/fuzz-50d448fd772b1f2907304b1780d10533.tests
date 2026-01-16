@@ -1,0 +1,5 @@
+=== failed process substitution in conditional should be treated as literal
+[[ <((1){) ]]
+---
+(cond (cond-unary "-n" (cond-term "<((1){)")))
+---

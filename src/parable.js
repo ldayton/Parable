@@ -5476,6 +5476,13 @@ class Parser {
 
 	_isAssignmentWord(word) {
 		let bracket_depth, ch, i, in_double, in_single;
+		// Assignment must start with identifier (letter or underscore), not quoted
+		if (
+			!word.value ||
+			!(/^[a-zA-Z]$/.test(word.value[0]) || word.value[0] === "_")
+		) {
+			return false;
+		}
 		in_single = false;
 		in_double = false;
 		bracket_depth = 0;

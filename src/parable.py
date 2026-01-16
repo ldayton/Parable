@@ -201,6 +201,9 @@ class ParseContext:
         self.paren_depth = 0
         self.brace_depth = 0
         self.bracket_depth = 0
+        self.case_depth = 0  # Nested case statements
+        self.arith_depth = 0  # Nested $((...)) expressions
+        self.arith_paren_depth = 0  # Grouping parens inside arithmetic
         self.quote = QuoteState()
 
 
@@ -239,6 +242,55 @@ class ContextStack:
     def get_depth(self) -> int:
         """Return the current stack depth."""
         return len(self._stack)
+
+    def enter_case(self) -> None:
+        """Increment case depth in current context."""
+        self.get_current().case_depth += 1
+
+    def exit_case(self) -> None:
+        """Decrement case depth in current context."""
+        ctx = self.get_current()
+        if ctx.case_depth > 0:
+            ctx.case_depth -= 1
+
+    def in_case(self) -> bool:
+        """Return True if currently inside a case statement."""
+        return self.get_current().case_depth > 0
+
+    def get_case_depth(self) -> int:
+        """Return current case nesting depth."""
+        return self.get_current().case_depth
+
+    def enter_arithmetic(self) -> None:
+        """Enter an arithmetic expression context."""
+        ctx = self.get_current()
+        ctx.arith_depth += 1
+        ctx.arith_paren_depth = 2  # $(( opens with 2 parens
+
+    def exit_arithmetic(self) -> None:
+        """Exit an arithmetic expression context."""
+        ctx = self.get_current()
+        if ctx.arith_depth > 0:
+            ctx.arith_depth -= 1
+            ctx.arith_paren_depth = 0
+
+    def in_arithmetic(self) -> bool:
+        """Return True if currently inside an arithmetic expression."""
+        return self.get_current().arith_depth > 0
+
+    def inc_arith_paren(self) -> None:
+        """Increment paren depth inside arithmetic."""
+        self.get_current().arith_paren_depth += 1
+
+    def dec_arith_paren(self) -> None:
+        """Decrement paren depth inside arithmetic."""
+        ctx = self.get_current()
+        if ctx.arith_paren_depth > 0:
+            ctx.arith_paren_depth -= 1
+
+    def get_arith_paren_depth(self) -> int:
+        """Return current arithmetic paren depth."""
+        return self.get_current().arith_paren_depth
 
 
 def _strip_line_continuations_comment_aware(text: str) -> str:

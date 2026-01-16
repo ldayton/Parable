@@ -173,6 +173,9 @@ class ParseContext {
 		this.paren_depth = 0;
 		this.brace_depth = 0;
 		this.bracket_depth = 0;
+		this.case_depth = 0;
+		this.arith_depth = 0;
+		this.arith_paren_depth = 0;
 		this.quote = new QuoteState();
 	}
 }
@@ -209,6 +212,62 @@ class ContextStack {
 
 	getDepth() {
 		return this._stack.length;
+	}
+
+	enterCase() {
+		this.getCurrent().case_depth += 1;
+	}
+
+	exitCase() {
+		let ctx;
+		ctx = this.getCurrent();
+		if (ctx.case_depth > 0) {
+			ctx.case_depth -= 1;
+		}
+	}
+
+	inCase() {
+		return this.getCurrent().case_depth > 0;
+	}
+
+	getCaseDepth() {
+		return this.getCurrent().case_depth;
+	}
+
+	enterArithmetic() {
+		let ctx;
+		ctx = this.getCurrent();
+		ctx.arith_depth += 1;
+		ctx.arith_paren_depth = 2;
+	}
+
+	exitArithmetic() {
+		let ctx;
+		ctx = this.getCurrent();
+		if (ctx.arith_depth > 0) {
+			ctx.arith_depth -= 1;
+			ctx.arith_paren_depth = 0;
+		}
+	}
+
+	inArithmetic() {
+		return this.getCurrent().arith_depth > 0;
+	}
+
+	incArithParen() {
+		this.getCurrent().arith_paren_depth += 1;
+	}
+
+	decArithParen() {
+		let ctx;
+		ctx = this.getCurrent();
+		if (ctx.arith_paren_depth > 0) {
+			ctx.arith_paren_depth -= 1;
+		}
+	}
+
+	getArithParenDepth() {
+		return this.getCurrent().arith_paren_depth;
 	}
 }
 

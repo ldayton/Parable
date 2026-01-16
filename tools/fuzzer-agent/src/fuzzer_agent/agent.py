@@ -20,6 +20,8 @@ MODEL_PRICING = {**CLAUDE_PRICING, **OTHER_PRICING, **AZURE_PRICING, **GCP_PRICI
 
 # Bedrock model IDs
 BEDROCK_MODELS = {
+    "deepseek-r1": "us.deepseek.r1-v1:0",
+    "deepseek-v3.1": "us.deepseek.deepseek-v3-1-v1:0",
     "haiku-3": "anthropic.claude-3-haiku-20240307-v1:0",
     "haiku-3.5": "anthropic.claude-3-5-haiku-20241022-v1:0",
     "haiku-4.5": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
@@ -43,6 +45,9 @@ AZURE_MODELS = {
     "gpt-4.1-nano": "azure/gpt-4.1-nano",
     "gpt-4o": "azure/gpt-4o",
     "gpt-4o-mini": "azure/gpt-4o-mini",
+    "gpt-5": "azure/gpt-5",
+    "gpt-5.1": "azure/gpt-5.1",
+    "gpt-5.2": "azure/gpt-5.2",
 }
 
 # GCP Vertex AI model IDs
@@ -50,6 +55,8 @@ GCP_MODELS = {
     "gemini-2.0-flash": "vertex_ai/gemini-2.0-flash",
     "gemini-2.5-flash": "vertex_ai/gemini-2.5-flash",
     "gemini-2.5-pro": "vertex_ai/gemini-2.5-pro",
+    "gemini-3-flash": "vertex_ai/gemini-3-flash-preview",
+    "gemini-3-pro": "vertex_ai/gemini-3-pro-preview",
 }
 
 MODELS = {**BEDROCK_MODELS, **AZURE_MODELS, **GCP_MODELS}

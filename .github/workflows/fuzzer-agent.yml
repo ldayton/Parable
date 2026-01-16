@@ -6,23 +6,28 @@ on:
       model:
         description: 'Model to use'
         required: true
-        default: 'sonnet-45'
+        default: 'sonnet-4.5'
         type: choice
         options:
+          - gpt-4.1
+          - gpt-4.1-mini
+          - gpt-4.1-nano
+          - gpt-4.5
+          - gpt-4o
+          - gpt-4o-mini
           - haiku-3
-          - haiku-35
-          - haiku-45
-          - sonnet-35
-          - sonnet-37
-          - sonnet-4
-          - sonnet-45
+          - haiku-3.5
+          - haiku-4.5
           - opus-4
-          - opus-41
-          - opus-45
+          - opus-4.5
+          - sonnet-3.5
+          - sonnet-4
+          - sonnet-4.5
 
 jobs:
   fuzzer-agent:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     permissions:
       contents: write
       pull-requests: write
@@ -46,6 +51,14 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: us-east-2
 
+      - name: Configure Azure credentials
+        if: startsWith(inputs.model, 'gpt-')
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
       - name: Configure git
         run: |
           git config user.name "github-actions[bot]"
@@ -54,6 +67,7 @@ jobs:
       - name: Run fuzzer agent
         env:
           GH_TOKEN: ${{ secrets.PAT }}
+          AZURE_API_BASE: ${{ secrets.AZURE_API_BASE }}
         run: |
           cd tools/fuzzer-agent
           uv run fuzzer-agent --model ${{ inputs.model }}

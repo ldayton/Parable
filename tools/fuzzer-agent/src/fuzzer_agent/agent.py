@@ -21,17 +21,17 @@ MODEL_PRICING = {**CLAUDE_PRICING, **OTHER_PRICING, **AZURE_PRICING}
 # Bedrock model IDs
 BEDROCK_MODELS = {
     "haiku-3": "anthropic.claude-3-haiku-20240307-v1:0",
-    "haiku-35": "anthropic.claude-3-5-haiku-20241022-v1:0",
-    "haiku-45": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "haiku-3.5": "anthropic.claude-3-5-haiku-20241022-v1:0",
+    "haiku-4.5": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
     "sonnet-3": "anthropic.claude-3-sonnet-20240229-v1:0",
-    "sonnet-35": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    "sonnet-3.5": "anthropic.claude-3-5-sonnet-20241022-v2:0",
     "sonnet-4": "us.anthropic.claude-sonnet-4-20250514-v1:0",
-    "sonnet-45": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    "sonnet-4.5": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
     "opus-4": "us.anthropic.claude-opus-4-20250514-v1:0",
-    "opus-45": "us.anthropic.claude-opus-4-5-20251101-v1:0",
-    "llama-33-70b": "meta.llama3-3-70b-instruct-v1:0",
-    "llama-32-90b": "meta.llama3-2-90b-instruct-v1:0",
-    "llama-31-70b": "meta.llama3-1-70b-instruct-v1:0",
+    "opus-4.5": "us.anthropic.claude-opus-4-5-20251101-v1:0",
+    "llama-3.3-70b": "meta.llama3-3-70b-instruct-v1:0",
+    "llama-3.2-90b": "meta.llama3-2-90b-instruct-v1:0",
+    "llama-3.1-70b": "meta.llama3-1-70b-instruct-v1:0",
     "nova-pro": "amazon.nova-pro-v1:0",
 }
 
@@ -55,7 +55,7 @@ PROMPTS_DIR = REPO_ROOT / "tools" / "fuzzer" / "prompts"
 class FuzzerFixer:
     """Agent that finds and fixes fuzzer bugs in Parable."""
 
-    def __init__(self, model: str = "sonnet-45"):
+    def __init__(self, model: str = "sonnet-4.5"):
         self.log = structlog.get_logger()
         self.model_name = model
         self.model_id = MODELS[model]
@@ -114,6 +114,7 @@ class FuzzerFixer:
         self.log.info("agent_start", model=self.model_name, base_sha=base_sha)
         if self.model_name in AZURE_MODELS:
             from azure.identity import DefaultAzureCredential
+
             credential = DefaultAzureCredential()
             token = credential.get_token("https://cognitiveservices.azure.com/.default")
             model = LiteLLMModel(

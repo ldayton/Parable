@@ -34,10 +34,10 @@ def main():
     )
     parser.add_argument(
         "--model",
-        default="sonnet-45",
+        default="sonnet-4.5",
         metavar="MODEL",
         choices=MODELS.keys(),
-        help="Model to use (default: sonnet-45)",
+        help="Model to use (default: sonnet-4.5)",
     )
     parser.add_argument(
         "--prices", action="store_true", help="Fetch live pricing from AWS and exit"

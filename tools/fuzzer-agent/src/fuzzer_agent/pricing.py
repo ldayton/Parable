@@ -23,21 +23,21 @@ REGION = "US East (Ohio)"
 # Bug: https://github.com/aws/aws-cli/issues/9567
 CLAUDE_PRICING: dict[str, tuple[float, float]] = {
     "haiku-3": (0.25, 1.25),
-    "haiku-35": (0.80, 4.00),
-    "haiku-45": (1.00, 5.00),
+    "haiku-3.5": (0.80, 4.00),
+    "haiku-4.5": (1.00, 5.00),
     "sonnet-3": (3.00, 15.00),
-    "sonnet-35": (3.00, 15.00),
+    "sonnet-3.5": (3.00, 15.00),
     "sonnet-4": (3.00, 15.00),
-    "sonnet-45": (3.00, 15.00),
+    "sonnet-4.5": (3.00, 15.00),
     "opus-4": (15.00, 75.00),
-    "opus-45": (5.00, 25.00),
+    "opus-4.5": (5.00, 25.00),
 }
 
 # Non-Claude pricing (fetched 2026-01-16, can be refreshed with --prices)
 OTHER_PRICING: dict[str, tuple[float, float]] = {
-    "llama-31-70b": (0.72, 0.72),
-    "llama-32-90b": (0.72, 0.72),
-    "llama-33-70b": (0.72, 0.72),
+    "llama-3.1-70b": (0.72, 0.72),
+    "llama-3.2-90b": (0.72, 0.72),
+    "llama-3.3-70b": (0.72, 0.72),
     "nova-lite": (0.06, 0.24),
     "nova-micro": (0.03, 0.14),
     "nova-pro": (0.80, 3.20),
@@ -68,9 +68,9 @@ API_MODELS = {
     "Nova Micro": "nova-micro",
     "Nova Lite": "nova-lite",
     "Nova Pro": "nova-pro",
-    "Llama 3.3 70B": "llama-33-70b",
-    "Llama 3.2 90B": "llama-32-90b",
-    "Llama 3.1 70B": "llama-31-70b",
+    "Llama 3.3 70B": "llama-3.3-70b",
+    "Llama 3.2 90B": "llama-3.2-90b",
+    "Llama 3.1 70B": "llama-3.1-70b",
 }
 
 
@@ -134,7 +134,10 @@ def fetch_azure_pricing() -> dict[str, tuple[float, float]]:
             meter = item.get("meterName", "")
             price = item.get("retailPrice", 0)
             # Skip batch, fine-tuning, cached, realtime, audio, training, hosting
-            if any(x in meter.lower() for x in ["batch", "ft", "cach", "rt-", "aud", "train", "host", "transcr", "tts"]):
+            if any(
+                x in meter.lower()
+                for x in ["batch", "ft", "cach", "rt-", "aud", "train", "host", "transcr", "tts"]
+            ):
                 continue
             # Only global pricing (most common)
             if "glbl" not in meter:
@@ -169,6 +172,7 @@ def fetch_azure_pricing() -> dict[str, tuple[float, float]]:
 def get_all_pricing() -> dict[str, tuple[float, float]]:
     """Get pricing for all models, combining API and hardcoded values."""
     import concurrent.futures
+
     prices = {**CLAUDE_PRICING, **AZURE_PRICING}
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         aws_future = executor.submit(fetch_bedrock_pricing)
@@ -212,7 +216,9 @@ def main() -> None:
         if model in prices:
             input_price, output_price = prices[model]
             live = "✓" if model in live_models else ""
-            print(f"{_get_provider(model):<10} {model:<15} ${input_price:<9.2f} ${output_price:<9.2f} {live}")
+            print(
+                f"{_get_provider(model):<10} {model:<15} ${input_price:<9.2f} ${output_price:<9.2f} {live}"
+            )
         else:
             print(f"{_get_provider(model):<10} {model:<15} {'(not found)':<10} {'(not found)':<10}")
 

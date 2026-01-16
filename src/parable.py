@@ -1306,7 +1306,22 @@ class Word(Node):
                         # Starts with subshell and formatting would change it - preserve original
                         result.append(direction + "(" + raw_stripped + ")")
                     else:
-                        result.append(direction + "(" + formatted + ")")
+                        # Check if list contains semicolon operators
+                        has_semicolon = False
+                        if node.command.kind == "list" and node.command.parts:
+                            for p in node.command.parts:
+                                if p.kind == "operator" and p.op in (";", "\n"):
+                                    has_semicolon = True
+                                    break
+                        # For lists without newlines or semicolons, preserve raw content
+                        if (
+                            node.command.kind == "list"
+                            and "\n" not in raw_stripped
+                            and not has_semicolon
+                        ):
+                            result.append(direction + "(" + raw_stripped + ")")
+                        else:
+                            result.append(direction + "(" + formatted + ")")
                     procsub_idx += 1
                     i = j
                 elif is_procsub and len(self.parts):

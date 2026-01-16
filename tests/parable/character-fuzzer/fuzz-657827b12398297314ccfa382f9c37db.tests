@@ -1,0 +1,5 @@
+=== don't add spaces to && inside process substitution with arithmetic
+$>((1)&&2)
+---
+(command (word "$>((1)&&2)"))
+---

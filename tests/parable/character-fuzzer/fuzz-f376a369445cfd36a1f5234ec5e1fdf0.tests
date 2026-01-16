@@ -1,0 +1,7 @@
+=== heredoc delimiter matching must be exact (not prefix)
+<<A <<AB
+AB
+---
+(command (redirect "<<" "AB
+") (redirect "<<" ""))
+---

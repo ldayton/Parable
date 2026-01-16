@@ -5312,9 +5312,8 @@ class Parser:
                     if len(pending_heredocs) > 0:
                         current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
                         in_heredoc_body = True
-                elif (
-                    check_line.startswith(current_heredoc_delim)
-                    and len(check_line) > len(current_heredoc_delim)
+                elif check_line.startswith(current_heredoc_delim) and len(check_line) > len(
+                    current_heredoc_delim
                 ):
                     # Delimiter with trailing content (e.g., "EOF)" where ) follows delimiter)
                     tabs_stripped = len(line) - len(check_line)
@@ -5745,9 +5744,8 @@ class Parser:
                     if len(pending_heredocs) > 0:
                         current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
                         in_heredoc_body = True
-                elif (
-                    check_line.startswith(current_heredoc_delim)
-                    and len(check_line) > len(current_heredoc_delim)
+                elif check_line.startswith(current_heredoc_delim) and len(check_line) > len(
+                    current_heredoc_delim
                 ):
                     # Delimiter with trailing content
                     tabs_stripped = len(line) - len(check_line)
@@ -6018,9 +6016,8 @@ class Parser:
                     if len(pending_heredocs) > 0:
                         current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
                         in_heredoc_body = True
-                elif (
-                    check_line.startswith(current_heredoc_delim)
-                    and len(check_line) > len(current_heredoc_delim)
+                elif check_line.startswith(current_heredoc_delim) and len(check_line) > len(
+                    current_heredoc_delim
                 ):
                     # Delimiter with trailing content
                     tabs_stripped = len(line) - len(check_line)

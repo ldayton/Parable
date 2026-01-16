@@ -10511,7 +10511,7 @@ class Parser {
 	}
 
 	parseFunction() {
-		let body, name, name_start, saved_pos;
+		let body, has_whitespace, name, name_start, pos_after_name, saved_pos;
 		this.skipWhitespace();
 		if (this.atEnd()) {
 			return null;
@@ -10575,7 +10575,15 @@ class Parser {
 			return null;
 		}
 		// Check for () - whitespace IS allowed between name and (
+		// But if name ends with extglob prefix (*?@+!) and () is adjacent,
+		// it's an extglob pattern, not a function definition
+		pos_after_name = this.pos;
 		this.skipWhitespace();
+		has_whitespace = this.pos > pos_after_name;
+		if (!has_whitespace && name && "*?@+!".includes(name[name.length - 1])) {
+			this.pos = saved_pos;
+			return null;
+		}
 		if (this.atEnd() || this.peek() !== "(") {
 			this.pos = saved_pos;
 			return null;

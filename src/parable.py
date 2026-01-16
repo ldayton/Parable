@@ -3351,14 +3351,19 @@ def _format_cmdsub_node(
                     skipped_semi = False
                 elif p.op == "&":
                     # If previous command has heredoc, insert & before heredoc content
+                    # But if it's a pipeline (contains |), append at end instead
                     if (
                         result
                         and "<<" in result[len(result) - 1]
                         and "\n" in result[len(result) - 1]
                     ):
                         last = result[len(result) - 1]
-                        first_nl = last.find("\n")
-                        result[len(result) - 1] = last[:first_nl] + " &" + last[first_nl:]
+                        # If this is a pipeline (has |), append & at the end
+                        if " |" in last or last.startswith("|"):
+                            result[len(result) - 1] = last + " &"
+                        else:
+                            first_nl = last.find("\n")
+                            result[len(result) - 1] = last[:first_nl] + " &" + last[first_nl:]
                     else:
                         result.append(" &")
                 else:

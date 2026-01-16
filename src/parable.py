@@ -3674,21 +3674,25 @@ def _extract_heredoc_delimiters(content: str) -> list[tuple[str, bool]]:
     return delimiters
 
 
-def _find_heredoc_content_end(source: str, start: int, delimiters: list[tuple[str, bool]]) -> int:
-    """Find position after all heredoc content in source starting at start.
+def _find_heredoc_content_end(
+    source: str, start: int, delimiters: list[tuple[str, bool]]
+) -> tuple[int, int]:
+    """Find heredoc content in source starting at start.
+    Returns (content_start, content_end) where content_start is position after newline
+    and content_end is position after all heredoc content.
     delimiters is list of (delimiter, strip_tabs) tuples.
     """
     if not delimiters:
-        return start
+        return start, start
     pos = start
-    for delimiter, strip_tabs in delimiters:
-        # Skip whitespace on the same line (e.g., tabs/spaces after closing paren)
-        ws_start = pos
-        while pos < len(source) and source[pos] in " \t":
-            pos += 1
-        if pos >= len(source) or source[pos] != "\n":
-            return ws_start
+    # Skip to end of current line (including non-whitespace)
+    while pos < len(source) and source[pos] != "\n":
         pos += 1
+    if pos >= len(source):
+        return start, start
+    content_start = pos  # Include the newline in heredoc content
+    pos += 1  # skip the newline for scanning
+    for delimiter, strip_tabs in delimiters:
         while pos < len(source):
             line_start = pos
             line_end = pos
@@ -3703,7 +3707,7 @@ def _find_heredoc_content_end(source: str, start: int, delimiters: list[tuple[st
                 pos = line_end + 1 if line_end < len(source) else line_end
                 break
             pos = line_end + 1 if line_end < len(source) else line_end
-    return pos
+    return content_start, pos
 
 
 def _is_word_boundary(s: str, pos: int, word_len: int) -> bool:
@@ -5099,10 +5103,16 @@ class Parser:
         # Check for heredocs in content - their bodies follow the )
         heredoc_delimiters = _extract_heredoc_delimiters(content)
         if heredoc_delimiters:
-            heredoc_end = _find_heredoc_content_end(self.source, self.pos, heredoc_delimiters)
-            if heredoc_end > self.pos:
-                content = content + _substring(self.source, self.pos, heredoc_end)
-                self.pos = heredoc_end
+            heredoc_start, heredoc_end = _find_heredoc_content_end(
+                self.source, self.pos, heredoc_delimiters
+            )
+            if heredoc_end > heredoc_start:
+                content = content + _substring(self.source, heredoc_start, heredoc_end)
+                # Use pending mechanism to skip heredoc after current line is parsed
+                if self._pending_heredoc_end is None:
+                    self._pending_heredoc_end = heredoc_end
+                else:
+                    self._pending_heredoc_end = max(self._pending_heredoc_end, heredoc_end)
 
         text = _substring(self.source, start, text_end)
         # Strip line continuations (backslash-newline) from text used for word construction

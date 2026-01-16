@@ -9631,6 +9631,9 @@ class Parser:
         last_word = self._find_last_word(last_node)
         if last_word and last_word.value.endswith("\\"):
             last_word.value = _substring(last_word.value, 0, len(last_word.value) - 1)
+            # If the word is now empty, remove it from the command
+            if not last_word.value and isinstance(last_node, Command) and last_node.words:
+                last_node.words.pop()
 
     def _find_last_word(self, node: Node) -> Word | None:
         """Recursively find the last Word in a node structure."""

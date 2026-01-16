@@ -11507,6 +11507,10 @@ class Parser {
 		last_word = this._findLastWord(last_node);
 		if (last_word && last_word.value.endsWith("\\")) {
 			last_word.value = last_word.value.slice(0, last_word.value.length - 1);
+			// If the word is now empty, remove it from the command
+			if (!last_word.value && last_node instanceof Command && last_node.words) {
+				last_node.words.pop();
+			}
 		}
 	}
 

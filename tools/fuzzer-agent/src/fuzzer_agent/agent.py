@@ -152,11 +152,14 @@ class FuzzerFixer:
                     },
                 )
             else:
+                # DeepSeek R1 doesn't support tool use in streaming mode
+                streaming = self.model_name != "deepseek-r1"
                 model = BedrockModel(
                     model_id=self.model_id,
                     region_name="us-east-2",
                     temperature=0.2,
                     max_tokens=4096,
+                    streaming=streaming,
                 )
             agent = Agent(
                 model=model,

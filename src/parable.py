@@ -1102,6 +1102,14 @@ class Word(Node):
                 # Check if this is actually a process substitution or just comparison + parens
                 # Process substitution: not preceded by alphanumeric
                 is_procsub = i == 0 or not value[i - 1].isalnum()
+                # Inside extglob: don't format, just copy raw content
+                if extglob_depth > 0:
+                    j = _find_cmdsub_end(value, i + 2)
+                    result.append(_substring(value, i, j))
+                    if procsub_idx < len(procsub_parts):
+                        procsub_idx += 1
+                    i = j
+                    continue
                 if procsub_idx < len(procsub_parts):
                     # Have parsed AST node - use it
                     direction = value[i]

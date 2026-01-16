@@ -1,0 +1,5 @@
+=== extglob with process substitution containing redirect
+*(<(<a))
+---
+(command (word "*(<(<a))"))
+---

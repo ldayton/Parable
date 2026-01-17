@@ -496,6 +496,12 @@ class Lexer:
         # EOF token mechanism for command substitution parsing
         self._eof_token: str | None = None
         self._eof_depth: int = 0
+        # Word parsing context (set by Parser before peeking)
+        self._word_context = WORD_CTX_NORMAL
+        self._at_command_start = False
+        self._in_array_literal = False
+        # Position after reading a token (may differ from token.pos due to heredocs)
+        self._post_read_pos: int = 0
 
     def peek(self) -> str | None:
         """Return current character without consuming."""
@@ -606,6 +612,9 @@ class Lexer:
             self.pos += 1
             return Token(TokenType.AMP, c, start)
         if c == "(":
+            # In REGEX context, ( is regex grouping, not operator
+            if self._word_context == WORD_CTX_REGEX:
+                return None
             # Track depth for EOF token matching
             if self._eof_token == ")":
                 # Don't increment in case patterns - (a) is pattern syntax, not subshell
@@ -614,6 +623,9 @@ class Lexer:
             self.pos += 1
             return Token(TokenType.LPAREN, c, start)
         if c == ")":
+            # In REGEX context, ) is regex grouping, not operator
+            if self._word_context == WORD_CTX_REGEX:
+                return None
             # Track depth for EOF token matching
             if self._eof_token == ")":
                 # Don't decrement in case patterns
@@ -623,9 +635,15 @@ class Lexer:
             self.pos += 1
             return Token(TokenType.RPAREN, c, start)
         if c == "<":
+            # <( is process substitution, not operator
+            if self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                return None
             self.pos += 1
             return Token(TokenType.LESS, c, start)
         if c == ">":
+            # >( is process substitution, not operator
+            if self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                return None
             self.pos += 1
             return Token(TokenType.GREATER, c, start)
         if c == "\n":
@@ -1194,38 +1212,25 @@ class Lexer:
         return Word("".join(chars), None)
 
     def _read_word(self) -> Token | None:
-        """Read a word token, handling quotes."""
+        """Read a word token using _read_word_internal with current context."""
         start = self.pos
         if self.pos >= self.length:
             return None
         c = self.peek()
-        if c is None or self.is_metachar(c):
+        if c is None:
             return None
-        chars: list[str] = []
-        while self.pos < self.length:
-            c = self.source[self.pos]
-            if self.is_metachar(c) and not self.quote.in_quotes():
-                break
-            if c == "\\":
-                chars.append(c)
-                self.pos += 1
-                if self.pos < self.length:
-                    chars.append(self.source[self.pos])
-                    self.pos += 1
-                continue
-            if c == "'" and not self.quote.double:
-                self.pos += 1
-                chars.append(self._scan_single_quoted())
-                continue
-            if c == '"' and not self.quote.single:
-                self.pos += 1
-                chars.append(self._scan_double_quoted())
-                continue
-            chars.append(c)
-            self.pos += 1
-        if not chars:
+        # Allow process substitution <( and >( even though < and > are metachars
+        is_procsub = (c == "<" or c == ">") and self.pos + 1 < self.length and self.source[self.pos + 1] == "("
+        # In REGEX context, ( and ) are regex grouping, not metachars
+        is_regex_paren = self._word_context == WORD_CTX_REGEX and (c == "(" or c == ")")
+        if self.is_metachar(c) and not is_procsub and not is_regex_paren:
             return None
-        return Token(TokenType.WORD, "".join(chars), start)
+        word = self._read_word_internal(
+            self._word_context, self._at_command_start, self._in_array_literal
+        )
+        if word is None:
+            return None
+        return Token(TokenType.WORD, word.value, start, None, word)
 
     def next_token(self) -> Token:
         """Return the next token from the input."""
@@ -6560,6 +6565,10 @@ class Parser:
         # EOF token mechanism for inline command substitution parsing
         self._eof_token: str | None = None
         self._eof_depth: int = 0
+        # Word parsing context for Lexer sync
+        self._word_context = WORD_CTX_NORMAL
+        self._at_command_start = False
+        self._in_array_literal = False
 
     def _set_state(self, flag: int) -> None:
         """Set a parser state flag."""
@@ -6648,11 +6657,22 @@ class Parser:
 
     def _sync_lexer(self) -> None:
         """Sync Lexer position and state to Parser."""
-        self._lexer.pos = self.pos
-        self._lexer._token_cache = None
+        # Invalidate cache if it doesn't match our current position
+        if (
+            self._lexer._token_cache is not None
+            and self._lexer._token_cache.pos != self.pos
+        ):
+            self._lexer._token_cache = None
+        # Sync lexer position
+        if self._lexer.pos != self.pos:
+            self._lexer.pos = self.pos
         self._lexer._eof_token = self._eof_token
         self._lexer._eof_depth = self._eof_depth
         self._lexer._parser_state = self._parser_state
+        # Sync word context
+        self._lexer._word_context = self._word_context
+        self._lexer._at_command_start = self._at_command_start
+        self._lexer._in_array_literal = self._in_array_literal
 
     def _sync_parser(self) -> None:
         """Sync Parser position to Lexer position."""
@@ -6660,14 +6680,38 @@ class Parser:
 
     def _lex_peek_token(self) -> Token:
         """Peek at next token via Lexer."""
+        # If there's a cached token that was read from our current position, use it
+        if (
+            self._lexer._token_cache is not None
+            and self._lexer._token_cache.pos == self.pos
+        ):
+            return self._lexer._token_cache
+        # Need to read a new token - sync lexer to our position first
+        saved_pos = self.pos
         self._sync_lexer()
-        return self._lexer.peek_token()
+        result = self._lexer.peek_token()
+        # Save the post-read position (may have advanced for heredocs)
+        self._lexer._post_read_pos = self._lexer.pos
+        # Restore parser position for peek semantics
+        self.pos = saved_pos
+        return result
 
     def _lex_next_token(self) -> Token:
         """Get next token via Lexer and sync position."""
-        self._sync_lexer()
-        tok = self._lexer.next_token()
-        self._sync_parser()
+        # Check if cached token is for our current position
+        if (
+            self._lexer._token_cache is not None
+            and self._lexer._token_cache.pos == self.pos
+        ):
+            # Consume cached token - use saved post-read position
+            tok = self._lexer.next_token()
+            self.pos = self._lexer._post_read_pos
+            self._lexer.pos = self._lexer._post_read_pos
+        else:
+            # No valid cache - sync and read fresh
+            self._sync_lexer()
+            tok = self._lexer.next_token()
+            self._sync_parser()
         self._record_token(tok)
         return tok
 
@@ -7067,20 +7111,25 @@ class Parser:
     def _parse_word_internal(
         self, ctx: int, at_command_start: bool = False, in_array_literal: bool = False
     ) -> Word | None:
-        """Unified word parser with context-aware termination. Delegates to Lexer."""
-        self._sync_lexer()
-        result = self._lexer._read_word_internal(ctx, at_command_start, in_array_literal)
-        self._sync_parser()
-        return result
+        """Unified word parser with context-aware termination. Sets context and delegates."""
+        self._word_context = ctx
+        return self.parse_word(at_command_start, in_array_literal)
 
     def parse_word(
         self, at_command_start: bool = False, in_array_literal: bool = False
     ) -> Word | None:
-        """Parse a word token, detecting parameter expansions and command substitutions."""
+        """Parse a word token by consuming WORD token with pre-parsed Word object."""
         self.skip_whitespace()
         if self.at_end():
             return None
-        return self._parse_word_internal(WORD_CTX_NORMAL, at_command_start, in_array_literal)
+        # Set context for Lexer before peeking
+        self._at_command_start = at_command_start
+        self._in_array_literal = in_array_literal
+        tok = self._lex_peek_token()
+        if tok.type != TokenType.WORD:
+            return None
+        self._lex_next_token()
+        return tok.word
 
     def _parse_command_substitution(self) -> tuple[Node | None, str]:
         """Parse a $(...) command substitution using EOF token mechanism.
@@ -8965,10 +9014,21 @@ class Parser:
         Parses the delimiter only. Content is gathered later by _gather_heredoc_bodies
         after the command line is complete.
         """
+        start_pos = self.pos
         self._set_state(ParserStateFlags.PST_HEREDOC)
         delimiter, quoted = self._parse_heredoc_delimiter()
+        # Check if we've already registered this heredoc (can happen due to re-tokenization)
+        for existing in self._pending_heredocs:
+            if (
+                hasattr(existing, "_start_pos")
+                and existing._start_pos == start_pos
+                and existing.delimiter == delimiter
+            ):
+                self._clear_state(ParserStateFlags.PST_HEREDOC)
+                return existing
         # Create stub HereDoc with empty content - will be filled in later
         heredoc = HereDoc(delimiter, "", strip_tabs, quoted, fd, False)
+        heredoc._start_pos = start_pos  # Track position for dedup
         self._pending_heredocs.append(heredoc)
         self._clear_state(ParserStateFlags.PST_HEREDOC)
         return heredoc
@@ -9196,6 +9256,7 @@ class Parser:
         self.advance()  # consume first [
         self.advance()  # consume second [
         self._set_state(ParserStateFlags.PST_CONDEXPR)
+        self._word_context = WORD_CTX_COND
 
         # Parse the conditional expression body
         body = self._parse_cond_or()
@@ -9212,11 +9273,13 @@ class Parser:
             or self.source[self.pos + 1] != "]"
         ):
             self._clear_state(ParserStateFlags.PST_CONDEXPR)
+            self._word_context = WORD_CTX_NORMAL
             raise ParseError("Expected ]] to close conditional expression", pos=self.pos)
 
         self.advance()  # consume first ]
         self.advance()  # consume second ]
         self._clear_state(ParserStateFlags.PST_CONDEXPR)
+        self._word_context = WORD_CTX_NORMAL
         return ConditionalExpr(body, self._collect_redirects())
 
     def _cond_skip_whitespace(self) -> None:
@@ -9380,6 +9443,8 @@ class Parser:
         self._set_state(ParserStateFlags.PST_REGEXP)
         result = self._parse_word_internal(WORD_CTX_REGEX)
         self._clear_state(ParserStateFlags.PST_REGEXP)
+        # Restore word context to COND after parsing regex
+        self._word_context = WORD_CTX_COND
         return result
 
     def parse_brace_group(self) -> BraceGroup | None:

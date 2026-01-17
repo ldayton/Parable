@@ -1375,9 +1375,8 @@ class Lexer:
             else:
                 content_chars.append(self.advance())
         if not found_close:
-            # Unterminated - reset and return None
-            self.pos = start
-            return None, ""
+            # Unterminated ANSI-C quote - this is an error, not a fallback
+            raise MatchedPairError("unexpected EOF while looking for matching `''", pos=start)
         text = _substring(self.source, start, self.pos)
         content = "".join(content_chars)
         node = AnsiCQuote(content)
@@ -1995,6 +1994,9 @@ class Lexer:
                 and self.pos + 1 < self.length
                 and self.source[self.pos + 1] == "{"
             ):
+                op = ""
+            elif not self.at_end() and self.peek() in ("'", '"'):
+                # Quotes start the argument, not the operator
                 op = ""
             else:
                 op = self.advance()
@@ -9058,11 +9060,14 @@ class Parser:
             # This enables the EOF token mechanism to work at the command level
             if self._lex_is_command_terminator():
                 break
-            # } is only a terminator at command position (closing a brace group)
-            # In argument position, } is just a regular word
-            tok = self._lex_peek_token()
-            if tok.type == TokenType.RBRACE and not words:
-                break
+            # } and ]] are only terminators at command position (closing brace group
+            # or conditional). In argument position, they're regular words.
+            # Check as reserved words since lexer returns them as WORD tokens.
+            # Use len() == 0 instead of 'not words' for JS transpiler compatibility
+            if len(words) == 0:
+                reserved = self._lex_peek_reserved_word()
+                if reserved == "}" or reserved == "]]":
+                    break
 
             # Try to parse a redirect first
             redirect = self.parse_redirect()

@@ -1617,9 +1617,11 @@ class Lexer {
 			}
 		}
 		if (!found_close) {
-			// Unterminated - reset and return None
-			this.pos = start;
-			return [null, ""];
+			// Unterminated ANSI-C quote - this is an error, not a fallback
+			throw new MatchedPairError(
+				"unexpected EOF while looking for matching `''",
+				start,
+			);
 		}
 		text = this.source.slice(start, this.pos);
 		content = content_chars.join("");
@@ -2418,6 +2420,9 @@ class Lexer {
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === "{"
 			) {
+				op = "";
+			} else if (!this.atEnd() && ["'", '"'].includes(this.peek())) {
+				// Quotes start the argument, not the operator
 				op = "";
 			} else {
 				op = this.advance();
@@ -10913,7 +10918,7 @@ class Parser {
 	}
 
 	parseCommand() {
-		let all_assignments, redirect, redirects, tok, w, word, words;
+		let all_assignments, redirect, redirects, reserved, w, word, words;
 		words = [];
 		redirects = [];
 		while (true) {
@@ -10923,11 +10928,15 @@ class Parser {
 			if (this._lexIsCommandTerminator()) {
 				break;
 			}
-			// } is only a terminator at command position (closing a brace group)
-			// In argument position, } is just a regular word
-			tok = this._lexPeekToken();
-			if (tok.type === TokenType.RBRACE && !words) {
-				break;
+			// } and ]] are only terminators at command position (closing brace group
+			// or conditional). In argument position, they're regular words.
+			// Check as reserved words since lexer returns them as WORD tokens.
+			// Use len() == 0 instead of 'not words' for JS transpiler compatibility
+			if (words.length === 0) {
+				reserved = this._lexPeekReservedWord();
+				if (reserved === "}" || reserved === "]]") {
+					break;
+				}
 			}
 			// Try to parse a redirect first
 			redirect = this.parseRedirect();

@@ -6135,6 +6135,21 @@ class Parser {
 		return result;
 	}
 
+	_lexPeekOperator() {
+		let t, tok;
+		tok = this._lexPeekToken();
+		t = tok.type;
+		// Single-char operators: SEMI(10) through GREATER(18)
+		// Multi-char operators: AND_AND(30) through PIPE_AMP(45)
+		if (
+			(t >= TokenType.SEMI && t <= TokenType.GREATER) ||
+			(t >= TokenType.AND_AND && t <= TokenType.PIPE_AMP)
+		) {
+			return [t, tok.value];
+		}
+		return null;
+	}
+
 	atEnd() {
 		return this.pos >= this.length;
 	}

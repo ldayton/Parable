@@ -5183,6 +5183,16 @@ class Parser:
         self._sync_parser()
         return result
 
+    def _lex_peek_operator(self) -> tuple[int, str] | None:
+        """Peek operator token. Returns (token_type, value) or None."""
+        tok = self._lex_peek_token()
+        t = tok.type
+        # Single-char operators: SEMI(10) through GREATER(18)
+        # Multi-char operators: AND_AND(30) through PIPE_AMP(45)
+        if (t >= TokenType.SEMI and t <= TokenType.GREATER) or (t >= TokenType.AND_AND and t <= TokenType.PIPE_AMP):
+            return (t, tok.value)
+        return None
+
     def at_end(self) -> bool:
         """Check if we've reached the end of input."""
         return self.pos >= self.length

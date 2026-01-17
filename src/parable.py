@@ -7372,9 +7372,11 @@ class Parser:
         return CommandSubstitution(cmd), text
 
     def _parse_process_substitution(self) -> tuple[Node | None, str]:
-        """Parse a <(...) or >(...) process substitution.
+        """Parse a <(...) or >(...) process substitution using EOF token mechanism.
 
         Returns (node, text) where node is ProcessSubstitution and text is raw text.
+        If the content can't be parsed as a valid command, returns (None, text) so
+        the caller can treat it as literal characters.
         """
         if self.at_end() or not _is_redirect_char(self.peek()):
             return None, ""
@@ -7388,218 +7390,74 @@ class Parser:
 
         self.advance()  # consume (
 
-        # Find matching ) - track nested parens and handle quotes
-        content_start = self.pos
-        depth = 1
-        # Heredoc state tracking
-        pending_heredocs: list[tuple[str, bool]] = []
-        in_heredoc_body = False
-        current_heredoc_delim = ""
-        current_heredoc_strip = False
+        # Save state and set up for inline parsing with EOF token
+        saved = self._save_parser_state()
+        old_in_process_sub = self._in_process_sub
+        self._in_process_sub = True
+        self._eof_token = ")"
+        self._eof_depth = 0
 
-        while not self.at_end() and depth > 0:
-            # When in heredoc body, scan for delimiter line by line
-            if in_heredoc_body:
-                line_start = self.pos
-                line_end = line_start
-                while line_end < self.length and self.source[line_end] != "\n":
-                    line_end += 1
-                line = _substring(self.source, line_start, line_end)
-                check_line = line.lstrip("\t") if current_heredoc_strip else line
-                if check_line == current_heredoc_delim:
-                    # Found delimiter line
-                    self.pos = line_end
-                    if self.pos < self.length and self.source[self.pos] == "\n":
+        # Try to parse the command list inline - lexer will stop at matching )
+        try:
+            cmd = self.parse_list()
+            if cmd is None:
+                cmd = Empty()
+
+            # After parse_list, we should be at the closing )
+            self.skip_whitespace_and_newlines()
+            if self.at_end() or self.peek() != ")":
+                # Parsing didn't reach the closing ) - not a valid process sub
+                raise ParseError("Invalid process substitution", pos=start)
+
+            self.advance()  # consume final )
+            text_end = self.pos
+            text = _substring(self.source, start, text_end)
+            # Strip line continuations (backslash-newline) from text
+            text = _strip_line_continuations_comment_aware(text)
+
+            self._restore_parser_state(saved)
+            self._in_process_sub = old_in_process_sub
+            return ProcessSubstitution(direction, cmd), text
+
+        except ParseError:
+            # Parsing failed - scan to find the closing ) and return as literal text
+            self._restore_parser_state(saved)
+            self._in_process_sub = old_in_process_sub
+            self.pos = start + 2  # after <( or >(
+
+            # Scan to find matching ) with paren depth tracking
+            depth = 1
+            while not self.at_end() and depth > 0:
+                c = self.peek()
+                if c == "(":
+                    depth += 1
+                elif c == ")":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                elif c == "'":
+                    self.advance()
+                    while not self.at_end() and self.peek() != "'":
                         self.advance()
-                    in_heredoc_body = False
-                    if len(pending_heredocs) > 0:
-                        current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
-                        in_heredoc_body = True
-                elif check_line.startswith(current_heredoc_delim) and len(check_line) > len(
-                    current_heredoc_delim
-                ):
-                    # Delimiter with trailing content
-                    tabs_stripped = len(line) - len(check_line)
-                    self.pos = line_start + tabs_stripped + len(current_heredoc_delim)
-                    in_heredoc_body = False
-                    if len(pending_heredocs) > 0:
-                        current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
-                        in_heredoc_body = True
-                else:
-                    # Not the delimiter, skip this line
-                    self.pos = line_end
-                    if self.pos < self.length and self.source[self.pos] == "\n":
-                        self.advance()
-                continue
-
-            c = self.peek()
-
-            # Comment - skip to end of line (quotes in comments are not special)
-            if c == "#":
-                while not self.at_end() and self.peek() != "\n":
+                elif c == '"':
                     self.advance()
-                continue
-
-            # Single-quoted string
-            if c == "'":
-                self.advance()
-                while not self.at_end() and self.peek() != "'":
-                    self.advance()
-                if not self.at_end():
-                    self.advance()
-                continue
-
-            # Double-quoted string
-            if c == '"':
-                self.advance()
-                while not self.at_end() and self.peek() != '"':
-                    if self.peek() == "\\" and self.pos + 1 < self.length:
-                        self.advance()
-                    self.advance()
-                if not self.at_end():
-                    self.advance()
-                continue
-
-            # Backslash escape
-            if c == "\\" and self.pos + 1 < self.length:
-                self.advance()
-                self.advance()
-                continue
-
-            # Heredoc declaration
-            if c == "<" and self.pos + 1 < self.length and self.source[self.pos + 1] == "<":
-                # Check for here-string <<<
-                if self.pos + 2 < self.length and self.source[self.pos + 2] == "<":
-                    self.advance()  # <
-                    self.advance()  # <
-                    self.advance()  # <
-                    # Skip whitespace and here-string word
-                    while not self.at_end() and _is_whitespace_no_newline(self.peek()):
-                        self.advance()
-                    while (
-                        not self.at_end()
-                        and not _is_whitespace(self.peek())
-                        and self.peek() not in "()"
-                    ):
+                    while not self.at_end() and self.peek() != '"':
                         if self.peek() == "\\" and self.pos + 1 < self.length:
                             self.advance()
-                            self.advance()
-                        elif self.peek() in "\"'":
-                            quote = self.peek()
-                            self.advance()
-                            while not self.at_end() and self.peek() != quote:
-                                if quote == '"' and self.peek() == "\\":
-                                    self.advance()
-                                self.advance()
-                            if not self.at_end():
-                                self.advance()
-                        else:
-                            self.advance()
-                    continue
-                # Heredoc <<
-                self.advance()  # <
-                self.advance()  # <
-                strip_tabs = False
-                if not self.at_end() and self.peek() == "-":
-                    strip_tabs = True
-                    self.advance()
-                # Skip whitespace
-                while not self.at_end() and _is_whitespace_no_newline(self.peek()):
-                    self.advance()
-                # Parse delimiter
-                delimiter_chars: list[str] = []
-                if not self.at_end():
-                    ch = self.peek()
-                    if _is_quote(ch):
-                        quote = self.advance()
-                        while not self.at_end() and self.peek() != quote:
-                            delimiter_chars.append(self.advance())
-                        if not self.at_end():
-                            self.advance()  # closing quote
-                    elif ch == "\\":
                         self.advance()
-                        if not self.at_end():
-                            delimiter_chars.append(self.advance())
-                        while not self.at_end() and not _is_metachar(self.peek()):
-                            delimiter_chars.append(self.advance())
-                    else:
-                        while not self.at_end() and not _is_metachar(self.peek()):
-                            ch = self.peek()
-                            if _is_quote(ch):
-                                quote = self.advance()
-                                while not self.at_end() and self.peek() != quote:
-                                    delimiter_chars.append(self.advance())
-                                if not self.at_end():
-                                    self.advance()
-                            elif ch == "\\":
-                                self.advance()
-                                if not self.at_end():
-                                    delimiter_chars.append(self.advance())
-                            else:
-                                delimiter_chars.append(self.advance())
-                delimiter = "".join(delimiter_chars)
-                if delimiter:
-                    pending_heredocs.append((delimiter, strip_tabs))
-                continue
-
-            # Newline - check for heredoc body mode
-            if c == "\n":
+                elif c == "\\" and self.pos + 1 < self.length:
+                    self.advance()
                 self.advance()
-                if len(pending_heredocs) > 0:
-                    current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
-                    in_heredoc_body = True
-                continue
 
-            # Nested parentheses (including nested process substitutions)
-            if c == "(":
-                depth += 1
-            elif c == ")":
-                depth -= 1
-                if depth == 0:
-                    break
+            if depth != 0:
+                self.pos = start
+                return None, ""
 
-            self.advance()
-
-        if depth != 0:
-            self.pos = start
-            return None, ""
-
-        content = _substring(self.source, content_start, self.pos)
-        self.advance()  # consume final )
-
-        # Save position after ) for text (before skipping heredoc content)
-        text_end = self.pos
-
-        # Check for heredocs whose bodies follow the )
-        if len(pending_heredocs) > 0:
-            heredoc_start, heredoc_end = _find_heredoc_content_end(
-                self.source, self.pos, pending_heredocs
-            )
-            if heredoc_end > heredoc_start:
-                content = content + _substring(self.source, heredoc_start, heredoc_end)
-                # Mark that heredoc content following the ) needs to be skipped
-                if self._cmdsub_heredoc_end is None:
-                    self._cmdsub_heredoc_end = heredoc_end
-                else:
-                    self._cmdsub_heredoc_end = max(self._cmdsub_heredoc_end, heredoc_end)
-
-        text = _substring(self.source, start, text_end)
-        # Strip line continuations (backslash-newline) from text used for word construction
-        # Use comment-aware stripping to preserve newlines that terminate comments
-        text = _strip_line_continuations_comment_aware(text)
-
-        # Parse the content as a command list
-        sub_parser = Parser(content, in_process_sub=True)
-        cmd = sub_parser.parse_list()
-        if cmd is None:
-            cmd = Empty()
-
-        # If content wasn't fully consumed, this isn't a valid process substitution
-        # Return the text so caller can treat it as literal characters
-        if not sub_parser.at_end():
+            self.advance()  # consume final )
+            text = _substring(self.source, start, self.pos)
+            # Strip line continuations (backslash-newline) from text
+            text = _strip_line_continuations_comment_aware(text)
             return None, text
-
-        return ProcessSubstitution(direction, cmd), text
 
     def _parse_array_literal(self) -> tuple[Node | None, str]:
         """Parse an array literal (word1 word2 ...).

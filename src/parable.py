@@ -9547,7 +9547,8 @@ class Parser:
 
     def parse_if(self) -> If | None:
         """Parse an if statement: if list; then list [elif list; then list]* [else list] fi."""
-        if not self.consume_word("if"):
+        self.skip_whitespace()
+        if not self._lex_consume_word("if"):
             return None
 
         # Parse condition (a list that ends at 'then')
@@ -9557,7 +9558,7 @@ class Parser:
 
         # Expect 'then'
         self.skip_whitespace_and_newlines()
-        if not self.consume_word("then"):
+        if not self._lex_consume_word("then"):
             raise ParseError("Expected 'then' after if condition", pos=self.pos)
 
         # Parse then body (ends at elif, else, or fi)
@@ -9567,12 +9568,11 @@ class Parser:
 
         # Check what comes next: elif, else, or fi
         self.skip_whitespace_and_newlines()
-        next_word = self.peek_word()
 
         else_body = None
-        if next_word == "elif":
+        if self._lex_is_at_reserved_word("elif"):
             # elif is syntactic sugar for else if ... fi
-            self.consume_word("elif")
+            self._lex_consume_word("elif")
             # Parse the rest as a nested if (but we've already consumed 'elif')
             # We need to parse: condition; then body [elif|else|fi]
             elif_condition = self.parse_list_until({"then"})
@@ -9580,7 +9580,7 @@ class Parser:
                 raise ParseError("Expected condition after 'elif'", pos=self.pos)
 
             self.skip_whitespace_and_newlines()
-            if not self.consume_word("then"):
+            if not self._lex_consume_word("then"):
                 raise ParseError("Expected 'then' after elif condition", pos=self.pos)
 
             elif_then_body = self.parse_list_until({"elif", "else", "fi"})
@@ -9589,43 +9589,42 @@ class Parser:
 
             # Recursively handle more elif/else/fi
             self.skip_whitespace_and_newlines()
-            inner_next = self.peek_word()
 
             inner_else = None
-            if inner_next == "elif":
+            if self._lex_is_at_reserved_word("elif"):
                 # More elif - recurse by creating a fake "if" and parsing
                 # Actually, let's just recursively call a helper
                 inner_else = self._parse_elif_chain()
-            elif inner_next == "else":
-                self.consume_word("else")
+            elif self._lex_is_at_reserved_word("else"):
+                self._lex_consume_word("else")
                 inner_else = self.parse_list_until({"fi"})
                 if inner_else is None:
                     raise ParseError("Expected commands after 'else'", pos=self.pos)
 
             else_body = If(elif_condition, elif_then_body, inner_else)
 
-        elif next_word == "else":
-            self.consume_word("else")
+        elif self._lex_is_at_reserved_word("else"):
+            self._lex_consume_word("else")
             else_body = self.parse_list_until({"fi"})
             if else_body is None:
                 raise ParseError("Expected commands after 'else'", pos=self.pos)
 
         # Expect 'fi'
         self.skip_whitespace_and_newlines()
-        if not self.consume_word("fi"):
+        if not self._lex_consume_word("fi"):
             raise ParseError("Expected 'fi' to close if statement", pos=self.pos)
         return If(condition, then_body, else_body, self._collect_redirects())
 
     def _parse_elif_chain(self) -> If:
         """Parse elif chain (after seeing 'elif' keyword)."""
-        self.consume_word("elif")
+        self._lex_consume_word("elif")
 
         condition = self.parse_list_until({"then"})
         if condition is None:
             raise ParseError("Expected condition after 'elif'", pos=self.pos)
 
         self.skip_whitespace_and_newlines()
-        if not self.consume_word("then"):
+        if not self._lex_consume_word("then"):
             raise ParseError("Expected 'then' after elif condition", pos=self.pos)
 
         then_body = self.parse_list_until({"elif", "else", "fi"})
@@ -9633,13 +9632,12 @@ class Parser:
             raise ParseError("Expected commands after 'then'", pos=self.pos)
 
         self.skip_whitespace_and_newlines()
-        next_word = self.peek_word()
 
         else_body = None
-        if next_word == "elif":
+        if self._lex_is_at_reserved_word("elif"):
             else_body = self._parse_elif_chain()
-        elif next_word == "else":
-            self.consume_word("else")
+        elif self._lex_is_at_reserved_word("else"):
+            self._lex_consume_word("else")
             else_body = self.parse_list_until({"fi"})
             if else_body is None:
                 raise ParseError("Expected commands after 'else'", pos=self.pos)

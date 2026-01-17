@@ -11594,10 +11594,9 @@ class Parser {
 			elif_then_body,
 			else_body,
 			inner_else,
-			inner_next,
-			next_word,
 			then_body;
-		if (!this.consumeWord("if")) {
+		this.skipWhitespace();
+		if (!this._lexConsumeWord("if")) {
 			return null;
 		}
 		// Parse condition (a list that ends at 'then')
@@ -11607,7 +11606,7 @@ class Parser {
 		}
 		// Expect 'then'
 		this.skipWhitespaceAndNewlines();
-		if (!this.consumeWord("then")) {
+		if (!this._lexConsumeWord("then")) {
 			throw new ParseError("Expected 'then' after if condition", this.pos);
 		}
 		// Parse then body (ends at elif, else, or fi)
@@ -11617,11 +11616,10 @@ class Parser {
 		}
 		// Check what comes next: elif, else, or fi
 		this.skipWhitespaceAndNewlines();
-		next_word = this.peekWord();
 		else_body = null;
-		if (next_word === "elif") {
+		if (this._lexIsAtReservedWord("elif")) {
 			// elif is syntactic sugar for else if ... fi
-			this.consumeWord("elif");
+			this._lexConsumeWord("elif");
 			// Parse the rest as a nested if (but we've already consumed 'elif')
 			// We need to parse: condition; then body [elif|else|fi]
 			elif_condition = this.parseListUntil(new Set(["then"]));
@@ -11629,7 +11627,7 @@ class Parser {
 				throw new ParseError("Expected condition after 'elif'", this.pos);
 			}
 			this.skipWhitespaceAndNewlines();
-			if (!this.consumeWord("then")) {
+			if (!this._lexConsumeWord("then")) {
 				throw new ParseError("Expected 'then' after elif condition", this.pos);
 			}
 			elif_then_body = this.parseListUntil(new Set(["elif", "else", "fi"]));
@@ -11638,22 +11636,21 @@ class Parser {
 			}
 			// Recursively handle more elif/else/fi
 			this.skipWhitespaceAndNewlines();
-			inner_next = this.peekWord();
 			inner_else = null;
-			if (inner_next === "elif") {
+			if (this._lexIsAtReservedWord("elif")) {
 				// More elif - recurse by creating a fake "if" and parsing
 				// Actually, let's just recursively call a helper
 				inner_else = this._parseElifChain();
-			} else if (inner_next === "else") {
-				this.consumeWord("else");
+			} else if (this._lexIsAtReservedWord("else")) {
+				this._lexConsumeWord("else");
 				inner_else = this.parseListUntil(new Set(["fi"]));
 				if (inner_else == null) {
 					throw new ParseError("Expected commands after 'else'", this.pos);
 				}
 			}
 			else_body = new If(elif_condition, elif_then_body, inner_else);
-		} else if (next_word === "else") {
-			this.consumeWord("else");
+		} else if (this._lexIsAtReservedWord("else")) {
+			this._lexConsumeWord("else");
 			else_body = this.parseListUntil(new Set(["fi"]));
 			if (else_body == null) {
 				throw new ParseError("Expected commands after 'else'", this.pos);
@@ -11661,21 +11658,21 @@ class Parser {
 		}
 		// Expect 'fi'
 		this.skipWhitespaceAndNewlines();
-		if (!this.consumeWord("fi")) {
+		if (!this._lexConsumeWord("fi")) {
 			throw new ParseError("Expected 'fi' to close if statement", this.pos);
 		}
 		return new If(condition, then_body, else_body, this._collectRedirects());
 	}
 
 	_parseElifChain() {
-		let condition, else_body, next_word, then_body;
-		this.consumeWord("elif");
+		let condition, else_body, then_body;
+		this._lexConsumeWord("elif");
 		condition = this.parseListUntil(new Set(["then"]));
 		if (condition == null) {
 			throw new ParseError("Expected condition after 'elif'", this.pos);
 		}
 		this.skipWhitespaceAndNewlines();
-		if (!this.consumeWord("then")) {
+		if (!this._lexConsumeWord("then")) {
 			throw new ParseError("Expected 'then' after elif condition", this.pos);
 		}
 		then_body = this.parseListUntil(new Set(["elif", "else", "fi"]));
@@ -11683,12 +11680,11 @@ class Parser {
 			throw new ParseError("Expected commands after 'then'", this.pos);
 		}
 		this.skipWhitespaceAndNewlines();
-		next_word = this.peekWord();
 		else_body = null;
-		if (next_word === "elif") {
+		if (this._lexIsAtReservedWord("elif")) {
 			else_body = this._parseElifChain();
-		} else if (next_word === "else") {
-			this.consumeWord("else");
+		} else if (this._lexIsAtReservedWord("else")) {
+			this._lexConsumeWord("else");
 			else_body = this.parseListUntil(new Set(["fi"]));
 			if (else_body == null) {
 				throw new ParseError("Expected commands after 'else'", this.pos);

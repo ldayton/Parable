@@ -4,7 +4,7 @@ Claude models use hardcoded values because AWS Pricing API is incomplete
 (missing output token prices and newer models).
 
 Sources:
-- AWS Pricing API: Nova, Llama, DeepSeek models
+- AWS Pricing API: Nova, Llama models
 - AWS Bedrock pricing page: Claude models (manually verified)
 - Azure Retail Prices API: Azure OpenAI models
 - GCP Cloud Billing API: Vertex AI Gemini models
@@ -37,7 +37,6 @@ CLAUDE_PRICING: dict[str, tuple[float, float]] = {
 
 # Non-Claude Bedrock pricing (fetched 2026-01-16, can be refreshed with --prices)
 OTHER_PRICING: dict[str, tuple[float, float]] = {
-    "deepseek-r1": (1.35, 5.40),
     "llama-3.1-70b": (0.72, 0.72),
     "llama-3.2-90b": (0.72, 0.72),
     "llama-3.3-70b": (0.72, 0.72),
@@ -82,7 +81,6 @@ AZURE_MODELS = {
 
 # Models to fetch from AWS Pricing API (API name -> our name)
 API_MODELS = {
-    "DeepSeek V3.1": "deepseek-v3.1",
     "Nova Micro": "nova-micro",
     "Nova Lite": "nova-lite",
     "Nova Pro": "nova-pro",
@@ -269,8 +267,6 @@ def _get_provider(model: str) -> str:
     """Get provider name for a model."""
     if model.startswith(("haiku", "sonnet", "opus")):
         return "Anthropic"
-    if model.startswith("deepseek"):
-        return "DeepSeek"
     if model.startswith("llama"):
         return "Meta"
     if model.startswith("nova"):

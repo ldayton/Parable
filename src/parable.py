@@ -257,6 +257,22 @@ class DolbraceState:
     QUOTE2 = 0x80  # Single quote semi-special (/)
 
 
+class MatchedPairFlags:
+    """Flags for _parse_matched_pair() to control parsing behavior.
+
+    Based on bash's P_* flags used in parse_matched_pair().
+    These flags control how the function handles quotes, escapes, and nested constructs.
+    """
+
+    NONE = 0
+    DQUOTE = 0x01  # Inside double quotes
+    DOLBRACE = 0x02  # Inside ${...}
+    COMMAND = 0x04  # Inside command substitution
+    ARITH = 0x08  # Inside arithmetic expression
+    ALLOWESC = 0x10  # Allow backslash escapes (for $'...')
+    EXTGLOB = 0x20  # Inside extglob pattern - don't parse ${ $( as constructs
+
+
 class SavedParserState:
     """Saved parser state for nested parsing (e.g., command substitutions).
 
@@ -897,6 +913,159 @@ class Lexer:
                 chars.append(self.advance())
         return True
 
+    def _parse_matched_pair(
+        self,
+        open_char: str,
+        close_char: str,
+        flags: int = 0,
+    ) -> str:
+        """Parse a matched pair construct, handling quotes via recursion.
+
+        This is the unified approach based on bash's parse_matched_pair().
+        Quotes are handled by recursive calls where the quote is both open and close.
+
+        Args:
+            open_char: Opening delimiter (e.g., '(', '{', '[', '"', "'")
+            close_char: Closing delimiter (e.g., ')', '}', ']', '"', "'")
+            flags: MatchedPairFlags controlling behavior
+
+        Returns:
+            The content between delimiters (not including the delimiters themselves).
+
+        Raises:
+            MatchedPairError: If EOF is reached before finding the closing delimiter.
+        """
+        start = self.pos
+        count = 1
+        chars: list[str] = []
+        pass_next = False
+
+        while count > 0:
+            if self.at_end():
+                raise MatchedPairError(
+                    f"unexpected EOF while looking for matching `{close_char}'",
+                    pos=start,
+                )
+
+            ch = self.advance()
+
+            # Backslash escape handling - pass through next char
+            if pass_next:
+                pass_next = False
+                chars.append(ch)
+                continue
+
+            # Inside single quotes, almost everything is literal
+            if open_char == "'":
+                if ch == close_char:
+                    count -= 1
+                    if count == 0:
+                        break
+                # In $'...' mode, backslash escapes are processed
+                if ch == "\\" and (flags & MatchedPairFlags.ALLOWESC):
+                    pass_next = True
+                chars.append(ch)
+                continue
+
+            # Backslash - set pass_next flag
+            if ch == "\\":
+                # Line continuation - skip \n
+                if not self.at_end() and self.peek() == "\n":
+                    self.advance()
+                    continue
+                pass_next = True
+                chars.append(ch)
+                continue
+
+            # Closing delimiter
+            if ch == close_char:
+                count -= 1
+                if count == 0:
+                    break
+                chars.append(ch)
+                continue
+
+            # Opening delimiter (only when open != close)
+            # In DOLBRACE mode, don't track bare '{' - only ${...} nesting matters
+            # (handled by the $ block below via recursion)
+            if ch == open_char and open_char != close_char:
+                if not (flags & MatchedPairFlags.DOLBRACE and open_char == "{"):
+                    count += 1
+                chars.append(ch)
+                continue
+
+            # Quote characters trigger recursion (when not already in quote mode)
+            if ch in "'\"`" and open_char != close_char:
+                if ch == "'":
+                    # Single quote - recursively parse until matching '
+                    chars.append(ch)
+                    nested = self._parse_matched_pair("'", "'", flags)
+                    chars.append(nested)
+                    chars.append("'")
+                    continue
+                elif ch == '"':
+                    # Double quote - recursively parse until matching "
+                    chars.append(ch)
+                    nested = self._parse_matched_pair('"', '"', flags | MatchedPairFlags.DQUOTE)
+                    chars.append(nested)
+                    chars.append('"')
+                    continue
+                elif ch == "`":
+                    # Backtick - recursively parse until matching `
+                    chars.append(ch)
+                    nested = self._parse_matched_pair("`", "`", flags)
+                    chars.append(nested)
+                    chars.append("`")
+                    continue
+
+            # ${ $( $[ trigger nested parsing (unless in extglob where they're just pattern chars)
+            if ch == "$" and not self.at_end() and not (flags & MatchedPairFlags.EXTGLOB):
+                next_ch = self.peek()
+                if next_ch == "{":
+                    chars.append(ch)
+                    chars.append(self.advance())
+                    nested = self._parse_matched_pair("{", "}", flags | MatchedPairFlags.DOLBRACE)
+                    chars.append(nested)
+                    chars.append("}")
+                    continue
+                elif next_ch == "(":
+                    chars.append(ch)
+                    chars.append(self.advance())
+                    if not self.at_end() and self.peek() == "(":
+                        # $(( ... )) arithmetic
+                        chars.append(self.advance())
+                        nested = self._parse_matched_pair("(", ")", flags | MatchedPairFlags.ARITH)
+                        chars.append(nested)
+                        chars.append(")")
+                        # Need to consume the second )
+                        if not self.at_end() and self.peek() == ")":
+                            chars.append(self.advance())
+                        else:
+                            raise MatchedPairError(
+                                "unexpected EOF while looking for matching `))'",
+                                pos=start,
+                            )
+                    else:
+                        # $( ... ) command substitution
+                        nested = self._parse_matched_pair(
+                            "(", ")", flags | MatchedPairFlags.COMMAND
+                        )
+                        chars.append(nested)
+                        chars.append(")")
+                    continue
+                elif next_ch == "[":
+                    # Deprecated $[ ... ] arithmetic
+                    chars.append(ch)
+                    chars.append(self.advance())
+                    nested = self._parse_matched_pair("[", "]", flags | MatchedPairFlags.ARITH)
+                    chars.append(nested)
+                    chars.append("]")
+                    continue
+
+            chars.append(ch)
+
+        return "".join(chars)
+
     def _read_word_internal(
         self, ctx: int, at_command_start: bool = False, in_array_literal: bool = False
     ) -> "Word | None":
@@ -976,18 +1145,10 @@ class Lexer:
             # COND: Extglob patterns or ( terminates
             if ctx == WORD_CTX_COND and ch == "(":
                 if chars and _is_extglob_prefix(chars[len(chars) - 1]):
-                    extglob_start = self.pos
                     chars.append(self.advance())  # (
-                    depth = 1
-                    while not self.at_end() and depth > 0:
-                        c = self.peek()
-                        if c == "(":
-                            depth += 1
-                        elif c == ")":
-                            depth -= 1
-                        chars.append(self.advance())
-                    if depth > 0:
-                        raise MatchedPairError("unexpected EOF looking for `)'", pos=extglob_start)
+                    content = self._parse_matched_pair("(", ")", MatchedPairFlags.EXTGLOB)
+                    chars.append(content)
+                    chars.append(")")
                     continue
                 else:
                     # ( without extglob prefix terminates the word
@@ -1168,74 +1329,11 @@ class Lexer:
                 and self.pos + 1 < self.length
                 and self.source[self.pos + 1] == "("
             ):
-                extglob_start = self.pos
                 chars.append(self.advance())  # @, ?, *, +, or !
                 chars.append(self.advance())  # (
-                extglob_depth = 1
-                while not self.at_end() and extglob_depth > 0:
-                    c = self.peek()
-                    if c == ")":
-                        chars.append(self.advance())
-                        extglob_depth -= 1
-                    elif c == "(":
-                        chars.append(self.advance())
-                        extglob_depth += 1
-                    elif c == "\\":
-                        if self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
-                            self.advance()
-                            self.advance()
-                        else:
-                            chars.append(self.advance())
-                            if not self.at_end():
-                                chars.append(self.advance())
-                    elif c == "'":
-                        chars.append(self.advance())
-                        while not self.at_end() and self.peek() != "'":
-                            chars.append(self.advance())
-                        if not self.at_end():
-                            chars.append(self.advance())
-                    elif c == '"':
-                        chars.append(self.advance())
-                        while not self.at_end() and self.peek() != '"':
-                            if self.peek() == "\\" and self.pos + 1 < self.length:
-                                chars.append(self.advance())
-                            chars.append(self.advance())
-                        if not self.at_end():
-                            chars.append(self.advance())
-                    elif (
-                        c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "("
-                    ):
-                        arith_start = self.pos
-                        chars.append(self.advance())  # $
-                        chars.append(self.advance())  # (
-                        if not self.at_end() and self.peek() == "(":
-                            chars.append(self.advance())  # second (
-                            inner_paren_depth = 2
-                            while not self.at_end() and inner_paren_depth > 0:
-                                pc = self.peek()
-                                if pc == "(":
-                                    inner_paren_depth += 1
-                                elif pc == ")":
-                                    inner_paren_depth -= 1
-                                chars.append(self.advance())
-                            if inner_paren_depth > 0:
-                                raise MatchedPairError(
-                                    "unexpected EOF looking for `))'", pos=arith_start
-                                )
-                        else:
-                            extglob_depth += 1
-                    elif (
-                        _is_extglob_prefix(c)
-                        and self.pos + 1 < self.length
-                        and self.source[self.pos + 1] == "("
-                    ):
-                        chars.append(self.advance())  # @, ?, *, +, or !
-                        chars.append(self.advance())  # (
-                        extglob_depth += 1
-                    else:
-                        chars.append(self.advance())
-                if extglob_depth > 0:
-                    raise MatchedPairError("unexpected EOF looking for `)'", pos=extglob_start)
+                content = self._parse_matched_pair("(", ")", MatchedPairFlags.EXTGLOB)
+                chars.append(content)
+                chars.append(")")
                 continue
             # NORMAL: Metacharacter terminates word (unless inside brackets)
             if ctx == WORD_CTX_NORMAL and _is_metachar(ch) and bracket_depth == 0:
@@ -1654,59 +1752,11 @@ class Lexer:
                 elif c == "[":
                     if not self._param_subscript_has_close(self.pos):
                         break
-                    # Array subscript - track bracket depth and quotes
-                    name_chars.append(self.advance())
-                    bracket_depth = 1
-                    subscript_quote = QuoteState()
-                    while not self.at_end() and bracket_depth > 0:
-                        sc = self.peek()
-                        if subscript_quote.single:
-                            name_chars.append(self.advance())
-                            if sc == "'":
-                                subscript_quote.single = False
-                            continue
-                        if subscript_quote.double:
-                            if sc == "\\" and self.pos + 1 < self.length:
-                                name_chars.append(self.advance())
-                                if not self.at_end():
-                                    name_chars.append(self.advance())
-                                continue
-                            name_chars.append(self.advance())
-                            if sc == '"':
-                                subscript_quote.double = False
-                            continue
-                        if sc == "'":
-                            subscript_quote.single = True
-                            name_chars.append(self.advance())
-                            continue
-                        if (
-                            sc == "$"
-                            and self.pos + 1 < self.length
-                            and self.source[self.pos + 1] == '"'
-                        ):
-                            # Locale string $"..." - strip the $ and enter double quote
-                            self.advance()  # skip $
-                            subscript_quote.double = True
-                            name_chars.append(self.advance())  # append "
-                            continue
-                        if sc == '"':
-                            subscript_quote.double = True
-                            name_chars.append(self.advance())
-                            continue
-                        if sc == "\\":
-                            name_chars.append(self.advance())
-                            if not self.at_end():
-                                name_chars.append(self.advance())
-                            continue
-                        if sc == "[":
-                            bracket_depth += 1
-                        elif sc == "]":
-                            bracket_depth -= 1
-                            if bracket_depth == 0:
-                                break
-                        name_chars.append(self.advance())
-                    if not self.at_end() and self.peek() == "]":
-                        name_chars.append(self.advance())
+                    # Array subscript - use _parse_matched_pair for bracket/quote handling
+                    name_chars.append(self.advance())  # [
+                    content = self._parse_matched_pair("[", "]")
+                    name_chars.append(content)
+                    name_chars.append("]")
                     break
                 else:
                     break
@@ -1796,77 +1846,19 @@ class Lexer:
                 # ${!prefix@} and ${!prefix*} are prefix matching
                 if not self.at_end() and _is_at_or_star(self.peek()):
                     suffix = self.advance()
-                    trailing: list[str] = []
-                    depth = 1
-                    while not self.at_end() and depth > 0:
-                        c = self.peek()
-                        if (
-                            c == "$"
-                            and self.pos + 1 < self.length
-                            and self.source[self.pos + 1] == "{"
-                        ):
-                            depth += 1
-                            trailing.append(self.advance())
-                            trailing.append(self.advance())
-                        elif c == "}":
-                            depth -= 1
-                            if depth == 0:
-                                break
-                            trailing.append(self.advance())
-                        elif c == "\\":
-                            trailing.append(self.advance())
-                            if not self.at_end():
-                                trailing.append(self.advance())
-                        else:
-                            trailing.append(self.advance())
-                    if depth == 0:
-                        self.advance()  # consume final }
-                        text = _substring(self.source, start, self.pos)
-                        self._dolbrace_state = saved_dolbrace
-                        return ParamIndirect(param + suffix + "".join(trailing)), text
-                    # Unclosed brace at EOF - error, not fallback
+                    trailing = self._parse_matched_pair("{", "}", MatchedPairFlags.DOLBRACE)
+                    text = _substring(self.source, start, self.pos)
                     self._dolbrace_state = saved_dolbrace
-                    if self.at_end():
-                        raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
-                    self.pos = start
-                    return None, ""
+                    return ParamIndirect(param + suffix + trailing), text
                 # Check for operator (e.g., ${!##} = indirect of # with # op)
                 op = self._consume_param_operator()
                 if op is None and not self.at_end() and self.peek() != "}":
                     op = self.advance()
                 if op is not None:
-                    arg_chars: list[str] = []
-                    depth = 1
-                    while not self.at_end() and depth > 0:
-                        c = self.peek()
-                        if (
-                            c == "$"
-                            and self.pos + 1 < self.length
-                            and self.source[self.pos + 1] == "{"
-                        ):
-                            depth += 1
-                            arg_chars.append(self.advance())
-                            arg_chars.append(self.advance())
-                        elif c == "}":
-                            depth -= 1
-                            if depth > 0:
-                                arg_chars.append(self.advance())
-                        elif c == "\\":
-                            arg_chars.append(self.advance())
-                            if not self.at_end():
-                                arg_chars.append(self.advance())
-                        else:
-                            arg_chars.append(self.advance())
-                    if depth == 0:
-                        self.advance()  # consume final }
-                        arg = "".join(arg_chars)
-                        text = _substring(self.source, start, self.pos)
-                        self._dolbrace_state = saved_dolbrace
-                        return ParamIndirect(param, op, arg), text
-                    # Unclosed at EOF - error, not fallback
-                    if self.at_end():
-                        self._dolbrace_state = saved_dolbrace
-                        raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
+                    arg = self._parse_matched_pair("{", "}", MatchedPairFlags.DOLBRACE)
+                    text = _substring(self.source, start, self.pos)
+                    self._dolbrace_state = saved_dolbrace
+                    return ParamIndirect(param, op, arg), text
                 # Fell through - pattern didn't match, return None
                 self._dolbrace_state = saved_dolbrace
                 self.pos = start
@@ -1889,75 +1881,10 @@ class Lexer:
                 param = ""
             else:
                 # Unknown syntax - consume until matching }
-                depth = 1
-                content_chars: list[str] = []
-                inner_quote = QuoteState()
-                while not self.at_end() and depth > 0:
-                    c = self.peek()
-                    if inner_quote.single:
-                        content_chars.append(self.advance())
-                        if c == "'":
-                            inner_quote.single = False
-                        continue
-                    if inner_quote.double:
-                        if c == "\\" and self.pos + 1 < self.length:
-                            content_chars.append(self.advance())
-                            if not self.at_end():
-                                content_chars.append(self.advance())
-                            continue
-                        content_chars.append(self.advance())
-                        if c == '"':
-                            inner_quote.double = False
-                        continue
-                    if c == "'":
-                        inner_quote.single = True
-                        content_chars.append(self.advance())
-                        continue
-                    if c == '"':
-                        inner_quote.double = True
-                        content_chars.append(self.advance())
-                        continue
-                    if c == "`":
-                        backtick_start = self.pos
-                        content_chars.append(self.advance())
-                        while not self.at_end() and self.peek() != "`":
-                            bc = self.peek()
-                            if bc == "\\" and self.pos + 1 < self.length:
-                                next_c = self.source[self.pos + 1]
-                                if _is_escape_char_in_dquote(next_c):
-                                    content_chars.append(self.advance())
-                            content_chars.append(self.advance())
-                        if self.at_end():
-                            raise ParseError("Unterminated backtick", pos=backtick_start)
-                        content_chars.append(self.advance())
-                        continue
-                    if c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
-                        depth += 1
-                        content_chars.append(self.advance())
-                        content_chars.append(self.advance())
-                    elif c == "}":
-                        depth -= 1
-                        if depth == 0:
-                            break
-                        content_chars.append(self.advance())
-                    elif c == "\\":
-                        if self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
-                            self.advance()
-                            self.advance()
-                        else:
-                            content_chars.append(self.advance())
-                            if not self.at_end():
-                                content_chars.append(self.advance())
-                    else:
-                        content_chars.append(self.advance())
-                if depth == 0:
-                    content = "".join(content_chars)
-                    self.advance()  # consume final }
-                    text = "${" + content + "}"
-                    self._dolbrace_state = saved_dolbrace
-                    return ParamExpansion(content), text
+                content = self._parse_matched_pair("{", "}", MatchedPairFlags.DOLBRACE)
+                text = "${" + content + "}"
                 self._dolbrace_state = saved_dolbrace
-                raise ParseError("Unclosed parameter expansion", pos=start)
+                return ParamExpansion(content), text
         if self.at_end():
             self._dolbrace_state = saved_dolbrace
             raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
@@ -7592,37 +7519,10 @@ class Parser:
             self._in_process_sub = old_in_process_sub
             self.pos = start + 2  # after <( or >(
 
-            # Scan to find matching ) with paren depth tracking
-            depth = 1
-            while not self.at_end() and depth > 0:
-                c = self.peek()
-                if c == "(":
-                    depth += 1
-                elif c == ")":
-                    depth -= 1
-                    if depth == 0:
-                        break
-                elif c == "'":
-                    self.advance()
-                    while not self.at_end() and self.peek() != "'":
-                        self.advance()
-                elif c == '"':
-                    self.advance()
-                    while not self.at_end() and self.peek() != '"':
-                        if self.peek() == "\\" and self.pos + 1 < self.length:
-                            self.advance()
-                        self.advance()
-                elif c == "\\" and self.pos + 1 < self.length:
-                    self.advance()
-                self.advance()
-
-            if depth != 0:
-                if self.at_end():
-                    raise MatchedPairError("unexpected EOF looking for `)'", pos=start) from None
-                self.pos = start
-                return None, ""
-
-            self.advance()  # consume final )
+            # Scan to find matching ) using unified matched pair parsing
+            self._lexer.pos = self.pos  # sync lexer to parser
+            self._lexer._parse_matched_pair("(", ")")
+            self.pos = self._lexer.pos  # sync parser from lexer
             text = _substring(self.source, start, self.pos)
             # Strip line continuations (backslash-newline) from text
             text = _strip_line_continuations_comment_aware(text)
@@ -8489,30 +8389,10 @@ class Parser:
         self.advance()  # consume $
         self.advance()  # consume [
 
-        # Find matching ] - need to track nested brackets
-        content_start = self.pos
-        depth = 1
-
-        while not self.at_end() and depth > 0:
-            c = self.peek()
-
-            if c == "[" and not _is_backslash_escaped(self.source, self.pos):
-                depth += 1
-                self.advance()
-            elif c == "]":
-                if not _is_backslash_escaped(self.source, self.pos):
-                    depth -= 1
-                    if depth == 0:
-                        break
-                self.advance()
-            else:
-                self.advance()
-
-        if self.at_end() or depth != 0:
-            raise ParseError("Unterminated $[", pos=start)
-
-        content = _substring(self.source, content_start, self.pos)
-        self.advance()  # consume ]
+        # Find matching ] using unified matched pair parsing
+        self._lexer.pos = self.pos  # sync lexer to parser
+        content = self._lexer._parse_matched_pair("[", "]", MatchedPairFlags.ARITH)
+        self.pos = self._lexer.pos  # sync parser from lexer
 
         text = _substring(self.source, start, self.pos)
         return ArithDeprecated(content), text

@@ -1,0 +1,137 @@
+# Delimiter validation tests
+# These test that Parable correctly errors on unclosed constructs
+# and correctly parses special param + () patterns
+
+# ============================================================
+# Issue 1: Unclosed constructs should be errors (too permissive)
+# ============================================================
+
+=== unclosed bracket in word
+v[
+---
+<error>
+---
+
+
+=== unclosed bracket simple
+x[
+---
+<error>
+---
+
+
+=== unclosed extglob @(
+@(
+---
+<error>
+---
+
+
+=== unclosed extglob +(
++(
+---
+<error>
+---
+
+
+=== unclosed extglob *(
+*(
+---
+<error>
+---
+
+
+=== unclosed extglob ?(
+?(
+---
+<error>
+---
+
+
+=== unclosed extglob !(
+!(
+---
+<error>
+---
+
+
+=== unclosed parameter expansion ${
+${
+---
+<error>
+---
+
+
+=== unclosed parameter expansion ${x
+${x
+---
+<error>
+---
+
+
+=== unclosed nested parameter expansion
+"${a${b"
+---
+<error>
+---
+
+
+# ============================================================
+# Issue 2: Special param + () should parse as word (too strict)
+# ============================================================
+
+=== $*() is valid word
+$*()
+---
+(command (word "$*()"))
+---
+
+
+=== $@() is valid word
+$@()
+---
+(command (word "$@()"))
+---
+
+
+=== $?() is valid word
+$?()
+---
+(command (word "$?()"))
+---
+
+
+=== x$!() mid-word is valid
+x$!()
+---
+(command (word "x$!()"))
+---
+
+
+=== x$*() mid-word is valid
+x$*()
+---
+(command (word "x$*()"))
+---
+
+
+=== echo with $@() argument
+echo $@()
+---
+(command (word "echo") (word "$@()"))
+---
+
+
+=== nested parens after special param
+$*(a)
+---
+(command (word "$*(a)"))
+---
+
+
+=== nested parens $@(x|y)
+$@(x|y)
+---
+(command (word "$@(x|y)"))
+---
+

@@ -443,6 +443,16 @@ class Lexer {
 		// EOF token mechanism for command substitution parsing
 		this._eof_token = null;
 		this._eof_depth = 0;
+		// Word parsing context (set by Parser before peeking)
+		this._word_context = WORD_CTX_NORMAL;
+		this._at_command_start = false;
+		this._in_array_literal = false;
+		// Position after reading a token (may differ from token.pos due to heredocs)
+		this._post_read_pos = 0;
+		// Context used when token was cached (for cache invalidation)
+		this._cached_word_context = WORD_CTX_NORMAL;
+		this._cached_at_command_start = false;
+		this._cached_in_array_literal = false;
 	}
 
 	peek() {
@@ -578,6 +588,10 @@ class Lexer {
 			return new Token(TokenType.AMP, c, start);
 		}
 		if (c === "(") {
+			// In REGEX context, ( is regex grouping, not operator
+			if (this._word_context === WORD_CTX_REGEX) {
+				return null;
+			}
 			// Track depth for EOF token matching
 			if (this._eof_token === ")") {
 				// Don't increment in case patterns - (a) is pattern syntax, not subshell
@@ -589,6 +603,10 @@ class Lexer {
 			return new Token(TokenType.LPAREN, c, start);
 		}
 		if (c === ")") {
+			// In REGEX context, ) is regex grouping, not operator
+			if (this._word_context === WORD_CTX_REGEX) {
+				return null;
+			}
 			// Track depth for EOF token matching
 			if (this._eof_token === ")") {
 				// Don't decrement in case patterns
@@ -602,10 +620,18 @@ class Lexer {
 			return new Token(TokenType.RPAREN, c, start);
 		}
 		if (c === "<") {
+			// <( is process substitution, not operator
+			if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
+				return null;
+			}
 			this.pos += 1;
 			return new Token(TokenType.LESS, c, start);
 		}
 		if (c === ">") {
+			// >( is process substitution, not operator
+			if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
+				return null;
+			}
 			this.pos += 1;
 			return new Token(TokenType.GREATER, c, start);
 		}
@@ -1405,47 +1431,35 @@ class Lexer {
 	}
 
 	_readWord() {
-		let c, chars, start;
+		let c, is_procsub, is_regex_paren, start, word;
 		start = this.pos;
 		if (this.pos >= this.length) {
 			return null;
 		}
 		c = this.peek();
-		if (c == null || this.isMetachar(c)) {
+		if (c == null) {
 			return null;
 		}
-		chars = [];
-		while (this.pos < this.length) {
-			c = this.source[this.pos];
-			if (this.isMetachar(c) && !this.quote.inQuotes()) {
-				break;
-			}
-			if (c === "\\") {
-				chars.push(c);
-				this.pos += 1;
-				if (this.pos < this.length) {
-					chars.push(this.source[this.pos]);
-					this.pos += 1;
-				}
-				continue;
-			}
-			if (c === "'" && !this.quote.double) {
-				this.pos += 1;
-				chars.push(this._scanSingleQuoted());
-				continue;
-			}
-			if (c === '"' && !this.quote.single) {
-				this.pos += 1;
-				chars.push(this._scanDoubleQuoted());
-				continue;
-			}
-			chars.push(c);
-			this.pos += 1;
-		}
-		if (chars.length === 0) {
+		// Allow process substitution <( and >( even though < and > are metachars
+		is_procsub =
+			(c === "<" || c === ">") &&
+			this.pos + 1 < this.length &&
+			this.source[this.pos + 1] === "(";
+		// In REGEX context, ( and ) are regex grouping, not metachars
+		is_regex_paren =
+			this._word_context === WORD_CTX_REGEX && (c === "(" || c === ")");
+		if (this.isMetachar(c) && !is_procsub && !is_regex_paren) {
 			return null;
 		}
-		return new Token(TokenType.WORD, chars.join(""), start);
+		word = this._readWordInternal(
+			this._word_context,
+			this._at_command_start,
+			this._in_array_literal,
+		);
+		if (word == null) {
+			return null;
+		}
+		return new Token(TokenType.WORD, word.value, start, null, word);
 	}
 
 	nextToken() {
@@ -5043,6 +5057,7 @@ class HereDoc extends Node {
 		this.quoted = quoted;
 		this.fd = fd;
 		this.complete = complete;
+		this._start_pos = -1;
 	}
 
 	toSexp() {
@@ -7891,6 +7906,10 @@ class Parser {
 		// EOF token mechanism for inline command substitution parsing
 		this._eof_token = null;
 		this._eof_depth = 0;
+		// Word parsing context for Lexer sync
+		this._word_context = WORD_CTX_NORMAL;
+		this._at_command_start = false;
+		this._in_array_literal = false;
 	}
 
 	_setState(flag) {
@@ -7978,11 +7997,28 @@ class Parser {
 	}
 
 	_syncLexer() {
-		this._lexer.pos = this.pos;
-		this._lexer._token_cache = null;
+		// Invalidate cache if it doesn't match our current position or context
+		if (this._lexer._token_cache != null) {
+			if (
+				this._lexer._token_cache.pos !== this.pos ||
+				this._lexer._cached_word_context !== this._word_context ||
+				this._lexer._cached_at_command_start !== this._at_command_start ||
+				this._lexer._cached_in_array_literal !== this._in_array_literal
+			) {
+				this._lexer._token_cache = null;
+			}
+		}
+		// Sync lexer position
+		if (this._lexer.pos !== this.pos) {
+			this._lexer.pos = this.pos;
+		}
 		this._lexer._eof_token = this._eof_token;
 		this._lexer._eof_depth = this._eof_depth;
 		this._lexer._parser_state = this._parser_state;
+		// Sync word context
+		this._lexer._word_context = this._word_context;
+		this._lexer._at_command_start = this._at_command_start;
+		this._lexer._in_array_literal = this._in_array_literal;
 	}
 
 	_syncParser() {
@@ -7990,15 +8026,57 @@ class Parser {
 	}
 
 	_lexPeekToken() {
+		let result, saved_pos;
+		// Check if cached token is valid: same position AND same word context
+		// (word context affects how array subscripts and other constructs are parsed)
+		if (
+			this._lexer._token_cache != null &&
+			this._lexer._token_cache.pos === this.pos &&
+			this._lexer._cached_word_context === this._word_context &&
+			this._lexer._cached_at_command_start === this._at_command_start &&
+			this._lexer._cached_in_array_literal === this._in_array_literal
+		) {
+			return this._lexer._token_cache;
+		}
+		// Need to read a new token - sync lexer to our position first
+		saved_pos = this.pos;
 		this._syncLexer();
-		return this._lexer.peekToken();
+		result = this._lexer.peekToken();
+		// Save the context used for this cached token
+		this._lexer._cached_word_context = this._word_context;
+		this._lexer._cached_at_command_start = this._at_command_start;
+		this._lexer._cached_in_array_literal = this._in_array_literal;
+		// Save the post-read position (may have advanced for heredocs)
+		this._lexer._post_read_pos = this._lexer.pos;
+		// Restore parser position for peek semantics
+		this.pos = saved_pos;
+		return result;
 	}
 
 	_lexNextToken() {
 		let tok;
-		this._syncLexer();
-		tok = this._lexer.nextToken();
-		this._syncParser();
+		// Check if cached token is valid: same position AND same word context
+		if (
+			this._lexer._token_cache != null &&
+			this._lexer._token_cache.pos === this.pos &&
+			this._lexer._cached_word_context === this._word_context &&
+			this._lexer._cached_at_command_start === this._at_command_start &&
+			this._lexer._cached_in_array_literal === this._in_array_literal
+		) {
+			// Consume cached token - use saved post-read position
+			tok = this._lexer.nextToken();
+			this.pos = this._lexer._post_read_pos;
+			this._lexer.pos = this._lexer._post_read_pos;
+		} else {
+			// No valid cache - sync and read fresh
+			this._syncLexer();
+			tok = this._lexer.nextToken();
+			// Save context for this token
+			this._lexer._cached_word_context = this._word_context;
+			this._lexer._cached_at_command_start = this._at_command_start;
+			this._lexer._cached_in_array_literal = this._in_array_literal;
+			this._syncParser();
+		}
 		this._recordToken(tok);
 		return tok;
 	}
@@ -8492,24 +8570,18 @@ class Parser {
 	}
 
 	_parseWordInternal(ctx, at_command_start, in_array_literal) {
-		let result;
 		if (at_command_start == null) {
 			at_command_start = false;
 		}
 		if (in_array_literal == null) {
 			in_array_literal = false;
 		}
-		this._syncLexer();
-		result = this._lexer._readWordInternal(
-			ctx,
-			at_command_start,
-			in_array_literal,
-		);
-		this._syncParser();
-		return result;
+		this._word_context = ctx;
+		return this.parseWord(at_command_start, in_array_literal);
 	}
 
 	parseWord(at_command_start, in_array_literal) {
+		let tok;
 		if (at_command_start == null) {
 			at_command_start = false;
 		}
@@ -8520,11 +8592,15 @@ class Parser {
 		if (this.atEnd()) {
 			return null;
 		}
-		return this._parseWordInternal(
-			WORD_CTX_NORMAL,
-			at_command_start,
-			in_array_literal,
-		);
+		// Set context for Lexer before peeking
+		this._at_command_start = at_command_start;
+		this._in_array_literal = in_array_literal;
+		tok = this._lexPeekToken();
+		if (tok.type !== TokenType.WORD) {
+			return null;
+		}
+		this._lexNextToken();
+		return tok.word;
 	}
 
 	_parseCommandSubstitution() {
@@ -10829,11 +10905,23 @@ class Parser {
 	}
 
 	_parseHeredoc(fd, strip_tabs) {
-		let delimiter, heredoc, quoted;
+		let delimiter, existing, heredoc, quoted, start_pos;
+		start_pos = this.pos;
 		this._setState(ParserStateFlags.PST_HEREDOC);
 		[delimiter, quoted] = this._parseHeredocDelimiter();
+		// Check if we've already registered this heredoc (can happen due to re-tokenization)
+		for (existing of this._pending_heredocs) {
+			if (
+				existing._start_pos === start_pos &&
+				existing.delimiter === delimiter
+			) {
+				this._clearState(ParserStateFlags.PST_HEREDOC);
+				return existing;
+			}
+		}
 		// Create stub HereDoc with empty content - will be filled in later
 		heredoc = new HereDoc(delimiter, "", strip_tabs, quoted, fd, false);
+		heredoc._start_pos = start_pos;
 		this._pending_heredocs.push(heredoc);
 		this._clearState(ParserStateFlags.PST_HEREDOC);
 		return heredoc;
@@ -11071,6 +11159,7 @@ class Parser {
 		this.advance();
 		this.advance();
 		this._setState(ParserStateFlags.PST_CONDEXPR);
+		this._word_context = WORD_CTX_COND;
 		// Parse the conditional expression body
 		body = this._parseCondOr();
 		// Skip whitespace before ]]
@@ -11085,6 +11174,7 @@ class Parser {
 			this.source[this.pos + 1] !== "]"
 		) {
 			this._clearState(ParserStateFlags.PST_CONDEXPR);
+			this._word_context = WORD_CTX_NORMAL;
 			throw new ParseError(
 				"Expected ]] to close conditional expression",
 				this.pos,
@@ -11093,6 +11183,7 @@ class Parser {
 		this.advance();
 		this.advance();
 		this._clearState(ParserStateFlags.PST_CONDEXPR);
+		this._word_context = WORD_CTX_NORMAL;
 		return new ConditionalExpr(body, this._collectRedirects());
 	}
 
@@ -11297,6 +11388,8 @@ class Parser {
 		this._setState(ParserStateFlags.PST_REGEXP);
 		result = this._parseWordInternal(WORD_CTX_REGEX);
 		this._clearState(ParserStateFlags.PST_REGEXP);
+		// Restore word context to COND after parsing regex
+		this._word_context = WORD_CTX_COND;
 		return result;
 	}
 

@@ -72,33 +72,37 @@ This eliminated ~550 lines of scanning code from `_parse_command_substitution` a
 
 ## Current State
 
-The Parser now uses a **hybrid approach**:
-- **Token-based terminator detection**: `parse_command()` uses `_lex_is_command_terminator()` which enables the EOF token mechanism
-- **Character-based word parsing**: `parse_word()` still does character-level expansion parsing
+The Parser now uses **token-based parsing** for words:
 
 ```python
-# Current implementation (hybrid):
-def parse_command(self):
-    while True:
-        self.skip_whitespace()
-        if self._lex_is_command_terminator():  # Token-based via Lexer
-            break
-        ...
-        word = self.parse_word()  # Character-based expansion parsing
-        ...
+# Current implementation (token-based):
+def parse_word(self, at_command_start=False, in_array_literal=False) -> Word | None:
+    self.skip_whitespace()
+    if self.at_end():
+        return None
+    # Set context for Lexer before peeking
+    self._at_command_start = at_command_start
+    self._in_array_literal = in_array_literal
+    tok = self._lex_peek_token()
+    if tok.type != TokenType.WORD:
+        return None
+    self._lex_next_token()
+    return tok.word
 ```
-
-This works because `_lex_peek_token()` doesn't advance Parser position - only `_lex_next_token()` does. The Lexer's EOF token mechanism is checked during terminator detection, while word parsing still uses character-level methods.
 
 **Key methods using tokens:**
 - `parse_command()` - uses `_lex_is_command_terminator()` for terminators ✓
 - `parse_list_operator()` - uses `_lex_peek_operator()` and `_lex_next_token()` ✓
 - `_parse_simple_pipeline()` - uses `_lex_peek_operator()` for pipe detection ✓
 - `parse_pipeline()` - uses `_lex_is_at_reserved_word()` for time/! detection ✓
+- `parse_word()` - consumes WORD tokens with pre-parsed Word objects ✓
 
-**Word parsing now in Lexer:**
-- `parse_word()` delegates to `Lexer._read_word_internal()` via callbacks
-- Parser methods (`_parse_command_substitution`, etc.) called back from Lexer as needed
+**Word parsing flow:**
+1. Parser sets word context (`_at_command_start`, `_in_array_literal`, `_word_context`)
+2. `_sync_lexer()` syncs context to Lexer (invalidates cache if context changed)
+3. `Lexer._read_word()` calls `_read_word_internal()` with context
+4. `_read_word_internal()` uses callbacks to Parser for nested parsing (`$()`, etc.)
+5. Token returned with pre-parsed `Word` object in `tok.word`
 
 **Remaining character-based:**
 - Newline handling in `parse_list()` - special heredoc/separator logic
@@ -263,15 +267,17 @@ def _lex_next_word(self, ctx: int) -> Word | None:
 3. **Phase 1c:** Move `_scan_bracket_expression` to Lexer ✓
 4. **Phase 2:** Move `_parse_word_internal` to Lexer as `_read_word_internal` ✓
 5. **Phase 3:** Add `word` field to Token class ✓
-6. **Phase 4:** ~~Update `parse_word()` to consume tokens~~ (Deferred - see note)
-7. **Phase 5:** ~~Handle context-sensitive cases~~ (Deferred - see note)
+6. **Phase 4:** Update `parse_word()` to consume tokens ✓
+7. **Phase 5:** Handle context-sensitive cases ✓
 
-**Note on Phases 4-5:** These phases would require `Lexer._read_word()` to call
-`_read_word_internal()`, but this creates infinite recursion: `_read_word_internal()`
-uses callbacks to Parser methods like `_parse_dollar_expansion()`, which eventually
-call back to Lexer. The current hybrid approach works well:
-- Token-based: terminators, operators, reserved words
-- Lexer-based: word parsing via `_read_word_internal()` with Parser callbacks
+**Phases 4-5 completed (January 2026, PR #332):** Initial concerns about infinite
+recursion were resolved. The recursion IS bounded by input nesting depth - each
+recursive call advances position in input, and the EOF token mechanism stops at
+delimiters. Key implementation details:
+- Word context state (`_at_command_start`, `_in_array_literal`, `_word_context`) synced from Parser to Lexer
+- Token cache tracks context and invalidates on context mismatch
+- `_post_read_pos` handles heredoc position advancement during tokenization
+- Heredoc registration is idempotent to handle re-tokenization
 
 ---
 
@@ -287,9 +293,10 @@ call back to Lexer. The current hybrid approach works well:
 
 1. ~~`parse_command()` never calls `self.peek()` or `self.advance()`~~ (Hybrid approach)
 2. All word parsing goes through `Lexer._read_word_internal()` ✓
-3. Token.word field available for future use ✓
-4. All 4515+ tests pass ✓
-5. Fuzzer finds no new differences
+3. Token.word field carries pre-parsed Word object ✓
+4. `parse_word()` consumes WORD tokens instead of bypassing tokenizer ✓
+5. All 4515+ tests pass ✓
+6. Fuzzer finds no new differences
 
 ---
 

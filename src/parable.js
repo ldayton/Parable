@@ -8441,39 +8441,6 @@ class Parser {
 		return true;
 	}
 
-	_scanSingleQuote(chars, start, track_newline) {
-		let content, saw_newline;
-		if (track_newline == null) {
-			track_newline = false;
-		}
-		this._syncLexer();
-		[content, saw_newline] = this._lexer._readSingleQuote(start);
-		this._syncParser();
-		chars.push(content);
-		if (track_newline && saw_newline) {
-			this._saw_newline_in_single_quote = true;
-		}
-	}
-
-	_scanBracketExpression(chars, parts, for_regex, paren_depth) {
-		let result;
-		if (for_regex == null) {
-			for_regex = false;
-		}
-		if (paren_depth == null) {
-			paren_depth = 0;
-		}
-		this._syncLexer();
-		result = this._lexer._readBracketExpression(
-			chars,
-			parts,
-			for_regex,
-			paren_depth,
-		);
-		this._syncParser();
-		return result;
-	}
-
 	_isWordTerminator(ctx, ch, bracket_depth, paren_depth) {
 		if (bracket_depth == null) {
 			bracket_depth = 0;
@@ -8639,24 +8606,6 @@ class Parser {
 		return [new CommandSubstitution(cmd), text];
 	}
 
-	_isWordBoundaryBefore() {
-		let prev;
-		if (this.pos === 0) {
-			return true;
-		}
-		prev = this.source[this.pos - 1];
-		return _isWordStartContext(prev);
-	}
-
-	_isCommentStartContext() {
-		let prev;
-		if (this.pos === 0) {
-			return true;
-		}
-		prev = this.source[this.pos - 1];
-		return " \t\n;|&()".includes(prev);
-	}
-
 	_isAssignmentWord(word) {
 		let bracket_depth, ch, i, quote;
 		// Assignment must start with identifier (letter or underscore), not quoted
@@ -8695,38 +8644,6 @@ class Parser {
 			i += 1;
 		}
 		return false;
-	}
-
-	_lookaheadKeyword(keyword) {
-		let after, after_pos;
-		if (this.pos + keyword.length > this.length) {
-			return false;
-		}
-		if (!_startsWithAt(this.source, this.pos, keyword)) {
-			return false;
-		}
-		// Check word boundary after keyword
-		after_pos = this.pos + keyword.length;
-		if (after_pos >= this.length) {
-			return true;
-		}
-		after = this.source[after_pos];
-		return _isWordEndContext(after);
-	}
-
-	_skipKeyword(keyword) {
-		let _;
-		for (_ of keyword) {
-			this.advance();
-		}
-	}
-
-	_lookaheadForEsacParser(case_depth) {
-		return _lookaheadForEsac(this.source, this.pos + 1, case_depth);
-	}
-
-	_skipBacktickParser() {
-		this.pos = _skipBacktick(this.source, this.pos);
 	}
 
 	_parseBacktickSubstitution() {
@@ -10198,22 +10115,6 @@ class Parser {
 		this.advance();
 		text = this.source.slice(start, this.pos);
 		return [new ArithDeprecated(content), text];
-	}
-
-	_parseAnsiCQuote() {
-		let result;
-		this._syncLexer();
-		result = this._lexer._readAnsiCQuote();
-		this._syncParser();
-		return result;
-	}
-
-	_parseLocaleString() {
-		let result;
-		this._syncLexer();
-		result = this._lexer._readLocaleString();
-		this._syncParser();
-		return result;
 	}
 
 	_parseParamExpansion() {

@@ -272,8 +272,6 @@ class SavedParserState:
         ctx_depth: int,
         eof_token: str | None = None,
         eof_depth: int = 0,
-        open_brace_count: int = 0,
-        open_cond_count: int = 0,
     ):
         self.parser_state = parser_state
         self.dolbrace_state = dolbrace_state
@@ -281,8 +279,6 @@ class SavedParserState:
         self.ctx_depth = ctx_depth
         self.eof_token = eof_token
         self.eof_depth = eof_depth
-        self.open_brace_count = open_brace_count
-        self.open_cond_count = open_cond_count
 
 
 class LexerSavedState:
@@ -6666,11 +6662,6 @@ class Parser:
         self._word_context = WORD_CTX_NORMAL
         self._at_command_start = False
         self._in_array_literal = False
-        # Brace/bracket counts for bash-style delimiter tracking
-        # } is only a reserved word when _open_brace_count > 0
-        # ]] is only a reserved word when _open_cond_count > 0
-        self._open_brace_count = 0
-        self._open_cond_count = 0
         # Delimiter stack for better error messages on unclosed constructs
         self._delimiter_stack = DelimiterStack()
 
@@ -6699,8 +6690,6 @@ class Parser:
             ctx_depth=self._ctx.get_depth(),
             eof_token=self._eof_token,
             eof_depth=self._eof_depth,
-            open_brace_count=self._open_brace_count,
-            open_cond_count=self._open_cond_count,
         )
 
     def _restore_parser_state(self, saved: SavedParserState) -> None:
@@ -6714,8 +6703,6 @@ class Parser:
         self._dolbrace_state = saved.dolbrace_state
         self._eof_token = saved.eof_token
         self._eof_depth = saved.eof_depth
-        self._open_brace_count = saved.open_brace_count
-        self._open_cond_count = saved.open_cond_count
         # Restore context stack to saved depth (pop any extra contexts)
         while self._ctx.get_depth() > saved.ctx_depth:
             self._ctx.pop()
@@ -6762,84 +6749,6 @@ class Parser:
         if tok is None:
             return None
         return tok.type
-
-    def _reserved_word_acceptable(self) -> bool:
-        """Check if reserved words are acceptable in current context.
-
-        Mirrors bash's reserved_word_acceptable(). Reserved words are recognized
-        only at "command start" positions - after command separators, at the
-        beginning of input, or after reserved words that expect a command.
-        """
-        last_type = self._last_token_type()
-        # None means start of input - reserved words acceptable
-        if last_type is None:
-            return True
-        # After command separators
-        if last_type in (
-            TokenType.NEWLINE,
-            TokenType.SEMI,
-            TokenType.SEMI_SEMI,
-            TokenType.SEMI_AMP,
-            TokenType.SEMI_SEMI_AMP,
-            TokenType.PIPE,
-            TokenType.PIPE_AMP,
-            TokenType.AMP,
-            TokenType.AND_AND,
-            TokenType.OR_OR,
-            TokenType.LPAREN,
-            TokenType.RPAREN,
-            TokenType.LBRACE,
-            TokenType.RBRACE,
-            TokenType.BANG,
-        ):
-            return True
-        # After reserved words that expect commands to follow
-        if last_type in (
-            TokenType.IF,
-            TokenType.THEN,
-            TokenType.ELSE,
-            TokenType.ELIF,
-            TokenType.WHILE,
-            TokenType.UNTIL,
-            TokenType.DO,
-            TokenType.CASE,
-            TokenType.TIME,
-        ):
-            return True
-        return False
-
-    def _special_case_tokens(self, word: str) -> bool:
-        """Check if word should NOT be recognized as a reserved word due to context.
-
-        Mirrors bash's special_case_tokens(). Returns True if the word should
-        remain a WORD token even though it matches a reserved word.
-
-        Special cases:
-        - After 'function': next word is function name, not reserved word
-        - After 'case' (before 'in'): word is case value, not reserved word
-
-        Note: Parable currently handles these via different parsing paths:
-        - parse_function() uses peek_word()/consume_word() for function names
-        - parse_case() uses parse_word() which respects tokenization
-
-        This method documents the special cases for architectural alignment with bash.
-        """
-        last = self._last_token()
-        if last is None:
-            return False
-        # After 'function', the next word is a name, not a reserved word
-        if last.type == TokenType.WORD and last.value == "function":
-            return True
-        # After 'case' (and before 'in'), the word is a value, not reserved
-        if last.type == TokenType.WORD and last.value == "case":
-            return True
-        # Check two tokens back for 'function' or 'case' patterns
-        prev = self._token_history[1]
-        if prev is not None:
-            # function name - name is already consumed, don't reclassify
-            if prev.value == "function":
-                return True
-        return False
 
     def _sync_lexer(self) -> None:
         """Sync Lexer position and state to Parser."""
@@ -9201,10 +9110,9 @@ class Parser:
             # This enables the EOF token mechanism to work at the command level
             if self._lex_is_command_terminator():
                 break
-            # } and ]] are only terminators at command position (closing brace group
-            # or conditional). In argument position, they're regular words.
-            # Check as reserved words since lexer returns them as WORD tokens.
-            # Use len() == 0 instead of 'not words' for JS transpiler compatibility
+            # } and ]] terminate at command position (first word).
+            # Can't use _reserved_word_acceptable() here because newlines aren't
+            # recorded in token history. Use len(words) == 0 for command position.
             if len(words) == 0:
                 reserved = self._lex_peek_reserved_word()
                 if reserved == "}" or reserved == "]]":
@@ -9418,7 +9326,6 @@ class Parser:
 
         self.advance()  # consume first [
         self.advance()  # consume second [
-        self._open_cond_count += 1
         self._set_state(ParserStateFlags.PST_CONDEXPR)
         self._word_context = WORD_CTX_COND
 
@@ -9436,14 +9343,12 @@ class Parser:
             or self.pos + 1 >= self.length
             or self.source[self.pos + 1] != "]"
         ):
-            self._open_cond_count -= 1
             self._clear_state(ParserStateFlags.PST_CONDEXPR)
             self._word_context = WORD_CTX_NORMAL
             raise ParseError("Expected ]] to close conditional expression", pos=self.pos)
 
         self.advance()  # consume first ]
         self.advance()  # consume second ]
-        self._open_cond_count -= 1
         self._clear_state(ParserStateFlags.PST_CONDEXPR)
         self._word_context = WORD_CTX_NORMAL
         return ConditionalExpr(body, self._collect_redirects())
@@ -9620,24 +9525,20 @@ class Parser:
         brace_pos = self.pos  # Save position for error messages
         if not self._lex_consume_word("{"):
             return None
-        self._open_brace_count += 1
         self._delimiter_stack.push("{", brace_pos)
         self.skip_whitespace_and_newlines()
 
         body = self.parse_list()
         if body is None:
-            self._open_brace_count -= 1
             self._delimiter_stack.pop()
             raise ParseError("Expected command in brace group", pos=self._lex_peek_token().pos)
 
         self.skip_whitespace()
         if not self._lex_consume_word("}"):
-            self._open_brace_count -= 1
             delim_info = self._delimiter_stack.pop()
             # Use the opening brace position for better error context
             open_pos = delim_info[1] if delim_info else brace_pos
             raise ParseError(f"Expected `}}' to match `{{' at position {open_pos}", pos=self.pos)
-        self._open_brace_count -= 1
         self._delimiter_stack.pop()
         return BraceGroup(body, self._collect_redirects())
 

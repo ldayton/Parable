@@ -111,59 +111,29 @@ static int special_case_tokens(char *tokstr) {
 
 ## Convergence Plan
 
-### Phase A: Add `open_brace_count` ✓
+### Phase A-D: Delimiter Tracking (Revised January 2026)
 
-**Completed:** Added infrastructure for tracking brace/bracket nesting.
+**Outcome:** After attempting integration, bash-style patterns don't fit Parable's architecture.
 
-1. ✓ Add `_open_brace_count` and `_open_cond_count` to Parser
-2. ✓ Increment/decrement in `parse_brace_group()` and `parse_conditional_expr()`
-3. ✓ Save/restore in `SavedParserState` for nested parsing (e.g., `$(...)`)
+**What was removed (dead code from initial attempt):**
+- `_open_brace_count` / `_open_cond_count` - redundant with parser structure
+- `_reserved_word_acceptable()` - can't work; newlines not in token history
+- `_special_case_tokens()` - cases handled by different parse paths (`peek_word()`)
 
-**Note:** In bash, `open_brace_count` affects lexer token type (RBRACE vs falling through
-to word parsing). In Parable, we track the count for potential future use in
-`reserved_word_acceptable()` logic, but the current reserved word recognition still
-works because `}` at command position always breaks the command loop, and whether it's
-successfully consumed depends on whether `parse_brace_group()` is expecting it.
+**What remains (actually integrated):**
+- `DelimiterStack` class - tracks (delimiter, position) for better error messages
+- Used in `parse_brace_group()` to report opening `{` position on unclosed error
 
-### Phase B: Implement `reserved_word_acceptable()` ✓
-
-**Completed:** Added centralized `_reserved_word_acceptable()` method.
-
-1. ✓ Created `_reserved_word_acceptable()` that checks token history
-2. ✓ Returns True after command separators (`;`, `|`, `&`, `&&`, `||`, `\n`, etc.)
-3. ✓ Returns True after reserved words expecting commands (`if`, `then`, `do`, etc.)
-4. ✓ Returns True at start of input (None in token history)
-
-**Note:** The method is infrastructure - not yet actively called. Current code achieves
-similar results via `len(words) == 0` checks in `parse_simple_command()`, which is
-effectively checking "command start position". The centralized method enables future
-consolidation of these scattered checks.
-
-### Phase C: Enhance DelimiterStack ✓
-
-**Completed:** Added `DelimiterStack` class for tracking delimiters with positions.
-
-1. ✓ Created `DelimiterStack` class with `push(delim, pos)`, `pop()`, `peek()`
-2. ✓ Store (delimiter_char, start_pos) tuples
-3. ✓ Added `_delimiter_stack` to Parser
-4. ✓ Used in `parse_brace_group()` for better error messages
-
-**Example:** `{ echo hello` now produces:
+**Example:** `{ echo hello` produces:
 `Parse error at position 12: Expected \`}' to match \`{' at position 0`
 
-### Phase D: Consolidate `special_case_tokens()` ✓
-
-**Completed:** Added `_special_case_tokens()` method documenting context-dependent behavior.
-
-1. ✓ Created `_special_case_tokens(word)` that checks token history
-2. ✓ Documents special cases:
-   - After `function`: next word is function name, not reserved
-   - After `case`: word is case value, not reserved
-3. ✓ Uses `_token_history` for context decisions
-
-**Note:** This is infrastructure/documentation. Parable handles these cases via different
-parsing paths (`peek_word()` for function names, `parse_word()` for case values), which
-achieves the same result as bash's centralized reclassification.
+**Why bash patterns don't apply to Parable:**
+1. Bash's `open_brace_count` works at lexer level to change token types
+2. Parable's parser structure handles this differently - `}` at command position
+   always breaks the loop, whether consumed depends on parser context
+3. Token history doesn't include newlines (consumed directly in `parse_list()`),
+   so `_reserved_word_acceptable()` can't determine command boundaries
+4. The `len(words) == 0` check in `parse_simple_command()` is correct and necessary
 
 ---
 

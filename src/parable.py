@@ -174,6 +174,18 @@ class TokenType:
     NUMBER = 81
 
 
+class Token:
+    """A token produced by the lexer."""
+
+    def __init__(self, type_: int, value: str, pos: int):
+        self.type = type_
+        self.value = value
+        self.pos = pos
+
+    def __repr__(self) -> str:
+        return f"Token({self.type}, {self.value!r}, {self.pos})"
+
+
 class QuoteState:
     """Unified quote state tracker for parsing.
 

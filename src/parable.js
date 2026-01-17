@@ -145,6 +145,18 @@ class TokenType {
 	NUMBER = 81;
 }
 
+class Token {
+	constructor(type_, value, pos) {
+		this.type = type_;
+		this.value = value;
+		this.pos = pos;
+	}
+
+	_repr() {
+		return `Token(${this.type}, ${this.value}, ${this.pos})`;
+	}
+}
+
 class QuoteState {
 	constructor() {
 		this.single = false;

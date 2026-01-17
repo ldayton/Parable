@@ -19,11 +19,21 @@ class JSTranspiler(ast.NodeVisitor):
         # Pre-populate with known class names (needed for forward references)
         # Lexer methods may instantiate Node subclasses defined later in the file
         self.class_names = {
-            "Parser", "Word", "ParseError",
+            "Parser",
+            "Word",
+            "ParseError",
             # Node subclasses used by Lexer for expansion parsing
-            "AnsiCQuote", "LocaleString", "CommandSubstitution", "ProcessSubstitution",
-            "ArithmeticExpansion", "ParamExpansion", "ParamLength", "ParamIndirect",
-            "ArrayLiteral", "Empty", "ArithEmpty",
+            "AnsiCQuote",
+            "LocaleString",
+            "CommandSubstitution",
+            "ProcessSubstitution",
+            "ArithmeticExpansion",
+            "ParamExpansion",
+            "ParamLength",
+            "ParamIndirect",
+            "ArrayLiteral",
+            "Empty",
+            "ArithEmpty",
         }
         self.comments = {}  # line_number -> comment_text
         self.last_line = 0

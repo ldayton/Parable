@@ -1208,7 +1208,11 @@ class Lexer:
                     depth = 1
                     while not self.at_end() and depth > 0:
                         c = self.peek()
-                        if c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
+                        if (
+                            c == "$"
+                            and self.pos + 1 < self.length
+                            and self.source[self.pos + 1] == "{"
+                        ):
                             depth += 1
                             trailing.append(self.advance())
                             trailing.append(self.advance())
@@ -1241,7 +1245,11 @@ class Lexer:
                     depth = 1
                     while not self.at_end() and depth > 0:
                         c = self.peek()
-                        if c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
+                        if (
+                            c == "$"
+                            and self.pos + 1 < self.length
+                            and self.source[self.pos + 1] == "{"
+                        ):
                             depth += 1
                             arg_chars.append(self.advance())
                             arg_chars.append(self.advance())
@@ -1274,7 +1282,11 @@ class Lexer:
             # Allow empty parameter for simple operators like ${:-word}
             if not self.at_end() and (
                 self.peek() in "-=+?"
-                or (self.peek() == ":" and self.pos + 1 < self.length and _is_simple_param_op(self.source[self.pos + 1]))
+                or (
+                    self.peek() == ":"
+                    and self.pos + 1 < self.length
+                    and _is_simple_param_op(self.source[self.pos + 1])
+                )
             ):
                 param = ""
             else:
@@ -1426,12 +1438,22 @@ class Lexer:
                     if not self.at_end():
                         arg_chars.append(self.advance())
             # Nested ${...}
-            elif c == "$" and not quote.single and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
+            elif (
+                c == "$"
+                and not quote.single
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "{"
+            ):
                 depth += 1
                 arg_chars.append(self.advance())
                 arg_chars.append(self.advance())
             # ANSI-C quoted string $'...'
-            elif c == "$" and not quote.single and self.pos + 1 < self.length and self.source[self.pos + 1] == "'":
+            elif (
+                c == "$"
+                and not quote.single
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "'"
+            ):
                 arg_chars.append(self.advance())
                 arg_chars.append(self.advance())
                 while not self.at_end() and self.peek() != "'":
@@ -1459,7 +1481,12 @@ class Lexer:
                 else:
                     arg_chars.append(self.advance())
             # Command substitution $(...)
-            elif c == "$" and not quote.single and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+            elif (
+                c == "$"
+                and not quote.single
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "("
+            ):
                 arg_chars.append(self.advance())
                 arg_chars.append(self.advance())
                 paren_depth = 1

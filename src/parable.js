@@ -5967,10 +5967,6 @@ function _isDollarDollarParen(value, idx) {
 	return dollar_count % 2 === 1;
 }
 
-function _isSemicolonOrAmp(c) {
-	return c === ";" || c === "&";
-}
-
 function _isParen(c) {
 	return c === "(" || c === ")";
 }
@@ -12774,10 +12770,7 @@ class Parser {
 			if (op === ";") {
 				this.skipWhitespaceAndNewlines();
 				// Also check for ;;, ;&, or ;;& (case terminators)
-				at_case_terminator =
-					this.peek() === ";" &&
-					this.pos + 1 < this.length &&
-					_isSemicolonOrAmp(this.source[this.pos + 1]);
+				at_case_terminator = this._lexPeekCaseTerminator() != null;
 				// Check for standalone } (closing brace), not } as part of a word
 				is_standalone_brace = false;
 				if (!this.atEnd() && this.peek() === "}") {
@@ -12812,11 +12805,7 @@ class Parser {
 			if (reserved != null && stop_words.has(reserved)) {
 				break;
 			}
-			if (
-				this.peek() === ";" &&
-				this.pos + 1 < this.length &&
-				_isSemicolonOrAmp(this.source[this.pos + 1])
-			) {
+			if (this._lexPeekCaseTerminator() != null) {
 				break;
 			}
 			pipeline = this.parsePipeline();

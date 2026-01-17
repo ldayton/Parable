@@ -5034,10 +5034,6 @@ def _is_dollar_dollar_paren(value: str, idx: int) -> bool:
     return dollar_count % 2 == 1
 
 
-def _is_semicolon_or_amp(c: str) -> bool:
-    return c == ";" or c == "&"
-
-
 def _is_paren(c: str) -> bool:
     return c == "(" or c == ")"
 
@@ -10516,11 +10512,7 @@ class Parser:
             if op == ";":
                 self.skip_whitespace_and_newlines()
                 # Also check for ;;, ;&, or ;;& (case terminators)
-                at_case_terminator = (
-                    self.peek() == ";"
-                    and self.pos + 1 < self.length
-                    and _is_semicolon_or_amp(self.source[self.pos + 1])
-                )
+                at_case_terminator = self._lex_peek_case_terminator() is not None
                 # Check for standalone } (closing brace), not } as part of a word
                 is_standalone_brace = False
                 if not self.at_end() and self.peek() == "}":
@@ -10548,11 +10540,7 @@ class Parser:
             # Also check for ;;, ;&, or ;;& (case terminators)
             if reserved is not None and reserved in stop_words:
                 break
-            if (
-                self.peek() == ";"
-                and self.pos + 1 < self.length
-                and _is_semicolon_or_amp(self.source[self.pos + 1])
-            ):
+            if self._lex_peek_case_terminator() is not None:
                 break
 
             pipeline = self.parse_pipeline()

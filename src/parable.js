@@ -11568,31 +11568,21 @@ class Parser {
 	}
 
 	parseBraceGroup() {
-		let body, next_ch;
+		let body;
 		this.skipWhitespace();
-		if (this.atEnd() || this.peek() !== "{") {
+		// Lexer handles { vs {abc distinction: only returns reserved word for standalone {
+		if (!this._lexConsumeWord("{")) {
 			return null;
 		}
-		// Check that { is followed by whitespace or a valid command starter
-		// {( is valid: brace group containing a subshell
-		// {< and {> are valid: brace group starting with a redirect
-		if (this.pos + 1 < this.length) {
-			next_ch = this.source[this.pos + 1];
-			if (!_isWhitespace(next_ch) && !"(<>".includes(next_ch)) {
-				return null;
-			}
-		}
-		this.advance();
 		this.skipWhitespaceAndNewlines();
 		body = this.parseList();
 		if (body == null) {
 			throw new ParseError("Expected command in brace group", this.pos);
 		}
 		this.skipWhitespace();
-		if (this.atEnd() || this.peek() !== "}") {
+		if (!this._lexConsumeWord("}")) {
 			throw new ParseError("Expected } to close brace group", this.pos);
 		}
-		this.advance();
 		return new BraceGroup(body, this._collectRedirects());
 	}
 

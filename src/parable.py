@@ -9527,18 +9527,9 @@ class Parser:
     def parse_brace_group(self) -> BraceGroup | None:
         """Parse a brace group { list }."""
         self.skip_whitespace()
-        if self.at_end() or self.peek() != "{":
+        # Lexer handles { vs {abc distinction: only returns reserved word for standalone {
+        if not self._lex_consume_word("{"):
             return None
-
-        # Check that { is followed by whitespace or a valid command starter
-        # {( is valid: brace group containing a subshell
-        # {< and {> are valid: brace group starting with a redirect
-        if self.pos + 1 < self.length:
-            next_ch = self.source[self.pos + 1]
-            if not _is_whitespace(next_ch) and next_ch not in "(<>":
-                return None
-
-        self.advance()  # consume {
         self.skip_whitespace_and_newlines()
 
         body = self.parse_list()
@@ -9546,9 +9537,8 @@ class Parser:
             raise ParseError("Expected command in brace group", pos=self.pos)
 
         self.skip_whitespace()
-        if self.at_end() or self.peek() != "}":
+        if not self._lex_consume_word("}"):
             raise ParseError("Expected } to close brace group", pos=self.pos)
-        self.advance()  # consume }
         return BraceGroup(body, self._collect_redirects())
 
     def parse_if(self) -> If | None:

@@ -151,11 +151,19 @@ consolidation of these scattered checks.
 **Example:** `{ echo hello` now produces:
 `Parse error at position 12: Expected \`}' to match \`{' at position 0`
 
-### Phase D: Consolidate `special_case_tokens()`
+### Phase D: Consolidate `special_case_tokens()` ✓
 
-1. Create single method for context-dependent token reclassification
-2. Move ad-hoc checks from `_reserved_word_token()` and elsewhere
-3. Use token history for decisions
+**Completed:** Added `_special_case_tokens()` method documenting context-dependent behavior.
+
+1. ✓ Created `_special_case_tokens(word)` that checks token history
+2. ✓ Documents special cases:
+   - After `function`: next word is function name, not reserved
+   - After `case`: word is case value, not reserved
+3. ✓ Uses `_token_history` for context decisions
+
+**Note:** This is infrastructure/documentation. Parable handles these cases via different
+parsing paths (`peek_word()` for function names, `parse_word()` for case values), which
+achieves the same result as bash's centralized reclassification.
 
 ---
 

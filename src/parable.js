@@ -8161,6 +8161,31 @@ class Parser {
 		return false;
 	}
 
+	_specialCaseTokens(word) {
+		let last, prev;
+		last = this._lastToken();
+		if (last == null) {
+			return false;
+		}
+		// After 'function', the next word is a name, not a reserved word
+		if (last.type === TokenType.WORD && last.value === "function") {
+			return true;
+		}
+		// After 'case' (and before 'in'), the word is a value, not reserved
+		if (last.type === TokenType.WORD && last.value === "case") {
+			return true;
+		}
+		// Check two tokens back for 'function' or 'case' patterns
+		prev = this._token_history[1];
+		if (prev != null) {
+			// function name - name is already consumed, don't reclassify
+			if (prev.value === "function") {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	_syncLexer() {
 		// Invalidate cache if it doesn't match our current position or context
 		if (this._lexer._token_cache != null) {

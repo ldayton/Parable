@@ -6808,6 +6808,39 @@ class Parser:
             return True
         return False
 
+    def _special_case_tokens(self, word: str) -> bool:
+        """Check if word should NOT be recognized as a reserved word due to context.
+
+        Mirrors bash's special_case_tokens(). Returns True if the word should
+        remain a WORD token even though it matches a reserved word.
+
+        Special cases:
+        - After 'function': next word is function name, not reserved word
+        - After 'case' (before 'in'): word is case value, not reserved word
+
+        Note: Parable currently handles these via different parsing paths:
+        - parse_function() uses peek_word()/consume_word() for function names
+        - parse_case() uses parse_word() which respects tokenization
+
+        This method documents the special cases for architectural alignment with bash.
+        """
+        last = self._last_token()
+        if last is None:
+            return False
+        # After 'function', the next word is a name, not a reserved word
+        if last.type == TokenType.WORD and last.value == "function":
+            return True
+        # After 'case' (and before 'in'), the word is a value, not reserved
+        if last.type == TokenType.WORD and last.value == "case":
+            return True
+        # Check two tokens back for 'function' or 'case' patterns
+        prev = self._token_history[1]
+        if prev is not None:
+            # function name - name is already consumed, don't reclassify
+            if prev.value == "function":
+                return True
+        return False
+
     def _sync_lexer(self) -> None:
         """Sync Lexer position and state to Parser."""
         # Invalidate cache if it doesn't match our current position or context

@@ -12878,7 +12878,7 @@ class Parser {
 	}
 
 	_parseSimplePipeline() {
-		let cmd, commands, is_pipe_both;
+		let cmd, commands, is_pipe_both, op, token_type, value;
 		cmd = this.parseCompoundCommand();
 		if (cmd == null) {
 			return null;
@@ -12886,20 +12886,16 @@ class Parser {
 		commands = [cmd];
 		while (true) {
 			this.skipWhitespace();
-			if (this.atEnd() || this.peek() !== "|") {
+			op = this._lexPeekOperator();
+			if (op == null) {
 				break;
 			}
-			// Check it's not ||
-			if (this.pos + 1 < this.length && this.source[this.pos + 1] === "|") {
+			[token_type, value] = op;
+			if (token_type !== TokenType.PIPE && token_type !== TokenType.PIPE_AMP) {
 				break;
 			}
-			this.advance();
-			// Check for |& (pipe stderr)
-			is_pipe_both = false;
-			if (!this.atEnd() && this.peek() === "&") {
-				this.advance();
-				is_pipe_both = true;
-			}
+			this._lexNextToken();
+			is_pipe_both = token_type === TokenType.PIPE_AMP;
 			this.skipWhitespaceAndNewlines();
 			// Add pipe-both marker if this is a |& pipe
 			if (is_pipe_both) {

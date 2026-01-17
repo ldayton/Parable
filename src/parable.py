@@ -10679,19 +10679,15 @@ class Parser:
 
         while True:
             self.skip_whitespace()
-            if self.at_end() or self.peek() != "|":
+            op = self._lex_peek_operator()
+            if op is None:
                 break
-            # Check it's not ||
-            if self.pos + 1 < self.length and self.source[self.pos + 1] == "|":
+            token_type, value = op
+            if token_type != TokenType.PIPE and token_type != TokenType.PIPE_AMP:
                 break
 
-            self.advance()  # consume |
-
-            # Check for |& (pipe stderr)
-            is_pipe_both = False
-            if not self.at_end() and self.peek() == "&":
-                self.advance()  # consume &
-                is_pipe_both = True
+            self._lex_next_token()  # consume pipe operator
+            is_pipe_both = token_type == TokenType.PIPE_AMP
 
             self.skip_whitespace_and_newlines()  # Allow command on next line after pipe
 

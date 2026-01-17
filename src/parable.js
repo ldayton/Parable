@@ -6060,6 +6060,20 @@ class Parser {
 		this._lexer = new Lexer(source);
 		// Token history for context-sensitive parsing (last 4 tokens like bash)
 		this._token_history = [null, null, null, null];
+		// Parser state flags for context-sensitive decisions
+		this._parser_state = ParserStateFlags.NONE;
+	}
+
+	_setState(flag) {
+		this._parser_state = this._parser_state | flag;
+	}
+
+	_clearState(flag) {
+		this._parser_state = this._parser_state & /* TODO: UnaryOp Invert() */ flag;
+	}
+
+	_inState(flag) {
+		return (this._parser_state & flag) !== 0;
 	}
 
 	_recordToken(tok) {

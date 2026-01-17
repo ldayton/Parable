@@ -5118,6 +5118,20 @@ class Parser:
         self._lexer = Lexer(source)
         # Token history for context-sensitive parsing (last 4 tokens like bash)
         self._token_history: list[Token | None] = [None, None, None, None]
+        # Parser state flags for context-sensitive decisions
+        self._parser_state = ParserStateFlags.NONE
+
+    def _set_state(self, flag: int) -> None:
+        """Set a parser state flag."""
+        self._parser_state = self._parser_state | flag
+
+    def _clear_state(self, flag: int) -> None:
+        """Clear a parser state flag."""
+        self._parser_state = self._parser_state & ~flag
+
+    def _in_state(self, flag: int) -> bool:
+        """Check if a parser state flag is set."""
+        return (self._parser_state & flag) != 0
 
     def _record_token(self, tok: Token) -> None:
         """Record token in history, shifting older tokens."""

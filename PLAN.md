@@ -139,12 +139,17 @@ similar results via `len(words) == 0` checks in `parse_simple_command()`, which 
 effectively checking "command start position". The centralized method enables future
 consolidation of these scattered checks.
 
-### Phase C: Enhance DelimiterStack
+### Phase C: Enhance DelimiterStack ✓
 
-1. Change from booleans to actual stack: `list[tuple[str, int]]`
-2. Store (delimiter_char, start_pos) on push
-3. Validate stack empty at parse boundaries
-4. Better error messages: "unclosed `{` at line 5"
+**Completed:** Added `DelimiterStack` class for tracking delimiters with positions.
+
+1. ✓ Created `DelimiterStack` class with `push(delim, pos)`, `pop()`, `peek()`
+2. ✓ Store (delimiter_char, start_pos) tuples
+3. ✓ Added `_delimiter_stack` to Parser
+4. ✓ Used in `parse_brace_group()` for better error messages
+
+**Example:** `{ echo hello` now produces:
+`Parse error at position 12: Expected \`}' to match \`{' at position 0`
 
 ### Phase D: Consolidate `special_case_tokens()`
 

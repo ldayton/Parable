@@ -254,6 +254,42 @@ class LexerSavedState {
 	}
 }
 
+class DelimiterStack {
+	constructor() {
+		this._stack = [];
+	}
+
+	push(delim, pos) {
+		this._stack.push([delim, pos]);
+	}
+
+	pop() {
+		if (this._stack) {
+			return this._stack.pop();
+		}
+		return null;
+	}
+
+	peek() {
+		if (this._stack) {
+			return this._stack[this._stack.length - 1];
+		}
+		return null;
+	}
+
+	isEmpty() {
+		return this._stack.length === 0;
+	}
+
+	depth() {
+		return this._stack.length;
+	}
+
+	clear() {
+		this._stack = [];
+	}
+}
+
 class QuoteState {
 	constructor() {
 		this.single = false;
@@ -7985,6 +8021,8 @@ class Parser {
 		// ]] is only a reserved word when _open_cond_count > 0
 		this._open_brace_count = 0;
 		this._open_cond_count = 0;
+		// Delimiter stack for better error messages on unclosed constructs
+		this._delimiter_stack = new DelimiterStack();
 	}
 
 	_setState(flag) {
@@ -11472,17 +11510,20 @@ class Parser {
 	}
 
 	parseBraceGroup() {
-		let body;
+		let body, brace_pos, delim_info, open_pos;
 		this.skipWhitespace();
 		// Lexer handles { vs {abc distinction: only returns reserved word for standalone {
+		brace_pos = this.pos;
 		if (!this._lexConsumeWord("{")) {
 			return null;
 		}
 		this._open_brace_count += 1;
+		this._delimiter_stack.push("{", brace_pos);
 		this.skipWhitespaceAndNewlines();
 		body = this.parseList();
 		if (body == null) {
 			this._open_brace_count -= 1;
+			this._delimiter_stack.pop();
 			throw new ParseError(
 				"Expected command in brace group",
 				this._lexPeekToken().pos,
@@ -11491,12 +11532,16 @@ class Parser {
 		this.skipWhitespace();
 		if (!this._lexConsumeWord("}")) {
 			this._open_brace_count -= 1;
+			delim_info = this._delimiter_stack.pop();
+			// Use the opening brace position for better error context
+			open_pos = delim_info ? delim_info[1] : brace_pos;
 			throw new ParseError(
-				"Expected } to close brace group",
-				this._lexPeekToken().pos,
+				`Expected \`}' to match \`{' at position ${open_pos}`,
+				this.pos,
 			);
 		}
 		this._open_brace_count -= 1;
+		this._delimiter_stack.pop();
 		return new BraceGroup(body, this._collectRedirects());
 	}
 

@@ -308,6 +308,45 @@ class LexerSavedState:
         self.pending_heredocs = pending_heredocs
 
 
+class DelimiterStack:
+    """Stack for tracking nested delimiters with positions.
+
+    Used for better error messages when delimiters are unclosed.
+    Each entry is (delimiter_char, start_pos).
+    """
+
+    def __init__(self):
+        self._stack: list[tuple[str, int]] = []
+
+    def push(self, delim: str, pos: int) -> None:
+        """Push a delimiter onto the stack."""
+        self._stack.append((delim, pos))
+
+    def pop(self) -> tuple[str, int] | None:
+        """Pop and return the top delimiter, or None if empty."""
+        if self._stack:
+            return self._stack.pop()
+        return None
+
+    def peek(self) -> tuple[str, int] | None:
+        """Return the top delimiter without removing it."""
+        if self._stack:
+            return self._stack[len(self._stack) - 1]
+        return None
+
+    def is_empty(self) -> bool:
+        """Return True if stack is empty."""
+        return len(self._stack) == 0
+
+    def depth(self) -> int:
+        """Return current nesting depth."""
+        return len(self._stack)
+
+    def clear(self) -> None:
+        """Clear the stack."""
+        self._stack = []
+
+
 class QuoteState:
     """Unified quote state tracker for parsing.
 
@@ -6632,6 +6671,8 @@ class Parser:
         # ]] is only a reserved word when _open_cond_count > 0
         self._open_brace_count = 0
         self._open_cond_count = 0
+        # Delimiter stack for better error messages on unclosed constructs
+        self._delimiter_stack = DelimiterStack()
 
     def _set_state(self, flag: int) -> None:
         """Set a parser state flag."""
@@ -9543,21 +9584,28 @@ class Parser:
         """Parse a brace group { list }."""
         self.skip_whitespace()
         # Lexer handles { vs {abc distinction: only returns reserved word for standalone {
+        brace_pos = self.pos  # Save position for error messages
         if not self._lex_consume_word("{"):
             return None
         self._open_brace_count += 1
+        self._delimiter_stack.push("{", brace_pos)
         self.skip_whitespace_and_newlines()
 
         body = self.parse_list()
         if body is None:
             self._open_brace_count -= 1
+            self._delimiter_stack.pop()
             raise ParseError("Expected command in brace group", pos=self._lex_peek_token().pos)
 
         self.skip_whitespace()
         if not self._lex_consume_word("}"):
             self._open_brace_count -= 1
-            raise ParseError("Expected } to close brace group", pos=self._lex_peek_token().pos)
+            delim_info = self._delimiter_stack.pop()
+            # Use the opening brace position for better error context
+            open_pos = delim_info[1] if delim_info else brace_pos
+            raise ParseError(f"Expected `}}' to match `{{' at position {open_pos}", pos=self.pos)
         self._open_brace_count -= 1
+        self._delimiter_stack.pop()
         return BraceGroup(body, self._collect_redirects())
 
     def parse_if(self) -> If | None:

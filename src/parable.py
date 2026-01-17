@@ -1029,11 +1029,12 @@ class Lexer:
                     chars.append("}")
                     continue
                 elif next_ch == "(":
-                    chars.append(ch)
-                    chars.append(self.advance())
-                    if not self.at_end() and self.peek() == "(":
+                    # Check if $(( arithmetic or $( command substitution
+                    if self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
                         # $(( ... )) arithmetic
-                        chars.append(self.advance())
+                        chars.append(ch)  # $
+                        chars.append(self.advance())  # first (
+                        chars.append(self.advance())  # second (
                         nested = self._parse_matched_pair("(", ")", flags | MatchedPairFlags.ARITH)
                         chars.append(nested)
                         chars.append(")")
@@ -1046,12 +1047,17 @@ class Lexer:
                                 pos=start,
                             )
                     else:
-                        # $( ... ) command substitution
-                        nested = self._parse_matched_pair(
-                            "(", ")", flags | MatchedPairFlags.COMMAND
-                        )
-                        chars.append(nested)
-                        chars.append(")")
+                        # $( ... ) command substitution - use full parsing
+                        self.pos -= 1  # back up to before $
+                        self._sync_to_parser()
+                        cmd_node, cmd_text = self._parser._parse_command_substitution()
+                        self._sync_from_parser()
+                        if cmd_node:
+                            chars.append(cmd_text)
+                        else:
+                            # Parser failed - add $( as literal
+                            chars.append(self.advance())  # $
+                            chars.append(self.advance())  # (
                     continue
                 elif next_ch == "[":
                     # Deprecated $[ ... ] arithmetic

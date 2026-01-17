@@ -36,6 +36,18 @@ test-pypy: test-pypy311
 [parallel]
 test-all: test-cpy test-pypy
 
+# Run the fuzzer (e.g., just fuzz char --stop-after 10)
+fuzz *ARGS:
+    uv run --directory tools/fuzzer fuzzer {{ARGS}}
+
+# Run the fuzzer agent
+fuzzer-agent *ARGS:
+    uv run --directory tools/fuzzer-agent fuzzer-agent {{ARGS}}
+
+# Run Parable against the bigtable-bash corpus
+run-corpus *ARGS:
+    tools/bash-oracle/src/oracle/run_corpus.py {{ARGS}}
+
 # Verify lock file is up to date
 lock-check:
     uv lock --check 2>&1 | sed -u "s/^/[lock] /" | tee /tmp/{{project}}-{{run_id}}-lock.log

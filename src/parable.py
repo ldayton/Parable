@@ -25,6 +25,16 @@ class ParseError(Exception):
         return f"Parse error: {self.message}"
 
 
+class MatchedPairError(ParseError):
+    """Raised when a matched pair (like parentheses or braces) is unclosed at EOF.
+
+    This is distinct from returning None/"" which signals "try alternative parsing".
+    MatchedPairError means "this IS the construct, but it's unclosed at EOF".
+    """
+
+    pass
+
+
 def _is_hex_digit(c: str) -> bool:
     return (c >= "0" and c <= "9") or (c >= "a" and c <= "f") or (c >= "A" and c <= "F")
 
@@ -262,6 +272,8 @@ class SavedParserState:
         ctx_depth: int,
         eof_token: str | None = None,
         eof_depth: int = 0,
+        open_brace_count: int = 0,
+        open_cond_count: int = 0,
     ):
         self.parser_state = parser_state
         self.dolbrace_state = dolbrace_state
@@ -269,6 +281,8 @@ class SavedParserState:
         self.ctx_depth = ctx_depth
         self.eof_token = eof_token
         self.eof_depth = eof_depth
+        self.open_brace_count = open_brace_count
+        self.open_cond_count = open_cond_count
 
 
 class LexerSavedState:
@@ -292,6 +306,45 @@ class LexerSavedState:
         self.quote_single = quote_single
         self.quote_double = quote_double
         self.pending_heredocs = pending_heredocs
+
+
+class DelimiterStack:
+    """Stack for tracking nested delimiters with positions.
+
+    Used for better error messages when delimiters are unclosed.
+    Each entry is (delimiter_char, start_pos).
+    """
+
+    def __init__(self):
+        self._stack: list[tuple[str, int]] = []
+
+    def push(self, delim: str, pos: int) -> None:
+        """Push a delimiter onto the stack."""
+        self._stack.append((delim, pos))
+
+    def pop(self) -> tuple[str, int] | None:
+        """Pop and return the top delimiter, or None if empty."""
+        if self._stack:
+            return self._stack.pop()
+        return None
+
+    def peek(self) -> tuple[str, int] | None:
+        """Return the top delimiter without removing it."""
+        if self._stack:
+            return self._stack[len(self._stack) - 1]
+        return None
+
+    def is_empty(self) -> bool:
+        """Return True if stack is empty."""
+        return len(self._stack) == 0
+
+    def depth(self) -> int:
+        """Return current nesting depth."""
+        return len(self._stack)
+
+    def clear(self) -> None:
+        """Clear the stack."""
+        self._stack = []
 
 
 class QuoteState:
@@ -898,6 +951,7 @@ class Lexer:
         chars: list[str] = []
         parts: list[Node] = []
         bracket_depth = 0  # Track [...] for array subscripts (NORMAL only)
+        bracket_start_pos: int | None = None  # Position where bracket tracking started
         seen_equals = False  # Track if we've seen = (NORMAL only)
         paren_depth = 0  # Track regex grouping parens (REGEX only)
         while not self.at_end():
@@ -927,10 +981,12 @@ class Lexer:
                 ):
                     prev_char = chars[len(chars) - 1]
                     if prev_char.isalnum() or prev_char == "_":
+                        bracket_start_pos = self.pos
                         bracket_depth += 1
                         chars.append(self.advance())
                         continue
                 if not chars and not seen_equals and in_array_literal:
+                    bracket_start_pos = self.pos
                     bracket_depth += 1
                     chars.append(self.advance())
                     continue
@@ -963,6 +1019,7 @@ class Lexer:
             # COND: Extglob patterns or ( terminates
             if ctx == WORD_CTX_COND and ch == "(":
                 if chars and _is_extglob_prefix(chars[len(chars) - 1]):
+                    extglob_start = self.pos
                     chars.append(self.advance())  # (
                     depth = 1
                     while not self.at_end() and depth > 0:
@@ -972,6 +1029,8 @@ class Lexer:
                         elif c == ")":
                             depth -= 1
                         chars.append(self.advance())
+                    if depth > 0:
+                        raise MatchedPairError("unexpected EOF looking for `)'", pos=extglob_start)
                     continue
                 else:
                     # ( without extglob prefix terminates the word
@@ -1121,12 +1180,21 @@ class Lexer:
                         chars.append(self.advance())
                 continue
             # NORMAL: Array literal - callback to Parser
+            # Only if there's a valid variable name before = or +=
             if ctx == WORD_CTX_NORMAL and ch == "(" and chars and bracket_depth == 0:
-                if chars[len(chars) - 1] == "=" or (
-                    len(chars) >= 2
+                is_array_assign = False
+                # Check += first (before =) since += ends with =
+                if (
+                    len(chars) >= 3
                     and chars[len(chars) - 2] == "+"
                     and chars[len(chars) - 1] == "="
                 ):
+                    # Check chars before += form valid name
+                    is_array_assign = _is_array_assignment_prefix(chars[:-2])
+                elif chars[len(chars) - 1] == "=" and len(chars) >= 2:
+                    # Check chars before = form valid name
+                    is_array_assign = _is_array_assignment_prefix(chars[:-1])
+                if is_array_assign:
                     self._sync_to_parser()
                     array_result = self._parser._parse_array_literal()
                     self._sync_from_parser()
@@ -1143,6 +1211,7 @@ class Lexer:
                 and self.pos + 1 < self.length
                 and self.source[self.pos + 1] == "("
             ):
+                extglob_start = self.pos
                 chars.append(self.advance())  # @, ?, *, +, or !
                 chars.append(self.advance())  # (
                 extglob_depth = 1
@@ -1179,6 +1248,7 @@ class Lexer:
                     elif (
                         c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "("
                     ):
+                        arith_start = self.pos
                         chars.append(self.advance())  # $
                         chars.append(self.advance())  # (
                         if not self.at_end() and self.peek() == "(":
@@ -1191,6 +1261,10 @@ class Lexer:
                                 elif pc == ")":
                                     inner_paren_depth -= 1
                                 chars.append(self.advance())
+                            if inner_paren_depth > 0:
+                                raise MatchedPairError(
+                                    "unexpected EOF looking for `))'", pos=arith_start
+                                )
                         else:
                             extglob_depth += 1
                     elif (
@@ -1203,12 +1277,17 @@ class Lexer:
                         extglob_depth += 1
                     else:
                         chars.append(self.advance())
+                if extglob_depth > 0:
+                    raise MatchedPairError("unexpected EOF looking for `)'", pos=extglob_start)
                 continue
             # NORMAL: Metacharacter terminates word (unless inside brackets)
             if ctx == WORD_CTX_NORMAL and _is_metachar(ch) and bracket_depth == 0:
                 break
             # Regular character
             chars.append(self.advance())
+        # Check for unclosed bracket at EOF
+        if bracket_depth > 0 and bracket_start_pos is not None and self.at_end():
+            raise MatchedPairError("unexpected EOF looking for `]'", pos=bracket_start_pos)
         if not chars:
             return None
         if parts:
@@ -1348,9 +1427,8 @@ class Lexer:
             else:
                 content_chars.append(self.advance())
         if not found_close:
-            # Unterminated - reset and return None
-            self.pos = start
-            return None, ""
+            # Unterminated ANSI-C quote - this is an error, not a fallback
+            raise MatchedPairError("unexpected EOF while looking for matching `''", pos=start)
         text = _substring(self.source, start, self.pos)
         content = "".join(content_chars)
         node = AnsiCQuote(content)
@@ -1597,9 +1675,9 @@ class Lexer:
         if self.at_end():
             return None
         ch = self.peek()
-        # Special parameters (but NOT $ followed by { - that's a nested ${...} expansion)
+        # Special parameters (but NOT $ followed by { ' or " - those are special expansions)
         if _is_special_param(ch):
-            if ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
+            if ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] in "{'\"":
                 return None
             self.advance()
             return ch
@@ -1727,8 +1805,7 @@ class Lexer:
         Returns (node, text).
         """
         if self.at_end():
-            self.pos = start
-            return None, ""
+            raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
         # Save and initialize dolbrace state
         saved_dolbrace = self._dolbrace_state
         self._dolbrace_state = DolbraceState.PARAM
@@ -1790,8 +1867,10 @@ class Lexer:
                         text = _substring(self.source, start, self.pos)
                         self._dolbrace_state = saved_dolbrace
                         return ParamIndirect(param + suffix + "".join(trailing)), text
-                    # Unclosed brace
+                    # Unclosed brace at EOF - error, not fallback
                     self._dolbrace_state = saved_dolbrace
+                    if self.at_end():
+                        raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
                     self.pos = start
                     return None, ""
                 # Check for operator (e.g., ${!##} = indirect of # with # op)
@@ -1827,6 +1906,10 @@ class Lexer:
                         text = _substring(self.source, start, self.pos)
                         self._dolbrace_state = saved_dolbrace
                         return ParamIndirect(param, op, arg), text
+                    # Unclosed at EOF - error, not fallback
+                    if self.at_end():
+                        self._dolbrace_state = saved_dolbrace
+                        raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
                 # Fell through - pattern didn't match, return None
                 self._dolbrace_state = saved_dolbrace
                 self.pos = start
@@ -1920,8 +2003,7 @@ class Lexer:
                 raise ParseError("Unclosed parameter expansion", pos=start)
         if self.at_end():
             self._dolbrace_state = saved_dolbrace
-            self.pos = start
-            return None, ""
+            raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
         # Check for closing brace (simple expansion)
         if self.peek() == "}":
             self.advance()
@@ -1964,6 +2046,9 @@ class Lexer:
                 and self.pos + 1 < self.length
                 and self.source[self.pos + 1] == "{"
             ):
+                op = ""
+            elif not self.at_end() and self.peek() in ("'", '"'):
+                # Quotes start the argument, not the operator
                 op = ""
             else:
                 op = self.advance()
@@ -2093,6 +2178,8 @@ class Lexer:
                 arg_chars.append(self.advance())
         if depth != 0:
             self._dolbrace_state = saved_dolbrace
+            if self.at_end():
+                raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
             self.pos = start
             return None, ""
         self.advance()  # consume final }
@@ -6579,6 +6666,13 @@ class Parser:
         self._word_context = WORD_CTX_NORMAL
         self._at_command_start = False
         self._in_array_literal = False
+        # Brace/bracket counts for bash-style delimiter tracking
+        # } is only a reserved word when _open_brace_count > 0
+        # ]] is only a reserved word when _open_cond_count > 0
+        self._open_brace_count = 0
+        self._open_cond_count = 0
+        # Delimiter stack for better error messages on unclosed constructs
+        self._delimiter_stack = DelimiterStack()
 
     def _set_state(self, flag: int) -> None:
         """Set a parser state flag."""
@@ -6605,6 +6699,8 @@ class Parser:
             ctx_depth=self._ctx.get_depth(),
             eof_token=self._eof_token,
             eof_depth=self._eof_depth,
+            open_brace_count=self._open_brace_count,
+            open_cond_count=self._open_cond_count,
         )
 
     def _restore_parser_state(self, saved: SavedParserState) -> None:
@@ -6618,6 +6714,8 @@ class Parser:
         self._dolbrace_state = saved.dolbrace_state
         self._eof_token = saved.eof_token
         self._eof_depth = saved.eof_depth
+        self._open_brace_count = saved.open_brace_count
+        self._open_cond_count = saved.open_cond_count
         # Restore context stack to saved depth (pop any extra contexts)
         while self._ctx.get_depth() > saved.ctx_depth:
             self._ctx.pop()
@@ -6664,6 +6762,84 @@ class Parser:
         if tok is None:
             return None
         return tok.type
+
+    def _reserved_word_acceptable(self) -> bool:
+        """Check if reserved words are acceptable in current context.
+
+        Mirrors bash's reserved_word_acceptable(). Reserved words are recognized
+        only at "command start" positions - after command separators, at the
+        beginning of input, or after reserved words that expect a command.
+        """
+        last_type = self._last_token_type()
+        # None means start of input - reserved words acceptable
+        if last_type is None:
+            return True
+        # After command separators
+        if last_type in (
+            TokenType.NEWLINE,
+            TokenType.SEMI,
+            TokenType.SEMI_SEMI,
+            TokenType.SEMI_AMP,
+            TokenType.SEMI_SEMI_AMP,
+            TokenType.PIPE,
+            TokenType.PIPE_AMP,
+            TokenType.AMP,
+            TokenType.AND_AND,
+            TokenType.OR_OR,
+            TokenType.LPAREN,
+            TokenType.RPAREN,
+            TokenType.LBRACE,
+            TokenType.RBRACE,
+            TokenType.BANG,
+        ):
+            return True
+        # After reserved words that expect commands to follow
+        if last_type in (
+            TokenType.IF,
+            TokenType.THEN,
+            TokenType.ELSE,
+            TokenType.ELIF,
+            TokenType.WHILE,
+            TokenType.UNTIL,
+            TokenType.DO,
+            TokenType.CASE,
+            TokenType.TIME,
+        ):
+            return True
+        return False
+
+    def _special_case_tokens(self, word: str) -> bool:
+        """Check if word should NOT be recognized as a reserved word due to context.
+
+        Mirrors bash's special_case_tokens(). Returns True if the word should
+        remain a WORD token even though it matches a reserved word.
+
+        Special cases:
+        - After 'function': next word is function name, not reserved word
+        - After 'case' (before 'in'): word is case value, not reserved word
+
+        Note: Parable currently handles these via different parsing paths:
+        - parse_function() uses peek_word()/consume_word() for function names
+        - parse_case() uses parse_word() which respects tokenization
+
+        This method documents the special cases for architectural alignment with bash.
+        """
+        last = self._last_token()
+        if last is None:
+            return False
+        # After 'function', the next word is a name, not a reserved word
+        if last.type == TokenType.WORD and last.value == "function":
+            return True
+        # After 'case' (and before 'in'), the word is a value, not reserved
+        if last.type == TokenType.WORD and last.value == "case":
+            return True
+        # Check two tokens back for 'function' or 'case' patterns
+        prev = self._token_history[1]
+        if prev is not None:
+            # function name - name is already consumed, don't reclassify
+            if prev.value == "function":
+                return True
+        return False
 
     def _sync_lexer(self) -> None:
         """Sync Lexer position and state to Parser."""
@@ -7137,8 +7313,14 @@ class Parser:
         self._in_array_literal = in_array_literal
         tok = self._lex_peek_token()
         if tok.type != TokenType.WORD:
+            # Reset context when not a word to avoid affecting subsequent calls
+            self._at_command_start = False
+            self._in_array_literal = False
             return None
         self._lex_next_token()
+        # Reset context after consuming to avoid affecting subsequent calls
+        self._at_command_start = False
+        self._in_array_literal = False
         return tok.word
 
     def _parse_command_substitution(self) -> tuple[Node | None, str]:
@@ -7567,6 +7749,8 @@ class Parser:
                 self.advance()
 
             if depth != 0:
+                if self.at_end():
+                    raise MatchedPairError("unexpected EOF looking for `)'", pos=start) from None
                 self.pos = start
                 return None, ""
 
@@ -7647,7 +7831,30 @@ class Parser:
         first_close_pos: int | None = None
         while not self.at_end() and depth > 0:
             c = self.peek()
-            if c == "(":
+            # Skip single-quoted strings (parens inside don't count)
+            if c == "'":
+                self.advance()
+                while not self.at_end() and self.peek() != "'":
+                    self.advance()
+                if not self.at_end():
+                    self.advance()
+            # Skip double-quoted strings (parens inside don't count)
+            elif c == '"':
+                self.advance()
+                while not self.at_end():
+                    if self.peek() == "\\" and self.pos + 1 < self.length:
+                        self.advance()
+                        self.advance()
+                    elif self.peek() == '"':
+                        self.advance()
+                        break
+                    else:
+                        self.advance()
+            # Handle backslash escapes outside quotes
+            elif c == "\\" and self.pos + 1 < self.length:
+                self.advance()
+                self.advance()
+            elif c == "(":
                 depth += 1
                 self.advance()
             elif c == ")":
@@ -7662,6 +7869,8 @@ class Parser:
                     first_close_pos = None
                 self.advance()
         if depth != 0:
+            if self.at_end():
+                raise MatchedPairError("unexpected EOF looking for `))'", pos=start)
             self.pos = start
             return None, ""
         # Content ends at first_close_pos if set, else at final )
@@ -8992,11 +9201,14 @@ class Parser:
             # This enables the EOF token mechanism to work at the command level
             if self._lex_is_command_terminator():
                 break
-            # } is only a terminator at command position (closing a brace group)
-            # In argument position, } is just a regular word
-            tok = self._lex_peek_token()
-            if tok.type == TokenType.RBRACE and not words:
-                break
+            # } and ]] are only terminators at command position (closing brace group
+            # or conditional). In argument position, they're regular words.
+            # Check as reserved words since lexer returns them as WORD tokens.
+            # Use len() == 0 instead of 'not words' for JS transpiler compatibility
+            if len(words) == 0:
+                reserved = self._lex_peek_reserved_word()
+                if reserved == "}" or reserved == "]]":
+                    break
 
             # Try to parse a redirect first
             redirect = self.parse_redirect()
@@ -9115,8 +9327,11 @@ class Parser:
             else:
                 self.advance()
 
-        if self.at_end() or depth != 1:
-            # Didn't find )) - might be nested subshells or malformed
+        if self.at_end():
+            # Hit EOF without finding )) - unclosed arithmetic command
+            raise MatchedPairError("unexpected EOF looking for `))'", pos=saved_pos)
+        if depth != 1:
+            # Didn't find )) - might be nested subshells, not arithmetic command
             self.pos = saved_pos
             return None
 
@@ -9203,6 +9418,7 @@ class Parser:
 
         self.advance()  # consume first [
         self.advance()  # consume second [
+        self._open_cond_count += 1
         self._set_state(ParserStateFlags.PST_CONDEXPR)
         self._word_context = WORD_CTX_COND
 
@@ -9220,12 +9436,14 @@ class Parser:
             or self.pos + 1 >= self.length
             or self.source[self.pos + 1] != "]"
         ):
+            self._open_cond_count -= 1
             self._clear_state(ParserStateFlags.PST_CONDEXPR)
             self._word_context = WORD_CTX_NORMAL
             raise ParseError("Expected ]] to close conditional expression", pos=self.pos)
 
         self.advance()  # consume first ]
         self.advance()  # consume second ]
+        self._open_cond_count -= 1
         self._clear_state(ParserStateFlags.PST_CONDEXPR)
         self._word_context = WORD_CTX_NORMAL
         return ConditionalExpr(body, self._collect_redirects())
@@ -9399,17 +9617,28 @@ class Parser:
         """Parse a brace group { list }."""
         self.skip_whitespace()
         # Lexer handles { vs {abc distinction: only returns reserved word for standalone {
+        brace_pos = self.pos  # Save position for error messages
         if not self._lex_consume_word("{"):
             return None
+        self._open_brace_count += 1
+        self._delimiter_stack.push("{", brace_pos)
         self.skip_whitespace_and_newlines()
 
         body = self.parse_list()
         if body is None:
+            self._open_brace_count -= 1
+            self._delimiter_stack.pop()
             raise ParseError("Expected command in brace group", pos=self._lex_peek_token().pos)
 
         self.skip_whitespace()
         if not self._lex_consume_word("}"):
-            raise ParseError("Expected } to close brace group", pos=self._lex_peek_token().pos)
+            self._open_brace_count -= 1
+            delim_info = self._delimiter_stack.pop()
+            # Use the opening brace position for better error context
+            open_pos = delim_info[1] if delim_info else brace_pos
+            raise ParseError(f"Expected `}}' to match `{{' at position {open_pos}", pos=self.pos)
+        self._open_brace_count -= 1
+        self._delimiter_stack.pop()
         return BraceGroup(body, self._collect_redirects())
 
     def parse_if(self) -> If | None:

@@ -146,13 +146,17 @@ class TokenType {
 }
 
 class Token {
-	constructor(type_, value, pos) {
+	constructor(type_, value, pos, parts) {
 		this.type = type_;
 		this.value = value;
 		this.pos = pos;
+		this.parts = parts != null ? parts : [];
 	}
 
 	_repr() {
+		if (this.parts && this.parts.length) {
+			return `Token(${this.type}, ${this.value}, ${this.pos}, parts=${this.parts.length})`;
+		}
 		return `Token(${this.type}, ${this.value}, ${this.pos})`;
 	}
 }
@@ -201,6 +205,24 @@ class SavedParserState {
 		this.dolbrace_state = dolbrace_state;
 		this.pending_heredocs = pending_heredocs;
 		this.ctx_depth = ctx_depth;
+	}
+}
+
+class LexerSavedState {
+	constructor(
+		pos,
+		parser_state,
+		dolbrace_state,
+		quote_single,
+		quote_double,
+		pending_heredocs,
+	) {
+		this.pos = pos;
+		this.parser_state = parser_state;
+		this.dolbrace_state = dolbrace_state;
+		this.quote_single = quote_single;
+		this.quote_double = quote_double;
+		this.pending_heredocs = pending_heredocs;
 	}
 }
 
@@ -395,6 +417,11 @@ class Lexer {
 		this.state = LexerState.CKCOMMENT;
 		this.quote = new QuoteState();
 		this._token_cache = null;
+		// Parser state flags for context-sensitive tokenization
+		this._parser_state = ParserStateFlags.NONE;
+		this._dolbrace_state = DolbraceState.NONE;
+		// Pending heredocs tracked during word parsing
+		this._pending_heredocs = [];
 	}
 
 	peek() {
@@ -706,6 +733,38 @@ class Lexer {
 
 	ungetToken(tok) {
 		this._token_cache = tok;
+	}
+
+	_saveState() {
+		return new LexerSavedState(
+			this.pos,
+			this._parser_state,
+			this._dolbrace_state,
+			this.quote.single,
+			this.quote.double,
+			Array.from(this._pending_heredocs),
+		);
+	}
+
+	_restoreState(saved) {
+		this.pos = saved.pos;
+		this._parser_state = saved.parser_state;
+		this._dolbrace_state = saved.dolbrace_state;
+		this.quote.single = saved.quote_single;
+		this.quote.double = saved.quote_double;
+		this._pending_heredocs = saved.pending_heredocs;
+	}
+
+	_setParserState(flag) {
+		this._parser_state = this._parser_state | flag;
+	}
+
+	_clearParserState(flag) {
+		this._parser_state = this._parser_state & /* TODO: UnaryOp Invert() */ flag;
+	}
+
+	_hasParserState(flag) {
+		return (this._parser_state & flag) !== 0;
 	}
 
 	// Reserved words mapping

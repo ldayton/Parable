@@ -175,14 +175,21 @@ class TokenType:
 
 
 class Token:
-    """A token produced by the lexer."""
+    """A token produced by the lexer.
 
-    def __init__(self, type_: int, value: str, pos: int):
+    For WORD tokens, `parts` contains expansion AST nodes (CommandSubstitution,
+    ParameterExpansion, etc.) found within the word.
+    """
+
+    def __init__(self, type_: int, value: str, pos: int, parts: list = None):
         self.type = type_
         self.value = value
         self.pos = pos
+        self.parts = parts if parts is not None else []
 
     def __repr__(self) -> str:
+        if self.parts:
+            return f"Token({self.type}, {self.value!r}, {self.pos}, parts={len(self.parts)})"
         return f"Token({self.type}, {self.value!r}, {self.pos})"
 
 
@@ -252,6 +259,29 @@ class SavedParserState:
         self.dolbrace_state = dolbrace_state
         self.pending_heredocs = pending_heredocs
         self.ctx_depth = ctx_depth
+
+
+class LexerSavedState:
+    """Saved lexer state for nested parsing (e.g., command substitutions).
+
+    Used when the lexer needs to parse nested constructs and restore state after.
+    """
+
+    def __init__(
+        self,
+        pos: int,
+        parser_state: int,
+        dolbrace_state: int,
+        quote_single: bool,
+        quote_double: bool,
+        pending_heredocs: list,
+    ):
+        self.pos = pos
+        self.parser_state = parser_state
+        self.dolbrace_state = dolbrace_state
+        self.quote_single = quote_single
+        self.quote_double = quote_double
+        self.pending_heredocs = pending_heredocs
 
 
 class QuoteState:
@@ -446,6 +476,11 @@ class Lexer:
         self.state = LexerState.CKCOMMENT
         self.quote = QuoteState()
         self._token_cache: Token | None = None
+        # Parser state flags for context-sensitive tokenization
+        self._parser_state = ParserStateFlags.NONE
+        self._dolbrace_state = DolbraceState.NONE
+        # Pending heredocs tracked during word parsing
+        self._pending_heredocs: list = []
 
     def peek(self) -> str | None:
         """Return current character without consuming."""
@@ -691,6 +726,38 @@ class Lexer:
     def unget_token(self, tok: Token) -> None:
         """Push a token back to be returned by next call."""
         self._token_cache = tok
+
+    def _save_state(self) -> LexerSavedState:
+        """Save current lexer state for nested parsing."""
+        return LexerSavedState(
+            pos=self.pos,
+            parser_state=self._parser_state,
+            dolbrace_state=self._dolbrace_state,
+            quote_single=self.quote.single,
+            quote_double=self.quote.double,
+            pending_heredocs=list(self._pending_heredocs),
+        )
+
+    def _restore_state(self, saved: LexerSavedState) -> None:
+        """Restore lexer state after nested parsing."""
+        self.pos = saved.pos
+        self._parser_state = saved.parser_state
+        self._dolbrace_state = saved.dolbrace_state
+        self.quote.single = saved.quote_single
+        self.quote.double = saved.quote_double
+        self._pending_heredocs = saved.pending_heredocs
+
+    def _set_parser_state(self, flag: int) -> None:
+        """Set a parser state flag."""
+        self._parser_state = self._parser_state | flag
+
+    def _clear_parser_state(self, flag: int) -> None:
+        """Clear a parser state flag."""
+        self._parser_state = self._parser_state & ~flag
+
+    def _has_parser_state(self, flag: int) -> bool:
+        """Check if a parser state flag is set."""
+        return (self._parser_state & flag) != 0
 
     # Reserved words mapping
     RESERVED_WORDS: dict[str, int] = {

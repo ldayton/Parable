@@ -157,6 +157,19 @@ class Token {
 	}
 }
 
+class LexerState {
+	NONE = 0;
+	WASDOL = 1;
+	CKCOMMENT = 2;
+	INCOMMENT = 4;
+	PASSNEXT = 8;
+	INHEREDOC = 128;
+	HEREDELIM = 256;
+	STRIPDOC = 512;
+	QUOTEDDOC = 1024;
+	INWORD = 2048;
+}
+
 class QuoteState {
 	constructor() {
 		this.single = false;

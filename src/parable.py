@@ -186,6 +186,21 @@ class Token:
         return f"Token({self.type}, {self.value!r}, {self.pos})"
 
 
+class LexerState:
+    """Lexer state flags for context tracking during tokenization."""
+
+    NONE = 0
+    WASDOL = 0x0001
+    CKCOMMENT = 0x0002
+    INCOMMENT = 0x0004
+    PASSNEXT = 0x0008
+    INHEREDOC = 0x0080
+    HEREDELIM = 0x0100
+    STRIPDOC = 0x0200
+    QUOTEDDOC = 0x0400
+    INWORD = 0x0800
+
+
 class QuoteState:
     """Unified quote state tracker for parsing.
 

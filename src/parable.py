@@ -519,6 +519,32 @@ class Lexer:
             return Token(TokenType.NEWLINE, c, start)
         return None
 
+    def skip_blanks(self) -> None:
+        """Skip spaces and tabs (not newlines)."""
+        while self.pos < self.length:
+            c = self.source[self.pos]
+            if c != " " and c != "\t":
+                break
+            self.pos += 1
+
+    def _skip_comment(self) -> bool:
+        """Skip comment if at # in comment-allowed context. Returns True if skipped."""
+        if self.pos >= self.length:
+            return False
+        if self.source[self.pos] != "#":
+            return False
+        if self.quote.in_quotes():
+            return False
+        # Check if in comment-allowed position (start of line or after blank/meta)
+        if self.pos > 0:
+            prev = self.source[self.pos - 1]
+            if prev not in " \t\n;|&(){}":
+                return False
+        # Skip to end of line
+        while self.pos < self.length and self.source[self.pos] != "\n":
+            self.pos += 1
+        return True
+
 
 def _strip_line_continuations_comment_aware(text: str) -> str:
     """Strip backslash-newline line continuations, preserving newlines in comments.

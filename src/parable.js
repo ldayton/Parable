@@ -517,6 +517,42 @@ class Lexer {
 		}
 		return null;
 	}
+
+	skipBlanks() {
+		let c;
+		while (this.pos < this.length) {
+			c = this.source[this.pos];
+			if (c !== " " && c !== "\t") {
+				break;
+			}
+			this.pos += 1;
+		}
+	}
+
+	_skipComment() {
+		let prev;
+		if (this.pos >= this.length) {
+			return false;
+		}
+		if (this.source[this.pos] !== "#") {
+			return false;
+		}
+		if (this.quote.inQuotes()) {
+			return false;
+		}
+		// Check if in comment-allowed position (start of line or after blank/meta)
+		if (this.pos > 0) {
+			prev = this.source[this.pos - 1];
+			if (!" \t\n;|&(){}".includes(prev)) {
+				return false;
+			}
+		}
+		// Skip to end of line
+		while (this.pos < this.length && this.source[this.pos] !== "\n") {
+			this.pos += 1;
+		}
+		return true;
+	}
 }
 
 function _stripLineContinuationsCommentAware(text) {

@@ -482,7 +482,7 @@ class Lexer:
         # Pending heredocs tracked during word parsing
         self._pending_heredocs: list = []
         # Reference to Parser for expansion parsing callbacks (set by Parser)
-        self._parser: "Parser | None" = None
+        self._parser: Parser | None = None
 
     def peek(self) -> str | None:
         """Return current character without consuming."""
@@ -825,7 +825,7 @@ class Lexer:
         self.advance()  # consume $
         self.advance()  # consume opening "
         content_chars: list[str] = []
-        inner_parts: list["Node"] = []
+        inner_parts: list[Node] = []
         found_close = False
         while not self.at_end():
             ch = self.peek()

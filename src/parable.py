@@ -5203,6 +5203,13 @@ class Parser:
             return tok.value
         return None
 
+    def _lex_peek_word(self) -> str | None:
+        """Peek next word token value. Returns None if not at a word."""
+        tok = self._lex_peek_token()
+        if tok.type == TokenType.WORD:
+            return tok.value
+        return None
+
     def at_end(self) -> bool:
         """Check if we've reached the end of input."""
         return self.pos >= self.length

@@ -21,14 +21,14 @@ test-pypy311 *ARGS: (_test "pypy3.11" ARGS)
 # Run tests (default: CPython 3.14)
 test *ARGS: (_test "3.14" ARGS)
 
-bash_oracle := env("BASH_ORACLE", home_directory() / "source" / "bash-oracle" / "bash-oracle")
-
-# Ensure bash-oracle is installed
+# Ensure bash-oracle is installed (downloads to /tmp if needed)
 ensure-bash-oracle:
     #!/usr/bin/env bash
-    ORACLE_PATH="{{bash_oracle}}"
-    if [[ -x "$ORACLE_PATH" ]]; then exit 0; fi
-    mkdir -p "$(dirname "$ORACLE_PATH")"
+    # Check env var first, then dev location
+    if [[ -n "${BASH_ORACLE:-}" && -x "$BASH_ORACLE" ]]; then exit 0; fi
+    if [[ -x "$HOME/source/bash-oracle/bash-oracle" ]]; then exit 0; fi
+    # Download to /tmp
+    ORACLE_PATH="/tmp/bash-oracle"
     case "$(uname -s)" in
         Linux)  URL="http://ldayton-parable.s3-website-us-east-1.amazonaws.com/bash-oracle/linux/bash-oracle" ;;
         Darwin) URL="http://ldayton-parable.s3-website-us-east-1.amazonaws.com/bash-oracle/macos/bash-oracle" ;;
@@ -39,7 +39,14 @@ ensure-bash-oracle:
 
 # Verify test expectations match bash-oracle
 verify-tests: ensure-bash-oracle
-    BASH_ORACLE="{{bash_oracle}}" tools/bash-oracle/src/oracle/verify_tests.py
+    #!/usr/bin/env bash
+    if [[ -n "${BASH_ORACLE:-}" && -x "$BASH_ORACLE" ]]; then
+        exec tools/bash-oracle/src/oracle/verify_tests.py
+    elif [[ -x "$HOME/source/bash-oracle/bash-oracle" ]]; then
+        BASH_ORACLE="$HOME/source/bash-oracle/bash-oracle" exec tools/bash-oracle/src/oracle/verify_tests.py
+    else
+        BASH_ORACLE="/tmp/bash-oracle" exec tools/bash-oracle/src/oracle/verify_tests.py
+    fi
 
 # Run tests on all supported CPython versions (parallel)
 [parallel]

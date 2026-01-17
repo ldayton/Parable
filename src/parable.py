@@ -1147,18 +1147,10 @@ class Lexer:
             # COND: Extglob patterns or ( terminates
             if ctx == WORD_CTX_COND and ch == "(":
                 if chars and _is_extglob_prefix(chars[len(chars) - 1]):
-                    extglob_start = self.pos
                     chars.append(self.advance())  # (
-                    depth = 1
-                    while not self.at_end() and depth > 0:
-                        c = self.peek()
-                        if c == "(":
-                            depth += 1
-                        elif c == ")":
-                            depth -= 1
-                        chars.append(self.advance())
-                    if depth > 0:
-                        raise MatchedPairError("unexpected EOF looking for `)'", pos=extglob_start)
+                    content = self._parse_matched_pair("(", ")")
+                    chars.append(content)
+                    chars.append(")")
                     continue
                 else:
                     # ( without extglob prefix terminates the word

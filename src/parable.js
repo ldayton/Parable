@@ -146,13 +146,17 @@ class TokenType {
 }
 
 class Token {
-	constructor(type_, value, pos) {
+	constructor(type_, value, pos, parts) {
 		this.type = type_;
 		this.value = value;
 		this.pos = pos;
+		this.parts = parts != null ? parts : [];
 	}
 
 	_repr() {
+		if (this.parts && this.parts.length) {
+			return `Token(${this.type}, ${this.value}, ${this.pos}, parts=${this.parts.length})`;
+		}
 		return `Token(${this.type}, ${this.value}, ${this.pos})`;
 	}
 }
@@ -193,6 +197,33 @@ class DolbraceState {
 	static WORD = 4;
 	static QUOTE = 64;
 	static QUOTE2 = 128;
+}
+
+class SavedParserState {
+	constructor(parser_state, dolbrace_state, pending_heredocs, ctx_depth) {
+		this.parser_state = parser_state;
+		this.dolbrace_state = dolbrace_state;
+		this.pending_heredocs = pending_heredocs;
+		this.ctx_depth = ctx_depth;
+	}
+}
+
+class LexerSavedState {
+	constructor(
+		pos,
+		parser_state,
+		dolbrace_state,
+		quote_single,
+		quote_double,
+		pending_heredocs,
+	) {
+		this.pos = pos;
+		this.parser_state = parser_state;
+		this.dolbrace_state = dolbrace_state;
+		this.quote_single = quote_single;
+		this.quote_double = quote_double;
+		this.pending_heredocs = pending_heredocs;
+	}
 }
 
 class QuoteState {
@@ -386,6 +417,13 @@ class Lexer {
 		this.state = LexerState.CKCOMMENT;
 		this.quote = new QuoteState();
 		this._token_cache = null;
+		// Parser state flags for context-sensitive tokenization
+		this._parser_state = ParserStateFlags.NONE;
+		this._dolbrace_state = DolbraceState.NONE;
+		// Pending heredocs tracked during word parsing
+		this._pending_heredocs = [];
+		// Reference to Parser for expansion parsing callbacks (set by Parser)
+		this._parser = null;
 	}
 
 	peek() {
@@ -697,6 +735,1041 @@ class Lexer {
 
 	ungetToken(tok) {
 		this._token_cache = tok;
+	}
+
+	_saveState() {
+		return new LexerSavedState(
+			this.pos,
+			this._parser_state,
+			this._dolbrace_state,
+			this.quote.single,
+			this.quote.double,
+			Array.from(this._pending_heredocs),
+		);
+	}
+
+	_restoreState(saved) {
+		this.pos = saved.pos;
+		this._parser_state = saved.parser_state;
+		this._dolbrace_state = saved.dolbrace_state;
+		this.quote.single = saved.quote_single;
+		this.quote.double = saved.quote_double;
+		this._pending_heredocs = saved.pending_heredocs;
+	}
+
+	_setParserState(flag) {
+		this._parser_state = this._parser_state | flag;
+	}
+
+	_clearParserState(flag) {
+		this._parser_state = this._parser_state & /* TODO: UnaryOp Invert() */ flag;
+	}
+
+	_hasParserState(flag) {
+		return (this._parser_state & flag) !== 0;
+	}
+
+	_readAnsiCQuote() {
+		let ch, content, content_chars, found_close, node, start, text;
+		if (this.atEnd() || this.peek() !== "$") {
+			return [null, ""];
+		}
+		if (this.pos + 1 >= this.length || this.source[this.pos + 1] !== "'") {
+			return [null, ""];
+		}
+		start = this.pos;
+		this.advance();
+		this.advance();
+		content_chars = [];
+		found_close = false;
+		while (!this.atEnd()) {
+			ch = this.peek();
+			if (ch === "'") {
+				this.advance();
+				found_close = true;
+				break;
+			} else if (ch === "\\") {
+				// Escape sequence - include both backslash and following char
+				content_chars.push(this.advance());
+				if (!this.atEnd()) {
+					content_chars.push(this.advance());
+				}
+			} else {
+				content_chars.push(this.advance());
+			}
+		}
+		if (!found_close) {
+			// Unterminated - reset and return None
+			this.pos = start;
+			return [null, ""];
+		}
+		text = this.source.slice(start, this.pos);
+		content = content_chars.join("");
+		node = new AnsiCQuote(content);
+		return [node, text];
+	}
+
+	_syncToParser() {
+		if (this._parser != null) {
+			this._parser.pos = this.pos;
+		}
+	}
+
+	_syncFromParser() {
+		if (this._parser != null) {
+			this.pos = this._parser.pos;
+		}
+	}
+
+	_readLocaleString() {
+		let arith_node,
+			arith_text,
+			ch,
+			cmdsub_node,
+			cmdsub_text,
+			content,
+			content_chars,
+			found_close,
+			inner_parts,
+			next_ch,
+			param_node,
+			param_text,
+			start,
+			text;
+		if (this.atEnd() || this.peek() !== "$") {
+			return [null, "", []];
+		}
+		if (this.pos + 1 >= this.length || this.source[this.pos + 1] !== '"') {
+			return [null, "", []];
+		}
+		start = this.pos;
+		this.advance();
+		this.advance();
+		content_chars = [];
+		inner_parts = [];
+		found_close = false;
+		while (!this.atEnd()) {
+			ch = this.peek();
+			if (ch === '"') {
+				this.advance();
+				found_close = true;
+				break;
+			} else if (ch === "\\" && this.pos + 1 < this.length) {
+				// Escape sequence (line continuation removes both)
+				next_ch = this.source[this.pos + 1];
+				if (next_ch === "\n") {
+					// Line continuation - skip both backslash and newline
+					this.advance();
+					this.advance();
+				} else {
+					content_chars.push(this.advance());
+					content_chars.push(this.advance());
+				}
+			} else if (
+				ch === "$" &&
+				this.pos + 2 < this.length &&
+				this.source[this.pos + 1] === "(" &&
+				this.source[this.pos + 2] === "("
+			) {
+				// Handle arithmetic expansion $((...))
+				// Delegate to Parser (sync positions for callback)
+				this._syncToParser();
+				[arith_node, arith_text] = this._parser._parseArithmeticExpansion();
+				this._syncFromParser();
+				if (arith_node) {
+					inner_parts.push(arith_node);
+					content_chars.push(arith_text);
+				} else {
+					// Not arithmetic - try command substitution
+					this._syncToParser();
+					[cmdsub_node, cmdsub_text] = this._parser._parseCommandSubstitution();
+					this._syncFromParser();
+					if (cmdsub_node) {
+						inner_parts.push(cmdsub_node);
+						content_chars.push(cmdsub_text);
+					} else {
+						content_chars.push(this.advance());
+					}
+				}
+			} else if (
+				ch === "$" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "("
+			) {
+				// Handle command substitution $(...)
+				this._syncToParser();
+				[cmdsub_node, cmdsub_text] = this._parser._parseCommandSubstitution();
+				this._syncFromParser();
+				if (cmdsub_node) {
+					inner_parts.push(cmdsub_node);
+					content_chars.push(cmdsub_text);
+				} else {
+					content_chars.push(this.advance());
+				}
+			} else if (ch === "$") {
+				// Handle parameter expansion
+				this._syncToParser();
+				[param_node, param_text] = this._parser._parseParamExpansion();
+				this._syncFromParser();
+				if (param_node) {
+					inner_parts.push(param_node);
+					content_chars.push(param_text);
+				} else {
+					content_chars.push(this.advance());
+				}
+			} else if (ch === "`") {
+				// Handle backtick command substitution
+				this._syncToParser();
+				[cmdsub_node, cmdsub_text] = this._parser._parseBacktickSubstitution();
+				this._syncFromParser();
+				if (cmdsub_node) {
+					inner_parts.push(cmdsub_node);
+					content_chars.push(cmdsub_text);
+				} else {
+					content_chars.push(this.advance());
+				}
+			} else {
+				content_chars.push(this.advance());
+			}
+		}
+		if (!found_close) {
+			// Unterminated - reset and return None
+			this.pos = start;
+			return [null, "", []];
+		}
+		content = content_chars.join("");
+		// Reconstruct text from parsed content (handles line continuation removal)
+		text = `$"${content}"`;
+		return [new LocaleString(content), text, inner_parts];
+	}
+
+	_updateDolbraceForOp(op, has_param) {
+		let first_char;
+		if (this._dolbrace_state === DolbraceState.NONE) {
+			return;
+		}
+		if (op == null || op.length === 0) {
+			return;
+		}
+		first_char = op[0];
+		if (this._dolbrace_state === DolbraceState.PARAM && has_param) {
+			if ("%#^,".includes(first_char)) {
+				this._dolbrace_state = DolbraceState.QUOTE;
+				return;
+			}
+			if (first_char === "/") {
+				this._dolbrace_state = DolbraceState.QUOTE2;
+				return;
+			}
+		}
+		if (this._dolbrace_state === DolbraceState.PARAM) {
+			if ("#%^,~:-=?+/".includes(first_char)) {
+				this._dolbrace_state = DolbraceState.OP;
+			}
+		}
+	}
+
+	_consumeParamOperator() {
+		let ch, next_ch;
+		if (this.atEnd()) {
+			return null;
+		}
+		ch = this.peek();
+		// Operators with optional colon prefix: :- := :? :+
+		if (ch === ":") {
+			this.advance();
+			if (this.atEnd()) {
+				return ":";
+			}
+			next_ch = this.peek();
+			if (_isSimpleParamOp(next_ch)) {
+				this.advance();
+				return `:${next_ch}`;
+			}
+			return ":";
+		}
+		// Operators without colon: - = ? +
+		if (_isSimpleParamOp(ch)) {
+			this.advance();
+			return ch;
+		}
+		// Pattern removal: # ## % %%
+		if (ch === "#") {
+			this.advance();
+			if (!this.atEnd() && this.peek() === "#") {
+				this.advance();
+				return "##";
+			}
+			return "#";
+		}
+		if (ch === "%") {
+			this.advance();
+			if (!this.atEnd() && this.peek() === "%") {
+				this.advance();
+				return "%%";
+			}
+			return "%";
+		}
+		// Substitution: / // /# /%
+		if (ch === "/") {
+			this.advance();
+			if (!this.atEnd()) {
+				next_ch = this.peek();
+				if (next_ch === "/") {
+					this.advance();
+					return "//";
+				} else if (next_ch === "#") {
+					this.advance();
+					return "/#";
+				} else if (next_ch === "%") {
+					this.advance();
+					return "/%";
+				}
+			}
+			return "/";
+		}
+		// Case modification: ^ ^^ , ,,
+		if (ch === "^") {
+			this.advance();
+			if (!this.atEnd() && this.peek() === "^") {
+				this.advance();
+				return "^^";
+			}
+			return "^";
+		}
+		if (ch === ",") {
+			this.advance();
+			if (!this.atEnd() && this.peek() === ",") {
+				this.advance();
+				return ",,";
+			}
+			return ",";
+		}
+		// Transformation: @
+		if (ch === "@") {
+			this.advance();
+			return "@";
+		}
+		return null;
+	}
+
+	_paramSubscriptHasClose(start_pos) {
+		let c, depth, i, quote;
+		depth = 1;
+		i = start_pos + 1;
+		quote = new QuoteState();
+		while (i < this.length) {
+			c = this.source[i];
+			if (quote.single) {
+				if (c === "'") {
+					quote.single = false;
+				}
+				i += 1;
+				continue;
+			}
+			if (quote.double) {
+				if (c === "\\" && i + 1 < this.length) {
+					i += 2;
+					continue;
+				}
+				if (c === '"') {
+					quote.double = false;
+				}
+				i += 1;
+				continue;
+			}
+			if (c === "'") {
+				quote.single = true;
+				i += 1;
+				continue;
+			}
+			if (c === '"') {
+				quote.double = true;
+				i += 1;
+				continue;
+			}
+			if (c === "\\") {
+				i += 2;
+				continue;
+			}
+			if (c === "}") {
+				return false;
+			}
+			if (c === "[") {
+				depth += 1;
+			} else if (c === "]") {
+				depth -= 1;
+				if (depth === 0) {
+					return true;
+				}
+			}
+			i += 1;
+		}
+		return false;
+	}
+
+	_consumeParamName() {
+		let bracket_depth, c, ch, name_chars, sc, subscript_quote;
+		if (this.atEnd()) {
+			return null;
+		}
+		ch = this.peek();
+		// Special parameters (but NOT $ followed by { - that's a nested ${...} expansion)
+		if (_isSpecialParam(ch)) {
+			if (
+				ch === "$" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "{"
+			) {
+				return null;
+			}
+			this.advance();
+			return ch;
+		}
+		// Digits (positional params)
+		if (/^[0-9]+$/.test(ch)) {
+			name_chars = [];
+			while (!this.atEnd() && /^[0-9]+$/.test(this.peek())) {
+				name_chars.push(this.advance());
+			}
+			return name_chars.join("");
+		}
+		// Variable name
+		if (/^[a-zA-Z]$/.test(ch) || ch === "_") {
+			name_chars = [];
+			while (!this.atEnd()) {
+				c = this.peek();
+				if (/^[a-zA-Z0-9]$/.test(c) || c === "_") {
+					name_chars.push(this.advance());
+				} else if (c === "[") {
+					if (!this._paramSubscriptHasClose(this.pos)) {
+						break;
+					}
+					// Array subscript - track bracket depth and quotes
+					name_chars.push(this.advance());
+					bracket_depth = 1;
+					subscript_quote = new QuoteState();
+					while (!this.atEnd() && bracket_depth > 0) {
+						sc = this.peek();
+						if (subscript_quote.single) {
+							name_chars.push(this.advance());
+							if (sc === "'") {
+								subscript_quote.single = false;
+							}
+							continue;
+						}
+						if (subscript_quote.double) {
+							if (sc === "\\" && this.pos + 1 < this.length) {
+								name_chars.push(this.advance());
+								if (!this.atEnd()) {
+									name_chars.push(this.advance());
+								}
+								continue;
+							}
+							name_chars.push(this.advance());
+							if (sc === '"') {
+								subscript_quote.double = false;
+							}
+							continue;
+						}
+						if (sc === "'") {
+							subscript_quote.single = true;
+							name_chars.push(this.advance());
+							continue;
+						}
+						if (
+							sc === "$" &&
+							this.pos + 1 < this.length &&
+							this.source[this.pos + 1] === '"'
+						) {
+							// Locale string $"..." - strip the $ and enter double quote
+							this.advance();
+							subscript_quote.double = true;
+							name_chars.push(this.advance());
+							continue;
+						}
+						if (sc === '"') {
+							subscript_quote.double = true;
+							name_chars.push(this.advance());
+							continue;
+						}
+						if (sc === "\\") {
+							name_chars.push(this.advance());
+							if (!this.atEnd()) {
+								name_chars.push(this.advance());
+							}
+							continue;
+						}
+						if (sc === "[") {
+							bracket_depth += 1;
+						} else if (sc === "]") {
+							bracket_depth -= 1;
+							if (bracket_depth === 0) {
+								break;
+							}
+						}
+						name_chars.push(this.advance());
+					}
+					if (!this.atEnd() && this.peek() === "]") {
+						name_chars.push(this.advance());
+					}
+					break;
+				} else {
+					break;
+				}
+			}
+			if (name_chars) {
+				return name_chars.join("");
+			} else {
+				return null;
+			}
+		}
+		return null;
+	}
+
+	_readParamExpansion() {
+		let c, ch, name, name_start, start, text;
+		if (this.atEnd() || this.peek() !== "$") {
+			return [null, ""];
+		}
+		start = this.pos;
+		this.advance();
+		if (this.atEnd()) {
+			this.pos = start;
+			return [null, ""];
+		}
+		ch = this.peek();
+		// Braced expansion ${...}
+		if (ch === "{") {
+			this.advance();
+			return this._readBracedParam(start);
+		}
+		// Simple expansion $var or $special
+		if (_isSpecialParamUnbraced(ch) || _isDigit(ch) || ch === "#") {
+			this.advance();
+			text = this.source.slice(start, this.pos);
+			return [new ParamExpansion(ch), text];
+		}
+		// Variable name [a-zA-Z_][a-zA-Z0-9_]*
+		if (/^[a-zA-Z]$/.test(ch) || ch === "_") {
+			name_start = this.pos;
+			while (!this.atEnd()) {
+				c = this.peek();
+				if (/^[a-zA-Z0-9]$/.test(c) || c === "_") {
+					this.advance();
+				} else {
+					break;
+				}
+			}
+			name = this.source.slice(name_start, this.pos);
+			text = this.source.slice(start, this.pos);
+			return [new ParamExpansion(name), text];
+		}
+		// Not a valid expansion, restore position
+		this.pos = start;
+		return [null, ""];
+	}
+
+	_readBracedParam(start) {
+		let arg,
+			arg_chars,
+			backtick_pos,
+			backtick_start,
+			bc,
+			c,
+			ch,
+			content,
+			content_chars,
+			depth,
+			dollar_count,
+			formatted,
+			inner,
+			inner_quote,
+			next_c,
+			op,
+			param,
+			paren_depth,
+			parsed,
+			pc,
+			quote,
+			saved_dolbrace,
+			sub_parser,
+			suffix,
+			text,
+			trailing;
+		if (this.atEnd()) {
+			this.pos = start;
+			return [null, ""];
+		}
+		// Save and initialize dolbrace state
+		saved_dolbrace = this._dolbrace_state;
+		this._dolbrace_state = DolbraceState.PARAM;
+		ch = this.peek();
+		// ${#param} - length
+		if (ch === "#") {
+			this.advance();
+			param = this._consumeParamName();
+			if (param && !this.atEnd() && this.peek() === "}") {
+				this.advance();
+				text = this.source.slice(start, this.pos);
+				this._dolbrace_state = saved_dolbrace;
+				return [new ParamLength(param), text];
+			}
+			// Not a simple length expansion - fall through to parse as regular expansion
+			this.pos = start + 2;
+		}
+		// ${!param} or ${!param<op><arg>} - indirect
+		if (ch === "!") {
+			this.advance();
+			while (!this.atEnd() && _isWhitespaceNoNewline(this.peek())) {
+				this.advance();
+			}
+			param = this._consumeParamName();
+			if (param) {
+				// Skip optional whitespace before closing brace
+				while (!this.atEnd() && _isWhitespaceNoNewline(this.peek())) {
+					this.advance();
+				}
+				if (!this.atEnd() && this.peek() === "}") {
+					this.advance();
+					text = this.source.slice(start, this.pos);
+					this._dolbrace_state = saved_dolbrace;
+					return [new ParamIndirect(param), text];
+				}
+				// ${!prefix@} and ${!prefix*} are prefix matching
+				if (!this.atEnd() && _isAtOrStar(this.peek())) {
+					suffix = this.advance();
+					trailing = [];
+					depth = 1;
+					while (!this.atEnd() && depth > 0) {
+						c = this.peek();
+						if (
+							c === "$" &&
+							this.pos + 1 < this.length &&
+							this.source[this.pos + 1] === "{"
+						) {
+							depth += 1;
+							trailing.push(this.advance());
+							trailing.push(this.advance());
+						} else if (c === "}") {
+							depth -= 1;
+							if (depth === 0) {
+								break;
+							}
+							trailing.push(this.advance());
+						} else if (c === "\\") {
+							trailing.push(this.advance());
+							if (!this.atEnd()) {
+								trailing.push(this.advance());
+							}
+						} else {
+							trailing.push(this.advance());
+						}
+					}
+					if (depth === 0) {
+						this.advance();
+						text = this.source.slice(start, this.pos);
+						this._dolbrace_state = saved_dolbrace;
+						return [
+							new ParamIndirect(param + suffix + trailing.join("")),
+							text,
+						];
+					}
+					// Unclosed brace
+					this._dolbrace_state = saved_dolbrace;
+					this.pos = start;
+					return [null, ""];
+				}
+				// Check for operator (e.g., ${!##} = indirect of # with # op)
+				op = this._consumeParamOperator();
+				if (op == null && !this.atEnd() && this.peek() !== "}") {
+					op = this.advance();
+				}
+				if (op != null) {
+					arg_chars = [];
+					depth = 1;
+					while (!this.atEnd() && depth > 0) {
+						c = this.peek();
+						if (
+							c === "$" &&
+							this.pos + 1 < this.length &&
+							this.source[this.pos + 1] === "{"
+						) {
+							depth += 1;
+							arg_chars.push(this.advance());
+							arg_chars.push(this.advance());
+						} else if (c === "}") {
+							depth -= 1;
+							if (depth > 0) {
+								arg_chars.push(this.advance());
+							}
+						} else if (c === "\\") {
+							arg_chars.push(this.advance());
+							if (!this.atEnd()) {
+								arg_chars.push(this.advance());
+							}
+						} else {
+							arg_chars.push(this.advance());
+						}
+					}
+					if (depth === 0) {
+						this.advance();
+						arg = arg_chars.join("");
+						text = this.source.slice(start, this.pos);
+						this._dolbrace_state = saved_dolbrace;
+						return [new ParamIndirect(param, op, arg), text];
+					}
+				}
+				// Fell through - pattern didn't match, return None
+				this._dolbrace_state = saved_dolbrace;
+				this.pos = start;
+				return [null, ""];
+			} else {
+				// ${! followed by non-param char like | - fall through to regular parsing
+				this.pos = start + 2;
+			}
+		}
+		// ${param} or ${param<op><arg>}
+		param = this._consumeParamName();
+		if (!param) {
+			// Allow empty parameter for simple operators like ${:-word}
+			if (
+				!this.atEnd() &&
+				("-=+?".includes(this.peek()) ||
+					(this.peek() === ":" &&
+						this.pos + 1 < this.length &&
+						_isSimpleParamOp(this.source[this.pos + 1])))
+			) {
+				param = "";
+			} else {
+				// Unknown syntax - consume until matching }
+				depth = 1;
+				content_chars = [];
+				inner_quote = new QuoteState();
+				while (!this.atEnd() && depth > 0) {
+					c = this.peek();
+					if (inner_quote.single) {
+						content_chars.push(this.advance());
+						if (c === "'") {
+							inner_quote.single = false;
+						}
+						continue;
+					}
+					if (inner_quote.double) {
+						if (c === "\\" && this.pos + 1 < this.length) {
+							content_chars.push(this.advance());
+							if (!this.atEnd()) {
+								content_chars.push(this.advance());
+							}
+							continue;
+						}
+						content_chars.push(this.advance());
+						if (c === '"') {
+							inner_quote.double = false;
+						}
+						continue;
+					}
+					if (c === "'") {
+						inner_quote.single = true;
+						content_chars.push(this.advance());
+						continue;
+					}
+					if (c === '"') {
+						inner_quote.double = true;
+						content_chars.push(this.advance());
+						continue;
+					}
+					if (c === "`") {
+						backtick_start = this.pos;
+						content_chars.push(this.advance());
+						while (!this.atEnd() && this.peek() !== "`") {
+							bc = this.peek();
+							if (bc === "\\" && this.pos + 1 < this.length) {
+								next_c = this.source[this.pos + 1];
+								if (_isEscapeCharInDquote(next_c)) {
+									content_chars.push(this.advance());
+								}
+							}
+							content_chars.push(this.advance());
+						}
+						if (this.atEnd()) {
+							throw new ParseError("Unterminated backtick", backtick_start);
+						}
+						content_chars.push(this.advance());
+						continue;
+					}
+					if (
+						c === "$" &&
+						this.pos + 1 < this.length &&
+						this.source[this.pos + 1] === "{"
+					) {
+						depth += 1;
+						content_chars.push(this.advance());
+						content_chars.push(this.advance());
+					} else if (c === "}") {
+						depth -= 1;
+						if (depth === 0) {
+							break;
+						}
+						content_chars.push(this.advance());
+					} else if (c === "\\") {
+						if (
+							this.pos + 1 < this.length &&
+							this.source[this.pos + 1] === "\n"
+						) {
+							this.advance();
+							this.advance();
+						} else {
+							content_chars.push(this.advance());
+							if (!this.atEnd()) {
+								content_chars.push(this.advance());
+							}
+						}
+					} else {
+						content_chars.push(this.advance());
+					}
+				}
+				if (depth === 0) {
+					content = content_chars.join("");
+					this.advance();
+					text = `\${${content}}`;
+					this._dolbrace_state = saved_dolbrace;
+					return [new ParamExpansion(content), text];
+				}
+				this._dolbrace_state = saved_dolbrace;
+				throw new ParseError("Unclosed parameter expansion", start);
+			}
+		}
+		if (this.atEnd()) {
+			this._dolbrace_state = saved_dolbrace;
+			this.pos = start;
+			return [null, ""];
+		}
+		// Check for closing brace (simple expansion)
+		if (this.peek() === "}") {
+			this.advance();
+			text = this.source.slice(start, this.pos);
+			this._dolbrace_state = saved_dolbrace;
+			return [new ParamExpansion(param), text];
+		}
+		// Parse operator
+		op = this._consumeParamOperator();
+		if (op == null) {
+			// Check for $" or $' which should have $ stripped
+			if (
+				!this.atEnd() &&
+				this.peek() === "$" &&
+				this.pos + 1 < this.length &&
+				['"', "'"].includes(this.source[this.pos + 1])
+			) {
+				dollar_count =
+					1 + _countConsecutiveDollarsBefore(this.source, this.pos);
+				if (dollar_count % 2 === 1) {
+					op = "";
+				} else {
+					op = this.advance();
+				}
+			} else if (!this.atEnd() && this.peek() === "`") {
+				backtick_pos = this.pos;
+				this.advance();
+				while (!this.atEnd() && this.peek() !== "`") {
+					bc = this.peek();
+					if (bc === "\\" && this.pos + 1 < this.length) {
+						next_c = this.source[this.pos + 1];
+						if (_isEscapeCharInDquote(next_c)) {
+							this.advance();
+						}
+					}
+					this.advance();
+				}
+				if (this.atEnd()) {
+					this._dolbrace_state = saved_dolbrace;
+					throw new ParseError("Unterminated backtick", backtick_pos);
+				}
+				this.advance();
+				op = "`";
+			} else if (
+				!this.atEnd() &&
+				this.peek() === "$" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "{"
+			) {
+				op = "";
+			} else {
+				op = this.advance();
+			}
+		}
+		// Update dolbrace state based on operator
+		this._updateDolbraceForOp(op, param.length > 0);
+		// Parse argument (everything until closing brace)
+		arg_chars = [];
+		depth = 1;
+		quote = new QuoteState();
+		while (!this.atEnd() && depth > 0) {
+			c = this.peek();
+			// Transition OP -> WORD when we see a non-operator character
+			if (
+				this._dolbrace_state === DolbraceState.OP &&
+				!"#%^,~:-=?+/".includes(c)
+			) {
+				this._dolbrace_state = DolbraceState.WORD;
+			}
+			// Single quotes
+			if (c === "'" && !quote.double) {
+				quote.single = !quote.single;
+				arg_chars.push(this.advance());
+			} else if (c === '"' && !quote.single) {
+				// Double quotes
+				quote.double = !quote.double;
+				arg_chars.push(this.advance());
+			} else if (c === "\\" && !quote.single) {
+				// Escape
+				if (this.pos + 1 < this.length && this.source[this.pos + 1] === "\n") {
+					this.advance();
+					this.advance();
+				} else {
+					arg_chars.push(this.advance());
+					if (!this.atEnd()) {
+						arg_chars.push(this.advance());
+					}
+				}
+			} else if (
+				c === "$" &&
+				!quote.single &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "{"
+			) {
+				// Nested ${...}
+				depth += 1;
+				arg_chars.push(this.advance());
+				arg_chars.push(this.advance());
+			} else if (
+				c === "$" &&
+				!quote.single &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "'"
+			) {
+				// ANSI-C quoted string $'...'
+				arg_chars.push(this.advance());
+				arg_chars.push(this.advance());
+				while (!this.atEnd() && this.peek() !== "'") {
+					if (this.peek() === "\\") {
+						arg_chars.push(this.advance());
+						if (!this.atEnd()) {
+							arg_chars.push(this.advance());
+						}
+					} else {
+						arg_chars.push(this.advance());
+					}
+				}
+				if (!this.atEnd()) {
+					arg_chars.push(this.advance());
+				}
+			} else if (
+				c === "$" &&
+				!quote.single &&
+				!quote.double &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === '"'
+			) {
+				// Locale string $"..."
+				dollar_count =
+					1 + _countConsecutiveDollarsBefore(this.source, this.pos);
+				if (dollar_count % 2 === 1) {
+					this.advance();
+					quote.double = true;
+					arg_chars.push(this.advance());
+				} else {
+					arg_chars.push(this.advance());
+				}
+			} else if (
+				c === "$" &&
+				!quote.single &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "("
+			) {
+				// Command substitution $(...)
+				arg_chars.push(this.advance());
+				arg_chars.push(this.advance());
+				paren_depth = 1;
+				while (!this.atEnd() && paren_depth > 0) {
+					pc = this.peek();
+					if (pc === "(") {
+						paren_depth += 1;
+					} else if (pc === ")") {
+						paren_depth -= 1;
+					} else if (pc === "\\") {
+						arg_chars.push(this.advance());
+						if (!this.atEnd()) {
+							arg_chars.push(this.advance());
+						}
+						continue;
+					}
+					arg_chars.push(this.advance());
+				}
+			} else if (c === "`" && !quote.single) {
+				// Backtick command substitution
+				backtick_start = this.pos;
+				arg_chars.push(this.advance());
+				while (!this.atEnd() && this.peek() !== "`") {
+					bc = this.peek();
+					if (bc === "\\" && this.pos + 1 < this.length) {
+						next_c = this.source[this.pos + 1];
+						if (_isEscapeCharInDquote(next_c)) {
+							arg_chars.push(this.advance());
+						}
+					}
+					arg_chars.push(this.advance());
+				}
+				if (this.atEnd()) {
+					this._dolbrace_state = saved_dolbrace;
+					throw new ParseError("Unterminated backtick", backtick_start);
+				}
+				arg_chars.push(this.advance());
+			} else if (c === "}") {
+				// Closing brace
+				if (quote.single) {
+					arg_chars.push(this.advance());
+				} else if (quote.double) {
+					if (depth > 1) {
+						depth -= 1;
+						arg_chars.push(this.advance());
+					} else {
+						arg_chars.push(this.advance());
+					}
+				} else {
+					depth -= 1;
+					if (depth > 0) {
+						arg_chars.push(this.advance());
+					}
+				}
+			} else {
+				arg_chars.push(this.advance());
+			}
+		}
+		if (depth !== 0) {
+			this._dolbrace_state = saved_dolbrace;
+			this.pos = start;
+			return [null, ""];
+		}
+		this.advance();
+		arg = arg_chars.join("");
+		// Format process substitution content within param expansion
+		if (["<", ">"].includes(op) && arg.startsWith("(") && arg.endsWith(")")) {
+			inner = arg.slice(1, -1);
+			try {
+				// Use Parser for formatting (calls back via _parser reference)
+				sub_parser = new Parser(inner, true);
+				parsed = sub_parser.parseList();
+				if (parsed && sub_parser.atEnd()) {
+					formatted = _formatCmdsubNode(parsed, 0, true, false, true);
+					arg = `(${formatted})`;
+				}
+			} catch (_) {}
+		}
+		text = `\${${param}${op}${arg}}`;
+		this._dolbrace_state = saved_dolbrace;
+		return [new ParamExpansion(param, op, arg), text];
 	}
 
 	// Reserved words mapping
@@ -6061,8 +7134,9 @@ class Parser {
 		this._in_process_sub = in_process_sub;
 		// Context stack for tracking nested parsing scopes
 		this._ctx = new ContextStack();
-		// Lexer for tokenization (not yet used, being added incrementally)
+		// Lexer for tokenization
 		this._lexer = new Lexer(source);
+		this._lexer._parser = this;
 		// Token history for context-sensitive parsing (last 4 tokens like bash)
 		this._token_history = [null, null, null, null];
 		// Parser state flags for context-sensitive decisions
@@ -6081,6 +7155,24 @@ class Parser {
 
 	_inState(flag) {
 		return (this._parser_state & flag) !== 0;
+	}
+
+	_saveParserState() {
+		return new SavedParserState(
+			this._parser_state,
+			this._dolbrace_state,
+			Array.from(this._pending_heredocs),
+			this._ctx.getDepth(),
+		);
+	}
+
+	_restoreParserState(saved) {
+		this._parser_state = saved.parser_state;
+		this._dolbrace_state = saved.dolbrace_state;
+		// Restore context stack to saved depth (pop any extra contexts)
+		while (this._ctx.getDepth() > saved.ctx_depth) {
+			this._ctx.pop();
+		}
 	}
 
 	_recordToken(tok) {
@@ -7306,7 +8398,7 @@ class Parser {
 			nested_depth,
 			pending_heredocs,
 			quote,
-			saved_state,
+			saved,
 			start,
 			strip_tabs,
 			sub_parser,
@@ -7323,7 +8415,7 @@ class Parser {
 			return [null, ""];
 		}
 		this.advance();
-		saved_state = this._parser_state;
+		saved = this._saveParserState();
 		this._setState(ParserStateFlags.PST_CMDSUBST);
 		// Find matching closing paren, being aware of:
 		// - Nested $() and plain ()
@@ -7682,7 +8774,7 @@ class Parser {
 			}
 		}
 		if (depth !== 0) {
-			this._parser_state = saved_state;
+			this._restoreParserState(saved);
 			this.pos = start;
 			return [null, ""];
 		}
@@ -7721,10 +8813,10 @@ class Parser {
 		// Ensure all content was consumed - if not, there's a syntax error
 		sub_parser.skipWhitespaceAndNewlines();
 		if (!sub_parser.atEnd()) {
-			this._parser_state = saved_state;
+			this._restoreParserState(saved);
 			throw new ParseError("Unexpected content in command substitution", start);
 		}
-		this._parser_state = saved_state;
+		this._restoreParserState(saved);
 		return [new CommandSubstitution(cmd), text];
 	}
 
@@ -8519,9 +9611,7 @@ class Parser {
 		this.advance();
 		this.advance();
 		this.advance();
-		// Find matching )) by tracking paren depth (starting at 2 for $(()
-		// The closing )) are: first ) that brings depth 2→1, and ) that brings 1→0
-		// Content excludes these UNLESS there's expression content between them
+		// Find matching )) by tracking paren depth
 		content_start = this.pos;
 		depth = 2;
 		first_close_pos = null;
@@ -8541,7 +9631,6 @@ class Parser {
 				this.advance();
 			} else {
 				if (depth === 1) {
-					// Content after first closing ), so include up to final )
 					first_close_pos = null;
 				}
 				this.advance();
@@ -8560,7 +9649,6 @@ class Parser {
 		this.advance();
 		text = this.source.slice(start, this.pos);
 		// Parse the arithmetic expression
-		// If parsing fails, this isn't arithmetic (e.g., $(((cmd))) is command sub + subshell)
 		try {
 			expr = this._parseArithExpr(content);
 		} catch (_) {
@@ -9498,1001 +10586,27 @@ class Parser {
 	}
 
 	_parseAnsiCQuote() {
-		let ch, content, content_chars, found_close, start, text;
-		if (this.atEnd() || this.peek() !== "$") {
-			return [null, ""];
-		}
-		if (this.pos + 1 >= this.length || this.source[this.pos + 1] !== "'") {
-			return [null, ""];
-		}
-		start = this.pos;
-		this.advance();
-		this.advance();
-		content_chars = [];
-		found_close = false;
-		while (!this.atEnd()) {
-			ch = this.peek();
-			if (ch === "'") {
-				this.advance();
-				found_close = true;
-				break;
-			} else if (ch === "\\") {
-				// Escape sequence - include both backslash and following char in content
-				content_chars.push(this.advance());
-				if (!this.atEnd()) {
-					content_chars.push(this.advance());
-				}
-			} else {
-				content_chars.push(this.advance());
-			}
-		}
-		if (!found_close) {
-			// Unterminated - reset and return None
-			this.pos = start;
-			return [null, ""];
-		}
-		text = this.source.slice(start, this.pos);
-		content = content_chars.join("");
-		return [new AnsiCQuote(content), text];
+		let result;
+		this._syncLexer();
+		result = this._lexer._readAnsiCQuote();
+		this._syncParser();
+		return result;
 	}
 
 	_parseLocaleString() {
-		let arith_node,
-			arith_result,
-			arith_text,
-			ch,
-			cmdsub_node,
-			cmdsub_result,
-			cmdsub_text,
-			content,
-			content_chars,
-			found_close,
-			inner_parts,
-			next_ch,
-			param_node,
-			param_result,
-			param_text,
-			start,
-			text;
-		if (this.atEnd() || this.peek() !== "$") {
-			return [null, "", []];
-		}
-		if (this.pos + 1 >= this.length || this.source[this.pos + 1] !== '"') {
-			return [null, "", []];
-		}
-		start = this.pos;
-		this.advance();
-		this.advance();
-		content_chars = [];
-		inner_parts = [];
-		found_close = false;
-		while (!this.atEnd()) {
-			ch = this.peek();
-			if (ch === '"') {
-				this.advance();
-				found_close = true;
-				break;
-			} else if (ch === "\\" && this.pos + 1 < this.length) {
-				// Escape sequence (line continuation removes both)
-				next_ch = this.source[this.pos + 1];
-				if (next_ch === "\n") {
-					// Line continuation - skip both backslash and newline
-					this.advance();
-					this.advance();
-				} else {
-					content_chars.push(this.advance());
-					content_chars.push(this.advance());
-				}
-			} else if (
-				ch === "$" &&
-				this.pos + 2 < this.length &&
-				this.source[this.pos + 1] === "(" &&
-				this.source[this.pos + 2] === "("
-			) {
-				// Handle arithmetic expansion $((...))
-				arith_result = this._parseArithmeticExpansion();
-				arith_node = arith_result[0];
-				arith_text = arith_result[1];
-				if (arith_node) {
-					inner_parts.push(arith_node);
-					content_chars.push(arith_text);
-				} else {
-					// Not arithmetic - try command substitution
-					cmdsub_result = this._parseCommandSubstitution();
-					cmdsub_node = cmdsub_result[0];
-					cmdsub_text = cmdsub_result[1];
-					if (cmdsub_node) {
-						inner_parts.push(cmdsub_node);
-						content_chars.push(cmdsub_text);
-					} else {
-						content_chars.push(this.advance());
-					}
-				}
-			} else if (
-				ch === "$" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "("
-			) {
-				// Handle command substitution $(...)
-				cmdsub_result = this._parseCommandSubstitution();
-				cmdsub_node = cmdsub_result[0];
-				cmdsub_text = cmdsub_result[1];
-				if (cmdsub_node) {
-					inner_parts.push(cmdsub_node);
-					content_chars.push(cmdsub_text);
-				} else {
-					content_chars.push(this.advance());
-				}
-			} else if (ch === "$") {
-				// Handle parameter expansion
-				param_result = this._parseParamExpansion();
-				param_node = param_result[0];
-				param_text = param_result[1];
-				if (param_node) {
-					inner_parts.push(param_node);
-					content_chars.push(param_text);
-				} else {
-					content_chars.push(this.advance());
-				}
-			} else if (ch === "`") {
-				// Handle backtick command substitution
-				cmdsub_result = this._parseBacktickSubstitution();
-				cmdsub_node = cmdsub_result[0];
-				cmdsub_text = cmdsub_result[1];
-				if (cmdsub_node) {
-					inner_parts.push(cmdsub_node);
-					content_chars.push(cmdsub_text);
-				} else {
-					content_chars.push(this.advance());
-				}
-			} else {
-				content_chars.push(this.advance());
-			}
-		}
-		if (!found_close) {
-			// Unterminated - reset and return None
-			this.pos = start;
-			return [null, "", []];
-		}
-		content = content_chars.join("");
-		// Reconstruct text from parsed content (handles line continuation removal)
-		text = `$"${content}"`;
-		return [new LocaleString(content), text, inner_parts];
+		let result;
+		this._syncLexer();
+		result = this._lexer._readLocaleString();
+		this._syncParser();
+		return result;
 	}
 
 	_parseParamExpansion() {
-		let c, ch, name, name_start, start, text;
-		if (this.atEnd() || this.peek() !== "$") {
-			return [null, ""];
-		}
-		start = this.pos;
-		this.advance();
-		if (this.atEnd()) {
-			this.pos = start;
-			return [null, ""];
-		}
-		ch = this.peek();
-		// Braced expansion ${...}
-		if (ch === "{") {
-			this.advance();
-			return this._parseBracedParam(start);
-		}
-		// Simple expansion $var or $special
-		// Special parameters: ?$!#@*-0-9 (but NOT & which is a shell metachar)
-		if (_isSpecialParamUnbraced(ch) || _isDigit(ch) || ch === "#") {
-			this.advance();
-			text = this.source.slice(start, this.pos);
-			return [new ParamExpansion(ch), text];
-		}
-		// Variable name [a-zA-Z_][a-zA-Z0-9_]*
-		if (/^[a-zA-Z]$/.test(ch) || ch === "_") {
-			name_start = this.pos;
-			while (!this.atEnd()) {
-				c = this.peek();
-				if (/^[a-zA-Z0-9]$/.test(c) || c === "_") {
-					this.advance();
-				} else {
-					break;
-				}
-			}
-			name = this.source.slice(name_start, this.pos);
-			text = this.source.slice(start, this.pos);
-			return [new ParamExpansion(name), text];
-		}
-		// Not a valid expansion, restore position
-		this.pos = start;
-		return [null, ""];
-	}
-
-	_parseBracedParam(start) {
-		let arg,
-			arg_chars,
-			backtick_pos,
-			backtick_start,
-			bc,
-			c,
-			ch,
-			content,
-			content_chars,
-			depth,
-			dollar_count,
-			formatted,
-			inner,
-			inner_quote,
-			next_c,
-			op,
-			param,
-			paren_depth,
-			parsed,
-			pc,
-			quote,
-			saved_dolbrace,
-			sub_parser,
-			suffix,
-			text,
-			trailing;
-		if (this.atEnd()) {
-			this.pos = start;
-			return [null, ""];
-		}
-		// Save and initialize dolbrace state
-		saved_dolbrace = this._dolbrace_state;
-		this._dolbrace_state = DolbraceState.PARAM;
-		ch = this.peek();
-		// ${#param} - length
-		if (ch === "#") {
-			this.advance();
-			param = this._consumeParamName();
-			if (param && !this.atEnd() && this.peek() === "}") {
-				this.advance();
-				text = this.source.slice(start, this.pos);
-				this._dolbrace_state = saved_dolbrace;
-				return [new ParamLength(param), text];
-			}
-			// Not a simple length expansion - fall through to parse as regular expansion
-			this.pos = start + 2;
-		}
-		// ${!param} or ${!param<op><arg>} - indirect
-		if (ch === "!") {
-			this.advance();
-			while (!this.atEnd() && _isWhitespaceNoNewline(this.peek())) {
-				this.advance();
-			}
-			param = this._consumeParamName();
-			if (param) {
-				// Skip optional whitespace before closing brace
-				while (!this.atEnd() && _isWhitespaceNoNewline(this.peek())) {
-					this.advance();
-				}
-				if (!this.atEnd() && this.peek() === "}") {
-					this.advance();
-					text = this.source.slice(start, this.pos);
-					this._dolbrace_state = saved_dolbrace;
-					return [new ParamIndirect(param), text];
-				}
-				// ${!prefix@} and ${!prefix*} are prefix matching (lists variable names)
-				// These are NOT operators - the @/* is part of the indirect form
-				if (!this.atEnd() && _isAtOrStar(this.peek())) {
-					suffix = this.advance();
-					// Consume any trailing content until closing brace
-					// Bash accepts this syntactically (fails at runtime)
-					trailing = [];
-					depth = 1;
-					while (!this.atEnd() && depth > 0) {
-						c = this.peek();
-						if (
-							c === "$" &&
-							this.pos + 1 < this.length &&
-							this.source[this.pos + 1] === "{"
-						) {
-							depth += 1;
-							trailing.push(this.advance());
-							trailing.push(this.advance());
-						} else if (c === "}") {
-							depth -= 1;
-							if (depth === 0) {
-								break;
-							}
-							trailing.push(this.advance());
-						} else if (c === "\\") {
-							trailing.push(this.advance());
-							if (!this.atEnd()) {
-								trailing.push(this.advance());
-							}
-						} else {
-							trailing.push(this.advance());
-						}
-					}
-					if (depth === 0) {
-						this.advance();
-						text = this.source.slice(start, this.pos);
-						this._dolbrace_state = saved_dolbrace;
-						return [
-							new ParamIndirect(param + suffix + trailing.join("")),
-							text,
-						];
-					}
-					// Unclosed brace
-					this._dolbrace_state = saved_dolbrace;
-					this.pos = start;
-					return [null, ""];
-				}
-				// Check for operator (e.g., ${!##} = indirect of # with # op)
-				op = this._consumeParamOperator();
-				if (op == null && !this.atEnd() && this.peek() !== "}") {
-					// Unknown operator - bash still parses these (fails at runtime)
-					op = this.advance();
-				}
-				if (op != null) {
-					// Parse argument until closing brace
-					arg_chars = [];
-					depth = 1;
-					while (!this.atEnd() && depth > 0) {
-						c = this.peek();
-						if (
-							c === "$" &&
-							this.pos + 1 < this.length &&
-							this.source[this.pos + 1] === "{"
-						) {
-							depth += 1;
-							arg_chars.push(this.advance());
-							arg_chars.push(this.advance());
-						} else if (c === "}") {
-							depth -= 1;
-							if (depth > 0) {
-								arg_chars.push(this.advance());
-							}
-						} else if (c === "\\") {
-							arg_chars.push(this.advance());
-							if (!this.atEnd()) {
-								arg_chars.push(this.advance());
-							}
-						} else {
-							arg_chars.push(this.advance());
-						}
-					}
-					if (depth === 0) {
-						this.advance();
-						arg = arg_chars.join("");
-						text = this.source.slice(start, this.pos);
-						this._dolbrace_state = saved_dolbrace;
-						return [new ParamIndirect(param, op, arg), text];
-					}
-				}
-				// Fell through - pattern didn't match, return None
-				this._dolbrace_state = saved_dolbrace;
-				this.pos = start;
-				return [null, ""];
-			} else {
-				// ${! followed by non-param char like | - fall through to regular parsing
-				this.pos = start + 2;
-			}
-		}
-		// ${param} or ${param<op><arg>}
-		param = this._consumeParamName();
-		if (!param) {
-			// Allow empty parameter for simple operators like ${:-word}
-			if (
-				!this.atEnd() &&
-				("-=+?".includes(this.peek()) ||
-					(this.peek() === ":" &&
-						this.pos + 1 < this.length &&
-						_isSimpleParamOp(this.source[this.pos + 1])))
-			) {
-				param = "";
-			} else {
-				// Unknown syntax like ${(M)...} (zsh) - consume until matching }
-				// Bash accepts these syntactically but fails at runtime
-				// Must track quotes - inside subscripts, quotes span until closed
-				depth = 1;
-				content_chars = [];
-				inner_quote = new QuoteState();
-				while (!this.atEnd() && depth > 0) {
-					c = this.peek();
-					if (inner_quote.single) {
-						content_chars.push(this.advance());
-						if (c === "'") {
-							inner_quote.single = false;
-						}
-						continue;
-					}
-					if (inner_quote.double) {
-						if (c === "\\" && this.pos + 1 < this.length) {
-							content_chars.push(this.advance());
-							if (!this.atEnd()) {
-								content_chars.push(this.advance());
-							}
-							continue;
-						}
-						content_chars.push(this.advance());
-						if (c === '"') {
-							inner_quote.double = false;
-						}
-						continue;
-					}
-					if (c === "'") {
-						inner_quote.single = true;
-						content_chars.push(this.advance());
-						continue;
-					}
-					if (c === '"') {
-						inner_quote.double = true;
-						content_chars.push(this.advance());
-						continue;
-					}
-					if (c === "`") {
-						backtick_start = this.pos;
-						content_chars.push(this.advance());
-						while (!this.atEnd() && this.peek() !== "`") {
-							bc = this.peek();
-							if (bc === "\\" && this.pos + 1 < this.length) {
-								next_c = this.source[this.pos + 1];
-								if (_isEscapeCharInDquote(next_c)) {
-									content_chars.push(this.advance());
-								}
-							}
-							content_chars.push(this.advance());
-						}
-						if (this.atEnd()) {
-							throw new ParseError("Unterminated backtick", backtick_start);
-						}
-						content_chars.push(this.advance());
-						continue;
-					}
-					if (
-						c === "$" &&
-						this.pos + 1 < this.length &&
-						this.source[this.pos + 1] === "{"
-					) {
-						depth += 1;
-						content_chars.push(this.advance());
-						content_chars.push(this.advance());
-					} else if (c === "}") {
-						depth -= 1;
-						if (depth === 0) {
-							break;
-						}
-						content_chars.push(this.advance());
-					} else if (c === "\\") {
-						if (
-							this.pos + 1 < this.length &&
-							this.source[this.pos + 1] === "\n"
-						) {
-							// Line continuation - skip both backslash and newline
-							this.advance();
-							this.advance();
-						} else {
-							content_chars.push(this.advance());
-							if (!this.atEnd()) {
-								content_chars.push(this.advance());
-							}
-						}
-					} else {
-						content_chars.push(this.advance());
-					}
-				}
-				if (depth === 0) {
-					content = content_chars.join("");
-					this.advance();
-					text = `\${${content}}`;
-					this._dolbrace_state = saved_dolbrace;
-					return [new ParamExpansion(content), text];
-				}
-				this._dolbrace_state = saved_dolbrace;
-				throw new ParseError("Unclosed parameter expansion", start);
-			}
-		}
-		if (this.atEnd()) {
-			this._dolbrace_state = saved_dolbrace;
-			this.pos = start;
-			return [null, ""];
-		}
-		// Check for closing brace (simple expansion)
-		if (this.peek() === "}") {
-			this.advance();
-			text = this.source.slice(start, this.pos);
-			this._dolbrace_state = saved_dolbrace;
-			return [new ParamExpansion(param), text];
-		}
-		// Parse operator
-		op = this._consumeParamOperator();
-		if (op == null) {
-			// Check for $" or $' which should have $ stripped (locale/ANSI-C quotes)
-			if (
-				!this.atEnd() &&
-				this.peek() === "$" &&
-				this.pos + 1 < this.length &&
-				['"', "'"].includes(this.source[this.pos + 1])
-			) {
-				// Count consecutive $ chars to check for $$ (PID param)
-				dollar_count =
-					1 + _countConsecutiveDollarsBefore(this.source, this.pos);
-				if (dollar_count % 2 === 1) {
-					// Odd count: locale/ANSI-C string - don't consume $, let argument loop handle it
-					// The $ needs to be preserved for _expand_all_ansi_c_quotes to process $'...'
-					op = "";
-				} else {
-					// Even count: this $ is part of $$ (PID), treat as unknown operator
-					op = this.advance();
-				}
-			} else if (!this.atEnd() && this.peek() === "`") {
-				// Backtick requires matching closing backtick
-				backtick_pos = this.pos;
-				this.advance();
-				while (!this.atEnd() && this.peek() !== "`") {
-					bc = this.peek();
-					if (bc === "\\" && this.pos + 1 < this.length) {
-						next_c = this.source[this.pos + 1];
-						if (_isEscapeCharInDquote(next_c)) {
-							this.advance();
-						}
-					}
-					this.advance();
-				}
-				if (this.atEnd()) {
-					this._dolbrace_state = saved_dolbrace;
-					throw new ParseError("Unterminated backtick", backtick_pos);
-				}
-				this.advance();
-				op = "`";
-			} else if (
-				!this.atEnd() &&
-				this.peek() === "$" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "{"
-			) {
-				// Nested ${...} - don't consume $ as operator, let argument loop handle it
-				op = "";
-			} else {
-				// Unknown operator - bash still parses these (fails at runtime)
-				// Treat the current char as the operator
-				op = this.advance();
-			}
-		}
-		// Update dolbrace state based on operator
-		this._updateDolbraceForOp(op, param.length > 0);
-		// Parse argument (everything until closing brace)
-		// Track quote state and nesting
-		arg_chars = [];
-		depth = 1;
-		quote = new QuoteState();
-		while (!this.atEnd() && depth > 0) {
-			c = this.peek();
-			// Transition OP -> WORD when we see a non-operator character
-			if (
-				this._dolbrace_state === DolbraceState.OP &&
-				!"#%^,~:-=?+/".includes(c)
-			) {
-				this._dolbrace_state = DolbraceState.WORD;
-			}
-			// Single quotes - toggle state when not in double quotes
-			// Note: In POSIX mode, single quotes would be literal in DOLBRACE_WORD state
-			// when inside double quotes, but Parable uses extended_quote behavior (default)
-			// where single quotes are always special
-			if (c === "'" && !quote.double) {
-				quote.single = !quote.single;
-				arg_chars.push(this.advance());
-			} else if (c === '"' && !quote.single) {
-				// Double quotes - toggle state
-				quote.double = !quote.double;
-				arg_chars.push(this.advance());
-			} else if (c === "\\" && !quote.single) {
-				// Escape - skip next char (line continuation removes both)
-				if (this.pos + 1 < this.length && this.source[this.pos + 1] === "\n") {
-					// Line continuation - skip both backslash and newline
-					this.advance();
-					this.advance();
-				} else {
-					arg_chars.push(this.advance());
-					if (!this.atEnd()) {
-						arg_chars.push(this.advance());
-					}
-				}
-			} else if (
-				c === "$" &&
-				!quote.single &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "{"
-			) {
-				// Nested ${...} - increase depth (outside single quotes)
-				depth += 1;
-				arg_chars.push(this.advance());
-				arg_chars.push(this.advance());
-			} else if (
-				c === "$" &&
-				!quote.single &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "'"
-			) {
-				// ANSI-C quoted string $'...' - scan to matching ' with escapes
-				arg_chars.push(this.advance());
-				arg_chars.push(this.advance());
-				// Scan to closing ' handling escape sequences
-				while (!this.atEnd() && this.peek() !== "'") {
-					if (this.peek() === "\\") {
-						arg_chars.push(this.advance());
-						if (!this.atEnd()) {
-							arg_chars.push(this.advance());
-						}
-					} else {
-						arg_chars.push(this.advance());
-					}
-				}
-				if (!this.atEnd()) {
-					arg_chars.push(this.advance());
-				}
-			} else if (
-				c === "$" &&
-				!quote.single &&
-				!quote.double &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === '"'
-			) {
-				// Locale string $"..." - strip $ and enter double quote
-				// Count consecutive $ chars to check for $$ (PID param)
-				dollar_count =
-					1 + _countConsecutiveDollarsBefore(this.source, this.pos);
-				if (dollar_count % 2 === 1) {
-					// Odd count: locale string $"..." - strip the $ and enter double quote
-					this.advance();
-					quote.double = true;
-					arg_chars.push(this.advance());
-				} else {
-					// Even count: this $ is part of $$ (PID), keep it
-					arg_chars.push(this.advance());
-				}
-			} else if (
-				c === "$" &&
-				!quote.single &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "("
-			) {
-				// Command substitution $(...) - scan to matching )
-				arg_chars.push(this.advance());
-				arg_chars.push(this.advance());
-				paren_depth = 1;
-				while (!this.atEnd() && paren_depth > 0) {
-					pc = this.peek();
-					if (pc === "(") {
-						paren_depth += 1;
-					} else if (pc === ")") {
-						paren_depth -= 1;
-					} else if (pc === "\\") {
-						arg_chars.push(this.advance());
-						if (!this.atEnd()) {
-							arg_chars.push(this.advance());
-						}
-						continue;
-					}
-					arg_chars.push(this.advance());
-				}
-			} else if (c === "`" && !quote.single) {
-				// Backtick command substitution - scan to matching `
-				backtick_start = this.pos;
-				arg_chars.push(this.advance());
-				while (!this.atEnd() && this.peek() !== "`") {
-					bc = this.peek();
-					if (bc === "\\" && this.pos + 1 < this.length) {
-						next_c = this.source[this.pos + 1];
-						if (_isEscapeCharInDquote(next_c)) {
-							arg_chars.push(this.advance());
-						}
-					}
-					arg_chars.push(this.advance());
-				}
-				if (this.atEnd()) {
-					this._dolbrace_state = saved_dolbrace;
-					throw new ParseError("Unterminated backtick", backtick_start);
-				}
-				arg_chars.push(this.advance());
-			} else if (c === "}") {
-				// Closing brace - handle depth for nested ${...}
-				if (quote.single) {
-					// Inside single quotes, } is literal
-					arg_chars.push(this.advance());
-				} else if (quote.double) {
-					// Inside double quotes, } can close nested ${...}
-					if (depth > 1) {
-						depth -= 1;
-						arg_chars.push(this.advance());
-					} else {
-						// Literal } in double quotes (not closing nested)
-						arg_chars.push(this.advance());
-					}
-				} else {
-					depth -= 1;
-					if (depth > 0) {
-						arg_chars.push(this.advance());
-					}
-				}
-			} else {
-				arg_chars.push(this.advance());
-			}
-		}
-		if (depth !== 0) {
-			this._dolbrace_state = saved_dolbrace;
-			this.pos = start;
-			return [null, ""];
-		}
-		this.advance();
-		arg = arg_chars.join("");
-		// Format process substitution content within param expansion
-		// When op is < or > and arg is (...), parse and format the inner command
-		if (["<", ">"].includes(op) && arg.startsWith("(") && arg.endsWith(")")) {
-			inner = arg.slice(1, -1);
-			try {
-				sub_parser = new Parser(inner, true);
-				parsed = sub_parser.parseList();
-				if (parsed && sub_parser.atEnd()) {
-					formatted = _formatCmdsubNode(parsed, 0, true, false, true);
-					arg = `(${formatted})`;
-				}
-			} catch (_) {}
-		}
-		// Reconstruct text from parsed components (handles line continuation removal)
-		text = `\${${param}${op}${arg}}`;
-		this._dolbrace_state = saved_dolbrace;
-		return [new ParamExpansion(param, op, arg), text];
-	}
-
-	_paramSubscriptHasClose(start_pos) {
-		let c, depth, i, quote;
-		depth = 1;
-		i = start_pos + 1;
-		quote = new QuoteState();
-		while (i < this.length) {
-			c = this.source[i];
-			if (quote.single) {
-				if (c === "'") {
-					quote.single = false;
-				}
-				i += 1;
-				continue;
-			}
-			if (quote.double) {
-				if (c === "\\" && i + 1 < this.length) {
-					i += 2;
-					continue;
-				}
-				if (c === '"') {
-					quote.double = false;
-				}
-				i += 1;
-				continue;
-			}
-			if (c === "'") {
-				quote.single = true;
-				i += 1;
-				continue;
-			}
-			if (c === '"') {
-				quote.double = true;
-				i += 1;
-				continue;
-			}
-			if (c === "\\") {
-				i += 2;
-				continue;
-			}
-			if (c === "}") {
-				return false;
-			}
-			if (c === "[") {
-				depth += 1;
-			} else if (c === "]") {
-				depth -= 1;
-				if (depth === 0) {
-					return true;
-				}
-			}
-			i += 1;
-		}
-		return false;
-	}
-
-	_consumeParamName() {
-		let bracket_depth, c, ch, name_chars, sc, subscript_quote;
-		if (this.atEnd()) {
-			return null;
-		}
-		ch = this.peek();
-		// Special parameters
-		// But NOT $ followed by { - that's a nested ${...} expansion
-		if (_isSpecialParam(ch)) {
-			if (
-				ch === "$" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "{"
-			) {
-				return null;
-			}
-			this.advance();
-			return ch;
-		}
-		// Digits (positional params)
-		if (/^[0-9]+$/.test(ch)) {
-			name_chars = [];
-			while (!this.atEnd() && /^[0-9]+$/.test(this.peek())) {
-				name_chars.push(this.advance());
-			}
-			return name_chars.join("");
-		}
-		// Variable name
-		if (/^[a-zA-Z]$/.test(ch) || ch === "_") {
-			name_chars = [];
-			while (!this.atEnd()) {
-				c = this.peek();
-				if (/^[a-zA-Z0-9]$/.test(c) || c === "_") {
-					name_chars.push(this.advance());
-				} else if (c === "[") {
-					if (!this._paramSubscriptHasClose(this.pos)) {
-						break;
-					}
-					// Array subscript - track bracket depth and quotes
-					name_chars.push(this.advance());
-					bracket_depth = 1;
-					subscript_quote = new QuoteState();
-					while (!this.atEnd() && bracket_depth > 0) {
-						sc = this.peek();
-						if (subscript_quote.single) {
-							name_chars.push(this.advance());
-							if (sc === "'") {
-								subscript_quote.single = false;
-							}
-							continue;
-						}
-						if (subscript_quote.double) {
-							if (sc === "\\" && this.pos + 1 < this.length) {
-								name_chars.push(this.advance());
-								if (!this.atEnd()) {
-									name_chars.push(this.advance());
-								}
-								continue;
-							}
-							name_chars.push(this.advance());
-							if (sc === '"') {
-								subscript_quote.double = false;
-							}
-							continue;
-						}
-						if (sc === "'") {
-							subscript_quote.single = true;
-							name_chars.push(this.advance());
-							continue;
-						}
-						if (
-							sc === "$" &&
-							this.pos + 1 < this.length &&
-							this.source[this.pos + 1] === '"'
-						) {
-							// Locale string $"..." - strip the $ and enter double quote
-							this.advance();
-							subscript_quote.double = true;
-							name_chars.push(this.advance());
-							continue;
-						}
-						if (sc === '"') {
-							subscript_quote.double = true;
-							name_chars.push(this.advance());
-							continue;
-						}
-						if (sc === "\\") {
-							name_chars.push(this.advance());
-							if (!this.atEnd()) {
-								name_chars.push(this.advance());
-							}
-							continue;
-						}
-						if (sc === "[") {
-							bracket_depth += 1;
-						} else if (sc === "]") {
-							bracket_depth -= 1;
-							if (bracket_depth === 0) {
-								break;
-							}
-						}
-						name_chars.push(this.advance());
-					}
-					if (!this.atEnd() && this.peek() === "]") {
-						name_chars.push(this.advance());
-					}
-					break;
-				} else {
-					break;
-				}
-			}
-			if (name_chars) {
-				return name_chars.join("");
-			} else {
-				return null;
-			}
-		}
-		return null;
-	}
-
-	_consumeParamOperator() {
-		let ch, next_ch;
-		if (this.atEnd()) {
-			return null;
-		}
-		ch = this.peek();
-		// Operators with optional colon prefix: :- := :? :+
-		if (ch === ":") {
-			this.advance();
-			if (this.atEnd()) {
-				return ":";
-			}
-			next_ch = this.peek();
-			if (_isSimpleParamOp(next_ch)) {
-				this.advance();
-				return `:${next_ch}`;
-			}
-			// Just : (substring)
-			return ":";
-		}
-		// Operators without colon: - = ? +
-		if (_isSimpleParamOp(ch)) {
-			this.advance();
-			return ch;
-		}
-		// Pattern removal: # ## % %%
-		if (ch === "#") {
-			this.advance();
-			if (!this.atEnd() && this.peek() === "#") {
-				this.advance();
-				return "##";
-			}
-			return "#";
-		}
-		if (ch === "%") {
-			this.advance();
-			if (!this.atEnd() && this.peek() === "%") {
-				this.advance();
-				return "%%";
-			}
-			return "%";
-		}
-		// Substitution: / // /# /%
-		if (ch === "/") {
-			this.advance();
-			if (!this.atEnd()) {
-				next_ch = this.peek();
-				if (next_ch === "/") {
-					this.advance();
-					return "//";
-				} else if (next_ch === "#") {
-					this.advance();
-					return "/#";
-				} else if (next_ch === "%") {
-					this.advance();
-					return "/%";
-				}
-			}
-			return "/";
-		}
-		// Case modification: ^ ^^ , ,,
-		if (ch === "^") {
-			this.advance();
-			if (!this.atEnd() && this.peek() === "^") {
-				this.advance();
-				return "^^";
-			}
-			return "^";
-		}
-		if (ch === ",") {
-			this.advance();
-			if (!this.atEnd() && this.peek() === ",") {
-				this.advance();
-				return ",,";
-			}
-			return ",";
-		}
-		// Transformation: @
-		if (ch === "@") {
-			this.advance();
-			return "@";
-		}
-		return null;
+		let result;
+		this._syncLexer();
+		result = this._lexer._readParamExpansion();
+		this._syncParser();
+		return result;
 	}
 
 	parseRedirect() {

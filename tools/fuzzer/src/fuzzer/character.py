@@ -337,12 +337,14 @@ class FuzzerCoordinator:
 
     def _write_discrepancy(self, d: Discrepancy) -> None:
         if self._output_file:
-            self._output_file.write("=" * 60 + "\n")
-            self._output_file.write(f"Mutation: {d.mutation_desc}\n")
-            self._output_file.write(f"Original: {d.original!r}\n")
-            self._output_file.write(f"Mutated:  {d.mutated!r}\n")
-            self._output_file.write(f"Parable:  {d.parable_result}\n")
-            self._output_file.write(f"Oracle:   {d.oracle_result}\n")
+            # Output in .tests format with context as comments
+            self._output_file.write(f"# Original: {d.original!r}\n")
+            self._output_file.write(f"# Parable:  {d.parable_result}\n")
+            self._output_file.write(f"=== {d.mutation_desc}\n")
+            self._output_file.write(f"{d.mutated}\n")
+            self._output_file.write("---\n")
+            self._output_file.write(f"{d.oracle_result}\n")
+            self._output_file.write("---\n\n")
             self._output_file.flush()
 
     def _print_discrepancy(self, d: Discrepancy) -> None:

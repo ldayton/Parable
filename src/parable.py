@@ -10189,7 +10189,8 @@ class Parser:
         - For compound commands (brace group, if, while, etc.), extract NAME if present
         - For simple commands, don't extract NAME (treat everything as the command)
         """
-        if not self.consume_word("coproc"):
+        self.skip_whitespace()
+        if not self._lex_consume_word("coproc"):
             return None
         self.skip_whitespace()
 
@@ -10213,8 +10214,8 @@ class Parser:
                 return Coproc(body, name)
 
         # Check for reserved word compounds directly
-        next_word = self.peek_word()
-        if next_word in COMPOUND_KEYWORDS:
+        next_word = self._lex_peek_reserved_word()
+        if next_word is not None and next_word in COMPOUND_KEYWORDS:
             body = self.parse_compound_command()
             if body is not None:
                 return Coproc(body, name)
@@ -10234,7 +10235,7 @@ class Parser:
             ch = None
             if not self.at_end():
                 ch = self.peek()
-            next_word = self.peek_word()
+            next_word = self._lex_peek_reserved_word()
 
             if _is_valid_identifier(potential_name):
                 # Valid identifier followed by compound command - extract name
@@ -10251,7 +10252,7 @@ class Parser:
                         body = self.parse_subshell()
                     if body is not None:
                         return Coproc(body, name)
-                elif next_word in COMPOUND_KEYWORDS:
+                elif next_word is not None and next_word in COMPOUND_KEYWORDS:
                     name = potential_name
                     body = self.parse_compound_command()
                     if body is not None:
@@ -10282,8 +10283,8 @@ class Parser:
         saved_pos = self.pos
 
         # Check for 'function' keyword form
-        if self.peek_word() == "function":
-            self.consume_word("function")
+        if self._lex_is_at_reserved_word("function"):
+            self._lex_consume_word("function")
             self.skip_whitespace()
 
             # Get function name

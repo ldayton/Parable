@@ -12409,7 +12409,8 @@ class Parser {
 
 	parseCoproc() {
 		let body, ch, name, next_word, potential_name, word_start;
-		if (!this.consumeWord("coproc")) {
+		this.skipWhitespace();
+		if (!this._lexConsumeWord("coproc")) {
 			return null;
 		}
 		this.skipWhitespace();
@@ -12438,8 +12439,8 @@ class Parser {
 			}
 		}
 		// Check for reserved word compounds directly
-		next_word = this.peekWord();
-		if (COMPOUND_KEYWORDS.has(next_word)) {
+		next_word = this._lexPeekReservedWord();
+		if (next_word != null && COMPOUND_KEYWORDS.has(next_word)) {
 			body = this.parseCompoundCommand();
 			if (body != null) {
 				return new Coproc(body, name);
@@ -12463,7 +12464,7 @@ class Parser {
 			if (!this.atEnd()) {
 				ch = this.peek();
 			}
-			next_word = this.peekWord();
+			next_word = this._lexPeekReservedWord();
 			if (_isValidIdentifier(potential_name)) {
 				// Valid identifier followed by compound command - extract name
 				if (ch === "{") {
@@ -12482,7 +12483,7 @@ class Parser {
 					if (body != null) {
 						return new Coproc(body, name);
 					}
-				} else if (COMPOUND_KEYWORDS.has(next_word)) {
+				} else if (next_word != null && COMPOUND_KEYWORDS.has(next_word)) {
 					name = potential_name;
 					body = this.parseCompoundCommand();
 					if (body != null) {
@@ -12516,8 +12517,8 @@ class Parser {
 		}
 		saved_pos = this.pos;
 		// Check for 'function' keyword form
-		if (this.peekWord() === "function") {
-			this.consumeWord("function");
+		if (this._lexIsAtReservedWord("function")) {
+			this._lexConsumeWord("function");
 			this.skipWhitespace();
 			// Get function name
 			name = this.peekWord();

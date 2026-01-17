@@ -10568,49 +10568,52 @@ class Parser:
                 return result
             # Fall through to simple command if [[ is not a conditional keyword
 
-        # Check for reserved words
-        word = self.peek_word()
+        # Check for reserved words using Lexer
+        reserved = self._lex_peek_reserved_word()
 
-        # In command substitutions, strip leading } for keyword matching
-        # Don't strip { because it's used for brace groups
-        keyword_word = word
-        if word is not None and self._in_process_sub and len(word) > 1 and word[0] == "}":
-            keyword_word = word[1:]
+        # In command substitutions, handle leading } for keyword matching
+        # (fallback for edge cases like "$(}case x in x)esac)")
+        if reserved is None and self._in_process_sub:
+            word = self.peek_word()
+            if word is not None and len(word) > 1 and word[0] == "}":
+                keyword_word = word[1:]
+                if keyword_word in RESERVED_WORDS or keyword_word in ("{", "}", "[[", "]]", "!", "time"):
+                    reserved = keyword_word
 
         # Reserved words that cannot start a statement (only valid in specific contexts)
-        if keyword_word in ("fi", "then", "elif", "else", "done", "esac", "do", "in"):
-            raise ParseError(f"Unexpected reserved word '{keyword_word}'", pos=self.pos)
+        if reserved in ("fi", "then", "elif", "else", "done", "esac", "do", "in"):
+            raise ParseError(f"Unexpected reserved word '{reserved}'", pos=self.pos)
 
         # If statement
-        if keyword_word == "if":
+        if reserved == "if":
             return self.parse_if()
 
         # While loop
-        if keyword_word == "while":
+        if reserved == "while":
             return self.parse_while()
 
         # Until loop
-        if keyword_word == "until":
+        if reserved == "until":
             return self.parse_until()
 
         # For loop
-        if keyword_word == "for":
+        if reserved == "for":
             return self.parse_for()
 
         # Select statement
-        if keyword_word == "select":
+        if reserved == "select":
             return self.parse_select()
 
         # Case statement
-        if keyword_word == "case":
+        if reserved == "case":
             return self.parse_case()
 
         # Function definition (function keyword form)
-        if keyword_word == "function":
+        if reserved == "function":
             return self.parse_function()
 
         # Coproc
-        if keyword_word == "coproc":
+        if reserved == "coproc":
             return self.parse_coproc()
 
         # Try POSIX function definition (name() form) before simple command

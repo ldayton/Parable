@@ -12720,7 +12720,7 @@ class Parser {
 	}
 
 	parseCompoundCommand() {
-		let ch, func, keyword_word, result, word;
+		let ch, func, keyword_word, reserved, result, word;
 		this.skipWhitespace();
 		if (this.atEnd()) {
 			return null;
@@ -12762,60 +12762,60 @@ class Parser {
 			}
 		}
 		// Fall through to simple command if [[ is not a conditional keyword
-		// Check for reserved words
-		word = this.peekWord();
-		// In command substitutions, strip leading } for keyword matching
-		// Don't strip { because it's used for brace groups
-		keyword_word = word;
-		if (
-			word != null &&
-			this._in_process_sub &&
-			word.length > 1 &&
-			word[0] === "}"
-		) {
-			keyword_word = word.slice(1);
+		// Check for reserved words using Lexer
+		reserved = this._lexPeekReservedWord();
+		// In command substitutions, handle leading } for keyword matching
+		// (fallback for edge cases like "$(}case x in x)esac)")
+		if (reserved == null && this._in_process_sub) {
+			word = this.peekWord();
+			if (word != null && word.length > 1 && word[0] === "}") {
+				keyword_word = word.slice(1);
+				if (
+					RESERVED_WORDS.has(keyword_word) ||
+					["{", "}", "[[", "]]", "!", "time"].includes(keyword_word)
+				) {
+					reserved = keyword_word;
+				}
+			}
 		}
 		// Reserved words that cannot start a statement (only valid in specific contexts)
 		if (
 			["fi", "then", "elif", "else", "done", "esac", "do", "in"].includes(
-				keyword_word,
+				reserved,
 			)
 		) {
-			throw new ParseError(
-				`Unexpected reserved word '${keyword_word}'`,
-				this.pos,
-			);
+			throw new ParseError(`Unexpected reserved word '${reserved}'`, this.pos);
 		}
 		// If statement
-		if (keyword_word === "if") {
+		if (reserved === "if") {
 			return this.parseIf();
 		}
 		// While loop
-		if (keyword_word === "while") {
+		if (reserved === "while") {
 			return this.parseWhile();
 		}
 		// Until loop
-		if (keyword_word === "until") {
+		if (reserved === "until") {
 			return this.parseUntil();
 		}
 		// For loop
-		if (keyword_word === "for") {
+		if (reserved === "for") {
 			return this.parseFor();
 		}
 		// Select statement
-		if (keyword_word === "select") {
+		if (reserved === "select") {
 			return this.parseSelect();
 		}
 		// Case statement
-		if (keyword_word === "case") {
+		if (reserved === "case") {
 			return this.parseCase();
 		}
 		// Function definition (function keyword form)
-		if (keyword_word === "function") {
+		if (reserved === "function") {
 			return this.parseFunction();
 		}
 		// Coproc
-		if (keyword_word === "coproc") {
+		if (reserved === "coproc") {
 			return this.parseCoproc();
 		}
 		// Try POSIX function definition (name() form) before simple command

@@ -75,7 +75,9 @@ def main():
 
     global _verbose, _deadline
     parser = argparse.ArgumentParser(description="Minimize a failing input to its MRE")
-    parser.add_argument("input", nargs="?", help="The bash code (or - for stdin, or @file to read from file)")
+    parser.add_argument(
+        "input", nargs="?", help="The bash code (or - for stdin, or @file to read from file)"
+    )
     parser.add_argument("-v", "--verbose", action="store_true", help="Show progress")
     parser.add_argument(
         "-t", "--timeout", type=int, default=10, help="Timeout in seconds (default: 10)"

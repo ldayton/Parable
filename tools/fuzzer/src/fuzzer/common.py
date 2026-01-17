@@ -129,7 +129,7 @@ def post_process_discrepancies(
             if result:
                 d.mutated = result
                 minimized.append(d)
-            print(f"\r  {i+1}/{len(discrepancies)}", end="", flush=True)
+            print(f"\r  {i + 1}/{len(discrepancies)}", end="", flush=True)
         print()
         discrepancies = minimized
         print(f"Minimized to {len(discrepancies)} discrepancies")
@@ -150,6 +150,7 @@ def post_process_discrepancies(
 def parse_layer_spec(spec: str) -> int:
     """Parse a layer spec like '5', 'words', 'commands' to an int."""
     from .generator import LAYER_PRESETS
+
     if spec in LAYER_PRESETS:
         return LAYER_PRESETS[spec]
     return int(spec)

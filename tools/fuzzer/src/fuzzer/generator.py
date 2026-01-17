@@ -24,19 +24,19 @@ from .common import (
 
 # Layer definitions - each layer enables constructs from all previous layers
 LAYERS = {
-    0: "literals",        # bare words, quoted strings
-    1: "simple_exp",      # $var, ${var}, special params
-    2: "complex_exp",     # ${var:-default}, ${var#pat}, arrays
-    3: "cmd_sub",         # $(cmd), `cmd`
-    4: "arithmetic",      # $((expr)), ((expr))
-    5: "simple_cmd",      # cmd arg1 arg2
-    6: "redirections",    # >, <, >>, <<, <<<, <(), >()
-    7: "pipelines",       # cmd1 | cmd2, ! cmd
-    8: "lists",           # &&, ||, ;, &
+    0: "literals",  # bare words, quoted strings
+    1: "simple_exp",  # $var, ${var}, special params
+    2: "complex_exp",  # ${var:-default}, ${var#pat}, arrays
+    3: "cmd_sub",  # $(cmd), `cmd`
+    4: "arithmetic",  # $((expr)), ((expr))
+    5: "simple_cmd",  # cmd arg1 arg2
+    6: "redirections",  # >, <, >>, <<, <<<, <(), >()
+    7: "pipelines",  # cmd1 | cmd2, ! cmd
+    8: "lists",  # &&, ||, ;, &
     9: "compound_basic",  # { }, ( ), if/then/fi
-    10: "loops",          # for, while, until, select
-    11: "case_cond",      # case, [[ ]]
-    12: "functions",      # f() { }, coproc
+    10: "loops",  # for, while, until, select
+    11: "case_cond",  # case, [[ ]]
+    12: "functions",  # f() { }, coproc
 }
 
 LAYER_PRESETS = {
@@ -52,50 +52,52 @@ LAYER_PRESETS = {
 def detect_layer(text: str) -> int:
     """Detect the maximum layer required to parse this input."""
     import re
+
     layer = 0
     # Layer 12: functions, coproc
-    if re.search(r'\b(function\s+\w+|coproc\b|\w+\s*\(\)\s*\{)', text):
+    if re.search(r"\b(function\s+\w+|coproc\b|\w+\s*\(\)\s*\{)", text):
         return 12
     # Layer 11: case, [[ ]]
-    if re.search(r'\bcase\b.*\besac\b|\[\[', text, re.DOTALL):
+    if re.search(r"\bcase\b.*\besac\b|\[\[", text, re.DOTALL):
         return 11
     # Layer 10: loops
-    if re.search(r'\b(for|while|until|select)\b.*\b(do|done)\b', text, re.DOTALL):
+    if re.search(r"\b(for|while|until|select)\b.*\b(do|done)\b", text, re.DOTALL):
         return 10
     # Layer 9: compound commands (brace groups, subshells, if)
     # Brace group: { cmd; } - must have space after {
     # Subshell: ( cmd ) - but not $( or <( or >(
-    if re.search(r'\bif\b.*\bthen\b|\bfi\b', text):
+    if re.search(r"\bif\b.*\bthen\b|\bfi\b", text):
         layer = max(layer, 9)
-    if re.search(r'(?<![<>$(\[])\(\s*\w', text):  # subshell, not $( or <( or >( or ((
+    if re.search(r"(?<![<>$(\[])\(\s*\w", text):  # subshell, not $( or <( or >( or ((
         layer = max(layer, 9)
-    if re.search(r'\{\s+\S.*;\s*\}', text):  # brace group
+    if re.search(r"\{\s+\S.*;\s*\}", text):  # brace group
         layer = max(layer, 9)
     # Layer 8: lists
-    if re.search(r'&&|\|\||(?<![<>]);(?![;&])|[^<>&]\s*&\s*$', text, re.MULTILINE):
+    if re.search(r"&&|\|\||(?<![<>]);(?![;&])|[^<>&]\s*&\s*$", text, re.MULTILINE):
         layer = max(layer, 8)
     # Layer 7: pipelines
-    if re.search(r'(?<!\|)\|(?!\||&)|\|&|^\s*!|^\s*time\b', text, re.MULTILINE):
+    if re.search(r"(?<!\|)\|(?!\||&)|\|&|^\s*!|^\s*time\b", text, re.MULTILINE):
         layer = max(layer, 7)
     # Layer 6: redirections
-    if re.search(r'[0-9]*>{1,2}|<{1,3}|>&|<\(|>\(', text):
+    if re.search(r"[0-9]*>{1,2}|<{1,3}|>&|<\(|>\(", text):
         layer = max(layer, 6)
     # Layer 5: simple commands (multiple words)
-    if re.search(r'^\s*\w+\s+\S', text, re.MULTILINE):
+    if re.search(r"^\s*\w+\s+\S", text, re.MULTILINE):
         layer = max(layer, 5)
     # Layer 4: arithmetic
-    if re.search(r'\$\(\(|\(\(', text):
+    if re.search(r"\$\(\(|\(\(", text):
         layer = max(layer, 4)
     # Layer 3: command substitution
-    if re.search(r'\$\(|`', text):
+    if re.search(r"\$\(|`", text):
         layer = max(layer, 3)
     # Layer 2: complex expansions
-    if re.search(r'\$\{[^}]*(:-|:=|:\+|:\?|##?|%%?|/|@|\[)', text):
+    if re.search(r"\$\{[^}]*(:-|:=|:\+|:\?|##?|%%?|/|@|\[)", text):
         layer = max(layer, 2)
     # Layer 1: simple expansions
-    if re.search(r'\$[\w@*#?$!_]|\$\{[\w@*#?$!_]+\}', text):
+    if re.search(r"\$[\w@*#?$!_]|\$\{[\w@*#?$!_]+\}", text):
         layer = max(layer, 1)
     return layer
+
 
 # Default probability weights (Csmith-inspired)
 DEFAULT_PROBS = {
@@ -104,17 +106,17 @@ DEFAULT_PROBS = {
     "word_double_quoted": 0.6,  # vs single when quoted
     "word_has_expansion": 0.4,
     "expansion_braced": 0.5,
-    "expansion_complex": 0.3,   # ${var:-...} vs ${var}
+    "expansion_complex": 0.3,  # ${var:-...} vs ${var}
     "expansion_array": 0.1,
     # Command structure
     "cmd_has_args": 0.7,
-    "cmd_extra_arg": 0.4,       # probability of each additional arg
+    "cmd_extra_arg": 0.4,  # probability of each additional arg
     "cmd_has_redirect": 0.2,
     "cmd_has_assignment": 0.1,
     # Pipelines and lists
     "pipeline_continues": 0.3,
     "list_continues": 0.3,
-    "list_and": 0.4,            # && vs ||
+    "list_and": 0.4,  # && vs ||
     "list_background": 0.1,
     # Compound commands
     "if_has_else": 0.4,
@@ -130,6 +132,7 @@ DEFAULT_PROBS = {
 @dataclass
 class GeneratorConfig:
     """Configuration for the generator."""
+
     max_layer: int = 12
     min_layer: int = 0
     max_depth: int = 5
@@ -141,9 +144,42 @@ class Generator:
     """Grammar-guided bash script generator with layered complexity."""
 
     # Word pools for generation
-    COMMANDS = ["echo", "cat", "grep", "sed", "awk", "wc", "sort", "head", "tail", "tr", "cut", "true", "false", "test", "pwd", "ls", "cd", "read", "printf"]
+    COMMANDS = [
+        "echo",
+        "cat",
+        "grep",
+        "sed",
+        "awk",
+        "wc",
+        "sort",
+        "head",
+        "tail",
+        "tr",
+        "cut",
+        "true",
+        "false",
+        "test",
+        "pwd",
+        "ls",
+        "cd",
+        "read",
+        "printf",
+    ]
     VARIABLES = ["var", "x", "y", "name", "file", "dir", "result", "tmp", "i", "n", "str", "arr"]
-    WORDS = ["hello", "world", "foo", "bar", "baz", "test", "file", "data", "output", "input", "value", "arg"]
+    WORDS = [
+        "hello",
+        "world",
+        "foo",
+        "bar",
+        "baz",
+        "test",
+        "file",
+        "data",
+        "output",
+        "input",
+        "value",
+        "arg",
+    ]
     PATTERNS = ["*", "?", "[abc]", "[0-9]", "*.txt", "test*", "*file*"]
     SPECIAL_PARAMS = ["@", "*", "#", "?", "$", "!", "0", "1", "2", "_"]
 
@@ -419,7 +455,7 @@ class Generator:
         elif choice < 0.65:
             return f"< {target}"
         elif choice < 0.75:
-            return f"2>&1"
+            return "2>&1"
         elif choice < 0.85:
             return f"2> {target}"
         elif choice < 0.92:
@@ -637,7 +673,9 @@ class Generator:
         """Generate a [[ ]] conditional expression."""
         word1 = self.gen_word()
         word2 = self.gen_word()
-        op = self._choice(["==", "!=", "=~", "<", ">", "-eq", "-ne", "-lt", "-gt", "-f", "-d", "-z", "-n"])
+        op = self._choice(
+            ["==", "!=", "=~", "<", ">", "-eq", "-ne", "-lt", "-gt", "-f", "-d", "-z", "-n"]
+        )
         if op in ["-f", "-d", "-z", "-n"]:
             return f"[[ {op} {word1} ]]"
         return f"[[ {word1} {op} {word2} ]]"
@@ -683,7 +721,9 @@ class Generator:
         if self._layer_enabled(11) and self.rng.random() < 0.1:
             return self._choice([self.gen_case, self.gen_cond])()
         if self._layer_enabled(10) and self.rng.random() < 0.15:
-            return self._choice([self.gen_for, self.gen_arith_for, self.gen_while, self.gen_until, self.gen_select])()
+            return self._choice(
+                [self.gen_for, self.gen_arith_for, self.gen_while, self.gen_until, self.gen_select]
+            )()
         if self._layer_enabled(9) and self.rng.random() < 0.15:
             return self._choice([self.gen_group, self.gen_subshell, self.gen_if])()
         if self._layer_enabled(8):
@@ -751,12 +791,23 @@ def main():
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("--both-succeed", action="store_true")
     parser.add_argument("--stop-after", type=int)
-    parser.add_argument("--layer", type=str, default="full", help="Layer spec: 0-12, range like 0-5, or preset (words, expansions, commands, pipes, control, full)")
+    parser.add_argument(
+        "--layer",
+        type=str,
+        default="full",
+        help="Layer spec: 0-12, range like 0-5, or preset (words, expansions, commands, pipes, control, full)",
+    )
     parser.add_argument("--max-depth", type=int, default=5, help="Maximum recursion depth")
     parser.add_argument("--list-layers", action="store_true", help="List available layers and exit")
-    parser.add_argument("--dry-run", type=int, metavar="N", help="Generate N samples and print them without testing")
-    parser.add_argument("--minimize", action="store_true", help="Minimize discrepancies before outputting")
-    parser.add_argument("--filter-layer", help="Only show discrepancies at or below this layer (implies --minimize)")
+    parser.add_argument(
+        "--dry-run", type=int, metavar="N", help="Generate N samples and print them without testing"
+    )
+    parser.add_argument(
+        "--minimize", action="store_true", help="Minimize discrepancies before outputting"
+    )
+    parser.add_argument(
+        "--filter-layer", help="Only show discrepancies at or below this layer (implies --minimize)"
+    )
     args = parser.parse_args()
 
     if args.list_layers:
@@ -780,7 +831,7 @@ def main():
     if args.dry_run:
         out = open(args.output, "w") if args.output else sys.stdout
         for i in range(args.dry_run):
-            out.write(f"--- {i+1} ---\n")
+            out.write(f"--- {i + 1} ---\n")
             out.write(gen.generate())
             out.write("\n\n")
         if args.output:

@@ -257,6 +257,21 @@ class DolbraceState:
     QUOTE2 = 0x80  # Single quote semi-special (/)
 
 
+class MatchedPairFlags:
+    """Flags for _parse_matched_pair() to control parsing behavior.
+
+    Based on bash's P_* flags used in parse_matched_pair().
+    These flags control how the function handles quotes, escapes, and nested constructs.
+    """
+
+    NONE = 0
+    DQUOTE = 0x01  # Inside double quotes
+    DOLBRACE = 0x02  # Inside ${...}
+    COMMAND = 0x04  # Inside command substitution
+    ARITH = 0x08  # Inside arithmetic expression
+    ALLOWESC = 0x10  # Allow backslash escapes (for $'...')
+
+
 class SavedParserState:
     """Saved parser state for nested parsing (e.g., command substitutions).
 

@@ -111,6 +111,114 @@ def _repeat_str(s: str, n: int) -> str:
     return "".join(result)
 
 
+class TokenType:
+    """Token type constants for the lexer."""
+
+    EOF = 0
+    WORD = 1
+    NEWLINE = 2
+
+    # Single-char operators
+    SEMI = 10
+    PIPE = 11
+    AMP = 12
+    LPAREN = 13
+    RPAREN = 14
+    LBRACE = 15
+    RBRACE = 16
+    LESS = 17
+    GREATER = 18
+
+    # Multi-char operators
+    AND_AND = 30
+    OR_OR = 31
+    SEMI_SEMI = 32
+    SEMI_AMP = 33
+    SEMI_SEMI_AMP = 34
+    LESS_LESS = 35
+    GREATER_GREATER = 36
+    LESS_AMP = 37
+    GREATER_AMP = 38
+    LESS_GREATER = 39
+    GREATER_PIPE = 40
+    LESS_LESS_MINUS = 41
+    LESS_LESS_LESS = 42
+    AMP_GREATER = 43
+    AMP_GREATER_GREATER = 44
+    PIPE_AMP = 45
+
+    # Reserved words
+    IF = 50
+    THEN = 51
+    ELSE = 52
+    ELIF = 53
+    FI = 54
+    CASE = 55
+    ESAC = 56
+    FOR = 57
+    WHILE = 58
+    UNTIL = 59
+    DO = 60
+    DONE = 61
+    IN = 62
+    FUNCTION = 63
+    SELECT = 64
+    COPROC = 65
+    TIME = 66
+    BANG = 67
+    LBRACKET_LBRACKET = 68
+    RBRACKET_RBRACKET = 69
+
+    # Special
+    ASSIGNMENT_WORD = 80
+    NUMBER = 81
+
+
+class Token:
+    """A token produced by the lexer."""
+
+    def __init__(self, type_: int, value: str, pos: int):
+        self.type = type_
+        self.value = value
+        self.pos = pos
+
+    def __repr__(self) -> str:
+        return f"Token({self.type}, {self.value!r}, {self.pos})"
+
+
+class LexerState:
+    """Lexer state flags for context tracking during tokenization."""
+
+    NONE = 0
+    WASDOL = 0x0001
+    CKCOMMENT = 0x0002
+    INCOMMENT = 0x0004
+    PASSNEXT = 0x0008
+    INHEREDOC = 0x0080
+    HEREDELIM = 0x0100
+    STRIPDOC = 0x0200
+    QUOTEDDOC = 0x0400
+    INWORD = 0x0800
+
+
+class ParserStateFlags:
+    """Parser state flags for context-sensitive parsing decisions."""
+
+    NONE = 0
+    PST_CASEPAT = 0x0001
+    PST_CMDSUBST = 0x0002
+    PST_CASESTMT = 0x0004
+    PST_CONDEXPR = 0x0008
+    PST_COMPASSIGN = 0x0010
+    PST_ARITH = 0x0020
+    PST_HEREDOC = 0x0040
+    PST_REGEXP = 0x0080
+    PST_EXTPAT = 0x0100
+    PST_SUBSHELL = 0x0200
+    PST_REDIRLIST = 0x0400
+    PST_COMMENT = 0x0800
+
+
 class QuoteState:
     """Unified quote state tracker for parsing.
 
@@ -291,6 +399,295 @@ class ContextStack:
     def get_arith_paren_depth(self) -> int:
         """Return current arithmetic paren depth."""
         return self.get_current().arith_paren_depth
+
+
+class Lexer:
+    """Lexer for tokenizing shell input."""
+
+    def __init__(self, source: str):
+        self.source = source
+        self.pos = 0
+        self.length = len(source)
+        self.state = LexerState.CKCOMMENT
+        self.quote = QuoteState()
+        self._token_cache: Token | None = None
+
+    def peek(self) -> str | None:
+        """Return current character without consuming."""
+        if self.pos >= self.length:
+            return None
+        return self.source[self.pos]
+
+    def advance(self) -> str | None:
+        """Consume and return current character."""
+        if self.pos >= self.length:
+            return None
+        c = self.source[self.pos]
+        self.pos += 1
+        return c
+
+    def at_end(self) -> bool:
+        """Return True if at end of input."""
+        return self.pos >= self.length
+
+    def lookahead(self, n: int) -> str:
+        """Return next n characters without consuming."""
+        return self.source[self.pos : self.pos + n]
+
+    def is_metachar(self, c: str) -> bool:
+        """Return True if c is a shell metacharacter."""
+        return c in "|&;()<> \t\n"
+
+    def is_operator_start(self, c: str) -> bool:
+        """Return True if c can start an operator."""
+        return c in "|&;<>()"
+
+    def is_blank(self, c: str) -> bool:
+        """Return True if c is blank (space or tab)."""
+        return c == " " or c == "\t"
+
+    def is_word_char(self, c: str) -> bool:
+        """Return True if c can be part of an unquoted word."""
+        if c is None:
+            return False
+        return not self.is_metachar(c)
+
+    def _read_operator(self) -> Token | None:
+        """Try to read an operator token. Returns None if not at operator."""
+        start = self.pos
+        c = self.peek()
+        if c is None:
+            return None
+        two = self.lookahead(2)
+        three = self.lookahead(3)
+        # Three-char operators
+        if three == ";;&":
+            self.pos += 3
+            return Token(TokenType.SEMI_SEMI_AMP, three, start)
+        if three == "<<-":
+            self.pos += 3
+            return Token(TokenType.LESS_LESS_MINUS, three, start)
+        if three == "<<<":
+            self.pos += 3
+            return Token(TokenType.LESS_LESS_LESS, three, start)
+        if three == "&>>":
+            self.pos += 3
+            return Token(TokenType.AMP_GREATER_GREATER, three, start)
+        # Two-char operators
+        if two == "&&":
+            self.pos += 2
+            return Token(TokenType.AND_AND, two, start)
+        if two == "||":
+            self.pos += 2
+            return Token(TokenType.OR_OR, two, start)
+        if two == ";;":
+            self.pos += 2
+            return Token(TokenType.SEMI_SEMI, two, start)
+        if two == ";&":
+            self.pos += 2
+            return Token(TokenType.SEMI_AMP, two, start)
+        if two == "<<":
+            self.pos += 2
+            return Token(TokenType.LESS_LESS, two, start)
+        if two == ">>":
+            self.pos += 2
+            return Token(TokenType.GREATER_GREATER, two, start)
+        if two == "<&":
+            self.pos += 2
+            return Token(TokenType.LESS_AMP, two, start)
+        if two == ">&":
+            self.pos += 2
+            return Token(TokenType.GREATER_AMP, two, start)
+        if two == "<>":
+            self.pos += 2
+            return Token(TokenType.LESS_GREATER, two, start)
+        if two == ">|":
+            self.pos += 2
+            return Token(TokenType.GREATER_PIPE, two, start)
+        if two == "&>":
+            self.pos += 2
+            return Token(TokenType.AMP_GREATER, two, start)
+        if two == "|&":
+            self.pos += 2
+            return Token(TokenType.PIPE_AMP, two, start)
+        # Single-char operators
+        if c == ";":
+            self.pos += 1
+            return Token(TokenType.SEMI, c, start)
+        if c == "|":
+            self.pos += 1
+            return Token(TokenType.PIPE, c, start)
+        if c == "&":
+            self.pos += 1
+            return Token(TokenType.AMP, c, start)
+        if c == "(":
+            self.pos += 1
+            return Token(TokenType.LPAREN, c, start)
+        if c == ")":
+            self.pos += 1
+            return Token(TokenType.RPAREN, c, start)
+        if c == "<":
+            self.pos += 1
+            return Token(TokenType.LESS, c, start)
+        if c == ">":
+            self.pos += 1
+            return Token(TokenType.GREATER, c, start)
+        if c == "\n":
+            self.pos += 1
+            return Token(TokenType.NEWLINE, c, start)
+        return None
+
+    def skip_blanks(self) -> None:
+        """Skip spaces and tabs (not newlines)."""
+        while self.pos < self.length:
+            c = self.source[self.pos]
+            if c != " " and c != "\t":
+                break
+            self.pos += 1
+
+    def _skip_comment(self) -> bool:
+        """Skip comment if at # in comment-allowed context. Returns True if skipped."""
+        if self.pos >= self.length:
+            return False
+        if self.source[self.pos] != "#":
+            return False
+        if self.quote.in_quotes():
+            return False
+        # Check if in comment-allowed position (start of line or after blank/meta)
+        if self.pos > 0:
+            prev = self.source[self.pos - 1]
+            if prev not in " \t\n;|&(){}":
+                return False
+        # Skip to end of line
+        while self.pos < self.length and self.source[self.pos] != "\n":
+            self.pos += 1
+        return True
+
+    def _scan_single_quoted(self) -> str:
+        """Scan content inside single quotes. Caller has consumed opening quote."""
+        chars = ["'"]
+        while self.pos < self.length:
+            c = self.source[self.pos]
+            chars.append(c)
+            self.pos += 1
+            if c == "'":
+                break
+        return "".join(chars)
+
+    def _scan_double_quoted(self) -> str:
+        """Scan content inside double quotes. Caller has consumed opening quote."""
+        chars = ['"']
+        while self.pos < self.length:
+            c = self.source[self.pos]
+            if c == "\\":
+                chars.append(c)
+                self.pos += 1
+                if self.pos < self.length:
+                    chars.append(self.source[self.pos])
+                    self.pos += 1
+                continue
+            chars.append(c)
+            self.pos += 1
+            if c == '"':
+                break
+        return "".join(chars)
+
+    def _read_word(self) -> Token | None:
+        """Read a word token, handling quotes."""
+        start = self.pos
+        if self.pos >= self.length:
+            return None
+        c = self.peek()
+        if c is None or self.is_metachar(c):
+            return None
+        chars: list[str] = []
+        while self.pos < self.length:
+            c = self.source[self.pos]
+            if self.is_metachar(c) and not self.quote.in_quotes():
+                break
+            if c == "\\":
+                chars.append(c)
+                self.pos += 1
+                if self.pos < self.length:
+                    chars.append(self.source[self.pos])
+                    self.pos += 1
+                continue
+            if c == "'" and not self.quote.double:
+                self.pos += 1
+                chars.append(self._scan_single_quoted())
+                continue
+            if c == '"' and not self.quote.single:
+                self.pos += 1
+                chars.append(self._scan_double_quoted())
+                continue
+            chars.append(c)
+            self.pos += 1
+        if not chars:
+            return None
+        return Token(TokenType.WORD, "".join(chars), start)
+
+    def next_token(self) -> Token:
+        """Return the next token from the input."""
+        if self._token_cache is not None:
+            tok = self._token_cache
+            self._token_cache = None
+            return tok
+        self.skip_blanks()
+        if self.at_end():
+            return Token(TokenType.EOF, "", self.pos)
+        while self._skip_comment():
+            self.skip_blanks()
+            if self.at_end():
+                return Token(TokenType.EOF, "", self.pos)
+        tok = self._read_operator()
+        if tok is not None:
+            return tok
+        tok = self._read_word()
+        if tok is not None:
+            return tok
+        return Token(TokenType.EOF, "", self.pos)
+
+    def peek_token(self) -> Token:
+        """Peek at next token without consuming."""
+        if self._token_cache is None:
+            self._token_cache = self.next_token()
+        return self._token_cache
+
+    def unget_token(self, tok: Token) -> None:
+        """Push a token back to be returned by next call."""
+        self._token_cache = tok
+
+    # Reserved words mapping
+    RESERVED_WORDS: dict[str, int] = {
+        "if": TokenType.IF,
+        "then": TokenType.THEN,
+        "else": TokenType.ELSE,
+        "elif": TokenType.ELIF,
+        "fi": TokenType.FI,
+        "case": TokenType.CASE,
+        "esac": TokenType.ESAC,
+        "for": TokenType.FOR,
+        "while": TokenType.WHILE,
+        "until": TokenType.UNTIL,
+        "do": TokenType.DO,
+        "done": TokenType.DONE,
+        "in": TokenType.IN,
+        "function": TokenType.FUNCTION,
+        "select": TokenType.SELECT,
+        "coproc": TokenType.COPROC,
+        "time": TokenType.TIME,
+        "!": TokenType.BANG,
+        "[[": TokenType.LBRACKET_LBRACKET,
+        "]]": TokenType.RBRACKET_RBRACKET,
+        "{": TokenType.LBRACE,
+        "}": TokenType.RBRACE,
+    }
+
+    def classify_word(self, word: str, reserved_ok: bool) -> int:
+        """Classify a word token - may be reserved word if unquoted and allowed."""
+        if reserved_ok and word in self.RESERVED_WORDS:
+            return self.RESERVED_WORDS[word]
+        return TokenType.WORD
 
 
 def _strip_line_continuations_comment_aware(text: str) -> str:
@@ -4637,10 +5034,6 @@ def _is_dollar_dollar_paren(value: str, idx: int) -> bool:
     return dollar_count % 2 == 1
 
 
-def _is_semicolon_or_amp(c: str) -> bool:
-    return c == ";" or c == "&"
-
-
 def _is_paren(c: str) -> bool:
     return c == "(" or c == ")"
 
@@ -4717,6 +5110,138 @@ class Parser:
         self._in_process_sub = in_process_sub
         # Context stack for tracking nested parsing scopes
         self._ctx = ContextStack()
+        # Lexer for tokenization (not yet used, being added incrementally)
+        self._lexer = Lexer(source)
+        # Token history for context-sensitive parsing (last 4 tokens like bash)
+        self._token_history: list[Token | None] = [None, None, None, None]
+        # Parser state flags for context-sensitive decisions
+        self._parser_state = ParserStateFlags.NONE
+
+    def _set_state(self, flag: int) -> None:
+        """Set a parser state flag."""
+        self._parser_state = self._parser_state | flag
+
+    def _clear_state(self, flag: int) -> None:
+        """Clear a parser state flag."""
+        self._parser_state = self._parser_state & ~flag
+
+    def _in_state(self, flag: int) -> bool:
+        """Check if a parser state flag is set."""
+        return (self._parser_state & flag) != 0
+
+    def _record_token(self, tok: Token) -> None:
+        """Record token in history, shifting older tokens."""
+        self._token_history = [
+            tok,
+            self._token_history[0],
+            self._token_history[1],
+            self._token_history[2],
+        ]
+
+    def _last_token(self) -> Token | None:
+        """Return the most recently recorded token."""
+        return self._token_history[0]
+
+    def _last_token_type(self) -> int | None:
+        """Return type of most recently recorded token, or None."""
+        tok = self._token_history[0]
+        if tok is None:
+            return None
+        return tok.type
+
+    def _sync_lexer(self) -> None:
+        """Sync Lexer position to Parser position."""
+        self._lexer.pos = self.pos
+        self._lexer._token_cache = None
+
+    def _sync_parser(self) -> None:
+        """Sync Parser position to Lexer position."""
+        self.pos = self._lexer.pos
+
+    def _lex_peek_token(self) -> Token:
+        """Peek at next token via Lexer."""
+        self._sync_lexer()
+        return self._lexer.peek_token()
+
+    def _lex_next_token(self) -> Token:
+        """Get next token via Lexer and sync position."""
+        self._sync_lexer()
+        tok = self._lexer.next_token()
+        self._sync_parser()
+        self._record_token(tok)
+        return tok
+
+    def _lex_skip_blanks(self) -> None:
+        """Skip blanks via Lexer."""
+        self._sync_lexer()
+        self._lexer.skip_blanks()
+        self._sync_parser()
+
+    def _lex_skip_comment(self) -> bool:
+        """Skip comment via Lexer. Returns True if comment was skipped."""
+        self._sync_lexer()
+        result = self._lexer._skip_comment()
+        self._sync_parser()
+        return result
+
+    def _lex_peek_operator(self) -> tuple[int, str] | None:
+        """Peek operator token. Returns (token_type, value) or None."""
+        tok = self._lex_peek_token()
+        t = tok.type
+        # Single-char operators: SEMI(10) through GREATER(18)
+        # Multi-char operators: AND_AND(30) through PIPE_AMP(45)
+        if (t >= TokenType.SEMI and t <= TokenType.GREATER) or (
+            t >= TokenType.AND_AND and t <= TokenType.PIPE_AMP
+        ):
+            return (t, tok.value)
+        return None
+
+    def _lex_peek_reserved_word(self) -> str | None:
+        """Peek reserved word. Returns word value if reserved, None otherwise."""
+        tok = self._lex_peek_token()
+        if tok.type != TokenType.WORD:
+            return None
+        # Strip trailing backslash-newline (line continuation) for classification
+        # The lexer includes \<newline> in words, but reserved word check ignores it
+        word = tok.value
+        if word.endswith("\\\n"):
+            word = word[:-2]
+        # Check against module-level RESERVED_WORDS set plus additional reserved tokens
+        # (Using module-level constant for transpiler compatibility)
+        if word in RESERVED_WORDS or word in ("{", "}", "[[", "]]", "!", "time"):
+            return word
+        return None
+
+    def _lex_is_at_reserved_word(self, word: str) -> bool:
+        """Check if next token is a specific reserved word."""
+        reserved = self._lex_peek_reserved_word()
+        return reserved == word
+
+    def _lex_consume_word(self, expected: str) -> bool:
+        """Try to consume a word token matching expected. Returns True if successful."""
+        tok = self._lex_peek_token()
+        if tok.type != TokenType.WORD:
+            return False
+        # Strip trailing backslash-newline (line continuation) for comparison
+        word = tok.value
+        if word.endswith("\\\n"):
+            word = word[:-2]
+        if word == expected:
+            self._lex_next_token()
+            return True
+        return False
+
+    def _lex_peek_case_terminator(self) -> str | None:
+        """Peek case terminator (;;, ;&, ;;&). Returns value or None."""
+        tok = self._lex_peek_token()
+        t = tok.type
+        if t == TokenType.SEMI_SEMI:
+            return ";;"
+        if t == TokenType.SEMI_AMP:
+            return ";&"
+        if t == TokenType.SEMI_SEMI_AMP:
+            return ";;&"
+        return None
 
     def at_end(self) -> bool:
         """Check if we've reached the end of input."""
@@ -4750,12 +5275,6 @@ class Parser:
         """Return next n characters without consuming."""
         return _substring(self.source, self.pos, self.pos + n)
 
-    def match_keyword(self, keyword: str) -> bool:
-        """Check if current position matches keyword with word boundary."""
-        if not _starts_with_at(self.source, self.pos, keyword):
-            return False
-        return _is_word_boundary(self.source, self.pos, len(keyword))
-
     def _is_bang_followed_by_procsub(self) -> bool:
         """Check if ! at current position is followed by >( or <( process substitution."""
         if self.pos + 2 >= self.length:
@@ -4768,13 +5287,14 @@ class Parser:
     def skip_whitespace(self) -> None:
         """Skip spaces, tabs, comments, and backslash-newline continuations."""
         while not self.at_end():
+            # Use Lexer for spaces/tabs
+            self._lex_skip_blanks()
+            if self.at_end():
+                break
             ch = self.peek()
-            if _is_whitespace_no_newline(ch):
-                self.advance()
-            elif ch == "#":
-                # Skip comment to end of line (but not the newline itself)
-                while not self.at_end() and self.peek() != "\n":
-                    self.advance()
+            if ch == "#":
+                # Use Lexer to skip comment
+                self._lex_skip_comment()
             elif ch == "\\" and self.peek_at(1) == "\n":
                 # Backslash-newline is line continuation - skip both
                 self.advance()
@@ -4842,17 +5362,21 @@ class Parser:
         if self.peek() == "{":
             brace = self.parse_brace_group()
             if brace is None:
-                raise ParseError(f"Expected brace group body in {context}", pos=self.pos)
+                raise ParseError(
+                    f"Expected brace group body in {context}", pos=self._lex_peek_token().pos
+                )
             return brace.body
-        if self.consume_word("do"):
+        if self._lex_consume_word("do"):
             body = self.parse_list_until({"done"})
             if body is None:
-                raise ParseError("Expected commands after 'do'", pos=self.pos)
+                raise ParseError("Expected commands after 'do'", pos=self._lex_peek_token().pos)
             self.skip_whitespace_and_newlines()
-            if not self.consume_word("done"):
-                raise ParseError(f"Expected 'done' to close {context}", pos=self.pos)
+            if not self._lex_consume_word("done"):
+                raise ParseError(
+                    f"Expected 'done' to close {context}", pos=self._lex_peek_token().pos
+                )
             return body
-        raise ParseError(f"Expected 'do' or '{{' in {context}", pos=self.pos)
+        raise ParseError(f"Expected 'do' or '{{' in {context}", pos=self._lex_peek_token().pos)
 
     def peek_word(self) -> str | None:
         """Peek at the next word without consuming it."""
@@ -4887,7 +5411,11 @@ class Parser:
         return word
 
     def consume_word(self, expected: str) -> bool:
-        """Try to consume a specific reserved word. Returns True if successful."""
+        """Try to consume a specific word. Returns True if successful.
+
+        Note: This is kept for edge cases (process sub leading }, variable names).
+        Most reserved word consumption has been migrated to _lex_consume_word().
+        """
         saved_pos = self.pos
         self.skip_whitespace()
 
@@ -6529,7 +7057,9 @@ class Parser:
         saved_arith_src = getattr(self, "_arith_src", None)
         saved_arith_pos = getattr(self, "_arith_pos", None)
         saved_arith_len = getattr(self, "_arith_len", None)
+        saved_parser_state = self._parser_state
 
+        self._set_state(ParserStateFlags.PST_ARITH)
         self._arith_src = content
         self._arith_pos = 0
         self._arith_len = len(content)
@@ -6539,7 +7069,8 @@ class Parser:
         else:
             result = self._arith_parse_comma()
 
-        # Restore previous arith context
+        # Restore previous arith context and parser state
+        self._parser_state = saved_parser_state
         if saved_arith_src is not None:
             self._arith_src = saved_arith_src
             self._arith_pos = saved_arith_pos
@@ -8994,186 +9525,181 @@ class Parser:
     def parse_brace_group(self) -> BraceGroup | None:
         """Parse a brace group { list }."""
         self.skip_whitespace()
-        if self.at_end() or self.peek() != "{":
+        # Lexer handles { vs {abc distinction: only returns reserved word for standalone {
+        if not self._lex_consume_word("{"):
             return None
-
-        # Check that { is followed by whitespace or a valid command starter
-        # {( is valid: brace group containing a subshell
-        # {< and {> are valid: brace group starting with a redirect
-        if self.pos + 1 < self.length:
-            next_ch = self.source[self.pos + 1]
-            if not _is_whitespace(next_ch) and next_ch not in "(<>":
-                return None
-
-        self.advance()  # consume {
         self.skip_whitespace_and_newlines()
 
         body = self.parse_list()
         if body is None:
-            raise ParseError("Expected command in brace group", pos=self.pos)
+            raise ParseError("Expected command in brace group", pos=self._lex_peek_token().pos)
 
         self.skip_whitespace()
-        if self.at_end() or self.peek() != "}":
-            raise ParseError("Expected } to close brace group", pos=self.pos)
-        self.advance()  # consume }
+        if not self._lex_consume_word("}"):
+            raise ParseError("Expected } to close brace group", pos=self._lex_peek_token().pos)
         return BraceGroup(body, self._collect_redirects())
 
     def parse_if(self) -> If | None:
         """Parse an if statement: if list; then list [elif list; then list]* [else list] fi."""
-        if not self.consume_word("if"):
+        self.skip_whitespace()
+        if not self._lex_consume_word("if"):
             return None
 
         # Parse condition (a list that ends at 'then')
         condition = self.parse_list_until({"then"})
         if condition is None:
-            raise ParseError("Expected condition after 'if'", pos=self.pos)
+            raise ParseError("Expected condition after 'if'", pos=self._lex_peek_token().pos)
 
         # Expect 'then'
         self.skip_whitespace_and_newlines()
-        if not self.consume_word("then"):
-            raise ParseError("Expected 'then' after if condition", pos=self.pos)
+        if not self._lex_consume_word("then"):
+            raise ParseError("Expected 'then' after if condition", pos=self._lex_peek_token().pos)
 
         # Parse then body (ends at elif, else, or fi)
         then_body = self.parse_list_until({"elif", "else", "fi"})
         if then_body is None:
-            raise ParseError("Expected commands after 'then'", pos=self.pos)
+            raise ParseError("Expected commands after 'then'", pos=self._lex_peek_token().pos)
 
         # Check what comes next: elif, else, or fi
         self.skip_whitespace_and_newlines()
-        next_word = self.peek_word()
 
         else_body = None
-        if next_word == "elif":
+        if self._lex_is_at_reserved_word("elif"):
             # elif is syntactic sugar for else if ... fi
-            self.consume_word("elif")
+            self._lex_consume_word("elif")
             # Parse the rest as a nested if (but we've already consumed 'elif')
             # We need to parse: condition; then body [elif|else|fi]
             elif_condition = self.parse_list_until({"then"})
             if elif_condition is None:
-                raise ParseError("Expected condition after 'elif'", pos=self.pos)
+                raise ParseError("Expected condition after 'elif'", pos=self._lex_peek_token().pos)
 
             self.skip_whitespace_and_newlines()
-            if not self.consume_word("then"):
-                raise ParseError("Expected 'then' after elif condition", pos=self.pos)
+            if not self._lex_consume_word("then"):
+                raise ParseError(
+                    "Expected 'then' after elif condition", pos=self._lex_peek_token().pos
+                )
 
             elif_then_body = self.parse_list_until({"elif", "else", "fi"})
             if elif_then_body is None:
-                raise ParseError("Expected commands after 'then'", pos=self.pos)
+                raise ParseError("Expected commands after 'then'", pos=self._lex_peek_token().pos)
 
             # Recursively handle more elif/else/fi
             self.skip_whitespace_and_newlines()
-            inner_next = self.peek_word()
 
             inner_else = None
-            if inner_next == "elif":
+            if self._lex_is_at_reserved_word("elif"):
                 # More elif - recurse by creating a fake "if" and parsing
                 # Actually, let's just recursively call a helper
                 inner_else = self._parse_elif_chain()
-            elif inner_next == "else":
-                self.consume_word("else")
+            elif self._lex_is_at_reserved_word("else"):
+                self._lex_consume_word("else")
                 inner_else = self.parse_list_until({"fi"})
                 if inner_else is None:
-                    raise ParseError("Expected commands after 'else'", pos=self.pos)
+                    raise ParseError(
+                        "Expected commands after 'else'", pos=self._lex_peek_token().pos
+                    )
 
             else_body = If(elif_condition, elif_then_body, inner_else)
 
-        elif next_word == "else":
-            self.consume_word("else")
+        elif self._lex_is_at_reserved_word("else"):
+            self._lex_consume_word("else")
             else_body = self.parse_list_until({"fi"})
             if else_body is None:
-                raise ParseError("Expected commands after 'else'", pos=self.pos)
+                raise ParseError("Expected commands after 'else'", pos=self._lex_peek_token().pos)
 
         # Expect 'fi'
         self.skip_whitespace_and_newlines()
-        if not self.consume_word("fi"):
-            raise ParseError("Expected 'fi' to close if statement", pos=self.pos)
+        if not self._lex_consume_word("fi"):
+            raise ParseError("Expected 'fi' to close if statement", pos=self._lex_peek_token().pos)
         return If(condition, then_body, else_body, self._collect_redirects())
 
     def _parse_elif_chain(self) -> If:
         """Parse elif chain (after seeing 'elif' keyword)."""
-        self.consume_word("elif")
+        self._lex_consume_word("elif")
 
         condition = self.parse_list_until({"then"})
         if condition is None:
-            raise ParseError("Expected condition after 'elif'", pos=self.pos)
+            raise ParseError("Expected condition after 'elif'", pos=self._lex_peek_token().pos)
 
         self.skip_whitespace_and_newlines()
-        if not self.consume_word("then"):
-            raise ParseError("Expected 'then' after elif condition", pos=self.pos)
+        if not self._lex_consume_word("then"):
+            raise ParseError("Expected 'then' after elif condition", pos=self._lex_peek_token().pos)
 
         then_body = self.parse_list_until({"elif", "else", "fi"})
         if then_body is None:
-            raise ParseError("Expected commands after 'then'", pos=self.pos)
+            raise ParseError("Expected commands after 'then'", pos=self._lex_peek_token().pos)
 
         self.skip_whitespace_and_newlines()
-        next_word = self.peek_word()
 
         else_body = None
-        if next_word == "elif":
+        if self._lex_is_at_reserved_word("elif"):
             else_body = self._parse_elif_chain()
-        elif next_word == "else":
-            self.consume_word("else")
+        elif self._lex_is_at_reserved_word("else"):
+            self._lex_consume_word("else")
             else_body = self.parse_list_until({"fi"})
             if else_body is None:
-                raise ParseError("Expected commands after 'else'", pos=self.pos)
+                raise ParseError("Expected commands after 'else'", pos=self._lex_peek_token().pos)
 
         return If(condition, then_body, else_body)
 
     def parse_while(self) -> While | None:
         """Parse a while loop: while list; do list; done."""
-        if not self.consume_word("while"):
+        self.skip_whitespace()
+        if not self._lex_consume_word("while"):
             return None
 
         # Parse condition (ends at 'do')
         condition = self.parse_list_until({"do"})
         if condition is None:
-            raise ParseError("Expected condition after 'while'", pos=self.pos)
+            raise ParseError("Expected condition after 'while'", pos=self._lex_peek_token().pos)
 
         # Expect 'do'
         self.skip_whitespace_and_newlines()
-        if not self.consume_word("do"):
-            raise ParseError("Expected 'do' after while condition", pos=self.pos)
+        if not self._lex_consume_word("do"):
+            raise ParseError("Expected 'do' after while condition", pos=self._lex_peek_token().pos)
 
         # Parse body (ends at 'done')
         body = self.parse_list_until({"done"})
         if body is None:
-            raise ParseError("Expected commands after 'do'", pos=self.pos)
+            raise ParseError("Expected commands after 'do'", pos=self._lex_peek_token().pos)
 
         # Expect 'done'
         self.skip_whitespace_and_newlines()
-        if not self.consume_word("done"):
-            raise ParseError("Expected 'done' to close while loop", pos=self.pos)
+        if not self._lex_consume_word("done"):
+            raise ParseError("Expected 'done' to close while loop", pos=self._lex_peek_token().pos)
         return While(condition, body, self._collect_redirects())
 
     def parse_until(self) -> Until | None:
         """Parse an until loop: until list; do list; done."""
-        if not self.consume_word("until"):
+        self.skip_whitespace()
+        if not self._lex_consume_word("until"):
             return None
 
         # Parse condition (ends at 'do')
         condition = self.parse_list_until({"do"})
         if condition is None:
-            raise ParseError("Expected condition after 'until'", pos=self.pos)
+            raise ParseError("Expected condition after 'until'", pos=self._lex_peek_token().pos)
 
         # Expect 'do'
         self.skip_whitespace_and_newlines()
-        if not self.consume_word("do"):
-            raise ParseError("Expected 'do' after until condition", pos=self.pos)
+        if not self._lex_consume_word("do"):
+            raise ParseError("Expected 'do' after until condition", pos=self._lex_peek_token().pos)
 
         # Parse body (ends at 'done')
         body = self.parse_list_until({"done"})
         if body is None:
-            raise ParseError("Expected commands after 'do'", pos=self.pos)
+            raise ParseError("Expected commands after 'do'", pos=self._lex_peek_token().pos)
 
         # Expect 'done'
         self.skip_whitespace_and_newlines()
-        if not self.consume_word("done"):
-            raise ParseError("Expected 'done' to close until loop", pos=self.pos)
+        if not self._lex_consume_word("done"):
+            raise ParseError("Expected 'done' to close until loop", pos=self._lex_peek_token().pos)
         return Until(condition, body, self._collect_redirects())
 
     def parse_for(self) -> For | ForArith | None:
         """Parse a for loop: for name [in words]; do list; done or C-style for ((;;))."""
-        if not self.consume_word("for"):
+        self.skip_whitespace()
+        if not self._lex_consume_word("for"):
             return None
         self.skip_whitespace()
 
@@ -9186,12 +9712,16 @@ class Parser:
             # Command substitution as variable name: for $(echo i) in ...
             var_word = self.parse_word()
             if var_word is None:
-                raise ParseError("Expected variable name after 'for'", pos=self.pos)
+                raise ParseError(
+                    "Expected variable name after 'for'", pos=self._lex_peek_token().pos
+                )
             var_name = var_word.value
         else:
             var_name = self.peek_word()
             if var_name is None:
-                raise ParseError("Expected variable name after 'for'", pos=self.pos)
+                raise ParseError(
+                    "Expected variable name after 'for'", pos=self._lex_peek_token().pos
+                )
             self.consume_word(var_name)
 
         self.skip_whitespace()
@@ -9203,8 +9733,8 @@ class Parser:
 
         # Check for optional 'in' clause
         words = None
-        if self.peek_word() == "in":
-            self.consume_word("in")
+        if self._lex_is_at_reserved_word("in"):
+            self._lex_consume_word("in")
             self.skip_whitespace()  # Only skip whitespace, not newlines
 
             # Check for immediate delimiter (;, newline) after 'in'
@@ -9226,11 +9756,13 @@ class Parser:
                         self.advance()  # consume semicolon
                     break
                 # 'do' only terminates if preceded by delimiter
-                if self.peek_word() == "do":
+                if self._lex_is_at_reserved_word("do"):
                     if saw_delimiter:
                         break
                     # 'for x in do' or 'for x in a b c do' is invalid
-                    raise ParseError("Expected ';' or newline before 'do'", pos=self.pos)
+                    raise ParseError(
+                        "Expected ';' or newline before 'do'", pos=self._lex_peek_token().pos
+                    )
 
                 word = self.parse_word()
                 if word is None:
@@ -9245,22 +9777,22 @@ class Parser:
             # Bash allows: for x in a b; { cmd; }
             brace_group = self.parse_brace_group()
             if brace_group is None:
-                raise ParseError("Expected brace group in for loop", pos=self.pos)
+                raise ParseError("Expected brace group in for loop", pos=self._lex_peek_token().pos)
             return For(var_name, words, brace_group.body, self._collect_redirects())
 
         # Expect 'do'
-        if not self.consume_word("do"):
-            raise ParseError("Expected 'do' in for loop", pos=self.pos)
+        if not self._lex_consume_word("do"):
+            raise ParseError("Expected 'do' in for loop", pos=self._lex_peek_token().pos)
 
         # Parse body (ends at 'done')
         body = self.parse_list_until({"done"})
         if body is None:
-            raise ParseError("Expected commands after 'do'", pos=self.pos)
+            raise ParseError("Expected commands after 'do'", pos=self._lex_peek_token().pos)
 
         # Expect 'done'
         self.skip_whitespace_and_newlines()
-        if not self.consume_word("done"):
-            raise ParseError("Expected 'done' to close for loop", pos=self.pos)
+        if not self._lex_consume_word("done"):
+            raise ParseError("Expected 'done' to close for loop", pos=self._lex_peek_token().pos)
         return For(var_name, words, body, self._collect_redirects())
 
     def _parse_for_arith(self) -> ForArith:
@@ -9321,14 +9853,17 @@ class Parser:
 
     def parse_select(self) -> Select | None:
         """Parse a select statement: select name [in words]; do list; done."""
-        if not self.consume_word("select"):
+        self.skip_whitespace()
+        if not self._lex_consume_word("select"):
             return None
         self.skip_whitespace()
 
         # Parse variable name
         var_name = self.peek_word()
         if var_name is None:
-            raise ParseError("Expected variable name after 'select'", pos=self.pos)
+            raise ParseError(
+                "Expected variable name after 'select'", pos=self._lex_peek_token().pos
+            )
         self.consume_word(var_name)
 
         self.skip_whitespace()
@@ -9340,8 +9875,8 @@ class Parser:
 
         # Check for optional 'in' clause
         words = None
-        if self.peek_word() == "in":
-            self.consume_word("in")
+        if self._lex_is_at_reserved_word("in"):
+            self._lex_consume_word("in")
             self.skip_whitespace_and_newlines()  # Allow newlines after 'in'
 
             # Parse words until semicolon, newline, 'do', or '{'
@@ -9355,7 +9890,7 @@ class Parser:
                     if self.peek() == ";":
                         self.advance()  # consume semicolon
                     break
-                if self.peek_word() == "do":
+                if self._lex_is_at_reserved_word("do"):
                     break
 
                 word = self.parse_word()
@@ -9370,38 +9905,17 @@ class Parser:
         body = self._parse_loop_body("select")
         return Select(var_name, words, body, self._collect_redirects())
 
-    def _is_case_terminator(self) -> bool:
-        """Check if we're at a case pattern terminator (;;, ;&, or ;;&)."""
-        if self.at_end() or self.peek() != ";":
-            return False
-        if self.pos + 1 >= self.length:
-            return False
-        next_ch = self.source[self.pos + 1]
-        # ;; or ;& or ;;& (which is actually ;;&)
-        return _is_semicolon_or_amp(next_ch)
-
     def _consume_case_terminator(self) -> str:
         """Consume and return case pattern terminator (;;, ;&, or ;;&)."""
-        if self.at_end() or self.peek() != ";":
-            return ";;"  # default
-        self.advance()  # consume first ;
-        if self.at_end():
-            return ";;"
-        ch = self.peek()
-        if ch == ";":
-            self.advance()  # consume second ;
-            # Check for ;;&
-            if not self.at_end() and self.peek() == "&":
-                self.advance()  # consume &
-                return ";;&"
-            return ";;"
-        elif ch == "&":
-            self.advance()  # consume &
-            return ";&"
-        return ";;"
+        term = self._lex_peek_case_terminator()
+        if term is not None:
+            self._lex_next_token()
+            return term
+        return ";;"  # default
 
     def parse_case(self) -> Case | None:
         """Parse a case statement: case word in pattern) commands;; ... esac."""
+        # Use consume_word for initial keyword to handle leading } in process subs
         if not self.consume_word("case"):
             return None
         self.skip_whitespace()
@@ -9409,23 +9923,24 @@ class Parser:
         # Parse the word to match
         word = self.parse_word()
         if word is None:
-            raise ParseError("Expected word after 'case'", pos=self.pos)
+            raise ParseError("Expected word after 'case'", pos=self._lex_peek_token().pos)
 
         self.skip_whitespace_and_newlines()
 
         # Expect 'in'
-        if not self.consume_word("in"):
-            raise ParseError("Expected 'in' after case word", pos=self.pos)
+        if not self._lex_consume_word("in"):
+            raise ParseError("Expected 'in' after case word", pos=self._lex_peek_token().pos)
 
         self.skip_whitespace_and_newlines()
 
         # Parse pattern clauses until 'esac'
         patterns = []
+        self._set_state(ParserStateFlags.PST_CASEPAT)
         while True:
             self.skip_whitespace_and_newlines()
 
             # Check if we're at 'esac' (but not 'esac)' which is esac as a pattern)
-            if self.peek_word() == "esac":
+            if self._lex_is_at_reserved_word("esac"):
                 # Look ahead to see if esac is a pattern (esac followed by ) then body/;;)
                 # or the closing keyword (esac followed by ) that closes containing construct)
                 saved = self.pos
@@ -9593,7 +10108,9 @@ class Parser:
 
             pattern = "".join(pattern_chars)
             if not pattern:
-                raise ParseError("Expected pattern in case statement", pos=self.pos)
+                raise ParseError(
+                    "Expected pattern in case statement", pos=self._lex_peek_token().pos
+                )
 
             # Parse commands until ;;, ;&, ;;&, or esac
             # Commands are optional (can have empty body)
@@ -9601,14 +10118,14 @@ class Parser:
 
             body = None
             # Check for empty body: terminator right after pattern
-            is_empty_body = self._is_case_terminator()
+            is_empty_body = self._lex_peek_case_terminator() is not None
 
             if not is_empty_body:
                 # Skip newlines and check if there's content before terminator or esac
                 self.skip_whitespace_and_newlines()
-                if not self.at_end() and self.peek_word() != "esac":
+                if not self.at_end() and not self._lex_is_at_reserved_word("esac"):
                     # Check again for terminator after whitespace/newlines
-                    is_at_terminator = self._is_case_terminator()
+                    is_at_terminator = self._lex_peek_case_terminator() is not None
                     if not is_at_terminator:
                         body = self.parse_list_until({"esac"})
                         self.skip_whitespace()
@@ -9620,10 +10137,13 @@ class Parser:
 
             patterns.append(CasePattern(pattern, body, terminator))
 
+        self._clear_state(ParserStateFlags.PST_CASEPAT)
         # Expect 'esac'
         self.skip_whitespace_and_newlines()
-        if not self.consume_word("esac"):
-            raise ParseError("Expected 'esac' to close case statement", pos=self.pos)
+        if not self._lex_consume_word("esac"):
+            raise ParseError(
+                "Expected 'esac' to close case statement", pos=self._lex_peek_token().pos
+            )
         return Case(word, patterns, self._collect_redirects())
 
     def parse_coproc(self) -> Coproc | None:
@@ -9633,7 +10153,8 @@ class Parser:
         - For compound commands (brace group, if, while, etc.), extract NAME if present
         - For simple commands, don't extract NAME (treat everything as the command)
         """
-        if not self.consume_word("coproc"):
+        self.skip_whitespace()
+        if not self._lex_consume_word("coproc"):
             return None
         self.skip_whitespace()
 
@@ -9657,8 +10178,8 @@ class Parser:
                 return Coproc(body, name)
 
         # Check for reserved word compounds directly
-        next_word = self.peek_word()
-        if next_word in COMPOUND_KEYWORDS:
+        next_word = self._lex_peek_reserved_word()
+        if next_word is not None and next_word in COMPOUND_KEYWORDS:
             body = self.parse_compound_command()
             if body is not None:
                 return Coproc(body, name)
@@ -9678,7 +10199,7 @@ class Parser:
             ch = None
             if not self.at_end():
                 ch = self.peek()
-            next_word = self.peek_word()
+            next_word = self._lex_peek_reserved_word()
 
             if _is_valid_identifier(potential_name):
                 # Valid identifier followed by compound command - extract name
@@ -9695,7 +10216,7 @@ class Parser:
                         body = self.parse_subshell()
                     if body is not None:
                         return Coproc(body, name)
-                elif next_word in COMPOUND_KEYWORDS:
+                elif next_word is not None and next_word in COMPOUND_KEYWORDS:
                     name = potential_name
                     body = self.parse_compound_command()
                     if body is not None:
@@ -9726,8 +10247,8 @@ class Parser:
         saved_pos = self.pos
 
         # Check for 'function' keyword form
-        if self.peek_word() == "function":
-            self.consume_word("function")
+        if self._lex_is_at_reserved_word("function"):
+            self._lex_consume_word("function")
             self.skip_whitespace()
 
             # Get function name
@@ -9888,7 +10409,8 @@ class Parser:
         """Parse a list that stops before certain reserved words."""
         # Check if we're already at a stop word
         self.skip_whitespace_and_newlines()
-        if self.peek_word() in stop_words:
+        reserved = self._lex_peek_reserved_word()
+        if reserved is not None and reserved in stop_words:
             return None
 
         pipeline = self.parse_pipeline()
@@ -9922,9 +10444,10 @@ class Parser:
                     next_pos = self.pos + 1
                     if next_pos >= self.length or _is_word_end_context(self.source[next_pos]):
                         is_standalone_brace = True
+                reserved = self._lex_peek_reserved_word()
                 if (
                     not self.at_end()
-                    and self.peek_word() not in stop_words
+                    and not (reserved is not None and reserved in stop_words)
                     and self.peek() != ")"
                     and not is_standalone_brace
                 ):
@@ -9943,9 +10466,10 @@ class Parser:
                     next_pos = self.pos + 1
                     if next_pos >= self.length or _is_word_end_context(self.source[next_pos]):
                         is_standalone_brace = True
+                reserved = self._lex_peek_reserved_word()
                 if (
                     self.at_end()
-                    or self.peek_word() in stop_words
+                    or (reserved is not None and reserved in stop_words)
                     or self.peek() == "\n"
                     or self.peek() == ")"
                     or is_standalone_brace
@@ -9956,20 +10480,17 @@ class Parser:
             if op == ";":
                 self.skip_whitespace_and_newlines()
                 # Also check for ;;, ;&, or ;;& (case terminators)
-                at_case_terminator = (
-                    self.peek() == ";"
-                    and self.pos + 1 < self.length
-                    and _is_semicolon_or_amp(self.source[self.pos + 1])
-                )
+                at_case_terminator = self._lex_peek_case_terminator() is not None
                 # Check for standalone } (closing brace), not } as part of a word
                 is_standalone_brace = False
                 if not self.at_end() and self.peek() == "}":
                     next_pos = self.pos + 1
                     if next_pos >= self.length or _is_word_end_context(self.source[next_pos]):
                         is_standalone_brace = True
+                reserved = self._lex_peek_reserved_word()
                 if (
                     self.at_end()
-                    or self.peek_word() in stop_words
+                    or (reserved is not None and reserved in stop_words)
                     or self.peek() == "\n"
                     or self.peek() == ")"
                     or is_standalone_brace
@@ -9983,14 +10504,11 @@ class Parser:
 
             # Check for stop words before parsing next pipeline
             self.skip_whitespace_and_newlines()
+            reserved = self._lex_peek_reserved_word()
             # Also check for ;;, ;&, or ;;& (case terminators)
-            if self.peek_word() in stop_words:
+            if reserved is not None and reserved in stop_words:
                 break
-            if (
-                self.peek() == ";"
-                and self.pos + 1 < self.length
-                and _is_semicolon_or_amp(self.source[self.pos + 1])
-            ):
+            if self._lex_peek_case_terminator() is not None:
                 break
 
             pipeline = self.parse_pipeline()
@@ -10035,49 +10553,61 @@ class Parser:
                 return result
             # Fall through to simple command if [[ is not a conditional keyword
 
-        # Check for reserved words
-        word = self.peek_word()
+        # Check for reserved words using Lexer
+        reserved = self._lex_peek_reserved_word()
 
-        # In command substitutions, strip leading } for keyword matching
-        # Don't strip { because it's used for brace groups
-        keyword_word = word
-        if word is not None and self._in_process_sub and len(word) > 1 and word[0] == "}":
-            keyword_word = word[1:]
+        # In command substitutions, handle leading } for keyword matching
+        # (fallback for edge cases like "$(}case x in x)esac)")
+        if reserved is None and self._in_process_sub:
+            word = self.peek_word()
+            if word is not None and len(word) > 1 and word[0] == "}":
+                keyword_word = word[1:]
+                if keyword_word in RESERVED_WORDS or keyword_word in (
+                    "{",
+                    "}",
+                    "[[",
+                    "]]",
+                    "!",
+                    "time",
+                ):
+                    reserved = keyword_word
 
         # Reserved words that cannot start a statement (only valid in specific contexts)
-        if keyword_word in ("fi", "then", "elif", "else", "done", "esac", "do", "in"):
-            raise ParseError(f"Unexpected reserved word '{keyword_word}'", pos=self.pos)
+        if reserved in ("fi", "then", "elif", "else", "done", "esac", "do", "in"):
+            raise ParseError(
+                f"Unexpected reserved word '{reserved}'", pos=self._lex_peek_token().pos
+            )
 
         # If statement
-        if keyword_word == "if":
+        if reserved == "if":
             return self.parse_if()
 
         # While loop
-        if keyword_word == "while":
+        if reserved == "while":
             return self.parse_while()
 
         # Until loop
-        if keyword_word == "until":
+        if reserved == "until":
             return self.parse_until()
 
         # For loop
-        if keyword_word == "for":
+        if reserved == "for":
             return self.parse_for()
 
         # Select statement
-        if keyword_word == "select":
+        if reserved == "select":
             return self.parse_select()
 
         # Case statement
-        if keyword_word == "case":
+        if reserved == "case":
             return self.parse_case()
 
         # Function definition (function keyword form)
-        if keyword_word == "function":
+        if reserved == "function":
             return self.parse_function()
 
         # Coproc
-        if keyword_word == "coproc":
+        if reserved == "coproc":
             return self.parse_coproc()
 
         # Try POSIX function definition (name() form) before simple command
@@ -10097,8 +10627,8 @@ class Parser:
         time_posix = False
 
         # Check for 'time' prefix first
-        if self.peek_word() == "time":
-            self.consume_word("time")
+        if self._lex_is_at_reserved_word("time"):
+            self._lex_consume_word("time")
             prefix_order = "time"
             self.skip_whitespace()
             # Check for -p flag
@@ -10122,8 +10652,8 @@ class Parser:
                     time_posix = True
                     self.skip_whitespace()
             # Skip nested time keywords (time time X collapses to time X)
-            while self.peek_word() == "time":
-                self.consume_word("time")
+            while self._lex_is_at_reserved_word("time"):
+                self._lex_consume_word("time")
                 self.skip_whitespace()
                 # Check for -p after nested time
                 if not self.at_end() and self.peek() == "-":
@@ -10198,19 +10728,15 @@ class Parser:
 
         while True:
             self.skip_whitespace()
-            if self.at_end() or self.peek() != "|":
+            op = self._lex_peek_operator()
+            if op is None:
                 break
-            # Check it's not ||
-            if self.pos + 1 < self.length and self.source[self.pos + 1] == "|":
+            token_type, value = op
+            if token_type != TokenType.PIPE and token_type != TokenType.PIPE_AMP:
                 break
 
-            self.advance()  # consume |
-
-            # Check for |& (pipe stderr)
-            is_pipe_both = False
-            if not self.at_end() and self.peek() == "&":
-                self.advance()  # consume &
-                is_pipe_both = True
+            self._lex_next_token()  # consume pipe operator
+            is_pipe_both = token_type == TokenType.PIPE_AMP
 
             self.skip_whitespace_and_newlines()  # Allow command on next line after pipe
 
@@ -10230,35 +10756,22 @@ class Parser:
     def parse_list_operator(self) -> str | None:
         """Parse a list operator (&&, ||, ;, &)."""
         self.skip_whitespace()
-        if self.at_end():
+        op = self._lex_peek_operator()
+        if op is None:
             return None
-
-        ch = self.peek()
-
-        if ch == "&":
-            # Check if this is &> or &>> (redirect), not background operator
-            if self.pos + 1 < self.length and self.source[self.pos + 1] == ">":
-                return None  # Let redirect parser handle &> and &>>
-            self.advance()
-            if not self.at_end() and self.peek() == "&":
-                self.advance()
-                return "&&"
-            return "&"
-
-        if ch == "|":
-            if self.pos + 1 < self.length and self.source[self.pos + 1] == "|":
-                self.advance()
-                self.advance()
-                return "||"
-            return None  # single | is pipe, not list operator
-
-        if ch == ";":
-            # Don't treat ;;, ;&, or ;;& as a single semicolon (they're case terminators)
-            if self.pos + 1 < self.length and _is_semicolon_or_amp(self.source[self.pos + 1]):
-                return None
-            self.advance()
+        token_type, value = op
+        if token_type == TokenType.AND_AND:
+            self._lex_next_token()
+            return "&&"
+        if token_type == TokenType.OR_OR:
+            self._lex_next_token()
+            return "||"
+        if token_type == TokenType.SEMI:
+            self._lex_next_token()
             return ";"
-
+        if token_type == TokenType.AMP:
+            self._lex_next_token()
+            return "&"
         return None
 
     def parse_list(self, newline_as_separator: bool = True) -> Node | None:

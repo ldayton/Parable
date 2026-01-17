@@ -88,6 +88,104 @@ function _countConsecutiveDollarsBefore(s, pos) {
 	return count;
 }
 
+class TokenType {
+	static EOF = 0;
+	static WORD = 1;
+	static NEWLINE = 2;
+	// Single-char operators
+	static SEMI = 10;
+	static PIPE = 11;
+	static AMP = 12;
+	static LPAREN = 13;
+	static RPAREN = 14;
+	static LBRACE = 15;
+	static RBRACE = 16;
+	static LESS = 17;
+	static GREATER = 18;
+	// Multi-char operators
+	static AND_AND = 30;
+	static OR_OR = 31;
+	static SEMI_SEMI = 32;
+	static SEMI_AMP = 33;
+	static SEMI_SEMI_AMP = 34;
+	static LESS_LESS = 35;
+	static GREATER_GREATER = 36;
+	static LESS_AMP = 37;
+	static GREATER_AMP = 38;
+	static LESS_GREATER = 39;
+	static GREATER_PIPE = 40;
+	static LESS_LESS_MINUS = 41;
+	static LESS_LESS_LESS = 42;
+	static AMP_GREATER = 43;
+	static AMP_GREATER_GREATER = 44;
+	static PIPE_AMP = 45;
+	// Reserved words
+	static IF = 50;
+	static THEN = 51;
+	static ELSE = 52;
+	static ELIF = 53;
+	static FI = 54;
+	static CASE = 55;
+	static ESAC = 56;
+	static FOR = 57;
+	static WHILE = 58;
+	static UNTIL = 59;
+	static DO = 60;
+	static DONE = 61;
+	static IN = 62;
+	static FUNCTION = 63;
+	static SELECT = 64;
+	static COPROC = 65;
+	static TIME = 66;
+	static BANG = 67;
+	static LBRACKET_LBRACKET = 68;
+	static RBRACKET_RBRACKET = 69;
+	// Special
+	static ASSIGNMENT_WORD = 80;
+	static NUMBER = 81;
+}
+
+class Token {
+	constructor(type_, value, pos) {
+		this.type = type_;
+		this.value = value;
+		this.pos = pos;
+	}
+
+	_repr() {
+		return `Token(${this.type}, ${this.value}, ${this.pos})`;
+	}
+}
+
+class LexerState {
+	static NONE = 0;
+	static WASDOL = 1;
+	static CKCOMMENT = 2;
+	static INCOMMENT = 4;
+	static PASSNEXT = 8;
+	static INHEREDOC = 128;
+	static HEREDELIM = 256;
+	static STRIPDOC = 512;
+	static QUOTEDDOC = 1024;
+	static INWORD = 2048;
+}
+
+class ParserStateFlags {
+	static NONE = 0;
+	static PST_CASEPAT = 1;
+	static PST_CMDSUBST = 2;
+	static PST_CASESTMT = 4;
+	static PST_CONDEXPR = 8;
+	static PST_COMPASSIGN = 16;
+	static PST_ARITH = 32;
+	static PST_HEREDOC = 64;
+	static PST_REGEXP = 128;
+	static PST_EXTPAT = 256;
+	static PST_SUBSHELL = 512;
+	static PST_REDIRLIST = 1024;
+	static PST_COMMENT = 2048;
+}
+
 class QuoteState {
 	constructor() {
 		this.single = false;
@@ -160,11 +258,11 @@ class QuoteState {
 
 class ParseContext {
 	// Context kind constants
-	NORMAL = 0;
-	COMMAND_SUB = 1;
-	ARITHMETIC = 2;
-	CASE_PATTERN = 3;
-	BRACE_EXPANSION = 4;
+	static NORMAL = 0;
+	static COMMAND_SUB = 1;
+	static ARITHMETIC = 2;
+	static CASE_PATTERN = 3;
+	static BRACE_EXPANSION = 4;
 	constructor(kind) {
 		if (kind == null) {
 			kind = 0;
@@ -268,6 +366,336 @@ class ContextStack {
 
 	getArithParenDepth() {
 		return this.getCurrent().arith_paren_depth;
+	}
+}
+
+class Lexer {
+	constructor(source) {
+		this.source = source;
+		this.pos = 0;
+		this.length = source.length;
+		this.state = LexerState.CKCOMMENT;
+		this.quote = new QuoteState();
+		this._token_cache = null;
+	}
+
+	peek() {
+		if (this.pos >= this.length) {
+			return null;
+		}
+		return this.source[this.pos];
+	}
+
+	advance() {
+		let c;
+		if (this.pos >= this.length) {
+			return null;
+		}
+		c = this.source[this.pos];
+		this.pos += 1;
+		return c;
+	}
+
+	atEnd() {
+		return this.pos >= this.length;
+	}
+
+	lookahead(n) {
+		return this.source.slice(this.pos, this.pos + n);
+	}
+
+	isMetachar(c) {
+		return "|&;()<> \t\n".includes(c);
+	}
+
+	isOperatorStart(c) {
+		return "|&;<>()".includes(c);
+	}
+
+	isBlank(c) {
+		return c === " " || c === "\t";
+	}
+
+	isWordChar(c) {
+		if (c == null) {
+			return false;
+		}
+		return !this.isMetachar(c);
+	}
+
+	_readOperator() {
+		let c, start, three, two;
+		start = this.pos;
+		c = this.peek();
+		if (c == null) {
+			return null;
+		}
+		two = this.lookahead(2);
+		three = this.lookahead(3);
+		// Three-char operators
+		if (three === ";;&") {
+			this.pos += 3;
+			return new Token(TokenType.SEMI_SEMI_AMP, three, start);
+		}
+		if (three === "<<-") {
+			this.pos += 3;
+			return new Token(TokenType.LESS_LESS_MINUS, three, start);
+		}
+		if (three === "<<<") {
+			this.pos += 3;
+			return new Token(TokenType.LESS_LESS_LESS, three, start);
+		}
+		if (three === "&>>") {
+			this.pos += 3;
+			return new Token(TokenType.AMP_GREATER_GREATER, three, start);
+		}
+		// Two-char operators
+		if (two === "&&") {
+			this.pos += 2;
+			return new Token(TokenType.AND_AND, two, start);
+		}
+		if (two === "||") {
+			this.pos += 2;
+			return new Token(TokenType.OR_OR, two, start);
+		}
+		if (two === ";;") {
+			this.pos += 2;
+			return new Token(TokenType.SEMI_SEMI, two, start);
+		}
+		if (two === ";&") {
+			this.pos += 2;
+			return new Token(TokenType.SEMI_AMP, two, start);
+		}
+		if (two === "<<") {
+			this.pos += 2;
+			return new Token(TokenType.LESS_LESS, two, start);
+		}
+		if (two === ">>") {
+			this.pos += 2;
+			return new Token(TokenType.GREATER_GREATER, two, start);
+		}
+		if (two === "<&") {
+			this.pos += 2;
+			return new Token(TokenType.LESS_AMP, two, start);
+		}
+		if (two === ">&") {
+			this.pos += 2;
+			return new Token(TokenType.GREATER_AMP, two, start);
+		}
+		if (two === "<>") {
+			this.pos += 2;
+			return new Token(TokenType.LESS_GREATER, two, start);
+		}
+		if (two === ">|") {
+			this.pos += 2;
+			return new Token(TokenType.GREATER_PIPE, two, start);
+		}
+		if (two === "&>") {
+			this.pos += 2;
+			return new Token(TokenType.AMP_GREATER, two, start);
+		}
+		if (two === "|&") {
+			this.pos += 2;
+			return new Token(TokenType.PIPE_AMP, two, start);
+		}
+		// Single-char operators
+		if (c === ";") {
+			this.pos += 1;
+			return new Token(TokenType.SEMI, c, start);
+		}
+		if (c === "|") {
+			this.pos += 1;
+			return new Token(TokenType.PIPE, c, start);
+		}
+		if (c === "&") {
+			this.pos += 1;
+			return new Token(TokenType.AMP, c, start);
+		}
+		if (c === "(") {
+			this.pos += 1;
+			return new Token(TokenType.LPAREN, c, start);
+		}
+		if (c === ")") {
+			this.pos += 1;
+			return new Token(TokenType.RPAREN, c, start);
+		}
+		if (c === "<") {
+			this.pos += 1;
+			return new Token(TokenType.LESS, c, start);
+		}
+		if (c === ">") {
+			this.pos += 1;
+			return new Token(TokenType.GREATER, c, start);
+		}
+		if (c === "\n") {
+			this.pos += 1;
+			return new Token(TokenType.NEWLINE, c, start);
+		}
+		return null;
+	}
+
+	skipBlanks() {
+		let c;
+		while (this.pos < this.length) {
+			c = this.source[this.pos];
+			if (c !== " " && c !== "\t") {
+				break;
+			}
+			this.pos += 1;
+		}
+	}
+
+	_skipComment() {
+		let prev;
+		if (this.pos >= this.length) {
+			return false;
+		}
+		if (this.source[this.pos] !== "#") {
+			return false;
+		}
+		if (this.quote.inQuotes()) {
+			return false;
+		}
+		// Check if in comment-allowed position (start of line or after blank/meta)
+		if (this.pos > 0) {
+			prev = this.source[this.pos - 1];
+			if (!" \t\n;|&(){}".includes(prev)) {
+				return false;
+			}
+		}
+		// Skip to end of line
+		while (this.pos < this.length && this.source[this.pos] !== "\n") {
+			this.pos += 1;
+		}
+		return true;
+	}
+
+	_scanSingleQuoted() {
+		let c, chars;
+		chars = ["'"];
+		while (this.pos < this.length) {
+			c = this.source[this.pos];
+			chars.push(c);
+			this.pos += 1;
+			if (c === "'") {
+				break;
+			}
+		}
+		return chars.join("");
+	}
+
+	_scanDoubleQuoted() {
+		let c, chars;
+		chars = ['"'];
+		while (this.pos < this.length) {
+			c = this.source[this.pos];
+			if (c === "\\") {
+				chars.push(c);
+				this.pos += 1;
+				if (this.pos < this.length) {
+					chars.push(this.source[this.pos]);
+					this.pos += 1;
+				}
+				continue;
+			}
+			chars.push(c);
+			this.pos += 1;
+			if (c === '"') {
+				break;
+			}
+		}
+		return chars.join("");
+	}
+
+	_readWord() {
+		let c, chars, start;
+		start = this.pos;
+		if (this.pos >= this.length) {
+			return null;
+		}
+		c = this.peek();
+		if (c == null || this.isMetachar(c)) {
+			return null;
+		}
+		chars = [];
+		while (this.pos < this.length) {
+			c = this.source[this.pos];
+			if (this.isMetachar(c) && !this.quote.inQuotes()) {
+				break;
+			}
+			if (c === "\\") {
+				chars.push(c);
+				this.pos += 1;
+				if (this.pos < this.length) {
+					chars.push(this.source[this.pos]);
+					this.pos += 1;
+				}
+				continue;
+			}
+			if (c === "'" && !this.quote.double) {
+				this.pos += 1;
+				chars.push(this._scanSingleQuoted());
+				continue;
+			}
+			if (c === '"' && !this.quote.single) {
+				this.pos += 1;
+				chars.push(this._scanDoubleQuoted());
+				continue;
+			}
+			chars.push(c);
+			this.pos += 1;
+		}
+		if (chars.length === 0) {
+			return null;
+		}
+		return new Token(TokenType.WORD, chars.join(""), start);
+	}
+
+	nextToken() {
+		let tok;
+		if (this._token_cache != null) {
+			tok = this._token_cache;
+			this._token_cache = null;
+			return tok;
+		}
+		this.skipBlanks();
+		if (this.atEnd()) {
+			return new Token(TokenType.EOF, "", this.pos);
+		}
+		while (this._skipComment()) {
+			this.skipBlanks();
+			if (this.atEnd()) {
+				return new Token(TokenType.EOF, "", this.pos);
+			}
+		}
+		tok = this._readOperator();
+		if (tok != null) {
+			return tok;
+		}
+		tok = this._readWord();
+		if (tok != null) {
+			return tok;
+		}
+		return new Token(TokenType.EOF, "", this.pos);
+	}
+
+	peekToken() {
+		if (this._token_cache == null) {
+			this._token_cache = this.nextToken();
+		}
+		return this._token_cache;
+	}
+
+	ungetToken(tok) {
+		this._token_cache = tok;
+	}
+
+	// Reserved words mapping
+	classifyWord(word, reserved_ok) {
+		if (reserved_ok && this.RESERVED_WORDS.includes(word)) {
+			return this.RESERVED_WORDS[word];
+		}
+		return TokenType.WORD;
 	}
 }
 
@@ -5539,10 +5967,6 @@ function _isDollarDollarParen(value, idx) {
 	return dollar_count % 2 === 1;
 }
 
-function _isSemicolonOrAmp(c) {
-	return c === ";" || c === "&";
-}
-
 function _isParen(c) {
 	return c === "(" || c === ")";
 }
@@ -5628,6 +6052,161 @@ class Parser {
 		this._in_process_sub = in_process_sub;
 		// Context stack for tracking nested parsing scopes
 		this._ctx = new ContextStack();
+		// Lexer for tokenization (not yet used, being added incrementally)
+		this._lexer = new Lexer(source);
+		// Token history for context-sensitive parsing (last 4 tokens like bash)
+		this._token_history = [null, null, null, null];
+		// Parser state flags for context-sensitive decisions
+		this._parser_state = ParserStateFlags.NONE;
+	}
+
+	_setState(flag) {
+		this._parser_state = this._parser_state | flag;
+	}
+
+	_clearState(flag) {
+		this._parser_state = this._parser_state & /* TODO: UnaryOp Invert() */ flag;
+	}
+
+	_inState(flag) {
+		return (this._parser_state & flag) !== 0;
+	}
+
+	_recordToken(tok) {
+		this._token_history = [
+			tok,
+			this._token_history[0],
+			this._token_history[1],
+			this._token_history[2],
+		];
+	}
+
+	_lastToken() {
+		return this._token_history[0];
+	}
+
+	_lastTokenType() {
+		let tok;
+		tok = this._token_history[0];
+		if (tok == null) {
+			return null;
+		}
+		return tok.type;
+	}
+
+	_syncLexer() {
+		this._lexer.pos = this.pos;
+		this._lexer._token_cache = null;
+	}
+
+	_syncParser() {
+		this.pos = this._lexer.pos;
+	}
+
+	_lexPeekToken() {
+		this._syncLexer();
+		return this._lexer.peekToken();
+	}
+
+	_lexNextToken() {
+		let tok;
+		this._syncLexer();
+		tok = this._lexer.nextToken();
+		this._syncParser();
+		this._recordToken(tok);
+		return tok;
+	}
+
+	_lexSkipBlanks() {
+		this._syncLexer();
+		this._lexer.skipBlanks();
+		this._syncParser();
+	}
+
+	_lexSkipComment() {
+		let result;
+		this._syncLexer();
+		result = this._lexer._skipComment();
+		this._syncParser();
+		return result;
+	}
+
+	_lexPeekOperator() {
+		let t, tok;
+		tok = this._lexPeekToken();
+		t = tok.type;
+		// Single-char operators: SEMI(10) through GREATER(18)
+		// Multi-char operators: AND_AND(30) through PIPE_AMP(45)
+		if (
+			(t >= TokenType.SEMI && t <= TokenType.GREATER) ||
+			(t >= TokenType.AND_AND && t <= TokenType.PIPE_AMP)
+		) {
+			return [t, tok.value];
+		}
+		return null;
+	}
+
+	_lexPeekReservedWord() {
+		let tok, word;
+		tok = this._lexPeekToken();
+		if (tok.type !== TokenType.WORD) {
+			return null;
+		}
+		// Strip trailing backslash-newline (line continuation) for classification
+		// The lexer includes \<newline> in words, but reserved word check ignores it
+		word = tok.value;
+		if (word.endsWith("\\\n")) {
+			word = word.slice(0, -2);
+		}
+		// Check against module-level RESERVED_WORDS set plus additional reserved tokens
+		// (Using module-level constant for transpiler compatibility)
+		if (
+			RESERVED_WORDS.has(word) ||
+			["{", "}", "[[", "]]", "!", "time"].includes(word)
+		) {
+			return word;
+		}
+		return null;
+	}
+
+	_lexIsAtReservedWord(word) {
+		let reserved;
+		reserved = this._lexPeekReservedWord();
+		return reserved === word;
+	}
+
+	_lexConsumeWord(expected) {
+		let tok, word;
+		tok = this._lexPeekToken();
+		if (tok.type !== TokenType.WORD) {
+			return false;
+		}
+		// Strip trailing backslash-newline (line continuation) for comparison
+		word = tok.value;
+		if (word.endsWith("\\\n")) {
+			word = word.slice(0, -2);
+		}
+		if (word === expected) {
+			this._lexNextToken();
+			return true;
+		}
+		return false;
+	}
+
+	_lexPeekCaseTerminator() {
+		let t, tok;
+		tok = this._lexPeekToken();
+		t = tok.type;
+		if (t === TokenType.SEMI_SEMI) {
+			return ";;";
+		}
+		if (t === TokenType.SEMI_AMP) {
+			return ";&";
+		}
+		if (t === TokenType.SEMI_SEMI_AMP) {
+			return ";;&";
+		}
+		return null;
 	}
 
 	atEnd() {
@@ -5664,13 +6243,6 @@ class Parser {
 		return this.source.slice(this.pos, this.pos + n);
 	}
 
-	matchKeyword(keyword) {
-		if (!_startsWithAt(this.source, this.pos, keyword)) {
-			return false;
-		}
-		return _isWordBoundary(this.source, this.pos, keyword.length);
-	}
-
 	_isBangFollowedByProcsub() {
 		let next_char;
 		if (this.pos + 2 >= this.length) {
@@ -5686,14 +6258,15 @@ class Parser {
 	skipWhitespace() {
 		let ch;
 		while (!this.atEnd()) {
+			// Use Lexer for spaces/tabs
+			this._lexSkipBlanks();
+			if (this.atEnd()) {
+				break;
+			}
 			ch = this.peek();
-			if (_isWhitespaceNoNewline(ch)) {
-				this.advance();
-			} else if (ch === "#") {
-				// Skip comment to end of line (but not the newline itself)
-				while (!this.atEnd() && this.peek() !== "\n") {
-					this.advance();
-				}
+			if (ch === "#") {
+				// Use Lexer to skip comment
+				this._lexSkipComment();
 			} else if (ch === "\\" && this.peekAt(1) === "\n") {
 				// Backslash-newline is line continuation - skip both
 				this.advance();
@@ -5778,23 +6351,32 @@ class Parser {
 			if (brace == null) {
 				throw new ParseError(
 					`Expected brace group body in ${context}`,
-					this.pos,
+					this._lexPeekToken().pos,
 				);
 			}
 			return brace.body;
 		}
-		if (this.consumeWord("do")) {
+		if (this._lexConsumeWord("do")) {
 			body = this.parseListUntil(new Set(["done"]));
 			if (body == null) {
-				throw new ParseError("Expected commands after 'do'", this.pos);
+				throw new ParseError(
+					"Expected commands after 'do'",
+					this._lexPeekToken().pos,
+				);
 			}
 			this.skipWhitespaceAndNewlines();
-			if (!this.consumeWord("done")) {
-				throw new ParseError(`Expected 'done' to close ${context}`, this.pos);
+			if (!this._lexConsumeWord("done")) {
+				throw new ParseError(
+					`Expected 'done' to close ${context}`,
+					this._lexPeekToken().pos,
+				);
 			}
 			return body;
 		}
-		throw new ParseError(`Expected 'do' or '{' in ${context}`, this.pos);
+		throw new ParseError(
+			`Expected 'do' or '{' in ${context}`,
+			this._lexPeekToken().pos,
+		);
 	}
 
 	peekWord() {
@@ -7957,11 +8539,17 @@ class Parser {
 	// 15. unary (! ~ + - ++ --)
 	// 16. postfix (++ -- [])
 	_parseArithExpr(content) {
-		let result, saved_arith_len, saved_arith_pos, saved_arith_src;
+		let result,
+			saved_arith_len,
+			saved_arith_pos,
+			saved_arith_src,
+			saved_parser_state;
 		// Save any existing arith context (for nested parsing)
 		saved_arith_src = this._arithSrc ?? null;
 		saved_arith_pos = this._arithPos ?? null;
 		saved_arith_len = this._arithLen ?? null;
+		saved_parser_state = this._parser_state;
+		this._setState(ParserStateFlags.PST_ARITH);
 		this._arith_src = content;
 		this._arith_pos = 0;
 		this._arith_len = content.length;
@@ -7971,7 +8559,8 @@ class Parser {
 		} else {
 			result = this._arithParseComma();
 		}
-		// Restore previous arith context
+		// Restore previous arith context and parser state
+		this._parser_state = saved_parser_state;
 		if (saved_arith_src != null) {
 			this._arith_src = saved_arith_src;
 			this._arith_pos = saved_arith_pos;
@@ -10673,7 +11262,7 @@ class Parser {
 	}
 
 	// Unary operators for [[ ]] conditionals
-	COND_UNARY_OPS = new Set([
+	static COND_UNARY_OPS = new Set([
 		"-a",
 		"-b",
 		"-c",
@@ -10702,7 +11291,7 @@ class Parser {
 		"-R",
 	]);
 	// Binary operators for [[ ]] conditionals
-	COND_BINARY_OPS = new Set([
+	static COND_BINARY_OPS = new Set([
 		"==",
 		"!=",
 		"=~",
@@ -10969,31 +11558,27 @@ class Parser {
 	}
 
 	parseBraceGroup() {
-		let body, next_ch;
+		let body;
 		this.skipWhitespace();
-		if (this.atEnd() || this.peek() !== "{") {
+		// Lexer handles { vs {abc distinction: only returns reserved word for standalone {
+		if (!this._lexConsumeWord("{")) {
 			return null;
 		}
-		// Check that { is followed by whitespace or a valid command starter
-		// {( is valid: brace group containing a subshell
-		// {< and {> are valid: brace group starting with a redirect
-		if (this.pos + 1 < this.length) {
-			next_ch = this.source[this.pos + 1];
-			if (!_isWhitespace(next_ch) && !"(<>".includes(next_ch)) {
-				return null;
-			}
-		}
-		this.advance();
 		this.skipWhitespaceAndNewlines();
 		body = this.parseList();
 		if (body == null) {
-			throw new ParseError("Expected command in brace group", this.pos);
+			throw new ParseError(
+				"Expected command in brace group",
+				this._lexPeekToken().pos,
+			);
 		}
 		this.skipWhitespace();
-		if (this.atEnd() || this.peek() !== "}") {
-			throw new ParseError("Expected } to close brace group", this.pos);
+		if (!this._lexConsumeWord("}")) {
+			throw new ParseError(
+				"Expected } to close brace group",
+				this._lexPeekToken().pos,
+			);
 		}
-		this.advance();
 		return new BraceGroup(body, this._collectRedirects());
 	}
 
@@ -11003,104 +11588,139 @@ class Parser {
 			elif_then_body,
 			else_body,
 			inner_else,
-			inner_next,
-			next_word,
 			then_body;
-		if (!this.consumeWord("if")) {
+		this.skipWhitespace();
+		if (!this._lexConsumeWord("if")) {
 			return null;
 		}
 		// Parse condition (a list that ends at 'then')
 		condition = this.parseListUntil(new Set(["then"]));
 		if (condition == null) {
-			throw new ParseError("Expected condition after 'if'", this.pos);
+			throw new ParseError(
+				"Expected condition after 'if'",
+				this._lexPeekToken().pos,
+			);
 		}
 		// Expect 'then'
 		this.skipWhitespaceAndNewlines();
-		if (!this.consumeWord("then")) {
-			throw new ParseError("Expected 'then' after if condition", this.pos);
+		if (!this._lexConsumeWord("then")) {
+			throw new ParseError(
+				"Expected 'then' after if condition",
+				this._lexPeekToken().pos,
+			);
 		}
 		// Parse then body (ends at elif, else, or fi)
 		then_body = this.parseListUntil(new Set(["elif", "else", "fi"]));
 		if (then_body == null) {
-			throw new ParseError("Expected commands after 'then'", this.pos);
+			throw new ParseError(
+				"Expected commands after 'then'",
+				this._lexPeekToken().pos,
+			);
 		}
 		// Check what comes next: elif, else, or fi
 		this.skipWhitespaceAndNewlines();
-		next_word = this.peekWord();
 		else_body = null;
-		if (next_word === "elif") {
+		if (this._lexIsAtReservedWord("elif")) {
 			// elif is syntactic sugar for else if ... fi
-			this.consumeWord("elif");
+			this._lexConsumeWord("elif");
 			// Parse the rest as a nested if (but we've already consumed 'elif')
 			// We need to parse: condition; then body [elif|else|fi]
 			elif_condition = this.parseListUntil(new Set(["then"]));
 			if (elif_condition == null) {
-				throw new ParseError("Expected condition after 'elif'", this.pos);
+				throw new ParseError(
+					"Expected condition after 'elif'",
+					this._lexPeekToken().pos,
+				);
 			}
 			this.skipWhitespaceAndNewlines();
-			if (!this.consumeWord("then")) {
-				throw new ParseError("Expected 'then' after elif condition", this.pos);
+			if (!this._lexConsumeWord("then")) {
+				throw new ParseError(
+					"Expected 'then' after elif condition",
+					this._lexPeekToken().pos,
+				);
 			}
 			elif_then_body = this.parseListUntil(new Set(["elif", "else", "fi"]));
 			if (elif_then_body == null) {
-				throw new ParseError("Expected commands after 'then'", this.pos);
+				throw new ParseError(
+					"Expected commands after 'then'",
+					this._lexPeekToken().pos,
+				);
 			}
 			// Recursively handle more elif/else/fi
 			this.skipWhitespaceAndNewlines();
-			inner_next = this.peekWord();
 			inner_else = null;
-			if (inner_next === "elif") {
+			if (this._lexIsAtReservedWord("elif")) {
 				// More elif - recurse by creating a fake "if" and parsing
 				// Actually, let's just recursively call a helper
 				inner_else = this._parseElifChain();
-			} else if (inner_next === "else") {
-				this.consumeWord("else");
+			} else if (this._lexIsAtReservedWord("else")) {
+				this._lexConsumeWord("else");
 				inner_else = this.parseListUntil(new Set(["fi"]));
 				if (inner_else == null) {
-					throw new ParseError("Expected commands after 'else'", this.pos);
+					throw new ParseError(
+						"Expected commands after 'else'",
+						this._lexPeekToken().pos,
+					);
 				}
 			}
 			else_body = new If(elif_condition, elif_then_body, inner_else);
-		} else if (next_word === "else") {
-			this.consumeWord("else");
+		} else if (this._lexIsAtReservedWord("else")) {
+			this._lexConsumeWord("else");
 			else_body = this.parseListUntil(new Set(["fi"]));
 			if (else_body == null) {
-				throw new ParseError("Expected commands after 'else'", this.pos);
+				throw new ParseError(
+					"Expected commands after 'else'",
+					this._lexPeekToken().pos,
+				);
 			}
 		}
 		// Expect 'fi'
 		this.skipWhitespaceAndNewlines();
-		if (!this.consumeWord("fi")) {
-			throw new ParseError("Expected 'fi' to close if statement", this.pos);
+		if (!this._lexConsumeWord("fi")) {
+			throw new ParseError(
+				"Expected 'fi' to close if statement",
+				this._lexPeekToken().pos,
+			);
 		}
 		return new If(condition, then_body, else_body, this._collectRedirects());
 	}
 
 	_parseElifChain() {
-		let condition, else_body, next_word, then_body;
-		this.consumeWord("elif");
+		let condition, else_body, then_body;
+		this._lexConsumeWord("elif");
 		condition = this.parseListUntil(new Set(["then"]));
 		if (condition == null) {
-			throw new ParseError("Expected condition after 'elif'", this.pos);
+			throw new ParseError(
+				"Expected condition after 'elif'",
+				this._lexPeekToken().pos,
+			);
 		}
 		this.skipWhitespaceAndNewlines();
-		if (!this.consumeWord("then")) {
-			throw new ParseError("Expected 'then' after elif condition", this.pos);
+		if (!this._lexConsumeWord("then")) {
+			throw new ParseError(
+				"Expected 'then' after elif condition",
+				this._lexPeekToken().pos,
+			);
 		}
 		then_body = this.parseListUntil(new Set(["elif", "else", "fi"]));
 		if (then_body == null) {
-			throw new ParseError("Expected commands after 'then'", this.pos);
+			throw new ParseError(
+				"Expected commands after 'then'",
+				this._lexPeekToken().pos,
+			);
 		}
 		this.skipWhitespaceAndNewlines();
-		next_word = this.peekWord();
 		else_body = null;
-		if (next_word === "elif") {
+		if (this._lexIsAtReservedWord("elif")) {
 			else_body = this._parseElifChain();
-		} else if (next_word === "else") {
-			this.consumeWord("else");
+		} else if (this._lexIsAtReservedWord("else")) {
+			this._lexConsumeWord("else");
 			else_body = this.parseListUntil(new Set(["fi"]));
 			if (else_body == null) {
-				throw new ParseError("Expected commands after 'else'", this.pos);
+				throw new ParseError(
+					"Expected commands after 'else'",
+					this._lexPeekToken().pos,
+				);
 			}
 		}
 		return new If(condition, then_body, else_body);
@@ -11108,63 +11728,90 @@ class Parser {
 
 	parseWhile() {
 		let body, condition;
-		if (!this.consumeWord("while")) {
+		this.skipWhitespace();
+		if (!this._lexConsumeWord("while")) {
 			return null;
 		}
 		// Parse condition (ends at 'do')
 		condition = this.parseListUntil(new Set(["do"]));
 		if (condition == null) {
-			throw new ParseError("Expected condition after 'while'", this.pos);
+			throw new ParseError(
+				"Expected condition after 'while'",
+				this._lexPeekToken().pos,
+			);
 		}
 		// Expect 'do'
 		this.skipWhitespaceAndNewlines();
-		if (!this.consumeWord("do")) {
-			throw new ParseError("Expected 'do' after while condition", this.pos);
+		if (!this._lexConsumeWord("do")) {
+			throw new ParseError(
+				"Expected 'do' after while condition",
+				this._lexPeekToken().pos,
+			);
 		}
 		// Parse body (ends at 'done')
 		body = this.parseListUntil(new Set(["done"]));
 		if (body == null) {
-			throw new ParseError("Expected commands after 'do'", this.pos);
+			throw new ParseError(
+				"Expected commands after 'do'",
+				this._lexPeekToken().pos,
+			);
 		}
 		// Expect 'done'
 		this.skipWhitespaceAndNewlines();
-		if (!this.consumeWord("done")) {
-			throw new ParseError("Expected 'done' to close while loop", this.pos);
+		if (!this._lexConsumeWord("done")) {
+			throw new ParseError(
+				"Expected 'done' to close while loop",
+				this._lexPeekToken().pos,
+			);
 		}
 		return new While(condition, body, this._collectRedirects());
 	}
 
 	parseUntil() {
 		let body, condition;
-		if (!this.consumeWord("until")) {
+		this.skipWhitespace();
+		if (!this._lexConsumeWord("until")) {
 			return null;
 		}
 		// Parse condition (ends at 'do')
 		condition = this.parseListUntil(new Set(["do"]));
 		if (condition == null) {
-			throw new ParseError("Expected condition after 'until'", this.pos);
+			throw new ParseError(
+				"Expected condition after 'until'",
+				this._lexPeekToken().pos,
+			);
 		}
 		// Expect 'do'
 		this.skipWhitespaceAndNewlines();
-		if (!this.consumeWord("do")) {
-			throw new ParseError("Expected 'do' after until condition", this.pos);
+		if (!this._lexConsumeWord("do")) {
+			throw new ParseError(
+				"Expected 'do' after until condition",
+				this._lexPeekToken().pos,
+			);
 		}
 		// Parse body (ends at 'done')
 		body = this.parseListUntil(new Set(["done"]));
 		if (body == null) {
-			throw new ParseError("Expected commands after 'do'", this.pos);
+			throw new ParseError(
+				"Expected commands after 'do'",
+				this._lexPeekToken().pos,
+			);
 		}
 		// Expect 'done'
 		this.skipWhitespaceAndNewlines();
-		if (!this.consumeWord("done")) {
-			throw new ParseError("Expected 'done' to close until loop", this.pos);
+		if (!this._lexConsumeWord("done")) {
+			throw new ParseError(
+				"Expected 'done' to close until loop",
+				this._lexPeekToken().pos,
+			);
 		}
 		return new Until(condition, body, this._collectRedirects());
 	}
 
 	parseFor() {
 		let body, brace_group, saw_delimiter, var_name, var_word, word, words;
-		if (!this.consumeWord("for")) {
+		this.skipWhitespace();
+		if (!this._lexConsumeWord("for")) {
 			return null;
 		}
 		this.skipWhitespace();
@@ -11181,13 +11828,19 @@ class Parser {
 			// Command substitution as variable name: for $(echo i) in ...
 			var_word = this.parseWord();
 			if (var_word == null) {
-				throw new ParseError("Expected variable name after 'for'", this.pos);
+				throw new ParseError(
+					"Expected variable name after 'for'",
+					this._lexPeekToken().pos,
+				);
 			}
 			var_name = var_word.value;
 		} else {
 			var_name = this.peekWord();
 			if (var_name == null) {
-				throw new ParseError("Expected variable name after 'for'", this.pos);
+				throw new ParseError(
+					"Expected variable name after 'for'",
+					this._lexPeekToken().pos,
+				);
 			}
 			this.consumeWord(var_name);
 		}
@@ -11199,8 +11852,8 @@ class Parser {
 		this.skipWhitespaceAndNewlines();
 		// Check for optional 'in' clause
 		words = null;
-		if (this.peekWord() === "in") {
-			this.consumeWord("in");
+		if (this._lexIsAtReservedWord("in")) {
+			this._lexConsumeWord("in");
 			this.skipWhitespace();
 			// Check for immediate delimiter (;, newline) after 'in'
 			saw_delimiter = _isSemicolonOrNewline(this.peek());
@@ -11224,12 +11877,15 @@ class Parser {
 					break;
 				}
 				// 'do' only terminates if preceded by delimiter
-				if (this.peekWord() === "do") {
+				if (this._lexIsAtReservedWord("do")) {
 					if (saw_delimiter) {
 						break;
 					}
 					// 'for x in do' or 'for x in a b c do' is invalid
-					throw new ParseError("Expected ';' or newline before 'do'", this.pos);
+					throw new ParseError(
+						"Expected ';' or newline before 'do'",
+						this._lexPeekToken().pos,
+					);
 				}
 				word = this.parseWord();
 				if (word == null) {
@@ -11245,7 +11901,10 @@ class Parser {
 			// Bash allows: for x in a b; { cmd; }
 			brace_group = this.parseBraceGroup();
 			if (brace_group == null) {
-				throw new ParseError("Expected brace group in for loop", this.pos);
+				throw new ParseError(
+					"Expected brace group in for loop",
+					this._lexPeekToken().pos,
+				);
 			}
 			return new For(
 				var_name,
@@ -11255,18 +11914,27 @@ class Parser {
 			);
 		}
 		// Expect 'do'
-		if (!this.consumeWord("do")) {
-			throw new ParseError("Expected 'do' in for loop", this.pos);
+		if (!this._lexConsumeWord("do")) {
+			throw new ParseError(
+				"Expected 'do' in for loop",
+				this._lexPeekToken().pos,
+			);
 		}
 		// Parse body (ends at 'done')
 		body = this.parseListUntil(new Set(["done"]));
 		if (body == null) {
-			throw new ParseError("Expected commands after 'do'", this.pos);
+			throw new ParseError(
+				"Expected commands after 'do'",
+				this._lexPeekToken().pos,
+			);
 		}
 		// Expect 'done'
 		this.skipWhitespaceAndNewlines();
-		if (!this.consumeWord("done")) {
-			throw new ParseError("Expected 'done' to close for loop", this.pos);
+		if (!this._lexConsumeWord("done")) {
+			throw new ParseError(
+				"Expected 'done' to close for loop",
+				this._lexPeekToken().pos,
+			);
 		}
 		return new For(var_name, words, body, this._collectRedirects());
 	}
@@ -11333,14 +12001,18 @@ class Parser {
 
 	parseSelect() {
 		let body, var_name, word, words;
-		if (!this.consumeWord("select")) {
+		this.skipWhitespace();
+		if (!this._lexConsumeWord("select")) {
 			return null;
 		}
 		this.skipWhitespace();
 		// Parse variable name
 		var_name = this.peekWord();
 		if (var_name == null) {
-			throw new ParseError("Expected variable name after 'select'", this.pos);
+			throw new ParseError(
+				"Expected variable name after 'select'",
+				this._lexPeekToken().pos,
+			);
 		}
 		this.consumeWord(var_name);
 		this.skipWhitespace();
@@ -11351,8 +12023,8 @@ class Parser {
 		this.skipWhitespaceAndNewlines();
 		// Check for optional 'in' clause
 		words = null;
-		if (this.peekWord() === "in") {
-			this.consumeWord("in");
+		if (this._lexIsAtReservedWord("in")) {
+			this._lexConsumeWord("in");
 			this.skipWhitespaceAndNewlines();
 			// Parse words until semicolon, newline, 'do', or '{'
 			words = [];
@@ -11368,7 +12040,7 @@ class Parser {
 					}
 					break;
 				}
-				if (this.peekWord() === "do") {
+				if (this._lexIsAtReservedWord("do")) {
 					break;
 				}
 				word = this.parseWord();
@@ -11385,40 +12057,12 @@ class Parser {
 		return new Select(var_name, words, body, this._collectRedirects());
 	}
 
-	_isCaseTerminator() {
-		let next_ch;
-		if (this.atEnd() || this.peek() !== ";") {
-			return false;
-		}
-		if (this.pos + 1 >= this.length) {
-			return false;
-		}
-		next_ch = this.source[this.pos + 1];
-		// ;; or ;& or ;;& (which is actually ;;&)
-		return _isSemicolonOrAmp(next_ch);
-	}
-
 	_consumeCaseTerminator() {
-		let ch;
-		if (this.atEnd() || this.peek() !== ";") {
-			return ";;";
-		}
-		this.advance();
-		if (this.atEnd()) {
-			return ";;";
-		}
-		ch = this.peek();
-		if (ch === ";") {
-			this.advance();
-			// Check for ;;&
-			if (!this.atEnd() && this.peek() === "&") {
-				this.advance();
-				return ";;&";
-			}
-			return ";;";
-		} else if (ch === "&") {
-			this.advance();
-			return ";&";
+		let term;
+		term = this._lexPeekCaseTerminator();
+		if (term != null) {
+			this._lexNextToken();
+			return term;
 		}
 		return ";;";
 	}
@@ -11444,6 +12088,7 @@ class Parser {
 			scan_pos,
 			terminator,
 			word;
+		// Use consume_word for initial keyword to handle leading } in process subs
 		if (!this.consumeWord("case")) {
 			return null;
 		}
@@ -11451,20 +12096,27 @@ class Parser {
 		// Parse the word to match
 		word = this.parseWord();
 		if (word == null) {
-			throw new ParseError("Expected word after 'case'", this.pos);
+			throw new ParseError(
+				"Expected word after 'case'",
+				this._lexPeekToken().pos,
+			);
 		}
 		this.skipWhitespaceAndNewlines();
 		// Expect 'in'
-		if (!this.consumeWord("in")) {
-			throw new ParseError("Expected 'in' after case word", this.pos);
+		if (!this._lexConsumeWord("in")) {
+			throw new ParseError(
+				"Expected 'in' after case word",
+				this._lexPeekToken().pos,
+			);
 		}
 		this.skipWhitespaceAndNewlines();
 		// Parse pattern clauses until 'esac'
 		patterns = [];
+		this._setState(ParserStateFlags.PST_CASEPAT);
 		while (true) {
 			this.skipWhitespaceAndNewlines();
 			// Check if we're at 'esac' (but not 'esac)' which is esac as a pattern)
-			if (this.peekWord() === "esac") {
+			if (this._lexIsAtReservedWord("esac")) {
 				// Look ahead to see if esac is a pattern (esac followed by ) then body/;;)
 				// or the closing keyword (esac followed by ) that closes containing construct)
 				saved = this.pos;
@@ -11671,20 +12323,23 @@ class Parser {
 			}
 			pattern = pattern_chars.join("");
 			if (!pattern) {
-				throw new ParseError("Expected pattern in case statement", this.pos);
+				throw new ParseError(
+					"Expected pattern in case statement",
+					this._lexPeekToken().pos,
+				);
 			}
 			// Parse commands until ;;, ;&, ;;&, or esac
 			// Commands are optional (can have empty body)
 			this.skipWhitespace();
 			body = null;
 			// Check for empty body: terminator right after pattern
-			is_empty_body = this._isCaseTerminator();
+			is_empty_body = this._lexPeekCaseTerminator() != null;
 			if (!is_empty_body) {
 				// Skip newlines and check if there's content before terminator or esac
 				this.skipWhitespaceAndNewlines();
-				if (!this.atEnd() && this.peekWord() !== "esac") {
+				if (!this.atEnd() && !this._lexIsAtReservedWord("esac")) {
 					// Check again for terminator after whitespace/newlines
-					is_at_terminator = this._isCaseTerminator();
+					is_at_terminator = this._lexPeekCaseTerminator() != null;
 					if (!is_at_terminator) {
 						body = this.parseListUntil(new Set(["esac"]));
 						this.skipWhitespace();
@@ -11696,17 +12351,22 @@ class Parser {
 			this.skipWhitespaceAndNewlines();
 			patterns.push(new CasePattern(pattern, body, terminator));
 		}
+		this._clearState(ParserStateFlags.PST_CASEPAT);
 		// Expect 'esac'
 		this.skipWhitespaceAndNewlines();
-		if (!this.consumeWord("esac")) {
-			throw new ParseError("Expected 'esac' to close case statement", this.pos);
+		if (!this._lexConsumeWord("esac")) {
+			throw new ParseError(
+				"Expected 'esac' to close case statement",
+				this._lexPeekToken().pos,
+			);
 		}
 		return new Case(word, patterns, this._collectRedirects());
 	}
 
 	parseCoproc() {
 		let body, ch, name, next_word, potential_name, word_start;
-		if (!this.consumeWord("coproc")) {
+		this.skipWhitespace();
+		if (!this._lexConsumeWord("coproc")) {
 			return null;
 		}
 		this.skipWhitespace();
@@ -11735,8 +12395,8 @@ class Parser {
 			}
 		}
 		// Check for reserved word compounds directly
-		next_word = this.peekWord();
-		if (COMPOUND_KEYWORDS.has(next_word)) {
+		next_word = this._lexPeekReservedWord();
+		if (next_word != null && COMPOUND_KEYWORDS.has(next_word)) {
 			body = this.parseCompoundCommand();
 			if (body != null) {
 				return new Coproc(body, name);
@@ -11760,7 +12420,7 @@ class Parser {
 			if (!this.atEnd()) {
 				ch = this.peek();
 			}
-			next_word = this.peekWord();
+			next_word = this._lexPeekReservedWord();
 			if (_isValidIdentifier(potential_name)) {
 				// Valid identifier followed by compound command - extract name
 				if (ch === "{") {
@@ -11779,7 +12439,7 @@ class Parser {
 					if (body != null) {
 						return new Coproc(body, name);
 					}
-				} else if (COMPOUND_KEYWORDS.has(next_word)) {
+				} else if (next_word != null && COMPOUND_KEYWORDS.has(next_word)) {
 					name = potential_name;
 					body = this.parseCompoundCommand();
 					if (body != null) {
@@ -11813,8 +12473,8 @@ class Parser {
 		}
 		saved_pos = this.pos;
 		// Check for 'function' keyword form
-		if (this.peekWord() === "function") {
-			this.consumeWord("function");
+		if (this._lexIsAtReservedWord("function")) {
+			this._lexConsumeWord("function");
 			this.skipWhitespace();
 			// Get function name
 			name = this.peekWord();
@@ -11981,10 +12641,12 @@ class Parser {
 			next_pos,
 			op,
 			parts,
-			pipeline;
+			pipeline,
+			reserved;
 		// Check if we're already at a stop word
 		this.skipWhitespaceAndNewlines();
-		if (stop_words.has(this.peekWord())) {
+		reserved = this._lexPeekReservedWord();
+		if (reserved != null && stop_words.has(reserved)) {
 			return null;
 		}
 		pipeline = this.parsePipeline();
@@ -12025,9 +12687,10 @@ class Parser {
 						is_standalone_brace = true;
 					}
 				}
+				reserved = this._lexPeekReservedWord();
 				if (
 					!this.atEnd() &&
-					!stop_words.has(this.peekWord()) &&
+					!(reserved != null && stop_words.has(reserved)) &&
 					this.peek() !== ")" &&
 					!is_standalone_brace
 				) {
@@ -12052,9 +12715,10 @@ class Parser {
 						is_standalone_brace = true;
 					}
 				}
+				reserved = this._lexPeekReservedWord();
 				if (
 					this.atEnd() ||
-					stop_words.has(this.peekWord()) ||
+					(reserved != null && stop_words.has(reserved)) ||
 					this.peek() === "\n" ||
 					this.peek() === ")" ||
 					is_standalone_brace
@@ -12066,10 +12730,7 @@ class Parser {
 			if (op === ";") {
 				this.skipWhitespaceAndNewlines();
 				// Also check for ;;, ;&, or ;;& (case terminators)
-				at_case_terminator =
-					this.peek() === ";" &&
-					this.pos + 1 < this.length &&
-					_isSemicolonOrAmp(this.source[this.pos + 1]);
+				at_case_terminator = this._lexPeekCaseTerminator() != null;
 				// Check for standalone } (closing brace), not } as part of a word
 				is_standalone_brace = false;
 				if (!this.atEnd() && this.peek() === "}") {
@@ -12081,9 +12742,10 @@ class Parser {
 						is_standalone_brace = true;
 					}
 				}
+				reserved = this._lexPeekReservedWord();
 				if (
 					this.atEnd() ||
-					stop_words.has(this.peekWord()) ||
+					(reserved != null && stop_words.has(reserved)) ||
 					this.peek() === "\n" ||
 					this.peek() === ")" ||
 					is_standalone_brace ||
@@ -12098,15 +12760,12 @@ class Parser {
 			}
 			// Check for stop words before parsing next pipeline
 			this.skipWhitespaceAndNewlines();
+			reserved = this._lexPeekReservedWord();
 			// Also check for ;;, ;&, or ;;& (case terminators)
-			if (stop_words.has(this.peekWord())) {
+			if (reserved != null && stop_words.has(reserved)) {
 				break;
 			}
-			if (
-				this.peek() === ";" &&
-				this.pos + 1 < this.length &&
-				_isSemicolonOrAmp(this.source[this.pos + 1])
-			) {
+			if (this._lexPeekCaseTerminator() != null) {
 				break;
 			}
 			pipeline = this.parsePipeline();
@@ -12122,7 +12781,7 @@ class Parser {
 	}
 
 	parseCompoundCommand() {
-		let ch, func, keyword_word, result, word;
+		let ch, func, keyword_word, reserved, result, word;
 		this.skipWhitespace();
 		if (this.atEnd()) {
 			return null;
@@ -12164,60 +12823,63 @@ class Parser {
 			}
 		}
 		// Fall through to simple command if [[ is not a conditional keyword
-		// Check for reserved words
-		word = this.peekWord();
-		// In command substitutions, strip leading } for keyword matching
-		// Don't strip { because it's used for brace groups
-		keyword_word = word;
-		if (
-			word != null &&
-			this._in_process_sub &&
-			word.length > 1 &&
-			word[0] === "}"
-		) {
-			keyword_word = word.slice(1);
+		// Check for reserved words using Lexer
+		reserved = this._lexPeekReservedWord();
+		// In command substitutions, handle leading } for keyword matching
+		// (fallback for edge cases like "$(}case x in x)esac)")
+		if (reserved == null && this._in_process_sub) {
+			word = this.peekWord();
+			if (word != null && word.length > 1 && word[0] === "}") {
+				keyword_word = word.slice(1);
+				if (
+					RESERVED_WORDS.has(keyword_word) ||
+					["{", "}", "[[", "]]", "!", "time"].includes(keyword_word)
+				) {
+					reserved = keyword_word;
+				}
+			}
 		}
 		// Reserved words that cannot start a statement (only valid in specific contexts)
 		if (
 			["fi", "then", "elif", "else", "done", "esac", "do", "in"].includes(
-				keyword_word,
+				reserved,
 			)
 		) {
 			throw new ParseError(
-				`Unexpected reserved word '${keyword_word}'`,
-				this.pos,
+				`Unexpected reserved word '${reserved}'`,
+				this._lexPeekToken().pos,
 			);
 		}
 		// If statement
-		if (keyword_word === "if") {
+		if (reserved === "if") {
 			return this.parseIf();
 		}
 		// While loop
-		if (keyword_word === "while") {
+		if (reserved === "while") {
 			return this.parseWhile();
 		}
 		// Until loop
-		if (keyword_word === "until") {
+		if (reserved === "until") {
 			return this.parseUntil();
 		}
 		// For loop
-		if (keyword_word === "for") {
+		if (reserved === "for") {
 			return this.parseFor();
 		}
 		// Select statement
-		if (keyword_word === "select") {
+		if (reserved === "select") {
 			return this.parseSelect();
 		}
 		// Case statement
-		if (keyword_word === "case") {
+		if (reserved === "case") {
 			return this.parseCase();
 		}
 		// Function definition (function keyword form)
-		if (keyword_word === "function") {
+		if (reserved === "function") {
 			return this.parseFunction();
 		}
 		// Coproc
-		if (keyword_word === "coproc") {
+		if (reserved === "coproc") {
 			return this.parseCoproc();
 		}
 		// Try POSIX function definition (name() form) before simple command
@@ -12236,8 +12898,8 @@ class Parser {
 		prefix_order = null;
 		time_posix = false;
 		// Check for 'time' prefix first
-		if (this.peekWord() === "time") {
-			this.consumeWord("time");
+		if (this._lexIsAtReservedWord("time")) {
+			this._lexConsumeWord("time");
 			prefix_order = "time";
 			this.skipWhitespace();
 			// Check for -p flag
@@ -12269,8 +12931,8 @@ class Parser {
 				}
 			}
 			// Skip nested time keywords (time time X collapses to time X)
-			while (this.peekWord() === "time") {
-				this.consumeWord("time");
+			while (this._lexIsAtReservedWord("time")) {
+				this._lexConsumeWord("time");
 				this.skipWhitespace();
 				// Check for -p after nested time
 				if (!this.atEnd() && this.peek() === "-") {
@@ -12348,7 +13010,7 @@ class Parser {
 	}
 
 	_parseSimplePipeline() {
-		let cmd, commands, is_pipe_both;
+		let cmd, commands, is_pipe_both, op, token_type, value;
 		cmd = this.parseCompoundCommand();
 		if (cmd == null) {
 			return null;
@@ -12356,20 +13018,16 @@ class Parser {
 		commands = [cmd];
 		while (true) {
 			this.skipWhitespace();
-			if (this.atEnd() || this.peek() !== "|") {
+			op = this._lexPeekOperator();
+			if (op == null) {
 				break;
 			}
-			// Check it's not ||
-			if (this.pos + 1 < this.length && this.source[this.pos + 1] === "|") {
+			[token_type, value] = op;
+			if (token_type !== TokenType.PIPE && token_type !== TokenType.PIPE_AMP) {
 				break;
 			}
-			this.advance();
-			// Check for |& (pipe stderr)
-			is_pipe_both = false;
-			if (!this.atEnd() && this.peek() === "&") {
-				this.advance();
-				is_pipe_both = true;
-			}
+			this._lexNextToken();
+			is_pipe_both = token_type === TokenType.PIPE_AMP;
 			this.skipWhitespaceAndNewlines();
 			// Add pipe-both marker if this is a |& pipe
 			if (is_pipe_both) {
@@ -12388,42 +13046,28 @@ class Parser {
 	}
 
 	parseListOperator() {
-		let ch;
+		let op, token_type, value;
 		this.skipWhitespace();
-		if (this.atEnd()) {
+		op = this._lexPeekOperator();
+		if (op == null) {
 			return null;
 		}
-		ch = this.peek();
-		if (ch === "&") {
-			// Check if this is &> or &>> (redirect), not background operator
-			if (this.pos + 1 < this.length && this.source[this.pos + 1] === ">") {
-				return null;
-			}
-			this.advance();
-			if (!this.atEnd() && this.peek() === "&") {
-				this.advance();
-				return "&&";
-			}
-			return "&";
+		[token_type, value] = op;
+		if (token_type === TokenType.AND_AND) {
+			this._lexNextToken();
+			return "&&";
 		}
-		if (ch === "|") {
-			if (this.pos + 1 < this.length && this.source[this.pos + 1] === "|") {
-				this.advance();
-				this.advance();
-				return "||";
-			}
-			return null;
+		if (token_type === TokenType.OR_OR) {
+			this._lexNextToken();
+			return "||";
 		}
-		if (ch === ";") {
-			// Don't treat ;;, ;&, or ;;& as a single semicolon (they're case terminators)
-			if (
-				this.pos + 1 < this.length &&
-				_isSemicolonOrAmp(this.source[this.pos + 1])
-			) {
-				return null;
-			}
-			this.advance();
+		if (token_type === TokenType.SEMI) {
+			this._lexNextToken();
 			return ";";
+		}
+		if (token_type === TokenType.AMP) {
+			this._lexNextToken();
+			return "&";
 		}
 		return null;
 	}

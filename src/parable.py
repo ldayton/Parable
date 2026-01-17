@@ -867,7 +867,7 @@ class Lexer:
 
     def _read_word_internal(
         self, ctx: int, at_command_start: bool = False, in_array_literal: bool = False
-    ) -> Word | None:
+    ) -> "Word | None":
         """Unified word parser with context-aware termination.
 
         Uses callbacks to Parser for methods that need parse_list or other parsing.

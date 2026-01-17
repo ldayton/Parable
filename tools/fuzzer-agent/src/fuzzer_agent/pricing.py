@@ -48,7 +48,6 @@ OTHER_PRICING: dict[str, tuple[float, float]] = {
 
 # Azure OpenAI fallback pricing (used if API fetch fails)
 AZURE_PRICING: dict[str, tuple[float, float]] = {
-    "gpt-4.5": (75.00, 150.00),
     "gpt-4.1": (2.00, 8.00),
     "gpt-4.1-mini": (0.40, 1.60),
     "gpt-4.1-nano": (0.10, 0.40),
@@ -71,7 +70,6 @@ GCP_PRICING: dict[str, tuple[float, float]] = {
 
 # Azure OpenAI models to fetch (skuName pattern -> our name)
 AZURE_MODELS = {
-    "gpt 4.5 0227": "gpt-4.5",
     "gpt 4.1 nano": "gpt-4.1-nano",
     "gpt 4.1 mini": "gpt-4.1-mini",
     "gpt 4.1": "gpt-4.1",

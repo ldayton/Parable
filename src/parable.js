@@ -25,6 +25,8 @@ class ParseError extends Error {
 	}
 }
 
+class MatchedPairError extends ParseError {}
+
 function _isHexDigit(c) {
 	return (
 		(c >= "0" && c <= "9") || (c >= "a" && c <= "f") || (c >= "A" && c <= "F")
@@ -990,8 +992,10 @@ class Lexer {
 
 	_readWordInternal(ctx, at_command_start, in_array_literal) {
 		let ansi_result,
+			arith_start,
 			array_result,
 			bracket_depth,
+			bracket_start_pos,
 			c,
 			ch,
 			chars,
@@ -999,10 +1003,12 @@ class Lexer {
 			content,
 			depth,
 			extglob_depth,
+			extglob_start,
 			for_regex,
 			handle_line_continuation,
 			in_single_in_dquote,
 			inner_paren_depth,
+			is_array_assign,
 			locale_result,
 			next_c,
 			next_ch,
@@ -1025,6 +1031,7 @@ class Lexer {
 		chars = [];
 		parts = [];
 		bracket_depth = 0;
+		bracket_start_pos = null;
 		seen_equals = false;
 		paren_depth = 0;
 		while (!this.atEnd()) {
@@ -1063,12 +1070,14 @@ class Lexer {
 				) {
 					prev_char = chars[chars.length - 1];
 					if (/^[a-zA-Z0-9]$/.test(prev_char) || prev_char === "_") {
+						bracket_start_pos = this.pos;
 						bracket_depth += 1;
 						chars.push(this.advance());
 						continue;
 					}
 				}
 				if (chars.length === 0 && !seen_equals && in_array_literal) {
+					bracket_start_pos = this.pos;
 					bracket_depth += 1;
 					chars.push(this.advance());
 					continue;
@@ -1108,6 +1117,7 @@ class Lexer {
 			// COND: Extglob patterns or ( terminates
 			if (ctx === WORD_CTX_COND && ch === "(") {
 				if (chars.length > 0 && _isExtglobPrefix(chars[chars.length - 1])) {
+					extglob_start = this.pos;
 					chars.push(this.advance());
 					depth = 1;
 					while (!this.atEnd() && depth > 0) {
@@ -1118,6 +1128,12 @@ class Lexer {
 							depth -= 1;
 						}
 						chars.push(this.advance());
+					}
+					if (depth > 0) {
+						throw new MatchedPairError(
+							"unexpected EOF looking for `)'",
+							extglob_start,
+						);
 					}
 					continue;
 				} else {
@@ -1304,18 +1320,27 @@ class Lexer {
 				continue;
 			}
 			// NORMAL: Array literal - callback to Parser
+			// Only if there's a valid variable name before = or +=
 			if (
 				ctx === WORD_CTX_NORMAL &&
 				ch === "(" &&
 				chars &&
 				bracket_depth === 0
 			) {
+				is_array_assign = false;
+				// Check += first (before =) since += ends with =
 				if (
-					chars[chars.length - 1] === "=" ||
-					(chars.length >= 2 &&
-						chars[chars.length - 2] === "+" &&
-						chars[chars.length - 1] === "=")
+					chars.length >= 3 &&
+					chars[chars.length - 2] === "+" &&
+					chars[chars.length - 1] === "="
 				) {
+					// Check chars before += form valid name
+					is_array_assign = _isArrayAssignmentPrefix(chars.slice(0, -2));
+				} else if (chars[chars.length - 1] === "=" && chars.length >= 2) {
+					// Check chars before = form valid name
+					is_array_assign = _isArrayAssignmentPrefix(chars.slice(0, -1));
+				}
+				if (is_array_assign) {
 					this._syncToParser();
 					array_result = this._parser._parseArrayLiteral();
 					this._syncFromParser();
@@ -1335,6 +1360,7 @@ class Lexer {
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === "("
 			) {
+				extglob_start = this.pos;
 				chars.push(this.advance());
 				chars.push(this.advance());
 				extglob_depth = 1;
@@ -1383,6 +1409,7 @@ class Lexer {
 						this.pos + 1 < this.length &&
 						this.source[this.pos + 1] === "("
 					) {
+						arith_start = this.pos;
 						chars.push(this.advance());
 						chars.push(this.advance());
 						if (!this.atEnd() && this.peek() === "(") {
@@ -1396,6 +1423,12 @@ class Lexer {
 									inner_paren_depth -= 1;
 								}
 								chars.push(this.advance());
+							}
+							if (inner_paren_depth > 0) {
+								throw new MatchedPairError(
+									"unexpected EOF looking for `))'",
+									arith_start,
+								);
 							}
 						} else {
 							extglob_depth += 1;
@@ -1412,6 +1445,12 @@ class Lexer {
 						chars.push(this.advance());
 					}
 				}
+				if (extglob_depth > 0) {
+					throw new MatchedPairError(
+						"unexpected EOF looking for `)'",
+						extglob_start,
+					);
+				}
 				continue;
 			}
 			// NORMAL: Metacharacter terminates word (unless inside brackets)
@@ -1420,6 +1459,13 @@ class Lexer {
 			}
 			// Regular character
 			chars.push(this.advance());
+		}
+		// Check for unclosed bracket at EOF
+		if (bracket_depth > 0 && bracket_start_pos != null && this.atEnd()) {
+			throw new MatchedPairError(
+				"unexpected EOF looking for `]'",
+				bracket_start_pos,
+			);
 		}
 		if (chars.length === 0) {
 			return null;
@@ -1581,9 +1627,11 @@ class Lexer {
 			}
 		}
 		if (!found_close) {
-			// Unterminated - reset and return None
-			this.pos = start;
-			return [null, ""];
+			// Unterminated ANSI-C quote - this is an error, not a fallback
+			throw new MatchedPairError(
+				"unexpected EOF while looking for matching `''",
+				start,
+			);
 		}
 		text = this.source.slice(start, this.pos);
 		content = content_chars.join("");
@@ -1896,12 +1944,12 @@ class Lexer {
 			return null;
 		}
 		ch = this.peek();
-		// Special parameters (but NOT $ followed by { - that's a nested ${...} expansion)
+		// Special parameters (but NOT $ followed by { ' or " - those are special expansions)
 		if (_isSpecialParam(ch)) {
 			if (
 				ch === "$" &&
 				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "{"
+				"{'\"".includes(this.source[this.pos + 1])
 			) {
 				return null;
 			}
@@ -2080,8 +2128,7 @@ class Lexer {
 			text,
 			trailing;
 		if (this.atEnd()) {
-			this.pos = start;
-			return [null, ""];
+			throw new MatchedPairError("unexpected EOF looking for `}'", start);
 		}
 		// Save and initialize dolbrace state
 		saved_dolbrace = this._dolbrace_state;
@@ -2157,8 +2204,11 @@ class Lexer {
 							text,
 						];
 					}
-					// Unclosed brace
+					// Unclosed brace at EOF - error, not fallback
 					this._dolbrace_state = saved_dolbrace;
+					if (this.atEnd()) {
+						throw new MatchedPairError("unexpected EOF looking for `}'", start);
+					}
 					this.pos = start;
 					return [null, ""];
 				}
@@ -2200,6 +2250,11 @@ class Lexer {
 						text = this.source.slice(start, this.pos);
 						this._dolbrace_state = saved_dolbrace;
 						return [new ParamIndirect(param, op, arg), text];
+					}
+					// Unclosed at EOF - error, not fallback
+					if (this.atEnd()) {
+						this._dolbrace_state = saved_dolbrace;
+						throw new MatchedPairError("unexpected EOF looking for `}'", start);
 					}
 				}
 				// Fell through - pattern didn't match, return None
@@ -2324,8 +2379,7 @@ class Lexer {
 		}
 		if (this.atEnd()) {
 			this._dolbrace_state = saved_dolbrace;
-			this.pos = start;
-			return [null, ""];
+			throw new MatchedPairError("unexpected EOF looking for `}'", start);
 		}
 		// Check for closing brace (simple expansion)
 		if (this.peek() === "}") {
@@ -2376,6 +2430,9 @@ class Lexer {
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === "{"
 			) {
+				op = "";
+			} else if (!this.atEnd() && ["'", '"'].includes(this.peek())) {
+				// Quotes start the argument, not the operator
 				op = "";
 			} else {
 				op = this.advance();
@@ -2531,6 +2588,9 @@ class Lexer {
 		}
 		if (depth !== 0) {
 			this._dolbrace_state = saved_dolbrace;
+			if (this.atEnd()) {
+				throw new MatchedPairError("unexpected EOF looking for `}'", start);
+			}
 			this.pos = start;
 			return [null, ""];
 		}
@@ -8564,9 +8624,15 @@ class Parser {
 		this._in_array_literal = in_array_literal;
 		tok = this._lexPeekToken();
 		if (tok.type !== TokenType.WORD) {
+			// Reset context when not a word to avoid affecting subsequent calls
+			this._at_command_start = false;
+			this._in_array_literal = false;
 			return null;
 		}
 		this._lexNextToken();
+		// Reset context after consuming to avoid affecting subsequent calls
+		this._at_command_start = false;
+		this._in_array_literal = false;
 		return tok.word;
 	}
 
@@ -9074,6 +9140,9 @@ class Parser {
 				this.advance();
 			}
 			if (depth !== 0) {
+				if (this.atEnd()) {
+					throw new MatchedPairError("unexpected EOF looking for `)'", start);
+				}
 				this.pos = start;
 				return [null, ""];
 			}
@@ -9149,7 +9218,34 @@ class Parser {
 		first_close_pos = null;
 		while (!this.atEnd() && depth > 0) {
 			c = this.peek();
-			if (c === "(") {
+			// Skip single-quoted strings (parens inside don't count)
+			if (c === "'") {
+				this.advance();
+				while (!this.atEnd() && this.peek() !== "'") {
+					this.advance();
+				}
+				if (!this.atEnd()) {
+					this.advance();
+				}
+			} else if (c === '"') {
+				// Skip double-quoted strings (parens inside don't count)
+				this.advance();
+				while (!this.atEnd()) {
+					if (this.peek() === "\\" && this.pos + 1 < this.length) {
+						this.advance();
+						this.advance();
+					} else if (this.peek() === '"') {
+						this.advance();
+						break;
+					} else {
+						this.advance();
+					}
+				}
+			} else if (c === "\\" && this.pos + 1 < this.length) {
+				// Handle backslash escapes outside quotes
+				this.advance();
+				this.advance();
+			} else if (c === "(") {
 				depth += 1;
 				this.advance();
 			} else if (c === ")") {
@@ -9169,6 +9265,9 @@ class Parser {
 			}
 		}
 		if (depth !== 0) {
+			if (this.atEnd()) {
+				throw new MatchedPairError("unexpected EOF looking for `))'", start);
+			}
 			this.pos = start;
 			return [null, ""];
 		}
@@ -10829,7 +10928,7 @@ class Parser {
 	}
 
 	parseCommand() {
-		let all_assignments, redirect, redirects, tok, w, word, words;
+		let all_assignments, redirect, redirects, reserved, w, word, words;
 		words = [];
 		redirects = [];
 		while (true) {
@@ -10839,11 +10938,15 @@ class Parser {
 			if (this._lexIsCommandTerminator()) {
 				break;
 			}
-			// } is only a terminator at command position (closing a brace group)
-			// In argument position, } is just a regular word
-			tok = this._lexPeekToken();
-			if (tok.type === TokenType.RBRACE && !words) {
-				break;
+			// } and ]] are only terminators at command position (closing brace group
+			// or conditional). In argument position, they're regular words.
+			// Check as reserved words since lexer returns them as WORD tokens.
+			// Use len() == 0 instead of 'not words' for JS transpiler compatibility
+			if (words.length === 0) {
+				reserved = this._lexPeekReservedWord();
+				if (reserved === "}" || reserved === "]]") {
+					break;
+				}
 			}
 			// Try to parse a redirect first
 			redirect = this.parseRedirect();
@@ -10971,8 +11074,12 @@ class Parser {
 				this.advance();
 			}
 		}
-		if (this.atEnd() || depth !== 1) {
-			// Didn't find )) - might be nested subshells or malformed
+		if (this.atEnd()) {
+			// Hit EOF without finding )) - unclosed arithmetic command
+			throw new MatchedPairError("unexpected EOF looking for `))'", saved_pos);
+		}
+		if (depth !== 1) {
+			// Didn't find )) - might be nested subshells, not arithmetic command
 			this.pos = saved_pos;
 			return null;
 		}

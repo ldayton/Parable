@@ -6127,6 +6127,14 @@ class Parser {
 		this._syncParser();
 	}
 
+	_lexSkipComment() {
+		let result;
+		this._syncLexer();
+		result = this._lexer._skipComment();
+		this._syncParser();
+		return result;
+	}
+
 	atEnd() {
 		return this.pos >= this.length;
 	}
@@ -6190,10 +6198,8 @@ class Parser {
 			}
 			ch = this.peek();
 			if (ch === "#") {
-				// Skip comment to end of line (but not the newline itself)
-				while (!this.atEnd() && this.peek() !== "\n") {
-					this.advance();
-				}
+				// Use Lexer to skip comment
+				this._lexSkipComment();
 			} else if (ch === "\\" && this.peekAt(1) === "\n") {
 				// Backslash-newline is line continuation - skip both
 				this.advance();

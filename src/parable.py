@@ -5176,6 +5176,13 @@ class Parser:
         self._lexer.skip_blanks()
         self._sync_parser()
 
+    def _lex_skip_comment(self) -> bool:
+        """Skip comment via Lexer. Returns True if comment was skipped."""
+        self._sync_lexer()
+        result = self._lexer._skip_comment()
+        self._sync_parser()
+        return result
+
     def at_end(self) -> bool:
         """Check if we've reached the end of input."""
         return self.pos >= self.length
@@ -5232,9 +5239,8 @@ class Parser:
                 break
             ch = self.peek()
             if ch == "#":
-                # Skip comment to end of line (but not the newline itself)
-                while not self.at_end() and self.peek() != "\n":
-                    self.advance()
+                # Use Lexer to skip comment
+                self._lex_skip_comment()
             elif ch == "\\" and self.peek_at(1) == "\n":
                 # Backslash-newline is line continuation - skip both
                 self.advance()

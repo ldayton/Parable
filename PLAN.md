@@ -8,15 +8,15 @@ Match bash's parsing behavior exactly by mirroring bash's architectural patterns
 
 ## Architecture Comparison
 
-| Aspect | Bash | Parable (Current) |
-|--------|------|-------------------|
-| **Token Stream** | `yylex()` produces tokens | Parser does character-level parsing |
-| **Parser State** | 28 `PST_*` flags in bitmask | `ParserStateFlags` (partial) |
-| **Lexer State** | 16 `LEX_*` flags | Lexer exists but Parser bypasses it |
-| **Quote State** | `struct dstack` with push/pop | `QuoteState` class ✓ |
-| **Token History** | Last 4 tokens tracked | `_token_history` ✓ |
-| **Dollar-Brace** | `DOLBRACE_*` state machine | `DolbraceState` ✓ |
-| **Nested Parsing** | Save/restore full state | Sub-parser instances |
+| Aspect             | Bash                          | Parable (Current)                   |
+| ------------------ | ----------------------------- | ----------------------------------- |
+| **Token Stream**   | `yylex()` produces tokens     | Parser does character-level parsing |
+| **Parser State**   | 28 `PST_*` flags in bitmask   | `ParserStateFlags` (partial)        |
+| **Lexer State**    | 16 `LEX_*` flags              | Lexer exists but Parser bypasses it |
+| **Quote State**    | `struct dstack` with push/pop | `QuoteState` class ✓                |
+| **Token History**  | Last 4 tokens tracked         | `_token_history` ✓                  |
+| **Dollar-Brace**   | `DOLBRACE_*` state machine    | `DolbraceState` ✓                   |
+| **Nested Parsing** | Save/restore full state       | Sub-parser instances                |
 
 ---
 
@@ -73,30 +73,42 @@ Functions like `parse_list()`, `parse_command()`, `parse_pipeline()` bypass the 
 The Lexer exists and has significant functionality, but the Parser mostly ignores it. Key parsing functions do character-level parsing directly:
 
 ```python
-# Current pattern (character-based):
+# Current (character-based):
 def parse_command(self):
     while True:
         self.skip_whitespace()
-        if self.at_end():    # Parser.at_end()
+        if self.at_end():        # Parser.at_end()
             break
-        ch = self.peek()     # Parser.peek() - bypasses Lexer!
+        ch = self.peek()         # Parser.peek() - bypasses Lexer
+        if ch == ";":
+            break
+        ...
+
+# Target (token-based):
+def parse_command(self):
+    while True:
+        tok = self._lex_peek_token()  # Lexer can inject EOF via _eof_token
+        if tok.type == TokenType.EOF:
+            break
+        if tok.type == TokenType.SEMI:
+            break
         ...
 ```
 
-The methods that were moved to Lexer work via callbacks - the Lexer calls back to Parser methods, creating bidirectional dependencies.
+The "leaf" methods moved to Lexer (ansi_c_quote, locale_string, param_expansion) work because they don't need to parse nested commands. The remaining methods need sub-parsers or callbacks because they contain `$()` which requires `parse_list()`.
 
 ---
 
 ## Two Paths Forward
 
 ### Path A: Move Methods First (Incremental)
-1. Move remaining expansion methods to Lexer (keep sub-parsers)
+1. Move remaining expansion methods to Lexer (keep sub-parsers for now)
 2. Move `_parse_word_internal` to Lexer
-3. Make Parser use Lexer for tokenization
-4. Implement EOF token mechanism → remove sub-parsers
+3. Make Parser token-based (`parse_command()` etc. use `_lex_next_token()`)
+4. EOF token mechanism now works → remove sub-parsers
 
 **Pros:** Lower risk, incremental progress
-**Cons:** Carries sub-parsers and bidirectional callbacks longer
+**Cons:** Carries sub-parsers longer; step 3 is still the hard part
 
 ### Path B: Make Parser Token-Based First (Direct)
 1. Refactor `parse_command()`, `parse_list()`, etc. to use `_lex_next_token()`
@@ -111,27 +123,31 @@ The methods that were moved to Lexer work via callbacks - the Lexer calls back t
 ## Blocked Work (Requires Token-Based Parser)
 
 ### EOF Token Mechanism
-Set `)` as EOF token for `$()`, have Lexer return EOF, parser stops automatically. Eliminates ~350 lines of scanning code and sub-parser creation.
+Set `)` as EOF token for `$()`, Lexer returns EOF when it sees `)` at depth 0, `parse_list()` stops automatically. Eliminates ~350 lines of scanning code and sub-parser creation.
 
 ### Unified Scanning/Parsing
-Remove `_find_cmdsub_end` and similar pre-scanning functions. Parse nested constructs inline with save/restore state.
+Remove `_find_cmdsub_end` and similar pre-scanning functions. Parse nested constructs inline with save/restore state instead of scan-then-parse.
 
-### Clean Lexer Migration
-Move `_parse_command_substitution`, `_parse_backtick_substitution`, etc. to Lexer without sub-parsers or Parser callbacks.
+### Sub-Parser Elimination
+Once EOF token works, `_parse_command_substitution` etc. can call `parse_list()` directly instead of creating sub-parsers. The Lexer signals when to stop.
 
 ---
 
-## Methods Still in Parser (Need Sub-Parsers)
+## Methods Still in Parser
 
-| Method | Why |
-|--------|-----|
-| `_parse_arithmetic_expansion` | calls `parse_list()` |
-| `_parse_command_substitution` | creates sub-parser |
-| `_parse_backtick_substitution` | creates sub-parser |
-| `_parse_process_substitution` | creates sub-parser |
-| `_parse_array_literal` | may create sub-parser |
-| `_parse_dollar_expansion` | dispatcher |
-| `_parse_word_internal` | orchestrates all |
+These remain in Parser because they parse nested commands (requiring `parse_list()`):
+
+| Method                         | Nested Command Parsing                       |
+| ------------------------------ | -------------------------------------------- |
+| `_parse_command_substitution`  | `$(...)` → sub-parser for content            |
+| `_parse_backtick_substitution` | `` `...` `` → sub-parser for content         |
+| `_parse_process_substitution`  | `<(...)` → sub-parser for content            |
+| `_parse_arithmetic_expansion`  | `$((... $(...) ...))` → calls `parse_list()` |
+| `_parse_array_literal`         | `=(...)` may contain command subs            |
+| `_parse_dollar_expansion`      | dispatcher for above                         |
+| `_parse_word_internal`         | orchestrates all expansion methods           |
+
+With a token-based Parser, these could use EOF token mechanism instead of sub-parsers.
 
 ---
 

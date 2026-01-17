@@ -6386,7 +6386,7 @@ class Parser {
 			if (brace == null) {
 				throw new ParseError(
 					`Expected brace group body in ${context}`,
-					this.pos,
+					this._lexPeekToken().pos,
 				);
 			}
 			return brace.body;
@@ -6394,15 +6394,24 @@ class Parser {
 		if (this._lexConsumeWord("do")) {
 			body = this.parseListUntil(new Set(["done"]));
 			if (body == null) {
-				throw new ParseError("Expected commands after 'do'", this.pos);
+				throw new ParseError(
+					"Expected commands after 'do'",
+					this._lexPeekToken().pos,
+				);
 			}
 			this.skipWhitespaceAndNewlines();
 			if (!this._lexConsumeWord("done")) {
-				throw new ParseError(`Expected 'done' to close ${context}`, this.pos);
+				throw new ParseError(
+					`Expected 'done' to close ${context}`,
+					this._lexPeekToken().pos,
+				);
 			}
 			return body;
 		}
-		throw new ParseError(`Expected 'do' or '{' in ${context}`, this.pos);
+		throw new ParseError(
+			`Expected 'do' or '{' in ${context}`,
+			this._lexPeekToken().pos,
+		);
 	}
 
 	peekWord() {
@@ -11593,11 +11602,17 @@ class Parser {
 		this.skipWhitespaceAndNewlines();
 		body = this.parseList();
 		if (body == null) {
-			throw new ParseError("Expected command in brace group", this.pos);
+			throw new ParseError(
+				"Expected command in brace group",
+				this._lexPeekToken().pos,
+			);
 		}
 		this.skipWhitespace();
 		if (!this._lexConsumeWord("}")) {
-			throw new ParseError("Expected } to close brace group", this.pos);
+			throw new ParseError(
+				"Expected } to close brace group",
+				this._lexPeekToken().pos,
+			);
 		}
 		return new BraceGroup(body, this._collectRedirects());
 	}
@@ -11616,17 +11631,26 @@ class Parser {
 		// Parse condition (a list that ends at 'then')
 		condition = this.parseListUntil(new Set(["then"]));
 		if (condition == null) {
-			throw new ParseError("Expected condition after 'if'", this.pos);
+			throw new ParseError(
+				"Expected condition after 'if'",
+				this._lexPeekToken().pos,
+			);
 		}
 		// Expect 'then'
 		this.skipWhitespaceAndNewlines();
 		if (!this._lexConsumeWord("then")) {
-			throw new ParseError("Expected 'then' after if condition", this.pos);
+			throw new ParseError(
+				"Expected 'then' after if condition",
+				this._lexPeekToken().pos,
+			);
 		}
 		// Parse then body (ends at elif, else, or fi)
 		then_body = this.parseListUntil(new Set(["elif", "else", "fi"]));
 		if (then_body == null) {
-			throw new ParseError("Expected commands after 'then'", this.pos);
+			throw new ParseError(
+				"Expected commands after 'then'",
+				this._lexPeekToken().pos,
+			);
 		}
 		// Check what comes next: elif, else, or fi
 		this.skipWhitespaceAndNewlines();
@@ -11638,15 +11662,24 @@ class Parser {
 			// We need to parse: condition; then body [elif|else|fi]
 			elif_condition = this.parseListUntil(new Set(["then"]));
 			if (elif_condition == null) {
-				throw new ParseError("Expected condition after 'elif'", this.pos);
+				throw new ParseError(
+					"Expected condition after 'elif'",
+					this._lexPeekToken().pos,
+				);
 			}
 			this.skipWhitespaceAndNewlines();
 			if (!this._lexConsumeWord("then")) {
-				throw new ParseError("Expected 'then' after elif condition", this.pos);
+				throw new ParseError(
+					"Expected 'then' after elif condition",
+					this._lexPeekToken().pos,
+				);
 			}
 			elif_then_body = this.parseListUntil(new Set(["elif", "else", "fi"]));
 			if (elif_then_body == null) {
-				throw new ParseError("Expected commands after 'then'", this.pos);
+				throw new ParseError(
+					"Expected commands after 'then'",
+					this._lexPeekToken().pos,
+				);
 			}
 			// Recursively handle more elif/else/fi
 			this.skipWhitespaceAndNewlines();
@@ -11659,7 +11692,10 @@ class Parser {
 				this._lexConsumeWord("else");
 				inner_else = this.parseListUntil(new Set(["fi"]));
 				if (inner_else == null) {
-					throw new ParseError("Expected commands after 'else'", this.pos);
+					throw new ParseError(
+						"Expected commands after 'else'",
+						this._lexPeekToken().pos,
+					);
 				}
 			}
 			else_body = new If(elif_condition, elif_then_body, inner_else);
@@ -11667,13 +11703,19 @@ class Parser {
 			this._lexConsumeWord("else");
 			else_body = this.parseListUntil(new Set(["fi"]));
 			if (else_body == null) {
-				throw new ParseError("Expected commands after 'else'", this.pos);
+				throw new ParseError(
+					"Expected commands after 'else'",
+					this._lexPeekToken().pos,
+				);
 			}
 		}
 		// Expect 'fi'
 		this.skipWhitespaceAndNewlines();
 		if (!this._lexConsumeWord("fi")) {
-			throw new ParseError("Expected 'fi' to close if statement", this.pos);
+			throw new ParseError(
+				"Expected 'fi' to close if statement",
+				this._lexPeekToken().pos,
+			);
 		}
 		return new If(condition, then_body, else_body, this._collectRedirects());
 	}
@@ -11683,15 +11725,24 @@ class Parser {
 		this._lexConsumeWord("elif");
 		condition = this.parseListUntil(new Set(["then"]));
 		if (condition == null) {
-			throw new ParseError("Expected condition after 'elif'", this.pos);
+			throw new ParseError(
+				"Expected condition after 'elif'",
+				this._lexPeekToken().pos,
+			);
 		}
 		this.skipWhitespaceAndNewlines();
 		if (!this._lexConsumeWord("then")) {
-			throw new ParseError("Expected 'then' after elif condition", this.pos);
+			throw new ParseError(
+				"Expected 'then' after elif condition",
+				this._lexPeekToken().pos,
+			);
 		}
 		then_body = this.parseListUntil(new Set(["elif", "else", "fi"]));
 		if (then_body == null) {
-			throw new ParseError("Expected commands after 'then'", this.pos);
+			throw new ParseError(
+				"Expected commands after 'then'",
+				this._lexPeekToken().pos,
+			);
 		}
 		this.skipWhitespaceAndNewlines();
 		else_body = null;
@@ -11701,7 +11752,10 @@ class Parser {
 			this._lexConsumeWord("else");
 			else_body = this.parseListUntil(new Set(["fi"]));
 			if (else_body == null) {
-				throw new ParseError("Expected commands after 'else'", this.pos);
+				throw new ParseError(
+					"Expected commands after 'else'",
+					this._lexPeekToken().pos,
+				);
 			}
 		}
 		return new If(condition, then_body, else_body);
@@ -11716,22 +11770,34 @@ class Parser {
 		// Parse condition (ends at 'do')
 		condition = this.parseListUntil(new Set(["do"]));
 		if (condition == null) {
-			throw new ParseError("Expected condition after 'while'", this.pos);
+			throw new ParseError(
+				"Expected condition after 'while'",
+				this._lexPeekToken().pos,
+			);
 		}
 		// Expect 'do'
 		this.skipWhitespaceAndNewlines();
 		if (!this._lexConsumeWord("do")) {
-			throw new ParseError("Expected 'do' after while condition", this.pos);
+			throw new ParseError(
+				"Expected 'do' after while condition",
+				this._lexPeekToken().pos,
+			);
 		}
 		// Parse body (ends at 'done')
 		body = this.parseListUntil(new Set(["done"]));
 		if (body == null) {
-			throw new ParseError("Expected commands after 'do'", this.pos);
+			throw new ParseError(
+				"Expected commands after 'do'",
+				this._lexPeekToken().pos,
+			);
 		}
 		// Expect 'done'
 		this.skipWhitespaceAndNewlines();
 		if (!this._lexConsumeWord("done")) {
-			throw new ParseError("Expected 'done' to close while loop", this.pos);
+			throw new ParseError(
+				"Expected 'done' to close while loop",
+				this._lexPeekToken().pos,
+			);
 		}
 		return new While(condition, body, this._collectRedirects());
 	}
@@ -11745,22 +11811,34 @@ class Parser {
 		// Parse condition (ends at 'do')
 		condition = this.parseListUntil(new Set(["do"]));
 		if (condition == null) {
-			throw new ParseError("Expected condition after 'until'", this.pos);
+			throw new ParseError(
+				"Expected condition after 'until'",
+				this._lexPeekToken().pos,
+			);
 		}
 		// Expect 'do'
 		this.skipWhitespaceAndNewlines();
 		if (!this._lexConsumeWord("do")) {
-			throw new ParseError("Expected 'do' after until condition", this.pos);
+			throw new ParseError(
+				"Expected 'do' after until condition",
+				this._lexPeekToken().pos,
+			);
 		}
 		// Parse body (ends at 'done')
 		body = this.parseListUntil(new Set(["done"]));
 		if (body == null) {
-			throw new ParseError("Expected commands after 'do'", this.pos);
+			throw new ParseError(
+				"Expected commands after 'do'",
+				this._lexPeekToken().pos,
+			);
 		}
 		// Expect 'done'
 		this.skipWhitespaceAndNewlines();
 		if (!this._lexConsumeWord("done")) {
-			throw new ParseError("Expected 'done' to close until loop", this.pos);
+			throw new ParseError(
+				"Expected 'done' to close until loop",
+				this._lexPeekToken().pos,
+			);
 		}
 		return new Until(condition, body, this._collectRedirects());
 	}
@@ -11785,13 +11863,19 @@ class Parser {
 			// Command substitution as variable name: for $(echo i) in ...
 			var_word = this.parseWord();
 			if (var_word == null) {
-				throw new ParseError("Expected variable name after 'for'", this.pos);
+				throw new ParseError(
+					"Expected variable name after 'for'",
+					this._lexPeekToken().pos,
+				);
 			}
 			var_name = var_word.value;
 		} else {
 			var_name = this.peekWord();
 			if (var_name == null) {
-				throw new ParseError("Expected variable name after 'for'", this.pos);
+				throw new ParseError(
+					"Expected variable name after 'for'",
+					this._lexPeekToken().pos,
+				);
 			}
 			this.consumeWord(var_name);
 		}
@@ -11833,7 +11917,10 @@ class Parser {
 						break;
 					}
 					// 'for x in do' or 'for x in a b c do' is invalid
-					throw new ParseError("Expected ';' or newline before 'do'", this.pos);
+					throw new ParseError(
+						"Expected ';' or newline before 'do'",
+						this._lexPeekToken().pos,
+					);
 				}
 				word = this.parseWord();
 				if (word == null) {
@@ -11849,7 +11936,10 @@ class Parser {
 			// Bash allows: for x in a b; { cmd; }
 			brace_group = this.parseBraceGroup();
 			if (brace_group == null) {
-				throw new ParseError("Expected brace group in for loop", this.pos);
+				throw new ParseError(
+					"Expected brace group in for loop",
+					this._lexPeekToken().pos,
+				);
 			}
 			return new For(
 				var_name,
@@ -11860,17 +11950,26 @@ class Parser {
 		}
 		// Expect 'do'
 		if (!this._lexConsumeWord("do")) {
-			throw new ParseError("Expected 'do' in for loop", this.pos);
+			throw new ParseError(
+				"Expected 'do' in for loop",
+				this._lexPeekToken().pos,
+			);
 		}
 		// Parse body (ends at 'done')
 		body = this.parseListUntil(new Set(["done"]));
 		if (body == null) {
-			throw new ParseError("Expected commands after 'do'", this.pos);
+			throw new ParseError(
+				"Expected commands after 'do'",
+				this._lexPeekToken().pos,
+			);
 		}
 		// Expect 'done'
 		this.skipWhitespaceAndNewlines();
 		if (!this._lexConsumeWord("done")) {
-			throw new ParseError("Expected 'done' to close for loop", this.pos);
+			throw new ParseError(
+				"Expected 'done' to close for loop",
+				this._lexPeekToken().pos,
+			);
 		}
 		return new For(var_name, words, body, this._collectRedirects());
 	}
@@ -11945,7 +12044,10 @@ class Parser {
 		// Parse variable name
 		var_name = this.peekWord();
 		if (var_name == null) {
-			throw new ParseError("Expected variable name after 'select'", this.pos);
+			throw new ParseError(
+				"Expected variable name after 'select'",
+				this._lexPeekToken().pos,
+			);
 		}
 		this.consumeWord(var_name);
 		this.skipWhitespace();
@@ -12029,12 +12131,18 @@ class Parser {
 		// Parse the word to match
 		word = this.parseWord();
 		if (word == null) {
-			throw new ParseError("Expected word after 'case'", this.pos);
+			throw new ParseError(
+				"Expected word after 'case'",
+				this._lexPeekToken().pos,
+			);
 		}
 		this.skipWhitespaceAndNewlines();
 		// Expect 'in'
 		if (!this._lexConsumeWord("in")) {
-			throw new ParseError("Expected 'in' after case word", this.pos);
+			throw new ParseError(
+				"Expected 'in' after case word",
+				this._lexPeekToken().pos,
+			);
 		}
 		this.skipWhitespaceAndNewlines();
 		// Parse pattern clauses until 'esac'
@@ -12250,7 +12358,10 @@ class Parser {
 			}
 			pattern = pattern_chars.join("");
 			if (!pattern) {
-				throw new ParseError("Expected pattern in case statement", this.pos);
+				throw new ParseError(
+					"Expected pattern in case statement",
+					this._lexPeekToken().pos,
+				);
 			}
 			// Parse commands until ;;, ;&, ;;&, or esac
 			// Commands are optional (can have empty body)
@@ -12279,7 +12390,10 @@ class Parser {
 		// Expect 'esac'
 		this.skipWhitespaceAndNewlines();
 		if (!this._lexConsumeWord("esac")) {
-			throw new ParseError("Expected 'esac' to close case statement", this.pos);
+			throw new ParseError(
+				"Expected 'esac' to close case statement",
+				this._lexPeekToken().pos,
+			);
 		}
 		return new Case(word, patterns, this._collectRedirects());
 	}
@@ -12772,7 +12886,10 @@ class Parser {
 				reserved,
 			)
 		) {
-			throw new ParseError(`Unexpected reserved word '${reserved}'`, this.pos);
+			throw new ParseError(
+				`Unexpected reserved word '${reserved}'`,
+				this._lexPeekToken().pos,
+			);
 		}
 		// If statement
 		if (reserved === "if") {

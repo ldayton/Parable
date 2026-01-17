@@ -5384,17 +5384,17 @@ class Parser:
         if self.peek() == "{":
             brace = self.parse_brace_group()
             if brace is None:
-                raise ParseError(f"Expected brace group body in {context}", pos=self.pos)
+                raise ParseError(f"Expected brace group body in {context}", pos=self._lex_peek_token().pos)
             return brace.body
         if self._lex_consume_word("do"):
             body = self.parse_list_until({"done"})
             if body is None:
-                raise ParseError("Expected commands after 'do'", pos=self.pos)
+                raise ParseError("Expected commands after 'do'", pos=self._lex_peek_token().pos)
             self.skip_whitespace_and_newlines()
             if not self._lex_consume_word("done"):
-                raise ParseError(f"Expected 'done' to close {context}", pos=self.pos)
+                raise ParseError(f"Expected 'done' to close {context}", pos=self._lex_peek_token().pos)
             return body
-        raise ParseError(f"Expected 'do' or '{{' in {context}", pos=self.pos)
+        raise ParseError(f"Expected 'do' or '{{' in {context}", pos=self._lex_peek_token().pos)
 
     def peek_word(self) -> str | None:
         """Peek at the next word without consuming it."""
@@ -9550,11 +9550,11 @@ class Parser:
 
         body = self.parse_list()
         if body is None:
-            raise ParseError("Expected command in brace group", pos=self.pos)
+            raise ParseError("Expected command in brace group", pos=self._lex_peek_token().pos)
 
         self.skip_whitespace()
         if not self._lex_consume_word("}"):
-            raise ParseError("Expected } to close brace group", pos=self.pos)
+            raise ParseError("Expected } to close brace group", pos=self._lex_peek_token().pos)
         return BraceGroup(body, self._collect_redirects())
 
     def parse_if(self) -> If | None:
@@ -9566,17 +9566,17 @@ class Parser:
         # Parse condition (a list that ends at 'then')
         condition = self.parse_list_until({"then"})
         if condition is None:
-            raise ParseError("Expected condition after 'if'", pos=self.pos)
+            raise ParseError("Expected condition after 'if'", pos=self._lex_peek_token().pos)
 
         # Expect 'then'
         self.skip_whitespace_and_newlines()
         if not self._lex_consume_word("then"):
-            raise ParseError("Expected 'then' after if condition", pos=self.pos)
+            raise ParseError("Expected 'then' after if condition", pos=self._lex_peek_token().pos)
 
         # Parse then body (ends at elif, else, or fi)
         then_body = self.parse_list_until({"elif", "else", "fi"})
         if then_body is None:
-            raise ParseError("Expected commands after 'then'", pos=self.pos)
+            raise ParseError("Expected commands after 'then'", pos=self._lex_peek_token().pos)
 
         # Check what comes next: elif, else, or fi
         self.skip_whitespace_and_newlines()
@@ -9589,15 +9589,15 @@ class Parser:
             # We need to parse: condition; then body [elif|else|fi]
             elif_condition = self.parse_list_until({"then"})
             if elif_condition is None:
-                raise ParseError("Expected condition after 'elif'", pos=self.pos)
+                raise ParseError("Expected condition after 'elif'", pos=self._lex_peek_token().pos)
 
             self.skip_whitespace_and_newlines()
             if not self._lex_consume_word("then"):
-                raise ParseError("Expected 'then' after elif condition", pos=self.pos)
+                raise ParseError("Expected 'then' after elif condition", pos=self._lex_peek_token().pos)
 
             elif_then_body = self.parse_list_until({"elif", "else", "fi"})
             if elif_then_body is None:
-                raise ParseError("Expected commands after 'then'", pos=self.pos)
+                raise ParseError("Expected commands after 'then'", pos=self._lex_peek_token().pos)
 
             # Recursively handle more elif/else/fi
             self.skip_whitespace_and_newlines()
@@ -9611,7 +9611,7 @@ class Parser:
                 self._lex_consume_word("else")
                 inner_else = self.parse_list_until({"fi"})
                 if inner_else is None:
-                    raise ParseError("Expected commands after 'else'", pos=self.pos)
+                    raise ParseError("Expected commands after 'else'", pos=self._lex_peek_token().pos)
 
             else_body = If(elif_condition, elif_then_body, inner_else)
 
@@ -9619,12 +9619,12 @@ class Parser:
             self._lex_consume_word("else")
             else_body = self.parse_list_until({"fi"})
             if else_body is None:
-                raise ParseError("Expected commands after 'else'", pos=self.pos)
+                raise ParseError("Expected commands after 'else'", pos=self._lex_peek_token().pos)
 
         # Expect 'fi'
         self.skip_whitespace_and_newlines()
         if not self._lex_consume_word("fi"):
-            raise ParseError("Expected 'fi' to close if statement", pos=self.pos)
+            raise ParseError("Expected 'fi' to close if statement", pos=self._lex_peek_token().pos)
         return If(condition, then_body, else_body, self._collect_redirects())
 
     def _parse_elif_chain(self) -> If:
@@ -9633,15 +9633,15 @@ class Parser:
 
         condition = self.parse_list_until({"then"})
         if condition is None:
-            raise ParseError("Expected condition after 'elif'", pos=self.pos)
+            raise ParseError("Expected condition after 'elif'", pos=self._lex_peek_token().pos)
 
         self.skip_whitespace_and_newlines()
         if not self._lex_consume_word("then"):
-            raise ParseError("Expected 'then' after elif condition", pos=self.pos)
+            raise ParseError("Expected 'then' after elif condition", pos=self._lex_peek_token().pos)
 
         then_body = self.parse_list_until({"elif", "else", "fi"})
         if then_body is None:
-            raise ParseError("Expected commands after 'then'", pos=self.pos)
+            raise ParseError("Expected commands after 'then'", pos=self._lex_peek_token().pos)
 
         self.skip_whitespace_and_newlines()
 
@@ -9652,7 +9652,7 @@ class Parser:
             self._lex_consume_word("else")
             else_body = self.parse_list_until({"fi"})
             if else_body is None:
-                raise ParseError("Expected commands after 'else'", pos=self.pos)
+                raise ParseError("Expected commands after 'else'", pos=self._lex_peek_token().pos)
 
         return If(condition, then_body, else_body)
 
@@ -9665,22 +9665,22 @@ class Parser:
         # Parse condition (ends at 'do')
         condition = self.parse_list_until({"do"})
         if condition is None:
-            raise ParseError("Expected condition after 'while'", pos=self.pos)
+            raise ParseError("Expected condition after 'while'", pos=self._lex_peek_token().pos)
 
         # Expect 'do'
         self.skip_whitespace_and_newlines()
         if not self._lex_consume_word("do"):
-            raise ParseError("Expected 'do' after while condition", pos=self.pos)
+            raise ParseError("Expected 'do' after while condition", pos=self._lex_peek_token().pos)
 
         # Parse body (ends at 'done')
         body = self.parse_list_until({"done"})
         if body is None:
-            raise ParseError("Expected commands after 'do'", pos=self.pos)
+            raise ParseError("Expected commands after 'do'", pos=self._lex_peek_token().pos)
 
         # Expect 'done'
         self.skip_whitespace_and_newlines()
         if not self._lex_consume_word("done"):
-            raise ParseError("Expected 'done' to close while loop", pos=self.pos)
+            raise ParseError("Expected 'done' to close while loop", pos=self._lex_peek_token().pos)
         return While(condition, body, self._collect_redirects())
 
     def parse_until(self) -> Until | None:
@@ -9692,22 +9692,22 @@ class Parser:
         # Parse condition (ends at 'do')
         condition = self.parse_list_until({"do"})
         if condition is None:
-            raise ParseError("Expected condition after 'until'", pos=self.pos)
+            raise ParseError("Expected condition after 'until'", pos=self._lex_peek_token().pos)
 
         # Expect 'do'
         self.skip_whitespace_and_newlines()
         if not self._lex_consume_word("do"):
-            raise ParseError("Expected 'do' after until condition", pos=self.pos)
+            raise ParseError("Expected 'do' after until condition", pos=self._lex_peek_token().pos)
 
         # Parse body (ends at 'done')
         body = self.parse_list_until({"done"})
         if body is None:
-            raise ParseError("Expected commands after 'do'", pos=self.pos)
+            raise ParseError("Expected commands after 'do'", pos=self._lex_peek_token().pos)
 
         # Expect 'done'
         self.skip_whitespace_and_newlines()
         if not self._lex_consume_word("done"):
-            raise ParseError("Expected 'done' to close until loop", pos=self.pos)
+            raise ParseError("Expected 'done' to close until loop", pos=self._lex_peek_token().pos)
         return Until(condition, body, self._collect_redirects())
 
     def parse_for(self) -> For | ForArith | None:
@@ -9726,12 +9726,12 @@ class Parser:
             # Command substitution as variable name: for $(echo i) in ...
             var_word = self.parse_word()
             if var_word is None:
-                raise ParseError("Expected variable name after 'for'", pos=self.pos)
+                raise ParseError("Expected variable name after 'for'", pos=self._lex_peek_token().pos)
             var_name = var_word.value
         else:
             var_name = self.peek_word()
             if var_name is None:
-                raise ParseError("Expected variable name after 'for'", pos=self.pos)
+                raise ParseError("Expected variable name after 'for'", pos=self._lex_peek_token().pos)
             self.consume_word(var_name)
 
         self.skip_whitespace()
@@ -9770,7 +9770,7 @@ class Parser:
                     if saw_delimiter:
                         break
                     # 'for x in do' or 'for x in a b c do' is invalid
-                    raise ParseError("Expected ';' or newline before 'do'", pos=self.pos)
+                    raise ParseError("Expected ';' or newline before 'do'", pos=self._lex_peek_token().pos)
 
                 word = self.parse_word()
                 if word is None:
@@ -9785,22 +9785,22 @@ class Parser:
             # Bash allows: for x in a b; { cmd; }
             brace_group = self.parse_brace_group()
             if brace_group is None:
-                raise ParseError("Expected brace group in for loop", pos=self.pos)
+                raise ParseError("Expected brace group in for loop", pos=self._lex_peek_token().pos)
             return For(var_name, words, brace_group.body, self._collect_redirects())
 
         # Expect 'do'
         if not self._lex_consume_word("do"):
-            raise ParseError("Expected 'do' in for loop", pos=self.pos)
+            raise ParseError("Expected 'do' in for loop", pos=self._lex_peek_token().pos)
 
         # Parse body (ends at 'done')
         body = self.parse_list_until({"done"})
         if body is None:
-            raise ParseError("Expected commands after 'do'", pos=self.pos)
+            raise ParseError("Expected commands after 'do'", pos=self._lex_peek_token().pos)
 
         # Expect 'done'
         self.skip_whitespace_and_newlines()
         if not self._lex_consume_word("done"):
-            raise ParseError("Expected 'done' to close for loop", pos=self.pos)
+            raise ParseError("Expected 'done' to close for loop", pos=self._lex_peek_token().pos)
         return For(var_name, words, body, self._collect_redirects())
 
     def _parse_for_arith(self) -> ForArith:
@@ -9869,7 +9869,7 @@ class Parser:
         # Parse variable name
         var_name = self.peek_word()
         if var_name is None:
-            raise ParseError("Expected variable name after 'select'", pos=self.pos)
+            raise ParseError("Expected variable name after 'select'", pos=self._lex_peek_token().pos)
         self.consume_word(var_name)
 
         self.skip_whitespace()
@@ -9929,13 +9929,13 @@ class Parser:
         # Parse the word to match
         word = self.parse_word()
         if word is None:
-            raise ParseError("Expected word after 'case'", pos=self.pos)
+            raise ParseError("Expected word after 'case'", pos=self._lex_peek_token().pos)
 
         self.skip_whitespace_and_newlines()
 
         # Expect 'in'
         if not self._lex_consume_word("in"):
-            raise ParseError("Expected 'in' after case word", pos=self.pos)
+            raise ParseError("Expected 'in' after case word", pos=self._lex_peek_token().pos)
 
         self.skip_whitespace_and_newlines()
 
@@ -10114,7 +10114,7 @@ class Parser:
 
             pattern = "".join(pattern_chars)
             if not pattern:
-                raise ParseError("Expected pattern in case statement", pos=self.pos)
+                raise ParseError("Expected pattern in case statement", pos=self._lex_peek_token().pos)
 
             # Parse commands until ;;, ;&, ;;&, or esac
             # Commands are optional (can have empty body)
@@ -10145,7 +10145,7 @@ class Parser:
         # Expect 'esac'
         self.skip_whitespace_and_newlines()
         if not self._lex_consume_word("esac"):
-            raise ParseError("Expected 'esac' to close case statement", pos=self.pos)
+            raise ParseError("Expected 'esac' to close case statement", pos=self._lex_peek_token().pos)
         return Case(word, patterns, self._collect_redirects())
 
     def parse_coproc(self) -> Coproc | None:
@@ -10576,7 +10576,7 @@ class Parser:
 
         # Reserved words that cannot start a statement (only valid in specific contexts)
         if reserved in ("fi", "then", "elif", "else", "done", "esac", "do", "in"):
-            raise ParseError(f"Unexpected reserved word '{reserved}'", pos=self.pos)
+            raise ParseError(f"Unexpected reserved word '{reserved}'", pos=self._lex_peek_token().pos)
 
         # If statement
         if reserved == "if":

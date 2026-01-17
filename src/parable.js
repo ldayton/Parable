@@ -8425,11 +8425,17 @@ class Parser {
 	// 15. unary (! ~ + - ++ --)
 	// 16. postfix (++ -- [])
 	_parseArithExpr(content) {
-		let result, saved_arith_len, saved_arith_pos, saved_arith_src;
+		let result,
+			saved_arith_len,
+			saved_arith_pos,
+			saved_arith_src,
+			saved_parser_state;
 		// Save any existing arith context (for nested parsing)
 		saved_arith_src = this._arithSrc ?? null;
 		saved_arith_pos = this._arithPos ?? null;
 		saved_arith_len = this._arithLen ?? null;
+		saved_parser_state = this._parser_state;
+		this._setState(ParserStateFlags.PST_ARITH);
 		this._arith_src = content;
 		this._arith_pos = 0;
 		this._arith_len = content.length;
@@ -8439,7 +8445,8 @@ class Parser {
 		} else {
 			result = this._arithParseComma();
 		}
-		// Restore previous arith context
+		// Restore previous arith context and parser state
+		this._parser_state = saved_parser_state;
 		if (saved_arith_src != null) {
 			this._arith_src = saved_arith_src;
 			this._arith_pos = saved_arith_pos;

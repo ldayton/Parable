@@ -6959,7 +6959,9 @@ class Parser:
         saved_arith_src = getattr(self, "_arith_src", None)
         saved_arith_pos = getattr(self, "_arith_pos", None)
         saved_arith_len = getattr(self, "_arith_len", None)
+        saved_parser_state = self._parser_state
 
+        self._set_state(ParserStateFlags.PST_ARITH)
         self._arith_src = content
         self._arith_pos = 0
         self._arith_len = len(content)
@@ -6969,7 +6971,8 @@ class Parser:
         else:
             result = self._arith_parse_comma()
 
-        # Restore previous arith context
+        # Restore previous arith context and parser state
+        self._parser_state = saved_parser_state
         if saved_arith_src is not None:
             self._arith_src = saved_arith_src
             self._arith_pos = saved_arith_pos

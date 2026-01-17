@@ -5066,6 +5066,23 @@ class Parser:
         self._ctx = ContextStack()
         # Lexer for tokenization (not yet used, being added incrementally)
         self._lexer = Lexer(source)
+        # Token history for context-sensitive parsing (last 4 tokens like bash)
+        self._token_history: list[Token | None] = [None, None, None, None]
+
+    def _record_token(self, tok: Token) -> None:
+        """Record token in history, shifting older tokens."""
+        self._token_history = [tok, self._token_history[0], self._token_history[1], self._token_history[2]]
+
+    def _last_token(self) -> Token | None:
+        """Return the most recently recorded token."""
+        return self._token_history[0]
+
+    def _last_token_type(self) -> int | None:
+        """Return type of most recently recorded token, or None."""
+        tok = self._token_history[0]
+        if tok is None:
+            return None
+        return tok.type
 
     def at_end(self) -> bool:
         """Check if we've reached the end of input."""

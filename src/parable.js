@@ -6034,6 +6034,30 @@ class Parser {
 		this._ctx = new ContextStack();
 		// Lexer for tokenization (not yet used, being added incrementally)
 		this._lexer = new Lexer(source);
+		// Token history for context-sensitive parsing (last 4 tokens like bash)
+		this._token_history = [null, null, null, null];
+	}
+
+	_recordToken(tok) {
+		this._token_history = [
+			tok,
+			this._token_history[0],
+			this._token_history[1],
+			this._token_history[2],
+		];
+	}
+
+	_lastToken() {
+		return this._token_history[0];
+	}
+
+	_lastTokenType() {
+		let tok;
+		tok = this._token_history[0];
+		if (tok == null) {
+			return null;
+		}
+		return tok.type;
 	}
 
 	atEnd() {

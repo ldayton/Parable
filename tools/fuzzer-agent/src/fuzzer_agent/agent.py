@@ -37,7 +37,6 @@ BEDROCK_MODELS = {
 
 # Azure OpenAI model IDs (deployment names, configure via AZURE_API_BASE)
 AZURE_MODELS = {
-    "gpt-4.5": "azure/gpt-4.5",
     "gpt-4.1": "azure/gpt-4.1",
     "gpt-4.1-mini": "azure/gpt-4.1-mini",
     "gpt-4.1-nano": "azure/gpt-4.1-nano",

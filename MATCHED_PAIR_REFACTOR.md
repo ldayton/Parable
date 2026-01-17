@@ -109,7 +109,7 @@ git fetch origin
 git checkout -b refactor-matched-pair origin/main
 ```
 
-After each step: `just quick-check && git add -A && git commit -m "..."`
+After each step: `just test && just transpile && just test-js && git add -A && git commit -m "..."`
 
 ---
 
@@ -341,7 +341,7 @@ Commit: `refactor: final cleanup of matched pair special cases`
 
 ## Acceptance Criteria
 
-1. `just quick-check` passes after every commit
+1. `just test && just transpile && just test-js` passes after every commit
 2. All 35+ scattered depth loops replaced with calls to `_parse_matched_pair`
 3. Quote handling is via recursion, not inline flags
 4. EOF always raises `MatchedPairError`, never returns None silently
@@ -375,7 +375,7 @@ git fetch origin
 git checkout -b refactor-matched-pair origin/main
 
 # After each step
-just quick-check && git add -A && git commit -m "..."
+just test && just transpile && just test-js && git add -A && git commit -m "..."
 
 # Final verification
 just test

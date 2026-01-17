@@ -6151,14 +6151,24 @@ class Parser {
 	}
 
 	_lexPeekReservedWord() {
-		let tok, word_type;
+		let tok, word;
 		tok = this._lexPeekToken();
 		if (tok.type !== TokenType.WORD) {
 			return null;
 		}
-		word_type = this._lexer.classifyWord(tok.value, true);
-		if (word_type !== TokenType.WORD) {
-			return tok.value;
+		// Strip trailing backslash-newline (line continuation) for classification
+		// The lexer includes \<newline> in words, but reserved word check ignores it
+		word = tok.value;
+		if (word.endsWith("\\\n")) {
+			word = word.slice(0, -2);
+		}
+		// Check against module-level RESERVED_WORDS set plus additional reserved tokens
+		// (Using module-level constant for transpiler compatibility)
+		if (
+			RESERVED_WORDS.has(word) ||
+			["{", "}", "[[", "]]", "!", "time"].includes(word)
+		) {
+			return word;
 		}
 		return null;
 	}
@@ -12558,10 +12568,12 @@ class Parser {
 			next_pos,
 			op,
 			parts,
-			pipeline;
+			pipeline,
+			reserved;
 		// Check if we're already at a stop word
 		this.skipWhitespaceAndNewlines();
-		if (stop_words.has(this.peekWord())) {
+		reserved = this._lexPeekReservedWord();
+		if (reserved != null && stop_words.has(reserved)) {
 			return null;
 		}
 		pipeline = this.parsePipeline();
@@ -12602,9 +12614,10 @@ class Parser {
 						is_standalone_brace = true;
 					}
 				}
+				reserved = this._lexPeekReservedWord();
 				if (
 					!this.atEnd() &&
-					!stop_words.has(this.peekWord()) &&
+					!(reserved != null && stop_words.has(reserved)) &&
 					this.peek() !== ")" &&
 					!is_standalone_brace
 				) {
@@ -12629,9 +12642,10 @@ class Parser {
 						is_standalone_brace = true;
 					}
 				}
+				reserved = this._lexPeekReservedWord();
 				if (
 					this.atEnd() ||
-					stop_words.has(this.peekWord()) ||
+					(reserved != null && stop_words.has(reserved)) ||
 					this.peek() === "\n" ||
 					this.peek() === ")" ||
 					is_standalone_brace
@@ -12658,9 +12672,10 @@ class Parser {
 						is_standalone_brace = true;
 					}
 				}
+				reserved = this._lexPeekReservedWord();
 				if (
 					this.atEnd() ||
-					stop_words.has(this.peekWord()) ||
+					(reserved != null && stop_words.has(reserved)) ||
 					this.peek() === "\n" ||
 					this.peek() === ")" ||
 					is_standalone_brace ||
@@ -12675,8 +12690,9 @@ class Parser {
 			}
 			// Check for stop words before parsing next pipeline
 			this.skipWhitespaceAndNewlines();
+			reserved = this._lexPeekReservedWord();
 			// Also check for ;;, ;&, or ;;& (case terminators)
-			if (stop_words.has(this.peekWord())) {
+			if (reserved != null && stop_words.has(reserved)) {
 				break;
 			}
 			if (

@@ -5198,9 +5198,15 @@ class Parser:
         tok = self._lex_peek_token()
         if tok.type != TokenType.WORD:
             return None
-        word_type = self._lexer.classify_word(tok.value, reserved_ok=True)
-        if word_type != TokenType.WORD:
-            return tok.value
+        # Strip trailing backslash-newline (line continuation) for classification
+        # The lexer includes \<newline> in words, but reserved word check ignores it
+        word = tok.value
+        if word.endswith("\\\n"):
+            word = word[:-2]
+        # Check against module-level RESERVED_WORDS set plus additional reserved tokens
+        # (Using module-level constant for transpiler compatibility)
+        if word in RESERVED_WORDS or word in ("{", "}", "[[", "]]", "!", "time"):
+            return word
         return None
 
     def _lex_peek_word(self) -> str | None:
@@ -10406,7 +10412,8 @@ class Parser:
         """Parse a list that stops before certain reserved words."""
         # Check if we're already at a stop word
         self.skip_whitespace_and_newlines()
-        if self.peek_word() in stop_words:
+        reserved = self._lex_peek_reserved_word()
+        if reserved is not None and reserved in stop_words:
             return None
 
         pipeline = self.parse_pipeline()
@@ -10440,9 +10447,10 @@ class Parser:
                     next_pos = self.pos + 1
                     if next_pos >= self.length or _is_word_end_context(self.source[next_pos]):
                         is_standalone_brace = True
+                reserved = self._lex_peek_reserved_word()
                 if (
                     not self.at_end()
-                    and self.peek_word() not in stop_words
+                    and not (reserved is not None and reserved in stop_words)
                     and self.peek() != ")"
                     and not is_standalone_brace
                 ):
@@ -10461,9 +10469,10 @@ class Parser:
                     next_pos = self.pos + 1
                     if next_pos >= self.length or _is_word_end_context(self.source[next_pos]):
                         is_standalone_brace = True
+                reserved = self._lex_peek_reserved_word()
                 if (
                     self.at_end()
-                    or self.peek_word() in stop_words
+                    or (reserved is not None and reserved in stop_words)
                     or self.peek() == "\n"
                     or self.peek() == ")"
                     or is_standalone_brace
@@ -10485,9 +10494,10 @@ class Parser:
                     next_pos = self.pos + 1
                     if next_pos >= self.length or _is_word_end_context(self.source[next_pos]):
                         is_standalone_brace = True
+                reserved = self._lex_peek_reserved_word()
                 if (
                     self.at_end()
-                    or self.peek_word() in stop_words
+                    or (reserved is not None and reserved in stop_words)
                     or self.peek() == "\n"
                     or self.peek() == ")"
                     or is_standalone_brace
@@ -10501,8 +10511,9 @@ class Parser:
 
             # Check for stop words before parsing next pipeline
             self.skip_whitespace_and_newlines()
+            reserved = self._lex_peek_reserved_word()
             # Also check for ;;, ;&, or ;;& (case terminators)
-            if self.peek_word() in stop_words:
+            if reserved is not None and reserved in stop_words:
                 break
             if (
                 self.peek() == ";"

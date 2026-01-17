@@ -64,7 +64,7 @@ def parse_test_file(filepath: Path) -> list[TestCase]:
 
 
 def get_oracle_output(input_text: str) -> str | None:
-    """Get bash-oracle output for the given input."""
+    """Get bash-oracle output for the given input. Returns '<error>' for syntax errors."""
     try:
         result = subprocess.run(
             [str(ORACLE_PATH), "-e", input_text],
@@ -72,7 +72,7 @@ def get_oracle_output(input_text: str) -> str | None:
             timeout=5,
         )
         if result.returncode != 0:
-            return None
+            return "<error>"
         return result.stdout.decode("utf-8", errors="replace").strip()
     except subprocess.TimeoutExpired:
         return None

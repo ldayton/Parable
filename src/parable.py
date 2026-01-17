@@ -798,6 +798,736 @@ class Lexer:
         node = AnsiCQuote(content)
         return node, text
 
+    def _sync_to_parser(self) -> None:
+        """Sync Parser position to Lexer position before calling Parser methods."""
+        if self._parser is not None:
+            self._parser.pos = self.pos
+
+    def _sync_from_parser(self) -> None:
+        """Sync Lexer position from Parser position after calling Parser methods."""
+        if self._parser is not None:
+            self.pos = self._parser.pos
+
+    def _read_locale_string(self) -> tuple["Node | None", str, list["Node"]]:
+        """Read locale translation $"...".
+
+        Returns (node, text, inner_parts) where:
+        - node is the LocaleString AST node
+        - text is the raw text including $"..."
+        - inner_parts is a list of expansion nodes found inside
+        Returns (None, "", []) if not a valid locale string.
+        """
+        if self.at_end() or self.peek() != "$":
+            return None, "", []
+        if self.pos + 1 >= self.length or self.source[self.pos + 1] != '"':
+            return None, "", []
+        start = self.pos
+        self.advance()  # consume $
+        self.advance()  # consume opening "
+        content_chars: list[str] = []
+        inner_parts: list["Node"] = []
+        found_close = False
+        while not self.at_end():
+            ch = self.peek()
+            if ch == '"':
+                self.advance()  # consume closing "
+                found_close = True
+                break
+            elif ch == "\\" and self.pos + 1 < self.length:
+                # Escape sequence (line continuation removes both)
+                next_ch = self.source[self.pos + 1]
+                if next_ch == "\n":
+                    # Line continuation - skip both backslash and newline
+                    self.advance()
+                    self.advance()
+                else:
+                    content_chars.append(self.advance())  # backslash
+                    content_chars.append(self.advance())  # escaped char
+            # Handle arithmetic expansion $((...))
+            elif (
+                ch == "$"
+                and self.pos + 2 < self.length
+                and self.source[self.pos + 1] == "("
+                and self.source[self.pos + 2] == "("
+            ):
+                # Delegate to Parser (sync positions for callback)
+                self._sync_to_parser()
+                arith_node, arith_text = self._parser._parse_arithmetic_expansion()
+                self._sync_from_parser()
+                if arith_node:
+                    inner_parts.append(arith_node)
+                    content_chars.append(arith_text)
+                else:
+                    # Not arithmetic - try command substitution
+                    self._sync_to_parser()
+                    cmdsub_node, cmdsub_text = self._parser._parse_command_substitution()
+                    self._sync_from_parser()
+                    if cmdsub_node:
+                        inner_parts.append(cmdsub_node)
+                        content_chars.append(cmdsub_text)
+                    else:
+                        content_chars.append(self.advance())
+            # Handle command substitution $(...)
+            elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                self._sync_to_parser()
+                cmdsub_node, cmdsub_text = self._parser._parse_command_substitution()
+                self._sync_from_parser()
+                if cmdsub_node:
+                    inner_parts.append(cmdsub_node)
+                    content_chars.append(cmdsub_text)
+                else:
+                    content_chars.append(self.advance())
+            # Handle parameter expansion
+            elif ch == "$":
+                self._sync_to_parser()
+                param_node, param_text = self._parser._parse_param_expansion()
+                self._sync_from_parser()
+                if param_node:
+                    inner_parts.append(param_node)
+                    content_chars.append(param_text)
+                else:
+                    content_chars.append(self.advance())
+            # Handle backtick command substitution
+            elif ch == "`":
+                self._sync_to_parser()
+                cmdsub_node, cmdsub_text = self._parser._parse_backtick_substitution()
+                self._sync_from_parser()
+                if cmdsub_node:
+                    inner_parts.append(cmdsub_node)
+                    content_chars.append(cmdsub_text)
+                else:
+                    content_chars.append(self.advance())
+            else:
+                content_chars.append(self.advance())
+        if not found_close:
+            # Unterminated - reset and return None
+            self.pos = start
+            return None, "", []
+        content = "".join(content_chars)
+        # Reconstruct text from parsed content (handles line continuation removal)
+        text = '$"' + content + '"'
+        return LocaleString(content), text, inner_parts
+
+    def _update_dolbrace_for_op(self, op: str | None, has_param: bool) -> None:
+        """Update dolbrace state based on operator seen."""
+        if self._dolbrace_state == DolbraceState.NONE:
+            return
+        if op is None or len(op) == 0:
+            return
+        first_char = op[0]
+        if self._dolbrace_state == DolbraceState.PARAM and has_param:
+            if first_char in "%#^,":
+                self._dolbrace_state = DolbraceState.QUOTE
+                return
+            if first_char == "/":
+                self._dolbrace_state = DolbraceState.QUOTE2
+                return
+        if self._dolbrace_state == DolbraceState.PARAM:
+            if first_char in "#%^,~:-=?+/":
+                self._dolbrace_state = DolbraceState.OP
+
+    def _consume_param_operator(self) -> str | None:
+        """Consume a parameter expansion operator."""
+        if self.at_end():
+            return None
+        ch = self.peek()
+        # Operators with optional colon prefix: :- := :? :+
+        if ch == ":":
+            self.advance()
+            if self.at_end():
+                return ":"
+            next_ch = self.peek()
+            if _is_simple_param_op(next_ch):
+                self.advance()
+                return ":" + next_ch
+            return ":"
+        # Operators without colon: - = ? +
+        if _is_simple_param_op(ch):
+            self.advance()
+            return ch
+        # Pattern removal: # ## % %%
+        if ch == "#":
+            self.advance()
+            if not self.at_end() and self.peek() == "#":
+                self.advance()
+                return "##"
+            return "#"
+        if ch == "%":
+            self.advance()
+            if not self.at_end() and self.peek() == "%":
+                self.advance()
+                return "%%"
+            return "%"
+        # Substitution: / // /# /%
+        if ch == "/":
+            self.advance()
+            if not self.at_end():
+                next_ch = self.peek()
+                if next_ch == "/":
+                    self.advance()
+                    return "//"
+                elif next_ch == "#":
+                    self.advance()
+                    return "/#"
+                elif next_ch == "%":
+                    self.advance()
+                    return "/%"
+            return "/"
+        # Case modification: ^ ^^ , ,,
+        if ch == "^":
+            self.advance()
+            if not self.at_end() and self.peek() == "^":
+                self.advance()
+                return "^^"
+            return "^"
+        if ch == ",":
+            self.advance()
+            if not self.at_end() and self.peek() == ",":
+                self.advance()
+                return ",,"
+            return ","
+        # Transformation: @
+        if ch == "@":
+            self.advance()
+            return "@"
+        return None
+
+    def _param_subscript_has_close(self, start_pos: int) -> bool:
+        """Check for a matching ] in a parameter subscript before closing }."""
+        depth = 1
+        i = start_pos + 1
+        quote = QuoteState()
+        while i < self.length:
+            c = self.source[i]
+            if quote.single:
+                if c == "'":
+                    quote.single = False
+                i += 1
+                continue
+            if quote.double:
+                if c == "\\" and i + 1 < self.length:
+                    i += 2
+                    continue
+                if c == '"':
+                    quote.double = False
+                i += 1
+                continue
+            if c == "'":
+                quote.single = True
+                i += 1
+                continue
+            if c == '"':
+                quote.double = True
+                i += 1
+                continue
+            if c == "\\":
+                i += 2
+                continue
+            if c == "}":
+                return False
+            if c == "[":
+                depth += 1
+            elif c == "]":
+                depth -= 1
+                if depth == 0:
+                    return True
+            i += 1
+        return False
+
+    def _consume_param_name(self) -> str | None:
+        """Consume a parameter name (variable name, special char, or array subscript)."""
+        if self.at_end():
+            return None
+        ch = self.peek()
+        # Special parameters (but NOT $ followed by { - that's a nested ${...} expansion)
+        if _is_special_param(ch):
+            if ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
+                return None
+            self.advance()
+            return ch
+        # Digits (positional params)
+        if ch.isdigit():
+            name_chars: list[str] = []
+            while not self.at_end() and self.peek().isdigit():
+                name_chars.append(self.advance())
+            return "".join(name_chars)
+        # Variable name
+        if ch.isalpha() or ch == "_":
+            name_chars = []
+            while not self.at_end():
+                c = self.peek()
+                if c.isalnum() or c == "_":
+                    name_chars.append(self.advance())
+                elif c == "[":
+                    if not self._param_subscript_has_close(self.pos):
+                        break
+                    # Array subscript - track bracket depth and quotes
+                    name_chars.append(self.advance())
+                    bracket_depth = 1
+                    subscript_quote = QuoteState()
+                    while not self.at_end() and bracket_depth > 0:
+                        sc = self.peek()
+                        if subscript_quote.single:
+                            name_chars.append(self.advance())
+                            if sc == "'":
+                                subscript_quote.single = False
+                            continue
+                        if subscript_quote.double:
+                            if sc == "\\" and self.pos + 1 < self.length:
+                                name_chars.append(self.advance())
+                                if not self.at_end():
+                                    name_chars.append(self.advance())
+                                continue
+                            name_chars.append(self.advance())
+                            if sc == '"':
+                                subscript_quote.double = False
+                            continue
+                        if sc == "'":
+                            subscript_quote.single = True
+                            name_chars.append(self.advance())
+                            continue
+                        if (
+                            sc == "$"
+                            and self.pos + 1 < self.length
+                            and self.source[self.pos + 1] == '"'
+                        ):
+                            # Locale string $"..." - strip the $ and enter double quote
+                            self.advance()  # skip $
+                            subscript_quote.double = True
+                            name_chars.append(self.advance())  # append "
+                            continue
+                        if sc == '"':
+                            subscript_quote.double = True
+                            name_chars.append(self.advance())
+                            continue
+                        if sc == "\\":
+                            name_chars.append(self.advance())
+                            if not self.at_end():
+                                name_chars.append(self.advance())
+                            continue
+                        if sc == "[":
+                            bracket_depth += 1
+                        elif sc == "]":
+                            bracket_depth -= 1
+                            if bracket_depth == 0:
+                                break
+                        name_chars.append(self.advance())
+                    if not self.at_end() and self.peek() == "]":
+                        name_chars.append(self.advance())
+                    break
+                else:
+                    break
+            if name_chars:
+                return "".join(name_chars)
+            else:
+                return None
+        return None
+
+    def _read_param_expansion(self) -> tuple["Node | None", str]:
+        """Read a parameter expansion starting at $.
+
+        Returns (node, text) where node is the AST node and text is the raw text.
+        Returns (None, "") if not a valid parameter expansion.
+        """
+        if self.at_end() or self.peek() != "$":
+            return None, ""
+        start = self.pos
+        self.advance()  # consume $
+        if self.at_end():
+            self.pos = start
+            return None, ""
+        ch = self.peek()
+        # Braced expansion ${...}
+        if ch == "{":
+            self.advance()  # consume {
+            return self._read_braced_param(start)
+        # Simple expansion $var or $special
+        if _is_special_param_unbraced(ch) or _is_digit(ch) or ch == "#":
+            self.advance()
+            text = _substring(self.source, start, self.pos)
+            return ParamExpansion(ch), text
+        # Variable name [a-zA-Z_][a-zA-Z0-9_]*
+        if ch.isalpha() or ch == "_":
+            name_start = self.pos
+            while not self.at_end():
+                c = self.peek()
+                if c.isalnum() or c == "_":
+                    self.advance()
+                else:
+                    break
+            name = _substring(self.source, name_start, self.pos)
+            text = _substring(self.source, start, self.pos)
+            return ParamExpansion(name), text
+        # Not a valid expansion, restore position
+        self.pos = start
+        return None, ""
+
+    def _read_braced_param(self, start: int) -> tuple["Node | None", str]:
+        """Read contents of ${...} after the opening brace.
+
+        start is the position of the $.
+        Returns (node, text).
+        """
+        if self.at_end():
+            self.pos = start
+            return None, ""
+        # Save and initialize dolbrace state
+        saved_dolbrace = self._dolbrace_state
+        self._dolbrace_state = DolbraceState.PARAM
+        ch = self.peek()
+        # ${#param} - length
+        if ch == "#":
+            self.advance()
+            param = self._consume_param_name()
+            if param and not self.at_end() and self.peek() == "}":
+                self.advance()
+                text = _substring(self.source, start, self.pos)
+                self._dolbrace_state = saved_dolbrace
+                return ParamLength(param), text
+            # Not a simple length expansion - fall through to parse as regular expansion
+            self.pos = start + 2  # reset to just after ${
+        # ${!param} or ${!param<op><arg>} - indirect
+        if ch == "!":
+            self.advance()
+            while not self.at_end() and _is_whitespace_no_newline(self.peek()):
+                self.advance()
+            param = self._consume_param_name()
+            if param:
+                # Skip optional whitespace before closing brace
+                while not self.at_end() and _is_whitespace_no_newline(self.peek()):
+                    self.advance()
+                if not self.at_end() and self.peek() == "}":
+                    self.advance()
+                    text = _substring(self.source, start, self.pos)
+                    self._dolbrace_state = saved_dolbrace
+                    return ParamIndirect(param), text
+                # ${!prefix@} and ${!prefix*} are prefix matching
+                if not self.at_end() and _is_at_or_star(self.peek()):
+                    suffix = self.advance()
+                    trailing: list[str] = []
+                    depth = 1
+                    while not self.at_end() and depth > 0:
+                        c = self.peek()
+                        if c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
+                            depth += 1
+                            trailing.append(self.advance())
+                            trailing.append(self.advance())
+                        elif c == "}":
+                            depth -= 1
+                            if depth == 0:
+                                break
+                            trailing.append(self.advance())
+                        elif c == "\\":
+                            trailing.append(self.advance())
+                            if not self.at_end():
+                                trailing.append(self.advance())
+                        else:
+                            trailing.append(self.advance())
+                    if depth == 0:
+                        self.advance()  # consume final }
+                        text = _substring(self.source, start, self.pos)
+                        self._dolbrace_state = saved_dolbrace
+                        return ParamIndirect(param + suffix + "".join(trailing)), text
+                    # Unclosed brace
+                    self._dolbrace_state = saved_dolbrace
+                    self.pos = start
+                    return None, ""
+                # Check for operator (e.g., ${!##} = indirect of # with # op)
+                op = self._consume_param_operator()
+                if op is None and not self.at_end() and self.peek() != "}":
+                    op = self.advance()
+                if op is not None:
+                    arg_chars: list[str] = []
+                    depth = 1
+                    while not self.at_end() and depth > 0:
+                        c = self.peek()
+                        if c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
+                            depth += 1
+                            arg_chars.append(self.advance())
+                            arg_chars.append(self.advance())
+                        elif c == "}":
+                            depth -= 1
+                            if depth > 0:
+                                arg_chars.append(self.advance())
+                        elif c == "\\":
+                            arg_chars.append(self.advance())
+                            if not self.at_end():
+                                arg_chars.append(self.advance())
+                        else:
+                            arg_chars.append(self.advance())
+                    if depth == 0:
+                        self.advance()  # consume final }
+                        arg = "".join(arg_chars)
+                        text = _substring(self.source, start, self.pos)
+                        self._dolbrace_state = saved_dolbrace
+                        return ParamIndirect(param, op, arg), text
+                # Fell through - pattern didn't match, return None
+                self._dolbrace_state = saved_dolbrace
+                self.pos = start
+                return None, ""
+            else:
+                # ${! followed by non-param char like | - fall through to regular parsing
+                self.pos = start + 2  # reset to just after ${
+        # ${param} or ${param<op><arg>}
+        param = self._consume_param_name()
+        if not param:
+            # Allow empty parameter for simple operators like ${:-word}
+            if not self.at_end() and (
+                self.peek() in "-=+?"
+                or (self.peek() == ":" and self.pos + 1 < self.length and _is_simple_param_op(self.source[self.pos + 1]))
+            ):
+                param = ""
+            else:
+                # Unknown syntax - consume until matching }
+                depth = 1
+                content_chars: list[str] = []
+                inner_quote = QuoteState()
+                while not self.at_end() and depth > 0:
+                    c = self.peek()
+                    if inner_quote.single:
+                        content_chars.append(self.advance())
+                        if c == "'":
+                            inner_quote.single = False
+                        continue
+                    if inner_quote.double:
+                        if c == "\\" and self.pos + 1 < self.length:
+                            content_chars.append(self.advance())
+                            if not self.at_end():
+                                content_chars.append(self.advance())
+                            continue
+                        content_chars.append(self.advance())
+                        if c == '"':
+                            inner_quote.double = False
+                        continue
+                    if c == "'":
+                        inner_quote.single = True
+                        content_chars.append(self.advance())
+                        continue
+                    if c == '"':
+                        inner_quote.double = True
+                        content_chars.append(self.advance())
+                        continue
+                    if c == "`":
+                        backtick_start = self.pos
+                        content_chars.append(self.advance())
+                        while not self.at_end() and self.peek() != "`":
+                            bc = self.peek()
+                            if bc == "\\" and self.pos + 1 < self.length:
+                                next_c = self.source[self.pos + 1]
+                                if _is_escape_char_in_dquote(next_c):
+                                    content_chars.append(self.advance())
+                            content_chars.append(self.advance())
+                        if self.at_end():
+                            raise ParseError("Unterminated backtick", pos=backtick_start)
+                        content_chars.append(self.advance())
+                        continue
+                    if c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
+                        depth += 1
+                        content_chars.append(self.advance())
+                        content_chars.append(self.advance())
+                    elif c == "}":
+                        depth -= 1
+                        if depth == 0:
+                            break
+                        content_chars.append(self.advance())
+                    elif c == "\\":
+                        if self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
+                            self.advance()
+                            self.advance()
+                        else:
+                            content_chars.append(self.advance())
+                            if not self.at_end():
+                                content_chars.append(self.advance())
+                    else:
+                        content_chars.append(self.advance())
+                if depth == 0:
+                    content = "".join(content_chars)
+                    self.advance()  # consume final }
+                    text = "${" + content + "}"
+                    self._dolbrace_state = saved_dolbrace
+                    return ParamExpansion(content), text
+                self._dolbrace_state = saved_dolbrace
+                raise ParseError("Unclosed parameter expansion", pos=start)
+        if self.at_end():
+            self._dolbrace_state = saved_dolbrace
+            self.pos = start
+            return None, ""
+        # Check for closing brace (simple expansion)
+        if self.peek() == "}":
+            self.advance()
+            text = _substring(self.source, start, self.pos)
+            self._dolbrace_state = saved_dolbrace
+            return ParamExpansion(param), text
+        # Parse operator
+        op = self._consume_param_operator()
+        if op is None:
+            # Check for $" or $' which should have $ stripped
+            if (
+                not self.at_end()
+                and self.peek() == "$"
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] in ('"', "'")
+            ):
+                dollar_count = 1 + _count_consecutive_dollars_before(self.source, self.pos)
+                if dollar_count % 2 == 1:
+                    op = ""
+                else:
+                    op = self.advance()
+            elif not self.at_end() and self.peek() == "`":
+                backtick_pos = self.pos
+                self.advance()
+                while not self.at_end() and self.peek() != "`":
+                    bc = self.peek()
+                    if bc == "\\" and self.pos + 1 < self.length:
+                        next_c = self.source[self.pos + 1]
+                        if _is_escape_char_in_dquote(next_c):
+                            self.advance()
+                    self.advance()
+                if self.at_end():
+                    self._dolbrace_state = saved_dolbrace
+                    raise ParseError("Unterminated backtick", pos=backtick_pos)
+                self.advance()
+                op = "`"
+            elif (
+                not self.at_end()
+                and self.peek() == "$"
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == "{"
+            ):
+                op = ""
+            else:
+                op = self.advance()
+        # Update dolbrace state based on operator
+        self._update_dolbrace_for_op(op, len(param) > 0)
+        # Parse argument (everything until closing brace)
+        arg_chars = []
+        depth = 1
+        quote = QuoteState()
+        while not self.at_end() and depth > 0:
+            c = self.peek()
+            # Transition OP -> WORD when we see a non-operator character
+            if self._dolbrace_state == DolbraceState.OP and c not in "#%^,~:-=?+/":
+                self._dolbrace_state = DolbraceState.WORD
+            # Single quotes
+            if c == "'" and not quote.double:
+                quote.single = not quote.single
+                arg_chars.append(self.advance())
+            # Double quotes
+            elif c == '"' and not quote.single:
+                quote.double = not quote.double
+                arg_chars.append(self.advance())
+            # Escape
+            elif c == "\\" and not quote.single:
+                if self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
+                    self.advance()
+                    self.advance()
+                else:
+                    arg_chars.append(self.advance())
+                    if not self.at_end():
+                        arg_chars.append(self.advance())
+            # Nested ${...}
+            elif c == "$" and not quote.single and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
+                depth += 1
+                arg_chars.append(self.advance())
+                arg_chars.append(self.advance())
+            # ANSI-C quoted string $'...'
+            elif c == "$" and not quote.single and self.pos + 1 < self.length and self.source[self.pos + 1] == "'":
+                arg_chars.append(self.advance())
+                arg_chars.append(self.advance())
+                while not self.at_end() and self.peek() != "'":
+                    if self.peek() == "\\":
+                        arg_chars.append(self.advance())
+                        if not self.at_end():
+                            arg_chars.append(self.advance())
+                    else:
+                        arg_chars.append(self.advance())
+                if not self.at_end():
+                    arg_chars.append(self.advance())
+            # Locale string $"..."
+            elif (
+                c == "$"
+                and not quote.single
+                and not quote.double
+                and self.pos + 1 < self.length
+                and self.source[self.pos + 1] == '"'
+            ):
+                dollar_count = 1 + _count_consecutive_dollars_before(self.source, self.pos)
+                if dollar_count % 2 == 1:
+                    self.advance()
+                    quote.double = True
+                    arg_chars.append(self.advance())
+                else:
+                    arg_chars.append(self.advance())
+            # Command substitution $(...)
+            elif c == "$" and not quote.single and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                arg_chars.append(self.advance())
+                arg_chars.append(self.advance())
+                paren_depth = 1
+                while not self.at_end() and paren_depth > 0:
+                    pc = self.peek()
+                    if pc == "(":
+                        paren_depth += 1
+                    elif pc == ")":
+                        paren_depth -= 1
+                    elif pc == "\\":
+                        arg_chars.append(self.advance())
+                        if not self.at_end():
+                            arg_chars.append(self.advance())
+                        continue
+                    arg_chars.append(self.advance())
+            # Backtick command substitution
+            elif c == "`" and not quote.single:
+                backtick_start = self.pos
+                arg_chars.append(self.advance())
+                while not self.at_end() and self.peek() != "`":
+                    bc = self.peek()
+                    if bc == "\\" and self.pos + 1 < self.length:
+                        next_c = self.source[self.pos + 1]
+                        if _is_escape_char_in_dquote(next_c):
+                            arg_chars.append(self.advance())
+                    arg_chars.append(self.advance())
+                if self.at_end():
+                    self._dolbrace_state = saved_dolbrace
+                    raise ParseError("Unterminated backtick", pos=backtick_start)
+                arg_chars.append(self.advance())
+            # Closing brace
+            elif c == "}":
+                if quote.single:
+                    arg_chars.append(self.advance())
+                elif quote.double:
+                    if depth > 1:
+                        depth -= 1
+                        arg_chars.append(self.advance())
+                    else:
+                        arg_chars.append(self.advance())
+                else:
+                    depth -= 1
+                    if depth > 0:
+                        arg_chars.append(self.advance())
+            else:
+                arg_chars.append(self.advance())
+        if depth != 0:
+            self._dolbrace_state = saved_dolbrace
+            self.pos = start
+            return None, ""
+        self.advance()  # consume final }
+        arg = "".join(arg_chars)
+        # Format process substitution content within param expansion
+        if op in ("<", ">") and arg.startswith("(") and arg.endswith(")"):
+            inner = arg[1:-1]
+            try:
+                # Use Parser for formatting (calls back via _parser reference)
+                sub_parser = Parser(inner, in_process_sub=True)
+                parsed = sub_parser.parse_list()
+                if parsed and sub_parser.at_end():
+                    formatted = _format_cmdsub_node(parsed, 0, True, False, True)
+                    arg = "(" + formatted + ")"
+            except Exception:
+                pass
+        text = "${" + param + op + arg + "}"
+        self._dolbrace_state = saved_dolbrace
+        return ParamExpansion(param, op, arg), text
+
     # Reserved words mapping
     RESERVED_WORDS: dict[str, int] = {
         "if": TokenType.IF,
@@ -7169,14 +7899,11 @@ class Parser:
         """Parse a $((...)) arithmetic expansion with parsed internals.
 
         Returns (node, text) where node is ArithmeticExpansion and text is raw text.
-        Returns (None, "") if this is not arithmetic expansion (e.g., $( ( ... ) )
-        which is command substitution containing a subshell).
+        Returns (None, "") if this is not arithmetic expansion.
         """
         if self.at_end() or self.peek() != "$":
             return None, ""
-
         start = self.pos
-
         # Check for $((
         if (
             self.pos + 2 >= self.length
@@ -7184,18 +7911,13 @@ class Parser:
             or self.source[self.pos + 2] != "("
         ):
             return None, ""
-
         self.advance()  # consume $
         self.advance()  # consume first (
         self.advance()  # consume second (
-
-        # Find matching )) by tracking paren depth (starting at 2 for $(()
-        # The closing )) are: first ) that brings depth 2→1, and ) that brings 1→0
-        # Content excludes these UNLESS there's expression content between them
+        # Find matching )) by tracking paren depth
         content_start = self.pos
-        depth = 2  # We consumed $((
-        first_close_pos: int | None = None  # Position of ) that brings depth 2→1
-
+        depth = 2
+        first_close_pos: int | None = None
         while not self.at_end() and depth > 0:
             c = self.peek()
             if c == "(":
@@ -7206,29 +7928,23 @@ class Parser:
                     first_close_pos = self.pos
                 depth -= 1
                 if depth == 0:
-                    break  # Don't advance past final )
+                    break
                 self.advance()
             else:
                 if depth == 1:
-                    # Content after first closing ), so include up to final )
                     first_close_pos = None
                 self.advance()
-
         if depth != 0:
             self.pos = start
             return None, ""
-
         # Content ends at first_close_pos if set, else at final )
         if first_close_pos is not None:
             content = _substring(self.source, content_start, first_close_pos)
         else:
             content = _substring(self.source, content_start, self.pos)
         self.advance()  # consume final )
-
         text = _substring(self.source, start, self.pos)
-
         # Parse the arithmetic expression
-        # If parsing fails, this isn't arithmetic (e.g., $(((cmd))) is command sub + subshell)
         try:
             expr = self._parse_arith_expr(content)
         except ParseError:
@@ -8005,802 +8721,18 @@ class Parser:
         return result
 
     def _parse_locale_string(self) -> tuple[Node | None, str, list[Node]]:
-        """Parse locale translation $"...".
-
-        Returns (node, text, inner_parts) where:
-        - node is the LocaleString AST node
-        - text is the raw text including $"..."
-        - inner_parts is a list of expansion nodes found inside
-        Returns (None, "", []) if not a valid locale string.
-        """
-        if self.at_end() or self.peek() != "$":
-            return None, "", []
-        if self.pos + 1 >= self.length or self.source[self.pos + 1] != '"':
-            return None, "", []
-
-        start = self.pos
-        self.advance()  # consume $
-        self.advance()  # consume opening "
-
-        content_chars = []
-        inner_parts = []
-        found_close = False
-
-        while not self.at_end():
-            ch = self.peek()
-            if ch == '"':
-                self.advance()  # consume closing "
-                found_close = True
-                break
-            elif ch == "\\" and self.pos + 1 < self.length:
-                # Escape sequence (line continuation removes both)
-                next_ch = self.source[self.pos + 1]
-                if next_ch == "\n":
-                    # Line continuation - skip both backslash and newline
-                    self.advance()
-                    self.advance()
-                else:
-                    content_chars.append(self.advance())  # backslash
-                    content_chars.append(self.advance())  # escaped char
-            # Handle arithmetic expansion $((...))
-            elif (
-                ch == "$"
-                and self.pos + 2 < self.length
-                and self.source[self.pos + 1] == "("
-                and self.source[self.pos + 2] == "("
-            ):
-                arith_result = self._parse_arithmetic_expansion()
-                arith_node = arith_result[0]
-                arith_text = arith_result[1]
-                if arith_node:
-                    inner_parts.append(arith_node)
-                    content_chars.append(arith_text)
-                else:
-                    # Not arithmetic - try command substitution
-                    cmdsub_result = self._parse_command_substitution()
-                    cmdsub_node = cmdsub_result[0]
-                    cmdsub_text = cmdsub_result[1]
-                    if cmdsub_node:
-                        inner_parts.append(cmdsub_node)
-                        content_chars.append(cmdsub_text)
-                    else:
-                        content_chars.append(self.advance())
-            # Handle command substitution $(...)
-            elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
-                cmdsub_result = self._parse_command_substitution()
-                cmdsub_node = cmdsub_result[0]
-                cmdsub_text = cmdsub_result[1]
-                if cmdsub_node:
-                    inner_parts.append(cmdsub_node)
-                    content_chars.append(cmdsub_text)
-                else:
-                    content_chars.append(self.advance())
-            # Handle parameter expansion
-            elif ch == "$":
-                param_result = self._parse_param_expansion()
-                param_node = param_result[0]
-                param_text = param_result[1]
-                if param_node:
-                    inner_parts.append(param_node)
-                    content_chars.append(param_text)
-                else:
-                    content_chars.append(self.advance())
-            # Handle backtick command substitution
-            elif ch == "`":
-                cmdsub_result = self._parse_backtick_substitution()
-                cmdsub_node = cmdsub_result[0]
-                cmdsub_text = cmdsub_result[1]
-                if cmdsub_node:
-                    inner_parts.append(cmdsub_node)
-                    content_chars.append(cmdsub_text)
-                else:
-                    content_chars.append(self.advance())
-            else:
-                content_chars.append(self.advance())
-        if not found_close:
-            # Unterminated - reset and return None
-            self.pos = start
-            return None, "", []
-
-        content = "".join(content_chars)
-        # Reconstruct text from parsed content (handles line continuation removal)
-        text = '$"' + content + '"'
-        return LocaleString(content), text, inner_parts
+        """Parse locale translation $"...". Delegates to Lexer."""
+        self._sync_lexer()
+        result = self._lexer._read_locale_string()
+        self._sync_parser()
+        return result
 
     def _parse_param_expansion(self) -> tuple[Node | None, str]:
-        """Parse a parameter expansion starting at $.
-
-        Returns (node, text) where node is the AST node and text is the raw text.
-        Returns (None, "") if not a valid parameter expansion.
-        """
-        if self.at_end() or self.peek() != "$":
-            return None, ""
-
-        start = self.pos
-        self.advance()  # consume $
-
-        if self.at_end():
-            self.pos = start
-            return None, ""
-
-        ch = self.peek()
-
-        # Braced expansion ${...}
-        if ch == "{":
-            self.advance()  # consume {
-            return self._parse_braced_param(start)
-
-        # Simple expansion $var or $special
-        # Special parameters: ?$!#@*-0-9 (but NOT & which is a shell metachar)
-        if _is_special_param_unbraced(ch) or _is_digit(ch) or ch == "#":
-            self.advance()
-            text = _substring(self.source, start, self.pos)
-            return ParamExpansion(ch), text
-
-        # Variable name [a-zA-Z_][a-zA-Z0-9_]*
-        if ch.isalpha() or ch == "_":
-            name_start = self.pos
-            while not self.at_end():
-                c = self.peek()
-                if c.isalnum() or c == "_":
-                    self.advance()
-                else:
-                    break
-            name = _substring(self.source, name_start, self.pos)
-            text = _substring(self.source, start, self.pos)
-            return ParamExpansion(name), text
-
-        # Not a valid expansion, restore position
-        self.pos = start
-        return None, ""
-
-    def _parse_braced_param(self, start: int) -> tuple[Node | None, str]:
-        """Parse contents of ${...} after the opening brace.
-
-        start is the position of the $.
-        Returns (node, text).
-        """
-        if self.at_end():
-            self.pos = start
-            return None, ""
-
-        # Save and initialize dolbrace state
-        saved_dolbrace = self._dolbrace_state
-        self._dolbrace_state = DolbraceState.PARAM
-
-        ch = self.peek()
-
-        # ${#param} - length
-        if ch == "#":
-            self.advance()
-            param = self._consume_param_name()
-            if param and not self.at_end() and self.peek() == "}":
-                self.advance()
-                text = _substring(self.source, start, self.pos)
-                self._dolbrace_state = saved_dolbrace
-                return ParamLength(param), text
-            # Not a simple length expansion - fall through to parse as regular expansion
-            self.pos = start + 2  # reset to just after ${
-
-        # ${!param} or ${!param<op><arg>} - indirect
-        if ch == "!":
-            self.advance()
-            while not self.at_end() and _is_whitespace_no_newline(self.peek()):
-                self.advance()
-            param = self._consume_param_name()
-            if param:
-                # Skip optional whitespace before closing brace
-                while not self.at_end() and _is_whitespace_no_newline(self.peek()):
-                    self.advance()
-                if not self.at_end() and self.peek() == "}":
-                    self.advance()
-                    text = _substring(self.source, start, self.pos)
-                    self._dolbrace_state = saved_dolbrace
-                    return ParamIndirect(param), text
-                # ${!prefix@} and ${!prefix*} are prefix matching (lists variable names)
-                # These are NOT operators - the @/* is part of the indirect form
-                if not self.at_end() and _is_at_or_star(self.peek()):
-                    suffix = self.advance()
-                    # Consume any trailing content until closing brace
-                    # Bash accepts this syntactically (fails at runtime)
-                    trailing = []
-                    depth = 1
-                    while not self.at_end() and depth > 0:
-                        c = self.peek()
-                        if (
-                            c == "$"
-                            and self.pos + 1 < self.length
-                            and self.source[self.pos + 1] == "{"
-                        ):
-                            depth += 1
-                            trailing.append(self.advance())
-                            trailing.append(self.advance())
-                        elif c == "}":
-                            depth -= 1
-                            if depth == 0:
-                                break
-                            trailing.append(self.advance())
-                        elif c == "\\":
-                            trailing.append(self.advance())
-                            if not self.at_end():
-                                trailing.append(self.advance())
-                        else:
-                            trailing.append(self.advance())
-                    if depth == 0:
-                        self.advance()  # consume final }
-                        text = _substring(self.source, start, self.pos)
-                        self._dolbrace_state = saved_dolbrace
-                        return ParamIndirect(param + suffix + "".join(trailing)), text
-                    # Unclosed brace
-                    self._dolbrace_state = saved_dolbrace
-                    self.pos = start
-                    return None, ""
-                # Check for operator (e.g., ${!##} = indirect of # with # op)
-                op = self._consume_param_operator()
-                if op is None and not self.at_end() and self.peek() != "}":
-                    # Unknown operator - bash still parses these (fails at runtime)
-                    op = self.advance()
-                if op is not None:
-                    # Parse argument until closing brace
-                    arg_chars = []
-                    depth = 1
-                    while not self.at_end() and depth > 0:
-                        c = self.peek()
-                        if (
-                            c == "$"
-                            and self.pos + 1 < self.length
-                            and self.source[self.pos + 1] == "{"
-                        ):
-                            depth += 1
-                            arg_chars.append(self.advance())
-                            arg_chars.append(self.advance())
-                        elif c == "}":
-                            depth -= 1
-                            if depth > 0:
-                                arg_chars.append(self.advance())
-                        elif c == "\\":
-                            arg_chars.append(self.advance())
-                            if not self.at_end():
-                                arg_chars.append(self.advance())
-                        else:
-                            arg_chars.append(self.advance())
-                    if depth == 0:
-                        self.advance()  # consume final }
-                        arg = "".join(arg_chars)
-                        text = _substring(self.source, start, self.pos)
-                        self._dolbrace_state = saved_dolbrace
-                        return ParamIndirect(param, op, arg), text
-                # Fell through - pattern didn't match, return None
-                self._dolbrace_state = saved_dolbrace
-                self.pos = start
-                return None, ""
-            else:
-                # ${! followed by non-param char like | - fall through to regular parsing
-                self.pos = start + 2  # reset to just after ${
-
-        # ${param} or ${param<op><arg>}
-        param = self._consume_param_name()
-        if not param:
-            # Allow empty parameter for simple operators like ${:-word}
-            if not self.at_end() and (
-                self.peek() in "-=+?"
-                or (
-                    self.peek() == ":"
-                    and self.pos + 1 < self.length
-                    and _is_simple_param_op(self.source[self.pos + 1])
-                )
-            ):
-                param = ""
-            else:
-                # Unknown syntax like ${(M)...} (zsh) - consume until matching }
-                # Bash accepts these syntactically but fails at runtime
-                # Must track quotes - inside subscripts, quotes span until closed
-                depth = 1
-                content_chars: list[str] = []
-                inner_quote = QuoteState()
-                while not self.at_end() and depth > 0:
-                    c = self.peek()
-                    if inner_quote.single:
-                        content_chars.append(self.advance())
-                        if c == "'":
-                            inner_quote.single = False
-                        continue
-                    if inner_quote.double:
-                        if c == "\\" and self.pos + 1 < self.length:
-                            content_chars.append(self.advance())
-                            if not self.at_end():
-                                content_chars.append(self.advance())
-                            continue
-                        content_chars.append(self.advance())
-                        if c == '"':
-                            inner_quote.double = False
-                        continue
-                    if c == "'":
-                        inner_quote.single = True
-                        content_chars.append(self.advance())
-                        continue
-                    if c == '"':
-                        inner_quote.double = True
-                        content_chars.append(self.advance())
-                        continue
-                    if c == "`":
-                        backtick_start = self.pos
-                        content_chars.append(self.advance())
-                        while not self.at_end() and self.peek() != "`":
-                            bc = self.peek()
-                            if bc == "\\" and self.pos + 1 < self.length:
-                                next_c = self.source[self.pos + 1]
-                                if _is_escape_char_in_dquote(next_c):
-                                    content_chars.append(self.advance())
-                            content_chars.append(self.advance())
-                        if self.at_end():
-                            raise ParseError("Unterminated backtick", pos=backtick_start)
-                        content_chars.append(self.advance())
-                        continue
-                    if c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
-                        depth += 1
-                        content_chars.append(self.advance())  # $
-                        content_chars.append(self.advance())  # {
-                    elif c == "}":
-                        depth -= 1
-                        if depth == 0:
-                            break
-                        content_chars.append(self.advance())
-                    elif c == "\\":
-                        if self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
-                            # Line continuation - skip both backslash and newline
-                            self.advance()
-                            self.advance()
-                        else:
-                            content_chars.append(self.advance())
-                            if not self.at_end():
-                                content_chars.append(self.advance())
-                    else:
-                        content_chars.append(self.advance())
-                if depth == 0:
-                    content = "".join(content_chars)
-                    self.advance()  # consume final }
-                    text = "${" + content + "}"
-                    self._dolbrace_state = saved_dolbrace
-                    return ParamExpansion(content), text
-                self._dolbrace_state = saved_dolbrace
-                raise ParseError("Unclosed parameter expansion", pos=start)
-
-        if self.at_end():
-            self._dolbrace_state = saved_dolbrace
-            self.pos = start
-            return None, ""
-
-        # Check for closing brace (simple expansion)
-        if self.peek() == "}":
-            self.advance()
-            text = _substring(self.source, start, self.pos)
-            self._dolbrace_state = saved_dolbrace
-            return ParamExpansion(param), text
-
-        # Parse operator
-        op = self._consume_param_operator()
-        if op is None:
-            # Check for $" or $' which should have $ stripped (locale/ANSI-C quotes)
-            if (
-                not self.at_end()
-                and self.peek() == "$"
-                and self.pos + 1 < self.length
-                and self.source[self.pos + 1] in ('"', "'")
-            ):
-                # Count consecutive $ chars to check for $$ (PID param)
-                dollar_count = 1 + _count_consecutive_dollars_before(self.source, self.pos)
-                if dollar_count % 2 == 1:
-                    # Odd count: locale/ANSI-C string - don't consume $, let argument loop handle it
-                    # The $ needs to be preserved for _expand_all_ansi_c_quotes to process $'...'
-                    op = ""  # empty operator means no operator
-                else:
-                    # Even count: this $ is part of $$ (PID), treat as unknown operator
-                    op = self.advance()
-            elif not self.at_end() and self.peek() == "`":
-                # Backtick requires matching closing backtick
-                backtick_pos = self.pos
-                self.advance()  # consume opening `
-                while not self.at_end() and self.peek() != "`":
-                    bc = self.peek()
-                    if bc == "\\" and self.pos + 1 < self.length:
-                        next_c = self.source[self.pos + 1]
-                        if _is_escape_char_in_dquote(next_c):
-                            self.advance()  # backslash
-                    self.advance()
-                if self.at_end():
-                    self._dolbrace_state = saved_dolbrace
-                    raise ParseError("Unterminated backtick", pos=backtick_pos)
-                self.advance()  # closing `
-                op = "`"  # treat as operator for now, bash will error at runtime
-            elif (
-                not self.at_end()
-                and self.peek() == "$"
-                and self.pos + 1 < self.length
-                and self.source[self.pos + 1] == "{"
-            ):
-                # Nested ${...} - don't consume $ as operator, let argument loop handle it
-                op = ""
-            else:
-                # Unknown operator - bash still parses these (fails at runtime)
-                # Treat the current char as the operator
-                op = self.advance()
-
-        # Update dolbrace state based on operator
-        self._update_dolbrace_for_op(op, len(param) > 0)
-
-        # Parse argument (everything until closing brace)
-        # Track quote state and nesting
-        arg_chars = []
-        depth = 1
-        quote = QuoteState()
-        while not self.at_end() and depth > 0:
-            c = self.peek()
-            # Transition OP -> WORD when we see a non-operator character
-            if self._dolbrace_state == DolbraceState.OP and c not in "#%^,~:-=?+/":
-                self._dolbrace_state = DolbraceState.WORD
-            # Single quotes - toggle state when not in double quotes
-            # Note: In POSIX mode, single quotes would be literal in DOLBRACE_WORD state
-            # when inside double quotes, but Parable uses extended_quote behavior (default)
-            # where single quotes are always special
-            if c == "'" and not quote.double:
-                quote.single = not quote.single
-                arg_chars.append(self.advance())
-            # Double quotes - toggle state
-            elif c == '"' and not quote.single:
-                quote.double = not quote.double
-                arg_chars.append(self.advance())
-            # Escape - skip next char (line continuation removes both)
-            elif c == "\\" and not quote.single:
-                if self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
-                    # Line continuation - skip both backslash and newline
-                    self.advance()
-                    self.advance()
-                else:
-                    arg_chars.append(self.advance())
-                    if not self.at_end():
-                        arg_chars.append(self.advance())
-            # Nested ${...} - increase depth (outside single quotes)
-            elif (
-                c == "$"
-                and not quote.single
-                and self.pos + 1 < self.length
-                and self.source[self.pos + 1] == "{"
-            ):
-                depth += 1
-                arg_chars.append(self.advance())  # $
-                arg_chars.append(self.advance())  # {
-            # ANSI-C quoted string $'...' - scan to matching ' with escapes
-            elif (
-                c == "$"
-                and not quote.single
-                and self.pos + 1 < self.length
-                and self.source[self.pos + 1] == "'"
-            ):
-                arg_chars.append(self.advance())  # $
-                arg_chars.append(self.advance())  # opening '
-                # Scan to closing ' handling escape sequences
-                while not self.at_end() and self.peek() != "'":
-                    if self.peek() == "\\":
-                        arg_chars.append(self.advance())  # backslash
-                        if not self.at_end():
-                            arg_chars.append(self.advance())  # escaped char
-                    else:
-                        arg_chars.append(self.advance())
-                if not self.at_end():
-                    arg_chars.append(self.advance())  # closing '
-            # Locale string $"..." - strip $ and enter double quote
-            elif (
-                c == "$"
-                and not quote.single
-                and not quote.double
-                and self.pos + 1 < self.length
-                and self.source[self.pos + 1] == '"'
-            ):
-                # Count consecutive $ chars to check for $$ (PID param)
-                dollar_count = 1 + _count_consecutive_dollars_before(self.source, self.pos)
-                if dollar_count % 2 == 1:
-                    # Odd count: locale string $"..." - strip the $ and enter double quote
-                    self.advance()  # skip $
-                    quote.double = True
-                    arg_chars.append(self.advance())  # append "
-                else:
-                    # Even count: this $ is part of $$ (PID), keep it
-                    arg_chars.append(self.advance())  # keep $
-            # Command substitution $(...) - scan to matching )
-            elif (
-                c == "$"
-                and not quote.single
-                and self.pos + 1 < self.length
-                and self.source[self.pos + 1] == "("
-            ):
-                arg_chars.append(self.advance())  # $
-                arg_chars.append(self.advance())  # (
-                paren_depth = 1
-                while not self.at_end() and paren_depth > 0:
-                    pc = self.peek()
-                    if pc == "(":
-                        paren_depth += 1
-                    elif pc == ")":
-                        paren_depth -= 1
-                    elif pc == "\\":
-                        arg_chars.append(self.advance())
-                        if not self.at_end():
-                            arg_chars.append(self.advance())
-                        continue
-                    arg_chars.append(self.advance())
-            # Backtick command substitution - scan to matching `
-            elif c == "`" and not quote.single:
-                backtick_start = self.pos
-                arg_chars.append(self.advance())  # opening `
-                while not self.at_end() and self.peek() != "`":
-                    bc = self.peek()
-                    if bc == "\\" and self.pos + 1 < self.length:
-                        next_c = self.source[self.pos + 1]
-                        if _is_escape_char_in_dquote(next_c):
-                            arg_chars.append(self.advance())  # backslash
-                    arg_chars.append(self.advance())
-                if self.at_end():
-                    self._dolbrace_state = saved_dolbrace
-                    raise ParseError("Unterminated backtick", pos=backtick_start)
-                arg_chars.append(self.advance())  # closing `
-            # Closing brace - handle depth for nested ${...}
-            elif c == "}":
-                if quote.single:
-                    # Inside single quotes, } is literal
-                    arg_chars.append(self.advance())
-                elif quote.double:
-                    # Inside double quotes, } can close nested ${...}
-                    if depth > 1:
-                        depth -= 1
-                        arg_chars.append(self.advance())
-                    else:
-                        # Literal } in double quotes (not closing nested)
-                        arg_chars.append(self.advance())
-                else:
-                    depth -= 1
-                    if depth > 0:
-                        arg_chars.append(self.advance())
-            else:
-                arg_chars.append(self.advance())
-
-        if depth != 0:
-            self._dolbrace_state = saved_dolbrace
-            self.pos = start
-            return None, ""
-
-        self.advance()  # consume final }
-        arg = "".join(arg_chars)
-        # Format process substitution content within param expansion
-        # When op is < or > and arg is (...), parse and format the inner command
-        if op in ("<", ">") and arg.startswith("(") and arg.endswith(")"):
-            inner = arg[1:-1]
-            try:
-                sub_parser = Parser(inner, in_process_sub=True)
-                parsed = sub_parser.parse_list()
-                if parsed and sub_parser.at_end():
-                    formatted = _format_cmdsub_node(parsed, 0, True, False, True)
-                    arg = "(" + formatted + ")"
-            except Exception:
-                pass  # Keep original arg if parsing fails
-        # Reconstruct text from parsed components (handles line continuation removal)
-        text = "${" + param + op + arg + "}"
-        self._dolbrace_state = saved_dolbrace
-        return ParamExpansion(param, op, arg), text
-
-    def _param_subscript_has_close(self, start_pos: int) -> bool:
-        """Check for a matching ] in a parameter subscript before closing }."""
-        depth = 1
-        i = start_pos + 1
-        quote = QuoteState()
-        while i < self.length:
-            c = self.source[i]
-            if quote.single:
-                if c == "'":
-                    quote.single = False
-                i += 1
-                continue
-            if quote.double:
-                if c == "\\" and i + 1 < self.length:
-                    i += 2
-                    continue
-                if c == '"':
-                    quote.double = False
-                i += 1
-                continue
-            if c == "'":
-                quote.single = True
-                i += 1
-                continue
-            if c == '"':
-                quote.double = True
-                i += 1
-                continue
-            if c == "\\":
-                i += 2
-                continue
-            if c == "}":
-                return False
-            if c == "[":
-                depth += 1
-            elif c == "]":
-                depth -= 1
-                if depth == 0:
-                    return True
-            i += 1
-        return False
-
-    def _consume_param_name(self) -> str | None:
-        """Consume a parameter name (variable name, special char, or array subscript)."""
-        if self.at_end():
-            return None
-
-        ch = self.peek()
-
-        # Special parameters
-        # But NOT $ followed by { - that's a nested ${...} expansion
-        if _is_special_param(ch):
-            if ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
-                return None
-            self.advance()
-            return ch
-
-        # Digits (positional params)
-        if ch.isdigit():
-            name_chars = []
-            while not self.at_end() and self.peek().isdigit():
-                name_chars.append(self.advance())
-            return "".join(name_chars)
-
-        # Variable name
-        if ch.isalpha() or ch == "_":
-            name_chars = []
-            while not self.at_end():
-                c = self.peek()
-                if c.isalnum() or c == "_":
-                    name_chars.append(self.advance())
-                elif c == "[":
-                    if not self._param_subscript_has_close(self.pos):
-                        break
-                    # Array subscript - track bracket depth and quotes
-                    name_chars.append(self.advance())
-                    bracket_depth = 1
-                    subscript_quote = QuoteState()
-                    while not self.at_end() and bracket_depth > 0:
-                        sc = self.peek()
-                        if subscript_quote.single:
-                            name_chars.append(self.advance())
-                            if sc == "'":
-                                subscript_quote.single = False
-                            continue
-                        if subscript_quote.double:
-                            if sc == "\\" and self.pos + 1 < self.length:
-                                name_chars.append(self.advance())
-                                if not self.at_end():
-                                    name_chars.append(self.advance())
-                                continue
-                            name_chars.append(self.advance())
-                            if sc == '"':
-                                subscript_quote.double = False
-                            continue
-                        if sc == "'":
-                            subscript_quote.single = True
-                            name_chars.append(self.advance())
-                            continue
-                        if (
-                            sc == "$"
-                            and self.pos + 1 < self.length
-                            and self.source[self.pos + 1] == '"'
-                        ):
-                            # Locale string $"..." - strip the $ and enter double quote
-                            self.advance()  # skip $
-                            subscript_quote.double = True
-                            name_chars.append(self.advance())  # append "
-                            continue
-                        if sc == '"':
-                            subscript_quote.double = True
-                            name_chars.append(self.advance())
-                            continue
-                        if sc == "\\":
-                            name_chars.append(self.advance())
-                            if not self.at_end():
-                                name_chars.append(self.advance())
-                            continue
-                        if sc == "[":
-                            bracket_depth += 1
-                        elif sc == "]":
-                            bracket_depth -= 1
-                            if bracket_depth == 0:
-                                break
-                        name_chars.append(self.advance())
-                    if not self.at_end() and self.peek() == "]":
-                        name_chars.append(self.advance())
-                    break
-                else:
-                    break
-            if name_chars:
-                return "".join(name_chars)
-            else:
-                return None
-
-        return None
-
-    def _consume_param_operator(self) -> str | None:
-        """Consume a parameter expansion operator."""
-        if self.at_end():
-            return None
-
-        ch = self.peek()
-
-        # Operators with optional colon prefix: :- := :? :+
-        if ch == ":":
-            self.advance()
-            if self.at_end():
-                return ":"
-            next_ch = self.peek()
-            if _is_simple_param_op(next_ch):
-                self.advance()
-                return ":" + next_ch
-            # Just : (substring)
-            return ":"
-
-        # Operators without colon: - = ? +
-        if _is_simple_param_op(ch):
-            self.advance()
-            return ch
-
-        # Pattern removal: # ## % %%
-        if ch == "#":
-            self.advance()
-            if not self.at_end() and self.peek() == "#":
-                self.advance()
-                return "##"
-            return "#"
-
-        if ch == "%":
-            self.advance()
-            if not self.at_end() and self.peek() == "%":
-                self.advance()
-                return "%%"
-            return "%"
-
-        # Substitution: / // /# /%
-        if ch == "/":
-            self.advance()
-            if not self.at_end():
-                next_ch = self.peek()
-                if next_ch == "/":
-                    self.advance()
-                    return "//"
-                elif next_ch == "#":
-                    self.advance()
-                    return "/#"
-                elif next_ch == "%":
-                    self.advance()
-                    return "/%"
-            return "/"
-
-        # Case modification: ^ ^^ , ,,
-        if ch == "^":
-            self.advance()
-            if not self.at_end() and self.peek() == "^":
-                self.advance()
-                return "^^"
-            return "^"
-
-        if ch == ",":
-            self.advance()
-            if not self.at_end() and self.peek() == ",":
-                self.advance()
-                return ",,"
-            return ","
-
-        # Transformation: @
-        if ch == "@":
-            self.advance()
-            return "@"
-
-        return None
+        """Parse a parameter expansion starting at $. Delegates to Lexer."""
+        self._sync_lexer()
+        result = self._lexer._read_param_expansion()
+        self._sync_parser()
+        return result
 
     def parse_redirect(self) -> Redirect | HereDoc | None:
         """Parse a redirection operator and target."""

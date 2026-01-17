@@ -5,13 +5,29 @@
 **Completed:**
 - Phase 1: Infrastructure (Token.parts, Lexer state, save/restore) ✓
 - Step 3.1: Move `_parse_ansi_c_quote` to Lexer ✓
+- Step 3.2: Move `_parse_locale_string` to Lexer ✓
+- Step 3.3: Move `_parse_param_expansion` to Lexer (+ helpers: `_consume_param_name`, `_consume_param_operator`, `_param_subscript_has_close`, `_read_braced_param`) ✓
 - Add Parser back-reference to Lexer for callbacks ✓
+- Add Lexer sync helpers (`_sync_to_parser`, `_sync_from_parser`) ✓
 - Update transpiler to handle forward references ✓
 
-**Remaining:**
-- Move remaining expansion methods (14 more)
-- Move word parsing (`_parse_word_internal`)
-- Remove redundant Parser methods
+**Deferred (cannot easily move to Lexer):**
+- `_parse_arithmetic_expansion` - calls `_parse_arith_expr` which calls `parse_list()`, creating recursive Parser interactions
+- `_parse_command_substitution` - creates new `Parser(content)` sub-parser
+- `_parse_backtick_substitution` - creates new `Parser(content)` sub-parser
+- `_parse_process_substitution` - creates new `Parser(content)` sub-parser
+- `_parse_array_literal` - may create sub-parser for nested content
+- `_parse_dollar_expansion` - dispatcher that calls all expansion methods
+- `_parse_word_internal` - main word reader, orchestrates all expansion methods
+
+**Assessment:**
+The "leaf" expansion methods (ansi_c_quote, locale_string, param_expansion) have been successfully moved to Lexer. These are self-contained and don't create new Parser instances.
+
+The remaining methods all either:
+1. Create new `Parser(content)` sub-parsers to parse nested command content
+2. Call methods like `parse_list()` which recursively trigger more parsing
+
+Moving these to Lexer would require the Lexer to create Parser instances or maintain complex bidirectional callbacks, which goes against the separation of concerns.
 
 ## Goal
 

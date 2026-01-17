@@ -5932,10 +5932,6 @@ def _is_escape_char_in_dquote(c: str) -> bool:
     return c == "$" or c == "`" or c == "\\"
 
 
-def _is_list_terminator(c: str) -> bool:
-    return c == "\n" or c == "|" or c == ";" or c == "(" or c == ")"
-
-
 def _is_negation_boundary(c: str) -> bool:
     return _is_whitespace(c) or c == ";" or c == "|" or c == ")" or c == "&" or c == ">" or c == "<"
 
@@ -6176,6 +6172,30 @@ class Parser:
         result = self._lexer._skip_comment()
         self._sync_parser()
         return result
+
+    def _lex_is_command_terminator(self) -> bool:
+        """Check if next token is a simple command terminator.
+
+        Returns True for tokens that terminate a simple command:
+        - EOF (including via _eof_token mechanism)
+        - NEWLINE
+        - PIPE (but not PIPE_AMP)
+        - SEMI (but not SEMI_SEMI, SEMI_AMP, SEMI_SEMI_AMP)
+        - LPAREN, RPAREN
+        - AMP (but not AMP_GREATER, AMP_GREATER_GREATER, AND_AND)
+        - RBRACE (at command position)
+        """
+        tok = self._lex_peek_token()
+        t = tok.type
+        return t in (
+            TokenType.EOF,
+            TokenType.NEWLINE,
+            TokenType.PIPE,
+            TokenType.SEMI,
+            TokenType.LPAREN,
+            TokenType.RPAREN,
+            TokenType.AMP,
+        )
 
     def _lex_peek_operator(self) -> tuple[int, str] | None:
         """Peek operator token. Returns (token_type, value) or None."""
@@ -8878,21 +8898,15 @@ class Parser:
 
         while True:
             self.skip_whitespace()
-            if self.at_end():
-                break
-            ch = self.peek()
-            # Check for command terminators, but &> and &>> are redirects, not terminators
-            if _is_list_terminator(ch):
-                break
-            if ch == "&" and not (self.pos + 1 < self.length and self.source[self.pos + 1] == ">"):
+            # Use token-based terminator detection
+            # This enables the EOF token mechanism to work at the command level
+            if self._lex_is_command_terminator():
                 break
             # } is only a terminator at command position (closing a brace group)
             # In argument position, } is just a regular word
-            if self.peek() == "}" and not words:
-                # Check if } would be a standalone word (next char is whitespace/meta/EOF)
-                next_pos = self.pos + 1
-                if next_pos >= self.length or _is_word_end_context(self.source[next_pos]):
-                    break
+            tok = self._lex_peek_token()
+            if tok.type == TokenType.RBRACE and not words:
+                break
 
             # Try to parse a redirect first
             redirect = self.parse_redirect()

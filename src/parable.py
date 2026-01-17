@@ -383,6 +383,40 @@ class ContextStack:
         return self.get_current().arith_paren_depth
 
 
+class Lexer:
+    """Lexer for tokenizing shell input."""
+
+    def __init__(self, source: str):
+        self.source = source
+        self.pos = 0
+        self.length = len(source)
+        self.state = LexerState.CKCOMMENT
+        self.quote = QuoteState()
+        self._token_cache: Token | None = None
+
+    def peek(self) -> str | None:
+        """Return current character without consuming."""
+        if self.pos >= self.length:
+            return None
+        return self.source[self.pos]
+
+    def advance(self) -> str | None:
+        """Consume and return current character."""
+        if self.pos >= self.length:
+            return None
+        c = self.source[self.pos]
+        self.pos += 1
+        return c
+
+    def at_end(self) -> bool:
+        """Return True if at end of input."""
+        return self.pos >= self.length
+
+    def lookahead(self, n: int) -> str:
+        """Return next n characters without consuming."""
+        return self.source[self.pos : self.pos + n]
+
+
 def _strip_line_continuations_comment_aware(text: str) -> str:
     """Strip backslash-newline line continuations, preserving newlines in comments.
 

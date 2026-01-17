@@ -353,6 +353,42 @@ class ContextStack {
 	}
 }
 
+class Lexer {
+	constructor(source) {
+		this.source = source;
+		this.pos = 0;
+		this.length = source.length;
+		this.state = LexerState.CKCOMMENT;
+		this.quote = new QuoteState();
+		this._token_cache = null;
+	}
+
+	peek() {
+		if (this.pos >= this.length) {
+			return null;
+		}
+		return this.source[this.pos];
+	}
+
+	advance() {
+		let c;
+		if (this.pos >= this.length) {
+			return null;
+		}
+		c = this.source[this.pos];
+		this.pos += 1;
+		return c;
+	}
+
+	atEnd() {
+		return this.pos >= this.length;
+	}
+
+	lookahead(n) {
+		return this.source.slice(this.pos, this.pos + n);
+	}
+}
+
 function _stripLineContinuationsCommentAware(text) {
 	let c, i, in_comment, j, num_preceding_backslashes, quote, result;
 	result = [];

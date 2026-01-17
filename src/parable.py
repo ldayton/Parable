@@ -986,8 +986,11 @@ class Lexer:
                 continue
 
             # Opening delimiter (only when open != close)
+            # In DOLBRACE mode, don't track bare '{' - only ${...} nesting matters
+            # (handled by the $ block below via recursion)
             if ch == open_char and open_char != close_char:
-                count += 1
+                if not (flags & MatchedPairFlags.DOLBRACE and open_char == "{"):
+                    count += 1
                 chars.append(ch)
                 continue
 
@@ -1849,77 +1852,19 @@ class Lexer:
                 # ${!prefix@} and ${!prefix*} are prefix matching
                 if not self.at_end() and _is_at_or_star(self.peek()):
                     suffix = self.advance()
-                    trailing: list[str] = []
-                    depth = 1
-                    while not self.at_end() and depth > 0:
-                        c = self.peek()
-                        if (
-                            c == "$"
-                            and self.pos + 1 < self.length
-                            and self.source[self.pos + 1] == "{"
-                        ):
-                            depth += 1
-                            trailing.append(self.advance())
-                            trailing.append(self.advance())
-                        elif c == "}":
-                            depth -= 1
-                            if depth == 0:
-                                break
-                            trailing.append(self.advance())
-                        elif c == "\\":
-                            trailing.append(self.advance())
-                            if not self.at_end():
-                                trailing.append(self.advance())
-                        else:
-                            trailing.append(self.advance())
-                    if depth == 0:
-                        self.advance()  # consume final }
-                        text = _substring(self.source, start, self.pos)
-                        self._dolbrace_state = saved_dolbrace
-                        return ParamIndirect(param + suffix + "".join(trailing)), text
-                    # Unclosed brace at EOF - error, not fallback
+                    trailing = self._parse_matched_pair("{", "}", MatchedPairFlags.DOLBRACE)
+                    text = _substring(self.source, start, self.pos)
                     self._dolbrace_state = saved_dolbrace
-                    if self.at_end():
-                        raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
-                    self.pos = start
-                    return None, ""
+                    return ParamIndirect(param + suffix + trailing), text
                 # Check for operator (e.g., ${!##} = indirect of # with # op)
                 op = self._consume_param_operator()
                 if op is None and not self.at_end() and self.peek() != "}":
                     op = self.advance()
                 if op is not None:
-                    arg_chars: list[str] = []
-                    depth = 1
-                    while not self.at_end() and depth > 0:
-                        c = self.peek()
-                        if (
-                            c == "$"
-                            and self.pos + 1 < self.length
-                            and self.source[self.pos + 1] == "{"
-                        ):
-                            depth += 1
-                            arg_chars.append(self.advance())
-                            arg_chars.append(self.advance())
-                        elif c == "}":
-                            depth -= 1
-                            if depth > 0:
-                                arg_chars.append(self.advance())
-                        elif c == "\\":
-                            arg_chars.append(self.advance())
-                            if not self.at_end():
-                                arg_chars.append(self.advance())
-                        else:
-                            arg_chars.append(self.advance())
-                    if depth == 0:
-                        self.advance()  # consume final }
-                        arg = "".join(arg_chars)
-                        text = _substring(self.source, start, self.pos)
-                        self._dolbrace_state = saved_dolbrace
-                        return ParamIndirect(param, op, arg), text
-                    # Unclosed at EOF - error, not fallback
-                    if self.at_end():
-                        self._dolbrace_state = saved_dolbrace
-                        raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
+                    arg = self._parse_matched_pair("{", "}", MatchedPairFlags.DOLBRACE)
+                    text = _substring(self.source, start, self.pos)
+                    self._dolbrace_state = saved_dolbrace
+                    return ParamIndirect(param, op, arg), text
                 # Fell through - pattern didn't match, return None
                 self._dolbrace_state = saved_dolbrace
                 self.pos = start
@@ -1942,75 +1887,10 @@ class Lexer:
                 param = ""
             else:
                 # Unknown syntax - consume until matching }
-                depth = 1
-                content_chars: list[str] = []
-                inner_quote = QuoteState()
-                while not self.at_end() and depth > 0:
-                    c = self.peek()
-                    if inner_quote.single:
-                        content_chars.append(self.advance())
-                        if c == "'":
-                            inner_quote.single = False
-                        continue
-                    if inner_quote.double:
-                        if c == "\\" and self.pos + 1 < self.length:
-                            content_chars.append(self.advance())
-                            if not self.at_end():
-                                content_chars.append(self.advance())
-                            continue
-                        content_chars.append(self.advance())
-                        if c == '"':
-                            inner_quote.double = False
-                        continue
-                    if c == "'":
-                        inner_quote.single = True
-                        content_chars.append(self.advance())
-                        continue
-                    if c == '"':
-                        inner_quote.double = True
-                        content_chars.append(self.advance())
-                        continue
-                    if c == "`":
-                        backtick_start = self.pos
-                        content_chars.append(self.advance())
-                        while not self.at_end() and self.peek() != "`":
-                            bc = self.peek()
-                            if bc == "\\" and self.pos + 1 < self.length:
-                                next_c = self.source[self.pos + 1]
-                                if _is_escape_char_in_dquote(next_c):
-                                    content_chars.append(self.advance())
-                            content_chars.append(self.advance())
-                        if self.at_end():
-                            raise ParseError("Unterminated backtick", pos=backtick_start)
-                        content_chars.append(self.advance())
-                        continue
-                    if c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
-                        depth += 1
-                        content_chars.append(self.advance())
-                        content_chars.append(self.advance())
-                    elif c == "}":
-                        depth -= 1
-                        if depth == 0:
-                            break
-                        content_chars.append(self.advance())
-                    elif c == "\\":
-                        if self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
-                            self.advance()
-                            self.advance()
-                        else:
-                            content_chars.append(self.advance())
-                            if not self.at_end():
-                                content_chars.append(self.advance())
-                    else:
-                        content_chars.append(self.advance())
-                if depth == 0:
-                    content = "".join(content_chars)
-                    self.advance()  # consume final }
-                    text = "${" + content + "}"
-                    self._dolbrace_state = saved_dolbrace
-                    return ParamExpansion(content), text
+                content = self._parse_matched_pair("{", "}", MatchedPairFlags.DOLBRACE)
+                text = "${" + content + "}"
                 self._dolbrace_state = saved_dolbrace
-                raise ParseError("Unclosed parameter expansion", pos=start)
+                return ParamExpansion(content), text
         if self.at_end():
             self._dolbrace_state = saved_dolbrace
             raise MatchedPairError("unexpected EOF looking for `}'", pos=start)

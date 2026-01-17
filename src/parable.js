@@ -6032,6 +6032,8 @@ class Parser {
 		this._in_process_sub = in_process_sub;
 		// Context stack for tracking nested parsing scopes
 		this._ctx = new ContextStack();
+		// Lexer for tokenization (not yet used, being added incrementally)
+		this._lexer = new Lexer(source);
 	}
 
 	atEnd() {

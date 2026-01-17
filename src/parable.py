@@ -5064,6 +5064,8 @@ class Parser:
         self._in_process_sub = in_process_sub
         # Context stack for tracking nested parsing scopes
         self._ctx = ContextStack()
+        # Lexer for tokenization (not yet used, being added incrementally)
+        self._lexer = Lexer(source)
 
     def at_end(self) -> bool:
         """Check if we've reached the end of input."""

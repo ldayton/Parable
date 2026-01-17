@@ -1,4 +1,12 @@
 # Base: 637f5c8696a6adc9b4519f1cd74aa78492266b7f
+diff --git a/CLAUDE.md b/CLAUDE.md
+new file mode 120000
+index 00000000..42061c01
+--- /dev/null
++++ b/CLAUDE.md
+@@ -0,0 +1 @@
++README.md
+\ No newline at end of file
 diff --git a/Makefile.in b/Makefile.in
 index c4a882f7..4399159f 100644
 --- a/Makefile.in
@@ -39,6 +47,177 @@ index c4a882f7..4399159f 100644
  
  # Where the source code of the shell builtins resides.
  BUILTIN_SRCDIR=$(srcdir)/builtins
+diff --git a/README b/README
+deleted file mode 100644
+index b2371539..00000000
+--- a/README
++++ /dev/null
+@@ -1,121 +0,0 @@
+-Introduction
+-============
+-
+-This is GNU Bash, version 5.3. Bash is the GNU Project's Bourne
+-Again SHell, a complete implementation of the POSIX shell spec,
+-but also with interactive command line editing, job control on
+-architectures that support it, csh-like features such as history
+-substitution and brace expansion, and a slew of other features. 
+-For more information on the features of Bash that are new to this
+-type of shell, see the file `doc/bashref.info'.  There is also a
+-large Unix-style man page. If the info fie and the man page conflict,
+-the man page is the definitive description of the shell's features. 
+-
+-See the file POSIX for a discussion of how the Bash defaults differ
+-from the POSIX spec and a description of the Bash `posix mode'.
+-
+-There are some user-visible incompatibilities between this version
+-of Bash and previous widely-distributed versions, bash-5.0, bash-5.1,
+-and bash-5.2. The COMPAT file has the details. The NEWS file tersely
+-lists features that are new in this release. 
+-
+-Bash is free software, distributed under the terms of the [GNU] General
+-Public License as published by the Free Software Foundation,
+-version 3 of the License (or any later version).  For more information,
+-see the file COPYING. 
+-
+-A number of frequently-asked questions are answered in the file
+-`doc/FAQ'. (That file is no longer updated.)
+-
+-To compile Bash, type `./configure', then `make'.  Bash auto-configures
+-the build process, so no further intervention should be necessary. Bash
+-builds with `gcc' by default if it is available.  If you want to use `cc'
+-instead, type
+-
+-	CC=cc ./configure
+-
+-if you are using a Bourne-style shell.  If you are not, the following
+-may work:
+-
+-	env CC=cc ./configure
+-
+-Read the file INSTALL in this directory for more information about how
+-to customize and control the build process, including how to build in a
+-directory different from the source directory. The file NOTES contains
+-platform-specific installation and configuration information.
+-
+-If you are a csh user and wish to convert your csh aliases to Bash
+-aliases, you may wish to use the script `examples/misc/alias-conv.sh'
+-as a starting point. The script `examples/misc/cshtobash' is a more
+-ambitious script that attempts to do a more complete job.
+-
+-Reporting Bugs
+-==============
+-
+-Bug reports for bash should be sent to:
+-
+-	bug-bash@gnu.org
+-
+-using the `bashbug' program that is built and installed at the same
+-time as bash.
+-
+-The discussion list `bug-bash@gnu.org' often contains information
+-about new ports of Bash, or discussions of new features or behavior
+-changes that people would like.  This mailing list is also available
+-as a usenet newsgroup: gnu.bash.bug.
+-
+-The `help-bash@gnu.org' mailing list is used for questions about
+-using bash.
+-
+-When you send a bug report, please use the `bashbug' program that is
+-built at the same time as bash. If bash fails to build, try building
+-bashbug directly with `make bashbug'. If you cannot build `bashbug',
+-please send mail to bug-bash@gnu.org with the following information:
+-
+-	* the version number and release status of Bash (e.g., 2.05a-release)
+-	* the machine and OS that it is running on (you may run
+-	  `bashversion -l' from the bash build directory for this information)
+-	* a list of the compilation flags or the contents of `config.h', if
+-	  appropriate
+-	* a description of the bug
+-	* a recipe for recreating the bug reliably
+-	* a fix for the bug if you have one!
+-
+-The `bashbug' program includes much of this automatically.
+-
+-Questions and requests for help with bash and bash programming may be
+-sent to the help-bash@gnu.org mailing list.
+-
+-If you would like to contact the Bash maintainers directly, send mail
+-to bash-maintainers@gnu.org.
+-
+-While the Bash maintainers do not promise to fix all bugs, we would
+-like this shell to be the best that we can make it.
+-
+-Other Packages
+-==============
+-
+-This distribution includes, in examples/bash-completion, a recent version
+-of the `bash-completion' package, which provides programmable completions
+-for a number of commands. It's available as a package in many distributions,
+-and that is the first place from which to obtain it.
+-
+-The latest version of bash-completion is always available from
+-https://github.com/scop/bash-completion.
+-
+-If it's not a package from your vendor, you may install the included version.
+-
+-There are a number of example dynamically loadable builtin commands in the
+-examples/loadables subdirectory. These are built and installed when bash is
+-installed. If you want to test or experiment with these builtins before
+-installing bash, you can run `make loadables' to build them.
+-
+-Enjoy!
+-
+-Chet Ramey
+-chet.ramey@case.edu
+-
+-Copying and distribution of this file, with or without modification,
+-are permitted in any medium without royalty provided the copyright
+-notice and this notice are preserved.  This file is offered as-is,
+-without any warranty.
+diff --git a/README.md b/README.md
+new file mode 100644
+index 00000000..ca7768f8
+--- /dev/null
++++ b/README.md
+@@ -0,0 +1,38 @@
++# bash-oracle
++
++Modified bash shell that outputs AST as s-expressions instead of executing commands.
++Used as an oracle to validate [Parable](https://github.com/ldayton/Parable)'s parser output.
++
++## Usage
++
++```bash
++# Parse from stdin
++echo 'echo hello' | ./bash-oracle /dev/stdin
++# (command (word "echo") (word "hello"))
++
++# Parse from -e flag
++./bash-oracle -e 'echo hello'
++# (command (word "echo") (word "hello"))
++
++# Generate .tests files from a directory of scripts
++./bash-oracle --write-tests /path/to/scripts /path/to/output
++```
++
++## Building
++
++Use `just` commands, not raw make:
++
++- `just build` - Build bash-oracle binary
++- `just check-binary` - Verify binary is newer than source files
++- `just check-patchfile` - Verify patchfile matches current git diff
++- `just clean` - Clean build artifacts
++- `just configure` - Run once after cloning, or after Makefile.in changes
++- `just patchfile` - Generate patch file for Parable
++- `just upload` - Upload patchfile and binary to S3 (runs checks first)
++
++## S3
++
++Bucket: `s3://ldayton-parable/bash-oracle/`
++
++- `macos/bash-oracle` - macOS binary
++- `macos/bash-oracle.patch` - patch file
 diff --git a/dump_ast.c b/dump_ast.c
 new file mode 100644
 index 00000000..d05a4df8
@@ -461,10 +640,10 @@ index 070f5119..7e769f33 100644
  /* Return 1 if TYPE is a shell control structure type. */
 diff --git a/justfile b/justfile
 new file mode 100644
-index 00000000..4390e869
+index 00000000..7daabc10
 --- /dev/null
 +++ b/justfile
-@@ -0,0 +1,18 @@
+@@ -0,0 +1,55 @@
 +# Configure (run once, or after Makefile.in changes)
 +configure:
 +    ./configure
@@ -483,8 +662,45 @@ index 00000000..4390e869
 +    @echo "# Base: $(git rev-parse master)" > ~/source/Parable/tools/bash-oracle/bash-oracle.patch
 +    @git diff master..HEAD >> ~/source/Parable/tools/bash-oracle/bash-oracle.patch
 +    @echo "Wrote ~/source/Parable/tools/bash-oracle/bash-oracle.patch (base: $(git rev-parse --short master))"
++
++# Check patchfile matches current git diff
++check-patchfile:
++    #!/usr/bin/env bash
++    expected=$(echo "# Base: $(git rev-parse master)" && git diff master..HEAD)
++    actual=$(cat ~/source/Parable/tools/bash-oracle/bash-oracle.patch)
++    if [[ "$expected" != "$actual" ]]; then
++        echo "Error: patchfile is stale (run 'just patchfile')"
++        exit 1
++    fi
++    echo "Patchfile up to date"
++
++# Check binary is newer than source files
++check-binary:
++    #!/usr/bin/env bash
++    if [[ ! -f bash-oracle ]]; then
++        echo "Error: bash-oracle binary not found (run 'just build')"
++        exit 1
++    fi
++    newest_src=$(find . -name '*.c' -o -name '*.h' | xargs stat -f %m | sort -rn | head -1)
++    binary_time=$(stat -f %m bash-oracle)
++    if [[ "$newest_src" -gt "$binary_time" ]]; then
++        echo "Error: binary is stale (run 'just build')"
++        exit 1
++    fi
++    echo "Binary up to date"
++
++# Upload patchfile and binary to S3 (macOS only)
++upload: check-patchfile check-binary
++    #!/usr/bin/env bash
++    if [[ "$(uname -s)" != "Darwin" ]]; then
++        echo "Error: upload only supported on macOS"
++        exit 1
++    fi
++    aws s3 cp ~/source/Parable/tools/bash-oracle/bash-oracle.patch s3://ldayton-parable/bash-oracle/macos/
++    aws s3 cp bash-oracle s3://ldayton-parable/bash-oracle/macos/
++    echo "Uploaded to s3://ldayton-parable/bash-oracle/macos/"
 diff --git a/shell.c b/shell.c
-index e59029cc..9ca9cc65 100644
+index e59029cc..6629c5ba 100644
 --- a/shell.c
 +++ b/shell.c
 @@ -69,6 +69,8 @@ extern int get_tty_state (void);
@@ -574,19 +790,22 @@ index e59029cc..9ca9cc65 100644
    if (running_setuid && privileged_mode == 0)
      disable_priv_mode ();
  
-@@ -831,6 +883,162 @@ main (int argc, char **argv, char **env)
+@@ -831,6 +883,165 @@ main (int argc, char **argv, char **env)
      exit_shell (pretty_print_loop ());
  
    /* Read commands until exit condition. */
 +  if (oracle_expr)
 +    {
 +      with_input_from_string (oracle_expr, "-e");
-+      while (yyparse () == 0 && global_command)
++      while (yyparse () == 0 && !EOF_Reached)
 +	{
-+	  dump_command (global_command);
-+	  printf ("\n");
-+	  dispose_command (global_command);
-+	  global_command = NULL;
++	  if (global_command)
++	    {
++	      dump_command (global_command);
++	      printf ("\n");
++	      dispose_command (global_command);
++	      global_command = NULL;
++	    }
 +	}
 +      exit_shell (0);
 +    }

@@ -234,6 +234,26 @@ class DolbraceState:
     QUOTE2 = 0x80  # Single quote semi-special (/)
 
 
+class SavedParserState:
+    """Saved parser state for nested parsing (e.g., command substitutions).
+
+    Based on bash's sh_parser_state_t and save_parser_state/restore_parser_state.
+    Used when parsing nested constructs to save and restore parser context.
+    """
+
+    def __init__(
+        self,
+        parser_state: int,
+        dolbrace_state: int,
+        pending_heredocs: list,
+        ctx_depth: int,
+    ):
+        self.parser_state = parser_state
+        self.dolbrace_state = dolbrace_state
+        self.pending_heredocs = pending_heredocs
+        self.ctx_depth = ctx_depth
+
+
 class QuoteState:
     """Unified quote state tracker for parsing.
 
@@ -5146,6 +5166,32 @@ class Parser:
         """Check if a parser state flag is set."""
         return (self._parser_state & flag) != 0
 
+    def _save_parser_state(self) -> SavedParserState:
+        """Save current parser state for nested parsing.
+
+        Based on bash's save_parser_state(). Used when entering nested
+        constructs like command substitutions to preserve context.
+        """
+        return SavedParserState(
+            parser_state=self._parser_state,
+            dolbrace_state=self._dolbrace_state,
+            pending_heredocs=list(self._pending_heredocs),
+            ctx_depth=self._ctx.get_depth(),
+        )
+
+    def _restore_parser_state(self, saved: SavedParserState) -> None:
+        """Restore parser state after nested parsing.
+
+        Based on bash's restore_parser_state(). Note: position is NOT restored
+        since we've advanced through the nested content. Heredocs are also not
+        restored since they were consumed during nested parsing.
+        """
+        self._parser_state = saved.parser_state
+        self._dolbrace_state = saved.dolbrace_state
+        # Restore context stack to saved depth (pop any extra contexts)
+        while self._ctx.get_depth() > saved.ctx_depth:
+            self._ctx.pop()
+
     def _record_token(self, tok: Token) -> None:
         """Record token in history, shifting older tokens."""
         self._token_history = [
@@ -6044,7 +6090,7 @@ class Parser:
 
         self.advance()  # consume (
 
-        saved_state = self._parser_state
+        saved = self._save_parser_state()
         self._set_state(ParserStateFlags.PST_CMDSUBST)
 
         # Find matching closing paren, being aware of:
@@ -6346,7 +6392,7 @@ class Parser:
                 self.advance()
 
         if depth != 0:
-            self._parser_state = saved_state
+            self._restore_parser_state(saved)
             self.pos = start
             return None, ""
 
@@ -6381,10 +6427,10 @@ class Parser:
         # Ensure all content was consumed - if not, there's a syntax error
         sub_parser.skip_whitespace_and_newlines()
         if not sub_parser.at_end():
-            self._parser_state = saved_state
+            self._restore_parser_state(saved)
             raise ParseError("Unexpected content in command substitution", pos=start)
 
-        self._parser_state = saved_state
+        self._restore_parser_state(saved)
         return CommandSubstitution(cmd), text
 
     def _is_word_boundary_before(self) -> bool:

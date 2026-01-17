@@ -195,6 +195,15 @@ class DolbraceState {
 	static QUOTE2 = 128;
 }
 
+class SavedParserState {
+	constructor(parser_state, dolbrace_state, pending_heredocs, ctx_depth) {
+		this.parser_state = parser_state;
+		this.dolbrace_state = dolbrace_state;
+		this.pending_heredocs = pending_heredocs;
+		this.ctx_depth = ctx_depth;
+	}
+}
+
 class QuoteState {
 	constructor() {
 		this.single = false;
@@ -6083,6 +6092,24 @@ class Parser {
 		return (this._parser_state & flag) !== 0;
 	}
 
+	_saveParserState() {
+		return new SavedParserState(
+			this._parser_state,
+			this._dolbrace_state,
+			Array.from(this._pending_heredocs),
+			this._ctx.getDepth(),
+		);
+	}
+
+	_restoreParserState(saved) {
+		this._parser_state = saved.parser_state;
+		this._dolbrace_state = saved.dolbrace_state;
+		// Restore context stack to saved depth (pop any extra contexts)
+		while (this._ctx.getDepth() > saved.ctx_depth) {
+			this._ctx.pop();
+		}
+	}
+
 	_recordToken(tok) {
 		this._token_history = [
 			tok,
@@ -7306,7 +7333,7 @@ class Parser {
 			nested_depth,
 			pending_heredocs,
 			quote,
-			saved_state,
+			saved,
 			start,
 			strip_tabs,
 			sub_parser,
@@ -7323,7 +7350,7 @@ class Parser {
 			return [null, ""];
 		}
 		this.advance();
-		saved_state = this._parser_state;
+		saved = this._saveParserState();
 		this._setState(ParserStateFlags.PST_CMDSUBST);
 		// Find matching closing paren, being aware of:
 		// - Nested $() and plain ()
@@ -7682,7 +7709,7 @@ class Parser {
 			}
 		}
 		if (depth !== 0) {
-			this._parser_state = saved_state;
+			this._restoreParserState(saved);
 			this.pos = start;
 			return [null, ""];
 		}
@@ -7721,10 +7748,10 @@ class Parser {
 		// Ensure all content was consumed - if not, there's a syntax error
 		sub_parser.skipWhitespaceAndNewlines();
 		if (!sub_parser.atEnd()) {
-			this._parser_state = saved_state;
+			this._restoreParserState(saved);
 			throw new ParseError("Unexpected content in command substitution", start);
 		}
-		this._parser_state = saved_state;
+		this._restoreParserState(saved);
 		return [new CommandSubstitution(cmd), text];
 	}
 

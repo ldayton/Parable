@@ -608,6 +608,37 @@ class Lexer:
             return None
         return Token(TokenType.WORD, "".join(chars), start)
 
+    def next_token(self) -> Token:
+        """Return the next token from the input."""
+        if self._token_cache is not None:
+            tok = self._token_cache
+            self._token_cache = None
+            return tok
+        self.skip_blanks()
+        if self.at_end():
+            return Token(TokenType.EOF, "", self.pos)
+        while self._skip_comment():
+            self.skip_blanks()
+            if self.at_end():
+                return Token(TokenType.EOF, "", self.pos)
+        tok = self._read_operator()
+        if tok is not None:
+            return tok
+        tok = self._read_word()
+        if tok is not None:
+            return tok
+        return Token(TokenType.EOF, "", self.pos)
+
+    def peek_token(self) -> Token:
+        """Peek at next token without consuming."""
+        if self._token_cache is None:
+            self._token_cache = self.next_token()
+        return self._token_cache
+
+    def unget_token(self, tok: Token) -> None:
+        """Push a token back to be returned by next call."""
+        self._token_cache = tok
+
 
 def _strip_line_continuations_comment_aware(text: str) -> str:
     """Strip backslash-newline line continuations, preserving newlines in comments.

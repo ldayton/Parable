@@ -634,6 +634,45 @@ class Lexer {
 		}
 		return new Token(TokenType.WORD, chars.join(""), start);
 	}
+
+	nextToken() {
+		let tok;
+		if (this._token_cache != null) {
+			tok = this._token_cache;
+			this._token_cache = null;
+			return tok;
+		}
+		this.skipBlanks();
+		if (this.atEnd()) {
+			return new Token(TokenType.EOF, "", this.pos);
+		}
+		while (this._skipComment()) {
+			this.skipBlanks();
+			if (this.atEnd()) {
+				return new Token(TokenType.EOF, "", this.pos);
+			}
+		}
+		tok = this._readOperator();
+		if (tok != null) {
+			return tok;
+		}
+		tok = this._readWord();
+		if (tok != null) {
+			return tok;
+		}
+		return new Token(TokenType.EOF, "", this.pos);
+	}
+
+	peekToken() {
+		if (this._token_cache == null) {
+			this._token_cache = this.nextToken();
+		}
+		return this._token_cache;
+	}
+
+	ungetToken(tok) {
+		this._token_cache = tok;
+	}
 }
 
 function _stripLineContinuationsCommentAware(text) {

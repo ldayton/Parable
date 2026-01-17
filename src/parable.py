@@ -1755,59 +1755,11 @@ class Lexer:
                 elif c == "[":
                     if not self._param_subscript_has_close(self.pos):
                         break
-                    # Array subscript - track bracket depth and quotes
-                    name_chars.append(self.advance())
-                    bracket_depth = 1
-                    subscript_quote = QuoteState()
-                    while not self.at_end() and bracket_depth > 0:
-                        sc = self.peek()
-                        if subscript_quote.single:
-                            name_chars.append(self.advance())
-                            if sc == "'":
-                                subscript_quote.single = False
-                            continue
-                        if subscript_quote.double:
-                            if sc == "\\" and self.pos + 1 < self.length:
-                                name_chars.append(self.advance())
-                                if not self.at_end():
-                                    name_chars.append(self.advance())
-                                continue
-                            name_chars.append(self.advance())
-                            if sc == '"':
-                                subscript_quote.double = False
-                            continue
-                        if sc == "'":
-                            subscript_quote.single = True
-                            name_chars.append(self.advance())
-                            continue
-                        if (
-                            sc == "$"
-                            and self.pos + 1 < self.length
-                            and self.source[self.pos + 1] == '"'
-                        ):
-                            # Locale string $"..." - strip the $ and enter double quote
-                            self.advance()  # skip $
-                            subscript_quote.double = True
-                            name_chars.append(self.advance())  # append "
-                            continue
-                        if sc == '"':
-                            subscript_quote.double = True
-                            name_chars.append(self.advance())
-                            continue
-                        if sc == "\\":
-                            name_chars.append(self.advance())
-                            if not self.at_end():
-                                name_chars.append(self.advance())
-                            continue
-                        if sc == "[":
-                            bracket_depth += 1
-                        elif sc == "]":
-                            bracket_depth -= 1
-                            if bracket_depth == 0:
-                                break
-                        name_chars.append(self.advance())
-                    if not self.at_end() and self.peek() == "]":
-                        name_chars.append(self.advance())
+                    # Array subscript - use _parse_matched_pair for bracket/quote handling
+                    name_chars.append(self.advance())  # [
+                    content = self._parse_matched_pair("[", "]")
+                    name_chars.append(content)
+                    name_chars.append("]")
                     break
                 else:
                     break

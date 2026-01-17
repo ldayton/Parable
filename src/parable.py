@@ -5135,7 +5135,12 @@ class Parser:
 
     def _record_token(self, tok: Token) -> None:
         """Record token in history, shifting older tokens."""
-        self._token_history = [tok, self._token_history[0], self._token_history[1], self._token_history[2]]
+        self._token_history = [
+            tok,
+            self._token_history[0],
+            self._token_history[1],
+            self._token_history[2],
+        ]
 
     def _last_token(self) -> Token | None:
         """Return the most recently recorded token."""
@@ -5189,7 +5194,9 @@ class Parser:
         t = tok.type
         # Single-char operators: SEMI(10) through GREATER(18)
         # Multi-char operators: AND_AND(30) through PIPE_AMP(45)
-        if (t >= TokenType.SEMI and t <= TokenType.GREATER) or (t >= TokenType.AND_AND and t <= TokenType.PIPE_AMP):
+        if (t >= TokenType.SEMI and t <= TokenType.GREATER) or (
+            t >= TokenType.AND_AND and t <= TokenType.PIPE_AMP
+        ):
             return (t, tok.value)
         return None
 
@@ -5234,6 +5241,13 @@ class Parser:
             self._lex_next_token()
             return True
         return False
+
+    def _unexpected_token_error(self, expected: str) -> ParseError:
+        """Create a ParseError with token context for better error messages."""
+        tok = self._lex_peek_token()
+        if tok.type == TokenType.EOF:
+            return ParseError(f"Expected {expected}, got end of input", pos=tok.pos)
+        return ParseError(f"Expected {expected}, got '{tok.value}'", pos=tok.pos)
 
     def _lex_peek_redirect_op(self) -> tuple[int, str] | None:
         """Peek redirect operator token. Returns (token_type, value) or None."""
@@ -5384,7 +5398,9 @@ class Parser:
         if self.peek() == "{":
             brace = self.parse_brace_group()
             if brace is None:
-                raise ParseError(f"Expected brace group body in {context}", pos=self._lex_peek_token().pos)
+                raise ParseError(
+                    f"Expected brace group body in {context}", pos=self._lex_peek_token().pos
+                )
             return brace.body
         if self._lex_consume_word("do"):
             body = self.parse_list_until({"done"})
@@ -5392,7 +5408,9 @@ class Parser:
                 raise ParseError("Expected commands after 'do'", pos=self._lex_peek_token().pos)
             self.skip_whitespace_and_newlines()
             if not self._lex_consume_word("done"):
-                raise ParseError(f"Expected 'done' to close {context}", pos=self._lex_peek_token().pos)
+                raise ParseError(
+                    f"Expected 'done' to close {context}", pos=self._lex_peek_token().pos
+                )
             return body
         raise ParseError(f"Expected 'do' or '{{' in {context}", pos=self._lex_peek_token().pos)
 
@@ -9593,7 +9611,9 @@ class Parser:
 
             self.skip_whitespace_and_newlines()
             if not self._lex_consume_word("then"):
-                raise ParseError("Expected 'then' after elif condition", pos=self._lex_peek_token().pos)
+                raise ParseError(
+                    "Expected 'then' after elif condition", pos=self._lex_peek_token().pos
+                )
 
             elif_then_body = self.parse_list_until({"elif", "else", "fi"})
             if elif_then_body is None:
@@ -9611,7 +9631,9 @@ class Parser:
                 self._lex_consume_word("else")
                 inner_else = self.parse_list_until({"fi"})
                 if inner_else is None:
-                    raise ParseError("Expected commands after 'else'", pos=self._lex_peek_token().pos)
+                    raise ParseError(
+                        "Expected commands after 'else'", pos=self._lex_peek_token().pos
+                    )
 
             else_body = If(elif_condition, elif_then_body, inner_else)
 
@@ -9726,12 +9748,16 @@ class Parser:
             # Command substitution as variable name: for $(echo i) in ...
             var_word = self.parse_word()
             if var_word is None:
-                raise ParseError("Expected variable name after 'for'", pos=self._lex_peek_token().pos)
+                raise ParseError(
+                    "Expected variable name after 'for'", pos=self._lex_peek_token().pos
+                )
             var_name = var_word.value
         else:
             var_name = self.peek_word()
             if var_name is None:
-                raise ParseError("Expected variable name after 'for'", pos=self._lex_peek_token().pos)
+                raise ParseError(
+                    "Expected variable name after 'for'", pos=self._lex_peek_token().pos
+                )
             self.consume_word(var_name)
 
         self.skip_whitespace()
@@ -9770,7 +9796,9 @@ class Parser:
                     if saw_delimiter:
                         break
                     # 'for x in do' or 'for x in a b c do' is invalid
-                    raise ParseError("Expected ';' or newline before 'do'", pos=self._lex_peek_token().pos)
+                    raise ParseError(
+                        "Expected ';' or newline before 'do'", pos=self._lex_peek_token().pos
+                    )
 
                 word = self.parse_word()
                 if word is None:
@@ -9869,7 +9897,9 @@ class Parser:
         # Parse variable name
         var_name = self.peek_word()
         if var_name is None:
-            raise ParseError("Expected variable name after 'select'", pos=self._lex_peek_token().pos)
+            raise ParseError(
+                "Expected variable name after 'select'", pos=self._lex_peek_token().pos
+            )
         self.consume_word(var_name)
 
         self.skip_whitespace()
@@ -10114,7 +10144,9 @@ class Parser:
 
             pattern = "".join(pattern_chars)
             if not pattern:
-                raise ParseError("Expected pattern in case statement", pos=self._lex_peek_token().pos)
+                raise ParseError(
+                    "Expected pattern in case statement", pos=self._lex_peek_token().pos
+                )
 
             # Parse commands until ;;, ;&, ;;&, or esac
             # Commands are optional (can have empty body)
@@ -10145,7 +10177,9 @@ class Parser:
         # Expect 'esac'
         self.skip_whitespace_and_newlines()
         if not self._lex_consume_word("esac"):
-            raise ParseError("Expected 'esac' to close case statement", pos=self._lex_peek_token().pos)
+            raise ParseError(
+                "Expected 'esac' to close case statement", pos=self._lex_peek_token().pos
+            )
         return Case(word, patterns, self._collect_redirects())
 
     def parse_coproc(self) -> Coproc | None:
@@ -10571,12 +10605,21 @@ class Parser:
             word = self.peek_word()
             if word is not None and len(word) > 1 and word[0] == "}":
                 keyword_word = word[1:]
-                if keyword_word in RESERVED_WORDS or keyword_word in ("{", "}", "[[", "]]", "!", "time"):
+                if keyword_word in RESERVED_WORDS or keyword_word in (
+                    "{",
+                    "}",
+                    "[[",
+                    "]]",
+                    "!",
+                    "time",
+                ):
                     reserved = keyword_word
 
         # Reserved words that cannot start a statement (only valid in specific contexts)
         if reserved in ("fi", "then", "elif", "else", "done", "esac", "do", "in"):
-            raise ParseError(f"Unexpected reserved word '{reserved}'", pos=self._lex_peek_token().pos)
+            raise ParseError(
+                f"Unexpected reserved word '{reserved}'", pos=self._lex_peek_token().pos
+            )
 
         # If statement
         if reserved == "if":

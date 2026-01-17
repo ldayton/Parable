@@ -6206,6 +6206,15 @@ class Parser {
 		return false;
 	}
 
+	_unexpectedTokenError(expected) {
+		let tok;
+		tok = this._lexPeekToken();
+		if (tok.type === TokenType.EOF) {
+			return new ParseError(`Expected ${expected}, got end of input`, tok.pos);
+		}
+		return new ParseError(`Expected ${expected}, got '${tok.value}'`, tok.pos);
+	}
+
 	_lexPeekRedirectOp() {
 		let t, tok;
 		tok = this._lexPeekToken();

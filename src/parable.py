@@ -828,12 +828,7 @@ class Word(Node):
         bracket_in_double_quote = False  # Quote state inside [...] (only double tracked)
         while i < len(value):
             ch = value[i]
-            if (
-                ch == "\\"
-                and i + 1 < len(value)
-                and not quote.single
-                and not brace_quote.single
-            ):
+            if ch == "\\" and i + 1 < len(value) and not quote.single and not brace_quote.single:
                 # Escape - copy both chars (but NOT inside single quotes where \ is literal)
                 result.append(ch)
                 result.append(value[i + 1])
@@ -861,19 +856,14 @@ class Word(Node):
                 brace_depth -= 1
                 result.append(ch)
                 i += 1
-            elif (
-                ch == "[" and brace_depth > 0 and not quote.single and not brace_quote.double
-            ):
+            elif ch == "[" and brace_depth > 0 and not quote.single and not brace_quote.double:
                 # Start of subscript inside brace expansion
                 bracket_depth += 1
                 bracket_in_double_quote = False
                 result.append(ch)
                 i += 1
             elif (
-                ch == "]"
-                and bracket_depth > 0
-                and not quote.single
-                and not bracket_in_double_quote
+                ch == "]" and bracket_depth > 0 and not quote.single and not bracket_in_double_quote
             ):
                 # End of subscript
                 bracket_depth -= 1
@@ -892,16 +882,12 @@ class Word(Node):
                 bracket_in_double_quote = not bracket_in_double_quote
                 result.append(ch)
                 i += 1
-            elif (
-                ch == '"' and not quote.single and not brace_quote.single and brace_depth > 0
-            ):
+            elif ch == '"' and not quote.single and not brace_quote.single and brace_depth > 0:
                 # Toggle quote state inside brace expansion
                 brace_quote.double = not brace_quote.double
                 result.append(ch)
                 i += 1
-            elif (
-                ch == "'" and not quote.double and not brace_quote.double and brace_depth > 0
-            ):
+            elif ch == "'" and not quote.double and not brace_quote.double and brace_depth > 0:
                 # Toggle single quote state inside brace expansion
                 brace_quote.single = not brace_quote.single
                 result.append(ch)

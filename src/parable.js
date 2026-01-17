@@ -6173,6 +6173,12 @@ class Parser {
 		return null;
 	}
 
+	_lexIsAtReservedWord(word) {
+		let reserved;
+		reserved = this._lexPeekReservedWord();
+		return reserved === word;
+	}
+
 	_lexPeekWord() {
 		let tok;
 		tok = this._lexPeekToken();

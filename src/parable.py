@@ -5209,6 +5209,11 @@ class Parser:
             return word
         return None
 
+    def _lex_is_at_reserved_word(self, word: str) -> bool:
+        """Check if next token is a specific reserved word."""
+        reserved = self._lex_peek_reserved_word()
+        return reserved == word
+
     def _lex_peek_word(self) -> str | None:
         """Peek next word token value. Returns None if not at a word."""
         tok = self._lex_peek_token()

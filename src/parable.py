@@ -270,6 +270,7 @@ class MatchedPairFlags:
     COMMAND = 0x04  # Inside command substitution
     ARITH = 0x08  # Inside arithmetic expression
     ALLOWESC = 0x10  # Allow backslash escapes (for $'...')
+    EXTGLOB = 0x20  # Inside extglob pattern - don't parse ${ $( as constructs
 
 
 class SavedParserState:
@@ -1014,8 +1015,8 @@ class Lexer:
                     chars.append("`")
                     continue
 
-            # ${ $( $[ trigger nested parsing
-            if ch == "$" and not self.at_end():
+            # ${ $( $[ trigger nested parsing (unless in extglob where they're just pattern chars)
+            if ch == "$" and not self.at_end() and not (flags & MatchedPairFlags.EXTGLOB):
                 next_ch = self.peek()
                 if next_ch == "{":
                     chars.append(ch)
@@ -1148,7 +1149,7 @@ class Lexer:
             if ctx == WORD_CTX_COND and ch == "(":
                 if chars and _is_extglob_prefix(chars[len(chars) - 1]):
                     chars.append(self.advance())  # (
-                    content = self._parse_matched_pair("(", ")")
+                    content = self._parse_matched_pair("(", ")", MatchedPairFlags.EXTGLOB)
                     chars.append(content)
                     chars.append(")")
                     continue
@@ -1331,74 +1332,11 @@ class Lexer:
                 and self.pos + 1 < self.length
                 and self.source[self.pos + 1] == "("
             ):
-                extglob_start = self.pos
                 chars.append(self.advance())  # @, ?, *, +, or !
                 chars.append(self.advance())  # (
-                extglob_depth = 1
-                while not self.at_end() and extglob_depth > 0:
-                    c = self.peek()
-                    if c == ")":
-                        chars.append(self.advance())
-                        extglob_depth -= 1
-                    elif c == "(":
-                        chars.append(self.advance())
-                        extglob_depth += 1
-                    elif c == "\\":
-                        if self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
-                            self.advance()
-                            self.advance()
-                        else:
-                            chars.append(self.advance())
-                            if not self.at_end():
-                                chars.append(self.advance())
-                    elif c == "'":
-                        chars.append(self.advance())
-                        while not self.at_end() and self.peek() != "'":
-                            chars.append(self.advance())
-                        if not self.at_end():
-                            chars.append(self.advance())
-                    elif c == '"':
-                        chars.append(self.advance())
-                        while not self.at_end() and self.peek() != '"':
-                            if self.peek() == "\\" and self.pos + 1 < self.length:
-                                chars.append(self.advance())
-                            chars.append(self.advance())
-                        if not self.at_end():
-                            chars.append(self.advance())
-                    elif (
-                        c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "("
-                    ):
-                        arith_start = self.pos
-                        chars.append(self.advance())  # $
-                        chars.append(self.advance())  # (
-                        if not self.at_end() and self.peek() == "(":
-                            chars.append(self.advance())  # second (
-                            inner_paren_depth = 2
-                            while not self.at_end() and inner_paren_depth > 0:
-                                pc = self.peek()
-                                if pc == "(":
-                                    inner_paren_depth += 1
-                                elif pc == ")":
-                                    inner_paren_depth -= 1
-                                chars.append(self.advance())
-                            if inner_paren_depth > 0:
-                                raise MatchedPairError(
-                                    "unexpected EOF looking for `))'", pos=arith_start
-                                )
-                        else:
-                            extglob_depth += 1
-                    elif (
-                        _is_extglob_prefix(c)
-                        and self.pos + 1 < self.length
-                        and self.source[self.pos + 1] == "("
-                    ):
-                        chars.append(self.advance())  # @, ?, *, +, or !
-                        chars.append(self.advance())  # (
-                        extglob_depth += 1
-                    else:
-                        chars.append(self.advance())
-                if extglob_depth > 0:
-                    raise MatchedPairError("unexpected EOF looking for `)'", pos=extglob_start)
+                content = self._parse_matched_pair("(", ")", MatchedPairFlags.EXTGLOB)
+                chars.append(content)
+                chars.append(")")
                 continue
             # NORMAL: Metacharacter terminates word (unless inside brackets)
             if ctx == WORD_CTX_NORMAL and _is_metachar(ch) and bracket_depth == 0:

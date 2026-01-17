@@ -29,6 +29,7 @@ class TestCase:
 @dataclass
 class WorkerResult:
     """Result from verifying a single test case."""
+
     passed: bool
     skipped: dict | None = None
     failure: dict | None = None
@@ -103,7 +104,7 @@ def normalize(s: str) -> str:
 def worker_process(
     work_queue: Queue[TestCase | None],
     result_queue: Queue[WorkerResult | None],
-    stop_event: "EventType",
+    stop_event: EventType,
 ) -> None:
     """Worker process: verify test cases from work queue."""
     while not stop_event.is_set():
@@ -112,17 +113,33 @@ def worker_process(
             break
         # Skip tests marked as <infinite> (bash-oracle hangs on these)
         if tc.expected == "<infinite>":
-            result_queue.put(WorkerResult(
-                passed=False,
-                skipped={"file": tc.file, "line": tc.line, "name": tc.name, "input": tc.input, "reason": "infinite"},
-            ))
+            result_queue.put(
+                WorkerResult(
+                    passed=False,
+                    skipped={
+                        "file": tc.file,
+                        "line": tc.line,
+                        "name": tc.name,
+                        "input": tc.input,
+                        "reason": "infinite",
+                    },
+                )
+            )
             continue
         oracle_output = get_oracle_output(tc.input)
         if oracle_output is None:
-            result_queue.put(WorkerResult(
-                passed=False,
-                skipped={"file": tc.file, "line": tc.line, "name": tc.name, "input": tc.input, "reason": "timeout"},
-            ))
+            result_queue.put(
+                WorkerResult(
+                    passed=False,
+                    skipped={
+                        "file": tc.file,
+                        "line": tc.line,
+                        "name": tc.name,
+                        "input": tc.input,
+                        "reason": "timeout",
+                    },
+                )
+            )
             continue
         expected_norm = normalize(tc.expected)
         oracle_norm = normalize(oracle_output)
@@ -171,7 +188,7 @@ def main():
     num_workers = mp.cpu_count()
     work_queue: Queue[TestCase | None] = mp.Queue()
     result_queue: Queue[WorkerResult | None] = mp.Queue()
-    stop_event: "EventType" = mp.Event()
+    stop_event: EventType = mp.Event()
 
     # Start workers
     workers = []
@@ -222,7 +239,7 @@ def main():
     print(f"Skipped: {skipped}")
     if skipped_tests:
         for s in skipped_tests:
-            reason = s.get('reason', 'unknown')
+            reason = s.get("reason", "unknown")
             print(f"  - {Path(s['file']).name}:{s['line']} {s['name']} ({reason})")
     print()
 

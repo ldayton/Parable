@@ -22,18 +22,16 @@ Match bash's parsing behavior exactly by mirroring bash's architectural patterns
 
 ## Key Insight (January 2026)
 
-**The Parser is character-based, not token-based.**
+**The EOF token mechanism DOES work, even with character-based parsing.**
 
-We attempted to implement bash's `shell_eof_token` mechanism to eliminate sub-parsers. It failed because:
+Initial attempts failed because the Parser bypassed the Lexer. The solution:
 
-```
-Bash:     Tokenizer (read_token/yylex) → tokens → Parser (yyparse)
-Parable:  Parser.parse_list() calls self.peek()/advance() directly
-```
+1. Add `_eof_token` and `_eof_depth` to both Parser and Lexer
+2. Sync state via `_sync_lexer()` before parsing nested content
+3. Have `Lexer.next_token()` return EOF when hitting delimiter at depth 0
+4. Track paren depth in `Lexer._read_operator()` with PST_CASEPAT handling
 
-Functions like `parse_list()`, `parse_command()`, `parse_pipeline()` bypass the Lexer entirely. Even when we set `_eof_token` on the Lexer, the Parser never sees it.
-
-**The EOF token mechanism is a consequence of tokenizer-parser architecture, not something that can be bolted on.**
+This eliminated ~550 lines of scanning code from `_parse_command_substitution` and `_parse_process_substitution`. The key was having the Lexer check EOF token conditions, even though the Parser still does character-level work for most things.
 
 ---
 
@@ -120,34 +118,36 @@ The "leaf" methods moved to Lexer (ansi_c_quote, locale_string, param_expansion)
 
 ---
 
-## Blocked Work (Requires Token-Based Parser)
+## Completed: EOF Token Mechanism
 
-### EOF Token Mechanism
-Set `)` as EOF token for `$()`, Lexer returns EOF when it sees `)` at depth 0, `parse_list()` stops automatically. Eliminates ~350 lines of scanning code and sub-parser creation.
+### What Works Now
+- `_parse_command_substitution`: Uses EOF token `)`, calls `parse_list()` directly ✓
+- `_parse_process_substitution`: Uses EOF token `)`, calls `parse_list()` directly ✓
+- Eliminated ~550 lines of scanning code ✓
+- No sub-parsers needed for command/process substitution ✓
 
-### Unified Scanning/Parsing
-Remove `_find_cmdsub_end` and similar pre-scanning functions. Parse nested constructs inline with save/restore state instead of scan-then-parse.
+### What Doesn't Apply
+- `_parse_backtick_substitution`: Escape handling (`\$`, `` \` ``, `\\`, `\<newline>`) requires character-by-character processing before parsing. Cannot use EOF token directly.
+- `_parse_arithmetic_expansion`: Uses separate arithmetic expression parser, not shell parser.
 
-### Sub-Parser Elimination
-Once EOF token works, `_parse_command_substitution` etc. can call `parse_list()` directly instead of creating sub-parsers. The Lexer signals when to stop.
+### Remaining Scanning Code
+`_find_cmdsub_end` and related functions are still used by:
+- `_format_command_substitutions` (Word.to_sexp output formatting)
+- `_parse_backtick_substitution` (escape processing)
 
 ---
 
 ## Methods Still in Parser
 
-These remain in Parser because they parse nested commands (requiring `parse_list()`):
-
-| Method                         | Nested Command Parsing                       |
+| Method                         | Status                                       |
 | ------------------------------ | -------------------------------------------- |
-| `_parse_command_substitution`  | `$(...)` → sub-parser for content            |
-| `_parse_backtick_substitution` | `` `...` `` → sub-parser for content         |
-| `_parse_process_substitution`  | `<(...)` → sub-parser for content            |
-| `_parse_arithmetic_expansion`  | `$((... $(...) ...))` → calls `parse_list()` |
+| `_parse_command_substitution`  | ✓ Uses EOF token, calls `parse_list()` inline |
+| `_parse_process_substitution`  | ✓ Uses EOF token, calls `parse_list()` inline |
+| `_parse_backtick_substitution` | Needs escape processing, uses sub-parser     |
+| `_parse_arithmetic_expansion`  | Uses separate arithmetic parser              |
 | `_parse_array_literal`         | `=(...)` may contain command subs            |
 | `_parse_dollar_expansion`      | dispatcher for above                         |
 | `_parse_word_internal`         | orchestrates all expansion methods           |
-
-With a token-based Parser, these could use EOF token mechanism instead of sub-parsers.
 
 ---
 

@@ -25,6 +25,16 @@ class ParseError(Exception):
         return f"Parse error: {self.message}"
 
 
+class MatchedPairError(ParseError):
+    """Raised when a matched pair (like parentheses or braces) is unclosed at EOF.
+
+    This is distinct from returning None/"" which signals "try alternative parsing".
+    MatchedPairError means "this IS the construct, but it's unclosed at EOF".
+    """
+
+    pass
+
+
 def _is_hex_digit(c: str) -> bool:
     return (c >= "0" and c <= "9") or (c >= "a" and c <= "f") or (c >= "A" and c <= "F")
 
@@ -898,6 +908,7 @@ class Lexer:
         chars: list[str] = []
         parts: list[Node] = []
         bracket_depth = 0  # Track [...] for array subscripts (NORMAL only)
+        bracket_start_pos: int | None = None  # Position where bracket tracking started
         seen_equals = False  # Track if we've seen = (NORMAL only)
         paren_depth = 0  # Track regex grouping parens (REGEX only)
         while not self.at_end():
@@ -927,10 +938,12 @@ class Lexer:
                 ):
                     prev_char = chars[len(chars) - 1]
                     if prev_char.isalnum() or prev_char == "_":
+                        bracket_start_pos = self.pos
                         bracket_depth += 1
                         chars.append(self.advance())
                         continue
                 if not chars and not seen_equals and in_array_literal:
+                    bracket_start_pos = self.pos
                     bracket_depth += 1
                     chars.append(self.advance())
                     continue
@@ -963,6 +976,7 @@ class Lexer:
             # COND: Extglob patterns or ( terminates
             if ctx == WORD_CTX_COND and ch == "(":
                 if chars and _is_extglob_prefix(chars[len(chars) - 1]):
+                    extglob_start = self.pos
                     chars.append(self.advance())  # (
                     depth = 1
                     while not self.at_end() and depth > 0:
@@ -972,6 +986,8 @@ class Lexer:
                         elif c == ")":
                             depth -= 1
                         chars.append(self.advance())
+                    if depth > 0:
+                        raise MatchedPairError("unexpected EOF looking for `)'", pos=extglob_start)
                     continue
                 else:
                     # ( without extglob prefix terminates the word
@@ -1143,6 +1159,7 @@ class Lexer:
                 and self.pos + 1 < self.length
                 and self.source[self.pos + 1] == "("
             ):
+                extglob_start = self.pos
                 chars.append(self.advance())  # @, ?, *, +, or !
                 chars.append(self.advance())  # (
                 extglob_depth = 1
@@ -1179,6 +1196,7 @@ class Lexer:
                     elif (
                         c == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "("
                     ):
+                        arith_start = self.pos
                         chars.append(self.advance())  # $
                         chars.append(self.advance())  # (
                         if not self.at_end() and self.peek() == "(":
@@ -1191,6 +1209,10 @@ class Lexer:
                                 elif pc == ")":
                                     inner_paren_depth -= 1
                                 chars.append(self.advance())
+                            if inner_paren_depth > 0:
+                                raise MatchedPairError(
+                                    "unexpected EOF looking for `))'", pos=arith_start
+                                )
                         else:
                             extglob_depth += 1
                     elif (
@@ -1203,12 +1225,17 @@ class Lexer:
                         extglob_depth += 1
                     else:
                         chars.append(self.advance())
+                if extglob_depth > 0:
+                    raise MatchedPairError("unexpected EOF looking for `)'", pos=extglob_start)
                 continue
             # NORMAL: Metacharacter terminates word (unless inside brackets)
             if ctx == WORD_CTX_NORMAL and _is_metachar(ch) and bracket_depth == 0:
                 break
             # Regular character
             chars.append(self.advance())
+        # Check for unclosed bracket at EOF
+        if bracket_depth > 0 and bracket_start_pos is not None and self.at_end():
+            raise MatchedPairError("unexpected EOF looking for `]'", pos=bracket_start_pos)
         if not chars:
             return None
         if parts:
@@ -1790,8 +1817,10 @@ class Lexer:
                         text = _substring(self.source, start, self.pos)
                         self._dolbrace_state = saved_dolbrace
                         return ParamIndirect(param + suffix + "".join(trailing)), text
-                    # Unclosed brace
+                    # Unclosed brace at EOF - error, not fallback
                     self._dolbrace_state = saved_dolbrace
+                    if self.at_end():
+                        raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
                     self.pos = start
                     return None, ""
                 # Check for operator (e.g., ${!##} = indirect of # with # op)
@@ -1827,6 +1856,10 @@ class Lexer:
                         text = _substring(self.source, start, self.pos)
                         self._dolbrace_state = saved_dolbrace
                         return ParamIndirect(param, op, arg), text
+                    # Unclosed at EOF - error, not fallback
+                    if self.at_end():
+                        self._dolbrace_state = saved_dolbrace
+                        raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
                 # Fell through - pattern didn't match, return None
                 self._dolbrace_state = saved_dolbrace
                 self.pos = start
@@ -1920,8 +1953,7 @@ class Lexer:
                 raise ParseError("Unclosed parameter expansion", pos=start)
         if self.at_end():
             self._dolbrace_state = saved_dolbrace
-            self.pos = start
-            return None, ""
+            raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
         # Check for closing brace (simple expansion)
         if self.peek() == "}":
             self.advance()
@@ -7137,8 +7169,14 @@ class Parser:
         self._in_array_literal = in_array_literal
         tok = self._lex_peek_token()
         if tok.type != TokenType.WORD:
+            # Reset context when not a word to avoid affecting subsequent calls
+            self._at_command_start = False
+            self._in_array_literal = False
             return None
         self._lex_next_token()
+        # Reset context after consuming to avoid affecting subsequent calls
+        self._at_command_start = False
+        self._in_array_literal = False
         return tok.word
 
     def _parse_command_substitution(self) -> tuple[Node | None, str]:
@@ -7567,6 +7605,8 @@ class Parser:
                 self.advance()
 
             if depth != 0:
+                if self.at_end():
+                    raise MatchedPairError("unexpected EOF looking for `)'", pos=start) from None
                 self.pos = start
                 return None, ""
 
@@ -9115,8 +9155,11 @@ class Parser:
             else:
                 self.advance()
 
-        if self.at_end() or depth != 1:
-            # Didn't find )) - might be nested subshells or malformed
+        if self.at_end():
+            # Hit EOF without finding )) - unclosed arithmetic command
+            raise MatchedPairError("unexpected EOF looking for `))'", pos=saved_pos)
+        if depth != 1:
+            # Didn't find )) - might be nested subshells, not arithmetic command
             self.pos = saved_pos
             return None
 

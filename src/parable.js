@@ -25,6 +25,8 @@ class ParseError extends Error {
 	}
 }
 
+class MatchedPairError extends ParseError {}
+
 function _isHexDigit(c) {
 	return (
 		(c >= "0" && c <= "9") || (c >= "a" && c <= "f") || (c >= "A" && c <= "F")
@@ -990,8 +992,10 @@ class Lexer {
 
 	_readWordInternal(ctx, at_command_start, in_array_literal) {
 		let ansi_result,
+			arith_start,
 			array_result,
 			bracket_depth,
+			bracket_start_pos,
 			c,
 			ch,
 			chars,
@@ -999,6 +1003,7 @@ class Lexer {
 			content,
 			depth,
 			extglob_depth,
+			extglob_start,
 			for_regex,
 			handle_line_continuation,
 			in_single_in_dquote,
@@ -1025,6 +1030,7 @@ class Lexer {
 		chars = [];
 		parts = [];
 		bracket_depth = 0;
+		bracket_start_pos = null;
 		seen_equals = false;
 		paren_depth = 0;
 		while (!this.atEnd()) {
@@ -1063,12 +1069,14 @@ class Lexer {
 				) {
 					prev_char = chars[chars.length - 1];
 					if (/^[a-zA-Z0-9]$/.test(prev_char) || prev_char === "_") {
+						bracket_start_pos = this.pos;
 						bracket_depth += 1;
 						chars.push(this.advance());
 						continue;
 					}
 				}
 				if (chars.length === 0 && !seen_equals && in_array_literal) {
+					bracket_start_pos = this.pos;
 					bracket_depth += 1;
 					chars.push(this.advance());
 					continue;
@@ -1108,6 +1116,7 @@ class Lexer {
 			// COND: Extglob patterns or ( terminates
 			if (ctx === WORD_CTX_COND && ch === "(") {
 				if (chars.length > 0 && _isExtglobPrefix(chars[chars.length - 1])) {
+					extglob_start = this.pos;
 					chars.push(this.advance());
 					depth = 1;
 					while (!this.atEnd() && depth > 0) {
@@ -1118,6 +1127,12 @@ class Lexer {
 							depth -= 1;
 						}
 						chars.push(this.advance());
+					}
+					if (depth > 0) {
+						throw new MatchedPairError(
+							"unexpected EOF looking for `)'",
+							extglob_start,
+						);
 					}
 					continue;
 				} else {
@@ -1335,6 +1350,7 @@ class Lexer {
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === "("
 			) {
+				extglob_start = this.pos;
 				chars.push(this.advance());
 				chars.push(this.advance());
 				extglob_depth = 1;
@@ -1383,6 +1399,7 @@ class Lexer {
 						this.pos + 1 < this.length &&
 						this.source[this.pos + 1] === "("
 					) {
+						arith_start = this.pos;
 						chars.push(this.advance());
 						chars.push(this.advance());
 						if (!this.atEnd() && this.peek() === "(") {
@@ -1396,6 +1413,12 @@ class Lexer {
 									inner_paren_depth -= 1;
 								}
 								chars.push(this.advance());
+							}
+							if (inner_paren_depth > 0) {
+								throw new MatchedPairError(
+									"unexpected EOF looking for `))'",
+									arith_start,
+								);
 							}
 						} else {
 							extglob_depth += 1;
@@ -1412,6 +1435,12 @@ class Lexer {
 						chars.push(this.advance());
 					}
 				}
+				if (extglob_depth > 0) {
+					throw new MatchedPairError(
+						"unexpected EOF looking for `)'",
+						extglob_start,
+					);
+				}
 				continue;
 			}
 			// NORMAL: Metacharacter terminates word (unless inside brackets)
@@ -1420,6 +1449,13 @@ class Lexer {
 			}
 			// Regular character
 			chars.push(this.advance());
+		}
+		// Check for unclosed bracket at EOF
+		if (bracket_depth > 0 && bracket_start_pos != null && this.atEnd()) {
+			throw new MatchedPairError(
+				"unexpected EOF looking for `]'",
+				bracket_start_pos,
+			);
 		}
 		if (chars.length === 0) {
 			return null;
@@ -2157,8 +2193,11 @@ class Lexer {
 							text,
 						];
 					}
-					// Unclosed brace
+					// Unclosed brace at EOF - error, not fallback
 					this._dolbrace_state = saved_dolbrace;
+					if (this.atEnd()) {
+						throw new MatchedPairError("unexpected EOF looking for `}'", start);
+					}
 					this.pos = start;
 					return [null, ""];
 				}
@@ -2200,6 +2239,11 @@ class Lexer {
 						text = this.source.slice(start, this.pos);
 						this._dolbrace_state = saved_dolbrace;
 						return [new ParamIndirect(param, op, arg), text];
+					}
+					// Unclosed at EOF - error, not fallback
+					if (this.atEnd()) {
+						this._dolbrace_state = saved_dolbrace;
+						throw new MatchedPairError("unexpected EOF looking for `}'", start);
 					}
 				}
 				// Fell through - pattern didn't match, return None
@@ -2324,8 +2368,7 @@ class Lexer {
 		}
 		if (this.atEnd()) {
 			this._dolbrace_state = saved_dolbrace;
-			this.pos = start;
-			return [null, ""];
+			throw new MatchedPairError("unexpected EOF looking for `}'", start);
 		}
 		// Check for closing brace (simple expansion)
 		if (this.peek() === "}") {
@@ -8564,9 +8607,15 @@ class Parser {
 		this._in_array_literal = in_array_literal;
 		tok = this._lexPeekToken();
 		if (tok.type !== TokenType.WORD) {
+			// Reset context when not a word to avoid affecting subsequent calls
+			this._at_command_start = false;
+			this._in_array_literal = false;
 			return null;
 		}
 		this._lexNextToken();
+		// Reset context after consuming to avoid affecting subsequent calls
+		this._at_command_start = false;
+		this._in_array_literal = false;
 		return tok.word;
 	}
 
@@ -9074,6 +9123,9 @@ class Parser {
 				this.advance();
 			}
 			if (depth !== 0) {
+				if (this.atEnd()) {
+					throw new MatchedPairError("unexpected EOF looking for `)'", start);
+				}
 				this.pos = start;
 				return [null, ""];
 			}
@@ -10971,8 +11023,12 @@ class Parser {
 				this.advance();
 			}
 		}
-		if (this.atEnd() || depth !== 1) {
-			// Didn't find )) - might be nested subshells or malformed
+		if (this.atEnd()) {
+			// Hit EOF without finding )) - unclosed arithmetic command
+			throw new MatchedPairError("unexpected EOF looking for `))'", saved_pos);
+		}
+		if (depth !== 1) {
+			// Didn't find )) - might be nested subshells, not arithmetic command
 			this.pos = saved_pos;
 			return null;
 		}

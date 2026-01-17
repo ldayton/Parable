@@ -1,5 +1,18 @@
 # Plan: Move Word Parsing to Lexer (Approach A)
 
+## Current Progress
+
+**Completed:**
+- Phase 1: Infrastructure (Token.parts, Lexer state, save/restore) ✓
+- Step 3.1: Move `_parse_ansi_c_quote` to Lexer ✓
+- Add Parser back-reference to Lexer for callbacks ✓
+- Update transpiler to handle forward references ✓
+
+**Remaining:**
+- Move remaining expansion methods (14 more)
+- Move word parsing (`_parse_word_internal`)
+- Remove redundant Parser methods
+
 ## Goal
 
 Refactor Parable to match bash's architecture where the Lexer produces fully-parsed WORD tokens with expansion parts, and the Parser consumes tokens rather than parsing character-by-character.

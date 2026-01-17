@@ -75,7 +75,7 @@ def main():
 
     global _verbose, _deadline
     parser = argparse.ArgumentParser(description="Minimize a failing input to its MRE")
-    parser.add_argument("input", help="The bash code that triggers a discrepancy")
+    parser.add_argument("input", nargs="?", help="The bash code (or - for stdin, or @file to read from file)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Show progress")
     parser.add_argument(
         "-t", "--timeout", type=int, default=10, help="Timeout in seconds (default: 10)"
@@ -84,11 +84,20 @@ def main():
     _verbose = args.verbose
     _deadline = time.time() + args.timeout
 
+    # Get input from argument, file, or stdin
+    if args.input is None or args.input == "-":
+        input_text = sys.stdin.read()
+    elif args.input.startswith("@"):
+        with open(args.input[1:]) as f:
+            input_text = f.read()
+    else:
+        input_text = args.input
+
     if _verbose:
-        print(f"Input ({len(args.input)} chars): {args.input!r}", file=sys.stderr)
+        print(f"Input ({len(input_text)} chars): {input_text!r}", file=sys.stderr)
 
     try:
-        result = minimize(args.input)
+        result = minimize(input_text)
     except TimeoutError:
         print(f"Error: timeout after {args.timeout}s", file=sys.stderr)
         sys.exit(2)
@@ -101,3 +110,7 @@ def main():
         print(f"MRE ({len(result)} chars): {result!r}", file=sys.stderr)
 
     print(result)
+
+
+if __name__ == "__main__":
+    main()

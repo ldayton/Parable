@@ -5157,6 +5157,25 @@ class Parser:
         """Sync Parser position to Lexer position."""
         self.pos = self._lexer.pos
 
+    def _lex_peek_token(self) -> Token:
+        """Peek at next token via Lexer."""
+        self._sync_lexer()
+        return self._lexer.peek_token()
+
+    def _lex_next_token(self) -> Token:
+        """Get next token via Lexer and sync position."""
+        self._sync_lexer()
+        tok = self._lexer.next_token()
+        self._sync_parser()
+        self._record_token(tok)
+        return tok
+
+    def _lex_skip_blanks(self) -> None:
+        """Skip blanks via Lexer."""
+        self._sync_lexer()
+        self._lexer.skip_blanks()
+        self._sync_parser()
+
     def at_end(self) -> bool:
         """Check if we've reached the end of input."""
         return self.pos >= self.length

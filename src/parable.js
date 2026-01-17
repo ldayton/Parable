@@ -6107,6 +6107,26 @@ class Parser {
 		this.pos = this._lexer.pos;
 	}
 
+	_lexPeekToken() {
+		this._syncLexer();
+		return this._lexer.peekToken();
+	}
+
+	_lexNextToken() {
+		let tok;
+		this._syncLexer();
+		tok = this._lexer.nextToken();
+		this._syncParser();
+		this._recordToken(tok);
+		return tok;
+	}
+
+	_lexSkipBlanks() {
+		this._syncLexer();
+		this._lexer.skipBlanks();
+		this._syncParser();
+	}
+
 	atEnd() {
 		return this.pos >= this.length;
 	}

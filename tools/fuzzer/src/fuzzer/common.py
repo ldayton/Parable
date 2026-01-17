@@ -106,3 +106,51 @@ def normalize(s: str) -> str:
     s = re.sub(r"\b1>&", ">&", s)
     s = re.sub(r"\\n\s+", r"\\n", s)
     return s
+
+
+def post_process_discrepancies(
+    discrepancies: list[Discrepancy],
+    minimize: bool = False,
+    filter_layer: int | None = None,
+) -> list[Discrepancy]:
+    """Minimize and/or filter discrepancies by layer."""
+    from .generator import LAYERS, detect_layer
+    from .minimize import minimize as minimize_fn
+
+    # --filter-layer implies --minimize
+    if filter_layer is not None:
+        minimize = True
+
+    if minimize and discrepancies:
+        print("Minimizing discrepancies...")
+        minimized = []
+        for i, d in enumerate(discrepancies):
+            result = minimize_fn(d.mutated)
+            if result:
+                d.mutated = result
+                minimized.append(d)
+            print(f"\r  {i + 1}/{len(discrepancies)}", end="", flush=True)
+        print()
+        discrepancies = minimized
+        print(f"Minimized to {len(discrepancies)} discrepancies")
+
+    if filter_layer is not None and discrepancies:
+        print(f"Filtering to layer {filter_layer} ({LAYERS.get(filter_layer, '?')}) and below...")
+        filtered = []
+        for d in discrepancies:
+            detected = detect_layer(d.mutated)
+            if detected <= filter_layer:
+                filtered.append(d)
+        discrepancies = filtered
+        print(f"Filtered to {len(discrepancies)} discrepancies")
+
+    return discrepancies
+
+
+def parse_layer_spec(spec: str) -> int:
+    """Parse a layer spec like '5', 'words', 'commands' to an int."""
+    from .generator import LAYER_PRESETS
+
+    if spec in LAYER_PRESETS:
+        return LAYER_PRESETS[spec]
+    return int(spec)

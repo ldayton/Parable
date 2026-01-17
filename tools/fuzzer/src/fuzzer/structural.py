@@ -18,7 +18,9 @@ from .common import (
     Discrepancy,
     find_test_files,
     normalize,
+    parse_layer_spec,
     parse_test_file,
+    post_process_discrepancies,
     run_oracle,
     run_parable,
 )
@@ -243,6 +245,15 @@ def main():
         action="store_true",
         help="List available transforms and exit",
     )
+    parser.add_argument(
+        "--minimize",
+        action="store_true",
+        help="Minimize discrepancies before output",
+    )
+    parser.add_argument(
+        "--filter-layer",
+        help="Only show discrepancies at or below this layer (implies --minimize)",
+    )
     args = parser.parse_args()
 
     if args.list_transforms:
@@ -313,6 +324,9 @@ def main():
 
     print(f"\nChecked {checked} transformations")
     print(f"Found {len(discrepancies)} unique discrepancies")
+
+    filter_layer = parse_layer_spec(args.filter_layer) if args.filter_layer else None
+    discrepancies = post_process_discrepancies(discrepancies, args.minimize, filter_layer)
 
     both_ok = [
         d for d in discrepancies if d.parable_result != "<error>" and d.oracle_result != "<error>"

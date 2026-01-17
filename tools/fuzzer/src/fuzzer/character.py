@@ -23,7 +23,9 @@ from .common import (
     Discrepancy,
     find_test_files,
     normalize,
+    parse_layer_spec,
     parse_test_file,
+    post_process_discrepancies,
     run_oracle,
     run_parable,
 )
@@ -162,6 +164,15 @@ def main():
         type=int,
         help="Stop after finding N unique discrepancies",
     )
+    parser.add_argument(
+        "--minimize",
+        action="store_true",
+        help="Minimize discrepancies before output",
+    )
+    parser.add_argument(
+        "--filter-layer",
+        help="Only show discrepancies at or below this layer (implies --minimize)",
+    )
     args = parser.parse_args()
 
     if args.seed is not None:
@@ -214,7 +225,10 @@ def main():
     # Report
     print(f"\nFound {len(discrepancies)} unique discrepancies in {args.iterations} iterations")
 
-    # Categorize
+    filter_layer = parse_layer_spec(args.filter_layer) if args.filter_layer else None
+    discrepancies = post_process_discrepancies(discrepancies, args.minimize, filter_layer)
+
+    # Categorize (after post-processing)
     both_ok = [
         d for d in discrepancies if d.parable_result != "<error>" and d.oracle_result != "<error>"
     ]

@@ -767,6 +767,46 @@ class Lexer {
 		return (this._parser_state & flag) !== 0;
 	}
 
+	_readAnsiCQuote() {
+		let ch, content, content_chars, found_close, node, start, text;
+		if (this.atEnd() || this.peek() !== "$") {
+			return [null, ""];
+		}
+		if (this.pos + 1 >= this.length || this.source[this.pos + 1] !== "'") {
+			return [null, ""];
+		}
+		start = this.pos;
+		this.advance();
+		this.advance();
+		content_chars = [];
+		found_close = false;
+		while (!this.atEnd()) {
+			ch = this.peek();
+			if (ch === "'") {
+				this.advance();
+				found_close = true;
+				break;
+			} else if (ch === "\\") {
+				// Escape sequence - include both backslash and following char
+				content_chars.push(this.advance());
+				if (!this.atEnd()) {
+					content_chars.push(this.advance());
+				}
+			} else {
+				content_chars.push(this.advance());
+			}
+		}
+		if (!found_close) {
+			// Unterminated - reset and return None
+			this.pos = start;
+			return [null, ""];
+		}
+		text = this.source.slice(start, this.pos);
+		content = content_chars.join("");
+		node = new AnsiCQuote(content);
+		return [node, text];
+	}
+
 	// Reserved words mapping
 	classifyWord(word, reserved_ok) {
 		if (reserved_ok && this.RESERVED_WORDS.includes(word)) {
@@ -9584,42 +9624,11 @@ class Parser {
 	}
 
 	_parseAnsiCQuote() {
-		let ch, content, content_chars, found_close, start, text;
-		if (this.atEnd() || this.peek() !== "$") {
-			return [null, ""];
-		}
-		if (this.pos + 1 >= this.length || this.source[this.pos + 1] !== "'") {
-			return [null, ""];
-		}
-		start = this.pos;
-		this.advance();
-		this.advance();
-		content_chars = [];
-		found_close = false;
-		while (!this.atEnd()) {
-			ch = this.peek();
-			if (ch === "'") {
-				this.advance();
-				found_close = true;
-				break;
-			} else if (ch === "\\") {
-				// Escape sequence - include both backslash and following char in content
-				content_chars.push(this.advance());
-				if (!this.atEnd()) {
-					content_chars.push(this.advance());
-				}
-			} else {
-				content_chars.push(this.advance());
-			}
-		}
-		if (!found_close) {
-			// Unterminated - reset and return None
-			this.pos = start;
-			return [null, ""];
-		}
-		text = this.source.slice(start, this.pos);
-		content = content_chars.join("");
-		return [new AnsiCQuote(content), text];
+		let result;
+		this._syncLexer();
+		result = this._lexer._readAnsiCQuote();
+		this._syncParser();
+		return result;
 	}
 
 	_parseLocaleString() {

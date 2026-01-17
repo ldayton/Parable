@@ -759,6 +759,43 @@ class Lexer:
         """Check if a parser state flag is set."""
         return (self._parser_state & flag) != 0
 
+    def _read_ansi_c_quote(self) -> tuple["Node | None", str]:
+        """Read ANSI-C quoting $'...'.
+
+        Returns (node, text) where node is the AST node and text is the raw text.
+        Returns (None, "") if not a valid ANSI-C quote.
+        """
+        if self.at_end() or self.peek() != "$":
+            return None, ""
+        if self.pos + 1 >= self.length or self.source[self.pos + 1] != "'":
+            return None, ""
+        start = self.pos
+        self.advance()  # consume $
+        self.advance()  # consume opening '
+        content_chars: list[str] = []
+        found_close = False
+        while not self.at_end():
+            ch = self.peek()
+            if ch == "'":
+                self.advance()  # consume closing '
+                found_close = True
+                break
+            elif ch == "\\":
+                # Escape sequence - include both backslash and following char
+                content_chars.append(self.advance())  # backslash
+                if not self.at_end():
+                    content_chars.append(self.advance())  # escaped char
+            else:
+                content_chars.append(self.advance())
+        if not found_close:
+            # Unterminated - reset and return None
+            self.pos = start
+            return None, ""
+        text = _substring(self.source, start, self.pos)
+        content = "".join(content_chars)
+        node = AnsiCQuote(content)
+        return node, text
+
     # Reserved words mapping
     RESERVED_WORDS: dict[str, int] = {
         "if": TokenType.IF,
@@ -7958,43 +7995,11 @@ class Parser:
         return ArithDeprecated(content), text
 
     def _parse_ansi_c_quote(self) -> tuple[Node | None, str]:
-        """Parse ANSI-C quoting $'...'.
-
-        Returns (node, text) where node is the AST node and text is the raw text.
-        Returns (None, "") if not a valid ANSI-C quote.
-        """
-        if self.at_end() or self.peek() != "$":
-            return None, ""
-        if self.pos + 1 >= self.length or self.source[self.pos + 1] != "'":
-            return None, ""
-
-        start = self.pos
-        self.advance()  # consume $
-        self.advance()  # consume opening '
-
-        content_chars = []
-        found_close = False
-        while not self.at_end():
-            ch = self.peek()
-            if ch == "'":
-                self.advance()  # consume closing '
-                found_close = True
-                break
-            elif ch == "\\":
-                # Escape sequence - include both backslash and following char in content
-                content_chars.append(self.advance())  # backslash
-                if not self.at_end():
-                    content_chars.append(self.advance())  # escaped char
-            else:
-                content_chars.append(self.advance())
-        if not found_close:
-            # Unterminated - reset and return None
-            self.pos = start
-            return None, ""
-
-        text = _substring(self.source, start, self.pos)
-        content = "".join(content_chars)
-        return AnsiCQuote(content), text
+        """Parse ANSI-C quoting $'...'. Delegates to Lexer."""
+        self._sync_lexer()
+        result = self._lexer._read_ansi_c_quote()
+        self._sync_parser()
+        return result
 
     def _parse_locale_string(self) -> tuple[Node | None, str, list[Node]]:
         """Parse locale translation $"...".

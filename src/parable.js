@@ -11990,19 +11990,6 @@ class Parser {
 		return new Select(var_name, words, body, this._collectRedirects());
 	}
 
-	_isCaseTerminator() {
-		let next_ch;
-		if (this.atEnd() || this.peek() !== ";") {
-			return false;
-		}
-		if (this.pos + 1 >= this.length) {
-			return false;
-		}
-		next_ch = this.source[this.pos + 1];
-		// ;; or ;& or ;;& (which is actually ;;&)
-		return _isSemicolonOrAmp(next_ch);
-	}
-
 	_consumeCaseTerminator() {
 		let term;
 		term = this._lexPeekCaseTerminator();
@@ -12270,13 +12257,13 @@ class Parser {
 			this.skipWhitespace();
 			body = null;
 			// Check for empty body: terminator right after pattern
-			is_empty_body = this._isCaseTerminator();
+			is_empty_body = this._lexPeekCaseTerminator() != null;
 			if (!is_empty_body) {
 				// Skip newlines and check if there's content before terminator or esac
 				this.skipWhitespaceAndNewlines();
 				if (!this.atEnd() && !this._lexIsAtReservedWord("esac")) {
 					// Check again for terminator after whitespace/newlines
-					is_at_terminator = this._isCaseTerminator();
+					is_at_terminator = this._lexPeekCaseTerminator() != null;
 					if (!is_at_terminator) {
 						body = this.parseListUntil(new Set(["esac"]));
 						this.skipWhitespace();

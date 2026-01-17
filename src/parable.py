@@ -9907,16 +9907,6 @@ class Parser:
         body = self._parse_loop_body("select")
         return Select(var_name, words, body, self._collect_redirects())
 
-    def _is_case_terminator(self) -> bool:
-        """Check if we're at a case pattern terminator (;;, ;&, or ;;&)."""
-        if self.at_end() or self.peek() != ";":
-            return False
-        if self.pos + 1 >= self.length:
-            return False
-        next_ch = self.source[self.pos + 1]
-        # ;; or ;& or ;;& (which is actually ;;&)
-        return _is_semicolon_or_amp(next_ch)
-
     def _consume_case_terminator(self) -> str:
         """Consume and return case pattern terminator (;;, ;&, or ;;&)."""
         term = self._lex_peek_case_terminator()
@@ -10128,14 +10118,14 @@ class Parser:
 
             body = None
             # Check for empty body: terminator right after pattern
-            is_empty_body = self._is_case_terminator()
+            is_empty_body = self._lex_peek_case_terminator() is not None
 
             if not is_empty_body:
                 # Skip newlines and check if there's content before terminator or esac
                 self.skip_whitespace_and_newlines()
                 if not self.at_end() and not self._lex_is_at_reserved_word("esac"):
                     # Check again for terminator after whitespace/newlines
-                    is_at_terminator = self._is_case_terminator()
+                    is_at_terminator = self._lex_peek_case_terminator() is not None
                     if not is_at_terminator:
                         body = self.parse_list_until({"esac"})
                         self.skip_whitespace()

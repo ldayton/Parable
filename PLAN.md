@@ -59,6 +59,10 @@ This eliminated ~550 lines of scanning code from `_parse_command_substitution` a
 - `_read_ansi_c_quote` ✓
 - `_read_locale_string` ✓
 - `_read_param_expansion` (+ helpers) ✓
+- `_read_single_quote` ✓
+- `_is_word_terminator` ✓
+- `_read_bracket_expression` ✓
+- `_read_word_internal` ✓ (with callbacks to Parser for nested parsing)
 
 ### Parser State Flags in Use
 - `PST_CASEPAT` - set in `parse_case()` ✓
@@ -92,30 +96,200 @@ This works because `_lex_peek_token()` doesn't advance Parser position - only `_
 - `_parse_simple_pipeline()` - uses `_lex_peek_operator()` for pipe detection ✓
 - `parse_pipeline()` - uses `_lex_is_at_reserved_word()` for time/! detection ✓
 
+**Word parsing now in Lexer:**
+- `parse_word()` delegates to `Lexer._read_word_internal()` via callbacks
+- Parser methods (`_parse_command_substitution`, etc.) called back from Lexer as needed
+
 **Remaining character-based:**
-- `parse_word()` / `_parse_word_internal()` - full expansion parsing
 - Newline handling in `parse_list()` - special heredoc/separator logic
 
 ---
 
-## Progress on Path A
+## Full Architectural Consistency Plan
 
-### Completed Steps
-1. ✓ Move remaining expansion methods to Lexer (ansi_c_quote, locale_string, param_expansion)
-2. ✓ EOF token mechanism implemented for command/process substitution
-3. ✓ `parse_command()` now token-based for terminator detection (hybrid approach)
+### Goal
+Parser consumes tokens exclusively. No character-level parsing in Parser.
 
-### Remaining Work
-- Move `_parse_word_internal` to Lexer (optional - hybrid approach may be sufficient)
-- Full token-based parsing for word consumption (if needed)
+```python
+# Target architecture:
+def parse_command(self):
+    while True:
+        tok = self._lex_peek_token()
+        if tok.type in TERMINATORS:
+            break
+        if tok.type == TokenType.WORD:
+            self._lex_next_token()
+            word = tok.word  # Word object with expansions
+            words.append(word)
+```
 
-### Architecture Notes
-The **hybrid approach** works well:
-- Token-based terminator detection enables EOF token mechanism
-- Character-based word parsing handles complex expansion logic
-- Position syncing (`_sync_lexer()`, `_sync_parser()`) bridges the two modes
+---
 
-Moving `_parse_word_internal` to Lexer would require extensive callback usage since expansion parsing (especially command substitution) needs `parse_list()`. The hybrid approach avoids this complexity while still achieving the key goal: proper tokenizer-parser separation for terminators.
+### Phase 1: Move Word Parsing Helpers to Lexer
+
+**Already done:**
+- `_read_ansi_c_quote` ✓
+- `_read_locale_string` ✓
+- `_read_param_expansion` ✓
+
+**To move (simple, no parse_list dependency):**
+
+| Method | Lines | Complexity | Notes |
+|--------|-------|------------|-------|
+| `_is_word_terminator` | 40 | Low | Context-sensitive termination logic |
+| `_scan_single_quote` | 12 | Low | Just scans to closing `'` |
+| `_scan_bracket_expression` | 90 | Medium | `[...]` for globs/regex |
+
+**Stays in Parser (needs parse_list):**
+- `_parse_command_substitution` - uses EOF token + parse_list
+- `_parse_process_substitution` - uses EOF token + parse_list
+- `_parse_backtick_substitution` - escape processing + sub-parser
+- `_parse_arithmetic_expansion` - separate arith parser
+- `_parse_array_literal` - loops calling parse_word
+
+---
+
+### Phase 2: Move `_parse_word_internal` to Lexer
+
+Create `Lexer._read_word_internal()` (~300 lines) with callbacks:
+
+```python
+class Lexer:
+    def _read_word_internal(self, ctx: int, ...) -> Word | None:
+        chars = []
+        parts = []
+        while not self.at_end():
+            ch = self.peek()
+            # ... existing logic ...
+
+            # For expansions needing Parser:
+            if ch == "$" and self._peek_next() == "(":
+                self._sync_to_parser()
+                node, text = self._parser._parse_command_substitution()
+                self._sync_from_parser()
+                if node:
+                    parts.append(node)
+                    chars.append(text)
+                continue
+            # ... etc ...
+        return Word("".join(chars), parts if parts else None)
+```
+
+**Callback pattern (already established):**
+```python
+self._sync_to_parser()           # Lexer.pos → Parser.pos
+result = self._parser.method()   # Call Parser method
+self._sync_from_parser()         # Parser.pos → Lexer.pos
+```
+
+---
+
+### Phase 3: Update Token to Carry Word
+
+```python
+class Token:
+    type: int
+    value: str
+    pos: int
+    word: Word | None = None  # NEW: parsed Word object for WORD tokens
+```
+
+Update `Lexer._read_word()`:
+```python
+def _read_word(self) -> Token | None:
+    word = self._read_word_internal(WORD_CTX_NORMAL)
+    if word is None:
+        return None
+    return Token(TokenType.WORD, word.value, start, word=word)
+```
+
+---
+
+### Phase 4: Update Parser to Consume Word Tokens
+
+```python
+def parse_word(self, at_command_start=False, in_array_literal=False) -> Word | None:
+    self.skip_whitespace()
+    tok = self._lex_peek_token()
+    if tok.type != TokenType.WORD:
+        return None
+    self._lex_next_token()  # Consume the token
+    return tok.word
+```
+
+**Methods to update:**
+- `parse_command()` - use `tok.word` instead of `parse_word()`
+- `parse_for()`, `parse_case()`, etc. - same pattern
+- `_parse_array_literal()` - needs special handling (Lexer callback)
+
+---
+
+### Phase 5: Handle Context-Sensitive Word Parsing
+
+The three word contexts need different handling:
+
+| Context | Where Used | Termination Rules |
+|---------|------------|-------------------|
+| `WORD_CTX_NORMAL` | Commands, assignments | Metacharacters terminate |
+| `WORD_CTX_COND` | Inside `[[ ]]` | `]]`, `&&`, `\|\|` terminate |
+| `WORD_CTX_REGEX` | RHS of `=~` | `]]`, whitespace terminate |
+
+**Option A:** Lexer checks Parser state flags to determine context
+```python
+def _read_word_internal(self):
+    if self._parser_state & PST_CONDEXPR:
+        ctx = WORD_CTX_COND
+    elif self._parser_state & PST_REGEXP:
+        ctx = WORD_CTX_REGEX
+    else:
+        ctx = WORD_CTX_NORMAL
+```
+
+**Option B:** Parser tells Lexer which context via method parameter
+```python
+def _lex_next_word(self, ctx: int) -> Word | None:
+    self._sync_lexer()
+    self._lexer._word_context = ctx
+    tok = self._lexer.next_token()
+    ...
+```
+
+---
+
+### Execution Order
+
+1. **Phase 1a:** Move `_scan_single_quote` to Lexer ✓
+2. **Phase 1b:** Move `_is_word_terminator` to Lexer ✓
+3. **Phase 1c:** Move `_scan_bracket_expression` to Lexer ✓
+4. **Phase 2:** Move `_parse_word_internal` to Lexer as `_read_word_internal` ✓
+5. **Phase 3:** Add `word` field to Token class ✓
+6. **Phase 4:** ~~Update `parse_word()` to consume tokens~~ (Deferred - see note)
+7. **Phase 5:** ~~Handle context-sensitive cases~~ (Deferred - see note)
+
+**Note on Phases 4-5:** These phases would require `Lexer._read_word()` to call
+`_read_word_internal()`, but this creates infinite recursion: `_read_word_internal()`
+uses callbacks to Parser methods like `_parse_dollar_expansion()`, which eventually
+call back to Lexer. The current hybrid approach works well:
+- Token-based: terminators, operators, reserved words
+- Lexer-based: word parsing via `_read_word_internal()` with Parser callbacks
+
+---
+
+### Risk Mitigation
+
+- **Test after each phase** - `just test && just transpile && just test-js`
+- **Keep old methods temporarily** - delete only after new ones proven
+- **Incremental PRs** - one phase per PR for easy rollback
+
+---
+
+### Success Criteria
+
+1. ~~`parse_command()` never calls `self.peek()` or `self.advance()`~~ (Hybrid approach)
+2. All word parsing goes through `Lexer._read_word_internal()` ✓
+3. Token.word field available for future use ✓
+4. All 4515+ tests pass ✓
+5. Fuzzer finds no new differences
 
 ---
 
@@ -148,7 +322,10 @@ Moving `_parse_word_internal` to Lexer would require extensive callback usage si
 | `_parse_arithmetic_expansion`  | Uses separate arithmetic parser              |
 | `_parse_array_literal`         | `=(...)` may contain command subs            |
 | `_parse_dollar_expansion`      | dispatcher for above                         |
-| `_parse_word_internal`         | orchestrates all expansion methods           |
+| `_parse_word_internal`         | ✓ Delegates to `Lexer._read_word_internal()` |
+| `_scan_single_quote`           | ✓ Delegates to `Lexer._read_single_quote()`  |
+| `_is_word_terminator`          | ✓ Delegates to `Lexer._is_word_terminator()` |
+| `_scan_bracket_expression`     | ✓ Delegates to `Lexer._read_bracket_expression()` |
 
 ---
 

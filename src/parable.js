@@ -146,14 +146,18 @@ class TokenType {
 }
 
 class Token {
-	constructor(type_, value, pos, parts) {
+	constructor(type_, value, pos, parts, word) {
 		this.type = type_;
 		this.value = value;
 		this.pos = pos;
 		this.parts = parts != null ? parts : [];
+		this.word = word;
 	}
 
 	_repr() {
+		if (this.word) {
+			return `Token(${this.type}, ${this.value}, ${this.pos}, word=${this.word})`;
+		}
 		if (this.parts && this.parts.length) {
 			return `Token(${this.type}, ${this.value}, ${this.pos}, parts=${this.parts.length})`;
 		}
@@ -683,6 +687,721 @@ class Lexer {
 			}
 		}
 		return chars.join("");
+	}
+
+	_readSingleQuote(start) {
+		let c, chars, saw_newline;
+		chars = ["'"];
+		saw_newline = false;
+		while (this.pos < this.length) {
+			c = this.source[this.pos];
+			if (c === "\n") {
+				saw_newline = true;
+			}
+			chars.push(c);
+			this.pos += 1;
+			if (c === "'") {
+				return [chars.join(""), saw_newline];
+			}
+		}
+		throw new ParseError("Unterminated single quote", start);
+	}
+
+	_isWordTerminator(ctx, ch, bracket_depth, paren_depth) {
+		if (bracket_depth == null) {
+			bracket_depth = 0;
+		}
+		if (paren_depth == null) {
+			paren_depth = 0;
+		}
+		if (ctx === WORD_CTX_REGEX) {
+			if (
+				ch === "]" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "]"
+			) {
+				return true;
+			}
+			if (
+				ch === "&" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "&"
+			) {
+				return true;
+			}
+			if (ch === ")" && paren_depth === 0) {
+				return true;
+			}
+			return _isWhitespace(ch) && paren_depth === 0;
+		}
+		if (ctx === WORD_CTX_COND) {
+			if (
+				ch === "]" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "]"
+			) {
+				return true;
+			}
+			// ) always terminates, but ( is handled in the loop for extglob
+			if (ch === ")") {
+				return true;
+			}
+			if (
+				ch === "&" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "&"
+			) {
+				return true;
+			}
+			if (
+				ch === "|" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "|"
+			) {
+				return true;
+			}
+			if (ch === ";") {
+				return true;
+			}
+			// < and > terminate unless followed by ( (process sub)
+			if (
+				_isRedirectChar(ch) &&
+				!(this.pos + 1 < this.length && this.source[this.pos + 1] === "(")
+			) {
+				return true;
+			}
+			return _isWhitespaceNoNewline(ch);
+		}
+		// WORD_CTX_NORMAL
+		// < and > don't terminate if followed by ( (process substitution)
+		if (
+			_isRedirectChar(ch) &&
+			this.pos + 1 < this.length &&
+			this.source[this.pos + 1] === "("
+		) {
+			return false;
+		}
+		return _isMetachar(ch) && bracket_depth === 0;
+	}
+
+	_readBracketExpression(chars, parts, for_regex, paren_depth) {
+		let bracket_will_close, c, next_ch, sc, scan;
+		if (for_regex == null) {
+			for_regex = false;
+		}
+		if (paren_depth == null) {
+			paren_depth = 0;
+		}
+		if (for_regex) {
+			// Regex mode: lookahead to check if bracket will close before terminators
+			scan = this.pos + 1;
+			if (scan < this.length && this.source[scan] === "^") {
+				scan += 1;
+			}
+			if (scan < this.length && this.source[scan] === "]") {
+				scan += 1;
+			}
+			bracket_will_close = false;
+			while (scan < this.length) {
+				sc = this.source[scan];
+				if (
+					sc === "]" &&
+					scan + 1 < this.length &&
+					this.source[scan + 1] === "]"
+				) {
+					break;
+				}
+				if (sc === ")" && paren_depth > 0) {
+					break;
+				}
+				if (
+					sc === "&" &&
+					scan + 1 < this.length &&
+					this.source[scan + 1] === "&"
+				) {
+					break;
+				}
+				if (sc === "]") {
+					bracket_will_close = true;
+					break;
+				}
+				if (
+					sc === "[" &&
+					scan + 1 < this.length &&
+					this.source[scan + 1] === ":"
+				) {
+					scan += 2;
+					while (
+						scan < this.length &&
+						!(
+							this.source[scan] === ":" &&
+							scan + 1 < this.length &&
+							this.source[scan + 1] === "]"
+						)
+					) {
+						scan += 1;
+					}
+					if (scan < this.length) {
+						scan += 2;
+					}
+					continue;
+				}
+				scan += 1;
+			}
+			if (!bracket_will_close) {
+				return false;
+			}
+		} else {
+			// Cond mode: check for [ followed by whitespace/operators
+			if (this.pos + 1 >= this.length) {
+				return false;
+			}
+			next_ch = this.source[this.pos + 1];
+			if (
+				_isWhitespaceNoNewline(next_ch) ||
+				next_ch === "&" ||
+				next_ch === "|"
+			) {
+				return false;
+			}
+		}
+		chars.push(this.advance());
+		// Handle negation [^
+		if (!this.atEnd() && this.peek() === "^") {
+			chars.push(this.advance());
+		}
+		// Handle ] as first char (literal ])
+		if (!this.atEnd() && this.peek() === "]") {
+			chars.push(this.advance());
+		}
+		// Consume until closing ]
+		while (!this.atEnd()) {
+			c = this.peek();
+			if (c === "]") {
+				chars.push(this.advance());
+				break;
+			}
+			if (
+				c === "[" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === ":"
+			) {
+				chars.push(this.advance());
+				chars.push(this.advance());
+				while (
+					!this.atEnd() &&
+					!(
+						this.peek() === ":" &&
+						this.pos + 1 < this.length &&
+						this.source[this.pos + 1] === "]"
+					)
+				) {
+					chars.push(this.advance());
+				}
+				if (!this.atEnd()) {
+					chars.push(this.advance());
+					chars.push(this.advance());
+				}
+			} else if (
+				!for_regex &&
+				c === "[" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "="
+			) {
+				chars.push(this.advance());
+				chars.push(this.advance());
+				while (
+					!this.atEnd() &&
+					!(
+						this.peek() === "=" &&
+						this.pos + 1 < this.length &&
+						this.source[this.pos + 1] === "]"
+					)
+				) {
+					chars.push(this.advance());
+				}
+				if (!this.atEnd()) {
+					chars.push(this.advance());
+					chars.push(this.advance());
+				}
+			} else if (
+				!for_regex &&
+				c === "[" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "."
+			) {
+				chars.push(this.advance());
+				chars.push(this.advance());
+				while (
+					!this.atEnd() &&
+					!(
+						this.peek() === "." &&
+						this.pos + 1 < this.length &&
+						this.source[this.pos + 1] === "]"
+					)
+				) {
+					chars.push(this.advance());
+				}
+				if (!this.atEnd()) {
+					chars.push(this.advance());
+					chars.push(this.advance());
+				}
+			} else if (for_regex && c === "$") {
+				// Callback to Parser for dollar expansion
+				this._syncToParser();
+				if (!this._parser._parseDollarExpansion(chars, parts)) {
+					this._syncFromParser();
+					chars.push(this.advance());
+				} else {
+					this._syncFromParser();
+				}
+			} else {
+				chars.push(this.advance());
+			}
+		}
+		return true;
+	}
+
+	_readWordInternal(ctx, at_command_start, in_array_literal) {
+		let ansi_result,
+			array_result,
+			bracket_depth,
+			c,
+			ch,
+			chars,
+			cmdsub_result,
+			content,
+			depth,
+			extglob_depth,
+			for_regex,
+			handle_line_continuation,
+			in_single_in_dquote,
+			inner_paren_depth,
+			locale_result,
+			next_c,
+			next_ch,
+			paren_depth,
+			parts,
+			pc,
+			prev_char,
+			procsub_result,
+			saw_newline,
+			seen_equals,
+			start,
+			track_newline;
+		if (at_command_start == null) {
+			at_command_start = false;
+		}
+		if (in_array_literal == null) {
+			in_array_literal = false;
+		}
+		start = this.pos;
+		chars = [];
+		parts = [];
+		bracket_depth = 0;
+		seen_equals = false;
+		paren_depth = 0;
+		while (!this.atEnd()) {
+			ch = this.peek();
+			// REGEX: Backslash-newline continuation (check first)
+			if (ctx === WORD_CTX_REGEX) {
+				if (
+					ch === "\\" &&
+					this.pos + 1 < this.length &&
+					this.source[this.pos + 1] === "\n"
+				) {
+					this.advance();
+					this.advance();
+					continue;
+				}
+			}
+			// Check termination for COND and REGEX contexts (NORMAL checks at end)
+			if (
+				ctx !== WORD_CTX_NORMAL &&
+				this._isWordTerminator(ctx, ch, bracket_depth, paren_depth)
+			) {
+				break;
+			}
+			// NORMAL: Array subscript tracking
+			if (ctx === WORD_CTX_NORMAL && ch === "[") {
+				if (bracket_depth > 0) {
+					bracket_depth += 1;
+					chars.push(this.advance());
+					continue;
+				}
+				if (
+					chars &&
+					at_command_start &&
+					!seen_equals &&
+					_isArrayAssignmentPrefix(chars)
+				) {
+					prev_char = chars[chars.length - 1];
+					if (/^[a-zA-Z0-9]$/.test(prev_char) || prev_char === "_") {
+						bracket_depth += 1;
+						chars.push(this.advance());
+						continue;
+					}
+				}
+				if (chars.length === 0 && !seen_equals && in_array_literal) {
+					bracket_depth += 1;
+					chars.push(this.advance());
+					continue;
+				}
+			}
+			if (ctx === WORD_CTX_NORMAL && ch === "]" && bracket_depth > 0) {
+				bracket_depth -= 1;
+				chars.push(this.advance());
+				continue;
+			}
+			if (ctx === WORD_CTX_NORMAL && ch === "=" && bracket_depth === 0) {
+				seen_equals = true;
+			}
+			// REGEX: Track paren depth
+			if (ctx === WORD_CTX_REGEX && ch === "(") {
+				paren_depth += 1;
+				chars.push(this.advance());
+				continue;
+			}
+			if (ctx === WORD_CTX_REGEX && ch === ")") {
+				if (paren_depth > 0) {
+					paren_depth -= 1;
+					chars.push(this.advance());
+					continue;
+				}
+				break;
+			}
+			// COND/REGEX: Bracket expressions
+			if ([WORD_CTX_COND, WORD_CTX_REGEX].includes(ctx) && ch === "[") {
+				for_regex = ctx === WORD_CTX_REGEX;
+				if (this._readBracketExpression(chars, parts, for_regex, paren_depth)) {
+					continue;
+				}
+				chars.push(this.advance());
+				continue;
+			}
+			// COND: Extglob patterns or ( terminates
+			if (ctx === WORD_CTX_COND && ch === "(") {
+				if (chars.length > 0 && _isExtglobPrefix(chars[chars.length - 1])) {
+					chars.push(this.advance());
+					depth = 1;
+					while (!this.atEnd() && depth > 0) {
+						c = this.peek();
+						if (c === "(") {
+							depth += 1;
+						} else if (c === ")") {
+							depth -= 1;
+						}
+						chars.push(this.advance());
+					}
+					continue;
+				} else {
+					// ( without extglob prefix terminates the word
+					break;
+				}
+			}
+			// REGEX: Space inside parens is part of pattern
+			if (ctx === WORD_CTX_REGEX && _isWhitespace(ch) && paren_depth > 0) {
+				chars.push(this.advance());
+				continue;
+			}
+			// Single-quoted string
+			if (ch === "'") {
+				this.advance();
+				track_newline = ctx === WORD_CTX_NORMAL;
+				[content, saw_newline] = this._readSingleQuote(start);
+				chars.push(content);
+				if (track_newline && saw_newline && this._parser != null) {
+					this._parser._saw_newline_in_single_quote = true;
+				}
+				continue;
+			}
+			// Double-quoted string
+			if (ch === '"') {
+				this.advance();
+				if (ctx === WORD_CTX_NORMAL) {
+					// NORMAL has special in_single_in_dquote and backtick handling
+					chars.push('"');
+					in_single_in_dquote = false;
+					while (
+						!this.atEnd() &&
+						(in_single_in_dquote || this.peek() !== '"')
+					) {
+						c = this.peek();
+						if (in_single_in_dquote) {
+							chars.push(this.advance());
+							if (c === "'") {
+								in_single_in_dquote = false;
+							}
+							continue;
+						}
+						if (c === "\\" && this.pos + 1 < this.length) {
+							next_c = this.source[this.pos + 1];
+							if (next_c === "\n") {
+								this.advance();
+								this.advance();
+							} else {
+								chars.push(this.advance());
+								chars.push(this.advance());
+							}
+						} else if (c === "$") {
+							// Callback to Parser for dollar expansion
+							this._syncToParser();
+							if (!this._parser._parseDollarExpansion(chars, parts)) {
+								this._syncFromParser();
+								chars.push(this.advance());
+							} else {
+								this._syncFromParser();
+							}
+						} else if (c === "`") {
+							// Callback to Parser for backtick substitution
+							this._syncToParser();
+							cmdsub_result = this._parser._parseBacktickSubstitution();
+							this._syncFromParser();
+							if (cmdsub_result[0]) {
+								parts.push(cmdsub_result[0]);
+								chars.push(cmdsub_result[1]);
+							} else {
+								chars.push(this.advance());
+							}
+						} else {
+							chars.push(this.advance());
+						}
+					}
+					if (this.atEnd()) {
+						throw new ParseError("Unterminated double quote", start);
+					}
+					chars.push(this.advance());
+				} else {
+					// COND/REGEX modes - callback to Parser's _scan_double_quote
+					handle_line_continuation = ctx === WORD_CTX_COND;
+					this._syncToParser();
+					this._parser._scanDoubleQuote(
+						chars,
+						parts,
+						start,
+						handle_line_continuation,
+					);
+					this._syncFromParser();
+				}
+				continue;
+			}
+			// Escape
+			if (ch === "\\" && this.pos + 1 < this.length) {
+				next_ch = this.source[this.pos + 1];
+				if (ctx !== WORD_CTX_REGEX && next_ch === "\n") {
+					this.advance();
+					this.advance();
+				} else {
+					chars.push(this.advance());
+					chars.push(this.advance());
+				}
+				continue;
+			}
+			// NORMAL/COND: ANSI-C quoting $'...'
+			if (
+				ctx !== WORD_CTX_REGEX &&
+				ch === "$" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "'"
+			) {
+				ansi_result = this._readAnsiCQuote();
+				if (ansi_result[0]) {
+					parts.push(ansi_result[0]);
+					chars.push(ansi_result[1]);
+				} else {
+					chars.push(this.advance());
+				}
+				continue;
+			}
+			// NORMAL/COND: Locale translation $"..."
+			if (
+				ctx !== WORD_CTX_REGEX &&
+				ch === "$" &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === '"'
+			) {
+				locale_result = this._readLocaleString();
+				if (locale_result[0]) {
+					parts.push(locale_result[0]);
+					parts.push(...locale_result[2]);
+					chars.push(locale_result[1]);
+				} else {
+					chars.push(this.advance());
+				}
+				continue;
+			}
+			// Dollar expansions - callback to Parser
+			if (ch === "$") {
+				this._syncToParser();
+				if (!this._parser._parseDollarExpansion(chars, parts)) {
+					this._syncFromParser();
+					chars.push(this.advance());
+				} else {
+					this._syncFromParser();
+				}
+				continue;
+			}
+			// NORMAL/COND: Backtick command substitution - callback to Parser
+			if (ctx !== WORD_CTX_REGEX && ch === "`") {
+				this._syncToParser();
+				cmdsub_result = this._parser._parseBacktickSubstitution();
+				this._syncFromParser();
+				if (cmdsub_result[0]) {
+					parts.push(cmdsub_result[0]);
+					chars.push(cmdsub_result[1]);
+				} else {
+					chars.push(this.advance());
+				}
+				continue;
+			}
+			// NORMAL/COND: Process substitution <(...) or >(...) - callback to Parser
+			if (
+				ctx !== WORD_CTX_REGEX &&
+				_isRedirectChar(ch) &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "("
+			) {
+				this._syncToParser();
+				procsub_result = this._parser._parseProcessSubstitution();
+				this._syncFromParser();
+				if (procsub_result[0]) {
+					parts.push(procsub_result[0]);
+					chars.push(procsub_result[1]);
+				} else if (procsub_result[1]) {
+					chars.push(procsub_result[1]);
+				} else {
+					chars.push(this.advance());
+					if (ctx === WORD_CTX_NORMAL) {
+						chars.push(this.advance());
+					}
+				}
+				continue;
+			}
+			// NORMAL: Array literal - callback to Parser
+			if (
+				ctx === WORD_CTX_NORMAL &&
+				ch === "(" &&
+				chars &&
+				bracket_depth === 0
+			) {
+				if (
+					chars[chars.length - 1] === "=" ||
+					(chars.length >= 2 &&
+						chars[chars.length - 2] === "+" &&
+						chars[chars.length - 1] === "=")
+				) {
+					this._syncToParser();
+					array_result = this._parser._parseArrayLiteral();
+					this._syncFromParser();
+					if (array_result[0]) {
+						parts.push(array_result[0]);
+						chars.push(array_result[1]);
+					} else {
+						break;
+					}
+					continue;
+				}
+			}
+			// NORMAL: Extglob pattern @(), ?(), *(), +(), !()
+			if (
+				ctx === WORD_CTX_NORMAL &&
+				_isExtglobPrefix(ch) &&
+				this.pos + 1 < this.length &&
+				this.source[this.pos + 1] === "("
+			) {
+				chars.push(this.advance());
+				chars.push(this.advance());
+				extglob_depth = 1;
+				while (!this.atEnd() && extglob_depth > 0) {
+					c = this.peek();
+					if (c === ")") {
+						chars.push(this.advance());
+						extglob_depth -= 1;
+					} else if (c === "(") {
+						chars.push(this.advance());
+						extglob_depth += 1;
+					} else if (c === "\\") {
+						if (
+							this.pos + 1 < this.length &&
+							this.source[this.pos + 1] === "\n"
+						) {
+							this.advance();
+							this.advance();
+						} else {
+							chars.push(this.advance());
+							if (!this.atEnd()) {
+								chars.push(this.advance());
+							}
+						}
+					} else if (c === "'") {
+						chars.push(this.advance());
+						while (!this.atEnd() && this.peek() !== "'") {
+							chars.push(this.advance());
+						}
+						if (!this.atEnd()) {
+							chars.push(this.advance());
+						}
+					} else if (c === '"') {
+						chars.push(this.advance());
+						while (!this.atEnd() && this.peek() !== '"') {
+							if (this.peek() === "\\" && this.pos + 1 < this.length) {
+								chars.push(this.advance());
+							}
+							chars.push(this.advance());
+						}
+						if (!this.atEnd()) {
+							chars.push(this.advance());
+						}
+					} else if (
+						c === "$" &&
+						this.pos + 1 < this.length &&
+						this.source[this.pos + 1] === "("
+					) {
+						chars.push(this.advance());
+						chars.push(this.advance());
+						if (!this.atEnd() && this.peek() === "(") {
+							chars.push(this.advance());
+							inner_paren_depth = 2;
+							while (!this.atEnd() && inner_paren_depth > 0) {
+								pc = this.peek();
+								if (pc === "(") {
+									inner_paren_depth += 1;
+								} else if (pc === ")") {
+									inner_paren_depth -= 1;
+								}
+								chars.push(this.advance());
+							}
+						} else {
+							extglob_depth += 1;
+						}
+					} else if (
+						_isExtglobPrefix(c) &&
+						this.pos + 1 < this.length &&
+						this.source[this.pos + 1] === "("
+					) {
+						chars.push(this.advance());
+						chars.push(this.advance());
+						extglob_depth += 1;
+					} else {
+						chars.push(this.advance());
+					}
+				}
+				continue;
+			}
+			// NORMAL: Metacharacter terminates word (unless inside brackets)
+			if (ctx === WORD_CTX_NORMAL && _isMetachar(ch) && bracket_depth === 0) {
+				break;
+			}
+			// Regular character
+			chars.push(this.advance());
+		}
+		if (chars.length === 0) {
+			return null;
+		}
+		if (parts && parts.length) {
+			return new Word(chars.join(""), parts);
+		}
+		return new Word(chars.join(""), null);
 	}
 
 	_readWord() {
@@ -7645,195 +8364,36 @@ class Parser {
 	}
 
 	_scanSingleQuote(chars, start, track_newline) {
-		let c;
+		let content, saw_newline;
 		if (track_newline == null) {
 			track_newline = false;
 		}
-		chars.push("'");
-		while (!this.atEnd() && this.peek() !== "'") {
-			c = this.advance();
-			if (track_newline && c === "\n") {
-				this._saw_newline_in_single_quote = true;
-			}
-			chars.push(c);
+		this._syncLexer();
+		[content, saw_newline] = this._lexer._readSingleQuote(start);
+		this._syncParser();
+		chars.push(content);
+		if (track_newline && saw_newline) {
+			this._saw_newline_in_single_quote = true;
 		}
-		if (this.atEnd()) {
-			throw new ParseError("Unterminated single quote", start);
-		}
-		chars.push(this.advance());
 	}
 
 	_scanBracketExpression(chars, parts, for_regex, paren_depth) {
-		let bracket_will_close, c, next_ch, sc, scan;
+		let result;
 		if (for_regex == null) {
 			for_regex = false;
 		}
 		if (paren_depth == null) {
 			paren_depth = 0;
 		}
-		if (for_regex) {
-			// Regex mode: lookahead to check if bracket will close before terminators
-			scan = this.pos + 1;
-			if (scan < this.length && this.source[scan] === "^") {
-				scan += 1;
-			}
-			if (scan < this.length && this.source[scan] === "]") {
-				scan += 1;
-			}
-			bracket_will_close = false;
-			while (scan < this.length) {
-				sc = this.source[scan];
-				if (
-					sc === "]" &&
-					scan + 1 < this.length &&
-					this.source[scan + 1] === "]"
-				) {
-					break;
-				}
-				if (sc === ")" && paren_depth > 0) {
-					break;
-				}
-				if (
-					sc === "&" &&
-					scan + 1 < this.length &&
-					this.source[scan + 1] === "&"
-				) {
-					break;
-				}
-				if (sc === "]") {
-					bracket_will_close = true;
-					break;
-				}
-				if (
-					sc === "[" &&
-					scan + 1 < this.length &&
-					this.source[scan + 1] === ":"
-				) {
-					scan += 2;
-					while (
-						scan < this.length &&
-						!(
-							this.source[scan] === ":" &&
-							scan + 1 < this.length &&
-							this.source[scan + 1] === "]"
-						)
-					) {
-						scan += 1;
-					}
-					if (scan < this.length) {
-						scan += 2;
-					}
-					continue;
-				}
-				scan += 1;
-			}
-			if (!bracket_will_close) {
-				return false;
-			}
-		} else {
-			// Cond mode: check for [ followed by whitespace/operators
-			if (this.pos + 1 >= this.length) {
-				return false;
-			}
-			next_ch = this.source[this.pos + 1];
-			if (
-				_isWhitespaceNoNewline(next_ch) ||
-				next_ch === "&" ||
-				next_ch === "|"
-			) {
-				return false;
-			}
-		}
-		chars.push(this.advance());
-		// Handle negation [^
-		if (!this.atEnd() && this.peek() === "^") {
-			chars.push(this.advance());
-		}
-		// Handle ] as first char (literal ])
-		if (!this.atEnd() && this.peek() === "]") {
-			chars.push(this.advance());
-		}
-		// Consume until closing ]
-		while (!this.atEnd()) {
-			c = this.peek();
-			if (c === "]") {
-				chars.push(this.advance());
-				break;
-			}
-			if (
-				c === "[" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === ":"
-			) {
-				chars.push(this.advance());
-				chars.push(this.advance());
-				while (
-					!this.atEnd() &&
-					!(
-						this.peek() === ":" &&
-						this.pos + 1 < this.length &&
-						this.source[this.pos + 1] === "]"
-					)
-				) {
-					chars.push(this.advance());
-				}
-				if (!this.atEnd()) {
-					chars.push(this.advance());
-					chars.push(this.advance());
-				}
-			} else if (
-				!for_regex &&
-				c === "[" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "="
-			) {
-				chars.push(this.advance());
-				chars.push(this.advance());
-				while (
-					!this.atEnd() &&
-					!(
-						this.peek() === "=" &&
-						this.pos + 1 < this.length &&
-						this.source[this.pos + 1] === "]"
-					)
-				) {
-					chars.push(this.advance());
-				}
-				if (!this.atEnd()) {
-					chars.push(this.advance());
-					chars.push(this.advance());
-				}
-			} else if (
-				!for_regex &&
-				c === "[" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "."
-			) {
-				chars.push(this.advance());
-				chars.push(this.advance());
-				while (
-					!this.atEnd() &&
-					!(
-						this.peek() === "." &&
-						this.pos + 1 < this.length &&
-						this.source[this.pos + 1] === "]"
-					)
-				) {
-					chars.push(this.advance());
-				}
-				if (!this.atEnd()) {
-					chars.push(this.advance());
-					chars.push(this.advance());
-				}
-			} else if (for_regex && c === "$") {
-				if (!this._parseDollarExpansion(chars, parts)) {
-					chars.push(this.advance());
-				}
-			} else {
-				chars.push(this.advance());
-			}
-		}
-		return true;
+		this._syncLexer();
+		result = this._lexer._readBracketExpression(
+			chars,
+			parts,
+			for_regex,
+			paren_depth,
+		);
+		this._syncParser();
+		return result;
 	}
 
 	_isWordTerminator(ctx, ch, bracket_depth, paren_depth) {
@@ -7843,74 +8403,8 @@ class Parser {
 		if (paren_depth == null) {
 			paren_depth = 0;
 		}
-		if (ctx === WORD_CTX_REGEX) {
-			if (
-				ch === "]" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "]"
-			) {
-				return true;
-			}
-			if (
-				ch === "&" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "&"
-			) {
-				return true;
-			}
-			if (ch === ")" && paren_depth === 0) {
-				return true;
-			}
-			return _isWhitespace(ch) && paren_depth === 0;
-		}
-		if (ctx === WORD_CTX_COND) {
-			if (
-				ch === "]" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "]"
-			) {
-				return true;
-			}
-			// ) always terminates, but ( is handled in the loop for extglob
-			if (ch === ")") {
-				return true;
-			}
-			if (
-				ch === "&" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "&"
-			) {
-				return true;
-			}
-			if (
-				ch === "|" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "|"
-			) {
-				return true;
-			}
-			if (ch === ";") {
-				return true;
-			}
-			// < and > terminate unless followed by ( (process sub)
-			if (
-				_isRedirectChar(ch) &&
-				!(this.pos + 1 < this.length && this.source[this.pos + 1] === "(")
-			) {
-				return true;
-			}
-			return _isWhitespaceNoNewline(ch);
-		}
-		// WORD_CTX_NORMAL
-		// < and > don't terminate if followed by ( (process substitution)
-		if (
-			_isRedirectChar(ch) &&
-			this.pos + 1 < this.length &&
-			this.source[this.pos + 1] === "("
-		) {
-			return false;
-		}
-		return _isMetachar(ch) && bracket_depth === 0;
+		this._syncLexer();
+		return this._lexer._isWordTerminator(ctx, ch, bracket_depth, paren_depth);
 	}
 
 	_scanDoubleQuote(chars, parts, start, handle_line_continuation) {
@@ -7998,413 +8492,21 @@ class Parser {
 	}
 
 	_parseWordInternal(ctx, at_command_start, in_array_literal) {
-		let ansi_result,
-			array_result,
-			bracket_depth,
-			c,
-			ch,
-			chars,
-			cmdsub_result,
-			depth,
-			extglob_depth,
-			for_regex,
-			handle_line_continuation,
-			in_single_in_dquote,
-			inner_paren_depth,
-			locale_result,
-			next_c,
-			next_ch,
-			paren_depth,
-			parts,
-			pc,
-			prev_char,
-			procsub_result,
-			seen_equals,
-			start,
-			track_newline;
+		let result;
 		if (at_command_start == null) {
 			at_command_start = false;
 		}
 		if (in_array_literal == null) {
 			in_array_literal = false;
 		}
-		start = this.pos;
-		chars = [];
-		parts = [];
-		bracket_depth = 0;
-		seen_equals = false;
-		paren_depth = 0;
-		while (!this.atEnd()) {
-			ch = this.peek();
-			// REGEX: Backslash-newline continuation (check first)
-			if (ctx === WORD_CTX_REGEX) {
-				if (
-					ch === "\\" &&
-					this.pos + 1 < this.length &&
-					this.source[this.pos + 1] === "\n"
-				) {
-					this.advance();
-					this.advance();
-					continue;
-				}
-			}
-			// Check termination for COND and REGEX contexts (NORMAL checks at end)
-			if (
-				ctx !== WORD_CTX_NORMAL &&
-				this._isWordTerminator(ctx, ch, bracket_depth, paren_depth)
-			) {
-				break;
-			}
-			// NORMAL: Array subscript tracking
-			if (ctx === WORD_CTX_NORMAL && ch === "[") {
-				if (bracket_depth > 0) {
-					bracket_depth += 1;
-					chars.push(this.advance());
-					continue;
-				}
-				if (
-					chars &&
-					at_command_start &&
-					!seen_equals &&
-					_isArrayAssignmentPrefix(chars)
-				) {
-					prev_char = chars[chars.length - 1];
-					if (/^[a-zA-Z0-9]$/.test(prev_char) || prev_char === "_") {
-						bracket_depth += 1;
-						chars.push(this.advance());
-						continue;
-					}
-				}
-				if (chars.length === 0 && !seen_equals && in_array_literal) {
-					bracket_depth += 1;
-					chars.push(this.advance());
-					continue;
-				}
-			}
-			if (ctx === WORD_CTX_NORMAL && ch === "]" && bracket_depth > 0) {
-				bracket_depth -= 1;
-				chars.push(this.advance());
-				continue;
-			}
-			if (ctx === WORD_CTX_NORMAL && ch === "=" && bracket_depth === 0) {
-				seen_equals = true;
-			}
-			// REGEX: Track paren depth
-			if (ctx === WORD_CTX_REGEX && ch === "(") {
-				paren_depth += 1;
-				chars.push(this.advance());
-				continue;
-			}
-			if (ctx === WORD_CTX_REGEX && ch === ")") {
-				if (paren_depth > 0) {
-					paren_depth -= 1;
-					chars.push(this.advance());
-					continue;
-				}
-				break;
-			}
-			// COND/REGEX: Bracket expressions
-			if ([WORD_CTX_COND, WORD_CTX_REGEX].includes(ctx) && ch === "[") {
-				for_regex = ctx === WORD_CTX_REGEX;
-				if (this._scanBracketExpression(chars, parts, for_regex, paren_depth)) {
-					continue;
-				}
-				chars.push(this.advance());
-				continue;
-			}
-			// COND: Extglob patterns or ( terminates
-			if (ctx === WORD_CTX_COND && ch === "(") {
-				if (chars.length > 0 && _isExtglobPrefix(chars[chars.length - 1])) {
-					chars.push(this.advance());
-					depth = 1;
-					while (!this.atEnd() && depth > 0) {
-						c = this.peek();
-						if (c === "(") {
-							depth += 1;
-						} else if (c === ")") {
-							depth -= 1;
-						}
-						chars.push(this.advance());
-					}
-					continue;
-				} else {
-					// ( without extglob prefix terminates the word
-					break;
-				}
-			}
-			// REGEX: Space inside parens is part of pattern
-			if (ctx === WORD_CTX_REGEX && _isWhitespace(ch) && paren_depth > 0) {
-				chars.push(this.advance());
-				continue;
-			}
-			// Single-quoted string
-			if (ch === "'") {
-				this.advance();
-				track_newline = ctx === WORD_CTX_NORMAL;
-				this._scanSingleQuote(chars, start, track_newline);
-				continue;
-			}
-			// Double-quoted string
-			if (ch === '"') {
-				this.advance();
-				if (ctx === WORD_CTX_NORMAL) {
-					// NORMAL has special in_single_in_dquote and backtick handling
-					chars.push('"');
-					in_single_in_dquote = false;
-					while (
-						!this.atEnd() &&
-						(in_single_in_dquote || this.peek() !== '"')
-					) {
-						c = this.peek();
-						if (in_single_in_dquote) {
-							chars.push(this.advance());
-							if (c === "'") {
-								in_single_in_dquote = false;
-							}
-							continue;
-						}
-						if (c === "\\" && this.pos + 1 < this.length) {
-							next_c = this.source[this.pos + 1];
-							if (next_c === "\n") {
-								this.advance();
-								this.advance();
-							} else {
-								chars.push(this.advance());
-								chars.push(this.advance());
-							}
-						} else if (c === "$") {
-							if (!this._parseDollarExpansion(chars, parts)) {
-								chars.push(this.advance());
-							}
-						} else if (c === "`") {
-							cmdsub_result = this._parseBacktickSubstitution();
-							if (cmdsub_result[0]) {
-								parts.push(cmdsub_result[0]);
-								chars.push(cmdsub_result[1]);
-							} else {
-								chars.push(this.advance());
-							}
-						} else {
-							chars.push(this.advance());
-						}
-					}
-					if (this.atEnd()) {
-						throw new ParseError("Unterminated double quote", start);
-					}
-					chars.push(this.advance());
-				} else {
-					handle_line_continuation = ctx === WORD_CTX_COND;
-					this._scanDoubleQuote(chars, parts, start, handle_line_continuation);
-				}
-				continue;
-			}
-			// Escape
-			if (ch === "\\" && this.pos + 1 < this.length) {
-				next_ch = this.source[this.pos + 1];
-				if (ctx !== WORD_CTX_REGEX && next_ch === "\n") {
-					this.advance();
-					this.advance();
-				} else {
-					chars.push(this.advance());
-					chars.push(this.advance());
-				}
-				continue;
-			}
-			// NORMAL/COND: ANSI-C quoting $'...'
-			if (
-				ctx !== WORD_CTX_REGEX &&
-				ch === "$" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "'"
-			) {
-				ansi_result = this._parseAnsiCQuote();
-				if (ansi_result[0]) {
-					parts.push(ansi_result[0]);
-					chars.push(ansi_result[1]);
-				} else {
-					chars.push(this.advance());
-				}
-				continue;
-			}
-			// NORMAL/COND: Locale translation $"..."
-			if (
-				ctx !== WORD_CTX_REGEX &&
-				ch === "$" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === '"'
-			) {
-				locale_result = this._parseLocaleString();
-				if (locale_result[0]) {
-					parts.push(locale_result[0]);
-					parts.push(...locale_result[2]);
-					chars.push(locale_result[1]);
-				} else {
-					chars.push(this.advance());
-				}
-				continue;
-			}
-			// Dollar expansions
-			if (ch === "$") {
-				if (!this._parseDollarExpansion(chars, parts)) {
-					chars.push(this.advance());
-				}
-				continue;
-			}
-			// NORMAL/COND: Backtick command substitution
-			if (ctx !== WORD_CTX_REGEX && ch === "`") {
-				cmdsub_result = this._parseBacktickSubstitution();
-				if (cmdsub_result[0]) {
-					parts.push(cmdsub_result[0]);
-					chars.push(cmdsub_result[1]);
-				} else {
-					chars.push(this.advance());
-				}
-				continue;
-			}
-			// NORMAL/COND: Process substitution <(...) or >(...)
-			if (
-				ctx !== WORD_CTX_REGEX &&
-				_isRedirectChar(ch) &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "("
-			) {
-				procsub_result = this._parseProcessSubstitution();
-				if (procsub_result[0]) {
-					parts.push(procsub_result[0]);
-					chars.push(procsub_result[1]);
-				} else if (procsub_result[1]) {
-					chars.push(procsub_result[1]);
-				} else {
-					chars.push(this.advance());
-					if (ctx === WORD_CTX_NORMAL) {
-						chars.push(this.advance());
-					}
-				}
-				continue;
-			}
-			// NORMAL: Array literal
-			if (
-				ctx === WORD_CTX_NORMAL &&
-				ch === "(" &&
-				chars &&
-				bracket_depth === 0
-			) {
-				if (
-					chars[chars.length - 1] === "=" ||
-					(chars.length >= 2 &&
-						chars[chars.length - 2] === "+" &&
-						chars[chars.length - 1] === "=")
-				) {
-					array_result = this._parseArrayLiteral();
-					if (array_result[0]) {
-						parts.push(array_result[0]);
-						chars.push(array_result[1]);
-					} else {
-						break;
-					}
-					continue;
-				}
-			}
-			// NORMAL: Extglob pattern @(), ?(), *(), +(), !()
-			if (
-				ctx === WORD_CTX_NORMAL &&
-				_isExtglobPrefix(ch) &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "("
-			) {
-				chars.push(this.advance());
-				chars.push(this.advance());
-				extglob_depth = 1;
-				while (!this.atEnd() && extglob_depth > 0) {
-					c = this.peek();
-					if (c === ")") {
-						chars.push(this.advance());
-						extglob_depth -= 1;
-					} else if (c === "(") {
-						chars.push(this.advance());
-						extglob_depth += 1;
-					} else if (c === "\\") {
-						if (
-							this.pos + 1 < this.length &&
-							this.source[this.pos + 1] === "\n"
-						) {
-							this.advance();
-							this.advance();
-						} else {
-							chars.push(this.advance());
-							if (!this.atEnd()) {
-								chars.push(this.advance());
-							}
-						}
-					} else if (c === "'") {
-						chars.push(this.advance());
-						while (!this.atEnd() && this.peek() !== "'") {
-							chars.push(this.advance());
-						}
-						if (!this.atEnd()) {
-							chars.push(this.advance());
-						}
-					} else if (c === '"') {
-						chars.push(this.advance());
-						while (!this.atEnd() && this.peek() !== '"') {
-							if (this.peek() === "\\" && this.pos + 1 < this.length) {
-								chars.push(this.advance());
-							}
-							chars.push(this.advance());
-						}
-						if (!this.atEnd()) {
-							chars.push(this.advance());
-						}
-					} else if (
-						c === "$" &&
-						this.pos + 1 < this.length &&
-						this.source[this.pos + 1] === "("
-					) {
-						chars.push(this.advance());
-						chars.push(this.advance());
-						if (!this.atEnd() && this.peek() === "(") {
-							chars.push(this.advance());
-							inner_paren_depth = 2;
-							while (!this.atEnd() && inner_paren_depth > 0) {
-								pc = this.peek();
-								if (pc === "(") {
-									inner_paren_depth += 1;
-								} else if (pc === ")") {
-									inner_paren_depth -= 1;
-								}
-								chars.push(this.advance());
-							}
-						} else {
-							extglob_depth += 1;
-						}
-					} else if (
-						_isExtglobPrefix(c) &&
-						this.pos + 1 < this.length &&
-						this.source[this.pos + 1] === "("
-					) {
-						chars.push(this.advance());
-						chars.push(this.advance());
-						extglob_depth += 1;
-					} else {
-						chars.push(this.advance());
-					}
-				}
-				continue;
-			}
-			// NORMAL: Metacharacter terminates word (unless inside brackets)
-			if (ctx === WORD_CTX_NORMAL && _isMetachar(ch) && bracket_depth === 0) {
-				break;
-			}
-			// Regular character
-			chars.push(this.advance());
-		}
-		if (chars.length === 0) {
-			return null;
-		}
-		if (parts && parts.length) {
-			return new Word(chars.join(""), parts);
-		}
-		return new Word(chars.join(""), null);
+		this._syncLexer();
+		result = this._lexer._readWordInternal(
+			ctx,
+			at_command_start,
+			in_array_literal,
+		);
+		this._syncParser();
+		return result;
 	}
 
 	parseWord(at_command_start, in_array_literal) {

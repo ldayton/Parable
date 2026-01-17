@@ -310,6 +310,9 @@ class JSTranspiler(ast.NodeVisitor):
         # Module-level assignments get const
         if not self.in_method and not self.in_class_body:
             self.emit(f"const {target} = {value};")
+        elif self.in_class_body and not self.in_method:
+            # Class-level assignments become static fields in JS
+            self.emit(f"static {target} = {value};")
         else:
             self.emit(f"{target} = {value};")
 

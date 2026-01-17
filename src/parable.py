@@ -1029,27 +1029,29 @@ class Lexer:
                     chars.append("}")
                     continue
                 elif next_ch == "(":
+                    # Back up to before $ for Parser callback
+                    self.pos -= 1
+                    self._sync_to_parser()
                     # Check if $(( arithmetic or $( command substitution
-                    if self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
-                        # $(( ... )) arithmetic
-                        chars.append(ch)  # $
-                        chars.append(self.advance())  # first (
-                        chars.append(self.advance())  # second (
-                        nested = self._parse_matched_pair("(", ")", flags | MatchedPairFlags.ARITH)
-                        chars.append(nested)
-                        chars.append(")")
-                        # Need to consume the second )
-                        if not self.at_end() and self.peek() == ")":
-                            chars.append(self.advance())
+                    if self.pos + 2 < self.length and self.source[self.pos + 2] == "(":
+                        # $(( ... )) arithmetic - use full parsing
+                        arith_node, arith_text = self._parser._parse_arithmetic_expansion()
+                        self._sync_from_parser()
+                        if arith_node:
+                            chars.append(arith_text)
                         else:
-                            raise MatchedPairError(
-                                "unexpected EOF while looking for matching `))'",
-                                pos=start,
-                            )
+                            # Arithmetic failed - try as command substitution fallback
+                            self._sync_to_parser()
+                            cmd_node, cmd_text = self._parser._parse_command_substitution()
+                            self._sync_from_parser()
+                            if cmd_node:
+                                chars.append(cmd_text)
+                            else:
+                                # Both failed - add $( as literal
+                                chars.append(self.advance())  # $
+                                chars.append(self.advance())  # (
                     else:
                         # $( ... ) command substitution - use full parsing
-                        self.pos -= 1  # back up to before $
-                        self._sync_to_parser()
                         cmd_node, cmd_text = self._parser._parse_command_substitution()
                         self._sync_from_parser()
                         if cmd_node:

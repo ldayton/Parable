@@ -387,6 +387,25 @@ class Lexer {
 	lookahead(n) {
 		return this.source.slice(this.pos, this.pos + n);
 	}
+
+	isMetachar(c) {
+		return "|&;()<> \t\n".includes(c);
+	}
+
+	isOperatorStart(c) {
+		return "|&;<>()".includes(c);
+	}
+
+	isBlank(c) {
+		return c === " " || c === "\t";
+	}
+
+	isWordChar(c) {
+		if (c == null) {
+			return false;
+		}
+		return !this.isMetachar(c);
+	}
 }
 
 function _stripLineContinuationsCommentAware(text) {

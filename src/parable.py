@@ -416,6 +416,24 @@ class Lexer:
         """Return next n characters without consuming."""
         return self.source[self.pos : self.pos + n]
 
+    def is_metachar(self, c: str) -> bool:
+        """Return True if c is a shell metacharacter."""
+        return c in "|&;()<> \t\n"
+
+    def is_operator_start(self, c: str) -> bool:
+        """Return True if c can start an operator."""
+        return c in "|&;<>()"
+
+    def is_blank(self, c: str) -> bool:
+        """Return True if c is blank (space or tab)."""
+        return c == " " or c == "\t"
+
+    def is_word_char(self, c: str) -> bool:
+        """Return True if c can be part of an unquoted word."""
+        if c is None:
+            return False
+        return not self.is_metachar(c)
+
 
 def _strip_line_continuations_comment_aware(text: str) -> str:
     """Strip backslash-newline line continuations, preserving newlines in comments.

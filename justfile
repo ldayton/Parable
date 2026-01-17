@@ -21,9 +21,25 @@ test-pypy311 *ARGS: (_test "pypy3.11" ARGS)
 # Run tests (default: CPython 3.14)
 test *ARGS: (_test "3.14" ARGS)
 
+bash_oracle := env("BASH_ORACLE", home_directory() / "source" / "bash-oracle" / "bash-oracle")
+
+# Ensure bash-oracle is installed
+ensure-bash-oracle:
+    #!/usr/bin/env bash
+    ORACLE_PATH="{{bash_oracle}}"
+    if [[ -x "$ORACLE_PATH" ]]; then exit 0; fi
+    mkdir -p "$(dirname "$ORACLE_PATH")"
+    case "$(uname -s)" in
+        Linux)  URL="http://ldayton-parable.s3-website-us-east-1.amazonaws.com/bash-oracle/linux/bash-oracle" ;;
+        Darwin) URL="http://ldayton-parable.s3-website-us-east-1.amazonaws.com/bash-oracle/macos/bash-oracle" ;;
+        *) echo "Unsupported OS"; exit 1 ;;
+    esac
+    curl -sSf --retry 3 --retry-delay 2 -o "$ORACLE_PATH" "$URL"
+    chmod +x "$ORACLE_PATH"
+
 # Verify test expectations match bash-oracle
-verify-tests:
-    tools/bash-oracle/src/oracle/verify_tests.py
+verify-tests: ensure-bash-oracle
+    BASH_ORACLE="{{bash_oracle}}" tools/bash-oracle/src/oracle/verify_tests.py
 
 # Run tests on all supported CPython versions (parallel)
 [parallel]

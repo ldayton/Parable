@@ -2,6 +2,7 @@
 """Verify that all tests/**/*.tests have correct parse expectations per bash-oracle."""
 
 import multiprocessing as mp
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -9,7 +10,7 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
 REPO_ROOT = SCRIPT_DIR.parent.parent.parent.parent
-ORACLE_PATH = Path.home() / "source" / "bash-oracle" / "bash-oracle"
+ORACLE_PATH = Path(os.environ["BASH_ORACLE"])
 
 
 @dataclass
@@ -157,7 +158,7 @@ def worker_process(work_queue, result_queue, stop_event) -> None:
 def main():
     if not ORACLE_PATH.exists():
         print(f"Error: bash-oracle not found at {ORACLE_PATH}", file=sys.stderr)
-        print("Build it with: cd tools/bash-oracle && just build", file=sys.stderr)
+        print("Run: just ensure-bash-oracle", file=sys.stderr)
         sys.exit(1)
 
     tests_dir = REPO_ROOT / "tests"

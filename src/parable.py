@@ -1022,11 +1022,16 @@ class Lexer:
             if ch == "$" and not self.at_end() and not (flags & MatchedPairFlags.EXTGLOB):
                 next_ch = self.peek()
                 if next_ch == "{":
-                    chars.append(ch)
-                    chars.append(self.advance())
-                    nested = self._parse_matched_pair("{", "}", flags | MatchedPairFlags.DOLBRACE)
-                    chars.append(nested)
-                    chars.append("}")
+                    # ${ ... } parameter expansion - use full parsing
+                    self.pos -= 1  # back up to before $
+                    self._sync_to_parser()
+                    param_node, param_text = self._parser._parse_param_expansion()
+                    self._sync_from_parser()
+                    if param_node:
+                        chars.append(param_text)
+                    else:
+                        # Parser failed - add $ as literal
+                        chars.append(self.advance())  # $
                     continue
                 elif next_ch == "(":
                     # Back up to before $ for Parser callback

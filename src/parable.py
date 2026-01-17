@@ -5224,7 +5224,13 @@ class Parser:
     def _lex_consume_word(self, expected: str) -> bool:
         """Try to consume a word token matching expected. Returns True if successful."""
         tok = self._lex_peek_token()
-        if tok.type == TokenType.WORD and tok.value == expected:
+        if tok.type != TokenType.WORD:
+            return False
+        # Strip trailing backslash-newline (line continuation) for comparison
+        word = tok.value
+        if word.endswith("\\\n"):
+            word = word[:-2]
+        if word == expected:
             self._lex_next_token()
             return True
         return False
@@ -5368,12 +5374,12 @@ class Parser:
             if brace is None:
                 raise ParseError(f"Expected brace group body in {context}", pos=self.pos)
             return brace.body
-        if self.consume_word("do"):
+        if self._lex_consume_word("do"):
             body = self.parse_list_until({"done"})
             if body is None:
                 raise ParseError("Expected commands after 'do'", pos=self.pos)
             self.skip_whitespace_and_newlines()
-            if not self.consume_word("done"):
+            if not self._lex_consume_word("done"):
                 raise ParseError(f"Expected 'done' to close {context}", pos=self.pos)
             return body
         raise ParseError(f"Expected 'do' or '{{' in {context}", pos=self.pos)
@@ -9700,7 +9706,8 @@ class Parser:
 
     def parse_for(self) -> For | ForArith | None:
         """Parse a for loop: for name [in words]; do list; done or C-style for ((;;))."""
-        if not self.consume_word("for"):
+        self.skip_whitespace()
+        if not self._lex_consume_word("for"):
             return None
         self.skip_whitespace()
 
@@ -9730,8 +9737,8 @@ class Parser:
 
         # Check for optional 'in' clause
         words = None
-        if self.peek_word() == "in":
-            self.consume_word("in")
+        if self._lex_is_at_reserved_word("in"):
+            self._lex_consume_word("in")
             self.skip_whitespace()  # Only skip whitespace, not newlines
 
             # Check for immediate delimiter (;, newline) after 'in'
@@ -9753,7 +9760,7 @@ class Parser:
                         self.advance()  # consume semicolon
                     break
                 # 'do' only terminates if preceded by delimiter
-                if self.peek_word() == "do":
+                if self._lex_is_at_reserved_word("do"):
                     if saw_delimiter:
                         break
                     # 'for x in do' or 'for x in a b c do' is invalid
@@ -9776,7 +9783,7 @@ class Parser:
             return For(var_name, words, brace_group.body, self._collect_redirects())
 
         # Expect 'do'
-        if not self.consume_word("do"):
+        if not self._lex_consume_word("do"):
             raise ParseError("Expected 'do' in for loop", pos=self.pos)
 
         # Parse body (ends at 'done')
@@ -9786,7 +9793,7 @@ class Parser:
 
         # Expect 'done'
         self.skip_whitespace_and_newlines()
-        if not self.consume_word("done"):
+        if not self._lex_consume_word("done"):
             raise ParseError("Expected 'done' to close for loop", pos=self.pos)
         return For(var_name, words, body, self._collect_redirects())
 

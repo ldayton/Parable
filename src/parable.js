@@ -6189,9 +6189,17 @@ class Parser {
 	}
 
 	_lexConsumeWord(expected) {
-		let tok;
+		let tok, word;
 		tok = this._lexPeekToken();
-		if (tok.type === TokenType.WORD && tok.value === expected) {
+		if (tok.type !== TokenType.WORD) {
+			return false;
+		}
+		// Strip trailing backslash-newline (line continuation) for comparison
+		word = tok.value;
+		if (word.endsWith("\\\n")) {
+			word = word.slice(0, -2);
+		}
+		if (word === expected) {
 			this._lexNextToken();
 			return true;
 		}
@@ -6367,13 +6375,13 @@ class Parser {
 			}
 			return brace.body;
 		}
-		if (this.consumeWord("do")) {
+		if (this._lexConsumeWord("do")) {
 			body = this.parseListUntil(new Set(["done"]));
 			if (body == null) {
 				throw new ParseError("Expected commands after 'do'", this.pos);
 			}
 			this.skipWhitespaceAndNewlines();
-			if (!this.consumeWord("done")) {
+			if (!this._lexConsumeWord("done")) {
 				throw new ParseError(`Expected 'done' to close ${context}`, this.pos);
 			}
 			return body;
@@ -11753,7 +11761,8 @@ class Parser {
 
 	parseFor() {
 		let body, brace_group, saw_delimiter, var_name, var_word, word, words;
-		if (!this.consumeWord("for")) {
+		this.skipWhitespace();
+		if (!this._lexConsumeWord("for")) {
 			return null;
 		}
 		this.skipWhitespace();
@@ -11788,8 +11797,8 @@ class Parser {
 		this.skipWhitespaceAndNewlines();
 		// Check for optional 'in' clause
 		words = null;
-		if (this.peekWord() === "in") {
-			this.consumeWord("in");
+		if (this._lexIsAtReservedWord("in")) {
+			this._lexConsumeWord("in");
 			this.skipWhitespace();
 			// Check for immediate delimiter (;, newline) after 'in'
 			saw_delimiter = _isSemicolonOrNewline(this.peek());
@@ -11813,7 +11822,7 @@ class Parser {
 					break;
 				}
 				// 'do' only terminates if preceded by delimiter
-				if (this.peekWord() === "do") {
+				if (this._lexIsAtReservedWord("do")) {
 					if (saw_delimiter) {
 						break;
 					}
@@ -11844,7 +11853,7 @@ class Parser {
 			);
 		}
 		// Expect 'do'
-		if (!this.consumeWord("do")) {
+		if (!this._lexConsumeWord("do")) {
 			throw new ParseError("Expected 'do' in for loop", this.pos);
 		}
 		// Parse body (ends at 'done')
@@ -11854,7 +11863,7 @@ class Parser {
 		}
 		// Expect 'done'
 		this.skipWhitespaceAndNewlines();
-		if (!this.consumeWord("done")) {
+		if (!this._lexConsumeWord("done")) {
 			throw new ParseError("Expected 'done' to close for loop", this.pos);
 		}
 		return new For(var_name, words, body, this._collectRedirects());

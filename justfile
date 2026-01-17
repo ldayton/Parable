@@ -34,7 +34,8 @@ ensure-bash-oracle:
         Darwin) URL="http://ldayton-parable.s3-website-us-east-1.amazonaws.com/bash-oracle/macos/bash-oracle" ;;
         *) echo "Unsupported OS"; exit 1 ;;
     esac
-    curl -sSf --retry 3 --retry-delay 2 -o "$ORACLE_PATH" "$URL"
+    echo "Downloading bash-oracle from $URL"
+    curl -sSf --retry 3 --retry-delay 2 --max-time 30 -o "$ORACLE_PATH" "$URL"
     chmod +x "$ORACLE_PATH"
 
 # Verify test expectations match bash-oracle

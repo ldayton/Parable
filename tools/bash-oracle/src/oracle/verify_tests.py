@@ -93,6 +93,8 @@ def get_oracle_output(input_text: str) -> str | None:
         return result.stdout.decode("utf-8", errors="replace").strip()
     except subprocess.TimeoutExpired:
         return None
+    except FileNotFoundError:
+        sys.exit(f"bash-oracle not found at {ORACLE_PATH}")
 
 
 def normalize(s: str) -> str:

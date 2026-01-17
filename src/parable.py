@@ -7043,24 +7043,6 @@ class Parser:
             self.advance()  # skip newline
         return True
 
-    def _scan_single_quote(self, chars: list, start: int, track_newline: bool = False) -> None:
-        """Scan single-quoted string content. Assumes opening quote already consumed."""
-        self._sync_lexer()
-        content, saw_newline = self._lexer._read_single_quote(start)
-        self._sync_parser()
-        chars.append(content)
-        if track_newline and saw_newline:
-            self._saw_newline_in_single_quote = True
-
-    def _scan_bracket_expression(
-        self, chars: list, parts: list, for_regex: bool = False, paren_depth: int = 0
-    ) -> bool:
-        """Scan [...] bracket expression. Returns True if consumed, False if [ is literal."""
-        self._sync_lexer()
-        result = self._lexer._read_bracket_expression(chars, parts, for_regex, paren_depth)
-        self._sync_parser()
-        return result
-
     def _is_word_terminator(
         self, ctx: int, ch: str, bracket_depth: int = 0, paren_depth: int = 0
     ) -> bool:
@@ -7201,24 +7183,6 @@ class Parser:
         self._restore_parser_state(saved)
         return CommandSubstitution(cmd), text
 
-    def _is_word_boundary_before(self) -> bool:
-        """Check if current position is at a word boundary (preceded by space/newline/start)."""
-        if self.pos == 0:
-            return True
-        prev = self.source[self.pos - 1]
-        return _is_word_start_context(prev)
-
-    def _is_comment_start_context(self) -> bool:
-        """Check if # at current position should start a comment.
-
-        Unlike _is_word_boundary_before, this excludes { and } since
-        ${#var} uses # for parameter length, not comments.
-        """
-        if self.pos == 0:
-            return True
-        prev = self.source[self.pos - 1]
-        return prev in " \t\n;|&()"
-
     def _is_assignment_word(self, word: "Word") -> bool:
         """Check if a word is an assignment (name=value) where name is a valid identifier."""
         # Assignment must start with identifier (letter or underscore), not quoted
@@ -7247,32 +7211,6 @@ class Parser:
                 return False
             i += 1
         return False
-
-    def _lookahead_keyword(self, keyword: str) -> bool:
-        """Check if keyword appears at current position followed by word boundary."""
-        if self.pos + len(keyword) > self.length:
-            return False
-        if not _starts_with_at(self.source, self.pos, keyword):
-            return False
-        # Check word boundary after keyword
-        after_pos = self.pos + len(keyword)
-        if after_pos >= self.length:
-            return True
-        after = self.source[after_pos]
-        return _is_word_end_context(after)
-
-    def _skip_keyword(self, keyword: str) -> None:
-        """Skip over a keyword."""
-        for _ in keyword:
-            self.advance()
-
-    def _lookahead_for_esac_parser(self, case_depth: int) -> bool:
-        """Check if esac closes all cases before a ) closes the cmdsub."""
-        return _lookahead_for_esac(self.source, self.pos + 1, case_depth)
-
-    def _skip_backtick_parser(self) -> None:
-        """Skip past a backtick command substitution."""
-        self.pos = _skip_backtick(self.source, self.pos)
 
     def _parse_backtick_substitution(self) -> tuple[Node | None, str]:
         """Parse a `...` command substitution.
@@ -8501,20 +8439,6 @@ class Parser:
 
         text = _substring(self.source, start, self.pos)
         return ArithDeprecated(content), text
-
-    def _parse_ansi_c_quote(self) -> tuple[Node | None, str]:
-        """Parse ANSI-C quoting $'...'. Delegates to Lexer."""
-        self._sync_lexer()
-        result = self._lexer._read_ansi_c_quote()
-        self._sync_parser()
-        return result
-
-    def _parse_locale_string(self) -> tuple[Node | None, str, list[Node]]:
-        """Parse locale translation $"...". Delegates to Lexer."""
-        self._sync_lexer()
-        result = self._lexer._read_locale_string()
-        self._sync_parser()
-        return result
 
     def _parse_param_expansion(self) -> tuple[Node | None, str]:
         """Parse a parameter expansion starting at $. Delegates to Lexer."""

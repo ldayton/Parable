@@ -21,6 +21,36 @@ test-pypy311 *ARGS: (_test "pypy3.11" ARGS)
 # Run tests (default: CPython 3.14)
 test *ARGS: (_test "3.14" ARGS)
 
+# Verify test expectations match bash-oracle (skips if no binary available)
+verify-tests:
+    #!/usr/bin/env bash
+    # Check env var first, then dev location, then download
+    if [[ -n "${BASH_ORACLE:-}" && -x "$BASH_ORACLE" ]]; then
+        exec tools/bash-oracle/src/oracle/verify_tests.py
+    fi
+    if [[ -x "$HOME/source/bash-oracle/bash-oracle" ]]; then
+        BASH_ORACLE="$HOME/source/bash-oracle/bash-oracle" exec tools/bash-oracle/src/oracle/verify_tests.py
+    fi
+    # Try to download
+    ORACLE_PATH="/tmp/bash-oracle"
+    case "$(uname -s)-$(uname -m)" in
+        Linux-x86_64)   URL="http://ldayton-parable.s3-website-us-east-1.amazonaws.com/bash-oracle/linux/bash-oracle" ;;
+        Darwin-*)       URL="http://ldayton-parable.s3-website-us-east-1.amazonaws.com/bash-oracle/macos/bash-oracle" ;;
+        *) echo "Skipping verify-tests: no binary for $(uname -s)-$(uname -m)"; exit 0 ;;
+    esac
+    echo "Downloading bash-oracle from $URL"
+    if ! curl -sSf --retry 3 --retry-delay 2 --max-time 30 -o "$ORACLE_PATH" "$URL"; then
+        echo "Skipping verify-tests: download failed"
+        exit 0
+    fi
+    chmod +x "$ORACLE_PATH"
+    # Verify binary works
+    if ! "$ORACLE_PATH" -e 'echo' >/dev/null 2>&1; then
+        echo "Skipping verify-tests: binary not compatible with this platform"
+        exit 0
+    fi
+    BASH_ORACLE="$ORACLE_PATH" exec tools/bash-oracle/src/oracle/verify_tests.py
+
 # Run tests on all supported CPython versions (parallel)
 [parallel]
 test-cpy: test-cpy310 test-cpy311 test-cpy312 test-cpy313 test-cpy314
@@ -54,10 +84,13 @@ _ensure-biome:
 
 # Internal: run all parallel checks
 [parallel]
-_check-parallel: test-all lint fmt lock-check check-dump-ast check-style check-transpile test-js fmt-js
+_check-parallel: test-all lint fmt lock-check check-dump-ast check-style check-transpile test-js fmt-js verify-tests
 
 # Run all checks (tests, lint, format, lock, style) in parallel
 check: _ensure-biome _check-parallel
+
+# Quick check: test, transpile, test-js
+quick-check: test transpile test-js
 
 # Run benchmarks, optionally comparing refs: bench [ref1] [ref2] [--fast]
 bench *ARGS:

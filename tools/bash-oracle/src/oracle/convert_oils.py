@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Convert Oils corpus to .tests format using bash-oracle."""
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -93,12 +94,12 @@ def convert_file(corpus_path: Path, output_dir: Path, oracle_path: Path) -> tupl
 
 def main():
     script_dir = Path(__file__).parent
-    oracle_path = Path.home() / "source" / "bash-oracle" / "bash-oracle"
+    _default = Path.home() / "source" / "bash-oracle" / "bash-oracle"
+    oracle_path = Path(os.environ.get("BASH_ORACLE") or _default)
+    if not oracle_path.exists():
+        sys.exit(f"bash-oracle not found at {oracle_path}")
     corpus_dir = script_dir.parent.parent / "tests" / "corpus" / "oils"
     output_dir = corpus_dir
-    if not oracle_path.exists():
-        print(f"Error: bash-oracle not found at {oracle_path}", file=sys.stderr)
-        sys.exit(1)
     corpus_files = sorted(corpus_dir.glob("*.txt"))
     if not corpus_files:
         print(f"No .txt files found in {corpus_dir}", file=sys.stderr)

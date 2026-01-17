@@ -1,5 +1,6 @@
 """Shared utilities for Parable fuzzers."""
 
+import os
 import re
 import subprocess
 import sys
@@ -13,7 +14,10 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from parable import ParseError, parse  # noqa: E402
 
-ORACLE_PATH = Path.home() / "source" / "bash-oracle" / "bash-oracle"
+_default_oracle = Path.home() / "source" / "bash-oracle" / "bash-oracle"
+ORACLE_PATH = Path(os.environ.get("BASH_ORACLE") or _default_oracle)
+if not ORACLE_PATH.exists():
+    sys.exit(f"bash-oracle not found at {ORACLE_PATH}")
 
 
 @dataclass

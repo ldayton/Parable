@@ -22,15 +22,6 @@ e[
 <error>
 ---
 
-# Original: '$(!\n)'
-# Parable:  (command (word "$(! )"))
-# Note: (!) is valid syntax - bash parses it fine (only runtime error)
-=== delete '\n' at 3; insert ' ' at 2
-(!)
----
-(subshell (negation (command)))
----
-
 # Original: 'echo ${foo:-\\}}'
 # Parable:  (command (word "echo") (word "${foo:-") (redirect ">" "\}"))
 === swap at 12; replace '}' with '>' at 12

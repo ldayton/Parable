@@ -6004,6 +6004,9 @@ class Parser:
 
         self.advance()  # consume (
 
+        saved_state = self._parser_state
+        self._set_state(ParserStateFlags.PST_CMDSUBST)
+
         # Find matching closing paren, being aware of:
         # - Nested $() and plain ()
         # - Quoted strings
@@ -6303,6 +6306,7 @@ class Parser:
                 self.advance()
 
         if depth != 0:
+            self._parser_state = saved_state
             self.pos = start
             return None, ""
 
@@ -6337,8 +6341,10 @@ class Parser:
         # Ensure all content was consumed - if not, there's a syntax error
         sub_parser.skip_whitespace_and_newlines()
         if not sub_parser.at_end():
+            self._parser_state = saved_state
             raise ParseError("Unexpected content in command substitution", pos=start)
 
+        self._parser_state = saved_state
         return CommandSubstitution(cmd), text
 
     def _is_word_boundary_before(self) -> bool:
@@ -6931,6 +6937,7 @@ class Parser:
 
         start = self.pos
         self.advance()  # consume (
+        self._set_state(ParserStateFlags.PST_COMPASSIGN)
 
         elements = []
 
@@ -6939,6 +6946,7 @@ class Parser:
             self.skip_whitespace_and_newlines()
 
             if self.at_end():
+                self._clear_state(ParserStateFlags.PST_COMPASSIGN)
                 raise ParseError("Unterminated array literal", pos=start)
 
             if self.peek() == ")":
@@ -6950,15 +6958,18 @@ class Parser:
                 # Might be a closing paren or error
                 if self.peek() == ")":
                     break
+                self._clear_state(ParserStateFlags.PST_COMPASSIGN)
                 raise ParseError("Expected word in array literal", pos=self.pos)
 
             elements.append(word)
 
         if self.at_end() or self.peek() != ")":
+            self._clear_state(ParserStateFlags.PST_COMPASSIGN)
             raise ParseError("Expected ) to close array literal", pos=self.pos)
         self.advance()  # consume )
 
         text = _substring(self.source, start, self.pos)
+        self._clear_state(ParserStateFlags.PST_COMPASSIGN)
         return Array(elements), text
 
     def _parse_arithmetic_expansion(self) -> tuple[Node | None, str]:
@@ -9111,10 +9122,12 @@ class Parser:
         Parses the delimiter only. Content is gathered later by _gather_heredoc_bodies
         after the command line is complete.
         """
+        self._set_state(ParserStateFlags.PST_HEREDOC)
         delimiter, quoted = self._parse_heredoc_delimiter()
         # Create stub HereDoc with empty content - will be filled in later
         heredoc = HereDoc(delimiter, "", strip_tabs, quoted, fd, False)
         self._pending_heredocs.append(heredoc)
+        self._clear_state(ParserStateFlags.PST_HEREDOC)
         return heredoc
 
     def parse_command(self) -> Command | None:
@@ -9174,15 +9187,19 @@ class Parser:
             return None
 
         self.advance()  # consume (
+        self._set_state(ParserStateFlags.PST_SUBSHELL)
 
         body = self.parse_list()
         if body is None:
+            self._clear_state(ParserStateFlags.PST_SUBSHELL)
             raise ParseError("Expected command in subshell", pos=self.pos)
 
         self.skip_whitespace()
         if self.at_end() or self.peek() != ")":
+            self._clear_state(ParserStateFlags.PST_SUBSHELL)
             raise ParseError("Expected ) to close subshell", pos=self.pos)
         self.advance()  # consume )
+        self._clear_state(ParserStateFlags.PST_SUBSHELL)
         return Subshell(body, self._collect_redirects())
 
     def parse_arithmetic_command(self) -> ArithmeticCommand | None:
@@ -9341,6 +9358,7 @@ class Parser:
 
         self.advance()  # consume first [
         self.advance()  # consume second [
+        self._set_state(ParserStateFlags.PST_CONDEXPR)
 
         # Parse the conditional expression body
         body = self._parse_cond_or()
@@ -9356,10 +9374,12 @@ class Parser:
             or self.pos + 1 >= self.length
             or self.source[self.pos + 1] != "]"
         ):
+            self._clear_state(ParserStateFlags.PST_CONDEXPR)
             raise ParseError("Expected ]] to close conditional expression", pos=self.pos)
 
         self.advance()  # consume first ]
         self.advance()  # consume second ]
+        self._clear_state(ParserStateFlags.PST_CONDEXPR)
         return ConditionalExpr(body, self._collect_redirects())
 
     def _cond_skip_whitespace(self) -> None:
@@ -9520,7 +9540,10 @@ class Parser:
         self._cond_skip_whitespace()
         if self._cond_at_end():
             return None
-        return self._parse_word_internal(WORD_CTX_REGEX)
+        self._set_state(ParserStateFlags.PST_REGEXP)
+        result = self._parse_word_internal(WORD_CTX_REGEX)
+        self._clear_state(ParserStateFlags.PST_REGEXP)
+        return result
 
     def parse_brace_group(self) -> BraceGroup | None:
         """Parse a brace group { list }."""
@@ -9918,6 +9941,7 @@ class Parser:
         # Use consume_word for initial keyword to handle leading } in process subs
         if not self.consume_word("case"):
             return None
+        self._set_state(ParserStateFlags.PST_CASESTMT)
         self.skip_whitespace()
 
         # Parse the word to match
@@ -10141,9 +10165,11 @@ class Parser:
         # Expect 'esac'
         self.skip_whitespace_and_newlines()
         if not self._lex_consume_word("esac"):
+            self._clear_state(ParserStateFlags.PST_CASESTMT)
             raise ParseError(
                 "Expected 'esac' to close case statement", pos=self._lex_peek_token().pos
             )
+        self._clear_state(ParserStateFlags.PST_CASESTMT)
         return Case(word, patterns, self._collect_redirects())
 
     def parse_coproc(self) -> Coproc | None:

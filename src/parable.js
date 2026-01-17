@@ -7267,6 +7267,7 @@ class Parser {
 			nested_depth,
 			pending_heredocs,
 			quote,
+			saved_state,
 			start,
 			strip_tabs,
 			sub_parser,
@@ -7283,6 +7284,8 @@ class Parser {
 			return [null, ""];
 		}
 		this.advance();
+		saved_state = this._parser_state;
+		this._setState(ParserStateFlags.PST_CMDSUBST);
 		// Find matching closing paren, being aware of:
 		// - Nested $() and plain ()
 		// - Quoted strings
@@ -7640,6 +7643,7 @@ class Parser {
 			}
 		}
 		if (depth !== 0) {
+			this._parser_state = saved_state;
 			this.pos = start;
 			return [null, ""];
 		}
@@ -7678,8 +7682,10 @@ class Parser {
 		// Ensure all content was consumed - if not, there's a syntax error
 		sub_parser.skipWhitespaceAndNewlines();
 		if (!sub_parser.atEnd()) {
+			this._parser_state = saved_state;
 			throw new ParseError("Unexpected content in command substitution", start);
 		}
+		this._parser_state = saved_state;
 		return [new CommandSubstitution(cmd), text];
 	}
 
@@ -8423,11 +8429,13 @@ class Parser {
 		}
 		start = this.pos;
 		this.advance();
+		this._setState(ParserStateFlags.PST_COMPASSIGN);
 		elements = [];
 		while (true) {
 			// Skip whitespace, newlines, and comments between elements
 			this.skipWhitespaceAndNewlines();
 			if (this.atEnd()) {
+				this._clearState(ParserStateFlags.PST_COMPASSIGN);
 				throw new ParseError("Unterminated array literal", start);
 			}
 			if (this.peek() === ")") {
@@ -8440,15 +8448,18 @@ class Parser {
 				if (this.peek() === ")") {
 					break;
 				}
+				this._clearState(ParserStateFlags.PST_COMPASSIGN);
 				throw new ParseError("Expected word in array literal", this.pos);
 			}
 			elements.push(word);
 		}
 		if (this.atEnd() || this.peek() !== ")") {
+			this._clearState(ParserStateFlags.PST_COMPASSIGN);
 			throw new ParseError("Expected ) to close array literal", this.pos);
 		}
 		this.advance();
 		text = this.source.slice(start, this.pos);
+		this._clearState(ParserStateFlags.PST_COMPASSIGN);
 		return [new ArrayNode(elements), text];
 	}
 
@@ -11085,10 +11096,12 @@ class Parser {
 
 	_parseHeredoc(fd, strip_tabs) {
 		let delimiter, heredoc, quoted;
+		this._setState(ParserStateFlags.PST_HEREDOC);
 		[delimiter, quoted] = this._parseHeredocDelimiter();
 		// Create stub HereDoc with empty content - will be filled in later
 		heredoc = new HereDoc(delimiter, "", strip_tabs, quoted, fd, false);
 		this._pending_heredocs.push(heredoc);
+		this._clearState(ParserStateFlags.PST_HEREDOC);
 		return heredoc;
 	}
 
@@ -11162,15 +11175,19 @@ class Parser {
 			return null;
 		}
 		this.advance();
+		this._setState(ParserStateFlags.PST_SUBSHELL);
 		body = this.parseList();
 		if (body == null) {
+			this._clearState(ParserStateFlags.PST_SUBSHELL);
 			throw new ParseError("Expected command in subshell", this.pos);
 		}
 		this.skipWhitespace();
 		if (this.atEnd() || this.peek() !== ")") {
+			this._clearState(ParserStateFlags.PST_SUBSHELL);
 			throw new ParseError("Expected ) to close subshell", this.pos);
 		}
 		this.advance();
+		this._clearState(ParserStateFlags.PST_SUBSHELL);
 		return new Subshell(body, this._collectRedirects());
 	}
 
@@ -11334,6 +11351,7 @@ class Parser {
 		}
 		this.advance();
 		this.advance();
+		this._setState(ParserStateFlags.PST_CONDEXPR);
 		// Parse the conditional expression body
 		body = this._parseCondOr();
 		// Skip whitespace before ]]
@@ -11347,6 +11365,7 @@ class Parser {
 			this.pos + 1 >= this.length ||
 			this.source[this.pos + 1] !== "]"
 		) {
+			this._clearState(ParserStateFlags.PST_CONDEXPR);
 			throw new ParseError(
 				"Expected ]] to close conditional expression",
 				this.pos,
@@ -11354,6 +11373,7 @@ class Parser {
 		}
 		this.advance();
 		this.advance();
+		this._clearState(ParserStateFlags.PST_CONDEXPR);
 		return new ConditionalExpr(body, this._collectRedirects());
 	}
 
@@ -11550,11 +11570,15 @@ class Parser {
 	}
 
 	_parseCondRegexWord() {
+		let result;
 		this._condSkipWhitespace();
 		if (this._condAtEnd()) {
 			return null;
 		}
-		return this._parseWordInternal(WORD_CTX_REGEX);
+		this._setState(ParserStateFlags.PST_REGEXP);
+		result = this._parseWordInternal(WORD_CTX_REGEX);
+		this._clearState(ParserStateFlags.PST_REGEXP);
+		return result;
 	}
 
 	parseBraceGroup() {
@@ -12092,6 +12116,7 @@ class Parser {
 		if (!this.consumeWord("case")) {
 			return null;
 		}
+		this._setState(ParserStateFlags.PST_CASESTMT);
 		this.skipWhitespace();
 		// Parse the word to match
 		word = this.parseWord();
@@ -12355,11 +12380,13 @@ class Parser {
 		// Expect 'esac'
 		this.skipWhitespaceAndNewlines();
 		if (!this._lexConsumeWord("esac")) {
+			this._clearState(ParserStateFlags.PST_CASESTMT);
 			throw new ParseError(
 				"Expected 'esac' to close case statement",
 				this._lexPeekToken().pos,
 			);
 		}
+		this._clearState(ParserStateFlags.PST_CASESTMT);
 		return new Case(word, patterns, this._collectRedirects());
 	}
 

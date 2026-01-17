@@ -5429,7 +5429,11 @@ class Parser:
         return word
 
     def consume_word(self, expected: str) -> bool:
-        """Try to consume a specific reserved word. Returns True if successful."""
+        """Try to consume a specific word. Returns True if successful.
+
+        Note: This is kept for edge cases (process sub leading }, variable names).
+        Most reserved word consumption has been migrated to _lex_consume_word().
+        """
         saved_pos = self.pos
         self.skip_whitespace()
 

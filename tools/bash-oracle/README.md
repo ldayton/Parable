@@ -4,13 +4,12 @@ Patched bash that dumps its internal AST as s-expressions. Used as an oracle to 
 
 ## Source
 
-Development happens in the bash-oracle branch: https://github.com/ldayton/bash-oracle/tree/bash-oracle
+https://github.com/ldayton/bash-oracle
 
 ## Build
 
 ```bash
-cd ~/source/bash
-git checkout bash-oracle
+cd ~/source/bash-oracle
 just build
 ```
 
@@ -56,15 +55,4 @@ uv run oracle --convert-tree-sitter
 
 ## Files
 
-- `bash-oracle.patch` - Patch for bash (generated via `just patchfile` in bash repo)
 - `src/oracle/` - Helper scripts for test corpus conversion
-
-## Updating the patch
-
-After making changes in the bash repo:
-```bash
-cd ~/source/bash
-git checkout bash-oracle
-# make changes, commit
-just patchfile  # writes to ~/source/Parable/tools/bash-oracle/bash-oracle.patch
-```

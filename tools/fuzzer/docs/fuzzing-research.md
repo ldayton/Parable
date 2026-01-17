@@ -74,7 +74,7 @@ Given the setup (bash-oracle with `--dump-ast` and Parable producing comparable 
 
 The differential testing infrastructure already exists:
 
-- **bash-oracle** at `~/source/bash/bash-oracle` with `-e <input>` flag dumps S-expression AST
+- **bash-oracle** at `~/source/bash-oracle/bash-oracle` with `-e <input>` flag dumps S-expression AST
 - **Parable** via `parse(input)[0].to_sexp()` produces matching S-expression format
 - **Comparison**: whitespace-normalized string equality (see `tools/fuzzer/src/fuzzer/common.py`)
 - **Corpus**: ~20k lines across `.tests` files in `tests/parable/` and `tests/corpus/`

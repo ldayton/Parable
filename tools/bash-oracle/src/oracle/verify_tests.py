@@ -8,7 +8,7 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
 REPO_ROOT = SCRIPT_DIR.parent.parent.parent.parent
-ORACLE_PATH = Path.home() / "source" / "bash" / "bash-oracle"
+ORACLE_PATH = Path.home() / "source" / "bash-oracle" / "bash-oracle"
 
 
 @dataclass

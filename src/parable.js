@@ -205,6 +205,16 @@ class DolbraceState {
 	static QUOTE2 = 128;
 }
 
+class MatchedPairFlags {
+	static NONE = 0;
+	static DQUOTE = 1;
+	static DOLBRACE = 2;
+	static COMMAND = 4;
+	static ARITH = 8;
+	static ALLOWESC = 16;
+	static EXTGLOB = 32;
+}
+
 class SavedParserState {
 	constructor(
 		parser_state,
@@ -990,9 +1000,171 @@ class Lexer {
 		return true;
 	}
 
+	_parseMatchedPair(open_char, close_char, flags) {
+		let ch, chars, count, nested, next_ch, pass_next, start;
+		if (flags == null) {
+			flags = 0;
+		}
+		start = this.pos;
+		count = 1;
+		chars = [];
+		pass_next = false;
+		while (count > 0) {
+			if (this.atEnd()) {
+				throw new MatchedPairError(
+					`unexpected EOF while looking for matching \`${close_char}'`,
+					start,
+				);
+			}
+			ch = this.advance();
+			// Backslash escape handling - pass through next char
+			if (pass_next) {
+				pass_next = false;
+				chars.push(ch);
+				continue;
+			}
+			// Inside single quotes, almost everything is literal
+			if (open_char === "'") {
+				if (ch === close_char) {
+					count -= 1;
+					if (count === 0) {
+						break;
+					}
+				}
+				// In $'...' mode, backslash escapes are processed
+				if (ch === "\\" && flags & MatchedPairFlags.ALLOWESC) {
+					pass_next = true;
+				}
+				chars.push(ch);
+				continue;
+			}
+			// Backslash - set pass_next flag
+			if (ch === "\\") {
+				// Line continuation - skip \n
+				if (!this.atEnd() && this.peek() === "\n") {
+					this.advance();
+					continue;
+				}
+				pass_next = true;
+				chars.push(ch);
+				continue;
+			}
+			// Closing delimiter
+			if (ch === close_char) {
+				count -= 1;
+				if (count === 0) {
+					break;
+				}
+				chars.push(ch);
+				continue;
+			}
+			// Opening delimiter (only when open != close)
+			// In DOLBRACE mode, don't track bare '{' - only ${...} nesting matters
+			// (handled by the $ block below via recursion)
+			if (ch === open_char && open_char !== close_char) {
+				if (!(flags & MatchedPairFlags.DOLBRACE && open_char === "{")) {
+					count += 1;
+				}
+				chars.push(ch);
+				continue;
+			}
+			// Quote characters trigger recursion (when not already in quote mode)
+			if ("'\"`".includes(ch) && open_char !== close_char) {
+				if (ch === "'") {
+					// Single quote - recursively parse until matching '
+					chars.push(ch);
+					nested = this._parseMatchedPair("'", "'", flags);
+					chars.push(nested);
+					chars.push("'");
+					continue;
+				} else if (ch === '"') {
+					// Double quote - recursively parse until matching "
+					chars.push(ch);
+					nested = this._parseMatchedPair(
+						'"',
+						'"',
+						flags | MatchedPairFlags.DQUOTE,
+					);
+					chars.push(nested);
+					chars.push('"');
+					continue;
+				} else if (ch === "`") {
+					// Backtick - recursively parse until matching `
+					chars.push(ch);
+					nested = this._parseMatchedPair("`", "`", flags);
+					chars.push(nested);
+					chars.push("`");
+					continue;
+				}
+			}
+			// ${ $( $[ trigger nested parsing (unless in extglob where they're just pattern chars)
+			if (ch === "$" && !this.atEnd() && !(flags & MatchedPairFlags.EXTGLOB)) {
+				next_ch = this.peek();
+				if (next_ch === "{") {
+					chars.push(ch);
+					chars.push(this.advance());
+					nested = this._parseMatchedPair(
+						"{",
+						"}",
+						flags | MatchedPairFlags.DOLBRACE,
+					);
+					chars.push(nested);
+					chars.push("}");
+					continue;
+				} else if (next_ch === "(") {
+					chars.push(ch);
+					chars.push(this.advance());
+					if (!this.atEnd() && this.peek() === "(") {
+						// $(( ... )) arithmetic
+						chars.push(this.advance());
+						nested = this._parseMatchedPair(
+							"(",
+							")",
+							flags | MatchedPairFlags.ARITH,
+						);
+						chars.push(nested);
+						chars.push(")");
+						// Need to consume the second )
+						if (!this.atEnd() && this.peek() === ")") {
+							chars.push(this.advance());
+						} else {
+							throw new MatchedPairError(
+								"unexpected EOF while looking for matching `))'",
+								start,
+							);
+						}
+					} else {
+						// $( ... ) command substitution
+						nested = this._parseMatchedPair(
+							"(",
+							")",
+							flags | MatchedPairFlags.COMMAND,
+						);
+						chars.push(nested);
+						chars.push(")");
+					}
+					continue;
+				} else if (next_ch === "[") {
+					// Deprecated $[ ... ] arithmetic
+					chars.push(ch);
+					chars.push(this.advance());
+					nested = this._parseMatchedPair(
+						"[",
+						"]",
+						flags | MatchedPairFlags.ARITH,
+					);
+					chars.push(nested);
+					chars.push("]");
+					continue;
+				}
+			}
+			chars.push(ch);
+		}
+		return chars.join("");
+	}
+
 	_readWordInternal(ctx, at_command_start, in_array_literal) {
 		let ansi_result,
-			arith_start,
 			array_result,
 			bracket_depth,
 			bracket_start_pos,
@@ -1001,20 +1173,15 @@ class Lexer {
 			chars,
 			cmdsub_result,
 			content,
-			depth,
-			extglob_depth,
-			extglob_start,
 			for_regex,
 			handle_line_continuation,
 			in_single_in_dquote,
-			inner_paren_depth,
 			is_array_assign,
 			locale_result,
 			next_c,
 			next_ch,
 			paren_depth,
 			parts,
-			pc,
 			prev_char,
 			procsub_result,
 			saw_newline,
@@ -1117,24 +1284,10 @@ class Lexer {
 			// COND: Extglob patterns or ( terminates
 			if (ctx === WORD_CTX_COND && ch === "(") {
 				if (chars.length > 0 && _isExtglobPrefix(chars[chars.length - 1])) {
-					extglob_start = this.pos;
 					chars.push(this.advance());
-					depth = 1;
-					while (!this.atEnd() && depth > 0) {
-						c = this.peek();
-						if (c === "(") {
-							depth += 1;
-						} else if (c === ")") {
-							depth -= 1;
-						}
-						chars.push(this.advance());
-					}
-					if (depth > 0) {
-						throw new MatchedPairError(
-							"unexpected EOF looking for `)'",
-							extglob_start,
-						);
-					}
+					content = this._parseMatchedPair("(", ")", MatchedPairFlags.EXTGLOB);
+					chars.push(content);
+					chars.push(")");
 					continue;
 				} else {
 					// ( without extglob prefix terminates the word
@@ -1360,97 +1513,11 @@ class Lexer {
 				this.pos + 1 < this.length &&
 				this.source[this.pos + 1] === "("
 			) {
-				extglob_start = this.pos;
 				chars.push(this.advance());
 				chars.push(this.advance());
-				extglob_depth = 1;
-				while (!this.atEnd() && extglob_depth > 0) {
-					c = this.peek();
-					if (c === ")") {
-						chars.push(this.advance());
-						extglob_depth -= 1;
-					} else if (c === "(") {
-						chars.push(this.advance());
-						extglob_depth += 1;
-					} else if (c === "\\") {
-						if (
-							this.pos + 1 < this.length &&
-							this.source[this.pos + 1] === "\n"
-						) {
-							this.advance();
-							this.advance();
-						} else {
-							chars.push(this.advance());
-							if (!this.atEnd()) {
-								chars.push(this.advance());
-							}
-						}
-					} else if (c === "'") {
-						chars.push(this.advance());
-						while (!this.atEnd() && this.peek() !== "'") {
-							chars.push(this.advance());
-						}
-						if (!this.atEnd()) {
-							chars.push(this.advance());
-						}
-					} else if (c === '"') {
-						chars.push(this.advance());
-						while (!this.atEnd() && this.peek() !== '"') {
-							if (this.peek() === "\\" && this.pos + 1 < this.length) {
-								chars.push(this.advance());
-							}
-							chars.push(this.advance());
-						}
-						if (!this.atEnd()) {
-							chars.push(this.advance());
-						}
-					} else if (
-						c === "$" &&
-						this.pos + 1 < this.length &&
-						this.source[this.pos + 1] === "("
-					) {
-						arith_start = this.pos;
-						chars.push(this.advance());
-						chars.push(this.advance());
-						if (!this.atEnd() && this.peek() === "(") {
-							chars.push(this.advance());
-							inner_paren_depth = 2;
-							while (!this.atEnd() && inner_paren_depth > 0) {
-								pc = this.peek();
-								if (pc === "(") {
-									inner_paren_depth += 1;
-								} else if (pc === ")") {
-									inner_paren_depth -= 1;
-								}
-								chars.push(this.advance());
-							}
-							if (inner_paren_depth > 0) {
-								throw new MatchedPairError(
-									"unexpected EOF looking for `))'",
-									arith_start,
-								);
-							}
-						} else {
-							extglob_depth += 1;
-						}
-					} else if (
-						_isExtglobPrefix(c) &&
-						this.pos + 1 < this.length &&
-						this.source[this.pos + 1] === "("
-					) {
-						chars.push(this.advance());
-						chars.push(this.advance());
-						extglob_depth += 1;
-					} else {
-						chars.push(this.advance());
-					}
-				}
-				if (extglob_depth > 0) {
-					throw new MatchedPairError(
-						"unexpected EOF looking for `)'",
-						extglob_start,
-					);
-				}
+				content = this._parseMatchedPair("(", ")", MatchedPairFlags.EXTGLOB);
+				chars.push(content);
+				chars.push(")");
 				continue;
 			}
 			// NORMAL: Metacharacter terminates word (unless inside brackets)
@@ -1939,7 +2006,7 @@ class Lexer {
 	}
 
 	_consumeParamName() {
-		let bracket_depth, c, ch, name_chars, sc, subscript_quote;
+		let c, ch, content, name_chars;
 		if (this.atEnd()) {
 			return null;
 		}
@@ -1975,74 +2042,11 @@ class Lexer {
 					if (!this._paramSubscriptHasClose(this.pos)) {
 						break;
 					}
-					// Array subscript - track bracket depth and quotes
+					// Array subscript - use _parse_matched_pair for bracket/quote handling
 					name_chars.push(this.advance());
-					bracket_depth = 1;
-					subscript_quote = new QuoteState();
-					while (!this.atEnd() && bracket_depth > 0) {
-						sc = this.peek();
-						if (subscript_quote.single) {
-							name_chars.push(this.advance());
-							if (sc === "'") {
-								subscript_quote.single = false;
-							}
-							continue;
-						}
-						if (subscript_quote.double) {
-							if (sc === "\\" && this.pos + 1 < this.length) {
-								name_chars.push(this.advance());
-								if (!this.atEnd()) {
-									name_chars.push(this.advance());
-								}
-								continue;
-							}
-							name_chars.push(this.advance());
-							if (sc === '"') {
-								subscript_quote.double = false;
-							}
-							continue;
-						}
-						if (sc === "'") {
-							subscript_quote.single = true;
-							name_chars.push(this.advance());
-							continue;
-						}
-						if (
-							sc === "$" &&
-							this.pos + 1 < this.length &&
-							this.source[this.pos + 1] === '"'
-						) {
-							// Locale string $"..." - strip the $ and enter double quote
-							this.advance();
-							subscript_quote.double = true;
-							name_chars.push(this.advance());
-							continue;
-						}
-						if (sc === '"') {
-							subscript_quote.double = true;
-							name_chars.push(this.advance());
-							continue;
-						}
-						if (sc === "\\") {
-							name_chars.push(this.advance());
-							if (!this.atEnd()) {
-								name_chars.push(this.advance());
-							}
-							continue;
-						}
-						if (sc === "[") {
-							bracket_depth += 1;
-						} else if (sc === "]") {
-							bracket_depth -= 1;
-							if (bracket_depth === 0) {
-								break;
-							}
-						}
-						name_chars.push(this.advance());
-					}
-					if (!this.atEnd() && this.peek() === "]") {
-						name_chars.push(this.advance());
-					}
+					content = this._parseMatchedPair("[", "]");
+					name_chars.push(content);
+					name_chars.push("]");
 					break;
 				} else {
 					break;
@@ -2109,12 +2113,10 @@ class Lexer {
 			c,
 			ch,
 			content,
-			content_chars,
 			depth,
 			dollar_count,
 			formatted,
 			inner,
-			inner_quote,
 			next_c,
 			op,
 			param,
@@ -2168,49 +2170,14 @@ class Lexer {
 				// ${!prefix@} and ${!prefix*} are prefix matching
 				if (!this.atEnd() && _isAtOrStar(this.peek())) {
 					suffix = this.advance();
-					trailing = [];
-					depth = 1;
-					while (!this.atEnd() && depth > 0) {
-						c = this.peek();
-						if (
-							c === "$" &&
-							this.pos + 1 < this.length &&
-							this.source[this.pos + 1] === "{"
-						) {
-							depth += 1;
-							trailing.push(this.advance());
-							trailing.push(this.advance());
-						} else if (c === "}") {
-							depth -= 1;
-							if (depth === 0) {
-								break;
-							}
-							trailing.push(this.advance());
-						} else if (c === "\\") {
-							trailing.push(this.advance());
-							if (!this.atEnd()) {
-								trailing.push(this.advance());
-							}
-						} else {
-							trailing.push(this.advance());
-						}
-					}
-					if (depth === 0) {
-						this.advance();
-						text = this.source.slice(start, this.pos);
-						this._dolbrace_state = saved_dolbrace;
-						return [
-							new ParamIndirect(param + suffix + trailing.join("")),
-							text,
-						];
-					}
-					// Unclosed brace at EOF - error, not fallback
+					trailing = this._parseMatchedPair(
+						"{",
+						"}",
+						MatchedPairFlags.DOLBRACE,
+					);
+					text = this.source.slice(start, this.pos);
 					this._dolbrace_state = saved_dolbrace;
-					if (this.atEnd()) {
-						throw new MatchedPairError("unexpected EOF looking for `}'", start);
-					}
-					this.pos = start;
-					return [null, ""];
+					return [new ParamIndirect(param + suffix + trailing), text];
 				}
 				// Check for operator (e.g., ${!##} = indirect of # with # op)
 				op = this._consumeParamOperator();
@@ -2218,44 +2185,10 @@ class Lexer {
 					op = this.advance();
 				}
 				if (op != null) {
-					arg_chars = [];
-					depth = 1;
-					while (!this.atEnd() && depth > 0) {
-						c = this.peek();
-						if (
-							c === "$" &&
-							this.pos + 1 < this.length &&
-							this.source[this.pos + 1] === "{"
-						) {
-							depth += 1;
-							arg_chars.push(this.advance());
-							arg_chars.push(this.advance());
-						} else if (c === "}") {
-							depth -= 1;
-							if (depth > 0) {
-								arg_chars.push(this.advance());
-							}
-						} else if (c === "\\") {
-							arg_chars.push(this.advance());
-							if (!this.atEnd()) {
-								arg_chars.push(this.advance());
-							}
-						} else {
-							arg_chars.push(this.advance());
-						}
-					}
-					if (depth === 0) {
-						this.advance();
-						arg = arg_chars.join("");
-						text = this.source.slice(start, this.pos);
-						this._dolbrace_state = saved_dolbrace;
-						return [new ParamIndirect(param, op, arg), text];
-					}
-					// Unclosed at EOF - error, not fallback
-					if (this.atEnd()) {
-						this._dolbrace_state = saved_dolbrace;
-						throw new MatchedPairError("unexpected EOF looking for `}'", start);
-					}
+					arg = this._parseMatchedPair("{", "}", MatchedPairFlags.DOLBRACE);
+					text = this.source.slice(start, this.pos);
+					this._dolbrace_state = saved_dolbrace;
+					return [new ParamIndirect(param, op, arg), text];
 				}
 				// Fell through - pattern didn't match, return None
 				this._dolbrace_state = saved_dolbrace;
@@ -2280,101 +2213,10 @@ class Lexer {
 				param = "";
 			} else {
 				// Unknown syntax - consume until matching }
-				depth = 1;
-				content_chars = [];
-				inner_quote = new QuoteState();
-				while (!this.atEnd() && depth > 0) {
-					c = this.peek();
-					if (inner_quote.single) {
-						content_chars.push(this.advance());
-						if (c === "'") {
-							inner_quote.single = false;
-						}
-						continue;
-					}
-					if (inner_quote.double) {
-						if (c === "\\" && this.pos + 1 < this.length) {
-							content_chars.push(this.advance());
-							if (!this.atEnd()) {
-								content_chars.push(this.advance());
-							}
-							continue;
-						}
-						content_chars.push(this.advance());
-						if (c === '"') {
-							inner_quote.double = false;
-						}
-						continue;
-					}
-					if (c === "'") {
-						inner_quote.single = true;
-						content_chars.push(this.advance());
-						continue;
-					}
-					if (c === '"') {
-						inner_quote.double = true;
-						content_chars.push(this.advance());
-						continue;
-					}
-					if (c === "`") {
-						backtick_start = this.pos;
-						content_chars.push(this.advance());
-						while (!this.atEnd() && this.peek() !== "`") {
-							bc = this.peek();
-							if (bc === "\\" && this.pos + 1 < this.length) {
-								next_c = this.source[this.pos + 1];
-								if (_isEscapeCharInDquote(next_c)) {
-									content_chars.push(this.advance());
-								}
-							}
-							content_chars.push(this.advance());
-						}
-						if (this.atEnd()) {
-							throw new ParseError("Unterminated backtick", backtick_start);
-						}
-						content_chars.push(this.advance());
-						continue;
-					}
-					if (
-						c === "$" &&
-						this.pos + 1 < this.length &&
-						this.source[this.pos + 1] === "{"
-					) {
-						depth += 1;
-						content_chars.push(this.advance());
-						content_chars.push(this.advance());
-					} else if (c === "}") {
-						depth -= 1;
-						if (depth === 0) {
-							break;
-						}
-						content_chars.push(this.advance());
-					} else if (c === "\\") {
-						if (
-							this.pos + 1 < this.length &&
-							this.source[this.pos + 1] === "\n"
-						) {
-							this.advance();
-							this.advance();
-						} else {
-							content_chars.push(this.advance());
-							if (!this.atEnd()) {
-								content_chars.push(this.advance());
-							}
-						}
-					} else {
-						content_chars.push(this.advance());
-					}
-				}
-				if (depth === 0) {
-					content = content_chars.join("");
-					this.advance();
-					text = `\${${content}}`;
-					this._dolbrace_state = saved_dolbrace;
-					return [new ParamExpansion(content), text];
-				}
+				content = this._parseMatchedPair("{", "}", MatchedPairFlags.DOLBRACE);
+				text = `\${${content}}`;
 				this._dolbrace_state = saved_dolbrace;
-				throw new ParseError("Unclosed parameter expansion", start);
+				return [new ParamExpansion(content), text];
 			}
 		}
 		if (this.atEnd()) {
@@ -9060,15 +8902,7 @@ class Parser {
 	}
 
 	_parseProcessSubstitution() {
-		let c,
-			cmd,
-			depth,
-			direction,
-			old_in_process_sub,
-			saved,
-			start,
-			text,
-			text_end;
+		let cmd, direction, old_in_process_sub, saved, start, text, text_end;
 		if (this.atEnd() || !_isRedirectChar(this.peek())) {
 			return [null, ""];
 		}
@@ -9110,43 +8944,10 @@ class Parser {
 			this._restoreParserState(saved);
 			this._in_process_sub = old_in_process_sub;
 			this.pos = start + 2;
-			// Scan to find matching ) with paren depth tracking
-			depth = 1;
-			while (!this.atEnd() && depth > 0) {
-				c = this.peek();
-				if (c === "(") {
-					depth += 1;
-				} else if (c === ")") {
-					depth -= 1;
-					if (depth === 0) {
-						break;
-					}
-				} else if (c === "'") {
-					this.advance();
-					while (!this.atEnd() && this.peek() !== "'") {
-						this.advance();
-					}
-				} else if (c === '"') {
-					this.advance();
-					while (!this.atEnd() && this.peek() !== '"') {
-						if (this.peek() === "\\" && this.pos + 1 < this.length) {
-							this.advance();
-						}
-						this.advance();
-					}
-				} else if (c === "\\" && this.pos + 1 < this.length) {
-					this.advance();
-				}
-				this.advance();
-			}
-			if (depth !== 0) {
-				if (this.atEnd()) {
-					throw new MatchedPairError("unexpected EOF looking for `)'", start);
-				}
-				this.pos = start;
-				return [null, ""];
-			}
-			this.advance();
+			// Scan to find matching ) using unified matched pair parsing
+			this._lexer.pos = this.pos;
+			this._lexer._parseMatchedPair("(", ")");
+			this.pos = this._lexer.pos;
 			text = this.source.slice(start, this.pos);
 			// Strip line continuations (backslash-newline) from text
 			text = _stripLineContinuationsCommentAware(text);
@@ -10176,7 +9977,7 @@ class Parser {
 	}
 
 	_parseDeprecatedArithmetic() {
-		let c, content, content_start, depth, start, text;
+		let content, start, text;
 		if (this.atEnd() || this.peek() !== "$") {
 			return [null, ""];
 		}
@@ -10187,31 +9988,10 @@ class Parser {
 		}
 		this.advance();
 		this.advance();
-		// Find matching ] - need to track nested brackets
-		content_start = this.pos;
-		depth = 1;
-		while (!this.atEnd() && depth > 0) {
-			c = this.peek();
-			if (c === "[" && !_isBackslashEscaped(this.source, this.pos)) {
-				depth += 1;
-				this.advance();
-			} else if (c === "]") {
-				if (!_isBackslashEscaped(this.source, this.pos)) {
-					depth -= 1;
-					if (depth === 0) {
-						break;
-					}
-				}
-				this.advance();
-			} else {
-				this.advance();
-			}
-		}
-		if (this.atEnd() || depth !== 0) {
-			throw new ParseError("Unterminated $[", start);
-		}
-		content = this.source.slice(content_start, this.pos);
-		this.advance();
+		// Find matching ] using unified matched pair parsing
+		this._lexer.pos = this.pos;
+		content = this._lexer._parseMatchedPair("[", "]", MatchedPairFlags.ARITH);
+		this.pos = this._lexer.pos;
 		text = this.source.slice(start, this.pos);
 		return [new ArithDeprecated(content), text];
 	}

@@ -1024,9 +1024,7 @@ class Lexer:
                 if next_ch == "{":
                     chars.append(ch)
                     chars.append(self.advance())
-                    nested = self._parse_matched_pair(
-                        "{", "}", flags | MatchedPairFlags.DOLBRACE
-                    )
+                    nested = self._parse_matched_pair("{", "}", flags | MatchedPairFlags.DOLBRACE)
                     chars.append(nested)
                     chars.append("}")
                     continue
@@ -1036,9 +1034,7 @@ class Lexer:
                     if not self.at_end() and self.peek() == "(":
                         # $(( ... )) arithmetic
                         chars.append(self.advance())
-                        nested = self._parse_matched_pair(
-                            "(", ")", flags | MatchedPairFlags.ARITH
-                        )
+                        nested = self._parse_matched_pair("(", ")", flags | MatchedPairFlags.ARITH)
                         chars.append(nested)
                         chars.append(")")
                         # Need to consume the second )
@@ -1061,9 +1057,7 @@ class Lexer:
                     # Deprecated $[ ... ] arithmetic
                     chars.append(ch)
                     chars.append(self.advance())
-                    nested = self._parse_matched_pair(
-                        "[", "]", flags | MatchedPairFlags.ARITH
-                    )
+                    nested = self._parse_matched_pair("[", "]", flags | MatchedPairFlags.ARITH)
                     chars.append(nested)
                     chars.append("]")
                     continue

@@ -406,6 +406,117 @@ class Lexer {
 		}
 		return !this.isMetachar(c);
 	}
+
+	_readOperator() {
+		let c, start, three, two;
+		start = this.pos;
+		c = this.peek();
+		if (c == null) {
+			return null;
+		}
+		two = this.lookahead(2);
+		three = this.lookahead(3);
+		// Three-char operators
+		if (three === ";;&") {
+			this.pos += 3;
+			return new Token(TokenType.SEMI_SEMI_AMP, three, start);
+		}
+		if (three === "<<-") {
+			this.pos += 3;
+			return new Token(TokenType.LESS_LESS_MINUS, three, start);
+		}
+		if (three === "<<<") {
+			this.pos += 3;
+			return new Token(TokenType.LESS_LESS_LESS, three, start);
+		}
+		if (three === "&>>") {
+			this.pos += 3;
+			return new Token(TokenType.AMP_GREATER_GREATER, three, start);
+		}
+		// Two-char operators
+		if (two === "&&") {
+			this.pos += 2;
+			return new Token(TokenType.AND_AND, two, start);
+		}
+		if (two === "||") {
+			this.pos += 2;
+			return new Token(TokenType.OR_OR, two, start);
+		}
+		if (two === ";;") {
+			this.pos += 2;
+			return new Token(TokenType.SEMI_SEMI, two, start);
+		}
+		if (two === ";&") {
+			this.pos += 2;
+			return new Token(TokenType.SEMI_AMP, two, start);
+		}
+		if (two === "<<") {
+			this.pos += 2;
+			return new Token(TokenType.LESS_LESS, two, start);
+		}
+		if (two === ">>") {
+			this.pos += 2;
+			return new Token(TokenType.GREATER_GREATER, two, start);
+		}
+		if (two === "<&") {
+			this.pos += 2;
+			return new Token(TokenType.LESS_AMP, two, start);
+		}
+		if (two === ">&") {
+			this.pos += 2;
+			return new Token(TokenType.GREATER_AMP, two, start);
+		}
+		if (two === "<>") {
+			this.pos += 2;
+			return new Token(TokenType.LESS_GREATER, two, start);
+		}
+		if (two === ">|") {
+			this.pos += 2;
+			return new Token(TokenType.GREATER_PIPE, two, start);
+		}
+		if (two === "&>") {
+			this.pos += 2;
+			return new Token(TokenType.AMP_GREATER, two, start);
+		}
+		if (two === "|&") {
+			this.pos += 2;
+			return new Token(TokenType.PIPE_AMP, two, start);
+		}
+		// Single-char operators
+		if (c === ";") {
+			this.pos += 1;
+			return new Token(TokenType.SEMI, c, start);
+		}
+		if (c === "|") {
+			this.pos += 1;
+			return new Token(TokenType.PIPE, c, start);
+		}
+		if (c === "&") {
+			this.pos += 1;
+			return new Token(TokenType.AMP, c, start);
+		}
+		if (c === "(") {
+			this.pos += 1;
+			return new Token(TokenType.LPAREN, c, start);
+		}
+		if (c === ")") {
+			this.pos += 1;
+			return new Token(TokenType.RPAREN, c, start);
+		}
+		if (c === "<") {
+			this.pos += 1;
+			return new Token(TokenType.LESS, c, start);
+		}
+		if (c === ">") {
+			this.pos += 1;
+			return new Token(TokenType.GREATER, c, start);
+		}
+		if (c === "\n") {
+			this.pos += 1;
+			return new Token(TokenType.NEWLINE, c, start);
+		}
+		return null;
+	}
 }
 
 function _stripLineContinuationsCommentAware(text) {

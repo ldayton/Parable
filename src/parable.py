@@ -434,6 +434,91 @@ class Lexer:
             return False
         return not self.is_metachar(c)
 
+    def _read_operator(self) -> Token | None:
+        """Try to read an operator token. Returns None if not at operator."""
+        start = self.pos
+        c = self.peek()
+        if c is None:
+            return None
+        two = self.lookahead(2)
+        three = self.lookahead(3)
+        # Three-char operators
+        if three == ";;&":
+            self.pos += 3
+            return Token(TokenType.SEMI_SEMI_AMP, three, start)
+        if three == "<<-":
+            self.pos += 3
+            return Token(TokenType.LESS_LESS_MINUS, three, start)
+        if three == "<<<":
+            self.pos += 3
+            return Token(TokenType.LESS_LESS_LESS, three, start)
+        if three == "&>>":
+            self.pos += 3
+            return Token(TokenType.AMP_GREATER_GREATER, three, start)
+        # Two-char operators
+        if two == "&&":
+            self.pos += 2
+            return Token(TokenType.AND_AND, two, start)
+        if two == "||":
+            self.pos += 2
+            return Token(TokenType.OR_OR, two, start)
+        if two == ";;":
+            self.pos += 2
+            return Token(TokenType.SEMI_SEMI, two, start)
+        if two == ";&":
+            self.pos += 2
+            return Token(TokenType.SEMI_AMP, two, start)
+        if two == "<<":
+            self.pos += 2
+            return Token(TokenType.LESS_LESS, two, start)
+        if two == ">>":
+            self.pos += 2
+            return Token(TokenType.GREATER_GREATER, two, start)
+        if two == "<&":
+            self.pos += 2
+            return Token(TokenType.LESS_AMP, two, start)
+        if two == ">&":
+            self.pos += 2
+            return Token(TokenType.GREATER_AMP, two, start)
+        if two == "<>":
+            self.pos += 2
+            return Token(TokenType.LESS_GREATER, two, start)
+        if two == ">|":
+            self.pos += 2
+            return Token(TokenType.GREATER_PIPE, two, start)
+        if two == "&>":
+            self.pos += 2
+            return Token(TokenType.AMP_GREATER, two, start)
+        if two == "|&":
+            self.pos += 2
+            return Token(TokenType.PIPE_AMP, two, start)
+        # Single-char operators
+        if c == ";":
+            self.pos += 1
+            return Token(TokenType.SEMI, c, start)
+        if c == "|":
+            self.pos += 1
+            return Token(TokenType.PIPE, c, start)
+        if c == "&":
+            self.pos += 1
+            return Token(TokenType.AMP, c, start)
+        if c == "(":
+            self.pos += 1
+            return Token(TokenType.LPAREN, c, start)
+        if c == ")":
+            self.pos += 1
+            return Token(TokenType.RPAREN, c, start)
+        if c == "<":
+            self.pos += 1
+            return Token(TokenType.LESS, c, start)
+        if c == ">":
+            self.pos += 1
+            return Token(TokenType.GREATER, c, start)
+        if c == "\n":
+            self.pos += 1
+            return Token(TokenType.NEWLINE, c, start)
+        return None
+
 
 def _strip_line_continuations_comment_aware(text: str) -> str:
     """Strip backslash-newline line continuations, preserving newlines in comments.

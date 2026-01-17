@@ -10630,8 +10630,8 @@ class Parser:
         time_posix = False
 
         # Check for 'time' prefix first
-        if self.peek_word() == "time":
-            self.consume_word("time")
+        if self._lex_is_at_reserved_word("time"):
+            self._lex_consume_word("time")
             prefix_order = "time"
             self.skip_whitespace()
             # Check for -p flag
@@ -10655,8 +10655,8 @@ class Parser:
                     time_posix = True
                     self.skip_whitespace()
             # Skip nested time keywords (time time X collapses to time X)
-            while self.peek_word() == "time":
-                self.consume_word("time")
+            while self._lex_is_at_reserved_word("time"):
+                self._lex_consume_word("time")
                 self.skip_whitespace()
                 # Check for -p after nested time
                 if not self.at_end() and self.peek() == "-":

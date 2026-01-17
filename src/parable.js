@@ -12834,8 +12834,8 @@ class Parser {
 		prefix_order = null;
 		time_posix = false;
 		// Check for 'time' prefix first
-		if (this.peekWord() === "time") {
-			this.consumeWord("time");
+		if (this._lexIsAtReservedWord("time")) {
+			this._lexConsumeWord("time");
 			prefix_order = "time";
 			this.skipWhitespace();
 			// Check for -p flag
@@ -12867,8 +12867,8 @@ class Parser {
 				}
 			}
 			// Skip nested time keywords (time time X collapses to time X)
-			while (this.peekWord() === "time") {
-				this.consumeWord("time");
+			while (this._lexIsAtReservedWord("time")) {
+				this._lexConsumeWord("time");
 				this.skipWhitespace();
 				// Check for -p after nested time
 				if (!this.atEnd() && this.peek() === "-") {

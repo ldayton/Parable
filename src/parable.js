@@ -12043,6 +12043,7 @@ class Parser {
 			scan_pos,
 			terminator,
 			word;
+		// Use consume_word for initial keyword to handle leading } in process subs
 		if (!this.consumeWord("case")) {
 			return null;
 		}
@@ -12054,7 +12055,7 @@ class Parser {
 		}
 		this.skipWhitespaceAndNewlines();
 		// Expect 'in'
-		if (!this.consumeWord("in")) {
+		if (!this._lexConsumeWord("in")) {
 			throw new ParseError("Expected 'in' after case word", this.pos);
 		}
 		this.skipWhitespaceAndNewlines();
@@ -12064,7 +12065,7 @@ class Parser {
 		while (true) {
 			this.skipWhitespaceAndNewlines();
 			// Check if we're at 'esac' (but not 'esac)' which is esac as a pattern)
-			if (this.peekWord() === "esac") {
+			if (this._lexIsAtReservedWord("esac")) {
 				// Look ahead to see if esac is a pattern (esac followed by ) then body/;;)
 				// or the closing keyword (esac followed by ) that closes containing construct)
 				saved = this.pos;
@@ -12282,7 +12283,7 @@ class Parser {
 			if (!is_empty_body) {
 				// Skip newlines and check if there's content before terminator or esac
 				this.skipWhitespaceAndNewlines();
-				if (!this.atEnd() && this.peekWord() !== "esac") {
+				if (!this.atEnd() && !this._lexIsAtReservedWord("esac")) {
 					// Check again for terminator after whitespace/newlines
 					is_at_terminator = this._isCaseTerminator();
 					if (!is_at_terminator) {
@@ -12299,7 +12300,7 @@ class Parser {
 		this._clearState(ParserStateFlags.PST_CASEPAT);
 		// Expect 'esac'
 		this.skipWhitespaceAndNewlines();
-		if (!this.consumeWord("esac")) {
+		if (!this._lexConsumeWord("esac")) {
 			throw new ParseError("Expected 'esac' to close case statement", this.pos);
 		}
 		return new Case(word, patterns, this._collectRedirects());

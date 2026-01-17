@@ -9937,6 +9937,7 @@ class Parser:
 
     def parse_case(self) -> Case | None:
         """Parse a case statement: case word in pattern) commands;; ... esac."""
+        # Use consume_word for initial keyword to handle leading } in process subs
         if not self.consume_word("case"):
             return None
         self.skip_whitespace()
@@ -9949,7 +9950,7 @@ class Parser:
         self.skip_whitespace_and_newlines()
 
         # Expect 'in'
-        if not self.consume_word("in"):
+        if not self._lex_consume_word("in"):
             raise ParseError("Expected 'in' after case word", pos=self.pos)
 
         self.skip_whitespace_and_newlines()
@@ -9961,7 +9962,7 @@ class Parser:
             self.skip_whitespace_and_newlines()
 
             # Check if we're at 'esac' (but not 'esac)' which is esac as a pattern)
-            if self.peek_word() == "esac":
+            if self._lex_is_at_reserved_word("esac"):
                 # Look ahead to see if esac is a pattern (esac followed by ) then body/;;)
                 # or the closing keyword (esac followed by ) that closes containing construct)
                 saved = self.pos
@@ -10142,7 +10143,7 @@ class Parser:
             if not is_empty_body:
                 # Skip newlines and check if there's content before terminator or esac
                 self.skip_whitespace_and_newlines()
-                if not self.at_end() and self.peek_word() != "esac":
+                if not self.at_end() and not self._lex_is_at_reserved_word("esac"):
                     # Check again for terminator after whitespace/newlines
                     is_at_terminator = self._is_case_terminator()
                     if not is_at_terminator:
@@ -10159,7 +10160,7 @@ class Parser:
         self._clear_state(ParserStateFlags.PST_CASEPAT)
         # Expect 'esac'
         self.skip_whitespace_and_newlines()
-        if not self.consume_word("esac"):
+        if not self._lex_consume_word("esac"):
             raise ParseError("Expected 'esac' to close case statement", pos=self.pos)
         return Case(word, patterns, self._collect_redirects())
 

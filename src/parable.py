@@ -219,6 +219,21 @@ class ParserStateFlags:
     PST_COMMENT = 0x0800
 
 
+class DolbraceState:
+    """States for ${...} parameter expansion parsing.
+
+    These states determine how single quotes are handled inside parameter expansions.
+    Based on bash's DOLBRACE_* defines in parser.h.
+    """
+
+    NONE = 0
+    PARAM = 0x01  # Reading parameter name: ${foo
+    OP = 0x02  # Reading operator: ${foo%
+    WORD = 0x04  # Reading word after operator: ${foo%bar
+    QUOTE = 0x40  # Single quote is special (%, #, ^, ,)
+    QUOTE2 = 0x80  # Single quote semi-special (/)
+
+
 class QuoteState:
     """Unified quote state tracker for parsing.
 
@@ -5116,6 +5131,8 @@ class Parser:
         self._token_history: list[Token | None] = [None, None, None, None]
         # Parser state flags for context-sensitive decisions
         self._parser_state = ParserStateFlags.NONE
+        # Dolbrace state for ${...} parameter expansion parsing
+        self._dolbrace_state = DolbraceState.NONE
 
     def _set_state(self, flag: int) -> None:
         """Set a parser state flag."""
@@ -5137,6 +5154,29 @@ class Parser:
             self._token_history[1],
             self._token_history[2],
         ]
+
+    def _update_dolbrace_for_op(self, op: str | None, has_param: bool) -> None:
+        """Update dolbrace state based on operator seen.
+
+        Based on bash's parse.y lines 4010-4027.
+        """
+        if self._dolbrace_state == DolbraceState.NONE:
+            return
+        if op is None or len(op) == 0:
+            return
+        first_char = op[0]
+        # If we have a param name and see certain operators, go to QUOTE/QUOTE2
+        if self._dolbrace_state == DolbraceState.PARAM and has_param:
+            if first_char in "%#^,":
+                self._dolbrace_state = DolbraceState.QUOTE
+                return
+            if first_char == "/":
+                self._dolbrace_state = DolbraceState.QUOTE2
+                return
+        # Any operator char transitions PARAM -> OP
+        if self._dolbrace_state == DolbraceState.PARAM:
+            if first_char in "#%^,~:-=?+/":
+                self._dolbrace_state = DolbraceState.OP
 
     def _last_token(self) -> Token | None:
         """Return the most recently recorded token."""
@@ -8003,6 +8043,10 @@ class Parser:
             self.pos = start
             return None, ""
 
+        # Save and initialize dolbrace state
+        saved_dolbrace = self._dolbrace_state
+        self._dolbrace_state = DolbraceState.PARAM
+
         ch = self.peek()
 
         # ${#param} - length
@@ -8012,6 +8056,7 @@ class Parser:
             if param and not self.at_end() and self.peek() == "}":
                 self.advance()
                 text = _substring(self.source, start, self.pos)
+                self._dolbrace_state = saved_dolbrace
                 return ParamLength(param), text
             # Not a simple length expansion - fall through to parse as regular expansion
             self.pos = start + 2  # reset to just after ${
@@ -8029,6 +8074,7 @@ class Parser:
                 if not self.at_end() and self.peek() == "}":
                     self.advance()
                     text = _substring(self.source, start, self.pos)
+                    self._dolbrace_state = saved_dolbrace
                     return ParamIndirect(param), text
                 # ${!prefix@} and ${!prefix*} are prefix matching (lists variable names)
                 # These are NOT operators - the @/* is part of the indirect form
@@ -8062,8 +8108,10 @@ class Parser:
                     if depth == 0:
                         self.advance()  # consume final }
                         text = _substring(self.source, start, self.pos)
+                        self._dolbrace_state = saved_dolbrace
                         return ParamIndirect(param + suffix + "".join(trailing)), text
                     # Unclosed brace
+                    self._dolbrace_state = saved_dolbrace
                     self.pos = start
                     return None, ""
                 # Check for operator (e.g., ${!##} = indirect of # with # op)
@@ -8099,8 +8147,10 @@ class Parser:
                         self.advance()  # consume final }
                         arg = "".join(arg_chars)
                         text = _substring(self.source, start, self.pos)
+                        self._dolbrace_state = saved_dolbrace
                         return ParamIndirect(param, op, arg), text
                 # Fell through - pattern didn't match, return None
+                self._dolbrace_state = saved_dolbrace
                 self.pos = start
                 return None, ""
             else:
@@ -8190,10 +8240,13 @@ class Parser:
                     content = "".join(content_chars)
                     self.advance()  # consume final }
                     text = "${" + content + "}"
+                    self._dolbrace_state = saved_dolbrace
                     return ParamExpansion(content), text
+                self._dolbrace_state = saved_dolbrace
                 raise ParseError("Unclosed parameter expansion", pos=start)
 
         if self.at_end():
+            self._dolbrace_state = saved_dolbrace
             self.pos = start
             return None, ""
 
@@ -8201,6 +8254,7 @@ class Parser:
         if self.peek() == "}":
             self.advance()
             text = _substring(self.source, start, self.pos)
+            self._dolbrace_state = saved_dolbrace
             return ParamExpansion(param), text
 
         # Parse operator
@@ -8234,6 +8288,7 @@ class Parser:
                             self.advance()  # backslash
                     self.advance()
                 if self.at_end():
+                    self._dolbrace_state = saved_dolbrace
                     raise ParseError("Unterminated backtick", pos=backtick_pos)
                 self.advance()  # closing `
                 op = "`"  # treat as operator for now, bash will error at runtime
@@ -8250,6 +8305,9 @@ class Parser:
                 # Treat the current char as the operator
                 op = self.advance()
 
+        # Update dolbrace state based on operator
+        self._update_dolbrace_for_op(op, len(param) > 0)
+
         # Parse argument (everything until closing brace)
         # Track quote state and nesting
         arg_chars = []
@@ -8257,7 +8315,13 @@ class Parser:
         quote = QuoteState()
         while not self.at_end() and depth > 0:
             c = self.peek()
-            # Single quotes - no escapes, just scan to closing quote
+            # Transition OP -> WORD when we see a non-operator character
+            if self._dolbrace_state == DolbraceState.OP and c not in "#%^,~:-=?+/":
+                self._dolbrace_state = DolbraceState.WORD
+            # Single quotes - toggle state when not in double quotes
+            # Note: In POSIX mode, single quotes would be literal in DOLBRACE_WORD state
+            # when inside double quotes, but Parable uses extended_quote behavior (default)
+            # where single quotes are always special
             if c == "'" and not quote.double:
                 quote.single = not quote.single
                 arg_chars.append(self.advance())
@@ -8356,6 +8420,7 @@ class Parser:
                             arg_chars.append(self.advance())  # backslash
                     arg_chars.append(self.advance())
                 if self.at_end():
+                    self._dolbrace_state = saved_dolbrace
                     raise ParseError("Unterminated backtick", pos=backtick_start)
                 arg_chars.append(self.advance())  # closing `
             # Closing brace - handle depth for nested ${...}
@@ -8379,6 +8444,7 @@ class Parser:
                 arg_chars.append(self.advance())
 
         if depth != 0:
+            self._dolbrace_state = saved_dolbrace
             self.pos = start
             return None, ""
 
@@ -8398,6 +8464,7 @@ class Parser:
                 pass  # Keep original arg if parsing fails
         # Reconstruct text from parsed components (handles line continuation removal)
         text = "${" + param + op + arg + "}"
+        self._dolbrace_state = saved_dolbrace
         return ParamExpansion(param, op, arg), text
 
     def _param_subscript_has_close(self, start_pos: int) -> bool:

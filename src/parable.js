@@ -186,6 +186,15 @@ class ParserStateFlags {
 	static PST_COMMENT = 2048;
 }
 
+class DolbraceState {
+	static NONE = 0;
+	static PARAM = 1;
+	static OP = 2;
+	static WORD = 4;
+	static QUOTE = 64;
+	static QUOTE2 = 128;
+}
+
 class QuoteState {
 	constructor() {
 		this.single = false;
@@ -6058,6 +6067,8 @@ class Parser {
 		this._token_history = [null, null, null, null];
 		// Parser state flags for context-sensitive decisions
 		this._parser_state = ParserStateFlags.NONE;
+		// Dolbrace state for ${...} parameter expansion parsing
+		this._dolbrace_state = DolbraceState.NONE;
 	}
 
 	_setState(flag) {
@@ -6079,6 +6090,34 @@ class Parser {
 			this._token_history[1],
 			this._token_history[2],
 		];
+	}
+
+	_updateDolbraceForOp(op, has_param) {
+		let first_char;
+		if (this._dolbrace_state === DolbraceState.NONE) {
+			return;
+		}
+		if (op == null || op.length === 0) {
+			return;
+		}
+		first_char = op[0];
+		// If we have a param name and see certain operators, go to QUOTE/QUOTE2
+		if (this._dolbrace_state === DolbraceState.PARAM && has_param) {
+			if ("%#^,".includes(first_char)) {
+				this._dolbrace_state = DolbraceState.QUOTE;
+				return;
+			}
+			if (first_char === "/") {
+				this._dolbrace_state = DolbraceState.QUOTE2;
+				return;
+			}
+		}
+		// Any operator char transitions PARAM -> OP
+		if (this._dolbrace_state === DolbraceState.PARAM) {
+			if ("#%^,~:-=?+/".includes(first_char)) {
+				this._dolbrace_state = DolbraceState.OP;
+			}
+		}
 	}
 
 	_lastToken() {
@@ -9687,6 +9726,7 @@ class Parser {
 			parsed,
 			pc,
 			quote,
+			saved_dolbrace,
 			sub_parser,
 			suffix,
 			text,
@@ -9695,6 +9735,9 @@ class Parser {
 			this.pos = start;
 			return [null, ""];
 		}
+		// Save and initialize dolbrace state
+		saved_dolbrace = this._dolbrace_state;
+		this._dolbrace_state = DolbraceState.PARAM;
 		ch = this.peek();
 		// ${#param} - length
 		if (ch === "#") {
@@ -9703,6 +9746,7 @@ class Parser {
 			if (param && !this.atEnd() && this.peek() === "}") {
 				this.advance();
 				text = this.source.slice(start, this.pos);
+				this._dolbrace_state = saved_dolbrace;
 				return [new ParamLength(param), text];
 			}
 			// Not a simple length expansion - fall through to parse as regular expansion
@@ -9723,6 +9767,7 @@ class Parser {
 				if (!this.atEnd() && this.peek() === "}") {
 					this.advance();
 					text = this.source.slice(start, this.pos);
+					this._dolbrace_state = saved_dolbrace;
 					return [new ParamIndirect(param), text];
 				}
 				// ${!prefix@} and ${!prefix*} are prefix matching (lists variable names)
@@ -9761,12 +9806,14 @@ class Parser {
 					if (depth === 0) {
 						this.advance();
 						text = this.source.slice(start, this.pos);
+						this._dolbrace_state = saved_dolbrace;
 						return [
 							new ParamIndirect(param + suffix + trailing.join("")),
 							text,
 						];
 					}
 					// Unclosed brace
+					this._dolbrace_state = saved_dolbrace;
 					this.pos = start;
 					return [null, ""];
 				}
@@ -9808,10 +9855,12 @@ class Parser {
 						this.advance();
 						arg = arg_chars.join("");
 						text = this.source.slice(start, this.pos);
+						this._dolbrace_state = saved_dolbrace;
 						return [new ParamIndirect(param, op, arg), text];
 					}
 				}
 				// Fell through - pattern didn't match, return None
+				this._dolbrace_state = saved_dolbrace;
 				this.pos = start;
 				return [null, ""];
 			} else {
@@ -9926,12 +9975,15 @@ class Parser {
 					content = content_chars.join("");
 					this.advance();
 					text = `\${${content}}`;
+					this._dolbrace_state = saved_dolbrace;
 					return [new ParamExpansion(content), text];
 				}
+				this._dolbrace_state = saved_dolbrace;
 				throw new ParseError("Unclosed parameter expansion", start);
 			}
 		}
 		if (this.atEnd()) {
+			this._dolbrace_state = saved_dolbrace;
 			this.pos = start;
 			return [null, ""];
 		}
@@ -9939,6 +9991,7 @@ class Parser {
 		if (this.peek() === "}") {
 			this.advance();
 			text = this.source.slice(start, this.pos);
+			this._dolbrace_state = saved_dolbrace;
 			return [new ParamExpansion(param), text];
 		}
 		// Parse operator
@@ -9977,6 +10030,7 @@ class Parser {
 					this.advance();
 				}
 				if (this.atEnd()) {
+					this._dolbrace_state = saved_dolbrace;
 					throw new ParseError("Unterminated backtick", backtick_pos);
 				}
 				this.advance();
@@ -9995,6 +10049,8 @@ class Parser {
 				op = this.advance();
 			}
 		}
+		// Update dolbrace state based on operator
+		this._updateDolbraceForOp(op, param.length > 0);
 		// Parse argument (everything until closing brace)
 		// Track quote state and nesting
 		arg_chars = [];
@@ -10002,7 +10058,17 @@ class Parser {
 		quote = new QuoteState();
 		while (!this.atEnd() && depth > 0) {
 			c = this.peek();
-			// Single quotes - no escapes, just scan to closing quote
+			// Transition OP -> WORD when we see a non-operator character
+			if (
+				this._dolbrace_state === DolbraceState.OP &&
+				!"#%^,~:-=?+/".includes(c)
+			) {
+				this._dolbrace_state = DolbraceState.WORD;
+			}
+			// Single quotes - toggle state when not in double quotes
+			// Note: In POSIX mode, single quotes would be literal in DOLBRACE_WORD state
+			// when inside double quotes, but Parable uses extended_quote behavior (default)
+			// where single quotes are always special
 			if (c === "'" && !quote.double) {
 				quote.single = !quote.single;
 				arg_chars.push(this.advance());
@@ -10115,6 +10181,7 @@ class Parser {
 					arg_chars.push(this.advance());
 				}
 				if (this.atEnd()) {
+					this._dolbrace_state = saved_dolbrace;
 					throw new ParseError("Unterminated backtick", backtick_start);
 				}
 				arg_chars.push(this.advance());
@@ -10143,6 +10210,7 @@ class Parser {
 			}
 		}
 		if (depth !== 0) {
+			this._dolbrace_state = saved_dolbrace;
 			this.pos = start;
 			return [null, ""];
 		}
@@ -10163,6 +10231,7 @@ class Parser {
 		}
 		// Reconstruct text from parsed components (handles line continuation removal)
 		text = `\${${param}${op}${arg}}`;
+		this._dolbrace_state = saved_dolbrace;
 		return [new ParamExpansion(param, op, arg), text];
 	}
 

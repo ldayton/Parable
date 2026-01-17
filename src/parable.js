@@ -213,9 +213,17 @@ class SavedParserState {
 		ctx_depth,
 		eof_token,
 		eof_depth,
+		open_brace_count,
+		open_cond_count,
 	) {
 		if (eof_depth == null) {
 			eof_depth = 0;
+		}
+		if (open_brace_count == null) {
+			open_brace_count = 0;
+		}
+		if (open_cond_count == null) {
+			open_cond_count = 0;
 		}
 		this.parser_state = parser_state;
 		this.dolbrace_state = dolbrace_state;
@@ -223,6 +231,8 @@ class SavedParserState {
 		this.ctx_depth = ctx_depth;
 		this.eof_token = eof_token;
 		this.eof_depth = eof_depth;
+		this.open_brace_count = open_brace_count;
+		this.open_cond_count = open_cond_count;
 	}
 }
 
@@ -7970,6 +7980,11 @@ class Parser {
 		this._word_context = WORD_CTX_NORMAL;
 		this._at_command_start = false;
 		this._in_array_literal = false;
+		// Brace/bracket counts for bash-style delimiter tracking
+		// } is only a reserved word when _open_brace_count > 0
+		// ]] is only a reserved word when _open_cond_count > 0
+		this._open_brace_count = 0;
+		this._open_cond_count = 0;
 	}
 
 	_setState(flag) {
@@ -7992,6 +8007,8 @@ class Parser {
 			this._ctx.getDepth(),
 			this._eof_token,
 			this._eof_depth,
+			this._open_brace_count,
+			this._open_cond_count,
 		);
 	}
 
@@ -8000,6 +8017,8 @@ class Parser {
 		this._dolbrace_state = saved.dolbrace_state;
 		this._eof_token = saved.eof_token;
 		this._eof_depth = saved.eof_depth;
+		this._open_brace_count = saved.open_brace_count;
+		this._open_cond_count = saved.open_cond_count;
 		// Restore context stack to saved depth (pop any extra contexts)
 		while (this._ctx.getDepth() > saved.ctx_depth) {
 			this._ctx.pop();
@@ -11166,6 +11185,7 @@ class Parser {
 		}
 		this.advance();
 		this.advance();
+		this._open_cond_count += 1;
 		this._setState(ParserStateFlags.PST_CONDEXPR);
 		this._word_context = WORD_CTX_COND;
 		// Parse the conditional expression body
@@ -11181,6 +11201,7 @@ class Parser {
 			this.pos + 1 >= this.length ||
 			this.source[this.pos + 1] !== "]"
 		) {
+			this._open_cond_count -= 1;
 			this._clearState(ParserStateFlags.PST_CONDEXPR);
 			this._word_context = WORD_CTX_NORMAL;
 			throw new ParseError(
@@ -11190,6 +11211,7 @@ class Parser {
 		}
 		this.advance();
 		this.advance();
+		this._open_cond_count -= 1;
 		this._clearState(ParserStateFlags.PST_CONDEXPR);
 		this._word_context = WORD_CTX_NORMAL;
 		return new ConditionalExpr(body, this._collectRedirects());
@@ -11408,9 +11430,11 @@ class Parser {
 		if (!this._lexConsumeWord("{")) {
 			return null;
 		}
+		this._open_brace_count += 1;
 		this.skipWhitespaceAndNewlines();
 		body = this.parseList();
 		if (body == null) {
+			this._open_brace_count -= 1;
 			throw new ParseError(
 				"Expected command in brace group",
 				this._lexPeekToken().pos,
@@ -11418,11 +11442,13 @@ class Parser {
 		}
 		this.skipWhitespace();
 		if (!this._lexConsumeWord("}")) {
+			this._open_brace_count -= 1;
 			throw new ParseError(
 				"Expected } to close brace group",
 				this._lexPeekToken().pos,
 			);
 		}
+		this._open_brace_count -= 1;
 		return new BraceGroup(body, this._collectRedirects());
 	}
 

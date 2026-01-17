@@ -20,6 +20,132 @@ Match bash's parsing behavior exactly by mirroring bash's architectural patterns
 
 ---
 
+## Architectural Gaps (January 2026)
+
+Based on studying bash source (`~/source/bash-oracle`), these core patterns are missing:
+
+### 1. `open_brace_count` - Brace Nesting Tracker
+
+**Bash** (`parse.y`):
+```c
+static int open_brace_count;  // Global counter
+
+// In read_token():
+if (character == '{') {
+    open_brace_count++;
+    return '{';
+}
+if (character == '}') {
+    if (open_brace_count > 0 && reserved_word_acceptable(last_read_token)) {
+        open_brace_count--;
+        return '}';  // RBRACE token
+    }
+    // Otherwise it's just a literal '}'
+}
+```
+
+**Parable**: Missing. Currently uses ad-hoc checks in `parse_simple_command()`. This is why `}` at command position is mishandled - bash knows `}` is only special when `open_brace_count > 0`.
+
+**Impact**: Input `}` returns literal word vs. RBRACE token based on whether we're inside `{ ... }`.
+
+### 2. `reserved_word_acceptable()` - Centralized Gate
+
+**Bash** (`parse.y:3835`):
+```c
+static int reserved_word_acceptable(int toksym) {
+    switch (toksym) {
+        case '\n': case ';': case '(': case ')':
+        case '|': case '&': case '{': case '}':
+        case AND_AND: case BANG: case BAR_AND:
+        case DO: case DONE: case ELIF: case ELSE:
+        case ESAC: case FI: case IF: case OR_OR:
+        case SEMI_SEMI: case SEMI_AND: case SEMI_SEMI_AND:
+        case THEN: case TIME: case TIMEOPT: case TIMEIGN:
+        case COPROC: case UNTIL: case WHILE:
+        case 0:  // Start of input
+            return 1;
+        default:
+            return 0;
+    }
+}
+```
+
+**Parable**: Logic is scattered across `_lex_peek_reserved_word()`, `_reserved_word_token()`, and `parse_simple_command()`. Each has partial, inconsistent checks.
+
+**Impact**: Reserved words recognized in wrong contexts. `]]` after `foo` should be literal.
+
+### 3. `dstack` - Delimiter Stack with Push/Pop
+
+**Bash** (`parse.y:220`):
+```c
+struct dstack {
+    unsigned char *delimiters;
+    int delimiter_depth;
+    int delimiter_space;
+};
+#define push_delimiter(ds, c) ...
+#define pop_delimiter(ds) ...
+```
+
+**Parable**: Uses `QuoteState` class with boolean fields, not a true stack. Works for simple nesting but can't track:
+- Which delimiter is unclosed (for error messages)
+- Position where delimiter opened
+- Proper LIFO ordering
+
+### 4. `special_case_tokens()` - Centralized Reclassification
+
+**Bash** (`parse.y:4091`):
+```c
+static int special_case_tokens(char *tokstr) {
+    if (last_read_token == WORD && token_before_that == FUNCTION)
+        return WORD;  // Function name, not reserved word
+    if (last_read_token == WORD && token_before_that == CASE)
+        return WORD;  // Case word, not reserved word
+    // ... more context-dependent reclassification
+}
+```
+
+**Parable**: Ad-hoc checks scattered throughout. No single place that handles token reclassification based on parser history.
+
+---
+
+## Convergence Plan
+
+### Phase A: Add `open_brace_count` ✓
+
+**Completed:** Added infrastructure for tracking brace/bracket nesting.
+
+1. ✓ Add `_open_brace_count` and `_open_cond_count` to Parser
+2. ✓ Increment/decrement in `parse_brace_group()` and `parse_conditional_expr()`
+3. ✓ Save/restore in `SavedParserState` for nested parsing (e.g., `$(...)`)
+
+**Note:** In bash, `open_brace_count` affects lexer token type (RBRACE vs falling through
+to word parsing). In Parable, we track the count for potential future use in
+`reserved_word_acceptable()` logic, but the current reserved word recognition still
+works because `}` at command position always breaks the command loop, and whether it's
+successfully consumed depends on whether `parse_brace_group()` is expecting it.
+
+### Phase B: Implement `reserved_word_acceptable()`
+
+1. Create single method that checks if reserved words are valid
+2. Use token history (`_token_history`) as input
+3. Replace scattered checks in lexer/parser
+
+### Phase C: Enhance DelimiterStack
+
+1. Change from booleans to actual stack: `list[tuple[str, int]]`
+2. Store (delimiter_char, start_pos) on push
+3. Validate stack empty at parse boundaries
+4. Better error messages: "unclosed `{` at line 5"
+
+### Phase D: Consolidate `special_case_tokens()`
+
+1. Create single method for context-dependent token reclassification
+2. Move ad-hoc checks from `_reserved_word_token()` and elsewhere
+3. Use token history for decisions
+
+---
+
 ## Key Insight (January 2026)
 
 **The EOF token mechanism DOES work, even with character-based parsing.**

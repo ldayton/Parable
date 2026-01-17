@@ -272,6 +272,8 @@ class SavedParserState:
         ctx_depth: int,
         eof_token: str | None = None,
         eof_depth: int = 0,
+        open_brace_count: int = 0,
+        open_cond_count: int = 0,
     ):
         self.parser_state = parser_state
         self.dolbrace_state = dolbrace_state
@@ -279,6 +281,8 @@ class SavedParserState:
         self.ctx_depth = ctx_depth
         self.eof_token = eof_token
         self.eof_depth = eof_depth
+        self.open_brace_count = open_brace_count
+        self.open_cond_count = open_cond_count
 
 
 class LexerSavedState:
@@ -6623,6 +6627,11 @@ class Parser:
         self._word_context = WORD_CTX_NORMAL
         self._at_command_start = False
         self._in_array_literal = False
+        # Brace/bracket counts for bash-style delimiter tracking
+        # } is only a reserved word when _open_brace_count > 0
+        # ]] is only a reserved word when _open_cond_count > 0
+        self._open_brace_count = 0
+        self._open_cond_count = 0
 
     def _set_state(self, flag: int) -> None:
         """Set a parser state flag."""
@@ -6649,6 +6658,8 @@ class Parser:
             ctx_depth=self._ctx.get_depth(),
             eof_token=self._eof_token,
             eof_depth=self._eof_depth,
+            open_brace_count=self._open_brace_count,
+            open_cond_count=self._open_cond_count,
         )
 
     def _restore_parser_state(self, saved: SavedParserState) -> None:
@@ -6662,6 +6673,8 @@ class Parser:
         self._dolbrace_state = saved.dolbrace_state
         self._eof_token = saved.eof_token
         self._eof_depth = saved.eof_depth
+        self._open_brace_count = saved.open_brace_count
+        self._open_cond_count = saved.open_cond_count
         # Restore context stack to saved depth (pop any extra contexts)
         while self._ctx.get_depth() > saved.ctx_depth:
             self._ctx.pop()
@@ -9286,6 +9299,7 @@ class Parser:
 
         self.advance()  # consume first [
         self.advance()  # consume second [
+        self._open_cond_count += 1
         self._set_state(ParserStateFlags.PST_CONDEXPR)
         self._word_context = WORD_CTX_COND
 
@@ -9303,12 +9317,14 @@ class Parser:
             or self.pos + 1 >= self.length
             or self.source[self.pos + 1] != "]"
         ):
+            self._open_cond_count -= 1
             self._clear_state(ParserStateFlags.PST_CONDEXPR)
             self._word_context = WORD_CTX_NORMAL
             raise ParseError("Expected ]] to close conditional expression", pos=self.pos)
 
         self.advance()  # consume first ]
         self.advance()  # consume second ]
+        self._open_cond_count -= 1
         self._clear_state(ParserStateFlags.PST_CONDEXPR)
         self._word_context = WORD_CTX_NORMAL
         return ConditionalExpr(body, self._collect_redirects())
@@ -9484,15 +9500,19 @@ class Parser:
         # Lexer handles { vs {abc distinction: only returns reserved word for standalone {
         if not self._lex_consume_word("{"):
             return None
+        self._open_brace_count += 1
         self.skip_whitespace_and_newlines()
 
         body = self.parse_list()
         if body is None:
+            self._open_brace_count -= 1
             raise ParseError("Expected command in brace group", pos=self._lex_peek_token().pos)
 
         self.skip_whitespace()
         if not self._lex_consume_word("}"):
+            self._open_brace_count -= 1
             raise ParseError("Expected } to close brace group", pos=self._lex_peek_token().pos)
+        self._open_brace_count -= 1
         return BraceGroup(body, self._collect_redirects())
 
     def parse_if(self) -> If | None:

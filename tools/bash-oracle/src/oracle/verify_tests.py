@@ -5,12 +5,7 @@ import multiprocessing as mp
 import subprocess
 import sys
 from dataclasses import dataclass
-from multiprocessing import Queue
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from multiprocessing.synchronize import Event as EventType
 
 SCRIPT_DIR = Path(__file__).parent
 REPO_ROOT = SCRIPT_DIR.parent.parent.parent.parent
@@ -101,11 +96,7 @@ def normalize(s: str) -> str:
     return " ".join(s.split())
 
 
-def worker_process(
-    work_queue: Queue[TestCase | None],
-    result_queue: Queue[WorkerResult | None],
-    stop_event: EventType,
-) -> None:
+def worker_process(work_queue, result_queue, stop_event) -> None:
     """Worker process: verify test cases from work queue."""
     while not stop_event.is_set():
         tc = work_queue.get()
@@ -186,9 +177,9 @@ def main():
 
     # Set up multiprocessing
     num_workers = mp.cpu_count()
-    work_queue: Queue[TestCase | None] = mp.Queue()
-    result_queue: Queue[WorkerResult | None] = mp.Queue()
-    stop_event: EventType = mp.Event()
+    work_queue = mp.Queue()
+    result_queue = mp.Queue()
+    stop_event = mp.Event()
 
     # Start workers
     workers = []

@@ -7041,10 +7041,6 @@ function _isEscapeCharInDquote(c) {
 	return c === "$" || c === "`" || c === "\\";
 }
 
-function _isListTerminator(c) {
-	return c === "\n" || c === "|" || c === ";" || c === "(" || c === ")";
-}
-
 function _isNegationBoundary(c) {
 	return (
 		_isWhitespace(c) ||
@@ -7300,6 +7296,21 @@ class Parser {
 		result = this._lexer._skipComment();
 		this._syncParser();
 		return result;
+	}
+
+	_lexIsCommandTerminator() {
+		let t, tok;
+		tok = this._lexPeekToken();
+		t = tok.type;
+		return [
+			TokenType.EOF,
+			TokenType.NEWLINE,
+			TokenType.PIPE,
+			TokenType.SEMI,
+			TokenType.LPAREN,
+			TokenType.RPAREN,
+			TokenType.AMP,
+		].includes(t);
 	}
 
 	_lexPeekOperator() {
@@ -10727,36 +10738,21 @@ class Parser {
 	}
 
 	parseCommand() {
-		let all_assignments, ch, next_pos, redirect, redirects, w, word, words;
+		let all_assignments, redirect, redirects, tok, w, word, words;
 		words = [];
 		redirects = [];
 		while (true) {
 			this.skipWhitespace();
-			if (this.atEnd()) {
-				break;
-			}
-			ch = this.peek();
-			// Check for command terminators, but &> and &>> are redirects, not terminators
-			if (_isListTerminator(ch)) {
-				break;
-			}
-			if (
-				ch === "&" &&
-				!(this.pos + 1 < this.length && this.source[this.pos + 1] === ">")
-			) {
+			// Use token-based terminator detection
+			// This enables the EOF token mechanism to work at the command level
+			if (this._lexIsCommandTerminator()) {
 				break;
 			}
 			// } is only a terminator at command position (closing a brace group)
 			// In argument position, } is just a regular word
-			if (this.peek() === "}" && !words) {
-				// Check if } would be a standalone word (next char is whitespace/meta/EOF)
-				next_pos = this.pos + 1;
-				if (
-					next_pos >= this.length ||
-					_isWordEndContext(this.source[next_pos])
-				) {
-					break;
-				}
+			tok = this._lexPeekToken();
+			if (tok.type === TokenType.RBRACE && !words) {
+				break;
 			}
 			// Try to parse a redirect first
 			redirect = this.parseRedirect();

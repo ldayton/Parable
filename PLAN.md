@@ -68,53 +68,54 @@ This eliminated ~550 lines of scanning code from `_parse_command_substitution` a
 
 ## Current State
 
-The Lexer exists and has significant functionality, but the Parser mostly ignores it. Key parsing functions do character-level parsing directly:
+The Parser now uses a **hybrid approach**:
+- **Token-based terminator detection**: `parse_command()` uses `_lex_is_command_terminator()` which enables the EOF token mechanism
+- **Character-based word parsing**: `parse_word()` still does character-level expansion parsing
 
 ```python
-# Current (character-based):
+# Current implementation (hybrid):
 def parse_command(self):
     while True:
         self.skip_whitespace()
-        if self.at_end():        # Parser.at_end()
-            break
-        ch = self.peek()         # Parser.peek() - bypasses Lexer
-        if ch == ";":
+        if self._lex_is_command_terminator():  # Token-based via Lexer
             break
         ...
-
-# Target (token-based):
-def parse_command(self):
-    while True:
-        tok = self._lex_peek_token()  # Lexer can inject EOF via _eof_token
-        if tok.type == TokenType.EOF:
-            break
-        if tok.type == TokenType.SEMI:
-            break
+        word = self.parse_word()  # Character-based expansion parsing
         ...
 ```
 
-The "leaf" methods moved to Lexer (ansi_c_quote, locale_string, param_expansion) work because they don't need to parse nested commands. The remaining methods need sub-parsers or callbacks because they contain `$()` which requires `parse_list()`.
+This works because `_lex_peek_token()` doesn't advance Parser position - only `_lex_next_token()` does. The Lexer's EOF token mechanism is checked during terminator detection, while word parsing still uses character-level methods.
+
+**Key methods using tokens:**
+- `parse_command()` - uses `_lex_is_command_terminator()` for terminators ✓
+- `parse_list_operator()` - uses `_lex_peek_operator()` and `_lex_next_token()` ✓
+- `_parse_simple_pipeline()` - uses `_lex_peek_operator()` for pipe detection ✓
+- `parse_pipeline()` - uses `_lex_is_at_reserved_word()` for time/! detection ✓
+
+**Remaining character-based:**
+- `parse_word()` / `_parse_word_internal()` - full expansion parsing
+- Newline handling in `parse_list()` - special heredoc/separator logic
 
 ---
 
-## Two Paths Forward
+## Progress on Path A
 
-### Path A: Move Methods First (Incremental)
-1. Move remaining expansion methods to Lexer (keep sub-parsers for now)
-2. Move `_parse_word_internal` to Lexer
-3. Make Parser token-based (`parse_command()` etc. use `_lex_next_token()`)
-4. EOF token mechanism now works → remove sub-parsers
+### Completed Steps
+1. ✓ Move remaining expansion methods to Lexer (ansi_c_quote, locale_string, param_expansion)
+2. ✓ EOF token mechanism implemented for command/process substitution
+3. ✓ `parse_command()` now token-based for terminator detection (hybrid approach)
 
-**Pros:** Lower risk, incremental progress
-**Cons:** Carries sub-parsers longer; step 3 is still the hard part
+### Remaining Work
+- Move `_parse_word_internal` to Lexer (optional - hybrid approach may be sufficient)
+- Full token-based parsing for word consumption (if needed)
 
-### Path B: Make Parser Token-Based First (Direct)
-1. Refactor `parse_command()`, `parse_list()`, etc. to use `_lex_next_token()`
-2. EOF token mechanism works naturally
-3. Move methods to Lexer cleanly (no sub-parsers needed)
+### Architecture Notes
+The **hybrid approach** works well:
+- Token-based terminator detection enables EOF token mechanism
+- Character-based word parsing handles complex expansion logic
+- Position syncing (`_sync_lexer()`, `_sync_parser()`) bridges the two modes
 
-**Pros:** Cleaner architecture, enables all blocked work
-**Cons:** Higher risk, touches core parsing loop
+Moving `_parse_word_internal` to Lexer would require extensive callback usage since expansion parsing (especially command substitution) needs `parse_list()`. The hybrid approach avoids this complexity while still achieving the key goal: proper tokenizer-parser separation for terminators.
 
 ---
 

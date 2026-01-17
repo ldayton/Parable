@@ -6172,6 +6172,16 @@ class Parser {
 		return null;
 	}
 
+	_lexConsumeWord(expected) {
+		let tok;
+		tok = this._lexPeekToken();
+		if (tok.type === TokenType.WORD && tok.value === expected) {
+			this._lexNextToken();
+			return true;
+		}
+		return false;
+	}
+
 	atEnd() {
 		return this.pos >= this.length;
 	}

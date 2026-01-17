@@ -5210,6 +5210,14 @@ class Parser:
             return tok.value
         return None
 
+    def _lex_consume_word(self, expected: str) -> bool:
+        """Try to consume a word token matching expected. Returns True if successful."""
+        tok = self._lex_peek_token()
+        if tok.type == TokenType.WORD and tok.value == expected:
+            self._lex_next_token()
+            return True
+        return False
+
     def at_end(self) -> bool:
         """Check if we've reached the end of input."""
         return self.pos >= self.length

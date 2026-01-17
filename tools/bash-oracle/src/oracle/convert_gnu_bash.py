@@ -90,7 +90,7 @@ def convert_file(corpus_path: Path, output_dir: Path, oracle_path: Path) -> tupl
 
 def main():
     script_dir = Path(__file__).parent
-    oracle_path = Path.home() / "source" / "bash" / "bash-oracle"
+    oracle_path = Path.home() / "source" / "bash-oracle" / "bash-oracle"
     corpus_dir = script_dir.parent.parent / "tests" / "corpus" / "gnu-bash"
     output_dir = corpus_dir
     if not oracle_path.exists():

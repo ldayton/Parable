@@ -6182,6 +6182,21 @@ class Parser {
 		return false;
 	}
 
+	_lexPeekRedirectOp() {
+		let t, tok;
+		tok = this._lexPeekToken();
+		t = tok.type;
+		// Single-char redirects: LESS(17), GREATER(18)
+		// Multi-char redirects: LESS_LESS(35) through AMP_GREATER_GREATER(44)
+		if (t === TokenType.LESS || t === TokenType.GREATER) {
+			return [t, tok.value];
+		}
+		if (t >= TokenType.LESS_LESS && t <= TokenType.AMP_GREATER_GREATER) {
+			return [t, tok.value];
+		}
+		return null;
+	}
+
 	atEnd() {
 		return this.pos >= this.length;
 	}

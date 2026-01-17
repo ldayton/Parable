@@ -5218,6 +5218,18 @@ class Parser:
             return True
         return False
 
+    def _lex_peek_redirect_op(self) -> tuple[int, str] | None:
+        """Peek redirect operator token. Returns (token_type, value) or None."""
+        tok = self._lex_peek_token()
+        t = tok.type
+        # Single-char redirects: LESS(17), GREATER(18)
+        # Multi-char redirects: LESS_LESS(35) through AMP_GREATER_GREATER(44)
+        if t == TokenType.LESS or t == TokenType.GREATER:
+            return (t, tok.value)
+        if t >= TokenType.LESS_LESS and t <= TokenType.AMP_GREATER_GREATER:
+            return (t, tok.value)
+        return None
+
     def at_end(self) -> bool:
         """Check if we've reached the end of input."""
         return self.pos >= self.length

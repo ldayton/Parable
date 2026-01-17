@@ -1022,44 +1022,61 @@ class Lexer:
             if ch == "$" and not self.at_end() and not (flags & MatchedPairFlags.EXTGLOB):
                 next_ch = self.peek()
                 if next_ch == "{":
-                    chars.append(ch)
-                    chars.append(self.advance())
-                    nested = self._parse_matched_pair("{", "}", flags | MatchedPairFlags.DOLBRACE)
-                    chars.append(nested)
-                    chars.append("}")
+                    # ${ ... } parameter expansion - use full parsing
+                    self.pos -= 1  # back up to before $
+                    self._sync_to_parser()
+                    param_node, param_text = self._parser._parse_param_expansion()
+                    self._sync_from_parser()
+                    if param_node:
+                        chars.append(param_text)
+                    else:
+                        # Parser failed - add $ as literal
+                        chars.append(self.advance())  # $
                     continue
                 elif next_ch == "(":
-                    chars.append(ch)
-                    chars.append(self.advance())
-                    if not self.at_end() and self.peek() == "(":
-                        # $(( ... )) arithmetic
-                        chars.append(self.advance())
-                        nested = self._parse_matched_pair("(", ")", flags | MatchedPairFlags.ARITH)
-                        chars.append(nested)
-                        chars.append(")")
-                        # Need to consume the second )
-                        if not self.at_end() and self.peek() == ")":
-                            chars.append(self.advance())
+                    # Back up to before $ for Parser callback
+                    self.pos -= 1
+                    self._sync_to_parser()
+                    # Check if $(( arithmetic or $( command substitution
+                    if self.pos + 2 < self.length and self.source[self.pos + 2] == "(":
+                        # $(( ... )) arithmetic - use full parsing
+                        arith_node, arith_text = self._parser._parse_arithmetic_expansion()
+                        self._sync_from_parser()
+                        if arith_node:
+                            chars.append(arith_text)
                         else:
-                            raise MatchedPairError(
-                                "unexpected EOF while looking for matching `))'",
-                                pos=start,
-                            )
+                            # Arithmetic failed - try as command substitution fallback
+                            self._sync_to_parser()
+                            cmd_node, cmd_text = self._parser._parse_command_substitution()
+                            self._sync_from_parser()
+                            if cmd_node:
+                                chars.append(cmd_text)
+                            else:
+                                # Both failed - add $( as literal
+                                chars.append(self.advance())  # $
+                                chars.append(self.advance())  # (
                     else:
-                        # $( ... ) command substitution
-                        nested = self._parse_matched_pair(
-                            "(", ")", flags | MatchedPairFlags.COMMAND
-                        )
-                        chars.append(nested)
-                        chars.append(")")
+                        # $( ... ) command substitution - use full parsing
+                        cmd_node, cmd_text = self._parser._parse_command_substitution()
+                        self._sync_from_parser()
+                        if cmd_node:
+                            chars.append(cmd_text)
+                        else:
+                            # Parser failed - add $( as literal
+                            chars.append(self.advance())  # $
+                            chars.append(self.advance())  # (
                     continue
                 elif next_ch == "[":
-                    # Deprecated $[ ... ] arithmetic
-                    chars.append(ch)
-                    chars.append(self.advance())
-                    nested = self._parse_matched_pair("[", "]", flags | MatchedPairFlags.ARITH)
-                    chars.append(nested)
-                    chars.append("]")
+                    # Deprecated $[ ... ] arithmetic - use full parsing
+                    self.pos -= 1  # back up to before $
+                    self._sync_to_parser()
+                    arith_node, arith_text = self._parser._parse_deprecated_arithmetic()
+                    self._sync_from_parser()
+                    if arith_node:
+                        chars.append(arith_text)
+                    else:
+                        # Parser failed - add $ as literal
+                        chars.append(self.advance())  # $
                     continue
 
             chars.append(ch)

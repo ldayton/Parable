@@ -1001,7 +1001,19 @@ class Lexer {
 	}
 
 	_parseMatchedPair(open_char, close_char, flags) {
-		let ch, chars, count, nested, next_ch, pass_next, start;
+		let arith_node,
+			arith_text,
+			ch,
+			chars,
+			cmd_node,
+			cmd_text,
+			count,
+			nested,
+			next_ch,
+			param_node,
+			param_text,
+			pass_next,
+			start;
 		if (flags == null) {
 			flags = 0;
 		}
@@ -1101,60 +1113,67 @@ class Lexer {
 			if (ch === "$" && !this.atEnd() && !(flags & MatchedPairFlags.EXTGLOB)) {
 				next_ch = this.peek();
 				if (next_ch === "{") {
-					chars.push(ch);
-					chars.push(this.advance());
-					nested = this._parseMatchedPair(
-						"{",
-						"}",
-						flags | MatchedPairFlags.DOLBRACE,
-					);
-					chars.push(nested);
-					chars.push("}");
+					// ${ ... } parameter expansion - use full parsing
+					this.pos -= 1;
+					this._syncToParser();
+					[param_node, param_text] = this._parser._parseParamExpansion();
+					this._syncFromParser();
+					if (param_node) {
+						chars.push(param_text);
+					} else {
+						// Parser failed - add $ as literal
+						chars.push(this.advance());
+					}
 					continue;
 				} else if (next_ch === "(") {
-					chars.push(ch);
-					chars.push(this.advance());
-					if (!this.atEnd() && this.peek() === "(") {
-						// $(( ... )) arithmetic
-						chars.push(this.advance());
-						nested = this._parseMatchedPair(
-							"(",
-							")",
-							flags | MatchedPairFlags.ARITH,
-						);
-						chars.push(nested);
-						chars.push(")");
-						// Need to consume the second )
-						if (!this.atEnd() && this.peek() === ")") {
-							chars.push(this.advance());
+					// Back up to before $ for Parser callback
+					this.pos -= 1;
+					this._syncToParser();
+					// Check if $(( arithmetic or $( command substitution
+					if (this.pos + 2 < this.length && this.source[this.pos + 2] === "(") {
+						// $(( ... )) arithmetic - use full parsing
+						[arith_node, arith_text] = this._parser._parseArithmeticExpansion();
+						this._syncFromParser();
+						if (arith_node) {
+							chars.push(arith_text);
 						} else {
-							throw new MatchedPairError(
-								"unexpected EOF while looking for matching `))'",
-								start,
-							);
+							// Arithmetic failed - try as command substitution fallback
+							this._syncToParser();
+							[cmd_node, cmd_text] = this._parser._parseCommandSubstitution();
+							this._syncFromParser();
+							if (cmd_node) {
+								chars.push(cmd_text);
+							} else {
+								// Both failed - add $( as literal
+								chars.push(this.advance());
+								chars.push(this.advance());
+							}
 						}
 					} else {
-						// $( ... ) command substitution
-						nested = this._parseMatchedPair(
-							"(",
-							")",
-							flags | MatchedPairFlags.COMMAND,
-						);
-						chars.push(nested);
-						chars.push(")");
+						// $( ... ) command substitution - use full parsing
+						[cmd_node, cmd_text] = this._parser._parseCommandSubstitution();
+						this._syncFromParser();
+						if (cmd_node) {
+							chars.push(cmd_text);
+						} else {
+							// Parser failed - add $( as literal
+							chars.push(this.advance());
+							chars.push(this.advance());
+						}
 					}
 					continue;
 				} else if (next_ch === "[") {
-					// Deprecated $[ ... ] arithmetic
-					chars.push(ch);
-					chars.push(this.advance());
-					nested = this._parseMatchedPair(
-						"[",
-						"]",
-						flags | MatchedPairFlags.ARITH,
-					);
-					chars.push(nested);
-					chars.push("]");
+					// Deprecated $[ ... ] arithmetic - use full parsing
+					this.pos -= 1;
+					this._syncToParser();
+					[arith_node, arith_text] = this._parser._parseDeprecatedArithmetic();
+					this._syncFromParser();
+					if (arith_node) {
+						chars.push(arith_text);
+					} else {
+						// Parser failed - add $ as literal
+						chars.push(this.advance());
+					}
 					continue;
 				}
 			}

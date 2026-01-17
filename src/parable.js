@@ -11929,6 +11929,7 @@ class Parser {
 		this.skipWhitespaceAndNewlines();
 		// Parse pattern clauses until 'esac'
 		patterns = [];
+		this._setState(ParserStateFlags.PST_CASEPAT);
 		while (true) {
 			this.skipWhitespaceAndNewlines();
 			// Check if we're at 'esac' (but not 'esac)' which is esac as a pattern)
@@ -12164,6 +12165,7 @@ class Parser {
 			this.skipWhitespaceAndNewlines();
 			patterns.push(new CasePattern(pattern, body, terminator));
 		}
+		this._clearState(ParserStateFlags.PST_CASEPAT);
 		// Expect 'esac'
 		this.skipWhitespaceAndNewlines();
 		if (!this.consumeWord("esac")) {

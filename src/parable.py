@@ -9851,6 +9851,7 @@ class Parser:
 
         # Parse pattern clauses until 'esac'
         patterns = []
+        self._set_state(ParserStateFlags.PST_CASEPAT)
         while True:
             self.skip_whitespace_and_newlines()
 
@@ -10050,6 +10051,7 @@ class Parser:
 
             patterns.append(CasePattern(pattern, body, terminator))
 
+        self._clear_state(ParserStateFlags.PST_CASEPAT)
         # Expect 'esac'
         self.skip_whitespace_and_newlines()
         if not self.consume_word("esac"):

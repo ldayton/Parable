@@ -481,6 +481,8 @@ class Lexer:
         self._dolbrace_state = DolbraceState.NONE
         # Pending heredocs tracked during word parsing
         self._pending_heredocs: list = []
+        # Reference to Parser for expansion parsing callbacks (set by Parser)
+        self._parser: "Parser | None" = None
 
     def peek(self) -> str | None:
         """Return current character without consuming."""
@@ -5249,8 +5251,9 @@ class Parser:
         self._in_process_sub = in_process_sub
         # Context stack for tracking nested parsing scopes
         self._ctx = ContextStack()
-        # Lexer for tokenization (not yet used, being added incrementally)
+        # Lexer for tokenization
         self._lexer = Lexer(source)
+        self._lexer._parser = self  # Back-reference for expansion parsing
         # Token history for context-sensitive parsing (last 4 tokens like bash)
         self._token_history: list[Token | None] = [None, None, None, None]
         # Parser state flags for context-sensitive decisions

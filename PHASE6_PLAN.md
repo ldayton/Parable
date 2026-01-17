@@ -1,5 +1,15 @@
 # Plan: Phase 6 - Unify Scanning and Parsing
 
+## Status: BLOCKED (same as EOF_TOKEN_PLAN.md)
+
+This plan depends on the same prerequisite as EOF_TOKEN_PLAN.md: **the Parser must be token-based**.
+
+The goal of parsing "inline without pre-scanning" requires the parser to stop when it hits a terminator like `)`. In bash, this works because the tokenizer returns EOF when `shell_eof_token` is set. In Parable, the Parser bypasses the Lexer for operators/terminators, so there's no way to signal "stop here" to `parse_list()`.
+
+See EOF_TOKEN_PLAN.md for the full analysis and prerequisites.
+
+---
+
 ## Overview
 
 Remove pre-scanning functions (`_find_cmdsub_end`, etc.) and parse nested constructs inline using save/restore state patterns. This eliminates duplicated logic between scanning and parsing.

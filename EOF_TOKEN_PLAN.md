@@ -1,5 +1,50 @@
 # Plan: EOF Token Mechanism for Command Substitution
 
+## Status: BLOCKED
+
+**This plan cannot be implemented until the Parser is token-based.**
+
+### Why It Failed (January 2026)
+
+We attempted to implement this plan and it failed. The implementation passed 4512/4515 tests but broke on edge cases like case statements inside command substitutions.
+
+**Root cause:** The EOF token mechanism assumes a clean tokenizer-parser architecture:
+```
+Bash:     Tokenizer (read_token/yylex) → tokens → Parser (yyparse)
+```
+
+When bash sets `shell_eof_token`, the **tokenizer** returns EOF. The parser only sees tokens, so it naturally stops.
+
+Parable's architecture is different:
+```
+Parable:  Parser does character-level parsing directly (peek/advance)
+          Lexer exists but is bypassed by parse_list(), parse_command(), etc.
+```
+
+Functions like `parse_command()`, `parse_list()`, `parse_pipeline()` call `self.peek()` and `self.advance()` on the **Parser**, completely bypassing the Lexer. So even when we set `_eof_token` on the Lexer, the Parser's parsing functions never check it.
+
+### Key Insight
+
+The EOF token mechanism is not a feature you can bolt on. It's a **consequence** of having a tokenizer-based parser. We tried to add the consequence without the prerequisite architecture.
+
+### Prerequisites
+
+Before this plan can proceed:
+1. **Make the Parser token-based** - `parse_list()`, `parse_command()`, `parse_pipeline()` must consume tokens from the Lexer, not characters
+2. Only then will the Lexer's EOF token mechanism naturally stop parsing
+3. Only then can sub-parsers be eliminated
+
+### Correct Order of Work
+
+1. Move word/expansion parsing to Lexer (can keep sub-parsers for now)
+2. Make Parser consume tokens from Lexer for operators/terminators
+3. Implement EOF token mechanism (this plan)
+4. Remove sub-parsers
+
+We tried to do step 3 before step 2 was complete.
+
+---
+
 ## Overview
 
 Implement bash's `shell_eof_token` mechanism to allow parsing command substitutions directly without creating sub-parsers. This eliminates ~350 lines of duplicated scanning logic and enables moving substitution methods to the Lexer.

@@ -11,7 +11,7 @@
 - Add Lexer sync helpers (`_sync_to_parser`, `_sync_from_parser`) ✓
 - Update transpiler to handle forward references ✓
 
-**Deferred (cannot easily move to Lexer):**
+**Deferred (require sub-parsers or Parser callbacks):**
 - `_parse_arithmetic_expansion` - calls `_parse_arith_expr` which calls `parse_list()`, creating recursive Parser interactions
 - `_parse_command_substitution` - creates new `Parser(content)` sub-parser
 - `_parse_backtick_substitution` - creates new `Parser(content)` sub-parser
@@ -20,14 +20,41 @@
 - `_parse_dollar_expansion` - dispatcher that calls all expansion methods
 - `_parse_word_internal` - main word reader, orchestrates all expansion methods
 
-**Assessment:**
+---
+
+## Key Insight (January 2026)
+
+We attempted to implement the EOF token mechanism (see EOF_TOKEN_PLAN.md) to eliminate sub-parsers. It failed because **the Parser is character-based, not token-based**.
+
+The real blocker isn't "methods need sub-parsers" - it's that `parse_list()`, `parse_command()`, `parse_pipeline()` do character-level parsing directly via `self.peek()` and `self.advance()`, bypassing the Lexer entirely.
+
+**Two paths forward:**
+
+### Path A: Move methods to Lexer first (keep sub-parsers)
+1. Move remaining expansion methods to Lexer, keeping sub-parser creation
+2. Move `_parse_word_internal` to Lexer
+3. Make Parser use Lexer for tokenization (operators, terminators)
+4. Then EOF token mechanism works → remove sub-parsers
+
+### Path B: Make Parser token-based first
+1. Refactor `parse_command()`, `parse_list()`, etc. to use `_lex_next_token()`
+2. EOF token mechanism then works naturally
+3. Move remaining methods to Lexer without sub-parsers
+
+Path B is more direct but higher risk (touches core parsing loop).
+Path A is incremental but carries technical debt (sub-parsers) longer.
+
+---
+
+## Assessment
+
 The "leaf" expansion methods (ansi_c_quote, locale_string, param_expansion) have been successfully moved to Lexer. These are self-contained and don't create new Parser instances.
 
 The remaining methods all either:
 1. Create new `Parser(content)` sub-parsers to parse nested command content
 2. Call methods like `parse_list()` which recursively trigger more parsing
 
-Moving these to Lexer would require the Lexer to create Parser instances or maintain complex bidirectional callbacks, which goes against the separation of concerns.
+Moving these to Lexer **can proceed** with sub-parsers or Parser callbacks. The sub-parsers are not ideal but are not the fundamental blocker. The fundamental blocker is that the Parser doesn't use the Lexer for tokenization.
 
 ## Goal
 

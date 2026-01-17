@@ -213,17 +213,9 @@ class SavedParserState {
 		ctx_depth,
 		eof_token,
 		eof_depth,
-		open_brace_count,
-		open_cond_count,
 	) {
 		if (eof_depth == null) {
 			eof_depth = 0;
-		}
-		if (open_brace_count == null) {
-			open_brace_count = 0;
-		}
-		if (open_cond_count == null) {
-			open_cond_count = 0;
 		}
 		this.parser_state = parser_state;
 		this.dolbrace_state = dolbrace_state;
@@ -231,8 +223,6 @@ class SavedParserState {
 		this.ctx_depth = ctx_depth;
 		this.eof_token = eof_token;
 		this.eof_depth = eof_depth;
-		this.open_brace_count = open_brace_count;
-		this.open_cond_count = open_cond_count;
 	}
 }
 
@@ -251,42 +241,6 @@ class LexerSavedState {
 		this.quote_single = quote_single;
 		this.quote_double = quote_double;
 		this.pending_heredocs = pending_heredocs;
-	}
-}
-
-class DelimiterStack {
-	constructor() {
-		this._stack = [];
-	}
-
-	push(delim, pos) {
-		this._stack.push([delim, pos]);
-	}
-
-	pop() {
-		if (this._stack) {
-			return this._stack.pop();
-		}
-		return null;
-	}
-
-	peek() {
-		if (this._stack) {
-			return this._stack[this._stack.length - 1];
-		}
-		return null;
-	}
-
-	isEmpty() {
-		return this._stack.length === 0;
-	}
-
-	depth() {
-		return this._stack.length;
-	}
-
-	clear() {
-		this._stack = [];
 	}
 }
 
@@ -8016,13 +7970,6 @@ class Parser {
 		this._word_context = WORD_CTX_NORMAL;
 		this._at_command_start = false;
 		this._in_array_literal = false;
-		// Brace/bracket counts for bash-style delimiter tracking
-		// } is only a reserved word when _open_brace_count > 0
-		// ]] is only a reserved word when _open_cond_count > 0
-		this._open_brace_count = 0;
-		this._open_cond_count = 0;
-		// Delimiter stack for better error messages on unclosed constructs
-		this._delimiter_stack = new DelimiterStack();
 	}
 
 	_setState(flag) {
@@ -8045,8 +7992,6 @@ class Parser {
 			this._ctx.getDepth(),
 			this._eof_token,
 			this._eof_depth,
-			this._open_brace_count,
-			this._open_cond_count,
 		);
 	}
 
@@ -8055,8 +8000,6 @@ class Parser {
 		this._dolbrace_state = saved.dolbrace_state;
 		this._eof_token = saved.eof_token;
 		this._eof_depth = saved.eof_depth;
-		this._open_brace_count = saved.open_brace_count;
-		this._open_cond_count = saved.open_cond_count;
 		// Restore context stack to saved depth (pop any extra contexts)
 		while (this._ctx.getDepth() > saved.ctx_depth) {
 			this._ctx.pop();
@@ -8111,79 +8054,6 @@ class Parser {
 			return null;
 		}
 		return tok.type;
-	}
-
-	_reservedWordAcceptable() {
-		let last_type;
-		last_type = this._lastTokenType();
-		// None means start of input - reserved words acceptable
-		if (last_type == null) {
-			return true;
-		}
-		// After command separators
-		if (
-			[
-				TokenType.NEWLINE,
-				TokenType.SEMI,
-				TokenType.SEMI_SEMI,
-				TokenType.SEMI_AMP,
-				TokenType.SEMI_SEMI_AMP,
-				TokenType.PIPE,
-				TokenType.PIPE_AMP,
-				TokenType.AMP,
-				TokenType.AND_AND,
-				TokenType.OR_OR,
-				TokenType.LPAREN,
-				TokenType.RPAREN,
-				TokenType.LBRACE,
-				TokenType.RBRACE,
-				TokenType.BANG,
-			].includes(last_type)
-		) {
-			return true;
-		}
-		// After reserved words that expect commands to follow
-		if (
-			[
-				TokenType.IF,
-				TokenType.THEN,
-				TokenType.ELSE,
-				TokenType.ELIF,
-				TokenType.WHILE,
-				TokenType.UNTIL,
-				TokenType.DO,
-				TokenType.CASE,
-				TokenType.TIME,
-			].includes(last_type)
-		) {
-			return true;
-		}
-		return false;
-	}
-
-	_specialCaseTokens(word) {
-		let last, prev;
-		last = this._lastToken();
-		if (last == null) {
-			return false;
-		}
-		// After 'function', the next word is a name, not a reserved word
-		if (last.type === TokenType.WORD && last.value === "function") {
-			return true;
-		}
-		// After 'case' (and before 'in'), the word is a value, not reserved
-		if (last.type === TokenType.WORD && last.value === "case") {
-			return true;
-		}
-		// Check two tokens back for 'function' or 'case' patterns
-		prev = this._token_history[1];
-		if (prev != null) {
-			// function name - name is already consumed, don't reclassify
-			if (prev.value === "function") {
-				return true;
-			}
-		}
-		return false;
 	}
 
 	_syncLexer() {
@@ -11296,7 +11166,6 @@ class Parser {
 		}
 		this.advance();
 		this.advance();
-		this._open_cond_count += 1;
 		this._setState(ParserStateFlags.PST_CONDEXPR);
 		this._word_context = WORD_CTX_COND;
 		// Parse the conditional expression body
@@ -11312,7 +11181,6 @@ class Parser {
 			this.pos + 1 >= this.length ||
 			this.source[this.pos + 1] !== "]"
 		) {
-			this._open_cond_count -= 1;
 			this._clearState(ParserStateFlags.PST_CONDEXPR);
 			this._word_context = WORD_CTX_NORMAL;
 			throw new ParseError(
@@ -11322,7 +11190,6 @@ class Parser {
 		}
 		this.advance();
 		this.advance();
-		this._open_cond_count -= 1;
 		this._clearState(ParserStateFlags.PST_CONDEXPR);
 		this._word_context = WORD_CTX_NORMAL;
 		return new ConditionalExpr(body, this._collectRedirects());
@@ -11535,20 +11402,15 @@ class Parser {
 	}
 
 	parseBraceGroup() {
-		let body, brace_pos, delim_info, open_pos;
+		let body;
 		this.skipWhitespace();
 		// Lexer handles { vs {abc distinction: only returns reserved word for standalone {
-		brace_pos = this.pos;
 		if (!this._lexConsumeWord("{")) {
 			return null;
 		}
-		this._open_brace_count += 1;
-		this._delimiter_stack.push("{", brace_pos);
 		this.skipWhitespaceAndNewlines();
 		body = this.parseList();
 		if (body == null) {
-			this._open_brace_count -= 1;
-			this._delimiter_stack.pop();
 			throw new ParseError(
 				"Expected command in brace group",
 				this._lexPeekToken().pos,
@@ -11556,17 +11418,11 @@ class Parser {
 		}
 		this.skipWhitespace();
 		if (!this._lexConsumeWord("}")) {
-			this._open_brace_count -= 1;
-			delim_info = this._delimiter_stack.pop();
-			// Use the opening brace position for better error context
-			open_pos = delim_info ? delim_info[1] : brace_pos;
 			throw new ParseError(
-				`Expected \`}' to match \`{' at position ${open_pos}`,
-				this.pos,
+				"Expected } to close brace group",
+				this._lexPeekToken().pos,
 			);
 		}
-		this._open_brace_count -= 1;
-		this._delimiter_stack.pop();
 		return new BraceGroup(body, this._collectRedirects());
 	}
 

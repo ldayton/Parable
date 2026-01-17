@@ -5247,6 +5247,18 @@ class Parser:
             return (t, tok.value)
         return None
 
+    def _lex_peek_case_terminator(self) -> str | None:
+        """Peek case terminator (;;, ;&, ;;&). Returns value or None."""
+        tok = self._lex_peek_token()
+        t = tok.type
+        if t == TokenType.SEMI_SEMI:
+            return ";;"
+        if t == TokenType.SEMI_AMP:
+            return ";&"
+        if t == TokenType.SEMI_SEMI_AMP:
+            return ";;&"
+        return None
+
     def at_end(self) -> bool:
         """Check if we've reached the end of input."""
         return self.pos >= self.length

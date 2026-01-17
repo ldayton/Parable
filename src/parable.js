@@ -6221,6 +6221,22 @@ class Parser {
 		return null;
 	}
 
+	_lexPeekCaseTerminator() {
+		let t, tok;
+		tok = this._lexPeekToken();
+		t = tok.type;
+		if (t === TokenType.SEMI_SEMI) {
+			return ";;";
+		}
+		if (t === TokenType.SEMI_AMP) {
+			return ";&";
+		}
+		if (t === TokenType.SEMI_SEMI_AMP) {
+			return ";;&";
+		}
+		return null;
+	}
+
 	atEnd() {
 		return this.pos >= this.length;
 	}

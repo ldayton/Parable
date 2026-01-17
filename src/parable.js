@@ -6175,15 +6175,6 @@ class Parser {
 		return reserved === word;
 	}
 
-	_lexPeekWord() {
-		let tok;
-		tok = this._lexPeekToken();
-		if (tok.type === TokenType.WORD) {
-			return tok.value;
-		}
-		return null;
-	}
-
 	_lexConsumeWord(expected) {
 		let tok, word;
 		tok = this._lexPeekToken();
@@ -6200,30 +6191,6 @@ class Parser {
 			return true;
 		}
 		return false;
-	}
-
-	_unexpectedTokenError(expected) {
-		let tok;
-		tok = this._lexPeekToken();
-		if (tok.type === TokenType.EOF) {
-			return new ParseError(`Expected ${expected}, got end of input`, tok.pos);
-		}
-		return new ParseError(`Expected ${expected}, got '${tok.value}'`, tok.pos);
-	}
-
-	_lexPeekRedirectOp() {
-		let t, tok;
-		tok = this._lexPeekToken();
-		t = tok.type;
-		// Single-char redirects: LESS(17), GREATER(18)
-		// Multi-char redirects: LESS_LESS(35) through AMP_GREATER_GREATER(44)
-		if (t === TokenType.LESS || t === TokenType.GREATER) {
-			return [t, tok.value];
-		}
-		if (t >= TokenType.LESS_LESS && t <= TokenType.AMP_GREATER_GREATER) {
-			return [t, tok.value];
-		}
-		return null;
 	}
 
 	_lexPeekCaseTerminator() {
@@ -6274,13 +6241,6 @@ class Parser {
 
 	lookahead(n) {
 		return this.source.slice(this.pos, this.pos + n);
-	}
-
-	matchKeyword(keyword) {
-		if (!_startsWithAt(this.source, this.pos, keyword)) {
-			return false;
-		}
-		return _isWordBoundary(this.source, this.pos, keyword.length);
 	}
 
 	_isBangFollowedByProcsub() {

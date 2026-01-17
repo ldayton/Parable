@@ -5217,13 +5217,6 @@ class Parser:
         reserved = self._lex_peek_reserved_word()
         return reserved == word
 
-    def _lex_peek_word(self) -> str | None:
-        """Peek next word token value. Returns None if not at a word."""
-        tok = self._lex_peek_token()
-        if tok.type == TokenType.WORD:
-            return tok.value
-        return None
-
     def _lex_consume_word(self, expected: str) -> bool:
         """Try to consume a word token matching expected. Returns True if successful."""
         tok = self._lex_peek_token()
@@ -5237,25 +5230,6 @@ class Parser:
             self._lex_next_token()
             return True
         return False
-
-    def _unexpected_token_error(self, expected: str) -> ParseError:
-        """Create a ParseError with token context for better error messages."""
-        tok = self._lex_peek_token()
-        if tok.type == TokenType.EOF:
-            return ParseError(f"Expected {expected}, got end of input", pos=tok.pos)
-        return ParseError(f"Expected {expected}, got '{tok.value}'", pos=tok.pos)
-
-    def _lex_peek_redirect_op(self) -> tuple[int, str] | None:
-        """Peek redirect operator token. Returns (token_type, value) or None."""
-        tok = self._lex_peek_token()
-        t = tok.type
-        # Single-char redirects: LESS(17), GREATER(18)
-        # Multi-char redirects: LESS_LESS(35) through AMP_GREATER_GREATER(44)
-        if t == TokenType.LESS or t == TokenType.GREATER:
-            return (t, tok.value)
-        if t >= TokenType.LESS_LESS and t <= TokenType.AMP_GREATER_GREATER:
-            return (t, tok.value)
-        return None
 
     def _lex_peek_case_terminator(self) -> str | None:
         """Peek case terminator (;;, ;&, ;;&). Returns value or None."""
@@ -5300,12 +5274,6 @@ class Parser:
     def lookahead(self, n: int) -> str:
         """Return next n characters without consuming."""
         return _substring(self.source, self.pos, self.pos + n)
-
-    def match_keyword(self, keyword: str) -> bool:
-        """Check if current position matches keyword with word boundary."""
-        if not _starts_with_at(self.source, self.pos, keyword):
-            return False
-        return _is_word_boundary(self.source, self.pos, len(keyword))
 
     def _is_bang_followed_by_procsub(self) -> bool:
         """Check if ! at current position is followed by >( or <( process substitution."""

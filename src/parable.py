@@ -7525,37 +7525,10 @@ class Parser:
             self._in_process_sub = old_in_process_sub
             self.pos = start + 2  # after <( or >(
 
-            # Scan to find matching ) with paren depth tracking
-            depth = 1
-            while not self.at_end() and depth > 0:
-                c = self.peek()
-                if c == "(":
-                    depth += 1
-                elif c == ")":
-                    depth -= 1
-                    if depth == 0:
-                        break
-                elif c == "'":
-                    self.advance()
-                    while not self.at_end() and self.peek() != "'":
-                        self.advance()
-                elif c == '"':
-                    self.advance()
-                    while not self.at_end() and self.peek() != '"':
-                        if self.peek() == "\\" and self.pos + 1 < self.length:
-                            self.advance()
-                        self.advance()
-                elif c == "\\" and self.pos + 1 < self.length:
-                    self.advance()
-                self.advance()
-
-            if depth != 0:
-                if self.at_end():
-                    raise MatchedPairError("unexpected EOF looking for `)'", pos=start) from None
-                self.pos = start
-                return None, ""
-
-            self.advance()  # consume final )
+            # Scan to find matching ) using unified matched pair parsing
+            self._lexer.pos = self.pos  # sync lexer to parser
+            self._lexer._parse_matched_pair("(", ")")
+            self.pos = self._lexer.pos  # sync parser from lexer
             text = _substring(self.source, start, self.pos)
             # Strip line continuations (backslash-newline) from text
             text = _strip_line_continuations_comment_aware(text)
@@ -8422,30 +8395,10 @@ class Parser:
         self.advance()  # consume $
         self.advance()  # consume [
 
-        # Find matching ] - need to track nested brackets
-        content_start = self.pos
-        depth = 1
-
-        while not self.at_end() and depth > 0:
-            c = self.peek()
-
-            if c == "[" and not _is_backslash_escaped(self.source, self.pos):
-                depth += 1
-                self.advance()
-            elif c == "]":
-                if not _is_backslash_escaped(self.source, self.pos):
-                    depth -= 1
-                    if depth == 0:
-                        break
-                self.advance()
-            else:
-                self.advance()
-
-        if self.at_end() or depth != 0:
-            raise ParseError("Unterminated $[", pos=start)
-
-        content = _substring(self.source, content_start, self.pos)
-        self.advance()  # consume ]
+        # Find matching ] using unified matched pair parsing
+        self._lexer.pos = self.pos  # sync lexer to parser
+        content = self._lexer._parse_matched_pair("[", "]", MatchedPairFlags.ARITH)
+        self.pos = self._lexer.pos  # sync parser from lexer
 
         text = _substring(self.source, start, self.pos)
         return ArithDeprecated(content), text

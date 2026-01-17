@@ -502,6 +502,10 @@ class Lexer:
         self._in_array_literal = False
         # Position after reading a token (may differ from token.pos due to heredocs)
         self._post_read_pos: int = 0
+        # Context used when token was cached (for cache invalidation)
+        self._cached_word_context: int = WORD_CTX_NORMAL
+        self._cached_at_command_start: bool = False
+        self._cached_in_array_literal: bool = False
 
     def peek(self) -> str | None:
         """Return current character without consuming."""
@@ -4052,6 +4056,7 @@ class HereDoc(Node):
     quoted: bool = False
     fd: int | None = None
     complete: bool = True
+    _start_pos: int = -1  # Parser position where heredoc redirect started (for dedup)
 
     def __init__(
         self,
@@ -4069,6 +4074,7 @@ class HereDoc(Node):
         self.quoted = quoted
         self.fd = fd
         self.complete = complete
+        self._start_pos = -1
 
     def to_sexp(self) -> str:
         op = "<<-" if self.strip_tabs else "<<"
@@ -6657,12 +6663,15 @@ class Parser:
 
     def _sync_lexer(self) -> None:
         """Sync Lexer position and state to Parser."""
-        # Invalidate cache if it doesn't match our current position
-        if (
-            self._lexer._token_cache is not None
-            and self._lexer._token_cache.pos != self.pos
-        ):
-            self._lexer._token_cache = None
+        # Invalidate cache if it doesn't match our current position or context
+        if self._lexer._token_cache is not None:
+            if (
+                self._lexer._token_cache.pos != self.pos
+                or self._lexer._cached_word_context != self._word_context
+                or self._lexer._cached_at_command_start != self._at_command_start
+                or self._lexer._cached_in_array_literal != self._in_array_literal
+            ):
+                self._lexer._token_cache = None
         # Sync lexer position
         if self._lexer.pos != self.pos:
             self._lexer.pos = self.pos
@@ -6680,16 +6689,24 @@ class Parser:
 
     def _lex_peek_token(self) -> Token:
         """Peek at next token via Lexer."""
-        # If there's a cached token that was read from our current position, use it
+        # Check if cached token is valid: same position AND same word context
+        # (word context affects how array subscripts and other constructs are parsed)
         if (
             self._lexer._token_cache is not None
             and self._lexer._token_cache.pos == self.pos
+            and self._lexer._cached_word_context == self._word_context
+            and self._lexer._cached_at_command_start == self._at_command_start
+            and self._lexer._cached_in_array_literal == self._in_array_literal
         ):
             return self._lexer._token_cache
         # Need to read a new token - sync lexer to our position first
         saved_pos = self.pos
         self._sync_lexer()
         result = self._lexer.peek_token()
+        # Save the context used for this cached token
+        self._lexer._cached_word_context = self._word_context
+        self._lexer._cached_at_command_start = self._at_command_start
+        self._lexer._cached_in_array_literal = self._in_array_literal
         # Save the post-read position (may have advanced for heredocs)
         self._lexer._post_read_pos = self._lexer.pos
         # Restore parser position for peek semantics
@@ -6698,10 +6715,13 @@ class Parser:
 
     def _lex_next_token(self) -> Token:
         """Get next token via Lexer and sync position."""
-        # Check if cached token is for our current position
+        # Check if cached token is valid: same position AND same word context
         if (
             self._lexer._token_cache is not None
             and self._lexer._token_cache.pos == self.pos
+            and self._lexer._cached_word_context == self._word_context
+            and self._lexer._cached_at_command_start == self._at_command_start
+            and self._lexer._cached_in_array_literal == self._in_array_literal
         ):
             # Consume cached token - use saved post-read position
             tok = self._lexer.next_token()
@@ -6711,6 +6731,10 @@ class Parser:
             # No valid cache - sync and read fresh
             self._sync_lexer()
             tok = self._lexer.next_token()
+            # Save context for this token
+            self._lexer._cached_word_context = self._word_context
+            self._lexer._cached_at_command_start = self._at_command_start
+            self._lexer._cached_in_array_literal = self._in_array_literal
             self._sync_parser()
         self._record_token(tok)
         return tok
@@ -9019,11 +9043,7 @@ class Parser:
         delimiter, quoted = self._parse_heredoc_delimiter()
         # Check if we've already registered this heredoc (can happen due to re-tokenization)
         for existing in self._pending_heredocs:
-            if (
-                hasattr(existing, "_start_pos")
-                and existing._start_pos == start_pos
-                and existing.delimiter == delimiter
-            ):
+            if existing._start_pos == start_pos and existing.delimiter == delimiter:
                 self._clear_state(ParserStateFlags.PST_HEREDOC)
                 return existing
         # Create stub HereDoc with empty content - will be filled in later

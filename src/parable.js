@@ -449,6 +449,10 @@ class Lexer {
 		this._in_array_literal = false;
 		// Position after reading a token (may differ from token.pos due to heredocs)
 		this._post_read_pos = 0;
+		// Context used when token was cached (for cache invalidation)
+		this._cached_word_context = WORD_CTX_NORMAL;
+		this._cached_at_command_start = false;
+		this._cached_in_array_literal = false;
 	}
 
 	peek() {
@@ -5053,6 +5057,7 @@ class HereDoc extends Node {
 		this.quoted = quoted;
 		this.fd = fd;
 		this.complete = complete;
+		this._start_pos = -1;
 	}
 
 	toSexp() {
@@ -7992,12 +7997,16 @@ class Parser {
 	}
 
 	_syncLexer() {
-		// Invalidate cache if it doesn't match our current position
-		if (
-			this._lexer._token_cache != null &&
-			this._lexer._token_cache.pos !== this.pos
-		) {
-			this._lexer._token_cache = null;
+		// Invalidate cache if it doesn't match our current position or context
+		if (this._lexer._token_cache != null) {
+			if (
+				this._lexer._token_cache.pos !== this.pos ||
+				this._lexer._cached_word_context !== this._word_context ||
+				this._lexer._cached_at_command_start !== this._at_command_start ||
+				this._lexer._cached_in_array_literal !== this._in_array_literal
+			) {
+				this._lexer._token_cache = null;
+			}
 		}
 		// Sync lexer position
 		if (this._lexer.pos !== this.pos) {
@@ -8018,10 +8027,14 @@ class Parser {
 
 	_lexPeekToken() {
 		let result, saved_pos;
-		// If there's a cached token that was read from our current position, use it
+		// Check if cached token is valid: same position AND same word context
+		// (word context affects how array subscripts and other constructs are parsed)
 		if (
 			this._lexer._token_cache != null &&
-			this._lexer._token_cache.pos === this.pos
+			this._lexer._token_cache.pos === this.pos &&
+			this._lexer._cached_word_context === this._word_context &&
+			this._lexer._cached_at_command_start === this._at_command_start &&
+			this._lexer._cached_in_array_literal === this._in_array_literal
 		) {
 			return this._lexer._token_cache;
 		}
@@ -8029,6 +8042,10 @@ class Parser {
 		saved_pos = this.pos;
 		this._syncLexer();
 		result = this._lexer.peekToken();
+		// Save the context used for this cached token
+		this._lexer._cached_word_context = this._word_context;
+		this._lexer._cached_at_command_start = this._at_command_start;
+		this._lexer._cached_in_array_literal = this._in_array_literal;
 		// Save the post-read position (may have advanced for heredocs)
 		this._lexer._post_read_pos = this._lexer.pos;
 		// Restore parser position for peek semantics
@@ -8038,10 +8055,13 @@ class Parser {
 
 	_lexNextToken() {
 		let tok;
-		// Check if cached token is for our current position
+		// Check if cached token is valid: same position AND same word context
 		if (
 			this._lexer._token_cache != null &&
-			this._lexer._token_cache.pos === this.pos
+			this._lexer._token_cache.pos === this.pos &&
+			this._lexer._cached_word_context === this._word_context &&
+			this._lexer._cached_at_command_start === this._at_command_start &&
+			this._lexer._cached_in_array_literal === this._in_array_literal
 		) {
 			// Consume cached token - use saved post-read position
 			tok = this._lexer.nextToken();
@@ -8051,6 +8071,10 @@ class Parser {
 			// No valid cache - sync and read fresh
 			this._syncLexer();
 			tok = this._lexer.nextToken();
+			// Save context for this token
+			this._lexer._cached_word_context = this._word_context;
+			this._lexer._cached_at_command_start = this._at_command_start;
+			this._lexer._cached_in_array_literal = this._in_array_literal;
 			this._syncParser();
 		}
 		this._recordToken(tok);
@@ -10888,7 +10912,6 @@ class Parser {
 		// Check if we've already registered this heredoc (can happen due to re-tokenization)
 		for (existing of this._pending_heredocs) {
 			if (
-				hasattr(existing, "_start_pos") &&
 				existing._start_pos === start_pos &&
 				existing.delimiter === delimiter
 			) {

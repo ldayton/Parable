@@ -553,6 +553,87 @@ class Lexer {
 		}
 		return true;
 	}
+
+	_scanSingleQuoted() {
+		let c, chars;
+		chars = ["'"];
+		while (this.pos < this.length) {
+			c = this.source[this.pos];
+			chars.push(c);
+			this.pos += 1;
+			if (c === "'") {
+				break;
+			}
+		}
+		return chars.join("");
+	}
+
+	_scanDoubleQuoted() {
+		let c, chars;
+		chars = ['"'];
+		while (this.pos < this.length) {
+			c = this.source[this.pos];
+			if (c === "\\") {
+				chars.push(c);
+				this.pos += 1;
+				if (this.pos < this.length) {
+					chars.push(this.source[this.pos]);
+					this.pos += 1;
+				}
+				continue;
+			}
+			chars.push(c);
+			this.pos += 1;
+			if (c === '"') {
+				break;
+			}
+		}
+		return chars.join("");
+	}
+
+	_readWord() {
+		let c, chars, start;
+		start = this.pos;
+		if (this.pos >= this.length) {
+			return null;
+		}
+		c = this.peek();
+		if (c == null || this.isMetachar(c)) {
+			return null;
+		}
+		chars = [];
+		while (this.pos < this.length) {
+			c = this.source[this.pos];
+			if (this.isMetachar(c) && !this.quote.inQuotes()) {
+				break;
+			}
+			if (c === "\\") {
+				chars.push(c);
+				this.pos += 1;
+				if (this.pos < this.length) {
+					chars.push(this.source[this.pos]);
+					this.pos += 1;
+				}
+				continue;
+			}
+			if (c === "'" && !this.quote.double) {
+				this.pos += 1;
+				chars.push(this._scanSingleQuoted());
+				continue;
+			}
+			if (c === '"' && !this.quote.single) {
+				this.pos += 1;
+				chars.push(this._scanDoubleQuoted());
+				continue;
+			}
+			chars.push(c);
+			this.pos += 1;
+		}
+		if (chars.length === 0) {
+			return null;
+		}
+		return new Token(TokenType.WORD, chars.join(""), start);
+	}
 }
 
 function _stripLineContinuationsCommentAware(text) {

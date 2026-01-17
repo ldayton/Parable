@@ -545,6 +545,69 @@ class Lexer:
             self.pos += 1
         return True
 
+    def _scan_single_quoted(self) -> str:
+        """Scan content inside single quotes. Caller has consumed opening quote."""
+        chars = ["'"]
+        while self.pos < self.length:
+            c = self.source[self.pos]
+            chars.append(c)
+            self.pos += 1
+            if c == "'":
+                break
+        return "".join(chars)
+
+    def _scan_double_quoted(self) -> str:
+        """Scan content inside double quotes. Caller has consumed opening quote."""
+        chars = ['"']
+        while self.pos < self.length:
+            c = self.source[self.pos]
+            if c == "\\":
+                chars.append(c)
+                self.pos += 1
+                if self.pos < self.length:
+                    chars.append(self.source[self.pos])
+                    self.pos += 1
+                continue
+            chars.append(c)
+            self.pos += 1
+            if c == '"':
+                break
+        return "".join(chars)
+
+    def _read_word(self) -> Token | None:
+        """Read a word token, handling quotes."""
+        start = self.pos
+        if self.pos >= self.length:
+            return None
+        c = self.peek()
+        if c is None or self.is_metachar(c):
+            return None
+        chars: list[str] = []
+        while self.pos < self.length:
+            c = self.source[self.pos]
+            if self.is_metachar(c) and not self.quote.in_quotes():
+                break
+            if c == "\\":
+                chars.append(c)
+                self.pos += 1
+                if self.pos < self.length:
+                    chars.append(self.source[self.pos])
+                    self.pos += 1
+                continue
+            if c == "'" and not self.quote.double:
+                self.pos += 1
+                chars.append(self._scan_single_quoted())
+                continue
+            if c == '"' and not self.quote.single:
+                self.pos += 1
+                chars.append(self._scan_double_quoted())
+                continue
+            chars.append(c)
+            self.pos += 1
+        if not chars:
+            return None
+        return Token(TokenType.WORD, "".join(chars), start)
+
 
 def _strip_line_continuations_comment_aware(text: str) -> str:
     """Strip backslash-newline line continuations, preserving newlines in comments.

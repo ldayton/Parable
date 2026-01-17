@@ -5226,10 +5226,12 @@ class Parser:
     def skip_whitespace(self) -> None:
         """Skip spaces, tabs, comments, and backslash-newline continuations."""
         while not self.at_end():
+            # Use Lexer for spaces/tabs
+            self._lex_skip_blanks()
+            if self.at_end():
+                break
             ch = self.peek()
-            if _is_whitespace_no_newline(ch):
-                self.advance()
-            elif ch == "#":
+            if ch == "#":
                 # Skip comment to end of line (but not the newline itself)
                 while not self.at_end() and self.peek() != "\n":
                     self.advance()

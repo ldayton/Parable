@@ -6183,10 +6183,13 @@ class Parser {
 	skipWhitespace() {
 		let ch;
 		while (!this.atEnd()) {
+			// Use Lexer for spaces/tabs
+			this._lexSkipBlanks();
+			if (this.atEnd()) {
+				break;
+			}
 			ch = this.peek();
-			if (_isWhitespaceNoNewline(ch)) {
-				this.advance();
-			} else if (ch === "#") {
+			if (ch === "#") {
 				// Skip comment to end of line (but not the newline itself)
 				while (!this.atEnd() && this.peek() !== "\n") {
 					this.advance();

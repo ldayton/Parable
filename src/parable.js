@@ -6098,6 +6098,15 @@ class Parser {
 		return tok.type;
 	}
 
+	_syncLexer() {
+		this._lexer.pos = this.pos;
+		this._lexer._token_cache = null;
+	}
+
+	_syncParser() {
+		this.pos = this._lexer.pos;
+	}
+
 	atEnd() {
 		return this.pos >= this.length;
 	}

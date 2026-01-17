@@ -5148,6 +5148,15 @@ class Parser:
             return None
         return tok.type
 
+    def _sync_lexer(self) -> None:
+        """Sync Lexer position to Parser position."""
+        self._lexer.pos = self.pos
+        self._lexer._token_cache = None
+
+    def _sync_parser(self) -> None:
+        """Sync Parser position to Lexer position."""
+        self.pos = self._lexer.pos
+
     def at_end(self) -> bool:
         """Check if we've reached the end of input."""
         return self.pos >= self.length

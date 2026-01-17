@@ -11,3 +11,8 @@ minimizer = "fuzzer.minimize:main"
 [build-system]
 requires = ["uv_build>=0.9.26"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]

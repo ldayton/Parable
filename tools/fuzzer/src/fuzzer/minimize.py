@@ -56,18 +56,38 @@ def is_interesting(input_text: str) -> bool:
     """Check if input shows a discrepancy between Parable and oracle."""
     parable = run_parable(input_text)
     oracle = run_oracle(input_text)
-    # Both must succeed and produce different results
-    if parable is None or oracle is None:
+    # Both error -> no discrepancy
+    if parable is None and oracle is None:
         return False
+    # One errors, other succeeds -> discrepancy
+    if (parable is None) != (oracle is None):
+        return True
+    # Both succeed but different -> discrepancy
     return normalize(parable) != normalize(oracle)
 
 
-def minimize(input_text: str) -> str | None:
-    """Minimize input to smallest string that still shows discrepancy."""
-    if not is_interesting(input_text):
-        return None
-    chars = ddmin(list(input_text), lambda c: is_interesting("".join(c)))
-    return "".join(chars)
+def minimize(input_text: str, timeout: float | None = 5.0) -> str | None:
+    """Minimize input to smallest string that still shows discrepancy.
+
+    Args:
+        input_text: The input to minimize
+        timeout: Timeout in seconds (default 5.0). None means no timeout.
+    """
+    import time
+
+    global _deadline
+    old_deadline = _deadline
+    try:
+        if timeout is not None:
+            _deadline = time.time() + timeout
+        if not is_interesting(input_text):
+            return None
+        chars = ddmin(list(input_text), lambda c: is_interesting("".join(c)))
+        return "".join(chars)
+    except TimeoutError:
+        return None  # Treat timeout as failed minimize
+    finally:
+        _deadline = old_deadline
 
 
 def main():

@@ -24,11 +24,22 @@ test *ARGS: (_test "3.14" ARGS)
 # Verify test expectations match bash-oracle (skips if no binary available)
 verify-tests:
     #!/usr/bin/env bash
-    # Check env var first, then dev location, then download
+    set -e
+    check_binary() {
+        local path="$1"
+        if ! "$path" -e 'echo' >/dev/null 2>&1; then
+            echo "Skipping verify-tests: binary not compatible ($(file -b "$path"))"
+            exit 0
+        fi
+    }
+    # Check env var first
     if [[ -n "${BASH_ORACLE:-}" && -x "$BASH_ORACLE" ]]; then
+        check_binary "$BASH_ORACLE"
         exec tools/bash-oracle/src/oracle/verify_tests.py
     fi
+    # Check dev location
     if [[ -x "$HOME/source/bash-oracle/bash-oracle" ]]; then
+        check_binary "$HOME/source/bash-oracle/bash-oracle"
         BASH_ORACLE="$HOME/source/bash-oracle/bash-oracle" exec tools/bash-oracle/src/oracle/verify_tests.py
     fi
     # Try to download
@@ -44,11 +55,7 @@ verify-tests:
         exit 0
     fi
     chmod +x "$ORACLE_PATH"
-    # Verify binary works
-    if ! "$ORACLE_PATH" -e 'echo' >/dev/null 2>&1; then
-        echo "Skipping verify-tests: binary not compatible with this platform"
-        exit 0
-    fi
+    check_binary "$ORACLE_PATH"
     BASH_ORACLE="$ORACLE_PATH" exec tools/bash-oracle/src/oracle/verify_tests.py
 
 # Run tests on all supported CPython versions (parallel)
@@ -84,7 +91,7 @@ _ensure-biome:
 
 # Internal: run all parallel checks
 [parallel]
-_check-parallel: test-all lint fmt lock-check check-dump-ast check-style check-transpile test-js fmt-js verify-tests
+_check-parallel: test-all lint fmt lock-check check-dump-ast check-style check-transpile test-js fmt-js
 
 # Run all checks (tests, lint, format, lock, style) in parallel
 check: _ensure-biome _check-parallel

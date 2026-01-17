@@ -673,6 +673,14 @@ class Lexer {
 	ungetToken(tok) {
 		this._token_cache = tok;
 	}
+
+	// Reserved words mapping
+	classifyWord(word, reserved_ok) {
+		if (reserved_ok && this.RESERVED_WORDS.includes(word)) {
+			return this.RESERVED_WORDS[word];
+		}
+		return TokenType.WORD;
+	}
 }
 
 function _stripLineContinuationsCommentAware(text) {

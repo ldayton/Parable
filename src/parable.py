@@ -639,6 +639,38 @@ class Lexer:
         """Push a token back to be returned by next call."""
         self._token_cache = tok
 
+    # Reserved words mapping
+    RESERVED_WORDS: dict[str, int] = {
+        "if": TokenType.IF,
+        "then": TokenType.THEN,
+        "else": TokenType.ELSE,
+        "elif": TokenType.ELIF,
+        "fi": TokenType.FI,
+        "case": TokenType.CASE,
+        "esac": TokenType.ESAC,
+        "for": TokenType.FOR,
+        "while": TokenType.WHILE,
+        "until": TokenType.UNTIL,
+        "do": TokenType.DO,
+        "done": TokenType.DONE,
+        "in": TokenType.IN,
+        "function": TokenType.FUNCTION,
+        "select": TokenType.SELECT,
+        "coproc": TokenType.COPROC,
+        "time": TokenType.TIME,
+        "!": TokenType.BANG,
+        "[[": TokenType.LBRACKET_LBRACKET,
+        "]]": TokenType.RBRACKET_RBRACKET,
+        "{": TokenType.LBRACE,
+        "}": TokenType.RBRACE,
+    }
+
+    def classify_word(self, word: str, reserved_ok: bool) -> int:
+        """Classify a word token - may be reserved word if unquoted and allowed."""
+        if reserved_ok and word in self.RESERVED_WORDS:
+            return self.RESERVED_WORDS[word]
+        return TokenType.WORD
+
 
 def _strip_line_continuations_comment_aware(text: str) -> str:
     """Strip backslash-newline line continuations, preserving newlines in comments.

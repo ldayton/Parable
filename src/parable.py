@@ -1624,9 +1624,9 @@ class Lexer:
         if self.at_end():
             return None
         ch = self.peek()
-        # Special parameters (but NOT $ followed by { - that's a nested ${...} expansion)
+        # Special parameters (but NOT $ followed by { ' or " - those are special expansions)
         if _is_special_param(ch):
-            if ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
+            if ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] in "{'\"":
                 return None
             self.advance()
             return ch
@@ -1754,8 +1754,7 @@ class Lexer:
         Returns (node, text).
         """
         if self.at_end():
-            self.pos = start
-            return None, ""
+            raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
         # Save and initialize dolbrace state
         saved_dolbrace = self._dolbrace_state
         self._dolbrace_state = DolbraceState.PARAM
@@ -2125,6 +2124,8 @@ class Lexer:
                 arg_chars.append(self.advance())
         if depth != 0:
             self._dolbrace_state = saved_dolbrace
+            if self.at_end():
+                raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
             self.pos = start
             return None, ""
         self.advance()  # consume final }

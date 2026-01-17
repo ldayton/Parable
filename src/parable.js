@@ -1932,12 +1932,12 @@ class Lexer {
 			return null;
 		}
 		ch = this.peek();
-		// Special parameters (but NOT $ followed by { - that's a nested ${...} expansion)
+		// Special parameters (but NOT $ followed by { ' or " - those are special expansions)
 		if (_isSpecialParam(ch)) {
 			if (
 				ch === "$" &&
 				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "{"
+				"{'\"".includes(this.source[this.pos + 1])
 			) {
 				return null;
 			}
@@ -2116,8 +2116,7 @@ class Lexer {
 			text,
 			trailing;
 		if (this.atEnd()) {
-			this.pos = start;
-			return [null, ""];
+			throw new MatchedPairError("unexpected EOF looking for `}'", start);
 		}
 		// Save and initialize dolbrace state
 		saved_dolbrace = this._dolbrace_state;
@@ -2574,6 +2573,9 @@ class Lexer {
 		}
 		if (depth !== 0) {
 			this._dolbrace_state = saved_dolbrace;
+			if (this.atEnd()) {
+				throw new MatchedPairError("unexpected EOF looking for `}'", start);
+			}
 			this.pos = start;
 			return [null, ""];
 		}

@@ -1,0 +1,82 @@
+# Original: '[[ foofoo_ == +(foo) ]] || echo FALSE\n[[ _foofoo == +(foo) ]] || echo FALSE\n[[ foofoo == +(foo) ]] && echo TRUE'
+# Parable:  (or (cond (cond-binary "==" (cond-term "foofoo_") (cond-term "+('foo)"))) (command (word "echo") (word "FALSE"))) (or (cond (cond-binary "==" (cond-term "_foofoo") (cond-term "+(foo)"))) (command (word "echo") (word "FALSE"))) (and (cond (cond-binary "==" (cond-term "foofoo") (cond-term "+(foo)"))) (command (word "e"))) (command (word "ho") (word "TRUE"))
+=== insert "'" at 16; replace 'c' with '\n' at 104
++(
+---
+<error>
+---
+
+# Original: 'z=zz\nzz=\necho ${!z:=foo}\necho ${!z:=bar}'
+# Parable:  (command (word "z=zz")) (command (word "zz=")) (command (word "echo") (word "${!z:=foo}")) (command (word "e[cho ${!z:=ba}r"))
+=== insert '[' at 26; swap at 39
+e[
+---
+<error>
+---
+
+# Original: 'FOO=bar\necho "foo${#FOO}"'
+# Parable:  (command (word "FOO=bare")) (command (word "cho") (word "\"foo${#FOO\"}"))
+=== swap at 7; swap at 23
+"${F"
+---
+<error>
+---
+
+# Original: '$(!\n)'
+# Parable:  (command (word "$(! )"))
+# Note: (!) is valid syntax - bash parses it fine (only runtime error)
+=== delete '\n' at 3; insert ' ' at 2
+(!)
+---
+(subshell (negation (command)))
+---
+
+# Original: 'echo ${foo:-\\}}'
+# Parable:  (command (word "echo") (word "${foo:-") (redirect ">" "\}"))
+=== swap at 12; replace '}' with '>' at 12
+${
+---
+<error>
+---
+
+# Original: 'declare -A assoc\nassoc[0]=42\n(( var = ${assoc[0]} ))\necho $var\n(( var = assoc[0] ))\necho $var'
+# Parable:  (command (word "declare") (word "-A") (word "assoc")) (command (word "assoc[0=42\n(( var = ${assc[0]} ))\necho $var\n(( var = assoc[0] ))\necho $var"))
+=== delete ']' at 24; delete 'o' at 42
+c[
+---
+<error>
+---
+
+# Original: 'foo=$(pwd)'
+# Parable:  (command (word "foo[=${pwd)"))
+=== insert '[' at 3; replace '(' with '{' at 6
+o[
+---
+<error>
+---
+
+# Original: "trap -- 'echo hi' EXIT\necho ok"
+# Parable:  (command (word "trap") (word "--") (word "'echo hi'") (word "EXIT")) (command (word "echo[ ok"))
+=== replace '\n' with '\n' at 22; insert '[' at 27
+''
+o[
+---
+<error>
+---
+
+# Original: 'function if { echo shadowed; }'
+# Parable:  (command (word "functi[n if {| echo shadowed; }"))
+=== replace 'o' with '[' at 6; insert '|' at 13
+i[
+---
+<error>
+---
+
+# Original: 'argv.py ${undef:-hi} ${undef:-\'a b\'} "${undef:-c d}" "${un:-"e f"}" "${un:-\'g h\'}"'
+# Parable:  (command (word "argv.py") (word "${undef:-h}i") (word "${undef:-'a b'") (word "\"${undef:-c d}\"") (word "\"${un:-\"e f\"}\"") (word "\"${un:-'g h'}\""))
+=== swap at 18; delete '}' at 35
+"${u"
+---
+<error>
+---
+

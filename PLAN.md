@@ -125,11 +125,19 @@ to word parsing). In Parable, we track the count for potential future use in
 works because `}` at command position always breaks the command loop, and whether it's
 successfully consumed depends on whether `parse_brace_group()` is expecting it.
 
-### Phase B: Implement `reserved_word_acceptable()`
+### Phase B: Implement `reserved_word_acceptable()` ✓
 
-1. Create single method that checks if reserved words are valid
-2. Use token history (`_token_history`) as input
-3. Replace scattered checks in lexer/parser
+**Completed:** Added centralized `_reserved_word_acceptable()` method.
+
+1. ✓ Created `_reserved_word_acceptable()` that checks token history
+2. ✓ Returns True after command separators (`;`, `|`, `&`, `&&`, `||`, `\n`, etc.)
+3. ✓ Returns True after reserved words expecting commands (`if`, `then`, `do`, etc.)
+4. ✓ Returns True at start of input (None in token history)
+
+**Note:** The method is infrastructure - not yet actively called. Current code achieves
+similar results via `len(words) == 0` checks in `parse_simple_command()`, which is
+effectively checking "command start position". The centralized method enables future
+consolidation of these scattered checks.
 
 ### Phase C: Enhance DelimiterStack
 

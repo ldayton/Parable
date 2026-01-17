@@ -6722,6 +6722,51 @@ class Parser:
             return None
         return tok.type
 
+    def _reserved_word_acceptable(self) -> bool:
+        """Check if reserved words are acceptable in current context.
+
+        Mirrors bash's reserved_word_acceptable(). Reserved words are recognized
+        only at "command start" positions - after command separators, at the
+        beginning of input, or after reserved words that expect a command.
+        """
+        last_type = self._last_token_type()
+        # None means start of input - reserved words acceptable
+        if last_type is None:
+            return True
+        # After command separators
+        if last_type in (
+            TokenType.NEWLINE,
+            TokenType.SEMI,
+            TokenType.SEMI_SEMI,
+            TokenType.SEMI_AMP,
+            TokenType.SEMI_SEMI_AMP,
+            TokenType.PIPE,
+            TokenType.PIPE_AMP,
+            TokenType.AMP,
+            TokenType.AND_AND,
+            TokenType.OR_OR,
+            TokenType.LPAREN,
+            TokenType.RPAREN,
+            TokenType.LBRACE,
+            TokenType.RBRACE,
+            TokenType.BANG,
+        ):
+            return True
+        # After reserved words that expect commands to follow
+        if last_type in (
+            TokenType.IF,
+            TokenType.THEN,
+            TokenType.ELSE,
+            TokenType.ELIF,
+            TokenType.WHILE,
+            TokenType.UNTIL,
+            TokenType.DO,
+            TokenType.CASE,
+            TokenType.TIME,
+        ):
+            return True
+        return False
+
     def _sync_lexer(self) -> None:
         """Sync Lexer position and state to Parser."""
         # Invalidate cache if it doesn't match our current position or context

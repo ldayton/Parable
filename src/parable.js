@@ -8075,6 +8075,54 @@ class Parser {
 		return tok.type;
 	}
 
+	_reservedWordAcceptable() {
+		let last_type;
+		last_type = this._lastTokenType();
+		// None means start of input - reserved words acceptable
+		if (last_type == null) {
+			return true;
+		}
+		// After command separators
+		if (
+			[
+				TokenType.NEWLINE,
+				TokenType.SEMI,
+				TokenType.SEMI_SEMI,
+				TokenType.SEMI_AMP,
+				TokenType.SEMI_SEMI_AMP,
+				TokenType.PIPE,
+				TokenType.PIPE_AMP,
+				TokenType.AMP,
+				TokenType.AND_AND,
+				TokenType.OR_OR,
+				TokenType.LPAREN,
+				TokenType.RPAREN,
+				TokenType.LBRACE,
+				TokenType.RBRACE,
+				TokenType.BANG,
+			].includes(last_type)
+		) {
+			return true;
+		}
+		// After reserved words that expect commands to follow
+		if (
+			[
+				TokenType.IF,
+				TokenType.THEN,
+				TokenType.ELSE,
+				TokenType.ELIF,
+				TokenType.WHILE,
+				TokenType.UNTIL,
+				TokenType.DO,
+				TokenType.CASE,
+				TokenType.TIME,
+			].includes(last_type)
+		) {
+			return true;
+		}
+		return false;
+	}
+
 	_syncLexer() {
 		// Invalidate cache if it doesn't match our current position or context
 		if (this._lexer._token_cache != null) {

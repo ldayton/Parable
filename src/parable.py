@@ -9646,7 +9646,8 @@ class Parser:
 
     def parse_while(self) -> While | None:
         """Parse a while loop: while list; do list; done."""
-        if not self.consume_word("while"):
+        self.skip_whitespace()
+        if not self._lex_consume_word("while"):
             return None
 
         # Parse condition (ends at 'do')
@@ -9656,7 +9657,7 @@ class Parser:
 
         # Expect 'do'
         self.skip_whitespace_and_newlines()
-        if not self.consume_word("do"):
+        if not self._lex_consume_word("do"):
             raise ParseError("Expected 'do' after while condition", pos=self.pos)
 
         # Parse body (ends at 'done')
@@ -9666,13 +9667,14 @@ class Parser:
 
         # Expect 'done'
         self.skip_whitespace_and_newlines()
-        if not self.consume_word("done"):
+        if not self._lex_consume_word("done"):
             raise ParseError("Expected 'done' to close while loop", pos=self.pos)
         return While(condition, body, self._collect_redirects())
 
     def parse_until(self) -> Until | None:
         """Parse an until loop: until list; do list; done."""
-        if not self.consume_word("until"):
+        self.skip_whitespace()
+        if not self._lex_consume_word("until"):
             return None
 
         # Parse condition (ends at 'do')
@@ -9682,7 +9684,7 @@ class Parser:
 
         # Expect 'do'
         self.skip_whitespace_and_newlines()
-        if not self.consume_word("do"):
+        if not self._lex_consume_word("do"):
             raise ParseError("Expected 'do' after until condition", pos=self.pos)
 
         # Parse body (ends at 'done')
@@ -9692,7 +9694,7 @@ class Parser:
 
         # Expect 'done'
         self.skip_whitespace_and_newlines()
-        if not self.consume_word("done"):
+        if not self._lex_consume_word("done"):
             raise ParseError("Expected 'done' to close until loop", pos=self.pos)
         return Until(condition, body, self._collect_redirects())
 

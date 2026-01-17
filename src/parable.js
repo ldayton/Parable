@@ -11695,7 +11695,8 @@ class Parser {
 
 	parseWhile() {
 		let body, condition;
-		if (!this.consumeWord("while")) {
+		this.skipWhitespace();
+		if (!this._lexConsumeWord("while")) {
 			return null;
 		}
 		// Parse condition (ends at 'do')
@@ -11705,7 +11706,7 @@ class Parser {
 		}
 		// Expect 'do'
 		this.skipWhitespaceAndNewlines();
-		if (!this.consumeWord("do")) {
+		if (!this._lexConsumeWord("do")) {
 			throw new ParseError("Expected 'do' after while condition", this.pos);
 		}
 		// Parse body (ends at 'done')
@@ -11715,7 +11716,7 @@ class Parser {
 		}
 		// Expect 'done'
 		this.skipWhitespaceAndNewlines();
-		if (!this.consumeWord("done")) {
+		if (!this._lexConsumeWord("done")) {
 			throw new ParseError("Expected 'done' to close while loop", this.pos);
 		}
 		return new While(condition, body, this._collectRedirects());
@@ -11723,7 +11724,8 @@ class Parser {
 
 	parseUntil() {
 		let body, condition;
-		if (!this.consumeWord("until")) {
+		this.skipWhitespace();
+		if (!this._lexConsumeWord("until")) {
 			return null;
 		}
 		// Parse condition (ends at 'do')
@@ -11733,7 +11735,7 @@ class Parser {
 		}
 		// Expect 'do'
 		this.skipWhitespaceAndNewlines();
-		if (!this.consumeWord("do")) {
+		if (!this._lexConsumeWord("do")) {
 			throw new ParseError("Expected 'do' after until condition", this.pos);
 		}
 		// Parse body (ends at 'done')
@@ -11743,7 +11745,7 @@ class Parser {
 		}
 		// Expect 'done'
 		this.skipWhitespaceAndNewlines();
-		if (!this.consumeWord("done")) {
+		if (!this._lexConsumeWord("done")) {
 			throw new ParseError("Expected 'done' to close until loop", this.pos);
 		}
 		return new Until(condition, body, this._collectRedirects());

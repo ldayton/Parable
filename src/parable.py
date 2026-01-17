@@ -201,6 +201,24 @@ class LexerState:
     INWORD = 0x0800
 
 
+class ParserStateFlags:
+    """Parser state flags for context-sensitive parsing decisions."""
+
+    NONE = 0
+    PST_CASEPAT = 0x0001
+    PST_CMDSUBST = 0x0002
+    PST_CASESTMT = 0x0004
+    PST_CONDEXPR = 0x0008
+    PST_COMPASSIGN = 0x0010
+    PST_ARITH = 0x0020
+    PST_HEREDOC = 0x0040
+    PST_REGEXP = 0x0080
+    PST_EXTPAT = 0x0100
+    PST_SUBSHELL = 0x0200
+    PST_REDIRLIST = 0x0400
+    PST_COMMENT = 0x0800
+
+
 class QuoteState:
     """Unified quote state tracker for parsing.
 

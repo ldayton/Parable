@@ -170,6 +170,22 @@ class LexerState {
 	INWORD = 2048;
 }
 
+class ParserStateFlags {
+	NONE = 0;
+	PST_CASEPAT = 1;
+	PST_CMDSUBST = 2;
+	PST_CASESTMT = 4;
+	PST_CONDEXPR = 8;
+	PST_COMPASSIGN = 16;
+	PST_ARITH = 32;
+	PST_HEREDOC = 64;
+	PST_REGEXP = 128;
+	PST_EXTPAT = 256;
+	PST_SUBSHELL = 512;
+	PST_REDIRLIST = 1024;
+	PST_COMMENT = 2048;
+}
+
 class QuoteState {
 	constructor() {
 		this.single = false;

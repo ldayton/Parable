@@ -6150,6 +6150,19 @@ class Parser {
 		return null;
 	}
 
+	_lexPeekReservedWord() {
+		let tok, word_type;
+		tok = this._lexPeekToken();
+		if (tok.type !== TokenType.WORD) {
+			return null;
+		}
+		word_type = this._lexer.classifyWord(tok.value, true);
+		if (word_type !== TokenType.WORD) {
+			return tok.value;
+		}
+		return null;
+	}
+
 	atEnd() {
 		return this.pos >= this.length;
 	}

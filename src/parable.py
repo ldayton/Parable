@@ -5193,6 +5193,16 @@ class Parser:
             return (t, tok.value)
         return None
 
+    def _lex_peek_reserved_word(self) -> str | None:
+        """Peek reserved word. Returns word value if reserved, None otherwise."""
+        tok = self._lex_peek_token()
+        if tok.type != TokenType.WORD:
+            return None
+        word_type = self._lexer.classify_word(tok.value, reserved_ok=True)
+        if word_type != TokenType.WORD:
+            return tok.value
+        return None
+
     def at_end(self) -> bool:
         """Check if we've reached the end of input."""
         return self.pos >= self.length

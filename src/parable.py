@@ -1224,7 +1224,11 @@ class Lexer:
         if c is None:
             return None
         # Allow process substitution <( and >( even though < and > are metachars
-        is_procsub = (c == "<" or c == ">") and self.pos + 1 < self.length and self.source[self.pos + 1] == "("
+        is_procsub = (
+            (c == "<" or c == ">")
+            and self.pos + 1 < self.length
+            and self.source[self.pos + 1] == "("
+        )
         # In REGEX context, ( and ) are regex grouping, not metachars
         is_regex_paren = self._word_context == WORD_CTX_REGEX and (c == "(" or c == ")")
         if self.is_metachar(c) and not is_procsub and not is_regex_paren:

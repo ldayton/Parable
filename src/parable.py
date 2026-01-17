@@ -1137,12 +1137,21 @@ class Lexer:
                         chars.append(self.advance())
                 continue
             # NORMAL: Array literal - callback to Parser
+            # Only if there's a valid variable name before = or +=
             if ctx == WORD_CTX_NORMAL and ch == "(" and chars and bracket_depth == 0:
-                if chars[len(chars) - 1] == "=" or (
-                    len(chars) >= 2
+                is_array_assign = False
+                # Check += first (before =) since += ends with =
+                if (
+                    len(chars) >= 3
                     and chars[len(chars) - 2] == "+"
                     and chars[len(chars) - 1] == "="
                 ):
+                    # Check chars before += form valid name
+                    is_array_assign = _is_array_assignment_prefix(chars[:-2])
+                elif chars[len(chars) - 1] == "=" and len(chars) >= 2:
+                    # Check chars before = form valid name
+                    is_array_assign = _is_array_assignment_prefix(chars[:-1])
+                if is_array_assign:
                     self._sync_to_parser()
                     array_result = self._parser._parse_array_literal()
                     self._sync_from_parser()

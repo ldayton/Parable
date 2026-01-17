@@ -1008,6 +1008,7 @@ class Lexer {
 			handle_line_continuation,
 			in_single_in_dquote,
 			inner_paren_depth,
+			is_array_assign,
 			locale_result,
 			next_c,
 			next_ch,
@@ -1319,18 +1320,27 @@ class Lexer {
 				continue;
 			}
 			// NORMAL: Array literal - callback to Parser
+			// Only if there's a valid variable name before = or +=
 			if (
 				ctx === WORD_CTX_NORMAL &&
 				ch === "(" &&
 				chars &&
 				bracket_depth === 0
 			) {
+				is_array_assign = false;
+				// Check += first (before =) since += ends with =
 				if (
-					chars[chars.length - 1] === "=" ||
-					(chars.length >= 2 &&
-						chars[chars.length - 2] === "+" &&
-						chars[chars.length - 1] === "=")
+					chars.length >= 3 &&
+					chars[chars.length - 2] === "+" &&
+					chars[chars.length - 1] === "="
 				) {
+					// Check chars before += form valid name
+					is_array_assign = _isArrayAssignmentPrefix(chars.slice(0, -2));
+				} else if (chars[chars.length - 1] === "=" && chars.length >= 2) {
+					// Check chars before = form valid name
+					is_array_assign = _isArrayAssignmentPrefix(chars.slice(0, -1));
+				}
+				if (is_array_assign) {
 					this._syncToParser();
 					array_result = this._parser._parseArrayLiteral();
 					this._syncFromParser();

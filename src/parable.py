@@ -7688,7 +7688,30 @@ class Parser:
         first_close_pos: int | None = None
         while not self.at_end() and depth > 0:
             c = self.peek()
-            if c == "(":
+            # Skip single-quoted strings (parens inside don't count)
+            if c == "'":
+                self.advance()
+                while not self.at_end() and self.peek() != "'":
+                    self.advance()
+                if not self.at_end():
+                    self.advance()
+            # Skip double-quoted strings (parens inside don't count)
+            elif c == '"':
+                self.advance()
+                while not self.at_end():
+                    if self.peek() == "\\" and self.pos + 1 < self.length:
+                        self.advance()
+                        self.advance()
+                    elif self.peek() == '"':
+                        self.advance()
+                        break
+                    else:
+                        self.advance()
+            # Handle backslash escapes outside quotes
+            elif c == "\\" and self.pos + 1 < self.length:
+                self.advance()
+                self.advance()
+            elif c == "(":
                 depth += 1
                 self.advance()
             elif c == ")":
@@ -7703,6 +7726,8 @@ class Parser:
                     first_close_pos = None
                 self.advance()
         if depth != 0:
+            if self.at_end():
+                raise MatchedPairError("unexpected EOF looking for `))'", pos=start)
             self.pos = start
             return None, ""
         # Content ends at first_close_pos if set, else at final )

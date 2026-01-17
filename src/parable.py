@@ -111,6 +111,69 @@ def _repeat_str(s: str, n: int) -> str:
     return "".join(result)
 
 
+class TokenType:
+    """Token type constants for the lexer."""
+
+    EOF = 0
+    WORD = 1
+    NEWLINE = 2
+
+    # Single-char operators
+    SEMI = 10
+    PIPE = 11
+    AMP = 12
+    LPAREN = 13
+    RPAREN = 14
+    LBRACE = 15
+    RBRACE = 16
+    LESS = 17
+    GREATER = 18
+
+    # Multi-char operators
+    AND_AND = 30
+    OR_OR = 31
+    SEMI_SEMI = 32
+    SEMI_AMP = 33
+    SEMI_SEMI_AMP = 34
+    LESS_LESS = 35
+    GREATER_GREATER = 36
+    LESS_AMP = 37
+    GREATER_AMP = 38
+    LESS_GREATER = 39
+    GREATER_PIPE = 40
+    LESS_LESS_MINUS = 41
+    LESS_LESS_LESS = 42
+    AMP_GREATER = 43
+    AMP_GREATER_GREATER = 44
+    PIPE_AMP = 45
+
+    # Reserved words
+    IF = 50
+    THEN = 51
+    ELSE = 52
+    ELIF = 53
+    FI = 54
+    CASE = 55
+    ESAC = 56
+    FOR = 57
+    WHILE = 58
+    UNTIL = 59
+    DO = 60
+    DONE = 61
+    IN = 62
+    FUNCTION = 63
+    SELECT = 64
+    COPROC = 65
+    TIME = 66
+    BANG = 67
+    LBRACKET_LBRACKET = 68
+    RBRACKET_RBRACKET = 69
+
+    # Special
+    ASSIGNMENT_WORD = 80
+    NUMBER = 81
+
+
 class QuoteState:
     """Unified quote state tracker for parsing.
 

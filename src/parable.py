@@ -10711,35 +10711,22 @@ class Parser:
     def parse_list_operator(self) -> str | None:
         """Parse a list operator (&&, ||, ;, &)."""
         self.skip_whitespace()
-        if self.at_end():
+        op = self._lex_peek_operator()
+        if op is None:
             return None
-
-        ch = self.peek()
-
-        if ch == "&":
-            # Check if this is &> or &>> (redirect), not background operator
-            if self.pos + 1 < self.length and self.source[self.pos + 1] == ">":
-                return None  # Let redirect parser handle &> and &>>
-            self.advance()
-            if not self.at_end() and self.peek() == "&":
-                self.advance()
-                return "&&"
-            return "&"
-
-        if ch == "|":
-            if self.pos + 1 < self.length and self.source[self.pos + 1] == "|":
-                self.advance()
-                self.advance()
-                return "||"
-            return None  # single | is pipe, not list operator
-
-        if ch == ";":
-            # Don't treat ;;, ;&, or ;;& as a single semicolon (they're case terminators)
-            if self.pos + 1 < self.length and _is_semicolon_or_amp(self.source[self.pos + 1]):
-                return None
-            self.advance()
+        token_type, value = op
+        if token_type == TokenType.AND_AND:
+            self._lex_next_token()
+            return "&&"
+        if token_type == TokenType.OR_OR:
+            self._lex_next_token()
+            return "||"
+        if token_type == TokenType.SEMI:
+            self._lex_next_token()
             return ";"
-
+        if token_type == TokenType.AMP:
+            self._lex_next_token()
+            return "&"
         return None
 
     def parse_list(self, newline_as_separator: bool = True) -> Node | None:

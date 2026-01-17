@@ -89,60 +89,60 @@ function _countConsecutiveDollarsBefore(s, pos) {
 }
 
 class TokenType {
-	EOF = 0;
-	WORD = 1;
-	NEWLINE = 2;
+	static EOF = 0;
+	static WORD = 1;
+	static NEWLINE = 2;
 	// Single-char operators
-	SEMI = 10;
-	PIPE = 11;
-	AMP = 12;
-	LPAREN = 13;
-	RPAREN = 14;
-	LBRACE = 15;
-	RBRACE = 16;
-	LESS = 17;
-	GREATER = 18;
+	static SEMI = 10;
+	static PIPE = 11;
+	static AMP = 12;
+	static LPAREN = 13;
+	static RPAREN = 14;
+	static LBRACE = 15;
+	static RBRACE = 16;
+	static LESS = 17;
+	static GREATER = 18;
 	// Multi-char operators
-	AND_AND = 30;
-	OR_OR = 31;
-	SEMI_SEMI = 32;
-	SEMI_AMP = 33;
-	SEMI_SEMI_AMP = 34;
-	LESS_LESS = 35;
-	GREATER_GREATER = 36;
-	LESS_AMP = 37;
-	GREATER_AMP = 38;
-	LESS_GREATER = 39;
-	GREATER_PIPE = 40;
-	LESS_LESS_MINUS = 41;
-	LESS_LESS_LESS = 42;
-	AMP_GREATER = 43;
-	AMP_GREATER_GREATER = 44;
-	PIPE_AMP = 45;
+	static AND_AND = 30;
+	static OR_OR = 31;
+	static SEMI_SEMI = 32;
+	static SEMI_AMP = 33;
+	static SEMI_SEMI_AMP = 34;
+	static LESS_LESS = 35;
+	static GREATER_GREATER = 36;
+	static LESS_AMP = 37;
+	static GREATER_AMP = 38;
+	static LESS_GREATER = 39;
+	static GREATER_PIPE = 40;
+	static LESS_LESS_MINUS = 41;
+	static LESS_LESS_LESS = 42;
+	static AMP_GREATER = 43;
+	static AMP_GREATER_GREATER = 44;
+	static PIPE_AMP = 45;
 	// Reserved words
-	IF = 50;
-	THEN = 51;
-	ELSE = 52;
-	ELIF = 53;
-	FI = 54;
-	CASE = 55;
-	ESAC = 56;
-	FOR = 57;
-	WHILE = 58;
-	UNTIL = 59;
-	DO = 60;
-	DONE = 61;
-	IN = 62;
-	FUNCTION = 63;
-	SELECT = 64;
-	COPROC = 65;
-	TIME = 66;
-	BANG = 67;
-	LBRACKET_LBRACKET = 68;
-	RBRACKET_RBRACKET = 69;
+	static IF = 50;
+	static THEN = 51;
+	static ELSE = 52;
+	static ELIF = 53;
+	static FI = 54;
+	static CASE = 55;
+	static ESAC = 56;
+	static FOR = 57;
+	static WHILE = 58;
+	static UNTIL = 59;
+	static DO = 60;
+	static DONE = 61;
+	static IN = 62;
+	static FUNCTION = 63;
+	static SELECT = 64;
+	static COPROC = 65;
+	static TIME = 66;
+	static BANG = 67;
+	static LBRACKET_LBRACKET = 68;
+	static RBRACKET_RBRACKET = 69;
 	// Special
-	ASSIGNMENT_WORD = 80;
-	NUMBER = 81;
+	static ASSIGNMENT_WORD = 80;
+	static NUMBER = 81;
 }
 
 class Token {
@@ -158,32 +158,32 @@ class Token {
 }
 
 class LexerState {
-	NONE = 0;
-	WASDOL = 1;
-	CKCOMMENT = 2;
-	INCOMMENT = 4;
-	PASSNEXT = 8;
-	INHEREDOC = 128;
-	HEREDELIM = 256;
-	STRIPDOC = 512;
-	QUOTEDDOC = 1024;
-	INWORD = 2048;
+	static NONE = 0;
+	static WASDOL = 1;
+	static CKCOMMENT = 2;
+	static INCOMMENT = 4;
+	static PASSNEXT = 8;
+	static INHEREDOC = 128;
+	static HEREDELIM = 256;
+	static STRIPDOC = 512;
+	static QUOTEDDOC = 1024;
+	static INWORD = 2048;
 }
 
 class ParserStateFlags {
-	NONE = 0;
-	PST_CASEPAT = 1;
-	PST_CMDSUBST = 2;
-	PST_CASESTMT = 4;
-	PST_CONDEXPR = 8;
-	PST_COMPASSIGN = 16;
-	PST_ARITH = 32;
-	PST_HEREDOC = 64;
-	PST_REGEXP = 128;
-	PST_EXTPAT = 256;
-	PST_SUBSHELL = 512;
-	PST_REDIRLIST = 1024;
-	PST_COMMENT = 2048;
+	static NONE = 0;
+	static PST_CASEPAT = 1;
+	static PST_CMDSUBST = 2;
+	static PST_CASESTMT = 4;
+	static PST_CONDEXPR = 8;
+	static PST_COMPASSIGN = 16;
+	static PST_ARITH = 32;
+	static PST_HEREDOC = 64;
+	static PST_REGEXP = 128;
+	static PST_EXTPAT = 256;
+	static PST_SUBSHELL = 512;
+	static PST_REDIRLIST = 1024;
+	static PST_COMMENT = 2048;
 }
 
 class QuoteState {
@@ -258,11 +258,11 @@ class QuoteState {
 
 class ParseContext {
 	// Context kind constants
-	NORMAL = 0;
-	COMMAND_SUB = 1;
-	ARITHMETIC = 2;
-	CASE_PATTERN = 3;
-	BRACE_EXPANSION = 4;
+	static NORMAL = 0;
+	static COMMAND_SUB = 1;
+	static ARITHMETIC = 2;
+	static CASE_PATTERN = 3;
+	static BRACE_EXPANSION = 4;
 	constructor(kind) {
 		if (kind == null) {
 			kind = 0;
@@ -11201,7 +11201,7 @@ class Parser {
 	}
 
 	// Unary operators for [[ ]] conditionals
-	COND_UNARY_OPS = new Set([
+	static COND_UNARY_OPS = new Set([
 		"-a",
 		"-b",
 		"-c",
@@ -11230,7 +11230,7 @@ class Parser {
 		"-R",
 	]);
 	// Binary operators for [[ ]] conditionals
-	COND_BINARY_OPS = new Set([
+	static COND_BINARY_OPS = new Set([
 		"==",
 		"!=",
 		"=~",
@@ -12918,42 +12918,28 @@ class Parser {
 	}
 
 	parseListOperator() {
-		let ch;
+		let op, token_type, value;
 		this.skipWhitespace();
-		if (this.atEnd()) {
+		op = this._lexPeekOperator();
+		if (op == null) {
 			return null;
 		}
-		ch = this.peek();
-		if (ch === "&") {
-			// Check if this is &> or &>> (redirect), not background operator
-			if (this.pos + 1 < this.length && this.source[this.pos + 1] === ">") {
-				return null;
-			}
-			this.advance();
-			if (!this.atEnd() && this.peek() === "&") {
-				this.advance();
-				return "&&";
-			}
-			return "&";
+		[token_type, value] = op;
+		if (token_type === TokenType.AND_AND) {
+			this._lexNextToken();
+			return "&&";
 		}
-		if (ch === "|") {
-			if (this.pos + 1 < this.length && this.source[this.pos + 1] === "|") {
-				this.advance();
-				this.advance();
-				return "||";
-			}
-			return null;
+		if (token_type === TokenType.OR_OR) {
+			this._lexNextToken();
+			return "||";
 		}
-		if (ch === ";") {
-			// Don't treat ;;, ;&, or ;;& as a single semicolon (they're case terminators)
-			if (
-				this.pos + 1 < this.length &&
-				_isSemicolonOrAmp(this.source[this.pos + 1])
-			) {
-				return null;
-			}
-			this.advance();
+		if (token_type === TokenType.SEMI) {
+			this._lexNextToken();
 			return ";";
+		}
+		if (token_type === TokenType.AMP) {
+			this._lexNextToken();
+			return "&";
 		}
 		return null;
 	}

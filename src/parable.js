@@ -12004,26 +12004,11 @@ class Parser {
 	}
 
 	_consumeCaseTerminator() {
-		let ch;
-		if (this.atEnd() || this.peek() !== ";") {
-			return ";;";
-		}
-		this.advance();
-		if (this.atEnd()) {
-			return ";;";
-		}
-		ch = this.peek();
-		if (ch === ";") {
-			this.advance();
-			// Check for ;;&
-			if (!this.atEnd() && this.peek() === "&") {
-				this.advance();
-				return ";;&";
-			}
-			return ";;";
-		} else if (ch === "&") {
-			this.advance();
-			return ";&";
+		let term;
+		term = this._lexPeekCaseTerminator();
+		if (term != null) {
+			this._lexNextToken();
+			return term;
 		}
 		return ";;";
 	}

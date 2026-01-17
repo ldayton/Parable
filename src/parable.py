@@ -9919,23 +9919,11 @@ class Parser:
 
     def _consume_case_terminator(self) -> str:
         """Consume and return case pattern terminator (;;, ;&, or ;;&)."""
-        if self.at_end() or self.peek() != ";":
-            return ";;"  # default
-        self.advance()  # consume first ;
-        if self.at_end():
-            return ";;"
-        ch = self.peek()
-        if ch == ";":
-            self.advance()  # consume second ;
-            # Check for ;;&
-            if not self.at_end() and self.peek() == "&":
-                self.advance()  # consume &
-                return ";;&"
-            return ";;"
-        elif ch == "&":
-            self.advance()  # consume &
-            return ";&"
-        return ";;"
+        term = self._lex_peek_case_terminator()
+        if term is not None:
+            self._lex_next_token()
+            return term
+        return ";;"  # default
 
     def parse_case(self) -> Case | None:
         """Parse a case statement: case word in pattern) commands;; ... esac."""

@@ -21,6 +21,10 @@ test-pypy311 *ARGS: (_test "pypy3.11" ARGS)
 # Run tests (default: CPython 3.14)
 test *ARGS: (_test "3.14" ARGS)
 
+# Verify test expectations match bash-oracle
+verify-tests:
+    tools/bash-oracle/src/oracle/verify_tests.py
+
 # Run tests on all supported CPython versions (parallel)
 [parallel]
 test-cpy: test-cpy310 test-cpy311 test-cpy312 test-cpy313 test-cpy314
@@ -42,10 +46,13 @@ _ensure-biome:
 
 # Internal: run all parallel checks
 [parallel]
-_check-parallel: test-all lint fmt lock-check check-dump-ast check-style check-transpile test-js fmt-js
+_check-parallel: test-all lint fmt lock-check check-dump-ast check-style check-transpile test-js fmt-js verify-tests
 
 # Run all checks (tests, lint, format, lock, style) in parallel
 check: _ensure-biome _check-parallel
+
+# Quick check: test, transpile, test-js
+quick-check: test transpile test-js
 
 # Run benchmarks, optionally comparing refs: bench [ref1] [ref2] [--fast]
 bench *ARGS:

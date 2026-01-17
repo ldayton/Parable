@@ -138,7 +138,12 @@ def main():
                 if filter_pattern not in name and filter_pattern not in rel_path:
                     continue
 
-            passed, actual, error_msg = run_test(test_input, test_expected)
+            # Treat <infinite> as <error> (bash-oracle hangs, but it's still a syntax error)
+            effective_expected = test_expected
+            if normalize(test_expected) == "<infinite>":
+                effective_expected = "<error>"
+
+            passed, actual, error_msg = run_test(test_input, effective_expected)
 
             if passed:
                 total_passed = total_passed + 1

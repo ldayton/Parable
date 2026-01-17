@@ -124,8 +124,11 @@ function main() {
       if (filterPattern && !name.includes(filterPattern) && !relPath.includes(filterPattern)) {
         continue;
       }
-      
-      const { passed, actual, error } = runTest(input, expected);
+
+      // Treat <infinite> as <error> (bash-oracle hangs, but it's still a syntax error)
+      const effectiveExpected = normalize(expected) === '<infinite>' ? '<error>' : expected;
+
+      const { passed, actual, error } = runTest(input, effectiveExpected);
       
       if (passed) {
         totalPassed++;

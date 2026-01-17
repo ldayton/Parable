@@ -9855,7 +9855,8 @@ class Parser:
 
     def parse_select(self) -> Select | None:
         """Parse a select statement: select name [in words]; do list; done."""
-        if not self.consume_word("select"):
+        self.skip_whitespace()
+        if not self._lex_consume_word("select"):
             return None
         self.skip_whitespace()
 
@@ -9874,8 +9875,8 @@ class Parser:
 
         # Check for optional 'in' clause
         words = None
-        if self.peek_word() == "in":
-            self.consume_word("in")
+        if self._lex_is_at_reserved_word("in"):
+            self._lex_consume_word("in")
             self.skip_whitespace_and_newlines()  # Allow newlines after 'in'
 
             # Parse words until semicolon, newline, 'do', or '{'
@@ -9889,7 +9890,7 @@ class Parser:
                     if self.peek() == ";":
                         self.advance()  # consume semicolon
                     break
-                if self.peek_word() == "do":
+                if self._lex_is_at_reserved_word("do"):
                     break
 
                 word = self.parse_word()

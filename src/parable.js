@@ -11931,7 +11931,8 @@ class Parser {
 
 	parseSelect() {
 		let body, var_name, word, words;
-		if (!this.consumeWord("select")) {
+		this.skipWhitespace();
+		if (!this._lexConsumeWord("select")) {
 			return null;
 		}
 		this.skipWhitespace();
@@ -11949,8 +11950,8 @@ class Parser {
 		this.skipWhitespaceAndNewlines();
 		// Check for optional 'in' clause
 		words = null;
-		if (this.peekWord() === "in") {
-			this.consumeWord("in");
+		if (this._lexIsAtReservedWord("in")) {
+			this._lexConsumeWord("in");
 			this.skipWhitespaceAndNewlines();
 			// Parse words until semicolon, newline, 'do', or '{'
 			words = [];
@@ -11966,7 +11967,7 @@ class Parser {
 					}
 					break;
 				}
-				if (this.peekWord() === "do") {
+				if (this._lexIsAtReservedWord("do")) {
 					break;
 				}
 				word = this.parseWord();

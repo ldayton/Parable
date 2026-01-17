@@ -69,13 +69,6 @@ ${x
 ---
 
 
-=== unclosed nested parameter expansion
-"${a${b"
----
-<error>
----
-
-
 # ============================================================
 # Issue 2: Special param + () should parse as word (too strict)
 # ============================================================

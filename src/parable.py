@@ -1088,6 +1088,28 @@ class Lexer:
                     chars.append(self.advance())
                 else:
                     self._sync_from_parser()
+                    # After special param like $*, $@, $?, $!, if followed by (, consume ()
+                    # This matches bash behavior where $*() is a single word
+                    if (
+                        ctx == WORD_CTX_NORMAL
+                        and chars
+                        and not self.at_end()
+                        and self.peek() == "("
+                    ):
+                        last_text = chars[-1]
+                        if last_text and _is_extglob_prefix(last_text[-1]):
+                            # Consume balanced () as part of word
+                            chars.append(self.advance())  # (
+                            paren_depth = 1
+                            while not self.at_end() and paren_depth > 0:
+                                c = self.peek()
+                                if c == "(":
+                                    paren_depth += 1
+                                elif c == ")":
+                                    paren_depth -= 1
+                                chars.append(self.advance())
+                            if paren_depth > 0:
+                                raise ParseError("Unclosed ( after parameter", pos=start)
                 continue
             # NORMAL/COND: Backtick command substitution - callback to Parser
             if ctx != WORD_CTX_REGEX and ch == "`":
@@ -1203,12 +1225,18 @@ class Lexer:
                         extglob_depth += 1
                     else:
                         chars.append(self.advance())
+                # Validate extglob was closed
+                if extglob_depth > 0:
+                    raise ParseError("Unclosed extglob pattern", pos=start)
                 continue
             # NORMAL: Metacharacter terminates word (unless inside brackets)
             if ctx == WORD_CTX_NORMAL and _is_metachar(ch) and bracket_depth == 0:
                 break
             # Regular character
             chars.append(self.advance())
+        # Validate all constructs are closed
+        if bracket_depth > 0:
+            raise ParseError("Unclosed bracket", pos=start)
         if not chars:
             return None
         if parts:
@@ -1727,8 +1755,7 @@ class Lexer:
         Returns (node, text).
         """
         if self.at_end():
-            self.pos = start
-            return None, ""
+            raise ParseError("Unclosed parameter expansion", pos=start)
         # Save and initialize dolbrace state
         saved_dolbrace = self._dolbrace_state
         self._dolbrace_state = DolbraceState.PARAM
@@ -1920,8 +1947,7 @@ class Lexer:
                 raise ParseError("Unclosed parameter expansion", pos=start)
         if self.at_end():
             self._dolbrace_state = saved_dolbrace
-            self.pos = start
-            return None, ""
+            raise ParseError("Unclosed parameter expansion", pos=start)
         # Check for closing brace (simple expansion)
         if self.peek() == "}":
             self.advance()
@@ -8988,6 +9014,14 @@ class Parser:
 
         while True:
             self.skip_whitespace()
+            # Calculate at_command_start BEFORE peeking tokens
+            # This is needed because array subscript tracking depends on this value
+            all_assignments = True
+            for w in words:
+                if not self._is_assignment_word(w):
+                    all_assignments = False
+                    break
+            self._at_command_start = not words or (all_assignments and len(redirects) == 0)
             # Use token-based terminator detection
             # This enables the EOF token mechanism to work at the command level
             if self._lex_is_command_terminator():
@@ -9005,17 +9039,8 @@ class Parser:
                 continue
 
             # Otherwise parse a word
-            # Allow array assignments like a[1 + 2]= in prefix position (before first non-assignment)
-            # Check if all previous words were assignments (contain = not inside quotes)
-            # and no redirects have been seen (redirects break assignment context)
-            all_assignments = True
-            for w in words:
-                if not self._is_assignment_word(w):
-                    all_assignments = False
-                    break
-            word = self.parse_word(
-                at_command_start=not words or (all_assignments and len(redirects) == 0)
-            )
+            # Use pre-calculated at_command_start (computed above before token peeking)
+            word = self.parse_word(at_command_start=self._at_command_start)
             if word is None:
                 break
             words.append(word)

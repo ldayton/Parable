@@ -201,6 +201,9 @@ class ParseContext:
         self.paren_depth = 0
         self.brace_depth = 0
         self.bracket_depth = 0
+        self.case_depth = 0  # Nested case statements
+        self.arith_depth = 0  # Nested $((...)) expressions
+        self.arith_paren_depth = 0  # Grouping parens inside arithmetic
         self.quote = QuoteState()
 
 
@@ -239,6 +242,55 @@ class ContextStack:
     def get_depth(self) -> int:
         """Return the current stack depth."""
         return len(self._stack)
+
+    def enter_case(self) -> None:
+        """Increment case depth in current context."""
+        self.get_current().case_depth += 1
+
+    def exit_case(self) -> None:
+        """Decrement case depth in current context."""
+        ctx = self.get_current()
+        if ctx.case_depth > 0:
+            ctx.case_depth -= 1
+
+    def in_case(self) -> bool:
+        """Return True if currently inside a case statement."""
+        return self.get_current().case_depth > 0
+
+    def get_case_depth(self) -> int:
+        """Return current case nesting depth."""
+        return self.get_current().case_depth
+
+    def enter_arithmetic(self) -> None:
+        """Enter an arithmetic expression context."""
+        ctx = self.get_current()
+        ctx.arith_depth += 1
+        ctx.arith_paren_depth = 2  # $(( opens with 2 parens
+
+    def exit_arithmetic(self) -> None:
+        """Exit an arithmetic expression context."""
+        ctx = self.get_current()
+        if ctx.arith_depth > 0:
+            ctx.arith_depth -= 1
+            ctx.arith_paren_depth = 0
+
+    def in_arithmetic(self) -> bool:
+        """Return True if currently inside an arithmetic expression."""
+        return self.get_current().arith_depth > 0
+
+    def inc_arith_paren(self) -> None:
+        """Increment paren depth inside arithmetic."""
+        self.get_current().arith_paren_depth += 1
+
+    def dec_arith_paren(self) -> None:
+        """Decrement paren depth inside arithmetic."""
+        ctx = self.get_current()
+        if ctx.arith_paren_depth > 0:
+            ctx.arith_paren_depth -= 1
+
+    def get_arith_paren_depth(self) -> int:
+        """Return current arithmetic paren depth."""
+        return self.get_current().arith_paren_depth
 
 
 def _strip_line_continuations_comment_aware(text: str) -> str:
@@ -769,100 +821,83 @@ class Word(Node):
         """Strip $ from locale strings $"..." while tracking quote context."""
         result = []
         i = 0
-        in_single_quote = False
-        in_double_quote = False
         brace_depth = 0
-        bracket_depth = 0  # Track [...] subscripts inside braces
-        # Track quote state inside brace expansions separately
-        brace_in_double_quote = False
-        brace_in_single_quote = False
-        bracket_in_double_quote = False  # Track quotes inside brackets
+        bracket_depth = 0
+        quote = QuoteState()  # Top-level quote state
+        brace_quote = QuoteState()  # Quote state inside ${...}
+        bracket_in_double_quote = False  # Quote state inside [...] (only double tracked)
         while i < len(value):
             ch = value[i]
-            if (
-                ch == "\\"
-                and i + 1 < len(value)
-                and not in_single_quote
-                and not brace_in_single_quote
-            ):
+            if ch == "\\" and i + 1 < len(value) and not quote.single and not brace_quote.single:
                 # Escape - copy both chars (but NOT inside single quotes where \ is literal)
                 result.append(ch)
                 result.append(value[i + 1])
                 i += 2
             elif (
                 _starts_with_at(value, i, "${")
-                and not in_single_quote
-                and not brace_in_single_quote
+                and not quote.single
+                and not brace_quote.single
                 # Don't treat ${ as brace expansion if preceded by $ (it's $$ + literal {)
                 and (i == 0 or value[i - 1] != "$")
             ):
                 brace_depth += 1
-                brace_in_double_quote = False
-                brace_in_single_quote = False
+                brace_quote.double = False
+                brace_quote.single = False
                 result.append("$")
                 result.append("{")
                 i += 2
             elif (
                 ch == "}"
                 and brace_depth > 0
-                and not in_single_quote
-                and not brace_in_double_quote
-                and not brace_in_single_quote
+                and not quote.single
+                and not brace_quote.double
+                and not brace_quote.single
             ):
                 brace_depth -= 1
                 result.append(ch)
                 i += 1
-            elif (
-                ch == "[" and brace_depth > 0 and not in_single_quote and not brace_in_double_quote
-            ):
+            elif ch == "[" and brace_depth > 0 and not quote.single and not brace_quote.double:
                 # Start of subscript inside brace expansion
                 bracket_depth += 1
                 bracket_in_double_quote = False
                 result.append(ch)
                 i += 1
             elif (
-                ch == "]"
-                and bracket_depth > 0
-                and not in_single_quote
-                and not bracket_in_double_quote
+                ch == "]" and bracket_depth > 0 and not quote.single and not bracket_in_double_quote
             ):
                 # End of subscript
                 bracket_depth -= 1
                 result.append(ch)
                 i += 1
-            elif ch == "'" and not in_double_quote and brace_depth == 0:
-                in_single_quote = not in_single_quote
+            elif ch == "'" and not quote.double and brace_depth == 0:
+                quote.single = not quote.single
                 result.append(ch)
                 i += 1
-            elif ch == '"' and not in_single_quote and brace_depth == 0:
-                in_double_quote = not in_double_quote
+            elif ch == '"' and not quote.single and brace_depth == 0:
+                quote.double = not quote.double
                 result.append(ch)
                 i += 1
-            elif ch == '"' and not in_single_quote and bracket_depth > 0:
+            elif ch == '"' and not quote.single and bracket_depth > 0:
                 # Toggle quote state inside bracket (subscript)
                 bracket_in_double_quote = not bracket_in_double_quote
                 result.append(ch)
                 i += 1
-            elif (
-                ch == '"' and not in_single_quote and not brace_in_single_quote and brace_depth > 0
-            ):
+            elif ch == '"' and not quote.single and not brace_quote.single and brace_depth > 0:
                 # Toggle quote state inside brace expansion
-                brace_in_double_quote = not brace_in_double_quote
+                brace_quote.double = not brace_quote.double
                 result.append(ch)
                 i += 1
-            elif (
-                ch == "'" and not in_double_quote and not brace_in_double_quote and brace_depth > 0
-            ):
+            elif ch == "'" and not quote.double and not brace_quote.double and brace_depth > 0:
                 # Toggle single quote state inside brace expansion
-                brace_in_single_quote = not brace_in_single_quote
+                brace_quote.single = not brace_quote.single
                 result.append(ch)
                 i += 1
             elif (
                 _starts_with_at(value, i, '$"')
-                and not in_single_quote
-                and not brace_in_single_quote
-                and (brace_depth > 0 or bracket_depth > 0 or not in_double_quote)
-                and not brace_in_double_quote
+                and not quote.single
+                and not brace_quote.single
+                and (brace_depth > 0 or bracket_depth > 0 or not quote.double)
+                and not brace_quote.double
                 and not bracket_in_double_quote
             ):
                 # Count consecutive $ chars ending at i to check for $$ (PID param)
@@ -873,9 +908,9 @@ class Word(Node):
                     if bracket_depth > 0:
                         bracket_in_double_quote = True
                     elif brace_depth > 0:
-                        brace_in_double_quote = True
+                        brace_quote.double = True
                     else:
-                        in_double_quote = True
+                        quote.double = True
                     i += 2
                 else:
                     # Even count: this $ is part of $$ (PID), just append it
@@ -935,39 +970,39 @@ class Word(Node):
             return -1
         i = open_pos + 1
         depth = 1
+        quote = QuoteState()
         while i < len(value) and depth > 0:
             ch = value[i]
-            if ch == "'":
+            # Handle escapes (only meaningful outside single quotes)
+            if ch == "\\" and i + 1 < len(value) and not quote.single:
+                i += 2
+                continue
+            # Track quote state
+            if ch == "'" and not quote.double:
+                quote.single = not quote.single
                 i += 1
-                while i < len(value) and value[i] != "'":
-                    i += 1
+                continue
+            if ch == '"' and not quote.single:
+                quote.double = not quote.double
                 i += 1
-            elif ch == '"':
+                continue
+            # Skip content inside quotes
+            if quote.single or quote.double:
                 i += 1
-                while i < len(value):
-                    if value[i] == "\\" and i + 1 < len(value):
-                        i += 2
-                    elif value[i] == '"':
-                        i += 1
-                        break
-                    else:
-                        i += 1
-            elif ch == "#":
-                # Comment - skip to end of line (but not the newline itself)
+                continue
+            # Handle comments (only outside quotes)
+            if ch == "#":
                 while i < len(value) and value[i] != "\n":
                     i += 1
-            elif ch == "\\" and i + 1 < len(value):
-                i += 2
-            elif ch == "(":
+                continue
+            # Track paren depth
+            if ch == "(":
                 depth += 1
-                i += 1
             elif ch == ")":
                 depth -= 1
                 if depth == 0:
                     return i
-                i += 1
-            else:
-                i += 1
+            i += 1
         return -1
 
     def _normalize_array_inner(self, inner: str) -> str:
@@ -3821,18 +3856,28 @@ def _lookahead_for_esac(value: str, start: int, case_depth: int) -> bool:
     """
     i = start
     depth = case_depth
+    quote = QuoteState()
     while i < len(value):
         c = value[i]
-        if c == "'" or c == '"':
-            quote = c
+        # Handle escapes (only in double quotes)
+        if c == "\\" and i + 1 < len(value) and quote.double:
+            i += 2
+            continue
+        # Track quote state
+        if c == "'" and not quote.double:
+            quote.single = not quote.single
             i += 1
-            while i < len(value) and value[i] != quote:
-                if c == '"' and value[i] == "\\":
-                    i += 1
-                i += 1
-            if i < len(value):
-                i += 1
-        elif _starts_with_at(value, i, "case") and _is_word_boundary(value, i, 4):
+            continue
+        if c == '"' and not quote.single:
+            quote.double = not quote.double
+            i += 1
+            continue
+        # Skip content inside quotes
+        if quote.single or quote.double:
+            i += 1
+            continue
+        # Check for case/esac keywords
+        if _starts_with_at(value, i, "case") and _is_word_boundary(value, i, 4):
             depth += 1
             i += 4
         elif _starts_with_at(value, i, "esac") and _is_word_boundary(value, i, 4):
@@ -4090,35 +4135,39 @@ def _skip_heredoc(value: str, start: int) -> int:
     # But track paren depth - if we hit a ) at depth 0, it closes the cmdsub
     # Must handle quotes and backticks since newlines in them don't end the line
     paren_depth = 0
+    quote = QuoteState()
+    in_backtick = False
     while i < len(value) and value[i] != "\n":
-        if value[i] == "(":
+        c = value[i]
+        # Handle escapes (in double quotes or backticks)
+        if c == "\\" and i + 1 < len(value) and (quote.double or in_backtick):
+            i += 2
+            continue
+        # Track quote state
+        if c == "'" and not quote.double and not in_backtick:
+            quote.single = not quote.single
+            i += 1
+            continue
+        if c == '"' and not quote.single and not in_backtick:
+            quote.double = not quote.double
+            i += 1
+            continue
+        if c == "`" and not quote.single:
+            in_backtick = not in_backtick
+            i += 1
+            continue
+        # Skip content inside quotes/backticks
+        if quote.single or quote.double or in_backtick:
+            i += 1
+            continue
+        # Track paren depth
+        if c == "(":
             paren_depth += 1
-        elif value[i] == ")":
+        elif c == ")":
             if paren_depth == 0:
                 # This ) closes the enclosing command substitution, stop here
                 break
             paren_depth -= 1
-        elif value[i] == "'":
-            # Single-quoted string - skip to closing quote
-            i += 1
-            while i < len(value) and value[i] != "'":
-                i += 1
-        elif value[i] == '"':
-            # Double-quoted string - skip to closing quote (with escapes)
-            i += 1
-            while i < len(value) and value[i] != '"':
-                if value[i] == "\\" and i + 1 < len(value):
-                    i += 2
-                else:
-                    i += 1
-        elif value[i] == "`":
-            # Backtick command substitution - skip to closing backtick
-            i += 1
-            while i < len(value) and value[i] != "`":
-                if value[i] == "\\" and i + 1 < len(value):
-                    i += 2
-                else:
-                    i += 1
         i += 1
     # If we stopped at ) (closing cmdsub), return here - no heredoc content
     if i < len(value) and value[i] == ")":

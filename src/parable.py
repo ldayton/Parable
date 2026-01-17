@@ -912,6 +912,162 @@ class Lexer:
                 chars.append(self.advance())
         return True
 
+    def _parse_matched_pair(
+        self,
+        open_char: str,
+        close_char: str,
+        flags: int = 0,
+    ) -> str:
+        """Parse a matched pair construct, handling quotes via recursion.
+
+        This is the unified approach based on bash's parse_matched_pair().
+        Quotes are handled by recursive calls where the quote is both open and close.
+
+        Args:
+            open_char: Opening delimiter (e.g., '(', '{', '[', '"', "'")
+            close_char: Closing delimiter (e.g., ')', '}', ']', '"', "'")
+            flags: MatchedPairFlags controlling behavior
+
+        Returns:
+            The content between delimiters (not including the delimiters themselves).
+
+        Raises:
+            MatchedPairError: If EOF is reached before finding the closing delimiter.
+        """
+        start = self.pos
+        count = 1
+        chars: list[str] = []
+        pass_next = False
+
+        while count > 0:
+            if self.at_end():
+                raise MatchedPairError(
+                    f"unexpected EOF while looking for matching `{close_char}'",
+                    pos=start,
+                )
+
+            ch = self.advance()
+
+            # Backslash escape handling - pass through next char
+            if pass_next:
+                pass_next = False
+                chars.append(ch)
+                continue
+
+            # Inside single quotes, almost everything is literal
+            if open_char == "'":
+                if ch == close_char:
+                    count -= 1
+                    if count == 0:
+                        break
+                # In $'...' mode, backslash escapes are processed
+                if ch == "\\" and (flags & MatchedPairFlags.ALLOWESC):
+                    pass_next = True
+                chars.append(ch)
+                continue
+
+            # Backslash - set pass_next flag
+            if ch == "\\":
+                # Line continuation - skip \n
+                if not self.at_end() and self.peek() == "\n":
+                    self.advance()
+                    continue
+                pass_next = True
+                chars.append(ch)
+                continue
+
+            # Closing delimiter
+            if ch == close_char:
+                count -= 1
+                if count == 0:
+                    break
+                chars.append(ch)
+                continue
+
+            # Opening delimiter (only when open != close)
+            if ch == open_char and open_char != close_char:
+                count += 1
+                chars.append(ch)
+                continue
+
+            # Quote characters trigger recursion (when not already in quote mode)
+            if ch in "'\"`" and open_char != close_char:
+                if ch == "'":
+                    # Single quote - recursively parse until matching '
+                    chars.append(ch)
+                    nested = self._parse_matched_pair("'", "'", flags)
+                    chars.append(nested)
+                    chars.append("'")
+                    continue
+                elif ch == '"':
+                    # Double quote - recursively parse until matching "
+                    chars.append(ch)
+                    nested = self._parse_matched_pair('"', '"', flags | MatchedPairFlags.DQUOTE)
+                    chars.append(nested)
+                    chars.append('"')
+                    continue
+                elif ch == "`":
+                    # Backtick - recursively parse until matching `
+                    chars.append(ch)
+                    nested = self._parse_matched_pair("`", "`", flags)
+                    chars.append(nested)
+                    chars.append("`")
+                    continue
+
+            # ${ $( $[ trigger nested parsing
+            if ch == "$" and not self.at_end():
+                next_ch = self.peek()
+                if next_ch == "{":
+                    chars.append(ch)
+                    chars.append(self.advance())
+                    nested = self._parse_matched_pair(
+                        "{", "}", flags | MatchedPairFlags.DOLBRACE
+                    )
+                    chars.append(nested)
+                    chars.append("}")
+                    continue
+                elif next_ch == "(":
+                    chars.append(ch)
+                    chars.append(self.advance())
+                    if not self.at_end() and self.peek() == "(":
+                        # $(( ... )) arithmetic
+                        chars.append(self.advance())
+                        nested = self._parse_matched_pair(
+                            "(", ")", flags | MatchedPairFlags.ARITH
+                        )
+                        chars.append(nested)
+                        chars.append(")")
+                        # Need to consume the second )
+                        if not self.at_end() and self.peek() == ")":
+                            chars.append(self.advance())
+                        else:
+                            raise MatchedPairError(
+                                "unexpected EOF while looking for matching `))'",
+                                pos=start,
+                            )
+                    else:
+                        # $( ... ) command substitution
+                        nested = self._parse_matched_pair(
+                            "(", ")", flags | MatchedPairFlags.COMMAND
+                        )
+                        chars.append(nested)
+                        chars.append(")")
+                    continue
+                elif next_ch == "[":
+                    # Deprecated $[ ... ] arithmetic
+                    chars.append(ch)
+                    chars.append(self.advance())
+                    nested = self._parse_matched_pair(
+                        "[", "]", flags | MatchedPairFlags.ARITH
+                    )
+                    chars.append(nested)
+                    chars.append("]")
+                    continue
+
+            chars.append(ch)
+
+        return "".join(chars)
+
     def _read_word_internal(
         self, ctx: int, at_command_start: bool = False, in_array_literal: bool = False
     ) -> "Word | None":

@@ -949,6 +949,11 @@ class Lexer:
 
             ch = self.advance()
 
+            # OP -> WORD transition in DOLBRACE mode
+            if (flags & MatchedPairFlags.DOLBRACE) and self._dolbrace_state == DolbraceState.OP:
+                if ch not in "#%^,~:-=?+/":
+                    self._dolbrace_state = DolbraceState.WORD
+
             # Backslash escape handling - pass through next char
             if pass_next:
                 pass_next = False
@@ -1969,135 +1974,14 @@ class Lexer:
         # Update dolbrace state based on operator
         self._update_dolbrace_for_op(op, len(param) > 0)
         # Parse argument (everything until closing brace)
-        arg_chars = []
-        depth = 1
-        quote = QuoteState()
-        while not self.at_end() and depth > 0:
-            c = self.peek()
-            # Transition OP -> WORD when we see a non-operator character
-            if self._dolbrace_state == DolbraceState.OP and c not in "#%^,~:-=?+/":
-                self._dolbrace_state = DolbraceState.WORD
-            # Single quotes
-            if c == "'" and not quote.double:
-                quote.single = not quote.single
-                arg_chars.append(self.advance())
-            # Double quotes
-            elif c == '"' and not quote.single:
-                quote.double = not quote.double
-                arg_chars.append(self.advance())
-            # Escape
-            elif c == "\\" and not quote.single:
-                if self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
-                    self.advance()
-                    self.advance()
-                else:
-                    arg_chars.append(self.advance())
-                    if not self.at_end():
-                        arg_chars.append(self.advance())
-            # Nested ${...}
-            elif (
-                c == "$"
-                and not quote.single
-                and self.pos + 1 < self.length
-                and self.source[self.pos + 1] == "{"
-            ):
-                depth += 1
-                arg_chars.append(self.advance())
-                arg_chars.append(self.advance())
-            # ANSI-C quoted string $'...'
-            elif (
-                c == "$"
-                and not quote.single
-                and self.pos + 1 < self.length
-                and self.source[self.pos + 1] == "'"
-            ):
-                arg_chars.append(self.advance())
-                arg_chars.append(self.advance())
-                while not self.at_end() and self.peek() != "'":
-                    if self.peek() == "\\":
-                        arg_chars.append(self.advance())
-                        if not self.at_end():
-                            arg_chars.append(self.advance())
-                    else:
-                        arg_chars.append(self.advance())
-                if not self.at_end():
-                    arg_chars.append(self.advance())
-            # Locale string $"..."
-            elif (
-                c == "$"
-                and not quote.single
-                and not quote.double
-                and self.pos + 1 < self.length
-                and self.source[self.pos + 1] == '"'
-            ):
-                dollar_count = 1 + _count_consecutive_dollars_before(self.source, self.pos)
-                if dollar_count % 2 == 1:
-                    self.advance()
-                    quote.double = True
-                    arg_chars.append(self.advance())
-                else:
-                    arg_chars.append(self.advance())
-            # Command substitution $(...)
-            elif (
-                c == "$"
-                and not quote.single
-                and self.pos + 1 < self.length
-                and self.source[self.pos + 1] == "("
-            ):
-                arg_chars.append(self.advance())
-                arg_chars.append(self.advance())
-                paren_depth = 1
-                while not self.at_end() and paren_depth > 0:
-                    pc = self.peek()
-                    if pc == "(":
-                        paren_depth += 1
-                    elif pc == ")":
-                        paren_depth -= 1
-                    elif pc == "\\":
-                        arg_chars.append(self.advance())
-                        if not self.at_end():
-                            arg_chars.append(self.advance())
-                        continue
-                    arg_chars.append(self.advance())
-            # Backtick command substitution
-            elif c == "`" and not quote.single:
-                backtick_start = self.pos
-                arg_chars.append(self.advance())
-                while not self.at_end() and self.peek() != "`":
-                    bc = self.peek()
-                    if bc == "\\" and self.pos + 1 < self.length:
-                        next_c = self.source[self.pos + 1]
-                        if _is_escape_char_in_dquote(next_c):
-                            arg_chars.append(self.advance())
-                    arg_chars.append(self.advance())
-                if self.at_end():
-                    self._dolbrace_state = saved_dolbrace
-                    raise ParseError("Unterminated backtick", pos=backtick_start)
-                arg_chars.append(self.advance())
-            # Closing brace
-            elif c == "}":
-                if quote.single:
-                    arg_chars.append(self.advance())
-                elif quote.double:
-                    if depth > 1:
-                        depth -= 1
-                        arg_chars.append(self.advance())
-                    else:
-                        arg_chars.append(self.advance())
-                else:
-                    depth -= 1
-                    if depth > 0:
-                        arg_chars.append(self.advance())
-            else:
-                arg_chars.append(self.advance())
-        if depth != 0:
+        try:
+            arg = self._collect_param_argument()
+        except MatchedPairError as e:
             self._dolbrace_state = saved_dolbrace
             if self.at_end():
-                raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
+                raise e  # EOF inside ${...} is always an error
             self.pos = start
             return None, ""
-        self.advance()  # consume final }
-        arg = "".join(arg_chars)
         # Format process substitution content within param expansion
         if op in ("<", ">") and arg.startswith("(") and arg.endswith(")"):
             inner = arg[1:-1]

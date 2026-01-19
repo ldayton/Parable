@@ -1029,6 +1029,15 @@ class Lexer {
 				);
 			}
 			ch = this.advance();
+			// OP -> WORD transition in DOLBRACE mode
+			if (
+				flags & MatchedPairFlags.DOLBRACE &&
+				this._dolbrace_state === DolbraceState.OP
+			) {
+				if (!"#%^,~:-=?+/".includes(ch)) {
+					this._dolbrace_state = DolbraceState.WORD;
+				}
+			}
 			// Backslash escape handling - pass through next char
 			if (pass_next) {
 				pass_next = false;
@@ -1083,6 +1092,20 @@ class Lexer {
 			// Quote characters trigger recursion (when not already in quote mode)
 			if ("'\"`".includes(ch) && open_char !== close_char) {
 				if (ch === "'") {
+					// In DOLBRACE mode with DQUOTE, single quotes are literal when
+					// dolbrace state is QUOTE or QUOTE2 (for operators like #, %, /, etc.)
+					if (
+						flags & MatchedPairFlags.DOLBRACE &&
+						flags & MatchedPairFlags.DQUOTE
+					) {
+						if (
+							this._dolbrace_state &
+							(DolbraceState.QUOTE | DolbraceState.QUOTE2)
+						) {
+							chars.push(ch);
+							continue;
+						}
+					}
 					// Single quote - recursively parse until matching '
 					chars.push(ch);
 					nested = this._parseMatchedPair("'", "'", flags);
@@ -1180,6 +1203,13 @@ class Lexer {
 			chars.push(ch);
 		}
 		return chars.join("");
+	}
+
+	_collectParamArgument(flags) {
+		if (flags == null) {
+			flags = MatchedPairFlags.NONE;
+		}
+		return this._parseMatchedPair("{", "}", flags | MatchedPairFlags.DOLBRACE);
 	}
 
 	_readWordInternal(ctx, at_command_start, in_array_literal) {
@@ -2125,24 +2155,17 @@ class Lexer {
 
 	_readBracedParam(start) {
 		let arg,
-			arg_chars,
 			backtick_pos,
-			backtick_start,
 			bc,
-			c,
 			ch,
 			content,
-			depth,
 			dollar_count,
 			formatted,
 			inner,
 			next_c,
 			op,
 			param,
-			paren_depth,
 			parsed,
-			pc,
-			quote,
 			saved_dolbrace,
 			sub_parser,
 			suffix,
@@ -2302,161 +2325,16 @@ class Lexer {
 		// Update dolbrace state based on operator
 		this._updateDolbraceForOp(op, param.length > 0);
 		// Parse argument (everything until closing brace)
-		arg_chars = [];
-		depth = 1;
-		quote = new QuoteState();
-		while (!this.atEnd() && depth > 0) {
-			c = this.peek();
-			// Transition OP -> WORD when we see a non-operator character
-			if (
-				this._dolbrace_state === DolbraceState.OP &&
-				!"#%^,~:-=?+/".includes(c)
-			) {
-				this._dolbrace_state = DolbraceState.WORD;
-			}
-			// Single quotes
-			if (c === "'" && !quote.double) {
-				quote.single = !quote.single;
-				arg_chars.push(this.advance());
-			} else if (c === '"' && !quote.single) {
-				// Double quotes
-				quote.double = !quote.double;
-				arg_chars.push(this.advance());
-			} else if (c === "\\" && !quote.single) {
-				// Escape
-				if (this.pos + 1 < this.length && this.source[this.pos + 1] === "\n") {
-					this.advance();
-					this.advance();
-				} else {
-					arg_chars.push(this.advance());
-					if (!this.atEnd()) {
-						arg_chars.push(this.advance());
-					}
-				}
-			} else if (
-				c === "$" &&
-				!quote.single &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "{"
-			) {
-				// Nested ${...}
-				depth += 1;
-				arg_chars.push(this.advance());
-				arg_chars.push(this.advance());
-			} else if (
-				c === "$" &&
-				!quote.single &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "'"
-			) {
-				// ANSI-C quoted string $'...'
-				arg_chars.push(this.advance());
-				arg_chars.push(this.advance());
-				while (!this.atEnd() && this.peek() !== "'") {
-					if (this.peek() === "\\") {
-						arg_chars.push(this.advance());
-						if (!this.atEnd()) {
-							arg_chars.push(this.advance());
-						}
-					} else {
-						arg_chars.push(this.advance());
-					}
-				}
-				if (!this.atEnd()) {
-					arg_chars.push(this.advance());
-				}
-			} else if (
-				c === "$" &&
-				!quote.single &&
-				!quote.double &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === '"'
-			) {
-				// Locale string $"..."
-				dollar_count =
-					1 + _countConsecutiveDollarsBefore(this.source, this.pos);
-				if (dollar_count % 2 === 1) {
-					this.advance();
-					quote.double = true;
-					arg_chars.push(this.advance());
-				} else {
-					arg_chars.push(this.advance());
-				}
-			} else if (
-				c === "$" &&
-				!quote.single &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "("
-			) {
-				// Command substitution $(...)
-				arg_chars.push(this.advance());
-				arg_chars.push(this.advance());
-				paren_depth = 1;
-				while (!this.atEnd() && paren_depth > 0) {
-					pc = this.peek();
-					if (pc === "(") {
-						paren_depth += 1;
-					} else if (pc === ")") {
-						paren_depth -= 1;
-					} else if (pc === "\\") {
-						arg_chars.push(this.advance());
-						if (!this.atEnd()) {
-							arg_chars.push(this.advance());
-						}
-						continue;
-					}
-					arg_chars.push(this.advance());
-				}
-			} else if (c === "`" && !quote.single) {
-				// Backtick command substitution
-				backtick_start = this.pos;
-				arg_chars.push(this.advance());
-				while (!this.atEnd() && this.peek() !== "`") {
-					bc = this.peek();
-					if (bc === "\\" && this.pos + 1 < this.length) {
-						next_c = this.source[this.pos + 1];
-						if (_isEscapeCharInDquote(next_c)) {
-							arg_chars.push(this.advance());
-						}
-					}
-					arg_chars.push(this.advance());
-				}
-				if (this.atEnd()) {
-					this._dolbrace_state = saved_dolbrace;
-					throw new ParseError("Unterminated backtick", backtick_start);
-				}
-				arg_chars.push(this.advance());
-			} else if (c === "}") {
-				// Closing brace
-				if (quote.single) {
-					arg_chars.push(this.advance());
-				} else if (quote.double) {
-					if (depth > 1) {
-						depth -= 1;
-						arg_chars.push(this.advance());
-					} else {
-						arg_chars.push(this.advance());
-					}
-				} else {
-					depth -= 1;
-					if (depth > 0) {
-						arg_chars.push(this.advance());
-					}
-				}
-			} else {
-				arg_chars.push(this.advance());
-			}
-		}
-		if (depth !== 0) {
+		try {
+			arg = this._collectParamArgument();
+		} catch (e) {
 			this._dolbrace_state = saved_dolbrace;
 			if (this.atEnd()) {
-				throw new MatchedPairError("unexpected EOF looking for `}'", start);
+				throw e;
 			}
 			this.pos = start;
 			return [null, ""];
 		}
-		this.advance();
-		arg = arg_chars.join("");
 		// Format process substitution content within param expansion
 		if (["<", ">"].includes(op) && arg.startsWith("(") && arg.endsWith(")")) {
 			inner = arg.slice(1, -1);

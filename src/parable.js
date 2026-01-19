@@ -1008,6 +1008,7 @@ class Lexer {
 			cmd_node,
 			cmd_text,
 			count,
+			in_dquote,
 			nested,
 			next_ch,
 			param_node,
@@ -1029,6 +1030,15 @@ class Lexer {
 				);
 			}
 			ch = this.advance();
+			// OP -> WORD transition in DOLBRACE mode
+			if (
+				flags & MatchedPairFlags.DOLBRACE &&
+				this._dolbrace_state === DolbraceState.OP
+			) {
+				if (!"#%^,~:-=?+/".includes(ch)) {
+					this._dolbrace_state = DolbraceState.WORD;
+				}
+			}
 			// Backslash escape handling - pass through next char
 			if (pass_next) {
 				pass_next = false;
@@ -1116,7 +1126,9 @@ class Lexer {
 					// ${ ... } parameter expansion - use full parsing
 					this.pos -= 1;
 					this._syncToParser();
-					[param_node, param_text] = this._parser._parseParamExpansion();
+					in_dquote = Boolean(flags & MatchedPairFlags.DQUOTE);
+					[param_node, param_text] =
+						this._parser._parseParamExpansion(in_dquote);
 					this._syncFromParser();
 					if (param_node) {
 						chars.push(param_text);
@@ -1180,6 +1192,13 @@ class Lexer {
 			chars.push(ch);
 		}
 		return chars.join("");
+	}
+
+	_collectParamArgument(flags) {
+		if (flags == null) {
+			flags = MatchedPairFlags.NONE;
+		}
+		return this._parseMatchedPair("{", "}", flags | MatchedPairFlags.DOLBRACE);
 	}
 
 	_readWordInternal(ctx, at_command_start, in_array_literal) {
@@ -1358,9 +1377,9 @@ class Lexer {
 								chars.push(this.advance());
 							}
 						} else if (c === "$") {
-							// Callback to Parser for dollar expansion
+							// Callback to Parser for dollar expansion (inside dquote)
 							this._syncToParser();
-							if (!this._parser._parseDollarExpansion(chars, parts)) {
+							if (!this._parser._parseDollarExpansion(chars, parts, true)) {
 								this._syncFromParser();
 								chars.push(this.advance());
 							} else {
@@ -2080,8 +2099,11 @@ class Lexer {
 		return null;
 	}
 
-	_readParamExpansion() {
+	_readParamExpansion(in_dquote) {
 		let c, ch, name, name_start, start, text;
+		if (in_dquote == null) {
+			in_dquote = false;
+		}
 		if (this.atEnd() || this.peek() !== "$") {
 			return [null, ""];
 		}
@@ -2095,7 +2117,7 @@ class Lexer {
 		// Braced expansion ${...}
 		if (ch === "{") {
 			this.advance();
-			return this._readBracedParam(start);
+			return this._readBracedParam(start, in_dquote);
 		}
 		// Simple expansion $var or $special
 		if (_isSpecialParamUnbraced(ch) || _isDigit(ch) || ch === "#") {
@@ -2123,31 +2145,28 @@ class Lexer {
 		return [null, ""];
 	}
 
-	_readBracedParam(start) {
+	_readBracedParam(start, in_dquote) {
 		let arg,
-			arg_chars,
 			backtick_pos,
-			backtick_start,
 			bc,
-			c,
 			ch,
 			content,
-			depth,
 			dollar_count,
+			flags,
 			formatted,
 			inner,
 			next_c,
 			op,
 			param,
-			paren_depth,
 			parsed,
-			pc,
-			quote,
 			saved_dolbrace,
 			sub_parser,
 			suffix,
 			text,
 			trailing;
+		if (in_dquote == null) {
+			in_dquote = false;
+		}
 		if (this.atEnd()) {
 			throw new MatchedPairError("unexpected EOF looking for `}'", start);
 		}
@@ -2302,161 +2321,17 @@ class Lexer {
 		// Update dolbrace state based on operator
 		this._updateDolbraceForOp(op, param.length > 0);
 		// Parse argument (everything until closing brace)
-		arg_chars = [];
-		depth = 1;
-		quote = new QuoteState();
-		while (!this.atEnd() && depth > 0) {
-			c = this.peek();
-			// Transition OP -> WORD when we see a non-operator character
-			if (
-				this._dolbrace_state === DolbraceState.OP &&
-				!"#%^,~:-=?+/".includes(c)
-			) {
-				this._dolbrace_state = DolbraceState.WORD;
-			}
-			// Single quotes
-			if (c === "'" && !quote.double) {
-				quote.single = !quote.single;
-				arg_chars.push(this.advance());
-			} else if (c === '"' && !quote.single) {
-				// Double quotes
-				quote.double = !quote.double;
-				arg_chars.push(this.advance());
-			} else if (c === "\\" && !quote.single) {
-				// Escape
-				if (this.pos + 1 < this.length && this.source[this.pos + 1] === "\n") {
-					this.advance();
-					this.advance();
-				} else {
-					arg_chars.push(this.advance());
-					if (!this.atEnd()) {
-						arg_chars.push(this.advance());
-					}
-				}
-			} else if (
-				c === "$" &&
-				!quote.single &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "{"
-			) {
-				// Nested ${...}
-				depth += 1;
-				arg_chars.push(this.advance());
-				arg_chars.push(this.advance());
-			} else if (
-				c === "$" &&
-				!quote.single &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "'"
-			) {
-				// ANSI-C quoted string $'...'
-				arg_chars.push(this.advance());
-				arg_chars.push(this.advance());
-				while (!this.atEnd() && this.peek() !== "'") {
-					if (this.peek() === "\\") {
-						arg_chars.push(this.advance());
-						if (!this.atEnd()) {
-							arg_chars.push(this.advance());
-						}
-					} else {
-						arg_chars.push(this.advance());
-					}
-				}
-				if (!this.atEnd()) {
-					arg_chars.push(this.advance());
-				}
-			} else if (
-				c === "$" &&
-				!quote.single &&
-				!quote.double &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === '"'
-			) {
-				// Locale string $"..."
-				dollar_count =
-					1 + _countConsecutiveDollarsBefore(this.source, this.pos);
-				if (dollar_count % 2 === 1) {
-					this.advance();
-					quote.double = true;
-					arg_chars.push(this.advance());
-				} else {
-					arg_chars.push(this.advance());
-				}
-			} else if (
-				c === "$" &&
-				!quote.single &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "("
-			) {
-				// Command substitution $(...)
-				arg_chars.push(this.advance());
-				arg_chars.push(this.advance());
-				paren_depth = 1;
-				while (!this.atEnd() && paren_depth > 0) {
-					pc = this.peek();
-					if (pc === "(") {
-						paren_depth += 1;
-					} else if (pc === ")") {
-						paren_depth -= 1;
-					} else if (pc === "\\") {
-						arg_chars.push(this.advance());
-						if (!this.atEnd()) {
-							arg_chars.push(this.advance());
-						}
-						continue;
-					}
-					arg_chars.push(this.advance());
-				}
-			} else if (c === "`" && !quote.single) {
-				// Backtick command substitution
-				backtick_start = this.pos;
-				arg_chars.push(this.advance());
-				while (!this.atEnd() && this.peek() !== "`") {
-					bc = this.peek();
-					if (bc === "\\" && this.pos + 1 < this.length) {
-						next_c = this.source[this.pos + 1];
-						if (_isEscapeCharInDquote(next_c)) {
-							arg_chars.push(this.advance());
-						}
-					}
-					arg_chars.push(this.advance());
-				}
-				if (this.atEnd()) {
-					this._dolbrace_state = saved_dolbrace;
-					throw new ParseError("Unterminated backtick", backtick_start);
-				}
-				arg_chars.push(this.advance());
-			} else if (c === "}") {
-				// Closing brace
-				if (quote.single) {
-					arg_chars.push(this.advance());
-				} else if (quote.double) {
-					if (depth > 1) {
-						depth -= 1;
-						arg_chars.push(this.advance());
-					} else {
-						arg_chars.push(this.advance());
-					}
-				} else {
-					depth -= 1;
-					if (depth > 0) {
-						arg_chars.push(this.advance());
-					}
-				}
-			} else {
-				arg_chars.push(this.advance());
-			}
-		}
-		if (depth !== 0) {
+		try {
+			flags = in_dquote ? MatchedPairFlags.DQUOTE : MatchedPairFlags.NONE;
+			arg = this._collectParamArgument(flags);
+		} catch (e) {
 			this._dolbrace_state = saved_dolbrace;
 			if (this.atEnd()) {
-				throw new MatchedPairError("unexpected EOF looking for `}'", start);
+				throw e;
 			}
 			this.pos = start;
 			return [null, ""];
 		}
-		this.advance();
-		arg = arg_chars.join("");
 		// Format process substitution content within param expansion
 		if (["<", ">"].includes(op) && arg.startsWith("(") && arg.endsWith(")")) {
 			inner = arg.slice(1, -1);
@@ -8391,7 +8266,7 @@ class Parser {
 					chars.push(this.advance());
 				}
 			} else if (c === "$") {
-				if (!this._parseDollarExpansion(chars, parts)) {
+				if (!this._parseDollarExpansion(chars, parts, true)) {
 					chars.push(this.advance());
 				}
 			} else {
@@ -8404,8 +8279,11 @@ class Parser {
 		chars.push(this.advance());
 	}
 
-	_parseDollarExpansion(chars, parts) {
+	_parseDollarExpansion(chars, parts, in_dquote) {
 		let result;
+		if (in_dquote == null) {
+			in_dquote = false;
+		}
 		// Check $(( -> arithmetic expansion
 		if (
 			this.pos + 2 < this.length &&
@@ -8448,7 +8326,7 @@ class Parser {
 			return false;
 		}
 		// Otherwise -> parameter expansion
-		result = this._parseParamExpansion();
+		result = this._parseParamExpansion(in_dquote);
 		if (result[0]) {
 			parts.push(result[0]);
 			chars.push(result[1]);
@@ -10015,10 +9893,13 @@ class Parser {
 		return [new ArithDeprecated(content), text];
 	}
 
-	_parseParamExpansion() {
+	_parseParamExpansion(in_dquote) {
 		let result;
+		if (in_dquote == null) {
+			in_dquote = false;
+		}
 		this._syncLexer();
-		result = this._lexer._readParamExpansion();
+		result = this._lexer._readParamExpansion(in_dquote);
 		this._syncParser();
 		return result;
 	}

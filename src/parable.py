@@ -949,6 +949,11 @@ class Lexer:
 
             ch = self.advance()
 
+            # OP -> WORD transition in DOLBRACE mode
+            if (flags & MatchedPairFlags.DOLBRACE) and self._dolbrace_state == DolbraceState.OP:
+                if ch not in "#%^,~:-=?+/":
+                    self._dolbrace_state = DolbraceState.WORD
+
             # Backslash escape handling - pass through next char
             if pass_next:
                 pass_next = False
@@ -1025,7 +1030,8 @@ class Lexer:
                     # ${ ... } parameter expansion - use full parsing
                     self.pos -= 1  # back up to before $
                     self._sync_to_parser()
-                    param_node, param_text = self._parser._parse_param_expansion()
+                    in_dquote = bool(flags & MatchedPairFlags.DQUOTE)
+                    param_node, param_text = self._parser._parse_param_expansion(in_dquote)
                     self._sync_from_parser()
                     if param_node:
                         chars.append(param_text)
@@ -1082,6 +1088,13 @@ class Lexer:
             chars.append(ch)
 
         return "".join(chars)
+
+    def _collect_param_argument(self, flags: int = MatchedPairFlags.NONE) -> str:
+        """Collect argument portion of ${...} until closing brace.
+
+        Wraps _parse_matched_pair() with DOLBRACE flag for parameter expansion arguments.
+        """
+        return self._parse_matched_pair("{", "}", flags | MatchedPairFlags.DOLBRACE)
 
     def _read_word_internal(
         self, ctx: int, at_command_start: bool = False, in_array_literal: bool = False
@@ -1206,9 +1219,11 @@ class Lexer:
                                 chars.append(self.advance())
                                 chars.append(self.advance())
                         elif c == "$":
-                            # Callback to Parser for dollar expansion
+                            # Callback to Parser for dollar expansion (inside dquote)
                             self._sync_to_parser()
-                            if not self._parser._parse_dollar_expansion(chars, parts):
+                            if not self._parser._parse_dollar_expansion(
+                                chars, parts, in_dquote=True
+                            ):
                                 self._sync_from_parser()
                                 chars.append(self.advance())
                             else:
@@ -1783,10 +1798,11 @@ class Lexer:
                 return None
         return None
 
-    def _read_param_expansion(self) -> tuple["Node | None", str]:
+    def _read_param_expansion(self, in_dquote: bool = False) -> tuple["Node | None", str]:
         """Read a parameter expansion starting at $.
 
         Returns (node, text) where node is the AST node and text is the raw text.
+        in_dquote is True if this expansion is inside double quotes.
         Returns (None, "") if not a valid parameter expansion.
         """
         if self.at_end() or self.peek() != "$":
@@ -1800,7 +1816,7 @@ class Lexer:
         # Braced expansion ${...}
         if ch == "{":
             self.advance()  # consume {
-            return self._read_braced_param(start)
+            return self._read_braced_param(start, in_dquote)
         # Simple expansion $var or $special
         if _is_special_param_unbraced(ch) or _is_digit(ch) or ch == "#":
             self.advance()
@@ -1822,10 +1838,11 @@ class Lexer:
         self.pos = start
         return None, ""
 
-    def _read_braced_param(self, start: int) -> tuple["Node | None", str]:
+    def _read_braced_param(self, start: int, in_dquote: bool = False) -> tuple["Node | None", str]:
         """Read contents of ${...} after the opening brace.
 
         start is the position of the $.
+        in_dquote is True if this expansion is inside double quotes.
         Returns (node, text).
         """
         if self.at_end():
@@ -1956,135 +1973,15 @@ class Lexer:
         # Update dolbrace state based on operator
         self._update_dolbrace_for_op(op, len(param) > 0)
         # Parse argument (everything until closing brace)
-        arg_chars = []
-        depth = 1
-        quote = QuoteState()
-        while not self.at_end() and depth > 0:
-            c = self.peek()
-            # Transition OP -> WORD when we see a non-operator character
-            if self._dolbrace_state == DolbraceState.OP and c not in "#%^,~:-=?+/":
-                self._dolbrace_state = DolbraceState.WORD
-            # Single quotes
-            if c == "'" and not quote.double:
-                quote.single = not quote.single
-                arg_chars.append(self.advance())
-            # Double quotes
-            elif c == '"' and not quote.single:
-                quote.double = not quote.double
-                arg_chars.append(self.advance())
-            # Escape
-            elif c == "\\" and not quote.single:
-                if self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
-                    self.advance()
-                    self.advance()
-                else:
-                    arg_chars.append(self.advance())
-                    if not self.at_end():
-                        arg_chars.append(self.advance())
-            # Nested ${...}
-            elif (
-                c == "$"
-                and not quote.single
-                and self.pos + 1 < self.length
-                and self.source[self.pos + 1] == "{"
-            ):
-                depth += 1
-                arg_chars.append(self.advance())
-                arg_chars.append(self.advance())
-            # ANSI-C quoted string $'...'
-            elif (
-                c == "$"
-                and not quote.single
-                and self.pos + 1 < self.length
-                and self.source[self.pos + 1] == "'"
-            ):
-                arg_chars.append(self.advance())
-                arg_chars.append(self.advance())
-                while not self.at_end() and self.peek() != "'":
-                    if self.peek() == "\\":
-                        arg_chars.append(self.advance())
-                        if not self.at_end():
-                            arg_chars.append(self.advance())
-                    else:
-                        arg_chars.append(self.advance())
-                if not self.at_end():
-                    arg_chars.append(self.advance())
-            # Locale string $"..."
-            elif (
-                c == "$"
-                and not quote.single
-                and not quote.double
-                and self.pos + 1 < self.length
-                and self.source[self.pos + 1] == '"'
-            ):
-                dollar_count = 1 + _count_consecutive_dollars_before(self.source, self.pos)
-                if dollar_count % 2 == 1:
-                    self.advance()
-                    quote.double = True
-                    arg_chars.append(self.advance())
-                else:
-                    arg_chars.append(self.advance())
-            # Command substitution $(...)
-            elif (
-                c == "$"
-                and not quote.single
-                and self.pos + 1 < self.length
-                and self.source[self.pos + 1] == "("
-            ):
-                arg_chars.append(self.advance())
-                arg_chars.append(self.advance())
-                paren_depth = 1
-                while not self.at_end() and paren_depth > 0:
-                    pc = self.peek()
-                    if pc == "(":
-                        paren_depth += 1
-                    elif pc == ")":
-                        paren_depth -= 1
-                    elif pc == "\\":
-                        arg_chars.append(self.advance())
-                        if not self.at_end():
-                            arg_chars.append(self.advance())
-                        continue
-                    arg_chars.append(self.advance())
-            # Backtick command substitution
-            elif c == "`" and not quote.single:
-                backtick_start = self.pos
-                arg_chars.append(self.advance())
-                while not self.at_end() and self.peek() != "`":
-                    bc = self.peek()
-                    if bc == "\\" and self.pos + 1 < self.length:
-                        next_c = self.source[self.pos + 1]
-                        if _is_escape_char_in_dquote(next_c):
-                            arg_chars.append(self.advance())
-                    arg_chars.append(self.advance())
-                if self.at_end():
-                    self._dolbrace_state = saved_dolbrace
-                    raise ParseError("Unterminated backtick", pos=backtick_start)
-                arg_chars.append(self.advance())
-            # Closing brace
-            elif c == "}":
-                if quote.single:
-                    arg_chars.append(self.advance())
-                elif quote.double:
-                    if depth > 1:
-                        depth -= 1
-                        arg_chars.append(self.advance())
-                    else:
-                        arg_chars.append(self.advance())
-                else:
-                    depth -= 1
-                    if depth > 0:
-                        arg_chars.append(self.advance())
-            else:
-                arg_chars.append(self.advance())
-        if depth != 0:
+        try:
+            flags = MatchedPairFlags.DQUOTE if in_dquote else MatchedPairFlags.NONE
+            arg = self._collect_param_argument(flags)
+        except MatchedPairError as e:
             self._dolbrace_state = saved_dolbrace
             if self.at_end():
-                raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
+                raise e  # EOF inside ${...} is always an error
             self.pos = start
             return None, ""
-        self.advance()  # consume final }
-        arg = "".join(arg_chars)
         # Format process substitution content within param expansion
         if op in ("<", ">") and arg.startswith("(") and arg.endswith(")"):
             inner = arg[1:-1]
@@ -7054,7 +6951,7 @@ class Parser:
                     chars.append(self.advance())
                     chars.append(self.advance())
             elif c == "$":
-                if not self._parse_dollar_expansion(chars, parts):
+                if not self._parse_dollar_expansion(chars, parts, in_dquote=True):
                     chars.append(self.advance())
             else:
                 chars.append(self.advance())
@@ -7062,7 +6959,7 @@ class Parser:
             raise ParseError("Unterminated double quote", pos=start)
         chars.append(self.advance())
 
-    def _parse_dollar_expansion(self, chars: list, parts: list) -> bool:
+    def _parse_dollar_expansion(self, chars: list, parts: list, in_dquote: bool = False) -> bool:
         """Handle $ expansions. Returns True if expansion parsed, False if bare $."""
         # Check $(( -> arithmetic expansion
         if (
@@ -7099,7 +6996,7 @@ class Parser:
                 return True
             return False
         # Otherwise -> parameter expansion
-        result = self._parse_param_expansion()
+        result = self._parse_param_expansion(in_dquote)
         if result[0]:
             parts.append(result[0])
             chars.append(result[1])
@@ -8414,10 +8311,10 @@ class Parser:
         text = _substring(self.source, start, self.pos)
         return ArithDeprecated(content), text
 
-    def _parse_param_expansion(self) -> tuple[Node | None, str]:
+    def _parse_param_expansion(self, in_dquote: bool = False) -> tuple[Node | None, str]:
         """Parse a parameter expansion starting at $. Delegates to Lexer."""
         self._sync_lexer()
-        result = self._lexer._read_param_expansion()
+        result = self._lexer._read_param_expansion(in_dquote)
         self._sync_parser()
         return result
 

@@ -2110,8 +2110,11 @@ class Lexer {
 		return null;
 	}
 
-	_readParamExpansion() {
+	_readParamExpansion(in_dquote) {
 		let c, ch, name, name_start, start, text;
+		if (in_dquote == null) {
+			in_dquote = false;
+		}
 		if (this.atEnd() || this.peek() !== "$") {
 			return [null, ""];
 		}
@@ -2125,7 +2128,7 @@ class Lexer {
 		// Braced expansion ${...}
 		if (ch === "{") {
 			this.advance();
-			return this._readBracedParam(start);
+			return this._readBracedParam(start, in_dquote);
 		}
 		// Simple expansion $var or $special
 		if (_isSpecialParamUnbraced(ch) || _isDigit(ch) || ch === "#") {
@@ -2153,13 +2156,14 @@ class Lexer {
 		return [null, ""];
 	}
 
-	_readBracedParam(start) {
+	_readBracedParam(start, in_dquote) {
 		let arg,
 			backtick_pos,
 			bc,
 			ch,
 			content,
 			dollar_count,
+			flags,
 			formatted,
 			inner,
 			next_c,
@@ -2171,6 +2175,9 @@ class Lexer {
 			suffix,
 			text,
 			trailing;
+		if (in_dquote == null) {
+			in_dquote = false;
+		}
 		if (this.atEnd()) {
 			throw new MatchedPairError("unexpected EOF looking for `}'", start);
 		}
@@ -2326,7 +2333,8 @@ class Lexer {
 		this._updateDolbraceForOp(op, param.length > 0);
 		// Parse argument (everything until closing brace)
 		try {
-			arg = this._collectParamArgument();
+			flags = in_dquote ? MatchedPairFlags.DQUOTE : MatchedPairFlags.NONE;
+			arg = this._collectParamArgument(flags);
 		} catch (e) {
 			this._dolbrace_state = saved_dolbrace;
 			if (this.atEnd()) {
@@ -8282,8 +8290,11 @@ class Parser {
 		chars.push(this.advance());
 	}
 
-	_parseDollarExpansion(chars, parts) {
+	_parseDollarExpansion(chars, parts, in_dquote) {
 		let result;
+		if (in_dquote == null) {
+			in_dquote = false;
+		}
 		// Check $(( -> arithmetic expansion
 		if (
 			this.pos + 2 < this.length &&
@@ -8326,7 +8337,7 @@ class Parser {
 			return false;
 		}
 		// Otherwise -> parameter expansion
-		result = this._parseParamExpansion();
+		result = this._parseParamExpansion(in_dquote);
 		if (result[0]) {
 			parts.push(result[0]);
 			chars.push(result[1]);
@@ -9893,10 +9904,13 @@ class Parser {
 		return [new ArithDeprecated(content), text];
 	}
 
-	_parseParamExpansion() {
+	_parseParamExpansion(in_dquote) {
 		let result;
+		if (in_dquote == null) {
+			in_dquote = false;
+		}
 		this._syncLexer();
-		result = this._lexer._readParamExpansion();
+		result = this._lexer._readParamExpansion(in_dquote);
 		this._syncParser();
 		return result;
 	}

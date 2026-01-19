@@ -1801,10 +1801,11 @@ class Lexer:
                 return None
         return None
 
-    def _read_param_expansion(self) -> tuple["Node | None", str]:
+    def _read_param_expansion(self, in_dquote: bool = False) -> tuple["Node | None", str]:
         """Read a parameter expansion starting at $.
 
         Returns (node, text) where node is the AST node and text is the raw text.
+        in_dquote is True if this expansion is inside double quotes.
         Returns (None, "") if not a valid parameter expansion.
         """
         if self.at_end() or self.peek() != "$":
@@ -1818,7 +1819,7 @@ class Lexer:
         # Braced expansion ${...}
         if ch == "{":
             self.advance()  # consume {
-            return self._read_braced_param(start)
+            return self._read_braced_param(start, in_dquote)
         # Simple expansion $var or $special
         if _is_special_param_unbraced(ch) or _is_digit(ch) or ch == "#":
             self.advance()
@@ -1840,10 +1841,11 @@ class Lexer:
         self.pos = start
         return None, ""
 
-    def _read_braced_param(self, start: int) -> tuple["Node | None", str]:
+    def _read_braced_param(self, start: int, in_dquote: bool = False) -> tuple["Node | None", str]:
         """Read contents of ${...} after the opening brace.
 
         start is the position of the $.
+        in_dquote is True if this expansion is inside double quotes.
         Returns (node, text).
         """
         if self.at_end():
@@ -1975,7 +1977,8 @@ class Lexer:
         self._update_dolbrace_for_op(op, len(param) > 0)
         # Parse argument (everything until closing brace)
         try:
-            arg = self._collect_param_argument()
+            flags = MatchedPairFlags.DQUOTE if in_dquote else MatchedPairFlags.NONE
+            arg = self._collect_param_argument(flags)
         except MatchedPairError as e:
             self._dolbrace_state = saved_dolbrace
             if self.at_end():
@@ -6959,7 +6962,7 @@ class Parser:
             raise ParseError("Unterminated double quote", pos=start)
         chars.append(self.advance())
 
-    def _parse_dollar_expansion(self, chars: list, parts: list) -> bool:
+    def _parse_dollar_expansion(self, chars: list, parts: list, in_dquote: bool = False) -> bool:
         """Handle $ expansions. Returns True if expansion parsed, False if bare $."""
         # Check $(( -> arithmetic expansion
         if (
@@ -6996,7 +6999,7 @@ class Parser:
                 return True
             return False
         # Otherwise -> parameter expansion
-        result = self._parse_param_expansion()
+        result = self._parse_param_expansion(in_dquote)
         if result[0]:
             parts.append(result[0])
             chars.append(result[1])
@@ -8311,10 +8314,10 @@ class Parser:
         text = _substring(self.source, start, self.pos)
         return ArithDeprecated(content), text
 
-    def _parse_param_expansion(self) -> tuple[Node | None, str]:
+    def _parse_param_expansion(self, in_dquote: bool = False) -> tuple[Node | None, str]:
         """Parse a parameter expansion starting at $. Delegates to Lexer."""
         self._sync_lexer()
-        result = self._lexer._read_param_expansion()
+        result = self._lexer._read_param_expansion(in_dquote)
         self._sync_parser()
         return result
 

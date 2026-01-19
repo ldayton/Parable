@@ -363,6 +363,26 @@ def main():
             print(f"Parable:  {d.parable_result[:200]}...")
             print(f"Oracle:   {d.oracle_result[:200]}...")
 
+    if parable_err and not args.both_succeed:
+        print("\n=== PARABLE ERRORS, ORACLE SUCCEEDS ===")
+        for d in parable_err[:3]:
+            print()
+            print("-" * 40)
+            print(f"Transform: {d.mutation_desc}")
+            print(f"Original: {d.original!r}")
+            print(f"Mutated:  {d.mutated!r}")
+            print(f"Oracle:   {d.oracle_result[:200]}...")
+
+    if oracle_err and not args.both_succeed:
+        print("\n=== PARABLE SUCCEEDS, ORACLE ERRORS ===")
+        for d in oracle_err[:3]:
+            print()
+            print("-" * 40)
+            print(f"Transform: {d.mutation_desc}")
+            print(f"Original: {d.original!r}")
+            print(f"Mutated:  {d.mutated!r}")
+            print(f"Parable:  {d.parable_result[:200]}...")
+
     sys.exit(1 if discrepancies else 0)
 
 

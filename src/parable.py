@@ -1089,6 +1089,13 @@ class Lexer:
 
         return "".join(chars)
 
+    def _collect_param_argument(self, flags: int = MatchedPairFlags.NONE) -> str:
+        """Collect argument portion of ${...} until closing brace.
+
+        Wraps _parse_matched_pair() with DOLBRACE flag for parameter expansion arguments.
+        """
+        return self._parse_matched_pair("{", "}", flags | MatchedPairFlags.DOLBRACE)
+
     def _read_word_internal(
         self, ctx: int, at_command_start: bool = False, in_array_literal: bool = False
     ) -> "Word | None":

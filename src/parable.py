@@ -1002,12 +1002,6 @@ class Lexer:
             # Quote characters trigger recursion (when not already in quote mode)
             if ch in "'\"`" and open_char != close_char:
                 if ch == "'":
-                    # In DOLBRACE mode with DQUOTE, single quotes are literal when
-                    # dolbrace state is QUOTE or QUOTE2 (for operators like #, %, /, etc.)
-                    if (flags & MatchedPairFlags.DOLBRACE) and (flags & MatchedPairFlags.DQUOTE):
-                        if self._dolbrace_state & (DolbraceState.QUOTE | DolbraceState.QUOTE2):
-                            chars.append(ch)
-                            continue
                     # Single quote - recursively parse until matching '
                     chars.append(ch)
                     nested = self._parse_matched_pair("'", "'", flags)
@@ -1036,7 +1030,8 @@ class Lexer:
                     # ${ ... } parameter expansion - use full parsing
                     self.pos -= 1  # back up to before $
                     self._sync_to_parser()
-                    param_node, param_text = self._parser._parse_param_expansion()
+                    in_dquote = bool(flags & MatchedPairFlags.DQUOTE)
+                    param_node, param_text = self._parser._parse_param_expansion(in_dquote)
                     self._sync_from_parser()
                     if param_node:
                         chars.append(param_text)
@@ -1224,9 +1219,9 @@ class Lexer:
                                 chars.append(self.advance())
                                 chars.append(self.advance())
                         elif c == "$":
-                            # Callback to Parser for dollar expansion
+                            # Callback to Parser for dollar expansion (inside dquote)
                             self._sync_to_parser()
-                            if not self._parser._parse_dollar_expansion(chars, parts):
+                            if not self._parser._parse_dollar_expansion(chars, parts, in_dquote=True):
                                 self._sync_from_parser()
                                 chars.append(self.advance())
                             else:
@@ -6954,7 +6949,7 @@ class Parser:
                     chars.append(self.advance())
                     chars.append(self.advance())
             elif c == "$":
-                if not self._parse_dollar_expansion(chars, parts):
+                if not self._parse_dollar_expansion(chars, parts, in_dquote=True):
                     chars.append(self.advance())
             else:
                 chars.append(self.advance())

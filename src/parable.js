@@ -1008,6 +1008,7 @@ class Lexer {
 			cmd_node,
 			cmd_text,
 			count,
+			in_dquote,
 			nested,
 			next_ch,
 			param_node,
@@ -1092,20 +1093,6 @@ class Lexer {
 			// Quote characters trigger recursion (when not already in quote mode)
 			if ("'\"`".includes(ch) && open_char !== close_char) {
 				if (ch === "'") {
-					// In DOLBRACE mode with DQUOTE, single quotes are literal when
-					// dolbrace state is QUOTE or QUOTE2 (for operators like #, %, /, etc.)
-					if (
-						flags & MatchedPairFlags.DOLBRACE &&
-						flags & MatchedPairFlags.DQUOTE
-					) {
-						if (
-							this._dolbrace_state &
-							(DolbraceState.QUOTE | DolbraceState.QUOTE2)
-						) {
-							chars.push(ch);
-							continue;
-						}
-					}
 					// Single quote - recursively parse until matching '
 					chars.push(ch);
 					nested = this._parseMatchedPair("'", "'", flags);
@@ -1139,7 +1126,9 @@ class Lexer {
 					// ${ ... } parameter expansion - use full parsing
 					this.pos -= 1;
 					this._syncToParser();
-					[param_node, param_text] = this._parser._parseParamExpansion();
+					in_dquote = Boolean(flags & MatchedPairFlags.DQUOTE);
+					[param_node, param_text] =
+						this._parser._parseParamExpansion(in_dquote);
 					this._syncFromParser();
 					if (param_node) {
 						chars.push(param_text);
@@ -1388,9 +1377,9 @@ class Lexer {
 								chars.push(this.advance());
 							}
 						} else if (c === "$") {
-							// Callback to Parser for dollar expansion
+							// Callback to Parser for dollar expansion (inside dquote)
 							this._syncToParser();
-							if (!this._parser._parseDollarExpansion(chars, parts)) {
+							if (!this._parser._parseDollarExpansion(chars, parts, true)) {
 								this._syncFromParser();
 								chars.push(this.advance());
 							} else {
@@ -8277,7 +8266,7 @@ class Parser {
 					chars.push(this.advance());
 				}
 			} else if (c === "$") {
-				if (!this._parseDollarExpansion(chars, parts)) {
+				if (!this._parseDollarExpansion(chars, parts, true)) {
 					chars.push(this.advance());
 				}
 			} else {

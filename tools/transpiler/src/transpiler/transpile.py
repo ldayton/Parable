@@ -689,6 +689,8 @@ class JSTranspiler(ast.NodeVisitor):
                 if len(node.args) >= 2:
                     return f"parseInt({args})"
                 return f"parseInt({args}, 10)"
+            if name == "bool":
+                return f"Boolean({args})"
             if name == "ord":
                 return f"{args}.charCodeAt(0)"
             if name == "chr":

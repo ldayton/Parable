@@ -1221,7 +1221,9 @@ class Lexer:
                         elif c == "$":
                             # Callback to Parser for dollar expansion (inside dquote)
                             self._sync_to_parser()
-                            if not self._parser._parse_dollar_expansion(chars, parts, in_dquote=True):
+                            if not self._parser._parse_dollar_expansion(
+                                chars, parts, in_dquote=True
+                            ):
                                 self._sync_from_parser()
                                 chars.append(self.advance())
                             else:

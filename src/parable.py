@@ -997,6 +997,12 @@ class Lexer:
             # Quote characters trigger recursion (when not already in quote mode)
             if ch in "'\"`" and open_char != close_char:
                 if ch == "'":
+                    # In DOLBRACE mode with DQUOTE, single quotes are literal when
+                    # dolbrace state is QUOTE or QUOTE2 (for operators like #, %, /, etc.)
+                    if (flags & MatchedPairFlags.DOLBRACE) and (flags & MatchedPairFlags.DQUOTE):
+                        if self._dolbrace_state & (DolbraceState.QUOTE | DolbraceState.QUOTE2):
+                            chars.append(ch)
+                            continue
                     # Single quote - recursively parse until matching '
                     chars.append(ch)
                     nested = self._parse_matched_pair("'", "'", flags)

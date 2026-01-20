@@ -79,7 +79,8 @@ def detect_layer(text: str) -> int:
     if re.search(r"(?<!\|)\|(?!\||&)|\|&|^\s*!|^\s*time\b", text, re.MULTILINE):
         layer = max(layer, 7)
     # Layer 6: redirections
-    if re.search(r"[0-9]*>{1,2}|<{1,3}|>&|<\(|>\(", text):
+    # Matches: n>, n>>, <, <<<, >&, <&, >|, <>, &>, &>>, {var}>, <(), >(), >&-, <&-
+    if re.search(r"[0-9]*>{1,2}|<{1,3}|[<>]&|>\||<>|&>{1,2}|\{\w+\}[<>]|[<>]\(|[<>]&-", text):
         layer = max(layer, 6)
     # Layer 5: simple commands (multiple words)
     if re.search(r"^\s*\w+\s+\S", text, re.MULTILINE):
@@ -186,7 +187,7 @@ class Generator:
     def __init__(self, config: GeneratorConfig | None = None):
         self.config = config or GeneratorConfig()
         self.depth = 0
-        self.heredoc_stack: list[tuple[str, bool]] = []  # (delimiter, quoted)
+        self.heredoc_stack: list[tuple[str, bool, bool]] = []  # (delimiter, quoted, strip_tabs)
         self.rng = random.Random(self.config.seed)
 
     def _prob(self, key: str) -> bool:
@@ -443,25 +444,67 @@ class Generator:
 
     # ========== Layer 6: Redirections ==========
 
+    # File descriptors for redirections
+    FDS = ["", "0", "1", "2", "3"]
+    # Variable names for {var}> style redirects
+    REDIR_VARS = ["fd", "outfd", "infd", "myfd"]
+
     def gen_redirection(self) -> str:
         """Generate a redirection."""
         choice = self.rng.random()
         target = self.gen_word() if self.rng.random() < 0.8 else self._choice(["&1", "&2"])
+        fd = self._choice(self.FDS)
 
-        if choice < 0.3:
-            return f"> {target}"
-        elif choice < 0.5:
-            return f">> {target}"
-        elif choice < 0.65:
-            return f"< {target}"
-        elif choice < 0.75:
-            return "2>&1"
-        elif choice < 0.85:
-            return f"2> {target}"
-        elif choice < 0.92:
+        if choice < 0.15:
+            # > file (output)
+            return f"{fd}> {target}"
+        elif choice < 0.25:
+            # >> file (append)
+            return f"{fd}>> {target}"
+        elif choice < 0.35:
+            # < file (input)
+            fd_in = self._choice(["", "0"])
+            return f"{fd_in}< {target}"
+        elif choice < 0.42:
+            # >| file (clobber - force overwrite even with noclobber)
+            return f"{fd}>| {target}"
+        elif choice < 0.49:
+            # <> file (open for read/write)
+            return f"{fd}<> {target}"
+        elif choice < 0.56:
+            # &> file (redirect stdout and stderr)
+            return f"&> {target}"
+        elif choice < 0.63:
+            # &>> file (append stdout and stderr)
+            return f"&>> {target}"
+        elif choice < 0.70:
+            # n>&m or n<&m (duplicate fd)
+            src_fd = self._choice(["0", "1", "2"])
+            dst_fd = self._choice(["0", "1", "2"])
+            if self.rng.random() < 0.5:
+                return f"{src_fd}>&{dst_fd}"
+            return f"{src_fd}<&{dst_fd}"
+        elif choice < 0.76:
+            # n>&- or n<&- (close fd)
+            close_fd = self._choice(["", "0", "1", "2"])
+            if self.rng.random() < 0.5:
+                return f"{close_fd}>&-"
+            return f"{close_fd}<&-"
+        elif choice < 0.82:
+            # {var}> file (variable redirect - assigns fd to var)
+            var = self._choice(self.REDIR_VARS)
+            if self.rng.random() < 0.5:
+                return f"{{{var}}}> {target}"
+            return f"{{{var}}}< {target}"
+        elif choice < 0.86:
             return self.gen_herestring()
-        else:
+        elif choice < 0.91:
+            return self.gen_heredoc()
+        elif choice < 0.96:
             return self.gen_process_sub()
+        else:
+            # 2>&1 style (common pattern)
+            return f"{self._choice(['2', '1'])}>&{self._choice(['1', '2'])}"
 
     def gen_herestring(self) -> str:
         """Generate a here-string <<<."""
@@ -472,20 +515,25 @@ class Generator:
         """Generate a heredoc redirect (body emitted later)."""
         delim = self._choice(["EOF", "END", "DOC", "HERE"])
         quoted = self.rng.random() < 0.3
-        self.heredoc_stack.append((delim, quoted))
+        strip_tabs = self.rng.random() < 0.3  # <<- strips leading tabs
+        self.heredoc_stack.append((delim, quoted, strip_tabs))
+        op = "<<-" if strip_tabs else "<<"
         if quoted:
-            return f"<<'{delim}'"
-        return f"<<{delim}"
+            return f"{op}'{delim}'"
+        return f"{op}{delim}"
 
-    def gen_heredoc_body(self, delim: str, quoted: bool) -> str:
+    def gen_heredoc_body(self, delim: str, quoted: bool, strip_tabs: bool = False) -> str:
         """Generate the body for a heredoc."""
         lines = []
         for _ in range(self.rng.randint(1, 3)):
+            prefix = "\t" if strip_tabs and self.rng.random() < 0.5 else ""
             if quoted or self.rng.random() < 0.7:
-                lines.append(self._choice(self.WORDS) + " " + self._choice(self.WORDS))
+                lines.append(prefix + self._choice(self.WORDS) + " " + self._choice(self.WORDS))
             else:
-                lines.append(f"{self._choice(self.WORDS)} {self.gen_simple_expansion()}")
-        return "\n".join(lines) + f"\n{delim}"
+                lines.append(f"{prefix}{self._choice(self.WORDS)} {self.gen_simple_expansion()}")
+        # Delimiter may have leading tab with <<-
+        delim_prefix = "\t" if strip_tabs and self.rng.random() < 0.5 else ""
+        return "\n".join(lines) + f"\n{delim_prefix}{delim}"
 
     def gen_process_sub(self) -> str:
         """Generate process substitution <() or >()."""
@@ -742,8 +790,8 @@ class Generator:
         self.heredoc_stack = []
         result = self.gen_command()
         # Emit any pending heredoc bodies
-        for delim, quoted in self.heredoc_stack:
-            result += "\n" + self.gen_heredoc_body(delim, quoted)
+        for delim, quoted, strip_tabs in self.heredoc_stack:
+            result += "\n" + self.gen_heredoc_body(delim, quoted, strip_tabs)
         return result
 
 

@@ -36,6 +36,8 @@ jobs:
         with:
           name: logs
           path: |
+            /tmp/parable-test-py3.8.log
+            /tmp/parable-test-py3.9.log
             /tmp/parable-test-py3.10.log
             /tmp/parable-test-py3.11.log
             /tmp/parable-test-py3.12.log

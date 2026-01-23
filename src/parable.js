@@ -2193,6 +2193,11 @@ class Lexer {
 		saved_dolbrace = this._dolbrace_state;
 		this._dolbrace_state = DolbraceState.PARAM;
 		ch = this.peek();
+		// ${ cmd } or ${| cmd } - function substitution (funsub)
+		if ([" ", "\t", "\n", "|"].includes(ch)) {
+			this._dolbrace_state = saved_dolbrace;
+			return this._readFunsub(start);
+		}
 		// ${#param} - length
 		if (ch === "#") {
 			this.advance();
@@ -2367,6 +2372,71 @@ class Lexer {
 		text = `\${${param}${op}${arg}}`;
 		this._dolbrace_state = saved_dolbrace;
 		return [new ParamExpansion(param, op, arg), text];
+	}
+
+	_readFunsub(start) {
+		let cmd,
+			content_start,
+			depth,
+			formatted,
+			formatted_text,
+			inner,
+			prefix,
+			raw_text,
+			stripped_inner,
+			sub_parser,
+			terminator;
+		// Find matching close brace
+		content_start = this.pos;
+		depth = 1;
+		while (!this.atEnd() && depth > 0) {
+			if (this.peek() === "{") {
+				depth += 1;
+			} else if (this.peek() === "}") {
+				depth -= 1;
+			}
+			if (depth > 0) {
+				this.advance();
+			}
+		}
+		if (depth > 0) {
+			throw new MatchedPairError("unexpected EOF looking for `}'", start);
+		}
+		// Extract content between ${ and }
+		inner = this.source.slice(content_start, this.pos);
+		raw_text = this.source.slice(start, this.pos + 1);
+		this.advance();
+		// Check if content is all whitespace - normalize to single space
+		stripped_inner = inner.replace(/^[ \t\n|]+/, "");
+		if (!stripped_inner) {
+			return [new FunSub(new Empty(), "${ }"), raw_text];
+		}
+		// Parse the command content
+		try {
+			sub_parser = new Parser(stripped_inner);
+			cmd = sub_parser.parseList();
+			if (cmd == null) {
+				cmd = new Empty();
+			}
+			// Format the command immediately
+			formatted = _formatCmdsubNode(cmd);
+			formatted = formatted.replace(/[;]+$/, "");
+			// Determine terminator: newline, background, or semicolon
+			if (inner.replace(/[ \t]+$/, "").endsWith("\n")) {
+				terminator = "\n }";
+			} else if (formatted.endsWith(" &")) {
+				terminator = " }";
+			} else {
+				terminator = "; }";
+			}
+			// Build the formatted text with normalized prefix
+			prefix = "${ ";
+			formatted_text = prefix + formatted + terminator;
+			return [new FunSub(cmd, formatted_text), raw_text];
+		} catch (_) {
+			// If parsing fails, store raw content
+			return [new FunSub(new Empty(), raw_text), raw_text];
+		}
 	}
 
 	// Reserved words mapping
@@ -5416,6 +5486,22 @@ class ParamExpansion extends Node {
 	}
 }
 
+class FunSub extends Node {
+	constructor(command, formatted_text) {
+		super();
+		if (formatted_text == null) {
+			formatted_text = "";
+		}
+		this.kind = "funsub";
+		this.command = command;
+		this.formatted_text = formatted_text;
+	}
+
+	toSexp() {
+		return `(funsub ${this.command.toSexp()})`;
+	}
+}
+
 class ParamLength extends Node {
 	constructor(param) {
 		super();
@@ -5457,10 +5543,14 @@ class ParamIndirect extends Node {
 }
 
 class CommandSubstitution extends Node {
-	constructor(command) {
+	constructor(command, formatted_text) {
 		super();
+		if (formatted_text == null) {
+			formatted_text = "";
+		}
 		this.kind = "cmdsub";
 		this.command = command;
+		this.formatted_text = formatted_text;
 	}
 
 	toSexp() {
@@ -5771,11 +5861,15 @@ class LocaleString extends Node {
 }
 
 class ProcessSubstitution extends Node {
-	constructor(direction, command) {
+	constructor(direction, command, formatted_text) {
 		super();
+		if (formatted_text == null) {
+			formatted_text = "";
+		}
 		this.kind = "procsub";
 		this.direction = direction;
 		this.command = command;
+		this.formatted_text = formatted_text;
 	}
 
 	toSexp() {
@@ -8395,7 +8489,7 @@ class Parser {
 	}
 
 	_parseCommandSubstitution() {
-		let cmd, saved, start, text, text_end;
+		let cmd, formatted_inner, formatted_text, saved, start, text, text_end;
 		if (this.atEnd() || this.peek() !== "$") {
 			return [null, ""];
 		}
@@ -8426,8 +8520,16 @@ class Parser {
 		this.advance();
 		text_end = this.pos;
 		text = this.source.slice(start, text_end);
+		// Format the parsed command immediately
+		formatted_inner = _formatCmdsubNode(cmd);
+		// Add space after $( if content starts with ( to avoid $((
+		if (formatted_inner.startsWith("(")) {
+			formatted_text = `$( ${formatted_inner})`;
+		} else {
+			formatted_text = `$(${formatted_inner})`;
+		}
 		this._restoreParserState(saved);
-		return [new CommandSubstitution(cmd), text];
+		return [new CommandSubstitution(cmd, formatted_text), text];
 	}
 
 	_isAssignmentWord(word) {
@@ -8818,7 +8920,16 @@ class Parser {
 	}
 
 	_parseProcessSubstitution() {
-		let cmd, direction, old_in_process_sub, saved, start, text, text_end;
+		let cmd,
+			compact,
+			direction,
+			formatted_inner,
+			formatted_text,
+			old_in_process_sub,
+			saved,
+			start,
+			text,
+			text_end;
 		if (this.atEnd() || !_isRedirectChar(this.peek())) {
 			return [null, ""];
 		}
@@ -8852,9 +8963,13 @@ class Parser {
 			text = this.source.slice(start, text_end);
 			// Strip line continuations (backslash-newline) from text
 			text = _stripLineContinuationsCommentAware(text);
+			// Format the parsed command immediately
+			compact = _startsWithSubshell(cmd);
+			formatted_inner = _formatCmdsubNode(cmd, 0, true, compact, true);
+			formatted_text = `${direction}(${formatted_inner})`;
 			this._restoreParserState(saved);
 			this._in_process_sub = old_in_process_sub;
-			return [new ProcessSubstitution(direction, cmd), text];
+			return [new ProcessSubstitution(direction, cmd, formatted_text), text];
 		} catch (_) {
 			// Parsing failed - scan to find the closing ) and return as literal text
 			this._restoreParserState(saved);

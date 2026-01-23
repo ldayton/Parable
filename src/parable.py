@@ -1867,6 +1867,10 @@ class Lexer:
         saved_dolbrace = self._dolbrace_state
         self._dolbrace_state = DolbraceState.PARAM
         ch = self.peek()
+        # ${ cmd } or ${| cmd } - function substitution (funsub)
+        if ch in (" ", "\t", "\n", "|"):
+            self._dolbrace_state = saved_dolbrace
+            return self._read_funsub(start)
         # ${#param} - length
         if ch == "#":
             self.advance()
@@ -2013,6 +2017,56 @@ class Lexer:
         text = "${" + param + op + arg + "}"
         self._dolbrace_state = saved_dolbrace
         return ParamExpansion(param, op, arg), text
+
+    def _read_funsub(self, start: int) -> tuple[Node | None, str]:
+        """Read a function substitution ${ cmd } or ${| cmd }.
+
+        start is the position of the $. Parser is positioned after the ${.
+        Returns (FunSub node, raw text).
+        """
+        # Find matching close brace
+        content_start = self.pos
+        depth = 1
+        while not self.at_end() and depth > 0:
+            if self.peek() == "{":
+                depth += 1
+            elif self.peek() == "}":
+                depth -= 1
+            if depth > 0:
+                self.advance()
+        if depth > 0:
+            raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
+        # Extract content between ${ and }
+        inner = _substring(self.source, content_start, self.pos)
+        raw_text = _substring(self.source, start, self.pos + 1)
+        self.advance()  # consume closing }
+        # Check if content is all whitespace - normalize to single space
+        stripped_inner = inner.lstrip(" \t\n|")
+        if not stripped_inner:
+            return FunSub(Empty(), "${ }"), raw_text
+        # Parse the command content
+        try:
+            sub_parser = Parser(stripped_inner)
+            cmd = sub_parser.parse_list()
+            if cmd is None:
+                cmd = Empty()
+            # Format the command immediately
+            formatted = _format_cmdsub_node(cmd)
+            formatted = formatted.rstrip(";")
+            # Determine terminator: newline, background, or semicolon
+            if inner.rstrip(" \t").endswith("\n"):
+                terminator = "\n }"
+            elif formatted.endswith(" &"):
+                terminator = " }"
+            else:
+                terminator = "; }"
+            # Build the formatted text with normalized prefix
+            prefix = "${ "  # Normalize all funsub prefixes to "${ "
+            formatted_text = prefix + formatted + terminator
+            return FunSub(cmd, formatted_text), raw_text
+        except Exception:
+            # If parsing fails, store raw content
+            return FunSub(Empty(), raw_text), raw_text
 
     # Reserved words mapping
     RESERVED_WORDS: dict[str, int] = {
@@ -4487,6 +4541,21 @@ class ParamExpansion(Node):
         return '(param "' + escaped_param + '")'
 
 
+class FunSub(Node):
+    """A function substitution ${ cmd } or ${| cmd }."""
+
+    command: Node
+    formatted_text: str  # Pre-computed formatted output, e.g. "${ echo foo; }"
+
+    def __init__(self, command: Node, formatted_text: str = ""):
+        self.kind = "funsub"
+        self.command = command
+        self.formatted_text = formatted_text
+
+    def to_sexp(self) -> str:
+        return "(funsub " + self.command.to_sexp() + ")"
+
+
 class ParamLength(Node):
     """A parameter length expansion ${#var}."""
 
@@ -4531,10 +4600,12 @@ class CommandSubstitution(Node):
     """A command substitution $(...) or `...`."""
 
     command: Node
+    formatted_text: str  # Pre-computed formatted output, e.g. "$(echo foo)"
 
-    def __init__(self, command: Node):
+    def __init__(self, command: Node, formatted_text: str = ""):
         self.kind = "cmdsub"
         self.command = command
+        self.formatted_text = formatted_text
 
     def to_sexp(self) -> str:
         return "(cmdsub " + self.command.to_sexp() + ")"
@@ -4870,11 +4941,13 @@ class ProcessSubstitution(Node):
 
     direction: str  # "<" for input, ">" for output
     command: Node
+    formatted_text: str  # Pre-computed formatted output, e.g. "<(cat file)"
 
-    def __init__(self, direction: str, command: Node):
+    def __init__(self, direction: str, command: Node, formatted_text: str = ""):
         self.kind = "procsub"
         self.direction = direction
         self.command = command
+        self.formatted_text = formatted_text
 
     def to_sexp(self) -> str:
         return '(procsub "' + self.direction + '" ' + self.command.to_sexp() + ")"
@@ -7087,8 +7160,16 @@ class Parser:
         text_end = self.pos
         text = _substring(self.source, start, text_end)
 
+        # Format the parsed command immediately
+        formatted_inner = _format_cmdsub_node(cmd)
+        # Add space after $( if content starts with ( to avoid $((
+        if formatted_inner.startswith("("):
+            formatted_text = "$( " + formatted_inner + ")"
+        else:
+            formatted_text = "$(" + formatted_inner + ")"
+
         self._restore_parser_state(saved)
-        return CommandSubstitution(cmd), text
+        return CommandSubstitution(cmd, formatted_text), text
 
     def _is_assignment_word(self, word: Word) -> bool:
         """Check if a word is an assignment (name=value) where name is a valid identifier."""
@@ -7439,9 +7520,14 @@ class Parser:
             # Strip line continuations (backslash-newline) from text
             text = _strip_line_continuations_comment_aware(text)
 
+            # Format the parsed command immediately
+            compact = _starts_with_subshell(cmd)
+            formatted_inner = _format_cmdsub_node(cmd, 0, True, compact, True)
+            formatted_text = direction + "(" + formatted_inner + ")"
+
             self._restore_parser_state(saved)
             self._in_process_sub = old_in_process_sub
-            return ProcessSubstitution(direction, cmd), text
+            return ProcessSubstitution(direction, cmd, formatted_text), text
 
         except ParseError:
             # Parsing failed - scan to find the closing ) and return as literal text

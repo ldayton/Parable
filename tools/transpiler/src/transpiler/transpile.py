@@ -29,6 +29,7 @@ class JSTranspiler(ast.NodeVisitor):
             "ProcessSubstitution",
             "ArithmeticExpansion",
             "ParamExpansion",
+            "FunSub",
             "ParamLength",
             "ParamIndirect",
             "ArrayLiteral",

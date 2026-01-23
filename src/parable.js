@@ -90,6 +90,182 @@ function _countConsecutiveDollarsBefore(s, pos) {
 	return count;
 }
 
+function _expandAnsiCEscapes(value) {
+	let byte_val,
+		c,
+		codepoint,
+		ctrl_char,
+		ctrl_val,
+		hex_str,
+		i,
+		inner,
+		j,
+		result,
+		simple;
+	if (!(value.startsWith("'") && value.endsWith("'"))) {
+		return value;
+	}
+	inner = value.slice(1, value.length - 1);
+	result = [];
+	i = 0;
+	while (i < inner.length) {
+		if (inner[i] === "\\" && i + 1 < inner.length) {
+			c = inner[i + 1];
+			// Check simple escapes first
+			simple = _getAnsiEscape(c);
+			if (simple >= 0) {
+				result.push(simple);
+				i += 2;
+			} else if (c === "'") {
+				// bash-oracle outputs \' as '\'' (shell quoting trick)
+				result.push(...[39, 92, 39, 39]);
+				i += 2;
+			} else if (c === "x") {
+				// Check for \x{...} brace syntax (bash 5.3+)
+				if (i + 2 < inner.length && inner[i + 2] === "{") {
+					// Find closing brace or end of hex digits
+					j = i + 3;
+					while (j < inner.length && _isHexDigit(inner[j])) {
+						j += 1;
+					}
+					hex_str = inner.slice(i + 3, j);
+					if (j < inner.length && inner[j] === "}") {
+						j += 1;
+					}
+					// If no hex digits, treat as NUL (truncates)
+					if (!hex_str) {
+						return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+					}
+					byte_val = parseInt(hex_str, 16) & 255;
+					if (byte_val === 0) {
+						return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+					}
+					result.push(byte_val);
+					i = j;
+				} else {
+					// Hex escape \xHH (1-2 hex digits) - raw byte
+					j = i + 2;
+					while (j < inner.length && j < i + 4 && _isHexDigit(inner[j])) {
+						j += 1;
+					}
+					if (j > i + 2) {
+						byte_val = parseInt(inner.slice(i + 2, j), 16);
+						if (byte_val === 0) {
+							// NUL truncates string
+							return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+						}
+						result.push(byte_val);
+						i = j;
+					} else {
+						result.push(inner[i].charCodeAt(0));
+						i += 1;
+					}
+				}
+			} else if (c === "u") {
+				// Unicode escape \uHHHH (1-4 hex digits) - encode as UTF-8
+				j = i + 2;
+				while (j < inner.length && j < i + 6 && _isHexDigit(inner[j])) {
+					j += 1;
+				}
+				if (j > i + 2) {
+					codepoint = parseInt(inner.slice(i + 2, j), 16);
+					if (codepoint === 0) {
+						// NUL truncates string
+						return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+					}
+					result.push(
+						...Array.from(
+							new TextEncoder().encode(String.fromCodePoint(codepoint)),
+						),
+					);
+					i = j;
+				} else {
+					result.push(inner[i].charCodeAt(0));
+					i += 1;
+				}
+			} else if (c === "U") {
+				// Unicode escape \UHHHHHHHH (1-8 hex digits) - encode as UTF-8
+				j = i + 2;
+				while (j < inner.length && j < i + 10 && _isHexDigit(inner[j])) {
+					j += 1;
+				}
+				if (j > i + 2) {
+					codepoint = parseInt(inner.slice(i + 2, j), 16);
+					if (codepoint === 0) {
+						// NUL truncates string
+						return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+					}
+					result.push(
+						...Array.from(
+							new TextEncoder().encode(String.fromCodePoint(codepoint)),
+						),
+					);
+					i = j;
+				} else {
+					result.push(inner[i].charCodeAt(0));
+					i += 1;
+				}
+			} else if (c === "c") {
+				// Control character \cX - mask with 0x1f
+				if (i + 3 <= inner.length) {
+					ctrl_char = inner[i + 2];
+					ctrl_val = ctrl_char.charCodeAt(0) & 31;
+					if (ctrl_val === 0) {
+						// NUL truncates string
+						return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+					}
+					result.push(ctrl_val);
+					i += 3;
+				} else {
+					result.push(inner[i].charCodeAt(0));
+					i += 1;
+				}
+			} else if (c === "0") {
+				// Nul or octal \0 or \0NN (up to 3 digits total)
+				j = i + 2;
+				while (j < inner.length && j < i + 4 && _isOctalDigit(inner[j])) {
+					j += 1;
+				}
+				if (j > i + 2) {
+					byte_val = parseInt(inner.slice(i + 1, j), 8) & 255;
+					if (byte_val === 0) {
+						// NUL truncates string
+						return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+					}
+					result.push(byte_val);
+					i = j;
+				} else {
+					// Just \0 - NUL truncates string
+					return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+				}
+			} else if (c >= "1" && c <= "7") {
+				// Octal escape \NNN (1-3 digits) - raw byte, wraps at 256
+				j = i + 1;
+				while (j < inner.length && j < i + 4 && _isOctalDigit(inner[j])) {
+					j += 1;
+				}
+				byte_val = parseInt(inner.slice(i + 1, j), 8) & 255;
+				if (byte_val === 0) {
+					// NUL truncates string
+					return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+				}
+				result.push(byte_val);
+				i = j;
+			} else {
+				// Unknown escape - preserve as-is
+				result.push(92);
+				result.push(c.charCodeAt(0));
+				i += 2;
+			}
+		} else {
+			result.push(...Array.from(new TextEncoder().encode(inner[i])));
+			i += 1;
+		}
+	}
+	// Decode as UTF-8, replacing invalid sequences with U+FFFD
+	return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+}
+
 class TokenType {
 	static EOF = 0;
 	static WORD = 1;
@@ -1722,7 +1898,14 @@ class Lexer {
 	}
 
 	_readAnsiCQuote() {
-		let ch, content, content_chars, found_close, node, start, text;
+		let ch,
+			content,
+			content_chars,
+			expanded_content,
+			found_close,
+			node,
+			start,
+			text;
 		if (this.atEnd() || this.peek() !== "$") {
 			return [null, ""];
 		}
@@ -1759,7 +1942,9 @@ class Lexer {
 		}
 		text = this.source.slice(start, this.pos);
 		content = content_chars.join("");
-		node = new AnsiCQuote(content);
+		// Pre-compute expanded form at parse time
+		expanded_content = _expandAnsiCEscapes(`'${content}'`);
+		node = new AnsiCQuote(content, expanded_content);
 		return [node, text];
 	}
 
@@ -1783,6 +1968,7 @@ class Lexer {
 			cmdsub_text,
 			content,
 			content_chars,
+			formatted_text,
 			found_close,
 			inner_parts,
 			next_ch,
@@ -1894,7 +2080,9 @@ class Lexer {
 		content = content_chars.join("");
 		// Reconstruct text from parsed content (handles line continuation removal)
 		text = `$"${content}"`;
-		return [new LocaleString(content), text, inner_parts];
+		// Pre-compute stripped form (without leading $)
+		formatted_text = `"${content}"`;
+		return [new LocaleString(content, formatted_text), text, inner_parts];
 	}
 
 	_updateDolbraceForOp(op, has_param) {
@@ -2681,184 +2869,10 @@ class Word extends Node {
 		return result.join("");
 	}
 
-	_expandAnsiCEscapes(value) {
-		let byte_val,
-			c,
-			codepoint,
-			ctrl_char,
-			ctrl_val,
-			hex_str,
-			i,
-			inner,
-			j,
-			result,
-			simple;
-		if (!(value.startsWith("'") && value.endsWith("'"))) {
-			return value;
-		}
-		inner = value.slice(1, value.length - 1);
-		result = [];
-		i = 0;
-		while (i < inner.length) {
-			if (inner[i] === "\\" && i + 1 < inner.length) {
-				c = inner[i + 1];
-				// Check simple escapes first
-				simple = _getAnsiEscape(c);
-				if (simple >= 0) {
-					result.push(simple);
-					i += 2;
-				} else if (c === "'") {
-					// bash-oracle outputs \' as '\'' (shell quoting trick)
-					result.push(...[39, 92, 39, 39]);
-					i += 2;
-				} else if (c === "x") {
-					// Check for \x{...} brace syntax (bash 5.3+)
-					if (i + 2 < inner.length && inner[i + 2] === "{") {
-						// Find closing brace or end of hex digits
-						j = i + 3;
-						while (j < inner.length && _isHexDigit(inner[j])) {
-							j += 1;
-						}
-						hex_str = inner.slice(i + 3, j);
-						if (j < inner.length && inner[j] === "}") {
-							j += 1;
-						}
-						// If no hex digits, treat as NUL (truncates)
-						if (!hex_str) {
-							return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
-						}
-						byte_val = parseInt(hex_str, 16) & 255;
-						if (byte_val === 0) {
-							return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
-						}
-						this._appendWithCtlesc(result, byte_val);
-						i = j;
-					} else {
-						// Hex escape \xHH (1-2 hex digits) - raw byte
-						j = i + 2;
-						while (j < inner.length && j < i + 4 && _isHexDigit(inner[j])) {
-							j += 1;
-						}
-						if (j > i + 2) {
-							byte_val = parseInt(inner.slice(i + 2, j), 16);
-							if (byte_val === 0) {
-								// NUL truncates string
-								return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
-							}
-							this._appendWithCtlesc(result, byte_val);
-							i = j;
-						} else {
-							result.push(inner[i].charCodeAt(0));
-							i += 1;
-						}
-					}
-				} else if (c === "u") {
-					// Unicode escape \uHHHH (1-4 hex digits) - encode as UTF-8
-					j = i + 2;
-					while (j < inner.length && j < i + 6 && _isHexDigit(inner[j])) {
-						j += 1;
-					}
-					if (j > i + 2) {
-						codepoint = parseInt(inner.slice(i + 2, j), 16);
-						if (codepoint === 0) {
-							// NUL truncates string
-							return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
-						}
-						result.push(
-							...Array.from(
-								new TextEncoder().encode(String.fromCodePoint(codepoint)),
-							),
-						);
-						i = j;
-					} else {
-						result.push(inner[i].charCodeAt(0));
-						i += 1;
-					}
-				} else if (c === "U") {
-					// Unicode escape \UHHHHHHHH (1-8 hex digits) - encode as UTF-8
-					j = i + 2;
-					while (j < inner.length && j < i + 10 && _isHexDigit(inner[j])) {
-						j += 1;
-					}
-					if (j > i + 2) {
-						codepoint = parseInt(inner.slice(i + 2, j), 16);
-						if (codepoint === 0) {
-							// NUL truncates string
-							return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
-						}
-						result.push(
-							...Array.from(
-								new TextEncoder().encode(String.fromCodePoint(codepoint)),
-							),
-						);
-						i = j;
-					} else {
-						result.push(inner[i].charCodeAt(0));
-						i += 1;
-					}
-				} else if (c === "c") {
-					// Control character \cX - mask with 0x1f
-					if (i + 3 <= inner.length) {
-						ctrl_char = inner[i + 2];
-						ctrl_val = ctrl_char.charCodeAt(0) & 31;
-						if (ctrl_val === 0) {
-							// NUL truncates string
-							return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
-						}
-						this._appendWithCtlesc(result, ctrl_val);
-						i += 3;
-					} else {
-						result.push(inner[i].charCodeAt(0));
-						i += 1;
-					}
-				} else if (c === "0") {
-					// Nul or octal \0 or \0NN (up to 3 digits total)
-					j = i + 2;
-					while (j < inner.length && j < i + 4 && _isOctalDigit(inner[j])) {
-						j += 1;
-					}
-					if (j > i + 2) {
-						byte_val = parseInt(inner.slice(i + 1, j), 8) & 255;
-						if (byte_val === 0) {
-							// NUL truncates string
-							return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
-						}
-						this._appendWithCtlesc(result, byte_val);
-						i = j;
-					} else {
-						// Just \0 - NUL truncates string
-						return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
-					}
-				} else if (c >= "1" && c <= "7") {
-					// Octal escape \NNN (1-3 digits) - raw byte, wraps at 256
-					j = i + 1;
-					while (j < inner.length && j < i + 4 && _isOctalDigit(inner[j])) {
-						j += 1;
-					}
-					byte_val = parseInt(inner.slice(i + 1, j), 8) & 255;
-					if (byte_val === 0) {
-						// NUL truncates string
-						return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
-					}
-					this._appendWithCtlesc(result, byte_val);
-					i = j;
-				} else {
-					// Unknown escape - preserve as-is
-					result.push(92);
-					result.push(c.charCodeAt(0));
-					i += 2;
-				}
-			} else {
-				result.push(...Array.from(new TextEncoder().encode(inner[i])));
-				i += 1;
-			}
-		}
-		// Decode as UTF-8, replacing invalid sequences with U+FFFD
-		return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
-	}
-
 	_expandAllAnsiCQuotes(value) {
 		let after_brace,
+			ansi_idx,
+			ansi_parts,
 			ansi_str,
 			brace_depth,
 			c,
@@ -2876,11 +2890,20 @@ class Word extends Node {
 			op,
 			op_start,
 			outer_in_dquote,
+			p,
 			quote,
 			rest,
 			result,
 			result_str,
 			var_name_len;
+		// Collect AnsiCQuote nodes from parts (pre-computed expanded_content)
+		ansi_parts = [];
+		for (p of this.parts) {
+			if (p.kind === "ansi-c") {
+				ansi_parts.push(p);
+			}
+		}
+		ansi_idx = 0;
 		result = [];
 		i = 0;
 		quote = new QuoteState();
@@ -2967,8 +2990,14 @@ class Word extends Node {
 				}
 				// Extract and expand the $'...' sequence
 				ansi_str = value.slice(i, j);
-				// Strip the $ and expand escapes
-				expanded = this._expandAnsiCEscapes(ansi_str.slice(1, ansi_str.length));
+				// Use pre-computed expanded_content if available
+				if (ansi_idx < ansi_parts.length) {
+					expanded = ansi_parts[ansi_idx].expanded_content;
+					ansi_idx += 1;
+				} else {
+					// Fall back to expanding at runtime (e.g., empty parts list)
+					expanded = _expandAnsiCEscapes(ansi_str.slice(1, ansi_str.length));
+				}
 				// Inside ${...} that's itself in double quotes, check if quotes should be stripped
 				outer_in_dquote = quote.outerDouble();
 				if (
@@ -3115,8 +3144,21 @@ class Word extends Node {
 			ch,
 			dollar_count,
 			i,
+			j,
+			locale_idx,
+			locale_parts,
+			node,
+			p,
 			quote,
 			result;
+		// Collect LocaleString nodes from parts (pre-computed formatted_text)
+		locale_parts = [];
+		for (p of this.parts) {
+			if (p.kind === "locale") {
+				locale_parts.push(p);
+			}
+		}
+		locale_idx = 0;
 		result = [];
 		i = 0;
 		brace_depth = 0;
@@ -3225,15 +3267,37 @@ class Word extends Node {
 				dollar_count = 1 + _countConsecutiveDollarsBefore(value, i);
 				if (dollar_count % 2 === 1) {
 					// Odd count: locale string $"..." - strip the $ and enter double quote
-					result.push('"');
-					if (bracket_depth > 0) {
-						bracket_in_double_quote = true;
-					} else if (brace_depth > 0) {
-						brace_quote.double = true;
+					// Use pre-computed formatted_text if available
+					if (locale_idx < locale_parts.length) {
+						node = locale_parts[locale_idx];
+						locale_idx += 1;
+						// Output pre-computed stripped form
+						result.push(node.formatted_text);
+						// Skip past entire $"..." in value (find closing quote)
+						j = i + 2;
+						while (j < value.length) {
+							if (value[j] === "\\" && j + 1 < value.length) {
+								j += 2;
+							} else if (value[j] === '"') {
+								j += 1;
+								break;
+							} else {
+								j += 1;
+							}
+						}
+						i = j;
 					} else {
-						quote.double = true;
+						// Fall back to char-by-char (no pre-computed node)
+						result.push('"');
+						if (bracket_depth > 0) {
+							bracket_in_double_quote = true;
+						} else if (brace_depth > 0) {
+							brace_quote.double = true;
+						} else {
+							quote.double = true;
+						}
+						i += 2;
 					}
-					i += 2;
 				} else {
 					// Even count: this $ is part of $$ (PID), just append it
 					result.push(ch);
@@ -3248,14 +3312,23 @@ class Word extends Node {
 	}
 
 	_normalizeArrayWhitespace(value) {
-		let close_paren_pos,
+		let array_parts,
+			close_paren_pos,
 			depth,
 			i,
 			inner,
 			open_paren_pos,
+			p,
 			prefix,
 			result,
 			suffix;
+		// Collect Array nodes from parts (pre-computed formatted_inner)
+		array_parts = [];
+		for (p of this.parts) {
+			if (p.kind === "array") {
+				array_parts.push(p);
+			}
+		}
 		// Match array assignment pattern: name=( or name+=( or name[sub]=( or name[sub]+=(
 		// Parse identifier: starts with letter/underscore, then alnum/underscore
 		i = 0;
@@ -3306,9 +3379,12 @@ class Word extends Node {
 				return value;
 			}
 		}
-		// Extract content inside parentheses
-		inner = value.slice(open_paren_pos + 1, close_paren_pos);
 		suffix = value.slice(close_paren_pos + 1, value.length);
+		// Extract content inside parentheses
+		// Note: formatted_inner contains raw element values, but at this point the value
+		// has already been transformed by _expand_all_ansi_c_quotes and
+		// _strip_locale_string_dollars, so we must normalize from the transformed value.
+		inner = value.slice(open_paren_pos + 1, close_paren_pos);
 		result = this._normalizeArrayInner(inner);
 		return `${prefix}(${result})${suffix}`;
 	}
@@ -5881,10 +5957,11 @@ class ArithConcat extends Node {
 }
 
 class AnsiCQuote extends Node {
-	constructor(content) {
+	constructor(content, expanded_content) {
 		super();
 		this.kind = "ansi-c";
 		this.content = content;
+		this.expanded_content = expanded_content;
 	}
 
 	toSexp() {
@@ -5898,10 +5975,11 @@ class AnsiCQuote extends Node {
 }
 
 class LocaleString extends Node {
-	constructor(content) {
+	constructor(content, formatted_text) {
 		super();
 		this.kind = "locale";
 		this.content = content;
+		this.formatted_text = formatted_text;
 	}
 
 	toSexp() {
@@ -6100,10 +6178,11 @@ class CondParen extends Node {
 }
 
 class ArrayNode extends Node {
-	constructor(elements) {
+	constructor(elements, formatted_inner) {
 		super();
 		this.kind = "array";
 		this.elements = elements;
+		this.formatted_inner = formatted_inner;
 	}
 
 	toSexp() {
@@ -9114,7 +9193,7 @@ class Parser {
 	}
 
 	_parseArrayLiteral() {
-		let elements, start, text, word;
+		let e, elements, formatted_inner, inner_parts, start, text, word;
 		if (this.atEnd() || this.peek() !== "(") {
 			return [null, ""];
 		}
@@ -9150,8 +9229,14 @@ class Parser {
 		}
 		this.advance();
 		text = this.source.slice(start, this.pos);
+		// Pre-compute normalized inner content (elements joined by single space)
+		inner_parts = [];
+		for (e of elements) {
+			inner_parts.push(e.value);
+		}
+		formatted_inner = inner_parts.join(" ");
 		this._clearState(ParserStateFlags.PST_COMPASSIGN);
-		return [new ArrayNode(elements), text];
+		return [new ArrayNode(elements, formatted_inner), text];
 	}
 
 	_parseArithmeticExpansion() {

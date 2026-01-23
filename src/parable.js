@@ -2655,7 +2655,8 @@ class Word extends Node {
 			inner,
 			j,
 			result,
-			simple;
+			simple,
+			skip_extra;
 		if (!(value.startsWith("'") && value.endsWith("'"))) {
 			return value;
 		}
@@ -2763,13 +2764,22 @@ class Word extends Node {
 					// Control character \cX - mask with 0x1f
 					if (i + 3 <= inner.length) {
 						ctrl_char = inner[i + 2];
+						// POSIX: $'\c\\' consumes both backslashes
+						skip_extra = 0;
+						if (
+							ctrl_char === "\\" &&
+							i + 4 <= inner.length &&
+							inner[i + 3] === "\\"
+						) {
+							skip_extra = 1;
+						}
 						ctrl_val = ctrl_char.charCodeAt(0) & 31;
 						if (ctrl_val === 0) {
 							// NUL truncates string
 							return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
 						}
 						this._appendWithCtlesc(result, ctrl_val);
-						i += 3;
+						i += 3 + skip_extra;
 					} else {
 						result.push(inner[i].charCodeAt(0));
 						i += 1;

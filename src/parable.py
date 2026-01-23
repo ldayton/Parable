@@ -1966,7 +1966,7 @@ class Lexer:
                     bc = self.peek()
                     if bc == "\\" and self.pos + 1 < self.length:
                         next_c = self.source[self.pos + 1]
-                        if _is_escape_char_in_dquote(next_c):
+                        if _is_escape_char_in_backtick(next_c):
                             self.advance()
                     self.advance()
                 if self.at_end():
@@ -6356,6 +6356,10 @@ def _is_simple_param_op(c: str) -> bool:
 
 
 def _is_escape_char_in_dquote(c: str) -> bool:
+    return c in ("$", "`", "\\", '"', "\n")
+
+
+def _is_escape_char_in_backtick(c: str) -> bool:
     return c == "$" or c == "`" or c == "\\"
 
 
@@ -7203,7 +7207,7 @@ class Parser:
                     self.advance()  # skip \
                     self.advance()  # skip newline
                     # Don't add to content_chars or text_chars
-                elif _is_escape_char_in_dquote(next_c):
+                elif _is_escape_char_in_backtick(next_c):
                     # Escape sequence: skip backslash in content, keep both in text
                     self.advance()  # skip \
                     escaped = self.advance()

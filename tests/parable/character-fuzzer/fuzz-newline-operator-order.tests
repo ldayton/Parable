@@ -1,0 +1,54 @@
+=== newline then ampersand in subshell
+(:
+&)
+---
+<error>
+---
+
+=== ampersand at end of subshell
+(: &)
+---
+(subshell (background (command (word ":"))))
+---
+
+=== ampersand then newline continuation in subshell
+(: &
+:)
+---
+(subshell (background (command (word ":")) (command (word ":"))))
+---
+
+=== newline then semicolon in subshell
+(:
+;)
+---
+<error>
+---
+
+=== semicolon at end of subshell
+(: ;)
+---
+(subshell (command (word ":")))
+---
+
+=== newline then ampersand in brace group
+{ :
+& }
+---
+<error>
+---
+
+=== ampersand then newline continuation in brace group
+{ : &
+: ; }
+---
+(brace-group (background (command (word ":")) (command (word ":"))))
+---
+
+=== top-level ampersand then newline separates commands
+: &
+:
+---
+(background (command (word ":")))
+(command (word ":"))
+---

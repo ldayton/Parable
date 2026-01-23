@@ -10178,6 +10178,24 @@ class Parser:
 
         return None
 
+    def _at_list_until_terminator(self, stop_words: set[str]) -> bool:
+        """Check if we're at a terminator for parse_list_until context."""
+        if self.at_end():
+            return True
+        if self.peek() == ")":
+            return True
+        # Check for standalone } (closing brace), not } as part of a word
+        if self.peek() == "}":
+            next_pos = self.pos + 1
+            if next_pos >= self.length or _is_word_end_context(self.source[next_pos]):
+                return True
+        reserved = self._lex_peek_reserved_word()
+        if reserved is not None and reserved in stop_words:
+            return True
+        if self._lex_peek_case_terminator() is not None:
+            return True
+        return False
+
     def parse_list_until(self, stop_words: set[str]) -> Node | None:
         """Parse a list that stops before certain reserved words."""
         # Check if we're already at a stop word
@@ -10193,95 +10211,55 @@ class Parser:
         parts = [pipeline]
 
         while True:
-            # Check for newline as implicit command separator
+            # Check for explicit operator FIRST (without consuming newlines)
             self.skip_whitespace()
-            has_newline = False
-            while not self.at_end() and self.peek() == "\n":
-                has_newline = True
-                self.advance()
-                # Gather pending heredoc content after newline
-                self._gather_heredoc_bodies()
-                if self._cmdsub_heredoc_end is not None and self._cmdsub_heredoc_end > self.pos:
-                    self.pos = self._cmdsub_heredoc_end
-                    self._cmdsub_heredoc_end = None
-                self.skip_whitespace()
-
             op = self.parse_list_operator()
 
-            # Newline acts as implicit semicolon if followed by more commands
-            if op is None and has_newline:
-                # Check if there's another command (not a stop word)
-                # } is only a terminator if it's standalone (closing brace group), not part of a word
-                is_standalone_brace = False
-                if not self.at_end() and self.peek() == "}":
-                    next_pos = self.pos + 1
-                    if next_pos >= self.length or _is_word_end_context(self.source[next_pos]):
-                        is_standalone_brace = True
-                reserved = self._lex_peek_reserved_word()
-                if (
-                    not self.at_end()
-                    and not (reserved is not None and reserved in stop_words)
-                    and self.peek() != ")"
-                    and not is_standalone_brace
-                ):
-                    op = "\n"  # Newline separator (distinct from explicit ;)
+            if op is None:
+                # No explicit operator - check for newline as implicit separator
+                if not self.at_end() and self.peek() == "\n":
+                    # compound_list context: newline acts as separator
+                    self.advance()  # consume \n
+                    self._gather_heredoc_bodies()
+                    if self._cmdsub_heredoc_end is not None and self._cmdsub_heredoc_end > self.pos:
+                        self.pos = self._cmdsub_heredoc_end
+                        self._cmdsub_heredoc_end = None
+                    self.skip_whitespace_and_newlines()
+                    if self._at_list_until_terminator(stop_words):
+                        break
+                    # Validate next thing is a command start, not bare operator
+                    next_op = self._peek_list_operator()
+                    if next_op in ("&", ";"):
+                        # Bare & or ; after newline - newline terminated the list
+                        break
+                    op = "\n"
+                else:
+                    break  # no operator, no newline - done
 
             if op is None:
                 break
 
-            # For & at end of list, don't require another command
-            if op == "&":
-                parts.append(Operator(op))
-                self.skip_whitespace_and_newlines()
-                # Check for standalone } (closing brace), not } as part of a word
-                is_standalone_brace = False
-                if not self.at_end() and self.peek() == "}":
-                    next_pos = self.pos + 1
-                    if next_pos >= self.length or _is_word_end_context(self.source[next_pos]):
-                        is_standalone_brace = True
-                reserved = self._lex_peek_reserved_word()
-                if (
-                    self.at_end()
-                    or (reserved is not None and reserved in stop_words)
-                    or self.peek() == "\n"
-                    or self.peek() == ")"
-                    or is_standalone_brace
-                ):
-                    break
-
-            # For ; - check if it's a terminator before a stop word (don't include it)
+            # For ; - check if it's a terminator (don't include trailing semicolons)
             if op == ";":
                 self.skip_whitespace_and_newlines()
-                # Also check for ;;, ;&, or ;;& (case terminators)
-                at_case_terminator = self._lex_peek_case_terminator() is not None
-                # Check for standalone } (closing brace), not } as part of a word
-                is_standalone_brace = False
-                if not self.at_end() and self.peek() == "}":
-                    next_pos = self.pos + 1
-                    if next_pos >= self.length or _is_word_end_context(self.source[next_pos]):
-                        is_standalone_brace = True
-                reserved = self._lex_peek_reserved_word()
-                if (
-                    self.at_end()
-                    or (reserved is not None and reserved in stop_words)
-                    or self.peek() == "\n"
-                    or self.peek() == ")"
-                    or is_standalone_brace
-                    or at_case_terminator
-                ):
+                if self._at_list_until_terminator(stop_words):
                     # Don't include trailing semicolon - it's just a terminator
                     break
                 parts.append(Operator(op))
-            elif op != "&":
+            elif op == "&":
+                parts.append(Operator(op))
+                self.skip_whitespace_and_newlines()
+                if self._at_list_until_terminator(stop_words):
+                    break
+            elif op in ("&&", "||"):
+                parts.append(Operator(op))
+                self.skip_whitespace_and_newlines()
+            else:
+                # op == "\n" - already handled above
                 parts.append(Operator(op))
 
             # Check for stop words before parsing next pipeline
-            self.skip_whitespace_and_newlines()
-            reserved = self._lex_peek_reserved_word()
-            # Also check for ;;, ;&, or ;;& (case terminators)
-            if reserved is not None and reserved in stop_words:
-                break
-            if self._lex_peek_case_terminator() is not None:
+            if self._at_list_until_terminator(stop_words):
                 break
 
             pipeline = self.parse_pipeline()
@@ -10547,6 +10525,13 @@ class Parser:
             return "&"
         return None
 
+    def _peek_list_operator(self) -> str | None:
+        """Peek at next list operator without consuming."""
+        saved_pos = self.pos
+        op = self.parse_list_operator()
+        self.pos = saved_pos
+        return op
+
     def parse_list(self, newline_as_separator: bool = True) -> Node | None:
         """Parse a command list (pipelines separated by &&, ||, ;, &).
 
@@ -10565,72 +10550,64 @@ class Parser:
         parts = [pipeline]
 
         while True:
-            # Check for newline as implicit command separator
+            # Check for explicit operator FIRST (without consuming newlines)
             self.skip_whitespace()
-            has_newline = False
-            while not self.at_end() and self.peek() == "\n":
-                has_newline = True
-                # If not treating newlines as separators, stop here
-                if not newline_as_separator:
-                    break
-                self.advance()
-                # Gather pending heredoc content after newline
-                self._gather_heredoc_bodies()
-                if self._cmdsub_heredoc_end is not None and self._cmdsub_heredoc_end > self.pos:
-                    self.pos = self._cmdsub_heredoc_end
-                    self._cmdsub_heredoc_end = None
-                self.skip_whitespace()
-
-            # If we hit a newline and not treating them as separators, stop
-            if has_newline and not newline_as_separator:
-                break
-
             op = self.parse_list_operator()
 
-            # Newline acts as implicit semicolon if followed by more commands
-            if op is None and has_newline:
-                if not self.at_end() and not self._at_list_terminating_bracket():
-                    op = "\n"  # Newline separator (distinct from explicit ;)
+            if op is None:
+                # No explicit operator - check for newline as implicit separator
+                if not self.at_end() and self.peek() == "\n":
+                    if not newline_as_separator:
+                        break  # top-level: newline ends this parse
+                    # compound_list: newline acts as separator
+                    self.advance()  # consume \n
+                    self._gather_heredoc_bodies()
+                    if self._cmdsub_heredoc_end is not None and self._cmdsub_heredoc_end > self.pos:
+                        self.pos = self._cmdsub_heredoc_end
+                        self._cmdsub_heredoc_end = None
+                    self.skip_whitespace_and_newlines()
+                    if self.at_end() or self._at_list_terminating_bracket():
+                        break
+                    # Validate next thing is a command start, not bare operator
+                    next_op = self._peek_list_operator()
+                    if next_op in ("&", ";"):
+                        # Bare & or ; after newline - newline terminated the list
+                        break
+                    op = "\n"
+                else:
+                    break  # no operator, no newline - done
 
             if op is None:
                 break
 
-            # Don't add duplicate semicolon (e.g., explicit ; followed by newline)
-            if not (
-                op == ";"
-                and parts
-                and parts[len(parts) - 1].kind == "operator"
-                and parts[len(parts) - 1].op == ";"
-            ):
-                parts.append(Operator(op))
+            parts.append(Operator(op))
 
-            # For & at end of list, don't require another command
-            if op == "&":
+            # Handle trailing newlines AFTER the operator
+            if op in ("&&", "||"):
+                self.skip_whitespace_and_newlines()  # always allowed
+            elif op == "&":
                 self.skip_whitespace()
                 if self.at_end() or self._at_list_terminating_bracket():
-                    break
-                # Newline after & - in compound commands, skip it (& acts as separator)
-                # At top level, newline terminates (separate commands)
+                    break  # & at end - backgrounds last command
                 if self.peek() == "\n":
                     if newline_as_separator:
                         self.skip_whitespace_and_newlines()
                         if self.at_end() or self._at_list_terminating_bracket():
                             break
                     else:
-                        break  # Top-level: newline ends this list
-
-            # For ; at end of list, don't require another command
-            if op == ";":
+                        break  # simple_list: newline ends
+            elif op == ";":
                 self.skip_whitespace()
                 if self.at_end() or self._at_list_terminating_bracket():
                     break
-                # Newline after ; means continue to see if more commands follow
                 if self.peek() == "\n":
-                    continue
-
-            # For && and ||, allow newlines before the next command
-            if op == "&&" or op == "||":
-                self.skip_whitespace_and_newlines()
+                    if newline_as_separator:
+                        self.skip_whitespace_and_newlines()
+                        if self.at_end() or self._at_list_terminating_bracket():
+                            break
+                    else:
+                        break  # simple_list: newline ends
+            # op == "\n" already handled above (newlines consumed in the no-op branch)
 
             pipeline = self.parse_pipeline()
             if pipeline is None:

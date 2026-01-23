@@ -2024,9 +2024,7 @@ class Lexer:
 
     def _read_funsub(self, start: int) -> tuple[Node | None, str]:
         """Read brace command substitution ${ cmd; } or ${| cmd; }."""
-        content = self._parse_matched_pair("{", "}", MatchedPairFlags.DOLBRACE)
-        text = "${" + content + "}"
-        return ParamExpansion(content), text
+        return self._parser._parse_funsub(start)
 
     # Reserved words mapping
     RESERVED_WORDS: dict[str, int] = {
@@ -3288,6 +3286,46 @@ class Word(Node):
                 result.append(_substring(value, i, j))
                 cmdsub_idx += 1
                 i = j
+            # Check for ${ brace command substitution (funsub)
+            elif (
+                _starts_with_at(value, i, "${")
+                and i + 2 < len(value)
+                and _is_funsub_char(value[i + 2])
+                and not _is_backslash_escaped(value, i)
+            ):
+                # Find matching close brace
+                j = _find_funsub_end(value, i + 2)
+                # Check if we have a parsed node with brace=True
+                if cmdsub_idx < len(cmdsub_parts) and getattr(
+                    cmdsub_parts[cmdsub_idx], "brace", False
+                ):
+                    node = cmdsub_parts[cmdsub_idx]
+                    formatted = _format_cmdsub_node(node.command)
+                    # Determine prefix: ${ or ${|
+                    has_pipe = value[i + 2] == "|"
+                    prefix = "${|" if has_pipe else "${ "
+                    # Check if original content ends with newline
+                    orig_inner = _substring(value, i + 2, j - 1)
+                    ends_with_newline = orig_inner.endswith("\n")
+                    # Add terminator before closing brace
+                    if not formatted or formatted.isspace():
+                        # Empty funsub: ${ }
+                        suffix = "}"
+                    elif formatted.endswith("&") or formatted.endswith("& "):
+                        # Background: ${ cmd & }
+                        suffix = " }" if formatted.endswith("&") else "}"
+                    elif ends_with_newline:
+                        # Preserve trailing newline: ${ cmd\n }
+                        suffix = "\n }"
+                    else:
+                        # Normal: ${ cmd; }
+                        suffix = "; }"
+                    result.append(prefix + formatted + suffix)
+                    cmdsub_idx += 1
+                else:
+                    # No parsed node, keep as-is
+                    result.append(_substring(value, i, j))
+                i = j
             # Check for >( or <( process substitution (not inside double quotes, $[...], or $((...)))
             elif (
                 (_starts_with_at(value, i, ">(") or _starts_with_at(value, i, "<("))
@@ -4542,15 +4580,19 @@ class ParamIndirect(Node):
 
 
 class CommandSubstitution(Node):
-    """A command substitution $(...) or `...`."""
+    """A command substitution $(...), `...`, or ${ cmd; }."""
 
     command: Node
+    brace: bool
 
-    def __init__(self, command: Node):
+    def __init__(self, command: Node, brace: bool = False):
         self.kind = "cmdsub"
         self.command = command
+        self.brace = brace
 
     def to_sexp(self) -> str:
+        if self.brace:
+            return "(funsub " + self.command.to_sexp() + ")"
         return "(cmdsub " + self.command.to_sexp() + ")"
 
 
@@ -5694,6 +5736,41 @@ def _is_valid_arithmetic_start(value: str, start: int) -> bool:
                 return False
         scan_i += 1
     return False  # Never found ))
+
+
+def _find_funsub_end(value: str, start: int) -> int:
+    """Find the end of a ${ cmd; } brace command substitution.
+
+    Starts after the opening ${. Returns position after the closing }.
+    Handles nested braces, quotes, and command substitutions.
+    """
+    depth = 1
+    i = start
+    quote = QuoteState()
+    while i < len(value) and depth > 0:
+        c = value[i]
+        if c == "\\" and i + 1 < len(value) and not quote.single:
+            i += 2
+            continue
+        if c == "'" and not quote.double:
+            quote.single = not quote.single
+            i += 1
+            continue
+        if c == '"' and not quote.single:
+            quote.double = not quote.double
+            i += 1
+            continue
+        if quote.single or quote.double:
+            i += 1
+            continue
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    return len(value)
 
 
 def _find_cmdsub_end(value: str, start: int) -> int:
@@ -6854,10 +6931,14 @@ class Parser:
         Returns True for ')' always (since it's a metachar).
         Returns True for '}' only if it's standalone (followed by word-end context or EOF).
         This handles cases like 'a&}}' where '}}' is a word, not a brace-group closer.
+        Also returns True if we're at the EOF token (for funsub parsing).
         """
         if self.at_end():
             return False
         ch = self.peek()
+        # Check if we're at the EOF token (e.g., } in funsub or ) in comsub)
+        if self._eof_token is not None and ch == self._eof_token and self._eof_depth == 0:
+            return True
         if ch == ")":
             return True
         if ch == "}":
@@ -7114,6 +7195,36 @@ class Parser:
 
         self._restore_parser_state(saved)
         return CommandSubstitution(cmd), text
+
+    def _parse_funsub(self, start: int) -> tuple[Node | None, str]:
+        """Parse brace command substitution ${ cmd; } or ${| cmd; }.
+
+        Called from Lexer when ${ followed by funsub char is detected.
+        start is position of $, and we're at the char after {.
+        """
+        self._sync_parser()
+        # Skip leading | if present (${| ... } variant)
+        if not self.at_end() and self.peek() == "|":
+            self.advance()
+        # Save state and set up for inline parsing with EOF token
+        saved = self._save_parser_state()
+        self._set_state(ParserStateFlags.PST_CMDSUBST)
+        self._eof_token = "}"
+        self._eof_depth = 0
+        # Parse the command list inline - lexer will stop at matching }
+        cmd = self.parse_list()
+        if cmd is None:
+            cmd = Empty()
+        # After parse_list, we should be at the closing }
+        self.skip_whitespace_and_newlines()
+        if self.at_end() or self.peek() != "}":
+            self._restore_parser_state(saved)
+            raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
+        self.advance()  # consume final }
+        text = _substring(self.source, start, self.pos)
+        self._restore_parser_state(saved)
+        self._sync_lexer()
+        return CommandSubstitution(cmd, brace=True), text
 
     def _is_assignment_word(self, word: Word) -> bool:
         """Check if a word is an assignment (name=value) where name is a valid identifier."""

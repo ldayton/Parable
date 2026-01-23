@@ -2372,12 +2372,16 @@ class Word(Node):
                     # Control character \cX - mask with 0x1f
                     if i + 3 <= len(inner):
                         ctrl_char = inner[i + 2]
+                        # POSIX: $'\c\\' consumes both backslashes
+                        skip_extra = 0
+                        if ctrl_char == "\\" and i + 4 <= len(inner) and inner[i + 3] == "\\":
+                            skip_extra = 1
                         ctrl_val = ord(ctrl_char) & 0x1F
                         if ctrl_val == 0:
                             # NUL truncates string
                             return "'" + result.decode("utf-8", errors="replace") + "'"
                         self._append_with_ctlesc(result, ctrl_val)
-                        i += 3
+                        i += 3 + skip_extra
                     else:
                         result.append(ord(inner[i]))
                         i += 1

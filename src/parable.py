@@ -6248,6 +6248,11 @@ def _is_metachar(c: str) -> bool:
     )
 
 
+def _is_funsub_char(c: str) -> bool:
+    """Check if character triggers brace command substitution (funsub)."""
+    return c == " " or c == "\t" or c == "\n" or c == "|"
+
+
 def _is_extglob_prefix(c: str) -> bool:
     return c == "@" or c == "?" or c == "*" or c == "+" or c == "!"
 

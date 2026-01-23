@@ -7455,6 +7455,10 @@ function _isMetachar(c) {
 	);
 }
 
+function _isFunsubChar(c) {
+	return c === " " || c === "\t" || c === "\n" || c === "|";
+}
+
 function _isExtglobPrefix(c) {
 	return c === "@" || c === "?" || c === "*" || c === "+" || c === "!";
 }

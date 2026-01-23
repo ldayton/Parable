@@ -35,5 +35,5 @@ fi
 === unbalanced paren in cmdsub is syntax error
 x=$(foo(:bar))
 ---
-<infinite>
+<error>
 ---

@@ -1,4 +1,5 @@
 === coproc with invalid name followed by arithmetic expression
+# @extglob
 coproc +(())
 ---
 (coproc "COPROC" (command (word "+(())")))

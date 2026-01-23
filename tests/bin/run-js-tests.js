@@ -76,8 +76,15 @@ function normalize(s) {
 }
 
 function runTest(testInput, testExpected) {
+  // Check for @extglob directive
+  let extglob = false;
+  if (testInput.startsWith('# @extglob\n')) {
+    extglob = true;
+    testInput = testInput.slice('# @extglob\n'.length);
+  }
+
   try {
-    const nodes = parse(testInput);
+    const nodes = parse(testInput, extglob);
     const actual = nodes.map(n => n.toSexp()).join(' ');
     const expectedNorm = normalize(testExpected);
     // If we expected an error but got a successful parse, that's a failure

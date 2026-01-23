@@ -2,6 +2,7 @@
 # Extended glob patterns @(), ?(), *(), +(), !() must be handled
 
 === basic @() extglob
+# @extglob
 case $x in @(a|b)) echo match;; esac
 ---
 (case (word "$x") (pattern ((word "@(a|b)")) (command (word "echo") (word "match"))))
@@ -9,6 +10,7 @@ case $x in @(a|b)) echo match;; esac
 
 
 === basic ?() extglob
+# @extglob
 case $x in ?(foo|bar)) echo match;; esac
 ---
 (case (word "$x") (pattern ((word "?(foo|bar)")) (command (word "echo") (word "match"))))
@@ -16,6 +18,7 @@ case $x in ?(foo|bar)) echo match;; esac
 
 
 === basic *() extglob
+# @extglob
 case $x in *(a|b|c)) echo match;; esac
 ---
 (case (word "$x") (pattern ((word "*(a|b|c)")) (command (word "echo") (word "match"))))
@@ -23,6 +26,7 @@ case $x in *(a|b|c)) echo match;; esac
 
 
 === basic +() extglob
+# @extglob
 case $x in +(one|two)) echo match;; esac
 ---
 (case (word "$x") (pattern ((word "+(one|two)")) (command (word "echo") (word "match"))))
@@ -30,6 +34,7 @@ case $x in +(one|two)) echo match;; esac
 
 
 === basic !() extglob
+# @extglob
 case $x in !(bad|worse)) echo good;; esac
 ---
 (case (word "$x") (pattern ((word "!(bad|worse)")) (command (word "echo") (word "good"))))
@@ -37,6 +42,7 @@ case $x in !(bad|worse)) echo good;; esac
 
 
 === extglob single alternative
+# @extglob
 case $x in @(foo)) echo foo;; esac
 ---
 (case (word "$x") (pattern ((word "@(foo)")) (command (word "echo") (word "foo"))))
@@ -44,6 +50,7 @@ case $x in @(foo)) echo foo;; esac
 
 
 === extglob many alternatives
+# @extglob
 case $x in @(a|b|c|d|e)) echo match;; esac
 ---
 (case (word "$x") (pattern ((word "@(a|b|c|d|e)")) (command (word "echo") (word "match"))))
@@ -51,6 +58,7 @@ case $x in @(a|b|c|d|e)) echo match;; esac
 
 
 === nested extglobs
+# @extglob
 case $x in @(a|@(b|c))) echo match;; esac
 ---
 (case (word "$x") (pattern ((word "@(a|@(b|c))")) (command (word "echo") (word "match"))))
@@ -58,6 +66,7 @@ case $x in @(a|@(b|c))) echo match;; esac
 
 
 === mixed nested extglobs
+# @extglob
 case $x in @(?(a)|+(b))) echo match;; esac
 ---
 (case (word "$x") (pattern ((word "@(?(a)|+(b))")) (command (word "echo") (word "match"))))
@@ -65,6 +74,7 @@ case $x in @(?(a)|+(b))) echo match;; esac
 
 
 === extglob with trailing glob
+# @extglob
 case $x in @(foo|bar)*) echo prefix;; esac
 ---
 (case (word "$x") (pattern ((word "@(foo|bar)*")) (command (word "echo") (word "prefix"))))
@@ -72,6 +82,7 @@ case $x in @(foo|bar)*) echo prefix;; esac
 
 
 === extglob with leading glob
+# @extglob
 case $x in *@(foo|bar)) echo suffix;; esac
 ---
 (case (word "$x") (pattern ((word "*@(foo|bar)")) (command (word "echo") (word "suffix"))))
@@ -79,6 +90,7 @@ case $x in *@(foo|bar)) echo suffix;; esac
 
 
 === extglob in middle
+# @extglob
 case $x in pre@(a|b)post) echo match;; esac
 ---
 (case (word "$x") (pattern ((word "pre@(a|b)post")) (command (word "echo") (word "match"))))
@@ -86,6 +98,7 @@ case $x in pre@(a|b)post) echo match;; esac
 
 
 === multiple extglobs in alternation
+# @extglob
 case $x in @(a|b)|@(c|d)) echo match;; esac
 ---
 (case (word "$x") (pattern ((word "@(a|b)") (word "@(c|d)")) (command (word "echo") (word "match"))))
@@ -93,6 +106,7 @@ case $x in @(a|b)|@(c|d)) echo match;; esac
 
 
 === extglob empty body
+# @extglob
 case $x in @(a|b));; esac
 ---
 (case (word "$x") (pattern ((word "@(a|b)")) ()))
@@ -100,6 +114,7 @@ case $x in @(a|b));; esac
 
 
 === multiple clauses with extglobs
+# @extglob
 case $x in @(a)) echo a;; @(b)) echo b;; esac
 ---
 (case (word "$x") (pattern ((word "@(a)")) (command (word "echo") (word "a"))) (pattern ((word "@(b)")) (command (word "echo") (word "b"))))
@@ -107,6 +122,7 @@ case $x in @(a)) echo a;; @(b)) echo b;; esac
 
 
 === extglob with optional leading paren
+# @extglob
 case $x in (@(a|b)) echo match;; esac
 ---
 (case (word "$x") (pattern ((word "@(a|b)")) (command (word "echo") (word "match"))))
@@ -114,6 +130,7 @@ case $x in (@(a|b)) echo match;; esac
 
 
 === extglob with wildcards inside
+# @extglob
 case $x in @(*.txt|*.md)) echo doc;; esac
 ---
 (case (word "$x") (pattern ((word "@(*.txt|*.md)")) (command (word "echo") (word "doc"))))
@@ -121,6 +138,7 @@ case $x in @(*.txt|*.md)) echo doc;; esac
 
 
 === extglob with character classes
+# @extglob
 case $x in @([a-z]*|[0-9]*)) echo match;; esac
 ---
 (case (word "$x") (pattern ((word "@([a-z]*|[0-9]*)")) (command (word "echo") (word "match"))))
@@ -128,6 +146,7 @@ case $x in @([a-z]*|[0-9]*)) echo match;; esac
 
 
 === extglob and regular alternation
+# @extglob
 case $x in foo|@(bar|baz)) echo match;; esac
 ---
 (case (word "$x") (pattern ((word "foo") (word "@(bar|baz)")) (command (word "echo") (word "match"))))
@@ -135,6 +154,7 @@ case $x in foo|@(bar|baz)) echo match;; esac
 
 
 === regular and extglob alternation
+# @extglob
 case $x in @(foo|bar)|baz) echo match;; esac
 ---
 (case (word "$x") (pattern ((word "@(foo|bar)") (word "baz")) (command (word "echo") (word "match"))))
@@ -142,6 +162,7 @@ case $x in @(foo|bar)|baz) echo match;; esac
 
 
 === deeply nested extglobs
+# @extglob
 case $x in @(@(@(a)))) echo match;; esac
 ---
 (case (word "$x") (pattern ((word "@(@(@(a)))")) (command (word "echo") (word "match"))))
@@ -149,6 +170,7 @@ case $x in @(@(@(a)))) echo match;; esac
 
 
 === command sub inside extglob
+# @extglob
 case $x in @($(echo a)|b)) echo match;; esac
 ---
 (case (word "$x") (pattern ((word "@($(echo a)|b)")) (command (word "echo") (word "match"))))
@@ -156,6 +178,7 @@ case $x in @($(echo a)|b)) echo match;; esac
 
 
 === quoted content inside extglob
+# @extglob
 case $x in @("foo"|bar)) echo match;; esac
 ---
 (case (word "$x") (pattern ((word "@(\"foo\"|bar)")) (command (word "echo") (word "match"))))
@@ -163,6 +186,7 @@ case $x in @("foo"|bar)) echo match;; esac
 
 
 === multiple extglobs in pattern
+# @extglob
 case $x in @(a)*@(b)) echo match;; esac
 ---
 (case (word "$x") (pattern ((word "@(a)*@(b)")) (command (word "echo") (word "match"))))
@@ -170,6 +194,7 @@ case $x in @(a)*@(b)) echo match;; esac
 
 
 === escaped paren inside extglob
+# @extglob
 case $x in @(a\)|b)) echo match;; esac
 ---
 (case (word "$x") (pattern ((word "@(a\\)|b)")) (command (word "echo") (word "match"))))
@@ -177,6 +202,7 @@ case $x in @(a\)|b)) echo match;; esac
 
 
 === arithmetic expansion inside extglob
+# @extglob
 case $x in @($((1+2)))) echo match;; esac
 ---
 (case (word "$x") (pattern ((word "@($((1+2)))")) (command (word "echo") (word "match"))))
@@ -184,6 +210,7 @@ case $x in @($((1+2)))) echo match;; esac
 
 
 === grouping parens inside extglob
+# @extglob
 case $x in @((a))) echo match;; esac
 ---
 (case (word "$x") (pattern ((word "@((a))")) (command (word "echo") (word "match"))))
@@ -191,6 +218,7 @@ case $x in @((a))) echo match;; esac
 
 
 === nested grouping in extglob
+# @extglob
 case $x in @((a|b)|(c))) echo match;; esac
 ---
 (case (word "$x") (pattern ((word "@((a|b)|(c))")) (command (word "echo") (word "match"))))
@@ -198,6 +226,7 @@ case $x in @((a|b)|(c))) echo match;; esac
 
 
 === backtick command sub in extglob
+# @extglob
 case $x in @(`cmd`)) echo match;; esac
 ---
 (case (word "$x") (pattern ((word "@(`cmd`)")) (command (word "echo") (word "match"))))

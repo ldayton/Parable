@@ -1,4 +1,5 @@
 === cmdsub inside extglob not reformatted
+# @extglob
 echo @($(e&f))
 ---
 (command (word "echo") (word "@($(e&f))"))

@@ -1,4 +1,5 @@
 === backslash-newline inside extglob should be stripped
+# @extglob
 <*(\
 )
 ---

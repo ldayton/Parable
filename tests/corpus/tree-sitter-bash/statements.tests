@@ -138,6 +138,7 @@ fi
 ---
 
 === If statements with conditional expressions
+# @extglob
 if [ "$(uname)" == 'Darwin' ]; then
   echo one
 fi
@@ -263,6 +264,7 @@ esac
 ---
 
 === Test commands
+# @extglob
 if [[ "$lsb_dist" != 'Ubuntu' || $(ver_to_int "$lsb_release") < $(ver_to_int '14.04') ]]; then
 	return 1
 fi
@@ -320,6 +322,7 @@ $((${n} < 10 ? ${n} : 10))
 ---
 
 === Test commands with regexes
+# @extglob
 [[ "35d8b" =~ ^[0-9a-fA-F] ]]
 [[ $CMD =~ (^|;)update_terminal_cwd($|;) ]]
 [[ ! " ${completions[*]} " =~ " $alias_cmd " ]]
@@ -360,6 +363,7 @@ $((${n} < 10 ? ${n} : 10))
 ---
 
 === Test command paren statefulness with a case glob
+# @extglob
 [[ ${test} == @($(IFS='|'; echo "${skip[*]}")) ]]
 
 case ${out} in

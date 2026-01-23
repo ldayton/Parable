@@ -1,4 +1,5 @@
 === extglob pattern a*() not parsed as function
+# @extglob
 a*()
 { :; }
 ---

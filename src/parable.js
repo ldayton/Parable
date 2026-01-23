@@ -7,10 +7,6 @@
  * const ast = parse("ps aux | grep python | awk '{print $2}'")
  */
 
-function _bool(x) {
-	return Array.isArray(x) ? x.length > 0 : Boolean(x);
-}
-
 class ParseError extends Error {
 	constructor(message, pos, line) {
 		super();
@@ -1143,7 +1139,7 @@ class Lexer {
 					// ${ ... } parameter expansion - use full parsing
 					this.pos -= 1;
 					this._syncToParser();
-					in_dquote = _bool(flags & MatchedPairFlags.DQUOTE);
+					in_dquote = Boolean(flags & MatchedPairFlags.DQUOTE);
 					[param_node, param_text] =
 						this._parser._parseParamExpansion(in_dquote);
 					this._syncFromParser();

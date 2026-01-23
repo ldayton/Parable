@@ -104,11 +104,6 @@ class JSTranspiler(ast.NodeVisitor):
                         self.emit(" *")
                 self.emit(" */")
             self.emit("")
-        # Emit helper for Python bool() semantics (empty arrays are falsy)
-        self.emit("function _bool(x) {")
-        self.emit("    return Array.isArray(x) ? x.length > 0 : Boolean(x);")
-        self.emit("}")
-        self.emit("")
         for stmt in node.body:
             # Skip unused module-level variable definitions
             if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
@@ -695,7 +690,7 @@ class JSTranspiler(ast.NodeVisitor):
                     return f"parseInt({args})"
                 return f"parseInt({args}, 10)"
             if name == "bool":
-                return f"_bool({args})"
+                return f"Boolean({args})"
             if name == "ord":
                 return f"{args}.charCodeAt(0)"
             if name == "chr":

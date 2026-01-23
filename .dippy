@@ -1,33 +1,33 @@
 # Dippy config for Parable
 
 #---- Python ----#
-deny python3 * "Use `uv run python`"
-deny python * "Use `uv run python`"
-allow uv run python *
-allow uv run python3 *
+deny python3 "Use `uv run python` to run in project env"
+deny python "Use `uv run python` to run in project env"
+allow uv run python
+allow uv run python3
 allow rm -rf /**/__pycache__
-deny uv run ruff * "Use `just fmt --fix and just lint --fix`"
-deny uv run tests/* "use `just test`"
-deny uv run tests/bin/run-tests.py *bigtable* "There's no test runner for the bigtable tests, if `just check` passes, you're ready to commit"
+deny uv run ruff "Use `just fmt --fix and just lint --fix`"
+deny uv run tests "use `just test`"
 
 #---- Just targets ----#
-allow just check *
-allow just fmt *
-allow just lint *
-allow just test *
-allow just test-js *
-allow just transpile *
+allow just check
+allow just fmt
+allow just lint
+allow just test
+allow just test-js
+allow just transpile
 deny just test-all "Don't worry about other Python versions, `just test` and `just check` are all you need"
 
 #---- Bash ----#
 deny bash * "Use `~/source/bash-oracle/bash-oracle -e`"
 deny node tests/* "Use `just test-js`"
-allow ~/source/bash-oracle/bash-oracle *
 deny-redirect * "Redirects only allowed to /tmp/* or to stdin/stderr"
 allow-redirect /tmp/**
 
 #---- Javascript ----#
-allow node -e *
+allow node -e
 
-#---- After ----#
-# after git commit * "re-read ~/source/Parable/tools/fuzzer/prompt.md and continue to next iteration"
+#---- Scripts ----#
+allow bin/parable-dump.py
+allow ~/source/bash-oracle/bash-oracle *
+deny tests/bin/run-tests.py *bigtable* "There's no test runner for the bigtable tests, if `just check` passes, you're ready to commit"

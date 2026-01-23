@@ -464,12 +464,14 @@ class Lexer {
 		this._word_context = WORD_CTX_NORMAL;
 		this._at_command_start = false;
 		this._in_array_literal = false;
+		this._in_assign_builtin = false;
 		// Position after reading a token (may differ from token.pos due to heredocs)
 		this._post_read_pos = 0;
 		// Context used when token was cached (for cache invalidation)
 		this._cached_word_context = WORD_CTX_NORMAL;
 		this._cached_at_command_start = false;
 		this._cached_in_array_literal = false;
+		this._cached_in_assign_builtin = false;
 	}
 
 	peek() {
@@ -1212,7 +1214,12 @@ class Lexer {
 		return this._parseMatchedPair("{", "}", flags | MatchedPairFlags.DOLBRACE);
 	}
 
-	_readWordInternal(ctx, at_command_start, in_array_literal) {
+	_readWordInternal(
+		ctx,
+		at_command_start,
+		in_array_literal,
+		in_assign_builtin,
+	) {
 		let ansi_result,
 			array_result,
 			bracket_depth,
@@ -1242,6 +1249,9 @@ class Lexer {
 		}
 		if (in_array_literal == null) {
 			in_array_literal = false;
+		}
+		if (in_assign_builtin == null) {
+			in_assign_builtin = false;
 		}
 		start = this.pos;
 		chars = [];
@@ -1566,7 +1576,7 @@ class Lexer {
 					// Check chars before = form valid name
 					is_array_assign = _isArrayAssignmentPrefix(chars.slice(0, -1));
 				}
-				if (is_array_assign) {
+				if (is_array_assign && (at_command_start || in_assign_builtin)) {
 					this._syncToParser();
 					array_result = this._parser._parseArrayLiteral();
 					this._syncFromParser();
@@ -1642,6 +1652,7 @@ class Lexer {
 			this._word_context,
 			this._at_command_start,
 			this._in_array_literal,
+			this._in_assign_builtin,
 		);
 		if (word == null) {
 			return null;
@@ -7426,6 +7437,17 @@ const COMPOUND_KEYWORDS = new Set([
 	"case",
 	"select",
 ]);
+// Builtins that allow array assignments in argument position (bash's ASSIGNMENT_BUILTIN flag)
+const ASSIGNMENT_BUILTINS = new Set([
+	"alias",
+	"declare",
+	"typeset",
+	"local",
+	"export",
+	"readonly",
+	"eval",
+	"let",
+]);
 function _isQuote(c) {
 	return c === "'" || c === '"';
 }
@@ -7856,6 +7878,7 @@ class Parser {
 		this._word_context = WORD_CTX_NORMAL;
 		this._at_command_start = false;
 		this._in_array_literal = false;
+		this._in_assign_builtin = false;
 	}
 
 	_setState(flag) {
@@ -7949,7 +7972,8 @@ class Parser {
 				this._lexer._token_cache.pos !== this.pos ||
 				this._lexer._cached_word_context !== this._word_context ||
 				this._lexer._cached_at_command_start !== this._at_command_start ||
-				this._lexer._cached_in_array_literal !== this._in_array_literal
+				this._lexer._cached_in_array_literal !== this._in_array_literal ||
+				this._lexer._cached_in_assign_builtin !== this._in_assign_builtin
 			) {
 				this._lexer._token_cache = null;
 			}
@@ -7965,6 +7989,7 @@ class Parser {
 		this._lexer._word_context = this._word_context;
 		this._lexer._at_command_start = this._at_command_start;
 		this._lexer._in_array_literal = this._in_array_literal;
+		this._lexer._in_assign_builtin = this._in_assign_builtin;
 	}
 
 	_syncParser() {
@@ -7980,7 +8005,8 @@ class Parser {
 			this._lexer._token_cache.pos === this.pos &&
 			this._lexer._cached_word_context === this._word_context &&
 			this._lexer._cached_at_command_start === this._at_command_start &&
-			this._lexer._cached_in_array_literal === this._in_array_literal
+			this._lexer._cached_in_array_literal === this._in_array_literal &&
+			this._lexer._cached_in_assign_builtin === this._in_assign_builtin
 		) {
 			return this._lexer._token_cache;
 		}
@@ -7992,6 +8018,7 @@ class Parser {
 		this._lexer._cached_word_context = this._word_context;
 		this._lexer._cached_at_command_start = this._at_command_start;
 		this._lexer._cached_in_array_literal = this._in_array_literal;
+		this._lexer._cached_in_assign_builtin = this._in_assign_builtin;
 		// Save the post-read position (may have advanced for heredocs)
 		this._lexer._post_read_pos = this._lexer.pos;
 		// Restore parser position for peek semantics
@@ -8007,7 +8034,8 @@ class Parser {
 			this._lexer._token_cache.pos === this.pos &&
 			this._lexer._cached_word_context === this._word_context &&
 			this._lexer._cached_at_command_start === this._at_command_start &&
-			this._lexer._cached_in_array_literal === this._in_array_literal
+			this._lexer._cached_in_array_literal === this._in_array_literal &&
+			this._lexer._cached_in_assign_builtin === this._in_assign_builtin
 		) {
 			// Consume cached token - use saved post-read position
 			tok = this._lexer.nextToken();
@@ -8021,6 +8049,7 @@ class Parser {
 			this._lexer._cached_word_context = this._word_context;
 			this._lexer._cached_at_command_start = this._at_command_start;
 			this._lexer._cached_in_array_literal = this._in_array_literal;
+			this._lexer._cached_in_assign_builtin = this._in_assign_builtin;
 			this._syncParser();
 		}
 		this._recordToken(tok);
@@ -8504,13 +8533,16 @@ class Parser {
 		return this.parseWord(at_command_start, in_array_literal);
 	}
 
-	parseWord(at_command_start, in_array_literal) {
+	parseWord(at_command_start, in_array_literal, in_assign_builtin) {
 		let tok;
 		if (at_command_start == null) {
 			at_command_start = false;
 		}
 		if (in_array_literal == null) {
 			in_array_literal = false;
+		}
+		if (in_assign_builtin == null) {
+			in_assign_builtin = false;
 		}
 		this.skipWhitespace();
 		if (this.atEnd()) {
@@ -8519,17 +8551,20 @@ class Parser {
 		// Set context for Lexer before peeking
 		this._at_command_start = at_command_start;
 		this._in_array_literal = in_array_literal;
+		this._in_assign_builtin = in_assign_builtin;
 		tok = this._lexPeekToken();
 		if (tok.type !== TokenType.WORD) {
 			// Reset context when not a word to avoid affecting subsequent calls
 			this._at_command_start = false;
 			this._in_array_literal = false;
+			this._in_assign_builtin = false;
 			return null;
 		}
 		this._lexNextToken();
 		// Reset context after consuming to avoid affecting subsequent calls
 		this._at_command_start = false;
 		this._in_array_literal = false;
+		this._in_assign_builtin = false;
 		return tok.word;
 	}
 
@@ -10811,7 +10846,14 @@ class Parser {
 	}
 
 	parseCommand() {
-		let all_assignments, redirect, redirects, reserved, w, word, words;
+		let all_assignments,
+			in_assign_builtin,
+			redirect,
+			redirects,
+			reserved,
+			w,
+			word,
+			words;
 		words = [];
 		redirects = [];
 		while (true) {
@@ -10848,8 +10890,15 @@ class Parser {
 					break;
 				}
 			}
+			// Check if first word is an assignment builtin (bash's PST_ASSIGNOK)
+			// This allows array literal assignments after builtins like declare, local, export
+			// but does NOT enable bracket tracking (which is only for true command start)
+			in_assign_builtin =
+				words.length > 0 && ASSIGNMENT_BUILTINS.has(words[0].value);
 			word = this.parseWord(
 				!words || (all_assignments && redirects.length === 0),
+				false,
+				in_assign_builtin,
 			);
 			if (word == null) {
 				break;

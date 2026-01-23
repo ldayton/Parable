@@ -1,0 +1,23 @@
+=== array assignment after word is syntax error
+x a=()
+---
+<error>
+---
+
+=== array assignment after quoted empty string is syntax error
+'' a=()
+---
+<error>
+---
+
+=== array assignment at command start is valid
+a=()
+---
+(command (word "a=()"))
+---
+
+=== array assignment after another assignment is valid
+x=1 a=()
+---
+(command (word "x=1") (word "a=()"))
+---

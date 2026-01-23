@@ -998,7 +998,8 @@ class Lexer {
 	}
 
 	_parseMatchedPair(open_char, close_char, flags) {
-		let arith_node,
+		let after_brace_pos,
+			arith_node,
 			arith_text,
 			ch,
 			chars,
@@ -1120,6 +1121,19 @@ class Lexer {
 			if (ch === "$" && !this.atEnd() && !(flags & MatchedPairFlags.EXTGLOB)) {
 				next_ch = this.peek();
 				if (next_ch === "{") {
+					// In ARITH mode, only parse ${ if followed by funsub char (bash parse.y:4137-4145)
+					// Otherwise treat $ as literal
+					if (flags & MatchedPairFlags.ARITH) {
+						after_brace_pos = this.pos + 1;
+						if (
+							after_brace_pos >= this.length ||
+							!_isFunsubChar(this.source[after_brace_pos])
+						) {
+							// Not funsub - treat $ as literal
+							chars.push(ch);
+							continue;
+						}
+					}
 					// ${ ... } parameter expansion - use full parsing
 					this.pos -= 1;
 					this._syncToParser();

@@ -1871,6 +1871,10 @@ class Lexer:
         saved_dolbrace = self._dolbrace_state
         self._dolbrace_state = DolbraceState.PARAM
         ch = self.peek()
+        # Brace command substitution ${ cmd; } or ${| cmd; }
+        if _is_funsub_char(ch):
+            self._dolbrace_state = saved_dolbrace
+            return self._read_funsub(start)
         # ${#param} - length
         if ch == "#":
             self.advance()
@@ -2017,6 +2021,12 @@ class Lexer:
         text = "${" + param + op + arg + "}"
         self._dolbrace_state = saved_dolbrace
         return ParamExpansion(param, op, arg), text
+
+    def _read_funsub(self, start: int) -> tuple[Node | None, str]:
+        """Read brace command substitution ${ cmd; } or ${| cmd; }."""
+        content = self._parse_matched_pair("{", "}", MatchedPairFlags.DOLBRACE)
+        text = "${" + content + "}"
+        return ParamExpansion(content), text
 
     # Reserved words mapping
     RESERVED_WORDS: dict[str, int] = {

@@ -2196,6 +2196,11 @@ class Lexer {
 		saved_dolbrace = this._dolbrace_state;
 		this._dolbrace_state = DolbraceState.PARAM;
 		ch = this.peek();
+		// Brace command substitution ${ cmd; } or ${| cmd; }
+		if (_isFunsubChar(ch)) {
+			this._dolbrace_state = saved_dolbrace;
+			return this._readFunsub(start);
+		}
 		// ${#param} - length
 		if (ch === "#") {
 			this.advance();
@@ -2370,6 +2375,13 @@ class Lexer {
 		text = `\${${param}${op}${arg}}`;
 		this._dolbrace_state = saved_dolbrace;
 		return [new ParamExpansion(param, op, arg), text];
+	}
+
+	_readFunsub(start) {
+		let content, text;
+		content = this._parseMatchedPair("{", "}", MatchedPairFlags.DOLBRACE);
+		text = `\${${content}}`;
+		return [new ParamExpansion(content), text];
 	}
 
 	// Reserved words mapping

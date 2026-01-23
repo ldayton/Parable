@@ -1,0 +1,5 @@
+=== unmatched quote inside parameter expansion
+${!z"}
+---
+<error>
+---

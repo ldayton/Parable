@@ -2246,10 +2246,10 @@ class Lexer {
 				}
 				// Check for operator (e.g., ${!##} = indirect of # with # op)
 				op = this._consumeParamOperator();
-				if (op == null && !this.atEnd() && this.peek() !== "}") {
+				if (op == null && !this.atEnd() && !"}\"'`".includes(this.peek())) {
 					op = this.advance();
 				}
-				if (op != null) {
+				if (op != null && !"\"'`".includes(op)) {
 					arg = this._parseMatchedPair("{", "}", MatchedPairFlags.DOLBRACE);
 					text = this.source.slice(start, this.pos);
 					this._dolbrace_state = saved_dolbrace;

@@ -1,0 +1,16 @@
+# Original: 'a\n${!|y}'
+# Parable:  (command (word "a")) (command (word "${!y"))
+=== delete '|' at 5; delete '}' at 6
+${!y
+---
+<error>
+---
+
+# Original: '"${[\']}\n"${[\']}"'
+# Parable:  (command (word "\"${['-}\n\"{[']}\""))
+=== replace ']' with '-' at 5; swap at 8
+"${'$"'}"
+---
+(command (word "\"${['-}\n$\"{[']}\""))
+---
+

@@ -21,12 +21,19 @@ def _check_timeout():
         raise TimeoutError("timeout")
 
 
+MAX_DDMIN_TESTS = 50  # Bail early on hard-to-minimize inputs
+
+
 def ddmin(chars: list[str], test_fn) -> list[str]:
     """Delta debugging algorithm - find 1-minimal failing input."""
+    import time
     n = 2
     tests = 0
+    start_time = time.time()
     while len(chars) >= 2:
         _check_timeout()
+        if tests >= MAX_DDMIN_TESTS:
+            break  # Bail early
         chunk_size = max(len(chars) // n, 1)
         reduced = False
         for i in range(n):
@@ -36,25 +43,35 @@ def ddmin(chars: list[str], test_fn) -> list[str]:
             if not candidate:
                 continue
             tests += 1
+            test_start = time.time()
+            result = test_fn(candidate)
+            test_elapsed = time.time() - test_start
+            if test_elapsed > 0.1:
+                print(f"  [ddmin] test {tests} took {test_elapsed:.2f}s, len={len(candidate)}", file=sys.stderr)
             if _verbose:
                 print(f"  [{tests}] {len(chars)} -> {len(candidate)} chars", file=sys.stderr)
-            if test_fn(candidate):
+            if result:
                 chars = candidate
                 n = max(n - 1, 2)
                 reduced = True
+                break
+            if tests >= MAX_DDMIN_TESTS:
                 break
         if not reduced:
             if n >= len(chars):
                 break
             n = min(n * 2, len(chars))
-    if _verbose:
-        print(f"  Done after {tests} tests", file=sys.stderr)
+    elapsed = time.time() - start_time
+    if elapsed > 1.0 or tests > 20:
+        print(f"  [ddmin] {tests} tests in {elapsed:.2f}s, final len={len(chars)}", file=sys.stderr)
     return chars
 
 
 def is_interesting(input_text: str) -> bool:
     """Check if input shows a discrepancy between Parable and oracle."""
+    _check_timeout()  # Check deadline before expensive operations
     parable = run_parable(input_text)
+    _check_timeout()
     oracle = run_oracle(input_text)
     # Both error -> no discrepancy
     if parable is None and oracle is None:

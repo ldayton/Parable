@@ -23,6 +23,7 @@ class TestCase:
     name: str
     input: str
     expected: str
+    extglob: bool = False
 
 
 @dataclass
@@ -66,13 +67,20 @@ def parse_test_file(filepath: Path) -> list[TestCase]:
                 i += 1
             while expected_lines and expected_lines[-1].strip() == "":
                 expected_lines.pop()
+            test_input = "\n".join(input_lines)
+            # Check for @extglob directive
+            extglob = False
+            if test_input.startswith("# @extglob\n"):
+                extglob = True
+                test_input = test_input[len("# @extglob\n") :]
             tests.append(
                 TestCase(
                     file=str(filepath),
                     line=start_line,
                     name=name,
-                    input="\n".join(input_lines),
+                    input=test_input,
                     expected="\n".join(expected_lines),
+                    extglob=extglob,
                 )
             )
         else:
@@ -80,11 +88,15 @@ def parse_test_file(filepath: Path) -> list[TestCase]:
     return tests
 
 
-def get_oracle_output(input_text: str) -> str | None:
+def get_oracle_output(input_text: str, extglob: bool = False) -> str | None:
     """Get bash-oracle output for the given input. Returns '<error>' for syntax errors."""
     try:
+        cmd = [str(ORACLE_PATH)]
+        if extglob:
+            cmd.append("--extglob")
+        cmd.extend(["-e", input_text])
         result = subprocess.run(
-            [str(ORACLE_PATH), "-e", input_text],
+            cmd,
             capture_output=True,
             timeout=5,
         )
@@ -123,7 +135,7 @@ def worker_process(work_queue, result_queue, stop_event) -> None:
                 )
             )
             continue
-        oracle_output = get_oracle_output(tc.input)
+        oracle_output = get_oracle_output(tc.input, tc.extglob)
         if oracle_output is None:
             result_queue.put(
                 WorkerResult(

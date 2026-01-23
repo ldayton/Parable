@@ -68,15 +68,19 @@ def parse_test_file(filepath: Path) -> list[str]:
     return inputs
 
 
-def run_oracle(input_text: str) -> str | None:
+def run_oracle(input_text: str, extglob: bool = False) -> str | None:
     """Run bash-oracle on input. Returns s-expr or None on error/timeout."""
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".sh", delete=False) as f:
             f.write(input_text)
             tmp_path = Path(f.name)
+        cmd = [str(ORACLE_PATH)]
+        if extglob:
+            cmd.append("--extglob")
+        cmd.append(str(tmp_path))
         result = subprocess.run(
-            [str(ORACLE_PATH), str(tmp_path)],
+            cmd,
             capture_output=True,
             timeout=5,
         )
@@ -92,10 +96,10 @@ def run_oracle(input_text: str) -> str | None:
             tmp_path.unlink(missing_ok=True)
 
 
-def run_parable(input_text: str) -> str | None:
+def run_parable(input_text: str, extglob: bool = False) -> str | None:
     """Run Parable on input. Returns s-expr, None on parse error, or <crash:...>."""
     try:
-        nodes = parse(input_text)
+        nodes = parse(input_text, extglob=extglob)
         return " ".join(node.to_sexp() for node in nodes)
     except ParseError:
         return None

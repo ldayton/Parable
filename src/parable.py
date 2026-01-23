@@ -1910,9 +1910,9 @@ class Lexer:
                     return ParamIndirect(param + suffix + trailing), text
                 # Check for operator (e.g., ${!##} = indirect of # with # op)
                 op = self._consume_param_operator()
-                if op is None and not self.at_end() and self.peek() != "}":
+                if op is None and not self.at_end() and self.peek() not in "}\"'`":
                     op = self.advance()
-                if op is not None:
+                if op is not None and op not in "\"'`":
                     arg = self._parse_matched_pair("{", "}", MatchedPairFlags.DOLBRACE)
                     text = _substring(self.source, start, self.pos)
                     self._dolbrace_state = saved_dolbrace

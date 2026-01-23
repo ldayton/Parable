@@ -2196,6 +2196,11 @@ class Lexer {
 		saved_dolbrace = this._dolbrace_state;
 		this._dolbrace_state = DolbraceState.PARAM;
 		ch = this.peek();
+		// Brace command substitution ${ cmd; } or ${| cmd; }
+		if (_isFunsubChar(ch)) {
+			this._dolbrace_state = saved_dolbrace;
+			return this._readFunsub(start);
+		}
 		// ${#param} - length
 		if (ch === "#") {
 			this.advance();
@@ -2370,6 +2375,10 @@ class Lexer {
 		text = `\${${param}${op}${arg}}`;
 		this._dolbrace_state = saved_dolbrace;
 		return [new ParamExpansion(param, op, arg), text];
+	}
+
+	_readFunsub(start) {
+		return this._parser._parseFunsub(start);
 	}
 
 	// Reserved words mapping
@@ -3734,6 +3743,7 @@ class Word extends Node {
 			deprecated_arith_depth,
 			depth,
 			direction,
+			ends_with_newline,
 			extglob_depth,
 			final_output,
 			formatted,
@@ -3741,6 +3751,7 @@ class Word extends Node {
 			has_arith,
 			has_brace_cmdsub,
 			has_param_with_procsub_pattern,
+			has_pipe,
 			has_untracked_cmdsub,
 			has_untracked_procsub,
 			i,
@@ -3753,6 +3764,7 @@ class Word extends Node {
 			main_quote,
 			node,
 			normalized_ws,
+			orig_inner,
 			p,
 			parsed,
 			parser,
@@ -3765,6 +3777,7 @@ class Word extends Node {
 			scan_quote,
 			spaced,
 			stripped,
+			suffix,
 			terminator;
 		if (in_arith == null) {
 			in_arith = false;
@@ -4005,6 +4018,49 @@ class Word extends Node {
 				// Keep backtick substitutions as-is (bash-oracle doesn't reformat them)
 				result.push(value.slice(i, j));
 				cmdsub_idx += 1;
+				i = j;
+			} else if (
+				_startsWithAt(value, i, "${") &&
+				i + 2 < value.length &&
+				_isFunsubChar(value[i + 2]) &&
+				!_isBackslashEscaped(value, i)
+			) {
+				// Check for ${ brace command substitution (funsub)
+				// Find matching close brace
+				j = _findFunsubEnd(value, i + 2);
+				// Check if we have a parsed node with brace=True
+				if (
+					cmdsub_idx < cmdsub_parts.length &&
+					(cmdsub_parts[cmdsub_idx].brace ?? false)
+				) {
+					node = cmdsub_parts[cmdsub_idx];
+					formatted = _formatCmdsubNode(node.command);
+					// Determine prefix: ${ or ${|
+					has_pipe = value[i + 2] === "|";
+					prefix = has_pipe ? "${|" : "${ ";
+					// Check if original content ends with newline
+					orig_inner = value.slice(i + 2, j - 1);
+					ends_with_newline = orig_inner.endsWith("\n");
+					// Add terminator before closing brace
+					if (!formatted || /^\s$/.test(formatted)) {
+						// Empty funsub: ${ }
+						suffix = "}";
+					} else if (formatted.endsWith("&") || formatted.endsWith("& ")) {
+						// Background: ${ cmd & }
+						suffix = formatted.endsWith("&") ? " }" : "}";
+					} else if (ends_with_newline) {
+						// Preserve trailing newline: ${ cmd\n }
+						suffix = "\n }";
+					} else {
+						// Normal: ${ cmd; }
+						suffix = "; }";
+					}
+					result.push(prefix + formatted + suffix);
+					cmdsub_idx += 1;
+				} else {
+					// No parsed node, keep as-is
+					result.push(value.slice(i, j));
+				}
 				i = j;
 			} else if (
 				(_startsWithAt(value, i, ">(") || _startsWithAt(value, i, "<(")) &&
@@ -5460,13 +5516,20 @@ class ParamIndirect extends Node {
 }
 
 class CommandSubstitution extends Node {
-	constructor(command) {
+	constructor(command, brace) {
 		super();
+		if (brace == null) {
+			brace = false;
+		}
 		this.kind = "cmdsub";
 		this.command = command;
+		this.brace = brace;
 	}
 
 	toSexp() {
+		if (this.brace) {
+			return `(funsub ${this.command.toSexp()})`;
+		}
 		return `(cmdsub ${this.command.toSexp()})`;
 	}
 }
@@ -6760,6 +6823,44 @@ function _isValidArithmeticStart(value, start) {
 	return false;
 }
 
+function _findFunsubEnd(value, start) {
+	let c, depth, i, quote;
+	depth = 1;
+	i = start;
+	quote = new QuoteState();
+	while (i < value.length && depth > 0) {
+		c = value[i];
+		if (c === "\\" && i + 1 < value.length && !quote.single) {
+			i += 2;
+			continue;
+		}
+		if (c === "'" && !quote.double) {
+			quote.single = !quote.single;
+			i += 1;
+			continue;
+		}
+		if (c === '"' && !quote.single) {
+			quote.double = !quote.double;
+			i += 1;
+			continue;
+		}
+		if (quote.single || quote.double) {
+			i += 1;
+			continue;
+		}
+		if (c === "{") {
+			depth += 1;
+		} else if (c === "}") {
+			depth -= 1;
+			if (depth === 0) {
+				return i + 1;
+			}
+		}
+		i += 1;
+	}
+	return value.length;
+}
+
 function _findCmdsubEnd(value, start) {
 	let arith_depth,
 		arith_paren_depth,
@@ -7455,6 +7556,10 @@ function _isMetachar(c) {
 	);
 }
 
+function _isFunsubChar(c) {
+	return c === " " || c === "\t" || c === "\n" || c === "|";
+}
+
 function _isExtglobPrefix(c) {
 	return c === "@" || c === "?" || c === "*" || c === "+" || c === "!";
 }
@@ -8122,6 +8227,14 @@ class Parser {
 			return false;
 		}
 		ch = this.peek();
+		// Check if we're at the EOF token (e.g., } in funsub or ) in comsub)
+		if (
+			this._eof_token != null &&
+			ch === this._eof_token &&
+			this._eof_depth === 0
+		) {
+			return true;
+		}
 		if (ch === ")") {
 			return true;
 		}
@@ -8440,6 +8553,36 @@ class Parser {
 		text = this.source.slice(start, text_end);
 		this._restoreParserState(saved);
 		return [new CommandSubstitution(cmd), text];
+	}
+
+	_parseFunsub(start) {
+		let cmd, saved, text;
+		this._syncParser();
+		// Skip leading | if present (${| ... } variant)
+		if (!this.atEnd() && this.peek() === "|") {
+			this.advance();
+		}
+		// Save state and set up for inline parsing with EOF token
+		saved = this._saveParserState();
+		this._setState(ParserStateFlags.PST_CMDSUBST);
+		this._eof_token = "}";
+		this._eof_depth = 0;
+		// Parse the command list inline - lexer will stop at matching }
+		cmd = this.parseList();
+		if (cmd == null) {
+			cmd = new Empty();
+		}
+		// After parse_list, we should be at the closing }
+		this.skipWhitespaceAndNewlines();
+		if (this.atEnd() || this.peek() !== "}") {
+			this._restoreParserState(saved);
+			throw new MatchedPairError("unexpected EOF looking for `}'", start);
+		}
+		this.advance();
+		text = this.source.slice(start, this.pos);
+		this._restoreParserState(saved);
+		this._syncLexer();
+		return [new CommandSubstitution(cmd, true), text];
 	}
 
 	_isAssignmentWord(word) {

@@ -2060,8 +2060,11 @@ class Lexer:
                 terminator = " }"
             else:
                 terminator = "; }"
-            # Build the formatted text with normalized prefix
-            prefix = "${ "  # Normalize all funsub prefixes to "${ "
+            # Build the formatted text, preserving ${| vs ${ prefix
+            if inner.startswith("|"):
+                prefix = "${|"
+            else:
+                prefix = "${ "
             formatted_text = prefix + formatted + terminator
             return FunSub(cmd, formatted_text), raw_text
         except Exception:
@@ -3129,12 +3132,15 @@ class Word(Node):
         # Collect command substitutions from all parts, including nested ones
         cmdsub_parts = []
         procsub_parts = []
+        funsub_parts = []
         has_arith = False  # Track if we have any arithmetic expansion nodes
         for p in self.parts:
             if p.kind == "cmdsub":
                 cmdsub_parts.append(p)
             elif p.kind == "procsub":
                 procsub_parts.append(p)
+            elif p.kind == "funsub":
+                funsub_parts.append(p)
             elif p.kind == "arith":
                 has_arith = True
             else:
@@ -3199,6 +3205,7 @@ class Word(Node):
         i = 0
         cmdsub_idx = 0
         procsub_idx = 0
+        funsub_idx = 0
         main_quote = QuoteState()
         extglob_depth = 0
         deprecated_arith_depth = 0  # Track $[...] depth
@@ -3466,7 +3473,6 @@ class Word(Node):
                 or _starts_with_at(value, i, "${\n")
                 or _starts_with_at(value, i, "${|")
             ) and not _is_backslash_escaped(value, i):
-                prefix = _substring(value, i, i + 3).replace("\t", " ").replace("\n", " ")
                 # Find matching close brace
                 j = i + 3
                 depth = 1
@@ -3476,30 +3482,48 @@ class Word(Node):
                     elif value[j] == "}":
                         depth -= 1
                     j += 1
-                # Parse and format the inner content
-                inner = _substring(value, i + 2, j - 1)  # Content between ${ and }
-                # Check if content is all whitespace - normalize to single space
-                if inner.strip() == "":
-                    result.append("${ }")
-                else:
-                    try:
-                        parser = Parser(inner.lstrip(" \t\n|"))
-                        parsed = parser.parse_list()
-                        if parsed:
-                            formatted = _format_cmdsub_node(parsed)
-                            formatted = formatted.rstrip(";")
-                            # Preserve trailing newline from original if present
-                            if inner.rstrip(" \t").endswith("\n"):
-                                terminator = "\n }"
-                            elif formatted.endswith(" &"):
-                                terminator = " }"
-                            else:
-                                terminator = "; }"
-                            result.append(prefix + formatted + terminator)
+                # Use pre-computed formatted_text from FunSub node if available
+                if funsub_idx < len(funsub_parts):
+                    node = funsub_parts[funsub_idx]
+                    if node.formatted_text and not _contains_heredoc(node.command):
+                        result.append(node.formatted_text)
+                    else:
+                        # Heredocs present - format at runtime
+                        formatted = _format_cmdsub_node(node.command)
+                        formatted = formatted.rstrip(";")
+                        inner = _substring(value, i + 2, j - 1)
+                        if inner.rstrip(" \t").endswith("\n"):
+                            terminator = "\n }"
+                        elif formatted.endswith(" &"):
+                            terminator = " }"
                         else:
-                            result.append("${ }")
-                    except Exception:
-                        result.append(_substring(value, i, j))
+                            terminator = "; }"
+                        result.append("${ " + formatted + terminator)
+                    funsub_idx += 1
+                else:
+                    # No AST node - parse and format on the fly
+                    inner = _substring(value, i + 2, j - 1)
+                    prefix = _substring(value, i, i + 3).replace("\t", " ").replace("\n", " ")
+                    if inner.strip() == "":
+                        result.append("${ }")
+                    else:
+                        try:
+                            parser = Parser(inner.lstrip(" \t\n|"))
+                            parsed = parser.parse_list()
+                            if parsed:
+                                formatted = _format_cmdsub_node(parsed)
+                                formatted = formatted.rstrip(";")
+                                if inner.rstrip(" \t").endswith("\n"):
+                                    terminator = "\n }"
+                                elif formatted.endswith(" &"):
+                                    terminator = " }"
+                                else:
+                                    terminator = "; }"
+                                result.append(prefix + formatted + terminator)
+                            else:
+                                result.append("${ }")
+                        except Exception:
+                            result.append(_substring(value, i, j))
                 i = j
             # Process regular ${...} parameter expansions (recursively format cmdsubs inside)
             # But not if the $ is escaped by a backslash

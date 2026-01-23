@@ -2429,8 +2429,12 @@ class Lexer {
 			} else {
 				terminator = "; }";
 			}
-			// Build the formatted text with normalized prefix
-			prefix = "${ ";
+			// Build the formatted text, preserving ${| vs ${ prefix
+			if (inner.startsWith("|")) {
+				prefix = "${|";
+			} else {
+				prefix = "${ ";
+			}
 			formatted_text = prefix + formatted + terminator;
 			return [new FunSub(cmd, formatted_text), raw_text];
 		} catch (_) {
@@ -3805,6 +3809,8 @@ class Word extends Node {
 			final_output,
 			formatted,
 			formatted_inner,
+			funsub_idx,
+			funsub_parts,
 			has_arith,
 			has_brace_cmdsub,
 			has_param_with_procsub_pattern,
@@ -3839,12 +3845,15 @@ class Word extends Node {
 		// Collect command substitutions from all parts, including nested ones
 		cmdsub_parts = [];
 		procsub_parts = [];
+		funsub_parts = [];
 		has_arith = false;
 		for (p of this.parts) {
 			if (p.kind === "cmdsub") {
 				cmdsub_parts.push(p);
 			} else if (p.kind === "procsub") {
 				procsub_parts.push(p);
+			} else if (p.kind === "funsub") {
+				funsub_parts.push(p);
 			} else if (p.kind === "arith") {
 				has_arith = true;
 			} else {
@@ -3922,6 +3931,7 @@ class Word extends Node {
 		i = 0;
 		cmdsub_idx = 0;
 		procsub_idx = 0;
+		funsub_idx = 0;
 		main_quote = new QuoteState();
 		extglob_depth = 0;
 		deprecated_arith_depth = 0;
@@ -4243,10 +4253,6 @@ class Word extends Node {
 			) {
 				// Check for ${ (space/tab/newline) or ${| brace command substitution
 				// But not if the $ is escaped by a backslash
-				prefix = value
-					.slice(i, i + 3)
-					.replaceAll("\t", " ")
-					.replaceAll("\n", " ");
 				// Find matching close brace
 				j = i + 3;
 				depth = 1;
@@ -4258,32 +4264,56 @@ class Word extends Node {
 					}
 					j += 1;
 				}
-				// Parse and format the inner content
-				inner = value.slice(i + 2, j - 1);
-				// Check if content is all whitespace - normalize to single space
-				if (inner.trim() === "") {
-					result.push("${ }");
-				} else {
-					try {
-						parser = new Parser(inner.replace(/^[ \t\n|]+/, ""));
-						parsed = parser.parseList();
-						if (parsed) {
-							formatted = _formatCmdsubNode(parsed);
-							formatted = formatted.replace(/[;]+$/, "");
-							// Preserve trailing newline from original if present
-							if (inner.replace(/[ \t]+$/, "").endsWith("\n")) {
-								terminator = "\n }";
-							} else if (formatted.endsWith(" &")) {
-								terminator = " }";
-							} else {
-								terminator = "; }";
-							}
-							result.push(prefix + formatted + terminator);
+				// Use pre-computed formatted_text from FunSub node if available
+				if (funsub_idx < funsub_parts.length) {
+					node = funsub_parts[funsub_idx];
+					if (node.formatted_text && !_containsHeredoc(node.command)) {
+						result.push(node.formatted_text);
+					} else {
+						// Heredocs present - format at runtime
+						formatted = _formatCmdsubNode(node.command);
+						formatted = formatted.replace(/[;]+$/, "");
+						inner = value.slice(i + 2, j - 1);
+						if (inner.replace(/[ \t]+$/, "").endsWith("\n")) {
+							terminator = "\n }";
+						} else if (formatted.endsWith(" &")) {
+							terminator = " }";
 						} else {
-							result.push("${ }");
+							terminator = "; }";
 						}
-					} catch (_) {
-						result.push(value.slice(i, j));
+						result.push(`\${ ${formatted}${terminator}`);
+					}
+					funsub_idx += 1;
+				} else {
+					// No AST node - parse and format on the fly
+					inner = value.slice(i + 2, j - 1);
+					prefix = value
+						.slice(i, i + 3)
+						.replaceAll("\t", " ")
+						.replaceAll("\n", " ");
+					if (inner.trim() === "") {
+						result.push("${ }");
+					} else {
+						try {
+							parser = new Parser(inner.replace(/^[ \t\n|]+/, ""));
+							parsed = parser.parseList();
+							if (parsed) {
+								formatted = _formatCmdsubNode(parsed);
+								formatted = formatted.replace(/[;]+$/, "");
+								if (inner.replace(/[ \t]+$/, "").endsWith("\n")) {
+									terminator = "\n }";
+								} else if (formatted.endsWith(" &")) {
+									terminator = " }";
+								} else {
+									terminator = "; }";
+								}
+								result.push(prefix + formatted + terminator);
+							} else {
+								result.push("${ }");
+							}
+						} catch (_) {
+							result.push(value.slice(i, j));
+						}
 					}
 				}
 				i = j;

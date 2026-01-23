@@ -68,14 +68,8 @@ def parse_test_file(filepath: Path) -> list[str]:
     return inputs
 
 
-_oracle_stats = {"calls": 0, "timeouts": 0, "slow": 0}
-
-
 def run_oracle(input_text: str, extglob: bool = False) -> str | None:
     """Run bash-oracle on input. Returns s-expr or None on error/timeout."""
-    import time
-    _oracle_stats["calls"] += 1
-    start = time.time()
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".sh", delete=False) as f:
@@ -86,29 +80,16 @@ def run_oracle(input_text: str, extglob: bool = False) -> str | None:
             cmd.append("--extglob")
         cmd.append(str(tmp_path))
         result = subprocess.run(cmd, capture_output=True, timeout=0.5)
-        elapsed = time.time() - start
-        if elapsed > 0.1:
-            _oracle_stats["slow"] += 1
         if result.returncode != 0:
             return None
         return result.stdout.decode("utf-8", errors="replace").strip()
     except subprocess.TimeoutExpired:
-        _oracle_stats["timeouts"] += 1
-        import sys
-        if _oracle_stats["timeouts"] % 10 == 1:
-            print(f"  [oracle] timeout #{_oracle_stats['timeouts']} (calls={_oracle_stats['calls']}, slow={_oracle_stats['slow']})", file=sys.stderr)
         return None
     except (FileNotFoundError, OSError):
         return None
     finally:
         if tmp_path:
             tmp_path.unlink(missing_ok=True)
-
-
-def print_oracle_stats():
-    """Print oracle call statistics."""
-    import sys
-    print(f"[oracle stats] calls={_oracle_stats['calls']}, timeouts={_oracle_stats['timeouts']}, slow={_oracle_stats['slow']}", file=sys.stderr)
 
 
 def run_parable(input_text: str, extglob: bool = False) -> str | None:
@@ -126,8 +107,6 @@ def run_parable(input_text: str, extglob: bool = False) -> str | None:
     except ParseError:
         return None
     except TimeoutError:
-        import sys
-        print(f"  [parable] TIMEOUT on input len={len(input_text)}: {input_text[:50]!r}...", file=sys.stderr)
         return None
     except Exception as e:
         return f"<crash: {type(e).__name__}: {e}>"

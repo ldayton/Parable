@@ -1,9 +1,0 @@
-# Original: 'fun () {\n  argv.py "$@" "$*"\n}\nfun "a b" "c d"'
-# Parable:  (function "fu[" (brace-group (command (word "agrv.py") (word "\"$@\"") (word "\"$*\"")))) (command (word "fun") (word "\"a b\"") (word "\"c d\""))
-=== replace 'n' with '[' at 2; swap at 12
-u[(){ p
-}
----
-<error>
----
-

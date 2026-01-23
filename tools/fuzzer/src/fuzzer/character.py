@@ -10,6 +10,7 @@ Uses loky for robust, deadlock-free multiprocessing with bounded parallelism.
 from __future__ import annotations
 
 import argparse
+import os
 import random
 import re
 import sys
@@ -216,39 +217,20 @@ def fuzz_task(
     seed: int | None,
 ) -> TaskResult:
     """Single fuzz iteration as an independent task. Runs in worker process."""
-    import time
-    import sys
-    task_start = time.time()
-
-    # Seed random for this task
     if seed is not None:
         random.seed(seed)
     else:
         random.seed()
 
     original = random.choice(_worker_inputs)
-    t0 = time.time()
     mutated, desc = mutate(original, num_mutations)
-    t_mutate = time.time() - t0
-
-    t0 = time.time()
     parable = run_parable(mutated)
-    t_parable = time.time() - t0
-
-    t0 = time.time()
     oracle = run_oracle(mutated)
-    t_oracle = time.time() - t0
 
     # Check for discrepancy
     if parable is None and oracle is None:
-        task_elapsed = time.time() - task_start
-        if task_elapsed > 0.2:
-            print(f"  [task-noop] {task_elapsed:.2f}s: parable={t_parable:.3f}s oracle={t_oracle:.3f}s", file=sys.stderr)
         return TaskResult()
     if (parable is None) == (oracle is None) and normalize(parable) == normalize(oracle):
-        task_elapsed = time.time() - task_start
-        if task_elapsed > 0.2:
-            print(f"  [task-noop] {task_elapsed:.2f}s: parable={t_parable:.3f}s oracle={t_oracle:.3f}s", file=sys.stderr)
         return TaskResult()
 
     # Found a discrepancy
@@ -266,18 +248,11 @@ def fuzz_task(
             return TaskResult()
 
     # Minimize if needed
-    t_minimize = 0
     if should_minimize:
-        t0 = time.time()
         minimized = minimize_input(d.mutated)
-        t_minimize = time.time() - t0
         if minimized is None:
             return TaskResult(found_discrepancy=True, survived_minimize=False)
         d.mutated = minimized
-
-    task_elapsed = time.time() - task_start
-    if task_elapsed > 0.5:
-        print(f"  [task] {task_elapsed:.2f}s total: mutate={t_mutate:.3f}s parable={t_parable:.3f}s oracle={t_oracle:.3f}s minimize={t_minimize:.2f}s len={len(original)}", file=sys.stderr)
 
     # Check layer filter
     passed = True
@@ -376,14 +351,11 @@ class FuzzerCoordinator:
         )
 
         try:
-            import time as time_module
             last_status_iterations = 0
             pending_futures = set()
 
             while not self.should_stop():
-                loop_start = time_module.time()
                 # Submit batch of tasks up to batch_size pending
-                submit_start = time_module.time()
                 while len(pending_futures) < self.config.batch_size and not self.should_stop():
                     # Generate unique seed for each task
                     task_seed = None
@@ -401,30 +373,20 @@ class FuzzerCoordinator:
                     pending_futures.add(future)
 
                 # Wait for at least one to complete
-                submit_elapsed = time_module.time() - submit_start
-                wait_elapsed = 0
                 if pending_futures:
                     done = set()
                     for future in list(pending_futures):
                         if future.done():
                             done.add(future)
                     if not done:
-                        # Wait for any future to complete (with timeout to avoid blocking forever)
                         import concurrent.futures
-
-                        wait_start = time_module.time()
                         done_iter, _ = concurrent.futures.wait(
                             pending_futures,
                             return_when=concurrent.futures.FIRST_COMPLETED,
                             timeout=10,
                         )
-                        wait_elapsed = time_module.time() - wait_start
-                        if wait_elapsed > 1.0:
-                            print(f"  [coord] wait took {wait_elapsed:.2f}s, pending={len(pending_futures)}", file=sys.stderr)
                         done = done_iter
                         if not done:
-                            # All workers stuck - print warning and continue
-                            self.print_status()
                             continue
 
                     for future in done:
@@ -433,14 +395,9 @@ class FuzzerCoordinator:
                             result = future.result()
                             self.process_result(result)
                         except Exception as e:
-                            # Worker crashed, just count iteration
                             self.stats.iterations += 1
                             if self.config.verbose:
                                 print(f"\nWorker error: {e}")
-
-                loop_elapsed = time_module.time() - loop_start
-                if loop_elapsed > 2.0:
-                    print(f"  [coord] loop {loop_elapsed:.2f}s: submit={submit_elapsed:.2f}s wait={wait_elapsed:.2f}s pending={len(pending_futures)}", file=sys.stderr)
 
                 # Print status periodically
                 if self.stats.iterations - last_status_iterations >= 100:
@@ -561,8 +518,8 @@ def main() -> None:
         "-j",
         "--jobs",
         type=int,
-        default=1,
-        help="Max parallel workers (default: 1)",
+        default=None,
+        help="Max parallel workers (default: number of CPU cores)",
     )
     args = parser.parse_args()
 
@@ -591,7 +548,7 @@ def main() -> None:
         max_iterations=None if args.stop_after else args.iterations,
         verbose=args.verbose,
         output_path=args.output,
-        max_workers=args.jobs,
+        max_workers=args.jobs or os.cpu_count() or 4,
     )
 
     # Run

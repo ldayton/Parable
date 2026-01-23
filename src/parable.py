@@ -2187,6 +2187,17 @@ class Lexer:
         stripped_inner = inner.lstrip(" \t\n|")
         if not stripped_inner:
             return FunSub(Empty(), "${ }"), raw_text
+        # Phase 5.2: Require proper terminator - no auto-insertion
+        inner_stripped = inner.rstrip(" \t")
+        if inner_stripped.endswith("\n"):
+            terminator = "\n }"
+        elif inner_stripped.endswith("&"):
+            terminator = " }"
+        elif inner_stripped.endswith(";"):
+            terminator = "; }"
+        else:
+            # Missing terminator - bash requires ; or newline before }
+            raise ParseError("funsub requires terminator before `}'", pos=start)
         # Parse the command content
         try:
             sub_parser = Parser(stripped_inner)
@@ -2196,13 +2207,6 @@ class Lexer:
             # Format the command immediately
             formatted = _format_cmdsub_node(cmd)
             formatted = formatted.rstrip(";")
-            # Determine terminator: newline, background, or semicolon
-            if inner.rstrip(" \t").endswith("\n"):
-                terminator = "\n }"
-            elif formatted.endswith(" &"):
-                terminator = " }"
-            else:
-                terminator = "; }"
             # Build the formatted text, preserving ${| vs ${ prefix
             if inner.startswith("|"):
                 prefix = "${|"

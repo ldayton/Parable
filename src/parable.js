@@ -2569,6 +2569,7 @@ class Lexer {
 			formatted,
 			formatted_text,
 			inner,
+			inner_stripped,
 			prefix,
 			raw_text,
 			stripped_inner,
@@ -2599,6 +2600,18 @@ class Lexer {
 		if (!stripped_inner) {
 			return [new FunSub(new Empty(), "${ }"), raw_text];
 		}
+		// Phase 5.2: Require proper terminator - no auto-insertion
+		inner_stripped = inner.replace(/[ \t]+$/, "");
+		if (inner_stripped.endsWith("\n")) {
+			terminator = "\n }";
+		} else if (inner_stripped.endsWith("&")) {
+			terminator = " }";
+		} else if (inner_stripped.endsWith(";")) {
+			terminator = "; }";
+		} else {
+			// Missing terminator - bash requires ; or newline before }
+			throw new ParseError("funsub requires terminator before `}'", start);
+		}
 		// Parse the command content
 		try {
 			sub_parser = new Parser(stripped_inner);
@@ -2609,14 +2622,6 @@ class Lexer {
 			// Format the command immediately
 			formatted = _formatCmdsubNode(cmd);
 			formatted = formatted.replace(/[;]+$/, "");
-			// Determine terminator: newline, background, or semicolon
-			if (inner.replace(/[ \t]+$/, "").endsWith("\n")) {
-				terminator = "\n }";
-			} else if (formatted.endsWith(" &")) {
-				terminator = " }";
-			} else {
-				terminator = "; }";
-			}
 			// Build the formatted text, preserving ${| vs ${ prefix
 			if (inner.startsWith("|")) {
 				prefix = "${|";

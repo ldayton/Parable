@@ -1,0 +1,17 @@
+=== $?() extglob after special param
+echo $?()
+---
+(command (word "echo") (word "$?()"))
+---
+
+=== $*() extglob after special param
+echo $*()
+---
+(command (word "echo") (word "$*()"))
+---
+
+=== $@() extglob after special param
+echo $@()
+---
+(command (word "echo") (word "$@()"))
+---

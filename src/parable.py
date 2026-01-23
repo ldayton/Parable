@@ -1299,6 +1299,20 @@ class Lexer:
                     chars.append(self.advance())
                 else:
                     self._sync_from_parser()
+                    # Special params $? $* $@ can be followed by () as extglob pattern
+                    if (
+                        ctx == WORD_CTX_NORMAL
+                        and chars
+                        and len(chars[len(chars) - 1]) == 2
+                        and chars[len(chars) - 1][0] == "$"
+                        and chars[len(chars) - 1][1] in "?*@"
+                        and not self.at_end()
+                        and self.peek() == "("
+                    ):
+                        chars.append(self.advance())  # (
+                        content = self._parse_matched_pair("(", ")", MatchedPairFlags.EXTGLOB)
+                        chars.append(content)
+                        chars.append(")")
                 continue
             # NORMAL/COND: Backtick command substitution - callback to Parser
             if ctx != WORD_CTX_REGEX and ch == "`":

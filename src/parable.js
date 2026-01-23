@@ -1471,6 +1471,25 @@ class Lexer {
 					chars.push(this.advance());
 				} else {
 					this._syncFromParser();
+					// Special params $? $* $@ can be followed by () as extglob pattern
+					if (
+						ctx === WORD_CTX_NORMAL &&
+						chars &&
+						chars[chars.length - 1].length === 2 &&
+						chars[chars.length - 1][0] === "$" &&
+						"?*@".includes(chars[chars.length - 1][1]) &&
+						!this.atEnd() &&
+						this.peek() === "("
+					) {
+						chars.push(this.advance());
+						content = this._parseMatchedPair(
+							"(",
+							")",
+							MatchedPairFlags.EXTGLOB,
+						);
+						chars.push(content);
+						chars.push(")");
+					}
 				}
 				continue;
 			}

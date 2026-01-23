@@ -12185,15 +12185,33 @@ class Parser {
 		return null;
 	}
 
+	_atListUntilTerminator(stop_words) {
+		let next_pos, reserved;
+		if (this.atEnd()) {
+			return true;
+		}
+		if (this.peek() === ")") {
+			return true;
+		}
+		// Check for standalone } (closing brace), not } as part of a word
+		if (this.peek() === "}") {
+			next_pos = this.pos + 1;
+			if (next_pos >= this.length || _isWordEndContext(this.source[next_pos])) {
+				return true;
+			}
+		}
+		reserved = this._lexPeekReservedWord();
+		if (reserved != null && stop_words.has(reserved)) {
+			return true;
+		}
+		if (this._lexPeekCaseTerminator() != null) {
+			return true;
+		}
+		return false;
+	}
+
 	parseListUntil(stop_words) {
-		let at_case_terminator,
-			has_newline,
-			is_standalone_brace,
-			next_pos,
-			op,
-			parts,
-			pipeline,
-			reserved;
+		let next_op, op, parts, pipeline, reserved;
 		// Check if we're already at a stop word
 		this.skipWhitespaceAndNewlines();
 		reserved = this._lexPeekReservedWord();
@@ -12206,117 +12224,63 @@ class Parser {
 		}
 		parts = [pipeline];
 		while (true) {
-			// Check for newline as implicit command separator
+			// Check for explicit operator FIRST (without consuming newlines)
 			this.skipWhitespace();
-			has_newline = false;
-			while (!this.atEnd() && this.peek() === "\n") {
-				has_newline = true;
-				this.advance();
-				// Gather pending heredoc content after newline
-				this._gatherHeredocBodies();
-				if (
-					this._cmdsub_heredoc_end != null &&
-					this._cmdsub_heredoc_end > this.pos
-				) {
-					this.pos = this._cmdsub_heredoc_end;
-					this._cmdsub_heredoc_end = null;
-				}
-				this.skipWhitespace();
-			}
 			op = this.parseListOperator();
-			// Newline acts as implicit semicolon if followed by more commands
-			if (op == null && has_newline) {
-				// Check if there's another command (not a stop word)
-				// } is only a terminator if it's standalone (closing brace group), not part of a word
-				is_standalone_brace = false;
-				if (!this.atEnd() && this.peek() === "}") {
-					next_pos = this.pos + 1;
+			if (op == null) {
+				// No explicit operator - check for newline as implicit separator
+				if (!this.atEnd() && this.peek() === "\n") {
+					// compound_list context: newline acts as separator
+					this.advance();
+					this._gatherHeredocBodies();
 					if (
-						next_pos >= this.length ||
-						_isWordEndContext(this.source[next_pos])
+						this._cmdsub_heredoc_end != null &&
+						this._cmdsub_heredoc_end > this.pos
 					) {
-						is_standalone_brace = true;
+						this.pos = this._cmdsub_heredoc_end;
+						this._cmdsub_heredoc_end = null;
 					}
-				}
-				reserved = this._lexPeekReservedWord();
-				if (
-					!this.atEnd() &&
-					!(reserved != null && stop_words.has(reserved)) &&
-					this.peek() !== ")" &&
-					!is_standalone_brace
-				) {
+					this.skipWhitespaceAndNewlines();
+					if (this._atListUntilTerminator(stop_words)) {
+						break;
+					}
+					// Validate next thing is a command start, not bare operator
+					next_op = this._peekListOperator();
+					if (["&", ";"].includes(next_op)) {
+						// Bare & or ; after newline - newline terminated the list
+						break;
+					}
 					op = "\n";
+				} else {
+					break;
 				}
 			}
 			if (op == null) {
 				break;
 			}
-			// For & at end of list, don't require another command
-			if (op === "&") {
-				parts.push(new Operator(op));
-				this.skipWhitespaceAndNewlines();
-				// Check for standalone } (closing brace), not } as part of a word
-				is_standalone_brace = false;
-				if (!this.atEnd() && this.peek() === "}") {
-					next_pos = this.pos + 1;
-					if (
-						next_pos >= this.length ||
-						_isWordEndContext(this.source[next_pos])
-					) {
-						is_standalone_brace = true;
-					}
-				}
-				reserved = this._lexPeekReservedWord();
-				if (
-					this.atEnd() ||
-					(reserved != null && stop_words.has(reserved)) ||
-					this.peek() === "\n" ||
-					this.peek() === ")" ||
-					is_standalone_brace
-				) {
-					break;
-				}
-			}
-			// For ; - check if it's a terminator before a stop word (don't include it)
+			// For ; - check if it's a terminator (don't include trailing semicolons)
 			if (op === ";") {
 				this.skipWhitespaceAndNewlines();
-				// Also check for ;;, ;&, or ;;& (case terminators)
-				at_case_terminator = this._lexPeekCaseTerminator() != null;
-				// Check for standalone } (closing brace), not } as part of a word
-				is_standalone_brace = false;
-				if (!this.atEnd() && this.peek() === "}") {
-					next_pos = this.pos + 1;
-					if (
-						next_pos >= this.length ||
-						_isWordEndContext(this.source[next_pos])
-					) {
-						is_standalone_brace = true;
-					}
-				}
-				reserved = this._lexPeekReservedWord();
-				if (
-					this.atEnd() ||
-					(reserved != null && stop_words.has(reserved)) ||
-					this.peek() === "\n" ||
-					this.peek() === ")" ||
-					is_standalone_brace ||
-					at_case_terminator
-				) {
+				if (this._atListUntilTerminator(stop_words)) {
 					// Don't include trailing semicolon - it's just a terminator
 					break;
 				}
 				parts.push(new Operator(op));
-			} else if (op !== "&") {
+			} else if (op === "&") {
+				parts.push(new Operator(op));
+				this.skipWhitespaceAndNewlines();
+				if (this._atListUntilTerminator(stop_words)) {
+					break;
+				}
+			} else if (["&&", "||"].includes(op)) {
+				parts.push(new Operator(op));
+				this.skipWhitespaceAndNewlines();
+			} else {
+				// op == "\n" - already handled above
 				parts.push(new Operator(op));
 			}
 			// Check for stop words before parsing next pipeline
-			this.skipWhitespaceAndNewlines();
-			reserved = this._lexPeekReservedWord();
-			// Also check for ;;, ;&, or ;;& (case terminators)
-			if (reserved != null && stop_words.has(reserved)) {
-				break;
-			}
-			if (this._lexPeekCaseTerminator() != null) {
+			if (this._atListUntilTerminator(stop_words)) {
 				break;
 			}
 			pipeline = this.parsePipeline();
@@ -12623,8 +12587,16 @@ class Parser {
 		return null;
 	}
 
+	_peekListOperator() {
+		let op, saved_pos;
+		saved_pos = this.pos;
+		op = this.parseListOperator();
+		this.pos = saved_pos;
+		return op;
+	}
+
 	parseList(newline_as_separator) {
-		let has_newline, op, parts, pipeline;
+		let next_op, op, parts, pipeline;
 		if (newline_as_separator == null) {
 			newline_as_separator = true;
 		}
@@ -12639,60 +12611,67 @@ class Parser {
 		}
 		parts = [pipeline];
 		while (true) {
-			// Check for newline as implicit command separator
+			// Check for explicit operator FIRST (without consuming newlines)
 			this.skipWhitespace();
-			has_newline = false;
-			while (!this.atEnd() && this.peek() === "\n") {
-				has_newline = true;
-				// If not treating newlines as separators, stop here
-				if (!newline_as_separator) {
-					break;
-				}
-				this.advance();
-				// Gather pending heredoc content after newline
-				this._gatherHeredocBodies();
-				if (
-					this._cmdsub_heredoc_end != null &&
-					this._cmdsub_heredoc_end > this.pos
-				) {
-					this.pos = this._cmdsub_heredoc_end;
-					this._cmdsub_heredoc_end = null;
-				}
-				this.skipWhitespace();
-			}
-			// If we hit a newline and not treating them as separators, stop
-			if (has_newline && !newline_as_separator) {
-				break;
-			}
 			op = this.parseListOperator();
-			// Newline acts as implicit semicolon if followed by more commands
-			if (op == null && has_newline) {
-				if (!this.atEnd() && !this._atListTerminatingBracket()) {
+			if (op == null) {
+				// No explicit operator - check for newline as implicit separator
+				if (!this.atEnd() && this.peek() === "\n") {
+					if (!newline_as_separator) {
+						break;
+					}
+					// compound_list: newline acts as separator
+					this.advance();
+					this._gatherHeredocBodies();
+					if (
+						this._cmdsub_heredoc_end != null &&
+						this._cmdsub_heredoc_end > this.pos
+					) {
+						this.pos = this._cmdsub_heredoc_end;
+						this._cmdsub_heredoc_end = null;
+					}
+					this.skipWhitespaceAndNewlines();
+					if (this.atEnd() || this._atListTerminatingBracket()) {
+						break;
+					}
+					// Validate next thing is a command start, not bare operator
+					next_op = this._peekListOperator();
+					if (["&", ";"].includes(next_op)) {
+						// Bare & or ; after newline - newline terminated the list
+						break;
+					}
 					op = "\n";
+				} else {
+					break;
 				}
 			}
 			if (op == null) {
 				break;
 			}
-			// Don't add duplicate semicolon (e.g., explicit ; followed by newline)
-			if (
-				!(
-					op === ";" &&
-					parts &&
-					parts[parts.length - 1].kind === "operator" &&
-					parts[parts.length - 1].op === ";"
-				)
-			) {
-				parts.push(new Operator(op));
-			}
-			// For & at end of list, don't require another command
-			if (op === "&") {
+			parts.push(new Operator(op));
+			// Handle trailing newlines AFTER the operator
+			if (["&&", "||"].includes(op)) {
+				this.skipWhitespaceAndNewlines();
+			} else if (op === "&") {
 				this.skipWhitespace();
 				if (this.atEnd() || this._atListTerminatingBracket()) {
 					break;
 				}
-				// Newline after & - in compound commands, skip it (& acts as separator)
-				// At top level, newline terminates (separate commands)
+				if (this.peek() === "\n") {
+					if (newline_as_separator) {
+						this.skipWhitespaceAndNewlines();
+						if (this.atEnd() || this._atListTerminatingBracket()) {
+							break;
+						}
+					} else {
+						break;
+					}
+				}
+			} else if (op === ";") {
+				this.skipWhitespace();
+				if (this.atEnd() || this._atListTerminatingBracket()) {
+					break;
+				}
 				if (this.peek() === "\n") {
 					if (newline_as_separator) {
 						this.skipWhitespaceAndNewlines();
@@ -12704,21 +12683,7 @@ class Parser {
 					}
 				}
 			}
-			// For ; at end of list, don't require another command
-			if (op === ";") {
-				this.skipWhitespace();
-				if (this.atEnd() || this._atListTerminatingBracket()) {
-					break;
-				}
-				// Newline after ; means continue to see if more commands follow
-				if (this.peek() === "\n") {
-					continue;
-				}
-			}
-			// For && and ||, allow newlines before the next command
-			if (op === "&&" || op === "||") {
-				this.skipWhitespaceAndNewlines();
-			}
+			// op == "\n" already handled above (newlines consumed in the no-op branch)
 			pipeline = this.parsePipeline();
 			if (pipeline == null) {
 				throw new ParseError(`Expected command after ${op}`, this.pos);

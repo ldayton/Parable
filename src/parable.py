@@ -530,12 +530,14 @@ class Lexer:
         self._word_context = WORD_CTX_NORMAL
         self._at_command_start = False
         self._in_array_literal = False
+        self._in_assign_builtin = False
         # Position after reading a token (may differ from token.pos due to heredocs)
         self._post_read_pos: int = 0
         # Context used when token was cached (for cache invalidation)
         self._cached_word_context: int = WORD_CTX_NORMAL
         self._cached_at_command_start: bool = False
         self._cached_in_array_literal: bool = False
+        self._cached_in_assign_builtin: bool = False
 
     def peek(self) -> str | None:
         """Return current character without consuming."""
@@ -1111,7 +1113,11 @@ class Lexer:
         return self._parse_matched_pair("{", "}", flags | MatchedPairFlags.DOLBRACE)
 
     def _read_word_internal(
-        self, ctx: int, at_command_start: bool = False, in_array_literal: bool = False
+        self,
+        ctx: int,
+        at_command_start: bool = False,
+        in_array_literal: bool = False,
+        in_assign_builtin: bool = False,
     ) -> Word | None:
         """Unified word parser with context-aware termination.
 
@@ -1373,7 +1379,7 @@ class Lexer:
                 elif chars[len(chars) - 1] == "=" and len(chars) >= 2:
                     # Check chars before = form valid name
                     is_array_assign = _is_array_assignment_prefix(chars[:-1])
-                if is_array_assign:
+                if is_array_assign and (at_command_start or in_assign_builtin):
                     self._sync_to_parser()
                     array_result = self._parser._parse_array_literal()
                     self._sync_from_parser()
@@ -1430,7 +1436,10 @@ class Lexer:
         if self.is_metachar(c) and not is_procsub and not is_regex_paren:
             return None
         word = self._read_word_internal(
-            self._word_context, self._at_command_start, self._in_array_literal
+            self._word_context,
+            self._at_command_start,
+            self._in_array_literal,
+            self._in_assign_builtin,
         )
         if word is None:
             return None
@@ -6220,6 +6229,9 @@ COND_BINARY_OPS = {
 
 COMPOUND_KEYWORDS = {"while", "until", "for", "if", "case", "select"}
 
+# Builtins that allow array assignments in argument position (bash's ASSIGNMENT_BUILTIN flag)
+ASSIGNMENT_BUILTINS = {"alias", "declare", "typeset", "local", "export", "readonly", "eval", "let"}
+
 
 def _is_quote(c: str) -> bool:
     return c == "'" or c == '"'
@@ -6592,6 +6604,7 @@ class Parser:
         self._word_context = WORD_CTX_NORMAL
         self._at_command_start = False
         self._in_array_literal = False
+        self._in_assign_builtin = False
 
     def _set_state(self, flag: int) -> None:
         """Set a parser state flag."""
@@ -6687,6 +6700,7 @@ class Parser:
                 or self._lexer._cached_word_context != self._word_context
                 or self._lexer._cached_at_command_start != self._at_command_start
                 or self._lexer._cached_in_array_literal != self._in_array_literal
+                or self._lexer._cached_in_assign_builtin != self._in_assign_builtin
             ):
                 self._lexer._token_cache = None
         # Sync lexer position
@@ -6699,6 +6713,7 @@ class Parser:
         self._lexer._word_context = self._word_context
         self._lexer._at_command_start = self._at_command_start
         self._lexer._in_array_literal = self._in_array_literal
+        self._lexer._in_assign_builtin = self._in_assign_builtin
 
     def _sync_parser(self) -> None:
         """Sync Parser position to Lexer position."""
@@ -6714,6 +6729,7 @@ class Parser:
             and self._lexer._cached_word_context == self._word_context
             and self._lexer._cached_at_command_start == self._at_command_start
             and self._lexer._cached_in_array_literal == self._in_array_literal
+            and self._lexer._cached_in_assign_builtin == self._in_assign_builtin
         ):
             return self._lexer._token_cache
         # Need to read a new token - sync lexer to our position first
@@ -6724,6 +6740,7 @@ class Parser:
         self._lexer._cached_word_context = self._word_context
         self._lexer._cached_at_command_start = self._at_command_start
         self._lexer._cached_in_array_literal = self._in_array_literal
+        self._lexer._cached_in_assign_builtin = self._in_assign_builtin
         # Save the post-read position (may have advanced for heredocs)
         self._lexer._post_read_pos = self._lexer.pos
         # Restore parser position for peek semantics
@@ -6739,6 +6756,7 @@ class Parser:
             and self._lexer._cached_word_context == self._word_context
             and self._lexer._cached_at_command_start == self._at_command_start
             and self._lexer._cached_in_array_literal == self._in_array_literal
+            and self._lexer._cached_in_assign_builtin == self._in_assign_builtin
         ):
             # Consume cached token - use saved post-read position
             tok = self._lexer.next_token()
@@ -6752,6 +6770,7 @@ class Parser:
             self._lexer._cached_word_context = self._word_context
             self._lexer._cached_at_command_start = self._at_command_start
             self._lexer._cached_in_array_literal = self._in_array_literal
+            self._lexer._cached_in_assign_builtin = self._in_assign_builtin
             self._sync_parser()
         self._record_token(tok)
         return tok
@@ -7143,7 +7162,10 @@ class Parser:
         return self.parse_word(at_command_start, in_array_literal)
 
     def parse_word(
-        self, at_command_start: bool = False, in_array_literal: bool = False
+        self,
+        at_command_start: bool = False,
+        in_array_literal: bool = False,
+        in_assign_builtin: bool = False,
     ) -> Word | None:
         """Parse a word token by consuming WORD token with pre-parsed Word object."""
         self.skip_whitespace()
@@ -7152,16 +7174,19 @@ class Parser:
         # Set context for Lexer before peeking
         self._at_command_start = at_command_start
         self._in_array_literal = in_array_literal
+        self._in_assign_builtin = in_assign_builtin
         tok = self._lex_peek_token()
         if tok.type != TokenType.WORD:
             # Reset context when not a word to avoid affecting subsequent calls
             self._at_command_start = False
             self._in_array_literal = False
+            self._in_assign_builtin = False
             return None
         self._lex_next_token()
         # Reset context after consuming to avoid affecting subsequent calls
         self._at_command_start = False
         self._in_array_literal = False
+        self._in_assign_builtin = False
         return tok.word
 
     def _parse_command_substitution(self) -> tuple[Node | None, str]:
@@ -9057,8 +9082,14 @@ class Parser:
                 if not self._is_assignment_word(w):
                     all_assignments = False
                     break
+            # Check if first word is an assignment builtin (bash's PST_ASSIGNOK)
+            # This allows array literal assignments after builtins like declare, local, export
+            # but does NOT enable bracket tracking (which is only for true command start)
+            in_assign_builtin = len(words) > 0 and words[0].value in ASSIGNMENT_BUILTINS
             word = self.parse_word(
-                at_command_start=not words or (all_assignments and len(redirects) == 0)
+                at_command_start=not words or (all_assignments and len(redirects) == 0),
+                in_array_literal=False,
+                in_assign_builtin=in_assign_builtin,
             )
             if word is None:
                 break

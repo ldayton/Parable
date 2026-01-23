@@ -4,24 +4,19 @@
 Mutates inputs from the test corpus (tests/**/*.tests) and compares Parable's
 parse results against bash-oracle to find discrepancies.
 
-Architecture:
-    - FuzzerConfig: Immutable configuration dataclass
-    - FuzzerStats: Mutable statistics tracking
-    - FuzzerCoordinator: Manages workers, deduplication, output, and stopping
-    - Worker processes: Run fuzz iterations and send results via queue
+Uses loky for robust, deadlock-free multiprocessing with bounded parallelism.
 """
 
 from __future__ import annotations
 
 import argparse
-import multiprocessing as mp
 import random
 import re
 import sys
 from dataclasses import dataclass, field
-from multiprocessing import Queue
 from pathlib import Path
-from typing import TYPE_CHECKING
+
+from loky import get_reusable_executor
 
 from .common import (
     ORACLE_PATH,
@@ -36,9 +31,6 @@ from .common import (
 )
 from .generator import detect_layer
 from .minimize import minimize as minimize_input
-
-if TYPE_CHECKING:
-    from multiprocessing.synchronize import Event as EventType
 
 # ------------------------------------------------------------------------------
 # Configuration
@@ -60,6 +52,7 @@ class FuzzerConfig:
     batch_size: int = 100
     verbose: bool = False
     output_path: Path | None = None
+    max_workers: int = 4  # Limit concurrent processes to prevent contention
 
     @property
     def should_minimize(self) -> bool:
@@ -80,12 +73,18 @@ class FuzzerStats:
     survived_minimize: int = 0
     passed_filter: int = 0
     duplicates_skipped: int = 0
+    start_time: float = field(default_factory=lambda: __import__("time").time())
 
     def status_line(self, config: FuzzerConfig) -> str:
+        import time
+
+        elapsed = time.time() - self.start_time
+        rate = self.iterations / elapsed if elapsed > 0 else 0
         if config.max_iterations:
             s = f"{self.iterations}/{config.max_iterations} iterations"
         else:
             s = f"{self.iterations} iterations"
+        s += f" ({rate:.1f}/s)"
         if config.should_minimize:
             s += f", {self.raw_discrepancies} found"
             s += f", {self.survived_minimize} minimized"
@@ -181,113 +180,81 @@ def mutate(s: str, num_mutations: int = 1) -> tuple[str, str]:
     return result_str, "; ".join(ops) if ops else "no-op"
 
 
-def fuzz_once(inputs: tuple[str, ...], num_mutations: int) -> Discrepancy | None:
-    """Run one fuzzing iteration. Returns Discrepancy if found, else None."""
-    original = random.choice(inputs)
-    mutated, desc = mutate(original, num_mutations)
-    parable = run_parable(mutated)
-    oracle = run_oracle(mutated)
-    if parable is None and oracle is None:
-        return None
-    if (parable is None) != (oracle is None):
-        return Discrepancy(
-            original=original,
-            mutated=mutated,
-            mutation_desc=desc,
-            parable_result=parable if parable else "<error>",
-            oracle_result=oracle if oracle else "<error>",
-        )
-    if normalize(parable) != normalize(oracle):
-        return Discrepancy(
-            original=original,
-            mutated=mutated,
-            mutation_desc=desc,
-            parable_result=parable,
-            oracle_result=oracle,
-        )
-    return None
-
-
 # ------------------------------------------------------------------------------
-# Worker process
+# Task function (runs in worker process)
 # ------------------------------------------------------------------------------
 
 
 @dataclass
-class WorkerResult:
-    """Result from a worker."""
+class TaskResult:
+    """Result from a single fuzz task."""
 
-    iterations: int  # Iterations performed since last message
-    discrepancy: Discrepancy | None = None  # None if no discrepancy or failed minimize
-    found_discrepancy: bool = False  # True if a discrepancy was found (even if it failed minimize)
+    discrepancy: Discrepancy | None = None
+    found_discrepancy: bool = False
     survived_minimize: bool = False
     passed_filter: bool = False
 
 
-# Sentinel value to signal workers to stop
-STOP_SENTINEL = None
-
-
-def worker_process(
-    config: FuzzerConfig,
-    result_queue: Queue[WorkerResult | None],
-    stop_event: EventType,
-    worker_id: int,
-) -> None:
-    """Worker process: fuzz continuously until stop_event is set."""
-    # Seed each worker uniquely
-    if config.seed is not None:
-        random.seed(config.seed + worker_id)
+def fuzz_task(
+    inputs: tuple[str, ...],
+    num_mutations: int,
+    should_minimize: bool,
+    filter_layer: int | None,
+    both_succeed: bool,
+    seed: int | None,
+) -> TaskResult:
+    """Single fuzz iteration as an independent task. Runs in worker process."""
+    # Seed random for this task
+    if seed is not None:
+        random.seed(seed)
     else:
         random.seed()
 
-    iterations = 0
-    while not stop_event.is_set():
-        iterations += 1
-        d = fuzz_once(config.inputs, config.mutations_per_input)
-        if d is None:
-            # Send progress update every 100 iterations even without discrepancy
-            if iterations >= 100:
-                result_queue.put(WorkerResult(iterations=iterations))
-                iterations = 0
-            continue
-        # Filter --both-succeed
-        if config.both_succeed:
-            if d.parable_result == "<error>" or d.oracle_result == "<error>":
-                continue
-        # Found a discrepancy - minimize if needed
-        if config.should_minimize:
-            minimized = minimize_input(d.mutated)
-            if minimized is None:
-                # Failed to minimize - report but don't include discrepancy
-                result_queue.put(
-                    WorkerResult(
-                        iterations=iterations,
-                        found_discrepancy=True,
-                        survived_minimize=False,
-                    )
-                )
-                iterations = 0
-                continue
-            d.mutated = minimized
-        # Check layer filter
-        passed = True
-        if config.filter_layer is not None:
-            detected = detect_layer(d.mutated)
-            if detected > config.filter_layer:
-                passed = False
-        result_queue.put(
-            WorkerResult(
-                iterations=iterations,
-                discrepancy=d,
-                found_discrepancy=True,
-                survived_minimize=True,
-                passed_filter=passed,
-            )
-        )
-        iterations = 0
-    # Signal this worker is done
-    result_queue.put(STOP_SENTINEL)
+    original = random.choice(inputs)
+    mutated, desc = mutate(original, num_mutations)
+    parable = run_parable(mutated)
+    oracle = run_oracle(mutated)
+
+    # Check for discrepancy
+    if parable is None and oracle is None:
+        return TaskResult()
+    if (parable is None) == (oracle is None) and normalize(parable) == normalize(oracle):
+        return TaskResult()
+
+    # Found a discrepancy
+    d = Discrepancy(
+        original=original,
+        mutated=mutated,
+        mutation_desc=desc,
+        parable_result=parable if parable else "<error>",
+        oracle_result=oracle if oracle else "<error>",
+    )
+
+    # Filter --both-succeed
+    if both_succeed:
+        if d.parable_result == "<error>" or d.oracle_result == "<error>":
+            return TaskResult()
+
+    # Minimize if needed
+    if should_minimize:
+        minimized = minimize_input(d.mutated)
+        if minimized is None:
+            return TaskResult(found_discrepancy=True, survived_minimize=False)
+        d.mutated = minimized
+
+    # Check layer filter
+    passed = True
+    if filter_layer is not None:
+        detected = detect_layer(d.mutated)
+        if detected > filter_layer:
+            passed = False
+
+    return TaskResult(
+        discrepancy=d,
+        found_discrepancy=True,
+        survived_minimize=True,
+        passed_filter=passed,
+    )
 
 
 # ------------------------------------------------------------------------------
@@ -297,7 +264,7 @@ def worker_process(
 
 @dataclass
 class FuzzerCoordinator:
-    """Coordinates fuzzing: manages workers, collects results, handles output."""
+    """Coordinates fuzzing using loky executor."""
 
     config: FuzzerConfig
     stats: FuzzerStats = field(default_factory=FuzzerStats)
@@ -312,14 +279,14 @@ class FuzzerCoordinator:
             return True
         return False
 
-    def process_result(self, result: WorkerResult) -> None:
-        """Process a single result from a worker."""
-        self.stats.iterations += result.iterations
+    def process_result(self, result: TaskResult) -> None:
+        """Process a single result from a task."""
+        self.stats.iterations += 1
         if not result.found_discrepancy:
-            return  # Just a progress update
+            return
         self.stats.raw_discrepancies += 1
         if not result.survived_minimize:
-            return  # Failed to minimize
+            return
         self.stats.survived_minimize += 1
         # Dedupe by minimized input
         key = result.discrepancy.mutated
@@ -328,7 +295,7 @@ class FuzzerCoordinator:
             return
         self.seen.add(key)
         if not result.passed_filter:
-            return  # Didn't pass layer filter
+            return
         self.stats.passed_filter += 1
         self.discrepancies.append(result.discrepancy)
         self._write_discrepancy(result.discrepancy)
@@ -337,7 +304,6 @@ class FuzzerCoordinator:
 
     def _write_discrepancy(self, d: Discrepancy) -> None:
         if self._output_file:
-            # Output in .tests format with context as comments
             self._output_file.write(f"# Original: {d.original!r}\n")
             self._output_file.write(f"# Parable:  {d.parable_result}\n")
             self._output_file.write(f"=== {d.mutation_desc}\n")
@@ -357,49 +323,83 @@ class FuzzerCoordinator:
         print(f"\r{self.stats.status_line(self.config)}", end="", flush=True)
 
     def run(self) -> None:
-        """Run the fuzzer with worker processes."""
-        num_workers = mp.cpu_count()
-        result_queue: Queue[WorkerResult | None] = mp.Queue()
-        stop_event: EventType = mp.Event()
-
+        """Run the fuzzer using loky executor."""
         # Open output file
         if self.config.output_path:
             self._output_file = open(self.config.output_path, "w")
 
-        # Start workers
-        workers = []
-        for i in range(num_workers):
-            p = mp.Process(
-                target=worker_process,
-                args=(self.config, result_queue, stop_event, i),
-            )
-            p.start()
-            workers.append(p)
+        # Use loky's reusable executor - robust and deadlock-free
+        # max_workers limits concurrent processes, preventing subprocess contention
+        executor = get_reusable_executor(
+            max_workers=self.config.max_workers,
+            timeout=60,  # Workers idle timeout
+        )
 
         try:
-            workers_alive = num_workers
             last_status_iterations = 0
-            while workers_alive > 0:
-                result = result_queue.get()
-                if result is STOP_SENTINEL:
-                    workers_alive -= 1
-                    continue
-                self.process_result(result)
-                # Print status every 100 iterations
+            pending_futures = set()
+
+            while not self.should_stop():
+                # Submit batch of tasks up to batch_size pending
+                while len(pending_futures) < self.config.batch_size and not self.should_stop():
+                    # Generate unique seed for each task
+                    task_seed = None
+                    if self.config.seed is not None:
+                        task_seed = self.config.seed + self.stats.iterations + len(pending_futures)
+
+                    future = executor.submit(
+                        fuzz_task,
+                        self.config.inputs,
+                        self.config.mutations_per_input,
+                        self.config.should_minimize,
+                        self.config.filter_layer,
+                        self.config.both_succeed,
+                        task_seed,
+                    )
+                    pending_futures.add(future)
+
+                # Wait for at least one to complete
+                if pending_futures:
+                    done = set()
+                    for future in list(pending_futures):
+                        if future.done():
+                            done.add(future)
+                    if not done:
+                        # Wait for any future to complete
+                        import concurrent.futures
+
+                        done_iter, _ = concurrent.futures.wait(
+                            pending_futures, return_when=concurrent.futures.FIRST_COMPLETED
+                        )
+                        done = done_iter
+
+                    for future in done:
+                        pending_futures.discard(future)
+                        try:
+                            result = future.result()
+                            self.process_result(result)
+                        except Exception as e:
+                            # Worker crashed, just count iteration
+                            self.stats.iterations += 1
+                            if self.config.verbose:
+                                print(f"\nWorker error: {e}")
+
+                # Print status periodically
                 if self.stats.iterations - last_status_iterations >= 100:
                     self.print_status()
                     last_status_iterations = self.stats.iterations
-                # Check stop condition
-                if self.should_stop():
-                    stop_event.set()
-                    print(f"\nStopped: {self.config.stop_after} discrepancies found")
-                    break
+
+            # Drain remaining futures
+            for future in pending_futures:
+                try:
+                    result = future.result(timeout=10)
+                    self.process_result(result)
+                except Exception:
+                    pass
+
+            if self.config.stop_after:
+                print(f"\nStopped: {self.config.stop_after} discrepancies found")
         finally:
-            stop_event.set()
-            for p in workers:
-                p.join(timeout=1)
-                if p.is_alive():
-                    p.terminate()
             if self._output_file:
                 self._output_file.close()
         print()
@@ -499,6 +499,13 @@ def main() -> None:
     parser.add_argument(
         "--filter-layer", help="Only show discrepancies at or below this layer (implies --minimize)"
     )
+    parser.add_argument(
+        "-j",
+        "--jobs",
+        type=int,
+        default=4,
+        help="Max parallel workers (default: 4)",
+    )
     args = parser.parse_args()
 
     if not ORACLE_PATH.exists():
@@ -526,6 +533,7 @@ def main() -> None:
         max_iterations=None if args.stop_after else args.iterations,
         verbose=args.verbose,
         output_path=args.output,
+        max_workers=args.jobs,
     )
 
     # Run

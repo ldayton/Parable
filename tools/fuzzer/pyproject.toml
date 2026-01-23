@@ -3,6 +3,7 @@ name = "fuzzer"
 version = "0.1.0"
 description = "Fuzzers for Parable bash parser"
 requires-python = ">=3.14"
+dependencies = ["loky>=3.5.0"]
 
 [project.scripts]
 fuzzer = "fuzzer:main"

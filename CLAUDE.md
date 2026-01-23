@@ -1,0 +1,5 @@
+- GNU bash's source code is here: ~/source/bash-oracle
+- Bash's grammar is here: ~/source/bash-oracle/parse.y
+- Generate more bugs like this: `just fuzz char --stop-after 10 --minimize --filter-layer 1`
+- Too see Parable's parse trees, run: `uv run /Users/lily/source/Parable/bin/parable-dump.py CMD`
+- To see bash's parse trees, run: `~/source/bash-oracle/bash-oracle -e CMD`

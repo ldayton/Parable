@@ -775,9 +775,9 @@ class Lexer:
             # ) always terminates, but ( is handled in the loop for extglob
             if ch == ")":
                 return True
-            if ch == "&" and self.pos + 1 < self.length and self.source[self.pos + 1] == "&":
+            if ch == "&":
                 return True
-            if ch == "|" and self.pos + 1 < self.length and self.source[self.pos + 1] == "|":
+            if ch == "|":
                 return True
             if ch == ";":
                 return True
@@ -786,7 +786,7 @@ class Lexer:
                 self.pos + 1 < self.length and self.source[self.pos + 1] == "("
             ):
                 return True
-            return _is_whitespace_no_newline(ch)
+            return _is_whitespace(ch)
         # WORD_CTX_NORMAL
         # < and > don't terminate if followed by ( (process substitution)
         if (

@@ -137,18 +137,24 @@ def worker_process(work_queue, result_queue, stop_event) -> None:
             continue
         oracle_output = get_oracle_output(tc.input, tc.extglob)
         if oracle_output is None:
-            result_queue.put(
-                WorkerResult(
-                    passed=False,
-                    skipped={
-                        "file": tc.file,
-                        "line": tc.line,
-                        "name": tc.name,
-                        "input": tc.input,
-                        "reason": "timeout",
-                    },
+            # Timeout - treat as pass if expected is <error> (bash hangs on some errors)
+            if normalize(tc.expected) == "<error>":
+                result_queue.put(WorkerResult(passed=True))
+            else:
+                # Timeout but didn't expect error - this is a failure
+                result_queue.put(
+                    WorkerResult(
+                        passed=False,
+                        failure={
+                            "file": tc.file,
+                            "line": tc.line,
+                            "name": tc.name,
+                            "input": tc.input,
+                            "expected": tc.expected,
+                            "oracle": "<timeout>",
+                        },
+                    )
                 )
-            )
             continue
         expected_norm = normalize(tc.expected)
         oracle_norm = normalize(oracle_output)

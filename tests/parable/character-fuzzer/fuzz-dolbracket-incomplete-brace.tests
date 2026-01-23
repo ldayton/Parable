@@ -1,0 +1,17 @@
+=== incomplete ${ inside $[...] should not error
+$[${]
+---
+(command (word "$[${]"))
+---
+
+=== complete ${foo} inside $[...] works
+$[${foo}]
+---
+(command (word "$[${foo}]"))
+---
+
+=== funsub ${ cmd; } inside $[...] works
+$[${ echo 1; }]
+---
+(command (word "$[${ echo 1; }]"))
+---

@@ -1031,6 +1031,16 @@ class Lexer:
             if ch == "$" and not self.at_end() and not (flags & MatchedPairFlags.EXTGLOB):
                 next_ch = self.peek()
                 if next_ch == "{":
+                    # In ARITH mode, only parse ${ if followed by funsub char (bash parse.y:4137-4145)
+                    # Otherwise treat $ as literal
+                    if flags & MatchedPairFlags.ARITH:
+                        after_brace_pos = self.pos + 1
+                        if after_brace_pos >= self.length or not _is_funsub_char(
+                            self.source[after_brace_pos]
+                        ):
+                            # Not funsub - treat $ as literal
+                            chars.append(ch)
+                            continue
                     # ${ ... } parameter expansion - use full parsing
                     self.pos -= 1  # back up to before $
                     self._sync_to_parser()

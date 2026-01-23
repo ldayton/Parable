@@ -3294,9 +3294,18 @@ class Word(Node):
                 # Format this command substitution
                 inner = _substring(value, i + 2, j - 1)
                 if cmdsub_idx < len(cmdsub_parts):
-                    # Have parsed AST node - use it (} is preserved in AST)
+                    # Have parsed AST node
                     node = cmdsub_parts[cmdsub_idx]
-                    formatted = _format_cmdsub_node(node.command)
+                    # Use pre-computed formatted_text if available and no heredocs
+                    if node.formatted_text and not _contains_heredoc(node.command):
+                        result.append(node.formatted_text)
+                    else:
+                        # Heredocs present or no formatted_text - format at runtime
+                        formatted = _format_cmdsub_node(node.command)
+                        if formatted.startswith("("):
+                            result.append("$( " + formatted + ")")
+                        else:
+                            result.append("$(" + formatted + ")")
                     cmdsub_idx += 1
                 else:
                     # No AST node (e.g., inside arithmetic) - parse content on the fly
@@ -3306,11 +3315,11 @@ class Word(Node):
                         formatted = _format_cmdsub_node(parsed) if parsed else ""
                     except Exception:
                         formatted = inner
-                # Add space after $( if content starts with ( to avoid $((
-                if formatted.startswith("("):
-                    result.append("$( " + formatted + ")")
-                else:
-                    result.append("$(" + formatted + ")")
+                    # Add space after $( if content starts with ( to avoid $((
+                    if formatted.startswith("("):
+                        result.append("$( " + formatted + ")")
+                    else:
+                        result.append("$(" + formatted + ")")
                 i = j
             # Check for backtick command substitution
             elif value[i] == "`" and cmdsub_idx < len(cmdsub_parts):
@@ -5186,6 +5195,48 @@ def _format_cond_body(node: Node) -> str:
     if kind == "cond-paren":
         return "( " + _format_cond_body(node.inner) + " )"
     return ""
+
+
+def _contains_heredoc(node: Node) -> bool:
+    """Check if a command AST contains any heredoc redirects."""
+    if node is None:
+        return False
+    kind = node.kind
+    if kind == "command":
+        for r in getattr(node, "redirects", []):
+            if r.kind == "heredoc":
+                return True
+        return False
+    if kind == "pipeline":
+        for cmd in getattr(node, "commands", []):
+            if _contains_heredoc(cmd):
+                return True
+        return False
+    if kind == "list":
+        for p in getattr(node, "parts", []):
+            if _contains_heredoc(p):
+                return True
+        return False
+    if kind in ("and", "or", "semi", "amp", "list-term"):
+        if _contains_heredoc(getattr(node, "left", None)):
+            return True
+        if _contains_heredoc(getattr(node, "right", None)):
+            return True
+        return False
+    if kind in ("subshell", "brace-group"):
+        return _contains_heredoc(getattr(node, "body", None))
+    if kind in ("if", "while", "until", "for", "case", "select", "arith-for", "coproc", "function"):
+        # These compound commands can contain heredocs in their bodies
+        for attr in ("then_part", "else_part", "body", "action", "actions"):
+            child = getattr(node, attr, None)
+            if child and _contains_heredoc(child):
+                return True
+        # Check conditions too
+        for attr in ("condition", "test"):
+            child = getattr(node, attr, None)
+            if child and _contains_heredoc(child):
+                return True
+    return False
 
 
 def _starts_with_subshell(node: Node) -> bool:

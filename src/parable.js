@@ -4033,9 +4033,20 @@ class Word extends Node {
 				// Format this command substitution
 				inner = value.slice(i + 2, j - 1);
 				if (cmdsub_idx < cmdsub_parts.length) {
-					// Have parsed AST node - use it (} is preserved in AST)
+					// Have parsed AST node
 					node = cmdsub_parts[cmdsub_idx];
-					formatted = _formatCmdsubNode(node.command);
+					// Use pre-computed formatted_text if available and no heredocs
+					if (node.formatted_text && !_containsHeredoc(node.command)) {
+						result.push(node.formatted_text);
+					} else {
+						// Heredocs present or no formatted_text - format at runtime
+						formatted = _formatCmdsubNode(node.command);
+						if (formatted.startsWith("(")) {
+							result.push(`$( ${formatted})`);
+						} else {
+							result.push(`$(${formatted})`);
+						}
+					}
 					cmdsub_idx += 1;
 				} else {
 					// No AST node (e.g., inside arithmetic) - parse content on the fly
@@ -4046,12 +4057,12 @@ class Word extends Node {
 					} catch (_) {
 						formatted = inner;
 					}
-				}
-				// Add space after $( if content starts with ( to avoid $((
-				if (formatted.startsWith("(")) {
-					result.push(`$( ${formatted})`);
-				} else {
-					result.push(`$(${formatted})`);
+					// Add space after $( if content starts with ( to avoid $((
+					if (formatted.startsWith("(")) {
+						result.push(`$( ${formatted})`);
+					} else {
+						result.push(`$(${formatted})`);
+					}
 				}
 				i = j;
 			} else if (value[i] === "`" && cmdsub_idx < cmdsub_parts.length) {
@@ -6111,6 +6122,79 @@ function _formatCondBody(node) {
 		return `( ${_formatCondBody(node.inner)} )`;
 	}
 	return "";
+}
+
+function _containsHeredoc(node) {
+	let attr, child, cmd, kind, p, r;
+	if (node == null) {
+		return false;
+	}
+	kind = node.kind;
+	if (kind === "command") {
+		for (r of node.redirects ?? []) {
+			if (r.kind === "heredoc") {
+				return true;
+			}
+		}
+		return false;
+	}
+	if (kind === "pipeline") {
+		for (cmd of node.commands ?? []) {
+			if (_containsHeredoc(cmd)) {
+				return true;
+			}
+		}
+		return false;
+	}
+	if (kind === "list") {
+		for (p of node.parts ?? []) {
+			if (_containsHeredoc(p)) {
+				return true;
+			}
+		}
+		return false;
+	}
+	if (["and", "or", "semi", "amp", "list-term"].includes(kind)) {
+		if (_containsHeredoc(node.left ?? null)) {
+			return true;
+		}
+		if (_containsHeredoc(node.right ?? null)) {
+			return true;
+		}
+		return false;
+	}
+	if (["subshell", "brace-group"].includes(kind)) {
+		return _containsHeredoc(node.body ?? null);
+	}
+	if (
+		[
+			"if",
+			"while",
+			"until",
+			"for",
+			"case",
+			"select",
+			"arith-for",
+			"coproc",
+			"function",
+		].includes(kind)
+	) {
+		// These compound commands can contain heredocs in their bodies
+		for (attr of ["then_part", "else_part", "body", "action", "actions"]) {
+			child = node[attr] ?? null;
+			if (child && _containsHeredoc(child)) {
+				return true;
+			}
+		}
+		// Check conditions too
+		for (attr of ["condition", "test"]) {
+			child = node[attr] ?? null;
+			if (child && _containsHeredoc(child)) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 function _startsWithSubshell(node) {

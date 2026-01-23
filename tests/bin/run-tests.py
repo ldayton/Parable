@@ -71,8 +71,14 @@ def run_test(test_input, test_expected):
     """Run a single test. Returns (passed, actual, error_msg)."""
     from parable import ParseError, parse
 
+    # Check for @extglob directive
+    extglob = False
+    if test_input.startswith("# @extglob\n"):
+        extglob = True
+        test_input = test_input[len("# @extglob\n") :]
+
     try:
-        nodes = parse(test_input)
+        nodes = parse(test_input, extglob=extglob)
         actual = " ".join(node.to_sexp() for node in nodes)
     except ParseError as e:
         if normalize(test_expected) == "<error>":

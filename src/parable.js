@@ -438,7 +438,10 @@ class ContextStack {
 }
 
 class Lexer {
-	constructor(source) {
+	constructor(source, extglob) {
+		if (extglob == null) {
+			extglob = false;
+		}
 		this.source = source;
 		this.pos = 0;
 		this.length = source.length;
@@ -450,6 +453,8 @@ class Lexer {
 		this._dolbrace_state = DolbraceState.NONE;
 		// Pending heredocs tracked during word parsing
 		this._pending_heredocs = [];
+		// Extglob parsing enabled (bash shopt extglob)
+		this._extglob = extglob;
 		// Reference to Parser for expansion parsing callbacks (set by Parser)
 		this._parser = null;
 		// EOF token mechanism for command substitution parsing
@@ -784,18 +789,10 @@ class Lexer {
 			if (ch === ")") {
 				return true;
 			}
-			if (
-				ch === "&" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "&"
-			) {
+			if (ch === "&") {
 				return true;
 			}
-			if (
-				ch === "|" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "|"
-			) {
+			if (ch === "|") {
 				return true;
 			}
 			if (ch === ";") {
@@ -808,7 +805,7 @@ class Lexer {
 			) {
 				return true;
 			}
-			return _isWhitespaceNoNewline(ch);
+			return _isWhitespace(ch);
 		}
 		// WORD_CTX_NORMAL
 		// < and > don't terminate if followed by ( (process substitution)
@@ -1321,7 +1318,11 @@ class Lexer {
 			}
 			// COND: Extglob patterns or ( terminates
 			if (ctx === WORD_CTX_COND && ch === "(") {
-				if (chars.length > 0 && _isExtglobPrefix(chars[chars.length - 1])) {
+				if (
+					this._extglob &&
+					chars &&
+					_isExtglobPrefix(chars[chars.length - 1])
+				) {
 					chars.push(this.advance());
 					content = this._parseMatchedPair("(", ")", MatchedPairFlags.EXTGLOB);
 					chars.push(content);
@@ -1565,6 +1566,7 @@ class Lexer {
 			}
 			// NORMAL: Extglob pattern @(), ?(), *(), +(), !()
 			if (
+				this._extglob &&
 				ctx === WORD_CTX_NORMAL &&
 				_isExtglobPrefix(ch) &&
 				this.pos + 1 < this.length &&
@@ -2311,7 +2313,7 @@ class Lexer {
 					bc = this.peek();
 					if (bc === "\\" && this.pos + 1 < this.length) {
 						next_c = this.source[this.pos + 1];
-						if (_isEscapeCharInDquote(next_c)) {
+						if (_isEscapeCharInBacktick(next_c)) {
 							this.advance();
 						}
 					}
@@ -2356,7 +2358,7 @@ class Lexer {
 			inner = arg.slice(1, -1);
 			try {
 				// Use Parser for formatting (calls back via _parser reference)
-				sub_parser = new Parser(inner, true);
+				sub_parser = new Parser(inner, true, this._parser._extglob);
 				parsed = sub_parser.parseList();
 				if (parsed && sub_parser.atEnd()) {
 					formatted = _formatCmdsubNode(parsed, 0, true, false, true);
@@ -7587,6 +7589,10 @@ function _isSimpleParamOp(c) {
 }
 
 function _isEscapeCharInDquote(c) {
+	return ["$", "`", "\\", '"', "\n"].includes(c);
+}
+
+function _isEscapeCharInBacktick(c) {
 	return c === "$" || c === "`" || c === "\\";
 }
 
@@ -7694,9 +7700,12 @@ const WORD_CTX_NORMAL = 0;
 const WORD_CTX_COND = 1;
 const WORD_CTX_REGEX = 2;
 class Parser {
-	constructor(source, in_process_sub) {
+	constructor(source, in_process_sub, extglob) {
 		if (in_process_sub == null) {
 			in_process_sub = false;
+		}
+		if (extglob == null) {
+			extglob = false;
 		}
 		this.source = source;
 		this.pos = 0;
@@ -7707,10 +7716,12 @@ class Parser {
 		this._cmdsub_heredoc_end = null;
 		this._saw_newline_in_single_quote = false;
 		this._in_process_sub = in_process_sub;
+		// Extglob parsing enabled (bash shopt extglob)
+		this._extglob = extglob;
 		// Context stack for tracking nested parsing scopes
 		this._ctx = new ContextStack();
 		// Lexer for tokenization
-		this._lexer = new Lexer(source);
+		this._lexer = new Lexer(source, extglob);
 		this._lexer._parser = this;
 		// Token history for context-sensitive parsing (last 4 tokens like bash)
 		this._token_history = [null, null, null, null];
@@ -8589,7 +8600,7 @@ class Parser {
 					// Line continuation: skip both backslash and newline
 					this.advance();
 					this.advance();
-				} else if (_isEscapeCharInDquote(next_c)) {
+				} else if (_isEscapeCharInBacktick(next_c)) {
 					// Don't add to content_chars or text_chars
 					// Escape sequence: skip backslash in content, keep both in text
 					this.advance();
@@ -8809,7 +8820,7 @@ class Parser {
 			}
 		}
 		// Parse the content as a command list
-		sub_parser = new Parser(content);
+		sub_parser = new Parser(content, this._extglob);
 		cmd = sub_parser.parseList();
 		if (cmd == null) {
 			cmd = new Empty();
@@ -11770,6 +11781,7 @@ class Parser {
 					pattern_chars.push(this.advance());
 					extglob_depth += 1;
 				} else if (
+					this._extglob &&
 					_isExtglobPrefix(ch) &&
 					this.pos + 1 < this.length &&
 					this.source[this.pos + 1] === "("
@@ -12848,9 +12860,12 @@ class Parser {
 	}
 }
 
-function parse(source) {
+function parse(source, extglob) {
 	let parser;
-	parser = new Parser(source);
+	if (extglob == null) {
+		extglob = false;
+	}
+	parser = new Parser(source, false, extglob);
 	return parser.parse();
 }
 

@@ -507,7 +507,7 @@ class ContextStack:
 class Lexer:
     """Lexer for tokenizing shell input."""
 
-    def __init__(self, source: str):
+    def __init__(self, source: str, extglob: bool = False):
         self.source = source
         self.pos = 0
         self.length = len(source)
@@ -519,6 +519,8 @@ class Lexer:
         self._dolbrace_state = DolbraceState.NONE
         # Pending heredocs tracked during word parsing
         self._pending_heredocs: list = []
+        # Extglob parsing enabled (bash shopt extglob)
+        self._extglob = extglob
         # Reference to Parser for expansion parsing callbacks (set by Parser)
         self._parser: Parser | None = None
         # EOF token mechanism for command substitution parsing
@@ -1176,7 +1178,7 @@ class Lexer:
                 continue
             # COND: Extglob patterns or ( terminates
             if ctx == WORD_CTX_COND and ch == "(":
-                if chars and _is_extglob_prefix(chars[len(chars) - 1]):
+                if self._extglob and chars and _is_extglob_prefix(chars[len(chars) - 1]):
                     chars.append(self.advance())  # (
                     content = self._parse_matched_pair("(", ")", MatchedPairFlags.EXTGLOB)
                     chars.append(content)
@@ -1372,7 +1374,8 @@ class Lexer:
                     continue
             # NORMAL: Extglob pattern @(), ?(), *(), +(), !()
             if (
-                ctx == WORD_CTX_NORMAL
+                self._extglob
+                and ctx == WORD_CTX_NORMAL
                 and _is_extglob_prefix(ch)
                 and self.pos + 1 < self.length
                 and self.source[self.pos + 1] == "("
@@ -2003,7 +2006,7 @@ class Lexer:
             inner = arg[1:-1]
             try:
                 # Use Parser for formatting (calls back via _parser reference)
-                sub_parser = Parser(inner, in_process_sub=True)
+                sub_parser = Parser(inner, in_process_sub=True, extglob=self._parser._extglob)
                 parsed = sub_parser.parse_list()
                 if parsed and sub_parser.at_end():
                     formatted = _format_cmdsub_node(parsed, 0, True, False, True)
@@ -6456,7 +6459,7 @@ WORD_CTX_REGEX = 2  # RHS of =~ in [[ ]]
 class Parser:
     """Recursive descent parser for bash."""
 
-    def __init__(self, source: str, in_process_sub: bool = False):
+    def __init__(self, source: str, in_process_sub: bool = False, extglob: bool = False):
         self.source = source
         self.pos = 0
         self.length = len(source)
@@ -6466,10 +6469,12 @@ class Parser:
         self._cmdsub_heredoc_end: int | None = None
         self._saw_newline_in_single_quote = False
         self._in_process_sub = in_process_sub
+        # Extglob parsing enabled (bash shopt extglob)
+        self._extglob = extglob
         # Context stack for tracking nested parsing scopes
         self._ctx = ContextStack()
         # Lexer for tokenization
-        self._lexer = Lexer(source)
+        self._lexer = Lexer(source, extglob=extglob)
         self._lexer._parser = self  # Back-reference for expansion parsing
         # Token history for context-sensitive parsing (last 4 tokens like bash)
         self._token_history: list[Token | None] = [None, None, None, None]
@@ -7392,7 +7397,7 @@ class Parser:
                     self._cmdsub_heredoc_end = max(self._cmdsub_heredoc_end, heredoc_end)
 
         # Parse the content as a command list
-        sub_parser = Parser(content)
+        sub_parser = Parser(content, extglob=self._extglob)
         cmd = sub_parser.parse_list()
         if cmd is None:
             cmd = Empty()
@@ -9802,7 +9807,8 @@ class Parser:
                     pattern_chars.append(self.advance())
                     extglob_depth += 1
                 elif (
-                    _is_extglob_prefix(ch)
+                    self._extglob
+                    and _is_extglob_prefix(ch)
                     and self.pos + 1 < self.length
                     and self.source[self.pos + 1] == "("
                 ):
@@ -10746,12 +10752,13 @@ class Parser:
         return None
 
 
-def parse(source: str) -> list[Node]:
+def parse(source: str, extglob: bool = False) -> list[Node]:
     """
     Parse bash source code and return a list of AST nodes.
 
     Args:
         source: The bash source code to parse.
+        extglob: Enable extended glob patterns (@, ?, *, +, ! followed by parentheses).
 
     Returns:
         A list of AST nodes representing the parsed code.
@@ -10759,5 +10766,5 @@ def parse(source: str) -> list[Node]:
     Raises:
         ParseError: If the source code cannot be parsed.
     """
-    parser = Parser(source)
+    parser = Parser(source, False, extglob)
     return parser.parse()

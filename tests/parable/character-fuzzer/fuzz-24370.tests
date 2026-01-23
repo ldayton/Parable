@@ -1,4 +1,5 @@
 === extglob with process substitution containing redirect
+# @extglob
 *(<(<a))
 ---
 (command (word "*(<(<a))"))

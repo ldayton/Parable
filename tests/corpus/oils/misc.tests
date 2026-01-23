@@ -4031,6 +4031,7 @@ echo "-$dirprefix-"
 ---
 
 === !( as negation and subshell versus extended glob - #2463
+# @extglob
 have_icu_uc=false
 have_icu_i18n=false
 
@@ -6992,7 +6993,8 @@ echo -n $'\c-\c+\c"' | show_bytes
 (command (word "echo"))
 (pipe (command (word "echo") (word "-n") (word "''")) (command (word "show_bytes")))
 (command (word "echo"))
-(pipe (command (word "echo") (word "-n") (word "''")) (command (word "show_bytes")))
+(pipe (command (word "echo") (word "-n") (word "'
+'")) (command (word "show_bytes")))
 ---
 
 === echo `cat OSCFLAGS` "world" > OSCFLAGS (from Alpine imap)
@@ -9629,6 +9631,7 @@ xx() { echo "${@@Q}";}; xx a b c d
 ---
 
 === extglob $IFS 1
+# @extglob
 # http://landley.net/notes.html#12-06-2020
 shopt -s extglob
 
@@ -9651,6 +9654,7 @@ echo $ABC
 ---
 
 === extglob $IFS 2
+# @extglob
 # http://landley.net/notes.html#17-05-2020
 
 shopt -s extglob  # required for bash, not osh
@@ -9661,6 +9665,7 @@ IFS=x; ABC=cxd; for i in +($ABC); do echo =$i=; done
 ---
 
 === char class / extglob
+# @extglob
 # http://landley.net/notes.html#14-05-2020
 shopt -s extglob
 

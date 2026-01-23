@@ -7609,6 +7609,7 @@ head foo-bar foo-spam
 ---
 
 === File redirect with extended glob
+# @extglob
 shopt -s extglob
 
 touch foo-bar
@@ -7626,6 +7627,7 @@ cat foo-bar
 ---
 
 === Extended glob that doesn't match anything
+# @extglob
 shopt -s extglob
 rm bad_*
 

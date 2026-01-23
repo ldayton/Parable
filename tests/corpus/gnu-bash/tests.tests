@@ -2497,6 +2497,7 @@ echo $upper
 ---
 
 === complete
+# @extglob
 #  Chet Ramey <chet.ramey@case.edu>
 #
 #  Copyright 2002-2020 Chester Ramey
@@ -3276,6 +3277,7 @@ ${THIS_SH} ./comsub7.sub
 ---
 
 === cond
+# @extglob
 #   This program is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
 #   the Free Software Foundation, either version 3 of the License, or
@@ -5979,6 +5981,7 @@ ${THIS_SH} ./exportfunc3.sub
 ---
 
 === extglob
+# @extglob
 #   This program is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
 #   the Free Software Foundation, either version 3 of the License, or
@@ -6719,6 +6722,7 @@ t foobb         !(foo)b*
 ---
 
 === extglob3
+# @extglob
 #   This program is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
 #   the Free Software Foundation, either version 3 of the License, or
@@ -14807,6 +14811,7 @@ EOF
 ---
 
 === printf
+# @extglob
 #   This program is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
 #   the Free Software Foundation, either version 3 of the License, or

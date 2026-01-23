@@ -18,6 +18,7 @@ for x in; do :; done
 
 
 === extglob in word
+# @extglob
 echo @(a|b)
 ---
 (command (word "echo") (word "@(a|b)"))

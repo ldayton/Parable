@@ -467,6 +467,7 @@ echo {z..3}
 ---
 
 === @() matches exactly one of the patterns
+# @extglob
 shopt -s extglob
 mkdir -p 0
 cd 0
@@ -481,6 +482,7 @@ echo @(*.cc|*.h)
 ---
 
 === ?() matches 0 or 1
+# @extglob
 shopt -s extglob
 mkdir -p 1
 cd 1
@@ -497,6 +499,7 @@ echo foo.?($ext|h)
 ---
 
 === *() matches 0 or more
+# @extglob
 shopt -s extglob
 mkdir -p eg1
 touch eg1/_ eg1/_One eg1/_OneOne eg1/_TwoTwo eg1/_OneTwo
@@ -509,6 +512,7 @@ echo eg1/_*(One|Two)
 ---
 
 === +() matches 1 or more
+# @extglob
 shopt -s extglob
 mkdir -p eg2
 touch eg2/_ eg2/_One eg2/_OneOne eg2/_TwoTwo eg2/_OneTwo
@@ -521,6 +525,7 @@ echo eg2/_+(One|$(echo Two))
 ---
 
 === !(*.h|*.cc) to match everything except C++
+# @extglob
 shopt -s extglob
 mkdir -p extglob2
 touch extglob2/{foo,bar}.cc extglob2/{foo,bar,baz}.h \
@@ -534,6 +539,7 @@ echo extglob2/!(*.h|*.cc)
 ---
 
 === Two adjacent alternations
+# @extglob
 shopt -s extglob
 mkdir -p 2
 touch 2/{aa,ab,ac,ba,bb,bc,ca,cb,cc}
@@ -550,6 +556,7 @@ echo 2/!(b)a@(b|c)  # constant in between
 ---
 
 === Nested extended glob pattern
+# @extglob
 shopt -s extglob
 mkdir -p eg6
 touch eg6/{ab,ac,ad,az,bc,bd}
@@ -564,6 +571,7 @@ echo eg6/a!(@(ab|b*))
 ---
 
 === Extended glob patterns with spaces
+# @extglob
 shopt -s extglob
 mkdir -p eg4
 touch eg4/a 'eg4/a b' eg4/foo
@@ -576,6 +584,7 @@ argv.py eg4/@(a b|foo)
 ---
 
 === Filenames with spaces
+# @extglob
 shopt -s extglob
 mkdir -p eg5
 touch eg5/'a b'{cd,de,ef}
@@ -588,6 +597,7 @@ argv.py eg5/'a '@(bcd|bde|zzz)
 ---
 
 === nullglob with extended glob
+# @extglob
 shopt -s extglob
 mkdir eg6
 argv.py eg6/@(no|matches)  # no matches
@@ -602,6 +612,7 @@ argv.py eg6/@(no|matches)  # no matches
 ---
 
 === Glob other punctuation chars (lexer mode)
+# @extglob
 shopt -s extglob
 mkdir -p eg5
 cd eg5
@@ -618,6 +629,7 @@ argv.py @(__aa|'__<>'|__{}|__#|__&&|)
 ---
 
 === More glob escaping
+# @extglob
 shopt -s extglob
 mkdir -p eg7
 cd eg7
@@ -636,6 +648,7 @@ argv.py @(nested|'_?'|@('_[:]'|'_*'))
 ---
 
 === Escaping of pipe (glibc bug, see demo/glibc_fnmatch.c)
+# @extglob
 shopt -s extglob
 
 mkdir -p extpipe
@@ -678,6 +691,7 @@ echo ${undef:-@(foo|bar).py}
 ---
 
 === Extended glob in assignment builtin
+# @extglob
 # Another invocation of _EvalWordToParts() that OSH should handle
 
 shopt -s extglob
@@ -696,6 +710,7 @@ echo status=$?
 ---
 
 === Extended glob in same word as array
+# @extglob
 shopt -s extglob
 mkdir -p eg10
 cd eg10
@@ -725,6 +740,7 @@ argv.py at extglob "$@"*@(.py|cc)
 ---
 
 === Extended glob with word splitting
+# @extglob
 shopt -s extglob
 mkdir -p 3
 cd 3
@@ -744,6 +760,7 @@ argv.py $x*.@(cc|h)
 ---
 
 === In Array Literal and for loop
+# @extglob
 shopt -s extglob
 mkdir -p eg11
 cd eg11
@@ -769,6 +786,7 @@ echo "${A[@]}"
 ---
 
 === No extended glob with simple_word_eval (YSH evaluation)
+# @extglob
 shopt -s ysh:all
 shopt -s extglob
 mkdir -p eg12
@@ -787,6 +805,7 @@ builtin write -- @(fo*|bar).py
 ---
 
 === no_dash_glob
+# @extglob
 shopt -s extglob
 mkdir -p opts
 cd opts
@@ -807,6 +826,7 @@ echo @(*)
 ---
 
 === noglob
+# @extglob
 shopt -s extglob
 mkdir -p _noglob
 cd _noglob
@@ -824,6 +844,7 @@ echo @(__nope__*|__nope__?|'*'|'?'|'[:alpha:]'|'|')
 ---
 
 === failglob
+# @extglob
 shopt -s extglob
 
 rm -f _failglob/*
@@ -851,6 +872,7 @@ echo status=$?
 ---
 
 === @ matches exactly one
+# @extglob
 [[ --verbose == --@(help|verbose) ]] && echo TRUE
 [[ --oops == --@(help|verbose) ]] || echo FALSE
 ---
@@ -859,6 +881,7 @@ echo status=$?
 ---
 
 === @() with variable arms
+# @extglob
 choice1='help'
 choice2='verbose'
 [[ --verbose == --@($choice1|$choice2) ]] && echo TRUE
@@ -871,6 +894,7 @@ choice2='verbose'
 ---
 
 === extglob in variable
+# @extglob
 shopt -s extglob
 
 # this syntax requires extglob in bash!!
@@ -896,6 +920,7 @@ quoted='--@(help|verbose)'
 ---
 
 === Matching literal '@(cc)'
+# @extglob
 # extglob is OFF.  Doesn't affect bash or mksh!
 [[ cc == @(cc) ]] 
 echo status=$?
@@ -937,6 +962,7 @@ pat='--@(help|verbose|no-@(long|short)-option)'
 ---
 
 === nested @() with quotes and vars
+# @extglob
 shopt -s extglob
 prefix=no
 [[ --no-long-option == --@(help|verbose|$prefix-@(long|short)-'option') ]] &&
@@ -948,6 +974,7 @@ prefix=no
 ---
 
 === ? matches 0 or 1
+# @extglob
 [[ -- == --?(help|verbose) ]] && echo TRUE
 [[ --oops == --?(help|verbose) ]] || echo FALSE
 ---
@@ -956,6 +983,7 @@ prefix=no
 ---
 
 === + matches 1 or more
+# @extglob
 [[ --helphelp == --+(help|verbose) ]] && echo TRUE
 [[ -- == --+(help|verbose) ]] || echo FALSE
 ---
@@ -964,6 +992,7 @@ prefix=no
 ---
 
 === * matches 0 or more
+# @extglob
 [[ -- == --*(help|verbose) ]] && echo TRUE
 [[ --oops == --*(help|verbose) ]] || echo FALSE
 ---
@@ -972,6 +1001,7 @@ prefix=no
 ---
 
 === simple repetition with *(foo) and +(Foo)
+# @extglob
 [[ foofoo == *(foo) ]] && echo TRUE
 [[ foofoo == +(foo) ]] && echo TRUE
 ---
@@ -980,6 +1010,7 @@ prefix=no
 ---
 
 === ! matches none
+# @extglob
 [[ --oops == --!(help|verbose) ]] && echo TRUE
 [[ --help == --!(help|verbose) ]] || echo FALSE
 ---
@@ -988,6 +1019,7 @@ prefix=no
 ---
 
 === match is anchored
+# @extglob
 [[ foo_ == @(foo) ]] || echo FALSE
 [[ _foo == @(foo) ]] || echo FALSE
 [[ foo == @(foo) ]] && echo TRUE
@@ -998,6 +1030,7 @@ prefix=no
 ---
 
 === repeated match is anchored
+# @extglob
 [[ foofoo_ == +(foo) ]] || echo FALSE
 [[ _foofoo == +(foo) ]] || echo FALSE
 [[ foofoo == +(foo) ]] && echo TRUE
@@ -1008,6 +1041,7 @@ prefix=no
 ---
 
 === repetition with glob
+# @extglob
 # NOTE that * means two different things here
 [[ foofoo_foo__foo___ == *(foo*) ]] && echo TRUE
 [[ Xoofoo_foo__foo___ == *(foo*) ]] || echo FALSE
@@ -1017,6 +1051,7 @@ prefix=no
 ---
 
 === No brace expansion in ==
+# @extglob
 [[ --X{a,b}X == --@(help|X{a,b}X) ]] && echo TRUE
 [[ --oops == --@(help|X{a,b}X) ]] || echo FALSE
 ---
@@ -1025,6 +1060,7 @@ prefix=no
 ---
 
 === adjacent extglob
+# @extglob
 [[ --help == @(--|++)@(help|verbose) ]] && echo TRUE
 [[ ++verbose == @(--|++)@(help|verbose) ]] && echo TRUE
 ---
@@ -1033,6 +1069,7 @@ prefix=no
 ---
 
 === nested extglob
+# @extglob
 [[ --help == --@(help|verbose=@(1|2)) ]] && echo TRUE
 [[ --verbose=1 == --@(help|verbose=@(1|2)) ]] && echo TRUE
 [[ --verbose=2 == --@(help|verbose=@(1|2)) ]] && echo TRUE
@@ -1045,6 +1082,7 @@ prefix=no
 ---
 
 === extglob empty string
+# @extglob
 shopt -s extglob
 [[ '' == @(foo|bar) ]] || echo FALSE
 [[ '' == @(foo||bar) ]] && echo TRUE
@@ -1055,6 +1093,7 @@ shopt -s extglob
 ---
 
 === extglob empty pattern
+# @extglob
 shopt -s extglob
 [[ '' == @() ]] && echo TRUE
 [[ '' == @(||) ]] && echo TRUE
@@ -1069,6 +1108,7 @@ shopt -s extglob
 ---
 
 === case with extglob
+# @extglob
 shopt -s extglob
 for word in --help --verbose --unmatched -- -zxzx -; do
   case $word in
@@ -1100,6 +1140,7 @@ done
 ---
 
 === [[ $x == !($str) ]]
+# @extglob
 shopt -s extglob
 empty=''
 str='x'
@@ -1114,6 +1155,7 @@ str='x'
 ---
 
 === Turning extglob on changes the meaning of [[ !(str) ]] in bash
+# @extglob
 empty=''
 str='x'
 [[ !($empty) ]]  && echo TRUE   # test if $empty is empty
@@ -1132,6 +1174,7 @@ shopt -s extglob  # mksh doesn't have this
 ---
 
 === With extglob on, !($str) on the left or right of == has different meanings
+# @extglob
 shopt -s extglob
 str='x'
 [[ 1 == !($str) ]]  && echo TRUE   # glob match
@@ -1142,6 +1185,7 @@ str='x'
 ---
 
 === extglob inside arg word
+# @extglob
 shopt -s extglob
 [[ foo == @(foo|bar) ]] && echo rhs
 [[ foo == ${unset:-@(foo|bar)} ]] && echo 'rhs arg'
@@ -1176,6 +1220,7 @@ echo $?
 ---
 
 === extended glob of single unicode char
+# @extglob
 shopt -s extglob
 [[ __a__ == @(__?__) ]]
 echo $?
@@ -2041,6 +2086,7 @@ echo *  # expansion includes -foo.txt, because it doesn't match GLOBIGNORE
 ---
 
 === Extended glob expansion combined with GLOBIGNORE
+# @extglob
 shopt -s extglob
 
 touch foo.cc foo.h bar.cc bar.h 

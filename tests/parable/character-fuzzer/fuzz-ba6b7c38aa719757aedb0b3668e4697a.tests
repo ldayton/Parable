@@ -1,4 +1,5 @@
 === parameter expansion with nested command substitution in @() - no closing brace
+# @extglob
 @(${$(a))
 ---
 (command (word "@(${$(a))"))

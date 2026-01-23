@@ -7589,18 +7589,26 @@ class Parser:
             self._in_process_sub = old_in_process_sub
             return ProcessSubstitution(direction, cmd), text
 
-        except ParseError:
-            # Parsing failed - scan to find the closing ) and return as literal text
+        except ParseError as e:
+            # Parsing failed - check if we should error or fall back to literal
             self._restore_parser_state(saved)
             self._in_process_sub = old_in_process_sub
-            self.pos = start + 2  # after <( or >(
 
-            # Scan to find matching ) using unified matched pair parsing
+            # Check what's after the opening <( or >(
+            content_start_char = self.source[start + 2] if start + 2 < self.length else ""
+
+            # If content starts with ( (like <((...)), bash treats as literal, not procsub
+            # If content starts with space/tab/newline, bash commits to procsub and errors
+            if content_start_char in " \t\n":
+                # Committed to procsub - re-raise the error (bash behavior)
+                raise e
+
+            # Otherwise, fall back to scanning for closing ) and return as literal
+            self.pos = start + 2  # after <( or >(
             self._lexer.pos = self.pos  # sync lexer to parser
             self._lexer._parse_matched_pair("(", ")")
             self.pos = self._lexer.pos  # sync parser from lexer
             text = _substring(self.source, start, self.pos)
-            # Strip line continuations (backslash-newline) from text
             text = _strip_line_continuations_comment_aware(text)
             return None, text
 

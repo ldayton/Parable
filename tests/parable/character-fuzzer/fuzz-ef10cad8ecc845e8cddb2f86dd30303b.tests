@@ -1,5 +1,5 @@
-=== strip space after >( in process substitution with $?()
+=== >( $?()) is syntax error
 >( $?())
 ---
-(command (word ">($?())"))
+<error>
 ---

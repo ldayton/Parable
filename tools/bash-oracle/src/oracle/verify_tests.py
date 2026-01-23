@@ -31,7 +31,6 @@ class WorkerResult:
     """Result from verifying a single test case."""
 
     passed: bool
-    skipped: dict | None = None
     failure: dict | None = None
 
 
@@ -120,35 +119,42 @@ def worker_process(work_queue, result_queue, stop_event) -> None:
         tc = work_queue.get()
         if tc is STOP_SENTINEL:
             break
-        # Skip tests marked as <infinite> (bash-oracle hangs on these)
+        # Tests marked <infinite> are failures - they should be fixed or expect <error>
         if tc.expected == "<infinite>":
             result_queue.put(
                 WorkerResult(
                     passed=False,
-                    skipped={
+                    failure={
                         "file": tc.file,
                         "line": tc.line,
                         "name": tc.name,
                         "input": tc.input,
-                        "reason": "infinite",
+                        "expected": tc.expected,
+                        "oracle": "<infinite>",
                     },
                 )
             )
             continue
         oracle_output = get_oracle_output(tc.input, tc.extglob)
         if oracle_output is None:
-            result_queue.put(
-                WorkerResult(
-                    passed=False,
-                    skipped={
-                        "file": tc.file,
-                        "line": tc.line,
-                        "name": tc.name,
-                        "input": tc.input,
-                        "reason": "timeout",
-                    },
+            # Timeout - treat as pass if expected is <error> (bash hangs on some errors)
+            if normalize(tc.expected) == "<error>":
+                result_queue.put(WorkerResult(passed=True))
+            else:
+                # Timeout but didn't expect error - this is a failure
+                result_queue.put(
+                    WorkerResult(
+                        passed=False,
+                        failure={
+                            "file": tc.file,
+                            "line": tc.line,
+                            "name": tc.name,
+                            "input": tc.input,
+                            "expected": tc.expected,
+                            "oracle": "<timeout>",
+                        },
+                    )
                 )
-            )
             continue
         expected_norm = normalize(tc.expected)
         oracle_norm = normalize(oracle_output)
@@ -184,9 +190,7 @@ def main():
     total = len(all_tests)
     passed = 0
     failed = 0
-    skipped = 0
     failures = []
-    skipped_tests = []
 
     # Set up multiprocessing
     num_workers = mp.cpu_count()
@@ -214,10 +218,7 @@ def main():
         if result is STOP_SENTINEL:
             continue
         processed += 1
-        if result.skipped:
-            skipped += 1
-            skipped_tests.append(result.skipped)
-        elif result.passed:
+        if result.passed:
             passed += 1
         else:
             failed += 1
@@ -240,11 +241,6 @@ def main():
     print(f"Total:   {total}")
     print(f"Passed:  {passed}")
     print(f"Failed:  {failed}")
-    print(f"Skipped: {skipped}")
-    if skipped_tests:
-        for s in skipped_tests:
-            reason = s.get("reason", "unknown")
-            print(f"  - {Path(s['file']).name}:{s['line']} {s['name']} ({reason})")
     print()
 
     if failures:

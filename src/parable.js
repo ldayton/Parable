@@ -8987,7 +8987,14 @@ class Parser {
 	}
 
 	_parseProcessSubstitution() {
-		let cmd, direction, old_in_process_sub, saved, start, text, text_end;
+		let cmd,
+			content_start_char,
+			direction,
+			old_in_process_sub,
+			saved,
+			start,
+			text,
+			text_end;
 		if (this.atEnd() || !_isRedirectChar(this.peek())) {
 			return [null, ""];
 		}
@@ -9024,17 +9031,25 @@ class Parser {
 			this._restoreParserState(saved);
 			this._in_process_sub = old_in_process_sub;
 			return [new ProcessSubstitution(direction, cmd), text];
-		} catch (_) {
-			// Parsing failed - scan to find the closing ) and return as literal text
+		} catch (e) {
+			// Parsing failed - check if we should error or fall back to literal
 			this._restoreParserState(saved);
 			this._in_process_sub = old_in_process_sub;
+			// Check what's after the opening <( or >(
+			content_start_char =
+				start + 2 < this.length ? this.source[start + 2] : "";
+			// If content starts with ( (like <((...)), bash treats as literal, not procsub
+			// If content starts with space/tab/newline, bash commits to procsub and errors
+			if (" \t\n".includes(content_start_char)) {
+				// Committed to procsub - re-raise the error (bash behavior)
+				throw e;
+			}
+			// Otherwise, fall back to scanning for closing ) and return as literal
 			this.pos = start + 2;
-			// Scan to find matching ) using unified matched pair parsing
 			this._lexer.pos = this.pos;
 			this._lexer._parseMatchedPair("(", ")");
 			this.pos = this._lexer.pos;
 			text = this.source.slice(start, this.pos);
-			// Strip line continuations (backslash-newline) from text
 			text = _stripLineContinuationsCommentAware(text);
 			return [null, text];
 		}

@@ -18,3 +18,9 @@ echo $@()
 ---
 (command (word "echo") (word "$@()"))
 ---
+
+=== $*() without extglob is syntax error
+$*()
+---
+<error>
+---

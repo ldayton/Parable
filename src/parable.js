@@ -1474,6 +1474,7 @@ class Lexer {
 					this._syncFromParser();
 					// Special params $? $* $@ can be followed by () as extglob pattern
 					if (
+						this._extglob &&
 						ctx === WORD_CTX_NORMAL &&
 						chars &&
 						chars[chars.length - 1].length === 2 &&

@@ -1303,7 +1303,8 @@ class Lexer:
                     self._sync_from_parser()
                     # Special params $? $* $@ can be followed by () as extglob pattern
                     if (
-                        ctx == WORD_CTX_NORMAL
+                        self._extglob
+                        and ctx == WORD_CTX_NORMAL
                         and chars
                         and len(chars[len(chars) - 1]) == 2
                         and chars[len(chars) - 1][0] == "$"

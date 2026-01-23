@@ -1,16 +1,19 @@
 === $?() extglob after special param
+# @extglob
 echo $?()
 ---
 (command (word "echo") (word "$?()"))
 ---
 
 === $*() extglob after special param
+# @extglob
 echo $*()
 ---
 (command (word "echo") (word "$*()"))
 ---
 
 === $@() extglob after special param
+# @extglob
 echo $@()
 ---
 (command (word "echo") (word "$@()"))

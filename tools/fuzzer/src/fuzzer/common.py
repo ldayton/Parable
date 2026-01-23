@@ -79,17 +79,13 @@ def run_oracle(input_text: str, extglob: bool = False) -> str | None:
         if extglob:
             cmd.append("--extglob")
         cmd.append(str(tmp_path))
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            timeout=5,
-        )
+        result = subprocess.run(cmd, capture_output=True, timeout=0.5)
         if result.returncode != 0:
             return None
         return result.stdout.decode("utf-8", errors="replace").strip()
     except subprocess.TimeoutExpired:
         return None
-    except FileNotFoundError:
+    except (FileNotFoundError, OSError):
         return None
     finally:
         if tmp_path:
@@ -98,13 +94,25 @@ def run_oracle(input_text: str, extglob: bool = False) -> str | None:
 
 def run_parable(input_text: str, extglob: bool = False) -> str | None:
     """Run Parable on input. Returns s-expr, None on parse error, or <crash:...>."""
+    import signal
+
+    def timeout_handler(signum, frame):
+        raise TimeoutError("parable timeout")
+
+    old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(2)  # 2 second timeout
     try:
         nodes = parse(input_text, extglob=extglob)
         return " ".join(node.to_sexp() for node in nodes)
     except ParseError:
         return None
+    except TimeoutError:
+        return None
     except Exception as e:
         return f"<crash: {type(e).__name__}: {e}>"
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
 
 
 def normalize(s: str) -> str:

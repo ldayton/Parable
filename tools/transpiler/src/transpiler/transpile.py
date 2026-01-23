@@ -690,6 +690,14 @@ class JSTranspiler(ast.NodeVisitor):
                     return f"parseInt({args})"
                 return f"parseInt({args}, 10)"
             if name == "bool":
+                # Warn if bool() is called on a bare variable - could be a list
+                # (Python bool([]) is False, JS Boolean([]) is true)
+                # Safe: bool(flags & MASK), bool(x > 0). Unsafe: bool(mylist)
+                if len(node.args) == 1 and isinstance(node.args[0], ast.Name):
+                    raise ValueError(
+                        f"bool({node.args[0].id}) may have different behavior in JS for arrays. "
+                        f"Use 'len({node.args[0].id}) > 0' for lists or explicit comparison for other types."
+                    )
                 return f"Boolean({args})"
             if name == "ord":
                 return f"{args}.charCodeAt(0)"

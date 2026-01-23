@@ -4108,13 +4108,26 @@ class Word extends Node {
 					continue;
 				}
 				if (procsub_idx < procsub_parts.length) {
-					// Have parsed AST node - use it
+					// Have parsed AST node
 					direction = value[i];
 					j = _findCmdsubEnd(value, i + 2);
 					node = procsub_parts[procsub_idx];
+					raw_content = value.slice(i + 2, j - 1);
+					// Use pre-computed formatted_text if no heredocs and no special subshell cases
+					if (
+						node.formatted_text &&
+						!_containsHeredoc(node.command) &&
+						node.command.kind !== "subshell" &&
+						!_startsWithSubshell(node.command)
+					) {
+						result.push(node.formatted_text);
+						procsub_idx += 1;
+						i = j;
+						continue;
+					}
+					// Fall back to full formatting logic for special cases
 					compact = _startsWithSubshell(node.command);
 					formatted = _formatCmdsubNode(node.command, 0, true, compact, true);
-					raw_content = value.slice(i + 2, j - 1);
 					if (node.command.kind === "subshell") {
 						// Extract leading whitespace
 						leading_ws_end = 0;

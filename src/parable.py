@@ -3356,13 +3356,25 @@ class Word(Node):
                     i = j
                     continue
                 if procsub_idx < len(procsub_parts):
-                    # Have parsed AST node - use it
+                    # Have parsed AST node
                     direction = value[i]
                     j = _find_cmdsub_end(value, i + 2)
                     node = procsub_parts[procsub_idx]
+                    raw_content = _substring(value, i + 2, j - 1)
+                    # Use pre-computed formatted_text if no heredocs and no special subshell cases
+                    if (
+                        node.formatted_text
+                        and not _contains_heredoc(node.command)
+                        and node.command.kind != "subshell"
+                        and not _starts_with_subshell(node.command)
+                    ):
+                        result.append(node.formatted_text)
+                        procsub_idx += 1
+                        i = j
+                        continue
+                    # Fall back to full formatting logic for special cases
                     compact = _starts_with_subshell(node.command)
                     formatted = _format_cmdsub_node(node.command, 0, True, compact, True)
-                    raw_content = _substring(value, i + 2, j - 1)
                     if node.command.kind == "subshell":
                         # Extract leading whitespace
                         leading_ws_end = 0

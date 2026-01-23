@@ -5,6 +5,10 @@ run_id := `head -c 16 /dev/urandom | xxd -p`
 _test version *ARGS:
     UV_PROJECT_ENVIRONMENT=.venv-{{version}} uv run --python {{version}} tests/bin/run-tests.py {{ARGS}} 2>&1 | sed -u "s/^/[{{version}}] /" | tee /tmp/{{project}}-{{run_id}}-test-{{version}}.log
 
+# Run tests on CPython 3.8
+test-cpy38 *ARGS: (_test "3.8" ARGS)
+# Run tests on CPython 3.9
+test-cpy39 *ARGS: (_test "3.9" ARGS)
 # Run tests on CPython 3.10
 test-cpy310 *ARGS: (_test "3.10" ARGS)
 # Run tests on CPython 3.11
@@ -60,7 +64,7 @@ verify-tests:
 
 # Run tests on all supported CPython versions (parallel)
 [parallel]
-test-cpy: test-cpy310 test-cpy311 test-cpy312 test-cpy313 test-cpy314
+test-cpy: test-cpy38 test-cpy39 test-cpy310 test-cpy311 test-cpy312 test-cpy313 test-cpy314
 
 # Run tests on PyPy
 test-pypy: test-pypy311

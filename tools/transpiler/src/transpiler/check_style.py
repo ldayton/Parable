@@ -224,9 +224,10 @@ def check_file(filepath):
         if isinstance(node, ast.Import):
             errors.append((lineno, "import: not allowed, code must be self-contained"))
 
-        # from ... import
+        # from ... import (allow __future__)
         if isinstance(node, ast.ImportFrom):
-            errors.append((lineno, "from import: not allowed, code must be self-contained"))
+            if node.module != "__future__":
+                errors.append((lineno, "from import: not allowed, code must be self-contained"))
 
     return errors
 

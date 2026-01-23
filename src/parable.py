@@ -7,6 +7,8 @@ from parable import parse
 ast = parse("ps aux | grep python | awk '{print $2}'")
 """
 
+from __future__ import annotations
+
 
 class ParseError(Exception):
     """Raised when parsing fails."""
@@ -193,7 +195,7 @@ class Token:
     """
 
     def __init__(
-        self, type_: int, value: str, pos: int, parts: list = None, word: "Word | None" = None
+        self, type_: int, value: str, pos: int, parts: list = None, word: Word | None = None
     ):
         self.type = type_
         self.value = value
@@ -371,7 +373,7 @@ class QuoteState:
         elif c == '"' and not self.single:
             self.double = not self.double
 
-    def copy(self) -> "QuoteState":
+    def copy(self) -> QuoteState:
         """Create a copy of this quote state."""
         qs = QuoteState()
         qs.single = self.single
@@ -1098,7 +1100,7 @@ class Lexer:
 
     def _read_word_internal(
         self, ctx: int, at_command_start: bool = False, in_array_literal: bool = False
-    ) -> "Word | None":
+    ) -> Word | None:
         """Unified word parser with context-aware termination.
 
         Uses callbacks to Parser for methods that need parse_list or other parsing.
@@ -1485,7 +1487,7 @@ class Lexer:
         """Check if a parser state flag is set."""
         return (self._parser_state & flag) != 0
 
-    def _read_ansi_c_quote(self) -> tuple["Node | None", str]:
+    def _read_ansi_c_quote(self) -> tuple[Node | None, str]:
         """Read ANSI-C quoting $'...'.
 
         Returns (node, text) where node is the AST node and text is the raw text.
@@ -1531,7 +1533,7 @@ class Lexer:
         if self._parser is not None:
             self.pos = self._parser.pos
 
-    def _read_locale_string(self) -> tuple["Node | None", str, list["Node"]]:
+    def _read_locale_string(self) -> tuple[Node | None, str, list[Node]]:
         """Read locale translation $"...".
 
         Returns (node, text, inner_parts) where:
@@ -1798,7 +1800,7 @@ class Lexer:
                 return None
         return None
 
-    def _read_param_expansion(self, in_dquote: bool = False) -> tuple["Node | None", str]:
+    def _read_param_expansion(self, in_dquote: bool = False) -> tuple[Node | None, str]:
         """Read a parameter expansion starting at $.
 
         Returns (node, text) where node is the AST node and text is the raw text.
@@ -1838,7 +1840,7 @@ class Lexer:
         self.pos = start
         return None, ""
 
-    def _read_braced_param(self, start: int, in_dquote: bool = False) -> tuple["Node | None", str]:
+    def _read_braced_param(self, start: int, in_dquote: bool = False) -> tuple[Node | None, str]:
         """Read contents of ${...} after the opening brace.
 
         start is the position of the $.
@@ -3978,9 +3980,9 @@ class Subshell(Node):
     """A subshell ( list )."""
 
     body: Node
-    redirects: list["Redirect | HereDoc"] | None = None
+    redirects: list[Redirect | HereDoc] | None = None
 
-    def __init__(self, body: Node, redirects: list["Redirect | HereDoc"] | None = None):
+    def __init__(self, body: Node, redirects: list[Redirect | HereDoc] | None = None):
         self.kind = "subshell"
         self.body = body
         self.redirects = redirects
@@ -3994,9 +3996,9 @@ class BraceGroup(Node):
     """A brace group { list; }."""
 
     body: Node
-    redirects: list["Redirect | HereDoc"] | None = None
+    redirects: list[Redirect | HereDoc] | None = None
 
-    def __init__(self, body: Node, redirects: list["Redirect | HereDoc"] | None = None):
+    def __init__(self, body: Node, redirects: list[Redirect | HereDoc] | None = None):
         self.kind = "brace-group"
         self.body = body
         self.redirects = redirects
@@ -4239,10 +4241,10 @@ class Case(Node):
     """A case statement."""
 
     word: Word
-    patterns: list["CasePattern"]
+    patterns: list[CasePattern]
     redirects: list[Node]
 
-    def __init__(self, word: Word, patterns: list["CasePattern"], redirects: list[Node] = None):
+    def __init__(self, word: Word, patterns: list[CasePattern], redirects: list[Node] = None):
         self.kind = "case"
         self.word = word
         self.patterns = patterns
@@ -4527,9 +4529,9 @@ class CommandSubstitution(Node):
 class ArithmeticExpansion(Node):
     """An arithmetic expansion $((...)) with parsed internals."""
 
-    expression: "Node | None"  # Parsed arithmetic expression, or None for empty
+    expression: Node | None  # Parsed arithmetic expression, or None for empty
 
-    def __init__(self, expression: "Node | None"):
+    def __init__(self, expression: Node | None):
         self.kind = "arith"
         self.expression = expression
 
@@ -4542,12 +4544,12 @@ class ArithmeticExpansion(Node):
 class ArithmeticCommand(Node):
     """An arithmetic command ((...)) with parsed internals."""
 
-    expression: "Node | None"  # Parsed arithmetic expression, or None for empty
+    expression: Node | None  # Parsed arithmetic expression, or None for empty
     redirects: list[Node]
     raw_content: str  # Raw expression text for bash-oracle-compatible output
 
     def __init__(
-        self, expression: "Node | None", redirects: list[Node] = None, raw_content: str = ""
+        self, expression: Node | None, redirects: list[Node] = None, raw_content: str = ""
     ):
         self.kind = "arith-cmd"
         self.expression = expression
@@ -4906,10 +4908,10 @@ class Time(Node):
 class ConditionalExpr(Node):
     """A conditional expression [[ expression ]]."""
 
-    body: "Node | str"  # Parsed node or raw string for backwards compat
+    body: Node | str  # Parsed node or raw string for backwards compat
     redirects: list[Node]
 
-    def __init__(self, body: "Node | str", redirects: list[Node] = None):
+    def __init__(self, body: Node | str, redirects: list[Node] = None):
         self.kind = "cond-expr"
         self.body = body
         if redirects is None:
@@ -5099,7 +5101,7 @@ def _format_cond_body(node: Node) -> str:
     return ""
 
 
-def _starts_with_subshell(node: "Node") -> bool:
+def _starts_with_subshell(node: Node) -> bool:
     """Check if a node starts with a subshell (for compact redirect formatting in procsub)."""
     if node.kind == "subshell":
         return True
@@ -5506,7 +5508,7 @@ def _format_cmdsub_node(
 
 
 def _format_redirect(
-    r: "Redirect | HereDoc", compact: bool = False, heredoc_op_only: bool = False
+    r: Redirect | HereDoc, compact: bool = False, heredoc_op_only: bool = False
 ) -> str:
     """Format a redirect for command substitution output."""
     if r.kind == "heredoc":
@@ -5570,7 +5572,7 @@ def _format_redirect(
     return op + " " + target
 
 
-def _format_heredoc_body(r: "HereDoc") -> str:
+def _format_heredoc_body(r: HereDoc) -> str:
     """Format just the heredoc body part (content + closing delimiter)."""
     return "\n" + r.content + r.delimiter + "\n"
 
@@ -7074,7 +7076,7 @@ class Parser:
         self._restore_parser_state(saved)
         return CommandSubstitution(cmd), text
 
-    def _is_assignment_word(self, word: "Word") -> bool:
+    def _is_assignment_word(self, word: Word) -> bool:
         """Check if a word is an assignment (name=value) where name is a valid identifier."""
         # Assignment must start with identifier (letter or underscore), not quoted
         if not word.value or not (word.value[0].isalpha() or word.value[0] == "_"):

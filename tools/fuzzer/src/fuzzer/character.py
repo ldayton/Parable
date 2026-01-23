@@ -380,6 +380,7 @@ class FuzzerCoordinator:
                             done.add(future)
                     if not done:
                         import concurrent.futures
+
                         done_iter, _ = concurrent.futures.wait(
                             pending_futures,
                             return_when=concurrent.futures.FIRST_COMPLETED,

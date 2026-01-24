@@ -2771,7 +2771,7 @@ class Word(Node):
                             dq_content.append(inner[j])
                             dq_content.append(inner[j + 1])
                             j += 2
-                    elif inner[j] == "$" and j + 1 < len(inner) and inner[j + 1] == "{":
+                    elif _is_expansion_start(inner, j, "${"):
                         # Start of ${...} expansion
                         dq_content.append("${")
                         dq_brace_depth += 1
@@ -2799,7 +2799,7 @@ class Word(Node):
                     in_whitespace = False
                     normalized.append(_substring(inner, i, i + 2))
                     i += 2
-            elif ch == "$" and i + 2 < len(inner) and inner[i + 1] == "(" and inner[i + 2] == "(":
+            elif _is_expansion_start(inner, i, "$(("):
                 # Arithmetic expansion $(( - find matching )) and preserve as-is
                 in_whitespace = False
                 j = i + 3
@@ -2815,7 +2815,7 @@ class Word(Node):
                         j += 1
                 normalized.append(_substring(inner, i, j))
                 i = j
-            elif ch == "$" and i + 1 < len(inner) and inner[i + 1] == "(":
+            elif _is_expansion_start(inner, i, "$("):
                 # Command substitution - find matching ) and preserve as-is
                 # (formatting is handled later by _format_command_substitutions)
                 in_whitespace = False
@@ -2871,7 +2871,7 @@ class Word(Node):
                 # Preserve process substitution as-is
                 normalized.append(_substring(inner, i, j))
                 i = j
-            elif ch == "$" and i + 1 < len(inner) and inner[i + 1] == "{":
+            elif _is_expansion_start(inner, i, "${"):
                 # Start of ${...} expansion
                 in_whitespace = False
                 normalized.append("${")

@@ -6,7 +6,8 @@ node_modules/
 .ruff_cache/
 .pyperf/
 .DS_Store
-.claude/
+.claude/*
+!.claude/skills/
 dippy.toml
 tools/bash-oracle/bash-oracle
 tools/bash-oracle/bin/failures.txt

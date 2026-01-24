@@ -18,15 +18,6 @@ just test -f heredoc          # Filter by name
 just test tests/parable/pipes.tests   # Run specific file
 ```
 
-## Coverage
-
-| Corpus                  | Tests        |
-| ----------------------- | ------------ |
-| GNU Bash test corpus    | 19,370 lines |
-| Oils bash corpus        | 2,495 tests  |
-| tree-sitter-bash corpus | 125 tests    |
-| Parable hand-written    | 1,542 tests  |
-
 ## Test Format
 
 Tests use a simple format:

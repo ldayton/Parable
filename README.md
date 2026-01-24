@@ -14,7 +14,7 @@ Parse bash exactly as bash does. Python or Javascript, your choice. One file, ze
 
 ## Philosophy
 
-**LLM-driven development.** This project is an exercise in maximizing what LLMs can do. A 10,900-line recursive descent parser for one of the gnarliest grammars in computing, built and maintained almost entirely through AI assistance—it wouldn't exist without them. When performance and clarity conflict, clarity wins. Verbose beats clever. The code should be readable by both humans and models.
+**LLM-driven development.** This project is an exercise in maximizing what LLMs can do. An 11,000-line recursive descent parser for one of the gnarliest grammars in computing, built and maintained almost entirely through AI assistance—it wouldn't exist without them. When performance and clarity conflict, clarity wins. Verbose beats clever. The code should be readable by both humans and models.
 
 **Match bash exactly.** Bash is the oracle. We [patched](https://github.com/ldayton/bash-oracle) GNU Bash 5.3 so it reveals its internal parse tree, then test against it. No spec interpretation, no "close enough"—if bash parses it one way, so do we. Bash always tells the truth, even when it's lying.
 
@@ -22,7 +22,7 @@ Parse bash exactly as bash does. Python or Javascript, your choice. One file, ze
 
 ## Javascript + Typescript
 
-The Python implementation uses idiomatic Python that transpiles naturally to idiomatic JavaScript: f-strings become template literals, ternaries stay ternaries, lambdas become arrow functions. A custom transpiler produces perfectly readable JS: not minified, not obfuscated, not transmogrified, but clean code that looks like a human wrote it.
+The Python implementation uses idiomatic Python that transpiles naturally to idiomatic Javascript: f-strings become template literals, ternaries stay ternaries, lambdas become arrow functions. A custom transpiler produces perfectly readable JS: not minified, not obfuscated, not transmogrified, but clean code that looks like a human wrote it.
 
 The Javascript output is then validated the same way as Python. Same tests, same bash AST comparisons, same edge cases. If Python parses it correctly, so does JS. Typescript definitions are auto-generated from the transpiled JS.
 
@@ -100,7 +100,7 @@ Every test validated against real bash 5.3 ASTs.
 - **GNU Bash test corpus:** 19,370 lines
 - **Oils bash corpus:** 2,495 tests
 - **tree-sitter-bash corpus:** 125 tests
-- **Parable hand-written tests:** 1,849 tests
+- **Parable hand-written tests:** 1,800+ tests
 
 ## Usage
 

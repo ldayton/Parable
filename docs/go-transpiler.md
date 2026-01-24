@@ -463,35 +463,240 @@ All major audits complete. Minor items to address during implementation:
 
 ## Implementation Plan
 
-### Phase 1: Scaffold
-- [ ] Create `tools/transpiler/src/transpiler/transpile_go.py`
-- [ ] Copy structure from `transpile_js.py`
-- [ ] Implement `visit_Module` with Go package header
+Incremental plan with clear milestones. Each increment produces runnable output. Validation gates catch problems early based on prior art learnings.
 
-### Phase 2: Types & Structs
-- [ ] `visit_ClassDef` → Go struct + methods
-- [ ] Build symbol table for return types (first pass)
-- [ ] Emit struct fields from `__init__` assignments
+### Increment 0: Infrastructure
+**Goal**: `just transpile-go` works (outputs placeholder), `just check-go` passes
 
-### Phase 3: Functions & Methods
-- [ ] `visit_FunctionDef` → `func` with receiver for methods
-- [ ] Handle `self.` → receiver name
-- [ ] Emit parameter types and return types
+- [ ] Add `--transpile-go` to `tools/transpiler/src/transpiler/__init__.py`
+- [ ] Create `tools/transpiler/src/transpiler/transpile_go.py` (minimal scaffold)
+- [ ] Add justfile targets:
+  - `transpile-go` — runs transpiler, outputs to `src/parable.go`, runs `gofmt`
+  - `check-transpile-go` — verifies `src/parable.go` matches transpiler output
+  - `check-go` — runs `go build` on `src/parable.go` (fails until Increment 6)
+  - `test-go` — placeholder (fails until Increment 7)
+- [ ] Initial `src/parable.go` with `package parable` and `// TODO` comment
+- [ ] Update `just check` to include `check-transpile-go`
 
-### Phase 4: Control Flow
-- [ ] `visit_If`, `visit_While`, `visit_For` → Go equivalents
-- [ ] `visit_Raise` → `panic(ErrorType{...})`
-- [ ] `visit_Try` → `defer func() { recover() }()`
+**Exit criterion**: `just transpile-go && just check-transpile-go` passes
 
-### Phase 5: Expressions
-- [ ] `visit_expr_Call` → method/function calls with type mappings
-- [ ] `visit_expr_BinOp`, `visit_expr_Compare` → operators
-- [ ] `visit_expr_Subscript` → slice indexing
+**Commit**: `git commit -m "feat(go): add transpile-go infrastructure"`
 
-### Phase 6: Polish
-- [ ] Import management (`strings`, `strconv`, `fmt`)
-- [ ] `go fmt` the output
-- [ ] Test against fuzz corpus
+### Increment 1: Symbol Table (Multi-Pass Foundation)
+**Goal**: Build complete type information before emitting any code
+
+*Prior art lesson: py2many uses multi-stage rewriter pipeline. Single-pass emission hits ordering issues.*
+
+- [ ] Pass 1: Collect all class names and inheritance relationships
+- [ ] Pass 2: Collect all function/method signatures (params + return types)
+- [ ] Pass 3: Collect all struct fields from `__init__` assignments
+- [ ] Emit symbol table as JSON or debug output for validation
+- [ ] Flag any types that can't be resolved (candidates for `interface{}` fallback)
+
+**Validation gate**: Print unresolved types. If >5, investigate before proceeding.
+
+**Exit criterion**: Symbol table covers all 63 classes, 218 struct fields, all function signatures
+
+**Commit**: `git commit -m "feat(go): build symbol table for type resolution"`
+
+### Increment 2: Error Types
+**Goal**: `ParseError` and `MatchedPairError` compile
+
+```go
+package parable
+
+type ParseError struct {
+    Message string
+    Pos     int
+    Line    int
+}
+
+type MatchedPairError struct {
+    ParseError
+}
+```
+
+- [ ] `visit_ClassDef` for `ParseError` → struct with fields
+- [ ] `visit_ClassDef` for `MatchedPairError` → struct embedding `ParseError`
+- [ ] Skip all other classes (emit `// TODO: ClassName`)
+
+**Exit criterion**: `go build src/parable.go` compiles (with unused struct warnings OK)
+
+**Commit**: `git commit -m "feat(go): emit ParseError and MatchedPairError structs"`
+
+### Increment 3: Node Interface & All Structs
+**Goal**: All 63 structs compile (no methods yet)
+
+- [ ] Emit `Node` interface: `type Node interface { Kind() string }`
+- [ ] `visit_ClassDef` for Node subclasses → struct with fields
+- [ ] Use symbol table for field types (no re-inference)
+- [ ] Handle `list[X]` → `[]X`, `X | None` → `X` (zero value)
+
+**Validation gate**: Verify all 218 struct fields have resolved Go types. Document any `interface{}` fallbacks in a tracking list.
+
+**Exit criterion**: All 63 structs defined, `go build` compiles
+
+**Commit**: `git commit -m "feat(go): emit all 63 struct definitions"`
+
+### Increment 4: Helper Functions
+**Goal**: Module-level functions compile
+
+- [ ] `visit_FunctionDef` (non-method) → `func name(params) returnType`
+- [ ] Parameter type emission from symbol table
+- [ ] Return type emission from symbol table
+- [ ] Function body as `panic("TODO")` placeholder
+
+**Exit criterion**: `_isHexDigit`, `_isOctalDigit`, etc. have signatures, `go build` compiles
+
+**Commit**: `git commit -m "feat(go): emit helper function signatures"`
+
+### Increment 5: Method Signatures
+**Goal**: All methods have signatures (bodies are `panic("TODO")`)
+
+- [ ] `visit_FunctionDef` (method) → `func (r *Type) name(params) returnType`
+- [ ] Convert `self` parameter to receiver
+- [ ] Handle `__init__` → constructor function `NewTypeName(...)`
+- [ ] Emit `Kind()` and `ToSexp()` method stubs for Node types
+
+**Exit criterion**: All methods declared, `go build` compiles
+
+**Commit**: `git commit -m "feat(go): emit all method signatures with stub bodies"`
+
+### Increment 6a: Expressions & Statements (Non-String)
+**Goal**: Method bodies emit real code for non-string operations
+
+- [ ] Literals: `ast.Constant` → Go literals
+- [ ] Variables: `ast.Name` → identifier (handle `self.` → `r.`)
+- [ ] Binary ops: `ast.BinOp` → Go operators (handle `//` → `/`, `**` → `math.Pow`)
+- [ ] Comparisons: `ast.Compare` → Go comparisons (handle chained)
+- [ ] Attribute access: `ast.Attribute` → field access
+- [ ] Calls: `ast.Call` → function/method calls (basic, no builtins yet)
+- [ ] If/While/For: control flow statements
+- [ ] Return: `ast.Return` → `return`
+- [ ] Assign: `ast.Assign`, `ast.AugAssign` → variable assignment
+
+**Exit criterion**: Bodies emit Go code for non-string operations
+
+**Commit**: `git commit -m "feat(go): emit expressions and control flow"`
+
+### Increment 6b: String Handling
+**Goal**: String operations use correct rune semantics
+
+*Prior art lesson: Python is character-oriented, Go is byte-oriented. This caused bugs in other transpilers.*
+
+- [ ] Decide: `[]rune` upfront vs incremental decode (recommend `[]rune` for Lexer.source)
+- [ ] `len(s)` on strings → `utf8.RuneCountInString(s)`
+- [ ] `s[i]` on strings → rune access (context-dependent)
+- [ ] `s[i:j]` on strings → `string([]rune(s)[i:j])`
+- [ ] `for c in s` → `for _, c := range s`
+
+**Validation gate**: Hand-verify transpiled output for `_isHexDigit` (simple) and `_expand_ansi_c_escapes` (complex, byte-oriented). These two functions exercise both string patterns.
+
+**Exit criterion**: String-heavy functions transpile correctly
+
+**Commit**: `git commit -m "feat(go): handle string/rune semantics"`
+
+### Increment 6c: Builtin Dispatch Table
+**Goal**: Python builtins map to Go equivalents
+
+- [ ] `.append(x)` → `slice = append(slice, x)`
+- [ ] `.join()` → `strings.Join()`
+- [ ] `.startswith()` / `.endswith()` → `strings.HasPrefix()` / `strings.HasSuffix()`
+- [ ] `.replace()` → `strings.ReplaceAll()` (handle chained)
+- [ ] `.find()` / `.rfind()` → `strings.Index()` / `strings.LastIndex()`
+- [ ] `.strip()` / `.lstrip()` / `.rstrip()` → `strings.Trim*`
+- [ ] `.isalpha()` / `.isdigit()` / `.isalnum()` → `unicode.Is*`
+- [ ] `ord()` / `chr()` → `rune()` / `string(rune())`
+- [ ] `int(s)` → `mustAtoi(s)` (panics on error)
+- [ ] `in` for strings → `strings.Contains()` / `strings.ContainsRune()`
+- [ ] `in` for tuples/lists → `||` chain (at transpile time)
+
+**Exit criterion**: All 25 builtin patterns from Challenge 6 table have mappings
+
+**Commit**: `git commit -m "feat(go): add Python builtin dispatch table"`
+
+### Increment 6d: Duck Typing (getattr)
+**Goal**: The 19 getattr calls work via optional interfaces
+
+*Prior art lesson: py2many explicitly punts on duck typing. This is novel territory.*
+
+- [ ] Hand-write the 8 optional interfaces from Audit A:
+  - `HasLeft`, `HasRight`, `HasExpression`, `HasOperand`
+  - `HasCondition`, `HasElements`, `HasParts`, `HasKind`
+- [ ] Emit interface definitions in transpiled output
+- [ ] `getattr(node, "left", None)` → type assertion with ok check
+- [ ] Verify against all 19 getattr call sites
+
+**Validation gate**: Manually test each of the 19 getattr usages compiles and runs correctly.
+
+**Exit criterion**: All getattr patterns transpile to working Go
+
+**Commit**: `git commit -m "feat(go): implement getattr via optional interfaces"`
+
+### Increment 6e: Exception Handling
+**Goal**: `raise` and `try/except` transpile correctly
+
+*Prior art lesson: No prior art helps here. Go stdlib parser's panic/recover is our model.*
+
+- [ ] `raise ParseError(...)` → `panic(ParseError{...})`
+- [ ] `raise MatchedPairError(...)` → `panic(MatchedPairError{...})`
+- [ ] `try/except ParseError` → `defer func() { if r := recover()... }()`
+- [ ] `except MatchedPairError` before `except ParseError` (subclass first)
+- [ ] Handle the 4 bare `except Exception:` blocks (recover all, re-panic non-errors)
+
+**Exit criterion**: All 7 catch sites from Audit C transpile correctly
+
+**Commit**: `git commit -m "feat(go): implement exception handling via panic/recover"`
+
+### Increment 6f: Remaining Type Fixes
+**Goal**: `go build src/parable.go` compiles with no errors
+
+- [ ] Import management: track and emit required imports
+- [ ] f-strings → `fmt.Sprintf()` (34 cases from Audit B)
+- [ ] `isinstance()` → type switch (6 cases)
+- [ ] Tuple returns → multiple return values or named structs (18 functions)
+- [ ] Fix remaining type mismatches iteratively
+- [ ] Any `interface{}` fallbacks: document in tracking list
+
+**Exit criterion**: `go build src/parable.go` exits 0
+
+**Commit**: `git commit -m "feat(go): fix remaining type errors, parable.go compiles"`
+
+### Increment 7: Test Parity
+**Goal**: `just test-go` passes same tests as Python/JS
+
+- [ ] Create `tests/bin/run-go-tests.go` (mirrors `run-js-tests.js`)
+- [ ] Export `Parse()` function matching Python's `parse()`
+- [ ] Export `ParseError` for test runner
+- [ ] Run against `.tests` corpus, compare s-expression output
+- [ ] Fix semantic bugs until test parity achieved
+
+**Exit criterion**: `just test-go` passes, same pass/fail as `just test`
+
+**Commit**: `git commit -m "feat(go): add Go test runner, achieve test parity"`
+
+### Increment 8: Integration
+**Goal**: Go transpiler is part of standard workflow
+
+- [ ] Add `just transpile` to run all three (js, dts, go)
+- [ ] Add `check-transpile-go` to `just check`
+- [ ] Add `test-go` to `just check`
+- [ ] Benchmark: `just bench-go`
+- [ ] Documentation updates
+
+**Exit criterion**: `just check` includes Go, CI passes
+
+**Commit**: `git commit -m "feat(go): integrate Go transpiler into CI"`
+
+---
+
+### Fallback Tracking
+
+When type inference fails, emit `// parable:fixme TYPE` comment and track here:
+
+| Location | Issue | Resolution |
+|----------|-------|------------|
+| *(none yet)* | | |
 
 ## References
 

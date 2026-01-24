@@ -795,6 +795,7 @@ class Lexer:
         open_char: str,
         close_char: str,
         flags: int = 0,
+        initial_was_dollar: bool = False,
     ) -> str:
         """Parse a matched pair construct, handling quotes via recursion.
 
@@ -816,7 +817,7 @@ class Lexer:
         count = 1
         chars: list[str] = []
         pass_next = False
-        was_dollar = False  # Track if previous char was $ (bash's LEX_WASDOL)
+        was_dollar = initial_was_dollar  # Track if previous char was $ (bash's LEX_WASDOL)
         was_gtlt = False  # Track if previous char was < or > (bash's LEX_GTLT)
 
         while count > 0:
@@ -1052,12 +1053,17 @@ class Lexer:
 
         return "".join(chars)
 
-    def _collect_param_argument(self, flags: int = MatchedPairFlags.NONE) -> str:
+    def _collect_param_argument(
+        self, flags: int = MatchedPairFlags.NONE, was_dollar: bool = False
+    ) -> str:
         """Collect argument portion of ${...} until closing brace.
 
         Wraps _parse_matched_pair() with DOLBRACE flag for parameter expansion arguments.
+        was_dollar should be True if the param name ended with $ (for $$ handling).
         """
-        return self._parse_matched_pair("{", "}", flags | MatchedPairFlags.DOLBRACE)
+        return self._parse_matched_pair(
+            "{", "}", flags | MatchedPairFlags.DOLBRACE, was_dollar
+        )
 
     def _read_word_internal(
         self,
@@ -1962,9 +1968,11 @@ class Lexer:
         # Update dolbrace state based on operator
         self._update_dolbrace_for_op(op, len(param) > 0)
         # Parse argument (everything until closing brace)
+        # Pass was_dollar=True if param ends with $ (for $$ handling in nested expansions)
         try:
             flags = MatchedPairFlags.DQUOTE if in_dquote else MatchedPairFlags.NONE
-            arg = self._collect_param_argument(flags)
+            param_ends_with_dollar = param is not None and param.endswith("$")
+            arg = self._collect_param_argument(flags, param_ends_with_dollar)
         except MatchedPairError as e:
             self._dolbrace_state = saved_dolbrace
             raise e

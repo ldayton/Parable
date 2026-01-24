@@ -10242,53 +10242,30 @@ class Parser:
 
             return Function(name, body)
 
-        # Check for POSIX form: name()
-        # We need to peek ahead to see if there's a () after the word
-        name = self.peek_word()
-        if name is None or name in RESERVED_WORDS:
+        # POSIX form: WORD '(' ')'
+        tok = self._lex_peek_token()
+        if tok.type != TokenType.WORD:
             return None
-
-        # Assignment words (NAME=...) are not function definitions
-        if _looks_like_assignment(name):
+        name = tok.value
+        if name in RESERVED_WORDS or _looks_like_assignment(name):
             return None
-
-        # Save position after the name
-        self.skip_whitespace()
-        name_start = self.pos
-
-        # Consume the name
-        while (
-            not self.at_end()
-            and not _is_metachar(self.peek())
-            and not _is_quote(self.peek())
-            and not _is_paren(self.peek())
-        ):
-            self.advance()
-
-        name = _substring(self.source, name_start, self.pos)
-        if not name:
-            self.pos = saved_pos
-            return None
-
-        # Check if name contains unclosed parameter expansion ${...}
-        # If so, () is inside the expansion, not function definition syntax
         if _has_unclosed_brace_expansion(name):
-            self.pos = saved_pos
             return None
 
-        # Check for () - whitespace IS allowed between name and (
-        # But if name ends with extglob prefix (*?@+!) and () is adjacent,
-        # it's an extglob pattern, not a function definition
-        # Similarly, if name ends with $ and () is adjacent, it's a command
-        # substitution, not a function definition
+        self._lex_next_token()  # consume name
         pos_after_name = self.pos
+
+        # Match '(' ')' using character-level checks to avoid _eof_depth sync issues
+        # when inside command substitution (where ')' would trigger EOF via _eof_token)
         self.skip_whitespace()
-        has_whitespace = self.pos > pos_after_name
-        if not has_whitespace and name and name[len(name) - 1] in "*?@+!$":
+        if self.at_end() or self.peek() != "(":
             self.pos = saved_pos
             return None
 
-        if self.at_end() or self.peek() != "(":
+        # If name ends with extglob prefix (*?@+!) or $ and ( is adjacent,
+        # it's an extglob pattern or command substitution, not function definition
+        has_whitespace = self.pos > pos_after_name
+        if not has_whitespace and name and name[-1] in "*?@+!$":
             self.pos = saved_pos
             return None
 

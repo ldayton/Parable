@@ -5795,6 +5795,43 @@ def _find_cmdsub_end(value: str, start: int) -> int:
     return i
 
 
+def _find_braced_param_end(value: str, start: int) -> int:
+    """Find end of ${...}. Starts after ${. Returns position after }."""
+    depth = 1
+    i = start
+    quote = QuoteState()
+    while i < len(value) and depth > 0:
+        c = value[i]
+        if c == "\\" and i + 1 < len(value) and not quote.single:
+            i += 2
+            continue
+        if c == "'" and not quote.double:
+            quote.single = not quote.single
+            i += 1
+            continue
+        if c == '"' and not quote.single:
+            quote.double = not quote.double
+            i += 1
+            continue
+        if quote.single or quote.double:
+            i += 1
+            continue
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        if c == "$" and i + 1 < len(value) and value[i + 1] == "(":
+            i = _find_cmdsub_end(value, i + 2)
+            continue
+        if c == "$" and i + 1 < len(value) and value[i + 1] == "{":
+            i = _find_braced_param_end(value, i + 2)
+            continue
+        i += 1
+    return i
+
+
 def _skip_heredoc(value: str, start: int) -> int:
     """Skip past a heredoc starting at <<. Returns position after heredoc content."""
     i = start + 2  # Skip <<
@@ -6308,6 +6345,9 @@ def _skip_matched_pair(s: str, start: int, open: str, close: str, flags: int = 0
             continue
         if not literal and not in_single and not in_double and c == "$" and i + 1 < n and s[i + 1] == "(":
             i = _find_cmdsub_end(s, i + 2)
+            continue
+        if not literal and not in_single and not in_double and c == "$" and i + 1 < n and s[i + 1] == "{":
+            i = _find_braced_param_end(s, i + 2)
             continue
         in_quotes = in_single or in_double
         if not literal and not in_quotes and c == open:

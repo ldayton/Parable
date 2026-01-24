@@ -6665,6 +6665,52 @@ function _skipSingleQuoted(s, start) {
 	return i < s.length ? i + 1 : i;
 }
 
+function _skipDoubleQuoted(s, start) {
+	let backq, c, i, n, pass_next;
+	[i, n] = [start, s.length];
+	pass_next = false;
+	while (i < n) {
+		c = s[i];
+		if (pass_next) {
+			pass_next = false;
+			i += 1;
+			continue;
+		}
+		if (c === "\\") {
+			pass_next = true;
+			i += 1;
+			continue;
+		}
+		if (backq) {
+			if (c === "`") {
+				backq = false;
+			}
+			i += 1;
+			continue;
+		}
+		if (c === "`") {
+			backq = true;
+			i += 1;
+			continue;
+		}
+		if (c === "$" && i + 1 < n) {
+			if (s[i + 1] === "(") {
+				i = _findCmdsubEnd(s, i + 2);
+				continue;
+			}
+			if (s[i + 1] === "{") {
+				i = _findBracedParamEnd(s, i + 2);
+				continue;
+			}
+		}
+		if (c === '"') {
+			return i + 1;
+		}
+		i += 1;
+	}
+	return i;
+}
+
 function _isValidArithmeticStart(value, start) {
 	let scan_c, scan_i, scan_paren;
 	scan_paren = 0;
@@ -6743,11 +6789,9 @@ function _findCmdsubEnd(value, start) {
 		depth,
 		i,
 		in_case_patterns,
-		in_double,
 		j;
 	depth = 1;
 	i = start;
-	in_double = false;
 	case_depth = 0;
 	in_case_patterns = false;
 	arith_depth = 0;
@@ -6759,26 +6803,13 @@ function _findCmdsubEnd(value, start) {
 			i += 2;
 			continue;
 		}
-		// Handle quotes
-		if (c === "'" && !in_double) {
+		// Handle quotes via delegation
+		if (c === "'") {
 			i = _skipSingleQuoted(value, i + 1);
 			continue;
 		}
 		if (c === '"') {
-			in_double = !in_double;
-			i += 1;
-			continue;
-		}
-		if (in_double) {
-			// Inside double quotes, $() command substitution is still active
-			if (_startsWithAt(value, i, "$(") && !_startsWithAt(value, i, "$((")) {
-				// Recursively find end of nested command substitution
-				j = _findCmdsubEnd(value, i + 2);
-				i = j;
-				continue;
-			}
-			// Skip other characters inside double quotes
-			i += 1;
+			i = _skipDoubleQuoted(value, i + 1);
 			continue;
 		}
 		// Handle comments - skip from # to end of line
@@ -7546,7 +7577,7 @@ function _isWordEndContext(c) {
 const _SMP_LITERAL = 1;
 const _SMP_PAST_OPEN = 2;
 function _skipMatchedPair(s, start, open, close, flags) {
-	let backq, c, depth, i, in_double, literal, n, pass_next;
+	let backq, c, depth, i, literal, n, pass_next;
 	if (flags == null) {
 		flags = 0;
 	}
@@ -7561,7 +7592,6 @@ function _skipMatchedPair(s, start, open, close, flags) {
 	}
 	depth = 1;
 	pass_next = false;
-	in_double = false;
 	backq = false;
 	while (i < n && depth > 0) {
 		c = s[i];
@@ -7588,38 +7618,25 @@ function _skipMatchedPair(s, start, open, close, flags) {
 			i += 1;
 			continue;
 		}
-		if (!literal && c === "'" && !in_double) {
+		if (!literal && c === "'") {
 			i = _skipSingleQuoted(s, i + 1);
 			continue;
 		}
 		if (!literal && c === '"') {
-			in_double = !in_double;
-			i += 1;
+			i = _skipDoubleQuoted(s, i + 1);
 			continue;
 		}
-		if (in_double) {
-			if (c === "$" && i + 1 < n) {
-				if (s[i + 1] === "(") {
-					i = _findCmdsubEnd(s, i + 2);
-					continue;
-				}
-				if (s[i + 1] === "{") {
-					i = _findBracedParamEnd(s, i + 2);
-					continue;
-				}
-			}
-		}
-		if (!literal && !in_double && c === "$" && i + 1 < n && s[i + 1] === "(") {
+		if (!literal && c === "$" && i + 1 < n && s[i + 1] === "(") {
 			i = _findCmdsubEnd(s, i + 2);
 			continue;
 		}
-		if (!literal && !in_double && c === "$" && i + 1 < n && s[i + 1] === "{") {
+		if (!literal && c === "$" && i + 1 < n && s[i + 1] === "{") {
 			i = _findBracedParamEnd(s, i + 2);
 			continue;
 		}
-		if (!literal && !in_double && c === open) {
+		if (!literal && c === open) {
 			depth += 1;
-		} else if (!in_double && c === close) {
+		} else if (c === close) {
 			depth -= 1;
 		}
 		i += 1;

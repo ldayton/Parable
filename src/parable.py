@@ -5582,6 +5582,42 @@ def _skip_single_quoted(s: str, start: int) -> int:
     return i + 1 if i < len(s) else i
 
 
+def _skip_double_quoted(s: str, start: int) -> int:
+    """Skip from after opening " to after closing ". Handles $(), ${}, backticks."""
+    i, n = start, len(s)
+    pass_next = backq = False
+    while i < n:
+        c = s[i]
+        if pass_next:
+            pass_next = False
+            i += 1
+            continue
+        if c == "\\":
+            pass_next = True
+            i += 1
+            continue
+        if backq:
+            if c == "`":
+                backq = False
+            i += 1
+            continue
+        if c == "`":
+            backq = True
+            i += 1
+            continue
+        if c == "$" and i + 1 < n:
+            if s[i + 1] == "(":
+                i = _find_cmdsub_end(s, i + 2)
+                continue
+            if s[i + 1] == "{":
+                i = _find_braced_param_end(s, i + 2)
+                continue
+        if c == '"':
+            return i + 1
+        i += 1
+    return i
+
+
 def _is_valid_arithmetic_start(value: str, start: int) -> bool:
     """Check if $(( at position starts a valid arithmetic expression.
 
@@ -5653,7 +5689,6 @@ def _find_cmdsub_end(value: str, start: int) -> int:
     """
     depth = 1
     i = start
-    in_double = False
     case_depth = 0  # Track nested case statements
     in_case_patterns = False  # After 'in' but before first ;; or esac
     arith_depth = 0  # Track nested arithmetic expressions
@@ -5664,23 +5699,12 @@ def _find_cmdsub_end(value: str, start: int) -> int:
         if c == "\\" and i + 1 < len(value):
             i += 2
             continue
-        # Handle quotes
-        if c == "'" and not in_double:
+        # Handle quotes via delegation
+        if c == "'":
             i = _skip_single_quoted(value, i + 1)
             continue
         if c == '"':
-            in_double = not in_double
-            i += 1
-            continue
-        if in_double:
-            # Inside double quotes, $() command substitution is still active
-            if _starts_with_at(value, i, "$(") and not _starts_with_at(value, i, "$(("):
-                # Recursively find end of nested command substitution
-                j = _find_cmdsub_end(value, i + 2)
-                i = j
-                continue
-            # Skip other characters inside double quotes
-            i += 1
+            i = _skip_double_quoted(value, i + 1)
             continue
         # Handle comments - skip from # to end of line
         # Only treat # as comment if preceded by whitespace or at start
@@ -6316,7 +6340,6 @@ def _skip_matched_pair(s: str, start: int, open: str, close: str, flags: int = 0
         i = start + 1
     depth = 1
     pass_next = False
-    in_double = False
     backq = False
     while i < n and depth > 0:
         c = s[i]
@@ -6338,30 +6361,21 @@ def _skip_matched_pair(s: str, start: int, open: str, close: str, flags: int = 0
             backq = True
             i += 1
             continue
-        if not literal and c == "'" and not in_double:
+        if not literal and c == "'":
             i = _skip_single_quoted(s, i + 1)
             continue
         if not literal and c == '"':
-            in_double = not in_double
-            i += 1
+            i = _skip_double_quoted(s, i + 1)
             continue
-        if in_double:
-            if c == "$" and i + 1 < n:
-                if s[i + 1] == "(":
-                    i = _find_cmdsub_end(s, i + 2)
-                    continue
-                if s[i + 1] == "{":
-                    i = _find_braced_param_end(s, i + 2)
-                    continue
-        if not literal and not in_double and c == "$" and i + 1 < n and s[i + 1] == "(":
+        if not literal and c == "$" and i + 1 < n and s[i + 1] == "(":
             i = _find_cmdsub_end(s, i + 2)
             continue
-        if not literal and not in_double and c == "$" and i + 1 < n and s[i + 1] == "{":
+        if not literal and c == "$" and i + 1 < n and s[i + 1] == "{":
             i = _find_braced_param_end(s, i + 2)
             continue
-        if not literal and not in_double and c == open:
+        if not literal and c == open:
             depth += 1
-        elif not in_double and c == close:
+        elif c == close:
             depth -= 1
         i += 1
     return i if depth == 0 else -1

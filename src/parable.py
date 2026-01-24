@@ -4409,7 +4409,7 @@ class CasePattern(Node):
                 current.append("(")
                 depth += 1
                 i += 2
-            elif ch == "$" and i + 1 < len(self.pattern) and self.pattern[i + 1] == "(":
+            elif _is_expansion_start(self.pattern, i, "$("):
                 # $( command sub or $(( arithmetic - track depth
                 current.append(ch)
                 current.append("(")

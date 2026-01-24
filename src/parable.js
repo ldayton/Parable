@@ -7,6 +7,7 @@
  * const ast = parse("ps aux | grep python | awk '{print $2}'")
  */
 
+// Type aliases for discriminated unions (used for type annotations only)
 class ParseError extends Error {
 	constructor(message, pos, line) {
 		super();

@@ -4820,7 +4820,7 @@ func (w *Word) _StripArithLineContinuations(value string) string {
 	return strings.Join(result, "")
 }
 
-func (w *Word) _CollectCmdsubs(node interface{}) []Node {
+func (w *Word) _CollectCmdsubs(node Node) []Node {
 	var result []Node
 	_ = result
 	var nodeKind interface{}
@@ -4829,24 +4829,24 @@ func (w *Word) _CollectCmdsubs(node interface{}) []Node {
 	_ = elements
 	var parts []Node
 	_ = parts
-	var expr interface{}
+	var expr Node
 	_ = expr
-	var left interface{}
+	var left Node
 	_ = left
-	var right interface{}
+	var right Node
 	_ = right
-	var operand interface{}
+	var operand Node
 	_ = operand
-	var condition interface{}
+	var condition Node
 	_ = condition
-	var trueValue interface{}
+	var trueValue Node
 	_ = trueValue
-	var falseValue interface{}
+	var falseValue Node
 	_ = falseValue
 	result = []Node{}
 	nodeKind = _getattr(node, "kind", nil)
 	if nodeKind == "cmdsub" {
-		result = append(result, node.(Node))
+		result = append(result, node)
 	} else if nodeKind == "array" {
 		elements = _getattr(node, "elements", []interface{}{}).([]Node)
 		for _, elem := range elements {
@@ -4860,39 +4860,39 @@ func (w *Word) _CollectCmdsubs(node interface{}) []Node {
 			}
 		}
 	} else {
-		expr = _getattr(node, "expression", nil)
+		expr = _getattr(node, "expression", nil).(Node)
 		if expr != nil {
 			result = append(result, w._CollectCmdsubs(expr)...)
 		}
 	}
-	left = _getattr(node, "left", nil)
+	left = _getattr(node, "left", nil).(Node)
 	if left != nil {
 		result = append(result, w._CollectCmdsubs(left)...)
 	}
-	right = _getattr(node, "right", nil)
+	right = _getattr(node, "right", nil).(Node)
 	if right != nil {
 		result = append(result, w._CollectCmdsubs(right)...)
 	}
-	operand = _getattr(node, "operand", nil)
+	operand = _getattr(node, "operand", nil).(Node)
 	if operand != nil {
 		result = append(result, w._CollectCmdsubs(operand)...)
 	}
-	condition = _getattr(node, "condition", nil)
+	condition = _getattr(node, "condition", nil).(Node)
 	if condition != nil {
 		result = append(result, w._CollectCmdsubs(condition)...)
 	}
-	trueValue = _getattr(node, "true_value", nil)
+	trueValue = _getattr(node, "true_value", nil).(Node)
 	if trueValue != nil {
 		result = append(result, w._CollectCmdsubs(trueValue)...)
 	}
-	falseValue = _getattr(node, "false_value", nil)
+	falseValue = _getattr(node, "false_value", nil).(Node)
 	if falseValue != nil {
 		result = append(result, w._CollectCmdsubs(falseValue)...)
 	}
 	return result
 }
 
-func (w *Word) _CollectProcsubs(node interface{}) []Node {
+func (w *Word) _CollectProcsubs(node Node) []Node {
 	var result []Node
 	_ = result
 	var nodeKind interface{}
@@ -4904,7 +4904,7 @@ func (w *Word) _CollectProcsubs(node interface{}) []Node {
 	result = []Node{}
 	nodeKind = _getattr(node, "kind", nil)
 	if nodeKind == "procsub" {
-		result = append(result, node.(Node))
+		result = append(result, node)
 	} else if nodeKind == "array" {
 		elements = _getattr(node, "elements", []interface{}{}).([]Node)
 		for _, elem := range elements {

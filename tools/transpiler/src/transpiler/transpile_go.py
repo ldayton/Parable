@@ -398,6 +398,28 @@ class GoTranspiler(ast.NodeVisitor):
         # (for return types, use _py_return_type_to_go instead)
         if py_type.startswith("tuple["):
             return "interface{}"
+        # Handle Callable[[], ReturnType] -> func() ReturnType
+        if py_type.startswith("Callable["):
+            inner = py_type[9:-1]  # Remove "Callable[" and "]"
+            parts = self._split_type_args(inner)
+            if len(parts) >= 2:
+                # First part is args (list), second is return type
+                args_str = parts[0]
+                ret_type = parts[-1]
+                go_ret = self._py_type_to_go(ret_type, concrete_nodes)
+                # Handle empty args list "[]"
+                if args_str == "[]":
+                    return f"func() {go_ret}"
+                # Handle args list like "[int, str]"
+                elif args_str.startswith("[") and args_str.endswith("]"):
+                    args_inner = args_str[1:-1]
+                    if args_inner:
+                        arg_types = [self._py_type_to_go(a.strip(), concrete_nodes) for a in args_inner.split(",")]
+                        return f"func({', '.join(arg_types)}) {go_ret}"
+                    else:
+                        return f"func() {go_ret}"
+            # Unknown Callable format
+            return "interface{}"
         # Handle class names (Node subclasses become interface, others become struct)
         if py_type in self.symbols.classes:
             info = self.symbols.classes[py_type]

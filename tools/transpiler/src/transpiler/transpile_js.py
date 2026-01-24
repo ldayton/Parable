@@ -66,6 +66,15 @@ class JSTranspiler(ast.NodeVisitor):
                 return True
         return False
 
+    def _name_is_subscripted(self, name: str, exprs: list[ast.expr]) -> bool:
+        """Check if name is used as the base of a subscript in any of the expressions."""
+        for expr in exprs:
+            for node in ast.walk(expr):
+                if isinstance(node, ast.Subscript):
+                    if isinstance(node.value, ast.Name) and node.value.id == name:
+                        return True
+        return False
+
     def visit_Module(self, node: ast.Module):
         # Emit module docstring as JSDoc comment
         if (
@@ -1017,8 +1026,7 @@ class JSTranspiler(ast.NodeVisitor):
         for i, v in enumerate(node.values):
             if i == 0 and first_name:
                 # Check if any later value subscripts this name
-                rest_src = ast.dump(ast.Module(body=[ast.Expr(value=vv) for vv in node.values[1:]]))
-                if f"Name(id='{first_name}'" in rest_src and "Subscript" in rest_src:
+                if self._name_is_subscripted(first_name, node.values[1:]):
                     values.append(f"{first_name}.length > 0")
                     continue
             values.append(self.visit_expr(v))
@@ -1106,8 +1114,8 @@ class JSTranspiler(ast.NodeVisitor):
             ast.LtE: "<=",
             ast.Gt: ">",
             ast.GtE: ">=",
-            ast.Is: "==",
-            ast.IsNot: "!=",  # == for is None checks (handles undefined)
+            ast.Is: "==",  # loose equality so `x is None` matches null/undefined
+            ast.IsNot: "!=",
             ast.In: "in",
             ast.NotIn: "not in",
         }

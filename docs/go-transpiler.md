@@ -677,6 +677,59 @@ All 53 Node subclasses need Go struct definitions.
 
 ---
 
+## Prior Art Research
+
+Examined three Python-to-Go transpilation approaches (January 2026):
+
+### py2many (Active, Multi-target)
+
+**Relevance: Medium.** Most applicable to our use case.
+
+| Aspect | Approach | Applicability |
+|--------|----------|---------------|
+| Type inference | Requires annotations; falls back to `interface{}` | Partial - Parable is fully annotated |
+| Exceptions | Only `assert` → `panic()`; no try/except | None - need custom handling |
+| Builtins | Dispatch table (`DISPATCH_MAP`) | High - adoptable pattern |
+| Duck typing | Explicitly unsupported | None |
+
+**Patterns worth adopting:**
+1. **Multi-stage rewriter pipeline** - AST passes for different concerns (visibility, ternary elimination, etc.)
+2. **Dispatch tables** - Clean mapping of Python builtins to Go equivalents
+3. **Graceful degradation** - Emit comments for untranslatable constructs rather than failing
+4. **IfExp rewriter** - Go has no ternary; rewrite `x if cond else y` to if-statement
+
+### Grumpy (Google, Abandoned)
+
+**Relevance: Low.** Fundamentally different goal.
+
+Grumpy preserved full Python semantics via a heavyweight runtime where all values were `*Object` with dynamic dispatch through slot tables. This is the opposite of our goal (idiomatic, statically-typed Go).
+
+**One notable pattern:** Error returns `(*Object, *BaseException)` instead of panic/recover. Every function returned an error tuple, with control flow implemented via loops and `continue`. More verbose but avoids panic overhead.
+
+**Why abandoned:** Python 2 only, no C extensions, ~50% CPython performance, incomplete stdlib.
+
+### pytype (Google, Type Analyzer)
+
+**Relevance: Low** for inference, but educational.
+
+Pytype uses forward dataflow analysis where types *widen* (accumulate unions), not narrow from usage. This means:
+- `x = None` followed by `x = Foo()` yields `None | Foo`, not `Foo`
+- No backward inference from how a variable is used
+
+**Does NOT help** with the 23 "defer to usage" None cases. However, their empty collection handling (inferring element type from `.append()` calls via `merge_instance_type_parameter`) validates our proposed approach.
+
+### Implications for Parable Transpiler
+
+1. **Type inference claim revised**: "All types mechanically inferrable" is optimistic. Plan for `interface{}` fallback in edge cases, with manual annotation override.
+
+2. **Duck typing (getattr) remains unsolved** by prior art. The optional-interface approach in Audit A is novel but appears necessary.
+
+3. **Exception handling**: No prior art helps. Go stdlib parser's panic/recover pattern remains best precedent.
+
+4. **Architecture**: Adopt py2many's multi-stage rewriter pipeline rather than single-pass emission.
+
+---
+
 *Last updated: 2026-01-24*
 
 **Audits completed:**

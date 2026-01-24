@@ -8932,7 +8932,7 @@ func (p *Parser) ParseUntil() *Until {
 	return NewUntil(condition, body, p._CollectRedirects())
 }
 
-func (p *Parser) ParseFor() interface{} {
+func (p *Parser) ParseFor() Node {
 	var varWord *Word
 	_ = varWord
 	var varName string
@@ -9163,7 +9163,97 @@ func (p *Parser) ParseCase() *Case {
 }
 
 func (p *Parser) ParseCoproc() *Coproc {
-	panic("TODO: method needs manual implementation")
+	var name string
+	_ = name
+	var ch string
+	_ = ch
+	var body Node
+	_ = body
+	var nextWord string
+	_ = nextWord
+	var wordStart int
+	_ = wordStart
+	var potentialName string
+	_ = potentialName
+	p.SkipWhitespace()
+	if !(p._LexConsumeWord("coproc")) {
+		return nil
+	}
+	p.SkipWhitespace()
+	name = ""
+	ch = ""
+	if !(p.AtEnd()) {
+		ch = p.Peek()
+	}
+	if ch == "{" {
+		body = p.ParseBraceGroup()
+		if body != nil {
+			return NewCoproc(body, name)
+		}
+	}
+	if ch == "(" {
+		if p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "(" {
+			body = p.ParseArithmeticCommand()
+			if body != nil {
+				return NewCoproc(body, name)
+			}
+		}
+		body = p.ParseSubshell()
+		if body != nil {
+			return NewCoproc(body, name)
+		}
+	}
+	nextWord = p._LexPeekReservedWord()
+	if nextWord != "" && CompoundKeywords[nextWord] {
+		body = p.ParseCompoundCommand()
+		if body != nil {
+			return NewCoproc(body, name)
+		}
+	}
+	wordStart = p.Pos
+	potentialName = p.PeekWord()
+	if len(potentialName) > 0 {
+		for !(p.AtEnd()) && !(_IsMetachar(p._Peek())) && !(_IsQuote(p._Peek())) {
+			p.Advance()
+		}
+		p.SkipWhitespace()
+		ch = ""
+		if !(p.AtEnd()) {
+			ch = p.Peek()
+		}
+		nextWord = p._LexPeekReservedWord()
+		if _IsValidIdentifier(potentialName) {
+			if ch == "{" {
+				name = potentialName
+				body = p.ParseBraceGroup()
+				if body != nil {
+					return NewCoproc(body, name)
+				}
+			} else if ch == "(" {
+				name = potentialName
+				if p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "(" {
+					body = p.ParseArithmeticCommand()
+				} else {
+					body = p.ParseSubshell()
+				}
+				if body != nil {
+					return NewCoproc(body, name)
+				}
+			} else if nextWord != "" && CompoundKeywords[nextWord] {
+				name = potentialName
+				body = p.ParseCompoundCommand()
+				if body != nil {
+					return NewCoproc(body, name)
+				}
+			}
+		}
+		p.Pos = wordStart
+	}
+	body = p.ParseCommand()
+	if body != nil {
+		return NewCoproc(body, name)
+	}
+	panic(NewParseError("Expected command after coproc", p.Pos, 0))
 }
 
 func (p *Parser) ParseFunction() *Function {
@@ -9272,7 +9362,51 @@ func (p *Parser) ParseFunction() *Function {
 }
 
 func (p *Parser) _ParseCompoundCommand() Node {
-	panic("TODO: method needs manual implementation")
+	var result Node
+	_ = result
+	result = p.ParseBraceGroup()
+	if result != nil {
+		return result
+	}
+	if !(p.AtEnd()) && p.Peek() == "(" && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "(" {
+		result = p.ParseArithmeticCommand()
+		if result != nil {
+			return result
+		}
+	}
+	result = p.ParseSubshell()
+	if result != nil {
+		return result
+	}
+	result = p.ParseConditionalExpr()
+	if result != nil {
+		return result
+	}
+	result = p.ParseIf()
+	if result != nil {
+		return result
+	}
+	result = p.ParseWhile()
+	if result != nil {
+		return result
+	}
+	result = p.ParseUntil()
+	if result != nil {
+		return result
+	}
+	result = p.ParseFor()
+	if result != nil {
+		return result
+	}
+	result = p.ParseCase()
+	if result != nil {
+		return result
+	}
+	result = p.ParseSelect()
+	if result != nil {
+		return result
+	}
+	return nil
 }
 
 func (p *Parser) _AtListUntilTerminator(stopWords map[string]struct{}) bool {

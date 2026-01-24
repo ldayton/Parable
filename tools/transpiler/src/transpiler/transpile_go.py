@@ -267,6 +267,7 @@ class GoTranspiler(ast.NodeVisitor):
         "_collect_procsubs": "[]Node",
         "_collect_redirects": "[]Node",
         "copy_stack": "[]*ParseContext",
+        "parse_for": "Node",  # Returns For | ForArith | None
     }
 
     # Tuple element types for functions returning tuples with typed elements
@@ -1107,8 +1108,6 @@ class GoTranspiler(ast.NodeVisitor):
         "parse_pipeline",
         "parse_list",
         "parse_list_until",
-        "parse_coproc",
-        "_parse_compound_command",
         "_at_list_until_terminator",
         "parse_list_operator",
         "_peek_list_operator",
@@ -1475,6 +1474,8 @@ class GoTranspiler(ast.NodeVisitor):
         append_types = self._collect_append_element_types(stmts)
         # Collect variables that are None-initialized but later assigned Node types
         nullable_node_vars = self._collect_nullable_node_vars(stmts)
+        # Collect variables assigned multiple different concrete Node types
+        multi_node_vars = self._collect_multi_node_type_vars(stmts)
         # Emit var declarations for all collected variables that are actually read
         for var_name, first_value in assignments.items():
             if var_name not in self.declared_vars and var_name in reads:
@@ -1497,6 +1498,11 @@ class GoTranspiler(ast.NodeVisitor):
                 if var_name in nullable_node_vars:
                     if not go_type or go_type == "interface{}":
                         go_type = "Node"
+                # Check if var is assigned multiple different concrete Node types
+                if var_name in multi_node_vars:
+                    if go_type and go_type.startswith("*") and go_type[1:] in self.symbols.classes:
+                        if self.symbols.classes[go_type[1:]].is_node:
+                            go_type = "Node"
                 if not go_type or go_type in ("interface{}", "[]interface{}"):
                     # Try harder - check if it's a known pattern
                     go_type = self._infer_var_type_from_name(var_name) or go_type or "interface{}"
@@ -1776,6 +1782,78 @@ class GoTranspiler(ast.NodeVisitor):
                 if self.symbols.classes[node.func.id].is_node:
                     return True
         return False
+
+    def _collect_multi_node_type_vars(self, stmts: list[ast.stmt]) -> set[str]:
+        """Collect variables assigned multiple different concrete Node types.
+
+        Pattern:
+            result = self.parse_brace_group()  # *BraceGroup
+            if cond:
+                result = self.parse_subshell()  # *Subshell
+
+        These should be typed as Node, not the first concrete type.
+        """
+        # Collect all Node types assigned to each variable
+        var_node_types: dict[str, set[str]] = {}
+        self._collect_var_node_types(stmts, var_node_types)
+        # Variables with multiple different Node types should be typed as Node
+        result: set[str] = set()
+        for var_name, types in var_node_types.items():
+            if len(types) > 1:
+                result.add(var_name)
+        return result
+
+    def _collect_var_node_types(self, stmts: list[ast.stmt], result: dict[str, set[str]]):
+        """Collect the concrete Node types assigned to each variable."""
+        for stmt in stmts:
+            if isinstance(stmt, ast.Assign):
+                for target in stmt.targets:
+                    if isinstance(target, ast.Name):
+                        var_name = self._snake_to_camel(target.id)
+                        var_name = self._safe_go_name(var_name)
+                        node_type = self._get_concrete_node_type(stmt.value)
+                        if node_type:
+                            if var_name not in result:
+                                result[var_name] = set()
+                            result[var_name].add(node_type)
+            # Recurse into control flow
+            if isinstance(stmt, ast.If):
+                self._collect_var_node_types(stmt.body, result)
+                self._collect_var_node_types(stmt.orelse, result)
+            elif isinstance(stmt, ast.For):
+                self._collect_var_node_types(stmt.body, result)
+            elif isinstance(stmt, ast.While):
+                self._collect_var_node_types(stmt.body, result)
+            elif isinstance(stmt, ast.Try):
+                self._collect_var_node_types(stmt.body, result)
+                for handler in stmt.handlers:
+                    self._collect_var_node_types(handler.body, result)
+            elif isinstance(stmt, ast.With):
+                self._collect_var_node_types(stmt.body, result)
+
+    def _get_concrete_node_type(self, node: ast.expr) -> str:
+        """Get the concrete Node type from an expression, or empty string if not a Node."""
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Attribute):
+                method = node.func.attr
+                class_name = self._infer_object_class(node.func.value)
+                if class_name:
+                    class_info = self.symbols.classes.get(class_name)
+                    if class_info and method in class_info.methods:
+                        ret_type = class_info.methods[method].return_type or ""
+                        # Return concrete Node types (e.g., *BraceGroup, *Subshell)
+                        if ret_type.startswith("*") and ret_type[1:] in self.symbols.classes:
+                            if self.symbols.classes[ret_type[1:]].is_node:
+                                return ret_type
+                        # Return "Node" for methods that return Node interface
+                        if ret_type == "Node":
+                            return "Node"
+            elif isinstance(node.func, ast.Name):
+                # Node constructor
+                if node.func.id in self.symbols.classes:
+                    if self.symbols.classes[node.func.id].is_node:
+                        return "*" + node.func.id
+        return ""
 
     def _infer_var_type_from_name(self, var_name: str) -> str:
         """Infer type from common variable naming patterns."""

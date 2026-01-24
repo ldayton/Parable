@@ -1,6 +1,7 @@
 """Parable fuzzers for differential testing against bash-oracle."""
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -160,6 +161,12 @@ def main():
     )
 
     args = parser.parse_args()
+
+    # Resolve output path relative to original cwd (before uv run --directory changed it)
+    if hasattr(args, "output") and args.output and not args.output.is_absolute():
+        orig_cwd = os.environ.get("FUZZER_ORIG_CWD")
+        if orig_cwd:
+            args.output = Path(orig_cwd) / args.output
 
     # Route to appropriate module
     if args.mode in ("character", "char"):

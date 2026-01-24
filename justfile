@@ -75,7 +75,7 @@ test-all: test-cpy test-pypy
 
 # Run the fuzzer (e.g., just fuzz char --stop-after 10)
 fuzz *ARGS:
-    uv run --directory tools/fuzzer fuzzer {{ARGS}}
+    FUZZER_ORIG_CWD="{{invocation_directory()}}" uv run --directory tools/fuzzer fuzzer {{ARGS}}
 
 # Run the fuzzer agent
 fuzzer-agent *ARGS:

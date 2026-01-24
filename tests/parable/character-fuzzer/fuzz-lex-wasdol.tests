@@ -1,0 +1,35 @@
+=== $$ followed by {} in param expansion
+${$${}
+---
+(command (word "${$${}"))
+---
+
+=== $$ followed by {x} in param expansion
+${$${x}
+---
+(command (word "${$${x}"))
+---
+
+=== $$$ in param expansion
+${$$$}
+---
+(command (word "${$$$}"))
+---
+
+=== $$$$ in param expansion
+${$$$$}
+---
+(command (word "${$$$$}"))
+---
+
+=== $$ with trailing chars
+${$$x}
+---
+(command (word "${$$x}"))
+---
+
+=== nested ${} after $$
+${$$${x}}
+---
+(command (word "${$$${x}}"))
+---

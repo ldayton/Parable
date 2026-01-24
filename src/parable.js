@@ -1009,6 +1009,12 @@ class Lexer {
 					}
 					continue;
 				} else if (next_ch === "(") {
+					// If previous char was $, this is $$ - treat current $ as literal
+					if (was_dollar) {
+						chars.push(ch);
+						was_dollar = true;
+						continue;
+					}
 					// Back up to before $ for Parser callback
 					this.pos -= 1;
 					this._syncToParser();
@@ -1051,6 +1057,12 @@ class Lexer {
 					}
 					continue;
 				} else if (next_ch === "[") {
+					// If previous char was $, this is $$ - treat current $ as literal
+					if (was_dollar) {
+						chars.push(ch);
+						was_dollar = true;
+						continue;
+					}
 					// Deprecated $[ ... ] arithmetic - use full parsing
 					this.pos -= 1;
 					this._syncToParser();

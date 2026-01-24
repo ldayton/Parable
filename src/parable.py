@@ -930,6 +930,11 @@ class Lexer:
                         was_dollar = True
                     continue
                 elif next_ch == "(":
+                    # If previous char was $, this is $$ - treat current $ as literal
+                    if was_dollar:
+                        chars.append(ch)
+                        was_dollar = True
+                        continue
                     # Back up to before $ for Parser callback
                     self.pos -= 1
                     self._sync_to_parser()
@@ -968,6 +973,11 @@ class Lexer:
                             was_dollar = False  # Ended with (
                     continue
                 elif next_ch == "[":
+                    # If previous char was $, this is $$ - treat current $ as literal
+                    if was_dollar:
+                        chars.append(ch)
+                        was_dollar = True
+                        continue
                     # Deprecated $[ ... ] arithmetic - use full parsing
                     self.pos -= 1  # back up to before $
                     self._sync_to_parser()

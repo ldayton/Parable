@@ -203,6 +203,7 @@ class MatchedPairFlags {
 	static EXTGLOB = 32;
 	static FIRSTCLOSE = 64;
 	static ARRAYSUB = 128;
+	static BACKQUOTE = 256;
 }
 
 class SavedParserState {

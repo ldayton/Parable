@@ -263,6 +263,7 @@ class MatchedPairFlags:
     EXTGLOB = 0x20  # Inside extglob pattern - don't parse ${ $( as constructs
     FIRSTCLOSE = 0x40  # Bare open delimiter doesn't increment count (bash's P_FIRSTCLOSE)
     ARRAYSUB = 0x80  # Inside [...] array subscript (bash's P_ARRAYSUB)
+    BACKQUOTE = 0x100  # Inside backtick substitution (bash's P_BACKQUOTE, reserved)
 
 
 class SavedParserState:

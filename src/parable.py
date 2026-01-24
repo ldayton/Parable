@@ -2386,7 +2386,7 @@ class Word(Node):
                 continue
             # Track brace depth for parameter expansions
             if not quote.single:
-                if _starts_with_at(value, i, "${"):
+                if _is_expansion_start(value, i, "${"):
                     brace_depth += 1
                     quote.push()
                     result.append("${")

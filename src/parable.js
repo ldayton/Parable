@@ -852,7 +852,8 @@ class Lexer {
 			param_text,
 			pass_next,
 			start,
-			was_dollar;
+			was_dollar,
+			was_gtlt;
 		if (flags == null) {
 			flags = 0;
 		}
@@ -861,6 +862,7 @@ class Lexer {
 		chars = [];
 		pass_next = false;
 		was_dollar = false;
+		was_gtlt = false;
 		while (count > 0) {
 			if (this.atEnd()) {
 				throw new MatchedPairError(
@@ -883,6 +885,7 @@ class Lexer {
 				pass_next = false;
 				chars.push(ch);
 				was_dollar = ch === "$";
+				was_gtlt = "<>".includes(ch);
 				continue;
 			}
 			// Inside single quotes, almost everything is literal
@@ -899,6 +902,7 @@ class Lexer {
 				}
 				chars.push(ch);
 				was_dollar = false;
+				was_gtlt = false;
 				continue;
 			}
 			// Backslash - set pass_next flag
@@ -907,11 +911,13 @@ class Lexer {
 				if (!this.atEnd() && this.peek() === "\n") {
 					this.advance();
 					was_dollar = false;
+					was_gtlt = false;
 					continue;
 				}
 				pass_next = true;
 				chars.push(ch);
 				was_dollar = false;
+				was_gtlt = false;
 				continue;
 			}
 			// Closing delimiter
@@ -922,6 +928,7 @@ class Lexer {
 				}
 				chars.push(ch);
 				was_dollar = false;
+				was_gtlt = "<>".includes(ch);
 				continue;
 			}
 			// Opening delimiter (only when open != close)
@@ -933,6 +940,7 @@ class Lexer {
 				}
 				chars.push(ch);
 				was_dollar = false;
+				was_gtlt = "<>".includes(ch);
 				continue;
 			}
 			// Quote characters trigger recursion (when not already in quote mode)
@@ -944,6 +952,7 @@ class Lexer {
 					chars.push(nested);
 					chars.push("'");
 					was_dollar = false;
+					was_gtlt = false;
 					continue;
 				} else if (ch === '"') {
 					// Double quote - recursively parse until matching "
@@ -956,6 +965,7 @@ class Lexer {
 					chars.push(nested);
 					chars.push('"');
 					was_dollar = false;
+					was_gtlt = false;
 					continue;
 				} else if (ch === "`") {
 					// Backtick - recursively parse until matching `
@@ -964,6 +974,7 @@ class Lexer {
 					chars.push(nested);
 					chars.push("`");
 					was_dollar = false;
+					was_gtlt = false;
 					continue;
 				}
 			}
@@ -976,6 +987,7 @@ class Lexer {
 					if (was_dollar) {
 						chars.push(ch);
 						was_dollar = true;
+						was_gtlt = false;
 						continue;
 					}
 					// In ARITH mode, only parse ${ if followed by funsub char (bash parse.y:4137-4145)
@@ -989,6 +1001,7 @@ class Lexer {
 							// Not funsub - treat $ as literal
 							chars.push(ch);
 							was_dollar = true;
+							was_gtlt = false;
 							continue;
 						}
 					}
@@ -1002,10 +1015,12 @@ class Lexer {
 					if (param_node) {
 						chars.push(param_text);
 						was_dollar = false;
+						was_gtlt = false;
 					} else {
 						// Parser failed - add $ as literal
 						chars.push(this.advance());
 						was_dollar = true;
+						was_gtlt = false;
 					}
 					continue;
 				} else if (next_ch === "(") {
@@ -1013,6 +1028,7 @@ class Lexer {
 					if (was_dollar) {
 						chars.push(ch);
 						was_dollar = true;
+						was_gtlt = false;
 						continue;
 					}
 					// Back up to before $ for Parser callback
@@ -1026,6 +1042,7 @@ class Lexer {
 						if (arith_node) {
 							chars.push(arith_text);
 							was_dollar = false;
+							was_gtlt = false;
 						} else {
 							// Arithmetic failed - try as command substitution fallback
 							this._syncToParser();
@@ -1034,11 +1051,13 @@ class Lexer {
 							if (cmd_node) {
 								chars.push(cmd_text);
 								was_dollar = false;
+								was_gtlt = false;
 							} else {
 								// Both failed - add $( as literal
 								chars.push(this.advance());
 								chars.push(this.advance());
 								was_dollar = false;
+								was_gtlt = false;
 							}
 						}
 					} else {
@@ -1048,11 +1067,13 @@ class Lexer {
 						if (cmd_node) {
 							chars.push(cmd_text);
 							was_dollar = false;
+							was_gtlt = false;
 						} else {
 							// Parser failed - add $( as literal
 							chars.push(this.advance());
 							chars.push(this.advance());
 							was_dollar = false;
+							was_gtlt = false;
 						}
 					}
 					continue;
@@ -1061,6 +1082,7 @@ class Lexer {
 					if (was_dollar) {
 						chars.push(ch);
 						was_dollar = true;
+						was_gtlt = false;
 						continue;
 					}
 					// Deprecated $[ ... ] arithmetic - use full parsing
@@ -1071,16 +1093,19 @@ class Lexer {
 					if (arith_node) {
 						chars.push(arith_text);
 						was_dollar = false;
+						was_gtlt = false;
 					} else {
 						// Parser failed - add $ as literal
 						chars.push(this.advance());
 						was_dollar = true;
+						was_gtlt = false;
 					}
 					continue;
 				}
 			}
 			chars.push(ch);
 			was_dollar = ch === "$";
+			was_gtlt = "<>".includes(ch);
 		}
 		return chars.join("");
 	}

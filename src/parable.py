@@ -801,6 +801,7 @@ class Lexer:
         chars: list[str] = []
         pass_next = False
         was_dollar = False  # Track if previous char was $ (bash's LEX_WASDOL)
+        was_gtlt = False  # Track if previous char was < or > (bash's LEX_GTLT)
 
         while count > 0:
             if self.at_end():
@@ -821,6 +822,7 @@ class Lexer:
                 pass_next = False
                 chars.append(ch)
                 was_dollar = ch == "$"
+                was_gtlt = ch in "<>"
                 continue
 
             # Inside single quotes, almost everything is literal
@@ -833,7 +835,8 @@ class Lexer:
                 if ch == "\\" and (flags & MatchedPairFlags.ALLOWESC):
                     pass_next = True
                 chars.append(ch)
-                was_dollar = False  # $ is literal in single quotes
+                was_dollar = False
+                was_gtlt = False
                 continue
 
             # Backslash - set pass_next flag
@@ -842,10 +845,12 @@ class Lexer:
                 if not self.at_end() and self.peek() == "\n":
                     self.advance()
                     was_dollar = False
+                    was_gtlt = False
                     continue
                 pass_next = True
                 chars.append(ch)
                 was_dollar = False
+                was_gtlt = False
                 continue
 
             # Closing delimiter
@@ -855,6 +860,7 @@ class Lexer:
                     break
                 chars.append(ch)
                 was_dollar = False
+                was_gtlt = ch in "<>"
                 continue
 
             # Opening delimiter (only when open != close)
@@ -865,6 +871,7 @@ class Lexer:
                     count += 1
                 chars.append(ch)
                 was_dollar = False
+                was_gtlt = ch in "<>"
                 continue
 
             # Quote characters trigger recursion (when not already in quote mode)
@@ -876,6 +883,7 @@ class Lexer:
                     chars.append(nested)
                     chars.append("'")
                     was_dollar = False
+                    was_gtlt = False
                     continue
                 elif ch == '"':
                     # Double quote - recursively parse until matching "
@@ -884,6 +892,7 @@ class Lexer:
                     chars.append(nested)
                     chars.append('"')
                     was_dollar = False
+                    was_gtlt = False
                     continue
                 elif ch == "`":
                     # Backtick - recursively parse until matching `
@@ -892,6 +901,7 @@ class Lexer:
                     chars.append(nested)
                     chars.append("`")
                     was_dollar = False
+                    was_gtlt = False
                     continue
 
             # ${ $( $[ trigger nested parsing (unless in extglob where they're just pattern chars)
@@ -903,6 +913,7 @@ class Lexer:
                     if was_dollar:
                         chars.append(ch)
                         was_dollar = True
+                        was_gtlt = False
                         continue
                     # In ARITH mode, only parse ${ if followed by funsub char (bash parse.y:4137-4145)
                     # Otherwise treat $ as literal
@@ -914,6 +925,7 @@ class Lexer:
                             # Not funsub - treat $ as literal
                             chars.append(ch)
                             was_dollar = True
+                            was_gtlt = False
                             continue
                     # ${ ... } parameter expansion - use full parsing
                     self.pos -= 1  # back up to before $
@@ -924,16 +936,19 @@ class Lexer:
                     if param_node:
                         chars.append(param_text)
                         was_dollar = False  # Ended with }
+                        was_gtlt = False
                     else:
                         # Parser failed - add $ as literal
                         chars.append(self.advance())  # $
                         was_dollar = True
+                        was_gtlt = False
                     continue
                 elif next_ch == "(":
                     # If previous char was $, this is $$ - treat current $ as literal
                     if was_dollar:
                         chars.append(ch)
                         was_dollar = True
+                        was_gtlt = False
                         continue
                     # Back up to before $ for Parser callback
                     self.pos -= 1
@@ -946,6 +961,7 @@ class Lexer:
                         if arith_node:
                             chars.append(arith_text)
                             was_dollar = False  # Ended with ))
+                            was_gtlt = False
                         else:
                             # Arithmetic failed - try as command substitution fallback
                             self._sync_to_parser()
@@ -954,11 +970,13 @@ class Lexer:
                             if cmd_node:
                                 chars.append(cmd_text)
                                 was_dollar = False  # Ended with )
+                                was_gtlt = False
                             else:
                                 # Both failed - add $( as literal
                                 chars.append(self.advance())  # $
                                 chars.append(self.advance())  # (
                                 was_dollar = False  # Ended with (
+                                was_gtlt = False
                     else:
                         # $( ... ) command substitution - use full parsing
                         cmd_node, cmd_text = self._parser._parse_command_substitution()
@@ -966,17 +984,20 @@ class Lexer:
                         if cmd_node:
                             chars.append(cmd_text)
                             was_dollar = False  # Ended with )
+                            was_gtlt = False
                         else:
                             # Parser failed - add $( as literal
                             chars.append(self.advance())  # $
                             chars.append(self.advance())  # (
                             was_dollar = False  # Ended with (
+                            was_gtlt = False
                     continue
                 elif next_ch == "[":
                     # If previous char was $, this is $$ - treat current $ as literal
                     if was_dollar:
                         chars.append(ch)
                         was_dollar = True
+                        was_gtlt = False
                         continue
                     # Deprecated $[ ... ] arithmetic - use full parsing
                     self.pos -= 1  # back up to before $
@@ -986,14 +1007,17 @@ class Lexer:
                     if arith_node:
                         chars.append(arith_text)
                         was_dollar = False  # Ended with ]
+                        was_gtlt = False
                     else:
                         # Parser failed - add $ as literal
                         chars.append(self.advance())  # $
                         was_dollar = True
+                        was_gtlt = False
                     continue
 
             chars.append(ch)
             was_dollar = ch == "$"
+            was_gtlt = ch in "<>"
 
         return "".join(chars)
 

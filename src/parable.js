@@ -7492,38 +7492,136 @@ function _isWordEndContext(c) {
 	);
 }
 
+// Flags for _skip_matched_pair (mirrors bash subst.c)
+const _SMP_LITERAL = 1;
+const _SMP_PAST_OPEN = 2;
+function _skipMatchedPair(s, start, open, close, flags) {
+	let c, depth, i, in_double, in_quotes, in_single, literal, n, pass_next;
+	if (flags == null) {
+		flags = 0;
+	}
+	n = s.length;
+	if (flags & _SMP_PAST_OPEN) {
+		i = start;
+	} else {
+		if (start >= n || s[start] !== open) {
+			return -1;
+		}
+		i = start + 1;
+	}
+	depth = 1;
+	pass_next = false;
+	in_single = false;
+	in_double = false;
+	while (i < n && depth > 0) {
+		c = s[i];
+		if (pass_next) {
+			pass_next = false;
+			i += 1;
+			continue;
+		}
+		literal = flags & _SMP_LITERAL;
+		if (!literal && c === "\\") {
+			pass_next = true;
+			i += 1;
+			continue;
+		}
+		if (!literal && c === "'" && !in_double) {
+			in_single = !in_single;
+			i += 1;
+			continue;
+		}
+		if (!literal && c === '"' && !in_single) {
+			in_double = !in_double;
+			i += 1;
+			continue;
+		}
+		in_quotes = in_single || in_double;
+		if (!literal && !in_quotes && c === open) {
+			depth += 1;
+		} else if (!in_quotes && c === close) {
+			depth -= 1;
+		}
+		i += 1;
+	}
+	return depth === 0 ? i : -1;
+}
+
+function _skipSubscript(s, start, flags) {
+	if (flags == null) {
+		flags = 0;
+	}
+	return _skipMatchedPair(s, start, "[", "]", flags);
+}
+
+function _assignment(s, flags) {
+	let c, end, i, sub_flags;
+	if (flags == null) {
+		flags = 0;
+	}
+	if (!s) {
+		return -1;
+	}
+	if (!(/^[a-zA-Z]$/.test(s[0]) || s[0] === "_")) {
+		return -1;
+	}
+	i = 1;
+	while (i < s.length) {
+		c = s[i];
+		if (c === "=") {
+			return i;
+		}
+		if (c === "[") {
+			sub_flags = flags & 2 ? _SMP_LITERAL : 0;
+			end = _skipSubscript(s, i, sub_flags);
+			if (end === -1) {
+				return -1;
+			}
+			i = end;
+			if (i < s.length && s[i] === "+") {
+				i += 1;
+			}
+			if (i < s.length && s[i] === "=") {
+				return i;
+			}
+			return -1;
+		}
+		if (c === "+") {
+			if (i + 1 < s.length && s[i + 1] === "=") {
+				return i + 1;
+			}
+			return -1;
+		}
+		if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
+			return -1;
+		}
+		i += 1;
+	}
+	return -1;
+}
+
 function _isArrayAssignmentPrefix(chars) {
-	let depth, i;
+	let end, i, s;
 	if (chars.length === 0) {
 		return false;
 	}
 	if (!(/^[a-zA-Z]$/.test(chars[0]) || chars[0] === "_")) {
 		return false;
 	}
+	s = chars.join("");
 	i = 1;
-	while (
-		i < chars.length &&
-		(/^[a-zA-Z0-9]$/.test(chars[i]) || chars[i] === "_")
-	) {
+	while (i < s.length && (/^[a-zA-Z0-9]$/.test(s[i]) || s[i] === "_")) {
 		i += 1;
 	}
-	while (i < chars.length) {
-		if (chars[i] !== "[") {
+	while (i < s.length) {
+		if (s[i] !== "[") {
 			return false;
 		}
-		depth = 1;
-		i += 1;
-		while (i < chars.length && depth > 0) {
-			if (chars[i] === "[") {
-				depth += 1;
-			} else if (chars[i] === "]") {
-				depth -= 1;
-			}
-			i += 1;
-		}
-		if (depth !== 0) {
+		end = _skipSubscript(s, i, _SMP_LITERAL);
+		if (end === -1) {
 			return false;
 		}
+		i = end;
 	}
 	return true;
 }
@@ -7617,28 +7715,7 @@ function _isSemicolonNewlineBrace(c) {
 }
 
 function _looksLikeAssignment(s) {
-	let c, eq_pos, name;
-	eq_pos = s.indexOf("=");
-	if (eq_pos === -1) {
-		return false;
-	}
-	name = s.slice(0, eq_pos);
-	// Handle NAME+= (array append)
-	if (name.endsWith("+")) {
-		name = name.slice(0, -1);
-	}
-	if (!name) {
-		return false;
-	}
-	if (!(/^[a-zA-Z]$/.test(name[0]) || name[0] === "_")) {
-		return false;
-	}
-	for (c of name.slice(1)) {
-		if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
-			return false;
-		}
-	}
-	return true;
+	return _assignment(s) !== -1;
 }
 
 function _isValidIdentifier(name) {
@@ -8451,43 +8528,7 @@ class Parser {
 	}
 
 	_isAssignmentWord(word) {
-		let bracket_depth, ch, i, quote;
-		// Assignment must start with identifier (letter or underscore), not quoted
-		if (
-			!word.value ||
-			!(/^[a-zA-Z]$/.test(word.value[0]) || word.value[0] === "_")
-		) {
-			return false;
-		}
-		quote = new QuoteState();
-		bracket_depth = 0;
-		i = 0;
-		while (i < word.value.length) {
-			ch = word.value[i];
-			if (ch === "'" && !quote.double) {
-				quote.single = !quote.single;
-			} else if (ch === '"' && !quote.single) {
-				quote.double = !quote.double;
-			} else if (ch === "\\" && !quote.single && i + 1 < word.value.length) {
-				i += 1;
-				continue;
-			} else if (ch === "[" && !quote.inQuotes()) {
-				bracket_depth += 1;
-			} else if (ch === "]" && !quote.inQuotes()) {
-				bracket_depth -= 1;
-			} else if (ch === "=" && !quote.inQuotes() && bracket_depth === 0) {
-				return true;
-			} else if (
-				!quote.inQuotes() &&
-				bracket_depth === 0 &&
-				!(/^[a-zA-Z0-9]$/.test(ch) || ch === "_")
-			) {
-				// Invalid char in identifier part before =
-				return false;
-			}
-			i += 1;
-		}
-		return false;
+		return _assignment(word.value) !== -1;
 	}
 
 	_parseBacktickSubstitution() {

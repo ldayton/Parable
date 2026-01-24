@@ -6251,28 +6251,125 @@ def _is_word_end_context(c: str) -> bool:
     )
 
 
+# Flags for _skip_matched_pair (mirrors bash subst.c)
+_SMP_LITERAL = 1  # No quote/escape processing
+_SMP_PAST_OPEN = 2  # start points past open bracket
+
+
+def _skip_matched_pair(s: str, start: int, open: str, close: str, flags: int = 0) -> int:
+    """Skip a matched pair of brackets, handling quotes and escapes.
+
+    Mirrors bash's skip_matched_pair() in subst.c:2086.
+    Returns index after closing bracket, or -1 if unmatched.
+
+    Flags:
+        _SMP_LITERAL (1): No quote/escape processing
+        _SMP_PAST_OPEN (2): start already points past open bracket
+    """
+    n = len(s)
+    if flags & _SMP_PAST_OPEN:
+        i = start
+    else:
+        if start >= n or s[start] != open:
+            return -1
+        i = start + 1
+    depth = 1
+    pass_next = False
+    in_single = False
+    in_double = False
+    while i < n and depth > 0:
+        c = s[i]
+        if pass_next:
+            pass_next = False
+            i += 1
+            continue
+        literal = flags & _SMP_LITERAL
+        if not literal and c == "\\":
+            pass_next = True
+            i += 1
+            continue
+        if not literal and c == "'" and not in_double:
+            in_single = not in_single
+            i += 1
+            continue
+        if not literal and c == '"' and not in_single:
+            in_double = not in_double
+            i += 1
+            continue
+        in_quotes = in_single or in_double
+        if not literal and not in_quotes and c == open:
+            depth += 1
+        elif not in_quotes and c == close:
+            depth -= 1
+        i += 1
+    return i if depth == 0 else -1
+
+
+def _skip_subscript(s: str, start: int, flags: int = 0) -> int:
+    """Skip a bracketed subscript starting at s[start]='['.
+
+    Mirrors bash's skipsubscript() in subst.c:2186.
+    Flags are passed through to _skip_matched_pair().
+    """
+    return _skip_matched_pair(s, start, "[", "]", flags)
+
+
+def _assignment(s: str, flags: int = 0) -> int:
+    """Return index of '=' if s is an assignment word, else -1.
+
+    Handles: NAME=, NAME+=, NAME[sub]=, NAME[sub]+=
+    Matches bash's assignment() function in general.c.
+
+    Flags:
+        & 2: Use literal subscript matching (for compound assignments)
+    """
+    if not s:
+        return -1
+    if not (s[0].isalpha() or s[0] == "_"):
+        return -1
+    i = 1
+    while i < len(s):
+        c = s[i]
+        if c == "=":
+            return i
+        if c == "[":
+            sub_flags = _SMP_LITERAL if (flags & 2) else 0
+            end = _skip_subscript(s, i, sub_flags)
+            if end == -1:
+                return -1
+            i = end
+            if i < len(s) and s[i] == "+":
+                i += 1
+            if i < len(s) and s[i] == "=":
+                return i
+            return -1
+        if c == "+":
+            if i + 1 < len(s) and s[i + 1] == "=":
+                return i + 1
+            return -1
+        if not (c.isalnum() or c == "_"):
+            return -1
+        i += 1
+    return -1
+
+
 def _is_array_assignment_prefix(chars: list[str]) -> bool:
     """Check if chars form name or name[subscript]... for array assignments."""
     if not chars:
         return False
     if not (chars[0].isalpha() or chars[0] == "_"):
         return False
+    s = "".join(chars)
     i = 1
-    while i < len(chars) and (chars[i].isalnum() or chars[i] == "_"):
+    while i < len(s) and (s[i].isalnum() or s[i] == "_"):
         i += 1
-    while i < len(chars):
-        if chars[i] != "[":
+    while i < len(s):
+        if s[i] != "[":
             return False
-        depth = 1
-        i += 1
-        while i < len(chars) and depth > 0:
-            if chars[i] == "[":
-                depth += 1
-            elif chars[i] == "]":
-                depth -= 1
-            i += 1
-        if depth != 0:
+        end = _skip_subscript(s, i, _SMP_LITERAL)
+        if end == -1:
             return False
+        i = end
     return True
 
 
@@ -6360,22 +6457,8 @@ def _is_semicolon_newline_brace(c: str) -> bool:
 
 
 def _looks_like_assignment(s: str) -> bool:
-    """Check if s looks like an assignment (NAME=... or NAME+=...) where NAME is a valid variable name."""
-    eq_pos = s.find("=")
-    if eq_pos == -1:
-        return False
-    name = s[:eq_pos]
-    # Handle NAME+= (array append)
-    if name.endswith("+"):
-        name = name[:-1]
-    if not name:
-        return False
-    if not (name[0].isalpha() or name[0] == "_"):
-        return False
-    for c in name[1:]:
-        if not (c.isalnum() or c == "_"):
-            return False
-    return True
+    """Check if s looks like an assignment word."""
+    return _assignment(s) != -1
 
 
 def _is_valid_identifier(name: str) -> bool:
@@ -7082,33 +7165,8 @@ class Parser:
         return CommandSubstitution(cmd, brace=True), text
 
     def _is_assignment_word(self, word: Word) -> bool:
-        """Check if a word is an assignment (name=value) where name is a valid identifier."""
-        # Assignment must start with identifier (letter or underscore), not quoted
-        if not word.value or not (word.value[0].isalpha() or word.value[0] == "_"):
-            return False
-        quote = QuoteState()
-        bracket_depth = 0
-        i = 0
-        while i < len(word.value):
-            ch = word.value[i]
-            if ch == "'" and not quote.double:
-                quote.single = not quote.single
-            elif ch == '"' and not quote.single:
-                quote.double = not quote.double
-            elif ch == "\\" and not quote.single and i + 1 < len(word.value):
-                i += 1  # Skip next char
-                continue
-            elif ch == "[" and not quote.in_quotes():
-                bracket_depth += 1
-            elif ch == "]" and not quote.in_quotes():
-                bracket_depth -= 1
-            elif ch == "=" and not quote.in_quotes() and bracket_depth == 0:
-                return True
-            elif not quote.in_quotes() and bracket_depth == 0 and not (ch.isalnum() or ch == "_"):
-                # Invalid char in identifier part before =
-                return False
-            i += 1
-        return False
+        """Check if a word is an assignment (name=value)."""
+        return _assignment(word.value) != -1
 
     def _parse_backtick_substitution(self) -> tuple[Node | None, str]:
         """Parse a `...` command substitution.

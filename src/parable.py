@@ -6343,6 +6343,14 @@ def _skip_matched_pair(s: str, start: int, open: str, close: str, flags: int = 0
             in_double = not in_double
             i += 1
             continue
+        if in_double:
+            if c == "$" and i + 1 < n:
+                if s[i + 1] == "(":
+                    i = _find_cmdsub_end(s, i + 2)
+                    continue
+                if s[i + 1] == "{":
+                    i = _find_braced_param_end(s, i + 2)
+                    continue
         if not literal and not in_single and not in_double and c == "$" and i + 1 < n and s[i + 1] == "(":
             i = _find_cmdsub_end(s, i + 2)
             continue

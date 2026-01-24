@@ -510,7 +510,7 @@ class GoTranspiler(ast.NodeVisitor):
         else:
             self.emit(f"func {go_name}({params_str}) {{")
         self.indent += 1
-        self.emit('panic("TODO")')
+        self._emit_body(node.body, func_info)
         self.indent -= 1
         self.emit("}")
         self.emit("")
@@ -551,7 +551,7 @@ class GoTranspiler(ast.NodeVisitor):
         else:
             self.emit(f"func ({receiver} *{class_info.name}) {go_name}({params_str}) {{")
         self.indent += 1
-        self.emit('panic("TODO")')
+        self._emit_body(node.body, func_info)
         self.indent -= 1
         self.emit("}")
         self.emit("")
@@ -568,6 +568,224 @@ class GoTranspiler(ast.NodeVisitor):
         self.indent -= 1
         self.emit("}")
         self.emit("")
+
+    def _emit_body(self, stmts: list[ast.stmt], func_info: FuncInfo | None = None):
+        """Emit function/method body statements."""
+        # For now, emit panic("TODO") for all function bodies
+        # This will be replaced with real implementations incrementally
+        self.emit('panic("TODO")')
+
+    def _emit_constructor_body(self, stmts: list[ast.stmt], class_info: ClassInfo):
+        """Emit constructor body, handling self.x = y assignments."""
+        receiver = class_info.name[0].lower()
+        for stmt in stmts:
+            # Skip docstrings
+            if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant):
+                continue
+            # Handle super().__init__() - skip for now, Go doesn't have super
+            if self._is_super_call(stmt):
+                continue
+            # Handle self.x = y assignments
+            if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+                target = stmt.targets[0]
+                if (
+                    isinstance(target, ast.Attribute)
+                    and isinstance(target.value, ast.Name)
+                    and target.value.id == "self"
+                ):
+                    field = self._to_go_field_name(target.attr)
+                    value = self.visit_expr(stmt.value)
+                    self.emit(f"{receiver}.{field} = {value}")
+                    continue
+            self._emit_stmt(stmt)
+
+    def _is_super_call(self, stmt: ast.stmt) -> bool:
+        """Check if statement is super().__init__() call."""
+        if not isinstance(stmt, ast.Expr):
+            return False
+        if not isinstance(stmt.value, ast.Call):
+            return False
+        call = stmt.value
+        if not isinstance(call.func, ast.Attribute):
+            return False
+        if call.func.attr != "__init__":
+            return False
+        if not isinstance(call.func.value, ast.Call):
+            return False
+        if not isinstance(call.func.value.func, ast.Name):
+            return False
+        return call.func.value.func.id == "super"
+
+    def _emit_stmt(self, stmt: ast.stmt):
+        """Emit a single statement."""
+        method = f"_emit_stmt_{stmt.__class__.__name__}"
+        if hasattr(self, method):
+            getattr(self, method)(stmt)
+        else:
+            self.emit(f"/* TODO: {stmt.__class__.__name__} */")
+
+    def _emit_stmt_Expr(self, stmt: ast.Expr):
+        """Emit expression statement."""
+        # Skip docstrings
+        if isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, str):
+            return
+        expr = self.visit_expr(stmt.value)
+        # Handle append which needs to be a statement
+        if "= append(" in expr:
+            self.emit(expr)
+        else:
+            self.emit(expr)
+
+    def _emit_stmt_Assign(self, stmt: ast.Assign):
+        """Emit assignment statement."""
+        if len(stmt.targets) == 1:
+            target = stmt.targets[0]
+            # Handle tuple unpacking
+            if isinstance(target, ast.Tuple):
+                targets = ", ".join(self.visit_expr(t) for t in target.elts)
+                value = self.visit_expr(stmt.value)
+                self.emit(f"{targets} = {value}")
+                return
+            target_str = self.visit_expr(target)
+            value = self.visit_expr(stmt.value)
+            self.emit(f"{target_str} = {value}")
+        else:
+            # Multiple assignment targets
+            value = self.visit_expr(stmt.value)
+            for target in stmt.targets:
+                target_str = self.visit_expr(target)
+                self.emit(f"{target_str} = {value}")
+
+    def _emit_stmt_AnnAssign(self, stmt: ast.AnnAssign):
+        """Emit annotated assignment."""
+        if stmt.value:
+            target = self.visit_expr(stmt.target)
+            value = self.visit_expr(stmt.value)
+            self.emit(f"{target} = {value}")
+
+    def _emit_stmt_AugAssign(self, stmt: ast.AugAssign):
+        """Emit augmented assignment (+=, -=, etc.)."""
+        target = self.visit_expr(stmt.target)
+        op = self._binop_to_go(stmt.op)
+        value = self.visit_expr(stmt.value)
+        self.emit(f"{target} {op}= {value}")
+
+    def _emit_stmt_Return(self, stmt: ast.Return):
+        """Emit return statement."""
+        if stmt.value:
+            value = self.visit_expr(stmt.value)
+            self.emit(f"return {value}")
+        else:
+            self.emit("return")
+
+    def _emit_stmt_If(self, stmt: ast.If):
+        """Emit if statement."""
+        self._emit_if_chain(stmt, is_first=True)
+
+    def _emit_if_chain(self, stmt: ast.If, is_first: bool):
+        """Emit if/elif/else chain."""
+        test = self.visit_expr(stmt.test)
+        if is_first:
+            self.emit(f"if {test} {{")
+        else:
+            self.emit_raw("\t" * self.indent + f"}} else if {test} {{")
+        self.indent += 1
+        for s in stmt.body:
+            self._emit_stmt(s)
+        self.indent -= 1
+        if stmt.orelse:
+            if len(stmt.orelse) == 1 and isinstance(stmt.orelse[0], ast.If):
+                # elif - continue chain
+                self._emit_if_chain(stmt.orelse[0], is_first=False)
+            else:
+                # else
+                self.emit_raw("\t" * self.indent + "} else {")
+                self.indent += 1
+                for s in stmt.orelse:
+                    self._emit_stmt(s)
+                self.indent -= 1
+                self.emit("}")
+        else:
+            self.emit("}")
+
+    def _emit_stmt_While(self, stmt: ast.While):
+        """Emit while loop."""
+        test = self.visit_expr(stmt.test)
+        self.emit(f"for {test} {{")
+        self.indent += 1
+        for s in stmt.body:
+            self._emit_stmt(s)
+        self.indent -= 1
+        self.emit("}")
+
+    def _emit_stmt_For(self, stmt: ast.For):
+        """Emit for loop."""
+        target = self.visit_expr(stmt.target)
+        # Handle range()
+        if isinstance(stmt.iter, ast.Call) and isinstance(stmt.iter.func, ast.Name):
+            if stmt.iter.func.id == "range":
+                self._emit_range_for(stmt, target)
+                return
+        # Standard for-each
+        iter_expr = self.visit_expr(stmt.iter)
+        self.emit(f"for _, {target} := range {iter_expr} {{")
+        self.indent += 1
+        for s in stmt.body:
+            self._emit_stmt(s)
+        self.indent -= 1
+        self.emit("}")
+
+    def _emit_range_for(self, stmt: ast.For, target: str):
+        """Emit for loop over range()."""
+        args = stmt.iter.args
+        if len(args) == 1:
+            end = self.visit_expr(args[0])
+            self.emit(f"for {target} := 0; {target} < {end}; {target}++ {{")
+        elif len(args) == 2:
+            start = self.visit_expr(args[0])
+            end = self.visit_expr(args[1])
+            self.emit(f"for {target} := {start}; {target} < {end}; {target}++ {{")
+        else:
+            start = self.visit_expr(args[0])
+            end = self.visit_expr(args[1])
+            step = self.visit_expr(args[2])
+            # Check for negative step
+            if isinstance(args[2], ast.UnaryOp) and isinstance(args[2].op, ast.USub):
+                self.emit(f"for {target} := {start}; {target} > {end}; {target} += {step} {{")
+            else:
+                self.emit(f"for {target} := {start}; {target} < {end}; {target} += {step} {{")
+        self.indent += 1
+        for s in stmt.body:
+            self._emit_stmt(s)
+        self.indent -= 1
+        self.emit("}")
+
+    def _emit_stmt_Break(self, stmt: ast.Break):
+        """Emit break statement."""
+        self.emit("break")
+
+    def _emit_stmt_Continue(self, stmt: ast.Continue):
+        """Emit continue statement."""
+        self.emit("continue")
+
+    def _emit_stmt_Pass(self, stmt: ast.Pass):
+        """Emit pass (no-op in Go)."""
+        pass  # Go doesn't need explicit pass
+
+    def _emit_stmt_Raise(self, stmt: ast.Raise):
+        """Emit raise as panic."""
+        if stmt.exc:
+            exc = self.visit_expr(stmt.exc)
+            self.emit(f"panic({exc})")
+        else:
+            self.emit("panic(nil)")
+
+    def _emit_stmt_Try(self, stmt: ast.Try):
+        """Emit try/except as defer/recover pattern."""
+        # This is complex - for now emit a TODO
+        self.emit("/* TODO: try/except */")
+        for s in stmt.body:
+            self._emit_stmt(s)
 
     def _format_params(self, params: list[ParamInfo]) -> str:
         """Format parameter list for Go function signature."""
@@ -631,6 +849,384 @@ class GoTranspiler(ast.NodeVisitor):
         """Convert snake_case to camelCase."""
         parts = name.split("_")
         return parts[0] + "".join(word.capitalize() for word in parts[1:])
+
+    # ========== Expression Emission ==========
+
+    def visit_expr(self, node: ast.expr) -> str:
+        """Convert a Python expression to Go code string."""
+        method = f"visit_expr_{node.__class__.__name__}"
+        if hasattr(self, method):
+            return getattr(self, method)(node)
+        return f"/* TODO: {node.__class__.__name__} */"
+
+    def visit_expr_Constant(self, node: ast.Constant) -> str:
+        """Convert constant literals."""
+        if isinstance(node.value, bool):
+            return "true" if node.value else "false"
+        if isinstance(node.value, int):
+            return str(node.value)
+        if isinstance(node.value, str):
+            # Escape for Go string literal
+            escaped = (
+                node.value.replace("\\", "\\\\")
+                .replace('"', '\\"')
+                .replace("\n", "\\n")
+                .replace("\t", "\\t")
+                .replace("\r", "\\r")
+            )
+            return f'"{escaped}"'
+        if node.value is None:
+            return "nil"
+        if isinstance(node.value, bytes):
+            # Convert bytes to []byte literal
+            return "[]byte{" + ", ".join(str(b) for b in node.value) + "}"
+        return repr(node.value)
+
+    def visit_expr_Name(self, node: ast.Name) -> str:
+        """Convert variable names."""
+        mapping = {
+            "True": "true",
+            "False": "false",
+            "None": "nil",
+            "self": self._get_receiver_name(),
+        }
+        name = mapping.get(node.id, node.id)
+        # Handle class name constants (e.g., TokenType.WORD)
+        if name in self.symbols.classes:
+            return name
+        # Convert to camelCase and handle reserved words
+        camel = self._snake_to_camel(name)
+        return self._safe_go_name(camel)
+
+    def _safe_go_name(self, name: str) -> str:
+        """Make sure name is not a Go reserved word."""
+        reserved = {
+            "type": "typ",
+            "func": "fn",
+            "var": "variable",
+            "range": "rng",
+            "map": "m",
+            "interface": "iface",
+            "chan": "ch",
+            "select": "sel",
+            "case": "caseVal",
+            "default": "defaultVal",
+            "package": "pkg",
+            "import": "imp",
+            "go": "goVal",
+            "defer": "deferVal",
+            "return": "ret",
+            "break": "brk",
+            "continue": "cont",
+            "fallthrough": "fallthru",
+            "if": "ifVal",
+            "else": "elseVal",
+            "for": "forVal",
+            "switch": "switchVal",
+            "const": "constVal",
+            "struct": "structVal",
+        }
+        return reserved.get(name, name)
+
+    def _get_receiver_name(self) -> str:
+        """Get receiver name for current class context."""
+        if self.current_class:
+            return self.current_class[0].lower()
+        return "self"
+
+    def visit_expr_Attribute(self, node: ast.Attribute) -> str:
+        """Convert attribute access."""
+        value = self.visit_expr(node.value)
+        attr = self._to_go_field_name(node.attr)
+        # Handle self.attr -> receiver.Attr
+        if isinstance(node.value, ast.Name) and node.value.id == "self":
+            return f"{value}.{attr}"
+        return f"{value}.{attr}"
+
+    def visit_expr_Subscript(self, node: ast.Subscript) -> str:
+        """Convert subscript access (indexing/slicing)."""
+        value = self.visit_expr(node.value)
+        if isinstance(node.slice, ast.Slice):
+            lower = self.visit_expr(node.slice.lower) if node.slice.lower else "0"
+            upper = self.visit_expr(node.slice.upper) if node.slice.upper else ""
+            if upper:
+                return f"{value}[{lower}:{upper}]"
+            return f"{value}[{lower}:]"
+        index = self.visit_expr(node.slice)
+        return f"{value}[{index}]"
+
+    def visit_expr_BinOp(self, node: ast.BinOp) -> str:
+        """Convert binary operations."""
+        left = self.visit_expr(node.left)
+        right = self.visit_expr(node.right)
+        op = self._binop_to_go(node.op)
+        # Handle floor division
+        if isinstance(node.op, ast.FloorDiv):
+            return f"{left} / {right}"  # Go int division is floor
+        # Handle power
+        if isinstance(node.op, ast.Pow):
+            return f"int(math.Pow(float64({left}), float64({right})))"
+        return f"{left} {op} {right}"
+
+    def _binop_to_go(self, op: ast.operator) -> str:
+        """Convert Python binary operator to Go."""
+        ops = {
+            ast.Add: "+",
+            ast.Sub: "-",
+            ast.Mult: "*",
+            ast.Div: "/",
+            ast.FloorDiv: "/",
+            ast.Mod: "%",
+            ast.LShift: "<<",
+            ast.RShift: ">>",
+            ast.BitOr: "|",
+            ast.BitXor: "^",
+            ast.BitAnd: "&",
+        }
+        return ops.get(type(op), "/* ? */")
+
+    def visit_expr_UnaryOp(self, node: ast.UnaryOp) -> str:
+        """Convert unary operations."""
+        operand = self.visit_expr(node.operand)
+        if isinstance(node.op, ast.Not):
+            return f"!{operand}"
+        if isinstance(node.op, ast.USub):
+            return f"-{operand}"
+        if isinstance(node.op, ast.UAdd):
+            return f"+{operand}"
+        if isinstance(node.op, ast.Invert):
+            return f"^{operand}"
+        return f"/* TODO: UnaryOp */{operand}"
+
+    def visit_expr_Compare(self, node: ast.Compare) -> str:
+        """Convert comparison operations."""
+        result = self.visit_expr(node.left)
+        for op, comparator in zip(node.ops, node.comparators, strict=True):
+            right = self.visit_expr(comparator)
+            # Handle 'in' operator
+            if isinstance(op, ast.In):
+                return self._emit_in_check(node.left, comparator, negated=False)
+            if isinstance(op, ast.NotIn):
+                return self._emit_in_check(node.left, comparator, negated=True)
+            op_str = self._cmpop_to_go(op)
+            result = f"{result} {op_str} {right}"
+        return result
+
+    def _cmpop_to_go(self, op: ast.cmpop) -> str:
+        """Convert Python comparison operator to Go."""
+        ops = {
+            ast.Eq: "==",
+            ast.NotEq: "!=",
+            ast.Lt: "<",
+            ast.LtE: "<=",
+            ast.Gt: ">",
+            ast.GtE: ">=",
+            ast.Is: "==",
+            ast.IsNot: "!=",
+        }
+        return ops.get(type(op), "/* ? */")
+
+    def _emit_in_check(
+        self, left: ast.expr, container: ast.expr, negated: bool
+    ) -> str:
+        """Emit Go code for 'x in container' check."""
+        left_expr = self.visit_expr(left)
+        # String membership
+        if isinstance(container, ast.Constant) and isinstance(container.value, str):
+            container_expr = self.visit_expr(container)
+            if negated:
+                return f"!strings.ContainsRune({container_expr}, {left_expr})"
+            return f"strings.ContainsRune({container_expr}, {left_expr})"
+        # For other containers, use a helper or inline check
+        container_expr = self.visit_expr(container)
+        if negated:
+            return f"!_contains({container_expr}, {left_expr})"
+        return f"_contains({container_expr}, {left_expr})"
+
+    def visit_expr_BoolOp(self, node: ast.BoolOp) -> str:
+        """Convert boolean operations (and/or)."""
+        op = " && " if isinstance(node.op, ast.And) else " || "
+        values = [self.visit_expr(v) for v in node.values]
+        return op.join(values)
+
+    def visit_expr_IfExp(self, node: ast.IfExp) -> str:
+        """Convert ternary expression. Go doesn't have ternary, use helper func."""
+        test = self.visit_expr(node.test)
+        body = self.visit_expr(node.body)
+        orelse = self.visit_expr(node.orelse)
+        # Use an inline if helper function
+        return f"_ternary({test}, {body}, {orelse})"
+
+    def visit_expr_Call(self, node: ast.Call) -> str:
+        """Convert function/method calls."""
+        args = [self.visit_expr(a) for a in node.args]
+        args_str = ", ".join(args)
+        # Method call
+        if isinstance(node.func, ast.Attribute):
+            return self._emit_method_call(node)
+        # Function call
+        if isinstance(node.func, ast.Name):
+            return self._emit_func_call(node)
+        return f"{self.visit_expr(node.func)}({args_str})"
+
+    def _emit_method_call(self, node: ast.Call) -> str:
+        """Emit method call."""
+        obj = self.visit_expr(node.func.value)
+        method = node.func.attr
+        args = [self.visit_expr(a) for a in node.args]
+        args_str = ", ".join(args)
+        # Handle Python string/list methods
+        method_map = {
+            "append": self._emit_append,
+            "startswith": lambda o, a: f"strings.HasPrefix({o}, {a[0]})",
+            "endswith": lambda o, a: f"strings.HasSuffix({o}, {a[0]})",
+            "strip": lambda o, a: f"strings.TrimSpace({o})",
+            "lstrip": lambda o, a: f"strings.TrimLeft({o}, {a[0]})" if a else f"strings.TrimLeft({o}, \" \\t\")",
+            "rstrip": lambda o, a: f"strings.TrimRight({o}, {a[0]})" if a else f"strings.TrimRight({o}, \" \\t\")",
+            "find": lambda o, a: f"strings.Index({o}, {a[0]})",
+            "rfind": lambda o, a: f"strings.LastIndex({o}, {a[0]})",
+            "replace": lambda o, a: f"strings.ReplaceAll({o}, {a[0]}, {a[1]})",
+            "join": lambda o, a: f"strings.Join({a[0]}, {o})",
+            "lower": lambda o, a: f"strings.ToLower({o})",
+            "upper": lambda o, a: f"strings.ToUpper({o})",
+            "isalpha": lambda o, a: f"_isAlpha({o})",
+            "isdigit": lambda o, a: f"_isDigit({o})",
+            "isalnum": lambda o, a: f"_isAlnum({o})",
+            "pop": self._emit_pop,
+            "extend": self._emit_extend,
+            "get": self._emit_dict_get,
+            "encode": lambda o, a: f"[]byte({o})",
+            "decode": lambda o, a: f"string({o})",
+        }
+        if method in method_map:
+            handler = method_map[method]
+            if callable(handler):
+                return handler(obj, args)
+        # Default: convert to Go method call
+        go_method = self._snake_to_pascal(method)
+        return f"{obj}.{go_method}({args_str})"
+
+    def _emit_append(self, obj: str, args: list[str]) -> str:
+        """Emit append call - Go requires reassignment."""
+        return f"{obj} = append({obj}, {args[0]})"
+
+    def _emit_pop(self, obj: str, args: list[str]) -> str:
+        """Emit pop call."""
+        return f"/* pop: {obj} */"
+
+    def _emit_extend(self, obj: str, args: list[str]) -> str:
+        """Emit extend call."""
+        return f"{obj} = append({obj}, {args[0]}...)"
+
+    def _emit_dict_get(self, obj: str, args: list[str]) -> str:
+        """Emit dict.get() call."""
+        key = args[0]
+        if len(args) > 1:
+            default = args[1]
+            return f"_mapGet({obj}, {key}, {default})"
+        return f"{obj}[{key}]"
+
+    def _emit_func_call(self, node: ast.Call) -> str:
+        """Emit function call."""
+        name = node.func.id
+        args = [self.visit_expr(a) for a in node.args]
+        args_str = ", ".join(args)
+        # Handle builtins
+        builtin_map = {
+            "len": lambda a: f"len({a[0]})",
+            "str": lambda a: f"fmt.Sprint({a[0]})" if a else '""',
+            "int": lambda a: f"_mustAtoi({a[0]})" if len(a) == 1 else f"_parseInt({a[0]}, {a[1]})",
+            "bool": lambda a: f"({a[0]} != 0)" if a else "false",
+            "ord": lambda a: f"rune({a[0]}[0])" if a else "0",
+            "chr": lambda a: f"string(rune({a[0]}))",
+            "isinstance": self._emit_isinstance,
+            "getattr": self._emit_getattr,
+            "range": lambda a: "/* range */",
+            "list": lambda a: f"append([]interface{{}}, {a[0]}...)" if a else "[]interface{}{}",
+            "set": lambda a: f"_makeSet({a[0]})" if a else "make(map[interface{}]struct{})",
+            "max": lambda a: f"_max({', '.join(a)})",
+            "min": lambda a: f"_min({', '.join(a)})",
+            "bytearray": lambda a: "[]byte{}",
+        }
+        if name in builtin_map:
+            return builtin_map[name](args)
+        # Handle helper functions
+        if name in ("_substring", "_sublist"):
+            return f"{args[0]}[{args[1]}:{args[2]}]"
+        if name == "_repeat_str":
+            return f"strings.Repeat({args[0]}, {args[1]})"
+        if name == "_starts_with_at":
+            return f"strings.HasPrefix({args[0]}[{args[1]}:], {args[2]})"
+        # Handle class constructors
+        if name in self.symbols.classes:
+            return f"New{name}({args_str})"
+        # Default function call
+        go_name = self._to_go_func_name(name)
+        return f"{go_name}({args_str})"
+
+    def _emit_isinstance(self, args: list[str]) -> str:
+        """Emit isinstance check using type assertion."""
+        return f"/* isinstance({args[0]}, {args[1]}) */"
+
+    def _emit_getattr(self, args: list[str]) -> str:
+        """Emit getattr call."""
+        obj = args[0]
+        attr = args[1]
+        if len(args) > 2:
+            default = args[2]
+            return f"_getattr({obj}, {attr}, {default})"
+        return f"_getattr({obj}, {attr}, nil)"
+
+    def visit_expr_List(self, node: ast.List) -> str:
+        """Convert list literals."""
+        if not node.elts:
+            return "[]interface{}{}"
+        elements = ", ".join(self.visit_expr(e) for e in node.elts)
+        return f"[]interface{{}}{{{elements}}}"
+
+    def visit_expr_Dict(self, node: ast.Dict) -> str:
+        """Convert dict literals."""
+        if not node.keys:
+            return "map[string]interface{}{}"
+        pairs = []
+        for k, v in zip(node.keys, node.values, strict=True):
+            pairs.append(f"{self.visit_expr(k)}: {self.visit_expr(v)}")
+        return "map[string]interface{}{" + ", ".join(pairs) + "}"
+
+    def visit_expr_Tuple(self, node: ast.Tuple) -> str:
+        """Convert tuple literals (as slices in Go)."""
+        elements = ", ".join(self.visit_expr(e) for e in node.elts)
+        return f"[]interface{{}}{{{elements}}}"
+
+    def visit_expr_Set(self, node: ast.Set) -> str:
+        """Convert set literals."""
+        if not node.elts:
+            return "make(map[interface{}]struct{})"
+        elements = ", ".join(f"{self.visit_expr(e)}: {{}}" for e in node.elts)
+        return f"map[interface{{}}]struct{{}}{{{elements}}}"
+
+    def visit_expr_JoinedStr(self, node: ast.JoinedStr) -> str:
+        """Convert f-strings to fmt.Sprintf."""
+        format_parts = []
+        args = []
+        for part in node.values:
+            if isinstance(part, ast.Constant):
+                # Escape % for fmt.Sprintf
+                format_parts.append(part.value.replace("%", "%%"))
+            elif isinstance(part, ast.FormattedValue):
+                format_parts.append("%v")
+                args.append(self.visit_expr(part.value))
+        format_str = "".join(format_parts).replace('"', '\\"').replace("\n", "\\n")
+        if args:
+            return f'fmt.Sprintf("{format_str}", {", ".join(args)})'
+        return f'"{format_str}"'
+
+    def visit_expr_Lambda(self, node: ast.Lambda) -> str:
+        """Convert lambda expressions."""
+        params = [self._to_go_param_name(a.arg) for a in node.args.args]
+        params_str = ", ".join(f"{p} interface{{}}" for p in params)
+        body = self.visit_expr(node.body)
+        return f"func({params_str}) interface{{}} {{ return {body} }}"
 
 
 def main():

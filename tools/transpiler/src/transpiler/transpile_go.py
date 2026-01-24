@@ -81,6 +81,9 @@ class GoTranspiler(ast.NodeVisitor):
         "None": "",
         "float": "float64",
         "bytes": "[]byte",
+        # Type aliases used in annotations
+        "CommandSub": "*CommandSubstitution",
+        "ProcessSub": "*ProcessSubstitution",
     }
 
     def __init__(self):
@@ -251,6 +254,10 @@ class GoTranspiler(ast.NodeVisitor):
         ("SavedParserState", "ctx_stack"): "[]*ParseContext",
         ("SavedParserState", "token_history"): "[]*Token",
         ("Parser", "_token_history"): "[]*Token",
+        # Dynamically created fields for arithmetic parsing
+        ("Parser", "_arith_src"): "string",
+        ("Parser", "_arith_pos"): "int",
+        ("Parser", "_arith_len"): "int",
     }
 
     # Override return types for methods that return generic list
@@ -258,6 +265,7 @@ class GoTranspiler(ast.NodeVisitor):
     RETURN_TYPE_OVERRIDES = {
         "_collect_cmdsubs": "[]Node",
         "_collect_procsubs": "[]Node",
+        "_collect_redirects": "[]Node",
         "copy_stack": "[]*ParseContext",
     }
 
@@ -988,6 +996,11 @@ class GoTranspiler(ast.NodeVisitor):
             else:
                 go_name = self._to_go_field_name(field_name)
                 self.emit(f"{go_name} {go_type}")
+        # Emit additional fields from FIELD_TYPE_OVERRIDES that don't exist in the class
+        for (class_name, field_name), go_type in self.FIELD_TYPE_OVERRIDES.items():
+            if class_name == name and field_name not in info.fields:
+                go_name = self._to_go_field_name(field_name)
+                self.emit(f"{go_name} {go_type}")
         self.indent -= 1
         self.emit("}")
         self.emit("")
@@ -1059,6 +1072,54 @@ class GoTranspiler(ast.NodeVisitor):
         "pop",  # QuoteState.pop - returns tuple
         "copy",  # QuoteState.copy - copies tuple stack
         "outer_double",  # QuoteState.outer_double - tuple stack access
+        # Higher-order function patterns and arithmetic parsing
+        "_arith_parse_left_assoc",
+        "_arith_parse_logical_or",
+        "_arith_parse_logical_and",
+        "_arith_parse_bitwise_or",
+        "_arith_parse_bitwise_xor",
+        "_arith_parse_bitwise_and",
+        "_arith_parse_equality",
+        "_arith_parse_comparison",
+        "_arith_parse_shift",
+        "_arith_parse_additive",
+        "_arith_parse_multiplicative",
+        "_arith_parse_ternary",
+        "_arith_parse_assign",
+        "_arith_parse_comma",
+        "_arith_parse_exponentiation",
+        "_arith_parse_unary",
+        "_arith_parse_postfix",
+        "_arith_parse_primary",
+        "_arith_parse_expansion",
+        "_parse_arith_expr",
+        "_parse_arithmetic_expansion",
+        "_parse_deprecated_arithmetic",
+        # Tuple passthrough (returns tuple stored in variable)
+        "_parse_param_expansion",
+        # Complex type assertions needed
+        "_format_command_substitutions",
+        "_collect_cmdsubs",
+        "_collect_procsubs",
+        "parse_redirect",
+        "_gather_heredoc_bodies",
+        "_parse_heredoc",
+        "_parse_heredoc_delimiter",
+        "_collect_redirects",
+        "parse_case",
+        "parse_compound_command",
+        "parse_pipeline",
+        "parse_list",
+        "parse_list_until",
+        "parse_coproc",
+        "_parse_comsub_body",
+        "_parse_compound_command",
+        "_at_list_until_terminator",
+        "parse_list_operator",
+        "_peek_list_operator",
+        "_parse_simple_pipeline",
+        "parse_simple",
+        "parse",
     }
 
     def _emit_function(self, node: ast.FunctionDef):
@@ -1242,6 +1303,16 @@ class GoTranspiler(ast.NodeVisitor):
                                   "replace", "format", "decode",
                                   "advance", "peek", "peek_at"):  # Parser methods returning string
                         self.var_types[var_name] = "string"
+                # If assigning from _ternary(cond, a, b), infer type from a/b
+                elif isinstance(stmt.value, ast.Call) and isinstance(stmt.value.func, ast.Name):
+                    if stmt.value.func.id == "_ternary" and len(stmt.value.args) >= 3:
+                        # Check if either value arg is a string
+                        if self._is_string_expr(stmt.value.args[1]) or self._is_string_expr(stmt.value.args[2]):
+                            self.var_types[var_name] = "string"
+                # If assigning from inline ternary (a if cond else b), infer type from a/b
+                elif isinstance(stmt.value, ast.IfExp):
+                    if self._is_string_expr(stmt.value.body) or self._is_string_expr(stmt.value.orelse):
+                        self.var_types[var_name] = "string"
         # Look for append calls to infer list element types
         if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
             call = stmt.value
@@ -1406,6 +1477,10 @@ class GoTranspiler(ast.NodeVisitor):
         # Collect all variable reads to filter out unused vars
         reads: set[str] = set()
         self._collect_all_reads(stmts, reads)
+        # Collect element types from append() calls for better list type inference
+        append_types = self._collect_append_element_types(stmts)
+        # Collect variables that are None-initialized but later assigned Node types
+        nullable_node_vars = self._collect_nullable_node_vars(stmts)
         # Emit var declarations for all collected variables that are actually read
         for var_name, first_value in assignments.items():
             if var_name not in self.declared_vars and var_name in reads:
@@ -1419,6 +1494,15 @@ class GoTranspiler(ast.NodeVisitor):
                         if not go_type or go_type in ("interface{}", "[]interface{}",
                                                        "map[string]interface{}"):
                             go_type = expr_type
+                # Check append() calls for element type - this is more reliable than name heuristics
+                if var_name in append_types:
+                    elem_type = append_types[var_name]
+                    if elem_type and (not go_type or go_type in ("interface{}", "[]interface{}", "[]string")):
+                        go_type = f"[]{elem_type}"
+                # Check if var is None-initialized but later assigned Node types
+                if var_name in nullable_node_vars:
+                    if not go_type or go_type == "interface{}":
+                        go_type = "Node"
                 if not go_type or go_type in ("interface{}", "[]interface{}"):
                     # Try harder - check if it's a known pattern
                     go_type = self._infer_var_type_from_name(var_name) or go_type or "interface{}"
@@ -1453,10 +1537,18 @@ class GoTranspiler(ast.NodeVisitor):
             if isinstance(stmt, ast.Assign):
                 for target in stmt.targets:
                     if isinstance(target, ast.Name):
-                        # Skip tuple-returning function calls assigned to single var
+                        # For tuple-returning function calls, collect synthetic vars
                         if isinstance(stmt.value, ast.Call):
                             ret_info = self._get_return_type_info(stmt.value)
                             if ret_info and len(ret_info) > 1:
+                                var_name = self._snake_to_camel(target.id)
+                                var_name = self._safe_go_name(var_name)
+                                for i, elem_type in enumerate(ret_info):
+                                    synth_name = f"{var_name}{i}"
+                                    if synth_name not in assignments:
+                                        assignments[synth_name] = None
+                                        # Store type for pre-declaration
+                                        self.var_types[synth_name] = elem_type
                                 continue
                         var_name = self._snake_to_camel(target.id)
                         var_name = self._safe_go_name(var_name)
@@ -1513,8 +1605,183 @@ class GoTranspiler(ast.NodeVisitor):
             var_name = self._snake_to_camel(node.id)
             var_name = self._safe_go_name(var_name)
             reads.add(var_name)
+        # Handle tuple element access: result[0] -> result0
+        elif isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name):
+            if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, int):
+                var_name = self._snake_to_camel(node.value.id)
+                var_name = self._safe_go_name(var_name)
+                reads.add(f"{var_name}{node.slice.value}")
         for child in ast.iter_child_nodes(node):
             self._collect_reads_in_node(child, reads)
+
+    def _collect_append_element_types(self, stmts: list[ast.stmt]) -> dict[str, str]:
+        """Collect element types from append() calls to infer list types."""
+        result: dict[str, str] = {}
+        self._collect_appends_recursive(stmts, result)
+        return result
+
+    def _collect_appends_recursive(self, stmts: list[ast.stmt], result: dict[str, str]):
+        """Recursively find append calls and infer element types."""
+        for stmt in stmts:
+            # Look for: var.append(value)
+            if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+                call = stmt.value
+                if (isinstance(call.func, ast.Attribute) and
+                    call.func.attr == "append" and
+                    isinstance(call.func.value, ast.Name) and
+                    call.args):
+                    var_name = self._snake_to_camel(call.func.value.id)
+                    var_name = self._safe_go_name(var_name)
+                    # Infer element type from the argument
+                    elem_type = self._infer_append_element_type(call.args[0])
+                    if elem_type and var_name not in result:
+                        result[var_name] = elem_type
+            # Recurse into control flow
+            if isinstance(stmt, ast.If):
+                self._collect_appends_recursive(stmt.body, result)
+                self._collect_appends_recursive(stmt.orelse, result)
+            elif isinstance(stmt, ast.For):
+                self._collect_appends_recursive(stmt.body, result)
+            elif isinstance(stmt, ast.While):
+                self._collect_appends_recursive(stmt.body, result)
+            elif isinstance(stmt, ast.Try):
+                self._collect_appends_recursive(stmt.body, result)
+                for handler in stmt.handlers:
+                    self._collect_appends_recursive(handler.body, result)
+            elif isinstance(stmt, ast.With):
+                self._collect_appends_recursive(stmt.body, result)
+
+    def _infer_append_element_type(self, node: ast.expr) -> str:
+        """Infer the Go type of an element being appended.
+
+        Returns 'Node' for Node subtypes since []Node is the common interface type
+        used in function signatures, even when appending concrete types like *Word.
+        """
+        # Variable reference - check var_types or infer from name
+        if isinstance(node, ast.Name):
+            var_name = self._snake_to_camel(node.id)
+            var_name = self._safe_go_name(var_name)
+            if var_name in self.var_types:
+                vtype = self.var_types[var_name]
+                # Convert concrete Node types to Node interface for slice compatibility
+                if vtype.startswith("*") and vtype[1:] in self.symbols.classes:
+                    if self.symbols.classes[vtype[1:]].is_node:
+                        return "Node"
+                return vtype
+            # Common patterns - return Node for AST node types
+            if node.id in ("word", "w", "redirect", "redir", "cmd", "command",
+                           "node", "n", "result", "elem", "item", "part"):
+                return "Node"
+        # Method call that returns a known type
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Attribute):
+                method = node.func.attr
+                # Parse methods that return Node types
+                if method.startswith("parse") or method.startswith("Parse"):
+                    return "Node"
+                if method in ("_Advance", "_advance"):
+                    return "string"
+        # String literal
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return "string"
+        return ""
+
+    def _collect_nullable_node_vars(self, stmts: list[ast.stmt]) -> set[str]:
+        """Collect variables that are first assigned None but later assigned Nodes.
+
+        Pattern:
+            else_body = None
+            if cond:
+                else_body = self.parse_list_until(...)  # returns Node | None
+
+        These should be typed as Node, not interface{}.
+        """
+        # First pass: collect vars assigned None
+        none_vars: set[str] = set()
+        self._collect_none_assigned_vars(stmts, none_vars)
+        # Second pass: check if any of those vars are later assigned from Node-returning methods
+        node_vars: set[str] = set()
+        self._collect_node_assigned_vars(stmts, none_vars, node_vars)
+        return node_vars
+
+    def _collect_none_assigned_vars(self, stmts: list[ast.stmt], result: set[str]):
+        """Find variables first assigned None."""
+        for stmt in stmts:
+            if isinstance(stmt, ast.Assign):
+                for target in stmt.targets:
+                    if isinstance(target, ast.Name):
+                        var_name = self._snake_to_camel(target.id)
+                        var_name = self._safe_go_name(var_name)
+                        if isinstance(stmt.value, ast.Constant) and stmt.value.value is None:
+                            result.add(var_name)
+            # Recurse into control flow
+            if isinstance(stmt, ast.If):
+                self._collect_none_assigned_vars(stmt.body, result)
+                self._collect_none_assigned_vars(stmt.orelse, result)
+            elif isinstance(stmt, ast.For):
+                self._collect_none_assigned_vars(stmt.body, result)
+            elif isinstance(stmt, ast.While):
+                self._collect_none_assigned_vars(stmt.body, result)
+            elif isinstance(stmt, ast.Try):
+                self._collect_none_assigned_vars(stmt.body, result)
+                for handler in stmt.handlers:
+                    self._collect_none_assigned_vars(handler.body, result)
+            elif isinstance(stmt, ast.With):
+                self._collect_none_assigned_vars(stmt.body, result)
+
+    def _collect_node_assigned_vars(self, stmts: list[ast.stmt], candidates: set[str], result: set[str]):
+        """Find candidate vars later assigned from Node-returning methods."""
+        for stmt in stmts:
+            if isinstance(stmt, ast.Assign):
+                for target in stmt.targets:
+                    if isinstance(target, ast.Name):
+                        var_name = self._snake_to_camel(target.id)
+                        var_name = self._safe_go_name(var_name)
+                        if var_name in candidates and self._is_node_returning_expr(stmt.value):
+                            result.add(var_name)
+            # Recurse into control flow
+            if isinstance(stmt, ast.If):
+                self._collect_node_assigned_vars(stmt.body, candidates, result)
+                self._collect_node_assigned_vars(stmt.orelse, candidates, result)
+            elif isinstance(stmt, ast.For):
+                self._collect_node_assigned_vars(stmt.body, candidates, result)
+            elif isinstance(stmt, ast.While):
+                self._collect_node_assigned_vars(stmt.body, candidates, result)
+            elif isinstance(stmt, ast.Try):
+                self._collect_node_assigned_vars(stmt.body, candidates, result)
+                for handler in stmt.handlers:
+                    self._collect_node_assigned_vars(handler.body, candidates, result)
+            elif isinstance(stmt, ast.With):
+                self._collect_node_assigned_vars(stmt.body, candidates, result)
+
+    def _is_node_returning_expr(self, node: ast.expr) -> bool:
+        """Check if an expression returns a Node type."""
+        # Method calls to parse_* methods return Node
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            method = node.func.attr
+            # Parse methods return Node types
+            if method.startswith("parse") or method.startswith("_parse"):
+                return True
+            if method.startswith("Parse") or method.startswith("_Parse"):
+                return True
+            # Check if method is in class and returns Node
+            class_name = self._infer_object_class(node.func.value)
+            if class_name:
+                class_info = self.symbols.classes.get(class_name)
+                if class_info and method in class_info.methods:
+                    ret_type = class_info.methods[method].return_type or ""
+                    if ret_type == "Node" or ret_type.endswith("| None") and "Node" in ret_type:
+                        return True
+                    # Check if return type is a Node subclass
+                    if ret_type.startswith("*") and ret_type[1:] in self.symbols.classes:
+                        if self.symbols.classes[ret_type[1:]].is_node:
+                            return True
+        # Node constructor
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            if node.func.id in self.symbols.classes:
+                if self.symbols.classes[node.func.id].is_node:
+                    return True
+        return False
 
     def _infer_var_type_from_name(self, var_name: str) -> str:
         """Infer type from common variable naming patterns."""
@@ -1561,6 +1828,8 @@ class GoTranspiler(ast.NodeVisitor):
         # String list patterns
         if name_lower in ("chars", "lines", "words"):
             return "[]string"
+        if name_lower.endswith("chars") or name_lower.endswith("lines"):
+            return "[]string"
         # Int list patterns (positions, indices)
         if name_lower.endswith("positions"):
             return "[]int"
@@ -1570,6 +1839,9 @@ class GoTranspiler(ast.NodeVisitor):
         # Segment variable (slice of nodes)
         if name_lower == "seg":
             return "[]Node"
+        # Node patterns (nullable in Python, but Node in Go since nil is valid)
+        if name_lower in ("iftrue", "iffalse"):
+            return "Node"
         return ""
 
     def _emit_constructor_body(self, stmts: list[ast.stmt], class_info: ClassInfo):
@@ -1739,13 +2011,16 @@ class GoTranspiler(ast.NodeVisitor):
                     target_str = self.visit_expr(target)
                     # Generate synthetic variable names for tuple elements
                     elem_vars = [f"{target_str}{i}" for i in range(len(ret_info))]
+                    # Check if all elem_vars are already declared (redeclaration)
+                    all_declared = all(v in self.declared_vars for v in elem_vars)
                     for i, v in enumerate(elem_vars):
                         self.declared_vars.add(v)
                         # Track element type for boolean context handling
                         self.var_types[v] = ret_info[i]
                     self.tuple_vars[target_str] = elem_vars
                     call_str = self.visit_expr(stmt.value)
-                    self.emit(f"{', '.join(elem_vars)} := {call_str}")
+                    op = "=" if all_declared else ":="
+                    self.emit(f"{', '.join(elem_vars)} {op} {call_str}")
                     return
             target_str = self.visit_expr(target)
             # Check if this is a new variable (local name, not attribute)
@@ -1926,6 +2201,9 @@ class GoTranspiler(ast.NodeVisitor):
             # Check for byte variable being returned as string
             elif self.current_return_type == "string" and self._is_byte_variable(stmt.value):
                 value = f"string({self.visit_expr(stmt.value)})"
+            # Check for interface field being returned as concrete pointer type
+            elif self.current_return_type.startswith("*") and self._is_interface_field(stmt.value):
+                value = f"{self.visit_expr(stmt.value)}.({self.current_return_type})"
             else:
                 value = self.visit_expr(stmt.value)
             self.emit(f"return {value}")
@@ -2007,6 +2285,24 @@ class GoTranspiler(ast.NodeVisitor):
         go_name = self._safe_go_name(go_name)
         return go_name in self.byte_vars
 
+    def _is_interface_field(self, node: ast.expr) -> bool:
+        """Check if node is an attribute access on a struct field typed as Node/interface{}."""
+        if not isinstance(node, ast.Attribute):
+            return False
+        # Look up the field type from the receiver's class
+        if isinstance(node.value, ast.Name):
+            var_name = self._snake_to_camel(node.value.id)
+            var_name = self._safe_go_name(var_name)
+            var_type = self.var_types.get(var_name, "")
+            # Strip pointer prefix to get class name
+            class_name = var_type.lstrip("*")
+            if class_name in self.symbols.classes:
+                class_info = self.symbols.classes[class_name]
+                if node.attr in class_info.fields:
+                    field_type = class_info.fields[node.attr].go_type or ""
+                    return field_type in ("Node", "interface{}")
+        return False
+
     def _emit_stmt_If(self, stmt: ast.If):
         """Emit if statement."""
         # Pre-declare variables assigned across if/elif/else branches to avoid Go scoping issues
@@ -2062,11 +2358,14 @@ class GoTranspiler(ast.NodeVisitor):
             if isinstance(s, ast.Assign):
                 for target in s.targets:
                     if isinstance(target, ast.Name):
-                        # Skip single-var assignments from tuple-returning functions
-                        # These get unpacked to x0, x1 := func() instead
+                        # For tuple-returning functions, collect the synthetic vars
                         if isinstance(s.value, ast.Call):
                             ret_info = self._get_return_type_info(s.value)
                             if ret_info and len(ret_info) > 1:
+                                go_name = self._snake_to_camel(target.id)
+                                go_name = self._safe_go_name(go_name)
+                                for i, elem_type in enumerate(ret_info):
+                                    vars[f"{go_name}{i}"] = elem_type
                                 continue
                             # Skip assignments from methods that force := usage
                             if isinstance(s.value.func, ast.Attribute):
@@ -3460,7 +3759,8 @@ class GoTranspiler(ast.NodeVisitor):
         # Check for self.source, self.text, etc.
         if isinstance(node.value, ast.Attribute):
             attr = node.value.attr
-            if attr in ("source", "text", "value", "line", "inner", "name", "word", "pattern"):
+            if attr in ("source", "text", "value", "line", "inner", "name", "word", "pattern",
+                        "_arith_src"):
                 return True
         return False
 

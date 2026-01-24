@@ -5,6 +5,7 @@ import ast
 import io
 import sys
 import tokenize
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -47,6 +48,18 @@ class JSTranspiler(ast.NodeVisitor):
                 comment = self.comments[comment_line].lstrip("# ").rstrip()
                 self.emit(f"// {comment}")
         self.last_line = line
+
+    @contextmanager
+    def _scoped(self, **attrs):
+        """Temporarily set attributes, restoring originals on exit."""
+        old = {k: getattr(self, k) for k in attrs}
+        for k, v in attrs.items():
+            setattr(self, k, v)
+        try:
+            yield
+        finally:
+            for k, v in old.items():
+                setattr(self, k, v)
 
     def transpile(self, source: str) -> str:
         # Extract standalone comments (not inline) using tokenize
@@ -155,15 +168,10 @@ class JSTranspiler(ast.NodeVisitor):
         extends = f" extends {bases[0]}" if bases else ""
         self.emit(f"class {safe_name}{extends} {{")
         self.indent += 1
-        old_in_class = self.in_class_body
-        old_has_base = self.class_has_base
-        self.in_class_body = True
-        self.class_has_base = bool(bases)
-        for stmt in node.body:
-            self.emit_comments_before(stmt.lineno)
-            self.visit(stmt)
-        self.in_class_body = old_in_class
-        self.class_has_base = old_has_base
+        with self._scoped(in_class_body=True, class_has_base=bool(bases)):
+            for stmt in node.body:
+                self.emit_comments_before(stmt.lineno)
+                self.visit(stmt)
         self.indent -= 1
         self.emit("}")
         self.emit("")
@@ -351,20 +359,14 @@ class JSTranspiler(ast.NodeVisitor):
         else:
             self.emit(f"function {name}({args_str}) {{")
         self.indent += 1
-        # Save and set context
-        old_in_class, old_in_method, old_scope = self.in_class_body, self.in_method, self.scope
-        self.in_class_body = False
-        self.in_method = True
-        self.scope = self._setup_function_scope(node)
-        # Emit body
-        if name == "constructor" and self.class_has_base:
-            self._emit_constructor_body(node)
-        else:
-            for stmt in node.body:
-                self.emit_comments_before(stmt.lineno)
-                self.visit(stmt)
-        # Restore context
-        self.in_class_body, self.in_method, self.scope = old_in_class, old_in_method, old_scope
+        new_scope = self._setup_function_scope(node)
+        with self._scoped(in_class_body=False, in_method=True, scope=new_scope):
+            if name == "constructor" and self.class_has_base:
+                self._emit_constructor_body(node)
+            else:
+                for stmt in node.body:
+                    self.emit_comments_before(stmt.lineno)
+                    self.visit(stmt)
         self.indent -= 1
         self.emit("}")
         self.emit("")
@@ -375,8 +377,8 @@ class JSTranspiler(ast.NodeVisitor):
         else:
             self.emit("return;")
 
-    def _get_declaration_keyword(self, names: set) -> str | None:
-        """Get const/let keyword for first assignment, or None if already declared."""
+    def _emit_declaration_keyword(self, names: set) -> str | None:
+        """Mark names as emitted and return const/let keyword, or None if already declared."""
         undeclared = names - self.scope.emitted
         if not undeclared:
             return None
@@ -403,7 +405,7 @@ class JSTranspiler(ast.NodeVisitor):
             # Emit declaration keyword on first assignment for each target
             for i, target in enumerate(targets):
                 names = self._collect_names_from_target(node.targets[i])
-                keyword = self._get_declaration_keyword(names)
+                keyword = self._emit_declaration_keyword(names)
                 if keyword:
                     self.emit(f"{keyword} {target} = {value};")
                 else:
@@ -417,7 +419,7 @@ class JSTranspiler(ast.NodeVisitor):
             target = self.visit_expr(node.target)
             value = self.visit_expr(node.value)
             names = self._collect_names_from_target(node.target)
-            keyword = self._get_declaration_keyword(names)
+            keyword = self._emit_declaration_keyword(names)
             if keyword:
                 self.emit(f"{keyword} {target} = {value};")
             else:
@@ -852,7 +854,7 @@ class JSTranspiler(ast.NodeVisitor):
         if name == "chr":
             return f"String.fromCodePoint({args})"
         if name == "isinstance":
-            return f"{node.args[0].id} instanceof {self.visit_expr(node.args[1])}"
+            return f"{self.visit_expr(node.args[0])} instanceof {self.visit_expr(node.args[1])}"
         if name == "getattr":
             return self._handle_getattr(node)
         if name == "bytearray":
@@ -1007,27 +1009,19 @@ class JSTranspiler(ast.NodeVisitor):
             result += f" {op_str} {self.visit_expr(comparator)}"
         return f"({result})"
 
-    def _is_find_comparison(self, left, right, op) -> bool:
+    def _is_find_comparison(self, left: ast.expr, right: ast.expr, op: ast.cmpop) -> bool:
         """Check if this is a .find(x) == -1 or .find(x) != -1 pattern."""
-        if not isinstance(left, ast.Call):
-            return False
-        if not isinstance(left.func, ast.Attribute):
-            return False
-        if left.func.attr != "find":
-            return False
-        if len(left.args) not in (1, 2):
-            return False
-        if not isinstance(op, (ast.Eq, ast.NotEq)):
-            return False
-        if not isinstance(right, ast.UnaryOp):
-            return False
-        if not isinstance(right.op, ast.USub):
-            return False
-        if not isinstance(right.operand, ast.Constant):
-            return False
-        if right.operand.value != 1:
-            return False
-        return True
+        return (
+            isinstance(left, ast.Call)
+            and isinstance(left.func, ast.Attribute)
+            and left.func.attr == "find"
+            and len(left.args) in (1, 2)
+            and isinstance(op, (ast.Eq, ast.NotEq))
+            and isinstance(right, ast.UnaryOp)
+            and isinstance(right.op, ast.USub)
+            and isinstance(right.operand, ast.Constant)
+            and right.operand.value == 1
+        )
 
     def visit_expr_BoolOp(self, node: ast.BoolOp) -> str:
         op = " && " if isinstance(node.op, ast.And) else " || "

@@ -3154,7 +3154,7 @@ class Word(Node):
             # Track $((...)) arithmetic - inside it, >( and <( are not process subs
             # But skip if this is actually $( ( (command substitution with subshell)
             if (
-                _starts_with_at(value, i, "$((")
+                _is_expansion_start(value, i, "$((")
                 and not _is_backslash_escaped(value, i)
                 and has_arith
             ):
@@ -3184,7 +3184,7 @@ class Word(Node):
                     continue
             # Check for $( command substitution (but not $(( arithmetic or escaped \$()
             # Special case: $(( without arithmetic nodes - preserve as-is
-            if _starts_with_at(value, i, "$((") and not has_arith:
+            if _is_expansion_start(value, i, "$((") and not has_arith:
                 # This looks like $(( but wasn't parsed as arithmetic
                 # It's actually $( ( ... ) ) - preserve original text
                 j = _find_cmdsub_end(value, i + 2)
@@ -3248,7 +3248,7 @@ class Word(Node):
                 i = j
             # Check for ${ brace command substitution (funsub)
             elif (
-                _starts_with_at(value, i, "${")
+                _is_expansion_start(value, i, "${")
                 and i + 2 < len(value)
                 and _is_funsub_char(value[i + 2])
                 and not _is_backslash_escaped(value, i)
@@ -3398,10 +3398,10 @@ class Word(Node):
             # Check for ${ (space/tab/newline) or ${| brace command substitution
             # But not if the $ is escaped by a backslash
             elif (
-                _starts_with_at(value, i, "${ ")
-                or _starts_with_at(value, i, "${\t")
-                or _starts_with_at(value, i, "${\n")
-                or _starts_with_at(value, i, "${|")
+                _is_expansion_start(value, i, "${ ")
+                or _is_expansion_start(value, i, "${\t")
+                or _is_expansion_start(value, i, "${\n")
+                or _is_expansion_start(value, i, "${|")
             ) and not _is_backslash_escaped(value, i):
                 prefix = _substring(value, i, i + 3).replace("\t", " ").replace("\n", " ")
                 # Find matching close brace
@@ -3440,7 +3440,7 @@ class Word(Node):
                 i = j
             # Process regular ${...} parameter expansions (recursively format cmdsubs inside)
             # But not if the $ is escaped by a backslash
-            elif _starts_with_at(value, i, "${") and not _is_backslash_escaped(value, i):
+            elif _is_expansion_start(value, i, "${") and not _is_backslash_escaped(value, i):
                 # Find matching close brace, respecting nesting, quotes, and cmdsubs
                 j = i + 2
                 depth = 1
@@ -3456,7 +3456,7 @@ class Word(Node):
                         brace_quote.double = not brace_quote.double
                     elif not brace_quote.in_quotes():
                         # Skip over $(...) command substitutions
-                        if _starts_with_at(value, j, "$(") and not _starts_with_at(value, j, "$(("):
+                        if _is_expansion_start(value, j, "$(") and not _starts_with_at(value, j, "$(("):
                             j = _find_cmdsub_end(value, j + 2)
                             continue
                         if c == "{":

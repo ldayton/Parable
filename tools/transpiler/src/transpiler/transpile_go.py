@@ -1679,7 +1679,7 @@ class GoTranspiler(ast.NodeVisitor):
                 # Parse methods that return Node types
                 if method.startswith("parse") or method.startswith("Parse"):
                     return "Node"
-                if method in ("_Advance", "_advance"):
+                if method in ("_Advance", "_advance", "Advance", "advance"):
                     return "string"
         # String literal
         if isinstance(node, ast.Constant) and isinstance(node.value, str):

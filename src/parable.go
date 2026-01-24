@@ -2129,26 +2129,12 @@ func (l *Lexer) Peek() string {
 	return string(string(l.Source[l.Pos]))
 }
 
-func (l *Lexer) _Peek() string {
-	panic("TODO: Statement type Assert")
-	return string(string(l.Source[l.Pos]))
-}
-
 func (l *Lexer) Advance() string {
 	var c string
 	_ = c
 	if l.Pos >= l.Length {
 		return ""
 	}
-	c = string(l.Source[l.Pos])
-	l.Pos += 1
-	return string(c)
-}
-
-func (l *Lexer) _Advance() string {
-	var c string
-	_ = c
-	panic("TODO: Statement type Assert")
 	c = string(l.Source[l.Pos])
 	l.Pos += 1
 	return string(c)
@@ -2407,7 +2393,44 @@ func (l *Lexer) _ReadBracketExpression(chars []string, parts []Node, forRegex bo
 	var c string
 	_ = c
 	if forRegex {
-		panic("TODO: incomplete implementation")
+		scan = l.Pos + 1
+		if scan < l.Length && string(l.Source[scan]) == "^" {
+			scan += 1
+		}
+		if scan < l.Length && string(l.Source[scan]) == "]" {
+			scan += 1
+		}
+		bracketWillClose = false
+		for scan < l.Length {
+			sc = string(l.Source[scan])
+			if sc == "]" && scan+1 < l.Length && string(l.Source[scan+1]) == "]" {
+				break
+			}
+			if sc == ")" && parenDepth > 0 {
+				break
+			}
+			if sc == "&" && scan+1 < l.Length && string(l.Source[scan+1]) == "&" {
+				break
+			}
+			if sc == "]" {
+				bracketWillClose = true
+				break
+			}
+			if sc == "[" && scan+1 < l.Length && string(l.Source[scan+1]) == ":" {
+				scan += 2
+				for scan < l.Length && !(string(l.Source[scan]) == ":" && scan+1 < l.Length && string(l.Source[scan+1]) == "]") {
+					scan += 1
+				}
+				if scan < l.Length {
+					scan += 2
+				}
+				continue
+			}
+			scan += 1
+		}
+		if !(bracketWillClose) {
+			return false
+		}
 	} else {
 		if l.Pos+1 >= l.Length {
 			return false
@@ -2417,59 +2440,65 @@ func (l *Lexer) _ReadBracketExpression(chars []string, parts []Node, forRegex bo
 			return false
 		}
 	}
-	chars = append(chars, l._Advance())
+	chars = append(chars, l.Advance())
 	if !(l.AtEnd()) && l.Peek() == "^" {
-		chars = append(chars, l._Advance())
+		chars = append(chars, l.Advance())
 	}
 	if !(l.AtEnd()) && l.Peek() == "]" {
-		chars = append(chars, l._Advance())
+		chars = append(chars, l.Advance())
 	}
 	for !(l.AtEnd()) {
 		c = l.Peek()
 		if c == "]" {
-			chars = append(chars, l._Advance())
+			chars = append(chars, l.Advance())
 			break
 		}
 		if c == "[" && l.Pos+1 < l.Length && string(l.Source[l.Pos+1]) == ":" {
-			chars = append(chars, l._Advance())
-			chars = append(chars, l._Advance())
+			chars = append(chars, l.Advance())
+			chars = append(chars, l.Advance())
 			for !(l.AtEnd()) && !(l.Peek() == ":" && l.Pos+1 < l.Length && string(l.Source[l.Pos+1]) == "]") {
-				chars = append(chars, l._Advance())
+				chars = append(chars, l.Advance())
 			}
 			if !(l.AtEnd()) {
-				chars = append(chars, l._Advance())
-				chars = append(chars, l._Advance())
+				chars = append(chars, l.Advance())
+				chars = append(chars, l.Advance())
 			}
 		} else if !(forRegex) && c == "[" && l.Pos+1 < l.Length && string(l.Source[l.Pos+1]) == "=" {
-			chars = append(chars, l._Advance())
-			chars = append(chars, l._Advance())
+			chars = append(chars, l.Advance())
+			chars = append(chars, l.Advance())
 			for !(l.AtEnd()) && !(l.Peek() == "=" && l.Pos+1 < l.Length && string(l.Source[l.Pos+1]) == "]") {
-				chars = append(chars, l._Advance())
+				chars = append(chars, l.Advance())
 			}
 			if !(l.AtEnd()) {
-				chars = append(chars, l._Advance())
-				chars = append(chars, l._Advance())
+				chars = append(chars, l.Advance())
+				chars = append(chars, l.Advance())
 			}
 		} else if !(forRegex) && c == "[" && l.Pos+1 < l.Length && string(l.Source[l.Pos+1]) == "." {
-			chars = append(chars, l._Advance())
-			chars = append(chars, l._Advance())
+			chars = append(chars, l.Advance())
+			chars = append(chars, l.Advance())
 			for !(l.AtEnd()) && !(l.Peek() == "." && l.Pos+1 < l.Length && string(l.Source[l.Pos+1]) == "]") {
-				chars = append(chars, l._Advance())
+				chars = append(chars, l.Advance())
 			}
 			if !(l.AtEnd()) {
-				chars = append(chars, l._Advance())
-				chars = append(chars, l._Advance())
+				chars = append(chars, l.Advance())
+				chars = append(chars, l.Advance())
 			}
 		} else if forRegex && c == "$" {
-			panic("TODO: incomplete implementation")
+			l._SyncToParser()
+			if !(l._Parser._ParseDollarExpansion(chars, parts, false)) {
+				l._SyncFromParser()
+				chars = append(chars, l.Advance())
+			} else {
+				l._SyncFromParser()
+			}
 		} else {
-			chars = append(chars, l._Advance())
+			chars = append(chars, l.Advance())
 		}
 	}
 	return true
 }
 
-func (l *Lexer) _ParseMatchedPair(openChar string, closeChar string, flags int) string {
+func (l *Lexer) _ParseMatchedPair(openChar string, closeChar string, flags int, initialWasDollar bool) string {
 	var start int
 	_ = start
 	var count int
@@ -2496,18 +2525,17 @@ func (l *Lexer) _ParseMatchedPair(openChar string, closeChar string, flags int) 
 	_ = inDquote
 	var direction string
 	_ = direction
-	panic("TODO: Statement type Assert")
 	start = l.Pos
 	count = 1
 	chars = []string{}
 	passNext = false
-	wasDollar = false
+	wasDollar = initialWasDollar
 	wasGtlt = false
 	for count > 0 {
 		if l.AtEnd() {
 			panic(NewMatchedPairError(fmt.Sprintf("unexpected EOF while looking for matching `%v'", closeChar), start, 0))
 		}
-		ch = l._Advance()
+		ch = l.Advance()
 		if (flags&MatchedPairFlags_DOLBRACE) != 0 && l._Dolbrace_state == DolbraceState_OP {
 			if !strings.Contains("#%^,~:-=?+/", ch) {
 				l._Dolbrace_state = DolbraceState_WORD
@@ -2571,7 +2599,7 @@ func (l *Lexer) _ParseMatchedPair(openChar string, closeChar string, flags int) 
 			if ch == "'" {
 				chars = append(chars, ch)
 				quoteFlags = _ternary(wasDollar, flags|MatchedPairFlags_ALLOWESC, flags)
-				nested = l._ParseMatchedPair("'", "'", quoteFlags)
+				nested = l._ParseMatchedPair("'", "'", quoteFlags, false)
 				chars = append(chars, nested)
 				chars = append(chars, "'")
 				wasDollar = false
@@ -2579,7 +2607,7 @@ func (l *Lexer) _ParseMatchedPair(openChar string, closeChar string, flags int) 
 				continue
 			} else if ch == "\"" {
 				chars = append(chars, ch)
-				nested = l._ParseMatchedPair("\"", "\"", flags|MatchedPairFlags_DQUOTE)
+				nested = l._ParseMatchedPair("\"", "\"", flags|MatchedPairFlags_DQUOTE, false)
 				chars = append(chars, nested)
 				chars = append(chars, "\"")
 				wasDollar = false
@@ -2587,7 +2615,7 @@ func (l *Lexer) _ParseMatchedPair(openChar string, closeChar string, flags int) 
 				continue
 			} else if ch == "`" {
 				chars = append(chars, ch)
-				nested = l._ParseMatchedPair("`", "`", flags)
+				nested = l._ParseMatchedPair("`", "`", flags, false)
 				chars = append(chars, nested)
 				chars = append(chars, "`")
 				wasDollar = false
@@ -2623,7 +2651,7 @@ func (l *Lexer) _ParseMatchedPair(openChar string, closeChar string, flags int) 
 					wasDollar = false
 					wasGtlt = false
 				} else {
-					chars = append(chars, l._Advance())
+					chars = append(chars, l.Advance())
 					wasDollar = true
 					wasGtlt = false
 				}
@@ -2647,8 +2675,8 @@ func (l *Lexer) _ParseMatchedPair(openChar string, closeChar string, flags int) 
 							wasDollar = false
 							wasGtlt = false
 						} else {
-							chars = append(chars, l._Advance())
-							chars = append(chars, l._Advance())
+							chars = append(chars, l.Advance())
+							chars = append(chars, l.Advance())
 							wasDollar = false
 							wasGtlt = false
 						}
@@ -2661,8 +2689,8 @@ func (l *Lexer) _ParseMatchedPair(openChar string, closeChar string, flags int) 
 						wasDollar = false
 						wasGtlt = false
 					} else {
-						chars = append(chars, l._Advance())
-						chars = append(chars, l._Advance())
+						chars = append(chars, l.Advance())
+						chars = append(chars, l.Advance())
 						wasDollar = false
 						wasGtlt = false
 					}
@@ -2678,7 +2706,7 @@ func (l *Lexer) _ParseMatchedPair(openChar string, closeChar string, flags int) 
 					wasDollar = false
 					wasGtlt = false
 				} else {
-					chars = append(chars, l._Advance())
+					chars = append(chars, l.Advance())
 					wasDollar = true
 					wasGtlt = false
 				}
@@ -2695,8 +2723,8 @@ func (l *Lexer) _ParseMatchedPair(openChar string, closeChar string, flags int) 
 	return strings.Join(chars, "")
 }
 
-func (l *Lexer) _CollectParamArgument(flags int) string {
-	return l._ParseMatchedPair("{", "}", flags|MatchedPairFlags_DOLBRACE)
+func (l *Lexer) _CollectParamArgument(flags int, wasDollar bool) string {
+	return l._ParseMatchedPair("{", "}", flags|MatchedPairFlags_DOLBRACE, wasDollar)
 }
 
 func (l *Lexer) _ReadWordInternal(ctx int, atCommandStart bool, inArrayLiteral bool, inAssignBuiltin bool) *Word {
@@ -2758,7 +2786,6 @@ func (l *Lexer) _ReadWordInternal(ctx int, atCommandStart bool, inArrayLiteral b
 	_ = arrayResult0
 	var arrayResult1 string
 	_ = arrayResult1
-	panic("TODO: Statement type Assert")
 	start = l.Pos
 	chars = []string{}
 	parts = []Node{}
@@ -2767,7 +2794,7 @@ func (l *Lexer) _ReadWordInternal(ctx int, atCommandStart bool, inArrayLiteral b
 	seenEquals = false
 	parenDepth = 0
 	for !(l.AtEnd()) {
-		ch = l._Peek()
+		ch = l.Peek()
 		if ctx == WordCtxRegex {
 			if ch == "\\" && l.Pos+1 < l.Length && string(l.Source[l.Pos+1]) == "\n" {
 				l.Advance()
@@ -2781,7 +2808,7 @@ func (l *Lexer) _ReadWordInternal(ctx int, atCommandStart bool, inArrayLiteral b
 		if ctx == WordCtxNormal && ch == "[" {
 			if bracketDepth > 0 {
 				bracketDepth += 1
-				chars = append(chars, l._Advance())
+				chars = append(chars, l.Advance())
 				continue
 			}
 			if len(chars) > 0 && atCommandStart && !(seenEquals) && _IsArrayAssignmentPrefix(chars) {
@@ -2789,20 +2816,20 @@ func (l *Lexer) _ReadWordInternal(ctx int, atCommandStart bool, inArrayLiteral b
 				if (unicode.IsLetter(_runeFromChar(prevChar)) || unicode.IsDigit(_runeFromChar(prevChar))) || prevChar == "_" {
 					bracketStartPos = l.Pos
 					bracketDepth += 1
-					chars = append(chars, l._Advance())
+					chars = append(chars, l.Advance())
 					continue
 				}
 			}
 			if !(len(chars) > 0) && !(seenEquals) && inArrayLiteral {
 				bracketStartPos = l.Pos
 				bracketDepth += 1
-				chars = append(chars, l._Advance())
+				chars = append(chars, l.Advance())
 				continue
 			}
 		}
 		if ctx == WordCtxNormal && ch == "]" && bracketDepth > 0 {
 			bracketDepth -= 1
-			chars = append(chars, l._Advance())
+			chars = append(chars, l.Advance())
 			continue
 		}
 		if ctx == WordCtxNormal && ch == "=" && bracketDepth == 0 {
@@ -2810,13 +2837,13 @@ func (l *Lexer) _ReadWordInternal(ctx int, atCommandStart bool, inArrayLiteral b
 		}
 		if ctx == WordCtxRegex && ch == "(" {
 			parenDepth += 1
-			chars = append(chars, l._Advance())
+			chars = append(chars, l.Advance())
 			continue
 		}
 		if ctx == WordCtxRegex && ch == ")" {
 			if parenDepth > 0 {
 				parenDepth -= 1
-				chars = append(chars, l._Advance())
+				chars = append(chars, l.Advance())
 				continue
 			}
 			break
@@ -2826,13 +2853,13 @@ func (l *Lexer) _ReadWordInternal(ctx int, atCommandStart bool, inArrayLiteral b
 			if l._ReadBracketExpression(chars, parts, forRegex, parenDepth) {
 				continue
 			}
-			chars = append(chars, l._Advance())
+			chars = append(chars, l.Advance())
 			continue
 		}
 		if ctx == WordCtxCond && ch == "(" {
 			if l._Extglob && len(chars) > 0 && _IsExtglobPrefix(chars[len(chars)-1]) {
-				chars = append(chars, l._Advance())
-				content = l._ParseMatchedPair("(", ")", MatchedPairFlags_EXTGLOB)
+				chars = append(chars, l.Advance())
+				content = l._ParseMatchedPair("(", ")", MatchedPairFlags_EXTGLOB, false)
 				chars = append(chars, content)
 				chars = append(chars, ")")
 				continue
@@ -2841,7 +2868,7 @@ func (l *Lexer) _ReadWordInternal(ctx int, atCommandStart bool, inArrayLiteral b
 			}
 		}
 		if ctx == WordCtxRegex && _IsWhitespace(ch) && parenDepth > 0 {
-			chars = append(chars, l._Advance())
+			chars = append(chars, l.Advance())
 			continue
 		}
 		if ch == "'" {
@@ -2860,9 +2887,9 @@ func (l *Lexer) _ReadWordInternal(ctx int, atCommandStart bool, inArrayLiteral b
 				chars = append(chars, "\"")
 				inSingleInDquote = false
 				for !(l.AtEnd()) && inSingleInDquote || l.Peek() != "\"" {
-					c = l._Peek()
+					c = l.Peek()
 					if inSingleInDquote {
-						chars = append(chars, l._Advance())
+						chars = append(chars, l.Advance())
 						if c == "'" {
 							inSingleInDquote = false
 						}
@@ -2874,14 +2901,14 @@ func (l *Lexer) _ReadWordInternal(ctx int, atCommandStart bool, inArrayLiteral b
 							l.Advance()
 							l.Advance()
 						} else {
-							chars = append(chars, l._Advance())
-							chars = append(chars, l._Advance())
+							chars = append(chars, l.Advance())
+							chars = append(chars, l.Advance())
 						}
 					} else if c == "$" {
 						l._SyncToParser()
 						if !(l._Parser._ParseDollarExpansion(chars, parts, true)) {
 							l._SyncFromParser()
-							chars = append(chars, l._Advance())
+							chars = append(chars, l.Advance())
 						} else {
 							l._SyncFromParser()
 						}
@@ -2893,16 +2920,16 @@ func (l *Lexer) _ReadWordInternal(ctx int, atCommandStart bool, inArrayLiteral b
 							parts = append(parts, cmdsubResult0.(Node))
 							chars = append(chars, cmdsubResult1)
 						} else {
-							chars = append(chars, l._Advance())
+							chars = append(chars, l.Advance())
 						}
 					} else {
-						chars = append(chars, l._Advance())
+						chars = append(chars, l.Advance())
 					}
 				}
 				if l.AtEnd() {
 					panic(NewParseError("Unterminated double quote", start, 0))
 				}
-				chars = append(chars, l._Advance())
+				chars = append(chars, l.Advance())
 			} else {
 				handleLineContinuation = ctx == WordCtxCond
 				l._SyncToParser()
@@ -2917,8 +2944,8 @@ func (l *Lexer) _ReadWordInternal(ctx int, atCommandStart bool, inArrayLiteral b
 				l.Advance()
 				l.Advance()
 			} else {
-				chars = append(chars, l._Advance())
-				chars = append(chars, l._Advance())
+				chars = append(chars, l.Advance())
+				chars = append(chars, l.Advance())
 			}
 			continue
 		}
@@ -2928,7 +2955,7 @@ func (l *Lexer) _ReadWordInternal(ctx int, atCommandStart bool, inArrayLiteral b
 				parts = append(parts, ansiResult0.(Node))
 				chars = append(chars, ansiResult1)
 			} else {
-				chars = append(chars, l._Advance())
+				chars = append(chars, l.Advance())
 			}
 			continue
 		}
@@ -2939,7 +2966,7 @@ func (l *Lexer) _ReadWordInternal(ctx int, atCommandStart bool, inArrayLiteral b
 				parts = append(parts, localeResult2...)
 				chars = append(chars, localeResult1)
 			} else {
-				chars = append(chars, l._Advance())
+				chars = append(chars, l.Advance())
 			}
 			continue
 		}
@@ -2947,12 +2974,12 @@ func (l *Lexer) _ReadWordInternal(ctx int, atCommandStart bool, inArrayLiteral b
 			l._SyncToParser()
 			if !(l._Parser._ParseDollarExpansion(chars, parts, false)) {
 				l._SyncFromParser()
-				chars = append(chars, l._Advance())
+				chars = append(chars, l.Advance())
 			} else {
 				l._SyncFromParser()
 				if l._Extglob && ctx == WordCtxNormal && len(chars) > 0 && len(chars[len(chars)-1]) == 2 && string(chars[len(chars)-1][0]) == "$" && strings.Contains("?*@", string(chars[len(chars)-1][1])) && !(l.AtEnd()) && l.Peek() == "(" {
-					chars = append(chars, l._Advance())
-					content = l._ParseMatchedPair("(", ")", MatchedPairFlags_EXTGLOB)
+					chars = append(chars, l.Advance())
+					content = l._ParseMatchedPair("(", ")", MatchedPairFlags_EXTGLOB, false)
 					chars = append(chars, content)
 					chars = append(chars, ")")
 				}
@@ -2967,7 +2994,7 @@ func (l *Lexer) _ReadWordInternal(ctx int, atCommandStart bool, inArrayLiteral b
 				parts = append(parts, cmdsubResult0.(Node))
 				chars = append(chars, cmdsubResult1)
 			} else {
-				chars = append(chars, l._Advance())
+				chars = append(chars, l.Advance())
 			}
 			continue
 		}
@@ -2981,9 +3008,9 @@ func (l *Lexer) _ReadWordInternal(ctx int, atCommandStart bool, inArrayLiteral b
 			} else if len(procsubResult1) > 0 {
 				chars = append(chars, procsubResult1)
 			} else {
-				chars = append(chars, l._Advance())
+				chars = append(chars, l.Advance())
 				if ctx == WordCtxNormal {
-					chars = append(chars, l._Advance())
+					chars = append(chars, l.Advance())
 				}
 			}
 			continue
@@ -3009,23 +3036,23 @@ func (l *Lexer) _ReadWordInternal(ctx int, atCommandStart bool, inArrayLiteral b
 			}
 		}
 		if l._Extglob && ctx == WordCtxNormal && _IsExtglobPrefix(ch) && l.Pos+1 < l.Length && string(l.Source[l.Pos+1]) == "(" {
-			chars = append(chars, l._Advance())
-			chars = append(chars, l._Advance())
-			content = l._ParseMatchedPair("(", ")", MatchedPairFlags_EXTGLOB)
+			chars = append(chars, l.Advance())
+			chars = append(chars, l.Advance())
+			content = l._ParseMatchedPair("(", ")", MatchedPairFlags_EXTGLOB, false)
 			chars = append(chars, content)
 			chars = append(chars, ")")
 			continue
 		}
 		if ctx == WordCtxNormal && (l._Parser_state&ParserStateFlags_PST_EOFTOKEN) != 0 && l._Eof_token != "" && ch == l._Eof_token && bracketDepth == 0 {
 			if !(len(chars) > 0) {
-				chars = append(chars, l._Advance())
+				chars = append(chars, l.Advance())
 			}
 			break
 		}
 		if ctx == WordCtxNormal && _IsMetachar(ch) && bracketDepth == 0 {
 			break
 		}
-		chars = append(chars, l._Advance())
+		chars = append(chars, l.Advance())
 	}
 	if bracketDepth > 0 && bracketStartPos != -1 && l.AtEnd() {
 		panic(NewMatchedPairError("unexpected EOF looking for `]'", bracketStartPos, 0))
@@ -3156,18 +3183,18 @@ func (l *Lexer) _ReadAnsiCQuote() (Node, string) {
 	contentChars = []string{}
 	foundClose = false
 	for !(l.AtEnd()) {
-		ch = l._Peek()
+		ch = l.Peek()
 		if ch == "'" {
 			l.Advance()
 			foundClose = true
 			break
 		} else if ch == "\\" {
-			contentChars = append(contentChars, l._Advance())
+			contentChars = append(contentChars, l.Advance())
 			if !(l.AtEnd()) {
-				contentChars = append(contentChars, l._Advance())
+				contentChars = append(contentChars, l.Advance())
 			}
 		} else {
-			contentChars = append(contentChars, l._Advance())
+			contentChars = append(contentChars, l.Advance())
 		}
 	}
 	if !(foundClose) {
@@ -3208,7 +3235,6 @@ func (l *Lexer) _ReadLocaleString() (Node, string, []Node) {
 	_ = content
 	var text string
 	_ = text
-	panic("TODO: Statement type Assert")
 	if l.AtEnd() || l.Peek() != "$" {
 		return nil, "", []Node{}
 	}
@@ -3222,7 +3248,7 @@ func (l *Lexer) _ReadLocaleString() (Node, string, []Node) {
 	innerParts = []Node{}
 	foundClose = false
 	for !(l.AtEnd()) {
-		ch = l._Peek()
+		ch = l.Peek()
 		if ch == "\"" {
 			l.Advance()
 			foundClose = true
@@ -3233,8 +3259,8 @@ func (l *Lexer) _ReadLocaleString() (Node, string, []Node) {
 				l.Advance()
 				l.Advance()
 			} else {
-				contentChars = append(contentChars, l._Advance())
-				contentChars = append(contentChars, l._Advance())
+				contentChars = append(contentChars, l.Advance())
+				contentChars = append(contentChars, l.Advance())
 			}
 		} else if ch == "$" && l.Pos+2 < l.Length && string(l.Source[l.Pos+1]) == "(" && string(l.Source[l.Pos+2]) == "(" {
 			l._SyncToParser()
@@ -3251,7 +3277,7 @@ func (l *Lexer) _ReadLocaleString() (Node, string, []Node) {
 					innerParts = append(innerParts, cmdsubNode.(Node))
 					contentChars = append(contentChars, cmdsubText)
 				} else {
-					contentChars = append(contentChars, l._Advance())
+					contentChars = append(contentChars, l.Advance())
 				}
 			}
 		} else if _IsExpansionStart(l.Source, l.Pos, "$(") {
@@ -3262,7 +3288,7 @@ func (l *Lexer) _ReadLocaleString() (Node, string, []Node) {
 				innerParts = append(innerParts, cmdsubNode.(Node))
 				contentChars = append(contentChars, cmdsubText)
 			} else {
-				contentChars = append(contentChars, l._Advance())
+				contentChars = append(contentChars, l.Advance())
 			}
 		} else if ch == "$" {
 			l._SyncToParser()
@@ -3272,7 +3298,7 @@ func (l *Lexer) _ReadLocaleString() (Node, string, []Node) {
 				innerParts = append(innerParts, paramNode.(Node))
 				contentChars = append(contentChars, paramText)
 			} else {
-				contentChars = append(contentChars, l._Advance())
+				contentChars = append(contentChars, l.Advance())
 			}
 		} else if ch == "`" {
 			l._SyncToParser()
@@ -3282,10 +3308,10 @@ func (l *Lexer) _ReadLocaleString() (Node, string, []Node) {
 				innerParts = append(innerParts, cmdsubNode.(Node))
 				contentChars = append(contentChars, cmdsubText)
 			} else {
-				contentChars = append(contentChars, l._Advance())
+				contentChars = append(contentChars, l.Advance())
 			}
 		} else {
-			contentChars = append(contentChars, l._Advance())
+			contentChars = append(contentChars, l.Advance())
 		}
 	}
 	if !(foundClose) {
@@ -3332,13 +3358,13 @@ func (l *Lexer) _ConsumeParamOperator() string {
 	if l.AtEnd() {
 		return ""
 	}
-	ch = l._Peek()
+	ch = l.Peek()
 	if ch == ":" {
 		l.Advance()
 		if l.AtEnd() {
 			return ":"
 		}
-		nextCh = l._Peek()
+		nextCh = l.Peek()
 		if _IsSimpleParamOp(nextCh) {
 			l.Advance()
 			return ":" + nextCh
@@ -3368,7 +3394,7 @@ func (l *Lexer) _ConsumeParamOperator() string {
 	if ch == "/" {
 		l.Advance()
 		if !(l.AtEnd()) {
-			nextCh = l._Peek()
+			nextCh = l.Peek()
 			if nextCh == "/" {
 				l.Advance()
 				return "//"
@@ -3479,7 +3505,7 @@ func (l *Lexer) _ConsumeParamName() string {
 	if l.AtEnd() {
 		return ""
 	}
-	ch = l._Peek()
+	ch = l.Peek()
 	if _IsSpecialParam(ch) {
 		if ch == "$" && l.Pos+1 < l.Length && strings.Contains("{'\"", string(l.Source[l.Pos+1])) {
 			return ""
@@ -3489,23 +3515,23 @@ func (l *Lexer) _ConsumeParamName() string {
 	}
 	if unicode.IsDigit(_runeFromChar(ch)) {
 		nameChars = []string{}
-		for !(l.AtEnd()) && unicode.IsDigit(_runeFromChar(l._Peek())) {
-			nameChars = append(nameChars, l._Advance())
+		for !(l.AtEnd()) && unicode.IsDigit(_runeFromChar(l.Peek())) {
+			nameChars = append(nameChars, l.Advance())
 		}
 		return strings.Join(nameChars, "")
 	}
 	if unicode.IsLetter(_runeFromChar(ch)) || ch == "_" {
 		nameChars = []string{}
 		for !(l.AtEnd()) {
-			c = l._Peek()
+			c = l.Peek()
 			if (unicode.IsLetter(_runeFromChar(c)) || unicode.IsDigit(_runeFromChar(c))) || c == "_" {
-				nameChars = append(nameChars, l._Advance())
+				nameChars = append(nameChars, l.Advance())
 			} else if c == "[" {
 				if !(l._ParamSubscriptHasClose(l.Pos)) {
 					break
 				}
-				nameChars = append(nameChars, l._Advance())
-				content = l._ParseMatchedPair("[", "]", MatchedPairFlags_ARRAYSUB)
+				nameChars = append(nameChars, l.Advance())
+				content = l._ParseMatchedPair("[", "]", MatchedPairFlags_ARRAYSUB, false)
 				nameChars = append(nameChars, content)
 				nameChars = append(nameChars, "]")
 				break
@@ -3544,7 +3570,7 @@ func (l *Lexer) _ReadParamExpansion(inDquote bool) (Node, string) {
 		l.Pos = start
 		return nil, ""
 	}
-	ch = l._Peek()
+	ch = l.Peek()
 	if ch == "{" {
 		l.Advance()
 		return l._ReadBracedParam(start, inDquote)
@@ -3557,7 +3583,7 @@ func (l *Lexer) _ReadParamExpansion(inDquote bool) (Node, string) {
 	if unicode.IsLetter(_runeFromChar(ch)) || ch == "_" {
 		nameStart = l.Pos
 		for !(l.AtEnd()) {
-			c = l._Peek()
+			c = l.Peek()
 			if (unicode.IsLetter(_runeFromChar(c)) || unicode.IsDigit(_runeFromChar(c))) || c == "_" {
 				l.Advance()
 			} else {
@@ -3601,6 +3627,8 @@ func (l *Lexer) _ReadBracedParam(start int, inDquote bool) (Node, string) {
 	_ = nextC
 	var flags int
 	_ = flags
+	var paramEndsWithDollar bool
+	_ = paramEndsWithDollar
 	var e interface{}
 	_ = e
 	var inner string
@@ -3611,13 +3639,12 @@ func (l *Lexer) _ReadBracedParam(start int, inDquote bool) (Node, string) {
 	_ = parsed
 	var formatted string
 	_ = formatted
-	panic("TODO: Statement type Assert")
 	if l.AtEnd() {
 		panic(NewMatchedPairError("unexpected EOF looking for `}'", start, 0))
 	}
 	savedDolbrace = l._Dolbrace_state
 	l._Dolbrace_state = DolbraceState_PARAM
-	ch = l._Peek()
+	ch = l.Peek()
 	if _IsFunsubChar(ch) {
 		l._Dolbrace_state = savedDolbrace
 		return l._ReadFunsub(start)
@@ -3635,33 +3662,33 @@ func (l *Lexer) _ReadBracedParam(start int, inDquote bool) (Node, string) {
 	}
 	if ch == "!" {
 		l.Advance()
-		for !(l.AtEnd()) && _IsWhitespaceNoNewline(l._Peek()) {
+		for !(l.AtEnd()) && _IsWhitespaceNoNewline(l.Peek()) {
 			l.Advance()
 		}
 		param = l._ConsumeParamName()
 		if len(param) > 0 {
-			for !(l.AtEnd()) && _IsWhitespaceNoNewline(l._Peek()) {
+			for !(l.AtEnd()) && _IsWhitespaceNoNewline(l.Peek()) {
 				l.Advance()
 			}
-			if !(l.AtEnd()) && l._Peek() == "}" {
+			if !(l.AtEnd()) && l.Peek() == "}" {
 				l.Advance()
 				text = l.Source[start:l.Pos]
 				l._Dolbrace_state = savedDolbrace
 				return NewParamIndirect(param, "", ""), text
 			}
-			if !(l.AtEnd()) && _IsAtOrStar(l._Peek()) {
-				suffix = l._Advance()
-				trailing = l._ParseMatchedPair("{", "}", MatchedPairFlags_DOLBRACE)
+			if !(l.AtEnd()) && _IsAtOrStar(l.Peek()) {
+				suffix = l.Advance()
+				trailing = l._ParseMatchedPair("{", "}", MatchedPairFlags_DOLBRACE, false)
 				text = l.Source[start:l.Pos]
 				l._Dolbrace_state = savedDolbrace
 				return NewParamIndirect(param+suffix+trailing, "", ""), text
 			}
 			op = l._ConsumeParamOperator()
-			if op == "" && !(l.AtEnd()) && !strings.Contains("}\"'`", l._Peek()) {
-				op = l._Advance()
+			if op == "" && !(l.AtEnd()) && !strings.Contains("}\"'`", l.Peek()) {
+				op = l.Advance()
 			}
 			if op != "" && !strings.Contains("\"'`", op) {
-				arg = l._ParseMatchedPair("{", "}", MatchedPairFlags_DOLBRACE)
+				arg = l._ParseMatchedPair("{", "}", MatchedPairFlags_DOLBRACE, false)
 				text = l.Source[start:l.Pos]
 				l._Dolbrace_state = savedDolbrace
 				return NewParamIndirect(param, op, arg), text
@@ -3680,7 +3707,7 @@ func (l *Lexer) _ReadBracedParam(start int, inDquote bool) (Node, string) {
 		if !(l.AtEnd()) && strings.Contains("-=+?", l.Peek()) || l.Peek() == ":" && l.Pos+1 < l.Length && _IsSimpleParamOp(string(l.Source[l.Pos+1])) {
 			param = ""
 		} else {
-			content = l._ParseMatchedPair("{", "}", MatchedPairFlags_DOLBRACE)
+			content = l._ParseMatchedPair("{", "}", MatchedPairFlags_DOLBRACE, false)
 			text = "${" + content + "}"
 			l._Dolbrace_state = savedDolbrace
 			return NewParamExpansion(content, "", ""), text
@@ -3703,13 +3730,13 @@ func (l *Lexer) _ReadBracedParam(start int, inDquote bool) (Node, string) {
 			if dollarCount%2 == 1 {
 				op = ""
 			} else {
-				op = l._Advance()
+				op = l.Advance()
 			}
-		} else if !(l.AtEnd()) && l._Peek() == "`" {
+		} else if !(l.AtEnd()) && l.Peek() == "`" {
 			backtickPos = l.Pos
 			l.Advance()
-			for !(l.AtEnd()) && l._Peek() != "`" {
-				bc = l._Peek()
+			for !(l.AtEnd()) && l.Peek() != "`" {
+				bc = l.Peek()
 				if bc == "\\" && l.Pos+1 < l.Length {
 					nextC = string(l.Source[l.Pos+1])
 					if _IsEscapeCharInBacktick(nextC) {
@@ -3726,15 +3753,15 @@ func (l *Lexer) _ReadBracedParam(start int, inDquote bool) (Node, string) {
 			op = "`"
 		} else if !(l.AtEnd()) && l.Peek() == "$" && l.Pos+1 < l.Length && string(l.Source[l.Pos+1]) == "{" {
 			op = ""
-		} else if !(l.AtEnd()) && _containsAny([]interface{}{"'", "\""}, l._Peek()) {
+		} else if !(l.AtEnd()) && _containsAny([]interface{}{"'", "\""}, l.Peek()) {
 			op = ""
-		} else if !(l.AtEnd()) && l._Peek() == "\\" {
-			op = l._Advance()
+		} else if !(l.AtEnd()) && l.Peek() == "\\" {
+			op = l.Advance()
 			if !(l.AtEnd()) {
-				op += l._Advance()
+				op += l.Advance()
 			}
 		} else {
-			op = l._Advance()
+			op = l.Advance()
 		}
 	}
 	l._UpdateDolbraceForOp(op, len(param) > 0)
@@ -3749,7 +3776,6 @@ func (l *Lexer) _ReadBracedParam(start int, inDquote bool) (Node, string) {
 }
 
 func (l *Lexer) _ReadFunsub(start int) (Node, string) {
-	panic("TODO: Statement type Assert")
 	return l._Parser._ParseFunsub(start)
 }
 
@@ -3907,9 +3933,28 @@ func (w *Word) _NormalizeParamExpansionNewlines(value string) string {
 	return strings.Join(result, "")
 }
 
-func (w *Word) _ExpandAnsiCEscapes(value string) string {
-	var inner string
-	_ = inner
+func (w *Word) _ShSingleQuote(s string) string {
+	var result []string
+	_ = result
+	if !(len(s) > 0) {
+		return "''"
+	}
+	if s == "'" {
+		return "\\'"
+	}
+	result = []string{"'"}
+	for _, c := range s {
+		if c == '\'' {
+			result = append(result, "'\\''")
+		} else {
+			result = append(result, string(c))
+		}
+	}
+	result = append(result, "'")
+	return strings.Join(result, "")
+}
+
+func (w *Word) _AnsiCToBytes(inner string) []byte {
 	var result []byte
 	_ = result
 	var i int
@@ -3932,10 +3977,6 @@ func (w *Word) _ExpandAnsiCEscapes(value string) string {
 	_ = skipExtra
 	var ctrlVal int
 	_ = ctrlVal
-	if !(strings.HasPrefix(value, "'") && strings.HasSuffix(value, "'")) {
-		return value
-	}
-	inner = value[1 : len(value)-1]
 	result = []byte{}
 	i = 0
 	for i < len(inner) {
@@ -3946,7 +3987,7 @@ func (w *Word) _ExpandAnsiCEscapes(value string) string {
 				result = append(result, byte(simple))
 				i += 2
 			} else if c == "'" {
-				result = append(result, []byte{39, 92, 39, 39}...)
+				result = append(result, byte(39))
 				i += 2
 			} else if c == "x" {
 				if i+2 < len(inner) && string(inner[i+2]) == "{" {
@@ -3959,11 +4000,11 @@ func (w *Word) _ExpandAnsiCEscapes(value string) string {
 						j += 1
 					}
 					if !(len(hexStr) > 0) {
-						return "'" + string(result) + "'"
+						return result
 					}
 					byteVal = _parseInt(hexStr, 16) & 255
 					if byteVal == 0 {
-						return "'" + string(result) + "'"
+						return result
 					}
 					w._AppendWithCtlesc(result, byteVal)
 					i = j
@@ -3975,7 +4016,7 @@ func (w *Word) _ExpandAnsiCEscapes(value string) string {
 					if j > i+2 {
 						byteVal = _parseInt(inner[i+2:j], 16)
 						if byteVal == 0 {
-							return "'" + string(result) + "'"
+							return result
 						}
 						w._AppendWithCtlesc(result, byteVal)
 						i = j
@@ -3992,7 +4033,7 @@ func (w *Word) _ExpandAnsiCEscapes(value string) string {
 				if j > i+2 {
 					codepoint = _parseInt(inner[i+2:j], 16)
 					if codepoint == 0 {
-						return "'" + string(result) + "'"
+						return result
 					}
 					result = append(result, []byte(string(rune(codepoint)))...)
 					i = j
@@ -4008,7 +4049,7 @@ func (w *Word) _ExpandAnsiCEscapes(value string) string {
 				if j > i+2 {
 					codepoint = _parseInt(inner[i+2:j], 16)
 					if codepoint == 0 {
-						return "'" + string(result) + "'"
+						return result
 					}
 					result = append(result, []byte(string(rune(codepoint)))...)
 					i = j
@@ -4025,7 +4066,7 @@ func (w *Word) _ExpandAnsiCEscapes(value string) string {
 					}
 					ctrlVal = int(rune(ctrlChar[0])) & 31
 					if ctrlVal == 0 {
-						return "'" + string(result) + "'"
+						return result
 					}
 					w._AppendWithCtlesc(result, ctrlVal)
 					i += 3 + skipExtra
@@ -4041,12 +4082,12 @@ func (w *Word) _ExpandAnsiCEscapes(value string) string {
 				if j > i+2 {
 					byteVal = _parseInt(inner[i+1:j], 8) & 255
 					if byteVal == 0 {
-						return "'" + string(result) + "'"
+						return result
 					}
 					w._AppendWithCtlesc(result, byteVal)
 					i = j
 				} else {
-					return "'" + string(result) + "'"
+					return result
 				}
 			} else if c >= "1" && c <= "7" {
 				j = i + 1
@@ -4055,7 +4096,7 @@ func (w *Word) _ExpandAnsiCEscapes(value string) string {
 				}
 				byteVal = _parseInt(inner[i+1:j], 8) & 255
 				if byteVal == 0 {
-					return "'" + string(result) + "'"
+					return result
 				}
 				w._AppendWithCtlesc(result, byteVal)
 				i = j
@@ -4069,7 +4110,23 @@ func (w *Word) _ExpandAnsiCEscapes(value string) string {
 			i += 1
 		}
 	}
-	return "'" + string(result) + "'"
+	return result
+}
+
+func (w *Word) _ExpandAnsiCEscapes(value string) string {
+	var inner string
+	_ = inner
+	var literalBytes []byte
+	_ = literalBytes
+	var literalStr string
+	_ = literalStr
+	if !(strings.HasPrefix(value, "'") && strings.HasSuffix(value, "'")) {
+		return value
+	}
+	inner = value[1 : len(value)-1]
+	literalBytes = w._AnsiCToBytes(inner)
+	literalStr = string(literalBytes)
+	return w._ShSingleQuote(literalStr)
 }
 
 func (w *Word) _ExpandAllAnsiCQuotes(value string) string {
@@ -5529,7 +5586,17 @@ func (p *Pipeline) _CmdSexp(cmd Node, needsRedirect bool) string {
 	if !(needsRedirect) {
 		return cmd.ToSexp()
 	}
-	panic("TODO: isinstance")
+	if cmd.Kind() == "command" {
+		parts = []string{}
+		for _, w := range cmd.(*Command).Words {
+			parts = append(parts, w.ToSexp())
+		}
+		for _, r := range cmd.(*Command).Redirects {
+			parts = append(parts, r.ToSexp())
+		}
+		parts = append(parts, "(redirect \">&\" 1)")
+		return "(command " + strings.Join(parts, " ") + ")"
+	}
 	return cmd.ToSexp()
 }
 
@@ -7072,20 +7139,6 @@ func (p *Parser) Advance() string {
 	return string(ch)
 }
 
-func (p *Parser) _Advance() string {
-	var ch string
-	_ = ch
-	panic("TODO: Statement type Assert")
-	ch = string(p.Source[p.Pos])
-	p.Pos += 1
-	return string(ch)
-}
-
-func (p *Parser) _Peek() string {
-	panic("TODO: Statement type Assert")
-	return string(string(p.Source[p.Pos]))
-}
-
 func (p *Parser) PeekAt(offset int) string {
 	var pos int
 	_ = pos
@@ -7121,7 +7174,7 @@ func (p *Parser) SkipWhitespace() {
 		if p.AtEnd() {
 			break
 		}
-		ch = p._Peek()
+		ch = p.Peek()
 		if ch == "#" {
 			p._LexSkipComment()
 		} else if ch == "\\" && p.PeekAt(1) == "\n" {
@@ -7137,7 +7190,7 @@ func (p *Parser) SkipWhitespaceAndNewlines() {
 	var ch string
 	_ = ch
 	for !(p.AtEnd()) {
-		ch = p._Peek()
+		ch = p.Peek()
 		if _IsWhitespace(ch) {
 			p.Advance()
 			if ch == "\n" {
@@ -7148,7 +7201,7 @@ func (p *Parser) SkipWhitespaceAndNewlines() {
 				}
 			}
 		} else if ch == "#" {
-			for !(p.AtEnd()) && p._Peek() != "\n" {
+			for !(p.AtEnd()) && p.Peek() != "\n" {
 				p.Advance()
 			}
 		} else if ch == "\\" && p.PeekAt(1) == "\n" {
@@ -7255,13 +7308,13 @@ func (p *Parser) PeekWord() string {
 	_ = word
 	savedPos = p.Pos
 	p.SkipWhitespace()
-	if p.AtEnd() || _IsMetachar(p._Peek()) {
+	if p.AtEnd() || _IsMetachar(p.Peek()) {
 		p.Pos = savedPos
 		return ""
 	}
 	chars = []string{}
-	for !(p.AtEnd()) && !(_IsMetachar(p._Peek())) {
-		ch = p._Peek()
+	for !(p.AtEnd()) && !(_IsMetachar(p.Peek())) {
+		ch = p.Peek()
 		if _IsQuote(ch) {
 			break
 		}
@@ -7269,11 +7322,11 @@ func (p *Parser) PeekWord() string {
 			break
 		}
 		if ch == "\\" && p.Pos+1 < p.Length {
-			chars = append(chars, p._Advance())
-			chars = append(chars, p._Advance())
+			chars = append(chars, p.Advance())
+			chars = append(chars, p.Advance())
 			continue
 		}
-		chars = append(chars, p._Advance())
+		chars = append(chars, p.Advance())
 	}
 	if len(chars) > 0 {
 		word = strings.Join(chars, "")
@@ -7339,21 +7392,21 @@ func (p *Parser) _ScanDoubleQuote(chars []string, parts []Node, start int, handl
 				p.Advance()
 				p.Advance()
 			} else {
-				chars = append(chars, p._Advance())
-				chars = append(chars, p._Advance())
+				chars = append(chars, p.Advance())
+				chars = append(chars, p.Advance())
 			}
 		} else if c == "$" {
 			if !(p._ParseDollarExpansion(chars, parts, true)) {
-				chars = append(chars, p._Advance())
+				chars = append(chars, p.Advance())
 			}
 		} else {
-			chars = append(chars, p._Advance())
+			chars = append(chars, p.Advance())
 		}
 	}
 	if p.AtEnd() {
 		panic(NewParseError("Unterminated double quote", start, 0))
 	}
-	chars = append(chars, p._Advance())
+	chars = append(chars, p.Advance())
 }
 
 func (p *Parser) _ParseDollarExpansion(chars []string, parts []Node, inDquote bool) bool {
@@ -7633,12 +7686,12 @@ func (p *Parser) _ParseBacktickSubstitution() (Node, string) {
 				p.Advance()
 			} else if _IsEscapeCharInBacktick(nextC) {
 				p.Advance()
-				escaped = p._Advance()
+				escaped = p.Advance()
 				contentChars = append(contentChars, escaped)
 				textChars = append(textChars, "\\")
 				textChars = append(textChars, escaped)
 			} else {
-				ch = p._Advance()
+				ch = p.Advance()
 				contentChars = append(contentChars, string(ch))
 				textChars = append(textChars, string(ch))
 			}
@@ -7646,132 +7699,132 @@ func (p *Parser) _ParseBacktickSubstitution() (Node, string) {
 		}
 		if c == "<" && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "<" {
 			if p.Pos+2 < p.Length && string(p.Source[p.Pos+2]) == "<" {
-				contentChars = append(contentChars, p._Advance())
+				contentChars = append(contentChars, p.Advance())
 				textChars = append(textChars, "<")
-				contentChars = append(contentChars, p._Advance())
+				contentChars = append(contentChars, p.Advance())
 				textChars = append(textChars, "<")
-				contentChars = append(contentChars, p._Advance())
+				contentChars = append(contentChars, p.Advance())
 				textChars = append(textChars, "<")
-				for !(p.AtEnd()) && _IsWhitespaceNoNewline(p._Peek()) {
-					ch = p._Advance()
+				for !(p.AtEnd()) && _IsWhitespaceNoNewline(p.Peek()) {
+					ch = p.Advance()
 					contentChars = append(contentChars, string(ch))
 					textChars = append(textChars, string(ch))
 				}
-				for !(p.AtEnd()) && !(_IsWhitespace(p._Peek())) && !strings.Contains("()", p._Peek()) {
-					if p._Peek() == "\\" && p.Pos+1 < p.Length {
-						ch = p._Advance()
+				for !(p.AtEnd()) && !(_IsWhitespace(p.Peek())) && !strings.Contains("()", p.Peek()) {
+					if p.Peek() == "\\" && p.Pos+1 < p.Length {
+						ch = p.Advance()
 						contentChars = append(contentChars, string(ch))
 						textChars = append(textChars, string(ch))
-						ch = p._Advance()
+						ch = p.Advance()
 						contentChars = append(contentChars, string(ch))
 						textChars = append(textChars, string(ch))
-					} else if strings.Contains("\"'", p._Peek()) {
-						quote = p._Peek()
-						ch = p._Advance()
+					} else if strings.Contains("\"'", p.Peek()) {
+						quote = p.Peek()
+						ch = p.Advance()
 						contentChars = append(contentChars, string(ch))
 						textChars = append(textChars, string(ch))
-						for !(p.AtEnd()) && p._Peek() != quote {
-							if quote == "\"" && p._Peek() == "\\" {
-								ch = p._Advance()
+						for !(p.AtEnd()) && p.Peek() != quote {
+							if quote == "\"" && p.Peek() == "\\" {
+								ch = p.Advance()
 								contentChars = append(contentChars, string(ch))
 								textChars = append(textChars, string(ch))
 							}
-							ch = p._Advance()
+							ch = p.Advance()
 							contentChars = append(contentChars, string(ch))
 							textChars = append(textChars, string(ch))
 						}
 						if !(p.AtEnd()) {
-							ch = p._Advance()
+							ch = p.Advance()
 							contentChars = append(contentChars, string(ch))
 							textChars = append(textChars, string(ch))
 						}
 					} else {
-						ch = p._Advance()
+						ch = p.Advance()
 						contentChars = append(contentChars, string(ch))
 						textChars = append(textChars, string(ch))
 					}
 				}
 				continue
 			}
-			contentChars = append(contentChars, p._Advance())
+			contentChars = append(contentChars, p.Advance())
 			textChars = append(textChars, "<")
-			contentChars = append(contentChars, p._Advance())
+			contentChars = append(contentChars, p.Advance())
 			textChars = append(textChars, "<")
 			stripTabs = false
 			if !(p.AtEnd()) && p.Peek() == "-" {
 				stripTabs = true
-				contentChars = append(contentChars, p._Advance())
+				contentChars = append(contentChars, p.Advance())
 				textChars = append(textChars, "-")
 			}
-			for !(p.AtEnd()) && _IsWhitespaceNoNewline(p._Peek()) {
-				ch = p._Advance()
+			for !(p.AtEnd()) && _IsWhitespaceNoNewline(p.Peek()) {
+				ch = p.Advance()
 				contentChars = append(contentChars, string(ch))
 				textChars = append(textChars, string(ch))
 			}
 			delimiterChars = []string{}
 			if !(p.AtEnd()) {
-				ch = p._Peek()
+				ch = p.Peek()
 				if _IsQuote(ch) {
-					quote = p._Advance()
+					quote = p.Advance()
 					contentChars = append(contentChars, quote)
 					textChars = append(textChars, quote)
-					for !(p.AtEnd()) && p._Peek() != quote {
-						dch = p._Advance()
+					for !(p.AtEnd()) && p.Peek() != quote {
+						dch = p.Advance()
 						contentChars = append(contentChars, dch)
 						textChars = append(textChars, dch)
 						delimiterChars = append(delimiterChars, dch)
 					}
 					if !(p.AtEnd()) {
-						closing = p._Advance()
+						closing = p.Advance()
 						contentChars = append(contentChars, closing)
 						textChars = append(textChars, closing)
 					}
 				} else if ch == "\\" {
-					esc = p._Advance()
+					esc = p.Advance()
 					contentChars = append(contentChars, esc)
 					textChars = append(textChars, esc)
 					if !(p.AtEnd()) {
-						dch = p._Advance()
+						dch = p.Advance()
 						contentChars = append(contentChars, dch)
 						textChars = append(textChars, dch)
 						delimiterChars = append(delimiterChars, dch)
 					}
-					for !(p.AtEnd()) && !(_IsMetachar(p._Peek())) {
-						dch = p._Advance()
+					for !(p.AtEnd()) && !(_IsMetachar(p.Peek())) {
+						dch = p.Advance()
 						contentChars = append(contentChars, dch)
 						textChars = append(textChars, dch)
 						delimiterChars = append(delimiterChars, dch)
 					}
 				} else {
-					for !(p.AtEnd()) && !(_IsMetachar(p._Peek())) && p._Peek() != "`" {
-						ch = p._Peek()
+					for !(p.AtEnd()) && !(_IsMetachar(p.Peek())) && p.Peek() != "`" {
+						ch = p.Peek()
 						if _IsQuote(ch) {
-							quote = p._Advance()
+							quote = p.Advance()
 							contentChars = append(contentChars, quote)
 							textChars = append(textChars, quote)
-							for !(p.AtEnd()) && p._Peek() != quote {
-								dch = p._Advance()
+							for !(p.AtEnd()) && p.Peek() != quote {
+								dch = p.Advance()
 								contentChars = append(contentChars, dch)
 								textChars = append(textChars, dch)
 								delimiterChars = append(delimiterChars, dch)
 							}
 							if !(p.AtEnd()) {
-								closing = p._Advance()
+								closing = p.Advance()
 								contentChars = append(contentChars, closing)
 								textChars = append(textChars, closing)
 							}
 						} else if ch == "\\" {
-							esc = p._Advance()
+							esc = p.Advance()
 							contentChars = append(contentChars, esc)
 							textChars = append(textChars, esc)
 							if !(p.AtEnd()) {
-								dch = p._Advance()
+								dch = p.Advance()
 								contentChars = append(contentChars, dch)
 								textChars = append(textChars, dch)
 								delimiterChars = append(delimiterChars, dch)
 							}
 						} else {
-							dch = p._Advance()
+							dch = p.Advance()
 							contentChars = append(contentChars, dch)
 							textChars = append(textChars, dch)
 							delimiterChars = append(delimiterChars, dch)
@@ -7786,7 +7839,7 @@ func (p *Parser) _ParseBacktickSubstitution() (Node, string) {
 			continue
 		}
 		if c == "\n" {
-			ch = p._Advance()
+			ch = p.Advance()
 			contentChars = append(contentChars, string(ch))
 			textChars = append(textChars, string(ch))
 			if len(pendingHeredocs) > 0 {
@@ -7794,7 +7847,7 @@ func (p *Parser) _ParseBacktickSubstitution() (Node, string) {
 			}
 			continue
 		}
-		ch = p._Advance()
+		ch = p.Advance()
 		contentChars = append(contentChars, string(ch))
 		textChars = append(textChars, string(ch))
 	}
@@ -7843,12 +7896,12 @@ func (p *Parser) _ParseProcessSubstitution() (Node, string) {
 	_ = e
 	var contentStartChar string
 	_ = contentStartChar
-	if p.AtEnd() || !(_IsRedirectChar(p._Peek())) {
+	if p.AtEnd() || !(_IsRedirectChar(p.Peek())) {
 		return nil, ""
 	}
 	start = p.Pos
-	direction = p._Advance()
-	if p.AtEnd() || p._Peek() != "(" {
+	direction = p.Advance()
+	if p.AtEnd() || p.Peek() != "(" {
 		p.Pos = start
 		return nil, ""
 	}
@@ -8571,10 +8624,10 @@ func (p *Parser) ParseConditionalExpr() *ConditionalExpr {
 	p._SetState(ParserStateFlags_PST_CONDEXPR)
 	p._Word_context = WordCtxCond
 	body = p._ParseCondOr()
-	for !(p.AtEnd()) && _IsWhitespaceNoNewline(p._Peek()) {
+	for !(p.AtEnd()) && _IsWhitespaceNoNewline(p.Peek()) {
 		p.Advance()
 	}
-	if p.AtEnd() || p._Peek() != "]" || p.Pos+1 >= p.Length || string(p.Source[p.Pos+1]) != "]" {
+	if p.AtEnd() || p.Peek() != "]" || p.Pos+1 >= p.Length || string(p.Source[p.Pos+1]) != "]" {
 		p._ClearState(ParserStateFlags_PST_CONDEXPR)
 		p._Word_context = WordCtxNormal
 		panic(NewParseError("Expected ]] to close conditional expression", p.Pos, 0))
@@ -8588,12 +8641,12 @@ func (p *Parser) ParseConditionalExpr() *ConditionalExpr {
 
 func (p *Parser) _CondSkipWhitespace() {
 	for !(p.AtEnd()) {
-		if _IsWhitespaceNoNewline(p._Peek()) {
+		if _IsWhitespaceNoNewline(p.Peek()) {
 			p.Advance()
-		} else if p._Peek() == "\\" && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "\n" {
+		} else if p.Peek() == "\\" && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "\n" {
 			p.Advance()
 			p.Advance()
-		} else if p._Peek() == "\n" {
+		} else if p.Peek() == "\n" {
 			p.Advance()
 		} else {
 			break
@@ -8689,8 +8742,8 @@ func (p *Parser) _ParseCondTerm() Node {
 		return NewUnaryTest(word1.Value, operand)
 	}
 	if !(p._CondAtEnd()) && p.Peek() != "&" && p.Peek() != "|" && p.Peek() != ")" {
-		if _IsRedirectChar(p._Peek()) && !(p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "(") {
-			op = p._Advance()
+		if _IsRedirectChar(p.Peek()) && !(p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "(") {
+			op = p.Advance()
 			p._CondSkipWhitespace()
 			word2 = p._ParseCondWord()
 			if word2 == nil {
@@ -8725,7 +8778,7 @@ func (p *Parser) _ParseCondWord() *Word {
 	if p._CondAtEnd() {
 		return nil
 	}
-	c = p._Peek()
+	c = p.Peek()
 	if _IsParen(c) {
 		return nil
 	}
@@ -8977,8 +9030,8 @@ func (p *Parser) ParseFor() Node {
 	if p._LexIsAtReservedWord("in") {
 		p._LexConsumeWord("in")
 		p.SkipWhitespace()
-		sawDelimiter = !(p.AtEnd()) && _IsSemicolonOrNewline(p._Peek())
-		if !(p.AtEnd()) && p._Peek() == ";" {
+		sawDelimiter = _IsSemicolonOrNewline(p.Peek())
+		if p.Peek() == ";" {
 			p.Advance()
 		}
 		p.SkipWhitespaceAndNewlines()
@@ -8988,9 +9041,9 @@ func (p *Parser) ParseFor() Node {
 			if p.AtEnd() {
 				break
 			}
-			if _IsSemicolonOrNewline(p._Peek()) {
+			if _IsSemicolonOrNewline(p.Peek()) {
 				sawDelimiter = true
-				if p._Peek() == ";" {
+				if p.Peek() == ";" {
 					p.Advance()
 				}
 				break
@@ -9056,25 +9109,25 @@ func (p *Parser) _ParseForArith() *ForArith {
 		ch = p.Peek()
 		if ch == "(" {
 			parenDepth += 1
-			current = append(current, p._Advance())
+			current = append(current, p.Advance())
 		} else if ch == ")" {
 			if parenDepth > 0 {
 				parenDepth -= 1
-				current = append(current, p._Advance())
+				current = append(current, p.Advance())
 			} else if p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == ")" {
 				parts = append(parts, strings.TrimLeft(strings.Join(current, ""), " \t"))
 				p.Advance()
 				p.Advance()
 				break
 			} else {
-				current = append(current, p._Advance())
+				current = append(current, p.Advance())
 			}
 		} else if ch == ";" && parenDepth == 0 {
 			parts = append(parts, strings.TrimLeft(strings.Join(current, ""), " \t"))
 			current = []string{}
 			p.Advance()
 		} else {
-			current = append(current, p._Advance())
+			current = append(current, p.Advance())
 		}
 	}
 	if len(parts) != 3 {
@@ -9126,8 +9179,8 @@ func (p *Parser) ParseSelect() *Select {
 			if p.AtEnd() {
 				break
 			}
-			if _IsSemicolonNewlineBrace(p._Peek()) {
-				if p._Peek() == ";" {
+			if _IsSemicolonNewlineBrace(p.Peek()) {
+				if p.Peek() == ";" {
 					p.Advance()
 				}
 				break
@@ -9310,7 +9363,7 @@ func (p *Parser) ParseFunction() *Function {
 	}
 	p.SkipWhitespace()
 	nameStart = p.Pos
-	for !(p.AtEnd()) && !(_IsMetachar(p._Peek())) && !(_IsQuote(p._Peek())) && !(_IsParen(p._Peek())) {
+	for !(p.AtEnd()) && !(_IsMetachar(p.Peek())) && !(_IsQuote(p.Peek())) && !(_IsParen(p.Peek())) {
 		p.Advance()
 	}
 	name = p.Source[nameStart:p.Pos]

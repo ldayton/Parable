@@ -22,7 +22,7 @@ interface NodeBase {
 // Structural nodes
 export interface Word extends NodeBase {
 	readonly kind: "word";
-	readonly value: string;
+	readonly value: Node;
 	readonly parts: Node[];
 }
 
@@ -198,7 +198,7 @@ export interface ProcessSubstitution extends NodeBase {
 // Arithmetic expression nodes
 export interface ArithNumber extends NodeBase {
 	readonly kind: "number";
-	readonly value: string;
+	readonly value: ArithNode;
 }
 
 export interface ArithEmpty extends NodeBase {
@@ -247,12 +247,12 @@ export interface ArithAssign extends NodeBase {
 	readonly kind: "assign";
 	readonly op: string;
 	readonly target: ArithNode;
-	readonly value: string;
+	readonly value: ArithNode;
 }
 
 export interface ArithTernary extends NodeBase {
 	readonly kind: "ternary";
-	readonly condition: Node;
+	readonly condition: ArithNode;
 	readonly if_true: ArithNode;
 	readonly if_false: ArithNode;
 }
@@ -276,7 +276,7 @@ export interface ArithEscape extends NodeBase {
 
 export interface ArithDeprecated extends NodeBase {
 	readonly kind: "arith-deprecated";
-	readonly expression: ArithNode | null;
+	readonly expression: string;
 }
 
 export interface ArithConcat extends NodeBase {

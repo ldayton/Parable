@@ -76,7 +76,7 @@ def infer_type(prop_name: str, class_name: str) -> str:
             return "Node[]"
 
     # Node types
-    if prop_name in ("body", "then_body", "else_body", "condition", "pipeline", "command"):
+    if prop_name in ("body", "then_body", "else_body", "pipeline", "command"):
         if class_name in ("ConditionalExpr",):
             return "CondNode | string"
         if prop_name in ("else_body", "pipeline"):
@@ -91,7 +91,20 @@ def infer_type(prop_name: str, class_name: str) -> str:
             return "Word"
         return "ArithNode"
 
-    if prop_name in ("left", "right", "operand", "expression", "index", "if_true", "if_false"):
+    if prop_name in (
+        "left",
+        "right",
+        "operand",
+        "expression",
+        "index",
+        "if_true",
+        "if_false",
+        "condition",
+        "value",
+    ):
+        # ArithDeprecated.expression is a string (raw text), not ArithNode
+        if class_name == "ArithDeprecated" and prop_name == "expression":
+            return "string"
         if class_name.startswith("Arith") or class_name in (
             "ArithmeticExpansion",
             "ArithmeticCommand",

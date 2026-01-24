@@ -41,7 +41,6 @@ class JSTranspiler(ast.NodeVisitor):
         self._reassigned_vars = set()
         self._emitted_vars = set()
         self._top_level_first_assign = set()  # Vars first assigned at top level
-        self._block_depth = 0
 
     def emit(self, text: str):
         self.output.append("    " * self.indent + text)
@@ -113,16 +112,15 @@ class JSTranspiler(ast.NodeVisitor):
             # Skip typing imports (from typing import ...)
             if isinstance(stmt, ast.ImportFrom) and stmt.module == "typing":
                 continue
-            # Skip type alias assignments (ArithNode = Union[...])
+            # Skip type aliases and unused module-level variable definitions
             if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+                # Type alias (ArithNode = Union[...])
                 if isinstance(stmt.value, ast.Subscript):
                     if isinstance(stmt.value.value, ast.Name) and stmt.value.value.id == "Union":
                         continue
-            # Skip unused module-level variable definitions
-            if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+                # Unused variable
                 if isinstance(stmt.targets[0], ast.Name):
-                    var_name = stmt.targets[0].id
-                    if not self._is_name_used(var_name, node, stmt):
+                    if not self._is_name_used(stmt.targets[0].id, node, stmt):
                         continue
             self.emit_comments_before(stmt.lineno)
             self.visit(stmt)
@@ -215,11 +213,6 @@ class JSTranspiler(ast.NodeVisitor):
         elif isinstance(target, ast.Starred):
             names.update(self._collect_names_from_target(target.value))
         return names
-
-    def _collect_local_vars(self, stmts: list) -> set:
-        """Collect all variable names assigned in a list of statements."""
-        counts, _ = self._count_assignments(stmts)
-        return set(counts.keys())
 
     def _count_assignments(
         self, stmts: list, counts: dict = None, top_level: set = None, in_block: bool = False
@@ -743,26 +736,27 @@ class JSTranspiler(ast.NodeVisitor):
                 return f"/^[a-zA-Z0-9]$/.test({obj})"
             if method == "isspace":
                 return f"/^\\s$/.test({obj})"
-            # Handle lstrip with character set argument
-            if method == "lstrip":
+            # Handle lstrip/rstrip with character set argument
+            if method in ("lstrip", "rstrip"):
+                anchor, fallback = (
+                    ("^", "trimStart()") if method == "lstrip" else ("$", "trimEnd()")
+                )
                 if len(node.args) == 1:
                     arg = node.args[0]
                     if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
                         escaped = self._escape_regex_chars(arg.value)
-                        return f'{obj}.replace(/^[{escaped}]+/, "")'
+                        return (
+                            f'{obj}.replace(/{anchor}[{escaped}]+/, "")'
+                            if method == "lstrip"
+                            else f'{obj}.replace(/[{escaped}]+{anchor}/, "")'
+                        )
                     chars = self.visit_expr(arg)
-                    return f'{obj}.replace(new RegExp("^[" + {chars} + "]+"), "")'
-                return f"{obj}.trimStart()"
-            # Handle rstrip with character set argument
-            if method == "rstrip":
-                if len(node.args) == 1:
-                    arg = node.args[0]
-                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-                        escaped = self._escape_regex_chars(arg.value)
-                        return f'{obj}.replace(/[{escaped}]+$/, "")'
-                    chars = self.visit_expr(arg)
-                    return f'{obj}.replace(new RegExp("[" + {chars} + "]+$"), "")'
-                return f"{obj}.trimEnd()"
+                    return (
+                        f'{obj}.replace(new RegExp("{anchor}[" + {chars} + "]+"), "")'
+                        if method == "lstrip"
+                        else f'{obj}.replace(new RegExp("[" + {chars} + "]+{anchor}"), "")'
+                    )
+                return f"{obj}.{fallback}"
             # Handle str.encode() - returns iterable of byte values (Uint8Array)
             if method == "encode":
                 return f"new TextEncoder().encode({obj})"
@@ -784,16 +778,11 @@ class JSTranspiler(ast.NodeVisitor):
                     items = self.visit_expr(node.args[0])
                     return f"{obj}.push(...{items})"
             # Handle endswith/startswith with tuple argument (JS only accepts string)
-            if method == "endswith" and len(node.args) == 1:
+            if method in ("endswith", "startswith") and len(node.args) == 1:
                 if isinstance(node.args[0], (ast.Tuple, ast.List)):
+                    js_method = "endsWith" if method == "endswith" else "startsWith"
                     checks = [
-                        f"{obj}.endsWith({self.visit_expr(elt)})" for elt in node.args[0].elts
-                    ]
-                    return f"({' || '.join(checks)})"
-            if method == "startswith" and len(node.args) == 1:
-                if isinstance(node.args[0], (ast.Tuple, ast.List)):
-                    checks = [
-                        f"{obj}.startsWith({self.visit_expr(elt)})" for elt in node.args[0].elts
+                        f"{obj}.{js_method}({self.visit_expr(elt)})" for elt in node.args[0].elts
                     ]
                     return f"({' || '.join(checks)})"
             method = method_map.get(method, method)

@@ -10032,7 +10032,7 @@ class Parser:
                         pattern_chars.append(self.advance())
                         if not self.at_end():
                             pattern_chars.append(self.advance())
-                elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                elif _is_expansion_start(self.source, self.pos, "$("):
                     # $( or $(( - command sub or arithmetic
                     pattern_chars.append(self.advance())  # $
                     pattern_chars.append(self.advance())  # (

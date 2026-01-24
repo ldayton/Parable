@@ -153,7 +153,7 @@ See [tests/README.md](tests/README.md) for options and coverage details.
 src/
 ├── parable.py                   # Single-file Python parser
 ├── parable.js                   # Transpiled Javascript parser
-└── parable.d.ts                 # TypeScript definitions
+└── parable.d.ts                 # Typescript definitions
 
 tests/
 ├── bin/                         # Test runners

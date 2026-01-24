@@ -3456,7 +3456,9 @@ class Word(Node):
                         brace_quote.double = not brace_quote.double
                     elif not brace_quote.in_quotes():
                         # Skip over $(...) command substitutions
-                        if _is_expansion_start(value, j, "$(") and not _starts_with_at(value, j, "$(("):
+                        if _is_expansion_start(value, j, "$(") and not _starts_with_at(
+                            value, j, "$(("
+                        ):
                             j = _find_cmdsub_end(value, j + 2)
                             continue
                         if c == "{":

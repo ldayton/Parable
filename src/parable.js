@@ -90,6 +90,14 @@ function _countConsecutiveDollarsBefore(s, pos) {
 	return count;
 }
 
+function _isExpansionStart(s, pos, delimiter) {
+	if (!_startsWithAt(s, pos, delimiter)) {
+		return false;
+	}
+	// If preceded by odd number of $, this $ pairs with previous to form $$
+	return _countConsecutiveDollarsBefore(s, pos) % 2 === 0;
+}
+
 class TokenType {
 	static EOF = 0;
 	static WORD = 1;
@@ -1792,11 +1800,7 @@ class Lexer {
 						content_chars.push(this.advance());
 					}
 				}
-			} else if (
-				ch === "$" &&
-				this.pos + 1 < this.length &&
-				this.source[this.pos + 1] === "("
-			) {
+			} else if (_isExpansionStart(this.source, this.pos, "$(")) {
 				// Handle command substitution $(...)
 				this._syncToParser();
 				[cmdsub_node, cmdsub_text] = this._parser._parseCommandSubstitution();
@@ -2501,12 +2505,7 @@ class Word extends Node {
 				quote.double = !quote.double;
 				result.push(c);
 				i += 1;
-			} else if (
-				c === "$" &&
-				i + 1 < value.length &&
-				value[i + 1] === "{" &&
-				!quote.single
-			) {
+			} else if (_isExpansionStart(value, i, "${") && !quote.single) {
 				// Check for ${ param expansion
 				result.push("$");
 				result.push("{");
@@ -2800,7 +2799,7 @@ class Word extends Node {
 			}
 			// Track brace depth for parameter expansions
 			if (!quote.single) {
-				if (_startsWithAt(value, i, "${")) {
+				if (_isExpansionStart(value, i, "${")) {
 					brace_depth += 1;
 					quote.push();
 					result.push("${");
@@ -3314,11 +3313,7 @@ class Word extends Node {
 							dq_content.push(inner[j + 1]);
 							j += 2;
 						}
-					} else if (
-						inner[j] === "$" &&
-						j + 1 < inner.length &&
-						inner[j + 1] === "{"
-					) {
+					} else if (_isExpansionStart(inner, j, "${")) {
 						// Start of ${...} expansion
 						dq_content.push("${");
 						dq_brace_depth += 1;
@@ -3349,12 +3344,7 @@ class Word extends Node {
 					normalized.push(inner.slice(i, i + 2));
 					i += 2;
 				}
-			} else if (
-				ch === "$" &&
-				i + 2 < inner.length &&
-				inner[i + 1] === "(" &&
-				inner[i + 2] === "("
-			) {
+			} else if (_isExpansionStart(inner, i, "$((")) {
 				// Arithmetic expansion $(( - find matching )) and preserve as-is
 				in_whitespace = false;
 				j = i + 3;
@@ -3380,7 +3370,7 @@ class Word extends Node {
 				}
 				normalized.push(inner.slice(i, j));
 				i = j;
-			} else if (ch === "$" && i + 1 < inner.length && inner[i + 1] === "(") {
+			} else if (_isExpansionStart(inner, i, "$(")) {
 				// Command substitution - find matching ) and preserve as-is
 				// (formatting is handled later by _format_command_substitutions)
 				in_whitespace = false;
@@ -3452,7 +3442,7 @@ class Word extends Node {
 				// Preserve process substitution as-is
 				normalized.push(inner.slice(i, j));
 				i = j;
-			} else if (ch === "$" && i + 1 < inner.length && inner[i + 1] === "{") {
+			} else if (_isExpansionStart(inner, i, "${")) {
 				// Start of ${...} expansion
 				in_whitespace = false;
 				normalized.push("${");
@@ -3513,7 +3503,7 @@ class Word extends Node {
 		i = 0;
 		while (i < value.length) {
 			// Check for $(( arithmetic expression
-			if (_startsWithAt(value, i, "$((")) {
+			if (_isExpansionStart(value, i, "$((")) {
 				start = i;
 				i += 3;
 				depth = 2;
@@ -3862,7 +3852,7 @@ class Word extends Node {
 			// Track $((...)) arithmetic - inside it, >( and <( are not process subs
 			// But skip if this is actually $( ( (command substitution with subshell)
 			if (
-				_startsWithAt(value, i, "$((") &&
+				_isExpansionStart(value, i, "$((") &&
 				!_isBackslashEscaped(value, i) &&
 				has_arith
 			) {
@@ -3900,7 +3890,7 @@ class Word extends Node {
 			}
 			// Check for $( command substitution (but not $(( arithmetic or escaped \$()
 			// Special case: $(( without arithmetic nodes - preserve as-is
-			if (_startsWithAt(value, i, "$((") && !has_arith) {
+			if (_isExpansionStart(value, i, "$((") && !has_arith) {
 				// This looks like $(( but wasn't parsed as arithmetic
 				// It's actually $( ( ... ) ) - preserve original text
 				j = _findCmdsubEnd(value, i + 2);
@@ -3973,7 +3963,7 @@ class Word extends Node {
 				cmdsub_idx += 1;
 				i = j;
 			} else if (
-				_startsWithAt(value, i, "${") &&
+				_isExpansionStart(value, i, "${") &&
 				i + 2 < value.length &&
 				_isFunsubChar(value[i + 2]) &&
 				!_isBackslashEscaped(value, i)
@@ -4153,10 +4143,10 @@ class Word extends Node {
 					i += 1;
 				}
 			} else if (
-				(_startsWithAt(value, i, "${ ") ||
-					_startsWithAt(value, i, "${\t") ||
-					_startsWithAt(value, i, "${\n") ||
-					_startsWithAt(value, i, "${|")) &&
+				(_isExpansionStart(value, i, "${ ") ||
+					_isExpansionStart(value, i, "${\t") ||
+					_isExpansionStart(value, i, "${\n") ||
+					_isExpansionStart(value, i, "${|")) &&
 				!_isBackslashEscaped(value, i)
 			) {
 				// Check for ${ (space/tab/newline) or ${| brace command substitution
@@ -4206,7 +4196,7 @@ class Word extends Node {
 				}
 				i = j;
 			} else if (
-				_startsWithAt(value, i, "${") &&
+				_isExpansionStart(value, i, "${") &&
 				!_isBackslashEscaped(value, i)
 			) {
 				// Process regular ${...} parameter expansions (recursively format cmdsubs inside)
@@ -4228,7 +4218,7 @@ class Word extends Node {
 					} else if (!brace_quote.inQuotes()) {
 						// Skip over $(...) command substitutions
 						if (
-							_startsWithAt(value, j, "$(") &&
+							_isExpansionStart(value, j, "$(") &&
 							!_startsWithAt(value, j, "$((")
 						) {
 							j = _findCmdsubEnd(value, j + 2);
@@ -5331,11 +5321,7 @@ class CasePattern extends Node {
 				current.push("(");
 				depth += 1;
 				i += 2;
-			} else if (
-				ch === "$" &&
-				i + 1 < this.pattern.length &&
-				this.pattern[i + 1] === "("
-			) {
+			} else if (_isExpansionStart(this.pattern, i, "$(")) {
 				// $( command sub or $(( arithmetic - track depth
 				current.push(ch);
 				current.push("(");
@@ -6807,11 +6793,7 @@ function _isValidArithmeticStart(value, start) {
 	while (scan_i < value.length) {
 		scan_c = value[scan_i];
 		// Skip over $( command subs - their parens shouldn't count
-		if (
-			scan_c === "$" &&
-			scan_i + 1 < value.length &&
-			value[scan_i + 1] === "("
-		) {
+		if (_isExpansionStart(value, scan_i, "$(")) {
 			scan_i = _findCmdsubEnd(value, scan_i + 2);
 			continue;
 		}
@@ -6959,7 +6941,7 @@ function _findCmdsubEnd(value, start) {
 			continue;
 		}
 		// Handle arithmetic expressions $((
-		if (_startsWithAt(value, i, "$((")) {
+		if (_isExpansionStart(value, i, "$((")) {
 			if (_isValidArithmeticStart(value, i)) {
 				arith_depth += 1;
 				i += 3;
@@ -7110,11 +7092,11 @@ function _findBracedParamEnd(value, start) {
 				return i + 1;
 			}
 		}
-		if (c === "$" && i + 1 < value.length && value[i + 1] === "(") {
+		if (_isExpansionStart(value, i, "$(")) {
 			i = _findCmdsubEnd(value, i + 2);
 			continue;
 		}
-		if (c === "$" && i + 1 < value.length && value[i + 1] === "{") {
+		if (_isExpansionStart(value, i, "${")) {
 			i = _findBracedParamEnd(value, i + 2);
 			continue;
 		}
@@ -7740,11 +7722,11 @@ function _skipMatchedPair(s, start, open, close, flags) {
 			i = _skipDoubleQuoted(s, i + 1);
 			continue;
 		}
-		if (!literal && c === "$" && i + 1 < n && s[i + 1] === "(") {
+		if (!literal && _isExpansionStart(s, i, "$(")) {
 			i = _findCmdsubEnd(s, i + 2);
 			continue;
 		}
-		if (!literal && c === "$" && i + 1 < n && s[i + 1] === "{") {
+		if (!literal && _isExpansionStart(s, i, "${")) {
 			i = _findBracedParamEnd(s, i + 2);
 			continue;
 		}
@@ -10583,11 +10565,7 @@ class Parser {
 					if (!this.atEnd()) {
 						this.advance();
 					}
-				} else if (
-					ch === "$" &&
-					this.pos + 1 < this.length &&
-					this.source[this.pos + 1] === "("
-				) {
+				} else if (_isExpansionStart(this.source, this.pos, "$(")) {
 					// Command substitution embedded in delimiter
 					delimiter_chars.push(this.advance());
 					delimiter_chars.push(this.advance());
@@ -12016,11 +11994,7 @@ class Parser {
 							pattern_chars.push(this.advance());
 						}
 					}
-				} else if (
-					ch === "$" &&
-					this.pos + 1 < this.length &&
-					this.source[this.pos + 1] === "("
-				) {
+				} else if (_isExpansionStart(this.source, this.pos, "$(")) {
 					// $( or $(( - command sub or arithmetic
 					pattern_chars.push(this.advance());
 					pattern_chars.push(this.advance());
@@ -12362,7 +12336,7 @@ class Parser {
 		brace_depth = 0;
 		i = 0;
 		while (i < name.length) {
-			if (i + 1 < name.length && name[i] === "$" && name[i + 1] === "{") {
+			if (_isExpansionStart(name, i, "${")) {
 				brace_depth += 1;
 				i += 2;
 				continue;

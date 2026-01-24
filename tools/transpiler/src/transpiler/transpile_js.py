@@ -49,13 +49,17 @@ class JSTranspiler(ast.NodeVisitor):
         self.last_line = 0
         self._in_assignment_target = False
 
-    def emit(self, text: str):
+    def emit(self, text: str) -> None:
         self.output.append("    " * self.indent + text)
 
-    def emit_raw(self, text: str):
+    def emit_raw(self, text: str) -> None:
         self.output.append(text)
 
-    def emit_comments_before(self, line: int):
+    def emit_same_line(self, text: str) -> None:
+        """Emit text at current indent, closing previous block on same line."""
+        self.output.append("    " * self.indent + text)
+
+    def emit_comments_before(self, line: int) -> None:
         for comment_line in self._sorted_comment_lines:
             if comment_line >= line:
                 break
@@ -142,33 +146,34 @@ class JSTranspiler(ast.NodeVisitor):
             node.id.endswith(self._LIST_SUFFIXES) or node.id in self._LIST_SUFFIXES
         )
 
-    def visit_Module(self, node: ast.Module):
-        # Emit module docstring as JSDoc comment
-        if (
+    def _emit_module_docstring(self, node: ast.Module) -> None:
+        """Emit module docstring as JSDoc comment if present."""
+        if not (
             node.body
             and isinstance(node.body[0], ast.Expr)
             and isinstance(node.body[0].value, ast.Constant)
             and isinstance(node.body[0].value.value, str)
         ):
-            docstring = (
-                node.body[0]
-                .value.value.strip()
-                .replace("Parable -", "Parable.js -", 1)
-                .replace("from parable import parse", "import { parse } from './parable.js';")
-                .replace("ast = parse(", "const ast = parse(")
-            )
-            lines = docstring.split("\n")
-            if len(lines) == 1:
-                self.emit(f"/** {docstring} */")
-            else:
-                self.emit("/**")
-                for line in lines:
-                    if line.strip():
-                        self.emit(f" * {line}")
-                    else:
-                        self.emit(" *")
-                self.emit(" */")
-            self.emit("")
+            return
+        docstring = (
+            node.body[0]
+            .value.value.strip()
+            .replace("Parable -", "Parable.js -", 1)
+            .replace("from parable import parse", "import { parse } from './parable.js';")
+            .replace("ast = parse(", "const ast = parse(")
+        )
+        lines = docstring.split("\n")
+        if len(lines) == 1:
+            self.emit(f"/** {docstring} */")
+        else:
+            self.emit("/**")
+            for line in lines:
+                self.emit(f" * {line}" if line.strip() else " *")
+            self.emit(" */")
+        self.emit("")
+
+    def visit_Module(self, node: ast.Module):
+        self._emit_module_docstring(node)
         for stmt in node.body:
             # Skip typing imports (from typing import ...)
             if isinstance(stmt, ast.ImportFrom) and stmt.module == "typing":
@@ -346,7 +351,7 @@ class JSTranspiler(ast.NodeVisitor):
         scope.emitted = param_names | hoisted
         return scope
 
-    def _emit_constructor_body(self, node: ast.FunctionDef):
+    def _emit_constructor_body(self, node: ast.FunctionDef) -> None:
         """Emit constructor body with super() handling."""
         super_stmt = None
         other_stmts = []
@@ -486,13 +491,13 @@ class JSTranspiler(ast.NodeVisitor):
             return
         self._emit_if(node, is_elif=False)
 
-    def _emit_if(self, node: ast.If, is_elif: bool):
+    def _emit_if(self, node: ast.If, is_elif: bool) -> None:
         test = self.visit_expr(node.test)
         # Handle truthiness checks - in Python [] is falsy but in JS it's truthy
         if self._is_array_attr(node.test):
             test = f"{test}?.length"
         if is_elif:
-            self.emit_raw("    " * self.indent + f"}} else if ({test}) {{")
+            self.emit_same_line(f"}} else if ({test}) {{")
         else:
             self.emit(f"if ({test}) {{")
         with self._indented():
@@ -521,7 +526,7 @@ class JSTranspiler(ast.NodeVisitor):
                 self.visit(stmt)
         self.emit("}")
 
-    def _emit_range_loop(self, target: str, args: list[ast.expr]) -> str:
+    def _emit_range_header(self, target: str, args: list[ast.expr]) -> str:
         """Build a C-style for loop header from range() arguments."""
         if len(args) == 1:
             return f"for (let {target} = 0; {target} < {self.visit_expr(args[0])}; {target}++)"
@@ -544,7 +549,7 @@ class JSTranspiler(ast.NodeVisitor):
             and isinstance(iter_expr.func, ast.Name)
             and iter_expr.func.id == "range"
         ):
-            self.emit(f"{self._emit_range_loop(target, iter_expr.args)} {{")
+            self.emit(f"{self._emit_range_header(target, iter_expr.args)} {{")
         else:
             self.emit(f"for (let {target} of {self.visit_expr(iter_expr)}) {{")
         with self._indented():
@@ -794,11 +799,12 @@ class JSTranspiler(ast.NodeVisitor):
     def visit_expr_Call(self, node: ast.Call) -> str:
         # Combine positional and keyword args (JS doesn't have kwargs, so treat as positional)
         all_args = [self._visit_callback_arg(a) for a in node.args]
-        # Handle keyword args that skip positional defaults
-        # Specific case: _format_cmdsub_node(x, in_procsub=True) -> FormatCmdsubNode(x, 0, true)
+        # Python kwargs with skipped positional defaults need explicit JS defaults
+        # Maps: (kwarg_name, current_arg_count) -> defaults to insert before the kwarg
+        _KWARG_DEFAULTS = {("in_procsub", 1): ["0"]}  # indent=0 default
         for kw in node.keywords:
-            if kw.arg == "in_procsub" and len(all_args) == 1:
-                all_args.append("0")  # default for indent
+            for default in _KWARG_DEFAULTS.get((kw.arg, len(all_args)), []):
+                all_args.append(default)
             all_args.append(self.visit_expr(kw.value))
         args = ", ".join(all_args)
         if isinstance(node.func, ast.Attribute):

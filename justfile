@@ -95,7 +95,7 @@ _ensure-biome:
 
 # Internal: run all parallel checks
 [parallel]
-_check-parallel: test-all lint fmt lock-check check-dump-ast check-style check-transpile test-js fmt-js
+_check-parallel: test-all lint fmt lock-check check-dump-ast check-style check-transpile test-js fmt-js fmt-dts check-dts
 
 # Run all checks (tests, lint, format, lock, style) in parallel
 check: _ensure-biome _check-parallel
@@ -188,3 +188,11 @@ bench-js *ARGS:
 fmt-js *ARGS:
     npx -y @biomejs/biome format {{ if ARGS == "--fix" { "--write" } else { "" } }} src/parable.js 2>&1 | sed -u "s/^/[fmt-js] /" | tee /tmp/{{project}}-{{run_id}}-fmt-js.log
     {{ if ARGS == "--fix" { "npx -y @biomejs/biome format --write src/parable.js >/dev/null 2>&1 || true" } else { "" } }}
+
+# Format TypeScript definitions (--fix to apply changes)
+fmt-dts *ARGS:
+    npx -y @biomejs/biome format {{ if ARGS == "--fix" { "--write" } else { "" } }} src/parable.d.ts 2>&1 | sed -u "s/^/[fmt-dts] /" | tee /tmp/{{project}}-{{run_id}}-fmt-dts.log
+
+# Type-check TypeScript definitions
+check-dts:
+    npx -y -p typescript tsc --noEmit 2>&1 | sed -u "s/^/[check-dts] /" | tee /tmp/{{project}}-{{run_id}}-check-dts.log

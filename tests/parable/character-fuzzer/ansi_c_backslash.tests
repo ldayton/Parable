@@ -1,0 +1,19 @@
+=== control-backslash consumes both backslashes
+$'\c\\'
+---
+(command (word "''"))
+---
+
+
+=== control-backslash followed by more backslashes
+$'\c\\\\'
+---
+(command (word "'\\'"))
+---
+
+
+=== control-backslash followed by other char
+echo $'\c\\X'
+---
+(command (word "echo") (word "'X'"))
+---

@@ -2280,10 +2280,12 @@ class Lexer {
 					this._dolbrace_state = saved_dolbrace;
 					return [new ParamIndirect(param, op, arg), text];
 				}
-				// Fell through - pattern didn't match, return None
-				this._dolbrace_state = saved_dolbrace;
-				this.pos = start;
-				return [null, ""];
+				// Fell through - continue to general parsing
+				if (this.atEnd()) {
+					this._dolbrace_state = saved_dolbrace;
+					throw new MatchedPairError("unexpected EOF looking for `}'", start);
+				}
+				this.pos = start + 2;
 			} else {
 				// ${! followed by non-param char like | - fall through to regular parsing
 				this.pos = start + 2;
@@ -2366,6 +2368,12 @@ class Lexer {
 			} else if (!this.atEnd() && ["'", '"'].includes(this.peek())) {
 				// Quotes start the argument, not the operator
 				op = "";
+			} else if (!this.atEnd() && this.peek() === "\\") {
+				// Backslash escapes the following character
+				op = this.advance();
+				if (!this.atEnd()) {
+					op += this.advance();
+				}
 			} else {
 				op = this.advance();
 			}
@@ -2378,11 +2386,7 @@ class Lexer {
 			arg = this._collectParamArgument(flags);
 		} catch (e) {
 			this._dolbrace_state = saved_dolbrace;
-			if (this.atEnd()) {
-				throw e;
-			}
-			this.pos = start;
-			return [null, ""];
+			throw e;
 		}
 		// Format process substitution content within param expansion
 		if (["<", ">"].includes(op) && arg.startsWith("(") && arg.endsWith(")")) {
@@ -2655,7 +2659,8 @@ class Word extends Node {
 			inner,
 			j,
 			result,
-			simple;
+			simple,
+			skip_extra;
 		if (!(value.startsWith("'") && value.endsWith("'"))) {
 			return value;
 		}
@@ -2763,13 +2768,22 @@ class Word extends Node {
 					// Control character \cX - mask with 0x1f
 					if (i + 3 <= inner.length) {
 						ctrl_char = inner[i + 2];
+						// POSIX: $'\c\\' consumes both backslashes
+						skip_extra = 0;
+						if (
+							ctrl_char === "\\" &&
+							i + 4 <= inner.length &&
+							inner[i + 3] === "\\"
+						) {
+							skip_extra = 1;
+						}
 						ctrl_val = ctrl_char.charCodeAt(0) & 31;
 						if (ctrl_val === 0) {
 							// NUL truncates string
 							return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
 						}
 						this._appendWithCtlesc(result, ctrl_val);
-						i += 3;
+						i += 3 + skip_extra;
 					} else {
 						result.push(inner[i].charCodeAt(0));
 						i += 1;

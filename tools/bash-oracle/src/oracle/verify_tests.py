@@ -164,7 +164,6 @@ def worker_process(work_queue, result_queue, stop_event) -> None:
             result_queue.put(
                 WorkerResult(
                     passed=False,
-                    skipped=False,
                     failure={
                         "file": tc.file,
                         "line": tc.line,

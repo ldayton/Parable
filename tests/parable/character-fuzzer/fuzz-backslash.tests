@@ -1,0 +1,16 @@
+# Original: 'show-values() {\n  echo values: ${A[@]}\n}\n\ndeclare -A A=([\'K\']=val)\nshow-values\n\ndeclare ref=\'A["K"]\'\necho ref ${!ref}\n\nkey=K\ndeclare ref=\'A[$key]\'\necho ref ${!ref}'
+# Parable:  (function "sow-values" (brace-group (command (word "echo") (word "values:") (word "${A[@]}")))) (command (word "declare") (word "-A") (word "A=(['K']=val)")) (command (word "show-values")) (command (word "declare") (word "ref='A[\"K\"]'")) (command (word "echo") (word "ref") (word "${!ref}")) (command (word "key=K")) (command (word "declare") (word "ref='A[$key]'")) (command (word "echo") (word "ref") (word "${!ref"))
+=== delete '}' at 162; delete 'h' at 1
+${!r
+---
+<error>
+---
+
+# Original: "set -- one two\nref1='1'\necho ref1=${!ref1}\nref2='2'\necho ref2=${!ref2}"
+# Parable:  (command (word "set") (word "--") (word "one") (word "two")) (command (word "ref1='1'")) (command (word "echo") (word "ref1=${!re-f1}")) (command (word "ref2='2'")) (command (word "echo") (word "ref2=${!ref2\\}"))
+=== insert '-' at 39; insert '\\' at 70
+${2\}
+---
+<error>
+---
+

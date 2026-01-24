@@ -1936,10 +1936,11 @@ class Lexer:
                     text = _substring(self.source, start, self.pos)
                     self._dolbrace_state = saved_dolbrace
                     return ParamIndirect(param, op, arg), text
-                # Fell through - pattern didn't match, return None
-                self._dolbrace_state = saved_dolbrace
-                self.pos = start
-                return None, ""
+                # Fell through - continue to general parsing
+                if self.at_end():
+                    self._dolbrace_state = saved_dolbrace
+                    raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
+                self.pos = start + 2  # reset to just after ${
             else:
                 # ${! followed by non-param char like | - fall through to regular parsing
                 self.pos = start + 2  # reset to just after ${
@@ -2011,6 +2012,11 @@ class Lexer:
             elif not self.at_end() and self.peek() in ("'", '"'):
                 # Quotes start the argument, not the operator
                 op = ""
+            elif not self.at_end() and self.peek() == "\\":
+                # Backslash escapes the following character
+                op = self.advance()
+                if not self.at_end():
+                    op += self.advance()
             else:
                 op = self.advance()
         # Update dolbrace state based on operator
@@ -2021,10 +2027,7 @@ class Lexer:
             arg = self._collect_param_argument(flags)
         except MatchedPairError as e:
             self._dolbrace_state = saved_dolbrace
-            if self.at_end():
-                raise e  # EOF inside ${...} is always an error
-            self.pos = start
-            return None, ""
+            raise e
         # Format process substitution content within param expansion
         if op in ("<", ">") and arg.startswith("(") and arg.endswith(")"):
             inner = arg[1:-1]
@@ -2372,12 +2375,16 @@ class Word(Node):
                     # Control character \cX - mask with 0x1f
                     if i + 3 <= len(inner):
                         ctrl_char = inner[i + 2]
+                        # POSIX: $'\c\\' consumes both backslashes
+                        skip_extra = 0
+                        if ctrl_char == "\\" and i + 4 <= len(inner) and inner[i + 3] == "\\":
+                            skip_extra = 1
                         ctrl_val = ord(ctrl_char) & 0x1F
                         if ctrl_val == 0:
                             # NUL truncates string
                             return "'" + result.decode("utf-8", errors="replace") + "'"
                         self._append_with_ctlesc(result, ctrl_val)
-                        i += 3
+                        i += 3 + skip_extra
                     else:
                         result.append(ord(inner[i]))
                         i += 1

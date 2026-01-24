@@ -851,7 +851,8 @@ class Lexer {
 			param_node,
 			param_text,
 			pass_next,
-			start;
+			start,
+			was_dollar;
 		if (flags == null) {
 			flags = 0;
 		}
@@ -859,6 +860,7 @@ class Lexer {
 		count = 1;
 		chars = [];
 		pass_next = false;
+		was_dollar = false;
 		while (count > 0) {
 			if (this.atEnd()) {
 				throw new MatchedPairError(
@@ -880,6 +882,7 @@ class Lexer {
 			if (pass_next) {
 				pass_next = false;
 				chars.push(ch);
+				was_dollar = ch === "$";
 				continue;
 			}
 			// Inside single quotes, almost everything is literal
@@ -895,6 +898,7 @@ class Lexer {
 					pass_next = true;
 				}
 				chars.push(ch);
+				was_dollar = false;
 				continue;
 			}
 			// Backslash - set pass_next flag
@@ -902,10 +906,12 @@ class Lexer {
 				// Line continuation - skip \n
 				if (!this.atEnd() && this.peek() === "\n") {
 					this.advance();
+					was_dollar = false;
 					continue;
 				}
 				pass_next = true;
 				chars.push(ch);
+				was_dollar = false;
 				continue;
 			}
 			// Closing delimiter
@@ -915,6 +921,7 @@ class Lexer {
 					break;
 				}
 				chars.push(ch);
+				was_dollar = false;
 				continue;
 			}
 			// Opening delimiter (only when open != close)
@@ -925,6 +932,7 @@ class Lexer {
 					count += 1;
 				}
 				chars.push(ch);
+				was_dollar = false;
 				continue;
 			}
 			// Quote characters trigger recursion (when not already in quote mode)
@@ -935,6 +943,7 @@ class Lexer {
 					nested = this._parseMatchedPair("'", "'", flags);
 					chars.push(nested);
 					chars.push("'");
+					was_dollar = false;
 					continue;
 				} else if (ch === '"') {
 					// Double quote - recursively parse until matching "
@@ -946,6 +955,7 @@ class Lexer {
 					);
 					chars.push(nested);
 					chars.push('"');
+					was_dollar = false;
 					continue;
 				} else if (ch === "`") {
 					// Backtick - recursively parse until matching `
@@ -953,6 +963,7 @@ class Lexer {
 					nested = this._parseMatchedPair("`", "`", flags);
 					chars.push(nested);
 					chars.push("`");
+					was_dollar = false;
 					continue;
 				}
 			}
@@ -970,6 +981,7 @@ class Lexer {
 						) {
 							// Not funsub - treat $ as literal
 							chars.push(ch);
+							was_dollar = true;
 							continue;
 						}
 					}
@@ -982,9 +994,11 @@ class Lexer {
 					this._syncFromParser();
 					if (param_node) {
 						chars.push(param_text);
+						was_dollar = false;
 					} else {
 						// Parser failed - add $ as literal
 						chars.push(this.advance());
+						was_dollar = true;
 					}
 					continue;
 				} else if (next_ch === "(") {
@@ -998,6 +1012,7 @@ class Lexer {
 						this._syncFromParser();
 						if (arith_node) {
 							chars.push(arith_text);
+							was_dollar = false;
 						} else {
 							// Arithmetic failed - try as command substitution fallback
 							this._syncToParser();
@@ -1005,10 +1020,12 @@ class Lexer {
 							this._syncFromParser();
 							if (cmd_node) {
 								chars.push(cmd_text);
+								was_dollar = false;
 							} else {
 								// Both failed - add $( as literal
 								chars.push(this.advance());
 								chars.push(this.advance());
+								was_dollar = false;
 							}
 						}
 					} else {
@@ -1017,10 +1034,12 @@ class Lexer {
 						this._syncFromParser();
 						if (cmd_node) {
 							chars.push(cmd_text);
+							was_dollar = false;
 						} else {
 							// Parser failed - add $( as literal
 							chars.push(this.advance());
 							chars.push(this.advance());
+							was_dollar = false;
 						}
 					}
 					continue;
@@ -1032,14 +1051,17 @@ class Lexer {
 					this._syncFromParser();
 					if (arith_node) {
 						chars.push(arith_text);
+						was_dollar = false;
 					} else {
 						// Parser failed - add $ as literal
 						chars.push(this.advance());
+						was_dollar = true;
 					}
 					continue;
 				}
 			}
 			chars.push(ch);
+			was_dollar = ch === "$";
 		}
 		return chars.join("");
 	}

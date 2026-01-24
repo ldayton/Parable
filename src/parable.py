@@ -1061,9 +1061,7 @@ class Lexer:
         Wraps _parse_matched_pair() with DOLBRACE flag for parameter expansion arguments.
         was_dollar should be True if the param name ended with $ (for $$ handling).
         """
-        return self._parse_matched_pair(
-            "{", "}", flags | MatchedPairFlags.DOLBRACE, was_dollar
-        )
+        return self._parse_matched_pair("{", "}", flags | MatchedPairFlags.DOLBRACE, was_dollar)
 
     def _read_word_internal(
         self,

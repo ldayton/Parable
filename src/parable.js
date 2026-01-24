@@ -847,7 +847,7 @@ class Lexer {
 		return true;
 	}
 
-	_parseMatchedPair(open_char, close_char, flags) {
+	_parseMatchedPair(open_char, close_char, flags, initial_was_dollar) {
 		let after_brace_pos,
 			arith_node,
 			arith_text,
@@ -872,11 +872,14 @@ class Lexer {
 		if (flags == null) {
 			flags = 0;
 		}
+		if (initial_was_dollar == null) {
+			initial_was_dollar = false;
+		}
 		start = this.pos;
 		count = 1;
 		chars = [];
 		pass_next = false;
-		was_dollar = false;
+		was_dollar = initial_was_dollar;
 		was_gtlt = false;
 		while (count > 0) {
 			if (this.atEnd()) {
@@ -1139,11 +1142,19 @@ class Lexer {
 		return chars.join("");
 	}
 
-	_collectParamArgument(flags) {
+	_collectParamArgument(flags, was_dollar) {
 		if (flags == null) {
 			flags = MatchedPairFlags.NONE;
 		}
-		return this._parseMatchedPair("{", "}", flags | MatchedPairFlags.DOLBRACE);
+		if (was_dollar == null) {
+			was_dollar = false;
+		}
+		return this._parseMatchedPair(
+			"{",
+			"}",
+			flags | MatchedPairFlags.DOLBRACE,
+			was_dollar,
+		);
 	}
 
 	_readWordInternal(
@@ -2129,6 +2140,7 @@ class Lexer {
 			next_c,
 			op,
 			param,
+			param_ends_with_dollar,
 			parsed,
 			saved_dolbrace,
 			sub_parser,
@@ -2305,9 +2317,11 @@ class Lexer {
 		// Update dolbrace state based on operator
 		this._updateDolbraceForOp(op, param.length > 0);
 		// Parse argument (everything until closing brace)
+		// Pass was_dollar=True if param ends with $ (for $$ handling in nested expansions)
 		try {
 			flags = in_dquote ? MatchedPairFlags.DQUOTE : MatchedPairFlags.NONE;
-			arg = this._collectParamArgument(flags);
+			param_ends_with_dollar = param != null && param.endsWith("$");
+			arg = this._collectParamArgument(flags, param_ends_with_dollar);
 		} catch (e) {
 			this._dolbrace_state = saved_dolbrace;
 			throw e;

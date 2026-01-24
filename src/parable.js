@@ -6988,6 +6988,15 @@ function _findBracedParamEnd(value, start) {
 			i += 1;
 			continue;
 		}
+		// Handle process substitution <(...) and >(...)
+		if (
+			(c === "<" || c === ">") &&
+			i + 1 < value.length &&
+			value[i + 1] === "("
+		) {
+			i = _findCmdsubEnd(value, i + 2);
+			continue;
+		}
 		if (c === "{") {
 			depth += 1;
 		} else if (c === "}") {

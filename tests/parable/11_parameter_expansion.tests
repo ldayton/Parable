@@ -726,3 +726,10 @@ echo ${foo}bar$baz
 ---
 (command (word "echo") (word "${foo}bar$baz"))
 ---
+
+
+=== process substitution in parameter default
+echo ${foo:-<(ls)}
+---
+(command (word "echo") (word "${foo:-<(ls)}"))
+---

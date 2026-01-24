@@ -397,9 +397,9 @@ class JSTranspiler(ast.NodeVisitor):
             and isinstance(node.test.value, ast.Name)
             and node.test.attr in array_attrs
         ):
-            test = f"{test} && {test}.length"
+            test = f"{test}?.length"
         elif isinstance(node.test, ast.Name) and node.test.id in array_attrs:
-            test = f"{test} && {test}.length"
+            test = f"{test}?.length"
         if is_elif:
             self.emit_raw("    " * self.indent + f"}} else if ({test}) {{")
         else:

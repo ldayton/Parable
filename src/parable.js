@@ -168,7 +168,7 @@ class Token {
 		if (this.word) {
 			return `Token(${this.type}, ${this.value}, ${this.pos}, word=${this.word})`;
 		}
-		if (this.parts && this.parts.length) {
+		if (this.parts?.length) {
 			return `Token(${this.type}, ${this.value}, ${this.pos}, parts=${this.parts.length})`;
 		}
 		return `Token(${this.type}, ${this.value}, ${this.pos})`;
@@ -1540,7 +1540,7 @@ class Lexer {
 		if (chars.length === 0) {
 			return null;
 		}
-		if (parts && parts.length) {
+		if (parts?.length) {
 			return new Word(chars.join(""), parts);
 		}
 		return new Word(chars.join(""), null);
@@ -2358,7 +2358,7 @@ function _stripLineContinuationsCommentAware(text) {
 
 function _appendRedirects(base, redirects) {
 	let parts, r;
-	if (redirects && redirects.length) {
+	if (redirects?.length) {
 		parts = [];
 		for (r of redirects) {
 			parts.push(r.toSexp());
@@ -4963,7 +4963,7 @@ class For extends Node {
 			word_strs;
 		// bash-oracle format: (for (word "var") (in (word "a") ...) body)
 		suffix = "";
-		if (this.redirects && this.redirects.length) {
+		if (this.redirects?.length) {
 			redirect_parts = [];
 			for (r of this.redirects) {
 				redirect_parts.push(r.toSexp());
@@ -5028,7 +5028,7 @@ class ForArith extends Node {
 		}
 
 		suffix = "";
-		if (this.redirects && this.redirects.length) {
+		if (this.redirects?.length) {
 			redirect_parts = [];
 			for (r of this.redirects) {
 				redirect_parts.push(r.toSexp());
@@ -5068,7 +5068,7 @@ class Select extends Node {
 			word_strs;
 		// bash-oracle format: (select (word "var") (in (word "a") ...) body)
 		suffix = "";
-		if (this.redirects && this.redirects.length) {
+		if (this.redirects?.length) {
 			redirect_parts = [];
 			for (r of this.redirects) {
 				redirect_parts.push(r.toSexp());
@@ -5082,7 +5082,7 @@ class Select extends Node {
 				word_parts.push(w.toSexp());
 			}
 			word_strs = word_parts.join(" ");
-			if (this.words && this.words.length) {
+			if (this.words?.length) {
 				in_clause = `(in ${word_strs})`;
 			} else {
 				in_clause = "(in)";
@@ -5455,7 +5455,7 @@ class ArithmeticCommand extends Node {
 			.replaceAll("\n", "\\n")
 			.replaceAll("\t", "\\t");
 		result = `(arith (word "${escaped}"))`;
-		if (this.redirects && this.redirects.length) {
+		if (this.redirects?.length) {
 			redirect_parts = [];
 			for (r of this.redirects) {
 				redirect_parts.push(r.toSexp());
@@ -5789,7 +5789,7 @@ class ConditionalExpr extends Node {
 		} else {
 			result = `(cond ${this.body.toSexp()})`;
 		}
-		if (this.redirects && this.redirects.length) {
+		if (this.redirects?.length) {
 			redirect_parts = [];
 			for (r of this.redirects) {
 				redirect_parts.push(r.toSexp());
@@ -5971,7 +5971,7 @@ function _startsWithSubshell(node) {
 		return false;
 	}
 	if (node.kind === "pipeline") {
-		if (node.commands && node.commands.length) {
+		if (node.commands?.length) {
 			return _startsWithSubshell(node.commands[0]);
 		}
 		return false;
@@ -6330,7 +6330,7 @@ function _formatCmdsubNode(
 		cond = _formatCmdsubNode(node.condition, indent);
 		body = _formatCmdsubNode(node.body, indent + 4);
 		result = `while ${cond}; do\n${inner_sp}${body};\n${sp}done`;
-		if (node.redirects && node.redirects.length) {
+		if (node.redirects?.length) {
 			for (r of node.redirects) {
 				result = `${result} ${_formatRedirect(r)}`;
 			}
@@ -6341,7 +6341,7 @@ function _formatCmdsubNode(
 		cond = _formatCmdsubNode(node.condition, indent);
 		body = _formatCmdsubNode(node.body, indent + 4);
 		result = `until ${cond}; do\n${inner_sp}${body};\n${sp}done`;
-		if (node.redirects && node.redirects.length) {
+		if (node.redirects?.length) {
 			for (r of node.redirects) {
 				result = `${result} ${_formatRedirect(r)}`;
 			}
@@ -6357,7 +6357,7 @@ function _formatCmdsubNode(
 				word_vals.push(w.value);
 			}
 			words = word_vals.join(" ");
-			if (words && words.length) {
+			if (words?.length) {
 				result = `for ${variable} in ${words};\n${sp}do\n${inner_sp}${body};\n${sp}done`;
 			} else {
 				// Empty 'in' clause: for var in ;
@@ -6367,7 +6367,7 @@ function _formatCmdsubNode(
 			// No 'in' clause - bash implies 'in "$@"'
 			result = `for ${variable} in "$@";\n${sp}do\n${inner_sp}${body};\n${sp}done`;
 		}
-		if (node.redirects && node.redirects.length) {
+		if (node.redirects?.length) {
 			for (r of node.redirects) {
 				result = `${result} ${_formatRedirect(r)}`;
 			}
@@ -6377,7 +6377,7 @@ function _formatCmdsubNode(
 	if (node.kind === "for-arith") {
 		body = _formatCmdsubNode(node.body, indent + 4);
 		result = `for ((${node.init}; ${node.cond}; ${node.incr}))\ndo\n${inner_sp}${body};\n${sp}done`;
-		if (node.redirects && node.redirects.length) {
+		if (node.redirects?.length) {
 			for (r of node.redirects) {
 				result = `${result} ${_formatRedirect(r)}`;
 			}
@@ -6410,7 +6410,7 @@ function _formatCmdsubNode(
 		}
 		pattern_str = patterns.join(`\n${" ".repeat(indent + 4)}`);
 		redirects = "";
-		if (node.redirects && node.redirects.length) {
+		if (node.redirects?.length) {
 			redirect_parts = [];
 			for (r of node.redirects) {
 				redirect_parts.push(_formatRedirect(r));
@@ -6429,7 +6429,7 @@ function _formatCmdsubNode(
 	if (node.kind === "subshell") {
 		body = _formatCmdsubNode(node.body, indent, in_procsub, compact_redirects);
 		redirects = "";
-		if (node.redirects && node.redirects.length) {
+		if (node.redirects?.length) {
 			redirect_parts = [];
 			for (r of node.redirects) {
 				redirect_parts.push(_formatRedirect(r));
@@ -6438,12 +6438,12 @@ function _formatCmdsubNode(
 		}
 		// Use compact format only when subshell is at the start of a procsub
 		if (procsub_first) {
-			if (redirects && redirects.length) {
+			if (redirects?.length) {
 				return `(${body}) ${redirects}`;
 			}
 			return `(${body})`;
 		}
-		if (redirects && redirects.length) {
+		if (redirects?.length) {
 			return `( ${body} ) ${redirects}`;
 		}
 		return `( ${body} )`;
@@ -6454,14 +6454,14 @@ function _formatCmdsubNode(
 		// Don't add semicolon after background operator
 		terminator = body.endsWith(" &") ? " }" : "; }";
 		redirects = "";
-		if (node.redirects && node.redirects.length) {
+		if (node.redirects?.length) {
 			redirect_parts = [];
 			for (r of node.redirects) {
 				redirect_parts.push(_formatRedirect(r));
 			}
 			redirects = redirect_parts.join(" ");
 		}
-		if (redirects && redirects.length) {
+		if (redirects?.length) {
 			return `{ ${body}${terminator} ${redirects}`;
 		}
 		return `{ ${body}${terminator}`;
@@ -12932,30 +12932,30 @@ class Parser {
 		if (node instanceof Command) {
 			// For trailing backslash stripping, prioritize words ending with backslash
 			// since that's the word we need to strip from
-			if (node.words && node.words.length) {
+			if (node.words?.length) {
 				last_word = node.words.at(-1);
 				if (last_word.value.endsWith("\\")) {
 					return last_word;
 				}
 			}
 			// Redirects come after words in s-expression output, so check redirects first
-			if (node.redirects && node.redirects.length) {
+			if (node.redirects?.length) {
 				last_redirect = node.redirects.at(-1);
 				if (last_redirect instanceof Redirect) {
 					return last_redirect.target;
 				}
 			}
-			if (node.words && node.words.length) {
+			if (node.words?.length) {
 				return node.words.at(-1);
 			}
 		}
 		if (node instanceof Pipeline) {
-			if (node.commands && node.commands.length) {
+			if (node.commands?.length) {
 				return this._findLastWord(node.commands.at(-1));
 			}
 		}
 		if (node instanceof List) {
-			if (node.parts && node.parts.length) {
+			if (node.parts?.length) {
 				return this._findLastWord(node.parts.at(-1));
 			}
 		}

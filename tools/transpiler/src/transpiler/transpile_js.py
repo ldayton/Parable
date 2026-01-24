@@ -83,6 +83,20 @@ class JSTranspiler(ast.NodeVisitor):
                     return True
         return False
 
+    def _is_array_attr(self, node: ast.expr) -> bool:
+        """Check if node matches known array attributes (for if statement truthiness)."""
+        if isinstance(node, ast.Name):
+            return node.id in self._ARRAY_ATTRS
+        if isinstance(node, ast.Attribute):
+            return node.attr in self._ARRAY_ATTRS
+        return False
+
+    def _is_list_var(self, node: ast.expr) -> bool:
+        """Check if node is likely a list variable (for negation truthiness)."""
+        return isinstance(node, ast.Name) and (
+            node.id.endswith(self._LIST_SUFFIXES) or node.id in self._LIST_SUFFIXES
+        )
+
     def visit_Module(self, node: ast.Module):
         # Emit module docstring as JSDoc comment
         if (
@@ -455,13 +469,7 @@ class JSTranspiler(ast.NodeVisitor):
     def _emit_if(self, node: ast.If, is_elif: bool):
         test = self.visit_expr(node.test)
         # Handle truthiness checks - in Python [] is falsy but in JS it's truthy
-        if (
-            isinstance(node.test, ast.Attribute)
-            and isinstance(node.test.value, ast.Name)
-            and node.test.attr in self._ARRAY_ATTRS
-        ):
-            test = f"{test}?.length"
-        elif isinstance(node.test, ast.Name) and node.test.id in self._ARRAY_ATTRS:
+        if self._is_array_attr(node.test):
             test = f"{test}?.length"
         if is_elif:
             self.emit_raw("    " * self.indent + f"}} else if ({test}) {{")
@@ -1041,10 +1049,8 @@ class JSTranspiler(ast.NodeVisitor):
         operand = self.visit_expr(node.operand)
         if isinstance(node.op, ast.Not):
             # Handle `not list_var` - in Python empty list is falsy, in JS array is truthy
-            if isinstance(node.operand, ast.Name):
-                name = node.operand.id
-                if name.endswith(self._LIST_SUFFIXES) or name in self._LIST_SUFFIXES:
-                    return f"{name}.length === 0"
+            if self._is_list_var(node.operand):
+                return f"{operand}.length === 0"
             return f"!{operand}"
         if isinstance(node.op, ast.USub):
             return f"-{operand}"

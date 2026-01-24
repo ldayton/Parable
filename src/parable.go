@@ -9266,7 +9266,7 @@ func (p *Parser) ParseCoproc() *Coproc {
 	wordStart = p.Pos
 	potentialName = p.PeekWord()
 	if len(potentialName) > 0 {
-		for !(p.AtEnd()) && !(_IsMetachar(p._Peek())) && !(_IsQuote(p._Peek())) {
+		for !(p.AtEnd()) && !(_IsMetachar(p.Peek())) && !(_IsQuote(p.Peek())) {
 			p.Advance()
 		}
 		p.SkipWhitespace()
@@ -9463,11 +9463,111 @@ func (p *Parser) _ParseCompoundCommand() Node {
 }
 
 func (p *Parser) _AtListUntilTerminator(stopWords map[string]struct{}) bool {
-	panic("TODO: method needs manual implementation")
+	var nextPos int
+	_ = nextPos
+	var reserved string
+	_ = reserved
+	if p.AtEnd() {
+		return true
+	}
+	if p.Peek() == ")" {
+		return true
+	}
+	if p.Peek() == "}" {
+		nextPos = p.Pos + 1
+		if nextPos >= p.Length || _IsWordEndContext(string(p.Source[nextPos])) {
+			return true
+		}
+	}
+	reserved = p._LexPeekReservedWord()
+	if reserved != "" && func() bool { _, ok := stopWords[reserved]; return ok }() {
+		return true
+	}
+	if p._LexPeekCaseTerminator() != "" {
+		return true
+	}
+	return false
 }
 
 func (p *Parser) ParseListUntil(stopWords map[string]struct{}) Node {
-	panic("TODO: method needs manual implementation")
+	var reserved string
+	_ = reserved
+	var pipeline Node
+	_ = pipeline
+	var parts []Node
+	_ = parts
+	var op string
+	_ = op
+	var nextOp string
+	_ = nextOp
+	p.SkipWhitespaceAndNewlines()
+	reserved = p._LexPeekReservedWord()
+	if reserved != "" && func() bool { _, ok := stopWords[reserved]; return ok }() {
+		return nil
+	}
+	pipeline = p.ParsePipeline()
+	if pipeline == nil {
+		return nil
+	}
+	parts = []Node{pipeline}
+	for true {
+		p.SkipWhitespace()
+		op = p.ParseListOperator()
+		if op == "" {
+			if !(p.AtEnd()) && p.Peek() == "\n" {
+				p.Advance()
+				p._GatherHeredocBodies()
+				if p._Cmdsub_heredoc_end != -1 && p._Cmdsub_heredoc_end > p.Pos {
+					p.Pos = p._Cmdsub_heredoc_end
+					p._Cmdsub_heredoc_end = -1
+				}
+				p.SkipWhitespaceAndNewlines()
+				if p._AtListUntilTerminator(stopWords) {
+					break
+				}
+				nextOp = p._PeekListOperator()
+				if _containsAny([]interface{}{"&", ";"}, nextOp) {
+					break
+				}
+				op = "\n"
+			} else {
+				break
+			}
+		}
+		if op == "" {
+			break
+		}
+		if op == ";" {
+			p.SkipWhitespaceAndNewlines()
+			if p._AtListUntilTerminator(stopWords) {
+				break
+			}
+			parts = append(parts, NewOperator(op))
+		} else if op == "&" {
+			parts = append(parts, NewOperator(op))
+			p.SkipWhitespaceAndNewlines()
+			if p._AtListUntilTerminator(stopWords) {
+				break
+			}
+		} else if _containsAny([]interface{}{"&&", "||"}, op) {
+			parts = append(parts, NewOperator(op))
+			p.SkipWhitespaceAndNewlines()
+		} else {
+			parts = append(parts, NewOperator(op))
+		}
+		if p._AtListUntilTerminator(stopWords) {
+			break
+		}
+		pipeline = p.ParsePipeline()
+		if pipeline == nil {
+			panic(NewParseError("Expected command after "+op, p.Pos, 0))
+		}
+		parts = append(parts, pipeline)
+	}
+	if len(parts) == 1 {
+		return parts[0]
+	}
+	return NewList(parts)
 }
 
 func (p *Parser) ParseCompoundCommand() Node {

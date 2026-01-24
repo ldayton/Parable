@@ -1107,8 +1107,6 @@ class GoTranspiler(ast.NodeVisitor):
         "parse_compound_command",
         "parse_pipeline",
         "parse_list",
-        "parse_list_until",
-        "_at_list_until_terminator",
         "parse_list_operator",
         "_peek_list_operator",
         "_parse_simple_pipeline",
@@ -3649,6 +3647,18 @@ class GoTranspiler(ast.NodeVisitor):
                 # Heuristic: common string field names
                 if left.attr in ("_eof_token", "op", "arg", "param"):
                     return '""'
+            # Handle method calls that return string (e.g., _lex_peek_case_terminator())
+            if isinstance(left, ast.Call) and isinstance(left.func, ast.Attribute):
+                method = left.func.attr
+                class_name = self._infer_object_class(left.func.value)
+                if class_name:
+                    class_info = self.symbols.classes.get(class_name)
+                    if class_info and method in class_info.methods:
+                        ret_type = class_info.methods[method].return_type or ""
+                        if ret_type == "string":
+                            return '""'
+                        if ret_type == "int":
+                            return "-1"
         return self.visit_expr(node)
 
     def _is_getattr_call(self, node: ast.expr) -> bool:
@@ -3909,15 +3919,27 @@ class GoTranspiler(ast.NodeVisitor):
                 return f"strings.Contains({container_expr}, {left_expr})"
         # For other containers, use a helper or inline check
         container_expr = self.visit_expr(container)
-        # Check if container is a module-level set (map in Go)
+        # Check if container is a set (map in Go) - either module-level or parameter
         if isinstance(container, ast.Name):
             name = container.id
-            if name.isupper() or (name.startswith("_") and name[1:].isupper()):
-                # This is a set literal converted to map[string]bool
-                # Use map access syntax: map[key]
+            # Module-level sets are uppercase
+            is_module_set = name.isupper() or (name.startswith("_") and name[1:].isupper())
+            # Check if it's a parameter/variable typed as map[string]struct{}
+            var_name = self._snake_to_camel(name)
+            var_name = self._safe_go_name(var_name)
+            var_type = self.var_types.get(var_name, "")
+            is_set_type = var_type.startswith("map[") and var_type.endswith("]struct{}")
+            if is_module_set:
+                # Module-level sets use map[string]bool - direct access works
                 if negated:
                     return f"!{container_expr}[{left_expr}]"
                 return f"{container_expr}[{left_expr}]"
+            if is_set_type:
+                # Parameter/variable sets use map[string]struct{} - need comma ok idiom
+                # Create inline check: func() bool { _, ok := m[k]; return ok }()
+                if negated:
+                    return f"func() bool {{ _, ok := {container_expr}[{left_expr}]; return !ok }}()"
+                return f"func() bool {{ _, ok := {container_expr}[{left_expr}]; return ok }}()"
         # Use _containsAny for interface{} slices, _contains for typed slices
         if "[]interface{}" in container_expr:
             func_name = "_containsAny"

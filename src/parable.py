@@ -110,6 +110,19 @@ def _count_consecutive_dollars_before(s: str, pos: int) -> int:
     return count
 
 
+def _is_expansion_start(s: str, pos: int, delimiter: str) -> bool:
+    """Check if s[pos:] starts a real expansion (not after $$).
+
+    Returns True if s starts with delimiter at pos AND the preceding
+    context indicates this is a real expansion (not $$ followed by
+    the delimiter's second character).
+    """
+    if not _starts_with_at(s, pos, delimiter):
+        return False
+    # If preceded by odd number of $, this $ pairs with previous to form $$
+    return _count_consecutive_dollars_before(s, pos) % 2 == 0
+
+
 def _sublist(lst: list, start: int, end: int) -> list:
     """Extract sublist from start to end (exclusive)."""
     return lst[start:end]
@@ -1556,7 +1569,7 @@ class Lexer:
                     else:
                         content_chars.append(self.advance())
             # Handle command substitution $(...)
-            elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+            elif _is_expansion_start(self.source, self.pos, "$("):
                 self._sync_to_parser()
                 cmdsub_node, cmdsub_text = self._parser._parse_command_substitution()
                 self._sync_from_parser()
@@ -2162,7 +2175,7 @@ class Word(Node):
                 result.append(c)
                 i += 1
             # Check for ${ param expansion
-            elif c == "$" and i + 1 < len(value) and value[i + 1] == "{" and not quote.single:
+            elif _is_expansion_start(value, i, "${") and not quote.single:
                 result.append("$")
                 result.append("{")
                 i += 2
@@ -2373,7 +2386,7 @@ class Word(Node):
                 continue
             # Track brace depth for parameter expansions
             if not quote.single:
-                if _starts_with_at(value, i, "${"):
+                if _is_expansion_start(value, i, "${"):
                     brace_depth += 1
                     quote.push()
                     result.append("${")
@@ -2758,7 +2771,7 @@ class Word(Node):
                             dq_content.append(inner[j])
                             dq_content.append(inner[j + 1])
                             j += 2
-                    elif inner[j] == "$" and j + 1 < len(inner) and inner[j + 1] == "{":
+                    elif _is_expansion_start(inner, j, "${"):
                         # Start of ${...} expansion
                         dq_content.append("${")
                         dq_brace_depth += 1
@@ -2786,7 +2799,7 @@ class Word(Node):
                     in_whitespace = False
                     normalized.append(_substring(inner, i, i + 2))
                     i += 2
-            elif ch == "$" and i + 2 < len(inner) and inner[i + 1] == "(" and inner[i + 2] == "(":
+            elif _is_expansion_start(inner, i, "$(("):
                 # Arithmetic expansion $(( - find matching )) and preserve as-is
                 in_whitespace = False
                 j = i + 3
@@ -2802,7 +2815,7 @@ class Word(Node):
                         j += 1
                 normalized.append(_substring(inner, i, j))
                 i = j
-            elif ch == "$" and i + 1 < len(inner) and inner[i + 1] == "(":
+            elif _is_expansion_start(inner, i, "$("):
                 # Command substitution - find matching ) and preserve as-is
                 # (formatting is handled later by _format_command_substitutions)
                 in_whitespace = False
@@ -2858,7 +2871,7 @@ class Word(Node):
                 # Preserve process substitution as-is
                 normalized.append(_substring(inner, i, j))
                 i = j
-            elif ch == "$" and i + 1 < len(inner) and inner[i + 1] == "{":
+            elif _is_expansion_start(inner, i, "${"):
                 # Start of ${...} expansion
                 in_whitespace = False
                 normalized.append("${")
@@ -2905,7 +2918,7 @@ class Word(Node):
         i = 0
         while i < len(value):
             # Check for $(( arithmetic expression
-            if _starts_with_at(value, i, "$(("):
+            if _is_expansion_start(value, i, "$(("):
                 start = i
                 i += 3
                 depth = 2  # Track single parens: $(( starts at depth 2
@@ -3141,7 +3154,7 @@ class Word(Node):
             # Track $((...)) arithmetic - inside it, >( and <( are not process subs
             # But skip if this is actually $( ( (command substitution with subshell)
             if (
-                _starts_with_at(value, i, "$((")
+                _is_expansion_start(value, i, "$((")
                 and not _is_backslash_escaped(value, i)
                 and has_arith
             ):
@@ -3171,7 +3184,7 @@ class Word(Node):
                     continue
             # Check for $( command substitution (but not $(( arithmetic or escaped \$()
             # Special case: $(( without arithmetic nodes - preserve as-is
-            if _starts_with_at(value, i, "$((") and not has_arith:
+            if _is_expansion_start(value, i, "$((") and not has_arith:
                 # This looks like $(( but wasn't parsed as arithmetic
                 # It's actually $( ( ... ) ) - preserve original text
                 j = _find_cmdsub_end(value, i + 2)
@@ -3235,7 +3248,7 @@ class Word(Node):
                 i = j
             # Check for ${ brace command substitution (funsub)
             elif (
-                _starts_with_at(value, i, "${")
+                _is_expansion_start(value, i, "${")
                 and i + 2 < len(value)
                 and _is_funsub_char(value[i + 2])
                 and not _is_backslash_escaped(value, i)
@@ -3385,10 +3398,10 @@ class Word(Node):
             # Check for ${ (space/tab/newline) or ${| brace command substitution
             # But not if the $ is escaped by a backslash
             elif (
-                _starts_with_at(value, i, "${ ")
-                or _starts_with_at(value, i, "${\t")
-                or _starts_with_at(value, i, "${\n")
-                or _starts_with_at(value, i, "${|")
+                _is_expansion_start(value, i, "${ ")
+                or _is_expansion_start(value, i, "${\t")
+                or _is_expansion_start(value, i, "${\n")
+                or _is_expansion_start(value, i, "${|")
             ) and not _is_backslash_escaped(value, i):
                 prefix = _substring(value, i, i + 3).replace("\t", " ").replace("\n", " ")
                 # Find matching close brace
@@ -3427,7 +3440,7 @@ class Word(Node):
                 i = j
             # Process regular ${...} parameter expansions (recursively format cmdsubs inside)
             # But not if the $ is escaped by a backslash
-            elif _starts_with_at(value, i, "${") and not _is_backslash_escaped(value, i):
+            elif _is_expansion_start(value, i, "${") and not _is_backslash_escaped(value, i):
                 # Find matching close brace, respecting nesting, quotes, and cmdsubs
                 j = i + 2
                 depth = 1
@@ -3443,7 +3456,9 @@ class Word(Node):
                         brace_quote.double = not brace_quote.double
                     elif not brace_quote.in_quotes():
                         # Skip over $(...) command substitutions
-                        if _starts_with_at(value, j, "$(") and not _starts_with_at(value, j, "$(("):
+                        if _is_expansion_start(value, j, "$(") and not _starts_with_at(
+                            value, j, "$(("
+                        ):
                             j = _find_cmdsub_end(value, j + 2)
                             continue
                         if c == "{":
@@ -4396,7 +4411,7 @@ class CasePattern(Node):
                 current.append("(")
                 depth += 1
                 i += 2
-            elif ch == "$" and i + 1 < len(self.pattern) and self.pattern[i + 1] == "(":
+            elif _is_expansion_start(self.pattern, i, "$("):
                 # $( command sub or $(( arithmetic - track depth
                 current.append(ch)
                 current.append("(")
@@ -5738,7 +5753,7 @@ def _is_valid_arithmetic_start(value: str, start: int) -> bool:
     while scan_i < len(value):
         scan_c = value[scan_i]
         # Skip over $( command subs - their parens shouldn't count
-        if scan_c == "$" and scan_i + 1 < len(value) and value[scan_i + 1] == "(":
+        if _is_expansion_start(value, scan_i, "$("):
             scan_i = _find_cmdsub_end(value, scan_i + 2)
             continue
         if scan_c == "(":
@@ -5863,7 +5878,7 @@ def _find_cmdsub_end(value: str, start: int) -> int:
                     i += 1
             continue
         # Handle arithmetic expressions $((
-        if _starts_with_at(value, i, "$(("):
+        if _is_expansion_start(value, i, "$(("):
             if _is_valid_arithmetic_start(value, i):
                 arith_depth += 1
                 i += 3
@@ -5975,10 +5990,10 @@ def _find_braced_param_end(value: str, start: int) -> int:
             depth -= 1
             if depth == 0:
                 return i + 1
-        if c == "$" and i + 1 < len(value) and value[i + 1] == "(":
+        if _is_expansion_start(value, i, "$("):
             i = _find_cmdsub_end(value, i + 2)
             continue
-        if c == "$" and i + 1 < len(value) and value[i + 1] == "{":
+        if _is_expansion_start(value, i, "${"):
             i = _find_braced_param_end(value, i + 2)
             continue
         i += 1
@@ -6492,10 +6507,10 @@ def _skip_matched_pair(s: str, start: int, open: str, close: str, flags: int = 0
         if not literal and c == '"':
             i = _skip_double_quoted(s, i + 1)
             continue
-        if not literal and c == "$" and i + 1 < n and s[i + 1] == "(":
+        if not literal and _is_expansion_start(s, i, "$("):
             i = _find_cmdsub_end(s, i + 2)
             continue
-        if not literal and c == "$" and i + 1 < n and s[i + 1] == "{":
+        if not literal and _is_expansion_start(s, i, "${"):
             i = _find_braced_param_end(s, i + 2)
             continue
         if not literal and c == open:
@@ -8868,7 +8883,7 @@ class Parser:
                             delimiter_chars.append(self.advance())
                     if not self.at_end():
                         self.advance()  # skip closing '
-                elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                elif _is_expansion_start(self.source, self.pos, "$("):
                     # Command substitution embedded in delimiter
                     delimiter_chars.append(self.advance())  # $
                     delimiter_chars.append(self.advance())  # (
@@ -10019,7 +10034,7 @@ class Parser:
                         pattern_chars.append(self.advance())
                         if not self.at_end():
                             pattern_chars.append(self.advance())
-                elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                elif _is_expansion_start(self.source, self.pos, "$("):
                     # $( or $(( - command sub or arithmetic
                     pattern_chars.append(self.advance())  # $
                     pattern_chars.append(self.advance())  # (
@@ -10328,7 +10343,7 @@ class Parser:
         brace_depth = 0
         i = 0
         while i < len(name):
-            if i + 1 < len(name) and name[i] == "$" and name[i + 1] == "{":
+            if _is_expansion_start(name, i, "${"):
                 brace_depth += 1
                 i += 2
                 continue

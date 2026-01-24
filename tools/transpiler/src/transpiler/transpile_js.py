@@ -16,25 +16,7 @@ class JSTranspiler(ast.NodeVisitor):
         self.in_method = False
         self.class_has_base = False
         self.declared_vars = set()
-        # Pre-populate with known class names (needed for forward references)
-        # Lexer methods may instantiate Node subclasses defined later in the file
-        self.class_names = {
-            "Parser",
-            "Word",
-            "ParseError",
-            # Node subclasses used by Lexer for expansion parsing
-            "AnsiCQuote",
-            "LocaleString",
-            "CommandSubstitution",
-            "ProcessSubstitution",
-            "ArithmeticExpansion",
-            "ParamExpansion",
-            "ParamLength",
-            "ParamIndirect",
-            "ArrayLiteral",
-            "Empty",
-            "ArithEmpty",
-        }
+        self.class_names = set()  # populated by pre-pass in transpile()
         self.comments = {}  # line_number -> comment_text
         self._sorted_comment_lines = []  # populated once in transpile()
         self.last_line = 0
@@ -70,6 +52,7 @@ class JSTranspiler(ast.NodeVisitor):
                     self.comments[line_num] = tok.string
         self._sorted_comment_lines = sorted(self.comments.keys())
         tree = ast.parse(source)
+        self.class_names = {node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)}
         self.visit(tree)
         return "\n".join(self.output)
 
@@ -129,7 +112,6 @@ class JSTranspiler(ast.NodeVisitor):
 
     def visit_ClassDef(self, node: ast.ClassDef):
         safe_name = self._safe_name(node.name)
-        self.class_names.add(node.name)  # Track original name for isinstance checks
         bases = [self.visit_expr(b) for b in node.bases]
         extends = f" extends {bases[0]}" if bases else ""
         self.emit(f"class {safe_name}{extends} {{")

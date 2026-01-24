@@ -20,11 +20,11 @@ Parse bash exactly as bash does. Python or Javascript, your choice. One file, ze
 
 **Portable performance.** Hand-written recursive descent—no generators, no native extensions. Pure Python and pure JS, zero dependencies, not even stdlib imports. The Python implementation is canonical; a custom transpiler produces idiomatic Javascript. Both run the same tests.
 
-## Javascript
+## Javascript + Typescript
 
 The Python implementation uses idiomatic Python that transpiles naturally to idiomatic JavaScript: f-strings become template literals, ternaries stay ternaries, lambdas become arrow functions. A custom transpiler produces perfectly readable JS: not minified, not obfuscated, not transmogrified, but clean code that looks like a human wrote it.
 
-The Javascript output is then validated the same way as Python. Same tests, same bash AST comparisons, same edge cases. If Python parses it correctly, so does JS.
+The Javascript output is then validated the same way as Python. Same tests, same bash AST comparisons, same edge cases. If Python parses it correctly, so does JS. Typescript definitions are auto-generated from the transpiled JS.
 
 ## Why Parable?
 

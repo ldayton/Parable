@@ -58,6 +58,11 @@ def extract_classes(js_source: str) -> list[dict]:
 
 def infer_type(prop_name: str, class_name: str) -> str:
     """Infer TypeScript type from property name and class context."""
+    # Special cases where 'value' is a string, not a node
+    if prop_name == "value":
+        if class_name in ("Word", "ArithNumber"):
+            return "string"
+
     # Array types
     if prop_name in ("words", "redirects", "parts", "elements", "patterns", "commands"):
         if prop_name == "words":

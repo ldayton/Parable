@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check for banned Python constructions in parable.py.
 
-Goal: C-style code that translates easily to Go/Rust/JS.
+Goal: C-style code that translates easily to JS/TS.
 
 Banned constructions:
 

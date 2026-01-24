@@ -22,7 +22,7 @@ interface NodeBase {
 // Structural nodes
 export interface Word extends NodeBase {
 	readonly kind: "word";
-	readonly value: Node;
+	readonly value: string;
 	readonly parts: Node[];
 }
 
@@ -198,7 +198,7 @@ export interface ProcessSubstitution extends NodeBase {
 // Arithmetic expression nodes
 export interface ArithNumber extends NodeBase {
 	readonly kind: "number";
-	readonly value: ArithNode;
+	readonly value: string;
 }
 
 export interface ArithEmpty extends NodeBase {

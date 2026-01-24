@@ -167,19 +167,6 @@ class Token {
 	}
 }
 
-class LexerState {
-	static NONE = 0;
-	static WASDOL = 1;
-	static CKCOMMENT = 2;
-	static INCOMMENT = 4;
-	static PASSNEXT = 8;
-	static INHEREDOC = 128;
-	static HEREDELIM = 256;
-	static STRIPDOC = 512;
-	static QUOTEDDOC = 1024;
-	static INWORD = 2048;
-}
-
 class ParserStateFlags {
 	static NONE = 0;
 	static PST_CASEPAT = 1;
@@ -232,41 +219,11 @@ class SavedParserState {
 	}
 }
 
-class LexerSavedState {
-	constructor(
-		pos,
-		parser_state,
-		dolbrace_state,
-		quote_single,
-		quote_double,
-		pending_heredocs,
-	) {
-		this.pos = pos;
-		this.parser_state = parser_state;
-		this.dolbrace_state = dolbrace_state;
-		this.quote_single = quote_single;
-		this.quote_double = quote_double;
-		this.pending_heredocs = pending_heredocs;
-	}
-}
-
 class QuoteState {
 	constructor() {
 		this.single = false;
 		this.double = false;
 		this._stack = [];
-	}
-
-	toggleSingle() {
-		if (!this.double) {
-			this.single = !this.single;
-		}
-	}
-
-	toggleDouble() {
-		if (!this.single) {
-			this.double = !this.double;
-		}
 	}
 
 	push() {
@@ -285,20 +242,6 @@ class QuoteState {
 		return this.single || this.double;
 	}
 
-	processChar(c, prev_escaped) {
-		if (prev_escaped == null) {
-			prev_escaped = false;
-		}
-		if (prev_escaped) {
-			return;
-		}
-		if (c === "'" && !this.double) {
-			this.single = !this.single;
-		} else if (c === '"' && !this.single) {
-			this.double = !this.double;
-		}
-	}
-
 	copy() {
 		let qs;
 		qs = new QuoteState();
@@ -313,10 +256,6 @@ class QuoteState {
 			return false;
 		}
 		return this._stack[this._stack.length - 1][1];
-	}
-
-	getDepth() {
-		return this._stack.length;
 	}
 }
 
@@ -375,20 +314,6 @@ class ContextStack {
 		return this._stack[0];
 	}
 
-	inContext(kind) {
-		let ctx;
-		for (ctx of this._stack) {
-			if (ctx.kind === kind) {
-				return true;
-			}
-		}
-		return false;
-	}
-
-	getDepth() {
-		return this._stack.length;
-	}
-
 	copyStack() {
 		let ctx, result;
 		result = [];
@@ -406,62 +331,6 @@ class ContextStack {
 		}
 		this._stack = result;
 	}
-
-	enterCase() {
-		this.getCurrent().case_depth += 1;
-	}
-
-	exitCase() {
-		let ctx;
-		ctx = this.getCurrent();
-		if (ctx.case_depth > 0) {
-			ctx.case_depth -= 1;
-		}
-	}
-
-	inCase() {
-		return this.getCurrent().case_depth > 0;
-	}
-
-	getCaseDepth() {
-		return this.getCurrent().case_depth;
-	}
-
-	enterArithmetic() {
-		let ctx;
-		ctx = this.getCurrent();
-		ctx.arith_depth += 1;
-		ctx.arith_paren_depth = 2;
-	}
-
-	exitArithmetic() {
-		let ctx;
-		ctx = this.getCurrent();
-		if (ctx.arith_depth > 0) {
-			ctx.arith_depth -= 1;
-			ctx.arith_paren_depth = 0;
-		}
-	}
-
-	inArithmetic() {
-		return this.getCurrent().arith_depth > 0;
-	}
-
-	incArithParen() {
-		this.getCurrent().arith_paren_depth += 1;
-	}
-
-	decArithParen() {
-		let ctx;
-		ctx = this.getCurrent();
-		if (ctx.arith_paren_depth > 0) {
-			ctx.arith_paren_depth -= 1;
-		}
-	}
-
-	getArithParenDepth() {
-		return this.getCurrent().arith_paren_depth;
-	}
 }
 
 class Lexer {
@@ -472,7 +341,6 @@ class Lexer {
 		this.source = source;
 		this.pos = 0;
 		this.length = source.length;
-		this.state = LexerState.CKCOMMENT;
 		this.quote = new QuoteState();
 		this._token_cache = null;
 		// Parser state flags for context-sensitive tokenization
@@ -529,21 +397,6 @@ class Lexer {
 
 	isMetachar(c) {
 		return "|&;()<> \t\n".includes(c);
-	}
-
-	isOperatorStart(c) {
-		return "|&;<>()".includes(c);
-	}
-
-	isBlank(c) {
-		return c === " " || c === "\t";
-	}
-
-	isWordChar(c) {
-		if (c == null) {
-			return false;
-		}
-		return !this.isMetachar(c);
 	}
 
 	_readOperator() {
@@ -707,43 +560,6 @@ class Lexer {
 			this.pos += 1;
 		}
 		return true;
-	}
-
-	_scanSingleQuoted() {
-		let c, chars;
-		chars = ["'"];
-		while (this.pos < this.length) {
-			c = this.source[this.pos];
-			chars.push(c);
-			this.pos += 1;
-			if (c === "'") {
-				break;
-			}
-		}
-		return chars.join("");
-	}
-
-	_scanDoubleQuoted() {
-		let c, chars;
-		chars = ['"'];
-		while (this.pos < this.length) {
-			c = this.source[this.pos];
-			if (c === "\\") {
-				chars.push(c);
-				this.pos += 1;
-				if (this.pos < this.length) {
-					chars.push(this.source[this.pos]);
-					this.pos += 1;
-				}
-				continue;
-			}
-			chars.push(c);
-			this.pos += 1;
-			if (c === '"') {
-				break;
-			}
-		}
-		return chars.join("");
 	}
 
 	_readSingleQuote(start) {
@@ -1765,42 +1581,6 @@ class Lexer {
 		return this._token_cache;
 	}
 
-	ungetToken(tok) {
-		this._token_cache = tok;
-	}
-
-	_saveState() {
-		return new LexerSavedState(
-			this.pos,
-			this._parser_state,
-			this._dolbrace_state,
-			this.quote.single,
-			this.quote.double,
-			Array.from(this._pending_heredocs),
-		);
-	}
-
-	_restoreState(saved) {
-		this.pos = saved.pos;
-		this._parser_state = saved.parser_state;
-		this._dolbrace_state = saved.dolbrace_state;
-		this.quote.single = saved.quote_single;
-		this.quote.double = saved.quote_double;
-		this._pending_heredocs = saved.pending_heredocs;
-	}
-
-	_setParserState(flag) {
-		this._parser_state = this._parser_state | flag;
-	}
-
-	_clearParserState(flag) {
-		this._parser_state = this._parser_state & /* TODO: UnaryOp Invert() */ flag;
-	}
-
-	_hasParserState(flag) {
-		return (this._parser_state & flag) !== 0;
-	}
-
 	_readAnsiCQuote() {
 		let ch, content, content_chars, found_close, node, start, text;
 		if (this.atEnd() || this.peek() !== "$") {
@@ -2463,12 +2243,6 @@ class Lexer {
 	}
 
 	// Reserved words mapping
-	classifyWord(word, reserved_ok) {
-		if (reserved_ok && this.RESERVED_WORDS.includes(word)) {
-			return this.RESERVED_WORDS[word];
-		}
-		return TokenType.WORD;
-	}
 }
 
 function _stripLineContinuationsCommentAware(text) {
@@ -7703,22 +7477,6 @@ function _isSemicolonOrNewline(c) {
 	return c === ";" || c === "\n";
 }
 
-function _isWordStartContext(c) {
-	return (
-		c === " " ||
-		c === "\t" ||
-		c === "\n" ||
-		c === ";" ||
-		c === "|" ||
-		c === "&" ||
-		c === "<" ||
-		c === "(" ||
-		c === "{" ||
-		c === ")" ||
-		c === "}"
-	);
-}
-
 function _isWordEndContext(c) {
 	return (
 		c === " " ||
@@ -7794,10 +7552,6 @@ function _isParamExpansionOp(c) {
 
 function _isSimpleParamOp(c) {
 	return c === "-" || c === "=" || c === "?" || c === "+";
-}
-
-function _isEscapeCharInDquote(c) {
-	return ["$", "`", "\\", '"', "\n"].includes(c);
 }
 
 function _isEscapeCharInBacktick(c) {
@@ -8011,19 +7765,6 @@ class Parser {
 				this._dolbrace_state = DolbraceState.OP;
 			}
 		}
-	}
-
-	_lastToken() {
-		return this._token_history[0];
-	}
-
-	_lastTokenType() {
-		let tok;
-		tok = this._token_history[0];
-		if (tok == null) {
-			return null;
-		}
-		return tok.type;
 	}
 
 	_syncLexer() {

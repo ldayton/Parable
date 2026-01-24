@@ -211,21 +211,6 @@ class Token:
         return f"Token({self.type}, {self.value!r}, {self.pos})"
 
 
-class LexerState:
-    """Lexer state flags for context tracking during tokenization."""
-
-    NONE = 0
-    WASDOL = 0x0001
-    CKCOMMENT = 0x0002
-    INCOMMENT = 0x0004
-    PASSNEXT = 0x0008
-    INHEREDOC = 0x0080
-    HEREDELIM = 0x0100
-    STRIPDOC = 0x0200
-    QUOTEDDOC = 0x0400
-    INWORD = 0x0800
-
-
 class ParserStateFlags:
     """Parser state flags for context-sensitive parsing decisions."""
 
@@ -298,29 +283,6 @@ class SavedParserState:
         self.eof_token = eof_token
 
 
-class LexerSavedState:
-    """Saved lexer state for nested parsing (e.g., command substitutions).
-
-    Used when the lexer needs to parse nested constructs and restore state after.
-    """
-
-    def __init__(
-        self,
-        pos: int,
-        parser_state: int,
-        dolbrace_state: int,
-        quote_single: bool,
-        quote_double: bool,
-        pending_heredocs: list,
-    ):
-        self.pos = pos
-        self.parser_state = parser_state
-        self.dolbrace_state = dolbrace_state
-        self.quote_single = quote_single
-        self.quote_double = quote_double
-        self.pending_heredocs = pending_heredocs
-
-
 class QuoteState:
     """Unified quote state tracker for parsing.
 
@@ -332,16 +294,6 @@ class QuoteState:
         self.single = False
         self.double = False
         self._stack: list[tuple[bool, bool]] = []
-
-    def toggle_single(self) -> None:
-        """Toggle single quote state if not inside double quotes."""
-        if not self.double:
-            self.single = not self.single
-
-    def toggle_double(self) -> None:
-        """Toggle double quote state if not inside single quotes."""
-        if not self.single:
-            self.double = not self.double
 
     def push(self) -> None:
         """Push current state onto stack and reset for nested context."""
@@ -358,20 +310,6 @@ class QuoteState:
         """Return True if inside any quotes."""
         return self.single or self.double
 
-    def process_char(self, c: str, prev_escaped: bool = False) -> None:
-        """Process a character, updating quote state.
-
-        Args:
-            c: The character to process
-            prev_escaped: True if character is preceded by an unescaped backslash
-        """
-        if prev_escaped:
-            return
-        if c == "'" and not self.double:
-            self.single = not self.single
-        elif c == '"' and not self.single:
-            self.double = not self.double
-
     def copy(self) -> QuoteState:
         """Create a copy of this quote state."""
         qs = QuoteState()
@@ -385,10 +323,6 @@ class QuoteState:
         if len(self._stack) == 0:
             return False
         return self._stack[len(self._stack) - 1][1]
-
-    def get_depth(self) -> int:
-        """Return the current stack depth."""
-        return len(self._stack)
 
 
 class ParseContext:
@@ -454,17 +388,6 @@ class ContextStack:
             return self._stack.pop()
         return self._stack[0]
 
-    def in_context(self, kind: int) -> bool:
-        """Return True if any context in the stack has the given kind."""
-        for ctx in self._stack:
-            if ctx.kind == kind:
-                return True
-        return False
-
-    def get_depth(self) -> int:
-        """Return the current stack depth."""
-        return len(self._stack)
-
     def copy_stack(self) -> list:
         """Return a deep copy of the context stack for state saving."""
         result = []
@@ -479,55 +402,6 @@ class ContextStack:
             result.append(ctx.copy())
         self._stack = result
 
-    def enter_case(self) -> None:
-        """Increment case depth in current context."""
-        self.get_current().case_depth += 1
-
-    def exit_case(self) -> None:
-        """Decrement case depth in current context."""
-        ctx = self.get_current()
-        if ctx.case_depth > 0:
-            ctx.case_depth -= 1
-
-    def in_case(self) -> bool:
-        """Return True if currently inside a case statement."""
-        return self.get_current().case_depth > 0
-
-    def get_case_depth(self) -> int:
-        """Return current case nesting depth."""
-        return self.get_current().case_depth
-
-    def enter_arithmetic(self) -> None:
-        """Enter an arithmetic expression context."""
-        ctx = self.get_current()
-        ctx.arith_depth += 1
-        ctx.arith_paren_depth = 2  # $(( opens with 2 parens
-
-    def exit_arithmetic(self) -> None:
-        """Exit an arithmetic expression context."""
-        ctx = self.get_current()
-        if ctx.arith_depth > 0:
-            ctx.arith_depth -= 1
-            ctx.arith_paren_depth = 0
-
-    def in_arithmetic(self) -> bool:
-        """Return True if currently inside an arithmetic expression."""
-        return self.get_current().arith_depth > 0
-
-    def inc_arith_paren(self) -> None:
-        """Increment paren depth inside arithmetic."""
-        self.get_current().arith_paren_depth += 1
-
-    def dec_arith_paren(self) -> None:
-        """Decrement paren depth inside arithmetic."""
-        ctx = self.get_current()
-        if ctx.arith_paren_depth > 0:
-            ctx.arith_paren_depth -= 1
-
-    def get_arith_paren_depth(self) -> int:
-        """Return current arithmetic paren depth."""
-        return self.get_current().arith_paren_depth
-
 
 class Lexer:
     """Lexer for tokenizing shell input."""
@@ -536,7 +410,6 @@ class Lexer:
         self.source = source
         self.pos = 0
         self.length = len(source)
-        self.state = LexerState.CKCOMMENT
         self.quote = QuoteState()
         self._token_cache: Token | None = None
         # Parser state flags for context-sensitive tokenization
@@ -590,20 +463,6 @@ class Lexer:
     def is_metachar(self, c: str) -> bool:
         """Return True if c is a shell metacharacter."""
         return c in "|&;()<> \t\n"
-
-    def is_operator_start(self, c: str) -> bool:
-        """Return True if c can start an operator."""
-        return c in "|&;<>()"
-
-    def is_blank(self, c: str) -> bool:
-        """Return True if c is blank (space or tab)."""
-        return c == " " or c == "\t"
-
-    def is_word_char(self, c: str) -> bool:
-        """Return True if c can be part of an unquoted word."""
-        if c is None:
-            return False
-        return not self.is_metachar(c)
 
     def _read_operator(self) -> Token | None:
         """Try to read an operator token. Returns None if not at operator."""
@@ -727,35 +586,6 @@ class Lexer:
         while self.pos < self.length and self.source[self.pos] != "\n":
             self.pos += 1
         return True
-
-    def _scan_single_quoted(self) -> str:
-        """Scan content inside single quotes. Caller has consumed opening quote."""
-        chars = ["'"]
-        while self.pos < self.length:
-            c = self.source[self.pos]
-            chars.append(c)
-            self.pos += 1
-            if c == "'":
-                break
-        return "".join(chars)
-
-    def _scan_double_quoted(self) -> str:
-        """Scan content inside double quotes. Caller has consumed opening quote."""
-        chars = ['"']
-        while self.pos < self.length:
-            c = self.source[self.pos]
-            if c == "\\":
-                chars.append(c)
-                self.pos += 1
-                if self.pos < self.length:
-                    chars.append(self.source[self.pos])
-                    self.pos += 1
-                continue
-            chars.append(c)
-            self.pos += 1
-            if c == '"':
-                break
-        return "".join(chars)
 
     def _read_single_quote(self, start: int) -> tuple[str, bool]:
         """Read single-quoted string content for word parsing.
@@ -1539,42 +1369,6 @@ class Lexer:
             self._last_read_token = saved_last  # Peeking shouldn't advance history
         return self._token_cache
 
-    def unget_token(self, tok: Token) -> None:
-        """Push a token back to be returned by next call."""
-        self._token_cache = tok
-
-    def _save_state(self) -> LexerSavedState:
-        """Save current lexer state for nested parsing."""
-        return LexerSavedState(
-            pos=self.pos,
-            parser_state=self._parser_state,
-            dolbrace_state=self._dolbrace_state,
-            quote_single=self.quote.single,
-            quote_double=self.quote.double,
-            pending_heredocs=list(self._pending_heredocs),
-        )
-
-    def _restore_state(self, saved: LexerSavedState) -> None:
-        """Restore lexer state after nested parsing."""
-        self.pos = saved.pos
-        self._parser_state = saved.parser_state
-        self._dolbrace_state = saved.dolbrace_state
-        self.quote.single = saved.quote_single
-        self.quote.double = saved.quote_double
-        self._pending_heredocs = saved.pending_heredocs
-
-    def _set_parser_state(self, flag: int) -> None:
-        """Set a parser state flag."""
-        self._parser_state = self._parser_state | flag
-
-    def _clear_parser_state(self, flag: int) -> None:
-        """Clear a parser state flag."""
-        self._parser_state = self._parser_state & ~flag
-
-    def _has_parser_state(self, flag: int) -> bool:
-        """Check if a parser state flag is set."""
-        return (self._parser_state & flag) != 0
-
     def _read_ansi_c_quote(self) -> tuple[Node | None, str]:
         """Read ANSI-C quoting $'...'.
 
@@ -2124,12 +1918,6 @@ class Lexer:
         "{": TokenType.LBRACE,
         "}": TokenType.RBRACE,
     }
-
-    def classify_word(self, word: str, reserved_ok: bool) -> int:
-        """Classify a word token - may be reserved word if unquoted and allowed."""
-        if reserved_ok and word in self.RESERVED_WORDS:
-            return self.RESERVED_WORDS[word]
-        return TokenType.WORD
 
 
 def _strip_line_continuations_comment_aware(text: str) -> str:
@@ -6447,23 +6235,6 @@ def _is_semicolon_or_newline(c: str) -> bool:
     return c == ";" or c == "\n"
 
 
-def _is_word_start_context(c: str) -> bool:
-    """Check if char is a valid context for starting a word (whitespace or metachar except >)."""
-    return (
-        c == " "
-        or c == "\t"
-        or c == "\n"
-        or c == ";"
-        or c == "|"
-        or c == "&"
-        or c == "<"
-        or c == "("
-        or c == "{"
-        or c == ")"
-        or c == "}"
-    )
-
-
 def _is_word_end_context(c: str) -> bool:
     """Check if char ends a word context (whitespace or metachar)."""
     return (
@@ -6529,10 +6300,6 @@ def _is_param_expansion_op(c: str) -> bool:
 
 def _is_simple_param_op(c: str) -> bool:
     return c == "-" or c == "=" or c == "?" or c == "+"
-
-
-def _is_escape_char_in_dquote(c: str) -> bool:
-    return c in ("$", "`", "\\", '"', "\n")
 
 
 def _is_escape_char_in_backtick(c: str) -> bool:
@@ -6733,17 +6500,6 @@ class Parser:
         if self._dolbrace_state == DolbraceState.PARAM:
             if first_char in "#%^,~:-=?+/":
                 self._dolbrace_state = DolbraceState.OP
-
-    def _last_token(self) -> Token | None:
-        """Return the most recently recorded token."""
-        return self._token_history[0]
-
-    def _last_token_type(self) -> int | None:
-        """Return type of most recently recorded token, or None."""
-        tok = self._token_history[0]
-        if tok is None:
-            return None
-        return tok.type
 
     def _sync_lexer(self) -> None:
         """Sync Lexer position and state to Parser."""

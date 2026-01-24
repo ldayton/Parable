@@ -38,6 +38,10 @@ class JSTranspiler(ast.NodeVisitor):
         self.comments = {}  # line_number -> comment_text
         self.last_line = 0
         self._in_assignment_target = False
+        self._reassigned_vars = set()
+        self._emitted_vars = set()
+        self._top_level_first_assign = set()  # Vars first assigned at top level
+        self._block_depth = 0
 
     def emit(self, text: str):
         self.output.append("    " * self.indent + text)
@@ -214,30 +218,50 @@ class JSTranspiler(ast.NodeVisitor):
 
     def _collect_local_vars(self, stmts: list) -> set:
         """Collect all variable names assigned in a list of statements."""
-        names = set()
+        counts, _ = self._count_assignments(stmts)
+        return set(counts.keys())
+
+    def _count_assignments(self, stmts: list, counts: dict = None, top_level: set = None, in_block: bool = False) -> tuple[dict, set]:
+        """Count assignments and track which vars are first assigned at top level."""
+        if counts is None:
+            counts = {}
+        if top_level is None:
+            top_level = set()
         for stmt in stmts:
             if isinstance(stmt, ast.Assign):
                 for target in stmt.targets:
-                    names.update(self._collect_names_from_target(target))
+                    for name in self._collect_names_from_target(target):
+                        if name not in counts and not in_block:
+                            top_level.add(name)
+                        counts[name] = counts.get(name, 0) + 1
             elif isinstance(stmt, ast.AnnAssign):
                 if isinstance(stmt.target, ast.Name) and stmt.value:
-                    names.add(stmt.target.id)
+                    name = stmt.target.id
+                    if name not in counts and not in_block:
+                        top_level.add(name)
+                    counts[name] = counts.get(name, 0) + 1
+            elif isinstance(stmt, ast.AugAssign):
+                for name in self._collect_names_from_target(stmt.target):
+                    counts[name] = counts.get(name, 0) + 1
             elif isinstance(stmt, ast.For):
-                names.update(self._collect_names_from_target(stmt.target))
-                names.update(self._collect_local_vars(stmt.body))
-                names.update(self._collect_local_vars(stmt.orelse))
+                # For loop variables are always block-scoped in JS, don't count them
+                # as function-level variables
+                self._count_assignments(stmt.body, counts, top_level, True)
+                self._count_assignments(stmt.orelse, counts, top_level, True)
             elif isinstance(stmt, ast.While):
-                names.update(self._collect_local_vars(stmt.body))
-                names.update(self._collect_local_vars(stmt.orelse))
+                body_counts, _ = self._count_assignments(stmt.body, {}, set(), True)
+                for name, count in body_counts.items():
+                    counts[name] = counts.get(name, 0) + count * 2
+                self._count_assignments(stmt.orelse, counts, top_level, True)
             elif isinstance(stmt, ast.If):
-                names.update(self._collect_local_vars(stmt.body))
-                names.update(self._collect_local_vars(stmt.orelse))
+                self._count_assignments(stmt.body, counts, top_level, True)
+                self._count_assignments(stmt.orelse, counts, top_level, True)
             elif isinstance(stmt, ast.Try):
-                names.update(self._collect_local_vars(stmt.body))
+                self._count_assignments(stmt.body, counts, top_level, True)
                 for handler in stmt.handlers:
-                    names.update(self._collect_local_vars(handler.body))
-                names.update(self._collect_local_vars(stmt.finalbody))
-        return names
+                    self._count_assignments(handler.body, counts, top_level, True)
+                self._count_assignments(stmt.finalbody, counts, top_level, True)
+        return counts, top_level
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
         # Skip helper functions that are inlined
@@ -271,17 +295,26 @@ class JSTranspiler(ast.NodeVisitor):
         old_in_class = self.in_class_body
         old_in_method = self.in_method
         old_declared = self.declared_vars
+        old_reassigned = self._reassigned_vars
+        old_emitted = self._emitted_vars
+        old_top_level = self._top_level_first_assign
         self.in_class_body = False
         self.in_method = True
-        # Collect all local variables and emit hoisted let declarations
+        # Track variables for const vs let at point of use
         param_names = {a.arg for a in node.args.args if a.arg != "self"}
         if node.args.vararg:
             param_names.add(node.args.vararg.arg)
-        local_vars = self._collect_local_vars(node.body) - param_names
-        if local_vars:
-            sorted_vars = sorted(self._safe_name(v) for v in local_vars)
-            self.emit(f"let {', '.join(sorted_vars)};")
+        assignment_counts, top_level_first = self._count_assignments(node.body)
+        local_vars = set(assignment_counts.keys()) - param_names
         self.declared_vars = param_names | local_vars
+        self._reassigned_vars = {name for name, count in assignment_counts.items() if count > 1}
+        self._top_level_first_assign = top_level_first - param_names
+        # Hoist vars not first-assigned at top level (they're used before assigned in main flow)
+        hoisted = local_vars - self._top_level_first_assign
+        if hoisted:
+            sorted_vars = sorted(self._safe_name(v) for v in hoisted)
+            self.emit(f"let {', '.join(sorted_vars)};")
+        self._emitted_vars = set(param_names) | hoisted
 
         # For constructors in subclasses, emit super() first
         if name == "constructor" and self.class_has_base:
@@ -316,6 +349,9 @@ class JSTranspiler(ast.NodeVisitor):
         self.in_class_body = old_in_class
         self.in_method = old_in_method
         self.declared_vars = old_declared
+        self._reassigned_vars = old_reassigned
+        self._emitted_vars = old_emitted
+        self._top_level_first_assign = old_top_level
         self.indent -= 1
         self.emit("}")
         self.emit("")
@@ -326,19 +362,39 @@ class JSTranspiler(ast.NodeVisitor):
         else:
             self.emit("return;")
 
+    def _get_declaration_keyword(self, names: set) -> str | None:
+        """Get const/let keyword for first assignment, or None if already declared."""
+        undeclared = names - self._emitted_vars
+        if not undeclared:
+            return None
+        self._emitted_vars.update(undeclared)
+        # Use let if any variable in this assignment is reassigned elsewhere
+        if undeclared & self._reassigned_vars:
+            return "let"
+        return "const"
+
     def visit_Assign(self, node: ast.Assign):
         self._in_assignment_target = True
-        target = self.visit_expr(node.targets[0])
+        targets = [self.visit_expr(t) for t in node.targets]
         self._in_assignment_target = False
         value = self.visit_expr(node.value)
         # Module-level assignments get const
         if not self.in_method and not self.in_class_body:
-            self.emit(f"const {target} = {value};")
+            for target in targets:
+                self.emit(f"const {target} = {value};")
         elif self.in_class_body and not self.in_method:
             # Class-level assignments become static fields in JS
-            self.emit(f"static {target} = {value};")
+            for target in targets:
+                self.emit(f"static {target} = {value};")
         else:
-            self.emit(f"{target} = {value};")
+            # Emit declaration keyword on first assignment for each target
+            for i, target in enumerate(targets):
+                names = self._collect_names_from_target(node.targets[i])
+                keyword = self._get_declaration_keyword(names)
+                if keyword:
+                    self.emit(f"{keyword} {target} = {value};")
+                else:
+                    self.emit(f"{target} = {value};")
 
     def visit_AnnAssign(self, node: ast.AnnAssign):
         # Skip class-level type annotations - constructor handles initialization
@@ -347,7 +403,12 @@ class JSTranspiler(ast.NodeVisitor):
         if node.value:
             target = self.visit_expr(node.target)
             value = self.visit_expr(node.value)
-            self.emit(f"{target} = {value};")
+            names = self._collect_names_from_target(node.target)
+            keyword = self._get_declaration_keyword(names)
+            if keyword:
+                self.emit(f"{keyword} {target} = {value};")
+            else:
+                self.emit(f"{target} = {value};")
 
     def visit_AugAssign(self, node: ast.AugAssign):
         target = self.visit_expr(node.target)
@@ -436,6 +497,10 @@ class JSTranspiler(ast.NodeVisitor):
     def visit_For(self, node: ast.For):
         target = self.visit_expr(node.target)
         iter_expr = node.iter
+        # For loops always declare their own block-scoped variable
+        names = self._collect_names_from_target(node.target)
+        # Use let for loop variables (they're reassigned each iteration)
+        decl = "let "
         # Handle range() specially
         if (
             isinstance(iter_expr, ast.Call)
@@ -445,11 +510,11 @@ class JSTranspiler(ast.NodeVisitor):
             args = iter_expr.args
             if len(args) == 1:
                 self.emit(
-                    f"for ({target} = 0; {target} < {self.visit_expr(args[0])}; {target}++) {{"
+                    f"for ({decl}{target} = 0; {target} < {self.visit_expr(args[0])}; {target}++) {{"
                 )
             elif len(args) == 2:
                 self.emit(
-                    f"for ({target} = {self.visit_expr(args[0])}; {target} < {self.visit_expr(args[1])}; {target}++) {{"
+                    f"for ({decl}{target} = {self.visit_expr(args[0])}; {target} < {self.visit_expr(args[1])}; {target}++) {{"
                 )
             else:
                 start, end, step = args
@@ -461,15 +526,15 @@ class JSTranspiler(ast.NodeVisitor):
                     is_negative = True
                 if is_negative:
                     self.emit(
-                        f"for ({target} = {self.visit_expr(start)}; {target} > {self.visit_expr(end)}; {target}--) {{"
+                        f"for ({decl}{target} = {self.visit_expr(start)}; {target} > {self.visit_expr(end)}; {target}--) {{"
                     )
                 else:
                     step_val = self.visit_expr(step)
                     self.emit(
-                        f"for ({target} = {self.visit_expr(start)}; {target} < {self.visit_expr(end)}; {target} += {step_val}) {{"
+                        f"for ({decl}{target} = {self.visit_expr(start)}; {target} < {self.visit_expr(end)}; {target} += {step_val}) {{"
                     )
         else:
-            self.emit(f"for ({target} of {self.visit_expr(iter_expr)}) {{")
+            self.emit(f"for ({decl}{target} of {self.visit_expr(iter_expr)}) {{")
         self.indent += 1
         for stmt in node.body:
             self.emit_comments_before(stmt.lineno)
@@ -1039,7 +1104,7 @@ def main():
     transpiler = JSTranspiler()
     print(transpiler.transpile(source))
     print()
-    print("export { parse, ParseError };")
+    print("module.exports = { parse, ParseError };")
 
 
 if __name__ == "__main__":

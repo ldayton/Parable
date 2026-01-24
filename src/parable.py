@@ -5835,7 +5835,8 @@ def _find_braced_param_end(value: str, start: int) -> int:
         if c == "\\" and i + 1 < len(value):
             i += 2
             continue
-        if c == "'" and not in_double:
+        # Single quotes: only delegate in QUOTE state (after %#^,)
+        if c == "'" and dolbrace_state == DolbraceState.QUOTE and not in_double:
             i = _skip_single_quoted(value, i + 1)
             continue
         if c == '"':
@@ -5845,8 +5846,10 @@ def _find_braced_param_end(value: str, start: int) -> int:
         if in_double:
             i += 1
             continue
-        # State transition: operators move from PARAM to WORD
-        if dolbrace_state == DolbraceState.PARAM and c in ":-=?+#%/^,":
+        # State transitions: operators move from PARAM to WORD or QUOTE
+        if dolbrace_state == DolbraceState.PARAM and c in "%#^,":
+            dolbrace_state = DolbraceState.QUOTE
+        elif dolbrace_state == DolbraceState.PARAM and c in ":-=?+/":
             dolbrace_state = DolbraceState.WORD
         # Handle array subscripts (only in PARAM state, not pattern words)
         if c == "[" and dolbrace_state == DolbraceState.PARAM and not in_double:

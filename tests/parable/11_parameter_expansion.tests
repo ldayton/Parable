@@ -747,3 +747,10 @@ echo ${foo#[abc]}
 ---
 (command (word "echo") (word "${foo#[abc]}"))
 ---
+
+
+=== single quote in pattern removal
+echo "${foo%'*'}"
+---
+(command (word "echo") (word "\"${foo%'*'}\""))
+---

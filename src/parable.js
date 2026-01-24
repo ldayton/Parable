@@ -6976,7 +6976,8 @@ function _findBracedParamEnd(value, start) {
 			i += 2;
 			continue;
 		}
-		if (c === "'" && !in_double) {
+		// Single quotes: only delegate in QUOTE state (after %#^,)
+		if (c === "'" && dolbrace_state === DolbraceState.QUOTE && !in_double) {
 			i = _skipSingleQuoted(value, i + 1);
 			continue;
 		}
@@ -6989,8 +6990,10 @@ function _findBracedParamEnd(value, start) {
 			i += 1;
 			continue;
 		}
-		// State transition: operators move from PARAM to WORD
-		if (dolbrace_state === DolbraceState.PARAM && ":-=?+#%/^,".includes(c)) {
+		// State transitions: operators move from PARAM to WORD or QUOTE
+		if (dolbrace_state === DolbraceState.PARAM && "%#^,".includes(c)) {
+			dolbrace_state = DolbraceState.QUOTE;
+		} else if (dolbrace_state === DolbraceState.PARAM && ":-=?+/".includes(c)) {
 			dolbrace_state = DolbraceState.WORD;
 		}
 		// Handle array subscripts (only in PARAM state, not pattern words)

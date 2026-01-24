@@ -261,6 +261,7 @@ class MatchedPairFlags:
     ARITH = 0x08  # Inside arithmetic expression
     ALLOWESC = 0x10  # Allow backslash escapes (for $'...')
     EXTGLOB = 0x20  # Inside extglob pattern - don't parse ${ $( as constructs
+    FIRSTCLOSE = 0x40  # Bare open delimiter doesn't increment count (bash's P_FIRSTCLOSE)
 
 
 class SavedParserState:

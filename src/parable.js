@@ -201,6 +201,7 @@ class MatchedPairFlags {
 	static ARITH = 8;
 	static ALLOWESC = 16;
 	static EXTGLOB = 32;
+	static FIRSTCLOSE = 64;
 }
 
 class SavedParserState {

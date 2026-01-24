@@ -172,22 +172,34 @@ class JSTranspiler(ast.NodeVisitor):
             self.emit(" */")
         self.emit("")
 
+    def _is_typing_import(self, stmt: ast.stmt) -> bool:
+        return isinstance(stmt, ast.ImportFrom) and stmt.module == "typing"
+
+    def _is_type_alias(self, stmt: ast.stmt) -> bool:
+        """Check for type alias like `ArithNode = Union[...]`."""
+        if not isinstance(stmt, ast.Assign) or len(stmt.targets) != 1:
+            return False
+        if not isinstance(stmt.value, ast.Subscript):
+            return False
+        return isinstance(stmt.value.value, ast.Name) and stmt.value.value.id == "Union"
+
+    def _is_unused_module_var(self, stmt: ast.stmt, module: ast.Module) -> bool:
+        if not isinstance(stmt, ast.Assign) or len(stmt.targets) != 1:
+            return False
+        target = stmt.targets[0]
+        if not isinstance(target, ast.Name):
+            return False
+        return not self._is_name_used(target.id, module, stmt)
+
     def visit_Module(self, node: ast.Module):
         self._emit_module_docstring(node)
         for stmt in node.body:
-            # Skip typing imports (from typing import ...)
-            if isinstance(stmt, ast.ImportFrom) and stmt.module == "typing":
+            if self._is_typing_import(stmt):
                 continue
-            # Skip type aliases and unused module-level variable definitions
-            if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
-                # Type alias (ArithNode = Union[...])
-                if isinstance(stmt.value, ast.Subscript):
-                    if isinstance(stmt.value.value, ast.Name) and stmt.value.value.id == "Union":
-                        continue
-                # Unused variable
-                if isinstance(stmt.targets[0], ast.Name):
-                    if not self._is_name_used(stmt.targets[0].id, node, stmt):
-                        continue
+            if self._is_type_alias(stmt):
+                continue
+            if self._is_unused_module_var(stmt, node):
+                continue
             self.emit_comments_before(stmt.lineno)
             self.visit(stmt)
 
@@ -297,10 +309,11 @@ class JSTranspiler(ast.NodeVisitor):
                 self._count_assignments(stmt.body, counts, top_level, True)
                 self._count_assignments(stmt.orelse, counts, top_level, True)
             elif isinstance(stmt, ast.While):
+                # While loops execute 0+ times, so any assignment may happen multiple times.
+                # Count body assignments separately, then merge with count >= 2 to force `let`.
                 body_counts, _ = self._count_assignments(stmt.body, {}, set(), True)
                 for name, count in body_counts.items():
-                    # Double count so loop vars use `let` (loops may execute multiple times)
-                    counts[name] = counts.get(name, 0) + count * 2
+                    counts[name] = counts.get(name, 0) + max(count, 2)
                 self._count_assignments(stmt.orelse, counts, top_level, True)
             elif isinstance(stmt, ast.If):
                 self._count_assignments(stmt.body, counts, top_level, True)

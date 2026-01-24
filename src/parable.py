@@ -1745,8 +1745,9 @@ class Lexer:
                     if not self._param_subscript_has_close(self.pos):
                         break
                     # Array subscript - use _parse_matched_pair for bracket/quote handling
+                    # ARRAYSUB enables ${} and <() detection inside subscripts
                     name_chars.append(self.advance())  # [
-                    content = self._parse_matched_pair("[", "]")
+                    content = self._parse_matched_pair("[", "]", MatchedPairFlags.ARRAYSUB)
                     name_chars.append(content)
                     name_chars.append("]")
                     break

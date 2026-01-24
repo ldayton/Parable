@@ -2042,8 +2042,9 @@ class Lexer {
 						break;
 					}
 					// Array subscript - use _parse_matched_pair for bracket/quote handling
+					// ARRAYSUB enables ${} and <() detection inside subscripts
 					name_chars.push(this.advance());
-					content = this._parseMatchedPair("[", "]");
+					content = this._parseMatchedPair("[", "]", MatchedPairFlags.ARRAYSUB);
 					name_chars.push(content);
 					name_chars.push("]");
 					break;

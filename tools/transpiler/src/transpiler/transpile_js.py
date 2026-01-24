@@ -61,6 +61,15 @@ class JSTranspiler(ast.NodeVisitor):
             for k, v in old.items():
                 setattr(self, k, v)
 
+    @contextmanager
+    def _indented(self):
+        """Temporarily increase indentation level."""
+        self.indent += 1
+        try:
+            yield
+        finally:
+            self.indent -= 1
+
     def transpile(self, source: str) -> str:
         # Extract standalone comments (not inline) using tokenize
         lines = source.splitlines()
@@ -167,12 +176,10 @@ class JSTranspiler(ast.NodeVisitor):
         bases = [self.visit_expr(b) for b in node.bases]
         extends = f" extends {bases[0]}" if bases else ""
         self.emit(f"class {safe_name}{extends} {{")
-        self.indent += 1
-        with self._scoped(in_class_body=True, class_has_base=bool(bases)):
+        with self._indented(), self._scoped(in_class_body=True, class_has_base=bool(bases)):
             for stmt in node.body:
                 self.emit_comments_before(stmt.lineno)
                 self.visit(stmt)
-        self.indent -= 1
         self.emit("}")
         self.emit("")
 
@@ -353,16 +360,15 @@ class JSTranspiler(ast.NodeVisitor):
             self.emit(f"{name}({args_str}) {{")
         else:
             self.emit(f"function {name}({args_str}) {{")
-        self.indent += 1
-        new_scope = self._setup_function_scope(node)
-        with self._scoped(in_class_body=False, in_method=True, scope=new_scope):
-            if name == "constructor" and self.class_has_base:
-                self._emit_constructor_body(node)
-            else:
-                for stmt in node.body:
-                    self.emit_comments_before(stmt.lineno)
-                    self.visit(stmt)
-        self.indent -= 1
+        with self._indented():
+            new_scope = self._setup_function_scope(node)
+            with self._scoped(in_class_body=False, in_method=True, scope=new_scope):
+                if name == "constructor" and self.class_has_base:
+                    self._emit_constructor_body(node)
+                else:
+                    for stmt in node.body:
+                        self.emit_comments_before(stmt.lineno)
+                        self.visit(stmt)
         self.emit("}")
         self.emit("")
 
@@ -474,21 +480,19 @@ class JSTranspiler(ast.NodeVisitor):
             self.emit_raw("    " * self.indent + f"}} else if ({test}) {{")
         else:
             self.emit(f"if ({test}) {{")
-        self.indent += 1
-        for stmt in node.body:
-            self.emit_comments_before(stmt.lineno)
-            self.visit(stmt)
-        self.indent -= 1
+        with self._indented():
+            for stmt in node.body:
+                self.emit_comments_before(stmt.lineno)
+                self.visit(stmt)
         if node.orelse:
             if len(node.orelse) == 1 and isinstance(node.orelse[0], ast.If):
                 self._emit_if(node.orelse[0], is_elif=True)
             else:
                 self.emit("} else {")
-                self.indent += 1
-                for stmt in node.orelse:
-                    self.emit_comments_before(stmt.lineno)
-                    self.visit(stmt)
-                self.indent -= 1
+                with self._indented():
+                    for stmt in node.orelse:
+                        self.emit_comments_before(stmt.lineno)
+                        self.visit(stmt)
                 self.emit("}")
         else:
             self.emit("}")
@@ -496,11 +500,10 @@ class JSTranspiler(ast.NodeVisitor):
     def visit_While(self, node: ast.While):
         test = self.visit_expr(node.test)
         self.emit(f"while ({test}) {{")
-        self.indent += 1
-        for stmt in node.body:
-            self.emit_comments_before(stmt.lineno)
-            self.visit(stmt)
-        self.indent -= 1
+        with self._indented():
+            for stmt in node.body:
+                self.emit_comments_before(stmt.lineno)
+                self.visit(stmt)
         self.emit("}")
 
     def _emit_range_loop(self, target: str, args: list[ast.expr]) -> str:
@@ -529,11 +532,10 @@ class JSTranspiler(ast.NodeVisitor):
             self.emit(f"{self._emit_range_loop(target, iter_expr.args)} {{")
         else:
             self.emit(f"for (let {target} of {self.visit_expr(iter_expr)}) {{")
-        self.indent += 1
-        for stmt in node.body:
-            self.emit_comments_before(stmt.lineno)
-            self.visit(stmt)
-        self.indent -= 1
+        with self._indented():
+            for stmt in node.body:
+                self.emit_comments_before(stmt.lineno)
+                self.visit(stmt)
         self.emit("}")
 
     def visit_Expr(self, node: ast.Expr):
@@ -559,19 +561,17 @@ class JSTranspiler(ast.NodeVisitor):
 
     def visit_Try(self, node: ast.Try):
         self.emit("try {")
-        self.indent += 1
-        for stmt in node.body:
-            self.emit_comments_before(stmt.lineno)
-            self.visit(stmt)
-        self.indent -= 1
+        with self._indented():
+            for stmt in node.body:
+                self.emit_comments_before(stmt.lineno)
+                self.visit(stmt)
         for handler in node.handlers:
             name = handler.name or "_"
             self.emit(f"}} catch ({name}) {{")
-            self.indent += 1
-            for stmt in handler.body:
-                self.emit_comments_before(stmt.lineno)
-                self.visit(stmt)
-            self.indent -= 1
+            with self._indented():
+                for stmt in handler.body:
+                    self.emit_comments_before(stmt.lineno)
+                    self.visit(stmt)
         self.emit("}")
 
     # Expression visitors return strings

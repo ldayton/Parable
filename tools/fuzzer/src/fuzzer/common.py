@@ -4,7 +4,6 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -70,26 +69,20 @@ def parse_test_file(filepath: Path) -> list[str]:
 
 def run_oracle(input_text: str, extglob: bool = False) -> str | None:
     """Run bash-oracle on input. Returns s-expr or None on error/timeout."""
-    tmp_path = None
     try:
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".sh", delete=False) as f:
-            f.write(input_text)
-            tmp_path = Path(f.name)
         cmd = [str(ORACLE_PATH)]
         if extglob:
             cmd.append("--extglob")
-        cmd.append(str(tmp_path))
+        cmd.extend(["-e", input_text])
         result = subprocess.run(cmd, capture_output=True, timeout=0.5)
         if result.returncode != 0:
             return None
         return result.stdout.decode("utf-8", errors="replace").strip()
     except subprocess.TimeoutExpired:
         return None
-    except (FileNotFoundError, OSError):
+    except (FileNotFoundError, OSError, ValueError):
+        # ValueError: null bytes in input can't be passed as command-line args
         return None
-    finally:
-        if tmp_path:
-            tmp_path.unlink(missing_ok=True)
 
 
 def run_parable(input_text: str, extglob: bool = False) -> str | None:

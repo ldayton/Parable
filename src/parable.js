@@ -2575,7 +2575,27 @@ class Word extends Node {
 		return result.join("");
 	}
 
-	_expandAnsiCEscapes(value) {
+	_shSingleQuote(s) {
+		let c, result;
+		if (!s) {
+			return "''";
+		}
+		if (s === "'") {
+			return "\\'";
+		}
+		result = ["'"];
+		for (c of s) {
+			if (c === "'") {
+				result.push("'\\''");
+			} else {
+				result.push(c);
+			}
+		}
+		result.push("'");
+		return result.join("");
+	}
+
+	_ansiCToBytes(inner) {
 		let byte_val,
 			c,
 			codepoint,
@@ -2583,33 +2603,24 @@ class Word extends Node {
 			ctrl_val,
 			hex_str,
 			i,
-			inner,
 			j,
 			result,
 			simple,
 			skip_extra;
-		if (!(value.startsWith("'") && value.endsWith("'"))) {
-			return value;
-		}
-		inner = value.slice(1, value.length - 1);
 		result = [];
 		i = 0;
 		while (i < inner.length) {
 			if (inner[i] === "\\" && i + 1 < inner.length) {
 				c = inner[i + 1];
-				// Check simple escapes first
 				simple = _getAnsiEscape(c);
 				if (simple >= 0) {
 					result.push(simple);
 					i += 2;
 				} else if (c === "'") {
-					// bash-oracle outputs \' as '\'' (shell quoting trick)
-					result.push(...[39, 92, 39, 39]);
+					result.push(39);
 					i += 2;
 				} else if (c === "x") {
-					// Check for \x{...} brace syntax (bash 5.3+)
 					if (i + 2 < inner.length && inner[i + 2] === "{") {
-						// Find closing brace or end of hex digits
 						j = i + 3;
 						while (j < inner.length && _isHexDigit(inner[j])) {
 							j += 1;
@@ -2618,18 +2629,16 @@ class Word extends Node {
 						if (j < inner.length && inner[j] === "}") {
 							j += 1;
 						}
-						// If no hex digits, treat as NUL (truncates)
 						if (!hex_str) {
-							return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+							return result;
 						}
 						byte_val = parseInt(hex_str, 16) & 255;
 						if (byte_val === 0) {
-							return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+							return result;
 						}
 						this._appendWithCtlesc(result, byte_val);
 						i = j;
 					} else {
-						// Hex escape \xHH (1-2 hex digits) - raw byte
 						j = i + 2;
 						while (j < inner.length && j < i + 4 && _isHexDigit(inner[j])) {
 							j += 1;
@@ -2637,8 +2646,7 @@ class Word extends Node {
 						if (j > i + 2) {
 							byte_val = parseInt(inner.slice(i + 2, j), 16);
 							if (byte_val === 0) {
-								// NUL truncates string
-								return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+								return result;
 							}
 							this._appendWithCtlesc(result, byte_val);
 							i = j;
@@ -2648,7 +2656,6 @@ class Word extends Node {
 						}
 					}
 				} else if (c === "u") {
-					// Unicode escape \uHHHH (1-4 hex digits) - encode as UTF-8
 					j = i + 2;
 					while (j < inner.length && j < i + 6 && _isHexDigit(inner[j])) {
 						j += 1;
@@ -2656,8 +2663,7 @@ class Word extends Node {
 					if (j > i + 2) {
 						codepoint = parseInt(inner.slice(i + 2, j), 16);
 						if (codepoint === 0) {
-							// NUL truncates string
-							return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+							return result;
 						}
 						result.push(
 							...Array.from(
@@ -2670,7 +2676,6 @@ class Word extends Node {
 						i += 1;
 					}
 				} else if (c === "U") {
-					// Unicode escape \UHHHHHHHH (1-8 hex digits) - encode as UTF-8
 					j = i + 2;
 					while (j < inner.length && j < i + 10 && _isHexDigit(inner[j])) {
 						j += 1;
@@ -2678,8 +2683,7 @@ class Word extends Node {
 					if (j > i + 2) {
 						codepoint = parseInt(inner.slice(i + 2, j), 16);
 						if (codepoint === 0) {
-							// NUL truncates string
-							return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+							return result;
 						}
 						result.push(
 							...Array.from(
@@ -2692,10 +2696,8 @@ class Word extends Node {
 						i += 1;
 					}
 				} else if (c === "c") {
-					// Control character \cX - mask with 0x1f
 					if (i + 3 <= inner.length) {
 						ctrl_char = inner[i + 2];
-						// POSIX: $'\c\\' consumes both backslashes
 						skip_extra = 0;
 						if (
 							ctrl_char === "\\" &&
@@ -2706,8 +2708,7 @@ class Word extends Node {
 						}
 						ctrl_val = ctrl_char.charCodeAt(0) & 31;
 						if (ctrl_val === 0) {
-							// NUL truncates string
-							return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+							return result;
 						}
 						this._appendWithCtlesc(result, ctrl_val);
 						i += 3 + skip_extra;
@@ -2716,7 +2717,6 @@ class Word extends Node {
 						i += 1;
 					}
 				} else if (c === "0") {
-					// Nul or octal \0 or \0NN (up to 3 digits total)
 					j = i + 2;
 					while (j < inner.length && j < i + 4 && _isOctalDigit(inner[j])) {
 						j += 1;
@@ -2724,30 +2724,25 @@ class Word extends Node {
 					if (j > i + 2) {
 						byte_val = parseInt(inner.slice(i + 1, j), 8) & 255;
 						if (byte_val === 0) {
-							// NUL truncates string
-							return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+							return result;
 						}
 						this._appendWithCtlesc(result, byte_val);
 						i = j;
 					} else {
-						// Just \0 - NUL truncates string
-						return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+						return result;
 					}
 				} else if (c >= "1" && c <= "7") {
-					// Octal escape \NNN (1-3 digits) - raw byte, wraps at 256
 					j = i + 1;
 					while (j < inner.length && j < i + 4 && _isOctalDigit(inner[j])) {
 						j += 1;
 					}
 					byte_val = parseInt(inner.slice(i + 1, j), 8) & 255;
 					if (byte_val === 0) {
-						// NUL truncates string
-						return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+						return result;
 					}
 					this._appendWithCtlesc(result, byte_val);
 					i = j;
 				} else {
-					// Unknown escape - preserve as-is
 					result.push(92);
 					result.push(c.charCodeAt(0));
 					i += 2;
@@ -2757,8 +2752,18 @@ class Word extends Node {
 				i += 1;
 			}
 		}
-		// Decode as UTF-8, replacing invalid sequences with U+FFFD
-		return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+		return result;
+	}
+
+	_expandAnsiCEscapes(value) {
+		let inner, literal_bytes, literal_str;
+		if (!(value.startsWith("'") && value.endsWith("'"))) {
+			return value;
+		}
+		inner = value.slice(1, value.length - 1);
+		literal_bytes = this._ansiCToBytes(inner);
+		literal_str = new TextDecoder().decode(new Uint8Array(literal_bytes));
+		return this._shSingleQuote(literal_str);
 	}
 
 	_expandAllAnsiCQuotes(value) {

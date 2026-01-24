@@ -8881,7 +8881,7 @@ class Parser:
                             delimiter_chars.append(self.advance())
                     if not self.at_end():
                         self.advance()  # skip closing '
-                elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                elif _is_expansion_start(self.source, self.pos, "$("):
                     # Command substitution embedded in delimiter
                     delimiter_chars.append(self.advance())  # $
                     delimiter_chars.append(self.advance())  # (

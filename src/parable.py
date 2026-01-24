@@ -9,7 +9,7 @@ ast = parse("ps aux | grep python | awk '{print $2}'")
 
 from __future__ import annotations
 
-from typing import Union
+from typing import Callable, Union
 
 
 class ParseError(Exception):
@@ -2128,7 +2128,7 @@ class Word(Node):
         escaped = value.replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
         return '(word "' + escaped + '")'
 
-    def _append_with_ctlesc(self, result: bytearray, byte_val: int):
+    def _append_with_ctlesc(self, result: bytearray, byte_val: int) -> None:
         """Append byte to result (CTLESC doubling happens later in to_sexp)."""
         result.append(byte_val)
 
@@ -2991,7 +2991,7 @@ class Word(Node):
                 i += 1
         return "".join(result)
 
-    def _collect_cmdsubs(self, node) -> list:
+    def _collect_cmdsubs(self, node: Node) -> list:
         """Recursively collect CommandSubstitution nodes from an AST node."""
         result = []
         node_kind = getattr(node, "kind", None)
@@ -3032,7 +3032,7 @@ class Word(Node):
             result.extend(self._collect_cmdsubs(false_value))
         return result
 
-    def _collect_procsubs(self, node) -> list:
+    def _collect_procsubs(self, node: Node) -> list:
         """Recursively collect ProcessSubstitution nodes from an AST node."""
         result = []
         node_kind = getattr(node, "kind", None)
@@ -8009,7 +8009,7 @@ class Parser:
             return ArithTernary(cond, if_true, if_false)
         return cond
 
-    def _arith_parse_left_assoc(self, ops: list, parsefn) -> Node:
+    def _arith_parse_left_assoc(self, ops: list, parsefn: Callable[[], Node]) -> Node:
         """Parse left-associative binary operators using match/consume."""
         left = parsefn()
         while True:

@@ -41,6 +41,13 @@ Banned constructions:
     yield                 yield x                   return list or use callback
     yield from            yield from iter           explicit loop
     zip                   for a, b in zip(x, y)     indexed loop
+
+Required annotations (for Go/TS transpiler):
+
+    Missing                Example                   Required
+    --------------------   ------------------------  --------------------------
+    return type            def f():                  def f() -> int:
+    parameter type         def f(x):                 def f(x: int):
 """
 
 import ast
@@ -228,6 +235,21 @@ def check_file(filepath):
         if isinstance(node, ast.ImportFrom):
             if node.module not in ("__future__", "typing"):
                 errors.append((lineno, "from import: not allowed, code must be self-contained"))
+
+        # missing return type annotation (skip __init__ and __new__)
+        if isinstance(node, ast.FunctionDef):
+            if node.returns is None and node.name not in ("__init__", "__new__"):
+                errors.append((lineno, "missing return type: def " + node.name + "() -> ..."))
+
+        # missing parameter type annotation (skip self/cls)
+        if isinstance(node, ast.FunctionDef):
+            for i, arg in enumerate(node.args.args):
+                if arg.arg in ("self", "cls") and i == 0:
+                    continue
+                if arg.annotation is None:
+                    errors.append(
+                        (lineno, "missing param type: " + arg.arg + " in " + node.name + "()")
+                    )
 
     return errors
 

@@ -5876,7 +5876,7 @@ def _find_cmdsub_end(value: str, start: int) -> int:
                     i += 1
             continue
         # Handle arithmetic expressions $((
-        if _starts_with_at(value, i, "$(("):
+        if _is_expansion_start(value, i, "$(("):
             if _is_valid_arithmetic_start(value, i):
                 arith_depth += 1
                 i += 3
@@ -5988,10 +5988,10 @@ def _find_braced_param_end(value: str, start: int) -> int:
             depth -= 1
             if depth == 0:
                 return i + 1
-        if c == "$" and i + 1 < len(value) and value[i + 1] == "(":
+        if _is_expansion_start(value, i, "$("):
             i = _find_cmdsub_end(value, i + 2)
             continue
-        if c == "$" and i + 1 < len(value) and value[i + 1] == "{":
+        if _is_expansion_start(value, i, "${"):
             i = _find_braced_param_end(value, i + 2)
             continue
         i += 1

@@ -491,46 +491,32 @@ class JSTranspiler(ast.NodeVisitor):
         self.indent -= 1
         self.emit("}")
 
+    def _emit_range_loop(self, target: str, args: list[ast.expr]) -> str:
+        """Build a C-style for loop header from range() arguments."""
+        if len(args) == 1:
+            return f"for (let {target} = 0; {target} < {self.visit_expr(args[0])}; {target}++)"
+        if len(args) == 2:
+            return f"for (let {target} = {self.visit_expr(args[0])}; {target} < {self.visit_expr(args[1])}; {target}++)"
+        start, end, step = args
+        is_negative = (isinstance(step, ast.UnaryOp) and isinstance(step.op, ast.USub)) or (
+            isinstance(step, ast.Constant) and step.value < 0
+        )
+        if is_negative:
+            return f"for (let {target} = {self.visit_expr(start)}; {target} > {self.visit_expr(end)}; {target}--)"
+        step_val = self.visit_expr(step)
+        return f"for (let {target} = {self.visit_expr(start)}; {target} < {self.visit_expr(end)}; {target} += {step_val})"
+
     def visit_For(self, node: ast.For):
         target = self.visit_expr(node.target)
         iter_expr = node.iter
-        # For loops always declare their own block-scoped variable
-        # Use let for loop variables (they're reassigned each iteration)
-        decl = "let "
-        # Handle range() specially
         if (
             isinstance(iter_expr, ast.Call)
             and isinstance(iter_expr.func, ast.Name)
             and iter_expr.func.id == "range"
         ):
-            args = iter_expr.args
-            if len(args) == 1:
-                self.emit(
-                    f"for ({decl}{target} = 0; {target} < {self.visit_expr(args[0])}; {target}++) {{"
-                )
-            elif len(args) == 2:
-                self.emit(
-                    f"for ({decl}{target} = {self.visit_expr(args[0])}; {target} < {self.visit_expr(args[1])}; {target}++) {{"
-                )
-            else:
-                start, end, step = args
-                # Check if step is negative for proper comparison and decrement
-                is_negative = False
-                if isinstance(step, ast.UnaryOp) and isinstance(step.op, ast.USub):
-                    is_negative = True
-                elif isinstance(step, ast.Constant) and step.value < 0:
-                    is_negative = True
-                if is_negative:
-                    self.emit(
-                        f"for ({decl}{target} = {self.visit_expr(start)}; {target} > {self.visit_expr(end)}; {target}--) {{"
-                    )
-                else:
-                    step_val = self.visit_expr(step)
-                    self.emit(
-                        f"for ({decl}{target} = {self.visit_expr(start)}; {target} < {self.visit_expr(end)}; {target} += {step_val}) {{"
-                    )
+            self.emit(f"{self._emit_range_loop(target, iter_expr.args)} {{")
         else:
-            self.emit(f"for ({decl}{target} of {self.visit_expr(iter_expr)}) {{")
+            self.emit(f"for (let {target} of {self.visit_expr(iter_expr)}) {{")
         self.indent += 1
         for stmt in node.body:
             self.emit_comments_before(stmt.lineno)

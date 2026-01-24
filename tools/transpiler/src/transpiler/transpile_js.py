@@ -221,7 +221,9 @@ class JSTranspiler(ast.NodeVisitor):
         counts, _ = self._count_assignments(stmts)
         return set(counts.keys())
 
-    def _count_assignments(self, stmts: list, counts: dict = None, top_level: set = None, in_block: bool = False) -> tuple[dict, set]:
+    def _count_assignments(
+        self, stmts: list, counts: dict = None, top_level: set = None, in_block: bool = False
+    ) -> tuple[dict, set]:
         """Count assignments and track which vars are first assigned at top level."""
         if counts is None:
             counts = {}
@@ -506,7 +508,6 @@ class JSTranspiler(ast.NodeVisitor):
         target = self.visit_expr(node.target)
         iter_expr = node.iter
         # For loops always declare their own block-scoped variable
-        names = self._collect_names_from_target(node.target)
         # Use let for loop variables (they're reassigned each iteration)
         decl = "let "
         # Handle range() specially

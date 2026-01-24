@@ -2918,7 +2918,7 @@ class Word(Node):
         i = 0
         while i < len(value):
             # Check for $(( arithmetic expression
-            if _starts_with_at(value, i, "$(("):
+            if _is_expansion_start(value, i, "$(("):
                 start = i
                 i += 3
                 depth = 2  # Track single parens: $(( starts at depth 2

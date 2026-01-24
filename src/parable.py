@@ -2175,7 +2175,7 @@ class Word(Node):
                 result.append(c)
                 i += 1
             # Check for ${ param expansion
-            elif c == "$" and i + 1 < len(value) and value[i + 1] == "{" and not quote.single:
+            elif _is_expansion_start(value, i, "${") and not quote.single:
                 result.append("$")
                 result.append("{")
                 i += 2

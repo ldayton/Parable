@@ -7668,7 +7668,7 @@ class Parser {
 	}
 
 	_clearState(flag) {
-		this._parser_state = this._parser_state & /* TODO: UnaryOp Invert() */ flag;
+		this._parser_state = this._parser_state & ~flag;
 	}
 
 	_inState(flag) {

@@ -36,6 +36,79 @@ NOT_HANDLED = _NotHandled()
 
 
 class JSTranspiler(ast.NodeVisitor):
+    # Attributes/names that are known to be arrays (for Python/JS truthiness fix)
+    _ARRAY_ATTRS = {"redirects", "parts", "elements", "words", "patterns", "commands"}
+    _LIST_SUFFIXES = (
+        "_chars",
+        "_list",
+        "_parts",
+        "chars",
+        "parts",
+        "result",
+        "results",
+        "items",
+        "values",
+    )
+    # JS reserved words that cannot be used with dot notation
+    _JS_RESERVED = {
+        "class",
+        "default",
+        "delete",
+        "export",
+        "import",
+        "new",
+        "return",
+        "super",
+        "switch",
+        "this",
+        "throw",
+        "typeof",
+        "void",
+        "with",
+        "yield",
+    }
+    # Rename JS reserved words and conflicting globals
+    _SAFE_NAME_MAP = {
+        "var": "variable",
+        "class": "cls",
+        "function": "func",
+        "in": "inVal",
+        "with": "withVal",
+        "Array": "ArrayNode",
+        "Function": "FunctionNode",
+    }
+    # Python name -> JS name mappings
+    _NAME_MAP = {
+        "True": "true",
+        "False": "false",
+        "None": "null",
+        "self": "this",
+        "Exception": "Error",
+        "NotImplementedError": 'new Error("Not implemented")',
+    }
+    # Method name mappings: Python -> JS
+    _METHOD_RENAMES = {
+        "append": "push",
+        "startswith": "startsWith",
+        "endswith": "endsWith",
+        "strip": "trim",
+        "lower": "toLowerCase",
+        "upper": "toUpperCase",
+        "find": "indexOf",
+        "rfind": "lastIndexOf",
+        "replace": "replaceAll",
+    }
+    # Regex-based character class tests
+    _CHAR_CLASS_TESTS = {
+        "isalpha": "/^[a-zA-Z]$/",
+        "isdigit": "/^[0-9]+$/",
+        "isalnum": "/^[a-zA-Z0-9]$/",
+        "isspace": "/^\\s$/",
+    }
+    # Python kwargs with skipped positional defaults need explicit JS defaults
+    # Maps: (kwarg_name, current_arg_count) -> defaults to insert before the kwarg
+    _KWARG_DEFAULTS = {("in_procsub", 1): ["0"]}  # indent=0 default
+
     def __init__(self):
         self.indent = 0
         self.output = []
@@ -50,13 +123,6 @@ class JSTranspiler(ast.NodeVisitor):
         self._in_assignment_target = False
 
     def emit(self, text: str) -> None:
-        self.output.append("    " * self.indent + text)
-
-    def emit_raw(self, text: str) -> None:
-        self.output.append(text)
-
-    def emit_same_line(self, text: str) -> None:
-        """Emit text at current indent, closing previous block on same line."""
         self.output.append("    " * self.indent + text)
 
     def emit_comments_before(self, line: int) -> None:
@@ -217,16 +283,7 @@ class JSTranspiler(ast.NodeVisitor):
 
     def _safe_name(self, name: str) -> str:
         """Rename JS reserved words and conflicting globals."""
-        reserved = {
-            "var": "variable",
-            "class": "cls",
-            "function": "func",
-            "in": "inVal",
-            "with": "withVal",
-            "Array": "ArrayNode",  # Avoid shadowing JS global
-            "Function": "FunctionNode",  # Avoid shadowing JS global
-        }
-        return reserved.get(name, name)
+        return self._SAFE_NAME_MAP.get(name, name)
 
     def _escape_regex_chars(self, s: str) -> str:
         """Escape special regex characters for use in a character class."""
@@ -515,7 +572,7 @@ class JSTranspiler(ast.NodeVisitor):
         if self._is_array_attr(node.test):
             test = f"{test}?.length"
         if is_elif:
-            self.emit_same_line(f"}} else if ({test}) {{")
+            self.emit(f"}} else if ({test}) {{")
         else:
             self.emit(f"if ({test}) {{")
         with self._indented():
@@ -620,15 +677,7 @@ class JSTranspiler(ast.NodeVisitor):
         raise NotImplementedError(f"No visitor for {node.__class__.__name__}")
 
     def visit_expr_Name(self, node: ast.Name) -> str:
-        mapping = {
-            "True": "true",
-            "False": "false",
-            "None": "null",
-            "self": "this",
-            "Exception": "Error",
-            "NotImplementedError": 'new Error("Not implemented")',
-        }
-        name = mapping.get(node.id, node.id)
+        name = self._NAME_MAP.get(node.id, node.id)
         return self._safe_name(name)
 
     def visit_expr_Constant(self, node: ast.Constant) -> str:
@@ -705,62 +754,11 @@ class JSTranspiler(ast.NodeVisitor):
             return f"this.{method_name}.bind(this)"
         return self.visit_expr(arg)
 
-    # Attributes/names that are known to be arrays (for Python/JS truthiness fix)
-    _ARRAY_ATTRS = {"redirects", "parts", "elements", "words", "patterns", "commands"}
-    _LIST_SUFFIXES = (
-        "_chars",
-        "_list",
-        "_parts",
-        "chars",
-        "parts",
-        "result",
-        "results",
-        "items",
-        "values",
-    )
-    # Method name mappings: Python -> JS
-    _method_renames = {
-        "append": "push",
-        "startswith": "startsWith",
-        "endswith": "endsWith",
-        "strip": "trim",
-        "lower": "toLowerCase",
-        "upper": "toUpperCase",
-        "find": "indexOf",
-        "rfind": "lastIndexOf",
-        "replace": "replaceAll",
-    }
-    # Regex-based character class tests
-    _char_class_tests = {
-        "isalpha": "/^[a-zA-Z]$/",
-        "isdigit": "/^[0-9]+$/",
-        "isalnum": "/^[a-zA-Z0-9]$/",
-        "isspace": "/^\\s$/",
-    }
-    # JS reserved words that cannot be used with dot notation
-    _JS_RESERVED = {
-        "class",
-        "default",
-        "delete",
-        "export",
-        "import",
-        "new",
-        "return",
-        "super",
-        "switch",
-        "this",
-        "throw",
-        "typeof",
-        "void",
-        "with",
-        "yield",
-    }
-
     def _handle_method_call(self, node: ast.Call, obj: str, method: str) -> str | _NotHandled:
         """Handle special method transformations. Returns NOT_HANDLED to fall through."""
         # Character class tests
-        if method in self._char_class_tests:
-            return f"{self._char_class_tests[method]}.test({obj})"
+        if method in self._CHAR_CLASS_TESTS:
+            return f"{self._CHAR_CLASS_TESTS[method]}.test({obj})"
         # Strip methods with optional character set
         if method in ("lstrip", "rstrip"):
             return self._handle_strip(node, obj, method)
@@ -778,7 +776,7 @@ class JSTranspiler(ast.NodeVisitor):
         # Tuple argument for startswith/endswith
         if method in ("endswith", "startswith") and len(node.args) == 1:
             if isinstance(node.args[0], (ast.Tuple, ast.List)):
-                js_method = self._method_renames[method]
+                js_method = self._METHOD_RENAMES[method]
                 checks = [f"{obj}.{js_method}({self.visit_expr(e)})" for e in node.args[0].elts]
                 return f"({' || '.join(checks)})"
         # Join: separator.join(lst) -> lst.join(separator)
@@ -817,11 +815,8 @@ class JSTranspiler(ast.NodeVisitor):
     def visit_expr_Call(self, node: ast.Call) -> str:
         # Combine positional and keyword args (JS doesn't have kwargs, so treat as positional)
         all_args = [self._visit_callback_arg(a) for a in node.args]
-        # Python kwargs with skipped positional defaults need explicit JS defaults
-        # Maps: (kwarg_name, current_arg_count) -> defaults to insert before the kwarg
-        _KWARG_DEFAULTS = {("in_procsub", 1): ["0"]}  # indent=0 default
         for kw in node.keywords:
-            for default in _KWARG_DEFAULTS.get((kw.arg, len(all_args)), []):
+            for default in self._KWARG_DEFAULTS.get((kw.arg, len(all_args)), []):
                 all_args.append(default)
             all_args.append(self.visit_expr(kw.value))
         args = ", ".join(all_args)
@@ -848,7 +843,7 @@ class JSTranspiler(ast.NodeVisitor):
         if result is not NOT_HANDLED:
             return result
         # Apply simple renames, then camelCase conversion
-        method = self._method_renames.get(method, method)
+        method = self._METHOD_RENAMES.get(method, method)
         if "_" in method:
             method = self._camel_case(method)
         return f"{obj}.{method}({args})"
@@ -1102,7 +1097,9 @@ class JSTranspiler(ast.NodeVisitor):
             return f"!{operand}"
         if isinstance(node.op, ast.USub):
             return f"-{operand}"
-        return f"/* TODO: UnaryOp {node.op} */{operand}"
+        if isinstance(node.op, ast.Invert):
+            return f"~{operand}"
+        raise NotImplementedError(f"UnaryOp {node.op.__class__.__name__}")
 
     def visit_expr_IfExp(self, node: ast.IfExp) -> str:
         test = self.visit_expr(node.test)
@@ -1151,7 +1148,9 @@ class JSTranspiler(ast.NodeVisitor):
             ast.BitXor: "^",
             ast.BitAnd: "&",
         }
-        return ops.get(type(op), "/* ? */")
+        if type(op) not in ops:
+            raise NotImplementedError(f"Operator {op.__class__.__name__}")
+        return ops[type(op)]
 
     def visit_cmpop(self, op: ast.cmpop) -> str:
         ops = {
@@ -1166,7 +1165,9 @@ class JSTranspiler(ast.NodeVisitor):
             ast.In: "in",
             ast.NotIn: "not in",
         }
-        return ops.get(type(op), "/* ? */")
+        if type(op) not in ops:
+            raise NotImplementedError(f"Comparison {op.__class__.__name__}")
+        return ops[type(op)]
 
 
 def main():

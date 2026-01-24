@@ -1098,27 +1098,21 @@ class GoTranspiler(ast.NodeVisitor):
         # Tuple passthrough (returns tuple stored in variable)
         "_parse_param_expansion",
         # Complex type assertions needed
-        "_format_command_substitutions",
-        "_collect_cmdsubs",
-        "_collect_procsubs",
         "parse_redirect",
         "_gather_heredoc_bodies",
         "_parse_heredoc",
         "_parse_heredoc_delimiter",
-        "_collect_redirects",
         "parse_case",
         "parse_compound_command",
         "parse_pipeline",
         "parse_list",
         "parse_list_until",
         "parse_coproc",
-        "_parse_comsub_body",
         "_parse_compound_command",
         "_at_list_until_terminator",
         "parse_list_operator",
         "_peek_list_operator",
         "_parse_simple_pipeline",
-        "parse_simple",
         "parse",
     }
 

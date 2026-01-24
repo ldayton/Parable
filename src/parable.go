@@ -4764,15 +4764,540 @@ func (w *Word) _StripArithLineContinuations(value string) string {
 }
 
 func (w *Word) _CollectCmdsubs(node interface{}) []Node {
-	panic("TODO: method needs manual implementation")
+	var result []Node
+	_ = result
+	var nodeKind interface{}
+	_ = nodeKind
+	var elements []Node
+	_ = elements
+	var parts []Node
+	_ = parts
+	var expr interface{}
+	_ = expr
+	var left interface{}
+	_ = left
+	var right interface{}
+	_ = right
+	var operand interface{}
+	_ = operand
+	var condition interface{}
+	_ = condition
+	var trueValue interface{}
+	_ = trueValue
+	var falseValue interface{}
+	_ = falseValue
+	result = []Node{}
+	nodeKind = _getattr(node, "kind", nil)
+	if nodeKind == "cmdsub" {
+		result = append(result, node.(Node))
+	} else if nodeKind == "array" {
+		elements = _getattr(node, "elements", []interface{}{}).([]Node)
+		for _, elem := range elements {
+			parts = _getattr(elem, "parts", []interface{}{}).([]Node)
+			for _, p := range parts {
+				if _getattr(p, "kind", nil) == "cmdsub" {
+					result = append(result, p)
+				} else {
+					result = append(result, w._CollectCmdsubs(p)...)
+				}
+			}
+		}
+	} else {
+		expr = _getattr(node, "expression", nil)
+		if expr != nil {
+			result = append(result, w._CollectCmdsubs(expr)...)
+		}
+	}
+	left = _getattr(node, "left", nil)
+	if left != nil {
+		result = append(result, w._CollectCmdsubs(left)...)
+	}
+	right = _getattr(node, "right", nil)
+	if right != nil {
+		result = append(result, w._CollectCmdsubs(right)...)
+	}
+	operand = _getattr(node, "operand", nil)
+	if operand != nil {
+		result = append(result, w._CollectCmdsubs(operand)...)
+	}
+	condition = _getattr(node, "condition", nil)
+	if condition != nil {
+		result = append(result, w._CollectCmdsubs(condition)...)
+	}
+	trueValue = _getattr(node, "true_value", nil)
+	if trueValue != nil {
+		result = append(result, w._CollectCmdsubs(trueValue)...)
+	}
+	falseValue = _getattr(node, "false_value", nil)
+	if falseValue != nil {
+		result = append(result, w._CollectCmdsubs(falseValue)...)
+	}
+	return result
 }
 
 func (w *Word) _CollectProcsubs(node interface{}) []Node {
-	panic("TODO: method needs manual implementation")
+	var result []Node
+	_ = result
+	var nodeKind interface{}
+	_ = nodeKind
+	var elements []Node
+	_ = elements
+	var parts []Node
+	_ = parts
+	result = []Node{}
+	nodeKind = _getattr(node, "kind", nil)
+	if nodeKind == "procsub" {
+		result = append(result, node.(Node))
+	} else if nodeKind == "array" {
+		elements = _getattr(node, "elements", []interface{}{}).([]Node)
+		for _, elem := range elements {
+			parts = _getattr(elem, "parts", []interface{}{}).([]Node)
+			for _, p := range parts {
+				if _getattr(p, "kind", nil) == "procsub" {
+					result = append(result, p)
+				} else {
+					result = append(result, w._CollectProcsubs(p)...)
+				}
+			}
+		}
+	}
+	return result
 }
 
 func (w *Word) _FormatCommandSubstitutions(value string, inArith bool) string {
-	panic("TODO: method needs manual implementation")
+	var cmdsubParts []Node
+	_ = cmdsubParts
+	var procsubParts []Node
+	_ = procsubParts
+	var hasArith bool
+	_ = hasArith
+	var hasBraceCmdsub bool
+	_ = hasBraceCmdsub
+	var hasUntrackedCmdsub bool
+	_ = hasUntrackedCmdsub
+	var hasUntrackedProcsub bool
+	_ = hasUntrackedProcsub
+	var idx int
+	_ = idx
+	var scanQuote *QuoteState
+	_ = scanQuote
+	var hasParamWithProcsubPattern bool
+	_ = hasParamWithProcsubPattern
+	var result []string
+	_ = result
+	var i int
+	_ = i
+	var cmdsubIdx int
+	_ = cmdsubIdx
+	var procsubIdx int
+	_ = procsubIdx
+	var mainQuote *QuoteState
+	_ = mainQuote
+	var extglobDepth int
+	_ = extglobDepth
+	var deprecatedArithDepth int
+	_ = deprecatedArithDepth
+	var arithDepth int
+	_ = arithDepth
+	var arithParenDepth int
+	_ = arithParenDepth
+	var j int
+	_ = j
+	var inner string
+	_ = inner
+	var node Node
+	_ = node
+	var formatted string
+	_ = formatted
+	var parser *Parser
+	_ = parser
+	var parsed Node
+	_ = parsed
+	var hasPipe bool
+	_ = hasPipe
+	var prefix string
+	_ = prefix
+	var origInner string
+	_ = origInner
+	var endsWithNewline bool
+	_ = endsWithNewline
+	var suffix string
+	_ = suffix
+	var isProcsub bool
+	_ = isProcsub
+	var direction string
+	_ = direction
+	var compact bool
+	_ = compact
+	var rawContent string
+	_ = rawContent
+	var leadingWsEnd int
+	_ = leadingWsEnd
+	var leadingWs string
+	_ = leadingWs
+	var stripped string
+	_ = stripped
+	var normalizedWs string
+	_ = normalizedWs
+	var spaced string
+	_ = spaced
+	var rawStripped string
+	_ = rawStripped
+	var finalOutput string
+	_ = finalOutput
+	var depth int
+	_ = depth
+	var terminator string
+	_ = terminator
+	var braceQuote *QuoteState
+	_ = braceQuote
+	var c string
+	_ = c
+	var formattedInner string
+	_ = formattedInner
+	cmdsubParts = []Node{}
+	procsubParts = []Node{}
+	hasArith = false
+	for _, p := range w.Parts {
+		if p.Kind() == "cmdsub" {
+			cmdsubParts = append(cmdsubParts, p)
+		} else if p.Kind() == "procsub" {
+			procsubParts = append(procsubParts, p)
+		} else if p.Kind() == "arith" {
+			hasArith = true
+		} else {
+			cmdsubParts = append(cmdsubParts, w._CollectCmdsubs(p)...)
+			procsubParts = append(procsubParts, w._CollectProcsubs(p)...)
+		}
+	}
+	hasBraceCmdsub = strings.Index(value, "${ ") != -1 || strings.Index(value, "${\t") != -1 || strings.Index(value, "${\n") != -1 || strings.Index(value, "${|") != -1
+	hasUntrackedCmdsub = false
+	hasUntrackedProcsub = false
+	idx = 0
+	scanQuote = NewQuoteState()
+	for idx < len(value) {
+		if string(value[idx]) == "\"" {
+			scanQuote.Double = !(scanQuote.Double)
+			idx += 1
+		} else if string(value[idx]) == "'" && !(scanQuote.Double) {
+			idx += 1
+			for idx < len(value) && string(value[idx]) != "'" {
+				idx += 1
+			}
+			if idx < len(value) {
+				idx += 1
+			}
+		} else if strings.HasPrefix(value[idx:], "$(") && !(strings.HasPrefix(value[idx:], "$((")) && !(_IsBackslashEscaped(value, idx)) && !(_IsDollarDollarParen(value, idx)) {
+			hasUntrackedCmdsub = true
+			break
+		} else if strings.HasPrefix(value[idx:], "<(") || strings.HasPrefix(value[idx:], ">(") && !(scanQuote.Double) {
+			if idx == 0 || !(unicode.IsLetter(_runeFromChar(string(value[idx-1]))) || unicode.IsDigit(_runeFromChar(string(value[idx-1])))) && !strings.Contains("\"'", string(value[idx-1])) {
+				hasUntrackedProcsub = true
+				break
+			}
+			idx += 1
+		} else {
+			idx += 1
+		}
+	}
+	hasParamWithProcsubPattern = strings.Contains(value, "${") && strings.Contains(value, "<(") || strings.Contains(value, ">(")
+	if !(len(cmdsubParts) > 0) && !(len(procsubParts) > 0) && !(hasBraceCmdsub) && !(hasUntrackedCmdsub) && !(hasUntrackedProcsub) && !(hasParamWithProcsubPattern) {
+		return value
+	}
+	result = []string{}
+	i = 0
+	cmdsubIdx = 0
+	procsubIdx = 0
+	mainQuote = NewQuoteState()
+	extglobDepth = 0
+	deprecatedArithDepth = 0
+	arithDepth = 0
+	arithParenDepth = 0
+	for i < len(value) {
+		if i > 0 && _IsExtglobPrefix(string(value[i-1])) && string(value[i]) == "(" && !(_IsBackslashEscaped(value, i-1)) {
+			extglobDepth += 1
+			result = append(result, string(value[i]))
+			i += 1
+			continue
+		}
+		if string(value[i]) == ")" && extglobDepth > 0 {
+			extglobDepth -= 1
+			result = append(result, string(value[i]))
+			i += 1
+			continue
+		}
+		if strings.HasPrefix(value[i:], "$[") && !(_IsBackslashEscaped(value, i)) {
+			deprecatedArithDepth += 1
+			result = append(result, string(value[i]))
+			i += 1
+			continue
+		}
+		if string(value[i]) == "]" && deprecatedArithDepth > 0 {
+			deprecatedArithDepth -= 1
+			result = append(result, string(value[i]))
+			i += 1
+			continue
+		}
+		if _IsExpansionStart(value, i, "$((") && !(_IsBackslashEscaped(value, i)) && hasArith {
+			arithDepth += 1
+			arithParenDepth += 2
+			result = append(result, "$((")
+			i += 3
+			continue
+		}
+		if arithDepth > 0 && arithParenDepth == 2 && strings.HasPrefix(value[i:], "))") {
+			arithDepth -= 1
+			arithParenDepth -= 2
+			result = append(result, "))")
+			i += 2
+			continue
+		}
+		if arithDepth > 0 {
+			if string(value[i]) == "(" {
+				arithParenDepth += 1
+				result = append(result, string(value[i]))
+				i += 1
+				continue
+			} else if string(value[i]) == ")" {
+				arithParenDepth -= 1
+				result = append(result, string(value[i]))
+				i += 1
+				continue
+			}
+		}
+		if _IsExpansionStart(value, i, "$((") && !(hasArith) {
+			j = _FindCmdsubEnd(value, i+2)
+			result = append(result, value[i:j])
+			if cmdsubIdx < len(cmdsubParts) {
+				cmdsubIdx += 1
+			}
+			i = j
+			continue
+		}
+		if strings.HasPrefix(value[i:], "$(") && !(strings.HasPrefix(value[i:], "$((")) && !(_IsBackslashEscaped(value, i)) && !(_IsDollarDollarParen(value, i)) {
+			j = _FindCmdsubEnd(value, i+2)
+			if extglobDepth > 0 {
+				result = append(result, value[i:j])
+				if cmdsubIdx < len(cmdsubParts) {
+					cmdsubIdx += 1
+				}
+				i = j
+				continue
+			}
+			inner = value[i+2 : j-1]
+			if cmdsubIdx < len(cmdsubParts) {
+				node = cmdsubParts[cmdsubIdx]
+				formatted = _FormatCmdsubNode(node.(*CommandSubstitution).Command, 0, false, false, false)
+				cmdsubIdx += 1
+			} else {
+				panic("TODO: incomplete implementation")
+			}
+			if strings.HasPrefix(formatted, "(") {
+				result = append(result, "$( "+formatted+")")
+			} else {
+				result = append(result, "$("+formatted+")")
+			}
+			i = j
+		} else if string(value[i]) == "`" && cmdsubIdx < len(cmdsubParts) {
+			j = i + 1
+			for j < len(value) {
+				if string(value[j]) == "\\" && j+1 < len(value) {
+					j += 2
+					continue
+				}
+				if string(value[j]) == "`" {
+					j += 1
+					break
+				}
+				j += 1
+			}
+			result = append(result, value[i:j])
+			cmdsubIdx += 1
+			i = j
+		} else if _IsExpansionStart(value, i, "${") && i+2 < len(value) && _IsFunsubChar(string(value[i+2])) && !(_IsBackslashEscaped(value, i)) {
+			j = _FindFunsubEnd(value, i+2)
+			if cmdsubIdx < len(cmdsubParts) && _getattr(cmdsubParts[cmdsubIdx], "brace", false).(bool) {
+				node = cmdsubParts[cmdsubIdx]
+				formatted = _FormatCmdsubNode(node.(*CommandSubstitution).Command, 0, false, false, false)
+				hasPipe = string(value[i+2]) == "|"
+				prefix = _ternary(hasPipe, "${|", "${ ")
+				origInner = value[i+2 : j-1]
+				endsWithNewline = strings.HasSuffix(origInner, "\n")
+				if !(len(formatted) > 0) || (len(formatted) > 0 && strings.TrimSpace(formatted) == "") {
+					suffix = "}"
+				} else if strings.HasSuffix(formatted, "&") || strings.HasSuffix(formatted, "& ") {
+					suffix = _ternary(strings.HasSuffix(formatted, "&"), " }", "}")
+				} else if endsWithNewline {
+					suffix = "\n }"
+				} else {
+					suffix = "; }"
+				}
+				result = append(result, prefix+formatted+suffix)
+				cmdsubIdx += 1
+			} else {
+				result = append(result, value[i:j])
+			}
+			i = j
+		} else if strings.HasPrefix(value[i:], ">(") || strings.HasPrefix(value[i:], "<(") && !(mainQuote.Double) && deprecatedArithDepth == 0 && arithDepth == 0 {
+			isProcsub = i == 0 || !(unicode.IsLetter(_runeFromChar(string(value[i-1]))) || unicode.IsDigit(_runeFromChar(string(value[i-1])))) && !strings.Contains("\"'", string(value[i-1]))
+			if extglobDepth > 0 {
+				j = _FindCmdsubEnd(value, i+2)
+				result = append(result, value[i:j])
+				if procsubIdx < len(procsubParts) {
+					procsubIdx += 1
+				}
+				i = j
+				continue
+			}
+			if procsubIdx < len(procsubParts) {
+				direction = string(value[i])
+				j = _FindCmdsubEnd(value, i+2)
+				node = procsubParts[procsubIdx]
+				compact = _StartsWithSubshell(node.(*CommandSubstitution).Command)
+				formatted = _FormatCmdsubNode(node.(*CommandSubstitution).Command, 0, true, compact, true)
+				rawContent = value[i+2 : j-1]
+				if node.(*CommandSubstitution).Command.Kind() == "subshell" {
+					leadingWsEnd = 0
+					for leadingWsEnd < len(rawContent) && strings.Contains(" \t\n", string(rawContent[leadingWsEnd])) {
+						leadingWsEnd += 1
+					}
+					leadingWs = rawContent[0:leadingWsEnd]
+					stripped = rawContent[leadingWsEnd:]
+					if strings.HasPrefix(stripped, "(") {
+						if len(leadingWs) > 0 {
+							normalizedWs = strings.ReplaceAll(strings.ReplaceAll(leadingWs, "\n", " "), "\t", " ")
+							spaced = _FormatCmdsubNode(node.(*CommandSubstitution).Command, 0, false, false, false)
+							result = append(result, direction+"("+normalizedWs+spaced+")")
+						} else {
+							rawContent = strings.ReplaceAll(rawContent, "\\\n", "")
+							result = append(result, direction+"("+rawContent+")")
+						}
+						procsubIdx += 1
+						i = j
+						continue
+					}
+				}
+				rawContent = value[i+2 : j-1]
+				rawStripped = strings.ReplaceAll(rawContent, "\\\n", "")
+				if _StartsWithSubshell(node.(*CommandSubstitution).Command) && formatted != rawStripped {
+					result = append(result, direction+"("+rawStripped+")")
+				} else {
+					finalOutput = direction + "(" + formatted + ")"
+					result = append(result, finalOutput)
+				}
+				procsubIdx += 1
+				i = j
+			} else if isProcsub && len(w.Parts) > 0 {
+				direction = string(value[i])
+				j = _FindCmdsubEnd(value, i+2)
+				if j > len(value) || j > 0 && j <= len(value) && string(value[j-1]) != ")" {
+					result = append(result, string(value[i]))
+					i += 1
+					continue
+				}
+				inner = value[i+2 : j-1]
+				panic("TODO: incomplete implementation")
+			} else if isProcsub {
+				direction = string(value[i])
+				j = _FindCmdsubEnd(value, i+2)
+				if j > len(value) || j > 0 && j <= len(value) && string(value[j-1]) != ")" {
+					result = append(result, string(value[i]))
+					i += 1
+					continue
+				}
+				inner = value[i+2 : j-1]
+				if inArith {
+					result = append(result, direction+"("+inner+")")
+				} else if len(strings.TrimSpace(inner)) > 0 {
+					stripped = strings.TrimLeft(inner, " \t")
+					result = append(result, direction+"("+stripped+")")
+				} else {
+					result = append(result, direction+"("+inner+")")
+				}
+				i = j
+			} else {
+				result = append(result, string(value[i]))
+				i += 1
+			}
+		} else if _IsExpansionStart(value, i, "${ ") || _IsExpansionStart(value, i, "${\t") || _IsExpansionStart(value, i, "${\n") || _IsExpansionStart(value, i, "${|") && !(_IsBackslashEscaped(value, i)) {
+			prefix = strings.ReplaceAll(strings.ReplaceAll(value[i:i+3], "\t", " "), "\n", " ")
+			j = i + 3
+			depth = 1
+			for j < len(value) && depth > 0 {
+				if string(value[j]) == "{" {
+					depth += 1
+				} else if string(value[j]) == "}" {
+					depth -= 1
+				}
+				j += 1
+			}
+			inner = value[i+2 : j-1]
+			if strings.TrimSpace(inner) == "" {
+				result = append(result, "${ }")
+			} else {
+				panic("TODO: incomplete implementation")
+			}
+			i = j
+		} else if _IsExpansionStart(value, i, "${") && !(_IsBackslashEscaped(value, i)) {
+			j = i + 2
+			depth = 1
+			braceQuote = NewQuoteState()
+			for j < len(value) && depth > 0 {
+				c = string(value[j])
+				if c == "\\" && j+1 < len(value) && !(braceQuote.Single) {
+					j += 2
+					continue
+				}
+				if c == "'" && !(braceQuote.Double) {
+					braceQuote.Single = !(braceQuote.Single)
+				} else if c == "\"" && !(braceQuote.Single) {
+					braceQuote.Double = !(braceQuote.Double)
+				} else if !(braceQuote.InQuotes()) {
+					if _IsExpansionStart(value, j, "$(") && !(strings.HasPrefix(value[j:], "$((")) {
+						j = _FindCmdsubEnd(value, j+2)
+						continue
+					}
+					if c == "{" {
+						depth += 1
+					} else if c == "}" {
+						depth -= 1
+					}
+				}
+				j += 1
+			}
+			if depth > 0 {
+				inner = value[i+2 : j]
+			} else {
+				inner = value[i+2 : j-1]
+			}
+			formattedInner = w._FormatCommandSubstitutions(inner, false)
+			formattedInner = w._NormalizeExtglobWhitespace(formattedInner)
+			if depth == 0 {
+				result = append(result, "${"+formattedInner+"}")
+			} else {
+				result = append(result, "${"+formattedInner)
+			}
+			i = j
+		} else if string(value[i]) == "\"" {
+			mainQuote.Double = !(mainQuote.Double)
+			result = append(result, string(value[i]))
+			i += 1
+		} else if string(value[i]) == "'" && !(mainQuote.Double) {
+			j = i + 1
+			for j < len(value) && string(value[j]) != "'" {
+				j += 1
+			}
+			if j < len(value) {
+				j += 1
+			}
+			result = append(result, value[i:j])
+			i = j
+		} else {
+			result = append(result, string(value[i]))
+			i += 1
+		}
+	}
+	return strings.Join(result, "")
 }
 
 func (w *Word) _NormalizeExtglobWhitespace(value string) string {
@@ -6677,7 +7202,20 @@ func (p *Parser) _AtEofToken() bool {
 }
 
 func (p *Parser) _CollectRedirects() []Node {
-	panic("TODO: method needs manual implementation")
+	var redirects []Node
+	_ = redirects
+	var redirect interface{}
+	_ = redirect
+	redirects = []Node{}
+	for true {
+		p.SkipWhitespace()
+		redirect = p.ParseRedirect()
+		if redirect == nil {
+			break
+		}
+		redirects = append(redirects, redirect.(Node))
+	}
+	return _ternary(len(redirects) > 0, redirects, nil)
 }
 
 func (p *Parser) _ParseLoopBody(context string) Node {

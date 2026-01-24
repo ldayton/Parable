@@ -2280,10 +2280,12 @@ class Lexer {
 					this._dolbrace_state = saved_dolbrace;
 					return [new ParamIndirect(param, op, arg), text];
 				}
-				// Fell through - pattern didn't match, return None
-				this._dolbrace_state = saved_dolbrace;
-				this.pos = start;
-				return [null, ""];
+				// Fell through - continue to general parsing
+				if (this.atEnd()) {
+					this._dolbrace_state = saved_dolbrace;
+					throw new MatchedPairError("unexpected EOF looking for `}'", start);
+				}
+				this.pos = start + 2;
 			} else {
 				// ${! followed by non-param char like | - fall through to regular parsing
 				this.pos = start + 2;

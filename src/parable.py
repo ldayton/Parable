@@ -1936,10 +1936,11 @@ class Lexer:
                     text = _substring(self.source, start, self.pos)
                     self._dolbrace_state = saved_dolbrace
                     return ParamIndirect(param, op, arg), text
-                # Fell through - pattern didn't match, return None
-                self._dolbrace_state = saved_dolbrace
-                self.pos = start
-                return None, ""
+                # Fell through - continue to general parsing
+                if self.at_end():
+                    self._dolbrace_state = saved_dolbrace
+                    raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
+                self.pos = start + 2  # reset to just after ${
             else:
                 # ${! followed by non-param char like | - fall through to regular parsing
                 self.pos = start + 2  # reset to just after ${

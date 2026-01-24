@@ -14,7 +14,6 @@ from pathlib import Path
 class FunctionScope:
     """Tracks variable state within a function for const/let declaration."""
 
-    declared: set = field(default_factory=set)
     reassigned: set = field(default_factory=set)
     emitted: set = field(default_factory=set)
     top_level_first: set = field(default_factory=set)
@@ -455,7 +454,6 @@ class JSTranspiler(ast.NodeVisitor):
         assignment_counts, top_level_first = self._count_assignments(node.body)
         local_vars = set(assignment_counts.keys()) - param_names
         scope = FunctionScope(
-            declared=param_names | local_vars,
             reassigned={name for name, count in assignment_counts.items() if count > 1},
             top_level_first=top_level_first - param_names,
         )

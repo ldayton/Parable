@@ -1097,9 +1097,13 @@ class Lexer {
 					continue;
 				}
 			}
-			// Process substitution <(...) or >(...) inside ${...}
+			// Process substitution <(...) or >(...) inside ${...} or array subscripts
 			// (bash's LEX_GTLT check at parse.y:4151-4160)
-			if (ch === "(" && was_gtlt && flags & MatchedPairFlags.DOLBRACE) {
+			if (
+				ch === "(" &&
+				was_gtlt &&
+				flags & (MatchedPairFlags.DOLBRACE | MatchedPairFlags.ARRAYSUB)
+			) {
 				// Back up: remove the < or > we already added to chars
 				direction = chars.pop();
 				this.pos -= 1;

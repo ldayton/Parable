@@ -733,3 +733,10 @@ echo ${foo:-<(ls)}
 ---
 (command (word "echo") (word "${foo:-<(ls)}"))
 ---
+
+
+=== array subscript with nested expansion
+echo ${arr[${idx}]}
+---
+(command (word "echo") (word "${arr[${idx}]}"))
+---

@@ -6964,7 +6964,7 @@ function _findCmdsubEnd(value, start) {
 }
 
 function _findBracedParamEnd(value, start) {
-	let c, depth, i, in_double;
+	let c, depth, end, i, in_double;
 	depth = 1;
 	i = start;
 	in_double = false;
@@ -6987,6 +6987,14 @@ function _findBracedParamEnd(value, start) {
 		if (in_double) {
 			i += 1;
 			continue;
+		}
+		// Handle array subscripts
+		if (c === "[" && !in_double) {
+			end = _skipSubscript(value, i, 0);
+			if (end !== -1) {
+				i = end;
+				continue;
+			}
 		}
 		// Handle process substitution <(...) and >(...)
 		if (

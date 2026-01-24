@@ -5844,6 +5844,12 @@ def _find_braced_param_end(value: str, start: int) -> int:
         if in_double:
             i += 1
             continue
+        # Handle array subscripts
+        if c == "[" and not in_double:
+            end = _skip_subscript(value, i, 0)
+            if end != -1:
+                i = end
+                continue
         # Handle process substitution <(...) and >(...)
         if (c == "<" or c == ">") and i + 1 < len(value) and value[i + 1] == "(":
             i = _find_cmdsub_end(value, i + 2)

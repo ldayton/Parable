@@ -201,6 +201,9 @@ class MatchedPairFlags {
 	static ARITH = 8;
 	static ALLOWESC = 16;
 	static EXTGLOB = 32;
+	static FIRSTCLOSE = 64;
+	static ARRAYSUB = 128;
+	static BACKQUOTE = 256;
 }
 
 class SavedParserState {
@@ -845,13 +848,19 @@ class Lexer {
 			cmd_node,
 			cmd_text,
 			count,
+			direction,
 			in_dquote,
 			nested,
 			next_ch,
 			param_node,
 			param_text,
 			pass_next,
-			start;
+			procsub_node,
+			procsub_text,
+			quote_flags,
+			start,
+			was_dollar,
+			was_gtlt;
 		if (flags == null) {
 			flags = 0;
 		}
@@ -859,6 +868,8 @@ class Lexer {
 		count = 1;
 		chars = [];
 		pass_next = false;
+		was_dollar = false;
+		was_gtlt = false;
 		while (count > 0) {
 			if (this.atEnd()) {
 				throw new MatchedPairError(
@@ -880,6 +891,8 @@ class Lexer {
 			if (pass_next) {
 				pass_next = false;
 				chars.push(ch);
+				was_dollar = ch === "$";
+				was_gtlt = "<>".includes(ch);
 				continue;
 			}
 			// Inside single quotes, almost everything is literal
@@ -895,6 +908,8 @@ class Lexer {
 					pass_next = true;
 				}
 				chars.push(ch);
+				was_dollar = false;
+				was_gtlt = false;
 				continue;
 			}
 			// Backslash - set pass_next flag
@@ -902,10 +917,14 @@ class Lexer {
 				// Line continuation - skip \n
 				if (!this.atEnd() && this.peek() === "\n") {
 					this.advance();
+					was_dollar = false;
+					was_gtlt = false;
 					continue;
 				}
 				pass_next = true;
 				chars.push(ch);
+				was_dollar = false;
+				was_gtlt = false;
 				continue;
 			}
 			// Closing delimiter
@@ -915,6 +934,8 @@ class Lexer {
 					break;
 				}
 				chars.push(ch);
+				was_dollar = false;
+				was_gtlt = "<>".includes(ch);
 				continue;
 			}
 			// Opening delimiter (only when open != close)
@@ -925,16 +946,22 @@ class Lexer {
 					count += 1;
 				}
 				chars.push(ch);
+				was_dollar = false;
+				was_gtlt = "<>".includes(ch);
 				continue;
 			}
 			// Quote characters trigger recursion (when not already in quote mode)
 			if ("'\"`".includes(ch) && open_char !== close_char) {
 				if (ch === "'") {
 					// Single quote - recursively parse until matching '
+					// If previous char was $, this is ANSI-C $'...' quoting with escapes
 					chars.push(ch);
-					nested = this._parseMatchedPair("'", "'", flags);
+					quote_flags = was_dollar ? flags | MatchedPairFlags.ALLOWESC : flags;
+					nested = this._parseMatchedPair("'", "'", quote_flags);
 					chars.push(nested);
 					chars.push("'");
+					was_dollar = false;
+					was_gtlt = false;
 					continue;
 				} else if (ch === '"') {
 					// Double quote - recursively parse until matching "
@@ -946,6 +973,8 @@ class Lexer {
 					);
 					chars.push(nested);
 					chars.push('"');
+					was_dollar = false;
+					was_gtlt = false;
 					continue;
 				} else if (ch === "`") {
 					// Backtick - recursively parse until matching `
@@ -953,12 +982,22 @@ class Lexer {
 					nested = this._parseMatchedPair("`", "`", flags);
 					chars.push(nested);
 					chars.push("`");
+					was_dollar = false;
+					was_gtlt = false;
 					continue;
 				}
 			}
 			// ${ $( $[ trigger nested parsing (unless in extglob where they're just pattern chars)
 			if (ch === "$" && !this.atEnd() && !(flags & MatchedPairFlags.EXTGLOB)) {
 				next_ch = this.peek();
+				// If previous char was $, this is the second $ in $$ - treat as unit
+				// Reset was_dollar so next char doesn't think it follows single $
+				if (was_dollar) {
+					chars.push(ch);
+					was_dollar = false;
+					was_gtlt = false;
+					continue;
+				}
 				if (next_ch === "{") {
 					// In ARITH mode, only parse ${ if followed by funsub char (bash parse.y:4137-4145)
 					// Otherwise treat $ as literal
@@ -970,6 +1009,8 @@ class Lexer {
 						) {
 							// Not funsub - treat $ as literal
 							chars.push(ch);
+							was_dollar = true;
+							was_gtlt = false;
 							continue;
 						}
 					}
@@ -982,9 +1023,13 @@ class Lexer {
 					this._syncFromParser();
 					if (param_node) {
 						chars.push(param_text);
+						was_dollar = false;
+						was_gtlt = false;
 					} else {
 						// Parser failed - add $ as literal
 						chars.push(this.advance());
+						was_dollar = true;
+						was_gtlt = false;
 					}
 					continue;
 				} else if (next_ch === "(") {
@@ -998,6 +1043,8 @@ class Lexer {
 						this._syncFromParser();
 						if (arith_node) {
 							chars.push(arith_text);
+							was_dollar = false;
+							was_gtlt = false;
 						} else {
 							// Arithmetic failed - try as command substitution fallback
 							this._syncToParser();
@@ -1005,10 +1052,14 @@ class Lexer {
 							this._syncFromParser();
 							if (cmd_node) {
 								chars.push(cmd_text);
+								was_dollar = false;
+								was_gtlt = false;
 							} else {
 								// Both failed - add $( as literal
 								chars.push(this.advance());
 								chars.push(this.advance());
+								was_dollar = false;
+								was_gtlt = false;
 							}
 						}
 					} else {
@@ -1017,10 +1068,14 @@ class Lexer {
 						this._syncFromParser();
 						if (cmd_node) {
 							chars.push(cmd_text);
+							was_dollar = false;
+							was_gtlt = false;
 						} else {
 							// Parser failed - add $( as literal
 							chars.push(this.advance());
 							chars.push(this.advance());
+							was_dollar = false;
+							was_gtlt = false;
 						}
 					}
 					continue;
@@ -1032,14 +1087,46 @@ class Lexer {
 					this._syncFromParser();
 					if (arith_node) {
 						chars.push(arith_text);
+						was_dollar = false;
+						was_gtlt = false;
 					} else {
 						// Parser failed - add $ as literal
 						chars.push(this.advance());
+						was_dollar = true;
+						was_gtlt = false;
 					}
 					continue;
 				}
 			}
+			// Process substitution <(...) or >(...) inside ${...} or array subscripts
+			// (bash's LEX_GTLT check at parse.y:4151-4160)
+			if (
+				ch === "(" &&
+				was_gtlt &&
+				flags & (MatchedPairFlags.DOLBRACE | MatchedPairFlags.ARRAYSUB)
+			) {
+				// Back up: remove the < or > we already added to chars
+				direction = chars.pop();
+				this.pos -= 1;
+				this._syncToParser();
+				[procsub_node, procsub_text] = this._parser._parseProcessSubstitution();
+				this._syncFromParser();
+				if (procsub_node) {
+					chars.push(procsub_text);
+					was_dollar = false;
+					was_gtlt = false;
+				} else {
+					// Failed - restore the < or > and (
+					chars.push(direction);
+					chars.push(this.advance());
+					was_dollar = false;
+					was_gtlt = false;
+				}
+				continue;
+			}
 			chars.push(ch);
+			was_dollar = ch === "$";
+			was_gtlt = "<>".includes(ch);
 		}
 		return chars.join("");
 	}
@@ -1960,8 +2047,9 @@ class Lexer {
 						break;
 					}
 					// Array subscript - use _parse_matched_pair for bracket/quote handling
+					// ARRAYSUB enables ${} and <() detection inside subscripts
 					name_chars.push(this.advance());
-					content = this._parseMatchedPair("[", "]");
+					content = this._parseMatchedPair("[", "]", MatchedPairFlags.ARRAYSUB);
 					name_chars.push(content);
 					name_chars.push("]");
 					break;

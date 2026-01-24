@@ -261,6 +261,9 @@ class MatchedPairFlags:
     ARITH = 0x08  # Inside arithmetic expression
     ALLOWESC = 0x10  # Allow backslash escapes (for $'...')
     EXTGLOB = 0x20  # Inside extglob pattern - don't parse ${ $( as constructs
+    FIRSTCLOSE = 0x40  # Bare open delimiter doesn't increment count (bash's P_FIRSTCLOSE)
+    ARRAYSUB = 0x80  # Inside [...] array subscript (bash's P_ARRAYSUB)
+    BACKQUOTE = 0x100  # Inside backtick substitution (bash's P_BACKQUOTE, reserved)
 
 
 class SavedParserState:
@@ -800,6 +803,8 @@ class Lexer:
         count = 1
         chars: list[str] = []
         pass_next = False
+        was_dollar = False  # Track if previous char was $ (bash's LEX_WASDOL)
+        was_gtlt = False  # Track if previous char was < or > (bash's LEX_GTLT)
 
         while count > 0:
             if self.at_end():
@@ -819,6 +824,8 @@ class Lexer:
             if pass_next:
                 pass_next = False
                 chars.append(ch)
+                was_dollar = ch == "$"
+                was_gtlt = ch in "<>"
                 continue
 
             # Inside single quotes, almost everything is literal
@@ -831,6 +838,8 @@ class Lexer:
                 if ch == "\\" and (flags & MatchedPairFlags.ALLOWESC):
                     pass_next = True
                 chars.append(ch)
+                was_dollar = False
+                was_gtlt = False
                 continue
 
             # Backslash - set pass_next flag
@@ -838,9 +847,13 @@ class Lexer:
                 # Line continuation - skip \n
                 if not self.at_end() and self.peek() == "\n":
                     self.advance()
+                    was_dollar = False
+                    was_gtlt = False
                     continue
                 pass_next = True
                 chars.append(ch)
+                was_dollar = False
+                was_gtlt = False
                 continue
 
             # Closing delimiter
@@ -849,6 +862,8 @@ class Lexer:
                 if count == 0:
                     break
                 chars.append(ch)
+                was_dollar = False
+                was_gtlt = ch in "<>"
                 continue
 
             # Opening delimiter (only when open != close)
@@ -858,16 +873,22 @@ class Lexer:
                 if not (flags & MatchedPairFlags.DOLBRACE and open_char == "{"):
                     count += 1
                 chars.append(ch)
+                was_dollar = False
+                was_gtlt = ch in "<>"
                 continue
 
             # Quote characters trigger recursion (when not already in quote mode)
             if ch in "'\"`" and open_char != close_char:
                 if ch == "'":
                     # Single quote - recursively parse until matching '
+                    # If previous char was $, this is ANSI-C $'...' quoting with escapes
                     chars.append(ch)
-                    nested = self._parse_matched_pair("'", "'", flags)
+                    quote_flags = flags | MatchedPairFlags.ALLOWESC if was_dollar else flags
+                    nested = self._parse_matched_pair("'", "'", quote_flags)
                     chars.append(nested)
                     chars.append("'")
+                    was_dollar = False
+                    was_gtlt = False
                     continue
                 elif ch == '"':
                     # Double quote - recursively parse until matching "
@@ -875,6 +896,8 @@ class Lexer:
                     nested = self._parse_matched_pair('"', '"', flags | MatchedPairFlags.DQUOTE)
                     chars.append(nested)
                     chars.append('"')
+                    was_dollar = False
+                    was_gtlt = False
                     continue
                 elif ch == "`":
                     # Backtick - recursively parse until matching `
@@ -882,11 +905,20 @@ class Lexer:
                     nested = self._parse_matched_pair("`", "`", flags)
                     chars.append(nested)
                     chars.append("`")
+                    was_dollar = False
+                    was_gtlt = False
                     continue
 
             # ${ $( $[ trigger nested parsing (unless in extglob where they're just pattern chars)
             if ch == "$" and not self.at_end() and not (flags & MatchedPairFlags.EXTGLOB):
                 next_ch = self.peek()
+                # If previous char was $, this is the second $ in $$ - treat as unit
+                # Reset was_dollar so next char doesn't think it follows single $
+                if was_dollar:
+                    chars.append(ch)
+                    was_dollar = False  # $$ is a unit, next char is NOT preceded by single $
+                    was_gtlt = False
+                    continue
                 if next_ch == "{":
                     # In ARITH mode, only parse ${ if followed by funsub char (bash parse.y:4137-4145)
                     # Otherwise treat $ as literal
@@ -897,6 +929,8 @@ class Lexer:
                         ):
                             # Not funsub - treat $ as literal
                             chars.append(ch)
+                            was_dollar = True
+                            was_gtlt = False
                             continue
                     # ${ ... } parameter expansion - use full parsing
                     self.pos -= 1  # back up to before $
@@ -906,9 +940,13 @@ class Lexer:
                     self._sync_from_parser()
                     if param_node:
                         chars.append(param_text)
+                        was_dollar = False  # Ended with }
+                        was_gtlt = False
                     else:
                         # Parser failed - add $ as literal
                         chars.append(self.advance())  # $
+                        was_dollar = True
+                        was_gtlt = False
                     continue
                 elif next_ch == "(":
                     # Back up to before $ for Parser callback
@@ -921,6 +959,8 @@ class Lexer:
                         self._sync_from_parser()
                         if arith_node:
                             chars.append(arith_text)
+                            was_dollar = False  # Ended with ))
+                            was_gtlt = False
                         else:
                             # Arithmetic failed - try as command substitution fallback
                             self._sync_to_parser()
@@ -928,20 +968,28 @@ class Lexer:
                             self._sync_from_parser()
                             if cmd_node:
                                 chars.append(cmd_text)
+                                was_dollar = False  # Ended with )
+                                was_gtlt = False
                             else:
                                 # Both failed - add $( as literal
                                 chars.append(self.advance())  # $
                                 chars.append(self.advance())  # (
+                                was_dollar = False  # Ended with (
+                                was_gtlt = False
                     else:
                         # $( ... ) command substitution - use full parsing
                         cmd_node, cmd_text = self._parser._parse_command_substitution()
                         self._sync_from_parser()
                         if cmd_node:
                             chars.append(cmd_text)
+                            was_dollar = False  # Ended with )
+                            was_gtlt = False
                         else:
                             # Parser failed - add $( as literal
                             chars.append(self.advance())  # $
                             chars.append(self.advance())  # (
+                            was_dollar = False  # Ended with (
+                            was_gtlt = False
                     continue
                 elif next_ch == "[":
                     # Deprecated $[ ... ] arithmetic - use full parsing
@@ -951,12 +999,43 @@ class Lexer:
                     self._sync_from_parser()
                     if arith_node:
                         chars.append(arith_text)
+                        was_dollar = False  # Ended with ]
+                        was_gtlt = False
                     else:
                         # Parser failed - add $ as literal
                         chars.append(self.advance())  # $
+                        was_dollar = True
+                        was_gtlt = False
                     continue
 
+            # Process substitution <(...) or >(...) inside ${...} or array subscripts
+            # (bash's LEX_GTLT check at parse.y:4151-4160)
+            if (
+                ch == "("
+                and was_gtlt
+                and (flags & (MatchedPairFlags.DOLBRACE | MatchedPairFlags.ARRAYSUB))
+            ):
+                # Back up: remove the < or > we already added to chars
+                direction = chars.pop()
+                self.pos -= 1  # Back up before (
+                self._sync_to_parser()
+                procsub_node, procsub_text = self._parser._parse_process_substitution()
+                self._sync_from_parser()
+                if procsub_node:
+                    chars.append(procsub_text)
+                    was_dollar = False
+                    was_gtlt = False
+                else:
+                    # Failed - restore the < or > and (
+                    chars.append(direction)
+                    chars.append(self.advance())  # (
+                    was_dollar = False
+                    was_gtlt = False
+                continue
+
             chars.append(ch)
+            was_dollar = ch == "$"
+            was_gtlt = ch in "<>"
 
         return "".join(chars)
 
@@ -1671,8 +1750,9 @@ class Lexer:
                     if not self._param_subscript_has_close(self.pos):
                         break
                     # Array subscript - use _parse_matched_pair for bracket/quote handling
+                    # ARRAYSUB enables ${} and <() detection inside subscripts
                     name_chars.append(self.advance())  # [
-                    content = self._parse_matched_pair("[", "]")
+                    content = self._parse_matched_pair("[", "]", MatchedPairFlags.ARRAYSUB)
                     name_chars.append(content)
                     name_chars.append("]")
                     break

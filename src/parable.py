@@ -9,6 +9,8 @@ ast = parse("ps aux | grep python | awk '{print $2}'")
 
 from __future__ import annotations
 
+from typing import Union
+
 
 class ParseError(Exception):
     """Raised when parsing fails."""
@@ -4464,9 +4466,9 @@ class CommandSubstitution(Node):
 class ArithmeticExpansion(Node):
     """An arithmetic expansion $((...)) with parsed internals."""
 
-    expression: Node | None  # Parsed arithmetic expression, or None for empty
+    expression: ArithNode | None  # Parsed arithmetic expression, or None for empty
 
-    def __init__(self, expression: Node | None):
+    def __init__(self, expression: ArithNode | None):
         self.kind = "arith"
         self.expression = expression
 
@@ -4479,12 +4481,15 @@ class ArithmeticExpansion(Node):
 class ArithmeticCommand(Node):
     """An arithmetic command ((...)) with parsed internals."""
 
-    expression: Node | None  # Parsed arithmetic expression, or None for empty
-    redirects: list[Node]
+    expression: ArithNode | None  # Parsed arithmetic expression, or None for empty
+    redirects: list[Redirect | HereDoc]
     raw_content: str  # Raw expression text for bash-oracle-compatible output
 
     def __init__(
-        self, expression: Node | None, redirects: list[Node] = None, raw_content: str = ""
+        self,
+        expression: ArithNode | None,
+        redirects: list[Redirect | HereDoc] = None,
+        raw_content: str = "",
     ):
         self.kind = "arith-cmd"
         self.expression = expression
@@ -4559,10 +4564,10 @@ class ArithBinaryOp(Node):
     """A binary operation in arithmetic."""
 
     op: str
-    left: Node
-    right: Node
+    left: ArithNode
+    right: ArithNode
 
-    def __init__(self, op: str, left: Node, right: Node):
+    def __init__(self, op: str, left: ArithNode, right: ArithNode):
         self.kind = "binary-op"
         self.op = op
         self.left = left
@@ -4578,9 +4583,9 @@ class ArithUnaryOp(Node):
     """A unary operation in arithmetic."""
 
     op: str
-    operand: Node
+    operand: ArithNode
 
-    def __init__(self, op: str, operand: Node):
+    def __init__(self, op: str, operand: ArithNode):
         self.kind = "unary-op"
         self.op = op
         self.operand = operand
@@ -4592,9 +4597,9 @@ class ArithUnaryOp(Node):
 class ArithPreIncr(Node):
     """Pre-increment ++var."""
 
-    operand: Node
+    operand: ArithNode
 
-    def __init__(self, operand: Node):
+    def __init__(self, operand: ArithNode):
         self.kind = "pre-incr"
         self.operand = operand
 
@@ -4605,9 +4610,9 @@ class ArithPreIncr(Node):
 class ArithPostIncr(Node):
     """Post-increment var++."""
 
-    operand: Node
+    operand: ArithNode
 
-    def __init__(self, operand: Node):
+    def __init__(self, operand: ArithNode):
         self.kind = "post-incr"
         self.operand = operand
 
@@ -4618,9 +4623,9 @@ class ArithPostIncr(Node):
 class ArithPreDecr(Node):
     """Pre-decrement --var."""
 
-    operand: Node
+    operand: ArithNode
 
-    def __init__(self, operand: Node):
+    def __init__(self, operand: ArithNode):
         self.kind = "pre-decr"
         self.operand = operand
 
@@ -4631,9 +4636,9 @@ class ArithPreDecr(Node):
 class ArithPostDecr(Node):
     """Post-decrement var--."""
 
-    operand: Node
+    operand: ArithNode
 
-    def __init__(self, operand: Node):
+    def __init__(self, operand: ArithNode):
         self.kind = "post-decr"
         self.operand = operand
 
@@ -4645,10 +4650,10 @@ class ArithAssign(Node):
     """Assignment operation (=, +=, -=, etc.)."""
 
     op: str
-    target: Node
-    value: Node
+    target: ArithNode
+    value: ArithNode
 
-    def __init__(self, op: str, target: Node, value: Node):
+    def __init__(self, op: str, target: ArithNode, value: ArithNode):
         self.kind = "assign"
         self.op = op
         self.target = target
@@ -4663,11 +4668,11 @@ class ArithAssign(Node):
 class ArithTernary(Node):
     """Ternary conditional expr ? expr : expr."""
 
-    condition: Node
-    if_true: Node
-    if_false: Node
+    condition: ArithNode
+    if_true: ArithNode
+    if_false: ArithNode
 
-    def __init__(self, condition: Node, if_true: Node, if_false: Node):
+    def __init__(self, condition: ArithNode, if_true: ArithNode, if_false: ArithNode):
         self.kind = "ternary"
         self.condition = condition
         self.if_true = if_true
@@ -4688,10 +4693,10 @@ class ArithTernary(Node):
 class ArithComma(Node):
     """Comma operator expr, expr."""
 
-    left: Node
-    right: Node
+    left: ArithNode
+    right: ArithNode
 
-    def __init__(self, left: Node, right: Node):
+    def __init__(self, left: ArithNode, right: ArithNode):
         self.kind = "comma"
         self.left = left
         self.right = right
@@ -4704,9 +4709,9 @@ class ArithSubscript(Node):
     """Array subscript arr[expr]."""
 
     array: str
-    index: Node
+    index: ArithNode
 
-    def __init__(self, array: str, index: Node):
+    def __init__(self, array: str, index: ArithNode):
         self.kind = "subscript"
         self.array = array
         self.index = index
@@ -4745,9 +4750,9 @@ class ArithDeprecated(Node):
 class ArithConcat(Node):
     """A concatenation of prefix + expansion in arithmetic (e.g., 0x$var)."""
 
-    parts: list[Node]
+    parts: list[ArithNode]
 
-    def __init__(self, parts: list[Node]):
+    def __init__(self, parts: list[ArithNode]):
         self.kind = "arith-concat"
         self.parts = parts
 
@@ -4843,10 +4848,10 @@ class Time(Node):
 class ConditionalExpr(Node):
     """A conditional expression [[ expression ]]."""
 
-    body: Node | str  # Parsed node or raw string for backwards compat
-    redirects: list[Node]
+    body: CondNode | str  # Parsed node or raw string for backwards compat
+    redirects: list[Redirect | HereDoc]
 
-    def __init__(self, body: Node | str, redirects: list[Node] = None):
+    def __init__(self, body: CondNode | str, redirects: list[Redirect | HereDoc] = None):
         self.kind = "cond-expr"
         self.body = body
         if redirects is None:
@@ -4922,10 +4927,10 @@ class BinaryTest(Node):
 class CondAnd(Node):
     """Logical AND in [[ ]], e.g., expr1 && expr2."""
 
-    left: Node
-    right: Node
+    left: CondNode
+    right: CondNode
 
-    def __init__(self, left: Node, right: Node):
+    def __init__(self, left: CondNode, right: CondNode):
         self.kind = "cond-and"
         self.left = left
         self.right = right
@@ -4937,10 +4942,10 @@ class CondAnd(Node):
 class CondOr(Node):
     """Logical OR in [[ ]], e.g., expr1 || expr2."""
 
-    left: Node
-    right: Node
+    left: CondNode
+    right: CondNode
 
-    def __init__(self, left: Node, right: Node):
+    def __init__(self, left: CondNode, right: CondNode):
         self.kind = "cond-or"
         self.left = left
         self.right = right
@@ -4952,9 +4957,9 @@ class CondOr(Node):
 class CondNot(Node):
     """Logical NOT in [[ ]], e.g., ! expr."""
 
-    operand: Node
+    operand: CondNode
 
-    def __init__(self, operand: Node):
+    def __init__(self, operand: CondNode):
         self.kind = "cond-not"
         self.operand = operand
 
@@ -4966,14 +4971,37 @@ class CondNot(Node):
 class CondParen(Node):
     """Parenthesized group in [[ ]], e.g., ( expr )."""
 
-    inner: Node
+    inner: CondNode
 
-    def __init__(self, inner: Node):
+    def __init__(self, inner: CondNode):
         self.kind = "cond-paren"
         self.inner = inner
 
     def to_sexp(self) -> str:
         return "(cond-expr " + self.inner.to_sexp() + ")"
+
+
+# Type aliases for AST node unions (Union required for Python 3.8/3.9 runtime)
+ArithNode = Union[  # noqa: UP007
+    ArithNumber,
+    ArithEmpty,
+    ArithVar,
+    ArithBinaryOp,
+    ArithUnaryOp,
+    ArithPreIncr,
+    ArithPostIncr,
+    ArithPreDecr,
+    ArithPostDecr,
+    ArithAssign,
+    ArithTernary,
+    ArithComma,
+    ArithSubscript,
+    ArithEscape,
+    ArithDeprecated,
+    ArithConcat,
+]
+
+CondNode = Union[UnaryTest, BinaryTest, CondAnd, CondOr, CondNot, CondParen]  # noqa: UP007
 
 
 class Array(Node):

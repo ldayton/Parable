@@ -2011,6 +2011,11 @@ class Lexer:
             elif not self.at_end() and self.peek() in ("'", '"'):
                 # Quotes start the argument, not the operator
                 op = ""
+            elif not self.at_end() and self.peek() == "\\":
+                # Backslash escapes the following character
+                op = self.advance()
+                if not self.at_end():
+                    op += self.advance()
             else:
                 op = self.advance()
         # Update dolbrace state based on operator

@@ -2366,6 +2366,12 @@ class Lexer {
 			} else if (!this.atEnd() && ["'", '"'].includes(this.peek())) {
 				// Quotes start the argument, not the operator
 				op = "";
+			} else if (!this.atEnd() && this.peek() === "\\") {
+				// Backslash escapes the following character
+				op = this.advance();
+				if (!this.atEnd()) {
+					op += this.advance();
+				}
 			} else {
 				op = this.advance();
 			}

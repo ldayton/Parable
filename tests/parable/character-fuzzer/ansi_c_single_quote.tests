@@ -1,0 +1,26 @@
+=== escaped single quote uses sh_single_quote
+$'\''
+---
+(command (word "\\'"))
+---
+
+
+=== hex escape for single quote
+$'\x27'
+---
+(command (word "\\'"))
+---
+
+
+=== octal escape for single quote
+$'\047'
+---
+(command (word "\\'"))
+---
+
+
+=== unicode escape for single quote
+$'\u0027'
+---
+(command (word "\\'"))
+---

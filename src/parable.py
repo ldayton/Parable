@@ -2225,145 +2225,146 @@ class Word(Node):
                 i += 1
         return "".join(result)
 
-    def _expand_ansi_c_escapes(self, value: str) -> str:
-        """Expand ANSI-C escape sequences in $'...' strings.
+    def _sh_single_quote(self, s: str) -> str:
+        """Shell-quote a string using single quotes (matches bash's sh_single_quote)."""
+        if not s:
+            return "''"
+        if s == "'":
+            return "\\'"
+        result = ["'"]
+        for c in s:
+            if c == "'":
+                result.append("'\\''")
+            else:
+                result.append(c)
+        result.append("'")
+        return "".join(result)
 
-        Uses bytes internally so \\x escapes can form valid UTF-8 sequences.
-        Invalid UTF-8 is replaced with U+FFFD.
-        """
-        if not (value.startswith("'") and value.endswith("'")):
-            return value
-        inner = _substring(value, 1, len(value) - 1)
+    def _ansi_c_to_bytes(self, inner: str) -> bytearray:
+        """Expand ANSI-C escapes to literal bytes (matches bash's ansicstr)."""
         result = bytearray()
         i = 0
         while i < len(inner):
             if inner[i] == "\\" and i + 1 < len(inner):
                 c = inner[i + 1]
-                # Check simple escapes first
                 simple = _get_ansi_escape(c)
                 if simple >= 0:
                     result.append(simple)
                     i += 2
                 elif c == "'":
-                    # bash-oracle outputs \' as '\'' (shell quoting trick)
-                    result.extend(b"'\\''")
+                    result.append(0x27)  # literal single quote
                     i += 2
                 elif c == "x":
-                    # Check for \x{...} brace syntax (bash 5.3+)
                     if i + 2 < len(inner) and inner[i + 2] == "{":
-                        # Find closing brace or end of hex digits
                         j = i + 3
                         while j < len(inner) and _is_hex_digit(inner[j]):
                             j += 1
                         hex_str = _substring(inner, i + 3, j)
                         if j < len(inner) and inner[j] == "}":
-                            j += 1  # consume }
-                        # If no hex digits, treat as NUL (truncates)
+                            j += 1
                         if not hex_str:
-                            return "'" + result.decode("utf-8", errors="replace") + "'"
-                        byte_val = int(hex_str, 16) & 0xFF  # Take low byte
+                            return result  # NUL truncates
+                        byte_val = int(hex_str, 16) & 0xFF
                         if byte_val == 0:
-                            return "'" + result.decode("utf-8", errors="replace") + "'"
+                            return result
                         self._append_with_ctlesc(result, byte_val)
                         i = j
                     else:
-                        # Hex escape \xHH (1-2 hex digits) - raw byte
                         j = i + 2
                         while j < len(inner) and j < i + 4 and _is_hex_digit(inner[j]):
                             j += 1
                         if j > i + 2:
                             byte_val = int(_substring(inner, i + 2, j), 16)
                             if byte_val == 0:
-                                # NUL truncates string
-                                return "'" + result.decode("utf-8", errors="replace") + "'"
+                                return result
                             self._append_with_ctlesc(result, byte_val)
                             i = j
                         else:
                             result.append(ord(inner[i]))
                             i += 1
                 elif c == "u":
-                    # Unicode escape \uHHHH (1-4 hex digits) - encode as UTF-8
                     j = i + 2
                     while j < len(inner) and j < i + 6 and _is_hex_digit(inner[j]):
                         j += 1
                     if j > i + 2:
                         codepoint = int(_substring(inner, i + 2, j), 16)
                         if codepoint == 0:
-                            # NUL truncates string
-                            return "'" + result.decode("utf-8", errors="replace") + "'"
+                            return result
                         result.extend(chr(codepoint).encode("utf-8"))
                         i = j
                     else:
                         result.append(ord(inner[i]))
                         i += 1
                 elif c == "U":
-                    # Unicode escape \UHHHHHHHH (1-8 hex digits) - encode as UTF-8
                     j = i + 2
                     while j < len(inner) and j < i + 10 and _is_hex_digit(inner[j]):
                         j += 1
                     if j > i + 2:
                         codepoint = int(_substring(inner, i + 2, j), 16)
                         if codepoint == 0:
-                            # NUL truncates string
-                            return "'" + result.decode("utf-8", errors="replace") + "'"
+                            return result
                         result.extend(chr(codepoint).encode("utf-8"))
                         i = j
                     else:
                         result.append(ord(inner[i]))
                         i += 1
                 elif c == "c":
-                    # Control character \cX - mask with 0x1f
                     if i + 3 <= len(inner):
                         ctrl_char = inner[i + 2]
-                        # POSIX: $'\c\\' consumes both backslashes
                         skip_extra = 0
                         if ctrl_char == "\\" and i + 4 <= len(inner) and inner[i + 3] == "\\":
                             skip_extra = 1
                         ctrl_val = ord(ctrl_char) & 0x1F
                         if ctrl_val == 0:
-                            # NUL truncates string
-                            return "'" + result.decode("utf-8", errors="replace") + "'"
+                            return result
                         self._append_with_ctlesc(result, ctrl_val)
                         i += 3 + skip_extra
                     else:
                         result.append(ord(inner[i]))
                         i += 1
                 elif c == "0":
-                    # Nul or octal \0 or \0NN (up to 3 digits total)
                     j = i + 2
                     while j < len(inner) and j < i + 4 and _is_octal_digit(inner[j]):
                         j += 1
                     if j > i + 2:
                         byte_val = int(_substring(inner, i + 1, j), 8) & 0xFF
                         if byte_val == 0:
-                            # NUL truncates string
-                            return "'" + result.decode("utf-8", errors="replace") + "'"
+                            return result
                         self._append_with_ctlesc(result, byte_val)
                         i = j
                     else:
-                        # Just \0 - NUL truncates string
-                        return "'" + result.decode("utf-8", errors="replace") + "'"
+                        return result  # Just \0 - NUL truncates
                 elif c >= "1" and c <= "7":
-                    # Octal escape \NNN (1-3 digits) - raw byte, wraps at 256
                     j = i + 1
                     while j < len(inner) and j < i + 4 and _is_octal_digit(inner[j]):
                         j += 1
                     byte_val = int(_substring(inner, i + 1, j), 8) & 0xFF
                     if byte_val == 0:
-                        # NUL truncates string
-                        return "'" + result.decode("utf-8", errors="replace") + "'"
+                        return result
                     self._append_with_ctlesc(result, byte_val)
                     i = j
                 else:
-                    # Unknown escape - preserve as-is
                     result.append(0x5C)
                     result.append(ord(c))
                     i += 2
             else:
                 result.extend(inner[i].encode("utf-8"))
                 i += 1
-        # Decode as UTF-8, replacing invalid sequences with U+FFFD
-        return "'" + result.decode("utf-8", errors="replace") + "'"
+        return result
+
+    def _expand_ansi_c_escapes(self, value: str) -> str:
+        """Expand ANSI-C escape sequences in $'...' strings.
+
+        Two-phase approach matching bash's architecture:
+        1. Expand escapes to literal bytes (ansicstr)
+        2. Apply shell quoting to result (sh_single_quote)
+        """
+        if not (value.startswith("'") and value.endswith("'")):
+            return value
+        inner = _substring(value, 1, len(value) - 1)
+        literal_bytes = self._ansi_c_to_bytes(inner)
+        literal_str = literal_bytes.decode("utf-8", errors="replace")
+        return self._sh_single_quote(literal_str)
 
     def _expand_all_ansi_c_quotes(self, value: str) -> str:
         """Find and expand ALL $'...' ANSI-C quoted strings in value."""

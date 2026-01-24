@@ -288,16 +288,14 @@ class SavedParserState:
         parser_state: int,
         dolbrace_state: int,
         pending_heredocs: list,
-        ctx_depth: int,
+        ctx_stack: list,
         eof_token: str | None = None,
-        eof_depth: int = 0,
     ):
         self.parser_state = parser_state
         self.dolbrace_state = dolbrace_state
         self.pending_heredocs = pending_heredocs
-        self.ctx_depth = ctx_depth
+        self.ctx_stack = ctx_stack
         self.eof_token = eof_token
-        self.eof_depth = eof_depth
 
 
 class LexerSavedState:
@@ -418,6 +416,18 @@ class ParseContext:
         self.arith_paren_depth = 0  # Grouping parens inside arithmetic
         self.quote = QuoteState()
 
+    def copy(self) -> ParseContext:
+        """Create a deep copy of this context."""
+        ctx = ParseContext(self.kind)
+        ctx.paren_depth = self.paren_depth
+        ctx.brace_depth = self.brace_depth
+        ctx.bracket_depth = self.bracket_depth
+        ctx.case_depth = self.case_depth
+        ctx.arith_depth = self.arith_depth
+        ctx.arith_paren_depth = self.arith_paren_depth
+        ctx.quote = self.quote.copy()
+        return ctx
+
 
 class ContextStack:
     """Stack of parsing contexts for tracking nested scopes.
@@ -454,6 +464,20 @@ class ContextStack:
     def get_depth(self) -> int:
         """Return the current stack depth."""
         return len(self._stack)
+
+    def copy_stack(self) -> list:
+        """Return a deep copy of the context stack for state saving."""
+        result = []
+        for ctx in self._stack:
+            result.append(ctx.copy())
+        return result
+
+    def restore_from(self, saved_stack: list) -> None:
+        """Restore the context stack from a saved copy."""
+        result = []
+        for ctx in saved_stack:
+            result.append(ctx.copy())
+        self._stack = result
 
     def enter_case(self) -> None:
         """Increment case depth in current context."""
@@ -526,7 +550,6 @@ class Lexer:
         self._parser: Parser | None = None
         # EOF token mechanism for command substitution parsing
         self._eof_token: str | None = None
-        self._eof_depth: int = 0
         # Last token returned by next_token (for context-sensitive parsing)
         self._last_read_token: Token | None = None
         # Word parsing context (set by Parser before peeking)
@@ -654,28 +677,12 @@ class Lexer:
             # In REGEX context, ( is regex grouping, not operator
             if self._word_context == WORD_CTX_REGEX:
                 return None
-            # Track depth for EOF token matching
-            if self._eof_token == ")":
-                # Don't increment in case patterns - (a) is pattern syntax, not subshell
-                if not (self._parser_state & ParserStateFlags.PST_CASEPAT):
-                    # Don't increment for function parens: WORD followed by ()
-                    if (
-                        self._last_read_token is None
-                        or self._last_read_token.type != TokenType.WORD
-                    ):
-                        self._eof_depth += 1
             self.pos += 1
             return Token(TokenType.LPAREN, c, start)
         if c == ")":
             # In REGEX context, ) is regex grouping, not operator
             if self._word_context == WORD_CTX_REGEX:
                 return None
-            # Track depth for EOF token matching
-            if self._eof_token == ")":
-                # Don't decrement in case patterns
-                if not (self._parser_state & ParserStateFlags.PST_CASEPAT):
-                    if self._eof_depth > 0:
-                        self._eof_depth -= 1
             self.pos += 1
             return Token(TokenType.RPAREN, c, start)
         if c == "<":
@@ -805,7 +812,6 @@ class Lexer:
             (self._parser_state & ParserStateFlags.PST_EOFTOKEN)
             and self._eof_token is not None
             and ch == self._eof_token
-            and self._eof_depth == 0
             and bracket_depth == 0
         ):
             return True
@@ -1427,7 +1433,6 @@ class Lexer:
                 and (self._parser_state & ParserStateFlags.PST_EOFTOKEN)
                 and self._eof_token is not None
                 and ch == self._eof_token
-                and self._eof_depth == 0
                 and bracket_depth == 0
             ):
                 if not chars:
@@ -1492,7 +1497,6 @@ class Lexer:
         if (
             self._eof_token is not None
             and self.peek() == self._eof_token
-            and self._eof_depth == 0
             and not (self._parser_state & ParserStateFlags.PST_CASEPAT)
             and not (self._parser_state & ParserStateFlags.PST_EOFTOKEN)
         ):
@@ -1509,7 +1513,6 @@ class Lexer:
             if (
                 self._eof_token is not None
                 and self.peek() == self._eof_token
-                and self._eof_depth == 0
                 and not (self._parser_state & ParserStateFlags.PST_CASEPAT)
                 and not (self._parser_state & ParserStateFlags.PST_EOFTOKEN)
             ):
@@ -6654,7 +6657,6 @@ class Parser:
         self._dolbrace_state = DolbraceState.NONE
         # EOF token mechanism for inline command substitution parsing
         self._eof_token: str | None = None
-        self._eof_depth: int = 0
         # Word parsing context for Lexer sync
         self._word_context = WORD_CTX_NORMAL
         self._at_command_start = False
@@ -6683,9 +6685,8 @@ class Parser:
             parser_state=self._parser_state,
             dolbrace_state=self._dolbrace_state,
             pending_heredocs=list(self._pending_heredocs),
-            ctx_depth=self._ctx.get_depth(),
+            ctx_stack=self._ctx.copy_stack(),
             eof_token=self._eof_token,
-            eof_depth=self._eof_depth,
         )
 
     def _restore_parser_state(self, saved: SavedParserState) -> None:
@@ -6698,10 +6699,8 @@ class Parser:
         self._parser_state = saved.parser_state
         self._dolbrace_state = saved.dolbrace_state
         self._eof_token = saved.eof_token
-        self._eof_depth = saved.eof_depth
-        # Restore context stack to saved depth (pop any extra contexts)
-        while self._ctx.get_depth() > saved.ctx_depth:
-            self._ctx.pop()
+        # Restore complete context stack
+        self._ctx.restore_from(saved.ctx_stack)
 
     def _record_token(self, tok: Token) -> None:
         """Record token in history, shifting older tokens."""
@@ -6762,7 +6761,6 @@ class Parser:
         if self._lexer.pos != self.pos:
             self._lexer.pos = self.pos
         self._lexer._eof_token = self._eof_token
-        self._lexer._eof_depth = self._eof_depth
         self._lexer._parser_state = self._parser_state
         # Sync last read token from parser's token history
         self._lexer._last_read_token = self._token_history[0]
@@ -7023,7 +7021,7 @@ class Parser:
             return False
         ch = self.peek()
         # Check if we're at the EOF token (e.g., } in funsub or ) in comsub)
-        if self._eof_token is not None and ch == self._eof_token and self._eof_depth == 0:
+        if self._eof_token is not None and ch == self._eof_token:
             return True
         if ch == ")":
             return True
@@ -7278,7 +7276,6 @@ class Parser:
         saved = self._save_parser_state()
         self._set_state(ParserStateFlags.PST_CMDSUBST | ParserStateFlags.PST_EOFTOKEN)
         self._eof_token = ")"
-        self._eof_depth = 0
 
         # Parse the command list inline - grammar will stop at matching )
         cmd = self.parse_list()
@@ -7313,7 +7310,6 @@ class Parser:
         saved = self._save_parser_state()
         self._set_state(ParserStateFlags.PST_CMDSUBST | ParserStateFlags.PST_EOFTOKEN)
         self._eof_token = "}"
-        self._eof_depth = 0
         # Parse the command list inline - grammar will stop at matching }
         cmd = self.parse_list()
         if cmd is None:
@@ -7659,7 +7655,6 @@ class Parser:
         self._in_process_sub = True
         self._set_state(ParserStateFlags.PST_EOFTOKEN)
         self._eof_token = ")"
-        self._eof_depth = 0
 
         # Try to parse the command list inline - grammar will stop at matching )
         try:
@@ -9046,11 +9041,7 @@ class Parser:
                 normalized_delim = _normalize_heredoc_delimiter(heredoc.delimiter)
                 # In command substitution: line starts with delimiter - heredoc ends there
                 # Remaining content (e.g., ")x" or "b)") is part of the command sub
-                if (
-                    self._eof_token == ")"
-                    and self._eof_depth == 0
-                    and normalized_check.startswith(normalized_delim)
-                ):
+                if self._eof_token == ")" and normalized_check.startswith(normalized_delim):
                     tabs_stripped = len(line) - len(check_line)
                     self.pos = line_start + tabs_stripped + len(heredoc.delimiter)
                     break
@@ -9962,7 +9953,7 @@ class Parser:
                 is_pattern = False
                 if not self.at_end() and self.peek() == ")":
                     # If we're at the EOF token delimiter (command sub closer), esac is keyword
-                    if self._eof_token == ")" and self._eof_depth == 0:
+                    if self._eof_token == ")":
                         is_pattern = False
                     else:
                         self.advance()  # consume )

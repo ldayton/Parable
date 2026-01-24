@@ -221,19 +221,14 @@ class SavedParserState {
 		parser_state,
 		dolbrace_state,
 		pending_heredocs,
-		ctx_depth,
+		ctx_stack,
 		eof_token,
-		eof_depth,
 	) {
-		if (eof_depth == null) {
-			eof_depth = 0;
-		}
 		this.parser_state = parser_state;
 		this.dolbrace_state = dolbrace_state;
 		this.pending_heredocs = pending_heredocs;
-		this.ctx_depth = ctx_depth;
+		this.ctx_stack = ctx_stack;
 		this.eof_token = eof_token;
-		this.eof_depth = eof_depth;
 	}
 }
 
@@ -345,6 +340,19 @@ class ParseContext {
 		this.arith_paren_depth = 0;
 		this.quote = new QuoteState();
 	}
+
+	copy() {
+		let ctx;
+		ctx = new ParseContext(this.kind);
+		ctx.paren_depth = this.paren_depth;
+		ctx.brace_depth = this.brace_depth;
+		ctx.bracket_depth = this.bracket_depth;
+		ctx.case_depth = this.case_depth;
+		ctx.arith_depth = this.arith_depth;
+		ctx.arith_paren_depth = this.arith_paren_depth;
+		ctx.quote = this.quote.copy();
+		return ctx;
+	}
 }
 
 class ContextStack {
@@ -379,6 +387,24 @@ class ContextStack {
 
 	getDepth() {
 		return this._stack.length;
+	}
+
+	copyStack() {
+		let ctx, result;
+		result = [];
+		for (ctx of this._stack) {
+			result.push(ctx.copy());
+		}
+		return result;
+	}
+
+	restoreFrom(saved_stack) {
+		let ctx, result;
+		result = [];
+		for (ctx of saved_stack) {
+			result.push(ctx.copy());
+		}
+		this._stack = result;
 	}
 
 	enterCase() {
@@ -460,7 +486,6 @@ class Lexer {
 		this._parser = null;
 		// EOF token mechanism for command substitution parsing
 		this._eof_token = null;
-		this._eof_depth = 0;
 		// Last token returned by next_token (for context-sensitive parsing)
 		this._last_read_token = null;
 		// Word parsing context (set by Parser before peeking)
@@ -614,19 +639,6 @@ class Lexer {
 			if (this._word_context === WORD_CTX_REGEX) {
 				return null;
 			}
-			// Track depth for EOF token matching
-			if (this._eof_token === ")") {
-				// Don't increment in case patterns - (a) is pattern syntax, not subshell
-				if (!(this._parser_state & ParserStateFlags.PST_CASEPAT)) {
-					// Don't increment for function parens: WORD followed by ()
-					if (
-						this._last_read_token == null ||
-						this._last_read_token.type !== TokenType.WORD
-					) {
-						this._eof_depth += 1;
-					}
-				}
-			}
 			this.pos += 1;
 			return new Token(TokenType.LPAREN, c, start);
 		}
@@ -634,15 +646,6 @@ class Lexer {
 			// In REGEX context, ) is regex grouping, not operator
 			if (this._word_context === WORD_CTX_REGEX) {
 				return null;
-			}
-			// Track depth for EOF token matching
-			if (this._eof_token === ")") {
-				// Don't decrement in case patterns
-				if (!(this._parser_state & ParserStateFlags.PST_CASEPAT)) {
-					if (this._eof_depth > 0) {
-						this._eof_depth -= 1;
-					}
-				}
 			}
 			this.pos += 1;
 			return new Token(TokenType.RPAREN, c, start);
@@ -824,7 +827,6 @@ class Lexer {
 			this._parser_state & ParserStateFlags.PST_EOFTOKEN &&
 			this._eof_token != null &&
 			ch === this._eof_token &&
-			this._eof_depth === 0 &&
 			bracket_depth === 0
 		) {
 			return true;
@@ -1630,7 +1632,6 @@ class Lexer {
 				this._parser_state & ParserStateFlags.PST_EOFTOKEN &&
 				this._eof_token != null &&
 				ch === this._eof_token &&
-				this._eof_depth === 0 &&
 				bracket_depth === 0
 			) {
 				if (chars.length === 0) {
@@ -1713,7 +1714,6 @@ class Lexer {
 		if (
 			this._eof_token != null &&
 			this.peek() === this._eof_token &&
-			this._eof_depth === 0 &&
 			!(this._parser_state & ParserStateFlags.PST_CASEPAT) &&
 			!(this._parser_state & ParserStateFlags.PST_EOFTOKEN)
 		) {
@@ -1732,7 +1732,6 @@ class Lexer {
 			if (
 				this._eof_token != null &&
 				this.peek() === this._eof_token &&
-				this._eof_depth === 0 &&
 				!(this._parser_state & ParserStateFlags.PST_CASEPAT) &&
 				!(this._parser_state & ParserStateFlags.PST_EOFTOKEN)
 			) {
@@ -7940,7 +7939,6 @@ class Parser {
 		this._dolbrace_state = DolbraceState.NONE;
 		// EOF token mechanism for inline command substitution parsing
 		this._eof_token = null;
-		this._eof_depth = 0;
 		// Word parsing context for Lexer sync
 		this._word_context = WORD_CTX_NORMAL;
 		this._at_command_start = false;
@@ -7965,9 +7963,8 @@ class Parser {
 			this._parser_state,
 			this._dolbrace_state,
 			Array.from(this._pending_heredocs),
-			this._ctx.getDepth(),
+			this._ctx.copyStack(),
 			this._eof_token,
-			this._eof_depth,
 		);
 	}
 
@@ -7975,11 +7972,8 @@ class Parser {
 		this._parser_state = saved.parser_state;
 		this._dolbrace_state = saved.dolbrace_state;
 		this._eof_token = saved.eof_token;
-		this._eof_depth = saved.eof_depth;
-		// Restore context stack to saved depth (pop any extra contexts)
-		while (this._ctx.getDepth() > saved.ctx_depth) {
-			this._ctx.pop();
-		}
+		// Restore complete context stack
+		this._ctx.restoreFrom(saved.ctx_stack);
 	}
 
 	_recordToken(tok) {
@@ -8050,7 +8044,6 @@ class Parser {
 			this._lexer.pos = this.pos;
 		}
 		this._lexer._eof_token = this._eof_token;
-		this._lexer._eof_depth = this._eof_depth;
 		this._lexer._parser_state = this._parser_state;
 		// Sync last read token from parser's token history
 		this._lexer._last_read_token = this._token_history[0];
@@ -8340,11 +8333,7 @@ class Parser {
 		}
 		ch = this.peek();
 		// Check if we're at the EOF token (e.g., } in funsub or ) in comsub)
-		if (
-			this._eof_token != null &&
-			ch === this._eof_token &&
-			this._eof_depth === 0
-		) {
+		if (this._eof_token != null && ch === this._eof_token) {
 			return true;
 		}
 		if (ch === ")") {
@@ -8670,7 +8659,6 @@ class Parser {
 			ParserStateFlags.PST_CMDSUBST | ParserStateFlags.PST_EOFTOKEN,
 		);
 		this._eof_token = ")";
-		this._eof_depth = 0;
 		// Parse the command list inline - grammar will stop at matching )
 		cmd = this.parseList();
 		if (cmd == null) {
@@ -8703,7 +8691,6 @@ class Parser {
 			ParserStateFlags.PST_CMDSUBST | ParserStateFlags.PST_EOFTOKEN,
 		);
 		this._eof_token = "}";
-		this._eof_depth = 0;
 		// Parse the command list inline - grammar will stop at matching }
 		cmd = this.parseList();
 		if (cmd == null) {
@@ -9134,7 +9121,6 @@ class Parser {
 		this._in_process_sub = true;
 		this._setState(ParserStateFlags.PST_EOFTOKEN);
 		this._eof_token = ")";
-		this._eof_depth = 0;
 		// Try to parse the command list inline - grammar will stop at matching )
 		try {
 			cmd = this.parseList();
@@ -10848,7 +10834,6 @@ class Parser {
 				// Remaining content (e.g., ")x" or "b)") is part of the command sub
 				if (
 					this._eof_token === ")" &&
-					this._eof_depth === 0 &&
 					normalized_check.startsWith(normalized_delim)
 				) {
 					tabs_stripped = line.length - check_line.length;
@@ -11976,7 +11961,7 @@ class Parser {
 				is_pattern = false;
 				if (!this.atEnd() && this.peek() === ")") {
 					// If we're at the EOF token delimiter (command sub closer), esac is keyword
-					if (this._eof_token === ")" && this._eof_depth === 0) {
+					if (this._eof_token === ")") {
 						is_pattern = false;
 					} else {
 						this.advance();

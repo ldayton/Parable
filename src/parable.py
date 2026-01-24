@@ -10214,24 +10214,22 @@ class Parser:
         # Check for 'function' keyword form
         if self._lex_is_at_reserved_word("function"):
             self._lex_consume_word("function")
-            self.skip_whitespace()
 
-            # Get function name
-            name = self.peek_word()
-            if name is None:
+            tok = self._lex_peek_token()
+            if tok.type != TokenType.WORD:
                 self.pos = saved_pos
                 return None
-            self.consume_word(name)
-            self.skip_whitespace()
+            name = tok.value
+            self._lex_next_token()  # consume name
 
             # Optional () after name - but only if it's actually ()
             # and not the start of a subshell body
+            # Use character-level checks to avoid _eof_depth sync issues
+            self.skip_whitespace()
             if not self.at_end() and self.peek() == "(":
-                # Check if this is () or start of subshell
                 if self.pos + 1 < self.length and self.source[self.pos + 1] == ")":
                     self.advance()  # consume (
                     self.advance()  # consume )
-                # else: the ( is start of subshell body, don't consume
 
             self.skip_whitespace_and_newlines()
 

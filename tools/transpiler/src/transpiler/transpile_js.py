@@ -5,58 +5,195 @@ import ast
 import io
 import sys
 import tokenize
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
+@dataclass
+class FunctionScope:
+    """Tracks variable state within a function for const/let declaration."""
+
+    reassigned: set = field(default_factory=set)
+    emitted: set = field(default_factory=set)
+    top_level_first: set = field(default_factory=set)
+
+
+class _NotHandled:
+    """Sentinel indicating a handler did not process the input."""
+
+    __slots__ = ()
+
+    def __bool__(self):
+        raise TypeError("Use 'is NOT_HANDLED' instead of truthiness check")
+
+    def __repr__(self):
+        return "NOT_HANDLED"
+
+
+NOT_HANDLED = _NotHandled()
+
+
 class JSTranspiler(ast.NodeVisitor):
+    # Attributes/names that are known to be arrays (for Python/JS truthiness fix)
+    _ARRAY_ATTRS = {"redirects", "parts", "elements", "words", "patterns", "commands"}
+    _LIST_SUFFIXES = (
+        "_chars",
+        "_list",
+        "_parts",
+        "chars",
+        "parts",
+        "result",
+        "results",
+        "items",
+        "values",
+    )
+    # JS reserved words that cannot be used with dot notation
+    _JS_RESERVED = {
+        "class",
+        "default",
+        "delete",
+        "export",
+        "import",
+        "new",
+        "return",
+        "super",
+        "switch",
+        "this",
+        "throw",
+        "typeof",
+        "void",
+        "with",
+        "yield",
+    }
+    # Rename JS reserved words and conflicting globals
+    _SAFE_NAME_MAP = {
+        "var": "variable",
+        "class": "cls",
+        "function": "func",
+        "in": "inVal",
+        "with": "withVal",
+        "Array": "ArrayNode",
+        "Function": "FunctionNode",
+    }
+    # Python name -> JS name mappings
+    _NAME_MAP = {
+        "True": "true",
+        "False": "false",
+        "None": "null",
+        "self": "this",
+        "Exception": "Error",
+        "NotImplementedError": 'new Error("Not implemented")',
+    }
+    # Method name mappings: Python -> JS
+    _METHOD_RENAMES = {
+        "append": "push",
+        "startswith": "startsWith",
+        "endswith": "endsWith",
+        "strip": "trim",
+        "lower": "toLowerCase",
+        "upper": "toUpperCase",
+        "find": "indexOf",
+        "rfind": "lastIndexOf",
+        "replace": "replaceAll",
+    }
+    # Regex-based character class tests
+    _CHAR_CLASS_TESTS = {
+        "isalpha": "/^[a-zA-Z]$/",
+        "isdigit": "/^[0-9]+$/",
+        "isalnum": "/^[a-zA-Z0-9]$/",
+        "isspace": "/^\\s$/",
+    }
+    # Python kwargs with skipped positional defaults need explicit JS defaults
+    # Maps: (kwarg_name, current_arg_count) -> defaults to insert before the kwarg
+    _KWARG_DEFAULTS = {("in_procsub", 1): ["0"]}  # indent=0 default
+    # Method prefixes that need .bind(this) when passed as callbacks
+    _CALLBACK_METHOD_PREFIXES = ("_arith_parse_", "_parse_")
+    # Simple builtin -> JS template (use {args} placeholder)
+    _BUILTIN_TEMPLATES = {
+        "len": "{args}.length",
+        "str": "String({args})",
+        "ord": "{args}.charCodeAt(0)",
+        "chr": "String.fromCodePoint({args})",
+        "bytearray": "[]",
+        "set": "new Set({args})",
+        "max": "Math.max({args})",
+        "min": "Math.min({args})",
+    }
+    # Binary operators: ast type -> JS operator
+    _BINARY_OPS = {
+        ast.Add: "+",
+        ast.Sub: "-",
+        ast.Mult: "*",
+        ast.Div: "/",
+        ast.Mod: "%",
+        ast.Pow: "**",
+        ast.LShift: "<<",
+        ast.RShift: ">>",
+        ast.BitOr: "|",
+        ast.BitXor: "^",
+        ast.BitAnd: "&",
+    }
+    # Comparison operators: ast type -> JS operator
+    _COMPARE_OPS = {
+        ast.Eq: "===",
+        ast.NotEq: "!==",
+        ast.Lt: "<",
+        ast.LtE: "<=",
+        ast.Gt: ">",
+        ast.GtE: ">=",
+        ast.Is: "==",  # loose equality so `x is None` matches null/undefined
+        ast.IsNot: "!=",
+        ast.In: "in",
+        ast.NotIn: "not in",
+    }
+    _MODULE_EXPORTS = "module.exports = { parse, ParseError };"
+
     def __init__(self):
         self.indent = 0
         self.output = []
         self.in_class_body = False
         self.in_method = False
         self.class_has_base = False
-        self.declared_vars = set()
-        # Pre-populate with known class names (needed for forward references)
-        # Lexer methods may instantiate Node subclasses defined later in the file
-        self.class_names = {
-            "Parser",
-            "Word",
-            "ParseError",
-            # Node subclasses used by Lexer for expansion parsing
-            "AnsiCQuote",
-            "LocaleString",
-            "CommandSubstitution",
-            "ProcessSubstitution",
-            "ArithmeticExpansion",
-            "ParamExpansion",
-            "ParamLength",
-            "ParamIndirect",
-            "ArrayLiteral",
-            "Empty",
-            "ArithEmpty",
-        }
+        self.scope = FunctionScope()
+        self.class_names = set()  # populated by pre-pass in transpile()
         self.comments = {}  # line_number -> comment_text
+        self._sorted_comment_lines = []  # populated once in transpile()
         self.last_line = 0
         self._in_assignment_target = False
-        self._reassigned_vars = set()
-        self._emitted_vars = set()
-        self._top_level_first_assign = set()  # Vars first assigned at top level
-        self._block_depth = 0
 
-    def emit(self, text: str):
+    def emit(self, text: str) -> None:
         self.output.append("    " * self.indent + text)
 
-    def emit_raw(self, text: str):
-        self.output.append(text)
-
-    def emit_comments_before(self, line: int):
-        for comment_line in sorted(self.comments.keys()):
+    def emit_comments_before(self, line: int) -> None:
+        for comment_line in self._sorted_comment_lines:
             if comment_line >= line:
                 break
             if comment_line > self.last_line:
                 comment = self.comments[comment_line].lstrip("# ").rstrip()
                 self.emit(f"// {comment}")
         self.last_line = line
+
+    @contextmanager
+    def _scoped(self, **attrs):
+        """Temporarily set attributes, restoring originals on exit."""
+        old = {k: getattr(self, k) for k in attrs}
+        for k, v in attrs.items():
+            setattr(self, k, v)
+        try:
+            yield
+        finally:
+            for k, v in old.items():
+                setattr(self, k, v)
+
+    @contextmanager
+    def _indented(self):
+        """Temporarily increase indentation level."""
+        self.indent += 1
+        try:
+            yield
+        finally:
+            self.indent -= 1
 
     def transpile(self, source: str) -> str:
         # Extract standalone comments (not inline) using tokenize
@@ -68,7 +205,9 @@ class JSTranspiler(ast.NodeVisitor):
                 # Only keep comments where preceding content on line is whitespace
                 if lines[line_num - 1][:col].strip() == "":
                     self.comments[line_num] = tok.string
+        self._sorted_comment_lines = sorted(self.comments.keys())
         tree = ast.parse(source)
+        self.class_names = {node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)}
         self.visit(tree)
         return "\n".join(self.output)
 
@@ -82,83 +221,109 @@ class JSTranspiler(ast.NodeVisitor):
                 return True
         return False
 
-    def visit_Module(self, node: ast.Module):
-        # Emit module docstring as JSDoc comment
-        if (
+    def _name_is_subscripted(self, name: str, exprs: list[ast.expr]) -> bool:
+        """Check if name is used as the base of a subscript in any of the expressions."""
+        for expr in exprs:
+            for node in ast.walk(expr):
+                if isinstance(node, ast.Subscript):
+                    if isinstance(node.value, ast.Name) and node.value.id == name:
+                        return True
+        return False
+
+    def _references_self(self, exprs: list[ast.expr]) -> bool:
+        """Check if any expression references 'self'."""
+        for expr in exprs:
+            for node in ast.walk(expr):
+                if isinstance(node, ast.Name) and node.id == "self":
+                    return True
+        return False
+
+    def _is_array_attr(self, node: ast.expr) -> bool:
+        """Check if node matches known array attributes (for if statement truthiness)."""
+        if isinstance(node, ast.Name):
+            return node.id in self._ARRAY_ATTRS
+        if isinstance(node, ast.Attribute):
+            return node.attr in self._ARRAY_ATTRS
+        return False
+
+    def _is_list_var(self, node: ast.expr) -> bool:
+        """Check if node is likely a list variable (for negation truthiness)."""
+        return isinstance(node, ast.Name) and (
+            node.id.endswith(self._LIST_SUFFIXES) or node.id in self._LIST_SUFFIXES
+        )
+
+    def _emit_module_docstring(self, node: ast.Module) -> None:
+        """Emit module docstring as JSDoc comment if present."""
+        if not (
             node.body
             and isinstance(node.body[0], ast.Expr)
             and isinstance(node.body[0].value, ast.Constant)
             and isinstance(node.body[0].value.value, str)
         ):
-            docstring = (
-                node.body[0]
-                .value.value.strip()
-                .replace("Parable -", "Parable.js -", 1)
-                .replace("from parable import parse", "import { parse } from './parable.js';")
-                .replace("ast = parse(", "const ast = parse(")
-            )
-            lines = docstring.split("\n")
-            if len(lines) == 1:
-                self.emit(f"/** {docstring} */")
-            else:
-                self.emit("/**")
-                for line in lines:
-                    if line.strip():
-                        self.emit(f" * {line}")
-                    else:
-                        self.emit(" *")
-                self.emit(" */")
-            self.emit("")
+            return
+        docstring = (
+            node.body[0]
+            .value.value.strip()
+            .replace("Parable -", "Parable.js -", 1)
+            .replace("from parable import parse", "import { parse } from './parable.js';")
+            .replace("ast = parse(", "const ast = parse(")
+        )
+        lines = docstring.split("\n")
+        if len(lines) == 1:
+            self.emit(f"/** {docstring} */")
+        else:
+            self.emit("/**")
+            for line in lines:
+                self.emit(f" * {line}" if line.strip() else " *")
+            self.emit(" */")
+        self.emit("")
+
+    def _is_typing_import(self, stmt: ast.stmt) -> bool:
+        return isinstance(stmt, ast.ImportFrom) and stmt.module == "typing"
+
+    def _is_type_alias(self, stmt: ast.stmt) -> bool:
+        """Check for type alias like `ArithNode = Union[...]`."""
+        if not isinstance(stmt, ast.Assign) or len(stmt.targets) != 1:
+            return False
+        if not isinstance(stmt.value, ast.Subscript):
+            return False
+        return isinstance(stmt.value.value, ast.Name) and stmt.value.value.id == "Union"
+
+    def _is_unused_module_var(self, stmt: ast.stmt, module: ast.Module) -> bool:
+        if not isinstance(stmt, ast.Assign) or len(stmt.targets) != 1:
+            return False
+        target = stmt.targets[0]
+        if not isinstance(target, ast.Name):
+            return False
+        return not self._is_name_used(target.id, module, stmt)
+
+    def visit_Module(self, node: ast.Module):
+        self._emit_module_docstring(node)
         for stmt in node.body:
-            # Skip typing imports (from typing import ...)
-            if isinstance(stmt, ast.ImportFrom) and stmt.module == "typing":
+            if self._is_typing_import(stmt):
                 continue
-            # Skip type alias assignments (ArithNode = Union[...])
-            if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
-                if isinstance(stmt.value, ast.Subscript):
-                    if isinstance(stmt.value.value, ast.Name) and stmt.value.value.id == "Union":
-                        continue
-            # Skip unused module-level variable definitions
-            if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
-                if isinstance(stmt.targets[0], ast.Name):
-                    var_name = stmt.targets[0].id
-                    if not self._is_name_used(var_name, node, stmt):
-                        continue
+            if self._is_type_alias(stmt):
+                continue
+            if self._is_unused_module_var(stmt, node):
+                continue
             self.emit_comments_before(stmt.lineno)
             self.visit(stmt)
 
     def visit_ClassDef(self, node: ast.ClassDef):
         safe_name = self._safe_name(node.name)
-        self.class_names.add(node.name)  # Track original name for isinstance checks
         bases = [self.visit_expr(b) for b in node.bases]
         extends = f" extends {bases[0]}" if bases else ""
         self.emit(f"class {safe_name}{extends} {{")
-        self.indent += 1
-        old_in_class = self.in_class_body
-        old_has_base = self.class_has_base
-        self.in_class_body = True
-        self.class_has_base = bool(bases)
-        for stmt in node.body:
-            self.emit_comments_before(stmt.lineno)
-            self.visit(stmt)
-        self.in_class_body = old_in_class
-        self.class_has_base = old_has_base
-        self.indent -= 1
+        with self._indented(), self._scoped(in_class_body=True, class_has_base=bool(bases)):
+            for stmt in node.body:
+                self.emit_comments_before(stmt.lineno)
+                self.visit(stmt)
         self.emit("}")
         self.emit("")
 
     def _safe_name(self, name: str) -> str:
         """Rename JS reserved words and conflicting globals."""
-        reserved = {
-            "var": "variable",
-            "class": "cls",
-            "function": "func",
-            "in": "inVal",
-            "with": "withVal",
-            "Array": "ArrayNode",  # Avoid shadowing JS global
-            "Function": "FunctionNode",  # Avoid shadowing JS global
-        }
-        return reserved.get(name, name)
+        return self._SAFE_NAME_MAP.get(name, name)
 
     def _escape_regex_chars(self, s: str) -> str:
         """Escape special regex characters for use in a character class."""
@@ -177,20 +342,15 @@ class JSTranspiler(ast.NodeVisitor):
 
     def _is_super_call(self, stmt: ast.stmt) -> bool:
         """Check if statement is a super().__init__() call."""
-        if not isinstance(stmt, ast.Expr):
-            return False
-        call = stmt.value
-        if not isinstance(call, ast.Call):
-            return False
-        if not isinstance(call.func, ast.Attribute):
-            return False
-        if call.func.attr != "__init__":
-            return False
-        if not isinstance(call.func.value, ast.Call):
-            return False
-        if not isinstance(call.func.value.func, ast.Name):
-            return False
-        return call.func.value.func.id == "super"
+        return (
+            isinstance(stmt, ast.Expr)
+            and isinstance(stmt.value, ast.Call)
+            and isinstance(stmt.value.func, ast.Attribute)
+            and stmt.value.func.attr == "__init__"
+            and isinstance(stmt.value.func.value, ast.Call)
+            and isinstance(stmt.value.func.value.func, ast.Name)
+            and stmt.value.func.value.func.id == "super"
+        )
 
     def _camel_case(self, name: str) -> str:
         """Convert snake_case or PascalCase to camelCase, preserving leading underscore."""
@@ -216,60 +376,59 @@ class JSTranspiler(ast.NodeVisitor):
             names.update(self._collect_names_from_target(target.value))
         return names
 
-    def _collect_local_vars(self, stmts: list) -> set:
-        """Collect all variable names assigned in a list of statements."""
-        counts, _ = self._count_assignments(stmts)
-        return set(counts.keys())
+    def _count_assignments(self, stmts: list) -> tuple[dict[str, int], set[str]]:
+        """Count assignments and track which vars are first assigned at top level.
 
-    def _count_assignments(
-        self, stmts: list, counts: dict = None, top_level: set = None, in_block: bool = False
-    ) -> tuple[dict, set]:
-        """Count assignments and track which vars are first assigned at top level."""
-        if counts is None:
-            counts = {}
-        if top_level is None:
-            top_level = set()
-        for stmt in stmts:
-            if isinstance(stmt, ast.Assign):
-                for target in stmt.targets:
-                    for name in self._collect_names_from_target(target):
-                        if name not in counts and not in_block:
-                            top_level.add(name)
-                        counts[name] = counts.get(name, 0) + 1
-            elif isinstance(stmt, ast.AnnAssign):
-                if isinstance(stmt.target, ast.Name) and stmt.value:
-                    name = stmt.target.id
-                    if name not in counts and not in_block:
-                        top_level.add(name)
-                    counts[name] = counts.get(name, 0) + 1
-            elif isinstance(stmt, ast.AugAssign):
-                for name in self._collect_names_from_target(stmt.target):
-                    counts[name] = counts.get(name, 0) + 1
-            elif isinstance(stmt, ast.For):
-                # For loop variables are always block-scoped in JS, don't count them
-                # as function-level variables
-                self._count_assignments(stmt.body, counts, top_level, True)
-                self._count_assignments(stmt.orelse, counts, top_level, True)
-            elif isinstance(stmt, ast.While):
-                body_counts, _ = self._count_assignments(stmt.body, {}, set(), True)
-                for name, count in body_counts.items():
-                    counts[name] = counts.get(name, 0) + count * 2
-                self._count_assignments(stmt.orelse, counts, top_level, True)
-            elif isinstance(stmt, ast.If):
-                self._count_assignments(stmt.body, counts, top_level, True)
-                self._count_assignments(stmt.orelse, counts, top_level, True)
-            elif isinstance(stmt, ast.Try):
-                self._count_assignments(stmt.body, counts, top_level, True)
-                for handler in stmt.handlers:
-                    self._count_assignments(handler.body, counts, top_level, True)
-                self._count_assignments(stmt.finalbody, counts, top_level, True)
-        return counts, top_level
+        Returns (counts, top_level_first) where:
+        - counts: maps variable name to number of assignments
+        - top_level_first: names whose first assignment is at function top level
+        """
+        counts: dict[str, int] = {}
+        top_level_first: set[str] = set()
 
-    def visit_FunctionDef(self, node: ast.FunctionDef):
-        # Skip helper functions that are inlined
-        if node.name in ("_substring", "_sublist", "_repeat_str"):
-            return
-        # Build args with default values in signature
+        def record(name: str, *, is_top_level: bool, add_count: int = 1) -> None:
+            if name not in counts and is_top_level:
+                top_level_first.add(name)
+            counts[name] = counts.get(name, 0) + add_count
+
+        def walk(stmts: list, is_top_level: bool) -> None:
+            for stmt in stmts:
+                if isinstance(stmt, ast.Assign):
+                    for target in stmt.targets:
+                        for name in self._collect_names_from_target(target):
+                            record(name, is_top_level=is_top_level)
+                elif isinstance(stmt, ast.AnnAssign):
+                    if isinstance(stmt.target, ast.Name) and stmt.value:
+                        record(stmt.target.id, is_top_level=is_top_level)
+                elif isinstance(stmt, ast.AugAssign):
+                    for name in self._collect_names_from_target(stmt.target):
+                        record(name, is_top_level=is_top_level)
+                elif isinstance(stmt, ast.For):
+                    # For loop target is block-scoped in JS via `let x of`
+                    walk(stmt.body, is_top_level=False)
+                    walk(stmt.orelse, is_top_level=False)
+                elif isinstance(stmt, ast.While):
+                    # While body may execute 0+ times; count separately to force `let`
+                    saved = counts.copy()
+                    walk(stmt.body, is_top_level=False)
+                    for name in counts:
+                        if name not in saved or counts[name] > saved[name]:
+                            counts[name] = max(counts[name], 2)  # force let
+                    walk(stmt.orelse, is_top_level=False)
+                elif isinstance(stmt, ast.If):
+                    walk(stmt.body, is_top_level=False)
+                    walk(stmt.orelse, is_top_level=False)
+                elif isinstance(stmt, ast.Try):
+                    walk(stmt.body, is_top_level=False)
+                    for handler in stmt.handlers:
+                        walk(handler.body, is_top_level=False)
+                    walk(stmt.finalbody, is_top_level=False)
+
+        walk(stmts, is_top_level=True)
+        return counts, top_level_first
+
+    def _build_function_signature(self, node: ast.FunctionDef) -> tuple[str, str]:
+        """Build JS function signature. Returns (name, args_str)."""
         non_self_args = [a for a in node.args.args if a.arg != "self"]
         defaults = node.args.defaults
         first_default_idx = len(non_self_args) - len(defaults) if defaults else len(non_self_args)
@@ -282,79 +441,68 @@ class JSTranspiler(ast.NodeVisitor):
                 if not (isinstance(default, ast.Constant) and default.value is None):
                     arg_str += f" = {self.visit_expr(default)}"
             args.append(arg_str)
-        # Handle *args as rest parameter
         if node.args.vararg:
             args.append("..." + self._safe_name(node.args.vararg.arg))
-        args_str = ", ".join(args)
         name = "constructor" if node.name == "__init__" else self._camel_case(node.name)
-        if self.in_class_body and not self.in_method:
-            # Class method
-            self.emit(f"{name}({args_str}) {{")
-        else:
-            # Top-level or nested function
-            self.emit(f"function {name}({args_str}) {{")
-        self.indent += 1
-        old_in_class = self.in_class_body
-        old_in_method = self.in_method
-        old_declared = self.declared_vars
-        old_reassigned = self._reassigned_vars
-        old_emitted = self._emitted_vars
-        old_top_level = self._top_level_first_assign
-        self.in_class_body = False
-        self.in_method = True
-        # Track variables for const vs let at point of use
+        return name, ", ".join(args)
+
+    def _setup_function_scope(self, node: ast.FunctionDef) -> FunctionScope:
+        """Analyze function body and set up variable scope. Returns new scope."""
         param_names = {a.arg for a in node.args.args if a.arg != "self"}
         if node.args.vararg:
             param_names.add(node.args.vararg.arg)
         assignment_counts, top_level_first = self._count_assignments(node.body)
         local_vars = set(assignment_counts.keys()) - param_names
-        self.declared_vars = param_names | local_vars
-        self._reassigned_vars = {name for name, count in assignment_counts.items() if count > 1}
-        self._top_level_first_assign = top_level_first - param_names
-        # Hoist vars not first-assigned at top level (they're used before assigned in main flow)
-        hoisted = local_vars - self._top_level_first_assign
+        scope = FunctionScope(
+            reassigned={name for name, count in assignment_counts.items() if count > 1},
+            top_level_first=top_level_first - param_names,
+        )
+        # Hoist vars not first-assigned at top level
+        hoisted = local_vars - scope.top_level_first
         if hoisted:
             sorted_vars = sorted(self._safe_name(v) for v in hoisted)
             self.emit(f"let {', '.join(sorted_vars)};")
-        self._emitted_vars = set(param_names) | hoisted
+        scope.emitted = param_names | hoisted
+        return scope
 
-        # For constructors in subclasses, emit super() first
-        if name == "constructor" and self.class_has_base:
-            # Find and emit super() call first, or add one if missing
-            super_stmt = None
-            other_stmts = []
-            for stmt in node.body:
-                if self._is_super_call(stmt):
-                    super_stmt = stmt
-                else:
-                    other_stmts.append(stmt)
-            if super_stmt:
-                # Check if super() args reference self - if so, we need to emit super() first
-                # then the assignments, then update message if needed
-                call = super_stmt.value
-                super_args = call.args
-                args_use_self = any("self" in ast.dump(arg) for arg in super_args)
-                if args_use_self:
-                    # Emit super() with no args first
-                    self.emit("super();")
-                else:
-                    self.visit(super_stmt)
+    def _emit_constructor_body(self, node: ast.FunctionDef) -> None:
+        """Emit constructor body with super() handling."""
+        super_stmt = None
+        other_stmts = []
+        for stmt in node.body:
+            if self._is_super_call(stmt):
+                super_stmt = stmt
             else:
+                other_stmts.append(stmt)
+        if super_stmt:
+            call = super_stmt.value
+            if self._references_self(call.args):
                 self.emit("super();")
-            for stmt in other_stmts:
-                self.emit_comments_before(stmt.lineno)
-                self.visit(stmt)
+            else:
+                self.visit(super_stmt)
         else:
-            for stmt in node.body:
-                self.emit_comments_before(stmt.lineno)
-                self.visit(stmt)
-        self.in_class_body = old_in_class
-        self.in_method = old_in_method
-        self.declared_vars = old_declared
-        self._reassigned_vars = old_reassigned
-        self._emitted_vars = old_emitted
-        self._top_level_first_assign = old_top_level
-        self.indent -= 1
+            self.emit("super();")
+        for stmt in other_stmts:
+            self.emit_comments_before(stmt.lineno)
+            self.visit(stmt)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef):
+        if node.name in ("_substring", "_sublist", "_repeat_str"):
+            return
+        name, args_str = self._build_function_signature(node)
+        if self.in_class_body and not self.in_method:
+            self.emit(f"{name}({args_str}) {{")
+        else:
+            self.emit(f"function {name}({args_str}) {{")
+        with self._indented():
+            new_scope = self._setup_function_scope(node)
+            with self._scoped(in_class_body=False, in_method=True, scope=new_scope):
+                if name == "constructor" and self.class_has_base:
+                    self._emit_constructor_body(node)
+                else:
+                    for stmt in node.body:
+                        self.emit_comments_before(stmt.lineno)
+                        self.visit(stmt)
         self.emit("}")
         self.emit("")
 
@@ -364,21 +512,20 @@ class JSTranspiler(ast.NodeVisitor):
         else:
             self.emit("return;")
 
-    def _get_declaration_keyword(self, names: set) -> str | None:
-        """Get const/let keyword for first assignment, or None if already declared."""
-        undeclared = names - self._emitted_vars
+    def _emit_declaration_keyword(self, names: set) -> str | None:
+        """Mark names as emitted and return const/let keyword, or None if already declared."""
+        undeclared = names - self.scope.emitted
         if not undeclared:
             return None
-        self._emitted_vars.update(undeclared)
+        self.scope.emitted.update(undeclared)
         # Use let if any variable in this assignment is reassigned elsewhere
-        if undeclared & self._reassigned_vars:
+        if undeclared & self.scope.reassigned:
             return "let"
         return "const"
 
     def visit_Assign(self, node: ast.Assign):
-        self._in_assignment_target = True
-        targets = [self.visit_expr(t) for t in node.targets]
-        self._in_assignment_target = False
+        with self._scoped(_in_assignment_target=True):
+            targets = [self.visit_expr(t) for t in node.targets]
         value = self.visit_expr(node.value)
         # Module-level assignments get const
         if not self.in_method and not self.in_class_body:
@@ -392,7 +539,7 @@ class JSTranspiler(ast.NodeVisitor):
             # Emit declaration keyword on first assignment for each target
             for i, target in enumerate(targets):
                 names = self._collect_names_from_target(node.targets[i])
-                keyword = self._get_declaration_keyword(names)
+                keyword = self._emit_declaration_keyword(names)
                 if keyword:
                     self.emit(f"{keyword} {target} = {value};")
                 else:
@@ -406,7 +553,7 @@ class JSTranspiler(ast.NodeVisitor):
             target = self.visit_expr(node.target)
             value = self.visit_expr(node.value)
             names = self._collect_names_from_target(node.target)
-            keyword = self._get_declaration_keyword(names)
+            keyword = self._emit_declaration_keyword(names)
             if keyword:
                 self.emit(f"{keyword} {target} = {value};")
             else:
@@ -458,38 +605,28 @@ class JSTranspiler(ast.NodeVisitor):
             return
         self._emit_if(node, is_elif=False)
 
-    def _emit_if(self, node: ast.If, is_elif: bool):
+    def _emit_if(self, node: ast.If, is_elif: bool) -> None:
         test = self.visit_expr(node.test)
         # Handle truthiness checks - in Python [] is falsy but in JS it's truthy
-        # Only add length check for known array-like attributes/variables
-        array_attrs = {"redirects", "parts", "elements", "words", "patterns", "commands"}
-        if (
-            isinstance(node.test, ast.Attribute)
-            and isinstance(node.test.value, ast.Name)
-            and node.test.attr in array_attrs
-        ):
-            test = f"{test}?.length"
-        elif isinstance(node.test, ast.Name) and node.test.id in array_attrs:
+        if self._is_array_attr(node.test):
             test = f"{test}?.length"
         if is_elif:
-            self.emit_raw("    " * self.indent + f"}} else if ({test}) {{")
+            self.emit(f"}} else if ({test}) {{")
         else:
             self.emit(f"if ({test}) {{")
-        self.indent += 1
-        for stmt in node.body:
-            self.emit_comments_before(stmt.lineno)
-            self.visit(stmt)
-        self.indent -= 1
+        with self._indented():
+            for stmt in node.body:
+                self.emit_comments_before(stmt.lineno)
+                self.visit(stmt)
         if node.orelse:
             if len(node.orelse) == 1 and isinstance(node.orelse[0], ast.If):
                 self._emit_if(node.orelse[0], is_elif=True)
             else:
                 self.emit("} else {")
-                self.indent += 1
-                for stmt in node.orelse:
-                    self.emit_comments_before(stmt.lineno)
-                    self.visit(stmt)
-                self.indent -= 1
+                with self._indented():
+                    for stmt in node.orelse:
+                        self.emit_comments_before(stmt.lineno)
+                        self.visit(stmt)
                 self.emit("}")
         else:
             self.emit("}")
@@ -497,58 +634,42 @@ class JSTranspiler(ast.NodeVisitor):
     def visit_While(self, node: ast.While):
         test = self.visit_expr(node.test)
         self.emit(f"while ({test}) {{")
-        self.indent += 1
-        for stmt in node.body:
-            self.emit_comments_before(stmt.lineno)
-            self.visit(stmt)
-        self.indent -= 1
+        with self._indented():
+            for stmt in node.body:
+                self.emit_comments_before(stmt.lineno)
+                self.visit(stmt)
         self.emit("}")
+
+    def _emit_range_header(self, target: str, args: list[ast.expr]) -> str:
+        """Build a C-style for loop header from range() arguments."""
+        if len(args) == 1:
+            return f"for (let {target} = 0; {target} < {self.visit_expr(args[0])}; {target}++)"
+        if len(args) == 2:
+            return f"for (let {target} = {self.visit_expr(args[0])}; {target} < {self.visit_expr(args[1])}; {target}++)"
+        start, end, step = args
+        is_negative = (isinstance(step, ast.UnaryOp) and isinstance(step.op, ast.USub)) or (
+            isinstance(step, ast.Constant) and step.value < 0
+        )
+        if is_negative:
+            return f"for (let {target} = {self.visit_expr(start)}; {target} > {self.visit_expr(end)}; {target}--)"
+        step_val = self.visit_expr(step)
+        return f"for (let {target} = {self.visit_expr(start)}; {target} < {self.visit_expr(end)}; {target} += {step_val})"
 
     def visit_For(self, node: ast.For):
         target = self.visit_expr(node.target)
         iter_expr = node.iter
-        # For loops always declare their own block-scoped variable
-        # Use let for loop variables (they're reassigned each iteration)
-        decl = "let "
-        # Handle range() specially
         if (
             isinstance(iter_expr, ast.Call)
             and isinstance(iter_expr.func, ast.Name)
             and iter_expr.func.id == "range"
         ):
-            args = iter_expr.args
-            if len(args) == 1:
-                self.emit(
-                    f"for ({decl}{target} = 0; {target} < {self.visit_expr(args[0])}; {target}++) {{"
-                )
-            elif len(args) == 2:
-                self.emit(
-                    f"for ({decl}{target} = {self.visit_expr(args[0])}; {target} < {self.visit_expr(args[1])}; {target}++) {{"
-                )
-            else:
-                start, end, step = args
-                # Check if step is negative for proper comparison and decrement
-                is_negative = False
-                if isinstance(step, ast.UnaryOp) and isinstance(step.op, ast.USub):
-                    is_negative = True
-                elif isinstance(step, ast.Constant) and step.value < 0:
-                    is_negative = True
-                if is_negative:
-                    self.emit(
-                        f"for ({decl}{target} = {self.visit_expr(start)}; {target} > {self.visit_expr(end)}; {target}--) {{"
-                    )
-                else:
-                    step_val = self.visit_expr(step)
-                    self.emit(
-                        f"for ({decl}{target} = {self.visit_expr(start)}; {target} < {self.visit_expr(end)}; {target} += {step_val}) {{"
-                    )
+            self.emit(f"{self._emit_range_header(target, iter_expr.args)} {{")
         else:
-            self.emit(f"for ({decl}{target} of {self.visit_expr(iter_expr)}) {{")
-        self.indent += 1
-        for stmt in node.body:
-            self.emit_comments_before(stmt.lineno)
-            self.visit(stmt)
-        self.indent -= 1
+            self.emit(f"for (let {target} of {self.visit_expr(iter_expr)}) {{")
+        with self._indented():
+            for stmt in node.body:
+                self.emit_comments_before(stmt.lineno)
+                self.visit(stmt)
         self.emit("}")
 
     def visit_Expr(self, node: ast.Expr):
@@ -574,19 +695,17 @@ class JSTranspiler(ast.NodeVisitor):
 
     def visit_Try(self, node: ast.Try):
         self.emit("try {")
-        self.indent += 1
-        for stmt in node.body:
-            self.emit_comments_before(stmt.lineno)
-            self.visit(stmt)
-        self.indent -= 1
+        with self._indented():
+            for stmt in node.body:
+                self.emit_comments_before(stmt.lineno)
+                self.visit(stmt)
         for handler in node.handlers:
             name = handler.name or "_"
             self.emit(f"}} catch ({name}) {{")
-            self.indent += 1
-            for stmt in handler.body:
-                self.emit_comments_before(stmt.lineno)
-                self.visit(stmt)
-            self.indent -= 1
+            with self._indented():
+                for stmt in handler.body:
+                    self.emit_comments_before(stmt.lineno)
+                    self.visit(stmt)
         self.emit("}")
 
     # Expression visitors return strings
@@ -594,18 +713,10 @@ class JSTranspiler(ast.NodeVisitor):
         method = f"visit_expr_{node.__class__.__name__}"
         if hasattr(self, method):
             return getattr(self, method)(node)
-        return f"/* TODO: {node.__class__.__name__} */"
+        raise NotImplementedError(f"No visitor for {node.__class__.__name__}")
 
     def visit_expr_Name(self, node: ast.Name) -> str:
-        mapping = {
-            "True": "true",
-            "False": "false",
-            "None": "null",
-            "self": "this",
-            "Exception": "Error",
-            "NotImplementedError": 'new Error("Not implemented")',
-        }
-        name = mapping.get(node.id, node.id)
+        name = self._NAME_MAP.get(node.id, node.id)
         return self._safe_name(name)
 
     def visit_expr_Constant(self, node: ast.Constant) -> str:
@@ -664,223 +775,172 @@ class JSTranspiler(ast.NodeVisitor):
         # Use dot notation for string keys that are valid identifiers
         if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
             key = node.slice.value
-            if key.isidentifier() and key not in (
-                "class",
-                "default",
-                "delete",
-                "export",
-                "import",
-                "new",
-                "return",
-                "super",
-                "switch",
-                "this",
-                "throw",
-                "typeof",
-                "void",
-                "with",
-                "yield",
-            ):
+            if key.isidentifier() and key not in self._JS_RESERVED:
                 return f"{value}.{key}"
         return f"{value}[{self.visit_expr(node.slice)}]"
 
     def _visit_callback_arg(self, arg: ast.expr) -> str:
         """Visit an argument, adding .bind(this) for self method references used as callbacks."""
-        # Only add .bind(this) for parser methods passed as callbacks
         if (
             isinstance(arg, ast.Attribute)
             and isinstance(arg.value, ast.Name)
             and arg.value.id == "self"
-            and (arg.attr.startswith("_arith_parse_") or arg.attr.startswith("_parse_"))
+            and arg.attr.startswith(self._CALLBACK_METHOD_PREFIXES)
         ):
-            # Convert method name to camelCase and add bind
             method_name = self._camel_case(arg.attr)
             return f"this.{method_name}.bind(this)"
         return self.visit_expr(arg)
 
+    def _handle_method_call(self, node: ast.Call, obj: str, method: str) -> str | _NotHandled:
+        """Handle special method transformations. Returns NOT_HANDLED to fall through."""
+        # Character class tests
+        if method in self._CHAR_CLASS_TESTS:
+            return f"{self._CHAR_CLASS_TESTS[method]}.test({obj})"
+        # Strip methods with optional character set
+        if method in ("lstrip", "rstrip"):
+            return self._handle_strip(node, obj, method)
+        # Encoding
+        if method == "encode":
+            return f"new TextEncoder().encode({obj})"
+        if method == "decode":
+            return f"new TextDecoder().decode(new Uint8Array({obj}))"
+        # Dict get
+        if method == "get":
+            return self._handle_dict_get(node, obj)
+        # List extend
+        if method == "extend" and len(node.args) == 1:
+            return f"{obj}.push(...{self.visit_expr(node.args[0])})"
+        # Tuple argument for startswith/endswith
+        if method in ("endswith", "startswith") and len(node.args) == 1:
+            if isinstance(node.args[0], (ast.Tuple, ast.List)):
+                js_method = self._METHOD_RENAMES[method]
+                checks = [f"{obj}.{js_method}({self.visit_expr(e)})" for e in node.args[0].elts]
+                return f"({' || '.join(checks)})"
+        # Join: separator.join(lst) -> lst.join(separator)
+        if method == "join" and len(node.args) == 1:
+            return f"{self.visit_expr(node.args[0])}.join({obj})"
+        return NOT_HANDLED
+
+    def _handle_strip(self, node: ast.Call, obj: str, method: str) -> str:
+        """Handle lstrip/rstrip with optional character set argument."""
+        if len(node.args) == 1:
+            arg = node.args[0]
+            anchor = "^" if method == "lstrip" else "$"
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                escaped = self._escape_regex_chars(arg.value)
+                pattern = f"{anchor}[{escaped}]+" if method == "lstrip" else f"[{escaped}]+{anchor}"
+                return f'{obj}.replace(/{pattern}/, "")'
+            chars = self.visit_expr(arg)
+            pattern = (
+                f'"{anchor}[" + {chars} + "]+"'
+                if method == "lstrip"
+                else f'"[" + {chars} + "]+{anchor}"'
+            )
+            return f'{obj}.replace(new RegExp({pattern}), "")'
+        return f"{obj}.{'trimStart' if method == 'lstrip' else 'trimEnd'}()"
+
+    def _handle_dict_get(self, node: ast.Call, obj: str) -> str | _NotHandled:
+        """Handle dict.get(key) and dict.get(key, default). Returns NOT_HANDLED to fall through."""
+        if len(node.args) >= 2:
+            key = self.visit_expr(node.args[0])
+            default = self.visit_expr(node.args[1])
+            return f"({obj}[{key}] ?? {default})"
+        if len(node.args) == 1:
+            return f"{obj}[{self.visit_expr(node.args[0])}]"
+        return NOT_HANDLED
+
     def visit_expr_Call(self, node: ast.Call) -> str:
         # Combine positional and keyword args (JS doesn't have kwargs, so treat as positional)
         all_args = [self._visit_callback_arg(a) for a in node.args]
-        # Handle keyword args that skip positional defaults
-        # Specific case: _format_cmdsub_node(x, in_procsub=True) -> FormatCmdsubNode(x, 0, true)
         for kw in node.keywords:
-            if kw.arg == "in_procsub" and len(all_args) == 1:
-                all_args.append("0")  # default for indent
+            for default in self._KWARG_DEFAULTS.get((kw.arg, len(all_args)), []):
+                all_args.append(default)
             all_args.append(self.visit_expr(kw.value))
         args = ", ".join(all_args)
-        # Handle method calls
         if isinstance(node.func, ast.Attribute):
-            # Special case: super().__init__(args) -> super(args)
-            if (
-                node.func.attr == "__init__"
-                and isinstance(node.func.value, ast.Call)
-                and isinstance(node.func.value.func, ast.Name)
-                and node.func.value.func.id == "super"
-            ):
-                return f"super({args})"
-            obj = self.visit_expr(node.func.value)
-            method = node.func.attr
-            # Map Python methods to JS
-            method_map = {
-                "append": "push",
-                "startswith": "startsWith",
-                "endswith": "endsWith",
-                "strip": "trim",
-                # rstrip handled specially below
-                "lower": "toLowerCase",
-                "upper": "toUpperCase",
-                # extend handled specially below
-                "find": "indexOf",
-                "rfind": "lastIndexOf",
-                "replace": "replaceAll",  # Python replaces all, JS replace() only first
-            }
-            # Handle character class methods with regex
-            if method == "isalpha":
-                return f"/^[a-zA-Z]$/.test({obj})"
-            if method == "isdigit":
-                return f"/^[0-9]+$/.test({obj})"
-            if method == "isalnum":
-                return f"/^[a-zA-Z0-9]$/.test({obj})"
-            if method == "isspace":
-                return f"/^\\s$/.test({obj})"
-            # Handle lstrip with character set argument
-            if method == "lstrip":
-                if len(node.args) == 1:
-                    arg = node.args[0]
-                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-                        escaped = self._escape_regex_chars(arg.value)
-                        return f'{obj}.replace(/^[{escaped}]+/, "")'
-                    chars = self.visit_expr(arg)
-                    return f'{obj}.replace(new RegExp("^[" + {chars} + "]+"), "")'
-                return f"{obj}.trimStart()"
-            # Handle rstrip with character set argument
-            if method == "rstrip":
-                if len(node.args) == 1:
-                    arg = node.args[0]
-                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-                        escaped = self._escape_regex_chars(arg.value)
-                        return f'{obj}.replace(/[{escaped}]+$/, "")'
-                    chars = self.visit_expr(arg)
-                    return f'{obj}.replace(new RegExp("[" + {chars} + "]+$"), "")'
-                return f"{obj}.trimEnd()"
-            # Handle str.encode() - returns iterable of byte values (Uint8Array)
-            if method == "encode":
-                return f"new TextEncoder().encode({obj})"
-            # Handle bytes.decode() - converts byte array to string
-            if method == "decode":
-                return f"new TextDecoder().decode(new Uint8Array({obj}))"
-            # Handle dict.get(key) and dict.get(key, default)
-            if method == "get":
-                if len(node.args) >= 2:
-                    key = self.visit_expr(node.args[0])
-                    default = self.visit_expr(node.args[1])
-                    return f"({obj}[{key}] ?? {default})"
-                elif len(node.args) == 1:
-                    key = self.visit_expr(node.args[0])
-                    return f"{obj}[{key}]"
-            # Handle list.extend() - needs spread operator
-            if method == "extend":
-                if len(node.args) == 1:
-                    items = self.visit_expr(node.args[0])
-                    return f"{obj}.push(...{items})"
-            # Handle endswith/startswith with tuple argument (JS only accepts string)
-            if method == "endswith" and len(node.args) == 1:
-                if isinstance(node.args[0], (ast.Tuple, ast.List)):
-                    checks = [
-                        f"{obj}.endsWith({self.visit_expr(elt)})" for elt in node.args[0].elts
-                    ]
-                    return f"({' || '.join(checks)})"
-            if method == "startswith" and len(node.args) == 1:
-                if isinstance(node.args[0], (ast.Tuple, ast.List)):
-                    checks = [
-                        f"{obj}.startsWith({self.visit_expr(elt)})" for elt in node.args[0].elts
-                    ]
-                    return f"({' || '.join(checks)})"
-            method = method_map.get(method, method)
-            # Convert remaining snake_case to camelCase
-            if "_" in method:
-                method = self._camel_case(method)
-            # Special case: separator.join(lst) -> lst.join(separator)
-            # In Python, join is a string method; in JS, it's an array method
-            if method == "join" and len(node.args) == 1:
-                sep = self.visit_expr(node.func.value)
-                return f"{args}.join({sep})"
-            return f"{obj}.{method}({args})"
-        # Handle builtins
+            return self._visit_attr_call(node, args)
         if isinstance(node.func, ast.Name):
-            name = node.func.id
-            if name == "len":
-                return f"{args}.length"
-            if name == "str":
-                return f"String({args})"
-            if name == "int":
-                if len(node.args) >= 2:
-                    return f"parseInt({args})"
-                return f"parseInt({args}, 10)"
-            if name == "bool":
-                # Warn if bool() is called on a bare variable - could be a list
-                # (Python bool([]) is False, JS Boolean([]) is true)
-                # Safe: bool(flags & MASK), bool(x > 0). Unsafe: bool(mylist)
-                if len(node.args) == 1 and isinstance(node.args[0], ast.Name):
-                    raise ValueError(
-                        f"bool({node.args[0].id}) may have different behavior in JS for arrays. "
-                        f"Use 'len({node.args[0].id}) > 0' for lists or explicit comparison for other types."
-                    )
-                return f"Boolean({args})"
-            if name == "ord":
-                return f"{args}.charCodeAt(0)"
-            if name == "chr":
-                # Use fromCodePoint for full unicode support (including > 0xFFFF)
-                return f"String.fromCodePoint({args})"
-            if name == "isinstance":
-                return f"{node.args[0].id} instanceof {self.visit_expr(node.args[1])}"
-            if name == "getattr":
-                obj = self.visit_expr(node.args[0])
-                attr_node = node.args[1]
-                # Use dot notation for string attrs that are valid identifiers
-                if isinstance(attr_node, ast.Constant) and isinstance(attr_node.value, str):
-                    key = attr_node.value
-                    if key.isidentifier():
-                        # Convert snake_case to camelCase for self attributes
-                        if obj == "this" and "_" in key:
-                            key = self._camel_case(key)
-                        if len(node.args) >= 3:
-                            default = self.visit_expr(node.args[2])
-                            return f"({obj}.{key} ?? {default})"
-                        return f"{obj}.{key}"
-                attr = self.visit_expr(attr_node)
-                if len(node.args) >= 3:
-                    default = self.visit_expr(node.args[2])
-                    return f"({obj}[{attr}] ?? {default})"
-                return f"{obj}[{attr}]"
-            if name == "bytearray":
-                return "[]"
-            if name == "list":
-                if args:
-                    return f"[...{args}]"
-                return "[]"
-            if name == "set":
-                return f"new Set({args})"
-            if name == "max":
-                return f"Math.max({args})"
-            if name == "min":
-                return f"Math.min({args})"
-            if name in ("_substring", "_sublist"):
-                obj = self.visit_expr(node.args[0])
-                start = self.visit_expr(node.args[1])
-                end = self.visit_expr(node.args[2])
-                return f"{obj}.slice({start}, {end})"
-            if name == "_repeat_str":
-                s = self.visit_expr(node.args[0])
-                n = self.visit_expr(node.args[1])
-                return f"{s}.repeat({n})"
-            if name in self.class_names:
-                return f"new {self._safe_name(name)}({args})"
-            # Convert snake_case function names to camelCase
-            if "_" in name:
-                name = self._camel_case(name)
-            return f"{name}({args})"
+            return self._visit_name_call(node, args)
         return f"{self.visit_expr(node.func)}({args})"
+
+    def _visit_attr_call(self, node: ast.Call, args: str) -> str:
+        """Handle method calls (obj.method(...))."""
+        # Special case: super().__init__(args) -> super(args)
+        if (
+            node.func.attr == "__init__"
+            and isinstance(node.func.value, ast.Call)
+            and isinstance(node.func.value.func, ast.Name)
+            and node.func.value.func.id == "super"
+        ):
+            return f"super({args})"
+        obj = self.visit_expr(node.func.value)
+        method = node.func.attr
+        # Try special method handlers first
+        result = self._handle_method_call(node, obj, method)
+        if result is not NOT_HANDLED:
+            return result
+        # Apply simple renames, then camelCase conversion
+        method = self._METHOD_RENAMES.get(method, method)
+        if "_" in method:
+            method = self._camel_case(method)
+        return f"{obj}.{method}({args})"
+
+    def _visit_name_call(self, node: ast.Call, args: str) -> str:
+        """Handle function/builtin calls (name(...))."""
+        name = node.func.id
+        # Try builtin handlers
+        result = self._handle_builtin_call(node, name, args)
+        if result is not NOT_HANDLED:
+            return result
+        # Class instantiation
+        if name in self.class_names:
+            return f"new {self._safe_name(name)}({args})"
+        # Convert snake_case function names to camelCase
+        if "_" in name:
+            name = self._camel_case(name)
+        return f"{name}({args})"
+
+    def _handle_builtin_call(self, node: ast.Call, name: str, args: str) -> str | _NotHandled:
+        """Handle Python builtin function calls. Returns NOT_HANDLED if not handled."""
+        if name in self._BUILTIN_TEMPLATES:
+            return self._BUILTIN_TEMPLATES[name].format(args=args)
+        if name == "int":
+            return f"parseInt({args})" if len(node.args) >= 2 else f"parseInt({args}, 10)"
+        if name == "bool":
+            if len(node.args) == 1 and isinstance(node.args[0], ast.Name):
+                raise ValueError(
+                    f"bool({node.args[0].id}) may have different behavior in JS for arrays. "
+                    f"Use 'len({node.args[0].id}) > 0' for lists or explicit comparison."
+                )
+            return f"Boolean({args})"
+        if name == "isinstance":
+            return f"{self.visit_expr(node.args[0])} instanceof {self.visit_expr(node.args[1])}"
+        if name == "getattr":
+            return self._handle_getattr(node)
+        if name == "list":
+            return f"[...{args}]" if args else "[]"
+        if name in ("_substring", "_sublist"):
+            obj, start, end = [self.visit_expr(a) for a in node.args[:3]]
+            return f"{obj}.slice({start}, {end})"
+        if name == "_repeat_str":
+            s, n = self.visit_expr(node.args[0]), self.visit_expr(node.args[1])
+            return f"{s}.repeat({n})"
+        return NOT_HANDLED
+
+    def _handle_getattr(self, node: ast.Call) -> str:
+        """Handle getattr(obj, attr) and getattr(obj, attr, default)."""
+        obj = self.visit_expr(node.args[0])
+        attr_node = node.args[1]
+        default = self.visit_expr(node.args[2]) if len(node.args) >= 3 else None
+        # Use dot notation for string attrs that are valid identifiers
+        if isinstance(attr_node, ast.Constant) and isinstance(attr_node.value, str):
+            key = attr_node.value
+            if key.isidentifier():
+                if obj == "this" and "_" in key:
+                    key = self._camel_case(key)
+                return f"({obj}.{key} ?? {default})" if default else f"{obj}.{key}"
+        attr = self.visit_expr(attr_node)
+        return f"({obj}[{attr}] ?? {default})" if default else f"{obj}[{attr}]"
 
     def _is_string_concat(self, node: ast.expr) -> bool:
         """Check if an expression is part of string concatenation."""
@@ -974,54 +1034,62 @@ class JSTranspiler(ast.NodeVisitor):
                 return True
         return False
 
+    def _handle_in_comparison(
+        self, left: str, right: str, comparator: ast.expr, negated: bool
+    ) -> str:
+        """Handle `x in collection` or `x not in collection`."""
+        prefix = "!" if negated else ""
+        method = "has" if self._is_set_expr(comparator) else "includes"
+        return f"{prefix}{right}.{method}({left})"
+
+    def _handle_find_comparison(self, node: ast.Compare) -> str | _NotHandled:
+        """Handle `.find(x) != -1` → `.includes(x)` pattern."""
+        if len(node.ops) != 1:
+            return NOT_HANDLED
+        op = node.ops[0]
+        if not self._is_find_pattern(node.left, node.comparators[0], op):
+            return NOT_HANDLED
+        obj = self.visit_expr(node.left.func.value)
+        args = ", ".join(self.visit_expr(a) for a in node.left.args)
+        prefix = "" if isinstance(op, ast.NotEq) else "!"
+        return f"{prefix}{obj}.includes({args})"
+
     def visit_expr_Compare(self, node: ast.Compare) -> str:
-        # Handle single comparison with in/not in specially
         if len(node.ops) == 1:
             left = self.visit_expr(node.left)
             right = self.visit_expr(node.comparators[0])
             op = node.ops[0]
             if isinstance(op, ast.In):
-                if self._is_set_expr(node.comparators[0]):
-                    return f"{right}.has({left})"
-                return f"{right}.includes({left})"
+                return self._handle_in_comparison(left, right, node.comparators[0], negated=False)
             if isinstance(op, ast.NotIn):
-                if self._is_set_expr(node.comparators[0]):
-                    return f"!{right}.has({left})"
-                return f"!{right}.includes({left})"
-            # Handle .find(x) != -1 → .includes(x) and .find(x) == -1 → !.includes(x)
-            if self._is_find_comparison(node.left, node.comparators[0], op):
-                obj = self.visit_expr(node.left.func.value)
-                args = ", ".join(self.visit_expr(a) for a in node.left.args)
-                if isinstance(op, ast.NotEq):
-                    return f"{obj}.includes({args})"
-                return f"!{obj}.includes({args})"
+                return self._handle_in_comparison(left, right, node.comparators[0], negated=True)
+            result = self._handle_find_comparison(node)
+            if result is not NOT_HANDLED:
+                return result
+        # General case: chained comparisons like `a < b < c`
         result = self.visit_expr(node.left)
         for op, comparator in zip(node.ops, node.comparators, strict=True):
             op_str = self.visit_cmpop(op)
             result += f" {op_str} {self.visit_expr(comparator)}"
         return f"({result})"
 
-    def _is_find_comparison(self, left, right, op) -> bool:
+    def _is_find_pattern(self, left: ast.expr, right: ast.expr, op: ast.cmpop) -> bool:
         """Check if this is a .find(x) == -1 or .find(x) != -1 pattern."""
-        if not isinstance(left, ast.Call):
-            return False
-        if not isinstance(left.func, ast.Attribute):
-            return False
-        if left.func.attr != "find":
-            return False
-        if len(left.args) not in (1, 2):
-            return False
         if not isinstance(op, (ast.Eq, ast.NotEq)):
             return False
-        if not isinstance(right, ast.UnaryOp):
-            return False
-        if not isinstance(right.op, ast.USub):
-            return False
-        if not isinstance(right.operand, ast.Constant):
-            return False
-        if right.operand.value != 1:
-            return False
-        return True
+        is_find_call = (
+            isinstance(left, ast.Call)
+            and isinstance(left.func, ast.Attribute)
+            and left.func.attr == "find"
+            and len(left.args) in (1, 2)
+        )
+        is_minus_one = (
+            isinstance(right, ast.UnaryOp)
+            and isinstance(right.op, ast.USub)
+            and isinstance(right.operand, ast.Constant)
+            and right.operand.value == 1
+        )
+        return is_find_call and is_minus_one
 
     def visit_expr_BoolOp(self, node: ast.BoolOp) -> str:
         op = " && " if isinstance(node.op, ast.And) else " || "
@@ -1036,8 +1104,7 @@ class JSTranspiler(ast.NodeVisitor):
         for i, v in enumerate(node.values):
             if i == 0 and first_name:
                 # Check if any later value subscripts this name
-                rest_src = ast.dump(ast.Module(body=[ast.Expr(value=vv) for vv in node.values[1:]]))
-                if f"Name(id='{first_name}'" in rest_src and "Subscript" in rest_src:
+                if self._name_is_subscripted(first_name, node.values[1:]):
                     values.append(f"{first_name}.length > 0")
                     continue
             values.append(self.visit_expr(v))
@@ -1047,26 +1114,14 @@ class JSTranspiler(ast.NodeVisitor):
         operand = self.visit_expr(node.operand)
         if isinstance(node.op, ast.Not):
             # Handle `not list_var` - in Python empty list is falsy, in JS array is truthy
-            # Convert to `list_var.length === 0` for common list variable names
-            if isinstance(node.operand, ast.Name):
-                name = node.operand.id
-                list_suffixes = (
-                    "_chars",
-                    "_list",
-                    "_parts",
-                    "chars",
-                    "parts",
-                    "result",
-                    "results",
-                    "items",
-                    "values",
-                )
-                if name.endswith(list_suffixes) or name in list_suffixes:
-                    return f"{name}.length === 0"
+            if self._is_list_var(node.operand):
+                return f"{operand}.length === 0"
             return f"!{operand}"
         if isinstance(node.op, ast.USub):
             return f"-{operand}"
-        return f"/* TODO: UnaryOp {node.op} */{operand}"
+        if isinstance(node.op, ast.Invert):
+            return f"~{operand}"
+        raise NotImplementedError(f"UnaryOp {node.op.__class__.__name__}")
 
     def visit_expr_IfExp(self, node: ast.IfExp) -> str:
         test = self.visit_expr(node.test)
@@ -1102,36 +1157,14 @@ class JSTranspiler(ast.NodeVisitor):
         return f"new Set([{elements}])"
 
     def visit_op(self, op: ast.operator) -> str:
-        ops = {
-            ast.Add: "+",
-            ast.Sub: "-",
-            ast.Mult: "*",
-            ast.Div: "/",
-            ast.FloorDiv: "Math.floor(/",
-            ast.Mod: "%",
-            ast.Pow: "**",
-            ast.LShift: "<<",
-            ast.RShift: ">>",
-            ast.BitOr: "|",
-            ast.BitXor: "^",
-            ast.BitAnd: "&",
-        }
-        return ops.get(type(op), "/* ? */")
+        if type(op) not in self._BINARY_OPS:
+            raise NotImplementedError(f"Operator {op.__class__.__name__}")
+        return self._BINARY_OPS[type(op)]
 
     def visit_cmpop(self, op: ast.cmpop) -> str:
-        ops = {
-            ast.Eq: "===",
-            ast.NotEq: "!==",
-            ast.Lt: "<",
-            ast.LtE: "<=",
-            ast.Gt: ">",
-            ast.GtE: ">=",
-            ast.Is: "==",
-            ast.IsNot: "!=",  # == for is None checks (handles undefined)
-            ast.In: "in",
-            ast.NotIn: "not in",
-        }
-        return ops.get(type(op), "/* ? */")
+        if type(op) not in self._COMPARE_OPS:
+            raise NotImplementedError(f"Comparison {op.__class__.__name__}")
+        return self._COMPARE_OPS[type(op)]
 
 
 def main():
@@ -1142,7 +1175,7 @@ def main():
     transpiler = JSTranspiler()
     print(transpiler.transpile(source))
     print()
-    print("module.exports = { parse, ParseError };")
+    print(JSTranspiler._MODULE_EXPORTS)
 
 
 if __name__ == "__main__":

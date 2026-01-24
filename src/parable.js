@@ -854,6 +854,7 @@ class Lexer {
 			pass_next,
 			procsub_node,
 			procsub_text,
+			quote_flags,
 			start,
 			was_dollar,
 			was_gtlt;
@@ -950,8 +951,10 @@ class Lexer {
 			if ("'\"`".includes(ch) && open_char !== close_char) {
 				if (ch === "'") {
 					// Single quote - recursively parse until matching '
+					// If previous char was $, this is ANSI-C $'...' quoting with escapes
 					chars.push(ch);
-					nested = this._parseMatchedPair("'", "'", flags);
+					quote_flags = was_dollar ? flags | MatchedPairFlags.ALLOWESC : flags;
+					nested = this._parseMatchedPair("'", "'", quote_flags);
 					chars.push(nested);
 					chars.push("'");
 					was_dollar = false;
@@ -984,15 +987,15 @@ class Lexer {
 			// ${ $( $[ trigger nested parsing (unless in extglob where they're just pattern chars)
 			if (ch === "$" && !this.atEnd() && !(flags & MatchedPairFlags.EXTGLOB)) {
 				next_ch = this.peek();
+				// If previous char was $, this is the second $ in $$ - treat as unit
+				// Reset was_dollar so next char doesn't think it follows single $
+				if (was_dollar) {
+					chars.push(ch);
+					was_dollar = false;
+					was_gtlt = false;
+					continue;
+				}
 				if (next_ch === "{") {
-					// If previous char was $, this is $$ - treat current $ as literal
-					// (bash's LEX_WASDOL check at parse.y:4131)
-					if (was_dollar) {
-						chars.push(ch);
-						was_dollar = true;
-						was_gtlt = false;
-						continue;
-					}
 					// In ARITH mode, only parse ${ if followed by funsub char (bash parse.y:4137-4145)
 					// Otherwise treat $ as literal
 					if (flags & MatchedPairFlags.ARITH) {
@@ -1027,13 +1030,6 @@ class Lexer {
 					}
 					continue;
 				} else if (next_ch === "(") {
-					// If previous char was $, this is $$ - treat current $ as literal
-					if (was_dollar) {
-						chars.push(ch);
-						was_dollar = true;
-						was_gtlt = false;
-						continue;
-					}
 					// Back up to before $ for Parser callback
 					this.pos -= 1;
 					this._syncToParser();
@@ -1081,13 +1077,6 @@ class Lexer {
 					}
 					continue;
 				} else if (next_ch === "[") {
-					// If previous char was $, this is $$ - treat current $ as literal
-					if (was_dollar) {
-						chars.push(ch);
-						was_dollar = true;
-						was_gtlt = false;
-						continue;
-					}
 					// Deprecated $[ ... ] arithmetic - use full parsing
 					this.pos -= 1;
 					this._syncToParser();

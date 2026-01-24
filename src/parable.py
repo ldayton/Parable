@@ -878,8 +878,10 @@ class Lexer:
             if ch in "'\"`" and open_char != close_char:
                 if ch == "'":
                     # Single quote - recursively parse until matching '
+                    # If previous char was $, this is ANSI-C $'...' quoting with escapes
                     chars.append(ch)
-                    nested = self._parse_matched_pair("'", "'", flags)
+                    quote_flags = flags | MatchedPairFlags.ALLOWESC if was_dollar else flags
+                    nested = self._parse_matched_pair("'", "'", quote_flags)
                     chars.append(nested)
                     chars.append("'")
                     was_dollar = False
@@ -907,14 +909,14 @@ class Lexer:
             # ${ $( $[ trigger nested parsing (unless in extglob where they're just pattern chars)
             if ch == "$" and not self.at_end() and not (flags & MatchedPairFlags.EXTGLOB):
                 next_ch = self.peek()
+                # If previous char was $, this is the second $ in $$ - treat as unit
+                # Reset was_dollar so next char doesn't think it follows single $
+                if was_dollar:
+                    chars.append(ch)
+                    was_dollar = False  # $$ is a unit, next char is NOT preceded by single $
+                    was_gtlt = False
+                    continue
                 if next_ch == "{":
-                    # If previous char was $, this is $$ - treat current $ as literal
-                    # (bash's LEX_WASDOL check at parse.y:4131)
-                    if was_dollar:
-                        chars.append(ch)
-                        was_dollar = True
-                        was_gtlt = False
-                        continue
                     # In ARITH mode, only parse ${ if followed by funsub char (bash parse.y:4137-4145)
                     # Otherwise treat $ as literal
                     if flags & MatchedPairFlags.ARITH:
@@ -944,12 +946,6 @@ class Lexer:
                         was_gtlt = False
                     continue
                 elif next_ch == "(":
-                    # If previous char was $, this is $$ - treat current $ as literal
-                    if was_dollar:
-                        chars.append(ch)
-                        was_dollar = True
-                        was_gtlt = False
-                        continue
                     # Back up to before $ for Parser callback
                     self.pos -= 1
                     self._sync_to_parser()
@@ -993,12 +989,6 @@ class Lexer:
                             was_gtlt = False
                     continue
                 elif next_ch == "[":
-                    # If previous char was $, this is $$ - treat current $ as literal
-                    if was_dollar:
-                        chars.append(ch)
-                        was_dollar = True
-                        was_gtlt = False
-                        continue
                     # Deprecated $[ ... ] arithmetic - use full parsing
                     self.pos -= 1  # back up to before $
                     self._sync_to_parser()

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check for banned Python constructions in parable.py.
 
-Goal: C-style code that translates easily to Go/Rust/JS.
+Goal: C-style code that translates easily to JS/TS.
 
 Banned constructions:
 
@@ -25,7 +25,7 @@ Banned constructions:
     global                global x                  pass as parameter
     hasattr               hasattr(x, 'y')           explicit field check
     import                import x                  not allowed (self-contained)
-    import from           from x import y           not allowed (self-contained)
+    import from           from x import y           not allowed (except __future__, typing)
     loop else             for x: ... else:          use flag variable
     list comprehension    [x*2 for x in items]      explicit loop
     match/case            match x:                  if/elif chain
@@ -224,9 +224,9 @@ def check_file(filepath):
         if isinstance(node, ast.Import):
             errors.append((lineno, "import: not allowed, code must be self-contained"))
 
-        # from ... import (allow __future__)
+        # from ... import (allow __future__ and typing)
         if isinstance(node, ast.ImportFrom):
-            if node.module != "__future__":
+            if node.module not in ("__future__", "typing"):
                 errors.append((lineno, "from import: not allowed, code must be self-contained"))
 
     return errors

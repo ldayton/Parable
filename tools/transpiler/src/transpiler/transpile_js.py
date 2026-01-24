@@ -105,6 +105,14 @@ class JSTranspiler(ast.NodeVisitor):
                 self.emit(" */")
             self.emit("")
         for stmt in node.body:
+            # Skip typing imports (from typing import ...)
+            if isinstance(stmt, ast.ImportFrom) and stmt.module == "typing":
+                continue
+            # Skip type alias assignments (ArithNode = Union[...])
+            if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+                if isinstance(stmt.value, ast.Subscript):
+                    if isinstance(stmt.value.value, ast.Name) and stmt.value.value.id == "Union":
+                        continue
             # Skip unused module-level variable definitions
             if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
                 if isinstance(stmt.targets[0], ast.Name):

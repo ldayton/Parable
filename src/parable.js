@@ -5882,6 +5882,7 @@ class CondParen extends Node {
 	}
 }
 
+// Type aliases for AST node unions (Union required for Python 3.8/3.9 runtime)
 class ArrayNode extends Node {
 	constructor(elements) {
 		super();

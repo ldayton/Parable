@@ -167,6 +167,15 @@ transpile-dts input="src/parable.js" output="src/parable.d.ts" py_src="src/parab
     uv run --directory tools/transpiler transpiler --transpile-dts "$js_in" "$py_in" > "$dts_out"
     npx -y @biomejs/biome format --write "$dts_out" >/dev/null 2>&1
 
+# Transpile Python to Go
+transpile-go output="src/parable.go":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    go_out="{{output}}"
+    [[ "$go_out" = /* ]] || go_out="$(pwd)/$go_out"
+    uv run --directory tools/transpiler transpiler --transpile-go "$(pwd)/src/parable.py" > "$go_out"
+    gofmt -w "$go_out"
+
 # Transpile Python to JavaScript and generate TypeScript definitions
 transpile: (transpile-js) (transpile-dts)
 
@@ -186,6 +195,24 @@ check-transpile:
         echo "[check-transpile-dts] FAIL: parable.d.ts is out of date, run 'just transpile'" >&2; \
         exit 1; \
     fi
+
+# Check that parable.go is up-to-date with transpiler output
+check-transpile-go:
+    @just transpile-go /tmp/{{project}}-{{run_id}}-transpile.go && \
+    if diff -q src/parable.go /tmp/{{project}}-{{run_id}}-transpile.go >/dev/null 2>&1; then \
+        echo "[check-transpile-go] OK"; \
+    else \
+        echo "[check-transpile-go] FAIL: parable.go is out of date, run 'just transpile-go'" >&2; \
+        exit 1; \
+    fi
+
+# Build Go (verifies parable.go compiles)
+build-go:
+    go build -C src -o /dev/null .
+
+# Run Go tests (placeholder)
+test-go:
+    @echo "[test-go] TODO: Not yet implemented"
 
 # Run JavaScript tests
 test-js *ARGS: check-transpile

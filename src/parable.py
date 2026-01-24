@@ -5602,6 +5602,50 @@ def _skip_backtick(value: str, start: int) -> int:
     return i
 
 
+def _skip_single_quoted(s: str, start: int) -> int:
+    """Skip from after opening ' to after closing '. Mirrors bash skip_single_quoted()."""
+    i = start
+    while i < len(s) and s[i] != "'":
+        i += 1
+    return i + 1 if i < len(s) else i
+
+
+def _skip_double_quoted(s: str, start: int) -> int:
+    """Skip from after opening " to after closing ". Handles $(), ${}, backticks."""
+    i, n = start, len(s)
+    pass_next = backq = False
+    while i < n:
+        c = s[i]
+        if pass_next:
+            pass_next = False
+            i += 1
+            continue
+        if c == "\\":
+            pass_next = True
+            i += 1
+            continue
+        if backq:
+            if c == "`":
+                backq = False
+            i += 1
+            continue
+        if c == "`":
+            backq = True
+            i += 1
+            continue
+        if c == "$" and i + 1 < n:
+            if s[i + 1] == "(":
+                i = _find_cmdsub_end(s, i + 2)
+                continue
+            if s[i + 1] == "{":
+                i = _find_braced_param_end(s, i + 2)
+                continue
+        if c == '"':
+            return i + 1
+        i += 1
+    return i
+
+
 def _is_valid_arithmetic_start(value: str, start: int) -> bool:
     """Check if $(( at position starts a valid arithmetic expression.
 
@@ -5673,38 +5717,22 @@ def _find_cmdsub_end(value: str, start: int) -> int:
     """
     depth = 1
     i = start
-    quote = QuoteState()
     case_depth = 0  # Track nested case statements
     in_case_patterns = False  # After 'in' but before first ;; or esac
     arith_depth = 0  # Track nested arithmetic expressions
     arith_paren_depth = 0  # Track grouping parens inside arithmetic
     while i < len(value) and depth > 0:
         c = value[i]
-        # Handle escapes
-        if c == "\\" and i + 1 < len(value) and not quote.single:
+        # Handle escapes (work everywhere except inside single quotes, which we delegate)
+        if c == "\\" and i + 1 < len(value):
             i += 2
             continue
-        # Handle quotes
-        if c == "'" and not quote.double:
-            quote.single = not quote.single
-            i += 1
+        # Handle quotes via delegation
+        if c == "'":
+            i = _skip_single_quoted(value, i + 1)
             continue
-        if c == '"' and not quote.single:
-            quote.double = not quote.double
-            i += 1
-            continue
-        if quote.single:
-            i += 1
-            continue
-        if quote.double:
-            # Inside double quotes, $() command substitution is still active
-            if _starts_with_at(value, i, "$(") and not _starts_with_at(value, i, "$(("):
-                # Recursively find end of nested command substitution
-                j = _find_cmdsub_end(value, i + 2)
-                i = j
-                continue
-            # Skip other characters inside double quotes
-            i += 1
+        if c == '"':
+            i = _skip_double_quoted(value, i + 1)
             continue
         # Handle comments - skip from # to end of line
         # Only treat # as comment if preceded by whitespace or at start
@@ -5819,6 +5847,60 @@ def _find_cmdsub_end(value: str, start: int) -> int:
                 # else: single ) in arithmetic without matching ( - skip it
             else:
                 depth -= 1
+        i += 1
+    return i
+
+
+def _find_braced_param_end(value: str, start: int) -> int:
+    """Find end of ${...}. Starts after ${. Returns position after }."""
+    depth = 1
+    i = start
+    in_double = False
+    dolbrace_state = DolbraceState.PARAM
+    while i < len(value) and depth > 0:
+        c = value[i]
+        # Escapes work everywhere except inside single quotes (which we delegate)
+        if c == "\\" and i + 1 < len(value):
+            i += 2
+            continue
+        # Single quotes: only delegate in QUOTE state (after %#^,)
+        if c == "'" and dolbrace_state == DolbraceState.QUOTE and not in_double:
+            i = _skip_single_quoted(value, i + 1)
+            continue
+        if c == '"':
+            in_double = not in_double
+            i += 1
+            continue
+        if in_double:
+            i += 1
+            continue
+        # State transitions: operators move from PARAM to WORD or QUOTE
+        if dolbrace_state == DolbraceState.PARAM and c in "%#^,":
+            dolbrace_state = DolbraceState.QUOTE
+        elif dolbrace_state == DolbraceState.PARAM and c in ":-=?+/":
+            dolbrace_state = DolbraceState.WORD
+        # Handle array subscripts (only in PARAM state, not pattern words)
+        if c == "[" and dolbrace_state == DolbraceState.PARAM and not in_double:
+            end = _skip_subscript(value, i, 0)
+            if end != -1:
+                i = end
+                continue
+        # Handle process substitution <(...) and >(...)
+        if (c == "<" or c == ">") and i + 1 < len(value) and value[i + 1] == "(":
+            i = _find_cmdsub_end(value, i + 2)
+            continue
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        if c == "$" and i + 1 < len(value) and value[i + 1] == "(":
+            i = _find_cmdsub_end(value, i + 2)
+            continue
+        if c == "$" and i + 1 < len(value) and value[i + 1] == "{":
+            i = _find_braced_param_end(value, i + 2)
+            continue
         i += 1
     return i
 
@@ -6303,8 +6385,7 @@ def _skip_matched_pair(s: str, start: int, open: str, close: str, flags: int = 0
         i = start + 1
     depth = 1
     pass_next = False
-    in_single = False
-    in_double = False
+    backq = False
     while i < n and depth > 0:
         c = s[i]
         if pass_next:
@@ -6316,18 +6397,30 @@ def _skip_matched_pair(s: str, start: int, open: str, close: str, flags: int = 0
             pass_next = True
             i += 1
             continue
-        if not literal and c == "'" and not in_double:
-            in_single = not in_single
+        if backq:
+            if c == "`":
+                backq = False
             i += 1
             continue
-        if not literal and c == '"' and not in_single:
-            in_double = not in_double
+        if not literal and c == "`":
+            backq = True
             i += 1
             continue
-        in_quotes = in_single or in_double
-        if not literal and not in_quotes and c == open:
+        if not literal and c == "'":
+            i = _skip_single_quoted(s, i + 1)
+            continue
+        if not literal and c == '"':
+            i = _skip_double_quoted(s, i + 1)
+            continue
+        if not literal and c == "$" and i + 1 < n and s[i + 1] == "(":
+            i = _find_cmdsub_end(s, i + 2)
+            continue
+        if not literal and c == "$" and i + 1 < n and s[i + 1] == "{":
+            i = _find_braced_param_end(s, i + 2)
+            continue
+        if not literal and c == open:
             depth += 1
-        elif not in_quotes and c == close:
+        elif c == close:
             depth -= 1
         i += 1
     return i if depth == 0 else -1

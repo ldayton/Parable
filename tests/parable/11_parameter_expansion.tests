@@ -726,3 +726,31 @@ echo ${foo}bar$baz
 ---
 (command (word "echo") (word "${foo}bar$baz"))
 ---
+
+
+=== process substitution in parameter default
+echo ${foo:-<(ls)}
+---
+(command (word "echo") (word "${foo:-<(ls)}"))
+---
+
+
+=== array subscript with nested expansion
+echo ${arr[${idx}]}
+---
+(command (word "echo") (word "${arr[${idx}]}"))
+---
+
+
+=== bracket in pattern word (not subscript)
+echo ${foo#[abc]}
+---
+(command (word "echo") (word "${foo#[abc]}"))
+---
+
+
+=== single quote in pattern removal
+echo "${foo%'*'}"
+---
+(command (word "echo") (word "\"${foo%'*'}\""))
+---

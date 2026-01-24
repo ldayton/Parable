@@ -6657,6 +6657,61 @@ function _skipBacktick(value, start) {
 	return i;
 }
 
+function _skipSingleQuoted(s, start) {
+	let i;
+	i = start;
+	while (i < s.length && s[i] !== "'") {
+		i += 1;
+	}
+	return i < s.length ? i + 1 : i;
+}
+
+function _skipDoubleQuoted(s, start) {
+	let backq, c, i, n, pass_next;
+	[i, n] = [start, s.length];
+	pass_next = false;
+	while (i < n) {
+		c = s[i];
+		if (pass_next) {
+			pass_next = false;
+			i += 1;
+			continue;
+		}
+		if (c === "\\") {
+			pass_next = true;
+			i += 1;
+			continue;
+		}
+		if (backq) {
+			if (c === "`") {
+				backq = false;
+			}
+			i += 1;
+			continue;
+		}
+		if (c === "`") {
+			backq = true;
+			i += 1;
+			continue;
+		}
+		if (c === "$" && i + 1 < n) {
+			if (s[i + 1] === "(") {
+				i = _findCmdsubEnd(s, i + 2);
+				continue;
+			}
+			if (s[i + 1] === "{") {
+				i = _findBracedParamEnd(s, i + 2);
+				continue;
+			}
+		}
+		if (c === '"') {
+			return i + 1;
+		}
+		i += 1;
+	}
+	return i;
+}
+
 function _isValidArithmeticStart(value, start) {
 	let scan_c, scan_i, scan_paren;
 	scan_paren = 0;
@@ -6735,47 +6790,27 @@ function _findCmdsubEnd(value, start) {
 		depth,
 		i,
 		in_case_patterns,
-		j,
-		quote;
+		j;
 	depth = 1;
 	i = start;
-	quote = new QuoteState();
 	case_depth = 0;
 	in_case_patterns = false;
 	arith_depth = 0;
 	arith_paren_depth = 0;
 	while (i < value.length && depth > 0) {
 		c = value[i];
-		// Handle escapes
-		if (c === "\\" && i + 1 < value.length && !quote.single) {
+		// Handle escapes (work everywhere except inside single quotes, which we delegate)
+		if (c === "\\" && i + 1 < value.length) {
 			i += 2;
 			continue;
 		}
-		// Handle quotes
-		if (c === "'" && !quote.double) {
-			quote.single = !quote.single;
-			i += 1;
+		// Handle quotes via delegation
+		if (c === "'") {
+			i = _skipSingleQuoted(value, i + 1);
 			continue;
 		}
-		if (c === '"' && !quote.single) {
-			quote.double = !quote.double;
-			i += 1;
-			continue;
-		}
-		if (quote.single) {
-			i += 1;
-			continue;
-		}
-		if (quote.double) {
-			// Inside double quotes, $() command substitution is still active
-			if (_startsWithAt(value, i, "$(") && !_startsWithAt(value, i, "$((")) {
-				// Recursively find end of nested command substitution
-				j = _findCmdsubEnd(value, i + 2);
-				i = j;
-				continue;
-			}
-			// Skip other characters inside double quotes
-			i += 1;
+		if (c === '"') {
+			i = _skipDoubleQuoted(value, i + 1);
 			continue;
 		}
 		// Handle comments - skip from # to end of line
@@ -6923,6 +6958,77 @@ function _findCmdsubEnd(value, start) {
 				// else: single ) in arithmetic without matching ( - skip it
 				depth -= 1;
 			}
+		}
+		i += 1;
+	}
+	return i;
+}
+
+function _findBracedParamEnd(value, start) {
+	let c, depth, dolbrace_state, end, i, in_double;
+	depth = 1;
+	i = start;
+	in_double = false;
+	dolbrace_state = DolbraceState.PARAM;
+	while (i < value.length && depth > 0) {
+		c = value[i];
+		// Escapes work everywhere except inside single quotes (which we delegate)
+		if (c === "\\" && i + 1 < value.length) {
+			i += 2;
+			continue;
+		}
+		// Single quotes: only delegate in QUOTE state (after %#^,)
+		if (c === "'" && dolbrace_state === DolbraceState.QUOTE && !in_double) {
+			i = _skipSingleQuoted(value, i + 1);
+			continue;
+		}
+		if (c === '"') {
+			in_double = !in_double;
+			i += 1;
+			continue;
+		}
+		if (in_double) {
+			i += 1;
+			continue;
+		}
+		// State transitions: operators move from PARAM to WORD or QUOTE
+		if (dolbrace_state === DolbraceState.PARAM && "%#^,".includes(c)) {
+			dolbrace_state = DolbraceState.QUOTE;
+		} else if (dolbrace_state === DolbraceState.PARAM && ":-=?+/".includes(c)) {
+			dolbrace_state = DolbraceState.WORD;
+		}
+		// Handle array subscripts (only in PARAM state, not pattern words)
+		if (c === "[" && dolbrace_state === DolbraceState.PARAM && !in_double) {
+			end = _skipSubscript(value, i, 0);
+			if (end !== -1) {
+				i = end;
+				continue;
+			}
+		}
+		// Handle process substitution <(...) and >(...)
+		if (
+			(c === "<" || c === ">") &&
+			i + 1 < value.length &&
+			value[i + 1] === "("
+		) {
+			i = _findCmdsubEnd(value, i + 2);
+			continue;
+		}
+		if (c === "{") {
+			depth += 1;
+		} else if (c === "}") {
+			depth -= 1;
+			if (depth === 0) {
+				return i + 1;
+			}
+		}
+		if (c === "$" && i + 1 < value.length && value[i + 1] === "(") {
+			i = _findCmdsubEnd(value, i + 2);
+			continue;
+		}
+		if (c === "$" && i + 1 < value.length && value[i + 1] === "{") {
+			i = _findBracedParamEnd(value, i + 2);
+			continue;
 		}
 		i += 1;
 	}
@@ -7497,7 +7603,7 @@ function _isWordEndContext(c) {
 const _SMP_LITERAL = 1;
 const _SMP_PAST_OPEN = 2;
 function _skipMatchedPair(s, start, open, close, flags) {
-	let c, depth, i, in_double, in_quotes, in_single, literal, n, pass_next;
+	let backq, c, depth, i, literal, n, pass_next;
 	if (flags == null) {
 		flags = 0;
 	}
@@ -7512,8 +7618,7 @@ function _skipMatchedPair(s, start, open, close, flags) {
 	}
 	depth = 1;
 	pass_next = false;
-	in_single = false;
-	in_double = false;
+	backq = false;
 	while (i < n && depth > 0) {
 		c = s[i];
 		if (pass_next) {
@@ -7527,20 +7632,37 @@ function _skipMatchedPair(s, start, open, close, flags) {
 			i += 1;
 			continue;
 		}
-		if (!literal && c === "'" && !in_double) {
-			in_single = !in_single;
+		if (backq) {
+			if (c === "`") {
+				backq = false;
+			}
 			i += 1;
 			continue;
 		}
-		if (!literal && c === '"' && !in_single) {
-			in_double = !in_double;
+		if (!literal && c === "`") {
+			backq = true;
 			i += 1;
 			continue;
 		}
-		in_quotes = in_single || in_double;
-		if (!literal && !in_quotes && c === open) {
+		if (!literal && c === "'") {
+			i = _skipSingleQuoted(s, i + 1);
+			continue;
+		}
+		if (!literal && c === '"') {
+			i = _skipDoubleQuoted(s, i + 1);
+			continue;
+		}
+		if (!literal && c === "$" && i + 1 < n && s[i + 1] === "(") {
+			i = _findCmdsubEnd(s, i + 2);
+			continue;
+		}
+		if (!literal && c === "$" && i + 1 < n && s[i + 1] === "{") {
+			i = _findBracedParamEnd(s, i + 2);
+			continue;
+		}
+		if (!literal && c === open) {
 			depth += 1;
-		} else if (!in_quotes && c === close) {
+		} else if (c === close) {
 			depth -= 1;
 		}
 		i += 1;

@@ -6277,6 +6277,7 @@ def _skip_matched_pair(s: str, start: int, open: str, close: str, flags: int = 0
     pass_next = False
     in_single = False
     in_double = False
+    backq = False
     while i < n and depth > 0:
         c = s[i]
         if pass_next:
@@ -6286,6 +6287,15 @@ def _skip_matched_pair(s: str, start: int, open: str, close: str, flags: int = 0
         literal = flags & _SMP_LITERAL
         if not literal and c == "\\":
             pass_next = True
+            i += 1
+            continue
+        if backq:
+            if c == "`":
+                backq = False
+            i += 1
+            continue
+        if not literal and c == "`":
+            backq = True
             i += 1
             continue
         if not literal and c == "'" and not in_double:

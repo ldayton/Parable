@@ -36,6 +36,7 @@ class JSTranspiler(ast.NodeVisitor):
             "ArithEmpty",
         }
         self.comments = {}  # line_number -> comment_text
+        self._sorted_comment_lines = []  # populated once in transpile()
         self.last_line = 0
         self._in_assignment_target = False
         self._reassigned_vars = set()
@@ -49,7 +50,7 @@ class JSTranspiler(ast.NodeVisitor):
         self.output.append(text)
 
     def emit_comments_before(self, line: int):
-        for comment_line in sorted(self.comments.keys()):
+        for comment_line in self._sorted_comment_lines:
             if comment_line >= line:
                 break
             if comment_line > self.last_line:
@@ -67,6 +68,7 @@ class JSTranspiler(ast.NodeVisitor):
                 # Only keep comments where preceding content on line is whitespace
                 if lines[line_num - 1][:col].strip() == "":
                     self.comments[line_num] = tok.string
+        self._sorted_comment_lines = sorted(self.comments.keys())
         tree = ast.parse(source)
         self.visit(tree)
         return "\n".join(self.output)
@@ -1096,7 +1098,6 @@ class JSTranspiler(ast.NodeVisitor):
             ast.Sub: "-",
             ast.Mult: "*",
             ast.Div: "/",
-            ast.FloorDiv: "Math.floor(/",
             ast.Mod: "%",
             ast.Pow: "**",
             ast.LShift: "<<",

@@ -898,6 +898,12 @@ class Lexer:
             if ch == "$" and not self.at_end() and not (flags & MatchedPairFlags.EXTGLOB):
                 next_ch = self.peek()
                 if next_ch == "{":
+                    # If previous char was $, this is $$ - treat current $ as literal
+                    # (bash's LEX_WASDOL check at parse.y:4131)
+                    if was_dollar:
+                        chars.append(ch)
+                        was_dollar = True
+                        continue
                     # In ARITH mode, only parse ${ if followed by funsub char (bash parse.y:4137-4145)
                     # Otherwise treat $ as literal
                     if flags & MatchedPairFlags.ARITH:

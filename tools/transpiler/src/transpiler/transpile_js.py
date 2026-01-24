@@ -279,51 +279,56 @@ class JSTranspiler(ast.NodeVisitor):
             names.update(self._collect_names_from_target(target.value))
         return names
 
-    def _count_assignments(
-        self, stmts: list, counts: dict = None, top_level: set = None, in_block: bool = False
-    ) -> tuple[dict, set]:
-        """Count assignments and track which vars are first assigned at top level."""
-        if counts is None:
-            counts = {}
-        if top_level is None:
-            top_level = set()
-        for stmt in stmts:
-            if isinstance(stmt, ast.Assign):
-                for target in stmt.targets:
-                    for name in self._collect_names_from_target(target):
-                        if name not in counts and not in_block:
-                            top_level.add(name)
-                        counts[name] = counts.get(name, 0) + 1
-            elif isinstance(stmt, ast.AnnAssign):
-                if isinstance(stmt.target, ast.Name) and stmt.value:
-                    name = stmt.target.id
-                    if name not in counts and not in_block:
-                        top_level.add(name)
-                    counts[name] = counts.get(name, 0) + 1
-            elif isinstance(stmt, ast.AugAssign):
-                for name in self._collect_names_from_target(stmt.target):
-                    counts[name] = counts.get(name, 0) + 1
-            elif isinstance(stmt, ast.For):
-                # For loop variables are always block-scoped in JS, don't count them
-                # as function-level variables
-                self._count_assignments(stmt.body, counts, top_level, True)
-                self._count_assignments(stmt.orelse, counts, top_level, True)
-            elif isinstance(stmt, ast.While):
-                # While loops execute 0+ times, so any assignment may happen multiple times.
-                # Count body assignments separately, then merge with count >= 2 to force `let`.
-                body_counts, _ = self._count_assignments(stmt.body, {}, set(), True)
-                for name, count in body_counts.items():
-                    counts[name] = counts.get(name, 0) + max(count, 2)
-                self._count_assignments(stmt.orelse, counts, top_level, True)
-            elif isinstance(stmt, ast.If):
-                self._count_assignments(stmt.body, counts, top_level, True)
-                self._count_assignments(stmt.orelse, counts, top_level, True)
-            elif isinstance(stmt, ast.Try):
-                self._count_assignments(stmt.body, counts, top_level, True)
-                for handler in stmt.handlers:
-                    self._count_assignments(handler.body, counts, top_level, True)
-                self._count_assignments(stmt.finalbody, counts, top_level, True)
-        return counts, top_level
+    def _count_assignments(self, stmts: list) -> tuple[dict[str, int], set[str]]:
+        """Count assignments and track which vars are first assigned at top level.
+
+        Returns (counts, top_level_first) where:
+        - counts: maps variable name to number of assignments
+        - top_level_first: names whose first assignment is at function top level
+        """
+        counts: dict[str, int] = {}
+        top_level_first: set[str] = set()
+
+        def record(name: str, *, is_top_level: bool, add_count: int = 1) -> None:
+            if name not in counts and is_top_level:
+                top_level_first.add(name)
+            counts[name] = counts.get(name, 0) + add_count
+
+        def walk(stmts: list, is_top_level: bool) -> None:
+            for stmt in stmts:
+                if isinstance(stmt, ast.Assign):
+                    for target in stmt.targets:
+                        for name in self._collect_names_from_target(target):
+                            record(name, is_top_level=is_top_level)
+                elif isinstance(stmt, ast.AnnAssign):
+                    if isinstance(stmt.target, ast.Name) and stmt.value:
+                        record(stmt.target.id, is_top_level=is_top_level)
+                elif isinstance(stmt, ast.AugAssign):
+                    for name in self._collect_names_from_target(stmt.target):
+                        record(name, is_top_level=is_top_level)
+                elif isinstance(stmt, ast.For):
+                    # For loop target is block-scoped in JS via `let x of`
+                    walk(stmt.body, is_top_level=False)
+                    walk(stmt.orelse, is_top_level=False)
+                elif isinstance(stmt, ast.While):
+                    # While body may execute 0+ times; count separately to force `let`
+                    saved = counts.copy()
+                    walk(stmt.body, is_top_level=False)
+                    for name in counts:
+                        if name not in saved or counts[name] > saved[name]:
+                            counts[name] = max(counts[name], 2)  # force let
+                    walk(stmt.orelse, is_top_level=False)
+                elif isinstance(stmt, ast.If):
+                    walk(stmt.body, is_top_level=False)
+                    walk(stmt.orelse, is_top_level=False)
+                elif isinstance(stmt, ast.Try):
+                    walk(stmt.body, is_top_level=False)
+                    for handler in stmt.handlers:
+                        walk(handler.body, is_top_level=False)
+                    walk(stmt.finalbody, is_top_level=False)
+
+        walk(stmts, is_top_level=True)
+        return counts, top_level_first
 
     def _build_function_signature(self, node: ast.FunctionDef) -> tuple[str, str]:
         """Build JS function signature. Returns (name, args_str)."""
@@ -1012,34 +1017,46 @@ class JSTranspiler(ast.NodeVisitor):
                 return True
         return False
 
+    def _handle_in_comparison(
+        self, left: str, right: str, comparator: ast.expr, negated: bool
+    ) -> str:
+        """Handle `x in collection` or `x not in collection`."""
+        prefix = "!" if negated else ""
+        method = "has" if self._is_set_expr(comparator) else "includes"
+        return f"{prefix}{right}.{method}({left})"
+
+    def _handle_find_comparison(self, node: ast.Compare) -> str | _NotHandled:
+        """Handle `.find(x) != -1` → `.includes(x)` pattern."""
+        if len(node.ops) != 1:
+            return NOT_HANDLED
+        op = node.ops[0]
+        if not self._is_find_pattern(node.left, node.comparators[0], op):
+            return NOT_HANDLED
+        obj = self.visit_expr(node.left.func.value)
+        args = ", ".join(self.visit_expr(a) for a in node.left.args)
+        prefix = "" if isinstance(op, ast.NotEq) else "!"
+        return f"{prefix}{obj}.includes({args})"
+
     def visit_expr_Compare(self, node: ast.Compare) -> str:
-        # Handle single comparison with in/not in specially
         if len(node.ops) == 1:
             left = self.visit_expr(node.left)
             right = self.visit_expr(node.comparators[0])
             op = node.ops[0]
             if isinstance(op, ast.In):
-                if self._is_set_expr(node.comparators[0]):
-                    return f"{right}.has({left})"
-                return f"{right}.includes({left})"
+                return self._handle_in_comparison(left, right, node.comparators[0], negated=False)
             if isinstance(op, ast.NotIn):
-                if self._is_set_expr(node.comparators[0]):
-                    return f"!{right}.has({left})"
-                return f"!{right}.includes({left})"
-            # Handle .find(x) != -1 → .includes(x) and .find(x) == -1 → !.includes(x)
-            if self._is_find_comparison(node.left, node.comparators[0], op):
-                obj = self.visit_expr(node.left.func.value)
-                args = ", ".join(self.visit_expr(a) for a in node.left.args)
-                if isinstance(op, ast.NotEq):
-                    return f"{obj}.includes({args})"
-                return f"!{obj}.includes({args})"
+                return self._handle_in_comparison(left, right, node.comparators[0], negated=True)
+            result = self._handle_find_comparison(node)
+            if result is not NOT_HANDLED:
+                return result
+        # General case: chained comparisons like `a < b < c`
         result = self.visit_expr(node.left)
         for op, comparator in zip(node.ops, node.comparators, strict=True):
             op_str = self.visit_cmpop(op)
             result += f" {op_str} {self.visit_expr(comparator)}"
         return f"({result})"
 
-    def _is_find_comparison(self, left: ast.expr, right: ast.expr, op: ast.cmpop) -> bool:
+    def _is_find_pattern(self, left: ast.expr, right: ast.expr, op: ast.cmpop) -> bool:
         """Check if this is a .find(x) == -1 or .find(x) != -1 pattern."""
         if not isinstance(op, (ast.Eq, ast.NotEq)):
             return False

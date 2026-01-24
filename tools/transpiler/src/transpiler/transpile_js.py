@@ -355,7 +355,36 @@ class JSTranspiler(ast.NodeVisitor):
         value = self.visit_expr(node.value)
         self.emit(f"{target} {op}= {value};")
 
+    def _is_nullish_assign(self, node: ast.If) -> tuple[str, str] | None:
+        """Check if `if x is None: x = val` pattern, return (var, val) or None."""
+        if node.orelse:
+            return None
+        if len(node.body) != 1 or not isinstance(node.body[0], ast.Assign):
+            return None
+        if not isinstance(node.test, ast.Compare):
+            return None
+        if len(node.test.ops) != 1 or not isinstance(node.test.ops[0], ast.Is):
+            return None
+        if not isinstance(node.test.comparators[0], ast.Constant):
+            return None
+        if node.test.comparators[0].value is not None:
+            return None
+        if not isinstance(node.test.left, ast.Name):
+            return None
+        var_name = node.test.left.id
+        assign = node.body[0]
+        if len(assign.targets) != 1 or not isinstance(assign.targets[0], ast.Name):
+            return None
+        if assign.targets[0].id != var_name:
+            return None
+        return (self._safe_name(var_name), self.visit_expr(assign.value))
+
     def visit_If(self, node: ast.If):
+        nullish = self._is_nullish_assign(node)
+        if nullish:
+            var, val = nullish
+            self.emit(f"{var} ??= {val};")
+            return
         self._emit_if(node, is_elif=False)
 
     def _emit_if(self, node: ast.If, is_elif: bool):

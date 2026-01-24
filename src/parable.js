@@ -2379,9 +2379,7 @@ class Word extends Node {
 		super();
 		this.kind = "word";
 		this.value = value;
-		if (parts == null) {
-			parts = [];
-		}
+		parts ??= [];
 		this.parts = parts;
 	}
 
@@ -4388,9 +4386,7 @@ class Command extends Node {
 		super();
 		this.kind = "command";
 		this.words = words;
-		if (redirects == null) {
-			redirects = [];
-		}
+		redirects ??= [];
 		this.redirects = redirects;
 	}
 
@@ -4892,9 +4888,7 @@ class If extends Node {
 		this.condition = condition;
 		this.then_body = then_body;
 		this.else_body = else_body;
-		if (redirects == null) {
-			redirects = [];
-		}
+		redirects ??= [];
 		this.redirects = redirects;
 	}
 
@@ -4918,9 +4912,7 @@ class While extends Node {
 		this.kind = "while";
 		this.condition = condition;
 		this.body = body;
-		if (redirects == null) {
-			redirects = [];
-		}
+		redirects ??= [];
 		this.redirects = redirects;
 	}
 
@@ -4937,9 +4929,7 @@ class Until extends Node {
 		this.kind = "until";
 		this.condition = condition;
 		this.body = body;
-		if (redirects == null) {
-			redirects = [];
-		}
+		redirects ??= [];
 		this.redirects = redirects;
 	}
 
@@ -4957,9 +4947,7 @@ class For extends Node {
 		this.variable = variable;
 		this.words = words;
 		this.body = body;
-		if (redirects == null) {
-			redirects = [];
-		}
+		redirects ??= [];
 		this.redirects = redirects;
 	}
 
@@ -5011,9 +4999,7 @@ class ForArith extends Node {
 		this.cond = cond;
 		this.incr = incr;
 		this.body = body;
-		if (redirects == null) {
-			redirects = [];
-		}
+		redirects ??= [];
 		this.redirects = redirects;
 	}
 
@@ -5067,9 +5053,7 @@ class Select extends Node {
 		this.variable = variable;
 		this.words = words;
 		this.body = body;
-		if (redirects == null) {
-			redirects = [];
-		}
+		redirects ??= [];
 		this.redirects = redirects;
 	}
 
@@ -5117,9 +5101,7 @@ class Case extends Node {
 		this.kind = "case";
 		this.word = word;
 		this.patterns = patterns;
-		if (redirects == null) {
-			redirects = [];
-		}
+		redirects ??= [];
 		this.redirects = redirects;
 	}
 
@@ -5453,9 +5435,7 @@ class ArithmeticCommand extends Node {
 		super();
 		this.kind = "arith-cmd";
 		this.expression = expression;
-		if (redirects == null) {
-			redirects = [];
-		}
+		redirects ??= [];
 		this.redirects = redirects;
 		this.raw_content = raw_content;
 	}
@@ -5790,9 +5770,7 @@ class ConditionalExpr extends Node {
 		super();
 		this.kind = "cond-expr";
 		this.body = body;
-		if (redirects == null) {
-			redirects = [];
-		}
+		redirects ??= [];
 		this.redirects = redirects;
 	}
 
@@ -8567,9 +8545,7 @@ class Parser {
 		this._eof_token = ")";
 		// Parse the command list inline - grammar will stop at matching )
 		cmd = this.parseList();
-		if (cmd == null) {
-			cmd = new Empty();
-		}
+		cmd ??= new Empty();
 		// After parse_list, we should be at the closing )
 		this.skipWhitespaceAndNewlines();
 		if (this.atEnd() || this.peek() !== ")") {
@@ -8599,9 +8575,7 @@ class Parser {
 		this._eof_token = "}";
 		// Parse the command list inline - grammar will stop at matching }
 		cmd = this.parseList();
-		if (cmd == null) {
-			cmd = new Empty();
-		}
+		cmd ??= new Empty();
 		// After parse_list, we should be at the closing }
 		this.skipWhitespaceAndNewlines();
 		if (this.atEnd() || this.peek() !== "}") {
@@ -8960,9 +8934,7 @@ class Parser {
 		// Parse the content as a command list
 		sub_parser = new Parser(content, this._extglob);
 		cmd = sub_parser.parseList();
-		if (cmd == null) {
-			cmd = new Empty();
-		}
+		cmd ??= new Empty();
 		return [new CommandSubstitution(cmd), text];
 	}
 
@@ -8994,9 +8966,7 @@ class Parser {
 		// Try to parse the command list inline - grammar will stop at matching )
 		try {
 			cmd = this.parseList();
-			if (cmd == null) {
-				cmd = new Empty();
-			}
+			cmd ??= new Empty();
 			// After parse_list, we should be at the closing )
 			this.skipWhitespaceAndNewlines();
 			if (this.atEnd() || this.peek() !== ")") {

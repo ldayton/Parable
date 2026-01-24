@@ -6505,10 +6505,10 @@ def _skip_matched_pair(s: str, start: int, open: str, close: str, flags: int = 0
         if not literal and c == '"':
             i = _skip_double_quoted(s, i + 1)
             continue
-        if not literal and c == "$" and i + 1 < n and s[i + 1] == "(":
+        if not literal and _is_expansion_start(s, i, "$("):
             i = _find_cmdsub_end(s, i + 2)
             continue
-        if not literal and c == "$" and i + 1 < n and s[i + 1] == "{":
+        if not literal and _is_expansion_start(s, i, "${"):
             i = _find_braced_param_end(s, i + 2)
             continue
         if not literal and c == open:

@@ -763,9 +763,9 @@ class JSTranspiler(ast.NodeVisitor):
                     chars = self.visit_expr(arg)
                     return f'{obj}.replace(new RegExp("[" + {chars} + "]+$"), "")'
                 return f"{obj}.trimEnd()"
-            # Handle str.encode() - returns array of byte values
+            # Handle str.encode() - returns iterable of byte values (Uint8Array)
             if method == "encode":
-                return f"Array.from(new TextEncoder().encode({obj}))"
+                return f"new TextEncoder().encode({obj})"
             # Handle bytes.decode() - converts byte array to string
             if method == "decode":
                 return f"new TextDecoder().decode(new Uint8Array({obj}))"
@@ -857,7 +857,7 @@ class JSTranspiler(ast.NodeVisitor):
                 return "[]"
             if name == "list":
                 if args:
-                    return f"Array.from({args})"
+                    return f"[...{args}]"
                 return "[]"
             if name == "set":
                 return f"new Set({args})"

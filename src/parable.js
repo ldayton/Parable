@@ -257,7 +257,7 @@ class QuoteState {
 		const qs = new QuoteState();
 		qs.single = this.single;
 		qs.double = this.double;
-		qs._stack = Array.from(this._stack);
+		qs._stack = [...this._stack];
 		return qs;
 	}
 
@@ -2587,9 +2587,7 @@ class Word extends Node {
 							return result;
 						}
 						result.push(
-							...Array.from(
-								new TextEncoder().encode(String.fromCodePoint(codepoint)),
-							),
+							...new TextEncoder().encode(String.fromCodePoint(codepoint)),
 						);
 						i = j;
 					} else {
@@ -2607,9 +2605,7 @@ class Word extends Node {
 							return result;
 						}
 						result.push(
-							...Array.from(
-								new TextEncoder().encode(String.fromCodePoint(codepoint)),
-							),
+							...new TextEncoder().encode(String.fromCodePoint(codepoint)),
 						);
 						i = j;
 					} else {
@@ -2669,7 +2665,7 @@ class Word extends Node {
 					i += 2;
 				}
 			} else {
-				result.push(...Array.from(new TextEncoder().encode(inner[i])));
+				result.push(...new TextEncoder().encode(inner[i]));
 				i++;
 			}
 		}
@@ -4387,7 +4383,7 @@ class List extends Node {
 		let inner_list, inner_parts, left, left_sexp, right, right_sexp;
 		// parts = [cmd, op, cmd, op, cmd, ...]
 		// Bash precedence: && and || bind tighter than ; and &
-		let parts = Array.from(this.parts);
+		let parts = [...this.parts];
 		const op_names = {
 			"&&": "and",
 			"||": "or",
@@ -7683,7 +7679,7 @@ class Parser {
 		return new SavedParserState(
 			this._parser_state,
 			this._dolbrace_state,
-			Array.from(this._pending_heredocs),
+			[...this._pending_heredocs],
 			this._ctx.copyStack(),
 			this._eof_token,
 		);

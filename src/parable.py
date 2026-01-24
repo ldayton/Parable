@@ -6572,6 +6572,21 @@ def _is_valid_identifier(name: str) -> bool:
     return True
 
 
+def _has_unclosed_brace_expansion(s: str) -> bool:
+    """Check if string contains unclosed ${...} parameter expansion."""
+    depth = 0
+    i = 0
+    while i < len(s):
+        if i + 1 < len(s) and s[i] == "$" and s[i + 1] == "{":
+            depth += 1
+            i += 2
+            continue
+        if s[i] == "}":
+            depth -= 1
+        i += 1
+    return depth > 0
+
+
 # Word parsing context constants
 WORD_CTX_NORMAL = 0  # Regular command context
 WORD_CTX_COND = 1  # Inside [[ ]]
@@ -10257,17 +10272,7 @@ class Parser:
 
         # Check if name contains unclosed parameter expansion ${...}
         # If so, () is inside the expansion, not function definition syntax
-        brace_depth = 0
-        i = 0
-        while i < len(name):
-            if i + 1 < len(name) and name[i] == "$" and name[i + 1] == "{":
-                brace_depth += 1
-                i += 2
-                continue
-            if name[i] == "}":
-                brace_depth -= 1
-            i += 1
-        if brace_depth > 0:
+        if _has_unclosed_brace_expansion(name):
             self.pos = saved_pos
             return None
 

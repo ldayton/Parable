@@ -10341,7 +10341,7 @@ class Parser:
         brace_depth = 0
         i = 0
         while i < len(name):
-            if i + 1 < len(name) and name[i] == "$" and name[i + 1] == "{":
+            if _is_expansion_start(name, i, "${"):
                 brace_depth += 1
                 i += 2
                 continue

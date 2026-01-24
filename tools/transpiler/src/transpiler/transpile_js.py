@@ -206,20 +206,15 @@ class JSTranspiler(ast.NodeVisitor):
 
     def _is_super_call(self, stmt: ast.stmt) -> bool:
         """Check if statement is a super().__init__() call."""
-        if not isinstance(stmt, ast.Expr):
-            return False
-        call = stmt.value
-        if not isinstance(call, ast.Call):
-            return False
-        if not isinstance(call.func, ast.Attribute):
-            return False
-        if call.func.attr != "__init__":
-            return False
-        if not isinstance(call.func.value, ast.Call):
-            return False
-        if not isinstance(call.func.value.func, ast.Name):
-            return False
-        return call.func.value.func.id == "super"
+        return (
+            isinstance(stmt, ast.Expr)
+            and isinstance(stmt.value, ast.Call)
+            and isinstance(stmt.value.func, ast.Attribute)
+            and stmt.value.func.attr == "__init__"
+            and isinstance(stmt.value.func.value, ast.Call)
+            and isinstance(stmt.value.func.value.func, ast.Name)
+            and stmt.value.func.value.func.id == "super"
+        )
 
     def _camel_case(self, name: str) -> str:
         """Convert snake_case or PascalCase to camelCase, preserving leading underscore."""
@@ -389,9 +384,8 @@ class JSTranspiler(ast.NodeVisitor):
         return "const"
 
     def visit_Assign(self, node: ast.Assign):
-        self._in_assignment_target = True
-        targets = [self.visit_expr(t) for t in node.targets]
-        self._in_assignment_target = False
+        with self._scoped(_in_assignment_target=True):
+            targets = [self.visit_expr(t) for t in node.targets]
         value = self.visit_expr(node.value)
         # Module-level assignments get const
         if not self.in_method and not self.in_class_body:
@@ -655,23 +649,7 @@ class JSTranspiler(ast.NodeVisitor):
         # Use dot notation for string keys that are valid identifiers
         if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
             key = node.slice.value
-            if key.isidentifier() and key not in (
-                "class",
-                "default",
-                "delete",
-                "export",
-                "import",
-                "new",
-                "return",
-                "super",
-                "switch",
-                "this",
-                "throw",
-                "typeof",
-                "void",
-                "with",
-                "yield",
-            ):
+            if key.isidentifier() and key not in self._JS_RESERVED:
                 return f"{value}.{key}"
         return f"{value}[{self.visit_expr(node.slice)}]"
 
@@ -720,6 +698,24 @@ class JSTranspiler(ast.NodeVisitor):
         "isdigit": "/^[0-9]+$/",
         "isalnum": "/^[a-zA-Z0-9]$/",
         "isspace": "/^\\s$/",
+    }
+    # JS reserved words that cannot be used with dot notation
+    _JS_RESERVED = {
+        "class",
+        "default",
+        "delete",
+        "export",
+        "import",
+        "new",
+        "return",
+        "super",
+        "switch",
+        "this",
+        "throw",
+        "typeof",
+        "void",
+        "with",
+        "yield",
     }
 
     def _handle_method_call(self, node: ast.Call, obj: str, method: str) -> str | None:
@@ -1011,17 +1007,21 @@ class JSTranspiler(ast.NodeVisitor):
 
     def _is_find_comparison(self, left: ast.expr, right: ast.expr, op: ast.cmpop) -> bool:
         """Check if this is a .find(x) == -1 or .find(x) != -1 pattern."""
-        return (
+        if not isinstance(op, (ast.Eq, ast.NotEq)):
+            return False
+        is_find_call = (
             isinstance(left, ast.Call)
             and isinstance(left.func, ast.Attribute)
             and left.func.attr == "find"
             and len(left.args) in (1, 2)
-            and isinstance(op, (ast.Eq, ast.NotEq))
-            and isinstance(right, ast.UnaryOp)
+        )
+        is_minus_one = (
+            isinstance(right, ast.UnaryOp)
             and isinstance(right.op, ast.USub)
             and isinstance(right.operand, ast.Constant)
             and right.operand.value == 1
         )
+        return is_find_call and is_minus_one
 
     def visit_expr_BoolOp(self, node: ast.BoolOp) -> str:
         op = " && " if isinstance(node.op, ast.And) else " || "

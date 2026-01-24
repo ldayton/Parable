@@ -5751,7 +5751,7 @@ def _is_valid_arithmetic_start(value: str, start: int) -> bool:
     while scan_i < len(value):
         scan_c = value[scan_i]
         # Skip over $( command subs - their parens shouldn't count
-        if scan_c == "$" and scan_i + 1 < len(value) and value[scan_i + 1] == "(":
+        if _is_expansion_start(value, scan_i, "$("):
             scan_i = _find_cmdsub_end(value, scan_i + 2)
             continue
         if scan_c == "(":

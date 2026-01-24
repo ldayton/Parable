@@ -69,23 +69,23 @@ function _startsWithAt(s, pos, prefix) {
 }
 
 function _countConsecutiveDollarsBefore(s, pos) {
-	let bs_count, count, j, k;
-	count = 0;
-	k = pos - 1;
+	let bs_count, j;
+	let count = 0;
+	let k = pos - 1;
 	while (k >= 0 && s[k] === "$") {
 		// Check if this dollar is escaped by counting preceding backslashes
 		bs_count = 0;
 		j = k - 1;
 		while (j >= 0 && s[j] === "\\") {
-			bs_count += 1;
-			j -= 1;
+			bs_count++;
+			j--;
 		}
 		if (bs_count % 2 === 1) {
 			// Odd number of backslashes means the dollar is escaped, stop counting
 			break;
 		}
-		count += 1;
-		k -= 1;
+		count++;
+		k--;
 	}
 	return count;
 }
@@ -168,7 +168,7 @@ class Token {
 		if (this.word) {
 			return `Token(${this.type}, ${this.value}, ${this.pos}, word=${this.word})`;
 		}
-		if (this.parts && this.parts.length) {
+		if (this.parts?.length) {
 			return `Token(${this.type}, ${this.value}, ${this.pos}, parts=${this.parts.length})`;
 		}
 		return `Token(${this.type}, ${this.value}, ${this.pos})`;
@@ -254,11 +254,10 @@ class QuoteState {
 	}
 
 	copy() {
-		let qs;
-		qs = new QuoteState();
+		const qs = new QuoteState();
 		qs.single = this.single;
 		qs.double = this.double;
-		qs._stack = Array.from(this._stack);
+		qs._stack = [...this._stack];
 		return qs;
 	}
 
@@ -266,7 +265,7 @@ class QuoteState {
 		if (this._stack.length === 0) {
 			return false;
 		}
-		return this._stack[this._stack.length - 1][1];
+		return this._stack.at(-1)[1];
 	}
 }
 
@@ -277,10 +276,7 @@ class ParseContext {
 	static ARITHMETIC = 2;
 	static CASE_PATTERN = 3;
 	static BRACE_EXPANSION = 4;
-	constructor(kind) {
-		if (kind == null) {
-			kind = 0;
-		}
+	constructor(kind = 0) {
 		this.kind = kind;
 		this.paren_depth = 0;
 		this.brace_depth = 0;
@@ -292,8 +288,7 @@ class ParseContext {
 	}
 
 	copy() {
-		let ctx;
-		ctx = new ParseContext(this.kind);
+		const ctx = new ParseContext(this.kind);
 		ctx.paren_depth = this.paren_depth;
 		ctx.brace_depth = this.brace_depth;
 		ctx.bracket_depth = this.bracket_depth;
@@ -311,7 +306,7 @@ class ContextStack {
 	}
 
 	getCurrent() {
-		return this._stack[this._stack.length - 1];
+		return this._stack.at(-1);
 	}
 
 	push(kind) {
@@ -326,18 +321,16 @@ class ContextStack {
 	}
 
 	copyStack() {
-		let ctx, result;
-		result = [];
-		for (ctx of this._stack) {
+		const result = [];
+		for (let ctx of this._stack) {
 			result.push(ctx.copy());
 		}
 		return result;
 	}
 
 	restoreFrom(saved_stack) {
-		let ctx, result;
-		result = [];
-		for (ctx of saved_stack) {
+		const result = [];
+		for (let ctx of saved_stack) {
 			result.push(ctx.copy());
 		}
 		this._stack = result;
@@ -345,10 +338,7 @@ class ContextStack {
 }
 
 class Lexer {
-	constructor(source, extglob) {
-		if (extglob == null) {
-			extglob = false;
-		}
+	constructor(source, extglob = false) {
 		this.source = source;
 		this.pos = 0;
 		this.length = source.length;
@@ -389,12 +379,11 @@ class Lexer {
 	}
 
 	advance() {
-		let c;
 		if (this.pos >= this.length) {
 			return null;
 		}
-		c = this.source[this.pos];
-		this.pos += 1;
+		const c = this.source[this.pos];
+		this.pos++;
 		return c;
 	}
 
@@ -411,14 +400,13 @@ class Lexer {
 	}
 
 	_readOperator() {
-		let c, start, three, two;
-		start = this.pos;
-		c = this.peek();
+		const start = this.pos;
+		const c = this.peek();
 		if (c == null) {
 			return null;
 		}
-		two = this.lookahead(2);
-		three = this.lookahead(3);
+		const two = this.lookahead(2);
+		const three = this.lookahead(3);
 		// Three-char operators
 		if (three === ";;&") {
 			this.pos += 3;
@@ -487,15 +475,15 @@ class Lexer {
 		}
 		// Single-char operators
 		if (c === ";") {
-			this.pos += 1;
+			this.pos++;
 			return new Token(TokenType.SEMI, c, start);
 		}
 		if (c === "|") {
-			this.pos += 1;
+			this.pos++;
 			return new Token(TokenType.PIPE, c, start);
 		}
 		if (c === "&") {
-			this.pos += 1;
+			this.pos++;
 			return new Token(TokenType.AMP, c, start);
 		}
 		if (c === "(") {
@@ -503,7 +491,7 @@ class Lexer {
 			if (this._word_context === WORD_CTX_REGEX) {
 				return null;
 			}
-			this.pos += 1;
+			this.pos++;
 			return new Token(TokenType.LPAREN, c, start);
 		}
 		if (c === ")") {
@@ -511,7 +499,7 @@ class Lexer {
 			if (this._word_context === WORD_CTX_REGEX) {
 				return null;
 			}
-			this.pos += 1;
+			this.pos++;
 			return new Token(TokenType.RPAREN, c, start);
 		}
 		if (c === "<") {
@@ -519,7 +507,7 @@ class Lexer {
 			if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
 				return null;
 			}
-			this.pos += 1;
+			this.pos++;
 			return new Token(TokenType.LESS, c, start);
 		}
 		if (c === ">") {
@@ -527,11 +515,11 @@ class Lexer {
 			if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
 				return null;
 			}
-			this.pos += 1;
+			this.pos++;
 			return new Token(TokenType.GREATER, c, start);
 		}
 		if (c === "\n") {
-			this.pos += 1;
+			this.pos++;
 			return new Token(TokenType.NEWLINE, c, start);
 		}
 		return null;
@@ -544,7 +532,7 @@ class Lexer {
 			if (c !== " " && c !== "\t") {
 				break;
 			}
-			this.pos += 1;
+			this.pos++;
 		}
 	}
 
@@ -568,22 +556,22 @@ class Lexer {
 		}
 		// Skip to end of line
 		while (this.pos < this.length && this.source[this.pos] !== "\n") {
-			this.pos += 1;
+			this.pos++;
 		}
 		return true;
 	}
 
 	_readSingleQuote(start) {
-		let c, chars, saw_newline;
-		chars = ["'"];
-		saw_newline = false;
+		let c;
+		const chars = ["'"];
+		let saw_newline = false;
 		while (this.pos < this.length) {
 			c = this.source[this.pos];
 			if (c === "\n") {
 				saw_newline = true;
 			}
 			chars.push(c);
-			this.pos += 1;
+			this.pos++;
 			if (c === "'") {
 				return [chars.join(""), saw_newline];
 			}
@@ -591,13 +579,7 @@ class Lexer {
 		throw new ParseError("Unterminated single quote", start);
 	}
 
-	_isWordTerminator(ctx, ch, bracket_depth, paren_depth) {
-		if (bracket_depth == null) {
-			bracket_depth = 0;
-		}
-		if (paren_depth == null) {
-			paren_depth = 0;
-		}
+	_isWordTerminator(ctx, ch, bracket_depth = 0, paren_depth = 0) {
 		if (ctx === WORD_CTX_REGEX) {
 			if (
 				ch === "]" &&
@@ -669,22 +651,16 @@ class Lexer {
 		return _isMetachar(ch) && bracket_depth === 0;
 	}
 
-	_readBracketExpression(chars, parts, for_regex, paren_depth) {
+	_readBracketExpression(chars, parts, for_regex = false, paren_depth = 0) {
 		let bracket_will_close, c, next_ch, sc, scan;
-		if (for_regex == null) {
-			for_regex = false;
-		}
-		if (paren_depth == null) {
-			paren_depth = 0;
-		}
 		if (for_regex) {
 			// Regex mode: lookahead to check if bracket will close before terminators
 			scan = this.pos + 1;
 			if (scan < this.length && this.source[scan] === "^") {
-				scan += 1;
+				scan++;
 			}
 			if (scan < this.length && this.source[scan] === "]") {
-				scan += 1;
+				scan++;
 			}
 			bracket_will_close = false;
 			while (scan < this.length) {
@@ -724,14 +700,14 @@ class Lexer {
 							this.source[scan + 1] === "]"
 						)
 					) {
-						scan += 1;
+						scan++;
 					}
 					if (scan < this.length) {
 						scan += 2;
 					}
 					continue;
 				}
-				scan += 1;
+				scan++;
 			}
 			if (!bracket_will_close) {
 				return false;
@@ -847,40 +823,33 @@ class Lexer {
 		return true;
 	}
 
-	_parseMatchedPair(open_char, close_char, flags, initial_was_dollar) {
+	_parseMatchedPair(
+		open_char,
+		close_char,
+		flags = 0,
+		initial_was_dollar = false,
+	) {
 		let after_brace_pos,
 			arith_node,
 			arith_text,
 			ch,
-			chars,
 			cmd_node,
 			cmd_text,
-			count,
 			direction,
 			in_dquote,
 			nested,
 			next_ch,
 			param_node,
 			param_text,
-			pass_next,
 			procsub_node,
 			procsub_text,
-			quote_flags,
-			start,
-			was_dollar,
-			was_gtlt;
-		if (flags == null) {
-			flags = 0;
-		}
-		if (initial_was_dollar == null) {
-			initial_was_dollar = false;
-		}
-		start = this.pos;
-		count = 1;
-		chars = [];
-		pass_next = false;
-		was_dollar = initial_was_dollar;
-		was_gtlt = false;
+			quote_flags;
+		const start = this.pos;
+		let count = 1;
+		const chars = [];
+		let pass_next = false;
+		let was_dollar = initial_was_dollar;
+		let was_gtlt = false;
 		while (count > 0) {
 			if (this.atEnd()) {
 				throw new MatchedPairError(
@@ -909,7 +878,7 @@ class Lexer {
 			// Inside single quotes, almost everything is literal
 			if (open_char === "'") {
 				if (ch === close_char) {
-					count -= 1;
+					count--;
 					if (count === 0) {
 						break;
 					}
@@ -940,7 +909,7 @@ class Lexer {
 			}
 			// Closing delimiter
 			if (ch === close_char) {
-				count -= 1;
+				count--;
 				if (count === 0) {
 					break;
 				}
@@ -954,7 +923,7 @@ class Lexer {
 			// (handled by the $ block below via recursion)
 			if (ch === open_char && open_char !== close_char) {
 				if (!(flags & MatchedPairFlags.DOLBRACE && open_char === "{")) {
-					count += 1;
+					count++;
 				}
 				chars.push(ch);
 				was_dollar = false;
@@ -1026,7 +995,7 @@ class Lexer {
 						}
 					}
 					// ${ ... } parameter expansion - use full parsing
-					this.pos -= 1;
+					this.pos--;
 					this._syncToParser();
 					in_dquote = Boolean(flags & MatchedPairFlags.DQUOTE);
 					[param_node, param_text] =
@@ -1045,7 +1014,7 @@ class Lexer {
 					continue;
 				} else if (next_ch === "(") {
 					// Back up to before $ for Parser callback
-					this.pos -= 1;
+					this.pos--;
 					this._syncToParser();
 					// Check if $(( arithmetic or $( command substitution
 					if (this.pos + 2 < this.length && this.source[this.pos + 2] === "(") {
@@ -1092,7 +1061,7 @@ class Lexer {
 					continue;
 				} else if (next_ch === "[") {
 					// Deprecated $[ ... ] arithmetic - use full parsing
-					this.pos -= 1;
+					this.pos--;
 					this._syncToParser();
 					[arith_node, arith_text] = this._parser._parseDeprecatedArithmetic();
 					this._syncFromParser();
@@ -1118,7 +1087,7 @@ class Lexer {
 			) {
 				// Back up: remove the < or > we already added to chars
 				direction = chars.pop();
-				this.pos -= 1;
+				this.pos--;
 				this._syncToParser();
 				[procsub_node, procsub_text] = this._parser._parseProcessSubstitution();
 				this._syncFromParser();
@@ -1142,13 +1111,7 @@ class Lexer {
 		return chars.join("");
 	}
 
-	_collectParamArgument(flags, was_dollar) {
-		if (flags == null) {
-			flags = MatchedPairFlags.NONE;
-		}
-		if (was_dollar == null) {
-			was_dollar = false;
-		}
+	_collectParamArgument(flags = MatchedPairFlags.NONE, was_dollar = false) {
 		return this._parseMatchedPair(
 			"{",
 			"}",
@@ -1159,17 +1122,14 @@ class Lexer {
 
 	_readWordInternal(
 		ctx,
-		at_command_start,
-		in_array_literal,
-		in_assign_builtin,
+		at_command_start = false,
+		in_array_literal = false,
+		in_assign_builtin = false,
 	) {
 		let ansi_result,
 			array_result,
-			bracket_depth,
-			bracket_start_pos,
 			c,
 			ch,
-			chars,
 			cmdsub_result,
 			content,
 			for_regex,
@@ -1179,30 +1139,17 @@ class Lexer {
 			locale_result,
 			next_c,
 			next_ch,
-			paren_depth,
-			parts,
 			prev_char,
 			procsub_result,
 			saw_newline,
-			seen_equals,
-			start,
 			track_newline;
-		if (at_command_start == null) {
-			at_command_start = false;
-		}
-		if (in_array_literal == null) {
-			in_array_literal = false;
-		}
-		if (in_assign_builtin == null) {
-			in_assign_builtin = false;
-		}
-		start = this.pos;
-		chars = [];
-		parts = [];
-		bracket_depth = 0;
-		bracket_start_pos = null;
-		seen_equals = false;
-		paren_depth = 0;
+		const start = this.pos;
+		const chars = [];
+		const parts = [];
+		let bracket_depth = 0;
+		let bracket_start_pos = null;
+		let seen_equals = false;
+		let paren_depth = 0;
 		while (!this.atEnd()) {
 			ch = this.peek();
 			// REGEX: Backslash-newline continuation (check first)
@@ -1227,7 +1174,7 @@ class Lexer {
 			// NORMAL: Array subscript tracking
 			if (ctx === WORD_CTX_NORMAL && ch === "[") {
 				if (bracket_depth > 0) {
-					bracket_depth += 1;
+					bracket_depth++;
 					chars.push(this.advance());
 					continue;
 				}
@@ -1237,23 +1184,23 @@ class Lexer {
 					!seen_equals &&
 					_isArrayAssignmentPrefix(chars)
 				) {
-					prev_char = chars[chars.length - 1];
+					prev_char = chars.at(-1);
 					if (/^[a-zA-Z0-9]$/.test(prev_char) || prev_char === "_") {
 						bracket_start_pos = this.pos;
-						bracket_depth += 1;
+						bracket_depth++;
 						chars.push(this.advance());
 						continue;
 					}
 				}
 				if (chars.length === 0 && !seen_equals && in_array_literal) {
 					bracket_start_pos = this.pos;
-					bracket_depth += 1;
+					bracket_depth++;
 					chars.push(this.advance());
 					continue;
 				}
 			}
 			if (ctx === WORD_CTX_NORMAL && ch === "]" && bracket_depth > 0) {
-				bracket_depth -= 1;
+				bracket_depth--;
 				chars.push(this.advance());
 				continue;
 			}
@@ -1262,13 +1209,13 @@ class Lexer {
 			}
 			// REGEX: Track paren depth
 			if (ctx === WORD_CTX_REGEX && ch === "(") {
-				paren_depth += 1;
+				paren_depth++;
 				chars.push(this.advance());
 				continue;
 			}
 			if (ctx === WORD_CTX_REGEX && ch === ")") {
 				if (paren_depth > 0) {
-					paren_depth -= 1;
+					paren_depth--;
 					chars.push(this.advance());
 					continue;
 				}
@@ -1285,11 +1232,7 @@ class Lexer {
 			}
 			// COND: Extglob patterns or ( terminates
 			if (ctx === WORD_CTX_COND && ch === "(") {
-				if (
-					this._extglob &&
-					chars &&
-					_isExtglobPrefix(chars[chars.length - 1])
-				) {
+				if (this._extglob && chars && _isExtglobPrefix(chars.at(-1))) {
 					chars.push(this.advance());
 					content = this._parseMatchedPair("(", ")", MatchedPairFlags.EXTGLOB);
 					chars.push(content);
@@ -1444,9 +1387,9 @@ class Lexer {
 						this._extglob &&
 						ctx === WORD_CTX_NORMAL &&
 						chars &&
-						chars[chars.length - 1].length === 2 &&
-						chars[chars.length - 1][0] === "$" &&
-						"?*@".includes(chars[chars.length - 1][1]) &&
+						chars.at(-1).length === 2 &&
+						chars.at(-1)[0] === "$" &&
+						"?*@".includes(chars.at(-1)[1]) &&
 						!this.atEnd() &&
 						this.peek() === "("
 					) {
@@ -1511,11 +1454,11 @@ class Lexer {
 				if (
 					chars.length >= 3 &&
 					chars[chars.length - 2] === "+" &&
-					chars[chars.length - 1] === "="
+					chars.at(-1) === "="
 				) {
 					// Check chars before += form valid name
 					is_array_assign = _isArrayAssignmentPrefix(chars.slice(0, -2));
-				} else if (chars[chars.length - 1] === "=" && chars.length >= 2) {
+				} else if (chars.at(-1) === "=" && chars.length >= 2) {
 					// Check chars before = form valid name
 					is_array_assign = _isArrayAssignmentPrefix(chars.slice(0, -1));
 				}
@@ -1578,34 +1521,33 @@ class Lexer {
 		if (chars.length === 0) {
 			return null;
 		}
-		if (parts && parts.length) {
+		if (parts?.length) {
 			return new Word(chars.join(""), parts);
 		}
 		return new Word(chars.join(""), null);
 	}
 
 	_readWord() {
-		let c, is_procsub, is_regex_paren, start, word;
-		start = this.pos;
+		const start = this.pos;
 		if (this.pos >= this.length) {
 			return null;
 		}
-		c = this.peek();
+		const c = this.peek();
 		if (c == null) {
 			return null;
 		}
 		// Allow process substitution <( and >( even though < and > are metachars
-		is_procsub =
+		const is_procsub =
 			(c === "<" || c === ">") &&
 			this.pos + 1 < this.length &&
 			this.source[this.pos + 1] === "(";
 		// In REGEX context, ( and ) are regex grouping, not metachars
-		is_regex_paren =
+		const is_regex_paren =
 			this._word_context === WORD_CTX_REGEX && (c === "(" || c === ")");
 		if (this.isMetachar(c) && !is_procsub && !is_regex_paren) {
 			return null;
 		}
-		word = this._readWordInternal(
+		const word = this._readWordInternal(
 			this._word_context,
 			this._at_command_start,
 			this._in_array_literal,
@@ -1688,18 +1630,18 @@ class Lexer {
 	}
 
 	_readAnsiCQuote() {
-		let ch, content, content_chars, found_close, node, start, text;
+		let ch;
 		if (this.atEnd() || this.peek() !== "$") {
 			return [null, ""];
 		}
 		if (this.pos + 1 >= this.length || this.source[this.pos + 1] !== "'") {
 			return [null, ""];
 		}
-		start = this.pos;
+		const start = this.pos;
 		this.advance();
 		this.advance();
-		content_chars = [];
-		found_close = false;
+		const content_chars = [];
+		let found_close = false;
 		while (!this.atEnd()) {
 			ch = this.peek();
 			if (ch === "'") {
@@ -1723,9 +1665,9 @@ class Lexer {
 				start,
 			);
 		}
-		text = this.source.slice(start, this.pos);
-		content = content_chars.join("");
-		node = new AnsiCQuote(content);
+		const text = this.source.slice(start, this.pos);
+		const content = content_chars.join("");
+		const node = new AnsiCQuote(content);
 		return [node, text];
 	}
 
@@ -1747,27 +1689,21 @@ class Lexer {
 			ch,
 			cmdsub_node,
 			cmdsub_text,
-			content,
-			content_chars,
-			found_close,
-			inner_parts,
 			next_ch,
 			param_node,
-			param_text,
-			start,
-			text;
+			param_text;
 		if (this.atEnd() || this.peek() !== "$") {
 			return [null, "", []];
 		}
 		if (this.pos + 1 >= this.length || this.source[this.pos + 1] !== '"') {
 			return [null, "", []];
 		}
-		start = this.pos;
+		const start = this.pos;
 		this.advance();
 		this.advance();
-		content_chars = [];
-		inner_parts = [];
-		found_close = false;
+		const content_chars = [];
+		const inner_parts = [];
+		let found_close = false;
 		while (!this.atEnd()) {
 			ch = this.peek();
 			if (ch === '"') {
@@ -1853,21 +1789,20 @@ class Lexer {
 			this.pos = start;
 			return [null, "", []];
 		}
-		content = content_chars.join("");
+		const content = content_chars.join("");
 		// Reconstruct text from parsed content (handles line continuation removal)
-		text = `$"${content}"`;
+		const text = `$"${content}"`;
 		return [new LocaleString(content), text, inner_parts];
 	}
 
 	_updateDolbraceForOp(op, has_param) {
-		let first_char;
 		if (this._dolbrace_state === DolbraceState.NONE) {
 			return;
 		}
 		if (op == null || op.length === 0) {
 			return;
 		}
-		first_char = op[0];
+		const first_char = op[0];
 		if (this._dolbrace_state === DolbraceState.PARAM && has_param) {
 			if ("%#^,".includes(first_char)) {
 				this._dolbrace_state = DolbraceState.QUOTE;
@@ -1886,11 +1821,11 @@ class Lexer {
 	}
 
 	_consumeParamOperator() {
-		let ch, next_ch;
+		let next_ch;
 		if (this.atEnd()) {
 			return null;
 		}
-		ch = this.peek();
+		const ch = this.peek();
 		// Operators with optional colon prefix: :- := :? :+
 		if (ch === ":") {
 			this.advance();
@@ -1970,17 +1905,17 @@ class Lexer {
 	}
 
 	_paramSubscriptHasClose(start_pos) {
-		let c, depth, i, quote;
-		depth = 1;
-		i = start_pos + 1;
-		quote = new QuoteState();
+		let c;
+		let depth = 1;
+		let i = start_pos + 1;
+		const quote = new QuoteState();
 		while (i < this.length) {
 			c = this.source[i];
 			if (quote.single) {
 				if (c === "'") {
 					quote.single = false;
 				}
-				i += 1;
+				i++;
 				continue;
 			}
 			if (quote.double) {
@@ -1991,17 +1926,17 @@ class Lexer {
 				if (c === '"') {
 					quote.double = false;
 				}
-				i += 1;
+				i++;
 				continue;
 			}
 			if (c === "'") {
 				quote.single = true;
-				i += 1;
+				i++;
 				continue;
 			}
 			if (c === '"') {
 				quote.double = true;
-				i += 1;
+				i++;
 				continue;
 			}
 			if (c === "\\") {
@@ -2012,24 +1947,24 @@ class Lexer {
 				return false;
 			}
 			if (c === "[") {
-				depth += 1;
+				depth++;
 			} else if (c === "]") {
-				depth -= 1;
+				depth--;
 				if (depth === 0) {
 					return true;
 				}
 			}
-			i += 1;
+			i++;
 		}
 		return false;
 	}
 
 	_consumeParamName() {
-		let c, ch, content, name_chars;
+		let c, content, name_chars;
 		if (this.atEnd()) {
 			return null;
 		}
-		ch = this.peek();
+		const ch = this.peek();
 		// Special parameters (but NOT $ followed by { ' or " - those are special expansions)
 		if (_isSpecialParam(ch)) {
 			if (
@@ -2081,21 +2016,18 @@ class Lexer {
 		return null;
 	}
 
-	_readParamExpansion(in_dquote) {
-		let c, ch, name, name_start, start, text;
-		if (in_dquote == null) {
-			in_dquote = false;
-		}
+	_readParamExpansion(in_dquote = false) {
+		let c, name, name_start, text;
 		if (this.atEnd() || this.peek() !== "$") {
 			return [null, ""];
 		}
-		start = this.pos;
+		const start = this.pos;
 		this.advance();
 		if (this.atEnd()) {
 			this.pos = start;
 			return [null, ""];
 		}
-		ch = this.peek();
+		const ch = this.peek();
 		// Braced expansion ${...}
 		if (ch === "{") {
 			this.advance();
@@ -2127,11 +2059,10 @@ class Lexer {
 		return [null, ""];
 	}
 
-	_readBracedParam(start, in_dquote) {
+	_readBracedParam(start, in_dquote = false) {
 		let arg,
 			backtick_pos,
 			bc,
-			ch,
 			content,
 			dollar_count,
 			flags,
@@ -2142,21 +2073,17 @@ class Lexer {
 			param,
 			param_ends_with_dollar,
 			parsed,
-			saved_dolbrace,
 			sub_parser,
 			suffix,
 			text,
 			trailing;
-		if (in_dquote == null) {
-			in_dquote = false;
-		}
 		if (this.atEnd()) {
 			throw new MatchedPairError("unexpected EOF looking for `}'", start);
 		}
 		// Save and initialize dolbrace state
-		saved_dolbrace = this._dolbrace_state;
+		const saved_dolbrace = this._dolbrace_state;
 		this._dolbrace_state = DolbraceState.PARAM;
-		ch = this.peek();
+		const ch = this.peek();
 		// Brace command substitution ${ cmd; } or ${| cmd; }
 		if (_isFunsubChar(ch)) {
 			this._dolbrace_state = saved_dolbrace;
@@ -2352,11 +2279,11 @@ class Lexer {
 }
 
 function _stripLineContinuationsCommentAware(text) {
-	let c, i, in_comment, j, num_preceding_backslashes, quote, result;
-	result = [];
-	i = 0;
-	in_comment = false;
-	quote = new QuoteState();
+	let c, j, num_preceding_backslashes;
+	const result = [];
+	let i = 0;
+	let in_comment = false;
+	const quote = new QuoteState();
 	while (i < text.length) {
 		c = text[i];
 		if (c === "\\" && i + 1 < text.length && text[i + 1] === "\n") {
@@ -2364,8 +2291,8 @@ function _stripLineContinuationsCommentAware(text) {
 			num_preceding_backslashes = 0;
 			j = i - 1;
 			while (j >= 0 && text[j] === "\\") {
-				num_preceding_backslashes += 1;
-				j -= 1;
+				num_preceding_backslashes++;
+				j--;
 			}
 			// If there's an even number of preceding backslashes (including 0),
 			// this backslash escapes the newline (line continuation)
@@ -2384,7 +2311,7 @@ function _stripLineContinuationsCommentAware(text) {
 		if (c === "\n") {
 			in_comment = false;
 			result.push(c);
-			i += 1;
+			i++;
 			continue;
 		}
 		if (c === "'" && !quote.double && !in_comment) {
@@ -2395,16 +2322,16 @@ function _stripLineContinuationsCommentAware(text) {
 			in_comment = true;
 		}
 		result.push(c);
-		i += 1;
+		i++;
 	}
 	return result.join("");
 }
 
 function _appendRedirects(base, redirects) {
-	let parts, r;
-	if (redirects && redirects.length) {
+	let parts;
+	if (redirects?.length) {
 		parts = [];
-		for (r of redirects) {
+		for (let r of redirects) {
 			parts.push(r.toSexp());
 		}
 		return `${base} ${parts.join(" ")}`;
@@ -2423,15 +2350,12 @@ class Word extends Node {
 		super();
 		this.kind = "word";
 		this.value = value;
-		if (parts == null) {
-			parts = [];
-		}
+		parts ??= [];
 		this.parts = parts;
 	}
 
 	toSexp() {
-		let escaped, value;
-		value = this.value;
+		let value = this.value;
 		// Expand ALL $'...' ANSI-C quotes (handles escapes and strips $)
 		value = this._expandAllAnsiCQuotes(value);
 		// Strip $ from locale strings $"..." (quote-aware)
@@ -2456,7 +2380,7 @@ class Word extends Node {
 			value = `${value}\\\\`;
 		}
 		// Escape double quotes, newlines, and tabs
-		escaped = value
+		const escaped = value
 			.replaceAll('"', '\\"')
 			.replaceAll("\n", "\\n")
 			.replaceAll("\t", "\\t");
@@ -2468,10 +2392,10 @@ class Word extends Node {
 	}
 
 	_doubleCtlescSmart(value) {
-		let bs_count, c, j, quote, result;
-		result = [];
-		quote = new QuoteState();
-		for (c of value) {
+		let bs_count;
+		const result = [];
+		const quote = new QuoteState();
+		for (let c of value) {
 			// Track quote state
 			if (c === "'" && !quote.double) {
 				quote.single = !quote.single;
@@ -2484,9 +2408,9 @@ class Word extends Node {
 				// In single quotes, backslashes are literal, so always double CTLESC
 				if (quote.double) {
 					bs_count = 0;
-					for (j = result.length - 2; j > -1; j--) {
+					for (let j = result.length - 2; j > -1; j--) {
 						if (result[j] === "\\") {
-							bs_count += 1;
+							bs_count++;
 						} else {
 							break;
 						}
@@ -2504,21 +2428,21 @@ class Word extends Node {
 	}
 
 	_normalizeParamExpansionNewlines(value) {
-		let c, ch, depth, had_leading_newline, i, quote, result;
-		result = [];
-		i = 0;
-		quote = new QuoteState();
+		let c, ch, depth, had_leading_newline;
+		const result = [];
+		let i = 0;
+		const quote = new QuoteState();
 		while (i < value.length) {
 			c = value[i];
 			// Track quote state
 			if (c === "'" && !quote.double) {
 				quote.single = !quote.single;
 				result.push(c);
-				i += 1;
+				i++;
 			} else if (c === '"' && !quote.single) {
 				quote.double = !quote.double;
 				result.push(c);
-				i += 1;
+				i++;
 			} else if (_isExpansionStart(value, i, "${") && !quote.single) {
 				// Check for ${ param expansion
 				result.push("$");
@@ -2528,7 +2452,7 @@ class Word extends Node {
 				had_leading_newline = i < value.length && value[i] === "\n";
 				if (had_leading_newline) {
 					result.push(" ");
-					i += 1;
+					i++;
 				}
 				// Find matching close brace and process content
 				depth = 1;
@@ -2550,41 +2474,40 @@ class Word extends Node {
 						quote.double = !quote.double;
 					} else if (!quote.inQuotes()) {
 						if (ch === "{") {
-							depth += 1;
+							depth++;
 						} else if (ch === "}") {
-							depth -= 1;
+							depth--;
 							if (depth === 0) {
 								// Add trailing space if we had leading newline
 								if (had_leading_newline) {
 									result.push(" ");
 								}
 								result.push(ch);
-								i += 1;
+								i++;
 								break;
 							}
 						}
 					}
 					result.push(ch);
-					i += 1;
+					i++;
 				}
 			} else {
 				result.push(c);
-				i += 1;
+				i++;
 			}
 		}
 		return result.join("");
 	}
 
 	_shSingleQuote(s) {
-		let c, result;
 		if (!s) {
 			return "''";
 		}
 		if (s === "'") {
 			return "\\'";
 		}
-		result = ["'"];
-		for (c of s) {
+		const result = ["'"];
+		for (let c of s) {
 			if (c === "'") {
 				result.push("'\\''");
 			} else {
@@ -2602,13 +2525,11 @@ class Word extends Node {
 			ctrl_char,
 			ctrl_val,
 			hex_str,
-			i,
 			j,
-			result,
 			simple,
 			skip_extra;
-		result = [];
-		i = 0;
+		const result = [];
+		let i = 0;
 		while (i < inner.length) {
 			if (inner[i] === "\\" && i + 1 < inner.length) {
 				c = inner[i + 1];
@@ -2623,11 +2544,11 @@ class Word extends Node {
 					if (i + 2 < inner.length && inner[i + 2] === "{") {
 						j = i + 3;
 						while (j < inner.length && _isHexDigit(inner[j])) {
-							j += 1;
+							j++;
 						}
 						hex_str = inner.slice(i + 3, j);
 						if (j < inner.length && inner[j] === "}") {
-							j += 1;
+							j++;
 						}
 						if (!hex_str) {
 							return result;
@@ -2641,7 +2562,7 @@ class Word extends Node {
 					} else {
 						j = i + 2;
 						while (j < inner.length && j < i + 4 && _isHexDigit(inner[j])) {
-							j += 1;
+							j++;
 						}
 						if (j > i + 2) {
 							byte_val = parseInt(inner.slice(i + 2, j), 16);
@@ -2652,13 +2573,13 @@ class Word extends Node {
 							i = j;
 						} else {
 							result.push(inner[i].charCodeAt(0));
-							i += 1;
+							i++;
 						}
 					}
 				} else if (c === "u") {
 					j = i + 2;
 					while (j < inner.length && j < i + 6 && _isHexDigit(inner[j])) {
-						j += 1;
+						j++;
 					}
 					if (j > i + 2) {
 						codepoint = parseInt(inner.slice(i + 2, j), 16);
@@ -2666,19 +2587,17 @@ class Word extends Node {
 							return result;
 						}
 						result.push(
-							...Array.from(
-								new TextEncoder().encode(String.fromCodePoint(codepoint)),
-							),
+							...new TextEncoder().encode(String.fromCodePoint(codepoint)),
 						);
 						i = j;
 					} else {
 						result.push(inner[i].charCodeAt(0));
-						i += 1;
+						i++;
 					}
 				} else if (c === "U") {
 					j = i + 2;
 					while (j < inner.length && j < i + 10 && _isHexDigit(inner[j])) {
-						j += 1;
+						j++;
 					}
 					if (j > i + 2) {
 						codepoint = parseInt(inner.slice(i + 2, j), 16);
@@ -2686,14 +2605,12 @@ class Word extends Node {
 							return result;
 						}
 						result.push(
-							...Array.from(
-								new TextEncoder().encode(String.fromCodePoint(codepoint)),
-							),
+							...new TextEncoder().encode(String.fromCodePoint(codepoint)),
 						);
 						i = j;
 					} else {
 						result.push(inner[i].charCodeAt(0));
-						i += 1;
+						i++;
 					}
 				} else if (c === "c") {
 					if (i + 3 <= inner.length) {
@@ -2714,12 +2631,12 @@ class Word extends Node {
 						i += 3 + skip_extra;
 					} else {
 						result.push(inner[i].charCodeAt(0));
-						i += 1;
+						i++;
 					}
 				} else if (c === "0") {
 					j = i + 2;
 					while (j < inner.length && j < i + 4 && _isOctalDigit(inner[j])) {
-						j += 1;
+						j++;
 					}
 					if (j > i + 2) {
 						byte_val = parseInt(inner.slice(i + 1, j), 8) & 255;
@@ -2734,7 +2651,7 @@ class Word extends Node {
 				} else if (c >= "1" && c <= "7") {
 					j = i + 1;
 					while (j < inner.length && j < i + 4 && _isOctalDigit(inner[j])) {
-						j += 1;
+						j++;
 					}
 					byte_val = parseInt(inner.slice(i + 1, j), 8) & 255;
 					if (byte_val === 0) {
@@ -2748,60 +2665,53 @@ class Word extends Node {
 					i += 2;
 				}
 			} else {
-				result.push(...Array.from(new TextEncoder().encode(inner[i])));
-				i += 1;
+				result.push(...new TextEncoder().encode(inner[i]));
+				i++;
 			}
 		}
 		return result;
 	}
 
 	_expandAnsiCEscapes(value) {
-		let inner, literal_bytes, literal_str;
 		if (!(value.startsWith("'") && value.endsWith("'"))) {
 			return value;
 		}
-		inner = value.slice(1, value.length - 1);
-		literal_bytes = this._ansiCToBytes(inner);
-		literal_str = new TextDecoder().decode(new Uint8Array(literal_bytes));
+		const inner = value.slice(1, value.length - 1);
+		const literal_bytes = this._ansiCToBytes(inner);
+		const literal_str = new TextDecoder().decode(new Uint8Array(literal_bytes));
 		return this._shSingleQuote(literal_str);
 	}
 
 	_expandAllAnsiCQuotes(value) {
 		let after_brace,
 			ansi_str,
-			brace_depth,
 			c,
 			ch,
 			effective_in_dquote,
 			expanded,
 			first_char,
-			i,
-			in_backtick,
 			in_pattern,
 			inner,
 			is_ansi_c,
 			j,
 			last_brace_idx,
-			op,
 			op_start,
 			outer_in_dquote,
-			quote,
 			rest,
-			result,
 			result_str,
 			var_name_len;
-		result = [];
-		i = 0;
-		quote = new QuoteState();
-		in_backtick = false;
-		brace_depth = 0;
+		const result = [];
+		let i = 0;
+		const quote = new QuoteState();
+		let in_backtick = false;
+		let brace_depth = 0;
 		while (i < value.length) {
 			ch = value[i];
 			// Track backtick context - don't expand $'...' inside backticks
 			if (ch === "`" && !quote.single) {
 				in_backtick = !in_backtick;
 				result.push(ch);
-				i += 1;
+				i++;
 				continue;
 			}
 			// Inside backticks, just copy everything as-is
@@ -2812,23 +2722,23 @@ class Word extends Node {
 					i += 2;
 				} else {
 					result.push(ch);
-					i += 1;
+					i++;
 				}
 				continue;
 			}
 			// Track brace depth for parameter expansions
 			if (!quote.single) {
 				if (_isExpansionStart(value, i, "${")) {
-					brace_depth += 1;
+					brace_depth++;
 					quote.push();
 					result.push("${");
 					i += 2;
 					continue;
 				} else if (ch === "}" && brace_depth > 0 && !quote.double) {
-					brace_depth -= 1;
+					brace_depth--;
 					result.push(ch);
 					quote.pop();
-					i += 1;
+					i++;
 					continue;
 				}
 			}
@@ -2846,11 +2756,11 @@ class Word extends Node {
 					quote.single = !quote.single;
 				}
 				result.push(ch);
-				i += 1;
+				i++;
 			} else if (ch === '"' && !quote.single) {
 				quote.double = !quote.double;
 				result.push(ch);
-				i += 1;
+				i++;
 			} else if (ch === "\\" && i + 1 < value.length && !quote.single) {
 				// Backslash escape - skip both chars to avoid misinterpreting \" or \'
 				result.push(ch);
@@ -2868,10 +2778,10 @@ class Word extends Node {
 					if (value[j] === "\\" && j + 1 < value.length) {
 						j += 2;
 					} else if (value[j] === "'") {
-						j += 1;
+						j++;
 						break;
 					} else {
-						j += 1;
+						j++;
 					}
 				}
 				// Extract and expand the $'...' sequence
@@ -2888,7 +2798,7 @@ class Word extends Node {
 				) {
 					inner = expanded.slice(1, expanded.length - 1);
 					// Only strip if no CTLESC (empty inner is OK for $'')
-					if (inner.indexOf("") === -1) {
+					if (!inner.includes("")) {
 						// Check if we're in a pattern context (%, %%, #, ##, /, //)
 						// For pattern operators, keep quotes; for others (like ~), strip them
 						result_str = result.join("");
@@ -2914,7 +2824,7 @@ class Word extends Node {
 										if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
 											break;
 										}
-										var_name_len += 1;
+										var_name_len++;
 									}
 								}
 							}
@@ -2930,7 +2840,7 @@ class Word extends Node {
 									op_start = op_start.slice(1);
 								}
 								// Check if it starts with a pattern operator
-								for (op of [
+								for (let op of [
 									"//",
 									"%%",
 									"##",
@@ -2956,7 +2866,7 @@ class Word extends Node {
 									op_start &&
 									!"%#/^,~:+-=?".includes(op_start[0])
 								) {
-									for (op of [
+									for (let op of [
 										"//",
 										"%%",
 										"##",
@@ -2981,7 +2891,7 @@ class Word extends Node {
 								// If first char is not itself a pattern operator, check for pattern ops after it
 								if (!"%#/^,".includes(first_char)) {
 									rest = after_brace.slice(1);
-									for (op of [
+									for (let op of [
 										"//",
 										"%%",
 										"##",
@@ -3010,29 +2920,21 @@ class Word extends Node {
 				i = j;
 			} else {
 				result.push(ch);
-				i += 1;
+				i++;
 			}
 		}
 		return result.join("");
 	}
 
 	_stripLocaleStringDollars(value) {
-		let brace_depth,
-			brace_quote,
-			bracket_depth,
-			bracket_in_double_quote,
-			ch,
-			dollar_count,
-			i,
-			quote,
-			result;
-		result = [];
-		i = 0;
-		brace_depth = 0;
-		bracket_depth = 0;
-		quote = new QuoteState();
-		brace_quote = new QuoteState();
-		bracket_in_double_quote = false;
+		let ch, dollar_count;
+		const result = [];
+		let i = 0;
+		let brace_depth = 0;
+		let bracket_depth = 0;
+		const quote = new QuoteState();
+		const brace_quote = new QuoteState();
+		let bracket_in_double_quote = false;
 		while (i < value.length) {
 			ch = value[i];
 			if (
@@ -3052,7 +2954,7 @@ class Word extends Node {
 				(i === 0 || value[i - 1] !== "$")
 			) {
 				// Don't treat ${ as brace expansion if preceded by $ (it's $$ + literal {)
-				brace_depth += 1;
+				brace_depth++;
 				brace_quote.double = false;
 				brace_quote.single = false;
 				result.push("$");
@@ -3065,9 +2967,9 @@ class Word extends Node {
 				!brace_quote.double &&
 				!brace_quote.single
 			) {
-				brace_depth -= 1;
+				brace_depth--;
 				result.push(ch);
-				i += 1;
+				i++;
 			} else if (
 				ch === "[" &&
 				brace_depth > 0 &&
@@ -3075,10 +2977,10 @@ class Word extends Node {
 				!brace_quote.double
 			) {
 				// Start of subscript inside brace expansion
-				bracket_depth += 1;
+				bracket_depth++;
 				bracket_in_double_quote = false;
 				result.push(ch);
-				i += 1;
+				i++;
 			} else if (
 				ch === "]" &&
 				bracket_depth > 0 &&
@@ -3086,22 +2988,22 @@ class Word extends Node {
 				!bracket_in_double_quote
 			) {
 				// End of subscript
-				bracket_depth -= 1;
+				bracket_depth--;
 				result.push(ch);
-				i += 1;
+				i++;
 			} else if (ch === "'" && !quote.double && brace_depth === 0) {
 				quote.single = !quote.single;
 				result.push(ch);
-				i += 1;
+				i++;
 			} else if (ch === '"' && !quote.single && brace_depth === 0) {
 				quote.double = !quote.double;
 				result.push(ch);
-				i += 1;
+				i++;
 			} else if (ch === '"' && !quote.single && bracket_depth > 0) {
 				// Toggle quote state inside bracket (subscript)
 				bracket_in_double_quote = !bracket_in_double_quote;
 				result.push(ch);
-				i += 1;
+				i++;
 			} else if (
 				ch === '"' &&
 				!quote.single &&
@@ -3111,7 +3013,7 @@ class Word extends Node {
 				// Toggle quote state inside brace expansion
 				brace_quote.double = !brace_quote.double;
 				result.push(ch);
-				i += 1;
+				i++;
 			} else if (
 				ch === "'" &&
 				!quote.double &&
@@ -3121,7 +3023,7 @@ class Word extends Node {
 				// Toggle single quote state inside brace expansion
 				brace_quote.single = !brace_quote.single;
 				result.push(ch);
-				i += 1;
+				i++;
 			} else if (
 				_startsWithAt(value, i, '$"') &&
 				!quote.single &&
@@ -3146,51 +3048,44 @@ class Word extends Node {
 				} else {
 					// Even count: this $ is part of $$ (PID), just append it
 					result.push(ch);
-					i += 1;
+					i++;
 				}
 			} else {
 				result.push(ch);
-				i += 1;
+				i++;
 			}
 		}
 		return result.join("");
 	}
 
 	_normalizeArrayWhitespace(value) {
-		let close_paren_pos,
-			depth,
-			i,
-			inner,
-			open_paren_pos,
-			prefix,
-			result,
-			suffix;
+		let close_paren_pos, depth;
 		// Match array assignment pattern: name=( or name+=( or name[sub]=( or name[sub]+=(
 		// Parse identifier: starts with letter/underscore, then alnum/underscore
-		i = 0;
+		let i = 0;
 		if (
 			!(i < value.length && (/^[a-zA-Z]$/.test(value[i]) || value[i] === "_"))
 		) {
 			return value;
 		}
-		i += 1;
+		i++;
 		while (
 			i < value.length &&
 			(/^[a-zA-Z0-9]$/.test(value[i]) || value[i] === "_")
 		) {
-			i += 1;
+			i++;
 		}
 		// Optional subscript(s): [...]
 		while (i < value.length && value[i] === "[") {
 			depth = 1;
-			i += 1;
+			i++;
 			while (i < value.length && depth > 0) {
 				if (value[i] === "[") {
-					depth += 1;
+					depth++;
 				} else if (value[i] === "]") {
-					depth -= 1;
+					depth--;
 				}
-				i += 1;
+				i++;
 			}
 			if (depth !== 0) {
 				return value;
@@ -3198,14 +3093,14 @@ class Word extends Node {
 		}
 		// Optional + for +=
 		if (i < value.length && value[i] === "+") {
-			i += 1;
+			i++;
 		}
 		// Must have =(
 		if (!(i + 1 < value.length && value[i] === "=" && value[i + 1] === "(")) {
 			return value;
 		}
-		prefix = value.slice(0, i + 1);
-		open_paren_pos = i + 1;
+		const prefix = value.slice(0, i + 1);
+		const open_paren_pos = i + 1;
 		// Find matching closing paren
 		if (value.endsWith(")")) {
 			close_paren_pos = value.length - 1;
@@ -3216,20 +3111,20 @@ class Word extends Node {
 			}
 		}
 		// Extract content inside parentheses
-		inner = value.slice(open_paren_pos + 1, close_paren_pos);
-		suffix = value.slice(close_paren_pos + 1, value.length);
-		result = this._normalizeArrayInner(inner);
+		const inner = value.slice(open_paren_pos + 1, close_paren_pos);
+		const suffix = value.slice(close_paren_pos + 1, value.length);
+		const result = this._normalizeArrayInner(inner);
 		return `${prefix}(${result})${suffix}`;
 	}
 
 	_findMatchingParen(value, open_pos) {
-		let ch, depth, i, quote;
+		let ch;
 		if (open_pos >= value.length || value[open_pos] !== "(") {
 			return -1;
 		}
-		i = open_pos + 1;
-		depth = 1;
-		quote = new QuoteState();
+		let i = open_pos + 1;
+		let depth = 1;
+		const quote = new QuoteState();
 		while (i < value.length && depth > 0) {
 			ch = value[i];
 			// Handle escapes (only meaningful outside single quotes)
@@ -3240,56 +3135,47 @@ class Word extends Node {
 			// Track quote state
 			if (ch === "'" && !quote.double) {
 				quote.single = !quote.single;
-				i += 1;
+				i++;
 				continue;
 			}
 			if (ch === '"' && !quote.single) {
 				quote.double = !quote.double;
-				i += 1;
+				i++;
 				continue;
 			}
 			// Skip content inside quotes
 			if (quote.single || quote.double) {
-				i += 1;
+				i++;
 				continue;
 			}
 			// Handle comments (only outside quotes)
 			if (ch === "#") {
 				while (i < value.length && value[i] !== "\n") {
-					i += 1;
+					i++;
 				}
 				continue;
 			}
 			// Track paren depth
 			if (ch === "(") {
-				depth += 1;
+				depth++;
 			} else if (ch === ")") {
-				depth -= 1;
+				depth--;
 				if (depth === 0) {
 					return i;
 				}
 			}
-			i += 1;
+			i++;
 		}
 		return -1;
 	}
 
 	_normalizeArrayInner(inner) {
-		let brace_depth,
-			bracket_depth,
-			ch,
-			depth,
-			dq_brace_depth,
-			dq_content,
-			i,
-			in_whitespace,
-			j,
-			normalized;
-		normalized = [];
-		i = 0;
-		in_whitespace = true;
-		brace_depth = 0;
-		bracket_depth = 0;
+		let ch, depth, dq_brace_depth, dq_content, j;
+		const normalized = [];
+		let i = 0;
+		let in_whitespace = true;
+		let brace_depth = 0;
+		let bracket_depth = 0;
 		while (i < inner.length) {
 			ch = inner[i];
 			if (_isWhitespace(ch)) {
@@ -3305,13 +3191,13 @@ class Word extends Node {
 				if (brace_depth > 0 || bracket_depth > 0) {
 					normalized.push(ch);
 				}
-				i += 1;
+				i++;
 			} else if (ch === "'") {
 				// Single-quoted string - preserve as-is
 				in_whitespace = false;
 				j = i + 1;
 				while (j < inner.length && inner[j] !== "'") {
-					j += 1;
+					j++;
 				}
 				normalized.push(inner.slice(i, j + 1));
 				i = j + 1;
@@ -3335,20 +3221,20 @@ class Word extends Node {
 					} else if (_isExpansionStart(inner, j, "${")) {
 						// Start of ${...} expansion
 						dq_content.push("${");
-						dq_brace_depth += 1;
+						dq_brace_depth++;
 						j += 2;
 					} else if (inner[j] === "}" && dq_brace_depth > 0) {
 						// End of ${...} expansion
 						dq_content.push("}");
-						dq_brace_depth -= 1;
-						j += 1;
+						dq_brace_depth--;
+						j++;
 					} else if (inner[j] === '"' && dq_brace_depth === 0) {
 						dq_content.push('"');
-						j += 1;
+						j++;
 						break;
 					} else {
 						dq_content.push(inner[j]);
-						j += 1;
+						j++;
 					}
 				}
 				normalized.push(dq_content.join(""));
@@ -3374,17 +3260,17 @@ class Word extends Node {
 						inner[j] === "(" &&
 						inner[j + 1] === "("
 					) {
-						depth += 1;
+						depth++;
 						j += 2;
 					} else if (
 						j + 1 < inner.length &&
 						inner[j] === ")" &&
 						inner[j + 1] === ")"
 					) {
-						depth -= 1;
+						depth--;
 						j += 2;
 					} else {
-						j += 1;
+						j++;
 					}
 				}
 				normalized.push(inner.slice(i, j));
@@ -3397,16 +3283,16 @@ class Word extends Node {
 				depth = 1;
 				while (j < inner.length && depth > 0) {
 					if (inner[j] === "(" && j > 0 && inner[j - 1] === "$") {
-						depth += 1;
+						depth++;
 					} else if (inner[j] === ")") {
-						depth -= 1;
+						depth--;
 					} else if (inner[j] === "'") {
-						j += 1;
+						j++;
 						while (j < inner.length && inner[j] !== "'") {
-							j += 1;
+							j++;
 						}
 					} else if (inner[j] === '"') {
-						j += 1;
+						j++;
 						while (j < inner.length) {
 							if (inner[j] === "\\" && j + 1 < inner.length) {
 								j += 2;
@@ -3415,10 +3301,10 @@ class Word extends Node {
 							if (inner[j] === '"') {
 								break;
 							}
-							j += 1;
+							j++;
 						}
 					}
-					j += 1;
+					j++;
 				}
 				// Preserve command substitution as-is
 				normalized.push(inner.slice(i, j));
@@ -3435,16 +3321,16 @@ class Word extends Node {
 				depth = 1;
 				while (j < inner.length && depth > 0) {
 					if (inner[j] === "(") {
-						depth += 1;
+						depth++;
 					} else if (inner[j] === ")") {
-						depth -= 1;
+						depth--;
 					} else if (inner[j] === "'") {
-						j += 1;
+						j++;
 						while (j < inner.length && inner[j] !== "'") {
-							j += 1;
+							j++;
 						}
 					} else if (inner[j] === '"') {
-						j += 1;
+						j++;
 						while (j < inner.length) {
 							if (inner[j] === "\\" && j + 1 < inner.length) {
 								j += 2;
@@ -3453,10 +3339,10 @@ class Word extends Node {
 							if (inner[j] === '"') {
 								break;
 							}
-							j += 1;
+							j++;
 						}
 					}
-					j += 1;
+					j++;
 				}
 				// Preserve process substitution as-is
 				normalized.push(inner.slice(i, j));
@@ -3465,42 +3351,42 @@ class Word extends Node {
 				// Start of ${...} expansion
 				in_whitespace = false;
 				normalized.push("${");
-				brace_depth += 1;
+				brace_depth++;
 				i += 2;
 			} else if (ch === "{" && brace_depth > 0) {
 				// Nested brace inside expansion
 				normalized.push(ch);
-				brace_depth += 1;
-				i += 1;
+				brace_depth++;
+				i++;
 			} else if (ch === "}" && brace_depth > 0) {
 				// End of expansion
 				normalized.push(ch);
-				brace_depth -= 1;
-				i += 1;
+				brace_depth--;
+				i++;
 			} else if (ch === "#" && brace_depth === 0 && in_whitespace) {
 				// Comment - skip to end of line (only at top level, start of word)
 				while (i < inner.length && inner[i] !== "\n") {
-					i += 1;
+					i++;
 				}
 			} else if (ch === "[") {
 				// Only start subscript tracking if at word start (for [key]=val patterns)
 				// Mid-word [ like a[ is literal, not a subscript
 				// But if already inside brackets, track nested brackets
 				if (in_whitespace || bracket_depth > 0) {
-					bracket_depth += 1;
+					bracket_depth++;
 				}
 				in_whitespace = false;
 				normalized.push(ch);
-				i += 1;
+				i++;
 			} else if (ch === "]" && bracket_depth > 0) {
 				// End of subscript
 				normalized.push(ch);
-				bracket_depth -= 1;
-				i += 1;
+				bracket_depth--;
+				i++;
 			} else {
 				in_whitespace = false;
 				normalized.push(ch);
-				i += 1;
+				i++;
 			}
 		}
 		// Strip trailing whitespace
@@ -3513,13 +3399,11 @@ class Word extends Node {
 			content,
 			depth,
 			first_close_idx,
-			i,
 			j,
 			num_backslashes,
-			result,
 			start;
-		result = [];
-		i = 0;
+		const result = [];
+		let i = 0;
 		while (i < value.length) {
 			// Check for $(( arithmetic expression
 			if (_isExpansionStart(value, i, "$((")) {
@@ -3532,8 +3416,8 @@ class Word extends Node {
 				while (i < value.length && depth > 0) {
 					if (value[i] === "(") {
 						arith_content.push("(");
-						depth += 1;
-						i += 1;
+						depth++;
+						i++;
 						if (depth > 1) {
 							first_close_idx = null;
 						}
@@ -3541,11 +3425,11 @@ class Word extends Node {
 						if (depth === 2) {
 							first_close_idx = arith_content.length;
 						}
-						depth -= 1;
+						depth--;
 						if (depth > 0) {
 							arith_content.push(")");
 						}
-						i += 1;
+						i++;
 					} else if (
 						value[i] === "\\" &&
 						i + 1 < value.length &&
@@ -3556,11 +3440,11 @@ class Word extends Node {
 						j = arith_content.length - 1;
 						// Skip trailing newlines before counting backslashes
 						while (j >= 0 && arith_content[j] === "\n") {
-							j -= 1;
+							j--;
 						}
 						while (j >= 0 && arith_content[j] === "\\") {
-							num_backslashes += 1;
-							j -= 1;
+							num_backslashes++;
+							j--;
 						}
 						// If odd number of preceding backslashes, this backslash is escaped
 						if (num_backslashes % 2 === 1) {
@@ -3576,7 +3460,7 @@ class Word extends Node {
 						}
 					} else {
 						arith_content.push(value[i]);
-						i += 1;
+						i++;
 						if (depth === 1) {
 							first_close_idx = null;
 						}
@@ -3601,36 +3485,24 @@ class Word extends Node {
 				}
 			} else {
 				result.push(value[i]);
-				i += 1;
+				i++;
 			}
 		}
 		return result.join("");
 	}
 
 	_collectCmdsubs(node) {
-		let condition,
-			elem,
-			elements,
-			expr,
-			false_value,
-			left,
-			node_kind,
-			operand,
-			p,
-			parts,
-			result,
-			right,
-			true_value;
-		result = [];
-		node_kind = node.kind ?? null;
+		let elements, expr, parts;
+		const result = [];
+		const node_kind = node.kind ?? null;
 		if (node_kind === "cmdsub") {
 			result.push(node);
 		} else if (node_kind === "array") {
 			// Array node - collect from each element's parts
 			elements = node.elements ?? [];
-			for (elem of elements) {
+			for (let elem of elements) {
 				parts = elem.parts ?? [];
-				for (p of parts) {
+				for (let p of parts) {
 					if ((p.kind ?? null) === "cmdsub") {
 						result.push(p);
 					} else {
@@ -3645,27 +3517,27 @@ class Word extends Node {
 				result.push(...this._collectCmdsubs(expr));
 			}
 		}
-		left = node.left ?? null;
+		const left = node.left ?? null;
 		if (left != null) {
 			result.push(...this._collectCmdsubs(left));
 		}
-		right = node.right ?? null;
+		const right = node.right ?? null;
 		if (right != null) {
 			result.push(...this._collectCmdsubs(right));
 		}
-		operand = node.operand ?? null;
+		const operand = node.operand ?? null;
 		if (operand != null) {
 			result.push(...this._collectCmdsubs(operand));
 		}
-		condition = node.condition ?? null;
+		const condition = node.condition ?? null;
 		if (condition != null) {
 			result.push(...this._collectCmdsubs(condition));
 		}
-		true_value = node.true_value ?? null;
+		const true_value = node.true_value ?? null;
 		if (true_value != null) {
 			result.push(...this._collectCmdsubs(true_value));
 		}
-		false_value = node.false_value ?? null;
+		const false_value = node.false_value ?? null;
 		if (false_value != null) {
 			result.push(...this._collectCmdsubs(false_value));
 		}
@@ -3673,16 +3545,16 @@ class Word extends Node {
 	}
 
 	_collectProcsubs(node) {
-		let elem, elements, node_kind, p, parts, result;
-		result = [];
-		node_kind = node.kind ?? null;
+		let elements, parts;
+		const result = [];
+		const node_kind = node.kind ?? null;
 		if (node_kind === "procsub") {
 			result.push(node);
 		} else if (node_kind === "array") {
 			elements = node.elements ?? [];
-			for (elem of elements) {
+			for (let elem of elements) {
 				parts = elem.parts ?? [];
-				for (p of parts) {
+				for (let p of parts) {
 					if ((p.kind ?? null) === "procsub") {
 						result.push(p);
 					} else {
@@ -3694,61 +3566,39 @@ class Word extends Node {
 		return result;
 	}
 
-	_formatCommandSubstitutions(value, in_arith) {
-		let arith_depth,
-			arith_paren_depth,
-			brace_quote,
+	_formatCommandSubstitutions(value, in_arith = false) {
+		let brace_quote,
 			c,
-			cmdsub_idx,
-			cmdsub_parts,
 			compact,
-			deprecated_arith_depth,
 			depth,
 			direction,
 			ends_with_newline,
-			extglob_depth,
 			final_output,
 			formatted,
 			formatted_inner,
-			has_arith,
-			has_brace_cmdsub,
-			has_param_with_procsub_pattern,
 			has_pipe,
-			has_untracked_cmdsub,
-			has_untracked_procsub,
-			i,
-			idx,
 			inner,
 			is_procsub,
 			j,
 			leading_ws,
 			leading_ws_end,
-			main_quote,
 			node,
 			normalized_ws,
 			orig_inner,
-			p,
 			parsed,
 			parser,
 			prefix,
-			procsub_idx,
-			procsub_parts,
 			raw_content,
 			raw_stripped,
-			result,
-			scan_quote,
 			spaced,
 			stripped,
 			suffix,
 			terminator;
-		if (in_arith == null) {
-			in_arith = false;
-		}
 		// Collect command substitutions from all parts, including nested ones
-		cmdsub_parts = [];
-		procsub_parts = [];
-		has_arith = false;
-		for (p of this.parts) {
+		const cmdsub_parts = [];
+		const procsub_parts = [];
+		let has_arith = false;
+		for (let p of this.parts) {
 			if (p.kind === "cmdsub") {
 				cmdsub_parts.push(p);
 			} else if (p.kind === "procsub") {
@@ -3761,29 +3611,29 @@ class Word extends Node {
 			}
 		}
 		// Check if we have ${ or ${| brace command substitutions to format
-		has_brace_cmdsub =
-			value.indexOf("${ ") !== -1 ||
-			value.indexOf("${\t") !== -1 ||
-			value.indexOf("${\n") !== -1 ||
-			value.indexOf("${|") !== -1;
+		const has_brace_cmdsub =
+			value.includes("${ ") ||
+			value.includes("${\t") ||
+			value.includes("${\n") ||
+			value.includes("${|");
 		// Check if there's an untracked $( that isn't $((, skipping over quotes only
-		has_untracked_cmdsub = false;
-		has_untracked_procsub = false;
-		idx = 0;
-		scan_quote = new QuoteState();
+		let has_untracked_cmdsub = false;
+		let has_untracked_procsub = false;
+		let idx = 0;
+		const scan_quote = new QuoteState();
 		while (idx < value.length) {
 			if (value[idx] === '"') {
 				scan_quote.double = !scan_quote.double;
-				idx += 1;
+				idx++;
 			} else if (value[idx] === "'" && !scan_quote.double) {
 				// Skip over single-quoted string (contents are literal)
 				// But only when not inside double quotes
-				idx += 1;
+				idx++;
 				while (idx < value.length && value[idx] !== "'") {
-					idx += 1;
+					idx++;
 				}
 				if (idx < value.length) {
-					idx += 1;
+					idx++;
 				}
 			} else if (
 				_startsWithAt(value, idx, "$(") &&
@@ -3808,13 +3658,13 @@ class Word extends Node {
 					has_untracked_procsub = true;
 					break;
 				}
-				idx += 1;
+				idx++;
 			} else {
-				idx += 1;
+				idx++;
 			}
 		}
 		// Check if ${...} contains <( or >( patterns that need normalization
-		has_param_with_procsub_pattern =
+		const has_param_with_procsub_pattern =
 			value.includes("${") && (value.includes("<(") || value.includes(">("));
 		if (
 			cmdsub_parts.length === 0 &&
@@ -3826,15 +3676,15 @@ class Word extends Node {
 		) {
 			return value;
 		}
-		result = [];
-		i = 0;
-		cmdsub_idx = 0;
-		procsub_idx = 0;
-		main_quote = new QuoteState();
-		extglob_depth = 0;
-		deprecated_arith_depth = 0;
-		arith_depth = 0;
-		arith_paren_depth = 0;
+		const result = [];
+		let i = 0;
+		let cmdsub_idx = 0;
+		let procsub_idx = 0;
+		const main_quote = new QuoteState();
+		let extglob_depth = 0;
+		let deprecated_arith_depth = 0;
+		let arith_depth = 0;
+		let arith_paren_depth = 0;
 		while (i < value.length) {
 			// Check for extglob start: @( ?( *( +( !(
 			if (
@@ -3843,29 +3693,29 @@ class Word extends Node {
 				value[i] === "(" &&
 				!_isBackslashEscaped(value, i - 1)
 			) {
-				extglob_depth += 1;
+				extglob_depth++;
 				result.push(value[i]);
-				i += 1;
+				i++;
 				continue;
 			}
 			// Track ) that closes extglob (but not inside cmdsub/procsub)
 			if (value[i] === ")" && extglob_depth > 0) {
-				extglob_depth -= 1;
+				extglob_depth--;
 				result.push(value[i]);
-				i += 1;
+				i++;
 				continue;
 			}
 			// Track deprecated arithmetic $[...] - inside it, >( and <( are not procsub
 			if (_startsWithAt(value, i, "$[") && !_isBackslashEscaped(value, i)) {
-				deprecated_arith_depth += 1;
+				deprecated_arith_depth++;
 				result.push(value[i]);
-				i += 1;
+				i++;
 				continue;
 			}
 			if (value[i] === "]" && deprecated_arith_depth > 0) {
-				deprecated_arith_depth -= 1;
+				deprecated_arith_depth--;
 				result.push(value[i]);
-				i += 1;
+				i++;
 				continue;
 			}
 			// Track $((...)) arithmetic - inside it, >( and <( are not process subs
@@ -3875,7 +3725,7 @@ class Word extends Node {
 				!_isBackslashEscaped(value, i) &&
 				has_arith
 			) {
-				arith_depth += 1;
+				arith_depth++;
 				arith_paren_depth += 2;
 				result.push("$((");
 				i += 3;
@@ -3887,7 +3737,7 @@ class Word extends Node {
 				arith_paren_depth === 2 &&
 				_startsWithAt(value, i, "))")
 			) {
-				arith_depth -= 1;
+				arith_depth--;
 				arith_paren_depth -= 2;
 				result.push("))");
 				i += 2;
@@ -3896,14 +3746,14 @@ class Word extends Node {
 			// Track ( and ) inside arithmetic
 			if (arith_depth > 0) {
 				if (value[i] === "(") {
-					arith_paren_depth += 1;
+					arith_paren_depth++;
 					result.push(value[i]);
-					i += 1;
+					i++;
 					continue;
 				} else if (value[i] === ")") {
-					arith_paren_depth -= 1;
+					arith_paren_depth--;
 					result.push(value[i]);
-					i += 1;
+					i++;
 					continue;
 				}
 			}
@@ -3915,7 +3765,7 @@ class Word extends Node {
 				j = _findCmdsubEnd(value, i + 2);
 				result.push(value.slice(i, j));
 				if (cmdsub_idx < cmdsub_parts.length) {
-					cmdsub_idx += 1;
+					cmdsub_idx++;
 				}
 				i = j;
 				continue;
@@ -3933,7 +3783,7 @@ class Word extends Node {
 				if (extglob_depth > 0) {
 					result.push(value.slice(i, j));
 					if (cmdsub_idx < cmdsub_parts.length) {
-						cmdsub_idx += 1;
+						cmdsub_idx++;
 					}
 					i = j;
 					continue;
@@ -3944,7 +3794,7 @@ class Word extends Node {
 					// Have parsed AST node - use it (} is preserved in AST)
 					node = cmdsub_parts[cmdsub_idx];
 					formatted = _formatCmdsubNode(node.command);
-					cmdsub_idx += 1;
+					cmdsub_idx++;
 				} else {
 					// No AST node (e.g., inside arithmetic) - parse content on the fly
 					try {
@@ -3972,14 +3822,14 @@ class Word extends Node {
 						continue;
 					}
 					if (value[j] === "`") {
-						j += 1;
+						j++;
 						break;
 					}
-					j += 1;
+					j++;
 				}
 				// Keep backtick substitutions as-is (bash-oracle doesn't reformat them)
 				result.push(value.slice(i, j));
-				cmdsub_idx += 1;
+				cmdsub_idx++;
 				i = j;
 			} else if (
 				_isExpansionStart(value, i, "${") &&
@@ -4018,7 +3868,7 @@ class Word extends Node {
 						suffix = "; }";
 					}
 					result.push(prefix + formatted + suffix);
-					cmdsub_idx += 1;
+					cmdsub_idx++;
 				} else {
 					// No parsed node, keep as-is
 					result.push(value.slice(i, j));
@@ -4042,7 +3892,7 @@ class Word extends Node {
 					j = _findCmdsubEnd(value, i + 2);
 					result.push(value.slice(i, j));
 					if (procsub_idx < procsub_parts.length) {
-						procsub_idx += 1;
+						procsub_idx++;
 					}
 					i = j;
 					continue;
@@ -4062,7 +3912,7 @@ class Word extends Node {
 							leading_ws_end < raw_content.length &&
 							" \t\n".includes(raw_content[leading_ws_end])
 						) {
-							leading_ws_end += 1;
+							leading_ws_end++;
 						}
 						leading_ws = raw_content.slice(0, leading_ws_end);
 						stripped = raw_content.slice(leading_ws_end);
@@ -4079,7 +3929,7 @@ class Word extends Node {
 								raw_content = raw_content.replaceAll("\\\n", "");
 								result.push(`${direction}(${raw_content})`);
 							}
-							procsub_idx += 1;
+							procsub_idx++;
 							i = j;
 							continue;
 						}
@@ -4096,7 +3946,7 @@ class Word extends Node {
 						final_output = `${direction}(${formatted})`;
 						result.push(final_output);
 					}
-					procsub_idx += 1;
+					procsub_idx++;
 					i = j;
 				} else if (is_procsub && this.parts.length) {
 					// No AST node but valid procsub context - parse content on the fly
@@ -4108,7 +3958,7 @@ class Word extends Node {
 						(j > 0 && j <= value.length && value[j - 1] !== ")")
 					) {
 						result.push(value[i]);
-						i += 1;
+						i++;
 						continue;
 					}
 					inner = value.slice(i + 2, j - 1);
@@ -4142,7 +3992,7 @@ class Word extends Node {
 					) {
 						// Couldn't find closing paren, treat as literal
 						result.push(value[i]);
-						i += 1;
+						i++;
 						continue;
 					}
 					inner = value.slice(i + 2, j - 1);
@@ -4159,7 +4009,7 @@ class Word extends Node {
 				} else {
 					// Not a process substitution (e.g., arithmetic comparison)
 					result.push(value[i]);
-					i += 1;
+					i++;
 				}
 			} else if (
 				(_isExpansionStart(value, i, "${ ") ||
@@ -4179,11 +4029,11 @@ class Word extends Node {
 				depth = 1;
 				while (j < value.length && depth > 0) {
 					if (value[j] === "{") {
-						depth += 1;
+						depth++;
 					} else if (value[j] === "}") {
-						depth -= 1;
+						depth--;
 					}
-					j += 1;
+					j++;
 				}
 				// Parse and format the inner content
 				inner = value.slice(i + 2, j - 1);
@@ -4244,12 +4094,12 @@ class Word extends Node {
 							continue;
 						}
 						if (c === "{") {
-							depth += 1;
+							depth++;
 						} else if (c === "}") {
-							depth -= 1;
+							depth--;
 						}
 					}
-					j += 1;
+					j++;
 				}
 				// Recursively format any cmdsubs inside the param expansion
 				// When depth > 0 (unclosed ${), include all remaining chars
@@ -4273,61 +4123,52 @@ class Word extends Node {
 				// Track double-quote state (single quotes inside double quotes are literal)
 				main_quote.double = !main_quote.double;
 				result.push(value[i]);
-				i += 1;
+				i++;
 			} else if (value[i] === "'" && !main_quote.double) {
 				// Skip single-quoted strings (contents are literal, don't look for cmdsubs)
 				// But only when NOT inside double quotes (where single quotes are literal)
 				j = i + 1;
 				while (j < value.length && value[j] !== "'") {
-					j += 1;
+					j++;
 				}
 				if (j < value.length) {
-					j += 1;
+					j++;
 				}
 				result.push(value.slice(i, j));
 				i = j;
 			} else {
 				result.push(value[i]);
-				i += 1;
+				i++;
 			}
 		}
 		return result.join("");
 	}
 
 	_normalizeExtglobWhitespace(value) {
-		let current_part,
-			deprecated_arith_depth,
-			depth,
-			extglob_quote,
-			has_pipe,
-			i,
-			part_content,
-			pattern_parts,
-			prefix_char,
-			result;
-		result = [];
-		i = 0;
-		extglob_quote = new QuoteState();
-		deprecated_arith_depth = 0;
+		let current_part, depth, has_pipe, part_content, pattern_parts, prefix_char;
+		const result = [];
+		let i = 0;
+		const extglob_quote = new QuoteState();
+		let deprecated_arith_depth = 0;
 		while (i < value.length) {
 			// Track double-quote state
 			if (value[i] === '"') {
 				extglob_quote.double = !extglob_quote.double;
 				result.push(value[i]);
-				i += 1;
+				i++;
 				continue;
 			}
 			// Track deprecated arithmetic $[...] - inside it, >( and <( are not procsub
 			if (_startsWithAt(value, i, "$[") && !_isBackslashEscaped(value, i)) {
-				deprecated_arith_depth += 1;
+				deprecated_arith_depth++;
 				result.push(value[i]);
-				i += 1;
+				i++;
 				continue;
 			}
 			if (value[i] === "]" && deprecated_arith_depth > 0) {
-				deprecated_arith_depth -= 1;
+				deprecated_arith_depth--;
 				result.push(value[i]);
-				i += 1;
+				i++;
 				continue;
 			}
 			// Check for >( or <( pattern (process substitution-like in regex)
@@ -4355,11 +4196,11 @@ class Word extends Node {
 							i += 2;
 							continue;
 						} else if (value[i] === "(") {
-							depth += 1;
+							depth++;
 							current_part.push(value[i]);
-							i += 1;
+							i++;
 						} else if (value[i] === ")") {
-							depth -= 1;
+							depth--;
 							if (depth === 0) {
 								// End of pattern
 								part_content = current_part.join("");
@@ -4374,7 +4215,7 @@ class Word extends Node {
 								break;
 							}
 							current_part.push(value[i]);
-							i += 1;
+							i++;
 						} else if (value[i] === "|" && depth === 1) {
 							// Check for || (OR operator) - keep as single token
 							if (i + 1 < value.length && value[i + 1] === "|") {
@@ -4391,11 +4232,11 @@ class Word extends Node {
 									pattern_parts.push(part_content.trim());
 								}
 								current_part = [];
-								i += 1;
+								i++;
 							}
 						} else {
 							current_part.push(value[i]);
-							i += 1;
+							i++;
 						}
 					}
 					// Join parts with " | "
@@ -4403,21 +4244,20 @@ class Word extends Node {
 					// Only append closing ) if we found one (depth == 0)
 					if (depth === 0) {
 						result.push(")");
-						i += 1;
+						i++;
 					}
 					continue;
 				}
 			}
 			result.push(value[i]);
-			i += 1;
+			i++;
 		}
 		return result.join("");
 	}
 
 	getCondFormattedValue() {
-		let value;
 		// Expand ANSI-C quotes
-		value = this._expandAllAnsiCQuotes(this.value);
+		let value = this._expandAllAnsiCQuotes(this.value);
 		// Strip $ from locale strings $"..."
 		value = this._stripLocaleStringDollars(value);
 		// Format command substitutions
@@ -4435,22 +4275,19 @@ class Command extends Node {
 		super();
 		this.kind = "command";
 		this.words = words;
-		if (redirects == null) {
-			redirects = [];
-		}
+		redirects ??= [];
 		this.redirects = redirects;
 	}
 
 	toSexp() {
-		let inner, parts, r, w;
-		parts = [];
-		for (w of this.words) {
+		const parts = [];
+		for (let w of this.words) {
 			parts.push(w.toSexp());
 		}
-		for (r of this.redirects) {
+		for (let r of this.redirects) {
 			parts.push(r.toSexp());
 		}
-		inner = parts.join(" ");
+		const inner = parts.join(" ");
 		if (!inner) {
 			return "(command)";
 		}
@@ -4466,27 +4303,17 @@ class Pipeline extends Node {
 	}
 
 	toSexp() {
-		let cmd,
-			cmds,
-			i,
-			j,
-			last_cmd,
-			last_needs,
-			last_pair,
-			needs,
-			needs_redirect,
-			pair,
-			result;
+		let cmd, needs, needs_redirect, pair;
 		if (this.commands.length === 1) {
 			return this.commands[0].toSexp();
 		}
 		// Build list of (cmd, needs_pipe_both_redirect) filtering out PipeBoth markers
-		cmds = [];
-		i = 0;
+		const cmds = [];
+		let i = 0;
 		while (i < this.commands.length) {
 			cmd = this.commands[i];
 			if (cmd.kind === "pipe-both") {
-				i += 1;
+				i++;
 				continue;
 			}
 			// Check if next element is PipeBoth
@@ -4494,7 +4321,7 @@ class Pipeline extends Node {
 				i + 1 < this.commands.length &&
 				this.commands[i + 1].kind === "pipe-both";
 			cmds.push([cmd, needs_redirect]);
-			i += 1;
+			i++;
 		}
 		if (cmds.length === 1) {
 			pair = cmds[0];
@@ -4503,11 +4330,11 @@ class Pipeline extends Node {
 			return this._cmdSexp(cmd, needs);
 		}
 		// Nest right-associatively: (pipe a (pipe b c))
-		last_pair = cmds[cmds.length - 1];
-		last_cmd = last_pair[0];
-		last_needs = last_pair[1];
-		result = this._cmdSexp(last_cmd, last_needs);
-		j = cmds.length - 2;
+		const last_pair = cmds.at(-1);
+		const last_cmd = last_pair[0];
+		const last_needs = last_pair[1];
+		let result = this._cmdSexp(last_cmd, last_needs);
+		let j = cmds.length - 2;
 		while (j >= 0) {
 			pair = cmds[j];
 			cmd = pair[0];
@@ -4518,23 +4345,23 @@ class Pipeline extends Node {
 			} else {
 				result = `(pipe ${this._cmdSexp(cmd, needs)} ${result})`;
 			}
-			j -= 1;
+			j--;
 		}
 		return result;
 	}
 
 	_cmdSexp(cmd, needs_redirect) {
-		let parts, r, w;
+		let parts;
 		if (!needs_redirect) {
 			return cmd.toSexp();
 		}
 		if (cmd.kind === "command") {
 			// Inject redirect inside command
 			parts = [];
-			for (w of cmd.words) {
+			for (let w of cmd.words) {
 				parts.push(w.toSexp());
 			}
-			for (r of cmd.redirects) {
+			for (let r of cmd.redirects) {
 				parts.push(r.toSexp());
 			}
 			parts.push('(redirect ">&" 1)');
@@ -4553,19 +4380,11 @@ class List extends Node {
 	}
 
 	toSexp() {
-		let i,
-			inner_list,
-			inner_parts,
-			left,
-			left_sexp,
-			op_names,
-			parts,
-			right,
-			right_sexp;
+		let inner_list, inner_parts, left, left_sexp, right, right_sexp;
 		// parts = [cmd, op, cmd, op, cmd, ...]
 		// Bash precedence: && and || bind tighter than ; and &
-		parts = Array.from(this.parts);
-		op_names = {
+		let parts = [...this.parts];
+		const op_names = {
 			"&&": "and",
 			"||": "or",
 			";": "semi",
@@ -4575,9 +4394,8 @@ class List extends Node {
 		// Strip trailing ; or \n (bash ignores it)
 		while (
 			parts.length > 1 &&
-			parts[parts.length - 1].kind === "operator" &&
-			(parts[parts.length - 1].op === ";" ||
-				parts[parts.length - 1].op === "\n")
+			parts.at(-1).kind === "operator" &&
+			(parts.at(-1).op === ";" || parts.at(-1).op === "\n")
 		) {
 			parts = parts.slice(0, parts.length - 1);
 		}
@@ -4586,12 +4404,9 @@ class List extends Node {
 		}
 		// Handle trailing & as unary background operator
 		// & only applies to the immediately preceding pipeline, not the whole list
-		if (
-			parts[parts.length - 1].kind === "operator" &&
-			parts[parts.length - 1].op === "&"
-		) {
+		if (parts.at(-1).kind === "operator" && parts.at(-1).op === "&") {
 			// Find rightmost ; or \n to split there
-			for (i = parts.length - 3; i > 0; i--) {
+			for (let i = parts.length - 3; i > 0; i--) {
 				if (
 					parts[i].kind === "operator" &&
 					(parts[i].op === ";" || parts[i].op === "\n")
@@ -4624,12 +4439,12 @@ class List extends Node {
 	}
 
 	_toSexpWithPrecedence(parts, op_names) {
-		let i, pos, result, seg, segments, semi_positions, start;
+		let result, seg, segments, start;
 		// Process operators by precedence: ; (lowest), then &, then && and ||
 		// Use iterative approach to avoid stack overflow on large lists
 		// Find all ; or \n positions (may not be at regular intervals due to consecutive ops)
-		semi_positions = [];
-		for (i = 0; i < parts.length; i++) {
+		const semi_positions = [];
+		for (let i = 0; i < parts.length; i++) {
 			if (
 				parts[i].kind === "operator" &&
 				(parts[i].op === ";" || parts[i].op === "\n")
@@ -4641,7 +4456,7 @@ class List extends Node {
 			// Split into segments at ; and \n positions, filtering empty/operator-only segments
 			segments = [];
 			start = 0;
-			for (pos of semi_positions) {
+			for (let pos of semi_positions) {
 				seg = parts.slice(start, pos);
 				if (seg.length > 0 && seg[0].kind !== "operator") {
 					segments.push(seg);
@@ -4658,7 +4473,7 @@ class List extends Node {
 			}
 			// Build left-associative result iteratively
 			result = this._toSexpAmpAndHigher(segments[0], op_names);
-			for (i = 1; i < segments.length; i++) {
+			for (let i = 1; i < segments.length; i++) {
 				result = `(semi ${result} ${this._toSexpAmpAndHigher(segments[i], op_names)})`;
 			}
 			return result;
@@ -4668,13 +4483,13 @@ class List extends Node {
 	}
 
 	_toSexpAmpAndHigher(parts, op_names) {
-		let amp_positions, i, pos, result, segments, start;
+		let result, segments, start;
 		// Handle & operator iteratively
 		if (parts.length === 1) {
 			return parts[0].toSexp();
 		}
-		amp_positions = [];
-		for (i = 1; i < parts.length - 1; i += 2) {
+		const amp_positions = [];
+		for (let i = 1; i < parts.length - 1; i += 2) {
 			if (parts[i].kind === "operator" && parts[i].op === "&") {
 				amp_positions.push(i);
 			}
@@ -4683,14 +4498,14 @@ class List extends Node {
 			// Split into segments at & positions
 			segments = [];
 			start = 0;
-			for (pos of amp_positions) {
+			for (let pos of amp_positions) {
 				segments.push(parts.slice(start, pos));
 				start = pos + 1;
 			}
 			segments.push(parts.slice(start, parts.length));
 			// Build left-associative result iteratively
 			result = this._toSexpAndOr(segments[0], op_names);
-			for (i = 1; i < segments.length; i++) {
+			for (let i = 1; i < segments.length; i++) {
 				result = `(background ${result} ${this._toSexpAndOr(segments[i], op_names)})`;
 			}
 			return result;
@@ -4700,13 +4515,13 @@ class List extends Node {
 	}
 
 	_toSexpAndOr(parts, op_names) {
-		let cmd, i, op, op_name, result;
+		let cmd, op, op_name;
 		// Process && and || left-associatively (already iterative)
 		if (parts.length === 1) {
 			return parts[0].toSexp();
 		}
-		result = parts[0].toSexp();
-		for (i = 1; i < parts.length - 1; i += 2) {
+		let result = parts[0].toSexp();
+		for (let i = 1; i < parts.length - 1; i += 2) {
 			op = parts[i];
 			cmd = parts[i + 1];
 			op_name = op_names[op.op] ?? op.op;
@@ -4724,8 +4539,13 @@ class Operator extends Node {
 	}
 
 	toSexp() {
-		let names;
-		names = { "&&": "and", "||": "or", ";": "semi", "&": "bg", "|": "pipe" };
+		const names = {
+			"&&": "and",
+			"||": "or",
+			";": "semi",
+			"&": "bg",
+			"|": "pipe",
+		};
 		return `(${names[this.op] ?? this.op})`;
 	}
 }
@@ -4775,28 +4595,28 @@ class Redirect extends Node {
 	}
 
 	toSexp() {
-		let fd_target, j, op, out_val, raw, target_val;
+		let fd_target, j, out_val, raw;
 		// Strip fd prefix from operator (e.g., "2>" -> ">", "{fd}>" -> ">")
-		op = this.op.replace(/^[0123456789]+/, "");
+		let op = this.op.replace(/^[0123456789]+/, "");
 		// Strip {varname} or {varname[subscript]} prefix if present
 		if (op.startsWith("{")) {
 			j = 1;
 			if (j < op.length && (/^[a-zA-Z]$/.test(op[j]) || op[j] === "_")) {
-				j += 1;
+				j++;
 				while (
 					j < op.length &&
 					(/^[a-zA-Z0-9]$/.test(op[j]) || op[j] === "_")
 				) {
-					j += 1;
+					j++;
 				}
 				// Handle optional [subscript] part
 				if (j < op.length && op[j] === "[") {
-					j += 1;
+					j++;
 					while (j < op.length && op[j] !== "]") {
-						j += 1;
+						j++;
 					}
 					if (j < op.length && op[j] === "]") {
-						j += 1;
+						j++;
 					}
 				}
 				if (j < op.length && op[j] === "}") {
@@ -4804,7 +4624,7 @@ class Redirect extends Node {
 				}
 			}
 		}
-		target_val = this.target.value;
+		let target_val = this.target.value;
 		// Expand ANSI-C $'...' quotes (converts escapes like \n to actual newline)
 		target_val = this.target._expandAllAnsiCQuotes(target_val);
 		// Strip $ from locale strings $"..."
@@ -4875,17 +4695,15 @@ class Redirect extends Node {
 }
 
 class HereDoc extends Node {
-	constructor(delimiter, content, strip_tabs, quoted, fd, complete) {
+	constructor(
+		delimiter,
+		content,
+		strip_tabs = false,
+		quoted = false,
+		fd,
+		complete = true,
+	) {
 		super();
-		if (strip_tabs == null) {
-			strip_tabs = false;
-		}
-		if (quoted == null) {
-			quoted = false;
-		}
-		if (complete == null) {
-			complete = true;
-		}
 		this.kind = "heredoc";
 		this.delimiter = delimiter;
 		this.content = content;
@@ -4897,9 +4715,8 @@ class HereDoc extends Node {
 	}
 
 	toSexp() {
-		let content, op;
-		op = this.strip_tabs ? "<<-" : "<<";
-		content = this.content;
+		const op = this.strip_tabs ? "<<-" : "<<";
+		let content = this.content;
 		// Escape trailing backslash (would escape the closing quote otherwise)
 		if (content.endsWith("\\") && !content.endsWith("\\\\")) {
 			content = `${content}\\`;
@@ -4917,8 +4734,7 @@ class Subshell extends Node {
 	}
 
 	toSexp() {
-		let base;
-		base = `(subshell ${this.body.toSexp()})`;
+		const base = `(subshell ${this.body.toSexp()})`;
 		return _appendRedirects(base, this.redirects);
 	}
 }
@@ -4932,8 +4748,7 @@ class BraceGroup extends Node {
 	}
 
 	toSexp() {
-		let base;
-		base = `(brace-group ${this.body.toSexp()})`;
+		const base = `(brace-group ${this.body.toSexp()})`;
 		return _appendRedirects(base, this.redirects);
 	}
 }
@@ -4945,20 +4760,17 @@ class If extends Node {
 		this.condition = condition;
 		this.then_body = then_body;
 		this.else_body = else_body;
-		if (redirects == null) {
-			redirects = [];
-		}
+		redirects ??= [];
 		this.redirects = redirects;
 	}
 
 	toSexp() {
-		let r, result;
-		result = `(if ${this.condition.toSexp()} ${this.then_body.toSexp()}`;
+		let result = `(if ${this.condition.toSexp()} ${this.then_body.toSexp()}`;
 		if (this.else_body) {
 			result = `${result} ${this.else_body.toSexp()}`;
 		}
 		result = `${result})`;
-		for (r of this.redirects) {
+		for (let r of this.redirects) {
 			result = `${result} ${r.toSexp()}`;
 		}
 		return result;
@@ -4971,15 +4783,12 @@ class While extends Node {
 		this.kind = "while";
 		this.condition = condition;
 		this.body = body;
-		if (redirects == null) {
-			redirects = [];
-		}
+		redirects ??= [];
 		this.redirects = redirects;
 	}
 
 	toSexp() {
-		let base;
-		base = `(while ${this.condition.toSexp()} ${this.body.toSexp()})`;
+		const base = `(while ${this.condition.toSexp()} ${this.body.toSexp()})`;
 		return _appendRedirects(base, this.redirects);
 	}
 }
@@ -4990,15 +4799,12 @@ class Until extends Node {
 		this.kind = "until";
 		this.condition = condition;
 		this.body = body;
-		if (redirects == null) {
-			redirects = [];
-		}
+		redirects ??= [];
 		this.redirects = redirects;
 	}
 
 	toSexp() {
-		let base;
-		base = `(until ${this.condition.toSexp()} ${this.body.toSexp()})`;
+		const base = `(until ${this.condition.toSexp()} ${this.body.toSexp()})`;
 		return _appendRedirects(base, this.redirects);
 	}
 }
@@ -5010,35 +4816,27 @@ class For extends Node {
 		this.variable = variable;
 		this.words = words;
 		this.body = body;
-		if (redirects == null) {
-			redirects = [];
-		}
+		redirects ??= [];
 		this.redirects = redirects;
 	}
 
 	toSexp() {
-		let r,
-			redirect_parts,
-			suffix,
-			temp_word,
-			var_escaped,
-			var_formatted,
-			w,
-			word_parts,
-			word_strs;
+		let redirect_parts, word_parts, word_strs;
 		// bash-oracle format: (for (word "var") (in (word "a") ...) body)
-		suffix = "";
-		if (this.redirects && this.redirects.length) {
+		let suffix = "";
+		if (this.redirects?.length) {
 			redirect_parts = [];
-			for (r of this.redirects) {
+			for (let r of this.redirects) {
 				redirect_parts.push(r.toSexp());
 			}
 			suffix = ` ${redirect_parts.join(" ")}`;
 		}
 		// Format command substitutions in var (e.g., for $(echo i) normalizes whitespace)
-		temp_word = new Word(this.variable, []);
-		var_formatted = temp_word._formatCommandSubstitutions(this.variable);
-		var_escaped = var_formatted.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+		const temp_word = new Word(this.variable, []);
+		const var_formatted = temp_word._formatCommandSubstitutions(this.variable);
+		const var_escaped = var_formatted
+			.replaceAll("\\", "\\\\")
+			.replaceAll('"', '\\"');
 		if (this.words == null) {
 			// No 'in' clause - bash-oracle implies (in (word "\"$@\""))
 			return `(for (word "${var_escaped}") (in (word "\\"$@\\"")) ${this.body.toSexp()})${suffix}`;
@@ -5047,7 +4845,7 @@ class For extends Node {
 			return `(for (word "${var_escaped}") (in) ${this.body.toSexp()})${suffix}`;
 		} else {
 			word_parts = [];
-			for (w of this.words) {
+			for (let w of this.words) {
 				word_parts.push(w.toSexp());
 			}
 			word_strs = word_parts.join(" ");
@@ -5064,29 +4862,17 @@ class ForArith extends Node {
 		this.cond = cond;
 		this.incr = incr;
 		this.body = body;
-		if (redirects == null) {
-			redirects = [];
-		}
+		redirects ??= [];
 		this.redirects = redirects;
 	}
 
 	toSexp() {
-		let body_str,
-			cond_str,
-			cond_val,
-			incr_str,
-			incr_val,
-			init_str,
-			init_val,
-			r,
-			redirect_parts,
-			suffix;
+		let redirect_parts;
 		// bash-oracle format: (arith-for (init (word "x")) (test (word "y")) (step (word "z")) body)
 		function formatArithVal(s) {
-			let val, w;
 			// Use Word's methods to expand ANSI-C quotes and strip locale $
-			w = new Word(s, []);
-			val = w._expandAllAnsiCQuotes(s);
+			const w = new Word(s, []);
+			let val = w._expandAllAnsiCQuotes(s);
 			val = w._stripLocaleStringDollars(val);
 			val = w._formatCommandSubstitutions(val);
 			val = val.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
@@ -5094,21 +4880,21 @@ class ForArith extends Node {
 			return val;
 		}
 
-		suffix = "";
-		if (this.redirects && this.redirects.length) {
+		let suffix = "";
+		if (this.redirects?.length) {
 			redirect_parts = [];
-			for (r of this.redirects) {
+			for (let r of this.redirects) {
 				redirect_parts.push(r.toSexp());
 			}
 			suffix = ` ${redirect_parts.join(" ")}`;
 		}
-		init_val = this.init ? this.init : "1";
-		cond_val = this.cond ? this.cond : "1";
-		incr_val = this.incr ? this.incr : "1";
-		init_str = formatArithVal(init_val);
-		cond_str = formatArithVal(cond_val);
-		incr_str = formatArithVal(incr_val);
-		body_str = this.body.toSexp();
+		const init_val = this.init ? this.init : "1";
+		const cond_val = this.cond ? this.cond : "1";
+		const incr_val = this.incr ? this.incr : "1";
+		const init_str = formatArithVal(init_val);
+		const cond_str = formatArithVal(cond_val);
+		const incr_str = formatArithVal(incr_val);
+		const body_str = this.body.toSexp();
 		return `(arith-for (init (word "${init_str}")) (test (word "${cond_str}")) (step (word "${incr_str}")) ${body_str})${suffix}`;
 	}
 }
@@ -5120,38 +4906,31 @@ class Select extends Node {
 		this.variable = variable;
 		this.words = words;
 		this.body = body;
-		if (redirects == null) {
-			redirects = [];
-		}
+		redirects ??= [];
 		this.redirects = redirects;
 	}
 
 	toSexp() {
-		let in_clause,
-			r,
-			redirect_parts,
-			suffix,
-			var_escaped,
-			w,
-			word_parts,
-			word_strs;
+		let in_clause, redirect_parts, word_parts, word_strs;
 		// bash-oracle format: (select (word "var") (in (word "a") ...) body)
-		suffix = "";
-		if (this.redirects && this.redirects.length) {
+		let suffix = "";
+		if (this.redirects?.length) {
 			redirect_parts = [];
-			for (r of this.redirects) {
+			for (let r of this.redirects) {
 				redirect_parts.push(r.toSexp());
 			}
 			suffix = ` ${redirect_parts.join(" ")}`;
 		}
-		var_escaped = this.variable.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+		const var_escaped = this.variable
+			.replaceAll("\\", "\\\\")
+			.replaceAll('"', '\\"');
 		if (this.words != null) {
 			word_parts = [];
-			for (w of this.words) {
+			for (let w of this.words) {
 				word_parts.push(w.toSexp());
 			}
 			word_strs = word_parts.join(" ");
-			if (this.words && this.words.length) {
+			if (this.words?.length) {
 				in_clause = `(in ${word_strs})`;
 			} else {
 				in_clause = "(in)";
@@ -5170,61 +4949,55 @@ class Case extends Node {
 		this.kind = "case";
 		this.word = word;
 		this.patterns = patterns;
-		if (redirects == null) {
-			redirects = [];
-		}
+		redirects ??= [];
 		this.redirects = redirects;
 	}
 
 	toSexp() {
-		let base, p, parts;
-		parts = [];
+		const parts = [];
 		parts.push(`(case ${this.word.toSexp()}`);
-		for (p of this.patterns) {
+		for (let p of this.patterns) {
 			parts.push(p.toSexp());
 		}
-		base = `${parts.join(" ")})`;
+		const base = `${parts.join(" ")})`;
 		return _appendRedirects(base, this.redirects);
 	}
 }
 
 function _consumeSingleQuote(s, start) {
-	let chars, i;
-	chars = ["'"];
-	i = start + 1;
+	const chars = ["'"];
+	let i = start + 1;
 	while (i < s.length && s[i] !== "'") {
 		chars.push(s[i]);
-		i += 1;
+		i++;
 	}
 	if (i < s.length) {
 		chars.push(s[i]);
-		i += 1;
+		i++;
 	}
 	return [i, chars];
 }
 
 function _consumeDoubleQuote(s, start) {
-	let chars, i;
-	chars = ['"'];
-	i = start + 1;
+	const chars = ['"'];
+	let i = start + 1;
 	while (i < s.length && s[i] !== '"') {
 		if (s[i] === "\\" && i + 1 < s.length) {
 			chars.push(s[i]);
-			i += 1;
+			i++;
 		}
 		chars.push(s[i]);
-		i += 1;
+		i++;
 	}
 	if (i < s.length) {
 		chars.push(s[i]);
-		i += 1;
+		i++;
 	}
 	return [i, chars];
 }
 
 function _hasBracketClose(s, start, depth) {
-	let i;
-	i = start;
+	let i = start;
 	while (i < s.length) {
 		if (s[i] === "]") {
 			return true;
@@ -5232,27 +5005,26 @@ function _hasBracketClose(s, start, depth) {
 		if ((s[i] === "|" || s[i] === ")") && depth === 0) {
 			return false;
 		}
-		i += 1;
+		i++;
 	}
 	return false;
 }
 
 function _consumeBracketClass(s, start, depth) {
-	let chars, i, is_bracket, scan_pos;
 	// First scan to see if this is a valid bracket expression
-	scan_pos = start + 1;
+	let scan_pos = start + 1;
 	// Skip [! or [^ at start
 	if (scan_pos < s.length && (s[scan_pos] === "!" || s[scan_pos] === "^")) {
-		scan_pos += 1;
+		scan_pos++;
 	}
 	// Handle ] as first char
 	if (scan_pos < s.length && s[scan_pos] === "]") {
 		if (_hasBracketClose(s, scan_pos + 1, depth)) {
-			scan_pos += 1;
+			scan_pos++;
 		}
 	}
 	// Scan for closing ]
-	is_bracket = false;
+	let is_bracket = false;
 	while (scan_pos < s.length) {
 		if (s[scan_pos] === "]") {
 			is_bracket = true;
@@ -5264,44 +5036,41 @@ function _consumeBracketClass(s, start, depth) {
 		if (s[scan_pos] === "|" && depth === 0) {
 			break;
 		}
-		scan_pos += 1;
+		scan_pos++;
 	}
 	if (!is_bracket) {
 		return [start + 1, ["["], false];
 	}
 	// Valid bracket - consume it
-	chars = ["["];
-	i = start + 1;
+	const chars = ["["];
+	let i = start + 1;
 	// Handle [! or [^
 	if (i < s.length && (s[i] === "!" || s[i] === "^")) {
 		chars.push(s[i]);
-		i += 1;
+		i++;
 	}
 	// Handle ] as first char
 	if (i < s.length && s[i] === "]") {
 		if (_hasBracketClose(s, i + 1, depth)) {
 			chars.push(s[i]);
-			i += 1;
+			i++;
 		}
 	}
 	// Consume until ]
 	while (i < s.length && s[i] !== "]") {
 		chars.push(s[i]);
-		i += 1;
+		i++;
 	}
 	if (i < s.length) {
 		chars.push(s[i]);
-		i += 1;
+		i++;
 	}
 	return [i, chars, true];
 }
 
 class CasePattern extends Node {
-	constructor(pattern, body, terminator) {
+	constructor(pattern, body, terminator = ";;") {
 		super();
-		if (terminator == null) {
-			terminator = ";;";
-		}
 		this.kind = "pattern";
 		this.pattern = pattern;
 		this.body = body;
@@ -5309,22 +5078,13 @@ class CasePattern extends Node {
 	}
 
 	toSexp() {
-		let alt,
-			alternatives,
-			ch,
-			current,
-			depth,
-			i,
-			parts,
-			pattern_str,
-			result,
-			word_list;
+		let ch, result;
 		// bash-oracle format: (pattern ((word "a") (word "b")) body)
 		// Split pattern by | respecting escapes, extglobs, quotes, and brackets
-		alternatives = [];
-		current = [];
-		i = 0;
-		depth = 0;
+		const alternatives = [];
+		let current = [];
+		let i = 0;
+		let depth = 0;
 		while (i < this.pattern.length) {
 			ch = this.pattern[i];
 			if (ch === "\\" && i + 1 < this.pattern.length) {
@@ -5338,22 +5098,22 @@ class CasePattern extends Node {
 				// Start of extglob: @(, ?(, *(, +(, !(
 				current.push(ch);
 				current.push("(");
-				depth += 1;
+				depth++;
 				i += 2;
 			} else if (_isExpansionStart(this.pattern, i, "$(")) {
 				// $( command sub or $(( arithmetic - track depth
 				current.push(ch);
 				current.push("(");
-				depth += 1;
+				depth++;
 				i += 2;
 			} else if (ch === "(" && depth > 0) {
 				current.push(ch);
-				depth += 1;
-				i += 1;
+				depth++;
+				i++;
 			} else if (ch === ")" && depth > 0) {
 				current.push(ch);
-				depth -= 1;
-				i += 1;
+				depth--;
+				i++;
 			} else if (ch === "[") {
 				result = _consumeBracketClass(this.pattern, i, depth);
 				i = result[0];
@@ -5369,20 +5129,20 @@ class CasePattern extends Node {
 			} else if (ch === "|" && depth === 0) {
 				alternatives.push(current.join(""));
 				current = [];
-				i += 1;
+				i++;
 			} else {
 				current.push(ch);
-				i += 1;
+				i++;
 			}
 		}
 		alternatives.push(current.join(""));
-		word_list = [];
-		for (alt of alternatives) {
+		const word_list = [];
+		for (let alt of alternatives) {
 			// Use Word.to_sexp() to properly expand ANSI-C quotes and escape
 			word_list.push(new Word(alt).toSexp());
 		}
-		pattern_str = word_list.join(" ");
-		parts = [`(pattern (${pattern_str})`];
+		const pattern_str = word_list.join(" ");
+		const parts = [`(pattern (${pattern_str})`];
 		if (this.body) {
 			parts.push(` ${this.body.toSexp()}`);
 		} else {
@@ -5417,8 +5177,10 @@ class ParamExpansion extends Node {
 	}
 
 	toSexp() {
-		let arg_val, escaped_arg, escaped_op, escaped_param;
-		escaped_param = this.param.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+		let arg_val, escaped_arg, escaped_op;
+		const escaped_param = this.param
+			.replaceAll("\\", "\\\\")
+			.replaceAll('"', '\\"');
 		if (this.op != null) {
 			escaped_op = this.op.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 			if (this.arg != null) {
@@ -5441,8 +5203,7 @@ class ParamLength extends Node {
 	}
 
 	toSexp() {
-		let escaped;
-		escaped = this.param.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+		const escaped = this.param.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 		return `(param-len "${escaped}")`;
 	}
 }
@@ -5457,8 +5218,8 @@ class ParamIndirect extends Node {
 	}
 
 	toSexp() {
-		let arg_val, escaped, escaped_arg, escaped_op;
-		escaped = this.param.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+		let arg_val, escaped_arg, escaped_op;
+		const escaped = this.param.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 		if (this.op != null) {
 			escaped_op = this.op.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 			if (this.arg != null) {
@@ -5474,11 +5235,8 @@ class ParamIndirect extends Node {
 }
 
 class CommandSubstitution extends Node {
-	constructor(command, brace) {
+	constructor(command, brace = false) {
 		super();
-		if (brace == null) {
-			brace = false;
-		}
 		this.kind = "cmdsub";
 		this.command = command;
 		this.brace = brace;
@@ -5508,38 +5266,33 @@ class ArithmeticExpansion extends Node {
 }
 
 class ArithmeticCommand extends Node {
-	constructor(expression, redirects, raw_content) {
+	constructor(expression, redirects, raw_content = "") {
 		super();
-		if (raw_content == null) {
-			raw_content = "";
-		}
 		this.kind = "arith-cmd";
 		this.expression = expression;
-		if (redirects == null) {
-			redirects = [];
-		}
+		redirects ??= [];
 		this.redirects = redirects;
 		this.raw_content = raw_content;
 	}
 
 	toSexp() {
-		let escaped, formatted, r, redirect_parts, redirect_sexps, result;
+		let redirect_parts, redirect_sexps;
 		// bash-oracle format: (arith (word "content"))
 		// Redirects are siblings: (arith (word "...")) (redirect ...)
 		// Format command substitutions using Word's method
-		formatted = new Word(this.raw_content)._formatCommandSubstitutions(
+		const formatted = new Word(this.raw_content)._formatCommandSubstitutions(
 			this.raw_content,
 			true,
 		);
-		escaped = formatted
+		const escaped = formatted
 			.replaceAll("\\", "\\\\")
 			.replaceAll('"', '\\"')
 			.replaceAll("\n", "\\n")
 			.replaceAll("\t", "\\t");
-		result = `(arith (word "${escaped}"))`;
-		if (this.redirects && this.redirects.length) {
+		const result = `(arith (word "${escaped}"))`;
+		if (this.redirects?.length) {
 			redirect_parts = [];
-			for (r of this.redirects) {
+			for (let r of this.redirects) {
 				redirect_parts.push(r.toSexp());
 			}
 			redirect_sexps = redirect_parts.join(" ");
@@ -5734,8 +5487,7 @@ class ArithDeprecated extends Node {
 	}
 
 	toSexp() {
-		let escaped;
-		escaped = this.expression
+		const escaped = this.expression
 			.replaceAll("\\", "\\\\")
 			.replaceAll('"', '\\"')
 			.replaceAll("\n", "\\n");
@@ -5751,9 +5503,8 @@ class ArithConcat extends Node {
 	}
 
 	toSexp() {
-		let p, sexps;
-		sexps = [];
-		for (p of this.parts) {
+		const sexps = [];
+		for (let p of this.parts) {
 			sexps.push(p.toSexp());
 		}
 		return `(arith-concat ${sexps.join(" ")})`;
@@ -5768,8 +5519,7 @@ class AnsiCQuote extends Node {
 	}
 
 	toSexp() {
-		let escaped;
-		escaped = this.content
+		const escaped = this.content
 			.replaceAll("\\", "\\\\")
 			.replaceAll('"', '\\"')
 			.replaceAll("\n", "\\n");
@@ -5785,8 +5535,7 @@ class LocaleString extends Node {
 	}
 
 	toSexp() {
-		let escaped;
-		escaped = this.content
+		const escaped = this.content
 			.replaceAll("\\", "\\\\")
 			.replaceAll('"', '\\"')
 			.replaceAll("\n", "\\n");
@@ -5824,11 +5573,8 @@ class Negation extends Node {
 }
 
 class Time extends Node {
-	constructor(pipeline, posix) {
+	constructor(pipeline, posix = false) {
 		super();
-		if (posix == null) {
-			posix = false;
-		}
 		this.kind = "time";
 		this.pipeline = pipeline;
 		this.posix = posix;
@@ -5855,17 +5601,15 @@ class ConditionalExpr extends Node {
 		super();
 		this.kind = "cond-expr";
 		this.body = body;
-		if (redirects == null) {
-			redirects = [];
-		}
+		redirects ??= [];
 		this.redirects = redirects;
 	}
 
 	toSexp() {
-		let body_kind, escaped, r, redirect_parts, redirect_sexps, result;
+		let escaped, redirect_parts, redirect_sexps, result;
 		// bash-oracle format: (cond ...) not (cond-expr ...)
 		// Redirects are siblings, not children: (cond ...) (redirect ...)
-		body_kind = this.body.kind ?? null;
+		const body_kind = this.body.kind ?? null;
 		if (body_kind == null) {
 			// body is a string
 			escaped = this.body
@@ -5876,9 +5620,9 @@ class ConditionalExpr extends Node {
 		} else {
 			result = `(cond ${this.body.toSexp()})`;
 		}
-		if (this.redirects && this.redirects.length) {
+		if (this.redirects?.length) {
 			redirect_parts = [];
-			for (r of this.redirects) {
+			for (let r of this.redirects) {
 				redirect_parts.push(r.toSexp());
 			}
 			redirect_sexps = redirect_parts.join(" ");
@@ -5897,10 +5641,9 @@ class UnaryTest extends Node {
 	}
 
 	toSexp() {
-		let operand_val;
 		// bash-oracle format: (cond-unary "-f" (cond-term "file"))
 		// cond-term preserves content as-is (no backslash escaping)
-		operand_val = this.operand.getCondFormattedValue();
+		const operand_val = this.operand.getCondFormattedValue();
 		return `(cond-unary "${this.op}" (cond-term "${operand_val}"))`;
 	}
 }
@@ -5915,11 +5658,10 @@ class BinaryTest extends Node {
 	}
 
 	toSexp() {
-		let left_val, right_val;
 		// bash-oracle format: (cond-binary "==" (cond-term "x") (cond-term "y"))
 		// cond-term preserves content as-is (no backslash escaping)
-		left_val = this.left.getCondFormattedValue();
-		right_val = this.right.getCondFormattedValue();
+		const left_val = this.left.getCondFormattedValue();
+		const right_val = this.right.getCondFormattedValue();
 		return `(cond-binary "${this.op}" (cond-term "${left_val}") (cond-term "${right_val}"))`;
 	}
 }
@@ -5984,15 +5726,14 @@ class ArrayNode extends Node {
 	}
 
 	toSexp() {
-		let e, inner, parts;
 		if (!this.elements) {
 			return "(array)";
 		}
-		parts = [];
-		for (e of this.elements) {
+		const parts = [];
+		for (let e of this.elements) {
 			parts.push(e.toSexp());
 		}
-		inner = parts.join(" ");
+		const inner = parts.join(" ");
 		return `(array ${inner})`;
 	}
 }
@@ -6018,8 +5759,8 @@ class Coproc extends Node {
 }
 
 function _formatCondBody(node) {
-	let kind, left_val, operand_val, right_val;
-	kind = node.kind;
+	let left_val, operand_val, right_val;
+	const kind = node.kind;
 	if (kind === "unary-test") {
 		operand_val = node.operand.getCondFormattedValue();
 		return `${node.op} ${operand_val}`;
@@ -6045,12 +5786,11 @@ function _formatCondBody(node) {
 }
 
 function _startsWithSubshell(node) {
-	let p;
 	if (node.kind === "subshell") {
 		return true;
 	}
 	if (node.kind === "list") {
-		for (p of node.parts) {
+		for (let p of node.parts) {
 			if (p.kind !== "operator") {
 				return _startsWithSubshell(p);
 			}
@@ -6058,7 +5798,7 @@ function _startsWithSubshell(node) {
 		return false;
 	}
 	if (node.kind === "pipeline") {
-		if (node.commands && node.commands.length) {
+		if (node.commands?.length) {
 			return _startsWithSubshell(node.commands[0]);
 		}
 		return false;
@@ -6068,10 +5808,10 @@ function _startsWithSubshell(node) {
 
 function _formatCmdsubNode(
 	node,
-	indent,
-	in_procsub,
-	compact_redirects,
-	procsub_first,
+	indent = 0,
+	in_procsub = false,
+	compact_redirects = false,
+	procsub_first = false,
 ) {
 	let body,
 		body_part,
@@ -6084,13 +5824,11 @@ function _formatCmdsubNode(
 		first_nl,
 		formatted,
 		formatted_cmd,
-		h,
 		has_heredoc,
 		heredocs,
 		i,
 		idx,
 		inner_body,
-		inner_sp,
 		is_last,
 		last,
 		name,
@@ -6103,48 +5841,33 @@ function _formatCmdsubNode(
 		pattern_str,
 		patterns,
 		prefix,
-		r,
 		redirect_parts,
 		redirects,
 		result,
 		result_parts,
 		s,
 		skipped_semi,
-		sp,
 		term,
 		term_indent,
 		terminator,
 		then_body,
 		val,
 		variable,
-		w,
 		word,
 		word_parts,
 		word_vals,
 		words;
-	if (indent == null) {
-		indent = 0;
-	}
-	if (in_procsub == null) {
-		in_procsub = false;
-	}
-	if (compact_redirects == null) {
-		compact_redirects = false;
-	}
-	if (procsub_first == null) {
-		procsub_first = false;
-	}
 	if (node == null) {
 		return "";
 	}
-	sp = " ".repeat(indent);
-	inner_sp = " ".repeat(indent + 4);
+	const sp = " ".repeat(indent);
+	const inner_sp = " ".repeat(indent + 4);
 	if (node.kind === "empty") {
 		return "";
 	}
 	if (node.kind === "command") {
 		parts = [];
-		for (w of node.words) {
+		for (let w of node.words) {
 			val = w._expandAllAnsiCQuotes(w.value);
 			// Strip $ from locale strings $"..." (quote-aware)
 			val = w._stripLocaleStringDollars(val);
@@ -6155,12 +5878,12 @@ function _formatCmdsubNode(
 		}
 		// Check for heredocs - their bodies need to come at the end
 		heredocs = [];
-		for (r of node.redirects) {
+		for (let r of node.redirects) {
 			if (r.kind === "heredoc") {
 				heredocs.push(r);
 			}
 		}
-		for (r of node.redirects) {
+		for (let r of node.redirects) {
 			// For heredocs, output just the operator part; body comes at end
 			parts.push(_formatRedirect(r, compact_redirects, true));
 		}
@@ -6173,7 +5896,7 @@ function _formatCmdsubNode(
 			result = parts.join(" ");
 		}
 		// Append heredoc bodies at the end
-		for (h of heredocs) {
+		for (let h of heredocs) {
 			result = result + _formatHeredocBody(h);
 		}
 		return result;
@@ -6185,7 +5908,7 @@ function _formatCmdsubNode(
 		while (i < node.commands.length) {
 			cmd = node.commands[i];
 			if (cmd.kind === "pipe-both") {
-				i += 1;
+				i++;
 				continue;
 			}
 			// Check if next element is PipeBoth
@@ -6193,7 +5916,7 @@ function _formatCmdsubNode(
 				i + 1 < node.commands.length &&
 				node.commands[i + 1].kind === "pipe-both";
 			cmds.push([cmd, needs_redirect]);
-			i += 1;
+			i++;
 		}
 		// Format pipeline, handling heredocs specially
 		result_parts = [];
@@ -6212,7 +5935,7 @@ function _formatCmdsubNode(
 			// Check if command has actual heredoc redirects
 			has_heredoc = false;
 			if (cmd.kind === "command" && cmd.redirects) {
-				for (r of cmd.redirects) {
+				for (let r of cmd.redirects) {
 					if (r.kind === "heredoc") {
 						has_heredoc = true;
 						break;
@@ -6243,7 +5966,7 @@ function _formatCmdsubNode(
 			} else {
 				result_parts.push(formatted);
 			}
-			idx += 1;
+			idx++;
 		}
 		// Join with " | " for commands without heredocs, or just join if heredocs handled
 		// In procsub, if first command is subshell, use compact "|" separator
@@ -6264,16 +5987,16 @@ function _formatCmdsubNode(
 			} else {
 				result = part;
 			}
-			idx += 1;
+			idx++;
 		}
 		return result;
 	}
 	if (node.kind === "list") {
 		// Check if any command in the list has a heredoc redirect
 		has_heredoc = false;
-		for (p of node.parts) {
+		for (let p of node.parts) {
 			if (p.kind === "command" && p.redirects) {
-				for (r of p.redirects) {
+				for (let r of p.redirects) {
 					if (r.kind === "heredoc") {
 						has_heredoc = true;
 						break;
@@ -6281,9 +6004,9 @@ function _formatCmdsubNode(
 				}
 			} else if (p.kind === "pipeline") {
 				// Check commands within the pipeline
-				for (cmd of p.commands) {
+				for (let cmd of p.commands) {
 					if (cmd.kind === "command" && cmd.redirects) {
-						for (r of cmd.redirects) {
+						for (let r of cmd.redirects) {
 							if (r.kind === "heredoc") {
 								has_heredoc = true;
 								break;
@@ -6300,11 +6023,11 @@ function _formatCmdsubNode(
 		result = [];
 		skipped_semi = false;
 		cmd_count = 0;
-		for (p of node.parts) {
+		for (let p of node.parts) {
 			if (p.kind === "operator") {
 				if (p.op === ";") {
 					// Skip semicolon if previous command ends with heredoc (newline)
-					if (result.length > 0 && result[result.length - 1].endsWith("\n")) {
+					if (result.length > 0 && result.at(-1).endsWith("\n")) {
 						skipped_semi = true;
 						continue;
 					}
@@ -6321,12 +6044,12 @@ function _formatCmdsubNode(
 					skipped_semi = false;
 				} else if (p.op === "\n") {
 					// Skip newline if it follows a semicolon (redundant separator)
-					if (result.length > 0 && result[result.length - 1] === ";") {
+					if (result.length > 0 && result.at(-1) === ";") {
 						skipped_semi = false;
 						continue;
 					}
 					// If previous ends with heredoc newline
-					if (result.length > 0 && result[result.length - 1].endsWith("\n")) {
+					if (result.length > 0 && result.at(-1).endsWith("\n")) {
 						// Add space if semicolon was skipped, else newline
 						result.push(skipped_semi ? " " : "\n");
 						skipped_semi = false;
@@ -6339,10 +6062,10 @@ function _formatCmdsubNode(
 					// But if it's a pipeline (contains |), append at end instead
 					if (
 						result.length > 0 &&
-						result[result.length - 1].includes("<<") &&
-						result[result.length - 1].includes("\n")
+						result.at(-1).includes("<<") &&
+						result.at(-1).includes("\n")
 					) {
-						last = result[result.length - 1];
+						last = result.at(-1);
 						// If this is a pipeline (has |), append & at the end
 						if (last.includes(" |") || last.startsWith("|")) {
 							result[result.length - 1] = `${last} &`;
@@ -6356,11 +6079,11 @@ function _formatCmdsubNode(
 					}
 				} else if (
 					result.length > 0 &&
-					result[result.length - 1].includes("<<") &&
-					result[result.length - 1].includes("\n")
+					result.at(-1).includes("<<") &&
+					result.at(-1).includes("\n")
 				) {
 					// For || and &&, insert before heredoc content like we do for &
-					last = result[result.length - 1];
+					last = result.at(-1);
 					first_nl = last.indexOf("\n");
 					result[result.length - 1] =
 						`${last.slice(0, first_nl)} ${p.op} ${last.slice(first_nl)}`;
@@ -6370,10 +6093,7 @@ function _formatCmdsubNode(
 			} else {
 				if (
 					result.length > 0 &&
-					!(
-						result[result.length - 1].endsWith(" ") ||
-						result[result.length - 1].endsWith("\n")
-					)
+					!(result.at(-1).endsWith(" ") || result.at(-1).endsWith("\n"))
 				) {
 					result.push(" ");
 				}
@@ -6387,7 +6107,7 @@ function _formatCmdsubNode(
 				);
 				// After heredoc with || or && inserted, add leading space to next command
 				if (result.length > 0) {
-					last = result[result.length - 1];
+					last = result.at(-1);
 					if (last.includes(" || \n") || last.includes(" && \n")) {
 						formatted_cmd = ` ${formatted_cmd}`;
 					}
@@ -6398,7 +6118,7 @@ function _formatCmdsubNode(
 					skipped_semi = false;
 				}
 				result.push(formatted_cmd);
-				cmd_count += 1;
+				cmd_count++;
 			}
 		}
 		// Strip trailing ; or newline (but preserve heredoc's trailing newline)
@@ -6432,8 +6152,8 @@ function _formatCmdsubNode(
 		cond = _formatCmdsubNode(node.condition, indent);
 		body = _formatCmdsubNode(node.body, indent + 4);
 		result = `while ${cond}; do\n${inner_sp}${body};\n${sp}done`;
-		if (node.redirects && node.redirects.length) {
-			for (r of node.redirects) {
+		if (node.redirects?.length) {
+			for (let r of node.redirects) {
 				result = `${result} ${_formatRedirect(r)}`;
 			}
 		}
@@ -6443,8 +6163,8 @@ function _formatCmdsubNode(
 		cond = _formatCmdsubNode(node.condition, indent);
 		body = _formatCmdsubNode(node.body, indent + 4);
 		result = `until ${cond}; do\n${inner_sp}${body};\n${sp}done`;
-		if (node.redirects && node.redirects.length) {
-			for (r of node.redirects) {
+		if (node.redirects?.length) {
+			for (let r of node.redirects) {
 				result = `${result} ${_formatRedirect(r)}`;
 			}
 		}
@@ -6455,11 +6175,11 @@ function _formatCmdsubNode(
 		body = _formatCmdsubNode(node.body, indent + 4);
 		if (node.words != null) {
 			word_vals = [];
-			for (w of node.words) {
+			for (let w of node.words) {
 				word_vals.push(w.value);
 			}
 			words = word_vals.join(" ");
-			if (words && words.length) {
+			if (words?.length) {
 				result = `for ${variable} in ${words};\n${sp}do\n${inner_sp}${body};\n${sp}done`;
 			} else {
 				// Empty 'in' clause: for var in ;
@@ -6469,8 +6189,8 @@ function _formatCmdsubNode(
 			// No 'in' clause - bash implies 'in "$@"'
 			result = `for ${variable} in "$@";\n${sp}do\n${inner_sp}${body};\n${sp}done`;
 		}
-		if (node.redirects && node.redirects.length) {
-			for (r of node.redirects) {
+		if (node.redirects?.length) {
+			for (let r of node.redirects) {
 				result = `${result} ${_formatRedirect(r)}`;
 			}
 		}
@@ -6479,8 +6199,8 @@ function _formatCmdsubNode(
 	if (node.kind === "for-arith") {
 		body = _formatCmdsubNode(node.body, indent + 4);
 		result = `for ((${node.init}; ${node.cond}; ${node.incr}))\ndo\n${inner_sp}${body};\n${sp}done`;
-		if (node.redirects && node.redirects.length) {
-			for (r of node.redirects) {
+		if (node.redirects?.length) {
+			for (let r of node.redirects) {
 				result = `${result} ${_formatRedirect(r)}`;
 			}
 		}
@@ -6508,13 +6228,13 @@ function _formatCmdsubNode(
 			} else {
 				patterns.push(`${pat})\n${body_part}${term_indent}${term}`);
 			}
-			i += 1;
+			i++;
 		}
 		pattern_str = patterns.join(`\n${" ".repeat(indent + 4)}`);
 		redirects = "";
-		if (node.redirects && node.redirects.length) {
+		if (node.redirects?.length) {
 			redirect_parts = [];
-			for (r of node.redirects) {
+			for (let r of node.redirects) {
 				redirect_parts.push(_formatRedirect(r));
 			}
 			redirects = ` ${redirect_parts.join(" ")}`;
@@ -6531,21 +6251,21 @@ function _formatCmdsubNode(
 	if (node.kind === "subshell") {
 		body = _formatCmdsubNode(node.body, indent, in_procsub, compact_redirects);
 		redirects = "";
-		if (node.redirects && node.redirects.length) {
+		if (node.redirects?.length) {
 			redirect_parts = [];
-			for (r of node.redirects) {
+			for (let r of node.redirects) {
 				redirect_parts.push(_formatRedirect(r));
 			}
 			redirects = redirect_parts.join(" ");
 		}
 		// Use compact format only when subshell is at the start of a procsub
 		if (procsub_first) {
-			if (redirects && redirects.length) {
+			if (redirects?.length) {
 				return `(${body}) ${redirects}`;
 			}
 			return `(${body})`;
 		}
-		if (redirects && redirects.length) {
+		if (redirects?.length) {
 			return `( ${body} ) ${redirects}`;
 		}
 		return `( ${body} )`;
@@ -6556,14 +6276,14 @@ function _formatCmdsubNode(
 		// Don't add semicolon after background operator
 		terminator = body.endsWith(" &") ? " }" : "; }";
 		redirects = "";
-		if (node.redirects && node.redirects.length) {
+		if (node.redirects?.length) {
 			redirect_parts = [];
-			for (r of node.redirects) {
+			for (let r of node.redirects) {
 				redirect_parts.push(_formatRedirect(r));
 			}
 			redirects = redirect_parts.join(" ");
 		}
-		if (redirects && redirects.length) {
+		if (redirects?.length) {
 			return `{ ${body}${terminator} ${redirects}`;
 		}
 		return `{ ${body}${terminator}`;
@@ -6592,14 +6312,8 @@ function _formatCmdsubNode(
 	return "";
 }
 
-function _formatRedirect(r, compact, heredoc_op_only) {
-	let after_amp, delim, is_literal_fd, op, target, was_input_close;
-	if (compact == null) {
-		compact = false;
-	}
-	if (heredoc_op_only == null) {
-		heredoc_op_only = false;
-	}
+function _formatRedirect(r, compact = false, heredoc_op_only = false) {
+	let after_amp, delim, is_literal_fd, op, was_input_close;
 	if (r.kind === "heredoc") {
 		if (r.strip_tabs) {
 			op = "<<-";
@@ -6628,7 +6342,7 @@ function _formatRedirect(r, compact, heredoc_op_only) {
 	} else if (op === "0<") {
 		op = "<";
 	}
-	target = r.target.value;
+	let target = r.target.value;
 	// Expand ANSI-C $'...' quotes
 	target = r.target._expandAllAnsiCQuotes(target);
 	// Strip $ from locale strings $"..."
@@ -6679,10 +6393,10 @@ function _formatHeredocBody(r) {
 }
 
 function _lookaheadForEsac(value, start, case_depth) {
-	let c, depth, i, quote;
-	i = start;
-	depth = case_depth;
-	quote = new QuoteState();
+	let c;
+	let i = start;
+	let depth = case_depth;
+	const quote = new QuoteState();
 	while (i < value.length) {
 		c = value[i];
 		// Handle escapes (only in double quotes)
@@ -6693,98 +6407,97 @@ function _lookaheadForEsac(value, start, case_depth) {
 		// Track quote state
 		if (c === "'" && !quote.double) {
 			quote.single = !quote.single;
-			i += 1;
+			i++;
 			continue;
 		}
 		if (c === '"' && !quote.single) {
 			quote.double = !quote.double;
-			i += 1;
+			i++;
 			continue;
 		}
 		// Skip content inside quotes
 		if (quote.single || quote.double) {
-			i += 1;
+			i++;
 			continue;
 		}
 		// Check for case/esac keywords
 		if (_startsWithAt(value, i, "case") && _isWordBoundary(value, i, 4)) {
-			depth += 1;
+			depth++;
 			i += 4;
 		} else if (
 			_startsWithAt(value, i, "esac") &&
 			_isWordBoundary(value, i, 4)
 		) {
-			depth -= 1;
+			depth--;
 			if (depth === 0) {
 				return true;
 			}
 			i += 4;
 		} else if (c === "(") {
-			i += 1;
+			i++;
 		} else if (c === ")") {
 			if (depth > 0) {
-				i += 1;
+				i++;
 			} else {
 				break;
 			}
 		} else {
-			i += 1;
+			i++;
 		}
 	}
 	return false;
 }
 
 function _skipBacktick(value, start) {
-	let i;
-	i = start + 1;
+	let i = start + 1;
 	while (i < value.length && value[i] !== "`") {
 		if (value[i] === "\\" && i + 1 < value.length) {
 			i += 2;
 		} else {
-			i += 1;
+			i++;
 		}
 	}
 	if (i < value.length) {
-		i += 1;
+		i++;
 	}
 	return i;
 }
 
 function _skipSingleQuoted(s, start) {
-	let i;
-	i = start;
+	let i = start;
 	while (i < s.length && s[i] !== "'") {
-		i += 1;
+		i++;
 	}
 	return i < s.length ? i + 1 : i;
 }
 
 function _skipDoubleQuoted(s, start) {
-	let backq, c, i, n, pass_next;
-	[i, n] = [start, s.length];
-	pass_next = false;
+	let c;
+	let [i, n] = [start, s.length];
+	let pass_next = false;
+	let backq = false;
 	while (i < n) {
 		c = s[i];
 		if (pass_next) {
 			pass_next = false;
-			i += 1;
+			i++;
 			continue;
 		}
 		if (c === "\\") {
 			pass_next = true;
-			i += 1;
+			i++;
 			continue;
 		}
 		if (backq) {
 			if (c === "`") {
 				backq = false;
 			}
-			i += 1;
+			i++;
 			continue;
 		}
 		if (c === "`") {
 			backq = true;
-			i += 1;
+			i++;
 			continue;
 		}
 		if (c === "$" && i + 1 < n) {
@@ -6800,15 +6513,15 @@ function _skipDoubleQuoted(s, start) {
 		if (c === '"') {
 			return i + 1;
 		}
-		i += 1;
+		i++;
 	}
 	return i;
 }
 
 function _isValidArithmeticStart(value, start) {
-	let scan_c, scan_i, scan_paren;
-	scan_paren = 0;
-	scan_i = start + 3;
+	let scan_c;
+	let scan_paren = 0;
+	let scan_i = start + 3;
 	while (scan_i < value.length) {
 		scan_c = value[scan_i];
 		// Skip over $( command subs - their parens shouldn't count
@@ -6817,10 +6530,10 @@ function _isValidArithmeticStart(value, start) {
 			continue;
 		}
 		if (scan_c === "(") {
-			scan_paren += 1;
+			scan_paren++;
 		} else if (scan_c === ")") {
 			if (scan_paren > 0) {
-				scan_paren -= 1;
+				scan_paren--;
 			} else if (scan_i + 1 < value.length && value[scan_i + 1] === ")") {
 				return true;
 			} else {
@@ -6828,16 +6541,16 @@ function _isValidArithmeticStart(value, start) {
 				return false;
 			}
 		}
-		scan_i += 1;
+		scan_i++;
 	}
 	return false;
 }
 
 function _findFunsubEnd(value, start) {
-	let c, depth, i, quote;
-	depth = 1;
-	i = start;
-	quote = new QuoteState();
+	let c;
+	let depth = 1;
+	let i = start;
+	const quote = new QuoteState();
 	while (i < value.length && depth > 0) {
 		c = value[i];
 		if (c === "\\" && i + 1 < value.length && !quote.single) {
@@ -6846,46 +6559,39 @@ function _findFunsubEnd(value, start) {
 		}
 		if (c === "'" && !quote.double) {
 			quote.single = !quote.single;
-			i += 1;
+			i++;
 			continue;
 		}
 		if (c === '"' && !quote.single) {
 			quote.double = !quote.double;
-			i += 1;
+			i++;
 			continue;
 		}
 		if (quote.single || quote.double) {
-			i += 1;
+			i++;
 			continue;
 		}
 		if (c === "{") {
-			depth += 1;
+			depth++;
 		} else if (c === "}") {
-			depth -= 1;
+			depth--;
 			if (depth === 0) {
 				return i + 1;
 			}
 		}
-		i += 1;
+		i++;
 	}
 	return value.length;
 }
 
 function _findCmdsubEnd(value, start) {
-	let arith_depth,
-		arith_paren_depth,
-		c,
-		case_depth,
-		depth,
-		i,
-		in_case_patterns,
-		j;
-	depth = 1;
-	i = start;
-	case_depth = 0;
-	in_case_patterns = false;
-	arith_depth = 0;
-	arith_paren_depth = 0;
+	let c, j;
+	let depth = 1;
+	let i = start;
+	let case_depth = 0;
+	let in_case_patterns = false;
+	let arith_depth = 0;
+	let arith_paren_depth = 0;
 	while (i < value.length && depth > 0) {
 		c = value[i];
 		// Handle escapes (work everywhere except inside single quotes, which we delegate)
@@ -6919,7 +6625,7 @@ function _findCmdsubEnd(value, start) {
 				value[i - 1] === ")")
 		) {
 			while (i < value.length && value[i] !== "\n") {
-				i += 1;
+				i++;
 			}
 			continue;
 		}
@@ -6928,33 +6634,33 @@ function _findCmdsubEnd(value, start) {
 			i += 3;
 			// Skip whitespace
 			while (i < value.length && (value[i] === " " || value[i] === "\t")) {
-				i += 1;
+				i++;
 			}
 			// Skip the word (may be quoted)
 			if (i < value.length && value[i] === '"') {
-				i += 1;
+				i++;
 				while (i < value.length && value[i] !== '"') {
 					if (value[i] === "\\" && i + 1 < value.length) {
 						i += 2;
 					} else {
-						i += 1;
+						i++;
 					}
 				}
 				if (i < value.length) {
-					i += 1;
+					i++;
 				}
 			} else if (i < value.length && value[i] === "'") {
-				i += 1;
+				i++;
 				while (i < value.length && value[i] !== "'") {
-					i += 1;
+					i++;
 				}
 				if (i < value.length) {
-					i += 1;
+					i++;
 				}
 			} else {
 				// Unquoted word - skip until whitespace or special char
 				while (i < value.length && !" \t\n;|&<>()".includes(value[i])) {
-					i += 1;
+					i++;
 				}
 			}
 			continue;
@@ -6962,7 +6668,7 @@ function _findCmdsubEnd(value, start) {
 		// Handle arithmetic expressions $((
 		if (_isExpansionStart(value, i, "$((")) {
 			if (_isValidArithmeticStart(value, i)) {
-				arith_depth += 1;
+				arith_depth++;
 				i += 3;
 				continue;
 			}
@@ -6977,7 +6683,7 @@ function _findCmdsubEnd(value, start) {
 			arith_paren_depth === 0 &&
 			_startsWithAt(value, i, "))")
 		) {
-			arith_depth -= 1;
+			arith_depth--;
 			i += 2;
 			continue;
 		}
@@ -6994,7 +6700,7 @@ function _findCmdsubEnd(value, start) {
 		}
 		// Check for 'case' keyword
 		if (_startsWithAt(value, i, "case") && _isWordBoundary(value, i, 4)) {
-			case_depth += 1;
+			case_depth++;
 			in_case_patterns = false;
 			i += 4;
 			continue;
@@ -7012,7 +6718,7 @@ function _findCmdsubEnd(value, start) {
 		// Check for 'esac' keyword
 		if (_startsWithAt(value, i, "esac") && _isWordBoundary(value, i, 4)) {
 			if (case_depth > 0) {
-				case_depth -= 1;
+				case_depth--;
 				in_case_patterns = false;
 			}
 			i += 4;
@@ -7028,37 +6734,37 @@ function _findCmdsubEnd(value, start) {
 			// In case patterns, ( before pattern name is optional and not a grouping paren
 			if (!(in_case_patterns && case_depth > 0)) {
 				if (arith_depth > 0) {
-					arith_paren_depth += 1;
+					arith_paren_depth++;
 				} else {
-					depth += 1;
+					depth++;
 				}
 			}
 		} else if (c === ")") {
 			// In case patterns, ) after pattern name is not a grouping paren
 			if (in_case_patterns && case_depth > 0) {
 				if (!_lookaheadForEsac(value, i + 1, case_depth)) {
-					depth -= 1;
+					depth--;
 				}
 			} else if (arith_depth > 0) {
 				if (arith_paren_depth > 0) {
-					arith_paren_depth -= 1;
+					arith_paren_depth--;
 				}
 			} else {
 				// else: single ) in arithmetic without matching ( - skip it
-				depth -= 1;
+				depth--;
 			}
 		}
-		i += 1;
+		i++;
 	}
 	return i;
 }
 
 function _findBracedParamEnd(value, start) {
-	let c, depth, dolbrace_state, end, i, in_double;
-	depth = 1;
-	i = start;
-	in_double = false;
-	dolbrace_state = DolbraceState.PARAM;
+	let c, end;
+	let depth = 1;
+	let i = start;
+	let in_double = false;
+	let dolbrace_state = DolbraceState.PARAM;
 	while (i < value.length && depth > 0) {
 		c = value[i];
 		// Escapes work everywhere except inside single quotes (which we delegate)
@@ -7073,11 +6779,11 @@ function _findBracedParamEnd(value, start) {
 		}
 		if (c === '"') {
 			in_double = !in_double;
-			i += 1;
+			i++;
 			continue;
 		}
 		if (in_double) {
-			i += 1;
+			i++;
 			continue;
 		}
 		// State transitions: operators move from PARAM to WORD or QUOTE
@@ -7104,9 +6810,9 @@ function _findBracedParamEnd(value, start) {
 			continue;
 		}
 		if (c === "{") {
-			depth += 1;
+			depth++;
 		} else if (c === "}") {
-			depth -= 1;
+			depth--;
 			if (depth === 0) {
 				return i + 1;
 			}
@@ -7119,75 +6825,68 @@ function _findBracedParamEnd(value, start) {
 			i = _findBracedParamEnd(value, i + 2);
 			continue;
 		}
-		i += 1;
+		i++;
 	}
 	return i;
 }
 
 function _skipHeredoc(value, start) {
 	let c,
-		delim_start,
 		delimiter,
-		i,
-		in_backtick,
-		j,
 		line,
 		line_end,
 		line_start,
 		next_line_start,
-		paren_depth,
-		quote,
-		quote_char,
 		stripped,
 		tabs_stripped,
 		trailing_bs;
-	i = start + 2;
+	let i = start + 2;
 	// Handle <<- (strip tabs)
 	if (i < value.length && value[i] === "-") {
-		i += 1;
+		i++;
 	}
 	// Skip whitespace before delimiter
 	while (i < value.length && _isWhitespaceNoNewline(value[i])) {
-		i += 1;
+		i++;
 	}
 	// Extract delimiter - may be quoted
-	delim_start = i;
-	quote_char = null;
+	let delim_start = i;
+	let quote_char = null;
 	if (i < value.length && (value[i] === '"' || value[i] === "'")) {
 		quote_char = value[i];
-		i += 1;
+		i++;
 		delim_start = i;
 		while (i < value.length && value[i] !== quote_char) {
-			i += 1;
+			i++;
 		}
 		delimiter = value.slice(delim_start, i);
 		if (i < value.length) {
-			i += 1;
+			i++;
 		}
 	} else if (i < value.length && value[i] === "\\") {
 		// Backslash-quoted delimiter like <<\EOF
-		i += 1;
+		i++;
 		delim_start = i;
 		if (i < value.length) {
-			i += 1;
+			i++;
 		}
 		while (i < value.length && !_isMetachar(value[i])) {
-			i += 1;
+			i++;
 		}
 		delimiter = value.slice(delim_start, i);
 	} else {
 		// Unquoted delimiter - stop at metacharacters like )
 		while (i < value.length && !_isMetachar(value[i])) {
-			i += 1;
+			i++;
 		}
 		delimiter = value.slice(delim_start, i);
 	}
 	// Skip to end of line (heredoc content starts on next line)
 	// But track paren depth - if we hit a ) at depth 0, it closes the cmdsub
 	// Must handle quotes and backticks since newlines in them don't end the line
-	paren_depth = 0;
-	quote = new QuoteState();
-	in_backtick = false;
+	let paren_depth = 0;
+	const quote = new QuoteState();
+	let in_backtick = false;
 	while (i < value.length && value[i] !== "\n") {
 		c = value[i];
 		// Handle escapes (in double quotes or backticks)
@@ -7198,42 +6897,42 @@ function _skipHeredoc(value, start) {
 		// Track quote state
 		if (c === "'" && !quote.double && !in_backtick) {
 			quote.single = !quote.single;
-			i += 1;
+			i++;
 			continue;
 		}
 		if (c === '"' && !quote.single && !in_backtick) {
 			quote.double = !quote.double;
-			i += 1;
+			i++;
 			continue;
 		}
 		if (c === "`" && !quote.single) {
 			in_backtick = !in_backtick;
-			i += 1;
+			i++;
 			continue;
 		}
 		// Skip content inside quotes/backticks
 		if (quote.single || quote.double || in_backtick) {
-			i += 1;
+			i++;
 			continue;
 		}
 		// Track paren depth
 		if (c === "(") {
-			paren_depth += 1;
+			paren_depth++;
 		} else if (c === ")") {
 			if (paren_depth === 0) {
 				// This ) closes the enclosing command substitution, stop here
 				break;
 			}
-			paren_depth -= 1;
+			paren_depth--;
 		}
-		i += 1;
+		i++;
 	}
 	// If we stopped at ) (closing cmdsub), return here - no heredoc content
 	if (i < value.length && value[i] === ")") {
 		return i;
 	}
 	if (i < value.length && value[i] === "\n") {
-		i += 1;
+		i++;
 	}
 	// Find the end delimiter on its own line
 	while (i < value.length) {
@@ -7241,15 +6940,15 @@ function _skipHeredoc(value, start) {
 		// Find end of this line - heredoc content can contain )
 		line_end = i;
 		while (line_end < value.length && value[line_end] !== "\n") {
-			line_end += 1;
+			line_end++;
 		}
 		line = value.slice(line_start, line_end);
 		// Handle backslash-newline continuation (join continued lines)
 		while (line_end < value.length) {
 			trailing_bs = 0;
-			for (j = line.length - 1; j > -1; j--) {
+			for (let j = line.length - 1; j > -1; j--) {
 				if (line[j] === "\\") {
-					trailing_bs += 1;
+					trailing_bs++;
 				} else {
 					break;
 				}
@@ -7259,10 +6958,10 @@ function _skipHeredoc(value, start) {
 			}
 			// Odd backslashes - line continuation
 			line = line.slice(0, -1);
-			line_end += 1;
+			line_end++;
 			next_line_start = line_end;
 			while (line_end < value.length && value[line_end] !== "\n") {
-				line_end += 1;
+				line_end++;
 			}
 			line = line + value.slice(next_line_start, line_end);
 		}
@@ -7297,45 +6996,40 @@ function _skipHeredoc(value, start) {
 }
 
 function _findHeredocContentEnd(source, start, delimiters) {
-	let content_start,
-		delimiter,
-		j,
-		line,
+	let line,
 		line_end,
 		line_start,
 		line_stripped,
 		next_line_start,
-		pos,
-		strip_tabs,
 		tabs_stripped,
 		trailing_bs;
 	if (!delimiters) {
 		return [start, start];
 	}
-	pos = start;
+	let pos = start;
 	// Skip to end of current line (including non-whitespace)
 	while (pos < source.length && source[pos] !== "\n") {
-		pos += 1;
+		pos++;
 	}
 	if (pos >= source.length) {
 		return [start, start];
 	}
-	content_start = pos;
-	pos += 1;
-	for ([delimiter, strip_tabs] of delimiters) {
+	const content_start = pos;
+	pos++;
+	for (let [delimiter, strip_tabs] of delimiters) {
 		while (pos < source.length) {
 			line_start = pos;
 			line_end = pos;
 			while (line_end < source.length && source[line_end] !== "\n") {
-				line_end += 1;
+				line_end++;
 			}
 			line = source.slice(line_start, line_end);
 			// Handle backslash-newline continuation (join continued lines)
 			while (line_end < source.length) {
 				trailing_bs = 0;
-				for (j = line.length - 1; j > -1; j--) {
+				for (let j = line.length - 1; j > -1; j--) {
 					if (line[j] === "\\") {
-						trailing_bs += 1;
+						trailing_bs++;
 					} else {
 						break;
 					}
@@ -7345,10 +7039,10 @@ function _findHeredocContentEnd(source, start, delimiters) {
 				}
 				// Odd backslashes - line continuation
 				line = line.slice(0, -1);
-				line_end += 1;
+				line_end++;
 				next_line_start = line_end;
 				while (line_end < source.length && source[line_end] !== "\n") {
-					line_end += 1;
+					line_end++;
 				}
 				line = line + source.slice(next_line_start, line_end);
 			}
@@ -7379,7 +7073,7 @@ function _findHeredocContentEnd(source, start, delimiters) {
 }
 
 function _isWordBoundary(s, pos, word_len) {
-	let end, prev;
+	let prev;
 	// Check character before - must be whitespace, separator, or start
 	if (pos > 0) {
 		prev = s[pos - 1];
@@ -7394,7 +7088,7 @@ function _isWordBoundary(s, pos, word_len) {
 		}
 	}
 	// Check character after
-	end = pos + word_len;
+	const end = pos + word_len;
 	if (end < s.length && (/^[a-zA-Z0-9]$/.test(s[end]) || s[end] === "_")) {
 		return false;
 	}
@@ -7489,10 +7183,9 @@ function _isQuote(c) {
 }
 
 function _collapseWhitespace(s) {
-	let c, joined, prev_was_ws, result;
-	result = [];
-	prev_was_ws = false;
-	for (c of s) {
+	const result = [];
+	let prev_was_ws = false;
+	for (let c of s) {
 		if (c === " " || c === "\t") {
 			if (!prev_was_ws) {
 				result.push(" ");
@@ -7503,16 +7196,15 @@ function _collapseWhitespace(s) {
 			prev_was_ws = false;
 		}
 	}
-	joined = result.join("");
+	const joined = result.join("");
 	return joined.trim(" \t");
 }
 
 function _countTrailingBackslashes(s) {
-	let count, i;
-	count = 0;
-	for (i = s.length - 1; i > -1; i--) {
+	let count = 0;
+	for (let i = s.length - 1; i > -1; i--) {
 		if (s[i] === "\\") {
-			count += 1;
+			count++;
 		} else {
 			break;
 		}
@@ -7521,9 +7213,9 @@ function _countTrailingBackslashes(s) {
 }
 
 function _normalizeHeredocDelimiter(delimiter) {
-	let depth, i, inner, inner_str, result;
-	result = [];
-	i = 0;
+	let depth, inner, inner_str;
+	const result = [];
+	let i = 0;
 	while (i < delimiter.length) {
 		// Handle command substitution $(...)
 		if (i + 1 < delimiter.length && delimiter.slice(i, i + 2) === "$(") {
@@ -7533,10 +7225,10 @@ function _normalizeHeredocDelimiter(delimiter) {
 			inner = [];
 			while (i < delimiter.length && depth > 0) {
 				if (delimiter[i] === "(") {
-					depth += 1;
+					depth++;
 					inner.push(delimiter[i]);
 				} else if (delimiter[i] === ")") {
-					depth -= 1;
+					depth--;
 					if (depth === 0) {
 						inner_str = inner.join("");
 						inner_str = _collapseWhitespace(inner_str);
@@ -7548,7 +7240,7 @@ function _normalizeHeredocDelimiter(delimiter) {
 				} else {
 					inner.push(delimiter[i]);
 				}
-				i += 1;
+				i++;
 			}
 		} else if (i + 1 < delimiter.length && delimiter.slice(i, i + 2) === "${") {
 			// Handle parameter expansion ${...}
@@ -7558,10 +7250,10 @@ function _normalizeHeredocDelimiter(delimiter) {
 			inner = [];
 			while (i < delimiter.length && depth > 0) {
 				if (delimiter[i] === "{") {
-					depth += 1;
+					depth++;
 					inner.push(delimiter[i]);
 				} else if (delimiter[i] === "}") {
-					depth -= 1;
+					depth--;
 					if (depth === 0) {
 						inner_str = inner.join("");
 						inner_str = _collapseWhitespace(inner_str);
@@ -7573,7 +7265,7 @@ function _normalizeHeredocDelimiter(delimiter) {
 				} else {
 					inner.push(delimiter[i]);
 				}
-				i += 1;
+				i++;
 			}
 		} else if (
 			i + 1 < delimiter.length &&
@@ -7588,10 +7280,10 @@ function _normalizeHeredocDelimiter(delimiter) {
 			inner = [];
 			while (i < delimiter.length && depth > 0) {
 				if (delimiter[i] === "(") {
-					depth += 1;
+					depth++;
 					inner.push(delimiter[i]);
 				} else if (delimiter[i] === ")") {
-					depth -= 1;
+					depth--;
 					if (depth === 0) {
 						inner_str = inner.join("");
 						inner_str = _collapseWhitespace(inner_str);
@@ -7603,11 +7295,11 @@ function _normalizeHeredocDelimiter(delimiter) {
 				} else {
 					inner.push(delimiter[i]);
 				}
-				i += 1;
+				i++;
 			}
 		} else {
 			result.push(delimiter[i]);
-			i += 1;
+			i++;
 		}
 	}
 	return result.join("");
@@ -7691,12 +7383,9 @@ function _isWordEndContext(c) {
 // Flags for _skip_matched_pair (mirrors bash subst.c)
 const _SMP_LITERAL = 1;
 const _SMP_PAST_OPEN = 2;
-function _skipMatchedPair(s, start, open, close, flags) {
-	let backq, c, depth, i, literal, n, pass_next;
-	if (flags == null) {
-		flags = 0;
-	}
-	n = s.length;
+function _skipMatchedPair(s, start, open, close, flags = 0) {
+	let c, i, literal;
+	const n = s.length;
 	if (flags & _SMP_PAST_OPEN) {
 		i = start;
 	} else {
@@ -7705,32 +7394,32 @@ function _skipMatchedPair(s, start, open, close, flags) {
 		}
 		i = start + 1;
 	}
-	depth = 1;
-	pass_next = false;
-	backq = false;
+	let depth = 1;
+	let pass_next = false;
+	let backq = false;
 	while (i < n && depth > 0) {
 		c = s[i];
 		if (pass_next) {
 			pass_next = false;
-			i += 1;
+			i++;
 			continue;
 		}
 		literal = flags & _SMP_LITERAL;
 		if (!literal && c === "\\") {
 			pass_next = true;
-			i += 1;
+			i++;
 			continue;
 		}
 		if (backq) {
 			if (c === "`") {
 				backq = false;
 			}
-			i += 1;
+			i++;
 			continue;
 		}
 		if (!literal && c === "`") {
 			backq = true;
-			i += 1;
+			i++;
 			continue;
 		}
 		if (!literal && c === "'") {
@@ -7750,34 +7439,28 @@ function _skipMatchedPair(s, start, open, close, flags) {
 			continue;
 		}
 		if (!literal && c === open) {
-			depth += 1;
+			depth++;
 		} else if (c === close) {
-			depth -= 1;
+			depth--;
 		}
-		i += 1;
+		i++;
 	}
 	return depth === 0 ? i : -1;
 }
 
-function _skipSubscript(s, start, flags) {
-	if (flags == null) {
-		flags = 0;
-	}
+function _skipSubscript(s, start, flags = 0) {
 	return _skipMatchedPair(s, start, "[", "]", flags);
 }
 
-function _assignment(s, flags) {
-	let c, end, i, sub_flags;
-	if (flags == null) {
-		flags = 0;
-	}
+function _assignment(s, flags = 0) {
+	let c, end, sub_flags;
 	if (!s) {
 		return -1;
 	}
 	if (!(/^[a-zA-Z]$/.test(s[0]) || s[0] === "_")) {
 		return -1;
 	}
-	i = 1;
+	let i = 1;
 	while (i < s.length) {
 		c = s[i];
 		if (c === "=") {
@@ -7791,7 +7474,7 @@ function _assignment(s, flags) {
 			}
 			i = end;
 			if (i < s.length && s[i] === "+") {
-				i += 1;
+				i++;
 			}
 			if (i < s.length && s[i] === "=") {
 				return i;
@@ -7807,23 +7490,23 @@ function _assignment(s, flags) {
 		if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
 			return -1;
 		}
-		i += 1;
+		i++;
 	}
 	return -1;
 }
 
 function _isArrayAssignmentPrefix(chars) {
-	let end, i, s;
+	let end;
 	if (chars.length === 0) {
 		return false;
 	}
 	if (!(/^[a-zA-Z]$/.test(chars[0]) || chars[0] === "_")) {
 		return false;
 	}
-	s = chars.join("");
-	i = 1;
+	const s = chars.join("");
+	let i = 1;
 	while (i < s.length && (/^[a-zA-Z0-9]$/.test(s[i]) || s[i] === "_")) {
-		i += 1;
+		i++;
 	}
 	while (i < s.length) {
 		if (s[i] !== "[") {
@@ -7881,23 +7564,21 @@ function _isNegationBoundary(c) {
 }
 
 function _isBackslashEscaped(value, idx) {
-	let bs_count, j;
-	bs_count = 0;
-	j = idx - 1;
+	let bs_count = 0;
+	let j = idx - 1;
 	while (j >= 0 && value[j] === "\\") {
-		bs_count += 1;
-		j -= 1;
+		bs_count++;
+		j--;
 	}
 	return bs_count % 2 === 1;
 }
 
 function _isDollarDollarParen(value, idx) {
-	let dollar_count, j;
-	dollar_count = 0;
-	j = idx - 1;
+	let dollar_count = 0;
+	let j = idx - 1;
 	while (j >= 0 && value[j] === "$") {
-		dollar_count += 1;
-		j -= 1;
+		dollar_count++;
+		j--;
 	}
 	return dollar_count % 2 === 1;
 }
@@ -7931,14 +7612,13 @@ function _looksLikeAssignment(s) {
 }
 
 function _isValidIdentifier(name) {
-	let c;
 	if (!name) {
 		return false;
 	}
 	if (!(/^[a-zA-Z]$/.test(name[0]) || name[0] === "_")) {
 		return false;
 	}
-	for (c of name.slice(1)) {
+	for (let c of name.slice(1)) {
 		if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
 			return false;
 		}
@@ -7951,13 +7631,7 @@ const WORD_CTX_NORMAL = 0;
 const WORD_CTX_COND = 1;
 const WORD_CTX_REGEX = 2;
 class Parser {
-	constructor(source, in_process_sub, extglob) {
-		if (in_process_sub == null) {
-			in_process_sub = false;
-		}
-		if (extglob == null) {
-			extglob = false;
-		}
+	constructor(source, in_process_sub = false, extglob = false) {
 		this.source = source;
 		this.pos = 0;
 		this.length = source.length;
@@ -8005,7 +7679,7 @@ class Parser {
 		return new SavedParserState(
 			this._parser_state,
 			this._dolbrace_state,
-			Array.from(this._pending_heredocs),
+			[...this._pending_heredocs],
 			this._ctx.copyStack(),
 			this._eof_token,
 		);
@@ -8029,14 +7703,13 @@ class Parser {
 	}
 
 	_updateDolbraceForOp(op, has_param) {
-		let first_char;
 		if (this._dolbrace_state === DolbraceState.NONE) {
 			return;
 		}
 		if (op == null || op.length === 0) {
 			return;
 		}
-		first_char = op[0];
+		const first_char = op[0];
 		// If we have a param name and see certain operators, go to QUOTE/QUOTE2
 		if (this._dolbrace_state === DolbraceState.PARAM && has_param) {
 			if ("%#^,".includes(first_char)) {
@@ -8089,7 +7762,6 @@ class Parser {
 	}
 
 	_lexPeekToken() {
-		let result, saved_pos;
 		// Check if cached token is valid: same position AND same word context
 		// (word context affects how array subscripts and other constructs are parsed)
 		if (
@@ -8103,9 +7775,9 @@ class Parser {
 			return this._lexer._token_cache;
 		}
 		// Need to read a new token - sync lexer to our position first
-		saved_pos = this.pos;
+		const saved_pos = this.pos;
 		this._syncLexer();
-		result = this._lexer.peekToken();
+		const result = this._lexer.peekToken();
 		// Save the context used for this cached token
 		this._lexer._cached_word_context = this._word_context;
 		this._lexer._cached_at_command_start = this._at_command_start;
@@ -8155,17 +7827,15 @@ class Parser {
 	}
 
 	_lexSkipComment() {
-		let result;
 		this._syncLexer();
-		result = this._lexer._skipComment();
+		const result = this._lexer._skipComment();
 		this._syncParser();
 		return result;
 	}
 
 	_lexIsCommandTerminator() {
-		let t, tok;
-		tok = this._lexPeekToken();
-		t = tok.type;
+		const tok = this._lexPeekToken();
+		const t = tok.type;
 		return [
 			TokenType.EOF,
 			TokenType.NEWLINE,
@@ -8178,9 +7848,8 @@ class Parser {
 	}
 
 	_lexPeekOperator() {
-		let t, tok;
-		tok = this._lexPeekToken();
-		t = tok.type;
+		const tok = this._lexPeekToken();
+		const t = tok.type;
 		// Single-char operators: SEMI(10) through GREATER(18)
 		// Multi-char operators: AND_AND(30) through PIPE_AMP(45)
 		if (
@@ -8193,14 +7862,13 @@ class Parser {
 	}
 
 	_lexPeekReservedWord() {
-		let tok, word;
-		tok = this._lexPeekToken();
+		const tok = this._lexPeekToken();
 		if (tok.type !== TokenType.WORD) {
 			return null;
 		}
 		// Strip trailing backslash-newline (line continuation) for classification
 		// The lexer includes \<newline> in words, but reserved word check ignores it
-		word = tok.value;
+		let word = tok.value;
 		if (word.endsWith("\\\n")) {
 			word = word.slice(0, -2);
 		}
@@ -8216,19 +7884,17 @@ class Parser {
 	}
 
 	_lexIsAtReservedWord(word) {
-		let reserved;
-		reserved = this._lexPeekReservedWord();
+		const reserved = this._lexPeekReservedWord();
 		return reserved === word;
 	}
 
 	_lexConsumeWord(expected) {
-		let tok, word;
-		tok = this._lexPeekToken();
+		const tok = this._lexPeekToken();
 		if (tok.type !== TokenType.WORD) {
 			return false;
 		}
 		// Strip trailing backslash-newline (line continuation) for comparison
-		word = tok.value;
+		let word = tok.value;
 		if (word.endsWith("\\\n")) {
 			word = word.slice(0, -2);
 		}
@@ -8240,9 +7906,8 @@ class Parser {
 	}
 
 	_lexPeekCaseTerminator() {
-		let t, tok;
-		tok = this._lexPeekToken();
-		t = tok.type;
+		const tok = this._lexPeekToken();
+		const t = tok.type;
 		if (t === TokenType.SEMI_SEMI) {
 			return ";;";
 		}
@@ -8267,18 +7932,16 @@ class Parser {
 	}
 
 	advance() {
-		let ch;
 		if (this.atEnd()) {
 			return null;
 		}
-		ch = this.source[this.pos];
-		this.pos += 1;
+		const ch = this.source[this.pos];
+		this.pos++;
 		return ch;
 	}
 
 	peekAt(offset) {
-		let pos;
-		pos = this.pos + offset;
+		const pos = this.pos + offset;
 		if (pos < 0 || pos >= this.length) {
 			return "";
 		}
@@ -8290,11 +7953,10 @@ class Parser {
 	}
 
 	_isBangFollowedByProcsub() {
-		let next_char;
 		if (this.pos + 2 >= this.length) {
 			return false;
 		}
-		next_char = this.source[this.pos + 1];
+		const next_char = this.source[this.pos + 1];
 		if (next_char !== ">" && next_char !== "<") {
 			return false;
 		}
@@ -8357,11 +8019,11 @@ class Parser {
 	}
 
 	_atListTerminatingBracket() {
-		let ch, next_pos;
+		let next_pos;
 		if (this.atEnd()) {
 			return false;
 		}
-		ch = this.peek();
+		const ch = this.peek();
 		// Check if we're at the EOF token (e.g., } in funsub or ) in comsub)
 		if (this._eof_token != null && ch === this._eof_token) {
 			return true;
@@ -8381,11 +8043,10 @@ class Parser {
 	}
 
 	_atEofToken() {
-		let tok;
 		if (this._eof_token == null) {
 			return false;
 		}
-		tok = this._lexPeekToken();
+		const tok = this._lexPeekToken();
 		if (this._eof_token === ")") {
 			return tok.type === TokenType.RPAREN;
 		}
@@ -8396,8 +8057,8 @@ class Parser {
 	}
 
 	_collectRedirects() {
-		let redirect, redirects;
-		redirects = [];
+		let redirect;
+		const redirects = [];
 		while (true) {
 			this.skipWhitespace();
 			redirect = this.parseRedirect();
@@ -8445,14 +8106,14 @@ class Parser {
 	}
 
 	peekWord() {
-		let ch, chars, saved_pos, word;
-		saved_pos = this.pos;
+		let ch, word;
+		const saved_pos = this.pos;
 		this.skipWhitespace();
 		if (this.atEnd() || _isMetachar(this.peek())) {
 			this.pos = saved_pos;
 			return null;
 		}
-		chars = [];
+		const chars = [];
 		while (!this.atEnd() && !_isMetachar(this.peek())) {
 			ch = this.peek();
 			// Stop at quotes - don't include in peek
@@ -8485,14 +8146,13 @@ class Parser {
 	}
 
 	consumeWord(expected) {
-		let _, has_leading_brace, keyword_word, saved_pos, word;
-		saved_pos = this.pos;
+		const saved_pos = this.pos;
 		this.skipWhitespace();
-		word = this.peekWord();
+		const word = this.peekWord();
 		// In command substitutions, strip leading } for keyword matching
 		// Don't strip { because it's used for brace groups
-		keyword_word = word;
-		has_leading_brace = false;
+		let keyword_word = word;
+		let has_leading_brace = false;
 		if (
 			word != null &&
 			this._in_process_sub &&
@@ -8512,7 +8172,7 @@ class Parser {
 		if (has_leading_brace) {
 			this.advance();
 		}
-		for (_ of expected) {
+		for (let _ of expected) {
 			this.advance();
 		}
 		// Skip trailing backslash-newline (line continuation)
@@ -8527,22 +8187,13 @@ class Parser {
 		return true;
 	}
 
-	_isWordTerminator(ctx, ch, bracket_depth, paren_depth) {
-		if (bracket_depth == null) {
-			bracket_depth = 0;
-		}
-		if (paren_depth == null) {
-			paren_depth = 0;
-		}
+	_isWordTerminator(ctx, ch, bracket_depth = 0, paren_depth = 0) {
 		this._syncLexer();
 		return this._lexer._isWordTerminator(ctx, ch, bracket_depth, paren_depth);
 	}
 
-	_scanDoubleQuote(chars, parts, start, handle_line_continuation) {
+	_scanDoubleQuote(chars, parts, start, handle_line_continuation = true) {
 		let c, next_c;
-		if (handle_line_continuation == null) {
-			handle_line_continuation = true;
-		}
 		chars.push('"');
 		while (!this.atEnd() && this.peek() !== '"') {
 			c = this.peek();
@@ -8569,11 +8220,8 @@ class Parser {
 		chars.push(this.advance());
 	}
 
-	_parseDollarExpansion(chars, parts, in_dquote) {
+	_parseDollarExpansion(chars, parts, in_dquote = false) {
 		let result;
-		if (in_dquote == null) {
-			in_dquote = false;
-		}
 		// Check $(( -> arithmetic expansion
 		if (
 			this.pos + 2 < this.length &&
@@ -8625,28 +8273,16 @@ class Parser {
 		return false;
 	}
 
-	_parseWordInternal(ctx, at_command_start, in_array_literal) {
-		if (at_command_start == null) {
-			at_command_start = false;
-		}
-		if (in_array_literal == null) {
-			in_array_literal = false;
-		}
+	_parseWordInternal(ctx, at_command_start = false, in_array_literal = false) {
 		this._word_context = ctx;
 		return this.parseWord(at_command_start, in_array_literal);
 	}
 
-	parseWord(at_command_start, in_array_literal, in_assign_builtin) {
-		let tok;
-		if (at_command_start == null) {
-			at_command_start = false;
-		}
-		if (in_array_literal == null) {
-			in_array_literal = false;
-		}
-		if (in_assign_builtin == null) {
-			in_assign_builtin = false;
-		}
+	parseWord(
+		at_command_start = false,
+		in_array_literal = false,
+		in_assign_builtin = false,
+	) {
 		this.skipWhitespace();
 		if (this.atEnd()) {
 			return null;
@@ -8655,7 +8291,7 @@ class Parser {
 		this._at_command_start = at_command_start;
 		this._in_array_literal = in_array_literal;
 		this._in_assign_builtin = in_assign_builtin;
-		tok = this._lexPeekToken();
+		const tok = this._lexPeekToken();
 		if (tok.type !== TokenType.WORD) {
 			// Reset context when not a word to avoid affecting subsequent calls
 			this._at_command_start = false;
@@ -8672,11 +8308,10 @@ class Parser {
 	}
 
 	_parseCommandSubstitution() {
-		let cmd, saved, start, text, text_end;
 		if (this.atEnd() || this.peek() !== "$") {
 			return [null, ""];
 		}
-		start = this.pos;
+		const start = this.pos;
 		this.advance();
 		if (this.atEnd() || this.peek() !== "(") {
 			this.pos = start;
@@ -8684,16 +8319,14 @@ class Parser {
 		}
 		this.advance();
 		// Save state and set up for inline parsing with EOF token
-		saved = this._saveParserState();
+		const saved = this._saveParserState();
 		this._setState(
 			ParserStateFlags.PST_CMDSUBST | ParserStateFlags.PST_EOFTOKEN,
 		);
 		this._eof_token = ")";
 		// Parse the command list inline - grammar will stop at matching )
-		cmd = this.parseList();
-		if (cmd == null) {
-			cmd = new Empty();
-		}
+		let cmd = this.parseList();
+		cmd ??= new Empty();
 		// After parse_list, we should be at the closing )
 		this.skipWhitespaceAndNewlines();
 		if (this.atEnd() || this.peek() !== ")") {
@@ -8702,30 +8335,27 @@ class Parser {
 			return [null, ""];
 		}
 		this.advance();
-		text_end = this.pos;
-		text = this.source.slice(start, text_end);
+		const text_end = this.pos;
+		const text = this.source.slice(start, text_end);
 		this._restoreParserState(saved);
 		return [new CommandSubstitution(cmd), text];
 	}
 
 	_parseFunsub(start) {
-		let cmd, saved, text;
 		this._syncParser();
 		// Skip leading | if present (${| ... } variant)
 		if (!this.atEnd() && this.peek() === "|") {
 			this.advance();
 		}
 		// Save state and set up for inline parsing with EOF token
-		saved = this._saveParserState();
+		const saved = this._saveParserState();
 		this._setState(
 			ParserStateFlags.PST_CMDSUBST | ParserStateFlags.PST_EOFTOKEN,
 		);
 		this._eof_token = "}";
 		// Parse the command list inline - grammar will stop at matching }
-		cmd = this.parseList();
-		if (cmd == null) {
-			cmd = new Empty();
-		}
+		let cmd = this.parseList();
+		cmd ??= new Empty();
 		// After parse_list, we should be at the closing }
 		this.skipWhitespaceAndNewlines();
 		if (this.atEnd() || this.peek() !== "}") {
@@ -8733,7 +8363,7 @@ class Parser {
 			throw new MatchedPairError("unexpected EOF looking for `}'", start);
 		}
 		this.advance();
-		text = this.source.slice(start, this.pos);
+		const text = this.source.slice(start, this.pos);
 		this._restoreParserState(saved);
 		this._syncLexer();
 		return [new CommandSubstitution(cmd, true), text];
@@ -8748,11 +8378,6 @@ class Parser {
 			ch,
 			check_line,
 			closing,
-			cmd,
-			content,
-			content_chars,
-			current_heredoc_delim,
-			current_heredoc_strip,
 			dch,
 			delimiter,
 			delimiter_chars,
@@ -8761,24 +8386,17 @@ class Parser {
 			escaped,
 			heredoc_end,
 			heredoc_start,
-			i,
-			in_heredoc_body,
 			line,
 			line_end,
 			line_start,
 			next_c,
-			pending_heredocs,
 			quote,
-			start,
 			strip_tabs,
-			sub_parser,
-			tabs_stripped,
-			text,
-			text_chars;
+			tabs_stripped;
 		if (this.atEnd() || this.peek() !== "`") {
 			return [null, ""];
 		}
-		start = this.pos;
+		const start = this.pos;
 		this.advance();
 		// Find closing backtick, processing escape sequences as we go.
 		// In backticks, backslash is special only before $, `, \, or newline.
@@ -8786,26 +8404,26 @@ class Parser {
 		// other \X -> \X (backslash is literal)
 		// content_chars: what gets parsed as the inner command
 		// text_chars: what appears in the word representation (with line continuations removed)
-		content_chars = [];
-		text_chars = ["`"];
+		const content_chars = [];
+		const text_chars = ["`"];
 		// Heredoc state tracking
-		pending_heredocs = [];
-		in_heredoc_body = false;
-		current_heredoc_delim = "";
-		current_heredoc_strip = false;
+		const pending_heredocs = [];
+		let in_heredoc_body = false;
+		let current_heredoc_delim = "";
+		let current_heredoc_strip = false;
 		while (!this.atEnd() && (in_heredoc_body || this.peek() !== "`")) {
 			// When in heredoc body, scan for delimiter line by line (no escape processing)
 			if (in_heredoc_body) {
 				line_start = this.pos;
 				line_end = line_start;
 				while (line_end < this.length && this.source[line_end] !== "\n") {
-					line_end += 1;
+					line_end++;
 				}
 				line = this.source.slice(line_start, line_end);
 				check_line = current_heredoc_strip ? line.replace(/^[\t]+/, "") : line;
 				if (check_line === current_heredoc_delim) {
 					// Found delimiter - add line to content and exit body mode
-					for (ch of line) {
+					for (let ch of line) {
 						content_chars.push(ch);
 						text_chars.push(ch);
 					}
@@ -8828,7 +8446,7 @@ class Parser {
 					// Delimiter with trailing content
 					tabs_stripped = line.length - check_line.length;
 					end_pos = tabs_stripped + current_heredoc_delim.length;
-					for (i = 0; i < end_pos; i++) {
+					for (let i = 0; i < end_pos; i++) {
 						content_chars.push(line[i]);
 						text_chars.push(line[i]);
 					}
@@ -8841,7 +8459,7 @@ class Parser {
 					}
 				} else {
 					// Not delimiter - add line and newline to content
-					for (ch of line) {
+					for (let ch of line) {
 						content_chars.push(ch);
 						text_chars.push(ch);
 					}
@@ -9060,8 +8678,8 @@ class Parser {
 		}
 		this.advance();
 		text_chars.push("`");
-		text = text_chars.join("");
-		content = content_chars.join("");
+		const text = text_chars.join("");
+		let content = content_chars.join("");
 		// Check for heredocs whose bodies follow the closing backtick
 		if (pending_heredocs.length > 0) {
 			[heredoc_start, heredoc_end] = _findHeredocContentEnd(
@@ -9082,45 +8700,34 @@ class Parser {
 			}
 		}
 		// Parse the content as a command list
-		sub_parser = new Parser(content, this._extglob);
-		cmd = sub_parser.parseList();
-		if (cmd == null) {
-			cmd = new Empty();
-		}
+		const sub_parser = new Parser(content, this._extglob);
+		let cmd = sub_parser.parseList();
+		cmd ??= new Empty();
 		return [new CommandSubstitution(cmd), text];
 	}
 
 	_parseProcessSubstitution() {
-		let cmd,
-			content_start_char,
-			direction,
-			old_in_process_sub,
-			saved,
-			start,
-			text,
-			text_end;
+		let cmd, content_start_char, text, text_end;
 		if (this.atEnd() || !_isRedirectChar(this.peek())) {
 			return [null, ""];
 		}
-		start = this.pos;
-		direction = this.advance();
+		const start = this.pos;
+		const direction = this.advance();
 		if (this.atEnd() || this.peek() !== "(") {
 			this.pos = start;
 			return [null, ""];
 		}
 		this.advance();
 		// Save state and set up for inline parsing with EOF token
-		saved = this._saveParserState();
-		old_in_process_sub = this._in_process_sub;
+		const saved = this._saveParserState();
+		const old_in_process_sub = this._in_process_sub;
 		this._in_process_sub = true;
 		this._setState(ParserStateFlags.PST_EOFTOKEN);
 		this._eof_token = ")";
 		// Try to parse the command list inline - grammar will stop at matching )
 		try {
 			cmd = this.parseList();
-			if (cmd == null) {
-				cmd = new Empty();
-			}
+			cmd ??= new Empty();
 			// After parse_list, we should be at the closing )
 			this.skipWhitespaceAndNewlines();
 			if (this.atEnd() || this.peek() !== ")") {
@@ -9160,14 +8767,14 @@ class Parser {
 	}
 
 	_parseArrayLiteral() {
-		let elements, start, text, word;
+		let word;
 		if (this.atEnd() || this.peek() !== "(") {
 			return [null, ""];
 		}
-		start = this.pos;
+		const start = this.pos;
 		this.advance();
 		this._setState(ParserStateFlags.PST_COMPASSIGN);
-		elements = [];
+		const elements = [];
 		while (true) {
 			// Skip whitespace, newlines, and comments between elements
 			this.skipWhitespaceAndNewlines();
@@ -9195,17 +8802,17 @@ class Parser {
 			throw new ParseError("Expected ) to close array literal", this.pos);
 		}
 		this.advance();
-		text = this.source.slice(start, this.pos);
+		const text = this.source.slice(start, this.pos);
 		this._clearState(ParserStateFlags.PST_COMPASSIGN);
 		return [new ArrayNode(elements), text];
 	}
 
 	_parseArithmeticExpansion() {
-		let c, content, content_start, depth, expr, first_close_pos, start, text;
+		let c, content, expr;
 		if (this.atEnd() || this.peek() !== "$") {
 			return [null, ""];
 		}
-		start = this.pos;
+		const start = this.pos;
 		// Check for $((
 		if (
 			this.pos + 2 >= this.length ||
@@ -9218,9 +8825,9 @@ class Parser {
 		this.advance();
 		this.advance();
 		// Find matching )) by tracking paren depth
-		content_start = this.pos;
-		depth = 2;
-		first_close_pos = null;
+		const content_start = this.pos;
+		let depth = 2;
+		let first_close_pos = null;
 		while (!this.atEnd() && depth > 0) {
 			c = this.peek();
 			// Skip single-quoted strings (parens inside don't count)
@@ -9251,13 +8858,13 @@ class Parser {
 				this.advance();
 				this.advance();
 			} else if (c === "(") {
-				depth += 1;
+				depth++;
 				this.advance();
 			} else if (c === ")") {
 				if (depth === 2) {
 					first_close_pos = this.pos;
 				}
-				depth -= 1;
+				depth--;
 				if (depth === 0) {
 					break;
 				}
@@ -9283,7 +8890,7 @@ class Parser {
 			content = this.source.slice(content_start, this.pos);
 		}
 		this.advance();
-		text = this.source.slice(start, this.pos);
+		const text = this.source.slice(start, this.pos);
 		// Parse the arithmetic expression
 		try {
 			expr = this._parseArithExpr(content);
@@ -9313,16 +8920,12 @@ class Parser {
 	// 15. unary (! ~ + - ++ --)
 	// 16. postfix (++ -- [])
 	_parseArithExpr(content) {
-		let result,
-			saved_arith_len,
-			saved_arith_pos,
-			saved_arith_src,
-			saved_parser_state;
+		let result;
 		// Save any existing arith context (for nested parsing)
-		saved_arith_src = this._arithSrc ?? null;
-		saved_arith_pos = this._arithPos ?? null;
-		saved_arith_len = this._arithLen ?? null;
-		saved_parser_state = this._parser_state;
+		const saved_arith_src = this._arithSrc ?? null;
+		const saved_arith_pos = this._arithPos ?? null;
+		const saved_arith_len = this._arithLen ?? null;
+		const saved_parser_state = this._parser_state;
 		this._setState(ParserStateFlags.PST_ARITH);
 		this._arith_src = content;
 		this._arith_pos = 0;
@@ -9347,12 +8950,8 @@ class Parser {
 		return this._arith_pos >= this._arith_len;
 	}
 
-	_arithPeek(offset) {
-		let pos;
-		if (offset == null) {
-			offset = 0;
-		}
-		pos = this._arith_pos + offset;
+	_arithPeek(offset = 0) {
+		const pos = this._arith_pos + offset;
 		if (pos >= this._arith_len) {
 			return "";
 		}
@@ -9360,12 +8959,11 @@ class Parser {
 	}
 
 	_arithAdvance() {
-		let c;
 		if (this._arithAtEnd()) {
 			return "";
 		}
-		c = this._arith_src[this._arith_pos];
-		this._arith_pos += 1;
+		const c = this._arith_src[this._arith_pos];
+		this._arith_pos++;
 		return c;
 	}
 
@@ -9374,7 +8972,7 @@ class Parser {
 		while (!this._arithAtEnd()) {
 			c = this._arith_src[this._arith_pos];
 			if (_isWhitespace(c)) {
-				this._arith_pos += 1;
+				this._arith_pos++;
 			} else if (
 				c === "\\" &&
 				this._arith_pos + 1 < this._arith_len &&
@@ -9401,8 +8999,8 @@ class Parser {
 	}
 
 	_arithParseComma() {
-		let left, right;
-		left = this._arithParseAssign();
+		let right;
+		let left = this._arithParseAssign();
 		while (true) {
 			this._arithSkipWs();
 			if (this._arithConsume(",")) {
@@ -9417,11 +9015,11 @@ class Parser {
 	}
 
 	_arithParseAssign() {
-		let assign_ops, left, op, right;
-		left = this._arithParseTernary();
+		let right;
+		const left = this._arithParseTernary();
 		this._arithSkipWs();
 		// Check for assignment operators
-		assign_ops = [
+		const assign_ops = [
 			"<<=",
 			">>=",
 			"+=",
@@ -9434,7 +9032,7 @@ class Parser {
 			"|=",
 			"=",
 		];
-		for (op of assign_ops) {
+		for (let op of assign_ops) {
 			if (this._arithMatch(op)) {
 				// Make sure it's not == or !=
 				if (op === "=" && this._arithPeek(1) === "=") {
@@ -9450,8 +9048,8 @@ class Parser {
 	}
 
 	_arithParseTernary() {
-		let cond, if_false, if_true;
-		cond = this._arithParseLogicalOr();
+		let if_false, if_true;
+		const cond = this._arithParseLogicalOr();
 		this._arithSkipWs();
 		if (this._arithConsume("?")) {
 			this._arithSkipWs();
@@ -9480,12 +9078,12 @@ class Parser {
 	}
 
 	_arithParseLeftAssoc(ops, parsefn) {
-		let left, matched, op;
-		left = parsefn();
+		let matched;
+		let left = parsefn();
 		while (true) {
 			this._arithSkipWs();
 			matched = false;
-			for (op of ops) {
+			for (let op of ops) {
 				if (this._arithMatch(op)) {
 					this._arithConsume(op);
 					this._arithSkipWs();
@@ -9516,8 +9114,8 @@ class Parser {
 	}
 
 	_arithParseBitwiseOr() {
-		let left, right;
-		left = this._arithParseBitwiseXor();
+		let right;
+		let left = this._arithParseBitwiseXor();
 		while (true) {
 			this._arithSkipWs();
 			// Make sure it's not || or |=
@@ -9538,8 +9136,8 @@ class Parser {
 	}
 
 	_arithParseBitwiseXor() {
-		let left, right;
-		left = this._arithParseBitwiseAnd();
+		let right;
+		let left = this._arithParseBitwiseAnd();
 		while (true) {
 			this._arithSkipWs();
 			// Make sure it's not ^=
@@ -9556,8 +9154,8 @@ class Parser {
 	}
 
 	_arithParseBitwiseAnd() {
-		let left, right;
-		left = this._arithParseEquality();
+		let right;
+		let left = this._arithParseEquality();
 		while (true) {
 			this._arithSkipWs();
 			// Make sure it's not && or &=
@@ -9585,8 +9183,8 @@ class Parser {
 	}
 
 	_arithParseComparison() {
-		let left, right;
-		left = this._arithParseShift();
+		let right;
+		let left = this._arithParseShift();
 		while (true) {
 			this._arithSkipWs();
 			if (this._arithMatch("<=")) {
@@ -9625,8 +9223,8 @@ class Parser {
 	}
 
 	_arithParseShift() {
-		let left, right;
-		left = this._arithParseAdditive();
+		let right;
+		let left = this._arithParseAdditive();
 		while (true) {
 			this._arithSkipWs();
 			if (this._arithMatch("<<=")) {
@@ -9653,8 +9251,8 @@ class Parser {
 	}
 
 	_arithParseAdditive() {
-		let c, c2, left, right;
-		left = this._arithParseMultiplicative();
+		let c, c2, right;
+		let left = this._arithParseMultiplicative();
 		while (true) {
 			this._arithSkipWs();
 			c = this._arithPeek();
@@ -9677,8 +9275,8 @@ class Parser {
 	}
 
 	_arithParseMultiplicative() {
-		let c, c2, left, right;
-		left = this._arithParseExponentiation();
+		let c, c2, right;
+		let left = this._arithParseExponentiation();
 		while (true) {
 			this._arithSkipWs();
 			c = this._arithPeek();
@@ -9706,8 +9304,8 @@ class Parser {
 	}
 
 	_arithParseExponentiation() {
-		let left, right;
-		left = this._arithParseUnary();
+		let right;
+		const left = this._arithParseUnary();
 		this._arithSkipWs();
 		if (this._arithMatch("**")) {
 			this._arithConsume("**");
@@ -9719,7 +9317,7 @@ class Parser {
 	}
 
 	_arithParseUnary() {
-		let c, operand;
+		let operand;
 		this._arithSkipWs();
 		// Pre-increment/decrement
 		if (this._arithMatch("++")) {
@@ -9735,7 +9333,7 @@ class Parser {
 			return new ArithPreDecr(operand);
 		}
 		// Unary operators
-		c = this._arithPeek();
+		const c = this._arithPeek();
 		if (c === "!") {
 			this._arithAdvance();
 			this._arithSkipWs();
@@ -9764,8 +9362,8 @@ class Parser {
 	}
 
 	_arithParsePostfix() {
-		let index, left;
-		left = this._arithParsePrimary();
+		let index;
+		let left = this._arithParsePrimary();
 		while (true) {
 			this._arithSkipWs();
 			if (this._arithMatch("++")) {
@@ -9799,9 +9397,9 @@ class Parser {
 	}
 
 	_arithParsePrimary() {
-		let c, escaped_char, expr;
+		let escaped_char, expr;
 		this._arithSkipWs();
-		c = this._arithPeek();
+		const c = this._arithPeek();
 		// Parenthesized expression
 		if (c === "(") {
 			this._arithAdvance();
@@ -9861,11 +9459,11 @@ class Parser {
 	}
 
 	_arithParseExpansion() {
-		let c, ch, name_chars;
+		let ch;
 		if (!this._arithConsume("$")) {
 			throw new ParseError("Expected '$'", this._arith_pos);
 		}
-		c = this._arithPeek();
+		const c = this._arithPeek();
 		// Command substitution $(...)
 		if (c === "(") {
 			return this._arithParseCmdsub();
@@ -9875,7 +9473,7 @@ class Parser {
 			return this._arithParseBracedParam();
 		}
 		// Simple $var
-		name_chars = [];
+		const name_chars = [];
 		while (!this._arithAtEnd()) {
 			ch = this._arithPeek();
 			if (/^[a-zA-Z0-9]$/.test(ch) || ch === "_") {
@@ -9898,7 +9496,7 @@ class Parser {
 	}
 
 	_arithParseCmdsub() {
-		let ch, cmd, content, content_start, depth, inner_expr, sub_parser;
+		let ch, content, content_start, depth, inner_expr;
 		// We're positioned after $, at (
 		this._arithAdvance();
 		// Check for $(( which is nested arithmetic
@@ -9909,13 +9507,13 @@ class Parser {
 			while (!this._arithAtEnd() && depth > 0) {
 				ch = this._arithPeek();
 				if (ch === "(") {
-					depth += 1;
+					depth++;
 					this._arithAdvance();
 				} else if (ch === ")") {
 					if (depth === 1 && this._arithPeek(1) === ")") {
 						break;
 					}
-					depth -= 1;
+					depth--;
 					this._arithAdvance();
 				} else {
 					this._arithAdvance();
@@ -9933,10 +9531,10 @@ class Parser {
 		while (!this._arithAtEnd() && depth > 0) {
 			ch = this._arithPeek();
 			if (ch === "(") {
-				depth += 1;
+				depth++;
 				this._arithAdvance();
 			} else if (ch === ")") {
-				depth -= 1;
+				depth--;
 				if (depth === 0) {
 					break;
 				}
@@ -9948,13 +9546,13 @@ class Parser {
 		content = this._arith_src.slice(content_start, this._arith_pos);
 		this._arithAdvance();
 		// Parse the command inside
-		sub_parser = new Parser(content, this._extglob);
-		cmd = sub_parser.parseList();
+		const sub_parser = new Parser(content, this._extglob);
+		const cmd = sub_parser.parseList();
 		return new CommandSubstitution(cmd);
 	}
 
 	_arithParseBracedParam() {
-		let ch, depth, name, name_chars, op_chars, op_str;
+		let ch, name_chars;
 		this._arithAdvance();
 		// Handle indirect ${!var}
 		if (this._arithPeek() === "!") {
@@ -9990,17 +9588,17 @@ class Parser {
 			}
 			name_chars.push(this._arithAdvance());
 		}
-		name = name_chars.join("");
+		const name = name_chars.join("");
 		// Check for operator
-		op_chars = [];
-		depth = 1;
+		const op_chars = [];
+		let depth = 1;
 		while (!this._arithAtEnd() && depth > 0) {
 			ch = this._arithPeek();
 			if (ch === "{") {
-				depth += 1;
+				depth++;
 				op_chars.push(this._arithAdvance());
 			} else if (ch === "}") {
-				depth -= 1;
+				depth--;
 				if (depth === 0) {
 					break;
 				}
@@ -10010,7 +9608,7 @@ class Parser {
 			}
 		}
 		this._arithConsume("}");
-		op_str = op_chars.join("");
+		const op_str = op_chars.join("");
 		// Parse the operator
 		if (op_str.startsWith(":-")) {
 			return new ParamExpansion(name, ":-", op_str.slice(2, op_str.length));
@@ -10049,13 +9647,12 @@ class Parser {
 	}
 
 	_arithParseSingleQuote() {
-		let content, content_start;
 		this._arithAdvance();
-		content_start = this._arith_pos;
+		const content_start = this._arith_pos;
 		while (!this._arithAtEnd() && this._arithPeek() !== "'") {
 			this._arithAdvance();
 		}
-		content = this._arith_src.slice(content_start, this._arith_pos);
+		const content = this._arith_src.slice(content_start, this._arith_pos);
 		if (!this._arithConsume("'")) {
 			throw new ParseError(
 				"Unterminated single quote in arithmetic",
@@ -10066,9 +9663,9 @@ class Parser {
 	}
 
 	_arithParseDoubleQuote() {
-		let c, content, content_start;
+		let c;
 		this._arithAdvance();
-		content_start = this._arith_pos;
+		const content_start = this._arith_pos;
 		while (!this._arithAtEnd() && this._arithPeek() !== '"') {
 			c = this._arithPeek();
 			if (c === "\\" && !this._arithAtEnd()) {
@@ -10078,7 +9675,7 @@ class Parser {
 				this._arithAdvance();
 			}
 		}
-		content = this._arith_src.slice(content_start, this._arith_pos);
+		const content = this._arith_src.slice(content_start, this._arith_pos);
 		if (!this._arithConsume('"')) {
 			throw new ParseError(
 				"Unterminated double quote in arithmetic",
@@ -10089,9 +9686,9 @@ class Parser {
 	}
 
 	_arithParseBacktick() {
-		let c, cmd, content, content_start, sub_parser;
+		let c;
 		this._arithAdvance();
-		content_start = this._arith_pos;
+		const content_start = this._arith_pos;
 		while (!this._arithAtEnd() && this._arithPeek() !== "`") {
 			c = this._arithPeek();
 			if (c === "\\" && !this._arithAtEnd()) {
@@ -10101,7 +9698,7 @@ class Parser {
 				this._arithAdvance();
 			}
 		}
-		content = this._arith_src.slice(content_start, this._arith_pos);
+		const content = this._arith_src.slice(content_start, this._arith_pos);
 		if (!this._arithConsume("`")) {
 			throw new ParseError(
 				"Unterminated backtick in arithmetic",
@@ -10109,16 +9706,16 @@ class Parser {
 			);
 		}
 		// Parse the command inside
-		sub_parser = new Parser(content, this._extglob);
-		cmd = sub_parser.parseList();
+		const sub_parser = new Parser(content, this._extglob);
+		const cmd = sub_parser.parseList();
 		return new CommandSubstitution(cmd);
 	}
 
 	_arithParseNumberOrVar() {
-		let c, ch, chars, expansion, prefix;
+		let ch, expansion, prefix;
 		this._arithSkipWs();
-		chars = [];
-		c = this._arithPeek();
+		const chars = [];
+		const c = this._arithPeek();
 		// Check for number (starts with digit or base#)
 		if (/^[0-9]+$/.test(c)) {
 			// Could be decimal, hex (0x), octal (0), or base#n
@@ -10157,11 +9754,10 @@ class Parser {
 	}
 
 	_parseDeprecatedArithmetic() {
-		let content, start, text;
 		if (this.atEnd() || this.peek() !== "$") {
 			return [null, ""];
 		}
-		start = this.pos;
+		const start = this.pos;
 		// Check for $[
 		if (this.pos + 1 >= this.length || this.source[this.pos + 1] !== "[") {
 			return [null, ""];
@@ -10170,28 +9766,26 @@ class Parser {
 		this.advance();
 		// Find matching ] using unified matched pair parsing
 		this._lexer.pos = this.pos;
-		content = this._lexer._parseMatchedPair("[", "]", MatchedPairFlags.ARITH);
+		const content = this._lexer._parseMatchedPair(
+			"[",
+			"]",
+			MatchedPairFlags.ARITH,
+		);
 		this.pos = this._lexer.pos;
-		text = this.source.slice(start, this.pos);
+		const text = this.source.slice(start, this.pos);
 		return [new ArithDeprecated(content), text];
 	}
 
-	_parseParamExpansion(in_dquote) {
-		let result;
-		if (in_dquote == null) {
-			in_dquote = false;
-		}
+	_parseParamExpansion(in_dquote = false) {
 		this._syncLexer();
-		result = this._lexer._readParamExpansion(in_dquote);
+		const result = this._lexer._readParamExpansion(in_dquote);
 		this._syncParser();
 		return result;
 	}
 
 	parseRedirect() {
 		let base,
-			c,
 			ch,
-			fd,
 			fd_chars,
 			fd_target,
 			in_bracket,
@@ -10202,10 +9796,7 @@ class Parser {
 			op,
 			right,
 			saved,
-			start,
-			strip_tabs,
 			target,
-			varfd,
 			varname,
 			varname_chars,
 			word_start;
@@ -10213,9 +9804,9 @@ class Parser {
 		if (this.atEnd()) {
 			return null;
 		}
-		start = this.pos;
-		fd = null;
-		varfd = null;
+		const start = this.pos;
+		let fd = null;
+		let varfd = null;
 		// Check for variable fd {varname} or {varname[subscript]} before redirect
 		if (this.peek() === "{") {
 			saved = this.pos;
@@ -10258,7 +9849,7 @@ class Parser {
 								(/^[a-zA-Z]$/.test(base[0]) || base[0] === "_")
 							) {
 								is_valid_varfd = true;
-								for (c of base.slice(1)) {
+								for (let c of base.slice(1)) {
 									if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
 										is_valid_varfd = false;
 										break;
@@ -10268,7 +9859,7 @@ class Parser {
 						}
 					} else {
 						is_valid_varfd = true;
-						for (c of varname.slice(1)) {
+						for (let c of varname.slice(1)) {
 							if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
 								is_valid_varfd = false;
 								break;
@@ -10343,7 +9934,7 @@ class Parser {
 		// Parse the redirect operator
 		op = this.advance();
 		// Check for multi-char operators
-		strip_tabs = false;
+		let strip_tabs = false;
 		if (!this.atEnd()) {
 			next_ch = this.peek();
 			if (op === ">" && next_ch === ">") {
@@ -10501,19 +10092,10 @@ class Parser {
 	}
 
 	_parseHeredocDelimiter() {
-		let c,
-			ch,
-			delimiter_chars,
-			depth,
-			dollar_count,
-			esc,
-			esc_val,
-			j,
-			next_ch,
-			quoted;
+		let c, ch, depth, dollar_count, esc, esc_val, j, next_ch;
 		this.skipWhitespace();
-		quoted = false;
-		delimiter_chars = [];
+		let quoted = false;
+		const delimiter_chars = [];
 		while (true) {
 			while (!this.atEnd() && !_isMetachar(this.peek())) {
 				ch = this.peek();
@@ -10592,9 +10174,9 @@ class Parser {
 					while (!this.atEnd() && depth > 0) {
 						c = this.peek();
 						if (c === "(") {
-							depth += 1;
+							depth++;
 						} else if (c === ")") {
-							depth -= 1;
+							depth--;
 						}
 						delimiter_chars.push(this.advance());
 					}
@@ -10607,12 +10189,12 @@ class Parser {
 					dollar_count = 0;
 					j = this.pos - 1;
 					while (j >= 0 && this.source[j] === "$") {
-						dollar_count += 1;
-						j -= 1;
+						dollar_count++;
+						j--;
 					}
 					// If preceded by backslash, first dollar was escaped
 					if (j >= 0 && this.source[j] === "\\") {
-						dollar_count -= 1;
+						dollar_count--;
 					}
 					if (dollar_count % 2 === 1) {
 						// Odd number of $ before: this $ pairs with previous to form $$
@@ -10626,7 +10208,7 @@ class Parser {
 						while (!this.atEnd()) {
 							c = this.peek();
 							if (c === "{") {
-								depth += 1;
+								depth++;
 							} else if (c === "}") {
 								// Consume the closing brace
 								delimiter_chars.push(this.advance());
@@ -10634,7 +10216,7 @@ class Parser {
 									// Outer expansion closed
 									break;
 								}
-								depth -= 1;
+								depth--;
 								// After closing inner brace, check if next is metachar
 								// If so, the expansion ends here (bash behavior)
 								if (depth === 0 && !this.atEnd() && _isMetachar(this.peek())) {
@@ -10654,12 +10236,12 @@ class Parser {
 					dollar_count = 0;
 					j = this.pos - 1;
 					while (j >= 0 && this.source[j] === "$") {
-						dollar_count += 1;
-						j -= 1;
+						dollar_count++;
+						j--;
 					}
 					// If preceded by backslash, first dollar was escaped
 					if (j >= 0 && this.source[j] === "\\") {
-						dollar_count -= 1;
+						dollar_count--;
 					}
 					if (dollar_count % 2 === 1) {
 						// Odd number of $ before: this $ pairs with previous to form $$
@@ -10673,9 +10255,9 @@ class Parser {
 						while (!this.atEnd() && depth > 0) {
 							c = this.peek();
 							if (c === "[") {
-								depth += 1;
+								depth++;
 							} else if (c === "]") {
-								depth -= 1;
+								depth--;
 							}
 							delimiter_chars.push(this.advance());
 						}
@@ -10743,9 +10325,9 @@ class Parser {
 				while (!this.atEnd() && depth > 0) {
 					c = this.peek();
 					if (c === "(") {
-						depth += 1;
+						depth++;
 					} else if (c === ")") {
-						depth -= 1;
+						depth--;
 					}
 					delimiter_chars.push(this.advance());
 				}
@@ -10757,13 +10339,13 @@ class Parser {
 	}
 
 	_readHeredocLine(quoted) {
-		let line, line_end, line_start, next_line_start, trailing_bs;
-		line_start = this.pos;
-		line_end = this.pos;
+		let next_line_start, trailing_bs;
+		const line_start = this.pos;
+		let line_end = this.pos;
 		while (line_end < this.length && this.source[line_end] !== "\n") {
-			line_end += 1;
+			line_end++;
 		}
-		line = this.source.slice(line_start, line_end);
+		let line = this.source.slice(line_start, line_end);
 		if (!quoted) {
 			while (line_end < this.length) {
 				trailing_bs = _countTrailingBackslashes(line);
@@ -10771,10 +10353,10 @@ class Parser {
 					break;
 				}
 				line = line.slice(0, line.length - 1);
-				line_end += 1;
+				line_end++;
 				next_line_start = line_end;
 				while (line_end < this.length && this.source[line_end] !== "\n") {
-					line_end += 1;
+					line_end++;
 				}
 				line = line + this.source.slice(next_line_start, line_end);
 			}
@@ -10783,10 +10365,9 @@ class Parser {
 	}
 
 	_lineMatchesDelimiter(line, delimiter, strip_tabs) {
-		let check_line, normalized_check, normalized_delim;
-		check_line = strip_tabs ? line.replace(/^[\t]+/, "") : line;
-		normalized_check = _normalizeHeredocDelimiter(check_line);
-		normalized_delim = _normalizeHeredocDelimiter(delimiter);
+		const check_line = strip_tabs ? line.replace(/^[\t]+/, "") : line;
+		const normalized_check = _normalizeHeredocDelimiter(check_line);
+		const normalized_delim = _normalizeHeredocDelimiter(delimiter);
 		return [normalized_check === normalized_delim, check_line];
 	}
 
@@ -10794,7 +10375,6 @@ class Parser {
 		let add_newline,
 			check_line,
 			content_lines,
-			heredoc,
 			line,
 			line_end,
 			line_start,
@@ -10802,7 +10382,7 @@ class Parser {
 			normalized_check,
 			normalized_delim,
 			tabs_stripped;
-		for (heredoc of this._pending_heredocs) {
+		for (let heredoc of this._pending_heredocs) {
 			content_lines = [];
 			line_start = this.pos;
 			while (this.pos < this.length) {
@@ -10863,12 +10443,11 @@ class Parser {
 	}
 
 	_parseHeredoc(fd, strip_tabs) {
-		let delimiter, existing, heredoc, quoted, start_pos;
-		start_pos = this.pos;
+		const start_pos = this.pos;
 		this._setState(ParserStateFlags.PST_HEREDOC);
-		[delimiter, quoted] = this._parseHeredocDelimiter();
+		const [delimiter, quoted] = this._parseHeredocDelimiter();
 		// Check if we've already registered this heredoc (can happen due to re-tokenization)
-		for (existing of this._pending_heredocs) {
+		for (let existing of this._pending_heredocs) {
 			if (
 				existing._start_pos === start_pos &&
 				existing.delimiter === delimiter
@@ -10878,7 +10457,7 @@ class Parser {
 			}
 		}
 		// Create stub HereDoc with empty content - will be filled in later
-		heredoc = new HereDoc(delimiter, "", strip_tabs, quoted, fd, false);
+		const heredoc = new HereDoc(delimiter, "", strip_tabs, quoted, fd, false);
 		heredoc._start_pos = start_pos;
 		this._pending_heredocs.push(heredoc);
 		this._clearState(ParserStateFlags.PST_HEREDOC);
@@ -10886,16 +10465,9 @@ class Parser {
 	}
 
 	parseCommand() {
-		let all_assignments,
-			in_assign_builtin,
-			redirect,
-			redirects,
-			reserved,
-			w,
-			word,
-			words;
-		words = [];
-		redirects = [];
+		let all_assignments, in_assign_builtin, redirect, reserved, word;
+		const words = [];
+		const redirects = [];
 		while (true) {
 			this.skipWhitespace();
 			// Use token-based terminator detection
@@ -10924,7 +10496,7 @@ class Parser {
 			// Check if all previous words were assignments (contain = not inside quotes)
 			// and no redirects have been seen (redirects break assignment context)
 			all_assignments = true;
-			for (w of words) {
+			for (let w of words) {
 				if (!this._isAssignmentWord(w)) {
 					all_assignments = false;
 					break;
@@ -10952,14 +10524,13 @@ class Parser {
 	}
 
 	parseSubshell() {
-		let body;
 		this.skipWhitespace();
 		if (this.atEnd() || this.peek() !== "(") {
 			return null;
 		}
 		this.advance();
 		this._setState(ParserStateFlags.PST_SUBSHELL);
-		body = this.parseList();
+		const body = this.parseList();
 		if (body == null) {
 			this._clearState(ParserStateFlags.PST_SUBSHELL);
 			throw new ParseError("Expected command in subshell", this.pos);
@@ -10975,7 +10546,7 @@ class Parser {
 	}
 
 	parseArithmeticCommand() {
-		let c, content, content_start, depth, expr, saved_pos;
+		let c;
 		this.skipWhitespace();
 		// Check for ((
 		if (
@@ -10986,13 +10557,13 @@ class Parser {
 		) {
 			return null;
 		}
-		saved_pos = this.pos;
+		const saved_pos = this.pos;
 		this.advance();
 		this.advance();
 		// Find matching )) - track nested parens
 		// Must be )) with no space between - ') )' is nested subshells
-		content_start = this.pos;
-		depth = 1;
+		const content_start = this.pos;
+		let depth = 1;
 		while (!this.atEnd() && depth > 0) {
 			c = this.peek();
 			// Skip single-quoted strings (parens inside don't count)
@@ -11023,7 +10594,7 @@ class Parser {
 				this.advance();
 				this.advance();
 			} else if (c === "(") {
-				depth += 1;
+				depth++;
 				this.advance();
 			} else if (c === ")") {
 				// Check for )) (must be consecutive, no space)
@@ -11035,7 +10606,7 @@ class Parser {
 					// Found the closing ))
 					break;
 				}
-				depth -= 1;
+				depth--;
 				if (depth === 0) {
 					// Closed with ) but next isn't ) - this is nested subshells, not arithmetic
 					this.pos = saved_pos;
@@ -11055,13 +10626,13 @@ class Parser {
 			this.pos = saved_pos;
 			return null;
 		}
-		content = this.source.slice(content_start, this.pos);
+		let content = this.source.slice(content_start, this.pos);
 		// Strip backslash-newline line continuations
 		content = content.replaceAll("\\\n", "");
 		this.advance();
 		this.advance();
 		// Parse the arithmetic expression
-		expr = this._parseArithExpr(content);
+		const expr = this._parseArithExpr(content);
 		return new ArithmeticCommand(expr, this._collectRedirects(), content);
 	}
 
@@ -11113,7 +10684,6 @@ class Parser {
 		"-ef",
 	]);
 	parseConditionalExpr() {
-		let body, next_pos;
 		this.skipWhitespace();
 		// Check for [[
 		if (
@@ -11124,7 +10694,7 @@ class Parser {
 		) {
 			return null;
 		}
-		next_pos = this.pos + 2;
+		const next_pos = this.pos + 2;
 		if (
 			next_pos < this.length &&
 			!(
@@ -11141,7 +10711,7 @@ class Parser {
 		this._setState(ParserStateFlags.PST_CONDEXPR);
 		this._word_context = WORD_CTX_COND;
 		// Parse the conditional expression body
-		body = this._parseCondOr();
+		const body = this._parseCondOr();
 		// Skip whitespace before ]]
 		while (!this.atEnd() && _isWhitespaceNoNewline(this.peek())) {
 			this.advance();
@@ -11197,9 +10767,9 @@ class Parser {
 	}
 
 	_parseCondOr() {
-		let left, right;
+		let right;
 		this._condSkipWhitespace();
-		left = this._parseCondAnd();
+		const left = this._parseCondAnd();
 		this._condSkipWhitespace();
 		if (
 			!this._condAtEnd() &&
@@ -11216,9 +10786,9 @@ class Parser {
 	}
 
 	_parseCondAnd() {
-		let left, right;
+		let right;
 		this._condSkipWhitespace();
-		left = this._parseCondTerm();
+		const left = this._parseCondTerm();
 		this._condSkipWhitespace();
 		if (
 			!this._condAtEnd() &&
@@ -11235,7 +10805,7 @@ class Parser {
 	}
 
 	_parseCondTerm() {
-		let inner, op, op_word, operand, saved_pos, word1, word2;
+		let inner, op, op_word, operand, saved_pos, word2;
 		this._condSkipWhitespace();
 		if (this._condAtEnd()) {
 			throw new ParseError(
@@ -11268,7 +10838,7 @@ class Parser {
 			return new CondParen(inner);
 		}
 		// Parse first word
-		word1 = this._parseCondWord();
+		const word1 = this._parseCondWord();
 		if (word1 == null) {
 			throw new ParseError("Expected word in conditional expression", this.pos);
 		}
@@ -11332,13 +10902,12 @@ class Parser {
 	}
 
 	_parseCondWord() {
-		let c;
 		this._condSkipWhitespace();
 		if (this._condAtEnd()) {
 			return null;
 		}
 		// Check for special tokens that aren't words
-		c = this.peek();
+		const c = this.peek();
 		if (_isParen(c)) {
 			return null;
 		}
@@ -11360,13 +10929,12 @@ class Parser {
 	}
 
 	_parseCondRegexWord() {
-		let result;
 		this._condSkipWhitespace();
 		if (this._condAtEnd()) {
 			return null;
 		}
 		this._setState(ParserStateFlags.PST_REGEXP);
-		result = this._parseWordInternal(WORD_CTX_REGEX);
+		const result = this._parseWordInternal(WORD_CTX_REGEX);
 		this._clearState(ParserStateFlags.PST_REGEXP);
 		// Restore word context to COND after parsing regex
 		this._word_context = WORD_CTX_COND;
@@ -11374,14 +10942,13 @@ class Parser {
 	}
 
 	parseBraceGroup() {
-		let body;
 		this.skipWhitespace();
 		// Lexer handles { vs {abc distinction: only returns reserved word for standalone {
 		if (!this._lexConsumeWord("{")) {
 			return null;
 		}
 		this.skipWhitespaceAndNewlines();
-		body = this.parseList();
+		const body = this.parseList();
 		if (body == null) {
 			throw new ParseError(
 				"Expected command in brace group",
@@ -11399,18 +10966,13 @@ class Parser {
 	}
 
 	parseIf() {
-		let condition,
-			elif_condition,
-			elif_then_body,
-			else_body,
-			inner_else,
-			then_body;
+		let elif_condition, elif_then_body, inner_else;
 		this.skipWhitespace();
 		if (!this._lexConsumeWord("if")) {
 			return null;
 		}
 		// Parse condition (a list that ends at 'then')
-		condition = this.parseListUntil(new Set(["then"]));
+		const condition = this.parseListUntil(new Set(["then"]));
 		if (condition == null) {
 			throw new ParseError(
 				"Expected condition after 'if'",
@@ -11426,7 +10988,7 @@ class Parser {
 			);
 		}
 		// Parse then body (ends at elif, else, or fi)
-		then_body = this.parseListUntil(new Set(["elif", "else", "fi"]));
+		const then_body = this.parseListUntil(new Set(["elif", "else", "fi"]));
 		if (then_body == null) {
 			throw new ParseError(
 				"Expected commands after 'then'",
@@ -11435,7 +10997,7 @@ class Parser {
 		}
 		// Check what comes next: elif, else, or fi
 		this.skipWhitespaceAndNewlines();
-		else_body = null;
+		let else_body = null;
 		if (this._lexIsAtReservedWord("elif")) {
 			// elif is syntactic sugar for else if ... fi
 			this._lexConsumeWord("elif");
@@ -11502,9 +11064,8 @@ class Parser {
 	}
 
 	_parseElifChain() {
-		let condition, else_body, then_body;
 		this._lexConsumeWord("elif");
-		condition = this.parseListUntil(new Set(["then"]));
+		const condition = this.parseListUntil(new Set(["then"]));
 		if (condition == null) {
 			throw new ParseError(
 				"Expected condition after 'elif'",
@@ -11518,7 +11079,7 @@ class Parser {
 				this._lexPeekToken().pos,
 			);
 		}
-		then_body = this.parseListUntil(new Set(["elif", "else", "fi"]));
+		const then_body = this.parseListUntil(new Set(["elif", "else", "fi"]));
 		if (then_body == null) {
 			throw new ParseError(
 				"Expected commands after 'then'",
@@ -11526,7 +11087,7 @@ class Parser {
 			);
 		}
 		this.skipWhitespaceAndNewlines();
-		else_body = null;
+		let else_body = null;
 		if (this._lexIsAtReservedWord("elif")) {
 			else_body = this._parseElifChain();
 		} else if (this._lexIsAtReservedWord("else")) {
@@ -11543,13 +11104,12 @@ class Parser {
 	}
 
 	parseWhile() {
-		let body, condition;
 		this.skipWhitespace();
 		if (!this._lexConsumeWord("while")) {
 			return null;
 		}
 		// Parse condition (ends at 'do')
-		condition = this.parseListUntil(new Set(["do"]));
+		const condition = this.parseListUntil(new Set(["do"]));
 		if (condition == null) {
 			throw new ParseError(
 				"Expected condition after 'while'",
@@ -11565,7 +11125,7 @@ class Parser {
 			);
 		}
 		// Parse body (ends at 'done')
-		body = this.parseListUntil(new Set(["done"]));
+		const body = this.parseListUntil(new Set(["done"]));
 		if (body == null) {
 			throw new ParseError(
 				"Expected commands after 'do'",
@@ -11584,13 +11144,12 @@ class Parser {
 	}
 
 	parseUntil() {
-		let body, condition;
 		this.skipWhitespace();
 		if (!this._lexConsumeWord("until")) {
 			return null;
 		}
 		// Parse condition (ends at 'do')
-		condition = this.parseListUntil(new Set(["do"]));
+		const condition = this.parseListUntil(new Set(["do"]));
 		if (condition == null) {
 			throw new ParseError(
 				"Expected condition after 'until'",
@@ -11606,7 +11165,7 @@ class Parser {
 			);
 		}
 		// Parse body (ends at 'done')
-		body = this.parseListUntil(new Set(["done"]));
+		const body = this.parseListUntil(new Set(["done"]));
 		if (body == null) {
 			throw new ParseError(
 				"Expected commands after 'do'",
@@ -11625,7 +11184,7 @@ class Parser {
 	}
 
 	parseFor() {
-		let body, brace_group, saw_delimiter, var_name, var_word, word, words;
+		let brace_group, saw_delimiter, var_name, var_word, word;
 		this.skipWhitespace();
 		if (!this._lexConsumeWord("for")) {
 			return null;
@@ -11667,7 +11226,7 @@ class Parser {
 		}
 		this.skipWhitespaceAndNewlines();
 		// Check for optional 'in' clause
-		words = null;
+		let words = null;
 		if (this._lexIsAtReservedWord("in")) {
 			this._lexConsumeWord("in");
 			this.skipWhitespace();
@@ -11737,7 +11296,7 @@ class Parser {
 			);
 		}
 		// Parse body (ends at 'done')
-		body = this.parseListUntil(new Set(["done"]));
+		const body = this.parseListUntil(new Set(["done"]));
 		if (body == null) {
 			throw new ParseError(
 				"Expected commands after 'do'",
@@ -11756,23 +11315,23 @@ class Parser {
 	}
 
 	_parseForArith() {
-		let body, ch, cond, current, incr, init, paren_depth, parts;
+		let ch;
 		// We've already consumed 'for' and positioned at '(('
 		this.advance();
 		this.advance();
 		// Parse the three expressions separated by semicolons
 		// Each can be empty
-		parts = [];
-		current = [];
-		paren_depth = 0;
+		const parts = [];
+		let current = [];
+		let paren_depth = 0;
 		while (!this.atEnd()) {
 			ch = this.peek();
 			if (ch === "(") {
-				paren_depth += 1;
+				paren_depth++;
 				current.push(this.advance());
 			} else if (ch === ")") {
 				if (paren_depth > 0) {
-					paren_depth -= 1;
+					paren_depth--;
 					current.push(this.advance());
 				} else if (
 					this.pos + 1 < this.length &&
@@ -11802,28 +11361,28 @@ class Parser {
 				this.pos,
 			);
 		}
-		init = parts[0];
-		cond = parts[1];
-		incr = parts[2];
+		const init = parts[0];
+		const cond = parts[1];
+		const incr = parts[2];
 		this.skipWhitespace();
 		// Handle optional semicolon
 		if (!this.atEnd() && this.peek() === ";") {
 			this.advance();
 		}
 		this.skipWhitespaceAndNewlines();
-		body = this._parseLoopBody("for loop");
+		const body = this._parseLoopBody("for loop");
 		return new ForArith(init, cond, incr, body, this._collectRedirects());
 	}
 
 	parseSelect() {
-		let body, var_name, word, words;
+		let word;
 		this.skipWhitespace();
 		if (!this._lexConsumeWord("select")) {
 			return null;
 		}
 		this.skipWhitespace();
 		// Parse variable name
-		var_name = this.peekWord();
+		const var_name = this.peekWord();
 		if (var_name == null) {
 			throw new ParseError(
 				"Expected variable name after 'select'",
@@ -11838,7 +11397,7 @@ class Parser {
 		}
 		this.skipWhitespaceAndNewlines();
 		// Check for optional 'in' clause
-		words = null;
+		let words = null;
 		if (this._lexIsAtReservedWord("in")) {
 			this._lexConsumeWord("in");
 			this.skipWhitespaceAndNewlines();
@@ -11869,13 +11428,12 @@ class Parser {
 		// Empty word list is allowed for select (unlike for)
 		// Skip whitespace before body
 		this.skipWhitespaceAndNewlines();
-		body = this._parseLoopBody("select");
+		const body = this._parseLoopBody("select");
 		return new Select(var_name, words, body, this._collectRedirects());
 	}
 
 	_consumeCaseTerminator() {
-		let term;
-		term = this._lexPeekCaseTerminator();
+		const term = this._lexPeekCaseTerminator();
 		if (term != null) {
 			this._lexNextToken();
 			return term;
@@ -11897,13 +11455,11 @@ class Parser {
 			paren_depth,
 			pattern,
 			pattern_chars,
-			patterns,
 			saved,
 			sc,
 			scan_depth,
 			scan_pos,
-			terminator,
-			word;
+			terminator;
 		// Use consume_word for initial keyword to handle leading } in process subs
 		if (!this.consumeWord("case")) {
 			return null;
@@ -11911,7 +11467,7 @@ class Parser {
 		this._setState(ParserStateFlags.PST_CASESTMT);
 		this.skipWhitespace();
 		// Parse the word to match
-		word = this.parseWord();
+		const word = this.parseWord();
 		if (word == null) {
 			throw new ParseError(
 				"Expected word after 'case'",
@@ -11928,7 +11484,7 @@ class Parser {
 		}
 		this.skipWhitespaceAndNewlines();
 		// Parse pattern clauses until 'esac'
-		patterns = [];
+		const patterns = [];
 		this._setState(ParserStateFlags.PST_CASEPAT);
 		while (true) {
 			this.skipWhitespaceAndNewlines();
@@ -11991,7 +11547,7 @@ class Parser {
 					if (extglob_depth > 0) {
 						// Inside extglob, consume the ) and decrement depth
 						pattern_chars.push(this.advance());
-						extglob_depth -= 1;
+						extglob_depth--;
 					} else {
 						// End of pattern
 						this.advance();
@@ -12024,20 +11580,20 @@ class Parser {
 						while (!this.atEnd() && paren_depth > 0) {
 							c = this.peek();
 							if (c === "(") {
-								paren_depth += 1;
+								paren_depth++;
 							} else if (c === ")") {
-								paren_depth -= 1;
+								paren_depth--;
 							}
 							pattern_chars.push(this.advance());
 						}
 					} else {
 						// $() command sub - track single paren
-						extglob_depth += 1;
+						extglob_depth++;
 					}
 				} else if (ch === "(" && extglob_depth > 0) {
 					// Grouping paren inside extglob
 					pattern_chars.push(this.advance());
-					extglob_depth += 1;
+					extglob_depth++;
 				} else if (
 					this._extglob &&
 					_isExtglobPrefix(ch) &&
@@ -12047,7 +11603,7 @@ class Parser {
 					// Extglob opener: @(, ?(, *(, +(, !(
 					pattern_chars.push(this.advance());
 					pattern_chars.push(this.advance());
-					extglob_depth += 1;
+					extglob_depth++;
 				} else if (ch === "[") {
 					// Character class - but only if there's a matching ]
 					// ] must come before ) at same depth (either extglob or pattern)
@@ -12057,13 +11613,13 @@ class Parser {
 					has_first_bracket_literal = false;
 					// Skip [! or [^ at start
 					if (scan_pos < this.length && _isCaretOrBang(this.source[scan_pos])) {
-						scan_pos += 1;
+						scan_pos++;
 					}
 					// Skip ] as first char (literal in char class) only if there's another ]
 					if (scan_pos < this.length && this.source[scan_pos] === "]") {
 						// Check if there's another ] later
-						if (this.source.indexOf("]", scan_pos + 1) !== -1) {
-							scan_pos += 1;
+						if (this.source.includes("]", scan_pos + 1)) {
+							scan_pos++;
 							has_first_bracket_literal = true;
 						}
 					}
@@ -12073,7 +11629,7 @@ class Parser {
 							is_char_class = true;
 							break;
 						} else if (sc === "[") {
-							scan_depth += 1;
+							scan_depth++;
 						} else if (sc === ")" && scan_depth === 0) {
 							// Hit pattern/extglob closer before finding ]
 							break;
@@ -12081,7 +11637,7 @@ class Parser {
 							// Hit pattern separator (| in case pattern or extglob alternation)
 							break;
 						}
-						scan_pos += 1;
+						scan_pos++;
 					}
 					if (is_char_class) {
 						pattern_chars.push(this.advance());
@@ -12185,15 +11741,15 @@ class Parser {
 	}
 
 	parseCoproc() {
-		let body, ch, name, next_word, potential_name, word_start;
+		let body;
 		this.skipWhitespace();
 		if (!this._lexConsumeWord("coproc")) {
 			return null;
 		}
 		this.skipWhitespace();
-		name = null;
+		let name = null;
 		// Check for compound command directly (no NAME)
-		ch = null;
+		let ch = null;
 		if (!this.atEnd()) {
 			ch = this.peek();
 		}
@@ -12216,7 +11772,7 @@ class Parser {
 			}
 		}
 		// Check for reserved word compounds directly
-		next_word = this._lexPeekReservedWord();
+		let next_word = this._lexPeekReservedWord();
 		if (next_word != null && COMPOUND_KEYWORDS.has(next_word)) {
 			body = this.parseCompoundCommand();
 			if (body != null) {
@@ -12224,8 +11780,8 @@ class Parser {
 			}
 		}
 		// Check if first word is NAME followed by compound command
-		word_start = this.pos;
-		potential_name = this.peekWord();
+		const word_start = this.pos;
+		const potential_name = this.peekWord();
 		if (potential_name) {
 			// Skip past the potential name
 			while (
@@ -12280,19 +11836,12 @@ class Parser {
 	}
 
 	parseFunction() {
-		let body,
-			brace_depth,
-			has_whitespace,
-			i,
-			name,
-			name_start,
-			pos_after_name,
-			saved_pos;
+		let body, name;
 		this.skipWhitespace();
 		if (this.atEnd()) {
 			return null;
 		}
-		saved_pos = this.pos;
+		const saved_pos = this.pos;
 		// Check for 'function' keyword form
 		if (this._lexIsAtReservedWord("function")) {
 			this._lexConsumeWord("function");
@@ -12335,7 +11884,7 @@ class Parser {
 		}
 		// Save position after the name
 		this.skipWhitespace();
-		name_start = this.pos;
+		const name_start = this.pos;
 		// Consume the name
 		while (
 			!this.atEnd() &&
@@ -12352,18 +11901,18 @@ class Parser {
 		}
 		// Check if name contains unclosed parameter expansion ${...}
 		// If so, () is inside the expansion, not function definition syntax
-		brace_depth = 0;
-		i = 0;
+		let brace_depth = 0;
+		let i = 0;
 		while (i < name.length) {
 			if (_isExpansionStart(name, i, "${")) {
-				brace_depth += 1;
+				brace_depth++;
 				i += 2;
 				continue;
 			}
 			if (name[i] === "}") {
-				brace_depth -= 1;
+				brace_depth--;
 			}
-			i += 1;
+			i++;
 		}
 		if (brace_depth > 0) {
 			this.pos = saved_pos;
@@ -12374,10 +11923,10 @@ class Parser {
 		// it's an extglob pattern, not a function definition
 		// Similarly, if name ends with $ and () is adjacent, it's a command
 		// substitution, not a function definition
-		pos_after_name = this.pos;
+		const pos_after_name = this.pos;
 		this.skipWhitespace();
-		has_whitespace = this.pos > pos_after_name;
-		if (!has_whitespace && name && "*?@+!$".includes(name[name.length - 1])) {
+		const has_whitespace = this.pos > pos_after_name;
+		if (!has_whitespace && name && "*?@+!$".includes(name.at(-1))) {
 			this.pos = saved_pos;
 			return null;
 		}
@@ -12402,9 +11951,8 @@ class Parser {
 	}
 
 	_parseCompoundCommand() {
-		let result;
 		// Try each compound command type
-		result = this.parseBraceGroup();
+		let result = this.parseBraceGroup();
 		if (result) {
 			return result;
 		}
@@ -12456,7 +12004,7 @@ class Parser {
 	}
 
 	_atListUntilTerminator(stop_words) {
-		let next_pos, reserved;
+		let next_pos;
 		if (this.atEnd()) {
 			return true;
 		}
@@ -12470,7 +12018,7 @@ class Parser {
 				return true;
 			}
 		}
-		reserved = this._lexPeekReservedWord();
+		const reserved = this._lexPeekReservedWord();
 		if (reserved != null && stop_words.has(reserved)) {
 			return true;
 		}
@@ -12481,18 +12029,18 @@ class Parser {
 	}
 
 	parseListUntil(stop_words) {
-		let next_op, op, parts, pipeline, reserved;
+		let next_op, op;
 		// Check if we're already at a stop word
 		this.skipWhitespaceAndNewlines();
-		reserved = this._lexPeekReservedWord();
+		const reserved = this._lexPeekReservedWord();
 		if (reserved != null && stop_words.has(reserved)) {
 			return null;
 		}
-		pipeline = this.parsePipeline();
+		let pipeline = this.parsePipeline();
 		if (pipeline == null) {
 			return null;
 		}
-		parts = [pipeline];
+		const parts = [pipeline];
 		while (true) {
 			// Check for explicit operator FIRST (without consuming newlines)
 			this.skipWhitespace();
@@ -12566,12 +12114,12 @@ class Parser {
 	}
 
 	parseCompoundCommand() {
-		let ch, func, keyword_word, reserved, result, word;
+		let keyword_word, result, word;
 		this.skipWhitespace();
 		if (this.atEnd()) {
 			return null;
 		}
-		ch = this.peek();
+		const ch = this.peek();
 		// Arithmetic command ((...)) - check before subshell
 		if (
 			ch === "(" &&
@@ -12609,7 +12157,7 @@ class Parser {
 		}
 		// Fall through to simple command if [[ is not a conditional keyword
 		// Check for reserved words using Lexer
-		reserved = this._lexPeekReservedWord();
+		let reserved = this._lexPeekReservedWord();
 		// In command substitutions, handle leading } for keyword matching
 		// (fallback for edge cases like "$(}case x in x)esac)")
 		if (reserved == null && this._in_process_sub) {
@@ -12668,7 +12216,7 @@ class Parser {
 			return this.parseCoproc();
 		}
 		// Try POSIX function definition (name() form) before simple command
-		func = this.parseFunction();
+		const func = this.parseFunction();
 		if (func != null) {
 			return func;
 		}
@@ -12677,11 +12225,11 @@ class Parser {
 	}
 
 	parsePipeline() {
-		let inner, prefix_order, result, saved, time_posix;
+		let inner, saved;
 		this.skipWhitespace();
 		// Track order of prefixes: "time", "negation", or "time_negation" or "negation_time"
-		prefix_order = null;
-		time_posix = false;
+		let prefix_order = null;
+		let time_posix = false;
 		// Check for 'time' prefix first
 		if (this._lexIsAtReservedWord("time")) {
 			this._lexConsumeWord("time");
@@ -12772,7 +12320,7 @@ class Parser {
 			}
 		}
 		// Parse the actual pipeline
-		result = this._parseSimplePipeline();
+		let result = this._parseSimplePipeline();
 		// Wrap based on prefix order
 		// Note: bare time and time ! are valid (null command timing)
 		if (prefix_order === "time") {
@@ -12795,12 +12343,12 @@ class Parser {
 	}
 
 	_parseSimplePipeline() {
-		let cmd, commands, is_pipe_both, op, token_type, value;
-		cmd = this.parseCompoundCommand();
+		let is_pipe_both, op, token_type, value;
+		let cmd = this.parseCompoundCommand();
 		if (cmd == null) {
 			return null;
 		}
-		commands = [cmd];
+		const commands = [cmd];
 		while (true) {
 			this.skipWhitespace();
 			op = this._lexPeekOperator();
@@ -12831,13 +12379,12 @@ class Parser {
 	}
 
 	parseListOperator() {
-		let op, token_type, value;
 		this.skipWhitespace();
-		op = this._lexPeekOperator();
+		const op = this._lexPeekOperator();
 		if (op == null) {
 			return null;
 		}
-		[token_type, value] = op;
+		const [token_type, value] = op;
 		if (token_type === TokenType.AND_AND) {
 			this._lexNextToken();
 			return "&&";
@@ -12858,28 +12405,24 @@ class Parser {
 	}
 
 	_peekListOperator() {
-		let op, saved_pos;
-		saved_pos = this.pos;
-		op = this.parseListOperator();
+		const saved_pos = this.pos;
+		const op = this.parseListOperator();
 		this.pos = saved_pos;
 		return op;
 	}
 
-	parseList(newline_as_separator) {
-		let next_op, op, parts, pipeline;
-		if (newline_as_separator == null) {
-			newline_as_separator = true;
-		}
+	parseList(newline_as_separator = true) {
+		let next_op, op;
 		if (newline_as_separator) {
 			this.skipWhitespaceAndNewlines();
 		} else {
 			this.skipWhitespace();
 		}
-		pipeline = this.parsePipeline();
+		let pipeline = this.parsePipeline();
 		if (pipeline == null) {
 			return null;
 		}
-		parts = [pipeline];
+		const parts = [pipeline];
 		// Grammar-level EOF token check (like Bash's simple_list rule)
 		if (this._inState(ParserStateFlags.PST_EOFTOKEN) && this._atEofToken()) {
 			return parts.length === 1 ? parts[0] : new List(parts);
@@ -12975,25 +12518,24 @@ class Parser {
 	}
 
 	parseComment() {
-		let start, text;
 		if (this.atEnd() || this.peek() !== "#") {
 			return null;
 		}
-		start = this.pos;
+		const start = this.pos;
 		while (!this.atEnd() && this.peek() !== "\n") {
 			this.advance();
 		}
-		text = this.source.slice(start, this.pos);
+		const text = this.source.slice(start, this.pos);
 		return new Comment(text);
 	}
 
 	parse() {
-		let comment, found_newline, result, results, source;
-		source = this.source.trim();
+		let comment, found_newline, result;
+		const source = this.source.trim();
 		if (!source) {
 			return [new Empty()];
 		}
-		results = [];
+		const results = [];
 		// Skip leading comments (bash-oracle doesn't output them)
 		while (true) {
 			this.skipWhitespace();
@@ -13048,7 +12590,7 @@ class Parser {
 		if (
 			this._saw_newline_in_single_quote &&
 			this.source &&
-			this.source[this.source.length - 1] === "\\" &&
+			this.source.at(-1) === "\\" &&
 			!(
 				this.source.length >= 3 &&
 				this.source.slice(this.source.length - 3, this.source.length - 1) ===
@@ -13071,13 +12613,12 @@ class Parser {
 	}
 
 	_stripTrailingBackslashFromLastWord(nodes) {
-		let last_node, last_word;
 		if (!nodes) {
 			return;
 		}
-		last_node = nodes[nodes.length - 1];
+		const last_node = nodes.at(-1);
 		// Find the last Word in the structure
-		last_word = this._findLastWord(last_node);
+		const last_word = this._findLastWord(last_node);
 		if (last_word && last_word.value.endsWith("\\")) {
 			last_word.value = last_word.value.slice(0, last_word.value.length - 1);
 			// If the word is now empty, remove it from the command
@@ -13095,43 +12636,39 @@ class Parser {
 		if (node instanceof Command) {
 			// For trailing backslash stripping, prioritize words ending with backslash
 			// since that's the word we need to strip from
-			if (node.words && node.words.length) {
-				last_word = node.words[node.words.length - 1];
+			if (node.words?.length) {
+				last_word = node.words.at(-1);
 				if (last_word.value.endsWith("\\")) {
 					return last_word;
 				}
 			}
 			// Redirects come after words in s-expression output, so check redirects first
-			if (node.redirects && node.redirects.length) {
-				last_redirect = node.redirects[node.redirects.length - 1];
+			if (node.redirects?.length) {
+				last_redirect = node.redirects.at(-1);
 				if (last_redirect instanceof Redirect) {
 					return last_redirect.target;
 				}
 			}
-			if (node.words && node.words.length) {
-				return node.words[node.words.length - 1];
+			if (node.words?.length) {
+				return node.words.at(-1);
 			}
 		}
 		if (node instanceof Pipeline) {
-			if (node.commands && node.commands.length) {
-				return this._findLastWord(node.commands[node.commands.length - 1]);
+			if (node.commands?.length) {
+				return this._findLastWord(node.commands.at(-1));
 			}
 		}
 		if (node instanceof List) {
-			if (node.parts && node.parts.length) {
-				return this._findLastWord(node.parts[node.parts.length - 1]);
+			if (node.parts?.length) {
+				return this._findLastWord(node.parts.at(-1));
 			}
 		}
 		return null;
 	}
 }
 
-function parse(source, extglob) {
-	let parser;
-	if (extglob == null) {
-		extglob = false;
-	}
-	parser = new Parser(source, false, extglob);
+function parse(source, extglob = false) {
+	const parser = new Parser(source, false, extglob);
 	return parser.parse();
 }
 

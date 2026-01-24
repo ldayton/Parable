@@ -37,6 +37,11 @@ class JSTranspiler(ast.NodeVisitor):
         }
         self.comments = {}  # line_number -> comment_text
         self.last_line = 0
+        self._in_assignment_target = False
+        self._reassigned_vars = set()
+        self._emitted_vars = set()
+        self._top_level_first_assign = set()  # Vars first assigned at top level
+        self._block_depth = 0
 
     def emit(self, text: str):
         self.output.append("    " * self.indent + text)
@@ -213,36 +218,70 @@ class JSTranspiler(ast.NodeVisitor):
 
     def _collect_local_vars(self, stmts: list) -> set:
         """Collect all variable names assigned in a list of statements."""
-        names = set()
+        counts, _ = self._count_assignments(stmts)
+        return set(counts.keys())
+
+    def _count_assignments(
+        self, stmts: list, counts: dict = None, top_level: set = None, in_block: bool = False
+    ) -> tuple[dict, set]:
+        """Count assignments and track which vars are first assigned at top level."""
+        if counts is None:
+            counts = {}
+        if top_level is None:
+            top_level = set()
         for stmt in stmts:
             if isinstance(stmt, ast.Assign):
                 for target in stmt.targets:
-                    names.update(self._collect_names_from_target(target))
+                    for name in self._collect_names_from_target(target):
+                        if name not in counts and not in_block:
+                            top_level.add(name)
+                        counts[name] = counts.get(name, 0) + 1
             elif isinstance(stmt, ast.AnnAssign):
                 if isinstance(stmt.target, ast.Name) and stmt.value:
-                    names.add(stmt.target.id)
+                    name = stmt.target.id
+                    if name not in counts and not in_block:
+                        top_level.add(name)
+                    counts[name] = counts.get(name, 0) + 1
+            elif isinstance(stmt, ast.AugAssign):
+                for name in self._collect_names_from_target(stmt.target):
+                    counts[name] = counts.get(name, 0) + 1
             elif isinstance(stmt, ast.For):
-                names.update(self._collect_names_from_target(stmt.target))
-                names.update(self._collect_local_vars(stmt.body))
-                names.update(self._collect_local_vars(stmt.orelse))
+                # For loop variables are always block-scoped in JS, don't count them
+                # as function-level variables
+                self._count_assignments(stmt.body, counts, top_level, True)
+                self._count_assignments(stmt.orelse, counts, top_level, True)
             elif isinstance(stmt, ast.While):
-                names.update(self._collect_local_vars(stmt.body))
-                names.update(self._collect_local_vars(stmt.orelse))
+                body_counts, _ = self._count_assignments(stmt.body, {}, set(), True)
+                for name, count in body_counts.items():
+                    counts[name] = counts.get(name, 0) + count * 2
+                self._count_assignments(stmt.orelse, counts, top_level, True)
             elif isinstance(stmt, ast.If):
-                names.update(self._collect_local_vars(stmt.body))
-                names.update(self._collect_local_vars(stmt.orelse))
+                self._count_assignments(stmt.body, counts, top_level, True)
+                self._count_assignments(stmt.orelse, counts, top_level, True)
             elif isinstance(stmt, ast.Try):
-                names.update(self._collect_local_vars(stmt.body))
+                self._count_assignments(stmt.body, counts, top_level, True)
                 for handler in stmt.handlers:
-                    names.update(self._collect_local_vars(handler.body))
-                names.update(self._collect_local_vars(stmt.finalbody))
-        return names
+                    self._count_assignments(handler.body, counts, top_level, True)
+                self._count_assignments(stmt.finalbody, counts, top_level, True)
+        return counts, top_level
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
         # Skip helper functions that are inlined
         if node.name in ("_substring", "_sublist", "_repeat_str"):
             return
-        args = [self._safe_name(a.arg) for a in node.args.args if a.arg != "self"]
+        # Build args with default values in signature
+        non_self_args = [a for a in node.args.args if a.arg != "self"]
+        defaults = node.args.defaults
+        first_default_idx = len(non_self_args) - len(defaults) if defaults else len(non_self_args)
+        args = []
+        for i, a in enumerate(non_self_args):
+            arg_str = self._safe_name(a.arg)
+            if i >= first_default_idx:
+                default = defaults[i - first_default_idx]
+                # Skip None defaults - JS undefined handles this
+                if not (isinstance(default, ast.Constant) and default.value is None):
+                    arg_str += f" = {self.visit_expr(default)}"
+            args.append(arg_str)
         # Handle *args as rest parameter
         if node.args.vararg:
             args.append("..." + self._safe_name(node.args.vararg.arg))
@@ -258,31 +297,26 @@ class JSTranspiler(ast.NodeVisitor):
         old_in_class = self.in_class_body
         old_in_method = self.in_method
         old_declared = self.declared_vars
+        old_reassigned = self._reassigned_vars
+        old_emitted = self._emitted_vars
+        old_top_level = self._top_level_first_assign
         self.in_class_body = False
         self.in_method = True
-        # Collect all local variables and emit hoisted let declarations
+        # Track variables for const vs let at point of use
         param_names = {a.arg for a in node.args.args if a.arg != "self"}
         if node.args.vararg:
             param_names.add(node.args.vararg.arg)
-        local_vars = self._collect_local_vars(node.body) - param_names
-        if local_vars:
-            sorted_vars = sorted(self._safe_name(v) for v in local_vars)
-            self.emit(f"let {', '.join(sorted_vars)};")
+        assignment_counts, top_level_first = self._count_assignments(node.body)
+        local_vars = set(assignment_counts.keys()) - param_names
         self.declared_vars = param_names | local_vars
-
-        # Helper to emit default argument checks
-        def emit_defaults():
-            defaults = node.args.defaults
-            if defaults:
-                non_self_args = [a for a in node.args.args if a.arg != "self"]
-                first_default_idx = len(non_self_args) - len(defaults)
-                for i, default in enumerate(defaults):
-                    # Skip None defaults - they're already undefined/null in JS
-                    if isinstance(default, ast.Constant) and default.value is None:
-                        continue
-                    arg_name = self._safe_name(non_self_args[first_default_idx + i].arg)
-                    default_val = self.visit_expr(default)
-                    self.emit(f"if ({arg_name} == null) {{ {arg_name} = {default_val}; }}")
+        self._reassigned_vars = {name for name, count in assignment_counts.items() if count > 1}
+        self._top_level_first_assign = top_level_first - param_names
+        # Hoist vars not first-assigned at top level (they're used before assigned in main flow)
+        hoisted = local_vars - self._top_level_first_assign
+        if hoisted:
+            sorted_vars = sorted(self._safe_name(v) for v in hoisted)
+            self.emit(f"let {', '.join(sorted_vars)};")
+        self._emitted_vars = set(param_names) | hoisted
 
         # For constructors in subclasses, emit super() first
         if name == "constructor" and self.class_has_base:
@@ -307,18 +341,19 @@ class JSTranspiler(ast.NodeVisitor):
                     self.visit(super_stmt)
             else:
                 self.emit("super();")
-            emit_defaults()  # After super() for constructors
             for stmt in other_stmts:
                 self.emit_comments_before(stmt.lineno)
                 self.visit(stmt)
         else:
-            emit_defaults()  # At start for regular methods
             for stmt in node.body:
                 self.emit_comments_before(stmt.lineno)
                 self.visit(stmt)
         self.in_class_body = old_in_class
         self.in_method = old_in_method
         self.declared_vars = old_declared
+        self._reassigned_vars = old_reassigned
+        self._emitted_vars = old_emitted
+        self._top_level_first_assign = old_top_level
         self.indent -= 1
         self.emit("}")
         self.emit("")
@@ -329,17 +364,39 @@ class JSTranspiler(ast.NodeVisitor):
         else:
             self.emit("return;")
 
+    def _get_declaration_keyword(self, names: set) -> str | None:
+        """Get const/let keyword for first assignment, or None if already declared."""
+        undeclared = names - self._emitted_vars
+        if not undeclared:
+            return None
+        self._emitted_vars.update(undeclared)
+        # Use let if any variable in this assignment is reassigned elsewhere
+        if undeclared & self._reassigned_vars:
+            return "let"
+        return "const"
+
     def visit_Assign(self, node: ast.Assign):
-        target = self.visit_expr(node.targets[0])
+        self._in_assignment_target = True
+        targets = [self.visit_expr(t) for t in node.targets]
+        self._in_assignment_target = False
         value = self.visit_expr(node.value)
         # Module-level assignments get const
         if not self.in_method and not self.in_class_body:
-            self.emit(f"const {target} = {value};")
+            for target in targets:
+                self.emit(f"const {target} = {value};")
         elif self.in_class_body and not self.in_method:
             # Class-level assignments become static fields in JS
-            self.emit(f"static {target} = {value};")
+            for target in targets:
+                self.emit(f"static {target} = {value};")
         else:
-            self.emit(f"{target} = {value};")
+            # Emit declaration keyword on first assignment for each target
+            for i, target in enumerate(targets):
+                names = self._collect_names_from_target(node.targets[i])
+                keyword = self._get_declaration_keyword(names)
+                if keyword:
+                    self.emit(f"{keyword} {target} = {value};")
+                else:
+                    self.emit(f"{target} = {value};")
 
     def visit_AnnAssign(self, node: ast.AnnAssign):
         # Skip class-level type annotations - constructor handles initialization
@@ -348,15 +405,57 @@ class JSTranspiler(ast.NodeVisitor):
         if node.value:
             target = self.visit_expr(node.target)
             value = self.visit_expr(node.value)
-            self.emit(f"{target} = {value};")
+            names = self._collect_names_from_target(node.target)
+            keyword = self._get_declaration_keyword(names)
+            if keyword:
+                self.emit(f"{keyword} {target} = {value};")
+            else:
+                self.emit(f"{target} = {value};")
 
     def visit_AugAssign(self, node: ast.AugAssign):
         target = self.visit_expr(node.target)
+        # Use ++ and -- for += 1 and -= 1
+        if isinstance(node.value, ast.Constant) and node.value.value == 1:
+            if isinstance(node.op, ast.Add):
+                self.emit(f"{target}++;")
+                return
+            if isinstance(node.op, ast.Sub):
+                self.emit(f"{target}--;")
+                return
         op = self.visit_op(node.op)
         value = self.visit_expr(node.value)
         self.emit(f"{target} {op}= {value};")
 
+    def _is_nullish_assign(self, node: ast.If) -> tuple[str, str] | None:
+        """Check if `if x is None: x = val` pattern, return (var, val) or None."""
+        if node.orelse:
+            return None
+        if len(node.body) != 1 or not isinstance(node.body[0], ast.Assign):
+            return None
+        if not isinstance(node.test, ast.Compare):
+            return None
+        if len(node.test.ops) != 1 or not isinstance(node.test.ops[0], ast.Is):
+            return None
+        if not isinstance(node.test.comparators[0], ast.Constant):
+            return None
+        if node.test.comparators[0].value is not None:
+            return None
+        if not isinstance(node.test.left, ast.Name):
+            return None
+        var_name = node.test.left.id
+        assign = node.body[0]
+        if len(assign.targets) != 1 or not isinstance(assign.targets[0], ast.Name):
+            return None
+        if assign.targets[0].id != var_name:
+            return None
+        return (self._safe_name(var_name), self.visit_expr(assign.value))
+
     def visit_If(self, node: ast.If):
+        nullish = self._is_nullish_assign(node)
+        if nullish:
+            var, val = nullish
+            self.emit(f"{var} ??= {val};")
+            return
         self._emit_if(node, is_elif=False)
 
     def _emit_if(self, node: ast.If, is_elif: bool):
@@ -369,9 +468,9 @@ class JSTranspiler(ast.NodeVisitor):
             and isinstance(node.test.value, ast.Name)
             and node.test.attr in array_attrs
         ):
-            test = f"{test} && {test}.length"
+            test = f"{test}?.length"
         elif isinstance(node.test, ast.Name) and node.test.id in array_attrs:
-            test = f"{test} && {test}.length"
+            test = f"{test}?.length"
         if is_elif:
             self.emit_raw("    " * self.indent + f"}} else if ({test}) {{")
         else:
@@ -408,6 +507,9 @@ class JSTranspiler(ast.NodeVisitor):
     def visit_For(self, node: ast.For):
         target = self.visit_expr(node.target)
         iter_expr = node.iter
+        # For loops always declare their own block-scoped variable
+        # Use let for loop variables (they're reassigned each iteration)
+        decl = "let "
         # Handle range() specially
         if (
             isinstance(iter_expr, ast.Call)
@@ -417,11 +519,11 @@ class JSTranspiler(ast.NodeVisitor):
             args = iter_expr.args
             if len(args) == 1:
                 self.emit(
-                    f"for ({target} = 0; {target} < {self.visit_expr(args[0])}; {target}++) {{"
+                    f"for ({decl}{target} = 0; {target} < {self.visit_expr(args[0])}; {target}++) {{"
                 )
             elif len(args) == 2:
                 self.emit(
-                    f"for ({target} = {self.visit_expr(args[0])}; {target} < {self.visit_expr(args[1])}; {target}++) {{"
+                    f"for ({decl}{target} = {self.visit_expr(args[0])}; {target} < {self.visit_expr(args[1])}; {target}++) {{"
                 )
             else:
                 start, end, step = args
@@ -433,15 +535,15 @@ class JSTranspiler(ast.NodeVisitor):
                     is_negative = True
                 if is_negative:
                     self.emit(
-                        f"for ({target} = {self.visit_expr(start)}; {target} > {self.visit_expr(end)}; {target}--) {{"
+                        f"for ({decl}{target} = {self.visit_expr(start)}; {target} > {self.visit_expr(end)}; {target}--) {{"
                     )
                 else:
                     step_val = self.visit_expr(step)
                     self.emit(
-                        f"for ({target} = {self.visit_expr(start)}; {target} < {self.visit_expr(end)}; {target} += {step_val}) {{"
+                        f"for ({decl}{target} = {self.visit_expr(start)}; {target} < {self.visit_expr(end)}; {target} += {step_val}) {{"
                     )
         else:
-            self.emit(f"for ({target} of {self.visit_expr(iter_expr)}) {{")
+            self.emit(f"for ({decl}{target} of {self.visit_expr(iter_expr)}) {{")
         self.indent += 1
         for stmt in node.body:
             self.emit_comments_before(stmt.lineno)
@@ -533,8 +635,26 @@ class JSTranspiler(ast.NodeVisitor):
             return f"this.{attr}"
         return f"{value}.{attr}"
 
+    def _is_last_index(self, node: ast.Subscript) -> bool:
+        """Check if subscript is arr[len(arr) - 1] pattern (read context only)."""
+        if self._in_assignment_target:
+            return False
+        if not isinstance(node.slice, ast.BinOp) or not isinstance(node.slice.op, ast.Sub):
+            return False
+        if not isinstance(node.slice.right, ast.Constant) or node.slice.right.value != 1:
+            return False
+        left = node.slice.left
+        if not isinstance(left, ast.Call) or not isinstance(left.func, ast.Name):
+            return False
+        if left.func.id != "len" or len(left.args) != 1:
+            return False
+        return ast.dump(left.args[0]) == ast.dump(node.value)
+
     def visit_expr_Subscript(self, node: ast.Subscript) -> str:
         value = self.visit_expr(node.value)
+        # Detect arr[len(arr) - 1] -> arr.at(-1)
+        if self._is_last_index(node):
+            return f"{value}.at(-1)"
         if isinstance(node.slice, ast.Slice):
             lower = self.visit_expr(node.slice.lower) if node.slice.lower else "0"
             upper = self.visit_expr(node.slice.upper) if node.slice.upper else ""
@@ -643,9 +763,9 @@ class JSTranspiler(ast.NodeVisitor):
                     chars = self.visit_expr(arg)
                     return f'{obj}.replace(new RegExp("[" + {chars} + "]+$"), "")'
                 return f"{obj}.trimEnd()"
-            # Handle str.encode() - returns array of byte values
+            # Handle str.encode() - returns iterable of byte values (Uint8Array)
             if method == "encode":
-                return f"Array.from(new TextEncoder().encode({obj}))"
+                return f"new TextEncoder().encode({obj})"
             # Handle bytes.decode() - converts byte array to string
             if method == "decode":
                 return f"new TextDecoder().decode(new Uint8Array({obj}))"
@@ -737,7 +857,7 @@ class JSTranspiler(ast.NodeVisitor):
                 return "[]"
             if name == "list":
                 if args:
-                    return f"Array.from({args})"
+                    return f"[...{args}]"
                 return "[]"
             if name == "set":
                 return f"new Set({args})"
@@ -868,11 +988,40 @@ class JSTranspiler(ast.NodeVisitor):
                 if self._is_set_expr(node.comparators[0]):
                     return f"!{right}.has({left})"
                 return f"!{right}.includes({left})"
+            # Handle .find(x) != -1 → .includes(x) and .find(x) == -1 → !.includes(x)
+            if self._is_find_comparison(node.left, node.comparators[0], op):
+                obj = self.visit_expr(node.left.func.value)
+                args = ", ".join(self.visit_expr(a) for a in node.left.args)
+                if isinstance(op, ast.NotEq):
+                    return f"{obj}.includes({args})"
+                return f"!{obj}.includes({args})"
         result = self.visit_expr(node.left)
         for op, comparator in zip(node.ops, node.comparators, strict=True):
             op_str = self.visit_cmpop(op)
             result += f" {op_str} {self.visit_expr(comparator)}"
         return f"({result})"
+
+    def _is_find_comparison(self, left, right, op) -> bool:
+        """Check if this is a .find(x) == -1 or .find(x) != -1 pattern."""
+        if not isinstance(left, ast.Call):
+            return False
+        if not isinstance(left.func, ast.Attribute):
+            return False
+        if left.func.attr != "find":
+            return False
+        if len(left.args) not in (1, 2):
+            return False
+        if not isinstance(op, (ast.Eq, ast.NotEq)):
+            return False
+        if not isinstance(right, ast.UnaryOp):
+            return False
+        if not isinstance(right.op, ast.USub):
+            return False
+        if not isinstance(right.operand, ast.Constant):
+            return False
+        if right.operand.value != 1:
+            return False
+        return True
 
     def visit_expr_BoolOp(self, node: ast.BoolOp) -> str:
         op = " && " if isinstance(node.op, ast.And) else " || "

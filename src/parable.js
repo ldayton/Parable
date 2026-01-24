@@ -6993,8 +6993,8 @@ function _findBracedParamEnd(value, start) {
 		if (dolbrace_state === DolbraceState.PARAM && ":-=?+#%/^,".includes(c)) {
 			dolbrace_state = DolbraceState.WORD;
 		}
-		// Handle array subscripts
-		if (c === "[" && !in_double) {
+		// Handle array subscripts (only in PARAM state, not pattern words)
+		if (c === "[" && dolbrace_state === DolbraceState.PARAM && !in_double) {
 			end = _skipSubscript(value, i, 0);
 			if (end !== -1) {
 				i = end;

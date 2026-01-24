@@ -5848,8 +5848,8 @@ def _find_braced_param_end(value: str, start: int) -> int:
         # State transition: operators move from PARAM to WORD
         if dolbrace_state == DolbraceState.PARAM and c in ":-=?+#%/^,":
             dolbrace_state = DolbraceState.WORD
-        # Handle array subscripts
-        if c == "[" and not in_double:
+        # Handle array subscripts (only in PARAM state, not pattern words)
+        if c == "[" and dolbrace_state == DolbraceState.PARAM and not in_double:
             end = _skip_subscript(value, i, 0)
             if end != -1:
                 i = end

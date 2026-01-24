@@ -110,6 +110,19 @@ def _count_consecutive_dollars_before(s: str, pos: int) -> int:
     return count
 
 
+def _is_expansion_start(s: str, pos: int, delimiter: str) -> bool:
+    """Check if s[pos:] starts a real expansion (not after $$).
+
+    Returns True if s starts with delimiter at pos AND the preceding
+    context indicates this is a real expansion (not $$ followed by
+    the delimiter's second character).
+    """
+    if not _starts_with_at(s, pos, delimiter):
+        return False
+    # If preceded by odd number of $, this $ pairs with previous to form $$
+    return _count_consecutive_dollars_before(s, pos) % 2 == 0
+
+
 def _sublist(lst: list, start: int, end: int) -> list:
     """Extract sublist from start to end (exclusive)."""
     return lst[start:end]

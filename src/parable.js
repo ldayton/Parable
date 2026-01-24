@@ -6964,10 +6964,11 @@ function _findCmdsubEnd(value, start) {
 }
 
 function _findBracedParamEnd(value, start) {
-	let c, depth, end, i, in_double;
+	let c, depth, dolbrace_state, end, i, in_double;
 	depth = 1;
 	i = start;
 	in_double = false;
+	dolbrace_state = DolbraceState.PARAM;
 	while (i < value.length && depth > 0) {
 		c = value[i];
 		// Escapes work everywhere except inside single quotes (which we delegate)
@@ -6987,6 +6988,10 @@ function _findBracedParamEnd(value, start) {
 		if (in_double) {
 			i += 1;
 			continue;
+		}
+		// State transition: operators move from PARAM to WORD
+		if (dolbrace_state === DolbraceState.PARAM && ":-=?+#%/^,".includes(c)) {
+			dolbrace_state = DolbraceState.WORD;
 		}
 		// Handle array subscripts
 		if (c === "[" && !in_double) {

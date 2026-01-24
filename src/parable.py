@@ -5828,6 +5828,7 @@ def _find_braced_param_end(value: str, start: int) -> int:
     depth = 1
     i = start
     in_double = False
+    dolbrace_state = DolbraceState.PARAM
     while i < len(value) and depth > 0:
         c = value[i]
         # Escapes work everywhere except inside single quotes (which we delegate)
@@ -5844,6 +5845,9 @@ def _find_braced_param_end(value: str, start: int) -> int:
         if in_double:
             i += 1
             continue
+        # State transition: operators move from PARAM to WORD
+        if dolbrace_state == DolbraceState.PARAM and c in ":-=?+#%/^,":
+            dolbrace_state = DolbraceState.WORD
         # Handle array subscripts
         if c == "[" and not in_double:
             end = _skip_subscript(value, i, 0)

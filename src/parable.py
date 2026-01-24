@@ -262,6 +262,7 @@ class MatchedPairFlags:
     ALLOWESC = 0x10  # Allow backslash escapes (for $'...')
     EXTGLOB = 0x20  # Inside extglob pattern - don't parse ${ $( as constructs
     FIRSTCLOSE = 0x40  # Bare open delimiter doesn't increment count (bash's P_FIRSTCLOSE)
+    ARRAYSUB = 0x80  # Inside [...] array subscript (bash's P_ARRAYSUB)
 
 
 class SavedParserState:

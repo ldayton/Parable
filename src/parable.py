@@ -1569,7 +1569,7 @@ class Lexer:
                     else:
                         content_chars.append(self.advance())
             # Handle command substitution $(...)
-            elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+            elif _is_expansion_start(self.source, self.pos, "$("):
                 self._sync_to_parser()
                 cmdsub_node, cmdsub_text = self._parser._parse_command_substitution()
                 self._sync_from_parser()

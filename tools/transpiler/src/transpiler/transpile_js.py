@@ -108,6 +108,47 @@ class JSTranspiler(ast.NodeVisitor):
     # Python kwargs with skipped positional defaults need explicit JS defaults
     # Maps: (kwarg_name, current_arg_count) -> defaults to insert before the kwarg
     _KWARG_DEFAULTS = {("in_procsub", 1): ["0"]}  # indent=0 default
+    # Method prefixes that need .bind(this) when passed as callbacks
+    _CALLBACK_METHOD_PREFIXES = ("_arith_parse_", "_parse_")
+    # Simple builtin -> JS template (use {args} placeholder)
+    _BUILTIN_TEMPLATES = {
+        "len": "{args}.length",
+        "str": "String({args})",
+        "ord": "{args}.charCodeAt(0)",
+        "chr": "String.fromCodePoint({args})",
+        "bytearray": "[]",
+        "set": "new Set({args})",
+        "max": "Math.max({args})",
+        "min": "Math.min({args})",
+    }
+    # Binary operators: ast type -> JS operator
+    _BINARY_OPS = {
+        ast.Add: "+",
+        ast.Sub: "-",
+        ast.Mult: "*",
+        ast.Div: "/",
+        ast.Mod: "%",
+        ast.Pow: "**",
+        ast.LShift: "<<",
+        ast.RShift: ">>",
+        ast.BitOr: "|",
+        ast.BitXor: "^",
+        ast.BitAnd: "&",
+    }
+    # Comparison operators: ast type -> JS operator
+    _COMPARE_OPS = {
+        ast.Eq: "===",
+        ast.NotEq: "!==",
+        ast.Lt: "<",
+        ast.LtE: "<=",
+        ast.Gt: ">",
+        ast.GtE: ">=",
+        ast.Is: "==",  # loose equality so `x is None` matches null/undefined
+        ast.IsNot: "!=",
+        ast.In: "in",
+        ast.NotIn: "not in",
+    }
+    _MODULE_EXPORTS = "module.exports = { parse, ParseError };"
 
     def __init__(self):
         self.indent = 0
@@ -742,14 +783,12 @@ class JSTranspiler(ast.NodeVisitor):
 
     def _visit_callback_arg(self, arg: ast.expr) -> str:
         """Visit an argument, adding .bind(this) for self method references used as callbacks."""
-        # Only add .bind(this) for parser methods passed as callbacks
         if (
             isinstance(arg, ast.Attribute)
             and isinstance(arg.value, ast.Name)
             and arg.value.id == "self"
-            and (arg.attr.startswith("_arith_parse_") or arg.attr.startswith("_parse_"))
+            and arg.attr.startswith(self._CALLBACK_METHOD_PREFIXES)
         ):
-            # Convert method name to camelCase and add bind
             method_name = self._camel_case(arg.attr)
             return f"this.{method_name}.bind(this)"
         return self.visit_expr(arg)
@@ -865,38 +904,23 @@ class JSTranspiler(ast.NodeVisitor):
 
     def _handle_builtin_call(self, node: ast.Call, name: str, args: str) -> str | _NotHandled:
         """Handle Python builtin function calls. Returns NOT_HANDLED if not handled."""
-        if name == "len":
-            return f"{args}.length"
-        if name == "str":
-            return f"String({args})"
+        if name in self._BUILTIN_TEMPLATES:
+            return self._BUILTIN_TEMPLATES[name].format(args=args)
         if name == "int":
             return f"parseInt({args})" if len(node.args) >= 2 else f"parseInt({args}, 10)"
         if name == "bool":
-            # Warn if bool() is called on a bare variable - could be a list
             if len(node.args) == 1 and isinstance(node.args[0], ast.Name):
                 raise ValueError(
                     f"bool({node.args[0].id}) may have different behavior in JS for arrays. "
                     f"Use 'len({node.args[0].id}) > 0' for lists or explicit comparison."
                 )
             return f"Boolean({args})"
-        if name == "ord":
-            return f"{args}.charCodeAt(0)"
-        if name == "chr":
-            return f"String.fromCodePoint({args})"
         if name == "isinstance":
             return f"{self.visit_expr(node.args[0])} instanceof {self.visit_expr(node.args[1])}"
         if name == "getattr":
             return self._handle_getattr(node)
-        if name == "bytearray":
-            return "[]"
         if name == "list":
             return f"[...{args}]" if args else "[]"
-        if name == "set":
-            return f"new Set({args})"
-        if name == "max":
-            return f"Math.max({args})"
-        if name == "min":
-            return f"Math.min({args})"
         if name in ("_substring", "_sublist"):
             obj, start, end = [self.visit_expr(a) for a in node.args[:3]]
             return f"{obj}.slice({start}, {end})"
@@ -1135,39 +1159,14 @@ class JSTranspiler(ast.NodeVisitor):
         return f"new Set([{elements}])"
 
     def visit_op(self, op: ast.operator) -> str:
-        ops = {
-            ast.Add: "+",
-            ast.Sub: "-",
-            ast.Mult: "*",
-            ast.Div: "/",
-            ast.Mod: "%",
-            ast.Pow: "**",
-            ast.LShift: "<<",
-            ast.RShift: ">>",
-            ast.BitOr: "|",
-            ast.BitXor: "^",
-            ast.BitAnd: "&",
-        }
-        if type(op) not in ops:
+        if type(op) not in self._BINARY_OPS:
             raise NotImplementedError(f"Operator {op.__class__.__name__}")
-        return ops[type(op)]
+        return self._BINARY_OPS[type(op)]
 
     def visit_cmpop(self, op: ast.cmpop) -> str:
-        ops = {
-            ast.Eq: "===",
-            ast.NotEq: "!==",
-            ast.Lt: "<",
-            ast.LtE: "<=",
-            ast.Gt: ">",
-            ast.GtE: ">=",
-            ast.Is: "==",  # loose equality so `x is None` matches null/undefined
-            ast.IsNot: "!=",
-            ast.In: "in",
-            ast.NotIn: "not in",
-        }
-        if type(op) not in ops:
+        if type(op) not in self._COMPARE_OPS:
             raise NotImplementedError(f"Comparison {op.__class__.__name__}")
-        return ops[type(op)]
+        return self._COMPARE_OPS[type(op)]
 
 
 def main():
@@ -1178,7 +1177,7 @@ def main():
     transpiler = JSTranspiler()
     print(transpiler.transpile(source))
     print()
-    print("module.exports = { parse, ParseError };")
+    print(JSTranspiler._MODULE_EXPORTS)
 
 
 if __name__ == "__main__":

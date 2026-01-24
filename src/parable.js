@@ -2798,7 +2798,7 @@ class Word extends Node {
 				) {
 					inner = expanded.slice(1, expanded.length - 1);
 					// Only strip if no CTLESC (empty inner is OK for $'')
-					if (inner.indexOf("") === -1) {
+					if (!inner.includes("")) {
 						// Check if we're in a pattern context (%, %%, #, ##, /, //)
 						// For pattern operators, keep quotes; for others (like ~), strip them
 						result_str = result.join("");
@@ -3612,10 +3612,10 @@ class Word extends Node {
 		}
 		// Check if we have ${ or ${| brace command substitutions to format
 		const has_brace_cmdsub =
-			value.indexOf("${ ") !== -1 ||
-			value.indexOf("${\t") !== -1 ||
-			value.indexOf("${\n") !== -1 ||
-			value.indexOf("${|") !== -1;
+			value.includes("${ ") ||
+			value.includes("${\t") ||
+			value.includes("${\n") ||
+			value.includes("${|");
 		// Check if there's an untracked $( that isn't $((, skipping over quotes only
 		let has_untracked_cmdsub = false;
 		let has_untracked_procsub = false;
@@ -11618,7 +11618,7 @@ class Parser {
 					// Skip ] as first char (literal in char class) only if there's another ]
 					if (scan_pos < this.length && this.source[scan_pos] === "]") {
 						// Check if there's another ] later
-						if (this.source.indexOf("]", scan_pos + 1) !== -1) {
+						if (this.source.includes("]", scan_pos + 1)) {
 							scan_pos++;
 							has_first_bracket_literal = true;
 						}

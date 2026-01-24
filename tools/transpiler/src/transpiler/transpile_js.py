@@ -988,11 +988,40 @@ class JSTranspiler(ast.NodeVisitor):
                 if self._is_set_expr(node.comparators[0]):
                     return f"!{right}.has({left})"
                 return f"!{right}.includes({left})"
+            # Handle .find(x) != -1 → .includes(x) and .find(x) == -1 → !.includes(x)
+            if self._is_find_comparison(node.left, node.comparators[0], op):
+                obj = self.visit_expr(node.left.func.value)
+                args = ", ".join(self.visit_expr(a) for a in node.left.args)
+                if isinstance(op, ast.NotEq):
+                    return f"{obj}.includes({args})"
+                return f"!{obj}.includes({args})"
         result = self.visit_expr(node.left)
         for op, comparator in zip(node.ops, node.comparators, strict=True):
             op_str = self.visit_cmpop(op)
             result += f" {op_str} {self.visit_expr(comparator)}"
         return f"({result})"
+
+    def _is_find_comparison(self, left, right, op) -> bool:
+        """Check if this is a .find(x) == -1 or .find(x) != -1 pattern."""
+        if not isinstance(left, ast.Call):
+            return False
+        if not isinstance(left.func, ast.Attribute):
+            return False
+        if left.func.attr != "find":
+            return False
+        if len(left.args) not in (1, 2):
+            return False
+        if not isinstance(op, (ast.Eq, ast.NotEq)):
+            return False
+        if not isinstance(right, ast.UnaryOp):
+            return False
+        if not isinstance(right.op, ast.USub):
+            return False
+        if not isinstance(right.operand, ast.Constant):
+            return False
+        if right.operand.value != 1:
+            return False
+        return True
 
     def visit_expr_BoolOp(self, node: ast.BoolOp) -> str:
         op = " && " if isinstance(node.op, ast.And) else " || "

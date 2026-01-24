@@ -1103,7 +1103,6 @@ class GoTranspiler(ast.NodeVisitor):
         "_gather_heredoc_bodies",
         "_parse_heredoc",
         "_parse_heredoc_delimiter",
-        "parse_case",
         "parse_compound_command",
         "parse_pipeline",
         "parse_list",
@@ -1679,6 +1678,11 @@ class GoTranspiler(ast.NodeVisitor):
                     return "Node"
                 if method in ("_Advance", "_advance", "Advance", "advance"):
                     return "string"
+            # Constructor call for a Node class
+            elif isinstance(node.func, ast.Name):
+                if node.func.id in self.symbols.classes:
+                    if self.symbols.classes[node.func.id].is_node:
+                        return "Node"
         # String literal
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             return "string"

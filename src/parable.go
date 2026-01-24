@@ -9212,7 +9212,248 @@ func (p *Parser) _ConsumeCaseTerminator() string {
 }
 
 func (p *Parser) ParseCase() *Case {
-	panic("TODO: method needs manual implementation")
+	var word *Word
+	_ = word
+	var patterns []Node
+	_ = patterns
+	var saved int
+	_ = saved
+	var isPattern bool
+	_ = isPattern
+	var nextCh string
+	_ = nextCh
+	var patternChars []string
+	_ = patternChars
+	var extglobDepth int
+	_ = extglobDepth
+	var ch string
+	_ = ch
+	var parenDepth int
+	_ = parenDepth
+	var c string
+	_ = c
+	var isCharClass bool
+	_ = isCharClass
+	var scanPos int
+	_ = scanPos
+	var scanDepth int
+	_ = scanDepth
+	var hasFirstBracketLiteral bool
+	_ = hasFirstBracketLiteral
+	var sc string
+	_ = sc
+	var pattern string
+	_ = pattern
+	var body Node
+	_ = body
+	var isEmptyBody bool
+	_ = isEmptyBody
+	var isAtTerminator bool
+	_ = isAtTerminator
+	var terminator string
+	_ = terminator
+	if !(p.ConsumeWord("case")) {
+		return nil
+	}
+	p._SetState(ParserStateFlags_PST_CASESTMT)
+	p.SkipWhitespace()
+	word = p.ParseWord(false, false, false)
+	if word == nil {
+		panic(NewParseError("Expected word after 'case'", p._LexPeekToken().Pos, 0))
+	}
+	p.SkipWhitespaceAndNewlines()
+	if !(p._LexConsumeWord("in")) {
+		panic(NewParseError("Expected 'in' after case word", p._LexPeekToken().Pos, 0))
+	}
+	p.SkipWhitespaceAndNewlines()
+	patterns = []Node{}
+	p._SetState(ParserStateFlags_PST_CASEPAT)
+	for true {
+		p.SkipWhitespaceAndNewlines()
+		if p._LexIsAtReservedWord("esac") {
+			saved = p.Pos
+			p.SkipWhitespace()
+			for !(p.AtEnd()) && !(_IsMetachar(p.Peek())) && !(_IsQuote(p.Peek())) {
+				p.Advance()
+			}
+			p.SkipWhitespace()
+			isPattern = false
+			if !(p.AtEnd()) && p.Peek() == ")" {
+				if p._Eof_token == ")" {
+					isPattern = false
+				} else {
+					p.Advance()
+					p.SkipWhitespace()
+					if !(p.AtEnd()) {
+						nextCh = p.Peek()
+						if nextCh == ";" {
+							isPattern = true
+						} else if !(_IsNewlineOrRightParen(nextCh)) {
+							isPattern = true
+						}
+					}
+				}
+			}
+			p.Pos = saved
+			if !(isPattern) {
+				break
+			}
+		}
+		p.SkipWhitespaceAndNewlines()
+		if !(p.AtEnd()) && p.Peek() == "(" {
+			p.Advance()
+			p.SkipWhitespaceAndNewlines()
+		}
+		patternChars = []string{}
+		extglobDepth = 0
+		for !(p.AtEnd()) {
+			ch = p.Peek()
+			if ch == ")" {
+				if extglobDepth > 0 {
+					patternChars = append(patternChars, p.Advance())
+					extglobDepth -= 1
+				} else {
+					p.Advance()
+					break
+				}
+			} else if ch == "\\" {
+				if p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "\n" {
+					p.Advance()
+					p.Advance()
+				} else {
+					patternChars = append(patternChars, p.Advance())
+					if !(p.AtEnd()) {
+						patternChars = append(patternChars, p.Advance())
+					}
+				}
+			} else if _IsExpansionStart(p.Source, p.Pos, "$(") {
+				patternChars = append(patternChars, p.Advance())
+				patternChars = append(patternChars, p.Advance())
+				if !(p.AtEnd()) && p.Peek() == "(" {
+					patternChars = append(patternChars, p.Advance())
+					parenDepth = 2
+					for !(p.AtEnd()) && parenDepth > 0 {
+						c = p.Peek()
+						if c == "(" {
+							parenDepth += 1
+						} else if c == ")" {
+							parenDepth -= 1
+						}
+						patternChars = append(patternChars, p.Advance())
+					}
+				} else {
+					extglobDepth += 1
+				}
+			} else if ch == "(" && extglobDepth > 0 {
+				patternChars = append(patternChars, p.Advance())
+				extglobDepth += 1
+			} else if p._Extglob && _IsExtglobPrefix(ch) && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "(" {
+				patternChars = append(patternChars, p.Advance())
+				patternChars = append(patternChars, p.Advance())
+				extglobDepth += 1
+			} else if ch == "[" {
+				isCharClass = false
+				scanPos = p.Pos + 1
+				scanDepth = 0
+				hasFirstBracketLiteral = false
+				if scanPos < p.Length && _IsCaretOrBang(string(p.Source[scanPos])) {
+					scanPos += 1
+				}
+				if scanPos < p.Length && string(p.Source[scanPos]) == "]" {
+					if strings.Index(p.Source, "]") != -1 {
+						scanPos += 1
+						hasFirstBracketLiteral = true
+					}
+				}
+				for scanPos < p.Length {
+					sc = string(p.Source[scanPos])
+					if sc == "]" && scanDepth == 0 {
+						isCharClass = true
+						break
+					} else if sc == "[" {
+						scanDepth += 1
+					} else if sc == ")" && scanDepth == 0 {
+						break
+					} else if sc == "|" && scanDepth == 0 {
+						break
+					}
+					scanPos += 1
+				}
+				if isCharClass {
+					patternChars = append(patternChars, p.Advance())
+					if !(p.AtEnd()) && _IsCaretOrBang(p.Peek()) {
+						patternChars = append(patternChars, p.Advance())
+					}
+					if hasFirstBracketLiteral && !(p.AtEnd()) && p.Peek() == "]" {
+						patternChars = append(patternChars, p.Advance())
+					}
+					for !(p.AtEnd()) && p.Peek() != "]" {
+						patternChars = append(patternChars, p.Advance())
+					}
+					if !(p.AtEnd()) {
+						patternChars = append(patternChars, p.Advance())
+					}
+				} else {
+					patternChars = append(patternChars, p.Advance())
+				}
+			} else if ch == "'" {
+				patternChars = append(patternChars, p.Advance())
+				for !(p.AtEnd()) && p.Peek() != "'" {
+					patternChars = append(patternChars, p.Advance())
+				}
+				if !(p.AtEnd()) {
+					patternChars = append(patternChars, p.Advance())
+				}
+			} else if ch == "\"" {
+				patternChars = append(patternChars, p.Advance())
+				for !(p.AtEnd()) && p.Peek() != "\"" {
+					if p.Peek() == "\\" && p.Pos+1 < p.Length {
+						patternChars = append(patternChars, p.Advance())
+					}
+					patternChars = append(patternChars, p.Advance())
+				}
+				if !(p.AtEnd()) {
+					patternChars = append(patternChars, p.Advance())
+				}
+			} else if _IsWhitespace(ch) {
+				if extglobDepth > 0 {
+					patternChars = append(patternChars, p.Advance())
+				} else {
+					p.Advance()
+				}
+			} else {
+				patternChars = append(patternChars, p.Advance())
+			}
+		}
+		pattern = strings.Join(patternChars, "")
+		if !(len(pattern) > 0) {
+			panic(NewParseError("Expected pattern in case statement", p._LexPeekToken().Pos, 0))
+		}
+		p.SkipWhitespace()
+		body = nil
+		isEmptyBody = p._LexPeekCaseTerminator() != ""
+		if !(isEmptyBody) {
+			p.SkipWhitespaceAndNewlines()
+			if !(p.AtEnd()) && !(p._LexIsAtReservedWord("esac")) {
+				isAtTerminator = p._LexPeekCaseTerminator() != ""
+				if !(isAtTerminator) {
+					body = p.ParseListUntil(map[string]struct{}{"esac": {}})
+					p.SkipWhitespace()
+				}
+			}
+		}
+		terminator = p._ConsumeCaseTerminator()
+		p.SkipWhitespaceAndNewlines()
+		patterns = append(patterns, NewCasePattern(pattern, body, terminator))
+	}
+	p._ClearState(ParserStateFlags_PST_CASEPAT)
+	p.SkipWhitespaceAndNewlines()
+	if !(p._LexConsumeWord("esac")) {
+		p._ClearState(ParserStateFlags_PST_CASESTMT)
+		panic(NewParseError("Expected 'esac' to close case statement", p._LexPeekToken().Pos, 0))
+	}
+	p._ClearState(ParserStateFlags_PST_CASESTMT)
+	return NewCase(word, patterns, p._CollectRedirects())
 }
 
 func (p *Parser) ParseCoproc() *Coproc {

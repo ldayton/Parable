@@ -1,14 +1,147 @@
-"""Generate TypeScript definitions from parable.js."""
+"""Generate TypeScript definitions from parable.py type annotations."""
 
+import ast
 import re
 import sys
+from pathlib import Path
 
 
-def extract_classes(js_source: str) -> list[dict]:
-    """Extract class definitions from JavaScript source."""
+def extract_python_types(py_source: str) -> dict[str, dict[str, str]]:
+    """Extract class type annotations from Python source."""
+    tree = ast.parse(py_source)
+    classes = {}
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef):
+            continue
+
+        # Only process Node subclasses
+        bases = [b.id for b in node.bases if isinstance(b, ast.Name)]
+        if "Node" not in bases and node.name != "Node":
+            continue
+
+        props = {}
+        for item in node.body:
+            # Class-level annotations (not in __init__)
+            if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
+                prop_name = item.target.id
+                prop_type = ast.unparse(item.annotation)
+                props[prop_name] = prop_type
+
+        if props or node.name == "Node":
+            classes[node.name] = props
+
+    return classes
+
+
+def py_type_to_ts(py_type: str) -> str:
+    """Convert Python type annotation to TypeScript type."""
+    # Handle list types first (before splitting on |)
+    if py_type.startswith("list["):
+        # Find matching bracket
+        depth = 0
+        for i, c in enumerate(py_type):
+            if c == "[":
+                depth += 1
+            elif c == "]":
+                depth -= 1
+                if depth == 0:
+                    inner = py_type[5:i]
+                    rest = py_type[i + 1 :]
+                    ts_inner = py_type_to_ts(inner)
+                    if " | " in ts_inner:
+                        ts_list = f"({ts_inner})[]"
+                    else:
+                        ts_list = f"{ts_inner}[]"
+                    if rest:
+                        # Handle e.g., list[X] | None
+                        return py_type_to_ts(ts_list + rest)
+                    return ts_list
+
+    # Handle None -> null
+    if py_type == "None":
+        return "null"
+    if py_type == "null":
+        return "null"
+
+    # Handle Union types
+    if py_type.startswith("Union["):
+        inner = py_type[6:-1]
+        parts = _split_union(inner)
+        ts_parts = [py_type_to_ts(p.strip()) for p in parts]
+        return " | ".join(ts_parts)
+
+    # Handle X | Y syntax (but not inside brackets)
+    if " | " in py_type:
+        parts = _split_union_bar(py_type)
+        ts_parts = [py_type_to_ts(p.strip()) for p in parts]
+        return " | ".join(ts_parts)
+
+    # Basic type mappings
+    mappings = {
+        "str": "string",
+        "int": "number",
+        "bool": "boolean",
+        "float": "number",
+    }
+
+    return mappings.get(py_type, py_type)
+
+
+def _split_union_bar(s: str) -> list[str]:
+    """Split on | respecting brackets."""
+    parts = []
+    depth = 0
+    current = ""
+    i = 0
+    while i < len(s):
+        c = s[i]
+        if c == "[":
+            depth += 1
+            current += c
+        elif c == "]":
+            depth -= 1
+            current += c
+        elif c == "|" and depth == 0 and i > 0 and s[i - 1] == " ":
+            # Found ' | '
+            parts.append(current.rstrip())
+            current = ""
+            i += 2  # Skip '| '
+            continue
+        else:
+            current += c
+        i += 1
+    if current.strip():
+        parts.append(current.strip())
+    return parts
+
+
+def _split_union(s: str) -> list[str]:
+    """Split union type string, respecting nested brackets."""
+    parts = []
+    depth = 0
+    current = ""
+    for c in s:
+        if c == "[":
+            depth += 1
+            current += c
+        elif c == "]":
+            depth -= 1
+            current += c
+        elif c == "," and depth == 0:
+            parts.append(current.strip())
+            current = ""
+        else:
+            current += c
+    if current.strip():
+        parts.append(current.strip())
+    return parts
+
+
+def extract_js_classes(js_source: str) -> list[dict]:
+    """Extract class definitions from JavaScript source for structure."""
     classes = []
 
-    # Match class definitions with their constructor bodies
     class_pattern = re.compile(
         r"^class\s+(\w+)\s+extends\s+(\w+)\s*\{(.*?)^\}",
         re.MULTILINE | re.DOTALL,
@@ -19,7 +152,6 @@ def extract_classes(js_source: str) -> list[dict]:
         parent = match.group(2)
         body = match.group(3)
 
-        # Extract constructor
         ctor_match = re.search(
             r"constructor\s*\(([^)]*)\)\s*\{(.*?)\n\t\}",
             body,
@@ -28,27 +160,22 @@ def extract_classes(js_source: str) -> list[dict]:
         if not ctor_match:
             continue
 
-        params = [p.strip() for p in ctor_match.group(1).split(",") if p.strip()]
         ctor_body = ctor_match.group(2)
 
-        # Extract kind literal
         kind_match = re.search(r'this\.kind\s*=\s*"([^"]+)"', ctor_body)
         kind = kind_match.group(1) if kind_match else None
 
-        # Extract property assignments
         props = []
         for prop_match in re.finditer(r"this\.(\w+)\s*=\s*(\w+)", ctor_body):
             prop_name = prop_match.group(1)
-            prop_value = prop_match.group(2)
             if prop_name != "kind":
-                props.append((prop_name, prop_value))
+                props.append(prop_name)
 
         classes.append(
             {
                 "name": name,
                 "parent": parent,
                 "kind": kind,
-                "params": params,
                 "props": props,
             }
         )
@@ -56,120 +183,8 @@ def extract_classes(js_source: str) -> list[dict]:
     return classes
 
 
-def infer_type(prop_name: str, class_name: str) -> str:
-    """Infer TypeScript type from property name and class context."""
-    # Special cases where 'value' is a string, not a node
-    if prop_name == "value":
-        if class_name in ("Word", "ArithNumber"):
-            return "string"
-
-    # Array types
-    if prop_name in ("words", "redirects", "parts", "elements", "patterns", "commands"):
-        if prop_name == "words":
-            return "Word[]"
-        if prop_name == "redirects":
-            return "(Redirect | HereDoc)[]"
-        if prop_name == "patterns":
-            return "CasePattern[]"
-        if prop_name == "elements":
-            return "Word[]"
-        if prop_name == "commands":
-            return "Node[]"
-        if prop_name == "parts":
-            if class_name == "ArithConcat":
-                return "ArithNode[]"
-            return "Node[]"
-
-    # Node types
-    if prop_name in ("body", "then_body", "else_body", "pipeline", "command"):
-        if class_name in ("ConditionalExpr",):
-            return "CondNode | string"
-        if prop_name in ("else_body", "pipeline"):
-            return "Node | null"
-        if prop_name == "body" and class_name == "CasePattern":
-            return "Node | null"
-        return "Node"
-
-    if prop_name == "word":
-        return "Word"
-
-    if prop_name == "target":
-        if class_name == "Redirect":
-            return "Word"
-        return "ArithNode"
-
-    if prop_name in (
-        "left",
-        "right",
-        "operand",
-        "expression",
-        "index",
-        "if_true",
-        "if_false",
-        "condition",
-        "value",
-    ):
-        # ArithDeprecated.expression is a string (raw text), not ArithNode
-        if class_name == "ArithDeprecated" and prop_name == "expression":
-            return "string"
-        if class_name.startswith("Arith") or class_name in (
-            "ArithmeticExpansion",
-            "ArithmeticCommand",
-        ):
-            if prop_name == "expression":
-                return "ArithNode | null"
-            return "ArithNode"
-        if class_name.startswith("Cond") or class_name in ("UnaryTest", "BinaryTest"):
-            if class_name in ("UnaryTest", "BinaryTest"):
-                return "Word"
-            return "CondNode"
-        return "Node"
-
-    if prop_name == "inner":
-        return "CondNode"
-
-    # String types
-    if prop_name in (
-        "value",
-        "name",
-        "op",
-        "param",
-        "arg",
-        "variable",
-        "pattern",
-        "delimiter",
-        "content",
-        "text",
-        "char",
-        "array",
-        "terminator",
-        "message",
-        "init",
-        "cond",
-        "incr",
-        "raw_content",
-        "direction",
-    ):
-        if prop_name == "direction":
-            return '"<" | ">"'
-        if prop_name in ("arg", "op", "init", "cond", "incr", "name"):
-            if class_name in ("ParamExpansion", "ParamIndirect", "ForArith", "Coproc"):
-                return "string | null"
-        return "string"
-
-    # Boolean types
-    if prop_name in ("posix", "brace", "strip_tabs", "quoted", "complete"):
-        return "boolean"
-
-    # Number types
-    if prop_name in ("fd", "pos", "line"):
-        return "number | null"
-
-    return "unknown"
-
-
-def generate_dts(classes: list[dict]) -> str:
-    """Generate TypeScript definitions from extracted classes."""
+def generate_dts(js_classes: list[dict], py_types: dict[str, dict[str, str]]) -> str:
+    """Generate TypeScript definitions from JS structure and Python types."""
     lines = [
         "/**",
         " * Parable.js - A recursive descent parser for bash.",
@@ -181,11 +196,10 @@ def generate_dts(classes: list[dict]) -> str:
         "",
     ]
 
-    # Separate by category
     error_classes = [
-        c for c in classes if c["parent"] == "Error" or c["name"] == "MatchedPairError"
+        c for c in js_classes if c["parent"] == "Error" or c["name"] == "MatchedPairError"
     ]
-    node_classes = [c for c in classes if c["parent"] == "Node"]
+    node_classes = [c for c in js_classes if c["parent"] == "Node"]
 
     # Error classes
     lines.append("// Error classes")
@@ -214,7 +228,7 @@ def generate_dts(classes: list[dict]) -> str:
         ]
     )
 
-    # Group nodes by category
+    # Categories
     categories = {
         "structural": [
             "Word",
@@ -291,21 +305,40 @@ def generate_dts(classes: list[dict]) -> str:
         "special": "Special nodes",
     }
 
-    # Build lookup
+    # Map JS class name to Python class name
+    js_to_py = {
+        "FunctionNode": "Function",
+        "ArrayNode": "Array",
+    }
+
     class_by_name = {c["name"]: c for c in node_classes}
 
     for cat, names in categories.items():
         lines.append(f"// {category_names[cat]}")
-        for name in names:
-            if name not in class_by_name:
+        for js_name in names:
+            if js_name not in class_by_name:
                 continue
-            cls = class_by_name[name]
-            lines.append(f"export interface {name} extends NodeBase {{")
+            cls = class_by_name[js_name]
+            py_name = js_to_py.get(js_name, js_name)
+            py_props = py_types.get(py_name, {})
+
+            lines.append(f"export interface {js_name} extends NodeBase {{")
             if cls["kind"]:
                 lines.append(f'\treadonly kind: "{cls["kind"]}";')
-            for prop_name, _ in cls["props"]:
-                prop_type = infer_type(prop_name, name)
-                lines.append(f"\treadonly {prop_name}: {prop_type};")
+
+            for prop_name in cls["props"]:
+                # Map JS prop name to Python prop name
+                py_prop = prop_name
+                if py_prop == "variable":
+                    py_prop = "var"
+
+                if py_prop in py_props:
+                    ts_type = py_type_to_ts(py_props[py_prop])
+                else:
+                    # Fallback for unmapped properties
+                    ts_type = "unknown"
+
+                lines.append(f"\treadonly {prop_name}: {ts_type};")
             lines.append("}")
             lines.append("")
 
@@ -335,7 +368,7 @@ def generate_dts(classes: list[dict]) -> str:
         lines.append(f"\t| {name}{sep}")
     lines.append("")
 
-    # Main Node union (excluding ArithNode internals and CondNode internals)
+    # Main Node union
     excluded = set(arith_types) | set(cond_types)
     all_node_names = []
     for names in categories.values():
@@ -372,17 +405,26 @@ def generate_dts(classes: list[dict]) -> str:
 
 
 def main():
-    """Generate TypeScript definitions from parable.js."""
+    """Generate TypeScript definitions from parable.js and parable.py."""
     if len(sys.argv) < 2:
-        print("Usage: transpiler --generate-dts <parable.js>", file=sys.stderr)
+        print("Usage: transpiler --transpile-dts <parable.js> [parable.py]", file=sys.stderr)
         sys.exit(1)
 
-    js_path = sys.argv[1]
+    js_path = Path(sys.argv[1]).resolve()
+    if len(sys.argv) >= 3:
+        py_path = Path(sys.argv[2]).resolve()
+    else:
+        py_path = js_path.parent / "parable.py"
+
     with open(js_path) as f:
         js_source = f.read()
 
-    classes = extract_classes(js_source)
-    dts = generate_dts(classes)
+    with open(py_path) as f:
+        py_source = f.read()
+
+    js_classes = extract_js_classes(js_source)
+    py_types = extract_python_types(py_source)
+    dts = generate_dts(js_classes, py_types)
     print(dts)
 
 

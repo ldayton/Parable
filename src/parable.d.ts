@@ -29,7 +29,7 @@ export interface Word extends NodeBase {
 export interface Command extends NodeBase {
 	readonly kind: "command";
 	readonly words: Word[];
-	readonly redirects: (Redirect | HereDoc)[];
+	readonly redirects: Node[];
 }
 
 export interface Pipeline extends NodeBase {
@@ -82,13 +82,13 @@ export interface HereDoc extends NodeBase {
 export interface Subshell extends NodeBase {
 	readonly kind: "subshell";
 	readonly body: Node;
-	readonly redirects: (Redirect | HereDoc)[];
+	readonly redirects: (Redirect | HereDoc)[] | null;
 }
 
 export interface BraceGroup extends NodeBase {
 	readonly kind: "brace-group";
 	readonly body: Node;
-	readonly redirects: (Redirect | HereDoc)[];
+	readonly redirects: (Redirect | HereDoc)[] | null;
 }
 
 export interface If extends NodeBase {
@@ -96,53 +96,53 @@ export interface If extends NodeBase {
 	readonly condition: Node;
 	readonly then_body: Node;
 	readonly else_body: Node | null;
-	readonly redirects: (Redirect | HereDoc)[];
+	readonly redirects: Node[];
 }
 
 export interface While extends NodeBase {
 	readonly kind: "while";
 	readonly condition: Node;
 	readonly body: Node;
-	readonly redirects: (Redirect | HereDoc)[];
+	readonly redirects: Node[];
 }
 
 export interface Until extends NodeBase {
 	readonly kind: "until";
 	readonly condition: Node;
 	readonly body: Node;
-	readonly redirects: (Redirect | HereDoc)[];
+	readonly redirects: Node[];
 }
 
 export interface For extends NodeBase {
 	readonly kind: "for";
 	readonly variable: string;
-	readonly words: Word[];
+	readonly words: Word[] | null;
 	readonly body: Node;
-	readonly redirects: (Redirect | HereDoc)[];
+	readonly redirects: Node[];
 }
 
 export interface ForArith extends NodeBase {
 	readonly kind: "for-arith";
-	readonly init: string | null;
-	readonly cond: string | null;
-	readonly incr: string | null;
+	readonly init: string;
+	readonly cond: string;
+	readonly incr: string;
 	readonly body: Node;
-	readonly redirects: (Redirect | HereDoc)[];
+	readonly redirects: Node[];
 }
 
 export interface Select extends NodeBase {
 	readonly kind: "select";
 	readonly variable: string;
-	readonly words: Word[];
+	readonly words: Word[] | null;
 	readonly body: Node;
-	readonly redirects: (Redirect | HereDoc)[];
+	readonly redirects: Node[];
 }
 
 export interface Case extends NodeBase {
 	readonly kind: "case";
 	readonly word: Word;
 	readonly patterns: CasePattern[];
-	readonly redirects: (Redirect | HereDoc)[];
+	readonly redirects: Node[];
 }
 
 export interface CasePattern extends NodeBase {
@@ -191,7 +191,7 @@ export interface ArithmeticExpansion extends NodeBase {
 
 export interface ProcessSubstitution extends NodeBase {
 	readonly kind: "procsub";
-	readonly direction: "<" | ">";
+	readonly direction: string;
 	readonly command: Node;
 }
 
@@ -347,12 +347,12 @@ export interface LocaleString extends NodeBase {
 // Special nodes
 export interface Negation extends NodeBase {
 	readonly kind: "negation";
-	readonly pipeline: Node | null;
+	readonly pipeline: Node;
 }
 
 export interface Time extends NodeBase {
 	readonly kind: "time";
-	readonly pipeline: Node | null;
+	readonly pipeline: Node;
 	readonly posix: boolean;
 }
 

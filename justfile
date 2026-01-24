@@ -155,14 +155,16 @@ transpile-js output="src/parable.js":
     npx -y @biomejs/biome format --write "$js_out" >/dev/null 2>&1
 
 # Generate TypeScript definitions from JavaScript
-transpile-dts input="src/parable.js" output="src/parable.d.ts":
+transpile-dts input="src/parable.js" output="src/parable.d.ts" py_src="src/parable.py":
     #!/usr/bin/env bash
     set -euo pipefail
     js_in="{{input}}"
     dts_out="{{output}}"
+    py_in="{{py_src}}"
     [[ "$js_in" = /* ]] || js_in="$(pwd)/$js_in"
     [[ "$dts_out" = /* ]] || dts_out="$(pwd)/$dts_out"
-    uv run --directory tools/transpiler transpiler --transpile-dts "$js_in" > "$dts_out"
+    [[ "$py_in" = /* ]] || py_in="$(pwd)/$py_in"
+    uv run --directory tools/transpiler transpiler --transpile-dts "$js_in" "$py_in" > "$dts_out"
     npx -y @biomejs/biome format --write "$dts_out" >/dev/null 2>&1
 
 # Transpile Python to JavaScript and generate TypeScript definitions

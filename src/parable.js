@@ -194,6 +194,7 @@ class ParserStateFlags {
 	static PST_SUBSHELL = 512;
 	static PST_REDIRLIST = 1024;
 	static PST_COMMENT = 2048;
+	static PST_EOFTOKEN = 4096;
 }
 
 class DolbraceState {
@@ -460,6 +461,8 @@ class Lexer {
 		// EOF token mechanism for command substitution parsing
 		this._eof_token = null;
 		this._eof_depth = 0;
+		// Last token returned by next_token (for context-sensitive parsing)
+		this._last_read_token = null;
 		// Word parsing context (set by Parser before peeking)
 		this._word_context = WORD_CTX_NORMAL;
 		this._at_command_start = false;
@@ -615,7 +618,13 @@ class Lexer {
 			if (this._eof_token === ")") {
 				// Don't increment in case patterns - (a) is pattern syntax, not subshell
 				if (!(this._parser_state & ParserStateFlags.PST_CASEPAT)) {
-					this._eof_depth += 1;
+					// Don't increment for function parens: WORD followed by ()
+					if (
+						this._last_read_token == null ||
+						this._last_read_token.type !== TokenType.WORD
+					) {
+						this._eof_depth += 1;
+					}
 				}
 			}
 			this.pos += 1;
@@ -810,6 +819,16 @@ class Lexer {
 			return _isWhitespace(ch);
 		}
 		// WORD_CTX_NORMAL
+		// PST_EOFTOKEN: EOF token character terminates word at depth 0
+		if (
+			this._parser_state & ParserStateFlags.PST_EOFTOKEN &&
+			this._eof_token != null &&
+			ch === this._eof_token &&
+			this._eof_depth === 0 &&
+			bracket_depth === 0
+		) {
+			return true;
+		}
 		// < and > don't terminate if followed by ( (process substitution)
 		if (
 			_isRedirectChar(ch) &&
@@ -1604,6 +1623,21 @@ class Lexer {
 				chars.push(")");
 				continue;
 			}
+			// NORMAL: PST_EOFTOKEN - EOF token character terminates word at depth 0
+			// But if we haven't read anything yet, read it as a single-char word
+			if (
+				ctx === WORD_CTX_NORMAL &&
+				this._parser_state & ParserStateFlags.PST_EOFTOKEN &&
+				this._eof_token != null &&
+				ch === this._eof_token &&
+				this._eof_depth === 0 &&
+				bracket_depth === 0
+			) {
+				if (chars.length === 0) {
+					chars.push(this.advance());
+				}
+				break;
+			}
 			// NORMAL: Metacharacter terminates word (unless inside brackets)
 			if (ctx === WORD_CTX_NORMAL && _isMetachar(ch) && bracket_depth === 0) {
 				break;
@@ -1665,50 +1699,69 @@ class Lexer {
 		if (this._token_cache != null) {
 			tok = this._token_cache;
 			this._token_cache = null;
+			this._last_read_token = tok;
 			return tok;
 		}
 		this.skipBlanks();
 		if (this.atEnd()) {
-			return new Token(TokenType.EOF, "", this.pos);
+			tok = new Token(TokenType.EOF, "", this.pos);
+			this._last_read_token = tok;
+			return tok;
 		}
 		// EOF token mechanism: return EOF when we hit the closing delimiter at depth 0
+		// PST_EOFTOKEN: let normal tokenization proceed, grammar will handle it
 		if (
 			this._eof_token != null &&
 			this.peek() === this._eof_token &&
 			this._eof_depth === 0 &&
-			!(this._parser_state & ParserStateFlags.PST_CASEPAT)
+			!(this._parser_state & ParserStateFlags.PST_CASEPAT) &&
+			!(this._parser_state & ParserStateFlags.PST_EOFTOKEN)
 		) {
-			return new Token(TokenType.EOF, "", this.pos);
+			tok = new Token(TokenType.EOF, "", this.pos);
+			this._last_read_token = tok;
+			return tok;
 		}
 		while (this._skipComment()) {
 			this.skipBlanks();
 			if (this.atEnd()) {
-				return new Token(TokenType.EOF, "", this.pos);
+				tok = new Token(TokenType.EOF, "", this.pos);
+				this._last_read_token = tok;
+				return tok;
 			}
 			// Check EOF token again after comment
 			if (
 				this._eof_token != null &&
 				this.peek() === this._eof_token &&
 				this._eof_depth === 0 &&
-				!(this._parser_state & ParserStateFlags.PST_CASEPAT)
+				!(this._parser_state & ParserStateFlags.PST_CASEPAT) &&
+				!(this._parser_state & ParserStateFlags.PST_EOFTOKEN)
 			) {
-				return new Token(TokenType.EOF, "", this.pos);
+				tok = new Token(TokenType.EOF, "", this.pos);
+				this._last_read_token = tok;
+				return tok;
 			}
 		}
 		tok = this._readOperator();
 		if (tok != null) {
+			this._last_read_token = tok;
 			return tok;
 		}
 		tok = this._readWord();
 		if (tok != null) {
+			this._last_read_token = tok;
 			return tok;
 		}
-		return new Token(TokenType.EOF, "", this.pos);
+		tok = new Token(TokenType.EOF, "", this.pos);
+		this._last_read_token = tok;
+		return tok;
 	}
 
 	peekToken() {
+		let saved_last;
 		if (this._token_cache == null) {
+			saved_last = this._last_read_token;
 			this._token_cache = this.nextToken();
+			this._last_read_token = saved_last;
 		}
 		return this._token_cache;
 	}
@@ -7999,6 +8052,8 @@ class Parser {
 		this._lexer._eof_token = this._eof_token;
 		this._lexer._eof_depth = this._eof_depth;
 		this._lexer._parser_state = this._parser_state;
+		// Sync last read token from parser's token history
+		this._lexer._last_read_token = this._token_history[0];
 		// Sync word context
 		this._lexer._word_context = this._word_context;
 		this._lexer._at_command_start = this._at_command_start;
@@ -8306,6 +8361,21 @@ class Parser {
 		return false;
 	}
 
+	_atEofToken() {
+		let tok;
+		if (this._eof_token == null) {
+			return false;
+		}
+		tok = this._lexPeekToken();
+		if (this._eof_token === ")") {
+			return tok.type === TokenType.RPAREN;
+		}
+		if (this._eof_token === "}") {
+			return tok.type === TokenType.WORD && tok.value === "}";
+		}
+		return false;
+	}
+
 	_collectRedirects() {
 		let redirect, redirects;
 		redirects = [];
@@ -8596,10 +8666,12 @@ class Parser {
 		this.advance();
 		// Save state and set up for inline parsing with EOF token
 		saved = this._saveParserState();
-		this._setState(ParserStateFlags.PST_CMDSUBST);
+		this._setState(
+			ParserStateFlags.PST_CMDSUBST | ParserStateFlags.PST_EOFTOKEN,
+		);
 		this._eof_token = ")";
 		this._eof_depth = 0;
-		// Parse the command list inline - lexer will stop at matching )
+		// Parse the command list inline - grammar will stop at matching )
 		cmd = this.parseList();
 		if (cmd == null) {
 			cmd = new Empty();
@@ -8627,10 +8699,12 @@ class Parser {
 		}
 		// Save state and set up for inline parsing with EOF token
 		saved = this._saveParserState();
-		this._setState(ParserStateFlags.PST_CMDSUBST);
+		this._setState(
+			ParserStateFlags.PST_CMDSUBST | ParserStateFlags.PST_EOFTOKEN,
+		);
 		this._eof_token = "}";
 		this._eof_depth = 0;
-		// Parse the command list inline - lexer will stop at matching }
+		// Parse the command list inline - grammar will stop at matching }
 		cmd = this.parseList();
 		if (cmd == null) {
 			cmd = new Empty();
@@ -9058,9 +9132,10 @@ class Parser {
 		saved = this._saveParserState();
 		old_in_process_sub = this._in_process_sub;
 		this._in_process_sub = true;
+		this._setState(ParserStateFlags.PST_EOFTOKEN);
 		this._eof_token = ")";
 		this._eof_depth = 0;
-		// Try to parse the command list inline - lexer will stop at matching )
+		// Try to parse the command list inline - grammar will stop at matching )
 		try {
 			cmd = this.parseList();
 			if (cmd == null) {
@@ -12834,6 +12909,10 @@ class Parser {
 			return null;
 		}
 		parts = [pipeline];
+		// Grammar-level EOF token check (like Bash's simple_list rule)
+		if (this._inState(ParserStateFlags.PST_EOFTOKEN) && this._atEofToken()) {
+			return parts.length === 1 ? parts[0] : new List(parts);
+		}
 		while (true) {
 			// Check for explicit operator FIRST (without consuming newlines)
 			this.skipWhitespace();
@@ -12913,6 +12992,10 @@ class Parser {
 				throw new ParseError(`Expected command after ${op}`, this.pos);
 			}
 			parts.push(pipeline);
+			// Grammar-level EOF token check after each command
+			if (this._inState(ParserStateFlags.PST_EOFTOKEN) && this._atEofToken()) {
+				break;
+			}
 		}
 		if (parts.length === 1) {
 			return parts[0];

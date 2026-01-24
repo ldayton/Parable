@@ -242,6 +242,7 @@ class ParserStateFlags:
     PST_SUBSHELL = 0x0200
     PST_REDIRLIST = 0x0400
     PST_COMMENT = 0x0800
+    PST_EOFTOKEN = 0x1000  # Check for EOF token at grammar level (like Bash)
 
 
 class DolbraceState:
@@ -526,6 +527,8 @@ class Lexer:
         # EOF token mechanism for command substitution parsing
         self._eof_token: str | None = None
         self._eof_depth: int = 0
+        # Last token returned by next_token (for context-sensitive parsing)
+        self._last_read_token: Token | None = None
         # Word parsing context (set by Parser before peeking)
         self._word_context = WORD_CTX_NORMAL
         self._at_command_start = False
@@ -655,7 +658,12 @@ class Lexer:
             if self._eof_token == ")":
                 # Don't increment in case patterns - (a) is pattern syntax, not subshell
                 if not (self._parser_state & ParserStateFlags.PST_CASEPAT):
-                    self._eof_depth += 1
+                    # Don't increment for function parens: WORD followed by ()
+                    if (
+                        self._last_read_token is None
+                        or self._last_read_token.type != TokenType.WORD
+                    ):
+                        self._eof_depth += 1
             self.pos += 1
             return Token(TokenType.LPAREN, c, start)
         if c == ")":
@@ -792,6 +800,15 @@ class Lexer:
                 return True
             return _is_whitespace(ch)
         # WORD_CTX_NORMAL
+        # PST_EOFTOKEN: EOF token character terminates word at depth 0
+        if (
+            (self._parser_state & ParserStateFlags.PST_EOFTOKEN)
+            and self._eof_token is not None
+            and ch == self._eof_token
+            and self._eof_depth == 0
+            and bracket_depth == 0
+        ):
+            return True
         # < and > don't terminate if followed by ( (process substitution)
         if (
             _is_redirect_char(ch)
@@ -1403,6 +1420,19 @@ class Lexer:
                 chars.append(content)
                 chars.append(")")
                 continue
+            # NORMAL: PST_EOFTOKEN - EOF token character terminates word at depth 0
+            # But if we haven't read anything yet, read it as a single-char word
+            if (
+                ctx == WORD_CTX_NORMAL
+                and (self._parser_state & ParserStateFlags.PST_EOFTOKEN)
+                and self._eof_token is not None
+                and ch == self._eof_token
+                and self._eof_depth == 0
+                and bracket_depth == 0
+            ):
+                if not chars:
+                    chars.append(self.advance())
+                break
             # NORMAL: Metacharacter terminates word (unless inside brackets)
             if ctx == WORD_CTX_NORMAL and _is_metachar(ch) and bracket_depth == 0:
                 break
@@ -1450,42 +1480,60 @@ class Lexer:
         if self._token_cache is not None:
             tok = self._token_cache
             self._token_cache = None
+            self._last_read_token = tok
             return tok
         self.skip_blanks()
         if self.at_end():
-            return Token(TokenType.EOF, "", self.pos)
+            tok = Token(TokenType.EOF, "", self.pos)
+            self._last_read_token = tok
+            return tok
         # EOF token mechanism: return EOF when we hit the closing delimiter at depth 0
+        # PST_EOFTOKEN: let normal tokenization proceed, grammar will handle it
         if (
             self._eof_token is not None
             and self.peek() == self._eof_token
             and self._eof_depth == 0
             and not (self._parser_state & ParserStateFlags.PST_CASEPAT)
+            and not (self._parser_state & ParserStateFlags.PST_EOFTOKEN)
         ):
-            return Token(TokenType.EOF, "", self.pos)
+            tok = Token(TokenType.EOF, "", self.pos)
+            self._last_read_token = tok
+            return tok
         while self._skip_comment():
             self.skip_blanks()
             if self.at_end():
-                return Token(TokenType.EOF, "", self.pos)
+                tok = Token(TokenType.EOF, "", self.pos)
+                self._last_read_token = tok
+                return tok
             # Check EOF token again after comment
             if (
                 self._eof_token is not None
                 and self.peek() == self._eof_token
                 and self._eof_depth == 0
                 and not (self._parser_state & ParserStateFlags.PST_CASEPAT)
+                and not (self._parser_state & ParserStateFlags.PST_EOFTOKEN)
             ):
-                return Token(TokenType.EOF, "", self.pos)
+                tok = Token(TokenType.EOF, "", self.pos)
+                self._last_read_token = tok
+                return tok
         tok = self._read_operator()
         if tok is not None:
+            self._last_read_token = tok
             return tok
         tok = self._read_word()
         if tok is not None:
+            self._last_read_token = tok
             return tok
-        return Token(TokenType.EOF, "", self.pos)
+        tok = Token(TokenType.EOF, "", self.pos)
+        self._last_read_token = tok
+        return tok
 
     def peek_token(self) -> Token:
         """Peek at next token without consuming."""
         if self._token_cache is None:
+            saved_last = self._last_read_token
             self._token_cache = self.next_token()
+            self._last_read_token = saved_last  # Peeking shouldn't advance history
         return self._token_cache
 
     def unget_token(self, tok: Token) -> None:
@@ -6716,6 +6764,8 @@ class Parser:
         self._lexer._eof_token = self._eof_token
         self._lexer._eof_depth = self._eof_depth
         self._lexer._parser_state = self._parser_state
+        # Sync last read token from parser's token history
+        self._lexer._last_read_token = self._token_history[0]
         # Sync word context
         self._lexer._word_context = self._word_context
         self._lexer._at_command_start = self._at_command_start
@@ -6985,6 +7035,17 @@ class Parser:
             return _is_word_end_context(self.source[next_pos])
         return False
 
+    def _at_eof_token(self) -> bool:
+        """Check if next token is the EOF token (grammar-level check)."""
+        if self._eof_token is None:
+            return False
+        tok = self._lex_peek_token()
+        if self._eof_token == ")":
+            return tok.type == TokenType.RPAREN
+        if self._eof_token == "}":
+            return tok.type == TokenType.WORD and tok.value == "}"
+        return False
+
     def _collect_redirects(self) -> list | None:
         """Collect trailing redirects after a compound command."""
         redirects = []
@@ -7215,11 +7276,11 @@ class Parser:
 
         # Save state and set up for inline parsing with EOF token
         saved = self._save_parser_state()
-        self._set_state(ParserStateFlags.PST_CMDSUBST)
+        self._set_state(ParserStateFlags.PST_CMDSUBST | ParserStateFlags.PST_EOFTOKEN)
         self._eof_token = ")"
         self._eof_depth = 0
 
-        # Parse the command list inline - lexer will stop at matching )
+        # Parse the command list inline - grammar will stop at matching )
         cmd = self.parse_list()
         if cmd is None:
             cmd = Empty()
@@ -7250,10 +7311,10 @@ class Parser:
             self.advance()
         # Save state and set up for inline parsing with EOF token
         saved = self._save_parser_state()
-        self._set_state(ParserStateFlags.PST_CMDSUBST)
+        self._set_state(ParserStateFlags.PST_CMDSUBST | ParserStateFlags.PST_EOFTOKEN)
         self._eof_token = "}"
         self._eof_depth = 0
-        # Parse the command list inline - lexer will stop at matching }
+        # Parse the command list inline - grammar will stop at matching }
         cmd = self.parse_list()
         if cmd is None:
             cmd = Empty()
@@ -7596,10 +7657,11 @@ class Parser:
         saved = self._save_parser_state()
         old_in_process_sub = self._in_process_sub
         self._in_process_sub = True
+        self._set_state(ParserStateFlags.PST_EOFTOKEN)
         self._eof_token = ")"
         self._eof_depth = 0
 
-        # Try to parse the command list inline - lexer will stop at matching )
+        # Try to parse the command list inline - grammar will stop at matching )
         try:
             cmd = self.parse_list()
             if cmd is None:
@@ -10726,6 +10788,10 @@ class Parser:
 
         parts = [pipeline]
 
+        # Grammar-level EOF token check (like Bash's simple_list rule)
+        if self._in_state(ParserStateFlags.PST_EOFTOKEN) and self._at_eof_token():
+            return parts[0] if len(parts) == 1 else List(parts)
+
         while True:
             # Check for explicit operator FIRST (without consuming newlines)
             self.skip_whitespace()
@@ -10790,6 +10856,10 @@ class Parser:
             if pipeline is None:
                 raise ParseError("Expected command after " + op, pos=self.pos)
             parts.append(pipeline)
+
+            # Grammar-level EOF token check after each command
+            if self._in_state(ParserStateFlags.PST_EOFTOKEN) and self._at_eof_token():
+                break
 
         if len(parts) == 1:
             return parts[0]

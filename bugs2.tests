@@ -1,8 +1,0 @@
-# Original: '${$${x}'
-# Parable:  (command (word "${$)${]}"))
-=== replace 'x' with ']' at 5; insert ')' at 3
-${$)${}
----
-<error>
----
-

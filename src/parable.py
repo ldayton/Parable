@@ -462,22 +462,10 @@ class Lexer:
             return None
         return self.source[self.pos]
 
-    def _peek(self) -> str:
-        """Return current character, asserting not at EOF."""
-        assert self.pos < self.length
-        return self.source[self.pos]
-
     def advance(self) -> str | None:
         """Consume and return current character."""
         if self.pos >= self.length:
             return None
-        c = self.source[self.pos]
-        self.pos += 1
-        return c
-
-    def _advance(self) -> str:
-        """Consume and return current character, asserting not at EOF."""
-        assert self.pos < self.length
         c = self.source[self.pos]
         self.pos += 1
         return c
@@ -692,7 +680,6 @@ class Lexer:
         For regex mode, calls back to Parser._parse_dollar_expansion for $ expansions.
         """
         if for_regex:
-            assert self._parser is not None
             # Regex mode: lookahead to check if bracket will close before terminators
             scan = self.pos + 1
             if scan < self.length and self.source[scan] == "^":
@@ -732,76 +719,75 @@ class Lexer:
             next_ch = self.source[self.pos + 1]
             if _is_whitespace_no_newline(next_ch) or next_ch == "&" or next_ch == "|":
                 return False
-        chars.append(self._advance())  # consume [
+        chars.append(self.advance())  # consume [
         # Handle negation [^
         if not self.at_end() and self.peek() == "^":
-            chars.append(self._advance())
+            chars.append(self.advance())
         # Handle ] as first char (literal ])
         if not self.at_end() and self.peek() == "]":
-            chars.append(self._advance())
+            chars.append(self.advance())
         # Consume until closing ]
         while not self.at_end():
             c = self.peek()
             if c == "]":
-                chars.append(self._advance())
+                chars.append(self.advance())
                 break
             if c == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == ":":
-                chars.append(self._advance())  # [
-                chars.append(self._advance())  # :
+                chars.append(self.advance())  # [
+                chars.append(self.advance())  # :
                 while not self.at_end() and not (
                     self.peek() == ":"
                     and self.pos + 1 < self.length
                     and self.source[self.pos + 1] == "]"
                 ):
-                    chars.append(self._advance())
+                    chars.append(self.advance())
                 if not self.at_end():
-                    chars.append(self._advance())  # :
-                    chars.append(self._advance())  # ]
+                    chars.append(self.advance())  # :
+                    chars.append(self.advance())  # ]
             elif (
                 not for_regex
                 and c == "["
                 and self.pos + 1 < self.length
                 and self.source[self.pos + 1] == "="
             ):
-                chars.append(self._advance())  # [
-                chars.append(self._advance())  # =
+                chars.append(self.advance())  # [
+                chars.append(self.advance())  # =
                 while not self.at_end() and not (
                     self.peek() == "="
                     and self.pos + 1 < self.length
                     and self.source[self.pos + 1] == "]"
                 ):
-                    chars.append(self._advance())
+                    chars.append(self.advance())
                 if not self.at_end():
-                    chars.append(self._advance())  # =
-                    chars.append(self._advance())  # ]
+                    chars.append(self.advance())  # =
+                    chars.append(self.advance())  # ]
             elif (
                 not for_regex
                 and c == "["
                 and self.pos + 1 < self.length
                 and self.source[self.pos + 1] == "."
             ):
-                chars.append(self._advance())  # [
-                chars.append(self._advance())  # .
+                chars.append(self.advance())  # [
+                chars.append(self.advance())  # .
                 while not self.at_end() and not (
                     self.peek() == "."
                     and self.pos + 1 < self.length
                     and self.source[self.pos + 1] == "]"
                 ):
-                    chars.append(self._advance())
+                    chars.append(self.advance())
                 if not self.at_end():
-                    chars.append(self._advance())  # .
-                    chars.append(self._advance())  # ]
+                    chars.append(self.advance())  # .
+                    chars.append(self.advance())  # ]
             elif for_regex and c == "$":
                 # Callback to Parser for dollar expansion
-                assert self._parser is not None
                 self._sync_to_parser()
                 if not self._parser._parse_dollar_expansion(chars, parts):
                     self._sync_from_parser()
-                    chars.append(self._advance())
+                    chars.append(self.advance())
                 else:
                     self._sync_from_parser()
             else:
-                chars.append(self._advance())
+                chars.append(self.advance())
         return True
 
     def _parse_matched_pair(
@@ -809,6 +795,7 @@ class Lexer:
         open_char: str,
         close_char: str,
         flags: int = 0,
+        initial_was_dollar: bool = False,
     ) -> str:
         """Parse a matched pair construct, handling quotes via recursion.
 
@@ -826,12 +813,11 @@ class Lexer:
         Raises:
             MatchedPairError: If EOF is reached before finding the closing delimiter.
         """
-        assert self._parser is not None
         start = self.pos
         count = 1
         chars: list[str] = []
         pass_next = False
-        was_dollar = False  # Track if previous char was $ (bash's LEX_WASDOL)
+        was_dollar = initial_was_dollar  # Track if previous char was $ (bash's LEX_WASDOL)
         was_gtlt = False  # Track if previous char was < or > (bash's LEX_GTLT)
 
         while count > 0:
@@ -841,7 +827,7 @@ class Lexer:
                     pos=start,
                 )
 
-            ch = self._advance()
+            ch = self.advance()
 
             # OP -> WORD transition in DOLBRACE mode
             if (flags & MatchedPairFlags.DOLBRACE) and self._dolbrace_state == DolbraceState.OP:
@@ -972,7 +958,7 @@ class Lexer:
                         was_gtlt = False
                     else:
                         # Parser failed - add $ as literal
-                        chars.append(self._advance())  # $
+                        chars.append(self.advance())  # $
                         was_dollar = True
                         was_gtlt = False
                     continue
@@ -1000,8 +986,8 @@ class Lexer:
                                 was_gtlt = False
                             else:
                                 # Both failed - add $( as literal
-                                chars.append(self._advance())  # $
-                                chars.append(self._advance())  # (
+                                chars.append(self.advance())  # $
+                                chars.append(self.advance())  # (
                                 was_dollar = False  # Ended with (
                                 was_gtlt = False
                     else:
@@ -1014,8 +1000,8 @@ class Lexer:
                             was_gtlt = False
                         else:
                             # Parser failed - add $( as literal
-                            chars.append(self._advance())  # $
-                            chars.append(self._advance())  # (
+                            chars.append(self.advance())  # $
+                            chars.append(self.advance())  # (
                             was_dollar = False  # Ended with (
                             was_gtlt = False
                     continue
@@ -1031,7 +1017,7 @@ class Lexer:
                         was_gtlt = False
                     else:
                         # Parser failed - add $ as literal
-                        chars.append(self._advance())  # $
+                        chars.append(self.advance())  # $
                         was_dollar = True
                         was_gtlt = False
                     continue
@@ -1056,7 +1042,7 @@ class Lexer:
                 else:
                     # Failed - restore the < or > and (
                     chars.append(direction)
-                    chars.append(self._advance())  # (
+                    chars.append(self.advance())  # (
                     was_dollar = False
                     was_gtlt = False
                 continue
@@ -1067,12 +1053,15 @@ class Lexer:
 
         return "".join(chars)
 
-    def _collect_param_argument(self, flags: int = MatchedPairFlags.NONE) -> str:
+    def _collect_param_argument(
+        self, flags: int = MatchedPairFlags.NONE, was_dollar: bool = False
+    ) -> str:
         """Collect argument portion of ${...} until closing brace.
 
         Wraps _parse_matched_pair() with DOLBRACE flag for parameter expansion arguments.
+        was_dollar should be True if the param name ended with $ (for $$ handling).
         """
-        return self._parse_matched_pair("{", "}", flags | MatchedPairFlags.DOLBRACE)
+        return self._parse_matched_pair("{", "}", flags | MatchedPairFlags.DOLBRACE, was_dollar)
 
     def _read_word_internal(
         self,
@@ -1085,7 +1074,6 @@ class Lexer:
 
         Uses callbacks to Parser for methods that need parse_list or other parsing.
         """
-        assert self._parser is not None
         start = self.pos
         chars: list[str] = []
         parts: list[Node] = []
@@ -1094,7 +1082,7 @@ class Lexer:
         seen_equals = False  # Track if we've seen = (NORMAL only)
         paren_depth = 0  # Track regex grouping parens (REGEX only)
         while not self.at_end():
-            ch = self._peek()
+            ch = self.peek()
             # REGEX: Backslash-newline continuation (check first)
             if ctx == WORD_CTX_REGEX:
                 if ch == "\\" and self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
@@ -1110,7 +1098,7 @@ class Lexer:
             if ctx == WORD_CTX_NORMAL and ch == "[":
                 if bracket_depth > 0:
                     bracket_depth += 1
-                    chars.append(self._advance())
+                    chars.append(self.advance())
                     continue
                 if (
                     chars
@@ -1122,28 +1110,28 @@ class Lexer:
                     if prev_char.isalnum() or prev_char == "_":
                         bracket_start_pos = self.pos
                         bracket_depth += 1
-                        chars.append(self._advance())
+                        chars.append(self.advance())
                         continue
                 if not chars and not seen_equals and in_array_literal:
                     bracket_start_pos = self.pos
                     bracket_depth += 1
-                    chars.append(self._advance())
+                    chars.append(self.advance())
                     continue
             if ctx == WORD_CTX_NORMAL and ch == "]" and bracket_depth > 0:
                 bracket_depth -= 1
-                chars.append(self._advance())
+                chars.append(self.advance())
                 continue
             if ctx == WORD_CTX_NORMAL and ch == "=" and bracket_depth == 0:
                 seen_equals = True
             # REGEX: Track paren depth
             if ctx == WORD_CTX_REGEX and ch == "(":
                 paren_depth += 1
-                chars.append(self._advance())
+                chars.append(self.advance())
                 continue
             if ctx == WORD_CTX_REGEX and ch == ")":
                 if paren_depth > 0:
                     paren_depth -= 1
-                    chars.append(self._advance())
+                    chars.append(self.advance())
                     continue
                 break
             # COND/REGEX: Bracket expressions
@@ -1153,12 +1141,12 @@ class Lexer:
                     chars, parts, for_regex=for_regex, paren_depth=paren_depth
                 ):
                     continue
-                chars.append(self._advance())
+                chars.append(self.advance())
                 continue
             # COND: Extglob patterns or ( terminates
             if ctx == WORD_CTX_COND and ch == "(":
                 if self._extglob and chars and _is_extglob_prefix(chars[len(chars) - 1]):
-                    chars.append(self._advance())  # (
+                    chars.append(self.advance())  # (
                     content = self._parse_matched_pair("(", ")", MatchedPairFlags.EXTGLOB)
                     chars.append(content)
                     chars.append(")")
@@ -1168,7 +1156,7 @@ class Lexer:
                     break
             # REGEX: Space inside parens is part of pattern
             if ctx == WORD_CTX_REGEX and _is_whitespace(ch) and paren_depth > 0:
-                chars.append(self._advance())
+                chars.append(self.advance())
                 continue
             # Single-quoted string
             if ch == "'":
@@ -1187,9 +1175,9 @@ class Lexer:
                     chars.append('"')
                     in_single_in_dquote = False
                     while not self.at_end() and (in_single_in_dquote or self.peek() != '"'):
-                        c = self._peek()
+                        c = self.peek()
                         if in_single_in_dquote:
-                            chars.append(self._advance())
+                            chars.append(self.advance())
                             if c == "'":
                                 in_single_in_dquote = False
                             continue
@@ -1199,8 +1187,8 @@ class Lexer:
                                 self.advance()
                                 self.advance()
                             else:
-                                chars.append(self._advance())
-                                chars.append(self._advance())
+                                chars.append(self.advance())
+                                chars.append(self.advance())
                         elif c == "$":
                             # Callback to Parser for dollar expansion (inside dquote)
                             self._sync_to_parser()
@@ -1208,7 +1196,7 @@ class Lexer:
                                 chars, parts, in_dquote=True
                             ):
                                 self._sync_from_parser()
-                                chars.append(self._advance())
+                                chars.append(self.advance())
                             else:
                                 self._sync_from_parser()
                         elif c == "`":
@@ -1220,12 +1208,12 @@ class Lexer:
                                 parts.append(cmdsub_result[0])
                                 chars.append(cmdsub_result[1])
                             else:
-                                chars.append(self._advance())
+                                chars.append(self.advance())
                         else:
-                            chars.append(self._advance())
+                            chars.append(self.advance())
                     if self.at_end():
                         raise ParseError("Unterminated double quote", pos=start)
-                    chars.append(self._advance())
+                    chars.append(self.advance())
                 else:
                     # COND/REGEX modes - callback to Parser's _scan_double_quote
                     handle_line_continuation = ctx == WORD_CTX_COND
@@ -1240,8 +1228,8 @@ class Lexer:
                     self.advance()
                     self.advance()
                 else:
-                    chars.append(self._advance())
-                    chars.append(self._advance())
+                    chars.append(self.advance())
+                    chars.append(self.advance())
                 continue
             # NORMAL/COND: ANSI-C quoting $'...'
             if (
@@ -1255,7 +1243,7 @@ class Lexer:
                     parts.append(ansi_result[0])
                     chars.append(ansi_result[1])
                 else:
-                    chars.append(self._advance())
+                    chars.append(self.advance())
                 continue
             # NORMAL/COND: Locale translation $"..."
             if (
@@ -1270,14 +1258,14 @@ class Lexer:
                     parts.extend(locale_result[2])
                     chars.append(locale_result[1])
                 else:
-                    chars.append(self._advance())
+                    chars.append(self.advance())
                 continue
             # Dollar expansions - callback to Parser
             if ch == "$":
                 self._sync_to_parser()
                 if not self._parser._parse_dollar_expansion(chars, parts):
                     self._sync_from_parser()
-                    chars.append(self._advance())
+                    chars.append(self.advance())
                 else:
                     self._sync_from_parser()
                     # Special params $? $* $@ can be followed by () as extglob pattern
@@ -1291,7 +1279,7 @@ class Lexer:
                         and not self.at_end()
                         and self.peek() == "("
                     ):
-                        chars.append(self._advance())  # (
+                        chars.append(self.advance())  # (
                         content = self._parse_matched_pair("(", ")", MatchedPairFlags.EXTGLOB)
                         chars.append(content)
                         chars.append(")")
@@ -1305,7 +1293,7 @@ class Lexer:
                     parts.append(cmdsub_result[0])
                     chars.append(cmdsub_result[1])
                 else:
-                    chars.append(self._advance())
+                    chars.append(self.advance())
                 continue
             # NORMAL/COND: Process substitution <(...) or >(...) - callback to Parser
             if (
@@ -1323,9 +1311,9 @@ class Lexer:
                 elif procsub_result[1]:
                     chars.append(procsub_result[1])
                 else:
-                    chars.append(self._advance())
+                    chars.append(self.advance())
                     if ctx == WORD_CTX_NORMAL:
-                        chars.append(self._advance())
+                        chars.append(self.advance())
                 continue
             # NORMAL: Array literal - callback to Parser
             # Only if there's a valid variable name before = or +=
@@ -1360,8 +1348,8 @@ class Lexer:
                 and self.pos + 1 < self.length
                 and self.source[self.pos + 1] == "("
             ):
-                chars.append(self._advance())  # @, ?, *, +, or !
-                chars.append(self._advance())  # (
+                chars.append(self.advance())  # @, ?, *, +, or !
+                chars.append(self.advance())  # (
                 content = self._parse_matched_pair("(", ")", MatchedPairFlags.EXTGLOB)
                 chars.append(content)
                 chars.append(")")
@@ -1376,13 +1364,13 @@ class Lexer:
                 and bracket_depth == 0
             ):
                 if not chars:
-                    chars.append(self._advance())
+                    chars.append(self.advance())
                 break
             # NORMAL: Metacharacter terminates word (unless inside brackets)
             if ctx == WORD_CTX_NORMAL and _is_metachar(ch) and bracket_depth == 0:
                 break
             # Regular character
-            chars.append(self._advance())
+            chars.append(self.advance())
         # Check for unclosed bracket at EOF
         if bracket_depth > 0 and bracket_start_pos is not None and self.at_end():
             raise MatchedPairError("unexpected EOF looking for `]'", pos=bracket_start_pos)
@@ -1495,18 +1483,18 @@ class Lexer:
         content_chars: list[str] = []
         found_close = False
         while not self.at_end():
-            ch = self._peek()
+            ch = self.peek()
             if ch == "'":
                 self.advance()  # consume closing '
                 found_close = True
                 break
             elif ch == "\\":
                 # Escape sequence - include both backslash and following char
-                content_chars.append(self._advance())  # backslash
+                content_chars.append(self.advance())  # backslash
                 if not self.at_end():
-                    content_chars.append(self._advance())  # escaped char
+                    content_chars.append(self.advance())  # escaped char
             else:
-                content_chars.append(self._advance())
+                content_chars.append(self.advance())
         if not found_close:
             # Unterminated ANSI-C quote - this is an error, not a fallback
             raise MatchedPairError("unexpected EOF while looking for matching `''", pos=start)
@@ -1534,7 +1522,6 @@ class Lexer:
         - inner_parts is a list of expansion nodes found inside
         Returns (None, "", []) if not a valid locale string.
         """
-        assert self._parser is not None
         if self.at_end() or self.peek() != "$":
             return None, "", []
         if self.pos + 1 >= self.length or self.source[self.pos + 1] != '"':
@@ -1546,7 +1533,7 @@ class Lexer:
         inner_parts: list[Node] = []
         found_close = False
         while not self.at_end():
-            ch = self._peek()
+            ch = self.peek()
             if ch == '"':
                 self.advance()  # consume closing "
                 found_close = True
@@ -1559,8 +1546,8 @@ class Lexer:
                     self.advance()
                     self.advance()
                 else:
-                    content_chars.append(self._advance())  # backslash
-                    content_chars.append(self._advance())  # escaped char
+                    content_chars.append(self.advance())  # backslash
+                    content_chars.append(self.advance())  # escaped char
             # Handle arithmetic expansion $((...))
             elif (
                 ch == "$"
@@ -1584,7 +1571,7 @@ class Lexer:
                         inner_parts.append(cmdsub_node)
                         content_chars.append(cmdsub_text)
                     else:
-                        content_chars.append(self._advance())
+                        content_chars.append(self.advance())
             # Handle command substitution $(...)
             elif _is_expansion_start(self.source, self.pos, "$("):
                 self._sync_to_parser()
@@ -1594,7 +1581,7 @@ class Lexer:
                     inner_parts.append(cmdsub_node)
                     content_chars.append(cmdsub_text)
                 else:
-                    content_chars.append(self._advance())
+                    content_chars.append(self.advance())
             # Handle parameter expansion
             elif ch == "$":
                 self._sync_to_parser()
@@ -1604,7 +1591,7 @@ class Lexer:
                     inner_parts.append(param_node)
                     content_chars.append(param_text)
                 else:
-                    content_chars.append(self._advance())
+                    content_chars.append(self.advance())
             # Handle backtick command substitution
             elif ch == "`":
                 self._sync_to_parser()
@@ -1614,9 +1601,9 @@ class Lexer:
                     inner_parts.append(cmdsub_node)
                     content_chars.append(cmdsub_text)
                 else:
-                    content_chars.append(self._advance())
+                    content_chars.append(self.advance())
             else:
-                content_chars.append(self._advance())
+                content_chars.append(self.advance())
         if not found_close:
             # Unterminated - reset and return None
             self.pos = start
@@ -1648,13 +1635,13 @@ class Lexer:
         """Consume a parameter expansion operator."""
         if self.at_end():
             return None
-        ch = self._peek()
+        ch = self.peek()
         # Operators with optional colon prefix: :- := :? :+
         if ch == ":":
             self.advance()
             if self.at_end():
                 return ":"
-            next_ch = self._peek()
+            next_ch = self.peek()
             if _is_simple_param_op(next_ch):
                 self.advance()
                 return ":" + next_ch
@@ -1680,7 +1667,7 @@ class Lexer:
         if ch == "/":
             self.advance()
             if not self.at_end():
-                next_ch = self._peek()
+                next_ch = self.peek()
                 if next_ch == "/":
                     self.advance()
                     return "//"
@@ -1756,7 +1743,7 @@ class Lexer:
         """Consume a parameter name (variable name, special char, or array subscript)."""
         if self.at_end():
             return None
-        ch = self._peek()
+        ch = self.peek()
         # Special parameters (but NOT $ followed by { ' or " - those are special expansions)
         if _is_special_param(ch):
             if ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] in "{'\"":
@@ -1766,22 +1753,22 @@ class Lexer:
         # Digits (positional params)
         if ch.isdigit():
             name_chars: list[str] = []
-            while not self.at_end() and self._peek().isdigit():
-                name_chars.append(self._advance())
+            while not self.at_end() and self.peek().isdigit():
+                name_chars.append(self.advance())
             return "".join(name_chars)
         # Variable name
         if ch.isalpha() or ch == "_":
             name_chars = []
             while not self.at_end():
-                c = self._peek()
+                c = self.peek()
                 if c.isalnum() or c == "_":
-                    name_chars.append(self._advance())
+                    name_chars.append(self.advance())
                 elif c == "[":
                     if not self._param_subscript_has_close(self.pos):
                         break
                     # Array subscript - use _parse_matched_pair for bracket/quote handling
                     # ARRAYSUB enables ${} and <() detection inside subscripts
-                    name_chars.append(self._advance())  # [
+                    name_chars.append(self.advance())  # [
                     content = self._parse_matched_pair("[", "]", MatchedPairFlags.ARRAYSUB)
                     name_chars.append(content)
                     name_chars.append("]")
@@ -1808,7 +1795,7 @@ class Lexer:
         if self.at_end():
             self.pos = start
             return None, ""
-        ch = self._peek()
+        ch = self.peek()
         # Braced expansion ${...}
         if ch == "{":
             self.advance()  # consume {
@@ -1822,7 +1809,7 @@ class Lexer:
         if ch.isalpha() or ch == "_":
             name_start = self.pos
             while not self.at_end():
-                c = self._peek()
+                c = self.peek()
                 if c.isalnum() or c == "_":
                     self.advance()
                 else:
@@ -1841,13 +1828,12 @@ class Lexer:
         in_dquote is True if this expansion is inside double quotes.
         Returns (node, text).
         """
-        assert self._parser is not None
         if self.at_end():
             raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
         # Save and initialize dolbrace state
         saved_dolbrace = self._dolbrace_state
         self._dolbrace_state = DolbraceState.PARAM
-        ch = self._peek()
+        ch = self.peek()
         # Brace command substitution ${ cmd; } or ${| cmd; }
         if _is_funsub_char(ch):
             self._dolbrace_state = saved_dolbrace
@@ -1866,29 +1852,29 @@ class Lexer:
         # ${!param} or ${!param<op><arg>} - indirect
         if ch == "!":
             self.advance()
-            while not self.at_end() and _is_whitespace_no_newline(self._peek()):
+            while not self.at_end() and _is_whitespace_no_newline(self.peek()):
                 self.advance()
             param = self._consume_param_name()
             if param:
                 # Skip optional whitespace before closing brace
-                while not self.at_end() and _is_whitespace_no_newline(self._peek()):
+                while not self.at_end() and _is_whitespace_no_newline(self.peek()):
                     self.advance()
-                if not self.at_end() and self._peek() == "}":
+                if not self.at_end() and self.peek() == "}":
                     self.advance()
                     text = _substring(self.source, start, self.pos)
                     self._dolbrace_state = saved_dolbrace
                     return ParamIndirect(param), text
                 # ${!prefix@} and ${!prefix*} are prefix matching
-                if not self.at_end() and _is_at_or_star(self._peek()):
-                    suffix = self._advance()
+                if not self.at_end() and _is_at_or_star(self.peek()):
+                    suffix = self.advance()
                     trailing = self._parse_matched_pair("{", "}", MatchedPairFlags.DOLBRACE)
                     text = _substring(self.source, start, self.pos)
                     self._dolbrace_state = saved_dolbrace
                     return ParamIndirect(param + suffix + trailing), text
                 # Check for operator (e.g., ${!##} = indirect of # with # op)
                 op = self._consume_param_operator()
-                if op is None and not self.at_end() and self._peek() not in "}\"'`":
-                    op = self._advance()
+                if op is None and not self.at_end() and self.peek() not in "}\"'`":
+                    op = self.advance()
                 if op is not None and op not in "\"'`":
                     arg = self._parse_matched_pair("{", "}", MatchedPairFlags.DOLBRACE)
                     text = _substring(self.source, start, self.pos)
@@ -1944,12 +1930,12 @@ class Lexer:
                 if dollar_count % 2 == 1:
                     op = ""
                 else:
-                    op = self._advance()
-            elif not self.at_end() and self._peek() == "`":
+                    op = self.advance()
+            elif not self.at_end() and self.peek() == "`":
                 backtick_pos = self.pos
                 self.advance()
-                while not self.at_end() and self._peek() != "`":
-                    bc = self._peek()
+                while not self.at_end() and self.peek() != "`":
+                    bc = self.peek()
                     if bc == "\\" and self.pos + 1 < self.length:
                         next_c = self.source[self.pos + 1]
                         if _is_escape_char_in_backtick(next_c):
@@ -1967,22 +1953,24 @@ class Lexer:
                 and self.source[self.pos + 1] == "{"
             ):
                 op = ""
-            elif not self.at_end() and self._peek() in ("'", '"'):
+            elif not self.at_end() and self.peek() in ("'", '"'):
                 # Quotes start the argument, not the operator
                 op = ""
-            elif not self.at_end() and self._peek() == "\\":
+            elif not self.at_end() and self.peek() == "\\":
                 # Backslash escapes the following character
-                op = self._advance()
+                op = self.advance()
                 if not self.at_end():
-                    op += self._advance()
+                    op += self.advance()
             else:
-                op = self._advance()
+                op = self.advance()
         # Update dolbrace state based on operator
         self._update_dolbrace_for_op(op, len(param) > 0)
         # Parse argument (everything until closing brace)
+        # Pass was_dollar=True if param ends with $ (for $$ handling in nested expansions)
         try:
             flags = MatchedPairFlags.DQUOTE if in_dquote else MatchedPairFlags.NONE
-            arg = self._collect_param_argument(flags)
+            param_ends_with_dollar = param is not None and param.endswith("$")
+            arg = self._collect_param_argument(flags, param_ends_with_dollar)
         except MatchedPairError as e:
             self._dolbrace_state = saved_dolbrace
             raise e
@@ -2004,7 +1992,6 @@ class Lexer:
 
     def _read_funsub(self, start: int) -> tuple[Node | None, str]:
         """Read brace command substitution ${ cmd; } or ${| cmd; }."""
-        assert self._parser is not None
         return self._parser._parse_funsub(start)
 
     # Reserved words mapping
@@ -2238,145 +2225,146 @@ class Word(Node):
                 i += 1
         return "".join(result)
 
-    def _expand_ansi_c_escapes(self, value: str) -> str:
-        """Expand ANSI-C escape sequences in $'...' strings.
+    def _sh_single_quote(self, s: str) -> str:
+        """Shell-quote a string using single quotes (matches bash's sh_single_quote)."""
+        if not s:
+            return "''"
+        if s == "'":
+            return "\\'"
+        result = ["'"]
+        for c in s:
+            if c == "'":
+                result.append("'\\''")
+            else:
+                result.append(c)
+        result.append("'")
+        return "".join(result)
 
-        Uses bytes internally so \\x escapes can form valid UTF-8 sequences.
-        Invalid UTF-8 is replaced with U+FFFD.
-        """
-        if not (value.startswith("'") and value.endswith("'")):
-            return value
-        inner = _substring(value, 1, len(value) - 1)
+    def _ansi_c_to_bytes(self, inner: str) -> bytearray:
+        """Expand ANSI-C escapes to literal bytes (matches bash's ansicstr)."""
         result = bytearray()
         i = 0
         while i < len(inner):
             if inner[i] == "\\" and i + 1 < len(inner):
                 c = inner[i + 1]
-                # Check simple escapes first
                 simple = _get_ansi_escape(c)
                 if simple >= 0:
                     result.append(simple)
                     i += 2
                 elif c == "'":
-                    # bash-oracle outputs \' as '\'' (shell quoting trick)
-                    result.extend(b"'\\''")
+                    result.append(0x27)  # literal single quote
                     i += 2
                 elif c == "x":
-                    # Check for \x{...} brace syntax (bash 5.3+)
                     if i + 2 < len(inner) and inner[i + 2] == "{":
-                        # Find closing brace or end of hex digits
                         j = i + 3
                         while j < len(inner) and _is_hex_digit(inner[j]):
                             j += 1
                         hex_str = _substring(inner, i + 3, j)
                         if j < len(inner) and inner[j] == "}":
-                            j += 1  # consume }
-                        # If no hex digits, treat as NUL (truncates)
+                            j += 1
                         if not hex_str:
-                            return "'" + result.decode("utf-8", errors="replace") + "'"
-                        byte_val = int(hex_str, 16) & 0xFF  # Take low byte
+                            return result  # NUL truncates
+                        byte_val = int(hex_str, 16) & 0xFF
                         if byte_val == 0:
-                            return "'" + result.decode("utf-8", errors="replace") + "'"
+                            return result
                         self._append_with_ctlesc(result, byte_val)
                         i = j
                     else:
-                        # Hex escape \xHH (1-2 hex digits) - raw byte
                         j = i + 2
                         while j < len(inner) and j < i + 4 and _is_hex_digit(inner[j]):
                             j += 1
                         if j > i + 2:
                             byte_val = int(_substring(inner, i + 2, j), 16)
                             if byte_val == 0:
-                                # NUL truncates string
-                                return "'" + result.decode("utf-8", errors="replace") + "'"
+                                return result
                             self._append_with_ctlesc(result, byte_val)
                             i = j
                         else:
                             result.append(ord(inner[i]))
                             i += 1
                 elif c == "u":
-                    # Unicode escape \uHHHH (1-4 hex digits) - encode as UTF-8
                     j = i + 2
                     while j < len(inner) and j < i + 6 and _is_hex_digit(inner[j]):
                         j += 1
                     if j > i + 2:
                         codepoint = int(_substring(inner, i + 2, j), 16)
                         if codepoint == 0:
-                            # NUL truncates string
-                            return "'" + result.decode("utf-8", errors="replace") + "'"
+                            return result
                         result.extend(chr(codepoint).encode("utf-8"))
                         i = j
                     else:
                         result.append(ord(inner[i]))
                         i += 1
                 elif c == "U":
-                    # Unicode escape \UHHHHHHHH (1-8 hex digits) - encode as UTF-8
                     j = i + 2
                     while j < len(inner) and j < i + 10 and _is_hex_digit(inner[j]):
                         j += 1
                     if j > i + 2:
                         codepoint = int(_substring(inner, i + 2, j), 16)
                         if codepoint == 0:
-                            # NUL truncates string
-                            return "'" + result.decode("utf-8", errors="replace") + "'"
+                            return result
                         result.extend(chr(codepoint).encode("utf-8"))
                         i = j
                     else:
                         result.append(ord(inner[i]))
                         i += 1
                 elif c == "c":
-                    # Control character \cX - mask with 0x1f
                     if i + 3 <= len(inner):
                         ctrl_char = inner[i + 2]
-                        # POSIX: $'\c\\' consumes both backslashes
                         skip_extra = 0
                         if ctrl_char == "\\" and i + 4 <= len(inner) and inner[i + 3] == "\\":
                             skip_extra = 1
                         ctrl_val = ord(ctrl_char) & 0x1F
                         if ctrl_val == 0:
-                            # NUL truncates string
-                            return "'" + result.decode("utf-8", errors="replace") + "'"
+                            return result
                         self._append_with_ctlesc(result, ctrl_val)
                         i += 3 + skip_extra
                     else:
                         result.append(ord(inner[i]))
                         i += 1
                 elif c == "0":
-                    # Nul or octal \0 or \0NN (up to 3 digits total)
                     j = i + 2
                     while j < len(inner) and j < i + 4 and _is_octal_digit(inner[j]):
                         j += 1
                     if j > i + 2:
                         byte_val = int(_substring(inner, i + 1, j), 8) & 0xFF
                         if byte_val == 0:
-                            # NUL truncates string
-                            return "'" + result.decode("utf-8", errors="replace") + "'"
+                            return result
                         self._append_with_ctlesc(result, byte_val)
                         i = j
                     else:
-                        # Just \0 - NUL truncates string
-                        return "'" + result.decode("utf-8", errors="replace") + "'"
+                        return result  # Just \0 - NUL truncates
                 elif c >= "1" and c <= "7":
-                    # Octal escape \NNN (1-3 digits) - raw byte, wraps at 256
                     j = i + 1
                     while j < len(inner) and j < i + 4 and _is_octal_digit(inner[j]):
                         j += 1
                     byte_val = int(_substring(inner, i + 1, j), 8) & 0xFF
                     if byte_val == 0:
-                        # NUL truncates string
-                        return "'" + result.decode("utf-8", errors="replace") + "'"
+                        return result
                     self._append_with_ctlesc(result, byte_val)
                     i = j
                 else:
-                    # Unknown escape - preserve as-is
                     result.append(0x5C)
                     result.append(ord(c))
                     i += 2
             else:
                 result.extend(inner[i].encode("utf-8"))
                 i += 1
-        # Decode as UTF-8, replacing invalid sequences with U+FFFD
-        return "'" + result.decode("utf-8", errors="replace") + "'"
+        return result
+
+    def _expand_ansi_c_escapes(self, value: str) -> str:
+        """Expand ANSI-C escape sequences in $'...' strings.
+
+        Two-phase approach matching bash's architecture:
+        1. Expand escapes to literal bytes (ansicstr)
+        2. Apply shell quoting to result (sh_single_quote)
+        """
+        if not (value.startswith("'") and value.endswith("'")):
+            return value
+        inner = _substring(value, 1, len(value) - 1)
+        literal_bytes = self._ansi_c_to_bytes(inner)
+        literal_str = literal_bytes.decode("utf-8", errors="replace")
+        return self._sh_single_quote(literal_str)
 
     def _expand_all_ansi_c_quotes(self, value: str) -> str:
         """Find and expand ALL $'...' ANSI-C quoted strings in value."""
@@ -3064,14 +3052,14 @@ class Word(Node):
     def _format_command_substitutions(self, value: str, in_arith: bool = False) -> str:
         """Replace $(...) and >(...) / <(...) with bash-oracle-formatted AST output."""
         # Collect command substitutions from all parts, including nested ones
-        cmdsub_parts: list[CommandSubstitution] = []
-        procsub_parts: list[ProcessSubstitution] = []
+        cmdsub_parts = []
+        procsub_parts = []
         has_arith = False  # Track if we have any arithmetic expansion nodes
         for p in self.parts:
             if p.kind == "cmdsub":
-                cmdsub_parts.append(p)  # type: ignore[arg-type]
+                cmdsub_parts.append(p)
             elif p.kind == "procsub":
-                procsub_parts.append(p)  # type: ignore[arg-type]
+                procsub_parts.append(p)
             elif p.kind == "arith":
                 has_arith = True
             else:
@@ -3705,7 +3693,7 @@ class Pipeline(Node):
         """Get s-expression for a command, optionally injecting pipe-both redirect."""
         if not needs_redirect:
             return cmd.to_sexp()
-        if isinstance(cmd, Command):
+        if cmd.kind == "command":
             # Inject redirect inside command
             parts = []
             for w in cmd.words:
@@ -3736,17 +3724,17 @@ class List(Node):
         while (
             len(parts) > 1
             and parts[len(parts) - 1].kind == "operator"
-            and (parts[len(parts) - 1].op == ";" or parts[len(parts) - 1].op == "\n")  # type: ignore[attr-defined,union-attr]
+            and (parts[len(parts) - 1].op == ";" or parts[len(parts) - 1].op == "\n")
         ):
             parts = _sublist(parts, 0, len(parts) - 1)
         if len(parts) == 1:
             return parts[0].to_sexp()
         # Handle trailing & as unary background operator
         # & only applies to the immediately preceding pipeline, not the whole list
-        if parts[len(parts) - 1].kind == "operator" and parts[len(parts) - 1].op == "&":  # type: ignore[attr-defined,union-attr]
+        if parts[len(parts) - 1].kind == "operator" and parts[len(parts) - 1].op == "&":
             # Find rightmost ; or \n to split there
             for i in range(len(parts) - 3, 0, -2):
-                if parts[i].kind == "operator" and (parts[i].op == ";" or parts[i].op == "\n"):  # type: ignore[attr-defined,union-attr]
+                if parts[i].kind == "operator" and (parts[i].op == ";" or parts[i].op == "\n"):
                     left = _sublist(parts, 0, i)
                     right = _sublist(parts, i + 1, len(parts) - 1)  # exclude trailing &
                     if len(left) > 1:
@@ -3773,7 +3761,7 @@ class List(Node):
         # Find all ; or \n positions (may not be at regular intervals due to consecutive ops)
         semi_positions = []
         for i in range(len(parts)):
-            if parts[i].kind == "operator" and (parts[i].op == ";" or parts[i].op == "\n"):  # type: ignore[attr-defined]
+            if parts[i].kind == "operator" and (parts[i].op == ";" or parts[i].op == "\n"):
                 semi_positions.append(i)
         if semi_positions:
             # Split into segments at ; and \n positions, filtering empty/operator-only segments
@@ -3810,7 +3798,7 @@ class List(Node):
             return parts[0].to_sexp()
         amp_positions = []
         for i in range(1, len(parts) - 1, 2):
-            if parts[i].kind == "operator" and parts[i].op == "&":  # type: ignore[attr-defined]
+            if parts[i].kind == "operator" and parts[i].op == "&":
                 amp_positions.append(i)
         if amp_positions:
             # Split into segments at & positions
@@ -4923,9 +4911,9 @@ class ProcessSubstitution(Node):
 class Negation(Node):
     """Pipeline negation with !."""
 
-    pipeline: Node | None
+    pipeline: Node
 
-    def __init__(self, pipeline: Node | None):
+    def __init__(self, pipeline: Node):
         self.kind = "negation"
         self.pipeline = pipeline
 
@@ -4939,10 +4927,10 @@ class Negation(Node):
 class Time(Node):
     """Time measurement with time keyword."""
 
-    pipeline: Node | None
+    pipeline: Node
     posix: bool = False  # -p flag
 
-    def __init__(self, pipeline: Node | None, posix: bool = False):
+    def __init__(self, pipeline: Node, posix: bool = False):
         self.kind = "time"
         self.pipeline = pipeline
         self.posix = posix
@@ -4978,10 +4966,10 @@ class ConditionalExpr(Node):
         body_kind = getattr(self.body, "kind", None)
         if body_kind is None:
             # body is a string
-            escaped = self.body.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")  # type: ignore[union-attr]
+            escaped = self.body.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
             result = '(cond "' + escaped + '")'
         else:
-            result = "(cond " + self.body.to_sexp() + ")"  # type: ignore[union-attr]
+            result = "(cond " + self.body.to_sexp() + ")"
         if self.redirects:
             redirect_parts = []
             for r in self.redirects:
@@ -5161,20 +5149,20 @@ def _format_cond_body(node: Node) -> str:
     """Format the body of a [[ ]] conditional expression."""
     kind = node.kind
     if kind == "unary-test":
-        operand_val = node.operand.get_cond_formatted_value()  # type: ignore[attr-defined]
-        return node.op + " " + operand_val  # type: ignore[attr-defined]
+        operand_val = node.operand.get_cond_formatted_value()
+        return node.op + " " + operand_val
     if kind == "binary-test":
-        left_val = node.left.get_cond_formatted_value()  # type: ignore[attr-defined]
-        right_val = node.right.get_cond_formatted_value()  # type: ignore[attr-defined]
-        return left_val + " " + node.op + " " + right_val  # type: ignore[attr-defined]
+        left_val = node.left.get_cond_formatted_value()
+        right_val = node.right.get_cond_formatted_value()
+        return left_val + " " + node.op + " " + right_val
     if kind == "cond-and":
-        return _format_cond_body(node.left) + " && " + _format_cond_body(node.right)  # type: ignore[attr-defined]
+        return _format_cond_body(node.left) + " && " + _format_cond_body(node.right)
     if kind == "cond-or":
-        return _format_cond_body(node.left) + " || " + _format_cond_body(node.right)  # type: ignore[attr-defined]
+        return _format_cond_body(node.left) + " || " + _format_cond_body(node.right)
     if kind == "cond-not":
-        return "! " + _format_cond_body(node.operand)  # type: ignore[attr-defined]
+        return "! " + _format_cond_body(node.operand)
     if kind == "cond-paren":
-        return "( " + _format_cond_body(node.inner) + " )"  # type: ignore[attr-defined]
+        return "( " + _format_cond_body(node.inner) + " )"
     return ""
 
 
@@ -5183,19 +5171,19 @@ def _starts_with_subshell(node: Node) -> bool:
     if node.kind == "subshell":
         return True
     if node.kind == "list":
-        for p in node.parts:  # type: ignore[attr-defined]
+        for p in node.parts:
             if p.kind != "operator":
                 return _starts_with_subshell(p)
         return False
     if node.kind == "pipeline":
-        if node.commands:  # type: ignore[attr-defined]
-            return _starts_with_subshell(node.commands[0])  # type: ignore[attr-defined]
+        if node.commands:
+            return _starts_with_subshell(node.commands[0])
         return False
     return False
 
 
 def _format_cmdsub_node(
-    node: Node | None,
+    node: Node,
     indent: int = 0,
     in_procsub: bool = False,
     compact_redirects: bool = False,
@@ -5210,7 +5198,7 @@ def _format_cmdsub_node(
         return ""
     if node.kind == "command":
         parts = []
-        for w in node.words:  # type: ignore[attr-defined]
+        for w in node.words:
             val = w._expand_all_ansi_c_quotes(w.value)
             # Strip $ from locale strings $"..." (quote-aware)
             val = w._strip_locale_string_dollars(val)
@@ -5220,16 +5208,16 @@ def _format_cmdsub_node(
             parts.append(val)
         # Check for heredocs - their bodies need to come at the end
         heredocs = []
-        for r in node.redirects:  # type: ignore[attr-defined]
+        for r in node.redirects:
             if r.kind == "heredoc":
                 heredocs.append(r)
-        for r in node.redirects:  # type: ignore[attr-defined]
+        for r in node.redirects:
             # For heredocs, output just the operator part; body comes at end
             parts.append(_format_redirect(r, compact=compact_redirects, heredoc_op_only=True))
         # In compact mode with words, don't add space before redirects
-        if compact_redirects and node.words and node.redirects:  # type: ignore[attr-defined]
-            word_parts = parts[: len(node.words)]  # type: ignore[attr-defined]
-            redirect_parts = parts[len(node.words) :]  # type: ignore[attr-defined]
+        if compact_redirects and node.words and node.redirects:
+            word_parts = parts[: len(node.words)]
+            redirect_parts = parts[len(node.words) :]
             result = " ".join(word_parts) + "".join(redirect_parts)
         else:
             result = " ".join(parts)
@@ -5241,13 +5229,13 @@ def _format_cmdsub_node(
         # Build list of (cmd, needs_pipe_both_redirect) filtering out PipeBoth markers
         cmds = []
         i = 0
-        while i < len(node.commands):  # type: ignore[attr-defined]
-            cmd = node.commands[i]  # type: ignore[attr-defined]
+        while i < len(node.commands):
+            cmd = node.commands[i]
             if cmd.kind == "pipe-both":
                 i += 1
                 continue
             # Check if next element is PipeBoth
-            needs_redirect = i + 1 < len(node.commands) and node.commands[i + 1].kind == "pipe-both"  # type: ignore[attr-defined]
+            needs_redirect = i + 1 < len(node.commands) and node.commands[i + 1].kind == "pipe-both"
             cmds.append((cmd, needs_redirect))
             i += 1
         # Format pipeline, handling heredocs specially
@@ -5309,7 +5297,7 @@ def _format_cmdsub_node(
     if node.kind == "list":
         # Check if any command in the list has a heredoc redirect
         has_heredoc = False
-        for p in node.parts:  # type: ignore[attr-defined]
+        for p in node.parts:
             if p.kind == "command" and p.redirects:
                 for r in p.redirects:
                     if r.kind == "heredoc":
@@ -5329,7 +5317,7 @@ def _format_cmdsub_node(
         result = []
         skipped_semi = False
         cmd_count = 0  # Track number of non-operator commands seen
-        for p in node.parts:  # type: ignore[attr-defined]
+        for p in node.parts:
             if p.kind == "operator":
                 if p.op == ";":
                     # Skip semicolon if previous command ends with heredoc (newline)
@@ -5367,7 +5355,7 @@ def _format_cmdsub_node(
                         and "<<" in result[len(result) - 1]
                         and "\n" in result[len(result) - 1]
                     ):
-                        last: str = result[len(result) - 1]
+                        last = result[len(result) - 1]
                         # If this is a pipeline (has |), append & at the end
                         if " |" in last or last.startswith("|"):
                             result[len(result) - 1] = last + " &"
@@ -5420,34 +5408,34 @@ def _format_cmdsub_node(
                 s = _substring(s, 0, len(s) - 1)
         return s
     if node.kind == "if":
-        cond = _format_cmdsub_node(node.condition, indent)  # type: ignore[attr-defined]
-        then_body = _format_cmdsub_node(node.then_body, indent + 4)  # type: ignore[attr-defined]
+        cond = _format_cmdsub_node(node.condition, indent)
+        then_body = _format_cmdsub_node(node.then_body, indent + 4)
         result = "if " + cond + "; then\n" + inner_sp + then_body + ";"
-        if node.else_body:  # type: ignore[attr-defined]
-            else_body = _format_cmdsub_node(node.else_body, indent + 4)  # type: ignore[attr-defined]
+        if node.else_body:
+            else_body = _format_cmdsub_node(node.else_body, indent + 4)
             result = result + "\n" + sp + "else\n" + inner_sp + else_body + ";"
         result = result + "\n" + sp + "fi"
         return result
     if node.kind == "while":
-        cond = _format_cmdsub_node(node.condition, indent)  # type: ignore[attr-defined]
-        body = _format_cmdsub_node(node.body, indent + 4)  # type: ignore[attr-defined]
+        cond = _format_cmdsub_node(node.condition, indent)
+        body = _format_cmdsub_node(node.body, indent + 4)
         result = "while " + cond + "; do\n" + inner_sp + body + ";\n" + sp + "done"
-        if node.redirects:  # type: ignore[attr-defined]
-            for r in node.redirects:  # type: ignore[attr-defined]
+        if node.redirects:
+            for r in node.redirects:
                 result = result + " " + _format_redirect(r)
         return result
     if node.kind == "until":
-        cond = _format_cmdsub_node(node.condition, indent)  # type: ignore[attr-defined]
-        body = _format_cmdsub_node(node.body, indent + 4)  # type: ignore[attr-defined]
+        cond = _format_cmdsub_node(node.condition, indent)
+        body = _format_cmdsub_node(node.body, indent + 4)
         result = "until " + cond + "; do\n" + inner_sp + body + ";\n" + sp + "done"
-        if node.redirects:  # type: ignore[attr-defined]
-            for r in node.redirects:  # type: ignore[attr-defined]
+        if node.redirects:
+            for r in node.redirects:
                 result = result + " " + _format_redirect(r)
         return result
     if node.kind == "for":
-        var = node.var  # type: ignore[attr-defined]
-        body = _format_cmdsub_node(node.body, indent + 4)  # type: ignore[attr-defined]
-        if node.words is not None:  # type: ignore[attr-defined]
+        var = node.var
+        body = _format_cmdsub_node(node.body, indent + 4)
+        if node.words is not None:
             word_vals = []
             for w in node.words:
                 word_vals.append(w.value)
@@ -5477,19 +5465,19 @@ def _format_cmdsub_node(
             result = (
                 "for " + var + ' in "$@";\n' + sp + "do\n" + inner_sp + body + ";\n" + sp + "done"
             )
-        if node.redirects:  # type: ignore[attr-defined]
-            for r in node.redirects:  # type: ignore[attr-defined]
+        if node.redirects:
+            for r in node.redirects:
                 result = result + " " + _format_redirect(r)
         return result
     if node.kind == "for-arith":
-        body = _format_cmdsub_node(node.body, indent + 4)  # type: ignore[attr-defined]
+        body = _format_cmdsub_node(node.body, indent + 4)
         result = (
             "for (("
-            + node.init  # type: ignore[attr-defined]
+            + node.init
             + "; "
-            + node.cond  # type: ignore[attr-defined]
+            + node.cond
             + "; "
-            + node.incr  # type: ignore[attr-defined]
+            + node.incr
             + "))\ndo\n"
             + inner_sp
             + body
@@ -5497,16 +5485,16 @@ def _format_cmdsub_node(
             + sp
             + "done"
         )
-        if node.redirects:  # type: ignore[attr-defined]
-            for r in node.redirects:  # type: ignore[attr-defined]
+        if node.redirects:
+            for r in node.redirects:
                 result = result + " " + _format_redirect(r)
         return result
     if node.kind == "case":
-        word = node.word.value  # type: ignore[attr-defined]
+        word = node.word.value
         patterns = []
         i = 0
-        while i < len(node.patterns):  # type: ignore[attr-defined]
-            p = node.patterns[i]  # type: ignore[attr-defined]
+        while i < len(node.patterns):
+            p = node.patterns[i]
             pat = p.pattern.replace("|", " | ")
             if p.body:
                 body = _format_cmdsub_node(p.body, indent + 8)
@@ -5524,24 +5512,24 @@ def _format_cmdsub_node(
             i += 1
         pattern_str = ("\n" + _repeat_str(" ", indent + 4)).join(patterns)
         redirects = ""
-        if node.redirects:  # type: ignore[attr-defined]
+        if node.redirects:
             redirect_parts = []
-            for r in node.redirects:  # type: ignore[attr-defined]
+            for r in node.redirects:
                 redirect_parts.append(_format_redirect(r))
             redirects = " " + " ".join(redirect_parts)
         return "case " + word + " in" + pattern_str + "\n" + sp + "esac" + redirects
     if node.kind == "function":
-        name = node.name  # type: ignore[attr-defined]
+        name = node.name
         # Get the body content - if it's a BraceGroup, unwrap it
-        inner_body = node.body.body if node.body.kind == "brace-group" else node.body  # type: ignore[attr-defined]
+        inner_body = node.body.body if node.body.kind == "brace-group" else node.body
         body = _format_cmdsub_node(inner_body, indent + 4).rstrip(";")
         return f"function {name} () \n{{ \n{inner_sp}{body}\n}}"
     if node.kind == "subshell":
-        body = _format_cmdsub_node(node.body, indent, in_procsub, compact_redirects)  # type: ignore[attr-defined]
+        body = _format_cmdsub_node(node.body, indent, in_procsub, compact_redirects)
         redirects = ""
-        if node.redirects:  # type: ignore[attr-defined]
+        if node.redirects:
             redirect_parts = []
-            for r in node.redirects:  # type: ignore[attr-defined]
+            for r in node.redirects:
                 redirect_parts.append(_format_redirect(r))
             redirects = " ".join(redirect_parts)
         # Use compact format only when subshell is at the start of a procsub
@@ -5553,32 +5541,32 @@ def _format_cmdsub_node(
             return "( " + body + " ) " + redirects
         return "( " + body + " )"
     if node.kind == "brace-group":
-        body = _format_cmdsub_node(node.body, indent)  # type: ignore[attr-defined]
+        body = _format_cmdsub_node(node.body, indent)
         body = body.rstrip(";")  # Strip trailing semicolons before adding our own
         # Don't add semicolon after background operator
         terminator = " }" if body.endswith(" &") else "; }"
         redirects = ""
-        if node.redirects:  # type: ignore[attr-defined]
+        if node.redirects:
             redirect_parts = []
-            for r in node.redirects:  # type: ignore[attr-defined]
+            for r in node.redirects:
                 redirect_parts.append(_format_redirect(r))
             redirects = " ".join(redirect_parts)
         if redirects:
             return "{ " + body + terminator + " " + redirects
         return "{ " + body + terminator
     if node.kind == "arith-cmd":
-        return "((" + node.raw_content + "))"  # type: ignore[attr-defined]
+        return "((" + node.raw_content + "))"
     if node.kind == "cond-expr":
-        body = _format_cond_body(node.body)  # type: ignore[attr-defined]
+        body = _format_cond_body(node.body)
         return "[[ " + body + " ]]"
     if node.kind == "negation":
-        if node.pipeline:  # type: ignore[attr-defined]
-            return "! " + _format_cmdsub_node(node.pipeline, indent)  # type: ignore[attr-defined]
+        if node.pipeline:
+            return "! " + _format_cmdsub_node(node.pipeline, indent)
         return "! "
     if node.kind == "time":
-        prefix = "time -p " if node.posix else "time "  # type: ignore[attr-defined]
-        if node.pipeline:  # type: ignore[attr-defined]
-            return prefix + _format_cmdsub_node(node.pipeline, indent)  # type: ignore[attr-defined]
+        prefix = "time -p " if node.posix else "time "
+        if node.pipeline:
+            return prefix + _format_cmdsub_node(node.pipeline, indent)
         return prefix
     # Fallback: return empty for unknown types
     return ""
@@ -5589,34 +5577,34 @@ def _format_redirect(
 ) -> str:
     """Format a redirect for command substitution output."""
     if r.kind == "heredoc":
-        if r.strip_tabs:  # type: ignore[union-attr]
+        if r.strip_tabs:
             op = "<<-"
         else:
             op = "<<"
         if r.fd is not None and r.fd != 0:
             op = str(r.fd) + op
-        if r.quoted:  # type: ignore[union-attr]
-            delim = "'" + r.delimiter + "'"  # type: ignore[union-attr]
+        if r.quoted:
+            delim = "'" + r.delimiter + "'"
         else:
-            delim = r.delimiter  # type: ignore[union-attr]
+            delim = r.delimiter
         if heredoc_op_only:
             # Just the operator part (<<DELIM), body comes separately
             return op + delim
         # Include heredoc content: <<DELIM\ncontent\nDELIM\n
-        return op + delim + "\n" + r.content + r.delimiter + "\n"  # type: ignore[union-attr]
-    op = r.op  # type: ignore[union-attr]
+        return op + delim + "\n" + r.content + r.delimiter + "\n"
+    op = r.op
     # Normalize default fd: 1> -> >, 0< -> <
     if op == "1>":
         op = ">"
     elif op == "0<":
         op = "<"
-    target = r.target.value  # type: ignore[union-attr]
+    target = r.target.value
     # Expand ANSI-C $'...' quotes
-    target = r.target._expand_all_ansi_c_quotes(target)  # type: ignore[union-attr]
+    target = r.target._expand_all_ansi_c_quotes(target)
     # Strip $ from locale strings $"..."
-    target = r.target._strip_locale_string_dollars(target)  # type: ignore[union-attr]
+    target = r.target._strip_locale_string_dollars(target)
     # Format command/process substitutions
-    target = r.target._format_command_substitutions(target)  # type: ignore[union-attr]
+    target = r.target._format_command_substitutions(target)
     # For fd duplication (target starts with &), handle normalization
     if target.startswith("&"):
         # Normalize N<&- to N>&- (close always uses >)
@@ -7018,18 +7006,6 @@ class Parser:
         self.pos += 1
         return ch
 
-    def _advance(self) -> str:
-        """Consume and return current character, asserting not at EOF."""
-        assert not self.at_end()
-        ch = self.source[self.pos]
-        self.pos += 1
-        return ch
-
-    def _peek(self) -> str:
-        """Return current character, asserting not at EOF."""
-        assert not self.at_end()
-        return self.source[self.pos]
-
     def peek_at(self, offset: int) -> str:
         """Peek at character at offset from current position.
 
@@ -7060,7 +7036,7 @@ class Parser:
             self._lex_skip_blanks()
             if self.at_end():
                 break
-            ch = self._peek()
+            ch = self.peek()
             if ch == "#":
                 # Use Lexer to skip comment
                 self._lex_skip_comment()
@@ -7074,7 +7050,7 @@ class Parser:
     def skip_whitespace_and_newlines(self) -> None:
         """Skip spaces, tabs, newlines, comments, and backslash-newline continuations."""
         while not self.at_end():
-            ch = self._peek()
+            ch = self.peek()
             if _is_whitespace(ch):
                 self.advance()
                 # After advancing past a newline, gather pending heredoc content
@@ -7086,7 +7062,7 @@ class Parser:
                         self._cmdsub_heredoc_end = None
             elif ch == "#":
                 # Skip comment to end of line
-                while not self.at_end() and self._peek() != "\n":
+                while not self.at_end() and self.peek() != "\n":
                     self.advance()
             elif ch == "\\" and self.peek_at(1) == "\n":
                 # Backslash-newline is line continuation - skip both
@@ -7167,13 +7143,13 @@ class Parser:
         saved_pos = self.pos
         self.skip_whitespace()
 
-        if self.at_end() or _is_metachar(self._peek()):
+        if self.at_end() or _is_metachar(self.peek()):
             self.pos = saved_pos
             return None
 
         chars = []
-        while not self.at_end() and not _is_metachar(self._peek()):
-            ch = self._peek()
+        while not self.at_end() and not _is_metachar(self.peek()):
+            ch = self.peek()
             # Stop at quotes - don't include in peek
             if _is_quote(ch):
                 break
@@ -7182,10 +7158,10 @@ class Parser:
                 break
             # Handle backslash escaping next character (even metacharacters)
             if ch == "\\" and self.pos + 1 < self.length:
-                chars.append(self._advance())  # backslash
-                chars.append(self._advance())  # escaped char
+                chars.append(self.advance())  # backslash
+                chars.append(self.advance())  # escaped char
                 continue
-            chars.append(self._advance())
+            chars.append(self.advance())
 
         if chars:
             word = "".join(chars)
@@ -7251,16 +7227,16 @@ class Parser:
                     self.advance()
                     self.advance()
                 else:
-                    chars.append(self._advance())
-                    chars.append(self._advance())
+                    chars.append(self.advance())
+                    chars.append(self.advance())
             elif c == "$":
                 if not self._parse_dollar_expansion(chars, parts, in_dquote=True):
-                    chars.append(self._advance())
+                    chars.append(self.advance())
             else:
-                chars.append(self._advance())
+                chars.append(self.advance())
         if self.at_end():
             raise ParseError("Unterminated double quote", pos=start)
-        chars.append(self._advance())
+        chars.append(self.advance())
 
     def _parse_dollar_expansion(self, chars: list, parts: list, in_dquote: bool = False) -> bool:
         """Handle $ expansions. Returns True if expansion parsed, False if bare $."""
@@ -7502,13 +7478,13 @@ class Parser:
                 elif _is_escape_char_in_backtick(next_c):
                     # Escape sequence: skip backslash in content, keep both in text
                     self.advance()  # skip \
-                    escaped = self._advance()
+                    escaped = self.advance()
                     content_chars.append(escaped)
                     text_chars.append("\\")
                     text_chars.append(escaped)
                 else:
                     # Backslash is literal before other characters
-                    ch = self._advance()
+                    ch = self.advance()
                     content_chars.append(ch)
                     text_chars.append(ch)
                 continue
@@ -7517,94 +7493,94 @@ class Parser:
             if c == "<" and self.pos + 1 < self.length and self.source[self.pos + 1] == "<":
                 # Check for here-string <<<
                 if self.pos + 2 < self.length and self.source[self.pos + 2] == "<":
-                    content_chars.append(self._advance())  # <
+                    content_chars.append(self.advance())  # <
                     text_chars.append("<")
-                    content_chars.append(self._advance())  # <
+                    content_chars.append(self.advance())  # <
                     text_chars.append("<")
-                    content_chars.append(self._advance())  # <
+                    content_chars.append(self.advance())  # <
                     text_chars.append("<")
                     # Skip whitespace and here-string word
-                    while not self.at_end() and _is_whitespace_no_newline(self._peek()):
-                        ch = self._advance()
+                    while not self.at_end() and _is_whitespace_no_newline(self.peek()):
+                        ch = self.advance()
                         content_chars.append(ch)
                         text_chars.append(ch)
                     while (
                         not self.at_end()
-                        and not _is_whitespace(self._peek())
-                        and self._peek() not in "()"
+                        and not _is_whitespace(self.peek())
+                        and self.peek() not in "()"
                     ):
-                        if self._peek() == "\\" and self.pos + 1 < self.length:
-                            ch = self._advance()
+                        if self.peek() == "\\" and self.pos + 1 < self.length:
+                            ch = self.advance()
                             content_chars.append(ch)
                             text_chars.append(ch)
-                            ch = self._advance()
+                            ch = self.advance()
                             content_chars.append(ch)
                             text_chars.append(ch)
-                        elif self._peek() in "\"'":
-                            quote = self._peek()
-                            ch = self._advance()
+                        elif self.peek() in "\"'":
+                            quote = self.peek()
+                            ch = self.advance()
                             content_chars.append(ch)
                             text_chars.append(ch)
-                            while not self.at_end() and self._peek() != quote:
-                                if quote == '"' and self._peek() == "\\":
-                                    ch = self._advance()
+                            while not self.at_end() and self.peek() != quote:
+                                if quote == '"' and self.peek() == "\\":
+                                    ch = self.advance()
                                     content_chars.append(ch)
                                     text_chars.append(ch)
-                                ch = self._advance()
+                                ch = self.advance()
                                 content_chars.append(ch)
                                 text_chars.append(ch)
                             if not self.at_end():
-                                ch = self._advance()
+                                ch = self.advance()
                                 content_chars.append(ch)
                                 text_chars.append(ch)
                         else:
-                            ch = self._advance()
+                            ch = self.advance()
                             content_chars.append(ch)
                             text_chars.append(ch)
                     continue
                 # Heredoc <<
-                content_chars.append(self._advance())  # <
+                content_chars.append(self.advance())  # <
                 text_chars.append("<")
-                content_chars.append(self._advance())  # <
+                content_chars.append(self.advance())  # <
                 text_chars.append("<")
                 strip_tabs = False
                 if not self.at_end() and self.peek() == "-":
                     strip_tabs = True
-                    content_chars.append(self._advance())
+                    content_chars.append(self.advance())
                     text_chars.append("-")
                 # Skip whitespace
-                while not self.at_end() and _is_whitespace_no_newline(self._peek()):
-                    ch = self._advance()
+                while not self.at_end() and _is_whitespace_no_newline(self.peek()):
+                    ch = self.advance()
                     content_chars.append(ch)
                     text_chars.append(ch)
                 # Parse delimiter
                 delimiter_chars: list[str] = []
                 if not self.at_end():
-                    ch = self._peek()
+                    ch = self.peek()
                     if _is_quote(ch):
-                        quote = self._advance()
+                        quote = self.advance()
                         content_chars.append(quote)
                         text_chars.append(quote)
-                        while not self.at_end() and self._peek() != quote:
-                            dch = self._advance()
+                        while not self.at_end() and self.peek() != quote:
+                            dch = self.advance()
                             content_chars.append(dch)
                             text_chars.append(dch)
                             delimiter_chars.append(dch)
                         if not self.at_end():
-                            closing = self._advance()
+                            closing = self.advance()
                             content_chars.append(closing)
                             text_chars.append(closing)
                     elif ch == "\\":
-                        esc = self._advance()
+                        esc = self.advance()
                         content_chars.append(esc)
                         text_chars.append(esc)
                         if not self.at_end():
-                            dch = self._advance()
+                            dch = self.advance()
                             content_chars.append(dch)
                             text_chars.append(dch)
                             delimiter_chars.append(dch)
-                        while not self.at_end() and not _is_metachar(self._peek()):
-                            dch = self._advance()
+                        while not self.at_end() and not _is_metachar(self.peek()):
+                            dch = self.advance()
                             content_chars.append(dch)
                             text_chars.append(dch)
                             delimiter_chars.append(dch)
@@ -7612,34 +7588,34 @@ class Parser:
                         # Stop at backtick (closes substitution) or metachar
                         while (
                             not self.at_end()
-                            and not _is_metachar(self._peek())
-                            and self._peek() != "`"
+                            and not _is_metachar(self.peek())
+                            and self.peek() != "`"
                         ):
-                            ch = self._peek()
+                            ch = self.peek()
                             if _is_quote(ch):
-                                quote = self._advance()
+                                quote = self.advance()
                                 content_chars.append(quote)
                                 text_chars.append(quote)
-                                while not self.at_end() and self._peek() != quote:
-                                    dch = self._advance()
+                                while not self.at_end() and self.peek() != quote:
+                                    dch = self.advance()
                                     content_chars.append(dch)
                                     text_chars.append(dch)
                                     delimiter_chars.append(dch)
                                 if not self.at_end():
-                                    closing = self._advance()
+                                    closing = self.advance()
                                     content_chars.append(closing)
                                     text_chars.append(closing)
                             elif ch == "\\":
-                                esc = self._advance()
+                                esc = self.advance()
                                 content_chars.append(esc)
                                 text_chars.append(esc)
                                 if not self.at_end():
-                                    dch = self._advance()
+                                    dch = self.advance()
                                     content_chars.append(dch)
                                     text_chars.append(dch)
                                     delimiter_chars.append(dch)
                             else:
-                                dch = self._advance()
+                                dch = self.advance()
                                 content_chars.append(dch)
                                 text_chars.append(dch)
                                 delimiter_chars.append(dch)
@@ -7650,7 +7626,7 @@ class Parser:
 
             # Newline - check for heredoc body mode
             if c == "\n":
-                ch = self._advance()
+                ch = self.advance()
                 content_chars.append(ch)
                 text_chars.append(ch)
                 if len(pending_heredocs) > 0:
@@ -7659,7 +7635,7 @@ class Parser:
                 continue
 
             # Regular character
-            ch = self._advance()
+            ch = self.advance()
             content_chars.append(ch)
             text_chars.append(ch)
 
@@ -7698,13 +7674,13 @@ class Parser:
         If the content can't be parsed as a valid command, returns (None, text) so
         the caller can treat it as literal characters.
         """
-        if self.at_end() or not _is_redirect_char(self._peek()):
+        if self.at_end() or not _is_redirect_char(self.peek()):
             return None, ""
 
         start = self.pos
-        direction = self._advance()  # consume < or >
+        direction = self.advance()  # consume < or >
 
-        if self.at_end() or self._peek() != "(":
+        if self.at_end() or self.peek() != "(":
             self.pos = start
             return None, ""
 
@@ -7725,7 +7701,7 @@ class Parser:
 
             # After parse_list, we should be at the closing )
             self.skip_whitespace_and_newlines()
-            if self.at_end() or self._peek() != ")":
+            if self.at_end() or self.peek() != ")":
                 # Parsing didn't reach the closing ) - not a valid process sub
                 raise ParseError("Invalid process substitution", pos=start)
 
@@ -7888,7 +7864,7 @@ class Parser:
         except ParseError:
             self.pos = start
             return None, ""
-        return ArithmeticExpansion(expr), text  # type: ignore[arg-type]
+        return ArithmeticExpansion(expr), text
 
     # ========== Arithmetic expression parser ==========
     # Operator precedence (lowest to highest):
@@ -7931,8 +7907,8 @@ class Parser:
         self._parser_state = saved_parser_state
         if saved_arith_src is not None:
             self._arith_src = saved_arith_src
-            self._arith_pos = saved_arith_pos  # type: ignore[assignment]
-            self._arith_len = saved_arith_len  # type: ignore[assignment]
+            self._arith_pos = saved_arith_pos
+            self._arith_len = saved_arith_len
 
         return result
 
@@ -7986,7 +7962,7 @@ class Parser:
             if self._arith_consume(","):
                 self._arith_skip_ws()
                 right = self._arith_parse_assign()
-                left = ArithComma(left, right)  # type: ignore[arg-type]
+                left = ArithComma(left, right)
             else:
                 break
         return left
@@ -8005,7 +7981,7 @@ class Parser:
                 self._arith_consume(op)
                 self._arith_skip_ws()
                 right = self._arith_parse_assign()  # right associative
-                return ArithAssign(op, left, right)  # type: ignore[arg-type]
+                return ArithAssign(op, left, right)
         return left
 
     def _arith_parse_ternary(self) -> Node:
@@ -8030,7 +8006,7 @@ class Parser:
                     if_false = self._arith_parse_ternary()
             else:
                 if_false = None
-            return ArithTernary(cond, if_true, if_false)  # type: ignore[arg-type]
+            return ArithTernary(cond, if_true, if_false)
         return cond
 
     def _arith_parse_left_assoc(self, ops: list, parsefn) -> Node:
@@ -8043,7 +8019,7 @@ class Parser:
                 if self._arith_match(op):
                     self._arith_consume(op)
                     self._arith_skip_ws()
-                    left = ArithBinaryOp(op, left, parsefn())  # type: ignore[arg-type]
+                    left = ArithBinaryOp(op, left, parsefn())
                     matched = True
                     break
             if not matched:
@@ -8070,7 +8046,7 @@ class Parser:
                 self._arith_advance()
                 self._arith_skip_ws()
                 right = self._arith_parse_bitwise_xor()
-                left = ArithBinaryOp("|", left, right)  # type: ignore[arg-type]
+                left = ArithBinaryOp("|", left, right)
             else:
                 break
         return left
@@ -8085,7 +8061,7 @@ class Parser:
                 self._arith_advance()
                 self._arith_skip_ws()
                 right = self._arith_parse_bitwise_and()
-                left = ArithBinaryOp("^", left, right)  # type: ignore[arg-type]
+                left = ArithBinaryOp("^", left, right)
             else:
                 break
         return left
@@ -8102,7 +8078,7 @@ class Parser:
                 self._arith_advance()
                 self._arith_skip_ws()
                 right = self._arith_parse_equality()
-                left = ArithBinaryOp("&", left, right)  # type: ignore[arg-type]
+                left = ArithBinaryOp("&", left, right)
             else:
                 break
         return left
@@ -8120,26 +8096,26 @@ class Parser:
                 self._arith_consume("<=")
                 self._arith_skip_ws()
                 right = self._arith_parse_shift()
-                left = ArithBinaryOp("<=", left, right)  # type: ignore[arg-type]
+                left = ArithBinaryOp("<=", left, right)
             elif self._arith_match(">="):
                 self._arith_consume(">=")
                 self._arith_skip_ws()
                 right = self._arith_parse_shift()
-                left = ArithBinaryOp(">=", left, right)  # type: ignore[arg-type]
+                left = ArithBinaryOp(">=", left, right)
             elif self._arith_peek() == "<" and (
                 self._arith_peek(1) != "<" and self._arith_peek(1) != "="
             ):
                 self._arith_advance()
                 self._arith_skip_ws()
                 right = self._arith_parse_shift()
-                left = ArithBinaryOp("<", left, right)  # type: ignore[arg-type]
+                left = ArithBinaryOp("<", left, right)
             elif self._arith_peek() == ">" and (
                 self._arith_peek(1) != ">" and self._arith_peek(1) != "="
             ):
                 self._arith_advance()
                 self._arith_skip_ws()
                 right = self._arith_parse_shift()
-                left = ArithBinaryOp(">", left, right)  # type: ignore[arg-type]
+                left = ArithBinaryOp(">", left, right)
             else:
                 break
         return left
@@ -8157,12 +8133,12 @@ class Parser:
                 self._arith_consume("<<")
                 self._arith_skip_ws()
                 right = self._arith_parse_additive()
-                left = ArithBinaryOp("<<", left, right)  # type: ignore[arg-type]
+                left = ArithBinaryOp("<<", left, right)
             elif self._arith_match(">>"):
                 self._arith_consume(">>")
                 self._arith_skip_ws()
                 right = self._arith_parse_additive()
-                left = ArithBinaryOp(">>", left, right)  # type: ignore[arg-type]
+                left = ArithBinaryOp(">>", left, right)
             else:
                 break
         return left
@@ -8178,12 +8154,12 @@ class Parser:
                 self._arith_advance()
                 self._arith_skip_ws()
                 right = self._arith_parse_multiplicative()
-                left = ArithBinaryOp("+", left, right)  # type: ignore[arg-type]
+                left = ArithBinaryOp("+", left, right)
             elif c == "-" and (c2 != "-" and c2 != "="):
                 self._arith_advance()
                 self._arith_skip_ws()
                 right = self._arith_parse_multiplicative()
-                left = ArithBinaryOp("-", left, right)  # type: ignore[arg-type]
+                left = ArithBinaryOp("-", left, right)
             else:
                 break
         return left
@@ -8199,17 +8175,17 @@ class Parser:
                 self._arith_advance()
                 self._arith_skip_ws()
                 right = self._arith_parse_exponentiation()
-                left = ArithBinaryOp("*", left, right)  # type: ignore[arg-type]
+                left = ArithBinaryOp("*", left, right)
             elif c == "/" and c2 != "=":
                 self._arith_advance()
                 self._arith_skip_ws()
                 right = self._arith_parse_exponentiation()
-                left = ArithBinaryOp("/", left, right)  # type: ignore[arg-type]
+                left = ArithBinaryOp("/", left, right)
             elif c == "%" and c2 != "=":
                 self._arith_advance()
                 self._arith_skip_ws()
                 right = self._arith_parse_exponentiation()
-                left = ArithBinaryOp("%", left, right)  # type: ignore[arg-type]
+                left = ArithBinaryOp("%", left, right)
             else:
                 break
         return left
@@ -8222,7 +8198,7 @@ class Parser:
             self._arith_consume("**")
             self._arith_skip_ws()
             right = self._arith_parse_exponentiation()  # right associative
-            return ArithBinaryOp("**", left, right)  # type: ignore[arg-type]
+            return ArithBinaryOp("**", left, right)
         return left
 
     def _arith_parse_unary(self) -> Node:
@@ -8233,34 +8209,34 @@ class Parser:
             self._arith_consume("++")
             self._arith_skip_ws()
             operand = self._arith_parse_unary()
-            return ArithPreIncr(operand)  # type: ignore[arg-type]
+            return ArithPreIncr(operand)
         if self._arith_match("--"):
             self._arith_consume("--")
             self._arith_skip_ws()
             operand = self._arith_parse_unary()
-            return ArithPreDecr(operand)  # type: ignore[arg-type]
+            return ArithPreDecr(operand)
         # Unary operators
         c = self._arith_peek()
         if c == "!":
             self._arith_advance()
             self._arith_skip_ws()
             operand = self._arith_parse_unary()
-            return ArithUnaryOp("!", operand)  # type: ignore[arg-type]
+            return ArithUnaryOp("!", operand)
         if c == "~":
             self._arith_advance()
             self._arith_skip_ws()
             operand = self._arith_parse_unary()
-            return ArithUnaryOp("~", operand)  # type: ignore[arg-type]
+            return ArithUnaryOp("~", operand)
         if c == "+" and self._arith_peek(1) != "+":
             self._arith_advance()
             self._arith_skip_ws()
             operand = self._arith_parse_unary()
-            return ArithUnaryOp("+", operand)  # type: ignore[arg-type]
+            return ArithUnaryOp("+", operand)
         if c == "-" and self._arith_peek(1) != "-":
             self._arith_advance()
             self._arith_skip_ws()
             operand = self._arith_parse_unary()
-            return ArithUnaryOp("-", operand)  # type: ignore[arg-type]
+            return ArithUnaryOp("-", operand)
         return self._arith_parse_postfix()
 
     def _arith_parse_postfix(self) -> Node:
@@ -8270,10 +8246,10 @@ class Parser:
             self._arith_skip_ws()
             if self._arith_match("++"):
                 self._arith_consume("++")
-                left = ArithPostIncr(left)  # type: ignore[arg-type]
+                left = ArithPostIncr(left)
             elif self._arith_match("--"):
                 self._arith_consume("--")
-                left = ArithPostDecr(left)  # type: ignore[arg-type]
+                left = ArithPostDecr(left)
             elif self._arith_peek() == "[":
                 # Array subscript - but only for variables
                 if left.kind == "var":
@@ -8283,7 +8259,7 @@ class Parser:
                     self._arith_skip_ws()
                     if not self._arith_consume("]"):
                         raise ParseError("Expected ']' in array subscript", pos=self._arith_pos)
-                    left = ArithSubscript(left.name, index)  # type: ignore[arg-type,attr-defined]
+                    left = ArithSubscript(left.name, index)
                 else:
                     break
             else:
@@ -8403,7 +8379,7 @@ class Parser:
             self._arith_advance()  # consume first )
             self._arith_advance()  # consume second )
             inner_expr = self._parse_arith_expr(content)
-            return ArithmeticExpansion(inner_expr)  # type: ignore[arg-type]
+            return ArithmeticExpansion(inner_expr)
 
         # Regular command substitution
         depth = 1
@@ -8427,7 +8403,7 @@ class Parser:
         sub_parser = Parser(content, extglob=self._extglob)
         cmd = sub_parser.parse_list()
 
-        return CommandSubstitution(cmd)  # type: ignore[arg-type]
+        return CommandSubstitution(cmd)
 
     def _arith_parse_braced_param(self) -> Node:
         """Parse ${...} parameter expansion inside arithmetic."""
@@ -8552,7 +8528,7 @@ class Parser:
         # Parse the command inside
         sub_parser = Parser(content, extglob=self._extglob)
         cmd = sub_parser.parse_list()
-        return CommandSubstitution(cmd)  # type: ignore[arg-type]
+        return CommandSubstitution(cmd)
 
     def _arith_parse_number_or_var(self) -> Node:
         """Parse a number or variable name."""
@@ -8573,7 +8549,7 @@ class Parser:
             # Check if followed by $ expansion (e.g., 0x$var)
             if not self._arith_at_end() and self._arith_peek() == "$":
                 expansion = self._arith_parse_expansion()
-                return ArithConcat([ArithNumber(prefix), expansion])  # type: ignore[list-item]
+                return ArithConcat([ArithNumber(prefix), expansion])
             return ArithNumber(prefix)
 
         # Variable name (starts with letter or _)
@@ -8633,25 +8609,25 @@ class Parser:
         varfd = None  # Variable fd like {fd}
 
         # Check for variable fd {varname} or {varname[subscript]} before redirect
-        if not self.at_end() and self._peek() == "{":
+        if self.peek() == "{":
             saved = self.pos
             self.advance()  # consume {
             varname_chars = []
             in_bracket = False
-            while not self.at_end() and not _is_redirect_char(self._peek()):
-                ch = self._peek()
+            while not self.at_end() and not _is_redirect_char(self.peek()):
+                ch = self.peek()
                 if ch == "}" and not in_bracket:
                     break
                 elif ch == "[":
                     in_bracket = True
-                    varname_chars.append(self._advance())
+                    varname_chars.append(self.advance())
                 elif ch == "]":
                     in_bracket = False
-                    varname_chars.append(self._advance())
+                    varname_chars.append(self.advance())
                 elif ch.isalnum() or ch == "_":
-                    varname_chars.append(self._advance())
+                    varname_chars.append(self.advance())
                 elif in_bracket and not _is_metachar(ch):
-                    varname_chars.append(self._advance())
+                    varname_chars.append(self.advance())
                 else:
                     break
             varname = "".join(varname_chars)
@@ -8675,7 +8651,7 @@ class Parser:
                             if not (c.isalnum() or c == "_"):
                                 is_valid_varfd = False
                                 break
-            if not self.at_end() and self._peek() == "}" and is_valid_varfd:
+            if not self.at_end() and self.peek() == "}" and is_valid_varfd:
                 self.advance()  # consume }
                 varfd = varname
             else:
@@ -8683,10 +8659,10 @@ class Parser:
                 self.pos = saved
 
         # Check for optional fd number before redirect (if no varfd)
-        if varfd is None and not self.at_end() and self._peek().isdigit():
+        if varfd is None and self.peek() and self.peek().isdigit():
             fd_chars = []
-            while not self.at_end() and self._peek().isdigit():
-                fd_chars.append(self._advance())
+            while not self.at_end() and self.peek().isdigit():
+                fd_chars.append(self.advance())
             fd = int("".join(fd_chars))
 
         ch = self.peek()
@@ -8727,21 +8703,21 @@ class Parser:
             return None
 
         # Parse the redirect operator
-        op = self._advance()
+        op = self.advance()
 
         # Check for multi-char operators
         strip_tabs = False
         if not self.at_end():
-            next_ch = self._peek()
+            next_ch = self.peek()
             if op == ">" and next_ch == ">":
                 self.advance()
                 op = ">>"
             elif op == "<" and next_ch == "<":
                 self.advance()
-                if not self.at_end() and self._peek() == "<":
+                if not self.at_end() and self.peek() == "<":
                     self.advance()
                     op = "<<<"
-                elif not self.at_end() and self._peek() == "-":
+                elif not self.at_end() and self.peek() == "-":
                     self.advance()
                     op = "<<"
                     strip_tabs = True
@@ -8780,12 +8756,12 @@ class Parser:
 
         # Handle fd duplication targets like &1, &2, &-, &10-, &$var
         # NOTE: No whitespace allowed between operator and & (e.g., <&- is valid, < &- is not)
-        if not self.at_end() and self._peek() == "&":
+        if not self.at_end() and self.peek() == "&":
             self.advance()  # consume &
             # Skip whitespace after & to check what follows
             self.skip_whitespace()
             # Check for "& -" followed by non-metachar (e.g., "3>& -5" -> 3>&- + word "5")
-            if not self.at_end() and self._peek() == "-":
+            if not self.at_end() and self.peek() == "-":
                 if self.pos + 1 < self.length and not _is_metachar(self.source[self.pos + 1]):
                     # Consume just the - as close target, leave rest for next word
                     self.advance()
@@ -8797,21 +8773,21 @@ class Parser:
                 target = None
             # If we didn't handle close syntax above, continue with normal parsing
             if target is None:
-                if not self.at_end() and (self._peek().isdigit() or self._peek() == "-"):
+                if not self.at_end() and (self.peek().isdigit() or self.peek() == "-"):
                     word_start = self.pos
                     fd_chars = []
-                    while not self.at_end() and self._peek().isdigit():
-                        fd_chars.append(self._advance())
+                    while not self.at_end() and self.peek().isdigit():
+                        fd_chars.append(self.advance())
                     if fd_chars:
                         fd_target = "".join(fd_chars)
                     else:
                         fd_target = ""
                     # Handle just - for close, or N- for move syntax
-                    if not self.at_end() and self._peek() == "-":
-                        fd_target += self._advance()  # consume the trailing -
+                    if not self.at_end() and self.peek() == "-":
+                        fd_target += self.advance()  # consume the trailing -
                     # If more word characters follow, treat the whole target as a word (e.g., <&0=)
                     # BUT: bare "-" (close syntax) is always complete - trailing chars are separate words
-                    if fd_target != "-" and not self.at_end() and not _is_metachar(self._peek()):
+                    if fd_target != "-" and not self.at_end() and not _is_metachar(self.peek()):
                         self.pos = word_start
                         inner_word = self.parse_word()
                         if inner_word is not None:
@@ -8860,20 +8836,20 @@ class Parser:
         delimiter_chars: list[str] = []
 
         while True:
-            while not self.at_end() and not _is_metachar(self._peek()):
-                ch = self._peek()
+            while not self.at_end() and not _is_metachar(self.peek()):
+                ch = self.peek()
                 if ch == '"':
                     quoted = True
                     self.advance()
-                    while not self.at_end() and self._peek() != '"':
-                        delimiter_chars.append(self._advance())
+                    while not self.at_end() and self.peek() != '"':
+                        delimiter_chars.append(self.advance())
                     if not self.at_end():
                         self.advance()
                 elif ch == "'":
                     quoted = True
                     self.advance()
-                    while not self.at_end() and self._peek() != "'":
-                        c = self._advance()
+                    while not self.at_end() and self.peek() != "'":
+                        c = self.advance()
                         if c == "\n":
                             self._saw_newline_in_single_quote = True
                         delimiter_chars.append(c)
@@ -8882,42 +8858,42 @@ class Parser:
                 elif ch == "\\":
                     self.advance()
                     if not self.at_end():
-                        next_ch = self._peek()
+                        next_ch = self.peek()
                         if next_ch == "\n":
                             # Backslash-newline: continue delimiter on next line
                             self.advance()  # skip the newline
                         else:
                             # Regular escape - quotes the next char
                             quoted = True
-                            delimiter_chars.append(self._advance())
+                            delimiter_chars.append(self.advance())
                 elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "'":
                     # ANSI-C quoting $'...' - skip $ and quotes, expand escapes
                     quoted = True
                     self.advance()  # skip $
                     self.advance()  # skip opening '
-                    while not self.at_end() and self._peek() != "'":
-                        c = self._peek()
+                    while not self.at_end() and self.peek() != "'":
+                        c = self.peek()
                         if c == "\\" and self.pos + 1 < self.length:
                             self.advance()  # skip backslash
-                            esc = self._peek()
+                            esc = self.peek()
                             # Handle ANSI-C escapes using the lookup table
                             esc_val = _get_ansi_escape(esc)
                             if esc_val >= 0:
                                 delimiter_chars.append(chr(esc_val))
                                 self.advance()
                             elif esc == "'":
-                                delimiter_chars.append(self._advance())
+                                delimiter_chars.append(self.advance())
                             else:
                                 # Other escapes - just use the escaped char
-                                delimiter_chars.append(self._advance())
+                                delimiter_chars.append(self.advance())
                         else:
-                            delimiter_chars.append(self._advance())
+                            delimiter_chars.append(self.advance())
                     if not self.at_end():
                         self.advance()  # skip closing '
                 elif _is_expansion_start(self.source, self.pos, "$("):
                     # Command substitution embedded in delimiter
-                    delimiter_chars.append(self._advance())  # $
-                    delimiter_chars.append(self._advance())  # (
+                    delimiter_chars.append(self.advance())  # $
+                    delimiter_chars.append(self.advance())  # (
                     depth = 1
                     while not self.at_end() and depth > 0:
                         c = self.peek()
@@ -8925,7 +8901,7 @@ class Parser:
                             depth += 1
                         elif c == ")":
                             depth -= 1
-                        delimiter_chars.append(self._advance())
+                        delimiter_chars.append(self.advance())
                 elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
                     # Check if this is $${ where $$ is PID and { ends delimiter
                     dollar_count = 0
@@ -8939,11 +8915,11 @@ class Parser:
                     if dollar_count % 2 == 1:
                         # Odd number of $ before: this $ pairs with previous to form $$
                         # Don't consume the {, let it end the delimiter
-                        delimiter_chars.append(self._advance())  # $
+                        delimiter_chars.append(self.advance())  # $
                     else:
                         # Parameter expansion embedded in delimiter
-                        delimiter_chars.append(self._advance())  # $
-                        delimiter_chars.append(self._advance())  # {
+                        delimiter_chars.append(self.advance())  # $
+                        delimiter_chars.append(self.advance())  # {
                         depth = 0
                         while not self.at_end():
                             c = self.peek()
@@ -8951,17 +8927,17 @@ class Parser:
                                 depth += 1
                             elif c == "}":
                                 # Consume the closing brace
-                                delimiter_chars.append(self._advance())
+                                delimiter_chars.append(self.advance())
                                 if depth == 0:
                                     # Outer expansion closed
                                     break
                                 depth -= 1
                                 # After closing inner brace, check if next is metachar
                                 # If so, the expansion ends here (bash behavior)
-                                if depth == 0 and not self.at_end() and _is_metachar(self._peek()):
+                                if depth == 0 and not self.at_end() and _is_metachar(self.peek()):
                                     break
                                 continue
-                            delimiter_chars.append(self._advance())
+                            delimiter_chars.append(self.advance())
                 elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "[":
                     # Check if this is $$[ where $$ is PID and [ ends delimiter
                     dollar_count = 0
@@ -8975,11 +8951,11 @@ class Parser:
                     if dollar_count % 2 == 1:
                         # Odd number of $ before: this $ pairs with previous to form $$
                         # Don't consume the [, let it end the delimiter
-                        delimiter_chars.append(self._advance())  # $
+                        delimiter_chars.append(self.advance())  # $
                     else:
                         # Arithmetic expansion $[...] embedded in delimiter
-                        delimiter_chars.append(self._advance())  # $
-                        delimiter_chars.append(self._advance())  # [
+                        delimiter_chars.append(self.advance())  # $
+                        delimiter_chars.append(self.advance())  # [
                         depth = 1
                         while not self.at_end() and depth > 0:
                             c = self.peek()
@@ -8987,38 +8963,38 @@ class Parser:
                                 depth += 1
                             elif c == "]":
                                 depth -= 1
-                            delimiter_chars.append(self._advance())
+                            delimiter_chars.append(self.advance())
                 elif ch == "`":
                     # Backtick command substitution embedded in delimiter
                     # Note: In bash, backtick closes command sub even with unclosed quotes inside
-                    delimiter_chars.append(self._advance())  # `
+                    delimiter_chars.append(self.advance())  # `
                     while not self.at_end() and self.peek() != "`":
                         c = self.peek()
                         if c == "'":
                             # Single-quoted string inside backtick - skip to closing quote or `
-                            delimiter_chars.append(self._advance())  # '
+                            delimiter_chars.append(self.advance())  # '
                             while not self.at_end() and self.peek() != "'" and self.peek() != "`":
-                                delimiter_chars.append(self._advance())
+                                delimiter_chars.append(self.advance())
                             if not self.at_end() and self.peek() == "'":
-                                delimiter_chars.append(self._advance())  # closing '
+                                delimiter_chars.append(self.advance())  # closing '
                         elif c == '"':
                             # Double-quoted string inside backtick - skip to closing quote or `
-                            delimiter_chars.append(self._advance())  # "
+                            delimiter_chars.append(self.advance())  # "
                             while not self.at_end() and self.peek() != '"' and self.peek() != "`":
                                 if self.peek() == "\\" and self.pos + 1 < self.length:
-                                    delimiter_chars.append(self._advance())  # backslash
-                                delimiter_chars.append(self._advance())
+                                    delimiter_chars.append(self.advance())  # backslash
+                                delimiter_chars.append(self.advance())
                             if not self.at_end() and self.peek() == '"':
-                                delimiter_chars.append(self._advance())  # closing "
+                                delimiter_chars.append(self.advance())  # closing "
                         elif c == "\\" and self.pos + 1 < self.length:
-                            delimiter_chars.append(self._advance())  # backslash
-                            delimiter_chars.append(self._advance())  # escaped char
+                            delimiter_chars.append(self.advance())  # backslash
+                            delimiter_chars.append(self.advance())  # escaped char
                         else:
-                            delimiter_chars.append(self._advance())
+                            delimiter_chars.append(self.advance())
                     if not self.at_end():
-                        delimiter_chars.append(self._advance())  # closing `
+                        delimiter_chars.append(self.advance())  # closing `
                 else:
-                    delimiter_chars.append(self._advance())
+                    delimiter_chars.append(self.advance())
 
             # Check for process substitution syntax <( or >( which is part of delimiter
             if (
@@ -9028,8 +9004,8 @@ class Parser:
                 and self.source[self.pos + 1] == "("
             ):
                 # Process substitution embedded in delimiter
-                delimiter_chars.append(self._advance())  # < or >
-                delimiter_chars.append(self._advance())  # (
+                delimiter_chars.append(self.advance())  # < or >
+                delimiter_chars.append(self.advance())  # (
                 depth = 1
                 while not self.at_end() and depth > 0:
                     c = self.peek()
@@ -9037,7 +9013,7 @@ class Parser:
                         depth += 1
                     elif c == ")":
                         depth -= 1
-                    delimiter_chars.append(self._advance())
+                    delimiter_chars.append(self.advance())
                 continue  # Try to collect more delimiter characters
             break
 
@@ -9203,7 +9179,7 @@ class Parser:
         if not words and not redirects:
             return None
 
-        return Command(words, redirects)  # type: ignore[arg-type]
+        return Command(words, redirects)
 
     def parse_subshell(self) -> Subshell | None:
         """Parse a subshell ( list )."""
@@ -9311,7 +9287,7 @@ class Parser:
 
         # Parse the arithmetic expression
         expr = self._parse_arith_expr(content)
-        return ArithmeticCommand(expr, self._collect_redirects(), raw_content=content)  # type: ignore[arg-type]
+        return ArithmeticCommand(expr, self._collect_redirects(), raw_content=content)
 
     # Unary operators for [[ ]] conditionals
     COND_UNARY_OPS = {
@@ -9393,13 +9369,13 @@ class Parser:
         body = self._parse_cond_or()
 
         # Skip whitespace before ]]
-        while not self.at_end() and _is_whitespace_no_newline(self._peek()):
+        while not self.at_end() and _is_whitespace_no_newline(self.peek()):
             self.advance()
 
         # Expect ]]
         if (
             self.at_end()
-            or self._peek() != "]"
+            or self.peek() != "]"
             or self.pos + 1 >= self.length
             or self.source[self.pos + 1] != "]"
         ):
@@ -9411,21 +9387,21 @@ class Parser:
         self.advance()  # consume second ]
         self._clear_state(ParserStateFlags.PST_CONDEXPR)
         self._word_context = WORD_CTX_NORMAL
-        return ConditionalExpr(body, self._collect_redirects())  # type: ignore[arg-type]
+        return ConditionalExpr(body, self._collect_redirects())
 
     def _cond_skip_whitespace(self) -> None:
         """Skip whitespace inside [[ ]], including backslash-newline continuation."""
         while not self.at_end():
-            if _is_whitespace_no_newline(self._peek()):
+            if _is_whitespace_no_newline(self.peek()):
                 self.advance()
             elif (
-                self._peek() == "\\"
+                self.peek() == "\\"
                 and self.pos + 1 < self.length
                 and self.source[self.pos + 1] == "\n"
             ):
                 self.advance()  # consume backslash
                 self.advance()  # consume newline
-            elif self._peek() == "\n":
+            elif self.peek() == "\n":
                 # Bare newline is also allowed inside [[ ]]
                 self.advance()
             else:
@@ -9451,7 +9427,7 @@ class Parser:
             self.advance()  # consume first |
             self.advance()  # consume second |
             right = self._parse_cond_or()  # recursive for right-associativity
-            return CondOr(left, right)  # type: ignore[arg-type]
+            return CondOr(left, right)
         return left
 
     def _parse_cond_and(self) -> Node:
@@ -9468,7 +9444,7 @@ class Parser:
             self.advance()  # consume first &
             self.advance()  # consume second &
             right = self._parse_cond_and()  # recursive for right-associativity
-            return CondAnd(left, right)  # type: ignore[arg-type]
+            return CondAnd(left, right)
         return left
 
     def _parse_cond_term(self) -> Node:
@@ -9488,7 +9464,7 @@ class Parser:
             else:
                 self.advance()  # consume !
                 operand = self._parse_cond_term()
-                return CondNot(operand)  # type: ignore[arg-type]
+                return CondNot(operand)
 
         # Parenthesized group: ( or_expr )
         if self.peek() == "(":
@@ -9498,7 +9474,7 @@ class Parser:
             if self.at_end() or self.peek() != ")":
                 raise ParseError("Expected ) in conditional expression", pos=self.pos)
             self.advance()  # consume )
-            return CondParen(inner)  # type: ignore[arg-type]
+            return CondParen(inner)
 
         # Parse first word
         word1 = self._parse_cond_word()
@@ -9521,10 +9497,10 @@ class Parser:
         ):
             # Handle < and > as binary operators (they terminate words)
             # But not <( or >( which are process substitution
-            if _is_redirect_char(self._peek()) and not (
+            if _is_redirect_char(self.peek()) and not (
                 self.pos + 1 < self.length and self.source[self.pos + 1] == "("
             ):
-                op = self._advance()
+                op = self.advance()
                 self._cond_skip_whitespace()
                 word2 = self._parse_cond_word()
                 if word2 is None:
@@ -9557,7 +9533,7 @@ class Parser:
         if self._cond_at_end():
             return None
         # Check for special tokens that aren't words
-        c = self._peek()
+        c = self.peek()
         if _is_paren(c):
             return None
         if c == "&" and self.pos + 1 < self.length and self.source[self.pos + 1] == "&":
@@ -9794,8 +9770,8 @@ class Parser:
             self.skip_whitespace()  # Only skip whitespace, not newlines
 
             # Check for immediate delimiter (;, newline) after 'in'
-            saw_delimiter = not self.at_end() and _is_semicolon_or_newline(self._peek())
-            if not self.at_end() and self._peek() == ";":
+            saw_delimiter = _is_semicolon_or_newline(self.peek())
+            if self.peek() == ";":
                 self.advance()
             self.skip_whitespace_and_newlines()
 
@@ -9806,9 +9782,9 @@ class Parser:
                 # Check for end of word list
                 if self.at_end():
                     break
-                if _is_semicolon_or_newline(self._peek()):
+                if _is_semicolon_or_newline(self.peek()):
                     saw_delimiter = True
-                    if self._peek() == ";":
+                    if self.peek() == ";":
                         self.advance()  # consume semicolon
                     break
                 # 'do' only terminates if preceded by delimiter
@@ -9867,11 +9843,11 @@ class Parser:
             ch = self.peek()
             if ch == "(":
                 paren_depth += 1
-                current.append(self._advance())
+                current.append(self.advance())
             elif ch == ")":
                 if paren_depth > 0:
                     paren_depth -= 1
-                    current.append(self._advance())
+                    current.append(self.advance())
                 else:
                     # Check for closing ))
                     if self.pos + 1 < self.length and self.source[self.pos + 1] == ")":
@@ -9881,14 +9857,14 @@ class Parser:
                         self.advance()  # consume second )
                         break
                     else:
-                        current.append(self._advance())
+                        current.append(self.advance())
             elif ch == ";" and paren_depth == 0:
                 # Preserve trailing whitespace in expressions
                 parts.append("".join(current).lstrip(" \t"))
                 current = []
                 self.advance()  # consume ;
             else:
-                current.append(self._advance())
+                current.append(self.advance())
 
         if len(parts) != 3:
             raise ParseError("Expected three expressions in for ((;;))", pos=self.pos)
@@ -9942,8 +9918,8 @@ class Parser:
                 # Check for end of word list
                 if self.at_end():
                     break
-                if _is_semicolon_newline_brace(self._peek()):
-                    if self._peek() == ";":
+                if _is_semicolon_newline_brace(self.peek()):
+                    if self.peek() == ";":
                         self.advance()  # consume semicolon
                     break
                 if self._lex_is_at_reserved_word("do"):
@@ -10005,14 +9981,14 @@ class Parser:
                 # Consume "esac"
                 while (
                     not self.at_end()
-                    and not _is_metachar(self._peek())
-                    and not _is_quote(self._peek())
+                    and not _is_metachar(self.peek())
+                    and not _is_quote(self.peek())
                 ):
                     self.advance()
                 self.skip_whitespace()
                 # Check for ) and what follows
                 is_pattern = False
-                if not self.at_end() and self._peek() == ")":
+                if not self.at_end() and self.peek() == ")":
                     # If we're at the EOF token delimiter (command sub closer), esac is keyword
                     if self._eof_token == ")":
                         is_pattern = False
@@ -10022,7 +9998,7 @@ class Parser:
                         # esac is a pattern if there's body content or ;; after )
                         # Not a pattern if ) is followed by end, newline, or another )
                         if not self.at_end():
-                            next_ch = self._peek()
+                            next_ch = self.peek()
                             # If followed by ;; or actual command content, it's a pattern
                             if next_ch == ";":
                                 is_pattern = True
@@ -10044,11 +10020,11 @@ class Parser:
             pattern_chars = []
             extglob_depth = 0
             while not self.at_end():
-                ch = self._peek()
+                ch = self.peek()
                 if ch == ")":
                     if extglob_depth > 0:
                         # Inside extglob, consume the ) and decrement depth
-                        pattern_chars.append(self._advance())
+                        pattern_chars.append(self.advance())
                         extglob_depth -= 1
                     else:
                         # End of pattern
@@ -10062,30 +10038,30 @@ class Parser:
                         self.advance()
                     else:
                         # Normal escape - consume both chars
-                        pattern_chars.append(self._advance())
+                        pattern_chars.append(self.advance())
                         if not self.at_end():
-                            pattern_chars.append(self._advance())
+                            pattern_chars.append(self.advance())
                 elif _is_expansion_start(self.source, self.pos, "$("):
                     # $( or $(( - command sub or arithmetic
-                    pattern_chars.append(self._advance())  # $
-                    pattern_chars.append(self._advance())  # (
-                    if not self.at_end() and self._peek() == "(":
+                    pattern_chars.append(self.advance())  # $
+                    pattern_chars.append(self.advance())  # (
+                    if not self.at_end() and self.peek() == "(":
                         # $(( arithmetic - need to find matching ))
-                        pattern_chars.append(self._advance())  # second (
+                        pattern_chars.append(self.advance())  # second (
                         paren_depth = 2
                         while not self.at_end() and paren_depth > 0:
-                            c = self._peek()
+                            c = self.peek()
                             if c == "(":
                                 paren_depth += 1
                             elif c == ")":
                                 paren_depth -= 1
-                            pattern_chars.append(self._advance())
+                            pattern_chars.append(self.advance())
                     else:
                         # $() command sub - track single paren
                         extglob_depth += 1
                 elif ch == "(" and extglob_depth > 0:
                     # Grouping paren inside extglob
-                    pattern_chars.append(self._advance())
+                    pattern_chars.append(self.advance())
                     extglob_depth += 1
                 elif (
                     self._extglob
@@ -10094,8 +10070,8 @@ class Parser:
                     and self.source[self.pos + 1] == "("
                 ):
                     # Extglob opener: @(, ?(, *(, +(, !(
-                    pattern_chars.append(self._advance())  # @, ?, *, +, or !
-                    pattern_chars.append(self._advance())  # (
+                    pattern_chars.append(self.advance())  # @, ?, *, +, or !
+                    pattern_chars.append(self.advance())  # (
                     extglob_depth += 1
                 elif ch == "[":
                     # Character class - but only if there's a matching ]
@@ -10128,45 +10104,45 @@ class Parser:
                             break
                         scan_pos += 1
                     if is_char_class:
-                        pattern_chars.append(self._advance())
+                        pattern_chars.append(self.advance())
                         # Handle [! or [^ at start
-                        if not self.at_end() and _is_caret_or_bang(self._peek()):
-                            pattern_chars.append(self._advance())
+                        if not self.at_end() and _is_caret_or_bang(self.peek()):
+                            pattern_chars.append(self.advance())
                         # Handle ] as first char (literal) only if we detected it in scan
-                        if has_first_bracket_literal and not self.at_end() and self._peek() == "]":
-                            pattern_chars.append(self._advance())
+                        if has_first_bracket_literal and not self.at_end() and self.peek() == "]":
+                            pattern_chars.append(self.advance())
                         # Consume until closing ]
-                        while not self.at_end() and self._peek() != "]":
-                            pattern_chars.append(self._advance())
+                        while not self.at_end() and self.peek() != "]":
+                            pattern_chars.append(self.advance())
                         if not self.at_end():
-                            pattern_chars.append(self._advance())  # ]
+                            pattern_chars.append(self.advance())  # ]
                     else:
                         # Not a valid char class, treat [ as literal
-                        pattern_chars.append(self._advance())
+                        pattern_chars.append(self.advance())
                 elif ch == "'":
                     # Single-quoted string in pattern
-                    pattern_chars.append(self._advance())
+                    pattern_chars.append(self.advance())
                     while not self.at_end() and self.peek() != "'":
-                        pattern_chars.append(self._advance())
+                        pattern_chars.append(self.advance())
                     if not self.at_end():
-                        pattern_chars.append(self._advance())
+                        pattern_chars.append(self.advance())
                 elif ch == '"':
                     # Double-quoted string in pattern
-                    pattern_chars.append(self._advance())
-                    while not self.at_end() and self._peek() != '"':
-                        if self._peek() == "\\" and self.pos + 1 < self.length:
-                            pattern_chars.append(self._advance())
-                        pattern_chars.append(self._advance())
+                    pattern_chars.append(self.advance())
+                    while not self.at_end() and self.peek() != '"':
+                        if self.peek() == "\\" and self.pos + 1 < self.length:
+                            pattern_chars.append(self.advance())
+                        pattern_chars.append(self.advance())
                     if not self.at_end():
-                        pattern_chars.append(self._advance())
+                        pattern_chars.append(self.advance())
                 elif _is_whitespace(ch):
                     # Skip whitespace at top level, but preserve inside $() or extglob
                     if extglob_depth > 0:
-                        pattern_chars.append(self._advance())
+                        pattern_chars.append(self.advance())
                     else:
                         self.advance()
                 else:
-                    pattern_chars.append(self._advance())
+                    pattern_chars.append(self.advance())
 
             pattern = "".join(pattern_chars)
             if not pattern:
@@ -10254,7 +10230,7 @@ class Parser:
         if potential_name:
             # Skip past the potential name
             while (
-                not self.at_end() and not _is_metachar(self._peek()) and not _is_quote(self._peek())
+                not self.at_end() and not _is_metachar(self.peek()) and not _is_quote(self.peek())
             ):
                 self.advance()
             self.skip_whitespace()
@@ -10358,9 +10334,9 @@ class Parser:
         # Consume the name
         while (
             not self.at_end()
-            and not _is_metachar(self._peek())
-            and not _is_quote(self._peek())
-            and not _is_paren(self._peek())
+            and not _is_metachar(self.peek())
+            and not _is_quote(self.peek())
+            and not _is_paren(self.peek())
         ):
             self.advance()
 
@@ -10679,7 +10655,7 @@ class Parser:
                 self.advance()
                 if not self.at_end() and self.peek() == "p":
                     self.advance()
-                    if self.at_end() or _is_metachar(self._peek()):
+                    if self.at_end() or _is_metachar(self.peek()):
                         time_posix = True
                     else:
                         self.pos = saved
@@ -10703,7 +10679,7 @@ class Parser:
                     self.advance()
                     if not self.at_end() and self.peek() == "p":
                         self.advance()
-                        if self.at_end() or _is_metachar(self._peek()):
+                        if self.at_end() or _is_metachar(self.peek()):
                             time_posix = True
                         else:
                             self.pos = saved
@@ -10731,7 +10707,7 @@ class Parser:
                 inner = self.parse_pipeline()
                 # Double negation cancels out (! ! cmd -> cmd, ! ! -> empty command)
                 if inner is not None and inner.kind == "negation":
-                    if inner.pipeline is not None:  # type: ignore[attr-defined]
+                    if inner.pipeline is not None:
                         return inner.pipeline
                     else:
                         return Command([])

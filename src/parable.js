@@ -6928,6 +6928,52 @@ function _findCmdsubEnd(value, start) {
 	return i;
 }
 
+function _findBracedParamEnd(value, start) {
+	let c, depth, i, quote;
+	depth = 1;
+	i = start;
+	quote = new QuoteState();
+	while (i < value.length && depth > 0) {
+		c = value[i];
+		if (c === "\\" && i + 1 < value.length && !quote.single) {
+			i += 2;
+			continue;
+		}
+		if (c === "'" && !quote.double) {
+			quote.single = !quote.single;
+			i += 1;
+			continue;
+		}
+		if (c === '"' && !quote.single) {
+			quote.double = !quote.double;
+			i += 1;
+			continue;
+		}
+		if (quote.single || quote.double) {
+			i += 1;
+			continue;
+		}
+		if (c === "{") {
+			depth += 1;
+		} else if (c === "}") {
+			depth -= 1;
+			if (depth === 0) {
+				return i + 1;
+			}
+		}
+		if (c === "$" && i + 1 < value.length && value[i + 1] === "(") {
+			i = _findCmdsubEnd(value, i + 2);
+			continue;
+		}
+		if (c === "$" && i + 1 < value.length && value[i + 1] === "{") {
+			i = _findBracedParamEnd(value, i + 2);
+			continue;
+		}
+		i += 1;
+	}
+	return i;
+}
+
 function _skipHeredoc(value, start) {
 	let c,
 		delim_start,
@@ -7496,7 +7542,16 @@ function _isWordEndContext(c) {
 const _SMP_LITERAL = 1;
 const _SMP_PAST_OPEN = 2;
 function _skipMatchedPair(s, start, open, close, flags) {
-	let c, depth, i, in_double, in_quotes, in_single, literal, n, pass_next;
+	let backq,
+		c,
+		depth,
+		i,
+		in_double,
+		in_quotes,
+		in_single,
+		literal,
+		n,
+		pass_next;
 	if (flags == null) {
 		flags = 0;
 	}
@@ -7513,6 +7568,7 @@ function _skipMatchedPair(s, start, open, close, flags) {
 	pass_next = false;
 	in_single = false;
 	in_double = false;
+	backq = false;
 	while (i < n && depth > 0) {
 		c = s[i];
 		if (pass_next) {
@@ -7526,6 +7582,18 @@ function _skipMatchedPair(s, start, open, close, flags) {
 			i += 1;
 			continue;
 		}
+		if (backq) {
+			if (c === "`") {
+				backq = false;
+			}
+			i += 1;
+			continue;
+		}
+		if (!literal && c === "`") {
+			backq = true;
+			i += 1;
+			continue;
+		}
 		if (!literal && c === "'" && !in_double) {
 			in_single = !in_single;
 			i += 1;
@@ -7534,6 +7602,40 @@ function _skipMatchedPair(s, start, open, close, flags) {
 		if (!literal && c === '"' && !in_single) {
 			in_double = !in_double;
 			i += 1;
+			continue;
+		}
+		if (in_double) {
+			if (c === "$" && i + 1 < n) {
+				if (s[i + 1] === "(") {
+					i = _findCmdsubEnd(s, i + 2);
+					continue;
+				}
+				if (s[i + 1] === "{") {
+					i = _findBracedParamEnd(s, i + 2);
+					continue;
+				}
+			}
+		}
+		if (
+			!literal &&
+			!in_single &&
+			!in_double &&
+			c === "$" &&
+			i + 1 < n &&
+			s[i + 1] === "("
+		) {
+			i = _findCmdsubEnd(s, i + 2);
+			continue;
+		}
+		if (
+			!literal &&
+			!in_single &&
+			!in_double &&
+			c === "$" &&
+			i + 1 < n &&
+			s[i + 1] === "{"
+		) {
+			i = _findBracedParamEnd(s, i + 2);
 			continue;
 		}
 		in_quotes = in_single || in_double;

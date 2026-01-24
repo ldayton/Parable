@@ -147,28 +147,18 @@ just test-js   # Javascript
 
 See [tests/README.md](tests/README.md) for options and coverage details.
 
-## Benchmarks
-
-```bash
-just bench     # Python
-just bench-js  # Javascript
-```
-
-See [bench/README.md](bench/README.md) for comparison options.
-
 ## Project Structure
 
 ```
 src/
 ├── parable.py                   # Single-file Python parser
-└── parable.js                   # Transpiled Javascript parser
+├── parable.js                   # Transpiled Javascript parser
+└── parable.d.ts                 # TypeScript definitions
 
 tests/
 ├── bin/                         # Test runners
 ├── parable/                     # Parable test cases
 └── corpus/                      # Validation corpus
-
-bench/                           # Benchmarks (npm install for JS)
 
 tools/
 ├── bash-oracle/                 # Patched bash + corpus utilities

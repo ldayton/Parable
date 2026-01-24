@@ -148,7 +148,7 @@ export interface Case extends NodeBase {
 export interface CasePattern extends NodeBase {
 	readonly kind: "pattern";
 	readonly pattern: string;
-	readonly body: Node;
+	readonly body: Node | null;
 	readonly terminator: string;
 }
 

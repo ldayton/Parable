@@ -86,6 +86,8 @@ def infer_type(prop_name: str, class_name: str) -> str:
             return "CondNode | string"
         if prop_name in ("else_body", "pipeline"):
             return "Node | null"
+        if prop_name == "body" and class_name == "CasePattern":
+            return "Node | null"
         return "Node"
 
     if prop_name == "word":

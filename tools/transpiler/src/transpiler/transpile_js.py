@@ -675,6 +675,84 @@ class JSTranspiler(ast.NodeVisitor):
             return f"this.{method_name}.bind(this)"
         return self.visit_expr(arg)
 
+    # Method name mappings: Python -> JS
+    _method_renames = {
+        "append": "push",
+        "startswith": "startsWith",
+        "endswith": "endsWith",
+        "strip": "trim",
+        "lower": "toLowerCase",
+        "upper": "toUpperCase",
+        "find": "indexOf",
+        "rfind": "lastIndexOf",
+        "replace": "replaceAll",
+    }
+    # Regex-based character class tests
+    _char_class_tests = {
+        "isalpha": "/^[a-zA-Z]$/",
+        "isdigit": "/^[0-9]+$/",
+        "isalnum": "/^[a-zA-Z0-9]$/",
+        "isspace": "/^\\s$/",
+    }
+
+    def _handle_method_call(self, node: ast.Call, obj: str, method: str) -> str | None:
+        """Handle special method transformations. Returns None if not handled."""
+        # Character class tests
+        if method in self._char_class_tests:
+            return f"{self._char_class_tests[method]}.test({obj})"
+        # Strip methods with optional character set
+        if method in ("lstrip", "rstrip"):
+            return self._handle_strip(node, obj, method)
+        # Encoding
+        if method == "encode":
+            return f"new TextEncoder().encode({obj})"
+        if method == "decode":
+            return f"new TextDecoder().decode(new Uint8Array({obj}))"
+        # Dict get
+        if method == "get":
+            return self._handle_dict_get(node, obj)
+        # List extend
+        if method == "extend" and len(node.args) == 1:
+            return f"{obj}.push(...{self.visit_expr(node.args[0])})"
+        # Tuple argument for startswith/endswith
+        if method in ("endswith", "startswith") and len(node.args) == 1:
+            if isinstance(node.args[0], (ast.Tuple, ast.List)):
+                js_method = self._method_renames[method]
+                checks = [f"{obj}.{js_method}({self.visit_expr(e)})" for e in node.args[0].elts]
+                return f"({' || '.join(checks)})"
+        # Join: separator.join(lst) -> lst.join(separator)
+        if method == "join" and len(node.args) == 1:
+            return f"{self.visit_expr(node.args[0])}.join({obj})"
+        return None
+
+    def _handle_strip(self, node: ast.Call, obj: str, method: str) -> str:
+        """Handle lstrip/rstrip with optional character set argument."""
+        if len(node.args) == 1:
+            arg = node.args[0]
+            anchor = "^" if method == "lstrip" else "$"
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                escaped = self._escape_regex_chars(arg.value)
+                pattern = f"{anchor}[{escaped}]+" if method == "lstrip" else f"[{escaped}]+{anchor}"
+                return f'{obj}.replace(/{pattern}/, "")'
+            chars = self.visit_expr(arg)
+            pattern = (
+                f'"{anchor}[" + {chars} + "]+"'
+                if method == "lstrip"
+                else f'"[" + {chars} + "]+{anchor}"'
+            )
+            return f'{obj}.replace(new RegExp({pattern}), "")'
+        return f"{obj}.{'trimStart' if method == 'lstrip' else 'trimEnd'}()"
+
+    def _handle_dict_get(self, node: ast.Call, obj: str) -> str | None:
+        """Handle dict.get(key) and dict.get(key, default)."""
+        if len(node.args) >= 2:
+            key = self.visit_expr(node.args[0])
+            default = self.visit_expr(node.args[1])
+            return f"({obj}[{key}] ?? {default})"
+        if len(node.args) == 1:
+            return f"{obj}[{self.visit_expr(node.args[0])}]"
+        return None
+
     def visit_expr_Call(self, node: ast.Call) -> str:
         # Combine positional and keyword args (JS doesn't have kwargs, so treat as positional)
         all_args = [self._visit_callback_arg(a) for a in node.args]
@@ -697,87 +775,14 @@ class JSTranspiler(ast.NodeVisitor):
                 return f"super({args})"
             obj = self.visit_expr(node.func.value)
             method = node.func.attr
-            # Map Python methods to JS
-            method_map = {
-                "append": "push",
-                "startswith": "startsWith",
-                "endswith": "endsWith",
-                "strip": "trim",
-                # rstrip handled specially below
-                "lower": "toLowerCase",
-                "upper": "toUpperCase",
-                # extend handled specially below
-                "find": "indexOf",
-                "rfind": "lastIndexOf",
-                "replace": "replaceAll",  # Python replaces all, JS replace() only first
-            }
-            # Handle character class methods with regex
-            if method == "isalpha":
-                return f"/^[a-zA-Z]$/.test({obj})"
-            if method == "isdigit":
-                return f"/^[0-9]+$/.test({obj})"
-            if method == "isalnum":
-                return f"/^[a-zA-Z0-9]$/.test({obj})"
-            if method == "isspace":
-                return f"/^\\s$/.test({obj})"
-            # Handle lstrip/rstrip with character set argument
-            if method in ("lstrip", "rstrip"):
-                anchor, fallback = (
-                    ("^", "trimStart()") if method == "lstrip" else ("$", "trimEnd()")
-                )
-                if len(node.args) == 1:
-                    arg = node.args[0]
-                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-                        escaped = self._escape_regex_chars(arg.value)
-                        return (
-                            f'{obj}.replace(/{anchor}[{escaped}]+/, "")'
-                            if method == "lstrip"
-                            else f'{obj}.replace(/[{escaped}]+{anchor}/, "")'
-                        )
-                    chars = self.visit_expr(arg)
-                    return (
-                        f'{obj}.replace(new RegExp("{anchor}[" + {chars} + "]+"), "")'
-                        if method == "lstrip"
-                        else f'{obj}.replace(new RegExp("[" + {chars} + "]+{anchor}"), "")'
-                    )
-                return f"{obj}.{fallback}"
-            # Handle str.encode() - returns iterable of byte values (Uint8Array)
-            if method == "encode":
-                return f"new TextEncoder().encode({obj})"
-            # Handle bytes.decode() - converts byte array to string
-            if method == "decode":
-                return f"new TextDecoder().decode(new Uint8Array({obj}))"
-            # Handle dict.get(key) and dict.get(key, default)
-            if method == "get":
-                if len(node.args) >= 2:
-                    key = self.visit_expr(node.args[0])
-                    default = self.visit_expr(node.args[1])
-                    return f"({obj}[{key}] ?? {default})"
-                elif len(node.args) == 1:
-                    key = self.visit_expr(node.args[0])
-                    return f"{obj}[{key}]"
-            # Handle list.extend() - needs spread operator
-            if method == "extend":
-                if len(node.args) == 1:
-                    items = self.visit_expr(node.args[0])
-                    return f"{obj}.push(...{items})"
-            # Handle endswith/startswith with tuple argument (JS only accepts string)
-            if method in ("endswith", "startswith") and len(node.args) == 1:
-                if isinstance(node.args[0], (ast.Tuple, ast.List)):
-                    js_method = "endsWith" if method == "endswith" else "startsWith"
-                    checks = [
-                        f"{obj}.{js_method}({self.visit_expr(elt)})" for elt in node.args[0].elts
-                    ]
-                    return f"({' || '.join(checks)})"
-            method = method_map.get(method, method)
-            # Convert remaining snake_case to camelCase
+            # Try special method handlers first
+            result = self._handle_method_call(node, obj, method)
+            if result is not None:
+                return result
+            # Apply simple renames, then camelCase conversion
+            method = self._method_renames.get(method, method)
             if "_" in method:
                 method = self._camel_case(method)
-            # Special case: separator.join(lst) -> lst.join(separator)
-            # In Python, join is a string method; in JS, it's an array method
-            if method == "join" and len(node.args) == 1:
-                sep = self.visit_expr(node.func.value)
-                return f"{args}.join({sep})"
             return f"{obj}.{method}({args})"
         # Handle builtins
         if isinstance(node.func, ast.Name):

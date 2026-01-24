@@ -607,3 +607,29 @@ Parable treats all positions in `${...}` the same, missing these distinctions.
    - `${param%'pattern'}` (quotes in removal operators)
    - `${param/pat/rep}` with quotes
    - Nested `${...}` with different quote contexts
+
+---
+
+## Current Status
+
+### Implemented
+
+The following features have been aligned with bash's delegation architecture:
+
+- **Delegation architecture** - `_skip_single_quoted()` and `_skip_double_quoted()` extracted as dedicated functions mirroring bash's `skip_single_quoted()` and `skip_double_quoted()`
+- **PARAM/WORD/QUOTE states** - `_find_braced_param_end()` now tracks `dolbrace_state` with transitions:
+  - PARAM → QUOTE after `%#^,` (pattern removal, case modification)
+  - PARAM → WORD after `:-=?+/` (default values, substitution)
+- **Process substitution** - `<(...)` and `>(...)` handled inside `${...}`
+- **Array subscripts** - `${arr[...]}` delegates to `_skip_subscript()` in PARAM state only
+- **Single-quote context** - Single quotes only special (delegated) in QUOTE state after `%#^,`
+
+### Deferred
+
+The following features are not yet implemented:
+
+- **QUOTE2 state** for `/` operator (slightly different single-quote handling in `${param/pat/rep}`)
+- **Function substitution** `${|...}` (ksh93/bash 5.3+ feature)
+- **Heredoc in `${...}`** (rare edge case)
+- **`posixly_correct`/`shell_compatibility_level`** interactions
+- **Multibyte character handling**

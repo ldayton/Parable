@@ -44,6 +44,27 @@ type Node interface {
 	ToSexp() string
 }
 
+// ANSICEscapes maps ANSI-C escape characters to byte values
+var ANSICEscapes = map[rune]int{
+	'a': 0x07, 'b': 0x08, 'e': 0x1B, 'E': 0x1B,
+	'f': 0x0C, 'n': 0x0A, 'r': 0x0D, 't': 0x09,
+	'v': 0x0B, '\\': 0x5C, '"': 0x22, '?': 0x3F,
+}
+
+func _mapGet[K comparable, V any](m map[K]V, key K, def V) V {
+	if v, ok := m[key]; ok {
+		return v
+	}
+	return def
+}
+
+func _ternary[T any](cond bool, a, b T) T {
+	if cond {
+		return a
+	}
+	return b
+}
+
 type TokenType struct {
 }
 

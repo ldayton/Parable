@@ -451,6 +451,44 @@ class GoTranspiler(ast.NodeVisitor):
         self.indent -= 1
         self.emit("}")
         self.emit("")
+        # Emit helper functions and constants
+        self._emit_helpers()
+
+    def _emit_helpers(self):
+        """Emit helper functions needed by transpiled code."""
+        # ANSI-C escapes map
+        self.emit("// ANSICEscapes maps ANSI-C escape characters to byte values")
+        self.emit("var ANSICEscapes = map[rune]int{")
+        self.indent += 1
+        self.emit("'a': 0x07, 'b': 0x08, 'e': 0x1B, 'E': 0x1B,")
+        self.emit("'f': 0x0C, 'n': 0x0A, 'r': 0x0D, 't': 0x09,")
+        self.emit("'v': 0x0B, '\\\\': 0x5C, '\"': 0x22, '?': 0x3F,")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
+        # Helper functions
+        self.emit("func _mapGet[K comparable, V any](m map[K]V, key K, def V) V {")
+        self.indent += 1
+        self.emit("if v, ok := m[key]; ok {")
+        self.indent += 1
+        self.emit("return v")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("return def")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
+        self.emit("func _ternary[T any](cond bool, a, b T) T {")
+        self.indent += 1
+        self.emit("if cond {")
+        self.indent += 1
+        self.emit("return a")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("return b")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
 
     def _emit_all_structs(self):
         """Emit all struct definitions."""
@@ -571,8 +609,8 @@ class GoTranspiler(ast.NodeVisitor):
 
     def _emit_body(self, stmts: list[ast.stmt], func_info: FuncInfo | None = None):
         """Emit function/method body statements."""
-        # For now, emit panic("TODO") for all function bodies
-        # This will be replaced with real implementations incrementally
+        # For now, emit panic("TODO") for all bodies
+        # Full body generation requires deeper type tracking
         self.emit('panic("TODO")')
 
     def _emit_constructor_body(self, stmts: list[ast.stmt], class_info: ClassInfo):
@@ -622,7 +660,7 @@ class GoTranspiler(ast.NodeVisitor):
         if hasattr(self, method):
             getattr(self, method)(stmt)
         else:
-            self.emit(f"/* TODO: {stmt.__class__.__name__} */")
+            raise NotImplementedError(f"Statement type {stmt.__class__.__name__}")
 
     def _emit_stmt_Expr(self, stmt: ast.Expr):
         """Emit expression statement."""
@@ -642,19 +680,19 @@ class GoTranspiler(ast.NodeVisitor):
             target = stmt.targets[0]
             # Handle tuple unpacking
             if isinstance(target, ast.Tuple):
-                targets = ", ".join(self.visit_expr(t) for t in target.elts)
-                value = self.visit_expr(stmt.value)
-                self.emit(f"{targets} = {value}")
-                return
+                raise NotImplementedError("Tuple unpacking")
             target_str = self.visit_expr(target)
             value = self.visit_expr(stmt.value)
+            # Check if this is a new variable (local name, not attribute)
+            if isinstance(target, ast.Name):
+                if target_str not in self.declared_vars:
+                    self.declared_vars.add(target_str)
+                    self.emit(f"{target_str} := {value}")
+                    return
             self.emit(f"{target_str} = {value}")
         else:
             # Multiple assignment targets
-            value = self.visit_expr(stmt.value)
-            for target in stmt.targets:
-                target_str = self.visit_expr(target)
-                self.emit(f"{target_str} = {value}")
+            raise NotImplementedError("Multiple assignment targets")
 
     def _emit_stmt_AnnAssign(self, stmt: ast.AnnAssign):
         """Emit annotated assignment."""
@@ -690,8 +728,11 @@ class GoTranspiler(ast.NodeVisitor):
         else:
             self.emit_raw("\t" * self.indent + f"}} else if {test} {{")
         self.indent += 1
-        for s in stmt.body:
-            self._emit_stmt(s)
+        try:
+            for s in stmt.body:
+                self._emit_stmt(s)
+        except NotImplementedError:
+            self.emit('panic("TODO: incomplete implementation")')
         self.indent -= 1
         if stmt.orelse:
             if len(stmt.orelse) == 1 and isinstance(stmt.orelse[0], ast.If):
@@ -701,8 +742,11 @@ class GoTranspiler(ast.NodeVisitor):
                 # else
                 self.emit_raw("\t" * self.indent + "} else {")
                 self.indent += 1
-                for s in stmt.orelse:
-                    self._emit_stmt(s)
+                try:
+                    for s in stmt.orelse:
+                        self._emit_stmt(s)
+                except NotImplementedError:
+                    self.emit('panic("TODO: incomplete implementation")')
                 self.indent -= 1
                 self.emit("}")
         else:
@@ -713,32 +757,48 @@ class GoTranspiler(ast.NodeVisitor):
         test = self.visit_expr(stmt.test)
         self.emit(f"for {test} {{")
         self.indent += 1
-        for s in stmt.body:
-            self._emit_stmt(s)
+        try:
+            for s in stmt.body:
+                self._emit_stmt(s)
+        except NotImplementedError:
+            self.emit('panic("TODO: incomplete implementation")')
         self.indent -= 1
         self.emit("}")
 
     def _emit_stmt_For(self, stmt: ast.For):
         """Emit for loop."""
-        target = self.visit_expr(stmt.target)
+        # Check for `for _ in x:` (discard loop variable) before visiting
+        is_discard = isinstance(stmt.target, ast.Name) and stmt.target.id == "_"
+        target = self.visit_expr(stmt.target) if not is_discard else "_"
         # Handle range()
         if isinstance(stmt.iter, ast.Call) and isinstance(stmt.iter.func, ast.Name):
             if stmt.iter.func.id == "range":
-                self._emit_range_for(stmt, target)
+                self._emit_range_for(stmt, target, is_discard)
                 return
         # Standard for-each
         iter_expr = self.visit_expr(stmt.iter)
-        self.emit(f"for _, {target} := range {iter_expr} {{")
+        # Handle `for _ in x:` (discard loop variable)
+        if is_discard:
+            self.emit(f"for range {iter_expr} {{")
+        else:
+            self.emit(f"for _, {target} := range {iter_expr} {{")
         self.indent += 1
-        for s in stmt.body:
-            self._emit_stmt(s)
+        try:
+            for s in stmt.body:
+                self._emit_stmt(s)
+        except NotImplementedError:
+            self.emit('panic("TODO: incomplete implementation")')
         self.indent -= 1
         self.emit("}")
 
-    def _emit_range_for(self, stmt: ast.For, target: str):
+    def _emit_range_for(self, stmt: ast.For, target: str, is_discard: bool = False):
         """Emit for loop over range()."""
         args = stmt.iter.args
-        if len(args) == 1:
+        # For discarded loop variable, use anonymous loop
+        if is_discard:
+            end = self.visit_expr(args[0]) if args else "0"
+            self.emit(f"for _i := 0; _i < {end}; _i++ {{")
+        elif len(args) == 1:
             end = self.visit_expr(args[0])
             self.emit(f"for {target} := 0; {target} < {end}; {target}++ {{")
         elif len(args) == 2:
@@ -755,8 +815,11 @@ class GoTranspiler(ast.NodeVisitor):
             else:
                 self.emit(f"for {target} := {start}; {target} < {end}; {target} += {step} {{")
         self.indent += 1
-        for s in stmt.body:
-            self._emit_stmt(s)
+        try:
+            for s in stmt.body:
+                self._emit_stmt(s)
+        except NotImplementedError:
+            self.emit('panic("TODO: incomplete implementation")')
         self.indent -= 1
         self.emit("}")
 
@@ -782,10 +845,7 @@ class GoTranspiler(ast.NodeVisitor):
 
     def _emit_stmt_Try(self, stmt: ast.Try):
         """Emit try/except as defer/recover pattern."""
-        # This is complex - for now emit a TODO
-        self.emit("/* TODO: try/except */")
-        for s in stmt.body:
-            self._emit_stmt(s)
+        raise NotImplementedError("try/except")
 
     def _format_params(self, params: list[ParamInfo]) -> str:
         """Format parameter list for Go function signature."""
@@ -847,7 +907,13 @@ class GoTranspiler(ast.NodeVisitor):
 
     def _snake_to_camel(self, name: str) -> str:
         """Convert snake_case to camelCase."""
+        if name == "_":
+            return "_"
         parts = name.split("_")
+        # Filter out empty parts from leading underscores
+        parts = [p for p in parts if p]
+        if not parts:
+            return name
         return parts[0] + "".join(word.capitalize() for word in parts[1:])
 
     # ========== Expression Emission ==========
@@ -857,7 +923,7 @@ class GoTranspiler(ast.NodeVisitor):
         method = f"visit_expr_{node.__class__.__name__}"
         if hasattr(self, method):
             return getattr(self, method)(node)
-        return f"/* TODO: {node.__class__.__name__} */"
+        raise NotImplementedError(f"Expression type {node.__class__.__name__}")
 
     def visit_expr_Constant(self, node: ast.Constant) -> str:
         """Convert constant literals."""
@@ -866,9 +932,10 @@ class GoTranspiler(ast.NodeVisitor):
         if isinstance(node.value, int):
             return str(node.value)
         if isinstance(node.value, str):
+            value = node.value
             # Escape for Go string literal
             escaped = (
-                node.value.replace("\\", "\\\\")
+                value.replace("\\", "\\\\")
                 .replace('"', '\\"')
                 .replace("\n", "\\n")
                 .replace("\t", "\\t")
@@ -1112,7 +1179,7 @@ class GoTranspiler(ast.NodeVisitor):
 
     def _emit_pop(self, obj: str, args: list[str]) -> str:
         """Emit pop call."""
-        return f"/* pop: {obj} */"
+        raise NotImplementedError("list.pop()")
 
     def _emit_extend(self, obj: str, args: list[str]) -> str:
         """Emit extend call."""
@@ -1166,7 +1233,7 @@ class GoTranspiler(ast.NodeVisitor):
 
     def _emit_isinstance(self, args: list[str]) -> str:
         """Emit isinstance check using type assertion."""
-        return f"/* isinstance({args[0]}, {args[1]}) */"
+        raise NotImplementedError("isinstance")
 
     def _emit_getattr(self, args: list[str]) -> str:
         """Emit getattr call."""

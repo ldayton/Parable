@@ -20,6 +20,21 @@ class FunctionScope:
     top_level_first: set = field(default_factory=set)
 
 
+class _NotHandled:
+    """Sentinel indicating a handler did not process the input."""
+
+    __slots__ = ()
+
+    def __bool__(self):
+        raise TypeError("Use 'is NOT_HANDLED' instead of truthiness check")
+
+    def __repr__(self):
+        return "NOT_HANDLED"
+
+
+NOT_HANDLED = _NotHandled()
+
+
 class JSTranspiler(ast.NodeVisitor):
     def __init__(self):
         self.indent = 0
@@ -718,8 +733,8 @@ class JSTranspiler(ast.NodeVisitor):
         "yield",
     }
 
-    def _handle_method_call(self, node: ast.Call, obj: str, method: str) -> str | None:
-        """Handle special method transformations. Returns None to fall through to default."""
+    def _handle_method_call(self, node: ast.Call, obj: str, method: str) -> str | _NotHandled:
+        """Handle special method transformations. Returns NOT_HANDLED to fall through."""
         # Character class tests
         if method in self._char_class_tests:
             return f"{self._char_class_tests[method]}.test({obj})"
@@ -746,7 +761,7 @@ class JSTranspiler(ast.NodeVisitor):
         # Join: separator.join(lst) -> lst.join(separator)
         if method == "join" and len(node.args) == 1:
             return f"{self.visit_expr(node.args[0])}.join({obj})"
-        return None
+        return NOT_HANDLED
 
     def _handle_strip(self, node: ast.Call, obj: str, method: str) -> str:
         """Handle lstrip/rstrip with optional character set argument."""
@@ -766,15 +781,15 @@ class JSTranspiler(ast.NodeVisitor):
             return f'{obj}.replace(new RegExp({pattern}), "")'
         return f"{obj}.{'trimStart' if method == 'lstrip' else 'trimEnd'}()"
 
-    def _handle_dict_get(self, node: ast.Call, obj: str) -> str | None:
-        """Handle dict.get(key) and dict.get(key, default). Returns None to fall through."""
+    def _handle_dict_get(self, node: ast.Call, obj: str) -> str | _NotHandled:
+        """Handle dict.get(key) and dict.get(key, default). Returns NOT_HANDLED to fall through."""
         if len(node.args) >= 2:
             key = self.visit_expr(node.args[0])
             default = self.visit_expr(node.args[1])
             return f"({obj}[{key}] ?? {default})"
         if len(node.args) == 1:
             return f"{obj}[{self.visit_expr(node.args[0])}]"
-        return None
+        return NOT_HANDLED
 
     def visit_expr_Call(self, node: ast.Call) -> str:
         # Combine positional and keyword args (JS doesn't have kwargs, so treat as positional)
@@ -806,7 +821,7 @@ class JSTranspiler(ast.NodeVisitor):
         method = node.func.attr
         # Try special method handlers first
         result = self._handle_method_call(node, obj, method)
-        if result is not None:
+        if result is not NOT_HANDLED:
             return result
         # Apply simple renames, then camelCase conversion
         method = self._method_renames.get(method, method)
@@ -819,7 +834,7 @@ class JSTranspiler(ast.NodeVisitor):
         name = node.func.id
         # Try builtin handlers
         result = self._handle_builtin_call(node, name, args)
-        if result is not None:
+        if result is not NOT_HANDLED:
             return result
         # Class instantiation
         if name in self.class_names:
@@ -829,8 +844,8 @@ class JSTranspiler(ast.NodeVisitor):
             name = self._camel_case(name)
         return f"{name}({args})"
 
-    def _handle_builtin_call(self, node: ast.Call, name: str, args: str) -> str | None:
-        """Handle Python builtin function calls. Returns None if not handled."""
+    def _handle_builtin_call(self, node: ast.Call, name: str, args: str) -> str | _NotHandled:
+        """Handle Python builtin function calls. Returns NOT_HANDLED if not handled."""
         if name == "len":
             return f"{args}.length"
         if name == "str":
@@ -869,7 +884,7 @@ class JSTranspiler(ast.NodeVisitor):
         if name == "_repeat_str":
             s, n = self.visit_expr(node.args[0]), self.visit_expr(node.args[1])
             return f"{s}.repeat({n})"
-        return None
+        return NOT_HANDLED
 
     def _handle_getattr(self, node: ast.Call) -> str:
         """Handle getattr(obj, attr) and getattr(obj, attr, default)."""

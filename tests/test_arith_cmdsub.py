@@ -7,6 +7,7 @@ original source, causing CommandSubstitution.command to be None.
 """
 
 import sys
+
 sys.path.insert(0, "src")
 
 from parable import parse

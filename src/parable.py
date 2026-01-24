@@ -8299,16 +8299,8 @@ class Parser:
         self._arith_advance()  # consume )
 
         # Parse the command inside
-        saved_pos = self.pos
-        saved_src = self.source
-        saved_len = self.length
-        self.source = content
-        self.pos = 0
-        self.length = len(content)
-        cmd = self.parse_list()
-        self.source = saved_src
-        self.pos = saved_pos
-        self.length = saved_len
+        sub_parser = Parser(content, extglob=self._extglob)
+        cmd = sub_parser.parse_list()
 
         return CommandSubstitution(cmd)
 
@@ -8433,16 +8425,8 @@ class Parser:
         if not self._arith_consume("`"):
             raise ParseError("Unterminated backtick in arithmetic", pos=self._arith_pos)
         # Parse the command inside
-        saved_pos = self.pos
-        saved_src = self.source
-        saved_len = self.length
-        self.source = content
-        self.pos = 0
-        self.length = len(content)
-        cmd = self.parse_list()
-        self.source = saved_src
-        self.pos = saved_pos
-        self.length = saved_len
+        sub_parser = Parser(content, extglob=self._extglob)
+        cmd = sub_parser.parse_list()
         return CommandSubstitution(cmd)
 
     def _arith_parse_number_or_var(self) -> Node:

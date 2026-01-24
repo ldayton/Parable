@@ -9829,15 +9829,7 @@ class Parser {
 	}
 
 	_arithParseCmdsub() {
-		let ch,
-			cmd,
-			content,
-			content_start,
-			depth,
-			inner_expr,
-			saved_len,
-			saved_pos,
-			saved_src;
+		let ch, cmd, content, content_start, depth, inner_expr, sub_parser;
 		// We're positioned after $, at (
 		this._arithAdvance();
 		// Check for $(( which is nested arithmetic
@@ -9887,16 +9879,8 @@ class Parser {
 		content = this._arith_src.slice(content_start, this._arith_pos);
 		this._arithAdvance();
 		// Parse the command inside
-		saved_pos = this.pos;
-		saved_src = this.source;
-		saved_len = this.length;
-		this.source = content;
-		this.pos = 0;
-		this.length = content.length;
-		cmd = this.parseList();
-		this.source = saved_src;
-		this.pos = saved_pos;
-		this.length = saved_len;
+		sub_parser = new Parser(content, this._extglob);
+		cmd = sub_parser.parseList();
 		return new CommandSubstitution(cmd);
 	}
 
@@ -10036,7 +10020,7 @@ class Parser {
 	}
 
 	_arithParseBacktick() {
-		let c, cmd, content, content_start, saved_len, saved_pos, saved_src;
+		let c, cmd, content, content_start, sub_parser;
 		this._arithAdvance();
 		content_start = this._arith_pos;
 		while (!this._arithAtEnd() && this._arithPeek() !== "`") {
@@ -10056,16 +10040,8 @@ class Parser {
 			);
 		}
 		// Parse the command inside
-		saved_pos = this.pos;
-		saved_src = this.source;
-		saved_len = this.length;
-		this.source = content;
-		this.pos = 0;
-		this.length = content.length;
-		cmd = this.parseList();
-		this.source = saved_src;
-		this.pos = saved_pos;
-		this.length = saved_len;
+		sub_parser = new Parser(content, this._extglob);
+		cmd = sub_parser.parseList();
 		return new CommandSubstitution(cmd);
 	}
 

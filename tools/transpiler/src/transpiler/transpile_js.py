@@ -412,6 +412,14 @@ class JSTranspiler(ast.NodeVisitor):
 
     def visit_AugAssign(self, node: ast.AugAssign):
         target = self.visit_expr(node.target)
+        # Use ++ and -- for += 1 and -= 1
+        if isinstance(node.value, ast.Constant) and node.value.value == 1:
+            if isinstance(node.op, ast.Add):
+                self.emit(f"{target}++;")
+                return
+            if isinstance(node.op, ast.Sub):
+                self.emit(f"{target}--;")
+                return
         op = self.visit_op(node.op)
         value = self.visit_expr(node.value)
         self.emit(f"{target} {op}= {value};")

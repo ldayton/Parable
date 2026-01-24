@@ -1015,6 +1015,27 @@ class Lexer:
                         was_gtlt = False
                     continue
 
+            # Process substitution <(...) or >(...) inside ${...}
+            # (bash's LEX_GTLT check at parse.y:4151-4160)
+            if ch == "(" and was_gtlt and (flags & MatchedPairFlags.DOLBRACE):
+                # Back up: remove the < or > we already added to chars
+                direction = chars.pop()
+                self.pos -= 1  # Back up before (
+                self._sync_to_parser()
+                procsub_node, procsub_text = self._parser._parse_process_substitution()
+                self._sync_from_parser()
+                if procsub_node:
+                    chars.append(procsub_text)
+                    was_dollar = False
+                    was_gtlt = False
+                else:
+                    # Failed - restore the < or > and (
+                    chars.append(direction)
+                    chars.append(self.advance())  # (
+                    was_dollar = False
+                    was_gtlt = False
+                continue
+
             chars.append(ch)
             was_dollar = ch == "$"
             was_gtlt = ch in "<>"

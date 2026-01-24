@@ -845,12 +845,15 @@ class Lexer {
 			cmd_node,
 			cmd_text,
 			count,
+			direction,
 			in_dquote,
 			nested,
 			next_ch,
 			param_node,
 			param_text,
 			pass_next,
+			procsub_node,
+			procsub_text,
 			start,
 			was_dollar,
 			was_gtlt;
@@ -1102,6 +1105,28 @@ class Lexer {
 					}
 					continue;
 				}
+			}
+			// Process substitution <(...) or >(...) inside ${...}
+			// (bash's LEX_GTLT check at parse.y:4151-4160)
+			if (ch === "(" && was_gtlt && flags & MatchedPairFlags.DOLBRACE) {
+				// Back up: remove the < or > we already added to chars
+				direction = chars.pop();
+				this.pos -= 1;
+				this._syncToParser();
+				[procsub_node, procsub_text] = this._parser._parseProcessSubstitution();
+				this._syncFromParser();
+				if (procsub_node) {
+					chars.push(procsub_text);
+					was_dollar = false;
+					was_gtlt = false;
+				} else {
+					// Failed - restore the < or > and (
+					chars.push(direction);
+					chars.push(this.advance());
+					was_dollar = false;
+					was_gtlt = false;
+				}
+				continue;
 			}
 			chars.push(ch);
 			was_dollar = ch === "$";

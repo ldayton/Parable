@@ -6656,6 +6656,15 @@ function _skipBacktick(value, start) {
 	return i;
 }
 
+function _skipSingleQuoted(s, start) {
+	let i;
+	i = start;
+	while (i < s.length && s[i] !== "'") {
+		i += 1;
+	}
+	return i < s.length ? i + 1 : i;
+}
+
 function _isValidArithmeticStart(value, start) {
 	let scan_c, scan_i, scan_paren;
 	scan_paren = 0;
@@ -6734,38 +6743,33 @@ function _findCmdsubEnd(value, start) {
 		depth,
 		i,
 		in_case_patterns,
-		j,
-		quote;
+		in_double,
+		j;
 	depth = 1;
 	i = start;
-	quote = new QuoteState();
+	in_double = false;
 	case_depth = 0;
 	in_case_patterns = false;
 	arith_depth = 0;
 	arith_paren_depth = 0;
 	while (i < value.length && depth > 0) {
 		c = value[i];
-		// Handle escapes
-		if (c === "\\" && i + 1 < value.length && !quote.single) {
+		// Handle escapes (work everywhere except inside single quotes, which we delegate)
+		if (c === "\\" && i + 1 < value.length) {
 			i += 2;
 			continue;
 		}
 		// Handle quotes
-		if (c === "'" && !quote.double) {
-			quote.single = !quote.single;
+		if (c === "'" && !in_double) {
+			i = _skipSingleQuoted(value, i + 1);
+			continue;
+		}
+		if (c === '"') {
+			in_double = !in_double;
 			i += 1;
 			continue;
 		}
-		if (c === '"' && !quote.single) {
-			quote.double = !quote.double;
-			i += 1;
-			continue;
-		}
-		if (quote.single) {
-			i += 1;
-			continue;
-		}
-		if (quote.double) {
+		if (in_double) {
 			// Inside double quotes, $() command substitution is still active
 			if (_startsWithAt(value, i, "$(") && !_startsWithAt(value, i, "$((")) {
 				// Recursively find end of nested command substitution
@@ -6929,27 +6933,27 @@ function _findCmdsubEnd(value, start) {
 }
 
 function _findBracedParamEnd(value, start) {
-	let c, depth, i, quote;
+	let c, depth, i, in_double;
 	depth = 1;
 	i = start;
-	quote = new QuoteState();
+	in_double = false;
 	while (i < value.length && depth > 0) {
 		c = value[i];
-		if (c === "\\" && i + 1 < value.length && !quote.single) {
+		// Escapes work everywhere except inside single quotes (which we delegate)
+		if (c === "\\" && i + 1 < value.length) {
 			i += 2;
 			continue;
 		}
-		if (c === "'" && !quote.double) {
-			quote.single = !quote.single;
+		if (c === "'" && !in_double) {
+			i = _skipSingleQuoted(value, i + 1);
+			continue;
+		}
+		if (c === '"') {
+			in_double = !in_double;
 			i += 1;
 			continue;
 		}
-		if (c === '"' && !quote.single) {
-			quote.double = !quote.double;
-			i += 1;
-			continue;
-		}
-		if (quote.single || quote.double) {
+		if (in_double) {
 			i += 1;
 			continue;
 		}
@@ -7542,16 +7546,7 @@ function _isWordEndContext(c) {
 const _SMP_LITERAL = 1;
 const _SMP_PAST_OPEN = 2;
 function _skipMatchedPair(s, start, open, close, flags) {
-	let backq,
-		c,
-		depth,
-		i,
-		in_double,
-		in_quotes,
-		in_single,
-		literal,
-		n,
-		pass_next;
+	let backq, c, depth, i, in_double, literal, n, pass_next;
 	if (flags == null) {
 		flags = 0;
 	}
@@ -7566,7 +7561,6 @@ function _skipMatchedPair(s, start, open, close, flags) {
 	}
 	depth = 1;
 	pass_next = false;
-	in_single = false;
 	in_double = false;
 	backq = false;
 	while (i < n && depth > 0) {
@@ -7595,11 +7589,10 @@ function _skipMatchedPair(s, start, open, close, flags) {
 			continue;
 		}
 		if (!literal && c === "'" && !in_double) {
-			in_single = !in_single;
-			i += 1;
+			i = _skipSingleQuoted(s, i + 1);
 			continue;
 		}
-		if (!literal && c === '"' && !in_single) {
+		if (!literal && c === '"') {
 			in_double = !in_double;
 			i += 1;
 			continue;
@@ -7616,32 +7609,17 @@ function _skipMatchedPair(s, start, open, close, flags) {
 				}
 			}
 		}
-		if (
-			!literal &&
-			!in_single &&
-			!in_double &&
-			c === "$" &&
-			i + 1 < n &&
-			s[i + 1] === "("
-		) {
+		if (!literal && !in_double && c === "$" && i + 1 < n && s[i + 1] === "(") {
 			i = _findCmdsubEnd(s, i + 2);
 			continue;
 		}
-		if (
-			!literal &&
-			!in_single &&
-			!in_double &&
-			c === "$" &&
-			i + 1 < n &&
-			s[i + 1] === "{"
-		) {
+		if (!literal && !in_double && c === "$" && i + 1 < n && s[i + 1] === "{") {
 			i = _findBracedParamEnd(s, i + 2);
 			continue;
 		}
-		in_quotes = in_single || in_double;
-		if (!literal && !in_quotes && c === open) {
+		if (!literal && !in_double && c === open) {
 			depth += 1;
-		} else if (!in_quotes && c === close) {
+		} else if (!in_double && c === close) {
 			depth -= 1;
 		}
 		i += 1;

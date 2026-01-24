@@ -5,7 +5,18 @@ import ast
 import io
 import sys
 import tokenize
+from dataclasses import dataclass, field
 from pathlib import Path
+
+
+@dataclass
+class FunctionScope:
+    """Tracks variable state within a function for const/let declaration."""
+
+    declared: set = field(default_factory=set)
+    reassigned: set = field(default_factory=set)
+    emitted: set = field(default_factory=set)
+    top_level_first: set = field(default_factory=set)
 
 
 class JSTranspiler(ast.NodeVisitor):
@@ -15,15 +26,12 @@ class JSTranspiler(ast.NodeVisitor):
         self.in_class_body = False
         self.in_method = False
         self.class_has_base = False
-        self.declared_vars = set()
+        self.scope = FunctionScope()
         self.class_names = set()  # populated by pre-pass in transpile()
         self.comments = {}  # line_number -> comment_text
         self._sorted_comment_lines = []  # populated once in transpile()
         self.last_line = 0
         self._in_assignment_target = False
-        self._reassigned_vars = set()
-        self._emitted_vars = set()
-        self._top_level_first_assign = set()  # Vars first assigned at top level
 
     def emit(self, text: str):
         self.output.append("    " * self.indent + text)
@@ -274,11 +282,8 @@ class JSTranspiler(ast.NodeVisitor):
                 self._count_assignments(stmt.finalbody, counts, top_level, True)
         return counts, top_level
 
-    def visit_FunctionDef(self, node: ast.FunctionDef):
-        # Skip helper functions that are inlined
-        if node.name in ("_substring", "_sublist", "_repeat_str"):
-            return
-        # Build args with default values in signature
+    def _build_function_signature(self, node: ast.FunctionDef) -> tuple[str, str]:
+        """Build JS function signature. Returns (name, args_str)."""
         non_self_args = [a for a in node.args.args if a.arg != "self"]
         defaults = node.args.defaults
         first_default_idx = len(non_self_args) - len(defaults) if defaults else len(non_self_args)
@@ -291,77 +296,75 @@ class JSTranspiler(ast.NodeVisitor):
                 if not (isinstance(default, ast.Constant) and default.value is None):
                     arg_str += f" = {self.visit_expr(default)}"
             args.append(arg_str)
-        # Handle *args as rest parameter
         if node.args.vararg:
             args.append("..." + self._safe_name(node.args.vararg.arg))
-        args_str = ", ".join(args)
         name = "constructor" if node.name == "__init__" else self._camel_case(node.name)
-        if self.in_class_body and not self.in_method:
-            # Class method
-            self.emit(f"{name}({args_str}) {{")
-        else:
-            # Top-level or nested function
-            self.emit(f"function {name}({args_str}) {{")
-        self.indent += 1
-        old_in_class = self.in_class_body
-        old_in_method = self.in_method
-        old_declared = self.declared_vars
-        old_reassigned = self._reassigned_vars
-        old_emitted = self._emitted_vars
-        old_top_level = self._top_level_first_assign
-        self.in_class_body = False
-        self.in_method = True
-        # Track variables for const vs let at point of use
+        return name, ", ".join(args)
+
+    def _setup_function_scope(self, node: ast.FunctionDef) -> FunctionScope:
+        """Analyze function body and set up variable scope. Returns new scope."""
         param_names = {a.arg for a in node.args.args if a.arg != "self"}
         if node.args.vararg:
             param_names.add(node.args.vararg.arg)
         assignment_counts, top_level_first = self._count_assignments(node.body)
         local_vars = set(assignment_counts.keys()) - param_names
-        self.declared_vars = param_names | local_vars
-        self._reassigned_vars = {name for name, count in assignment_counts.items() if count > 1}
-        self._top_level_first_assign = top_level_first - param_names
-        # Hoist vars not first-assigned at top level (they're used before assigned in main flow)
-        hoisted = local_vars - self._top_level_first_assign
+        scope = FunctionScope(
+            declared=param_names | local_vars,
+            reassigned={name for name, count in assignment_counts.items() if count > 1},
+            top_level_first=top_level_first - param_names,
+        )
+        # Hoist vars not first-assigned at top level
+        hoisted = local_vars - scope.top_level_first
         if hoisted:
             sorted_vars = sorted(self._safe_name(v) for v in hoisted)
             self.emit(f"let {', '.join(sorted_vars)};")
-        self._emitted_vars = set(param_names) | hoisted
+        scope.emitted = param_names | hoisted
+        return scope
 
-        # For constructors in subclasses, emit super() first
-        if name == "constructor" and self.class_has_base:
-            # Find and emit super() call first, or add one if missing
-            super_stmt = None
-            other_stmts = []
-            for stmt in node.body:
-                if self._is_super_call(stmt):
-                    super_stmt = stmt
-                else:
-                    other_stmts.append(stmt)
-            if super_stmt:
-                # Check if super() args reference self - if so, we need to emit super() first
-                # then the assignments, then update message if needed
-                call = super_stmt.value
-                if self._references_self(call.args):
-                    # Emit super() with no args first
-                    # Emit super() with no args first
-                    self.emit("super();")
-                else:
-                    self.visit(super_stmt)
+    def _emit_constructor_body(self, node: ast.FunctionDef):
+        """Emit constructor body with super() handling."""
+        super_stmt = None
+        other_stmts = []
+        for stmt in node.body:
+            if self._is_super_call(stmt):
+                super_stmt = stmt
             else:
+                other_stmts.append(stmt)
+        if super_stmt:
+            call = super_stmt.value
+            if self._references_self(call.args):
                 self.emit("super();")
-            for stmt in other_stmts:
-                self.emit_comments_before(stmt.lineno)
-                self.visit(stmt)
+            else:
+                self.visit(super_stmt)
+        else:
+            self.emit("super();")
+        for stmt in other_stmts:
+            self.emit_comments_before(stmt.lineno)
+            self.visit(stmt)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef):
+        if node.name in ("_substring", "_sublist", "_repeat_str"):
+            return
+        name, args_str = self._build_function_signature(node)
+        if self.in_class_body and not self.in_method:
+            self.emit(f"{name}({args_str}) {{")
+        else:
+            self.emit(f"function {name}({args_str}) {{")
+        self.indent += 1
+        # Save and set context
+        old_in_class, old_in_method, old_scope = self.in_class_body, self.in_method, self.scope
+        self.in_class_body = False
+        self.in_method = True
+        self.scope = self._setup_function_scope(node)
+        # Emit body
+        if name == "constructor" and self.class_has_base:
+            self._emit_constructor_body(node)
         else:
             for stmt in node.body:
                 self.emit_comments_before(stmt.lineno)
                 self.visit(stmt)
-        self.in_class_body = old_in_class
-        self.in_method = old_in_method
-        self.declared_vars = old_declared
-        self._reassigned_vars = old_reassigned
-        self._emitted_vars = old_emitted
-        self._top_level_first_assign = old_top_level
+        # Restore context
+        self.in_class_body, self.in_method, self.scope = old_in_class, old_in_method, old_scope
         self.indent -= 1
         self.emit("}")
         self.emit("")
@@ -374,12 +377,12 @@ class JSTranspiler(ast.NodeVisitor):
 
     def _get_declaration_keyword(self, names: set) -> str | None:
         """Get const/let keyword for first assignment, or None if already declared."""
-        undeclared = names - self._emitted_vars
+        undeclared = names - self.scope.emitted
         if not undeclared:
             return None
-        self._emitted_vars.update(undeclared)
+        self.scope.emitted.update(undeclared)
         # Use let if any variable in this assignment is reassigned elsewhere
-        if undeclared & self._reassigned_vars:
+        if undeclared & self.scope.reassigned:
             return "let"
         return "const"
 

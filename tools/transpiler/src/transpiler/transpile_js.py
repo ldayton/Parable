@@ -239,6 +239,7 @@ class JSTranspiler(ast.NodeVisitor):
             elif isinstance(stmt, ast.While):
                 body_counts, _ = self._count_assignments(stmt.body, {}, set(), True)
                 for name, count in body_counts.items():
+                    # Double count so loop vars use `let` (loops may execute multiple times)
                     counts[name] = counts.get(name, 0) + count * 2
                 self._count_assignments(stmt.orelse, counts, top_level, True)
             elif isinstance(stmt, ast.If):
@@ -580,7 +581,7 @@ class JSTranspiler(ast.NodeVisitor):
         method = f"visit_expr_{node.__class__.__name__}"
         if hasattr(self, method):
             return getattr(self, method)(node)
-        return f"/* TODO: {node.__class__.__name__} */"
+        raise NotImplementedError(f"No visitor for {node.__class__.__name__}")
 
     def visit_expr_Name(self, node: ast.Name) -> str:
         mapping = {
@@ -705,7 +706,7 @@ class JSTranspiler(ast.NodeVisitor):
     }
 
     def _handle_method_call(self, node: ast.Call, obj: str, method: str) -> str | None:
-        """Handle special method transformations. Returns None if not handled."""
+        """Handle special method transformations. Returns None to fall through to default."""
         # Character class tests
         if method in self._char_class_tests:
             return f"{self._char_class_tests[method]}.test({obj})"
@@ -753,7 +754,7 @@ class JSTranspiler(ast.NodeVisitor):
         return f"{obj}.{'trimStart' if method == 'lstrip' else 'trimEnd'}()"
 
     def _handle_dict_get(self, node: ast.Call, obj: str) -> str | None:
-        """Handle dict.get(key) and dict.get(key, default)."""
+        """Handle dict.get(key) and dict.get(key, default). Returns None to fall through."""
         if len(node.args) >= 2:
             key = self.visit_expr(node.args[0])
             default = self.visit_expr(node.args[1])

@@ -1010,7 +1010,11 @@ class Lexer:
 
             # Process substitution <(...) or >(...) inside ${...} or array subscripts
             # (bash's LEX_GTLT check at parse.y:4151-4160)
-            if ch == "(" and was_gtlt and (flags & (MatchedPairFlags.DOLBRACE | MatchedPairFlags.ARRAYSUB)):
+            if (
+                ch == "("
+                and was_gtlt
+                and (flags & (MatchedPairFlags.DOLBRACE | MatchedPairFlags.ARRAYSUB))
+            ):
                 # Back up: remove the < or > we already added to chars
                 direction = chars.pop()
                 self.pos -= 1  # Back up before (

@@ -763,102 +763,105 @@ class JSTranspiler(ast.NodeVisitor):
                 all_args.append("0")  # default for indent
             all_args.append(self.visit_expr(kw.value))
         args = ", ".join(all_args)
-        # Handle method calls
         if isinstance(node.func, ast.Attribute):
-            # Special case: super().__init__(args) -> super(args)
-            if (
-                node.func.attr == "__init__"
-                and isinstance(node.func.value, ast.Call)
-                and isinstance(node.func.value.func, ast.Name)
-                and node.func.value.func.id == "super"
-            ):
-                return f"super({args})"
-            obj = self.visit_expr(node.func.value)
-            method = node.func.attr
-            # Try special method handlers first
-            result = self._handle_method_call(node, obj, method)
-            if result is not None:
-                return result
-            # Apply simple renames, then camelCase conversion
-            method = self._method_renames.get(method, method)
-            if "_" in method:
-                method = self._camel_case(method)
-            return f"{obj}.{method}({args})"
-        # Handle builtins
+            return self._visit_attr_call(node, args)
         if isinstance(node.func, ast.Name):
-            name = node.func.id
-            if name == "len":
-                return f"{args}.length"
-            if name == "str":
-                return f"String({args})"
-            if name == "int":
-                if len(node.args) >= 2:
-                    return f"parseInt({args})"
-                return f"parseInt({args}, 10)"
-            if name == "bool":
-                # Warn if bool() is called on a bare variable - could be a list
-                # (Python bool([]) is False, JS Boolean([]) is true)
-                # Safe: bool(flags & MASK), bool(x > 0). Unsafe: bool(mylist)
-                if len(node.args) == 1 and isinstance(node.args[0], ast.Name):
-                    raise ValueError(
-                        f"bool({node.args[0].id}) may have different behavior in JS for arrays. "
-                        f"Use 'len({node.args[0].id}) > 0' for lists or explicit comparison for other types."
-                    )
-                return f"Boolean({args})"
-            if name == "ord":
-                return f"{args}.charCodeAt(0)"
-            if name == "chr":
-                # Use fromCodePoint for full unicode support (including > 0xFFFF)
-                return f"String.fromCodePoint({args})"
-            if name == "isinstance":
-                return f"{node.args[0].id} instanceof {self.visit_expr(node.args[1])}"
-            if name == "getattr":
-                obj = self.visit_expr(node.args[0])
-                attr_node = node.args[1]
-                # Use dot notation for string attrs that are valid identifiers
-                if isinstance(attr_node, ast.Constant) and isinstance(attr_node.value, str):
-                    key = attr_node.value
-                    if key.isidentifier():
-                        # Convert snake_case to camelCase for self attributes
-                        if obj == "this" and "_" in key:
-                            key = self._camel_case(key)
-                        if len(node.args) >= 3:
-                            default = self.visit_expr(node.args[2])
-                            return f"({obj}.{key} ?? {default})"
-                        return f"{obj}.{key}"
-                attr = self.visit_expr(attr_node)
-                if len(node.args) >= 3:
-                    default = self.visit_expr(node.args[2])
-                    return f"({obj}[{attr}] ?? {default})"
-                return f"{obj}[{attr}]"
-            if name == "bytearray":
-                return "[]"
-            if name == "list":
-                if args:
-                    return f"[...{args}]"
-                return "[]"
-            if name == "set":
-                return f"new Set({args})"
-            if name == "max":
-                return f"Math.max({args})"
-            if name == "min":
-                return f"Math.min({args})"
-            if name in ("_substring", "_sublist"):
-                obj = self.visit_expr(node.args[0])
-                start = self.visit_expr(node.args[1])
-                end = self.visit_expr(node.args[2])
-                return f"{obj}.slice({start}, {end})"
-            if name == "_repeat_str":
-                s = self.visit_expr(node.args[0])
-                n = self.visit_expr(node.args[1])
-                return f"{s}.repeat({n})"
-            if name in self.class_names:
-                return f"new {self._safe_name(name)}({args})"
-            # Convert snake_case function names to camelCase
-            if "_" in name:
-                name = self._camel_case(name)
-            return f"{name}({args})"
+            return self._visit_name_call(node, args)
         return f"{self.visit_expr(node.func)}({args})"
+
+    def _visit_attr_call(self, node: ast.Call, args: str) -> str:
+        """Handle method calls (obj.method(...))."""
+        # Special case: super().__init__(args) -> super(args)
+        if (
+            node.func.attr == "__init__"
+            and isinstance(node.func.value, ast.Call)
+            and isinstance(node.func.value.func, ast.Name)
+            and node.func.value.func.id == "super"
+        ):
+            return f"super({args})"
+        obj = self.visit_expr(node.func.value)
+        method = node.func.attr
+        # Try special method handlers first
+        result = self._handle_method_call(node, obj, method)
+        if result is not None:
+            return result
+        # Apply simple renames, then camelCase conversion
+        method = self._method_renames.get(method, method)
+        if "_" in method:
+            method = self._camel_case(method)
+        return f"{obj}.{method}({args})"
+
+    def _visit_name_call(self, node: ast.Call, args: str) -> str:
+        """Handle function/builtin calls (name(...))."""
+        name = node.func.id
+        # Try builtin handlers
+        result = self._handle_builtin_call(node, name, args)
+        if result is not None:
+            return result
+        # Class instantiation
+        if name in self.class_names:
+            return f"new {self._safe_name(name)}({args})"
+        # Convert snake_case function names to camelCase
+        if "_" in name:
+            name = self._camel_case(name)
+        return f"{name}({args})"
+
+    def _handle_builtin_call(self, node: ast.Call, name: str, args: str) -> str | None:
+        """Handle Python builtin function calls. Returns None if not handled."""
+        if name == "len":
+            return f"{args}.length"
+        if name == "str":
+            return f"String({args})"
+        if name == "int":
+            return f"parseInt({args})" if len(node.args) >= 2 else f"parseInt({args}, 10)"
+        if name == "bool":
+            # Warn if bool() is called on a bare variable - could be a list
+            if len(node.args) == 1 and isinstance(node.args[0], ast.Name):
+                raise ValueError(
+                    f"bool({node.args[0].id}) may have different behavior in JS for arrays. "
+                    f"Use 'len({node.args[0].id}) > 0' for lists or explicit comparison."
+                )
+            return f"Boolean({args})"
+        if name == "ord":
+            return f"{args}.charCodeAt(0)"
+        if name == "chr":
+            return f"String.fromCodePoint({args})"
+        if name == "isinstance":
+            return f"{node.args[0].id} instanceof {self.visit_expr(node.args[1])}"
+        if name == "getattr":
+            return self._handle_getattr(node)
+        if name == "bytearray":
+            return "[]"
+        if name == "list":
+            return f"[...{args}]" if args else "[]"
+        if name == "set":
+            return f"new Set({args})"
+        if name == "max":
+            return f"Math.max({args})"
+        if name == "min":
+            return f"Math.min({args})"
+        if name in ("_substring", "_sublist"):
+            obj, start, end = [self.visit_expr(a) for a in node.args[:3]]
+            return f"{obj}.slice({start}, {end})"
+        if name == "_repeat_str":
+            s, n = self.visit_expr(node.args[0]), self.visit_expr(node.args[1])
+            return f"{s}.repeat({n})"
+        return None
+
+    def _handle_getattr(self, node: ast.Call) -> str:
+        """Handle getattr(obj, attr) and getattr(obj, attr, default)."""
+        obj = self.visit_expr(node.args[0])
+        attr_node = node.args[1]
+        default = self.visit_expr(node.args[2]) if len(node.args) >= 3 else None
+        # Use dot notation for string attrs that are valid identifiers
+        if isinstance(attr_node, ast.Constant) and isinstance(attr_node.value, str):
+            key = attr_node.value
+            if key.isidentifier():
+                if obj == "this" and "_" in key:
+                    key = self._camel_case(key)
+                return f"({obj}.{key} ?? {default})" if default else f"{obj}.{key}"
+        attr = self.visit_expr(attr_node)
+        return f"({obj}[{attr}] ?? {default})" if default else f"{obj}[{attr}]"
 
     def _is_string_concat(self, node: ast.expr) -> bool:
         """Check if an expression is part of string concatenation."""

@@ -7,7 +7,6 @@
  * const ast = parse("ps aux | grep python | awk '{print $2}'")
  */
 
-// Type aliases for discriminated unions (used for type annotations only)
 class ParseError extends Error {
 	constructor(message, pos, line) {
 		super();
@@ -168,19 +167,6 @@ class Token {
 	}
 }
 
-class LexerState {
-	static NONE = 0;
-	static WASDOL = 1;
-	static CKCOMMENT = 2;
-	static INCOMMENT = 4;
-	static PASSNEXT = 8;
-	static INHEREDOC = 128;
-	static HEREDELIM = 256;
-	static STRIPDOC = 512;
-	static QUOTEDDOC = 1024;
-	static INWORD = 2048;
-}
-
 class ParserStateFlags {
 	static NONE = 0;
 	static PST_CASEPAT = 1;
@@ -222,37 +208,14 @@ class SavedParserState {
 		parser_state,
 		dolbrace_state,
 		pending_heredocs,
-		ctx_depth,
+		ctx_stack,
 		eof_token,
-		eof_depth,
 	) {
-		if (eof_depth == null) {
-			eof_depth = 0;
-		}
 		this.parser_state = parser_state;
 		this.dolbrace_state = dolbrace_state;
 		this.pending_heredocs = pending_heredocs;
-		this.ctx_depth = ctx_depth;
+		this.ctx_stack = ctx_stack;
 		this.eof_token = eof_token;
-		this.eof_depth = eof_depth;
-	}
-}
-
-class LexerSavedState {
-	constructor(
-		pos,
-		parser_state,
-		dolbrace_state,
-		quote_single,
-		quote_double,
-		pending_heredocs,
-	) {
-		this.pos = pos;
-		this.parser_state = parser_state;
-		this.dolbrace_state = dolbrace_state;
-		this.quote_single = quote_single;
-		this.quote_double = quote_double;
-		this.pending_heredocs = pending_heredocs;
 	}
 }
 
@@ -261,18 +224,6 @@ class QuoteState {
 		this.single = false;
 		this.double = false;
 		this._stack = [];
-	}
-
-	toggleSingle() {
-		if (!this.double) {
-			this.single = !this.single;
-		}
-	}
-
-	toggleDouble() {
-		if (!this.single) {
-			this.double = !this.double;
-		}
 	}
 
 	push() {
@@ -291,20 +242,6 @@ class QuoteState {
 		return this.single || this.double;
 	}
 
-	processChar(c, prev_escaped) {
-		if (prev_escaped == null) {
-			prev_escaped = false;
-		}
-		if (prev_escaped) {
-			return;
-		}
-		if (c === "'" && !this.double) {
-			this.single = !this.single;
-		} else if (c === '"' && !this.single) {
-			this.double = !this.double;
-		}
-	}
-
 	copy() {
 		let qs;
 		qs = new QuoteState();
@@ -319,10 +256,6 @@ class QuoteState {
 			return false;
 		}
 		return this._stack[this._stack.length - 1][1];
-	}
-
-	getDepth() {
-		return this._stack.length;
 	}
 }
 
@@ -346,6 +279,19 @@ class ParseContext {
 		this.arith_paren_depth = 0;
 		this.quote = new QuoteState();
 	}
+
+	copy() {
+		let ctx;
+		ctx = new ParseContext(this.kind);
+		ctx.paren_depth = this.paren_depth;
+		ctx.brace_depth = this.brace_depth;
+		ctx.bracket_depth = this.bracket_depth;
+		ctx.case_depth = this.case_depth;
+		ctx.arith_depth = this.arith_depth;
+		ctx.arith_paren_depth = this.arith_paren_depth;
+		ctx.quote = this.quote.copy();
+		return ctx;
+	}
 }
 
 class ContextStack {
@@ -368,74 +314,22 @@ class ContextStack {
 		return this._stack[0];
 	}
 
-	inContext(kind) {
-		let ctx;
+	copyStack() {
+		let ctx, result;
+		result = [];
 		for (ctx of this._stack) {
-			if (ctx.kind === kind) {
-				return true;
-			}
+			result.push(ctx.copy());
 		}
-		return false;
+		return result;
 	}
 
-	getDepth() {
-		return this._stack.length;
-	}
-
-	enterCase() {
-		this.getCurrent().case_depth += 1;
-	}
-
-	exitCase() {
-		let ctx;
-		ctx = this.getCurrent();
-		if (ctx.case_depth > 0) {
-			ctx.case_depth -= 1;
+	restoreFrom(saved_stack) {
+		let ctx, result;
+		result = [];
+		for (ctx of saved_stack) {
+			result.push(ctx.copy());
 		}
-	}
-
-	inCase() {
-		return this.getCurrent().case_depth > 0;
-	}
-
-	getCaseDepth() {
-		return this.getCurrent().case_depth;
-	}
-
-	enterArithmetic() {
-		let ctx;
-		ctx = this.getCurrent();
-		ctx.arith_depth += 1;
-		ctx.arith_paren_depth = 2;
-	}
-
-	exitArithmetic() {
-		let ctx;
-		ctx = this.getCurrent();
-		if (ctx.arith_depth > 0) {
-			ctx.arith_depth -= 1;
-			ctx.arith_paren_depth = 0;
-		}
-	}
-
-	inArithmetic() {
-		return this.getCurrent().arith_depth > 0;
-	}
-
-	incArithParen() {
-		this.getCurrent().arith_paren_depth += 1;
-	}
-
-	decArithParen() {
-		let ctx;
-		ctx = this.getCurrent();
-		if (ctx.arith_paren_depth > 0) {
-			ctx.arith_paren_depth -= 1;
-		}
-	}
-
-	getArithParenDepth() {
-		return this.getCurrent().arith_paren_depth;
+		this._stack = result;
 	}
 }
 
@@ -447,7 +341,6 @@ class Lexer {
 		this.source = source;
 		this.pos = 0;
 		this.length = source.length;
-		this.state = LexerState.CKCOMMENT;
 		this.quote = new QuoteState();
 		this._token_cache = null;
 		// Parser state flags for context-sensitive tokenization
@@ -461,7 +354,6 @@ class Lexer {
 		this._parser = null;
 		// EOF token mechanism for command substitution parsing
 		this._eof_token = null;
-		this._eof_depth = 0;
 		// Last token returned by next_token (for context-sensitive parsing)
 		this._last_read_token = null;
 		// Word parsing context (set by Parser before peeking)
@@ -505,21 +397,6 @@ class Lexer {
 
 	isMetachar(c) {
 		return "|&;()<> \t\n".includes(c);
-	}
-
-	isOperatorStart(c) {
-		return "|&;<>()".includes(c);
-	}
-
-	isBlank(c) {
-		return c === " " || c === "\t";
-	}
-
-	isWordChar(c) {
-		if (c == null) {
-			return false;
-		}
-		return !this.isMetachar(c);
 	}
 
 	_readOperator() {
@@ -615,19 +492,6 @@ class Lexer {
 			if (this._word_context === WORD_CTX_REGEX) {
 				return null;
 			}
-			// Track depth for EOF token matching
-			if (this._eof_token === ")") {
-				// Don't increment in case patterns - (a) is pattern syntax, not subshell
-				if (!(this._parser_state & ParserStateFlags.PST_CASEPAT)) {
-					// Don't increment for function parens: WORD followed by ()
-					if (
-						this._last_read_token == null ||
-						this._last_read_token.type !== TokenType.WORD
-					) {
-						this._eof_depth += 1;
-					}
-				}
-			}
 			this.pos += 1;
 			return new Token(TokenType.LPAREN, c, start);
 		}
@@ -635,15 +499,6 @@ class Lexer {
 			// In REGEX context, ) is regex grouping, not operator
 			if (this._word_context === WORD_CTX_REGEX) {
 				return null;
-			}
-			// Track depth for EOF token matching
-			if (this._eof_token === ")") {
-				// Don't decrement in case patterns
-				if (!(this._parser_state & ParserStateFlags.PST_CASEPAT)) {
-					if (this._eof_depth > 0) {
-						this._eof_depth -= 1;
-					}
-				}
 			}
 			this.pos += 1;
 			return new Token(TokenType.RPAREN, c, start);
@@ -705,43 +560,6 @@ class Lexer {
 			this.pos += 1;
 		}
 		return true;
-	}
-
-	_scanSingleQuoted() {
-		let c, chars;
-		chars = ["'"];
-		while (this.pos < this.length) {
-			c = this.source[this.pos];
-			chars.push(c);
-			this.pos += 1;
-			if (c === "'") {
-				break;
-			}
-		}
-		return chars.join("");
-	}
-
-	_scanDoubleQuoted() {
-		let c, chars;
-		chars = ['"'];
-		while (this.pos < this.length) {
-			c = this.source[this.pos];
-			if (c === "\\") {
-				chars.push(c);
-				this.pos += 1;
-				if (this.pos < this.length) {
-					chars.push(this.source[this.pos]);
-					this.pos += 1;
-				}
-				continue;
-			}
-			chars.push(c);
-			this.pos += 1;
-			if (c === '"') {
-				break;
-			}
-		}
-		return chars.join("");
 	}
 
 	_readSingleQuote(start) {
@@ -825,7 +643,6 @@ class Lexer {
 			this._parser_state & ParserStateFlags.PST_EOFTOKEN &&
 			this._eof_token != null &&
 			ch === this._eof_token &&
-			this._eof_depth === 0 &&
 			bracket_depth === 0
 		) {
 			return true;
@@ -1631,7 +1448,6 @@ class Lexer {
 				this._parser_state & ParserStateFlags.PST_EOFTOKEN &&
 				this._eof_token != null &&
 				ch === this._eof_token &&
-				this._eof_depth === 0 &&
 				bracket_depth === 0
 			) {
 				if (chars.length === 0) {
@@ -1714,7 +1530,6 @@ class Lexer {
 		if (
 			this._eof_token != null &&
 			this.peek() === this._eof_token &&
-			this._eof_depth === 0 &&
 			!(this._parser_state & ParserStateFlags.PST_CASEPAT) &&
 			!(this._parser_state & ParserStateFlags.PST_EOFTOKEN)
 		) {
@@ -1733,7 +1548,6 @@ class Lexer {
 			if (
 				this._eof_token != null &&
 				this.peek() === this._eof_token &&
-				this._eof_depth === 0 &&
 				!(this._parser_state & ParserStateFlags.PST_CASEPAT) &&
 				!(this._parser_state & ParserStateFlags.PST_EOFTOKEN)
 			) {
@@ -1765,42 +1579,6 @@ class Lexer {
 			this._last_read_token = saved_last;
 		}
 		return this._token_cache;
-	}
-
-	ungetToken(tok) {
-		this._token_cache = tok;
-	}
-
-	_saveState() {
-		return new LexerSavedState(
-			this.pos,
-			this._parser_state,
-			this._dolbrace_state,
-			this.quote.single,
-			this.quote.double,
-			Array.from(this._pending_heredocs),
-		);
-	}
-
-	_restoreState(saved) {
-		this.pos = saved.pos;
-		this._parser_state = saved.parser_state;
-		this._dolbrace_state = saved.dolbrace_state;
-		this.quote.single = saved.quote_single;
-		this.quote.double = saved.quote_double;
-		this._pending_heredocs = saved.pending_heredocs;
-	}
-
-	_setParserState(flag) {
-		this._parser_state = this._parser_state | flag;
-	}
-
-	_clearParserState(flag) {
-		this._parser_state = this._parser_state & /* TODO: UnaryOp Invert() */ flag;
-	}
-
-	_hasParserState(flag) {
-		return (this._parser_state & flag) !== 0;
 	}
 
 	_readAnsiCQuote() {
@@ -2465,12 +2243,6 @@ class Lexer {
 	}
 
 	// Reserved words mapping
-	classifyWord(word, reserved_ok) {
-		if (reserved_ok && this.RESERVED_WORDS.includes(word)) {
-			return this.RESERVED_WORDS[word];
-		}
-		return TokenType.WORD;
-	}
 }
 
 function _stripLineContinuationsCommentAware(text) {
@@ -7705,22 +7477,6 @@ function _isSemicolonOrNewline(c) {
 	return c === ";" || c === "\n";
 }
 
-function _isWordStartContext(c) {
-	return (
-		c === " " ||
-		c === "\t" ||
-		c === "\n" ||
-		c === ";" ||
-		c === "|" ||
-		c === "&" ||
-		c === "<" ||
-		c === "(" ||
-		c === "{" ||
-		c === ")" ||
-		c === "}"
-	);
-}
-
 function _isWordEndContext(c) {
 	return (
 		c === " " ||
@@ -7796,10 +7552,6 @@ function _isParamExpansionOp(c) {
 
 function _isSimpleParamOp(c) {
 	return c === "-" || c === "=" || c === "?" || c === "+";
-}
-
-function _isEscapeCharInDquote(c) {
-	return ["$", "`", "\\", '"', "\n"].includes(c);
 }
 
 function _isEscapeCharInBacktick(c) {
@@ -7941,7 +7693,6 @@ class Parser {
 		this._dolbrace_state = DolbraceState.NONE;
 		// EOF token mechanism for inline command substitution parsing
 		this._eof_token = null;
-		this._eof_depth = 0;
 		// Word parsing context for Lexer sync
 		this._word_context = WORD_CTX_NORMAL;
 		this._at_command_start = false;
@@ -7966,9 +7717,8 @@ class Parser {
 			this._parser_state,
 			this._dolbrace_state,
 			Array.from(this._pending_heredocs),
-			this._ctx.getDepth(),
+			this._ctx.copyStack(),
 			this._eof_token,
-			this._eof_depth,
 		);
 	}
 
@@ -7976,11 +7726,8 @@ class Parser {
 		this._parser_state = saved.parser_state;
 		this._dolbrace_state = saved.dolbrace_state;
 		this._eof_token = saved.eof_token;
-		this._eof_depth = saved.eof_depth;
-		// Restore context stack to saved depth (pop any extra contexts)
-		while (this._ctx.getDepth() > saved.ctx_depth) {
-			this._ctx.pop();
-		}
+		// Restore complete context stack
+		this._ctx.restoreFrom(saved.ctx_stack);
 	}
 
 	_recordToken(tok) {
@@ -8020,19 +7767,6 @@ class Parser {
 		}
 	}
 
-	_lastToken() {
-		return this._token_history[0];
-	}
-
-	_lastTokenType() {
-		let tok;
-		tok = this._token_history[0];
-		if (tok == null) {
-			return null;
-		}
-		return tok.type;
-	}
-
 	_syncLexer() {
 		// Invalidate cache if it doesn't match our current position or context
 		if (this._lexer._token_cache != null) {
@@ -8051,7 +7785,6 @@ class Parser {
 			this._lexer.pos = this.pos;
 		}
 		this._lexer._eof_token = this._eof_token;
-		this._lexer._eof_depth = this._eof_depth;
 		this._lexer._parser_state = this._parser_state;
 		// Sync last read token from parser's token history
 		this._lexer._last_read_token = this._token_history[0];
@@ -8341,11 +8074,7 @@ class Parser {
 		}
 		ch = this.peek();
 		// Check if we're at the EOF token (e.g., } in funsub or ) in comsub)
-		if (
-			this._eof_token != null &&
-			ch === this._eof_token &&
-			this._eof_depth === 0
-		) {
+		if (this._eof_token != null && ch === this._eof_token) {
 			return true;
 		}
 		if (ch === ")") {
@@ -8671,7 +8400,6 @@ class Parser {
 			ParserStateFlags.PST_CMDSUBST | ParserStateFlags.PST_EOFTOKEN,
 		);
 		this._eof_token = ")";
-		this._eof_depth = 0;
 		// Parse the command list inline - grammar will stop at matching )
 		cmd = this.parseList();
 		if (cmd == null) {
@@ -8704,7 +8432,6 @@ class Parser {
 			ParserStateFlags.PST_CMDSUBST | ParserStateFlags.PST_EOFTOKEN,
 		);
 		this._eof_token = "}";
-		this._eof_depth = 0;
 		// Parse the command list inline - grammar will stop at matching }
 		cmd = this.parseList();
 		if (cmd == null) {
@@ -9135,7 +8862,6 @@ class Parser {
 		this._in_process_sub = true;
 		this._setState(ParserStateFlags.PST_EOFTOKEN);
 		this._eof_token = ")";
-		this._eof_depth = 0;
 		// Try to parse the command list inline - grammar will stop at matching )
 		try {
 			cmd = this.parseList();
@@ -10849,7 +10575,6 @@ class Parser {
 				// Remaining content (e.g., ")x" or "b)") is part of the command sub
 				if (
 					this._eof_token === ")" &&
-					this._eof_depth === 0 &&
 					normalized_check.startsWith(normalized_delim)
 				) {
 					tabs_stripped = line.length - check_line.length;
@@ -11977,7 +11702,7 @@ class Parser {
 				is_pattern = false;
 				if (!this.atEnd() && this.peek() === ")") {
 					// If we're at the EOF token delimiter (command sub closer), esac is keyword
-					if (this._eof_token === ")" && this._eof_depth === 0) {
+					if (this._eof_token === ")") {
 						is_pattern = false;
 					} else {
 						this.advance();

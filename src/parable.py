@@ -9,37 +9,6 @@ ast = parse("ps aux | grep python | awk '{print $2}'")
 
 from __future__ import annotations
 
-from typing import Union
-
-# Type aliases for discriminated unions (used for type annotations only)
-ArithNode = Union[  # noqa: UP007
-    "ArithNumber",
-    "ArithEmpty",
-    "ArithVar",
-    "ArithBinaryOp",
-    "ArithUnaryOp",
-    "ArithPreIncr",
-    "ArithPostIncr",
-    "ArithPreDecr",
-    "ArithPostDecr",
-    "ArithAssign",
-    "ArithTernary",
-    "ArithComma",
-    "ArithSubscript",
-    "ArithEscape",
-    "ArithDeprecated",
-    "ArithConcat",
-]
-
-CondNode = Union[  # noqa: UP007
-    "UnaryTest",
-    "BinaryTest",
-    "CondAnd",
-    "CondOr",
-    "CondNot",
-    "CondParen",
-]
-
 
 class ParseError(Exception):
     """Raised when parsing fails."""
@@ -242,21 +211,6 @@ class Token:
         return f"Token({self.type}, {self.value!r}, {self.pos})"
 
 
-class LexerState:
-    """Lexer state flags for context tracking during tokenization."""
-
-    NONE = 0
-    WASDOL = 0x0001
-    CKCOMMENT = 0x0002
-    INCOMMENT = 0x0004
-    PASSNEXT = 0x0008
-    INHEREDOC = 0x0080
-    HEREDELIM = 0x0100
-    STRIPDOC = 0x0200
-    QUOTEDDOC = 0x0400
-    INWORD = 0x0800
-
-
 class ParserStateFlags:
     """Parser state flags for context-sensitive parsing decisions."""
 
@@ -319,39 +273,14 @@ class SavedParserState:
         parser_state: int,
         dolbrace_state: int,
         pending_heredocs: list,
-        ctx_depth: int,
+        ctx_stack: list,
         eof_token: str | None = None,
-        eof_depth: int = 0,
     ):
         self.parser_state = parser_state
         self.dolbrace_state = dolbrace_state
         self.pending_heredocs = pending_heredocs
-        self.ctx_depth = ctx_depth
+        self.ctx_stack = ctx_stack
         self.eof_token = eof_token
-        self.eof_depth = eof_depth
-
-
-class LexerSavedState:
-    """Saved lexer state for nested parsing (e.g., command substitutions).
-
-    Used when the lexer needs to parse nested constructs and restore state after.
-    """
-
-    def __init__(
-        self,
-        pos: int,
-        parser_state: int,
-        dolbrace_state: int,
-        quote_single: bool,
-        quote_double: bool,
-        pending_heredocs: list,
-    ):
-        self.pos = pos
-        self.parser_state = parser_state
-        self.dolbrace_state = dolbrace_state
-        self.quote_single = quote_single
-        self.quote_double = quote_double
-        self.pending_heredocs = pending_heredocs
 
 
 class QuoteState:
@@ -365,16 +294,6 @@ class QuoteState:
         self.single = False
         self.double = False
         self._stack: list[tuple[bool, bool]] = []
-
-    def toggle_single(self) -> None:
-        """Toggle single quote state if not inside double quotes."""
-        if not self.double:
-            self.single = not self.single
-
-    def toggle_double(self) -> None:
-        """Toggle double quote state if not inside single quotes."""
-        if not self.single:
-            self.double = not self.double
 
     def push(self) -> None:
         """Push current state onto stack and reset for nested context."""
@@ -391,20 +310,6 @@ class QuoteState:
         """Return True if inside any quotes."""
         return self.single or self.double
 
-    def process_char(self, c: str, prev_escaped: bool = False) -> None:
-        """Process a character, updating quote state.
-
-        Args:
-            c: The character to process
-            prev_escaped: True if character is preceded by an unescaped backslash
-        """
-        if prev_escaped:
-            return
-        if c == "'" and not self.double:
-            self.single = not self.single
-        elif c == '"' and not self.single:
-            self.double = not self.double
-
     def copy(self) -> QuoteState:
         """Create a copy of this quote state."""
         qs = QuoteState()
@@ -418,10 +323,6 @@ class QuoteState:
         if len(self._stack) == 0:
             return False
         return self._stack[len(self._stack) - 1][1]
-
-    def get_depth(self) -> int:
-        """Return the current stack depth."""
-        return len(self._stack)
 
 
 class ParseContext:
@@ -449,6 +350,18 @@ class ParseContext:
         self.arith_paren_depth = 0  # Grouping parens inside arithmetic
         self.quote = QuoteState()
 
+    def copy(self) -> ParseContext:
+        """Create a deep copy of this context."""
+        ctx = ParseContext(self.kind)
+        ctx.paren_depth = self.paren_depth
+        ctx.brace_depth = self.brace_depth
+        ctx.bracket_depth = self.bracket_depth
+        ctx.case_depth = self.case_depth
+        ctx.arith_depth = self.arith_depth
+        ctx.arith_paren_depth = self.arith_paren_depth
+        ctx.quote = self.quote.copy()
+        return ctx
+
 
 class ContextStack:
     """Stack of parsing contexts for tracking nested scopes.
@@ -475,65 +388,19 @@ class ContextStack:
             return self._stack.pop()
         return self._stack[0]
 
-    def in_context(self, kind: int) -> bool:
-        """Return True if any context in the stack has the given kind."""
+    def copy_stack(self) -> list:
+        """Return a deep copy of the context stack for state saving."""
+        result = []
         for ctx in self._stack:
-            if ctx.kind == kind:
-                return True
-        return False
+            result.append(ctx.copy())
+        return result
 
-    def get_depth(self) -> int:
-        """Return the current stack depth."""
-        return len(self._stack)
-
-    def enter_case(self) -> None:
-        """Increment case depth in current context."""
-        self.get_current().case_depth += 1
-
-    def exit_case(self) -> None:
-        """Decrement case depth in current context."""
-        ctx = self.get_current()
-        if ctx.case_depth > 0:
-            ctx.case_depth -= 1
-
-    def in_case(self) -> bool:
-        """Return True if currently inside a case statement."""
-        return self.get_current().case_depth > 0
-
-    def get_case_depth(self) -> int:
-        """Return current case nesting depth."""
-        return self.get_current().case_depth
-
-    def enter_arithmetic(self) -> None:
-        """Enter an arithmetic expression context."""
-        ctx = self.get_current()
-        ctx.arith_depth += 1
-        ctx.arith_paren_depth = 2  # $(( opens with 2 parens
-
-    def exit_arithmetic(self) -> None:
-        """Exit an arithmetic expression context."""
-        ctx = self.get_current()
-        if ctx.arith_depth > 0:
-            ctx.arith_depth -= 1
-            ctx.arith_paren_depth = 0
-
-    def in_arithmetic(self) -> bool:
-        """Return True if currently inside an arithmetic expression."""
-        return self.get_current().arith_depth > 0
-
-    def inc_arith_paren(self) -> None:
-        """Increment paren depth inside arithmetic."""
-        self.get_current().arith_paren_depth += 1
-
-    def dec_arith_paren(self) -> None:
-        """Decrement paren depth inside arithmetic."""
-        ctx = self.get_current()
-        if ctx.arith_paren_depth > 0:
-            ctx.arith_paren_depth -= 1
-
-    def get_arith_paren_depth(self) -> int:
-        """Return current arithmetic paren depth."""
-        return self.get_current().arith_paren_depth
+    def restore_from(self, saved_stack: list) -> None:
+        """Restore the context stack from a saved copy."""
+        result = []
+        for ctx in saved_stack:
+            result.append(ctx.copy())
+        self._stack = result
 
 
 class Lexer:
@@ -543,7 +410,6 @@ class Lexer:
         self.source = source
         self.pos = 0
         self.length = len(source)
-        self.state = LexerState.CKCOMMENT
         self.quote = QuoteState()
         self._token_cache: Token | None = None
         # Parser state flags for context-sensitive tokenization
@@ -557,7 +423,6 @@ class Lexer:
         self._parser: Parser | None = None
         # EOF token mechanism for command substitution parsing
         self._eof_token: str | None = None
-        self._eof_depth: int = 0
         # Last token returned by next_token (for context-sensitive parsing)
         self._last_read_token: Token | None = None
         # Word parsing context (set by Parser before peeking)
@@ -598,20 +463,6 @@ class Lexer:
     def is_metachar(self, c: str) -> bool:
         """Return True if c is a shell metacharacter."""
         return c in "|&;()<> \t\n"
-
-    def is_operator_start(self, c: str) -> bool:
-        """Return True if c can start an operator."""
-        return c in "|&;<>()"
-
-    def is_blank(self, c: str) -> bool:
-        """Return True if c is blank (space or tab)."""
-        return c == " " or c == "\t"
-
-    def is_word_char(self, c: str) -> bool:
-        """Return True if c can be part of an unquoted word."""
-        if c is None:
-            return False
-        return not self.is_metachar(c)
 
     def _read_operator(self) -> Token | None:
         """Try to read an operator token. Returns None if not at operator."""
@@ -685,28 +536,12 @@ class Lexer:
             # In REGEX context, ( is regex grouping, not operator
             if self._word_context == WORD_CTX_REGEX:
                 return None
-            # Track depth for EOF token matching
-            if self._eof_token == ")":
-                # Don't increment in case patterns - (a) is pattern syntax, not subshell
-                if not (self._parser_state & ParserStateFlags.PST_CASEPAT):
-                    # Don't increment for function parens: WORD followed by ()
-                    if (
-                        self._last_read_token is None
-                        or self._last_read_token.type != TokenType.WORD
-                    ):
-                        self._eof_depth += 1
             self.pos += 1
             return Token(TokenType.LPAREN, c, start)
         if c == ")":
             # In REGEX context, ) is regex grouping, not operator
             if self._word_context == WORD_CTX_REGEX:
                 return None
-            # Track depth for EOF token matching
-            if self._eof_token == ")":
-                # Don't decrement in case patterns
-                if not (self._parser_state & ParserStateFlags.PST_CASEPAT):
-                    if self._eof_depth > 0:
-                        self._eof_depth -= 1
             self.pos += 1
             return Token(TokenType.RPAREN, c, start)
         if c == "<":
@@ -751,35 +586,6 @@ class Lexer:
         while self.pos < self.length and self.source[self.pos] != "\n":
             self.pos += 1
         return True
-
-    def _scan_single_quoted(self) -> str:
-        """Scan content inside single quotes. Caller has consumed opening quote."""
-        chars = ["'"]
-        while self.pos < self.length:
-            c = self.source[self.pos]
-            chars.append(c)
-            self.pos += 1
-            if c == "'":
-                break
-        return "".join(chars)
-
-    def _scan_double_quoted(self) -> str:
-        """Scan content inside double quotes. Caller has consumed opening quote."""
-        chars = ['"']
-        while self.pos < self.length:
-            c = self.source[self.pos]
-            if c == "\\":
-                chars.append(c)
-                self.pos += 1
-                if self.pos < self.length:
-                    chars.append(self.source[self.pos])
-                    self.pos += 1
-                continue
-            chars.append(c)
-            self.pos += 1
-            if c == '"':
-                break
-        return "".join(chars)
 
     def _read_single_quote(self, start: int) -> tuple[str, bool]:
         """Read single-quoted string content for word parsing.
@@ -836,7 +642,6 @@ class Lexer:
             (self._parser_state & ParserStateFlags.PST_EOFTOKEN)
             and self._eof_token is not None
             and ch == self._eof_token
-            and self._eof_depth == 0
             and bracket_depth == 0
         ):
             return True
@@ -1458,7 +1263,6 @@ class Lexer:
                 and (self._parser_state & ParserStateFlags.PST_EOFTOKEN)
                 and self._eof_token is not None
                 and ch == self._eof_token
-                and self._eof_depth == 0
                 and bracket_depth == 0
             ):
                 if not chars:
@@ -1523,7 +1327,6 @@ class Lexer:
         if (
             self._eof_token is not None
             and self.peek() == self._eof_token
-            and self._eof_depth == 0
             and not (self._parser_state & ParserStateFlags.PST_CASEPAT)
             and not (self._parser_state & ParserStateFlags.PST_EOFTOKEN)
         ):
@@ -1540,7 +1343,6 @@ class Lexer:
             if (
                 self._eof_token is not None
                 and self.peek() == self._eof_token
-                and self._eof_depth == 0
                 and not (self._parser_state & ParserStateFlags.PST_CASEPAT)
                 and not (self._parser_state & ParserStateFlags.PST_EOFTOKEN)
             ):
@@ -1566,42 +1368,6 @@ class Lexer:
             self._token_cache = self.next_token()
             self._last_read_token = saved_last  # Peeking shouldn't advance history
         return self._token_cache
-
-    def unget_token(self, tok: Token) -> None:
-        """Push a token back to be returned by next call."""
-        self._token_cache = tok
-
-    def _save_state(self) -> LexerSavedState:
-        """Save current lexer state for nested parsing."""
-        return LexerSavedState(
-            pos=self.pos,
-            parser_state=self._parser_state,
-            dolbrace_state=self._dolbrace_state,
-            quote_single=self.quote.single,
-            quote_double=self.quote.double,
-            pending_heredocs=list(self._pending_heredocs),
-        )
-
-    def _restore_state(self, saved: LexerSavedState) -> None:
-        """Restore lexer state after nested parsing."""
-        self.pos = saved.pos
-        self._parser_state = saved.parser_state
-        self._dolbrace_state = saved.dolbrace_state
-        self.quote.single = saved.quote_single
-        self.quote.double = saved.quote_double
-        self._pending_heredocs = saved.pending_heredocs
-
-    def _set_parser_state(self, flag: int) -> None:
-        """Set a parser state flag."""
-        self._parser_state = self._parser_state | flag
-
-    def _clear_parser_state(self, flag: int) -> None:
-        """Clear a parser state flag."""
-        self._parser_state = self._parser_state & ~flag
-
-    def _has_parser_state(self, flag: int) -> bool:
-        """Check if a parser state flag is set."""
-        return (self._parser_state & flag) != 0
 
     def _read_ansi_c_quote(self) -> tuple[Node | None, str]:
         """Read ANSI-C quoting $'...'.
@@ -2152,12 +1918,6 @@ class Lexer:
         "{": TokenType.LBRACE,
         "}": TokenType.RBRACE,
     }
-
-    def classify_word(self, word: str, reserved_ok: bool) -> int:
-        """Classify a word token - may be reserved word if unquoted and allowed."""
-        if reserved_ok and word in self.RESERVED_WORDS:
-            return self.RESERVED_WORDS[word]
-        return TokenType.WORD
 
 
 def _strip_line_continuations_comment_aware(text: str) -> str:
@@ -4704,9 +4464,9 @@ class CommandSubstitution(Node):
 class ArithmeticExpansion(Node):
     """An arithmetic expansion $((...)) with parsed internals."""
 
-    expression: ArithNode | None  # Parsed arithmetic expression, or None for empty
+    expression: Node | None  # Parsed arithmetic expression, or None for empty
 
-    def __init__(self, expression: ArithNode | None):
+    def __init__(self, expression: Node | None):
         self.kind = "arith"
         self.expression = expression
 
@@ -4719,15 +4479,12 @@ class ArithmeticExpansion(Node):
 class ArithmeticCommand(Node):
     """An arithmetic command ((...)) with parsed internals."""
 
-    expression: ArithNode | None  # Parsed arithmetic expression, or None for empty
-    redirects: list[Redirect | HereDoc]
+    expression: Node | None  # Parsed arithmetic expression, or None for empty
+    redirects: list[Node]
     raw_content: str  # Raw expression text for bash-oracle-compatible output
 
     def __init__(
-        self,
-        expression: ArithNode | None,
-        redirects: list[Redirect | HereDoc] = None,
-        raw_content: str = "",
+        self, expression: Node | None, redirects: list[Node] = None, raw_content: str = ""
     ):
         self.kind = "arith-cmd"
         self.expression = expression
@@ -4802,10 +4559,10 @@ class ArithBinaryOp(Node):
     """A binary operation in arithmetic."""
 
     op: str
-    left: ArithNode
-    right: ArithNode
+    left: Node
+    right: Node
 
-    def __init__(self, op: str, left: ArithNode, right: ArithNode):
+    def __init__(self, op: str, left: Node, right: Node):
         self.kind = "binary-op"
         self.op = op
         self.left = left
@@ -4821,9 +4578,9 @@ class ArithUnaryOp(Node):
     """A unary operation in arithmetic."""
 
     op: str
-    operand: ArithNode
+    operand: Node
 
-    def __init__(self, op: str, operand: ArithNode):
+    def __init__(self, op: str, operand: Node):
         self.kind = "unary-op"
         self.op = op
         self.operand = operand
@@ -4835,9 +4592,9 @@ class ArithUnaryOp(Node):
 class ArithPreIncr(Node):
     """Pre-increment ++var."""
 
-    operand: ArithNode
+    operand: Node
 
-    def __init__(self, operand: ArithNode):
+    def __init__(self, operand: Node):
         self.kind = "pre-incr"
         self.operand = operand
 
@@ -4848,9 +4605,9 @@ class ArithPreIncr(Node):
 class ArithPostIncr(Node):
     """Post-increment var++."""
 
-    operand: ArithNode
+    operand: Node
 
-    def __init__(self, operand: ArithNode):
+    def __init__(self, operand: Node):
         self.kind = "post-incr"
         self.operand = operand
 
@@ -4861,9 +4618,9 @@ class ArithPostIncr(Node):
 class ArithPreDecr(Node):
     """Pre-decrement --var."""
 
-    operand: ArithNode
+    operand: Node
 
-    def __init__(self, operand: ArithNode):
+    def __init__(self, operand: Node):
         self.kind = "pre-decr"
         self.operand = operand
 
@@ -4874,9 +4631,9 @@ class ArithPreDecr(Node):
 class ArithPostDecr(Node):
     """Post-decrement var--."""
 
-    operand: ArithNode
+    operand: Node
 
-    def __init__(self, operand: ArithNode):
+    def __init__(self, operand: Node):
         self.kind = "post-decr"
         self.operand = operand
 
@@ -4888,10 +4645,10 @@ class ArithAssign(Node):
     """Assignment operation (=, +=, -=, etc.)."""
 
     op: str
-    target: ArithNode
-    value: ArithNode
+    target: Node
+    value: Node
 
-    def __init__(self, op: str, target: ArithNode, value: ArithNode):
+    def __init__(self, op: str, target: Node, value: Node):
         self.kind = "assign"
         self.op = op
         self.target = target
@@ -4906,11 +4663,11 @@ class ArithAssign(Node):
 class ArithTernary(Node):
     """Ternary conditional expr ? expr : expr."""
 
-    condition: ArithNode
-    if_true: ArithNode
-    if_false: ArithNode
+    condition: Node
+    if_true: Node
+    if_false: Node
 
-    def __init__(self, condition: ArithNode, if_true: ArithNode, if_false: ArithNode):
+    def __init__(self, condition: Node, if_true: Node, if_false: Node):
         self.kind = "ternary"
         self.condition = condition
         self.if_true = if_true
@@ -4931,10 +4688,10 @@ class ArithTernary(Node):
 class ArithComma(Node):
     """Comma operator expr, expr."""
 
-    left: ArithNode
-    right: ArithNode
+    left: Node
+    right: Node
 
-    def __init__(self, left: ArithNode, right: ArithNode):
+    def __init__(self, left: Node, right: Node):
         self.kind = "comma"
         self.left = left
         self.right = right
@@ -4947,9 +4704,9 @@ class ArithSubscript(Node):
     """Array subscript arr[expr]."""
 
     array: str
-    index: ArithNode
+    index: Node
 
-    def __init__(self, array: str, index: ArithNode):
+    def __init__(self, array: str, index: Node):
         self.kind = "subscript"
         self.array = array
         self.index = index
@@ -4988,9 +4745,9 @@ class ArithDeprecated(Node):
 class ArithConcat(Node):
     """A concatenation of prefix + expansion in arithmetic (e.g., 0x$var)."""
 
-    parts: list[ArithNode]
+    parts: list[Node]
 
-    def __init__(self, parts: list[ArithNode]):
+    def __init__(self, parts: list[Node]):
         self.kind = "arith-concat"
         self.parts = parts
 
@@ -5086,10 +4843,10 @@ class Time(Node):
 class ConditionalExpr(Node):
     """A conditional expression [[ expression ]]."""
 
-    body: CondNode | str  # Parsed node or raw string for backwards compat
-    redirects: list[Redirect | HereDoc]
+    body: Node | str  # Parsed node or raw string for backwards compat
+    redirects: list[Node]
 
-    def __init__(self, body: CondNode | str, redirects: list[Redirect | HereDoc] = None):
+    def __init__(self, body: Node | str, redirects: list[Node] = None):
         self.kind = "cond-expr"
         self.body = body
         if redirects is None:
@@ -5165,10 +4922,10 @@ class BinaryTest(Node):
 class CondAnd(Node):
     """Logical AND in [[ ]], e.g., expr1 && expr2."""
 
-    left: CondNode
-    right: CondNode
+    left: Node
+    right: Node
 
-    def __init__(self, left: CondNode, right: CondNode):
+    def __init__(self, left: Node, right: Node):
         self.kind = "cond-and"
         self.left = left
         self.right = right
@@ -5180,10 +4937,10 @@ class CondAnd(Node):
 class CondOr(Node):
     """Logical OR in [[ ]], e.g., expr1 || expr2."""
 
-    left: CondNode
-    right: CondNode
+    left: Node
+    right: Node
 
-    def __init__(self, left: CondNode, right: CondNode):
+    def __init__(self, left: Node, right: Node):
         self.kind = "cond-or"
         self.left = left
         self.right = right
@@ -5195,9 +4952,9 @@ class CondOr(Node):
 class CondNot(Node):
     """Logical NOT in [[ ]], e.g., ! expr."""
 
-    operand: CondNode
+    operand: Node
 
-    def __init__(self, operand: CondNode):
+    def __init__(self, operand: Node):
         self.kind = "cond-not"
         self.operand = operand
 
@@ -5209,9 +4966,9 @@ class CondNot(Node):
 class CondParen(Node):
     """Parenthesized group in [[ ]], e.g., ( expr )."""
 
-    inner: CondNode
+    inner: Node
 
-    def __init__(self, inner: CondNode):
+    def __init__(self, inner: Node):
         self.kind = "cond-paren"
         self.inner = inner
 
@@ -6478,23 +6235,6 @@ def _is_semicolon_or_newline(c: str) -> bool:
     return c == ";" or c == "\n"
 
 
-def _is_word_start_context(c: str) -> bool:
-    """Check if char is a valid context for starting a word (whitespace or metachar except >)."""
-    return (
-        c == " "
-        or c == "\t"
-        or c == "\n"
-        or c == ";"
-        or c == "|"
-        or c == "&"
-        or c == "<"
-        or c == "("
-        or c == "{"
-        or c == ")"
-        or c == "}"
-    )
-
-
 def _is_word_end_context(c: str) -> bool:
     """Check if char ends a word context (whitespace or metachar)."""
     return (
@@ -6560,10 +6300,6 @@ def _is_param_expansion_op(c: str) -> bool:
 
 def _is_simple_param_op(c: str) -> bool:
     return c == "-" or c == "=" or c == "?" or c == "+"
-
-
-def _is_escape_char_in_dquote(c: str) -> bool:
-    return c in ("$", "`", "\\", '"', "\n")
 
 
 def _is_escape_char_in_backtick(c: str) -> bool:
@@ -6688,7 +6424,6 @@ class Parser:
         self._dolbrace_state = DolbraceState.NONE
         # EOF token mechanism for inline command substitution parsing
         self._eof_token: str | None = None
-        self._eof_depth: int = 0
         # Word parsing context for Lexer sync
         self._word_context = WORD_CTX_NORMAL
         self._at_command_start = False
@@ -6717,9 +6452,8 @@ class Parser:
             parser_state=self._parser_state,
             dolbrace_state=self._dolbrace_state,
             pending_heredocs=list(self._pending_heredocs),
-            ctx_depth=self._ctx.get_depth(),
+            ctx_stack=self._ctx.copy_stack(),
             eof_token=self._eof_token,
-            eof_depth=self._eof_depth,
         )
 
     def _restore_parser_state(self, saved: SavedParserState) -> None:
@@ -6732,10 +6466,8 @@ class Parser:
         self._parser_state = saved.parser_state
         self._dolbrace_state = saved.dolbrace_state
         self._eof_token = saved.eof_token
-        self._eof_depth = saved.eof_depth
-        # Restore context stack to saved depth (pop any extra contexts)
-        while self._ctx.get_depth() > saved.ctx_depth:
-            self._ctx.pop()
+        # Restore complete context stack
+        self._ctx.restore_from(saved.ctx_stack)
 
     def _record_token(self, tok: Token) -> None:
         """Record token in history, shifting older tokens."""
@@ -6769,17 +6501,6 @@ class Parser:
             if first_char in "#%^,~:-=?+/":
                 self._dolbrace_state = DolbraceState.OP
 
-    def _last_token(self) -> Token | None:
-        """Return the most recently recorded token."""
-        return self._token_history[0]
-
-    def _last_token_type(self) -> int | None:
-        """Return type of most recently recorded token, or None."""
-        tok = self._token_history[0]
-        if tok is None:
-            return None
-        return tok.type
-
     def _sync_lexer(self) -> None:
         """Sync Lexer position and state to Parser."""
         # Invalidate cache if it doesn't match our current position or context
@@ -6796,7 +6517,6 @@ class Parser:
         if self._lexer.pos != self.pos:
             self._lexer.pos = self.pos
         self._lexer._eof_token = self._eof_token
-        self._lexer._eof_depth = self._eof_depth
         self._lexer._parser_state = self._parser_state
         # Sync last read token from parser's token history
         self._lexer._last_read_token = self._token_history[0]
@@ -7057,7 +6777,7 @@ class Parser:
             return False
         ch = self.peek()
         # Check if we're at the EOF token (e.g., } in funsub or ) in comsub)
-        if self._eof_token is not None and ch == self._eof_token and self._eof_depth == 0:
+        if self._eof_token is not None and ch == self._eof_token:
             return True
         if ch == ")":
             return True
@@ -7312,7 +7032,6 @@ class Parser:
         saved = self._save_parser_state()
         self._set_state(ParserStateFlags.PST_CMDSUBST | ParserStateFlags.PST_EOFTOKEN)
         self._eof_token = ")"
-        self._eof_depth = 0
 
         # Parse the command list inline - grammar will stop at matching )
         cmd = self.parse_list()
@@ -7347,7 +7066,6 @@ class Parser:
         saved = self._save_parser_state()
         self._set_state(ParserStateFlags.PST_CMDSUBST | ParserStateFlags.PST_EOFTOKEN)
         self._eof_token = "}"
-        self._eof_depth = 0
         # Parse the command list inline - grammar will stop at matching }
         cmd = self.parse_list()
         if cmd is None:
@@ -7693,7 +7411,6 @@ class Parser:
         self._in_process_sub = True
         self._set_state(ParserStateFlags.PST_EOFTOKEN)
         self._eof_token = ")"
-        self._eof_depth = 0
 
         # Try to parse the command list inline - grammar will stop at matching )
         try:
@@ -9080,11 +8797,7 @@ class Parser:
                 normalized_delim = _normalize_heredoc_delimiter(heredoc.delimiter)
                 # In command substitution: line starts with delimiter - heredoc ends there
                 # Remaining content (e.g., ")x" or "b)") is part of the command sub
-                if (
-                    self._eof_token == ")"
-                    and self._eof_depth == 0
-                    and normalized_check.startswith(normalized_delim)
-                ):
+                if self._eof_token == ")" and normalized_check.startswith(normalized_delim):
                     tabs_stripped = len(line) - len(check_line)
                     self.pos = line_start + tabs_stripped + len(heredoc.delimiter)
                     break
@@ -9996,7 +9709,7 @@ class Parser:
                 is_pattern = False
                 if not self.at_end() and self.peek() == ")":
                     # If we're at the EOF token delimiter (command sub closer), esac is keyword
-                    if self._eof_token == ")" and self._eof_depth == 0:
+                    if self._eof_token == ")":
                         is_pattern = False
                     else:
                         self.advance()  # consume )

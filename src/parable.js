@@ -277,10 +277,7 @@ class ParseContext {
 	static ARITHMETIC = 2;
 	static CASE_PATTERN = 3;
 	static BRACE_EXPANSION = 4;
-	constructor(kind) {
-		if (kind == null) {
-			kind = 0;
-		}
+	constructor(kind = 0) {
 		this.kind = kind;
 		this.paren_depth = 0;
 		this.brace_depth = 0;
@@ -345,10 +342,7 @@ class ContextStack {
 }
 
 class Lexer {
-	constructor(source, extglob) {
-		if (extglob == null) {
-			extglob = false;
-		}
+	constructor(source, extglob = false) {
 		this.source = source;
 		this.pos = 0;
 		this.length = source.length;
@@ -591,13 +585,7 @@ class Lexer {
 		throw new ParseError("Unterminated single quote", start);
 	}
 
-	_isWordTerminator(ctx, ch, bracket_depth, paren_depth) {
-		if (bracket_depth == null) {
-			bracket_depth = 0;
-		}
-		if (paren_depth == null) {
-			paren_depth = 0;
-		}
+	_isWordTerminator(ctx, ch, bracket_depth = 0, paren_depth = 0) {
 		if (ctx === WORD_CTX_REGEX) {
 			if (
 				ch === "]" &&
@@ -669,14 +657,8 @@ class Lexer {
 		return _isMetachar(ch) && bracket_depth === 0;
 	}
 
-	_readBracketExpression(chars, parts, for_regex, paren_depth) {
+	_readBracketExpression(chars, parts, for_regex = false, paren_depth = 0) {
 		let bracket_will_close, c, next_ch, sc, scan;
-		if (for_regex == null) {
-			for_regex = false;
-		}
-		if (paren_depth == null) {
-			paren_depth = 0;
-		}
 		if (for_regex) {
 			// Regex mode: lookahead to check if bracket will close before terminators
 			scan = this.pos + 1;
@@ -847,7 +829,12 @@ class Lexer {
 		return true;
 	}
 
-	_parseMatchedPair(open_char, close_char, flags, initial_was_dollar) {
+	_parseMatchedPair(
+		open_char,
+		close_char,
+		flags = 0,
+		initial_was_dollar = false,
+	) {
 		let after_brace_pos,
 			arith_node,
 			arith_text,
@@ -869,12 +856,6 @@ class Lexer {
 			start,
 			was_dollar,
 			was_gtlt;
-		if (flags == null) {
-			flags = 0;
-		}
-		if (initial_was_dollar == null) {
-			initial_was_dollar = false;
-		}
 		start = this.pos;
 		count = 1;
 		chars = [];
@@ -1142,13 +1123,7 @@ class Lexer {
 		return chars.join("");
 	}
 
-	_collectParamArgument(flags, was_dollar) {
-		if (flags == null) {
-			flags = MatchedPairFlags.NONE;
-		}
-		if (was_dollar == null) {
-			was_dollar = false;
-		}
+	_collectParamArgument(flags = MatchedPairFlags.NONE, was_dollar = false) {
 		return this._parseMatchedPair(
 			"{",
 			"}",
@@ -1159,9 +1134,9 @@ class Lexer {
 
 	_readWordInternal(
 		ctx,
-		at_command_start,
-		in_array_literal,
-		in_assign_builtin,
+		at_command_start = false,
+		in_array_literal = false,
+		in_assign_builtin = false,
 	) {
 		let ansi_result,
 			array_result,
@@ -1187,15 +1162,6 @@ class Lexer {
 			seen_equals,
 			start,
 			track_newline;
-		if (at_command_start == null) {
-			at_command_start = false;
-		}
-		if (in_array_literal == null) {
-			in_array_literal = false;
-		}
-		if (in_assign_builtin == null) {
-			in_assign_builtin = false;
-		}
 		start = this.pos;
 		chars = [];
 		parts = [];
@@ -2081,11 +2047,8 @@ class Lexer {
 		return null;
 	}
 
-	_readParamExpansion(in_dquote) {
+	_readParamExpansion(in_dquote = false) {
 		let c, ch, name, name_start, start, text;
-		if (in_dquote == null) {
-			in_dquote = false;
-		}
 		if (this.atEnd() || this.peek() !== "$") {
 			return [null, ""];
 		}
@@ -2127,7 +2090,7 @@ class Lexer {
 		return [null, ""];
 	}
 
-	_readBracedParam(start, in_dquote) {
+	_readBracedParam(start, in_dquote = false) {
 		let arg,
 			backtick_pos,
 			bc,
@@ -2147,9 +2110,6 @@ class Lexer {
 			suffix,
 			text,
 			trailing;
-		if (in_dquote == null) {
-			in_dquote = false;
-		}
 		if (this.atEnd()) {
 			throw new MatchedPairError("unexpected EOF looking for `}'", start);
 		}
@@ -3694,7 +3654,7 @@ class Word extends Node {
 		return result;
 	}
 
-	_formatCommandSubstitutions(value, in_arith) {
+	_formatCommandSubstitutions(value, in_arith = false) {
 		let arith_depth,
 			arith_paren_depth,
 			brace_quote,
@@ -3741,9 +3701,6 @@ class Word extends Node {
 			stripped,
 			suffix,
 			terminator;
-		if (in_arith == null) {
-			in_arith = false;
-		}
 		// Collect command substitutions from all parts, including nested ones
 		cmdsub_parts = [];
 		procsub_parts = [];
@@ -4875,17 +4832,15 @@ class Redirect extends Node {
 }
 
 class HereDoc extends Node {
-	constructor(delimiter, content, strip_tabs, quoted, fd, complete) {
+	constructor(
+		delimiter,
+		content,
+		strip_tabs = false,
+		quoted = false,
+		fd,
+		complete = true,
+	) {
 		super();
-		if (strip_tabs == null) {
-			strip_tabs = false;
-		}
-		if (quoted == null) {
-			quoted = false;
-		}
-		if (complete == null) {
-			complete = true;
-		}
 		this.kind = "heredoc";
 		this.delimiter = delimiter;
 		this.content = content;
@@ -5297,11 +5252,8 @@ function _consumeBracketClass(s, start, depth) {
 }
 
 class CasePattern extends Node {
-	constructor(pattern, body, terminator) {
+	constructor(pattern, body, terminator = ";;") {
 		super();
-		if (terminator == null) {
-			terminator = ";;";
-		}
 		this.kind = "pattern";
 		this.pattern = pattern;
 		this.body = body;
@@ -5474,11 +5426,8 @@ class ParamIndirect extends Node {
 }
 
 class CommandSubstitution extends Node {
-	constructor(command, brace) {
+	constructor(command, brace = false) {
 		super();
-		if (brace == null) {
-			brace = false;
-		}
 		this.kind = "cmdsub";
 		this.command = command;
 		this.brace = brace;
@@ -5508,11 +5457,8 @@ class ArithmeticExpansion extends Node {
 }
 
 class ArithmeticCommand extends Node {
-	constructor(expression, redirects, raw_content) {
+	constructor(expression, redirects, raw_content = "") {
 		super();
-		if (raw_content == null) {
-			raw_content = "";
-		}
 		this.kind = "arith-cmd";
 		this.expression = expression;
 		if (redirects == null) {
@@ -5824,11 +5770,8 @@ class Negation extends Node {
 }
 
 class Time extends Node {
-	constructor(pipeline, posix) {
+	constructor(pipeline, posix = false) {
 		super();
-		if (posix == null) {
-			posix = false;
-		}
 		this.kind = "time";
 		this.pipeline = pipeline;
 		this.posix = posix;
@@ -6068,10 +6011,10 @@ function _startsWithSubshell(node) {
 
 function _formatCmdsubNode(
 	node,
-	indent,
-	in_procsub,
-	compact_redirects,
-	procsub_first,
+	indent = 0,
+	in_procsub = false,
+	compact_redirects = false,
+	procsub_first = false,
 ) {
 	let body,
 		body_part,
@@ -6122,18 +6065,6 @@ function _formatCmdsubNode(
 		word_parts,
 		word_vals,
 		words;
-	if (indent == null) {
-		indent = 0;
-	}
-	if (in_procsub == null) {
-		in_procsub = false;
-	}
-	if (compact_redirects == null) {
-		compact_redirects = false;
-	}
-	if (procsub_first == null) {
-		procsub_first = false;
-	}
 	if (node == null) {
 		return "";
 	}
@@ -6592,14 +6523,8 @@ function _formatCmdsubNode(
 	return "";
 }
 
-function _formatRedirect(r, compact, heredoc_op_only) {
+function _formatRedirect(r, compact = false, heredoc_op_only = false) {
 	let after_amp, delim, is_literal_fd, op, target, was_input_close;
-	if (compact == null) {
-		compact = false;
-	}
-	if (heredoc_op_only == null) {
-		heredoc_op_only = false;
-	}
 	if (r.kind === "heredoc") {
 		if (r.strip_tabs) {
 			op = "<<-";
@@ -7691,11 +7616,8 @@ function _isWordEndContext(c) {
 // Flags for _skip_matched_pair (mirrors bash subst.c)
 const _SMP_LITERAL = 1;
 const _SMP_PAST_OPEN = 2;
-function _skipMatchedPair(s, start, open, close, flags) {
+function _skipMatchedPair(s, start, open, close, flags = 0) {
 	let backq, c, depth, i, literal, n, pass_next;
-	if (flags == null) {
-		flags = 0;
-	}
 	n = s.length;
 	if (flags & _SMP_PAST_OPEN) {
 		i = start;
@@ -7759,18 +7681,12 @@ function _skipMatchedPair(s, start, open, close, flags) {
 	return depth === 0 ? i : -1;
 }
 
-function _skipSubscript(s, start, flags) {
-	if (flags == null) {
-		flags = 0;
-	}
+function _skipSubscript(s, start, flags = 0) {
 	return _skipMatchedPair(s, start, "[", "]", flags);
 }
 
-function _assignment(s, flags) {
+function _assignment(s, flags = 0) {
 	let c, end, i, sub_flags;
-	if (flags == null) {
-		flags = 0;
-	}
 	if (!s) {
 		return -1;
 	}
@@ -7951,13 +7867,7 @@ const WORD_CTX_NORMAL = 0;
 const WORD_CTX_COND = 1;
 const WORD_CTX_REGEX = 2;
 class Parser {
-	constructor(source, in_process_sub, extglob) {
-		if (in_process_sub == null) {
-			in_process_sub = false;
-		}
-		if (extglob == null) {
-			extglob = false;
-		}
+	constructor(source, in_process_sub = false, extglob = false) {
 		this.source = source;
 		this.pos = 0;
 		this.length = source.length;
@@ -8527,22 +8437,13 @@ class Parser {
 		return true;
 	}
 
-	_isWordTerminator(ctx, ch, bracket_depth, paren_depth) {
-		if (bracket_depth == null) {
-			bracket_depth = 0;
-		}
-		if (paren_depth == null) {
-			paren_depth = 0;
-		}
+	_isWordTerminator(ctx, ch, bracket_depth = 0, paren_depth = 0) {
 		this._syncLexer();
 		return this._lexer._isWordTerminator(ctx, ch, bracket_depth, paren_depth);
 	}
 
-	_scanDoubleQuote(chars, parts, start, handle_line_continuation) {
+	_scanDoubleQuote(chars, parts, start, handle_line_continuation = true) {
 		let c, next_c;
-		if (handle_line_continuation == null) {
-			handle_line_continuation = true;
-		}
 		chars.push('"');
 		while (!this.atEnd() && this.peek() !== '"') {
 			c = this.peek();
@@ -8569,11 +8470,8 @@ class Parser {
 		chars.push(this.advance());
 	}
 
-	_parseDollarExpansion(chars, parts, in_dquote) {
+	_parseDollarExpansion(chars, parts, in_dquote = false) {
 		let result;
-		if (in_dquote == null) {
-			in_dquote = false;
-		}
 		// Check $(( -> arithmetic expansion
 		if (
 			this.pos + 2 < this.length &&
@@ -8625,28 +8523,17 @@ class Parser {
 		return false;
 	}
 
-	_parseWordInternal(ctx, at_command_start, in_array_literal) {
-		if (at_command_start == null) {
-			at_command_start = false;
-		}
-		if (in_array_literal == null) {
-			in_array_literal = false;
-		}
+	_parseWordInternal(ctx, at_command_start = false, in_array_literal = false) {
 		this._word_context = ctx;
 		return this.parseWord(at_command_start, in_array_literal);
 	}
 
-	parseWord(at_command_start, in_array_literal, in_assign_builtin) {
+	parseWord(
+		at_command_start = false,
+		in_array_literal = false,
+		in_assign_builtin = false,
+	) {
 		let tok;
-		if (at_command_start == null) {
-			at_command_start = false;
-		}
-		if (in_array_literal == null) {
-			in_array_literal = false;
-		}
-		if (in_assign_builtin == null) {
-			in_assign_builtin = false;
-		}
 		this.skipWhitespace();
 		if (this.atEnd()) {
 			return null;
@@ -9347,11 +9234,8 @@ class Parser {
 		return this._arith_pos >= this._arith_len;
 	}
 
-	_arithPeek(offset) {
+	_arithPeek(offset = 0) {
 		let pos;
-		if (offset == null) {
-			offset = 0;
-		}
 		pos = this._arith_pos + offset;
 		if (pos >= this._arith_len) {
 			return "";
@@ -10176,11 +10060,8 @@ class Parser {
 		return [new ArithDeprecated(content), text];
 	}
 
-	_parseParamExpansion(in_dquote) {
+	_parseParamExpansion(in_dquote = false) {
 		let result;
-		if (in_dquote == null) {
-			in_dquote = false;
-		}
 		this._syncLexer();
 		result = this._lexer._readParamExpansion(in_dquote);
 		this._syncParser();
@@ -12865,11 +12746,8 @@ class Parser {
 		return op;
 	}
 
-	parseList(newline_as_separator) {
+	parseList(newline_as_separator = true) {
 		let next_op, op, parts, pipeline;
-		if (newline_as_separator == null) {
-			newline_as_separator = true;
-		}
 		if (newline_as_separator) {
 			this.skipWhitespaceAndNewlines();
 		} else {
@@ -13126,11 +13004,8 @@ class Parser {
 	}
 }
 
-function parse(source, extglob) {
+function parse(source, extglob = false) {
 	let parser;
-	if (extglob == null) {
-		extglob = false;
-	}
 	parser = new Parser(source, false, extglob);
 	return parser.parse();
 }

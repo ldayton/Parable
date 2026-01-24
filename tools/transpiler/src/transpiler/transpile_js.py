@@ -242,7 +242,19 @@ class JSTranspiler(ast.NodeVisitor):
         # Skip helper functions that are inlined
         if node.name in ("_substring", "_sublist", "_repeat_str"):
             return
-        args = [self._safe_name(a.arg) for a in node.args.args if a.arg != "self"]
+        # Build args with default values in signature
+        non_self_args = [a for a in node.args.args if a.arg != "self"]
+        defaults = node.args.defaults
+        first_default_idx = len(non_self_args) - len(defaults) if defaults else len(non_self_args)
+        args = []
+        for i, a in enumerate(non_self_args):
+            arg_str = self._safe_name(a.arg)
+            if i >= first_default_idx:
+                default = defaults[i - first_default_idx]
+                # Skip None defaults - JS undefined handles this
+                if not (isinstance(default, ast.Constant) and default.value is None):
+                    arg_str += f" = {self.visit_expr(default)}"
+            args.append(arg_str)
         # Handle *args as rest parameter
         if node.args.vararg:
             args.append("..." + self._safe_name(node.args.vararg.arg))
@@ -270,20 +282,6 @@ class JSTranspiler(ast.NodeVisitor):
             self.emit(f"let {', '.join(sorted_vars)};")
         self.declared_vars = param_names | local_vars
 
-        # Helper to emit default argument checks
-        def emit_defaults():
-            defaults = node.args.defaults
-            if defaults:
-                non_self_args = [a for a in node.args.args if a.arg != "self"]
-                first_default_idx = len(non_self_args) - len(defaults)
-                for i, default in enumerate(defaults):
-                    # Skip None defaults - they're already undefined/null in JS
-                    if isinstance(default, ast.Constant) and default.value is None:
-                        continue
-                    arg_name = self._safe_name(non_self_args[first_default_idx + i].arg)
-                    default_val = self.visit_expr(default)
-                    self.emit(f"if ({arg_name} == null) {{ {arg_name} = {default_val}; }}")
-
         # For constructors in subclasses, emit super() first
         if name == "constructor" and self.class_has_base:
             # Find and emit super() call first, or add one if missing
@@ -307,12 +305,10 @@ class JSTranspiler(ast.NodeVisitor):
                     self.visit(super_stmt)
             else:
                 self.emit("super();")
-            emit_defaults()  # After super() for constructors
             for stmt in other_stmts:
                 self.emit_comments_before(stmt.lineno)
                 self.visit(stmt)
         else:
-            emit_defaults()  # At start for regular methods
             for stmt in node.body:
                 self.emit_comments_before(stmt.lineno)
                 self.visit(stmt)

@@ -266,7 +266,7 @@ class QuoteState {
 		if (this._stack.length === 0) {
 			return false;
 		}
-		return this._stack[this._stack.length - 1][1];
+		return this._stack.at(-1)[1];
 	}
 }
 
@@ -308,7 +308,7 @@ class ContextStack {
 	}
 
 	getCurrent() {
-		return this._stack[this._stack.length - 1];
+		return this._stack.at(-1);
 	}
 
 	push(kind) {
@@ -1203,7 +1203,7 @@ class Lexer {
 					!seen_equals &&
 					_isArrayAssignmentPrefix(chars)
 				) {
-					prev_char = chars[chars.length - 1];
+					prev_char = chars.at(-1);
 					if (/^[a-zA-Z0-9]$/.test(prev_char) || prev_char === "_") {
 						bracket_start_pos = this.pos;
 						bracket_depth += 1;
@@ -1251,11 +1251,7 @@ class Lexer {
 			}
 			// COND: Extglob patterns or ( terminates
 			if (ctx === WORD_CTX_COND && ch === "(") {
-				if (
-					this._extglob &&
-					chars &&
-					_isExtglobPrefix(chars[chars.length - 1])
-				) {
+				if (this._extglob && chars && _isExtglobPrefix(chars.at(-1))) {
 					chars.push(this.advance());
 					content = this._parseMatchedPair("(", ")", MatchedPairFlags.EXTGLOB);
 					chars.push(content);
@@ -1410,9 +1406,9 @@ class Lexer {
 						this._extglob &&
 						ctx === WORD_CTX_NORMAL &&
 						chars &&
-						chars[chars.length - 1].length === 2 &&
-						chars[chars.length - 1][0] === "$" &&
-						"?*@".includes(chars[chars.length - 1][1]) &&
+						chars.at(-1).length === 2 &&
+						chars.at(-1)[0] === "$" &&
+						"?*@".includes(chars.at(-1)[1]) &&
 						!this.atEnd() &&
 						this.peek() === "("
 					) {
@@ -1477,11 +1473,11 @@ class Lexer {
 				if (
 					chars.length >= 3 &&
 					chars[chars.length - 2] === "+" &&
-					chars[chars.length - 1] === "="
+					chars.at(-1) === "="
 				) {
 					// Check chars before += form valid name
 					is_array_assign = _isArrayAssignmentPrefix(chars.slice(0, -2));
-				} else if (chars[chars.length - 1] === "=" && chars.length >= 2) {
+				} else if (chars.at(-1) === "=" && chars.length >= 2) {
 					// Check chars before = form valid name
 					is_array_assign = _isArrayAssignmentPrefix(chars.slice(0, -1));
 				}
@@ -4460,7 +4456,7 @@ class Pipeline extends Node {
 			return this._cmdSexp(cmd, needs);
 		}
 		// Nest right-associatively: (pipe a (pipe b c))
-		last_pair = cmds[cmds.length - 1];
+		last_pair = cmds.at(-1);
 		last_cmd = last_pair[0];
 		last_needs = last_pair[1];
 		result = this._cmdSexp(last_cmd, last_needs);
@@ -4532,9 +4528,8 @@ class List extends Node {
 		// Strip trailing ; or \n (bash ignores it)
 		while (
 			parts.length > 1 &&
-			parts[parts.length - 1].kind === "operator" &&
-			(parts[parts.length - 1].op === ";" ||
-				parts[parts.length - 1].op === "\n")
+			parts.at(-1).kind === "operator" &&
+			(parts.at(-1).op === ";" || parts.at(-1).op === "\n")
 		) {
 			parts = parts.slice(0, parts.length - 1);
 		}
@@ -4543,10 +4538,7 @@ class List extends Node {
 		}
 		// Handle trailing & as unary background operator
 		// & only applies to the immediately preceding pipeline, not the whole list
-		if (
-			parts[parts.length - 1].kind === "operator" &&
-			parts[parts.length - 1].op === "&"
-		) {
+		if (parts.at(-1).kind === "operator" && parts.at(-1).op === "&") {
 			// Find rightmost ; or \n to split there
 			for (i = parts.length - 3; i > 0; i--) {
 				if (
@@ -6235,7 +6227,7 @@ function _formatCmdsubNode(
 			if (p.kind === "operator") {
 				if (p.op === ";") {
 					// Skip semicolon if previous command ends with heredoc (newline)
-					if (result.length > 0 && result[result.length - 1].endsWith("\n")) {
+					if (result.length > 0 && result.at(-1).endsWith("\n")) {
 						skipped_semi = true;
 						continue;
 					}
@@ -6252,12 +6244,12 @@ function _formatCmdsubNode(
 					skipped_semi = false;
 				} else if (p.op === "\n") {
 					// Skip newline if it follows a semicolon (redundant separator)
-					if (result.length > 0 && result[result.length - 1] === ";") {
+					if (result.length > 0 && result.at(-1) === ";") {
 						skipped_semi = false;
 						continue;
 					}
 					// If previous ends with heredoc newline
-					if (result.length > 0 && result[result.length - 1].endsWith("\n")) {
+					if (result.length > 0 && result.at(-1).endsWith("\n")) {
 						// Add space if semicolon was skipped, else newline
 						result.push(skipped_semi ? " " : "\n");
 						skipped_semi = false;
@@ -6270,10 +6262,10 @@ function _formatCmdsubNode(
 					// But if it's a pipeline (contains |), append at end instead
 					if (
 						result.length > 0 &&
-						result[result.length - 1].includes("<<") &&
-						result[result.length - 1].includes("\n")
+						result.at(-1).includes("<<") &&
+						result.at(-1).includes("\n")
 					) {
-						last = result[result.length - 1];
+						last = result.at(-1);
 						// If this is a pipeline (has |), append & at the end
 						if (last.includes(" |") || last.startsWith("|")) {
 							result[result.length - 1] = `${last} &`;
@@ -6287,11 +6279,11 @@ function _formatCmdsubNode(
 					}
 				} else if (
 					result.length > 0 &&
-					result[result.length - 1].includes("<<") &&
-					result[result.length - 1].includes("\n")
+					result.at(-1).includes("<<") &&
+					result.at(-1).includes("\n")
 				) {
 					// For || and &&, insert before heredoc content like we do for &
-					last = result[result.length - 1];
+					last = result.at(-1);
 					first_nl = last.indexOf("\n");
 					result[result.length - 1] =
 						`${last.slice(0, first_nl)} ${p.op} ${last.slice(first_nl)}`;
@@ -6301,10 +6293,7 @@ function _formatCmdsubNode(
 			} else {
 				if (
 					result.length > 0 &&
-					!(
-						result[result.length - 1].endsWith(" ") ||
-						result[result.length - 1].endsWith("\n")
-					)
+					!(result.at(-1).endsWith(" ") || result.at(-1).endsWith("\n"))
 				) {
 					result.push(" ");
 				}
@@ -6318,7 +6307,7 @@ function _formatCmdsubNode(
 				);
 				// After heredoc with || or && inserted, add leading space to next command
 				if (result.length > 0) {
-					last = result[result.length - 1];
+					last = result.at(-1);
 					if (last.includes(" || \n") || last.includes(" && \n")) {
 						formatted_cmd = ` ${formatted_cmd}`;
 					}
@@ -12258,7 +12247,7 @@ class Parser {
 		pos_after_name = this.pos;
 		this.skipWhitespace();
 		has_whitespace = this.pos > pos_after_name;
-		if (!has_whitespace && name && "*?@+!$".includes(name[name.length - 1])) {
+		if (!has_whitespace && name && "*?@+!$".includes(name.at(-1))) {
 			this.pos = saved_pos;
 			return null;
 		}
@@ -12926,7 +12915,7 @@ class Parser {
 		if (
 			this._saw_newline_in_single_quote &&
 			this.source &&
-			this.source[this.source.length - 1] === "\\" &&
+			this.source.at(-1) === "\\" &&
 			!(
 				this.source.length >= 3 &&
 				this.source.slice(this.source.length - 3, this.source.length - 1) ===
@@ -12953,7 +12942,7 @@ class Parser {
 		if (!nodes) {
 			return;
 		}
-		last_node = nodes[nodes.length - 1];
+		last_node = nodes.at(-1);
 		// Find the last Word in the structure
 		last_word = this._findLastWord(last_node);
 		if (last_word && last_word.value.endsWith("\\")) {
@@ -12974,30 +12963,30 @@ class Parser {
 			// For trailing backslash stripping, prioritize words ending with backslash
 			// since that's the word we need to strip from
 			if (node.words && node.words.length) {
-				last_word = node.words[node.words.length - 1];
+				last_word = node.words.at(-1);
 				if (last_word.value.endsWith("\\")) {
 					return last_word;
 				}
 			}
 			// Redirects come after words in s-expression output, so check redirects first
 			if (node.redirects && node.redirects.length) {
-				last_redirect = node.redirects[node.redirects.length - 1];
+				last_redirect = node.redirects.at(-1);
 				if (last_redirect instanceof Redirect) {
 					return last_redirect.target;
 				}
 			}
 			if (node.words && node.words.length) {
-				return node.words[node.words.length - 1];
+				return node.words.at(-1);
 			}
 		}
 		if (node instanceof Pipeline) {
 			if (node.commands && node.commands.length) {
-				return this._findLastWord(node.commands[node.commands.length - 1]);
+				return this._findLastWord(node.commands.at(-1));
 			}
 		}
 		if (node instanceof List) {
 			if (node.parts && node.parts.length) {
-				return this._findLastWord(node.parts[node.parts.length - 1]);
+				return this._findLastWord(node.parts.at(-1));
 			}
 		}
 		return null;
@@ -13010,4 +12999,4 @@ function parse(source, extglob = false) {
 	return parser.parse();
 }
 
-module.exports = { parse, ParseError };
+export { parse, ParseError };

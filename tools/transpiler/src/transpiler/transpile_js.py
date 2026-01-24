@@ -37,6 +37,7 @@ class JSTranspiler(ast.NodeVisitor):
         }
         self.comments = {}  # line_number -> comment_text
         self.last_line = 0
+        self._in_assignment_target = False
 
     def emit(self, text: str):
         self.output.append("    " * self.indent + text)
@@ -326,7 +327,9 @@ class JSTranspiler(ast.NodeVisitor):
             self.emit("return;")
 
     def visit_Assign(self, node: ast.Assign):
+        self._in_assignment_target = True
         target = self.visit_expr(node.targets[0])
+        self._in_assignment_target = False
         value = self.visit_expr(node.value)
         # Module-level assignments get const
         if not self.in_method and not self.in_class_body:
@@ -529,8 +532,26 @@ class JSTranspiler(ast.NodeVisitor):
             return f"this.{attr}"
         return f"{value}.{attr}"
 
+    def _is_last_index(self, node: ast.Subscript) -> bool:
+        """Check if subscript is arr[len(arr) - 1] pattern (read context only)."""
+        if self._in_assignment_target:
+            return False
+        if not isinstance(node.slice, ast.BinOp) or not isinstance(node.slice.op, ast.Sub):
+            return False
+        if not isinstance(node.slice.right, ast.Constant) or node.slice.right.value != 1:
+            return False
+        left = node.slice.left
+        if not isinstance(left, ast.Call) or not isinstance(left.func, ast.Name):
+            return False
+        if left.func.id != "len" or len(left.args) != 1:
+            return False
+        return ast.dump(left.args[0]) == ast.dump(node.value)
+
     def visit_expr_Subscript(self, node: ast.Subscript) -> str:
         value = self.visit_expr(node.value)
+        # Detect arr[len(arr) - 1] -> arr.at(-1)
+        if self._is_last_index(node):
+            return f"{value}.at(-1)"
         if isinstance(node.slice, ast.Slice):
             lower = self.visit_expr(node.slice.lower) if node.slice.lower else "0"
             upper = self.visit_expr(node.slice.upper) if node.slice.upper else ""
@@ -989,7 +1010,7 @@ def main():
     transpiler = JSTranspiler()
     print(transpiler.transpile(source))
     print()
-    print("module.exports = { parse, ParseError };")
+    print("export { parse, ParseError };")
 
 
 if __name__ == "__main__":

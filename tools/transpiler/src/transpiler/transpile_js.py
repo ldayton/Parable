@@ -75,6 +75,14 @@ class JSTranspiler(ast.NodeVisitor):
                         return True
         return False
 
+    def _references_self(self, exprs: list[ast.expr]) -> bool:
+        """Check if any expression references 'self'."""
+        for expr in exprs:
+            for node in ast.walk(expr):
+                if isinstance(node, ast.Name) and node.id == "self":
+                    return True
+        return False
+
     def visit_Module(self, node: ast.Module):
         # Emit module docstring as JSDoc comment
         if (
@@ -319,9 +327,8 @@ class JSTranspiler(ast.NodeVisitor):
                 # Check if super() args reference self - if so, we need to emit super() first
                 # then the assignments, then update message if needed
                 call = super_stmt.value
-                super_args = call.args
-                args_use_self = any("self" in ast.dump(arg) for arg in super_args)
-                if args_use_self:
+                if self._references_self(call.args):
+                    # Emit super() with no args first
                     # Emit super() with no args first
                     self.emit("super();")
                 else:
@@ -448,15 +455,13 @@ class JSTranspiler(ast.NodeVisitor):
     def _emit_if(self, node: ast.If, is_elif: bool):
         test = self.visit_expr(node.test)
         # Handle truthiness checks - in Python [] is falsy but in JS it's truthy
-        # Only add length check for known array-like attributes/variables
-        array_attrs = {"redirects", "parts", "elements", "words", "patterns", "commands"}
         if (
             isinstance(node.test, ast.Attribute)
             and isinstance(node.test.value, ast.Name)
-            and node.test.attr in array_attrs
+            and node.test.attr in self._ARRAY_ATTRS
         ):
             test = f"{test}?.length"
-        elif isinstance(node.test, ast.Name) and node.test.id in array_attrs:
+        elif isinstance(node.test, ast.Name) and node.test.id in self._ARRAY_ATTRS:
             test = f"{test}?.length"
         if is_elif:
             self.emit_raw("    " * self.indent + f"}} else if ({test}) {{")
@@ -671,6 +676,19 @@ class JSTranspiler(ast.NodeVisitor):
             return f"this.{method_name}.bind(this)"
         return self.visit_expr(arg)
 
+    # Attributes/names that are known to be arrays (for Python/JS truthiness fix)
+    _ARRAY_ATTRS = {"redirects", "parts", "elements", "words", "patterns", "commands"}
+    _LIST_SUFFIXES = (
+        "_chars",
+        "_list",
+        "_parts",
+        "chars",
+        "parts",
+        "result",
+        "results",
+        "items",
+        "values",
+    )
     # Method name mappings: Python -> JS
     _method_renames = {
         "append": "push",
@@ -1023,21 +1041,9 @@ class JSTranspiler(ast.NodeVisitor):
         operand = self.visit_expr(node.operand)
         if isinstance(node.op, ast.Not):
             # Handle `not list_var` - in Python empty list is falsy, in JS array is truthy
-            # Convert to `list_var.length === 0` for common list variable names
             if isinstance(node.operand, ast.Name):
                 name = node.operand.id
-                list_suffixes = (
-                    "_chars",
-                    "_list",
-                    "_parts",
-                    "chars",
-                    "parts",
-                    "result",
-                    "results",
-                    "items",
-                    "values",
-                )
-                if name.endswith(list_suffixes) or name in list_suffixes:
+                if name.endswith(self._LIST_SUFFIXES) or name in self._LIST_SUFFIXES:
                     return f"{name}.length === 0"
             return f"!{operand}"
         if isinstance(node.op, ast.USub):

@@ -2027,10 +2027,7 @@ class Lexer:
             arg = self._collect_param_argument(flags)
         except MatchedPairError as e:
             self._dolbrace_state = saved_dolbrace
-            if self.at_end():
-                raise e  # EOF inside ${...} is always an error
-            self.pos = start
-            return None, ""
+            raise e
         # Format process substitution content within param expansion
         if op in ("<", ">") and arg.startswith("(") and arg.endswith(")"):
             inner = arg[1:-1]

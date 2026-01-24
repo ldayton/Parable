@@ -2386,11 +2386,7 @@ class Lexer {
 			arg = this._collectParamArgument(flags);
 		} catch (e) {
 			this._dolbrace_state = saved_dolbrace;
-			if (this.atEnd()) {
-				throw e;
-			}
-			this.pos = start;
-			return [null, ""];
+			throw e;
 		}
 		// Format process substitution content within param expansion
 		if (["<", ">"].includes(op) && arg.startsWith("(") && arg.endsWith(")")) {

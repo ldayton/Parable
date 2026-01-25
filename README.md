@@ -8,7 +8,7 @@
 </pre>
 </div>
 
-Parse bash exactly as bash does. Python or Javascript, your choice. One file, zero dependencies. This is the only complete bash parser for Python or JS. Extensively validated against bash itself.
+Parse bash exactly as bash does. Python, Javascript, or Go—your choice. One file, zero dependencies. This is the only complete bash parser for Python, JS, or Go. Extensively validated against bash itself.
 
 ---
 
@@ -18,13 +18,13 @@ Parse bash exactly as bash does. Python or Javascript, your choice. One file, ze
 
 **Match bash exactly.** Bash is the oracle. We [patched](https://github.com/ldayton/bash-oracle) GNU Bash 5.3 so it reveals its internal parse tree, then test against it. No spec interpretation, no "close enough"—if bash parses it one way, so do we. Bash always tells the truth, even when it's lying.
 
-**Portable performance.** Hand-written recursive descent—no generators, no native extensions. Pure Python and pure JS, zero dependencies, not even stdlib imports. The Python implementation is canonical; a custom transpiler produces idiomatic Javascript. Both run the same tests.
+**Portable performance.** Hand-written recursive descent—no generators, no native extensions. Pure Python, pure JS, and pure Go—zero dependencies, not even stdlib imports. The Python implementation is canonical; a custom transpiler produces idiomatic Javascript and Go. All three run the same tests.
 
-## Javascript + Typescript
+## Transpiled Outputs
 
-The Python implementation uses idiomatic Python that transpiles naturally to idiomatic Javascript: f-strings become template literals, ternaries stay ternaries, lambdas become arrow functions. A custom transpiler produces perfectly readable JS: not minified, not obfuscated, not transmogrified, but clean code that looks like a human wrote it.
+The Python implementation uses idiomatic Python that transpiles naturally to idiomatic Javascript and Go. A custom transpiler produces perfectly readable code—not minified, not obfuscated, but clean code that looks like a human wrote it.
 
-The Javascript output is then validated the same way as Python. Same tests, same bash AST comparisons, same edge cases. If Python parses it correctly, so does JS. Typescript definitions are auto-generated from the transpiled JS.
+All outputs are validated the same way as Python. Same tests, same bash AST comparisons, same edge cases. If Python parses it correctly, so do JS and Go. Typescript definitions are auto-generated from the transpiled JS.
 
 ## Why Parable?
 
@@ -33,9 +33,10 @@ Bash's grammar is notoriously irregular. Existing tools make tradeoffs:
 - **bashlex** — Incomplete. Fails on [heredocs](https://github.com/idank/bashlex/issues/99), [arrays](https://github.com/idank/bashlex/issues/84), [arithmetic](https://github.com/idank/bashlex/issues/68), and [more](https://github.com/idank/bashlex/issues). Fine for simple scripts, breaks on real ones.
 - **Oils/OSH** — A whole shell, not an embeddable library. Makes [intentional parsing tradeoffs](https://github.com/oils-for-unix/oils/blob/master/doc/known-differences.md) for a cleaner language—fine for their goals, but won't predict what real bash does.
 - **tree-sitter-bash** — Editor-focused, not Python-native. [Many open parsing bugs](https://github.com/tree-sitter/tree-sitter-bash/issues).
-- **sh-syntax** — WASM port of mvdan/sh, not pure JS. [Doesn't fully match bash](https://github.com/mvdan/sh#caveats).
+- **mvdan/sh** — Go-native, but [doesn't fully match bash](https://github.com/mvdan/sh#caveats). Targets POSIX with bash extensions.
+- **sh-syntax** — WASM port of mvdan/sh, not pure JS. Inherits the same limitations.
 
-Parable is the only Python & JS library that parses bash exactly as bash does—tested against bash's own AST. For security and sandboxing, 95% coverage is 100% inadequate.
+Parable is the only library (Python, JS, or Go) that parses bash exactly as bash does—tested against bash's own AST. For security and sandboxing, 95% coverage is 100% inadequate.
 
 **Use cases:**
 - **Security auditing** — Analyze scripts for command injection, dangerous patterns, or policy violations. The construct you can't parse is the one that owns you.
@@ -131,6 +132,15 @@ const ast = parse("ps aux | grep python | awk '{print $2}'");
 console.log(ast[0].toSexp());
 ```
 
+### Go
+
+```go
+import "github.com/parable-parser/parable"
+
+ast := parable.Parse("ps aux | grep python | awk '{print $2}'")
+fmt.Println(ast[0].ToSexp())
+```
+
 ## Installation
 
 ```bash
@@ -143,6 +153,7 @@ cd Parable && uv pip install -e .
 ```bash
 just test      # Python
 just test-js   # Javascript
+just test-go   # Go
 ```
 
 See [tests/README.md](tests/README.md) for options and coverage details.
@@ -153,7 +164,8 @@ See [tests/README.md](tests/README.md) for options and coverage details.
 src/
 ├── parable.py                   # Single-file Python parser
 ├── parable.js                   # Transpiled Javascript parser
-└── parable.d.ts                 # Typescript definitions
+├── parable.d.ts                 # Typescript definitions
+└── parable.go                   # Transpiled Go parser
 
 tests/
 ├── bin/                         # Test runners
@@ -163,7 +175,10 @@ tests/
 tools/
 ├── bash-oracle/                 # Patched bash + corpus utilities
 ├── fuzzer/                      # Differential fuzzers
-└── transpiler/                  # Python-to-JS transpiler
+└── transpiler/
+    ├── transpile_js.py          # Python → Javascript
+    ├── transpile_dts.py         # Javascript → Typescript definitions
+    └── transpile_go.py          # Python → Go
 ```
 
 ## License

@@ -9404,7 +9404,12 @@ func (p *Parser) _LineMatchesDelimiter(line string, delimiter string, stripTabs 
 }
 
 func (p *Parser) _GatherHeredocBodies() {
-	panic("TODO: method needs manual implementation")
+	// Minimal implementation: just return if no pending heredocs
+	// Full heredoc support requires implementing the full algorithm
+	if len(p._Pending_heredocs) == 0 {
+		return
+	}
+	panic("TODO: heredoc gathering not yet implemented")
 }
 
 func (p *Parser) _ParseHeredoc(fd int, stripTabs bool) *HereDoc {

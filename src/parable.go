@@ -1421,7 +1421,7 @@ func _StartsWithSubshell(node Node) bool {
 }
 
 func _FormatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bool, procsubFirst bool) string {
-	if node == nil {
+	if _isNilNode(node) {
 		return ""
 	}
 	sp := _RepeatStr(" ", indent)

@@ -1163,7 +1163,6 @@ class GoTranspiler(ast.NodeVisitor):
         "_parse_heredoc",
         "_parse_heredoc_delimiter",
         "parse_compound_command",
-        "parse_pipeline",
         "parse_list",
         "parse",
         # Tuple stack in local variable (heredoc tracking)
@@ -3012,7 +3011,20 @@ class GoTranspiler(ast.NodeVisitor):
         return None
 
     def _detect_kind_check(self, test: ast.expr) -> tuple[str, str] | None:
-        """Detect `var.kind == "literal"`. Returns (var_name, kind_literal) or None."""
+        """Detect `var.kind == "literal"` or `var is not None and var.kind == "literal"`.
+        Returns (var_name, kind_literal) or None."""
+        # Handle compound: `var is not None and var.kind == "literal"`
+        # Go type assertion handles nil check implicitly, so we can emit just the assertion
+        if isinstance(test, ast.BoolOp) and isinstance(test.op, ast.And):
+            for value in test.values:
+                result = self._detect_simple_kind_check(value)
+                if result:
+                    return result
+            return None
+        return self._detect_simple_kind_check(test)
+
+    def _detect_simple_kind_check(self, test: ast.expr) -> tuple[str, str] | None:
+        """Detect simple `var.kind == "literal"`. Returns (var_name, kind_literal) or None."""
         if not isinstance(test, ast.Compare):
             return None
         if len(test.ops) != 1 or not isinstance(test.ops[0], ast.Eq):

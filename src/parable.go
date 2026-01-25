@@ -10521,7 +10521,102 @@ func (p *Parser) ParseCompoundCommand() Node {
 }
 
 func (p *Parser) ParsePipeline() Node {
-	panic("TODO: method needs manual implementation")
+	var prefixOrder interface{}
+	_ = prefixOrder
+	var timePosix bool
+	_ = timePosix
+	var saved int
+	_ = saved
+	var inner Node
+	_ = inner
+	var result Node
+	_ = result
+	p.SkipWhitespace()
+	prefixOrder = nil
+	timePosix = false
+	if p._LexIsAtReservedWord("time") {
+		p._LexConsumeWord("time")
+		prefixOrder = "time"
+		p.SkipWhitespace()
+		if !(p.AtEnd()) && p.Peek() == "-" {
+			saved = p.Pos
+			p.Advance()
+			if !(p.AtEnd()) && p.Peek() == "p" {
+				p.Advance()
+				if p.AtEnd() || _IsMetachar(p.Peek()) {
+					timePosix = true
+				} else {
+					p.Pos = saved
+				}
+			} else {
+				p.Pos = saved
+			}
+		}
+		p.SkipWhitespace()
+		if !(p.AtEnd()) && strings.HasPrefix(p.Source[p.Pos:], "--") {
+			if p.Pos+2 >= p.Length || _IsWhitespace(string(p.Source[p.Pos+2])) {
+				p.Advance()
+				p.Advance()
+				timePosix = true
+				p.SkipWhitespace()
+			}
+		}
+		for p._LexIsAtReservedWord("time") {
+			p._LexConsumeWord("time")
+			p.SkipWhitespace()
+			if !(p.AtEnd()) && p.Peek() == "-" {
+				saved = p.Pos
+				p.Advance()
+				if !(p.AtEnd()) && p.Peek() == "p" {
+					p.Advance()
+					if p.AtEnd() || _IsMetachar(p.Peek()) {
+						timePosix = true
+					} else {
+						p.Pos = saved
+					}
+				} else {
+					p.Pos = saved
+				}
+			}
+		}
+		p.SkipWhitespace()
+		if !(p.AtEnd()) && p.Peek() == "!" {
+			if p.Pos+1 >= p.Length || _IsNegationBoundary(string(p.Source[p.Pos+1])) && !(p._IsBangFollowedByProcsub()) {
+				p.Advance()
+				prefixOrder = "time_negation"
+				p.SkipWhitespace()
+			}
+		}
+	} else if !(p.AtEnd()) && p.Peek() == "!" {
+		if p.Pos+1 >= p.Length || _IsNegationBoundary(string(p.Source[p.Pos+1])) && !(p._IsBangFollowedByProcsub()) {
+			p.Advance()
+			p.SkipWhitespace()
+			inner = p.ParsePipeline()
+			if i, ok := inner.(*Negation); ok {
+				if i.Pipeline != nil {
+					return i.Pipeline
+				} else {
+					return NewCommand([]Node{}, nil)
+				}
+			}
+			return NewNegation(inner)
+		}
+	}
+	result = p._ParseSimplePipeline()
+	if prefixOrder == "time" {
+		result = NewTime(result, timePosix)
+	} else if prefixOrder == "negation" {
+		result = NewNegation(result)
+	} else if prefixOrder == "time_negation" {
+		result = NewTime(result, timePosix)
+		result = NewNegation(result)
+	} else if prefixOrder == "negation_time" {
+		result = NewTime(result, timePosix)
+		result = NewNegation(result)
+	} else if result == nil {
+		return nil
+	}
+	return result
 }
 
 func (p *Parser) _ParseSimplePipeline() Node {

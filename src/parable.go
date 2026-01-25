@@ -9660,12 +9660,72 @@ func (p *Parser) _LineMatchesDelimiter(line string, delimiter string, stripTabs 
 }
 
 func (p *Parser) _GatherHeredocBodies() {
-	// Minimal implementation: return if no pending heredocs
-	// Full heredoc support requires implementing the full algorithm
-	if len(p._Pending_heredocs) == 0 {
-		return
+	for _, heredocNode := range p._Pending_heredocs {
+		heredoc := heredocNode.(*HereDoc)
+		var contentLines []string
+		lineStart := p.Pos
+
+		for p.Pos < p.Length {
+			lineStart = p.Pos
+			line, lineEnd := p._ReadHeredocLine(heredoc.Quoted)
+			matches, checkLine := p._LineMatchesDelimiter(line, heredoc.Delimiter, heredoc.Strip_tabs)
+
+			if matches {
+				if lineEnd < p.Length {
+					p.Pos = lineEnd + 1
+				} else {
+					p.Pos = lineEnd
+				}
+				break
+			}
+
+			// Check for delimiter followed by cmdsub/procsub closer
+			normalizedCheck := _NormalizeHeredocDelimiter(checkLine)
+			normalizedDelim := _NormalizeHeredocDelimiter(heredoc.Delimiter)
+
+			// In command substitution: line starts with delimiter
+			if p._Eof_token == ")" && strings.HasPrefix(normalizedCheck, normalizedDelim) {
+				tabsStripped := len(line) - len(checkLine)
+				p.Pos = lineStart + tabsStripped + len(heredoc.Delimiter)
+				break
+			}
+
+			// At EOF with line starting with delimiter (process sub case)
+			if lineEnd >= p.Length &&
+				strings.HasPrefix(normalizedCheck, normalizedDelim) &&
+				p._In_process_sub {
+				tabsStripped := len(line) - len(checkLine)
+				p.Pos = lineStart + tabsStripped + len(heredoc.Delimiter)
+				break
+			}
+
+			// Add line to content
+			contentLine := line
+			if heredoc.Strip_tabs {
+				contentLine = strings.TrimLeft(line, "\t")
+			}
+
+			if lineEnd < p.Length {
+				contentLines = append(contentLines, contentLine+"\n")
+				p.Pos = lineEnd + 1
+			} else {
+				// EOF - bash keeps trailing newline unless escaped
+				addNewline := true
+				if !heredoc.Quoted && _CountTrailingBackslashes(line)%2 == 1 {
+					addNewline = false
+				}
+				if addNewline {
+					contentLines = append(contentLines, contentLine+"\n")
+				} else {
+					contentLines = append(contentLines, contentLine)
+				}
+				p.Pos = p.Length
+			}
+		}
+
+		heredoc.Content = strings.Join(contentLines, "")
 	}
-	panic("TODO: heredoc gathering not yet implemented")
+	p._Pending_heredocs = []Node{}
 }
 
 func (p *Parser) _ParseHeredoc(fd int, stripTabs bool) *HereDoc {

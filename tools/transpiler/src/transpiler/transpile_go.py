@@ -1319,15 +1319,101 @@ class GoTranspiler(ast.NodeVisitor):
 
     @staticmethod
     def _emit_gather_heredoc_bodies(t: "GoTranspiler", receiver: str):
-        """Emit minimal _GatherHeredocBodies - returns early if no pending heredocs."""
-        t.emit("// Minimal implementation: return if no pending heredocs")
-        t.emit("// Full heredoc support requires implementing the full algorithm")
-        t.emit(f"if len({receiver}._Pending_heredocs) == 0 {{")
+        """Emit full _GatherHeredocBodies implementation."""
+        t.emit(f"for _, heredocNode := range {receiver}._Pending_heredocs {{")
         t.indent += 1
-        t.emit("return")
+        t.emit("heredoc := heredocNode.(*HereDoc)")
+        t.emit("var contentLines []string")
+        t.emit(f"lineStart := {receiver}.Pos")
+        t.emit("")
+        t.emit(f"for {receiver}.Pos < {receiver}.Length {{")
+        t.indent += 1
+        t.emit(f"lineStart = {receiver}.Pos")
+        t.emit(f"line, lineEnd := {receiver}._ReadHeredocLine(heredoc.Quoted)")
+        t.emit(f"matches, checkLine := {receiver}._LineMatchesDelimiter(line, heredoc.Delimiter, heredoc.Strip_tabs)")
+        t.emit("")
+        t.emit("if matches {")
+        t.indent += 1
+        t.emit(f"if lineEnd < {receiver}.Length {{")
+        t.indent += 1
+        t.emit(f"{receiver}.Pos = lineEnd + 1")
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit(f"{receiver}.Pos = lineEnd")
         t.indent -= 1
         t.emit("}")
-        t.emit('panic("TODO: heredoc gathering not yet implemented")')
+        t.emit("break")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        t.emit("// Check for delimiter followed by cmdsub/procsub closer")
+        t.emit("normalizedCheck := _NormalizeHeredocDelimiter(checkLine)")
+        t.emit("normalizedDelim := _NormalizeHeredocDelimiter(heredoc.Delimiter)")
+        t.emit("")
+        t.emit("// In command substitution: line starts with delimiter")
+        t.emit(f'if {receiver}._Eof_token == ")" && strings.HasPrefix(normalizedCheck, normalizedDelim) {{')
+        t.indent += 1
+        t.emit("tabsStripped := len(line) - len(checkLine)")
+        t.emit(f"{receiver}.Pos = lineStart + tabsStripped + len(heredoc.Delimiter)")
+        t.emit("break")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        t.emit("// At EOF with line starting with delimiter (process sub case)")
+        t.emit(f"if lineEnd >= {receiver}.Length &&")
+        t.indent += 1
+        t.emit("strings.HasPrefix(normalizedCheck, normalizedDelim) &&")
+        t.emit(f"{receiver}._In_process_sub {{")
+        t.indent -= 1
+        t.indent += 1
+        t.emit("tabsStripped := len(line) - len(checkLine)")
+        t.emit(f"{receiver}.Pos = lineStart + tabsStripped + len(heredoc.Delimiter)")
+        t.emit("break")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        t.emit("// Add line to content")
+        t.emit("contentLine := line")
+        t.emit("if heredoc.Strip_tabs {")
+        t.indent += 1
+        t.emit('contentLine = strings.TrimLeft(line, "\\t")')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        t.emit(f"if lineEnd < {receiver}.Length {{")
+        t.indent += 1
+        t.emit('contentLines = append(contentLines, contentLine+"\\n")')
+        t.emit(f"{receiver}.Pos = lineEnd + 1")
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit("// EOF - bash keeps trailing newline unless escaped")
+        t.emit("addNewline := true")
+        t.emit("if !heredoc.Quoted && _CountTrailingBackslashes(line)%2 == 1 {")
+        t.indent += 1
+        t.emit("addNewline = false")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("if addNewline {")
+        t.indent += 1
+        t.emit('contentLines = append(contentLines, contentLine+"\\n")')
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit("contentLines = append(contentLines, contentLine)")
+        t.indent -= 1
+        t.emit("}")
+        t.emit(f"{receiver}.Pos = {receiver}.Length")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        t.emit('heredoc.Content = strings.Join(contentLines, "")')
+        t.indent -= 1
+        t.emit("}")
+        t.emit(f"{receiver}._Pending_heredocs = []Node{{}}")
 
     @staticmethod
     def _emit_parse_heredoc(t: "GoTranspiler", receiver: str):

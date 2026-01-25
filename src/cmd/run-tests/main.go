@@ -112,8 +112,17 @@ type testOutput struct {
 func runTestInner(testInput, testExpected string, extglob bool) (passed bool, actual string, errMsg string) {
 	defer func() {
 		if r := recover(); r != nil {
-			// Check if it's a ParseError
+			// Check if it's a ParseError or MatchedPairError (which embeds ParseError)
+			var errMsg_ string
+			isParseError := false
 			if pe, ok := r.(*parable.ParseError); ok {
+				errMsg_ = pe.Error()
+				isParseError = true
+			} else if mpe, ok := r.(*parable.MatchedPairError); ok {
+				errMsg_ = mpe.Error()
+				isParseError = true
+			}
+			if isParseError {
 				if normalize(testExpected) == "<error>" {
 					passed = true
 					actual = "<error>"
@@ -122,7 +131,7 @@ func runTestInner(testInput, testExpected string, extglob bool) (passed bool, ac
 				}
 				passed = false
 				actual = "<parse error>"
-				errMsg = pe.Error()
+				errMsg = errMsg_
 				return
 			}
 			// Other panic

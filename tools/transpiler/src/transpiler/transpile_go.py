@@ -1154,9 +1154,6 @@ class GoTranspiler(ast.NodeVisitor):
         # Higher-order function patterns and arithmetic parsing
         # Higher-order function - not called, kept as stub
         "_arith_parse_left_assoc",
-        # Complex type assertions needed
-        "_parse_heredoc",
-        "_parse_heredoc_delimiter",
         # Tuple stack in local variable (heredoc tracking)
         "_parse_backtick_substitution",
     }
@@ -1250,6 +1247,8 @@ class GoTranspiler(ast.NodeVisitor):
         ("Parser", "_arith_parse_equality"): lambda t, r: GoTranspiler._emit_arith_left_assoc(t, r, ["==", "!="], "_ArithParseComparison"),
         # Heredoc gathering - minimal implementation (full heredocs not yet supported)
         ("Parser", "_gather_heredoc_bodies"): lambda t, r: GoTranspiler._emit_gather_heredoc_bodies(t, r),
+        # Heredoc parsing - needs type assertion for _pending_heredocs iteration
+        ("Parser", "_parse_heredoc"): lambda t, r: GoTranspiler._emit_parse_heredoc(t, r),
     }
 
     @staticmethod
@@ -1329,6 +1328,29 @@ class GoTranspiler(ast.NodeVisitor):
         t.indent -= 1
         t.emit("}")
         t.emit('panic("TODO: heredoc gathering not yet implemented")')
+
+    @staticmethod
+    def _emit_parse_heredoc(t: "GoTranspiler", receiver: str):
+        """Emit _ParseHeredoc with proper type assertion for _pending_heredocs."""
+        t.emit(f"startPos := {receiver}.Pos")
+        t.emit(f"{receiver}._SetState(ParserStateFlags_PST_HEREDOC)")
+        t.emit(f"delimiter, quoted := {receiver}._ParseHeredocDelimiter()")
+        t.emit(f"for _, existing := range {receiver}._Pending_heredocs {{")
+        t.indent += 1
+        t.emit("h := existing.(*HereDoc)")
+        t.emit("if h._Start_pos == startPos && h.Delimiter == delimiter {")
+        t.indent += 1
+        t.emit(f"{receiver}._ClearState(ParserStateFlags_PST_HEREDOC)")
+        t.emit("return h")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("heredoc := NewHereDoc(delimiter, \"\", stripTabs, quoted, fd, false)")
+        t.emit("heredoc._Start_pos = startPos")
+        t.emit(f"{receiver}._Pending_heredocs = append({receiver}._Pending_heredocs, heredoc)")
+        t.emit(f"{receiver}._ClearState(ParserStateFlags_PST_HEREDOC)")
+        t.emit("return heredoc")
 
     def _emit_constructor(self, node: ast.FunctionDef, class_info: ClassInfo):
         """Emit a constructor function."""

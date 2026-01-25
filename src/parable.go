@@ -9397,7 +9397,218 @@ func (p *Parser) ParseRedirect() interface{} {
 }
 
 func (p *Parser) _ParseHeredocDelimiter() (string, bool) {
-	panic("TODO: method needs manual implementation")
+	var quoted bool
+	_ = quoted
+	var delimiterChars []string
+	_ = delimiterChars
+	var ch string
+	_ = ch
+	var c string
+	_ = c
+	var nextCh string
+	_ = nextCh
+	var esc string
+	_ = esc
+	var escVal int
+	_ = escVal
+	var depth int
+	_ = depth
+	var dollarCount int
+	_ = dollarCount
+	var j int
+	_ = j
+	p.SkipWhitespace()
+	quoted = false
+	delimiterChars = []string{}
+	for true {
+		for !(p.AtEnd()) && !(_IsMetachar(p.Peek())) {
+			ch = p.Peek()
+			if ch == "\"" {
+				quoted = true
+				p.Advance()
+				for !(p.AtEnd()) && p.Peek() != "\"" {
+					delimiterChars = append(delimiterChars, p.Advance())
+				}
+				if !(p.AtEnd()) {
+					p.Advance()
+				}
+			} else if ch == "'" {
+				quoted = true
+				p.Advance()
+				for !(p.AtEnd()) && p.Peek() != "'" {
+					c = p.Advance()
+					if c == "\n" {
+						p._Saw_newline_in_single_quote = true
+					}
+					delimiterChars = append(delimiterChars, c)
+				}
+				if !(p.AtEnd()) {
+					p.Advance()
+				}
+			} else if ch == "\\" {
+				p.Advance()
+				if !(p.AtEnd()) {
+					nextCh = p.Peek()
+					if nextCh == "\n" {
+						p.Advance()
+					} else {
+						quoted = true
+						delimiterChars = append(delimiterChars, p.Advance())
+					}
+				}
+			} else if ch == "$" && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "'" {
+				quoted = true
+				p.Advance()
+				p.Advance()
+				for !(p.AtEnd()) && p.Peek() != "'" {
+					c = p.Peek()
+					if c == "\\" && p.Pos+1 < p.Length {
+						p.Advance()
+						esc = p.Peek()
+						escVal = _GetAnsiEscape(esc)
+						if escVal >= 0 {
+							delimiterChars = append(delimiterChars, string(rune(escVal)))
+							p.Advance()
+						} else if esc == "'" {
+							delimiterChars = append(delimiterChars, p.Advance())
+						} else {
+							delimiterChars = append(delimiterChars, p.Advance())
+						}
+					} else {
+						delimiterChars = append(delimiterChars, p.Advance())
+					}
+				}
+				if !(p.AtEnd()) {
+					p.Advance()
+				}
+			} else if _IsExpansionStart(p.Source, p.Pos, "$(") {
+				delimiterChars = append(delimiterChars, p.Advance())
+				delimiterChars = append(delimiterChars, p.Advance())
+				depth = 1
+				for !(p.AtEnd()) && depth > 0 {
+					c = p.Peek()
+					if c == "(" {
+						depth += 1
+					} else if c == ")" {
+						depth -= 1
+					}
+					delimiterChars = append(delimiterChars, p.Advance())
+				}
+			} else if ch == "$" && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "{" {
+				dollarCount = 0
+				j = p.Pos - 1
+				for j >= 0 && string(p.Source[j]) == "$" {
+					dollarCount += 1
+					j -= 1
+				}
+				if j >= 0 && string(p.Source[j]) == "\\" {
+					dollarCount -= 1
+				}
+				if dollarCount%2 == 1 {
+					delimiterChars = append(delimiterChars, p.Advance())
+				} else {
+					delimiterChars = append(delimiterChars, p.Advance())
+					delimiterChars = append(delimiterChars, p.Advance())
+					depth = 0
+					for !(p.AtEnd()) {
+						c = p.Peek()
+						if c == "{" {
+							depth += 1
+						} else if c == "}" {
+							delimiterChars = append(delimiterChars, p.Advance())
+							if depth == 0 {
+								break
+							}
+							depth -= 1
+							if depth == 0 && !(p.AtEnd()) && _IsMetachar(p.Peek()) {
+								break
+							}
+							continue
+						}
+						delimiterChars = append(delimiterChars, p.Advance())
+					}
+				}
+			} else if ch == "$" && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "[" {
+				dollarCount = 0
+				j = p.Pos - 1
+				for j >= 0 && string(p.Source[j]) == "$" {
+					dollarCount += 1
+					j -= 1
+				}
+				if j >= 0 && string(p.Source[j]) == "\\" {
+					dollarCount -= 1
+				}
+				if dollarCount%2 == 1 {
+					delimiterChars = append(delimiterChars, p.Advance())
+				} else {
+					delimiterChars = append(delimiterChars, p.Advance())
+					delimiterChars = append(delimiterChars, p.Advance())
+					depth = 1
+					for !(p.AtEnd()) && depth > 0 {
+						c = p.Peek()
+						if c == "[" {
+							depth += 1
+						} else if c == "]" {
+							depth -= 1
+						}
+						delimiterChars = append(delimiterChars, p.Advance())
+					}
+				}
+			} else if ch == "`" {
+				delimiterChars = append(delimiterChars, p.Advance())
+				for !(p.AtEnd()) && p.Peek() != "`" {
+					c = p.Peek()
+					if c == "'" {
+						delimiterChars = append(delimiterChars, p.Advance())
+						for !(p.AtEnd()) && p.Peek() != "'" && p.Peek() != "`" {
+							delimiterChars = append(delimiterChars, p.Advance())
+						}
+						if !(p.AtEnd()) && p.Peek() == "'" {
+							delimiterChars = append(delimiterChars, p.Advance())
+						}
+					} else if c == "\"" {
+						delimiterChars = append(delimiterChars, p.Advance())
+						for !(p.AtEnd()) && p.Peek() != "\"" && p.Peek() != "`" {
+							if p.Peek() == "\\" && p.Pos+1 < p.Length {
+								delimiterChars = append(delimiterChars, p.Advance())
+							}
+							delimiterChars = append(delimiterChars, p.Advance())
+						}
+						if !(p.AtEnd()) && p.Peek() == "\"" {
+							delimiterChars = append(delimiterChars, p.Advance())
+						}
+					} else if c == "\\" && p.Pos+1 < p.Length {
+						delimiterChars = append(delimiterChars, p.Advance())
+						delimiterChars = append(delimiterChars, p.Advance())
+					} else {
+						delimiterChars = append(delimiterChars, p.Advance())
+					}
+				}
+				if !(p.AtEnd()) {
+					delimiterChars = append(delimiterChars, p.Advance())
+				}
+			} else {
+				delimiterChars = append(delimiterChars, p.Advance())
+			}
+		}
+		if !(p.AtEnd()) && strings.Contains("<>", p.Peek()) && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "(" {
+			delimiterChars = append(delimiterChars, p.Advance())
+			delimiterChars = append(delimiterChars, p.Advance())
+			depth = 1
+			for !(p.AtEnd()) && depth > 0 {
+				c = p.Peek()
+				if c == "(" {
+					depth += 1
+				} else if c == ")" {
+					depth -= 1
+				}
+				delimiterChars = append(delimiterChars, p.Advance())
+			}
+			continue
+		}
+		break
+	}
+	return strings.Join(delimiterChars, ""), quoted
 }
 
 func (p *Parser) _ReadHeredocLine(quoted bool) (string, int) {
@@ -9458,7 +9669,21 @@ func (p *Parser) _GatherHeredocBodies() {
 }
 
 func (p *Parser) _ParseHeredoc(fd int, stripTabs bool) *HereDoc {
-	panic("TODO: method needs manual implementation")
+	startPos := p.Pos
+	p._SetState(ParserStateFlags_PST_HEREDOC)
+	delimiter, quoted := p._ParseHeredocDelimiter()
+	for _, existing := range p._Pending_heredocs {
+		h := existing.(*HereDoc)
+		if h._Start_pos == startPos && h.Delimiter == delimiter {
+			p._ClearState(ParserStateFlags_PST_HEREDOC)
+			return h
+		}
+	}
+	heredoc := NewHereDoc(delimiter, "", stripTabs, quoted, fd, false)
+	heredoc._Start_pos = startPos
+	p._Pending_heredocs = append(p._Pending_heredocs, heredoc)
+	p._ClearState(ParserStateFlags_PST_HEREDOC)
+	return heredoc
 }
 
 func (p *Parser) ParseCommand() *Command {

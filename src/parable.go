@@ -5646,10 +5646,10 @@ func (w *Word) _FormatCommandSubstitutions(value string, inArith bool) string {
 				direction = string(value[i])
 				j = _FindCmdsubEnd(value, i+2)
 				node = procsubParts[procsubIdx]
-				compact = _StartsWithSubshell(node.(*CommandSubstitution).Command)
-				formatted = _FormatCmdsubNode(node.(*CommandSubstitution).Command, 0, true, compact, true)
+				compact = _StartsWithSubshell(node.(*ProcessSubstitution).Command)
+				formatted = _FormatCmdsubNode(node.(*ProcessSubstitution).Command, 0, true, compact, true)
 				rawContent = _Substring(value, i+2, j-1)
-				if node.(*CommandSubstitution).Command.Kind() == "subshell" {
+				if node.(*ProcessSubstitution).Command.Kind() == "subshell" {
 					leadingWsEnd = 0
 					for leadingWsEnd < len(rawContent) && strings.Contains(" \t\n", string(rawContent[leadingWsEnd])) {
 						leadingWsEnd += 1
@@ -5659,7 +5659,7 @@ func (w *Word) _FormatCommandSubstitutions(value string, inArith bool) string {
 					if strings.HasPrefix(stripped, "(") {
 						if len(leadingWs) > 0 {
 							normalizedWs = strings.ReplaceAll(strings.ReplaceAll(leadingWs, "\n", " "), "\t", " ")
-							spaced = _FormatCmdsubNode(node.(*CommandSubstitution).Command, 0, false, false, false)
+							spaced = _FormatCmdsubNode(node.(*ProcessSubstitution).Command, 0, false, false, false)
 							result = append(result, direction+"("+normalizedWs+spaced+")")
 						} else {
 							rawContent = strings.ReplaceAll(rawContent, "\\\n", "")
@@ -5672,7 +5672,7 @@ func (w *Word) _FormatCommandSubstitutions(value string, inArith bool) string {
 				}
 				rawContent = _Substring(value, i+2, j-1)
 				rawStripped = strings.ReplaceAll(rawContent, "\\\n", "")
-				if _StartsWithSubshell(node.(*CommandSubstitution).Command) && formatted != rawStripped {
+				if _StartsWithSubshell(node.(*ProcessSubstitution).Command) && formatted != rawStripped {
 					result = append(result, direction+"("+rawStripped+")")
 				} else {
 					finalOutput = direction + "(" + formatted + ")"

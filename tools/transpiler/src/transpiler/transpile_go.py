@@ -2005,6 +2005,7 @@ class GoTranspiler(ast.NodeVisitor):
         self.var_types: dict[str, str] = {}  # Inferred types for local vars
         self.tuple_vars = {}  # Reset tuple variable tracking
         self.returned_vars = set()  # Reset returned variable tracking
+        self.var_assign_sources: dict[str, str] = {}  # Track assignment sources for type inference
         # Track return type for nil → zero value conversion
         self.current_return_type = func_info.return_type if func_info else ""
         if func_info:
@@ -3109,6 +3110,8 @@ class GoTranspiler(ast.NodeVisitor):
                         self.byte_vars.add(target_str)
                     # Track if assigned from a tuple-returning function
                     self._track_tuple_func_assignment(target_str, stmt.value)
+                    # Track assignment source for procsub/cmdsub type inference
+                    self._track_assign_source(target_str, stmt.value)
                     self.emit(f"{target_str} := {value}")
                     return
             # Use inferred type for empty list assignment to typed variables
@@ -3121,6 +3124,9 @@ class GoTranspiler(ast.NodeVisitor):
             # Track if this variable holds a byte (from string subscript)
             if isinstance(target, ast.Name) and self._is_string_char_subscript(stmt.value):
                 self.byte_vars.add(target_str)
+            # Track assignment source for procsub/cmdsub type inference
+            if isinstance(target, ast.Name):
+                self._track_assign_source(target_str, stmt.value)
             # Convert nil to -1 if assigning to int field (self.x = None)
             if isinstance(target, ast.Attribute) and isinstance(stmt.value, ast.Constant) and stmt.value.value is None:
                 if isinstance(target.value, ast.Name) and target.value.id == "self" and self.current_class:
@@ -3373,6 +3379,13 @@ class GoTranspiler(ast.NodeVisitor):
             go_func_name = self._to_go_func_name(func_name)
             if go_func_name in self.TUPLE_ELEMENT_TYPES:
                 self.tuple_func_vars[var_name] = go_func_name
+
+    def _track_assign_source(self, var_name: str, value: ast.expr):
+        """Track assignment source for procsub/cmdsub type inference."""
+        if isinstance(value, ast.Subscript) and isinstance(value.value, ast.Name):
+            source_name = value.value.id
+            if source_name in ("procsub_parts", "cmdsub_parts"):
+                self.var_assign_sources[var_name] = source_name
 
     def _is_byte_variable(self, node: ast.expr) -> bool:
         """Check if node is a variable known to hold a byte."""
@@ -4396,7 +4409,7 @@ class GoTranspiler(ast.NodeVisitor):
         # Check if value needs type assertion for struct-specific field access
         value_type = self._get_expr_element_type(node.value)
         if value_type in ("interface{}", "Node"):
-            type_assertion = self._get_type_for_field(attr_name)
+            type_assertion = self._get_type_for_field(attr_name, node.value)
             if type_assertion:
                 return f"{value}.({type_assertion}).{attr}"
         return f"{value}.{attr}"
@@ -4450,8 +4463,19 @@ class GoTranspiler(ast.NodeVisitor):
                     return class_info.fields[node.attr].go_type or ""
         return ""
 
-    def _get_type_for_field(self, field_name: str) -> str | None:
+    def _get_type_for_field(self, field_name: str, value_node: ast.expr | None = None) -> str | None:
         """Get the type assertion needed for a field access on interface{} or Node."""
+        # Special case: .command field exists on both CommandSubstitution and ProcessSubstitution
+        # Determine which type based on the assignment source tracked in var_assign_sources
+        if field_name == "command" and value_node is not None:
+            if isinstance(value_node, ast.Name):
+                var_name = self._snake_to_camel(value_node.id)
+                var_name = self._safe_go_name(var_name)
+                source = getattr(self, 'var_assign_sources', {}).get(var_name, "")
+                if source == "procsub_parts":
+                    return "*ProcessSubstitution"
+                elif source == "cmdsub_parts":
+                    return "*CommandSubstitution"
         field_to_type = {
             "command": "*CommandSubstitution",
             "body": "*ProcessSubstitution",

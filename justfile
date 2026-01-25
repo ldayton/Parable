@@ -210,9 +210,27 @@ check-transpile-go:
 build-go:
     go build -C src -o /dev/null .
 
-# Run Go tests (placeholder)
-test-go:
-    @echo "[test-go] TODO: Not yet implemented"
+# Run Go tests
+test-go *ARGS:
+    go run -C src ./cmd/run-tests {{ARGS}}
+
+# Format Go (--fix to apply changes)
+fmt-go *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "{{ARGS}}" = "--fix" ]; then
+        gofmt -w src/parable.go
+        echo "[fmt-go] OK"
+    else
+        diff_output=$(gofmt -d src/parable.go)
+        if [ -z "$diff_output" ]; then
+            echo "[fmt-go] OK"
+        else
+            echo "[fmt-go] FAIL: src/parable.go needs formatting, run 'just fmt-go --fix'" >&2
+            echo "$diff_output" >&2
+            exit 1
+        fi
+    fi
 
 # Run JavaScript tests
 test-js *ARGS: check-transpile

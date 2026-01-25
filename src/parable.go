@@ -1413,7 +1413,7 @@ func _FormatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects b
 		return result
 	case *Pipeline:
 		type cmdInfo struct {
-			cmd          Node
+			cmd           Node
 			needsRedirect bool
 		}
 		cmds := []cmdInfo{}

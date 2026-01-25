@@ -11,11 +11,11 @@ deny uv run tests "use `just test`"
 
 #---- Just targets ----#
 allow just check
+allow just check-style
 allow just fmt
 allow just lint
-allow just test
-allow just test-js
-allow just transpile
+allow just test*
+allow just transpile*
 deny just test-all "Don't worry about other Python versions, `just test` and `just check` are all you need"
 
 #---- Bash ----#

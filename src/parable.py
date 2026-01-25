@@ -444,7 +444,7 @@ class Lexer:
         # Last token returned by next_token (for context-sensitive parsing)
         self._last_read_token: Token | None = None
         # Word parsing context (set by Parser before peeking)
-        self._word_context = WORD_CTX_NORMAL
+        self._word_context: int = WORD_CTX_NORMAL
         self._at_command_start = False
         self._in_array_literal = False
         self._in_assign_builtin = False
@@ -6731,7 +6731,7 @@ class Parser:
         # EOF token mechanism for inline command substitution parsing
         self._eof_token: str | None = None
         # Word parsing context for Lexer sync
-        self._word_context = WORD_CTX_NORMAL
+        self._word_context: int = WORD_CTX_NORMAL
         self._at_command_start = False
         self._in_array_literal = False
         self._in_assign_builtin = False
@@ -7894,9 +7894,9 @@ class Parser:
         saved_parser_state = self._parser_state
 
         self._set_state(ParserStateFlags.PST_ARITH)
-        self._arith_src = content
-        self._arith_pos = 0
-        self._arith_len = len(content)
+        self._arith_src: str = content
+        self._arith_pos: int = 0
+        self._arith_len: int = len(content)
         self._arith_skip_ws()
         if self._arith_at_end():
             result = None

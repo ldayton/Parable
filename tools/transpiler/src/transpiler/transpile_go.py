@@ -807,6 +807,19 @@ class GoTranspiler(ast.NodeVisitor):
         self.indent -= 1
         self.emit("}")
         self.emit("")
+        # Helper to detect typed nil (e.g., (*Command)(nil) assigned to Node interface)
+        self.emit("func _isNilNode(n Node) bool {")
+        self.indent += 1
+        self.emit("if n == nil {")
+        self.indent += 1
+        self.emit("return true")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("v := reflect.ValueOf(n)")
+        self.emit("return v.Kind() == reflect.Ptr && v.IsNil()")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
         # Character helper - get rune from string
         self.emit("func _runeAt(s string, i int) rune {")
         self.indent += 1
@@ -1247,6 +1260,10 @@ class GoTranspiler(ast.NodeVisitor):
         ("Parser", "_parse_process_substitution"): lambda t, r: GoTranspiler._emit_parse_process_substitution(t, r),
         # Backtick substitution - complex heredoc tracking in local vars
         ("Parser", "_parse_backtick_substitution"): lambda t, r: GoTranspiler._emit_parse_backtick_substitution(t, r),
+        # Command substitution - needs _isNilNode for typed nil check
+        ("Parser", "_parse_command_substitution"): lambda t, r: GoTranspiler._emit_parse_command_substitution(t, r),
+        # Funsub (brace command substitution) - needs _isNilNode for typed nil check
+        ("Parser", "_parse_funsub"): lambda t, r: GoTranspiler._emit_parse_funsub(t, r),
     }
 
     @staticmethod
@@ -1486,7 +1503,7 @@ class GoTranspiler(ast.NodeVisitor):
         t.emit("}()")
         t.emit("")
         t.emit(f"cmd := {receiver}.ParseList(true)")
-        t.emit("if cmd == nil {")
+        t.emit("if _isNilNode(cmd) {")
         t.indent += 1
         t.emit("cmd = NewEmpty()")
         t.indent -= 1
@@ -1962,13 +1979,121 @@ class GoTranspiler(ast.NodeVisitor):
         # Parse the content as a command list
         t.emit(f"subParser := NewParser(content, false, {receiver}._Extglob)")
         t.emit("cmd := subParser.ParseList(true)")
-        t.emit("if cmd == nil {")
+        t.emit("if _isNilNode(cmd) {")
         t.indent += 1
         t.emit("cmd = NewEmpty()")
         t.indent -= 1
         t.emit("}")
         t.emit("")
         t.emit("return NewCommandSubstitution(cmd, false), text")
+
+    @staticmethod
+    def _emit_parse_command_substitution(t: "GoTranspiler", receiver: str):
+        """Emit _ParseCommandSubstitution with _isNilNode check for typed nil."""
+        # Variable declarations
+        t.emit("var start int")
+        t.emit("_ = start")
+        t.emit("var saved *SavedParserState")
+        t.emit("_ = saved")
+        t.emit("var cmd Node")
+        t.emit("_ = cmd")
+        t.emit("var textEnd int")
+        t.emit("_ = textEnd")
+        t.emit("var text string")
+        t.emit("_ = text")
+        # Initial checks
+        t.emit(f'if {receiver}.AtEnd() || {receiver}.Peek() != "$" {{')
+        t.indent += 1
+        t.emit('return nil, ""')
+        t.indent -= 1
+        t.emit("}")
+        t.emit(f"start = {receiver}.Pos")
+        t.emit(f"{receiver}.Advance()")
+        t.emit("")
+        t.emit(f'if {receiver}.AtEnd() || {receiver}.Peek() != "(" {{')
+        t.indent += 1
+        t.emit(f"{receiver}.Pos = start")
+        t.emit('return nil, ""')
+        t.indent -= 1
+        t.emit("}")
+        t.emit(f"{receiver}.Advance()")
+        t.emit("")
+        # Save state and set up for parsing
+        t.emit(f"saved = {receiver}._SaveParserState()")
+        t.emit(f"{receiver}._SetState(ParserStateFlags_PST_CMDSUBST | ParserStateFlags_PST_EOFTOKEN)")
+        t.emit(f'{receiver}._Eof_token = ")"')
+        t.emit("")
+        # Parse command list with _isNilNode check for typed nil
+        t.emit(f"cmd = {receiver}.ParseList(true)")
+        t.emit("if _isNilNode(cmd) {")
+        t.indent += 1
+        t.emit("cmd = NewEmpty()")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        # Check for closing paren
+        t.emit(f"{receiver}.SkipWhitespaceAndNewlines()")
+        t.emit(f'if {receiver}.AtEnd() || {receiver}.Peek() != ")" {{')
+        t.indent += 1
+        t.emit(f"{receiver}._RestoreParserState(saved)")
+        t.emit(f"{receiver}.Pos = start")
+        t.emit('return nil, ""')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        t.emit(f"{receiver}.Advance()")
+        t.emit(f"textEnd = {receiver}.Pos")
+        t.emit(f"text = _Substring({receiver}.Source, start, textEnd)")
+        t.emit("")
+        t.emit(f"{receiver}._RestoreParserState(saved)")
+        t.emit("return NewCommandSubstitution(cmd, false), text")
+
+    @staticmethod
+    def _emit_parse_funsub(t: "GoTranspiler", receiver: str):
+        """Emit _ParseFunsub with _isNilNode check for typed nil."""
+        # Variable declarations
+        t.emit("var saved *SavedParserState")
+        t.emit("_ = saved")
+        t.emit("var cmd Node")
+        t.emit("_ = cmd")
+        t.emit("var text string")
+        t.emit("_ = text")
+        # Sync parser and skip leading |
+        t.emit(f"{receiver}._SyncParser()")
+        t.emit(f'if !({receiver}.AtEnd()) && {receiver}.Peek() == "|" {{')
+        t.indent += 1
+        t.emit(f"{receiver}.Advance()")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        # Save state and set up for parsing
+        t.emit(f"saved = {receiver}._SaveParserState()")
+        t.emit(f"{receiver}._SetState(ParserStateFlags_PST_CMDSUBST | ParserStateFlags_PST_EOFTOKEN)")
+        t.emit(f'{receiver}._Eof_token = "}}"')
+        t.emit("")
+        # Parse command list with _isNilNode check for typed nil
+        t.emit(f"cmd = {receiver}.ParseList(true)")
+        t.emit("if _isNilNode(cmd) {")
+        t.indent += 1
+        t.emit("cmd = NewEmpty()")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        # Check for closing brace
+        t.emit(f"{receiver}.SkipWhitespaceAndNewlines()")
+        t.emit(f'if {receiver}.AtEnd() || {receiver}.Peek() != "}}" {{')
+        t.indent += 1
+        t.emit(f"{receiver}._RestoreParserState(saved)")
+        t.emit(f'panic(NewMatchedPairError("unexpected EOF looking for `}}\'", start, 0))')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        t.emit(f"{receiver}.Advance()")
+        t.emit(f"text = _Substring({receiver}.Source, start, {receiver}.Pos)")
+        t.emit(f"{receiver}._RestoreParserState(saved)")
+        t.emit(f"{receiver}._SyncLexer()")
+        t.emit("return NewCommandSubstitution(cmd, true), text")
+
     MANUAL_FUNCTIONS: dict[str, "Callable[[GoTranspiler], None]"] = {
         "_format_heredoc_body": lambda t: GoTranspiler._emit_format_heredoc_body(t),
         "_starts_with_subshell": lambda t: GoTranspiler._emit_starts_with_subshell(t),

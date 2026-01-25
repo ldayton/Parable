@@ -74,6 +74,14 @@ func _ternary[T any](cond bool, a, b T) T {
 	return b
 }
 
+func _isNilNode(n Node) bool {
+	if n == nil {
+		return true
+	}
+	v := reflect.ValueOf(n)
+	return v.Kind() == reflect.Ptr && v.IsNil()
+}
+
 func _runeAt(s string, i int) rune {
 	if i < len(s) {
 		return rune(s[i])
@@ -7803,10 +7811,6 @@ func (c *ConditionalExpr) ToSexp() string {
 	case string:
 		escaped = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(b, "\\", "\\\\"), "\"", "\\\""), "\n", "\\n")
 		result = "(cond \"" + escaped + "\")"
-	default:
-		if n, ok := body.(Node); ok {
-			result = "(cond " + n.ToSexp() + ")"
-		}
 	}
 	if len(c.Redirects) > 0 {
 		redirectParts = []string{}
@@ -8571,27 +8575,33 @@ func (p *Parser) _ParseCommandSubstitution() (Node, string) {
 	}
 	start = p.Pos
 	p.Advance()
+
 	if p.AtEnd() || p.Peek() != "(" {
 		p.Pos = start
 		return nil, ""
 	}
 	p.Advance()
+
 	saved = p._SaveParserState()
 	p._SetState(ParserStateFlags_PST_CMDSUBST | ParserStateFlags_PST_EOFTOKEN)
 	p._Eof_token = ")"
+
 	cmd = p.ParseList(true)
-	if cmd == nil {
+	if _isNilNode(cmd) {
 		cmd = NewEmpty()
 	}
+
 	p.SkipWhitespaceAndNewlines()
 	if p.AtEnd() || p.Peek() != ")" {
 		p._RestoreParserState(saved)
 		p.Pos = start
 		return nil, ""
 	}
+
 	p.Advance()
 	textEnd = p.Pos
 	text = _Substring(p.Source, start, textEnd)
+
 	p._RestoreParserState(saved)
 	return NewCommandSubstitution(cmd, false), text
 }
@@ -8607,18 +8617,22 @@ func (p *Parser) _ParseFunsub(start int) (Node, string) {
 	if !(p.AtEnd()) && p.Peek() == "|" {
 		p.Advance()
 	}
+
 	saved = p._SaveParserState()
 	p._SetState(ParserStateFlags_PST_CMDSUBST | ParserStateFlags_PST_EOFTOKEN)
 	p._Eof_token = "}"
+
 	cmd = p.ParseList(true)
-	if cmd == nil {
+	if _isNilNode(cmd) {
 		cmd = NewEmpty()
 	}
+
 	p.SkipWhitespaceAndNewlines()
 	if p.AtEnd() || p.Peek() != "}" {
 		p._RestoreParserState(saved)
 		panic(NewMatchedPairError("unexpected EOF looking for `}'", start, 0))
 	}
+
 	p.Advance()
 	text = _Substring(p.Source, start, p.Pos)
 	p._RestoreParserState(saved)
@@ -8922,7 +8936,7 @@ func (p *Parser) _ParseBacktickSubstitution() (Node, string) {
 
 	subParser := NewParser(content, false, p._Extglob)
 	cmd := subParser.ParseList(true)
-	if cmd == nil {
+	if _isNilNode(cmd) {
 		cmd = NewEmpty()
 	}
 
@@ -8963,7 +8977,7 @@ func (p *Parser) _ParseProcessSubstitution() (Node, string) {
 		}()
 
 		cmd := p.ParseList(true)
-		if cmd == nil {
+		if _isNilNode(cmd) {
 			cmd = NewEmpty()
 		}
 

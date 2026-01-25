@@ -292,6 +292,9 @@ class GoTranspiler(ast.NodeVisitor):
     FIELD_TYPE_OVERRIDES = {
         ("Lexer", "_word_context"): "int",
         ("Parser", "_word_context"): "int",
+        # Source_runes for rune-based indexing (Unicode support)
+        ("Lexer", "source_runes"): "[]rune",
+        ("Parser", "source_runes"): "[]rune",
         # Untyped list fields that need concrete slice types
         ("SavedParserState", "pending_heredocs"): "[]Node",
         ("SavedParserState", "ctx_stack"): "[]*ParseContext",
@@ -822,24 +825,32 @@ class GoTranspiler(ast.NodeVisitor):
         self.indent -= 1
         self.emit("}")
         self.emit("")
-        # Character helper - get rune from string
-        self.emit("func _runeAt(s string, i int) rune {")
+        # Character helper - get character (rune) from string at character index
+        self.emit("func _runeAt(s string, i int) string {")
         self.indent += 1
-        self.emit("if i < len(s) {")
+        self.emit("runes := []rune(s)")
+        self.emit("if i < 0 || i >= len(runes) {")
         self.indent += 1
-        self.emit("return rune(s[i])")
+        self.emit('return ""')
         self.indent -= 1
         self.emit("}")
-        self.emit("return 0")
+        self.emit("return string(runes[i])")
         self.indent -= 1
         self.emit("}")
         self.emit("")
-        # String to rune (first char)
+        # Rune length helper - get character count (not byte count)
+        self.emit("func _runeLen(s string) int {")
+        self.indent += 1
+        self.emit("return utf8.RuneCountInString(s)")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
+        # String to rune (first char) - uses for range to get first rune
         self.emit("func _strToRune(s string) rune {")
         self.indent += 1
-        self.emit("if len(s) > 0 {")
+        self.emit("for _, r := range s {")
         self.indent += 1
-        self.emit("return rune(s[0])")
+        self.emit("return r")
         self.indent -= 1
         self.emit("}")
         self.emit("return 0")
@@ -860,9 +871,9 @@ class GoTranspiler(ast.NodeVisitor):
         self.indent -= 1
         self.emit("case string:")
         self.indent += 1
-        self.emit("if len(v) > 0 {")
+        self.emit("for _, r := range v {")
         self.indent += 1
-        self.emit("return rune(v[0])")
+        self.emit("return r")
         self.indent -= 1
         self.emit("}")
         self.indent -= 1
@@ -1045,6 +1056,29 @@ class GoTranspiler(ast.NodeVisitor):
         self.indent -= 1
         self.emit("}")
         self.emit("")
+        # _Substring helper - rune-based substring extraction
+        self.emit("func _Substring(s string, start int, end int) string {")
+        self.indent += 1
+        self.emit("runes := []rune(s)")
+        self.emit("if start < 0 {")
+        self.indent += 1
+        self.emit("start = 0")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("if end > len(runes) {")
+        self.indent += 1
+        self.emit("end = len(runes)")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("if start >= end {")
+        self.indent += 1
+        self.emit('return ""')
+        self.indent -= 1
+        self.emit("}")
+        self.emit("return string(runes[start:end])")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
         # _pop helper - pop from slice (generic)
         self.emit("func _pop[T any](s *[]T) T {")
         self.indent += 1
@@ -1160,10 +1194,17 @@ class GoTranspiler(ast.NodeVisitor):
             return name
         return name[0].upper() + name[1:]
 
+    # Functions that are replaced by hardcoded Go implementations (skip transpilation)
+    SKIP_FUNCTIONS = {
+        "_substring",  # Replaced by rune-based _Substring in _emit_helpers()
+    }
+
     def _emit_helper_functions(self, tree: ast.Module):
         """Emit module-level helper functions."""
         for node in tree.body:
             if isinstance(node, ast.FunctionDef):
+                if node.name in self.SKIP_FUNCTIONS:
+                    continue
                 self._emit_function(node)
 
     # Functions that require duck typing (Part 6d) or have complex patterns - skip body for now
@@ -4103,6 +4144,15 @@ class GoTranspiler(ast.NodeVisitor):
                         value = f"_ternary({test}, {body}, {field_type}{{}})"
                     else:
                         value = self.visit_expr(stmt.value)
+                    # Special handling for Lexer/Parser: after Source, emit Source_runes
+                    if class_info.name in ("Lexer", "Parser") and field_name == "source":
+                        self.emit(f"{receiver}.Source = {value}")
+                        self.emit(f"{receiver}.Source_runes = []rune({value})")
+                        continue
+                    # Special handling for Lexer/Parser: Length uses Source_runes
+                    if class_info.name in ("Lexer", "Parser") and field_name == "length":
+                        self.emit(f"{receiver}.Length = len({receiver}.Source_runes)")
+                        continue
                     self.emit(f"{receiver}.{field} = {value}")
                     continue
             # Handle self.x: Type = y annotated assignments
@@ -5942,6 +5992,15 @@ class GoTranspiler(ast.NodeVisitor):
                     return elem_vars[idx]
         value = self.visit_expr(node.value)
         if isinstance(node.slice, ast.Slice):
+            # Check if slicing a string - need rune-based slicing
+            is_string_slice = self._is_string_slice(node)
+            # For Lexer/Parser Source slices, use Source_runes directly
+            is_source_slice = self._is_lexer_source_slice(node)
+            # Compute len function based on type
+            len_func = "_runeLen" if is_string_slice else "len"
+            if is_source_slice:
+                receiver = self.current_class[0].lower()
+                len_func = f"len({receiver}.Source_runes)"
             # Handle negative indices (Python [:-1] -> Go [:len(x)-1])
             lower = ""
             upper = ""
@@ -5949,10 +6008,20 @@ class GoTranspiler(ast.NodeVisitor):
                 if isinstance(node.slice.lower, ast.UnaryOp) and isinstance(node.slice.lower.op, ast.USub):
                     # Negative lower bound: -N -> len(x)-N
                     n = self.visit_expr(node.slice.lower.operand)
-                    lower = f"len({value})-{n}"
+                    if is_source_slice:
+                        lower = f"{len_func}-{n}"
+                    elif is_string_slice:
+                        lower = f"{len_func}({value})-{n}"
+                    else:
+                        lower = f"len({value})-{n}"
                 elif isinstance(node.slice.lower, ast.Constant) and isinstance(node.slice.lower.value, int) and node.slice.lower.value < 0:
                     # Negative constant lower bound
-                    lower = f"len({value}){node.slice.lower.value}"
+                    if is_source_slice:
+                        lower = f"{len_func}{node.slice.lower.value}"
+                    elif is_string_slice:
+                        lower = f"{len_func}({value}){node.slice.lower.value}"
+                    else:
+                        lower = f"len({value}){node.slice.lower.value}"
                 else:
                     lower = self.visit_expr(node.slice.lower)
             else:
@@ -5961,19 +6030,45 @@ class GoTranspiler(ast.NodeVisitor):
                 if isinstance(node.slice.upper, ast.UnaryOp) and isinstance(node.slice.upper.op, ast.USub):
                     # Negative upper bound: -N -> len(x)-N
                     n = self.visit_expr(node.slice.upper.operand)
-                    upper = f"len({value})-{n}"
+                    if is_source_slice:
+                        upper = f"{len_func}-{n}"
+                    elif is_string_slice:
+                        upper = f"{len_func}({value})-{n}"
+                    else:
+                        upper = f"len({value})-{n}"
                 elif isinstance(node.slice.upper, ast.Constant) and isinstance(node.slice.upper.value, int) and node.slice.upper.value < 0:
                     # Negative constant upper bound
-                    upper = f"len({value}){node.slice.upper.value}"
+                    if is_source_slice:
+                        upper = f"{len_func}{node.slice.upper.value}"
+                    elif is_string_slice:
+                        upper = f"{len_func}({value}){node.slice.upper.value}"
+                    else:
+                        upper = f"len({value}){node.slice.upper.value}"
                 else:
                     upper = self.visit_expr(node.slice.upper)
+            # Emit the slice
+            if is_source_slice:
+                receiver = self.current_class[0].lower()
+                if upper:
+                    return f"string({receiver}.Source_runes[{lower}:{upper}])"
+                return f"string({receiver}.Source_runes[{lower}:])"
+            if is_string_slice:
+                if upper:
+                    return f"_Substring({value}, {lower}, {upper})"
+                return f"_Substring({value}, {lower}, {len_func}({value}))"
             if upper:
                 return f"{value}[{lower}:{upper}]"
             return f"{value}[{lower}:]"
         index = self.visit_expr(node.slice)
-        # Check if indexing a string - convert byte to string
+        # Check if indexing a string - use rune-based access
         if self._is_string_subscript(node):
-            return f"string({value}[{index}])"
+            # Check if this is self.source[i] in Lexer/Parser - use Source_runes
+            if self._is_lexer_source_subscript(node):
+                # Use pre-converted Source_runes for O(1) access
+                receiver = self._get_receiver_name()
+                return f"string({receiver}.Source_runes[{index}])"
+            # General string indexing - use _runeAt helper
+            return f"_runeAt({value}, {index})"
         # Check if indexing an interface{} variable (needs type assertion)
         if isinstance(node.value, ast.Name):
             var_name = self._snake_to_camel(node.value.id)
@@ -6444,6 +6539,51 @@ class GoTranspiler(ast.NodeVisitor):
                 return True
         return False
 
+    def _is_lexer_source_subscript(self, node: ast.Subscript) -> bool:
+        """Check if node is self.source[i] access in Lexer/Parser context."""
+        if not isinstance(node.value, ast.Attribute):
+            return False
+        if node.value.attr != "source":
+            return False
+        # Check if we're in a Lexer or Parser class
+        if self.current_class in ("Lexer", "Parser"):
+            return True
+        return False
+
+    def _is_string_slice(self, node: ast.Subscript) -> bool:
+        """Check if node is a string slice (e.g., s[start:end])."""
+        if not isinstance(node.slice, ast.Slice):
+            return False
+        # Check if the value being sliced is likely a string
+        if isinstance(node.value, ast.Name):
+            name = node.value.id
+            go_name = self._snake_to_camel(name)
+            go_name = self._safe_go_name(go_name)
+            var_type = self.var_types.get(go_name, "")
+            if var_type == "string":
+                return True
+            # Common string variable names
+            if name in ("s", "text", "source", "inner", "value", "line",
+                       "name", "word", "op", "delimiter", "prefix", "suffix"):
+                return True
+        if isinstance(node.value, ast.Attribute):
+            if node.value.attr in ("source", "text", "value", "line", "inner",
+                                   "name", "word", "pattern", "_arith_src"):
+                return True
+        return False
+
+    def _is_lexer_source_slice(self, node: ast.Subscript) -> bool:
+        """Check if node is self.source[start:end] in Lexer/Parser context."""
+        if not isinstance(node.slice, ast.Slice):
+            return False
+        if not isinstance(node.value, ast.Attribute):
+            return False
+        if node.value.attr != "source":
+            return False
+        if self.current_class in ("Lexer", "Parser"):
+            return True
+        return False
+
     def _char_to_rune_literal(self, c: str) -> str:
         """Convert a single character to a Go rune literal."""
         if c == "\n":
@@ -6869,7 +7009,7 @@ class GoTranspiler(ast.NodeVisitor):
         args_str = ", ".join(args)
         # Handle builtins
         builtin_map = {
-            "len": lambda a: f"len({a[0]})",
+            "len": lambda a: self._emit_len(node.args[0], a[0]),
             "str": lambda a: f"fmt.Sprint({a[0]})" if a else '""',
             "int": lambda a: f"_mustAtoi({a[0]})" if len(a) == 1 else f"_parseInt({a[0]}, {a[1]})",
             "bool": lambda a: f"({a[0]} != 0)" if a else "false",
@@ -6933,6 +7073,44 @@ class GoTranspiler(ast.NodeVisitor):
                 if arg_type and arg_type.startswith("[]"):
                     return f"append({arg_type}{{}}, {args[0]}...)"
         return f"append([]interface{{}}{{}}, {args[0]}...)"
+
+    def _emit_len(self, arg_node: ast.expr, arg_str: str) -> str:
+        """Emit len() call - use _runeLen for strings, len() otherwise."""
+        # Check if the argument is a string expression
+        if self._is_string_expr(arg_node):
+            # For Lexer/Parser Source, use len(Source_runes) for O(1) access
+            if isinstance(arg_node, ast.Attribute):
+                if arg_node.attr == "source" and self.current_class in ("Lexer", "Parser"):
+                    receiver = self.current_class[0].lower()
+                    return f"len({receiver}.Source_runes)"
+            return f"_runeLen({arg_str})"
+        return f"len({arg_str})"
+
+    def _is_string_expr(self, node: ast.expr) -> bool:
+        """Check if node evaluates to a string type."""
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return True
+        if isinstance(node, ast.Name):
+            go_name = self._snake_to_camel(node.id)
+            go_name = self._safe_go_name(go_name)
+            var_type = self.var_types.get(go_name, "")
+            if var_type == "string":
+                return True
+            # Common string variable names
+            if node.id in ("s", "text", "source", "inner", "value", "char", "c", "line",
+                          "name", "word", "op", "delimiter", "prefix", "suffix"):
+                return True
+        if isinstance(node, ast.Attribute):
+            if node.attr in ("source", "text", "value", "line", "inner", "name", "word",
+                           "pattern", "_arith_src"):
+                return True
+        # String method calls return strings
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            method = node.func.attr
+            if method in ("strip", "lstrip", "rstrip", "lower", "upper", "replace",
+                         "join", "format", "split"):
+                return True
+        return False
 
     def _emit_ord(self, args: list[str]) -> str:
         """Emit ord() call - get code point of a character.

@@ -1,3 +1,9 @@
+// Package parable is a recursive descent parser for bash.
+//
+// MIT License - https://github.com/ldayton/Parable
+//
+//	import "parable"
+//	ast, err := parable.Parse("ps aux | grep python")
 package parable
 
 import (
@@ -6703,12 +6709,12 @@ func (c *CasePattern) ToSexp() string {
 	current = []string{}
 	i = 0
 	depth := 0
-	for i < _runeLen(c.Pattern) {
+	for i < len(c.Pattern) {
 		ch = _runeAt(c.Pattern, i)
-		if ch == "\\" && i+1 < _runeLen(c.Pattern) {
+		if ch == "\\" && i+1 < len(c.Pattern) {
 			current = append(current, _Substring(c.Pattern, i, i+2))
 			i += 2
-		} else if (ch == "@" || ch == "?" || ch == "*" || ch == "+" || ch == "!") && i+1 < _runeLen(c.Pattern) && _runeAt(c.Pattern, i+1) == "(" {
+		} else if (ch == "@" || ch == "?" || ch == "*" || ch == "+" || ch == "!") && i+1 < len(c.Pattern) && _runeAt(c.Pattern, i+1) == "(" {
 			current = append(current, ch)
 			current = append(current, "(")
 			depth += 1
@@ -11396,7 +11402,7 @@ func (p *Parser) Parse() []Node {
 	if !(len(results) > 0) {
 		return []Node{NewEmpty()}
 	}
-	if p._Saw_newline_in_single_quote && p.Source != "" && string(p.Source_runes[len(p.Source_runes)-1]) == "\\" && !(len(p.Source_runes) >= 3 && string(p.Source_runes[len(p.Source_runes)-3:len(p.Source_runes)-1]) == "\\\n") {
+	if p._Saw_newline_in_single_quote && p.Source != "" && string(p.Source_runes[len(p.Source)-1]) == "\\" && !(len(p.Source) >= 3 && string(p.Source_runes[len(p.Source)-3:len(p.Source)-1]) == "\\\n") {
 		if !(p._LastWordOnOwnLine(results)) {
 			p._StripTrailingBackslashFromLastWord(results)
 		}
@@ -11415,7 +11421,7 @@ func (p *Parser) _StripTrailingBackslashFromLastWord(nodes []Node) {
 	lastNode := nodes[len(nodes)-1]
 	lastWord := p._FindLastWord(lastNode)
 	if lastWord != nil && strings.HasSuffix(lastWord.Value, "\\") {
-		lastWord.Value = _Substring(lastWord.Value, 0, _runeLen(lastWord.Value)-1)
+		lastWord.Value = _Substring(lastWord.Value, 0, len(lastWord.Value)-1)
 		if !(len(lastWord.Value) > 0) && func() bool { _, ok := lastNode.(*Command); return ok }() && len(lastNode.(*Command).Words) > 0 {
 			_pop(&lastNode.(*Command).Words)
 		}

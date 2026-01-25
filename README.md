@@ -18,7 +18,7 @@ Parse bash exactly as bash does. Python, Javascript, or Go—your choice. One fi
 
 **Match bash exactly.** Bash is the oracle. We [patched](https://github.com/ldayton/bash-oracle) GNU Bash 5.3 so it reveals its internal parse tree, then test against it. No spec interpretation, no "close enough"—if bash parses it one way, so do we. Bash always tells the truth, even when it's lying.
 
-**Portable performance.** Hand-written recursive descent—no generators, no native extensions. Pure Python, pure JS, and pure Go—zero dependencies, not even stdlib imports. The Python implementation is canonical; a custom transpiler produces idiomatic Javascript and Go. All three run the same tests.
+**Portable performance.** Hand-written recursive descent—no generators, no native extensions, no imports. Pure Python transpiles to idiomatic JS and Go. All three run the same tests.
 
 ## Transpiled Outputs
 

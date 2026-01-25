@@ -197,6 +197,12 @@ func _snakeToPascal(s string) string {
 	return strings.Join(parts, "")
 }
 
+func _pop[T any](s *[]T) T {
+	last := (*s)[len(*s)-1]
+	*s = (*s)[:len(*s)-1]
+	return last
+}
+
 // Module-level constants
 const (
 	SmpLiteral    = 1
@@ -292,6 +298,12 @@ var AssignmentBuiltins = map[string]bool{
 	"typeset":  true,
 }
 
+// quoteStackEntry holds pushed quote state (single, double)
+type quoteStackEntry struct {
+	single bool
+	double bool
+}
+
 // TokenType constants
 const (
 	TokenType_EOF                 = 0
@@ -350,7 +362,7 @@ type Token struct {
 	Type  int
 	Value string
 	Pos   int
-	Parts interface{}
+	Parts []Node
 	Word  Node
 }
 
@@ -408,7 +420,7 @@ type SavedParserState struct {
 type QuoteState struct {
 	Single bool
 	Double bool
-	_Stack []interface{}
+	_Stack []quoteStackEntry
 }
 
 // ParseContext constants
@@ -444,7 +456,7 @@ type Lexer struct {
 	_Token_cache              *Token
 	_Parser_state             int
 	_Dolbrace_state           int
-	_Pending_heredocs         []interface{}
+	_Pending_heredocs         []Node
 	_Extglob                  bool
 	_Parser                   *Parser
 	_Eof_token                string
@@ -1115,7 +1127,7 @@ func _IsExpansionStart(s string, pos int, delimiter string) bool {
 	return _CountConsecutiveDollarsBefore(s, pos)%2 == 0
 }
 
-func _Sublist(lst []interface{}, start int, end int) []interface{} {
+func _Sublist(lst []Node, start int, end int) []Node {
 	return lst[start:end]
 }
 
@@ -1202,7 +1214,7 @@ func _AppendRedirects(base string, redirects []Node) string {
 	return base
 }
 
-func _ConsumeSingleQuote(s string, start int) interface{} {
+func _ConsumeSingleQuote(s string, start int) (int, []string) {
 	var chars []string
 	_ = chars
 	var i int
@@ -1217,10 +1229,10 @@ func _ConsumeSingleQuote(s string, start int) interface{} {
 		chars = append(chars, string(s[i]))
 		i += 1
 	}
-	return []interface{}{i, chars}
+	return i, chars
 }
 
-func _ConsumeDoubleQuote(s string, start int) interface{} {
+func _ConsumeDoubleQuote(s string, start int) (int, []string) {
 	var chars []string
 	_ = chars
 	var i int
@@ -1239,7 +1251,7 @@ func _ConsumeDoubleQuote(s string, start int) interface{} {
 		chars = append(chars, string(s[i]))
 		i += 1
 	}
-	return []interface{}{i, chars}
+	return i, chars
 }
 
 func _HasBracketClose(s string, start int, depth int) bool {
@@ -1258,7 +1270,7 @@ func _HasBracketClose(s string, start int, depth int) bool {
 	return false
 }
 
-func _ConsumeBracketClass(s string, start int, depth int) interface{} {
+func _ConsumeBracketClass(s string, start int, depth int) (int, []string, bool) {
 	var scanPos int
 	_ = scanPos
 	var isBracket bool
@@ -1291,7 +1303,7 @@ func _ConsumeBracketClass(s string, start int, depth int) interface{} {
 		scanPos += 1
 	}
 	if !(isBracket) {
-		return []interface{}{start + 1, []string{"["}, false}
+		return start + 1, []string{"["}, false
 	}
 	chars = []string{"["}
 	i = start + 1
@@ -1313,7 +1325,7 @@ func _ConsumeBracketClass(s string, start int, depth int) interface{} {
 		chars = append(chars, string(s[i]))
 		i += 1
 	}
-	return []interface{}{i, chars, true}
+	return i, chars, true
 }
 
 func _FormatCondBody(node Node) string {
@@ -1410,11 +1422,67 @@ func _SkipBacktick(value string, start int) int {
 }
 
 func _SkipSingleQuoted(s string, start int) int {
-	panic("TODO: function needs manual transpilation")
+	var i int
+	_ = i
+	i = start
+	for i < len(s) && string(s[i]) != "'" {
+		i += 1
+	}
+	return _ternary(i < len(s), i+1, i)
 }
 
 func _SkipDoubleQuoted(s string, start int) int {
-	panic("TODO: function needs manual transpilation")
+	var passNext bool
+	_ = passNext
+	var backq bool
+	_ = backq
+	var c string
+	_ = c
+	var i int
+	_ = i
+	i, n := start, len(s)
+	passNext = false
+	backq = false
+	for i < n {
+		c = string(s[i])
+		if passNext {
+			passNext = false
+			i += 1
+			continue
+		}
+		if c == "\\" {
+			passNext = true
+			i += 1
+			continue
+		}
+		if backq {
+			if c == "`" {
+				backq = false
+			}
+			i += 1
+			continue
+		}
+		if c == "`" {
+			backq = true
+			i += 1
+			continue
+		}
+		if c == "$" && i+1 < n {
+			if string(s[i+1]) == "(" {
+				i = _FindCmdsubEnd(s, i+2)
+				continue
+			}
+			if string(s[i+1]) == "{" {
+				i = _FindBracedParamEnd(s, i+2)
+				continue
+			}
+		}
+		if c == "\"" {
+			return i + 1
+		}
+		i += 1
+	}
+	return i
 }
 
 func _IsValidArithmeticStart(value string, start int) bool {
@@ -1714,7 +1782,166 @@ func _FindBracedParamEnd(value string, start int) int {
 }
 
 func _SkipHeredoc(value string, start int) int {
-	panic("TODO: function needs manual transpilation")
+	var i int
+	_ = i
+	var delimStart int
+	_ = delimStart
+	var quoteChar string
+	_ = quoteChar
+	var delimiter string
+	_ = delimiter
+	var parenDepth int
+	_ = parenDepth
+	var quote *QuoteState
+	_ = quote
+	var inBacktick bool
+	_ = inBacktick
+	var c string
+	_ = c
+	var lineStart int
+	_ = lineStart
+	var lineEnd int
+	_ = lineEnd
+	var line string
+	_ = line
+	var trailingBs int
+	_ = trailingBs
+	var nextLineStart int
+	_ = nextLineStart
+	var stripped string
+	_ = stripped
+	var tabsStripped int
+	_ = tabsStripped
+	i = start + 2
+	if i < len(value) && string(value[i]) == "-" {
+		i += 1
+	}
+	for i < len(value) && _IsWhitespaceNoNewline(string(value[i])) {
+		i += 1
+	}
+	delimStart = i
+	quoteChar = ""
+	if i < len(value) && string(value[i]) == "\"" || string(value[i]) == "'" {
+		quoteChar = string(value[i])
+		i += 1
+		delimStart = i
+		for i < len(value) && string(value[i]) != quoteChar {
+			i += 1
+		}
+		delimiter = value[delimStart:i]
+		if i < len(value) {
+			i += 1
+		}
+	} else if i < len(value) && string(value[i]) == "\\" {
+		i += 1
+		delimStart = i
+		if i < len(value) {
+			i += 1
+		}
+		for i < len(value) && !(_IsMetachar(string(value[i]))) {
+			i += 1
+		}
+		delimiter = value[delimStart:i]
+	} else {
+		for i < len(value) && !(_IsMetachar(string(value[i]))) {
+			i += 1
+		}
+		delimiter = value[delimStart:i]
+	}
+	parenDepth = 0
+	quote = NewQuoteState()
+	inBacktick = false
+	for i < len(value) && string(value[i]) != "\n" {
+		c = string(value[i])
+		if c == "\\" && i+1 < len(value) && quote.Double || inBacktick {
+			i += 2
+			continue
+		}
+		if c == "'" && !(quote.Double) && !(inBacktick) {
+			quote.Single = !(quote.Single)
+			i += 1
+			continue
+		}
+		if c == "\"" && !(quote.Single) && !(inBacktick) {
+			quote.Double = !(quote.Double)
+			i += 1
+			continue
+		}
+		if c == "`" && !(quote.Single) {
+			inBacktick = !(inBacktick)
+			i += 1
+			continue
+		}
+		if quote.Single || quote.Double || inBacktick {
+			i += 1
+			continue
+		}
+		if c == "(" {
+			parenDepth += 1
+		} else if c == ")" {
+			if parenDepth == 0 {
+				break
+			}
+			parenDepth -= 1
+		}
+		i += 1
+	}
+	if i < len(value) && string(value[i]) == ")" {
+		return i
+	}
+	if i < len(value) && string(value[i]) == "\n" {
+		i += 1
+	}
+	for i < len(value) {
+		lineStart = i
+		lineEnd = i
+		for lineEnd < len(value) && string(value[lineEnd]) != "\n" {
+			lineEnd += 1
+		}
+		line = value[lineStart:lineEnd]
+		for lineEnd < len(value) {
+			trailingBs = 0
+			for j := len(line) - 1; j > -1; j += -1 {
+				if string(line[j]) == "\\" {
+					trailingBs += 1
+				} else {
+					break
+				}
+			}
+			if trailingBs%2 == 0 {
+				break
+			}
+			line = line[0 : len(line)-1]
+			lineEnd += 1
+			nextLineStart = lineEnd
+			for lineEnd < len(value) && string(value[lineEnd]) != "\n" {
+				lineEnd += 1
+			}
+			line = line + value[nextLineStart:lineEnd]
+		}
+		if start+2 < len(value) && string(value[start+2]) == "-" {
+			stripped = strings.TrimLeft(line, "\t")
+		} else {
+			stripped = line
+		}
+		if stripped == delimiter {
+			if lineEnd < len(value) {
+				return lineEnd + 1
+			} else {
+				return lineEnd
+			}
+		}
+		if strings.HasPrefix(stripped, delimiter) && len(stripped) > len(delimiter) {
+			tabsStripped = len(line) - len(stripped)
+			return lineStart + tabsStripped + len(delimiter)
+		}
+		if lineEnd < len(value) {
+			i = lineEnd + 1
+		} else {
+			i = lineEnd
+		}
+	}
+	return i
 }
 
 func _FindHeredocContentEnd(source string, start int, delimiters []interface{}) (int, int) {
@@ -1747,7 +1974,27 @@ func _IsQuote(c string) bool {
 }
 
 func _CollapseWhitespace(s string) string {
-	panic("TODO: function needs manual transpilation")
+	var result []string
+	_ = result
+	var prevWasWs bool
+	_ = prevWasWs
+	var joined string
+	_ = joined
+	result = []string{}
+	prevWasWs = false
+	for _, c := range s {
+		if c == ' ' || c == '\t' {
+			if !(prevWasWs) {
+				result = append(result, " ")
+			}
+			prevWasWs = true
+		} else {
+			result = append(result, string(c))
+			prevWasWs = false
+		}
+	}
+	joined = strings.Join(result, "")
+	return strings.TrimSpace(joined)
 }
 
 func _CountTrailingBackslashes(s string) int {
@@ -1765,7 +2012,98 @@ func _CountTrailingBackslashes(s string) int {
 }
 
 func _NormalizeHeredocDelimiter(delimiter string) string {
-	panic("TODO: function needs manual transpilation")
+	var result []string
+	_ = result
+	var i int
+	_ = i
+	var depth int
+	_ = depth
+	var inner []string
+	_ = inner
+	var innerStr string
+	_ = innerStr
+	result = []string{}
+	i = 0
+	for i < len(delimiter) {
+		if i+1 < len(delimiter) && delimiter[i:i+2] == "$(" {
+			result = append(result, "$(")
+			i += 2
+			depth = 1
+			inner = []string{}
+			for i < len(delimiter) && depth > 0 {
+				if string(delimiter[i]) == "(" {
+					depth += 1
+					inner = append(inner, string(delimiter[i]))
+				} else if string(delimiter[i]) == ")" {
+					depth -= 1
+					if depth == 0 {
+						innerStr = strings.Join(inner, "")
+						innerStr = _CollapseWhitespace(innerStr)
+						result = append(result, innerStr)
+						result = append(result, ")")
+					} else {
+						inner = append(inner, string(delimiter[i]))
+					}
+				} else {
+					inner = append(inner, string(delimiter[i]))
+				}
+				i += 1
+			}
+		} else if i+1 < len(delimiter) && delimiter[i:i+2] == "${" {
+			result = append(result, "${")
+			i += 2
+			depth = 1
+			inner = []string{}
+			for i < len(delimiter) && depth > 0 {
+				if string(delimiter[i]) == "{" {
+					depth += 1
+					inner = append(inner, string(delimiter[i]))
+				} else if string(delimiter[i]) == "}" {
+					depth -= 1
+					if depth == 0 {
+						innerStr = strings.Join(inner, "")
+						innerStr = _CollapseWhitespace(innerStr)
+						result = append(result, innerStr)
+						result = append(result, "}")
+					} else {
+						inner = append(inner, string(delimiter[i]))
+					}
+				} else {
+					inner = append(inner, string(delimiter[i]))
+				}
+				i += 1
+			}
+		} else if i+1 < len(delimiter) && strings.Contains("<>", string(delimiter[i])) && string(delimiter[i+1]) == "(" {
+			result = append(result, string(delimiter[i]))
+			result = append(result, "(")
+			i += 2
+			depth = 1
+			inner = []string{}
+			for i < len(delimiter) && depth > 0 {
+				if string(delimiter[i]) == "(" {
+					depth += 1
+					inner = append(inner, string(delimiter[i]))
+				} else if string(delimiter[i]) == ")" {
+					depth -= 1
+					if depth == 0 {
+						innerStr = strings.Join(inner, "")
+						innerStr = _CollapseWhitespace(innerStr)
+						result = append(result, innerStr)
+						result = append(result, ")")
+					} else {
+						inner = append(inner, string(delimiter[i]))
+					}
+				} else {
+					inner = append(inner, string(delimiter[i]))
+				}
+				i += 1
+			}
+		} else {
+			result = append(result, string(delimiter[i]))
+			i += 1
+		}
+	}
+	return strings.Join(result, "")
 }
 
 func _IsMetachar(c string) bool {
@@ -1805,7 +2143,81 @@ func _IsWordEndContext(c string) bool {
 }
 
 func _SkipMatchedPair(s string, start int, open string, close string, flags int) int {
-	panic("TODO: function needs manual transpilation")
+	var n int
+	_ = n
+	var i int
+	_ = i
+	var depth int
+	_ = depth
+	var passNext bool
+	_ = passNext
+	var backq bool
+	_ = backq
+	var c string
+	_ = c
+	var literal int
+	_ = literal
+	n = len(s)
+	if (flags & SmpPastOpen) != 0 {
+		i = start
+	} else {
+		if start >= n || string(s[start]) != open {
+			return -1
+		}
+		i = start + 1
+	}
+	depth = 1
+	passNext = false
+	backq = false
+	for i < n && depth > 0 {
+		c = string(s[i])
+		if passNext {
+			passNext = false
+			i += 1
+			continue
+		}
+		literal = flags & SmpLiteral
+		if !(literal != 0) && c == "\\" {
+			passNext = true
+			i += 1
+			continue
+		}
+		if backq {
+			if c == "`" {
+				backq = false
+			}
+			i += 1
+			continue
+		}
+		if !(literal != 0) && c == "`" {
+			backq = true
+			i += 1
+			continue
+		}
+		if !(literal != 0) && c == "'" {
+			i = _SkipSingleQuoted(s, i+1)
+			continue
+		}
+		if !(literal != 0) && c == "\"" {
+			i = _SkipDoubleQuoted(s, i+1)
+			continue
+		}
+		if !(literal != 0) && _IsExpansionStart(s, i, "$(") {
+			i = _FindCmdsubEnd(s, i+2)
+			continue
+		}
+		if !(literal != 0) && _IsExpansionStart(s, i, "${") {
+			i = _FindBracedParamEnd(s, i+2)
+			continue
+		}
+		if !(literal != 0) && c == open {
+			depth += 1
+		} else if c == close {
+			depth -= 1
+		}
+		i += 1
+	}
+	return _ternary(depth == 0, i, -1)
 }
 
 func _SkipSubscript(s string, start int, flags int) int {
@@ -1991,12 +2403,12 @@ func Parse(source string, extglob bool) []Node {
 	return parser.Parse()
 }
 
-func NewToken(typ int, value string, pos int, parts []interface{}, word Node) *Token {
+func NewToken(typ int, value string, pos int, parts []Node, word Node) *Token {
 	t := &Token{}
 	t.Type = typ
 	t.Value = value
 	t.Pos = pos
-	t.Parts = _ternary(parts != nil, parts, []interface{}{})
+	t.Parts = _ternary(parts != nil, parts, []Node{})
 	t.Word = word
 	return t
 }
@@ -2015,18 +2427,23 @@ func NewQuoteState() *QuoteState {
 	q := &QuoteState{}
 	q.Single = false
 	q.Double = false
-	q._Stack = []interface{}{}
+	q._Stack = []quoteStackEntry{}
 	return q
 }
 
 func (q *QuoteState) Push() {
-	q._Stack = append(q._Stack, []interface{}{q.Single, q.Double})
+	q._Stack = append(q._Stack, quoteStackEntry{q.Single, q.Double})
 	q.Single = false
 	q.Double = false
 }
 
 func (q *QuoteState) Pop() {
-	panic("TODO: method needs manual implementation")
+	if len(q._Stack) > 0 {
+		entry := q._Stack[len(q._Stack)-1]
+		q._Stack = q._Stack[:len(q._Stack)-1]
+		q.Single = entry.single
+		q.Double = entry.double
+	}
 }
 
 func (q *QuoteState) InQuotes() bool {
@@ -2034,11 +2451,19 @@ func (q *QuoteState) InQuotes() bool {
 }
 
 func (q *QuoteState) Copy() *QuoteState {
-	panic("TODO: method needs manual implementation")
+	qs := &QuoteState{}
+	qs.Single = q.Single
+	qs.Double = q.Double
+	qs._Stack = make([]quoteStackEntry, len(q._Stack))
+	copy(qs._Stack, q._Stack)
+	return qs
 }
 
 func (q *QuoteState) OuterDouble() bool {
-	panic("TODO: method needs manual implementation")
+	if len(q._Stack) == 0 {
+		return false
+	}
+	return q._Stack[len(q._Stack)-1].double
 }
 
 func NewParseContext(kind int) *ParseContext {
@@ -2055,7 +2480,17 @@ func NewParseContext(kind int) *ParseContext {
 }
 
 func (p *ParseContext) Copy() *ParseContext {
-	panic("TODO: method needs manual implementation")
+	var ctx *ParseContext
+	_ = ctx
+	ctx = NewParseContext(p.Kind)
+	ctx.Paren_depth = p.Paren_depth
+	ctx.Brace_depth = p.Brace_depth
+	ctx.Bracket_depth = p.Bracket_depth
+	ctx.Case_depth = p.Case_depth
+	ctx.Arith_depth = p.Arith_depth
+	ctx.Arith_paren_depth = p.Arith_paren_depth
+	ctx.Quote = p.Quote.Copy()
+	return ctx
 }
 
 func NewContextStack() *ContextStack {
@@ -2073,7 +2508,10 @@ func (c *ContextStack) Push(kind int) {
 }
 
 func (c *ContextStack) Pop() *ParseContext {
-	panic("TODO: method needs manual implementation")
+	if len(c._Stack) > 1 {
+		return _pop(&c._Stack)
+	}
+	return c._Stack[0]
 }
 
 func (c *ContextStack) CopyStack() []*ParseContext {
@@ -2105,7 +2543,7 @@ func NewLexer(source string, extglob bool) *Lexer {
 	l._Token_cache = nil
 	l._Parser_state = ParserStateFlags_NONE
 	l._Dolbrace_state = DolbraceState_NONE
-	l._Pending_heredocs = []interface{}{}
+	l._Pending_heredocs = []Node{}
 	l._Extglob = extglob
 	l._Parser = nil
 	l._Eof_token = ""
@@ -2714,7 +3152,22 @@ func (l *Lexer) _ParseMatchedPair(openChar string, closeChar string, flags int, 
 			}
 		}
 		if ch == "(" && wasGtlt && (flags&MatchedPairFlags_DOLBRACE|MatchedPairFlags_ARRAYSUB) != 0 {
-			panic("TODO: incomplete implementation")
+			direction = _pop(&chars)
+			l.Pos -= 1
+			l._SyncToParser()
+			procsubNode, procsubText := l._Parser._ParseProcessSubstitution()
+			l._SyncFromParser()
+			if procsubNode != nil {
+				chars = append(chars, procsubText)
+				wasDollar = false
+				wasGtlt = false
+			} else {
+				chars = append(chars, direction)
+				chars = append(chars, l.Advance())
+				wasDollar = false
+				wasGtlt = false
+			}
+			continue
 		}
 		chars = append(chars, ch)
 		wasDollar = ch == "$"
@@ -3765,10 +4218,31 @@ func (l *Lexer) _ReadBracedParam(start int, inDquote bool) (Node, string) {
 		}
 	}
 	l._UpdateDolbraceForOp(op, len(param) > 0)
-	panic("TODO: try/except")
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				l._Dolbrace_state = savedDolbrace
+				panic(r)
+			}
+		}()
+		flags = _ternary(inDquote, MatchedPairFlags_DQUOTE, MatchedPairFlags_NONE)
+		paramEndsWithDollar = param != "" && strings.HasSuffix(param, "$")
+		arg = l._CollectParamArgument(flags, paramEndsWithDollar)
+	}()
 	if _containsAny([]interface{}{"<", ">"}, op) && strings.HasPrefix(arg, "(") && strings.HasSuffix(arg, ")") {
 		inner = arg[1 : len(arg)-1]
-		panic("TODO: incomplete implementation")
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+				}
+			}()
+			subParser = NewParser(inner, true, l._Parser._Extglob)
+			parsed = subParser.ParseList(true)
+			if parsed != nil && subParser.AtEnd() {
+				formatted = _FormatCmdsubNode(parsed, 0, true, false, true)
+				arg = "(" + formatted + ")"
+			}
+		}()
 	}
 	text = "${" + param + op + arg + "}"
 	l._Dolbrace_state = savedDolbrace
@@ -4208,7 +4682,9 @@ func (w *Word) _ExpandAllAnsiCQuotes(value string) string {
 			} else if ch == "}" && braceDepth > 0 && !(quote.Double) {
 				braceDepth -= 1
 				result = append(result, ch)
-				panic("TODO: incomplete implementation")
+				quote.Pop()
+				i += 1
+				continue
 			}
 		}
 		effectiveInDquote = quote.Double
@@ -5147,7 +5623,16 @@ func (w *Word) _FormatCommandSubstitutions(value string, inArith bool) string {
 				formatted = _FormatCmdsubNode(node.(*CommandSubstitution).Command, 0, false, false, false)
 				cmdsubIdx += 1
 			} else {
-				panic("TODO: incomplete implementation")
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							formatted = inner
+						}
+					}()
+					parser = NewParser(inner, false, false)
+					parsed = parser.ParseList(true)
+					formatted = _ternary(parsed != nil, _FormatCmdsubNode(parsed, 0, false, false, false), "")
+				}()
 			}
 			if strings.HasPrefix(formatted, "(") {
 				result = append(result, "$( "+formatted+")")
@@ -5253,7 +5738,23 @@ func (w *Word) _FormatCommandSubstitutions(value string, inArith bool) string {
 					continue
 				}
 				inner = value[i+2 : j-1]
-				panic("TODO: incomplete implementation")
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							formatted = inner
+						}
+					}()
+					parser = NewParser(inner, false, false)
+					parsed = parser.ParseList(true)
+					if parsed != nil && parser.Pos == len(inner) && !strings.Contains(inner, "\n") {
+						compact = _StartsWithSubshell(parsed)
+						formatted = _FormatCmdsubNode(parsed, 0, true, compact, true)
+					} else {
+						formatted = inner
+					}
+				}()
+				result = append(result, direction+"("+formatted+")")
+				i = j
 			} else if isProcsub {
 				direction = string(value[i])
 				j = _FindCmdsubEnd(value, i+2)
@@ -5292,7 +5793,29 @@ func (w *Word) _FormatCommandSubstitutions(value string, inArith bool) string {
 			if strings.TrimSpace(inner) == "" {
 				result = append(result, "${ }")
 			} else {
-				panic("TODO: incomplete implementation")
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							result = append(result, value[i:j])
+						}
+					}()
+					parser = NewParser(strings.TrimLeft(inner, " \t\n|"), false, false)
+					parsed = parser.ParseList(true)
+					if parsed != nil {
+						formatted = _FormatCmdsubNode(parsed, 0, false, false, false)
+						formatted = strings.TrimRight(formatted, ";")
+						if strings.HasSuffix(strings.TrimRight(inner, " \t"), "\n") {
+							terminator = "\n }"
+						} else if strings.HasSuffix(formatted, " &") {
+							terminator = " }"
+						} else {
+							terminator = "; }"
+						}
+						result = append(result, prefix+formatted+terminator)
+					} else {
+						result = append(result, "${ }")
+					}
+				}()
 			}
 			i = j
 		} else if _IsExpansionStart(value, i, "${") && !(_IsBackslashEscaped(value, i)) {
@@ -6215,8 +6738,10 @@ func (c *CasePattern) ToSexp() string {
 	_ = depth
 	var ch string
 	_ = ch
-	var result interface{}
-	_ = result
+	var result0 int
+	_ = result0
+	var result1 []string
+	_ = result1
 	var wordList []string
 	_ = wordList
 	var patternStr string
@@ -6251,17 +6776,17 @@ func (c *CasePattern) ToSexp() string {
 			depth -= 1
 			i += 1
 		} else if ch == "[" {
-			result = _ConsumeBracketClass(c.Pattern, i, depth)
-			i = result.([]interface{})[0].(int)
-			current = append(current, result.([]interface{})[1].([]string)...)
+			result0, result1, _ = _ConsumeBracketClass(c.Pattern, i, depth)
+			i = result0
+			current = append(current, result1...)
 		} else if ch == "'" && depth == 0 {
-			result = _ConsumeSingleQuote(c.Pattern, i)
-			i = result.([]interface{})[0].(int)
-			current = append(current, result.([]interface{})[1].([]string)...)
+			result0, result1 = _ConsumeSingleQuote(c.Pattern, i)
+			i = result0
+			current = append(current, result1...)
 		} else if ch == "\"" && depth == 0 {
-			result = _ConsumeDoubleQuote(c.Pattern, i)
-			i = result.([]interface{})[0].(int)
-			current = append(current, result.([]interface{})[1].([]string)...)
+			result0, result1 = _ConsumeDoubleQuote(c.Pattern, i)
+			i = result0
+			current = append(current, result1...)
 		} else if ch == "|" && depth == 0 {
 			alternatives = append(alternatives, strings.Join(current, ""))
 			current = []string{}
@@ -7561,320 +8086,7 @@ func (p *Parser) _IsAssignmentWord(word Node) bool {
 }
 
 func (p *Parser) _ParseBacktickSubstitution() (Node, string) {
-	var start int
-	_ = start
-	var contentChars []string
-	_ = contentChars
-	var textChars []string
-	_ = textChars
-	var pendingHeredocs []interface{}
-	_ = pendingHeredocs
-	var inHeredocBody bool
-	_ = inHeredocBody
-	var currentHeredocDelim string
-	_ = currentHeredocDelim
-	var currentHeredocStrip bool
-	_ = currentHeredocStrip
-	var lineStart int
-	_ = lineStart
-	var lineEnd int
-	_ = lineEnd
-	var line string
-	_ = line
-	var checkLine string
-	_ = checkLine
-	var tabsStripped int
-	_ = tabsStripped
-	var endPos int
-	_ = endPos
-	var c string
-	_ = c
-	var nextC string
-	_ = nextC
-	var escaped string
-	_ = escaped
-	var ch string
-	_ = ch
-	var quote string
-	_ = quote
-	var stripTabs bool
-	_ = stripTabs
-	var delimiterChars []string
-	_ = delimiterChars
-	var dch string
-	_ = dch
-	var closing string
-	_ = closing
-	var esc string
-	_ = esc
-	var delimiter string
-	_ = delimiter
-	var text string
-	_ = text
-	var content string
-	_ = content
-	var subParser *Parser
-	_ = subParser
-	var cmd Node
-	_ = cmd
-	if p.AtEnd() || p.Peek() != "`" {
-		return nil, ""
-	}
-	start = p.Pos
-	p.Advance()
-	contentChars = []string{}
-	textChars = []string{"`"}
-	pendingHeredocs = []interface{}{}
-	inHeredocBody = false
-	currentHeredocDelim = ""
-	currentHeredocStrip = false
-	for !(p.AtEnd()) && inHeredocBody || p.Peek() != "`" {
-		if inHeredocBody {
-			lineStart = p.Pos
-			lineEnd = lineStart
-			for lineEnd < p.Length && string(p.Source[lineEnd]) != "\n" {
-				lineEnd += 1
-			}
-			line = p.Source[lineStart:lineEnd]
-			checkLine = _ternary(currentHeredocStrip, strings.TrimLeft(line, "\t"), line)
-			if checkLine == currentHeredocDelim {
-				for _, ch := range line {
-					contentChars = append(contentChars, string(ch))
-					textChars = append(textChars, string(ch))
-				}
-				p.Pos = lineEnd
-				if p.Pos < p.Length && string(p.Source[p.Pos]) == "\n" {
-					contentChars = append(contentChars, "\n")
-					textChars = append(textChars, "\n")
-					p.Advance()
-				}
-				inHeredocBody = false
-				if len(pendingHeredocs) > 0 {
-					panic("TODO: incomplete implementation")
-				}
-			} else if strings.HasPrefix(checkLine, currentHeredocDelim) && len(checkLine) > len(currentHeredocDelim) {
-				tabsStripped = len(line) - len(checkLine)
-				endPos = tabsStripped + len(currentHeredocDelim)
-				for i := 0; i < endPos; i++ {
-					contentChars = append(contentChars, string(line[i]))
-					textChars = append(textChars, string(line[i]))
-				}
-				p.Pos = lineStart + endPos
-				inHeredocBody = false
-				if len(pendingHeredocs) > 0 {
-					panic("TODO: incomplete implementation")
-				}
-			} else {
-				for _, ch := range line {
-					contentChars = append(contentChars, string(ch))
-					textChars = append(textChars, string(ch))
-				}
-				p.Pos = lineEnd
-				if p.Pos < p.Length && string(p.Source[p.Pos]) == "\n" {
-					contentChars = append(contentChars, "\n")
-					textChars = append(textChars, "\n")
-					p.Advance()
-				}
-			}
-			continue
-		}
-		c = p.Peek()
-		if c == "\\" && p.Pos+1 < p.Length {
-			nextC = string(p.Source[p.Pos+1])
-			if nextC == "\n" {
-				p.Advance()
-				p.Advance()
-			} else if _IsEscapeCharInBacktick(nextC) {
-				p.Advance()
-				escaped = p.Advance()
-				contentChars = append(contentChars, escaped)
-				textChars = append(textChars, "\\")
-				textChars = append(textChars, escaped)
-			} else {
-				ch = p.Advance()
-				contentChars = append(contentChars, string(ch))
-				textChars = append(textChars, string(ch))
-			}
-			continue
-		}
-		if c == "<" && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "<" {
-			if p.Pos+2 < p.Length && string(p.Source[p.Pos+2]) == "<" {
-				contentChars = append(contentChars, p.Advance())
-				textChars = append(textChars, "<")
-				contentChars = append(contentChars, p.Advance())
-				textChars = append(textChars, "<")
-				contentChars = append(contentChars, p.Advance())
-				textChars = append(textChars, "<")
-				for !(p.AtEnd()) && _IsWhitespaceNoNewline(p.Peek()) {
-					ch = p.Advance()
-					contentChars = append(contentChars, string(ch))
-					textChars = append(textChars, string(ch))
-				}
-				for !(p.AtEnd()) && !(_IsWhitespace(p.Peek())) && !strings.Contains("()", p.Peek()) {
-					if p.Peek() == "\\" && p.Pos+1 < p.Length {
-						ch = p.Advance()
-						contentChars = append(contentChars, string(ch))
-						textChars = append(textChars, string(ch))
-						ch = p.Advance()
-						contentChars = append(contentChars, string(ch))
-						textChars = append(textChars, string(ch))
-					} else if strings.Contains("\"'", p.Peek()) {
-						quote = p.Peek()
-						ch = p.Advance()
-						contentChars = append(contentChars, string(ch))
-						textChars = append(textChars, string(ch))
-						for !(p.AtEnd()) && p.Peek() != quote {
-							if quote == "\"" && p.Peek() == "\\" {
-								ch = p.Advance()
-								contentChars = append(contentChars, string(ch))
-								textChars = append(textChars, string(ch))
-							}
-							ch = p.Advance()
-							contentChars = append(contentChars, string(ch))
-							textChars = append(textChars, string(ch))
-						}
-						if !(p.AtEnd()) {
-							ch = p.Advance()
-							contentChars = append(contentChars, string(ch))
-							textChars = append(textChars, string(ch))
-						}
-					} else {
-						ch = p.Advance()
-						contentChars = append(contentChars, string(ch))
-						textChars = append(textChars, string(ch))
-					}
-				}
-				continue
-			}
-			contentChars = append(contentChars, p.Advance())
-			textChars = append(textChars, "<")
-			contentChars = append(contentChars, p.Advance())
-			textChars = append(textChars, "<")
-			stripTabs = false
-			if !(p.AtEnd()) && p.Peek() == "-" {
-				stripTabs = true
-				contentChars = append(contentChars, p.Advance())
-				textChars = append(textChars, "-")
-			}
-			for !(p.AtEnd()) && _IsWhitespaceNoNewline(p.Peek()) {
-				ch = p.Advance()
-				contentChars = append(contentChars, string(ch))
-				textChars = append(textChars, string(ch))
-			}
-			delimiterChars = []string{}
-			if !(p.AtEnd()) {
-				ch = p.Peek()
-				if _IsQuote(ch) {
-					quote = p.Advance()
-					contentChars = append(contentChars, quote)
-					textChars = append(textChars, quote)
-					for !(p.AtEnd()) && p.Peek() != quote {
-						dch = p.Advance()
-						contentChars = append(contentChars, dch)
-						textChars = append(textChars, dch)
-						delimiterChars = append(delimiterChars, dch)
-					}
-					if !(p.AtEnd()) {
-						closing = p.Advance()
-						contentChars = append(contentChars, closing)
-						textChars = append(textChars, closing)
-					}
-				} else if ch == "\\" {
-					esc = p.Advance()
-					contentChars = append(contentChars, esc)
-					textChars = append(textChars, esc)
-					if !(p.AtEnd()) {
-						dch = p.Advance()
-						contentChars = append(contentChars, dch)
-						textChars = append(textChars, dch)
-						delimiterChars = append(delimiterChars, dch)
-					}
-					for !(p.AtEnd()) && !(_IsMetachar(p.Peek())) {
-						dch = p.Advance()
-						contentChars = append(contentChars, dch)
-						textChars = append(textChars, dch)
-						delimiterChars = append(delimiterChars, dch)
-					}
-				} else {
-					for !(p.AtEnd()) && !(_IsMetachar(p.Peek())) && p.Peek() != "`" {
-						ch = p.Peek()
-						if _IsQuote(ch) {
-							quote = p.Advance()
-							contentChars = append(contentChars, quote)
-							textChars = append(textChars, quote)
-							for !(p.AtEnd()) && p.Peek() != quote {
-								dch = p.Advance()
-								contentChars = append(contentChars, dch)
-								textChars = append(textChars, dch)
-								delimiterChars = append(delimiterChars, dch)
-							}
-							if !(p.AtEnd()) {
-								closing = p.Advance()
-								contentChars = append(contentChars, closing)
-								textChars = append(textChars, closing)
-							}
-						} else if ch == "\\" {
-							esc = p.Advance()
-							contentChars = append(contentChars, esc)
-							textChars = append(textChars, esc)
-							if !(p.AtEnd()) {
-								dch = p.Advance()
-								contentChars = append(contentChars, dch)
-								textChars = append(textChars, dch)
-								delimiterChars = append(delimiterChars, dch)
-							}
-						} else {
-							dch = p.Advance()
-							contentChars = append(contentChars, dch)
-							textChars = append(textChars, dch)
-							delimiterChars = append(delimiterChars, dch)
-						}
-					}
-				}
-			}
-			delimiter = strings.Join(delimiterChars, "")
-			if len(delimiter) > 0 {
-				pendingHeredocs = append(pendingHeredocs, []interface{}{delimiter, stripTabs})
-			}
-			continue
-		}
-		if c == "\n" {
-			ch = p.Advance()
-			contentChars = append(contentChars, string(ch))
-			textChars = append(textChars, string(ch))
-			if len(pendingHeredocs) > 0 {
-				panic("TODO: incomplete implementation")
-			}
-			continue
-		}
-		ch = p.Advance()
-		contentChars = append(contentChars, string(ch))
-		textChars = append(textChars, string(ch))
-	}
-	if p.AtEnd() {
-		panic(NewParseError("Unterminated backtick", start, 0))
-	}
-	p.Advance()
-	textChars = append(textChars, "`")
-	text = strings.Join(textChars, "")
-	content = strings.Join(contentChars, "")
-	if len(pendingHeredocs) > 0 {
-		heredocStart, heredocEnd := _FindHeredocContentEnd(p.Source, p.Pos, pendingHeredocs)
-		if heredocEnd > heredocStart {
-			content = content + p.Source[heredocStart:heredocEnd]
-			if p._Cmdsub_heredoc_end == -1 {
-				p._Cmdsub_heredoc_end = heredocEnd
-			} else {
-				p._Cmdsub_heredoc_end = _max(p._Cmdsub_heredoc_end, heredocEnd)
-			}
-		}
-	}
-	subParser = NewParser(content, false, p._Extglob)
-	cmd = subParser.ParseList(true)
-	if cmd == nil {
-		cmd = NewEmpty()
-	}
-	return NewCommandSubstitution(cmd, false), text
+	panic("TODO: method needs manual implementation")
 }
 
 func (p *Parser) _ParseProcessSubstitution() (Node, string) {
@@ -7911,7 +8123,7 @@ func (p *Parser) _ParseProcessSubstitution() (Node, string) {
 	p._In_process_sub = true
 	p._SetState(ParserStateFlags_PST_EOFTOKEN)
 	p._Eof_token = ")"
-	panic("TODO: try/except")
+	panic("TODO: try/except with return")
 }
 
 func (p *Parser) _ParseArrayLiteral() (Node, string) {
@@ -7960,7 +8172,96 @@ func (p *Parser) _ParseArrayLiteral() (Node, string) {
 }
 
 func (p *Parser) _ParseArithmeticExpansion() (Node, string) {
-	panic("TODO: method needs manual implementation")
+	var start int
+	_ = start
+	var contentStart int
+	_ = contentStart
+	var depth int
+	_ = depth
+	var firstClosePos int
+	_ = firstClosePos
+	var c string
+	_ = c
+	var content string
+	_ = content
+	var text string
+	_ = text
+	var expr Node
+	_ = expr
+	if p.AtEnd() || p.Peek() != "$" {
+		return nil, ""
+	}
+	start = p.Pos
+	if p.Pos+2 >= p.Length || string(p.Source[p.Pos+1]) != "(" || string(p.Source[p.Pos+2]) != "(" {
+		return nil, ""
+	}
+	p.Advance()
+	p.Advance()
+	p.Advance()
+	contentStart = p.Pos
+	depth = 2
+	firstClosePos = -1
+	for !(p.AtEnd()) && depth > 0 {
+		c = p.Peek()
+		if c == "'" {
+			p.Advance()
+			for !(p.AtEnd()) && p.Peek() != "'" {
+				p.Advance()
+			}
+			if !(p.AtEnd()) {
+				p.Advance()
+			}
+		} else if c == "\"" {
+			p.Advance()
+			for !(p.AtEnd()) {
+				if p.Peek() == "\\" && p.Pos+1 < p.Length {
+					p.Advance()
+					p.Advance()
+				} else if p.Peek() == "\"" {
+					p.Advance()
+					break
+				} else {
+					p.Advance()
+				}
+			}
+		} else if c == "\\" && p.Pos+1 < p.Length {
+			p.Advance()
+			p.Advance()
+		} else if c == "(" {
+			depth += 1
+			p.Advance()
+		} else if c == ")" {
+			if depth == 2 {
+				firstClosePos = p.Pos
+			}
+			depth -= 1
+			if depth == 0 {
+				break
+			}
+			p.Advance()
+		} else {
+			if depth == 1 {
+				firstClosePos = -1
+			}
+			p.Advance()
+		}
+	}
+	if depth != 0 {
+		if p.AtEnd() {
+			panic(NewMatchedPairError("unexpected EOF looking for `))'", start, 0))
+		}
+		p.Pos = start
+		return nil, ""
+	}
+	if firstClosePos != -1 {
+		content = p.Source[contentStart:firstClosePos]
+	} else {
+		content = p.Source[contentStart:p.Pos]
+	}
+	p.Advance()
+	text = p.Source[start:p.Pos]
+	panic("TODO: try/except with return")
+	return NewArithmeticExpansion(expr), text
 }
 
 func (p *Parser) _ParseArithExpr(content string) Node {
@@ -8020,67 +8321,396 @@ func (p *Parser) _ArithConsume(s string) bool {
 }
 
 func (p *Parser) _ArithParseComma() Node {
-	panic("TODO: method needs manual implementation")
+	var left Node
+	_ = left
+	var right Node
+	_ = right
+	left = p._ArithParseAssign()
+	for true {
+		p._ArithSkipWs()
+		if p._ArithConsume(",") {
+			p._ArithSkipWs()
+			right = p._ArithParseAssign()
+			left = NewArithComma(left, right)
+		} else {
+			break
+		}
+	}
+	return left
 }
 
 func (p *Parser) _ArithParseAssign() Node {
-	panic("TODO: method needs manual implementation")
+	var left Node
+	_ = left
+	var assignOps []string
+	_ = assignOps
+	var right Node
+	_ = right
+	left = p._ArithParseTernary()
+	p._ArithSkipWs()
+	assignOps = []string{"<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "^=", "|=", "="}
+	for _, op := range assignOps {
+		if p._ArithMatch(op) {
+			if op == "=" && p._ArithPeek(1) == "=" {
+				break
+			}
+			p._ArithConsume(op)
+			p._ArithSkipWs()
+			right = p._ArithParseAssign()
+			return NewArithAssign(op, left, right)
+		}
+	}
+	return left
 }
 
 func (p *Parser) _ArithParseTernary() Node {
-	panic("TODO: method needs manual implementation")
+	var cond Node
+	_ = cond
+	var ifTrue Node
+	_ = ifTrue
+	var ifFalse Node
+	_ = ifFalse
+	cond = p._ArithParseLogicalOr()
+	p._ArithSkipWs()
+	if p._ArithConsume("?") {
+		p._ArithSkipWs()
+		if p._ArithMatch(":") {
+			ifTrue = nil
+		} else {
+			ifTrue = p._ArithParseAssign()
+		}
+		p._ArithSkipWs()
+		if p._ArithConsume(":") {
+			p._ArithSkipWs()
+			if p._ArithAtEnd() || p._ArithPeek(0) == ")" {
+				ifFalse = nil
+			} else {
+				ifFalse = p._ArithParseTernary()
+			}
+		} else {
+			ifFalse = nil
+		}
+		return NewArithTernary(cond, ifTrue, ifFalse)
+	}
+	return cond
 }
 
-func (p *Parser) _ArithParseLeftAssoc(ops []interface{}, parsefn interface{}) Node {
+func (p *Parser) _ArithParseLeftAssoc(ops []string, parsefn interface{}) Node {
 	panic("TODO: method needs manual implementation")
 }
 
 func (p *Parser) _ArithParseLogicalOr() Node {
-	panic("TODO: method needs manual implementation")
+	left := p._ArithParseLogicalAnd()
+	for {
+		p._ArithSkipWs()
+		matched := false
+		if p._ArithMatch("||") {
+			p._ArithConsume("||")
+			p._ArithSkipWs()
+			left = NewArithBinaryOp("||", left, p._ArithParseLogicalAnd())
+			matched = true
+		}
+		if !matched {
+			break
+		}
+	}
+	return left
 }
 
 func (p *Parser) _ArithParseLogicalAnd() Node {
-	panic("TODO: method needs manual implementation")
+	left := p._ArithParseBitwiseOr()
+	for {
+		p._ArithSkipWs()
+		matched := false
+		if p._ArithMatch("&&") {
+			p._ArithConsume("&&")
+			p._ArithSkipWs()
+			left = NewArithBinaryOp("&&", left, p._ArithParseBitwiseOr())
+			matched = true
+		}
+		if !matched {
+			break
+		}
+	}
+	return left
 }
 
 func (p *Parser) _ArithParseBitwiseOr() Node {
-	panic("TODO: method needs manual implementation")
+	var left Node
+	_ = left
+	var right Node
+	_ = right
+	left = p._ArithParseBitwiseXor()
+	for true {
+		p._ArithSkipWs()
+		if p._ArithPeek(0) == "|" && p._ArithPeek(1) != "|" && p._ArithPeek(1) != "=" {
+			p._ArithAdvance()
+			p._ArithSkipWs()
+			right = p._ArithParseBitwiseXor()
+			left = NewArithBinaryOp("|", left, right)
+		} else {
+			break
+		}
+	}
+	return left
 }
 
 func (p *Parser) _ArithParseBitwiseXor() Node {
-	panic("TODO: method needs manual implementation")
+	var left Node
+	_ = left
+	var right Node
+	_ = right
+	left = p._ArithParseBitwiseAnd()
+	for true {
+		p._ArithSkipWs()
+		if p._ArithPeek(0) == "^" && p._ArithPeek(1) != "=" {
+			p._ArithAdvance()
+			p._ArithSkipWs()
+			right = p._ArithParseBitwiseAnd()
+			left = NewArithBinaryOp("^", left, right)
+		} else {
+			break
+		}
+	}
+	return left
 }
 
 func (p *Parser) _ArithParseBitwiseAnd() Node {
-	panic("TODO: method needs manual implementation")
+	var left Node
+	_ = left
+	var right Node
+	_ = right
+	left = p._ArithParseEquality()
+	for true {
+		p._ArithSkipWs()
+		if p._ArithPeek(0) == "&" && p._ArithPeek(1) != "&" && p._ArithPeek(1) != "=" {
+			p._ArithAdvance()
+			p._ArithSkipWs()
+			right = p._ArithParseEquality()
+			left = NewArithBinaryOp("&", left, right)
+		} else {
+			break
+		}
+	}
+	return left
 }
 
 func (p *Parser) _ArithParseEquality() Node {
-	panic("TODO: method needs manual implementation")
+	left := p._ArithParseComparison()
+	for {
+		p._ArithSkipWs()
+		matched := false
+		if p._ArithMatch("==") {
+			p._ArithConsume("==")
+			p._ArithSkipWs()
+			left = NewArithBinaryOp("==", left, p._ArithParseComparison())
+			matched = true
+		} else if p._ArithMatch("!=") {
+			p._ArithConsume("!=")
+			p._ArithSkipWs()
+			left = NewArithBinaryOp("!=", left, p._ArithParseComparison())
+			matched = true
+		}
+		if !matched {
+			break
+		}
+	}
+	return left
 }
 
 func (p *Parser) _ArithParseComparison() Node {
-	panic("TODO: method needs manual implementation")
+	var left Node
+	_ = left
+	var right Node
+	_ = right
+	left = p._ArithParseShift()
+	for true {
+		p._ArithSkipWs()
+		if p._ArithMatch("<=") {
+			p._ArithConsume("<=")
+			p._ArithSkipWs()
+			right = p._ArithParseShift()
+			left = NewArithBinaryOp("<=", left, right)
+		} else if p._ArithMatch(">=") {
+			p._ArithConsume(">=")
+			p._ArithSkipWs()
+			right = p._ArithParseShift()
+			left = NewArithBinaryOp(">=", left, right)
+		} else if p._ArithPeek(0) == "<" && p._ArithPeek(1) != "<" && p._ArithPeek(1) != "=" {
+			p._ArithAdvance()
+			p._ArithSkipWs()
+			right = p._ArithParseShift()
+			left = NewArithBinaryOp("<", left, right)
+		} else if p._ArithPeek(0) == ">" && p._ArithPeek(1) != ">" && p._ArithPeek(1) != "=" {
+			p._ArithAdvance()
+			p._ArithSkipWs()
+			right = p._ArithParseShift()
+			left = NewArithBinaryOp(">", left, right)
+		} else {
+			break
+		}
+	}
+	return left
 }
 
 func (p *Parser) _ArithParseShift() Node {
-	panic("TODO: method needs manual implementation")
+	var left Node
+	_ = left
+	var right Node
+	_ = right
+	left = p._ArithParseAdditive()
+	for true {
+		p._ArithSkipWs()
+		if p._ArithMatch("<<=") {
+			break
+		}
+		if p._ArithMatch(">>=") {
+			break
+		}
+		if p._ArithMatch("<<") {
+			p._ArithConsume("<<")
+			p._ArithSkipWs()
+			right = p._ArithParseAdditive()
+			left = NewArithBinaryOp("<<", left, right)
+		} else if p._ArithMatch(">>") {
+			p._ArithConsume(">>")
+			p._ArithSkipWs()
+			right = p._ArithParseAdditive()
+			left = NewArithBinaryOp(">>", left, right)
+		} else {
+			break
+		}
+	}
+	return left
 }
 
 func (p *Parser) _ArithParseAdditive() Node {
-	panic("TODO: method needs manual implementation")
+	var left Node
+	_ = left
+	var c string
+	_ = c
+	var c2 string
+	_ = c2
+	var right Node
+	_ = right
+	left = p._ArithParseMultiplicative()
+	for true {
+		p._ArithSkipWs()
+		c = p._ArithPeek(0)
+		c2 = p._ArithPeek(1)
+		if c == "+" && c2 != "+" && c2 != "=" {
+			p._ArithAdvance()
+			p._ArithSkipWs()
+			right = p._ArithParseMultiplicative()
+			left = NewArithBinaryOp("+", left, right)
+		} else if c == "-" && c2 != "-" && c2 != "=" {
+			p._ArithAdvance()
+			p._ArithSkipWs()
+			right = p._ArithParseMultiplicative()
+			left = NewArithBinaryOp("-", left, right)
+		} else {
+			break
+		}
+	}
+	return left
 }
 
 func (p *Parser) _ArithParseMultiplicative() Node {
-	panic("TODO: method needs manual implementation")
+	var left Node
+	_ = left
+	var c string
+	_ = c
+	var c2 string
+	_ = c2
+	var right Node
+	_ = right
+	left = p._ArithParseExponentiation()
+	for true {
+		p._ArithSkipWs()
+		c = p._ArithPeek(0)
+		c2 = p._ArithPeek(1)
+		if c == "*" && c2 != "*" && c2 != "=" {
+			p._ArithAdvance()
+			p._ArithSkipWs()
+			right = p._ArithParseExponentiation()
+			left = NewArithBinaryOp("*", left, right)
+		} else if c == "/" && c2 != "=" {
+			p._ArithAdvance()
+			p._ArithSkipWs()
+			right = p._ArithParseExponentiation()
+			left = NewArithBinaryOp("/", left, right)
+		} else if c == "%" && c2 != "=" {
+			p._ArithAdvance()
+			p._ArithSkipWs()
+			right = p._ArithParseExponentiation()
+			left = NewArithBinaryOp("%", left, right)
+		} else {
+			break
+		}
+	}
+	return left
 }
 
 func (p *Parser) _ArithParseExponentiation() Node {
-	panic("TODO: method needs manual implementation")
+	var left Node
+	_ = left
+	var right Node
+	_ = right
+	left = p._ArithParseUnary()
+	p._ArithSkipWs()
+	if p._ArithMatch("**") {
+		p._ArithConsume("**")
+		p._ArithSkipWs()
+		right = p._ArithParseExponentiation()
+		return NewArithBinaryOp("**", left, right)
+	}
+	return left
 }
 
 func (p *Parser) _ArithParseUnary() Node {
-	panic("TODO: method needs manual implementation")
+	var operand Node
+	_ = operand
+	var c string
+	_ = c
+	p._ArithSkipWs()
+	if p._ArithMatch("++") {
+		p._ArithConsume("++")
+		p._ArithSkipWs()
+		operand = p._ArithParseUnary()
+		return NewArithPreIncr(operand)
+	}
+	if p._ArithMatch("--") {
+		p._ArithConsume("--")
+		p._ArithSkipWs()
+		operand = p._ArithParseUnary()
+		return NewArithPreDecr(operand)
+	}
+	c = p._ArithPeek(0)
+	if c == "!" {
+		p._ArithAdvance()
+		p._ArithSkipWs()
+		operand = p._ArithParseUnary()
+		return NewArithUnaryOp("!", operand)
+	}
+	if c == "~" {
+		p._ArithAdvance()
+		p._ArithSkipWs()
+		operand = p._ArithParseUnary()
+		return NewArithUnaryOp("~", operand)
+	}
+	if c == "+" && p._ArithPeek(1) != "+" {
+		p._ArithAdvance()
+		p._ArithSkipWs()
+		operand = p._ArithParseUnary()
+		return NewArithUnaryOp("+", operand)
+	}
+	if c == "-" && p._ArithPeek(1) != "-" {
+		p._ArithAdvance()
+		p._ArithSkipWs()
+		operand = p._ArithParseUnary()
+		return NewArithUnaryOp("-", operand)
+	}
+	return p._ArithParsePostfix()
 }
 
 func (p *Parser) _ArithParsePostfix() Node {
@@ -8088,11 +8718,87 @@ func (p *Parser) _ArithParsePostfix() Node {
 }
 
 func (p *Parser) _ArithParsePrimary() Node {
-	panic("TODO: method needs manual implementation")
+	var c string
+	_ = c
+	var expr Node
+	_ = expr
+	var escapedChar string
+	_ = escapedChar
+	p._ArithSkipWs()
+	c = p._ArithPeek(0)
+	if c == "(" {
+		p._ArithAdvance()
+		p._ArithSkipWs()
+		expr = p._ArithParseComma()
+		p._ArithSkipWs()
+		if !(p._ArithConsume(")")) {
+			panic(NewParseError("Expected ')' in arithmetic expression", p._Arith_pos, 0))
+		}
+		return expr
+	}
+	if c == "#" && p._ArithPeek(1) == "$" {
+		p._ArithAdvance()
+		return p._ArithParseExpansion()
+	}
+	if c == "$" {
+		return p._ArithParseExpansion()
+	}
+	if c == "'" {
+		return p._ArithParseSingleQuote()
+	}
+	if c == "\"" {
+		return p._ArithParseDoubleQuote()
+	}
+	if c == "`" {
+		return p._ArithParseBacktick()
+	}
+	if c == "\\" {
+		p._ArithAdvance()
+		if p._ArithAtEnd() {
+			panic(NewParseError("Unexpected end after backslash in arithmetic", p._Arith_pos, 0))
+		}
+		escapedChar = p._ArithAdvance()
+		return NewArithEscape(escapedChar)
+	}
+	if p._ArithAtEnd() || strings.Contains(")]:,;?|&<>=!+-*/%^~#{}", c) {
+		return NewArithEmpty()
+	}
+	return p._ArithParseNumberOrVar()
 }
 
 func (p *Parser) _ArithParseExpansion() Node {
-	panic("TODO: method needs manual implementation")
+	var c string
+	_ = c
+	var nameChars []string
+	_ = nameChars
+	var ch string
+	_ = ch
+	if !(p._ArithConsume("$")) {
+		panic(NewParseError("Expected '$'", p._Arith_pos, 0))
+	}
+	c = p._ArithPeek(0)
+	if c == "(" {
+		return p._ArithParseCmdsub()
+	}
+	if c == "{" {
+		return p._ArithParseBracedParam()
+	}
+	nameChars = []string{}
+	for !(p._ArithAtEnd()) {
+		ch = p._ArithPeek(0)
+		if (unicode.IsLetter(_runeFromChar(ch)) || unicode.IsDigit(_runeFromChar(ch))) || ch == "_" {
+			nameChars = append(nameChars, p._ArithAdvance())
+		} else if _IsSpecialParamOrDigit(ch) || ch == "#" && !(len(nameChars) > 0) {
+			nameChars = append(nameChars, p._ArithAdvance())
+			break
+		} else {
+			break
+		}
+	}
+	if !(len(nameChars) > 0) {
+		panic(NewParseError("Expected variable name after $", p._Arith_pos, 0))
+	}
+	return NewParamExpansion(strings.Join(nameChars, ""), "", "")
 }
 
 func (p *Parser) _ArithParseCmdsub() Node {
@@ -8378,7 +9084,26 @@ func (p *Parser) _ArithParseNumberOrVar() Node {
 }
 
 func (p *Parser) _ParseDeprecatedArithmetic() (Node, string) {
-	panic("TODO: method needs manual implementation")
+	var start int
+	_ = start
+	var content string
+	_ = content
+	var text string
+	_ = text
+	if p.AtEnd() || p.Peek() != "$" {
+		return nil, ""
+	}
+	start = p.Pos
+	if p.Pos+1 >= p.Length || string(p.Source[p.Pos+1]) != "[" {
+		return nil, ""
+	}
+	p.Advance()
+	p.Advance()
+	p._Lexer.Pos = p.Pos
+	content = p._Lexer._ParseMatchedPair("[", "]", MatchedPairFlags_ARITH, false)
+	p.Pos = p._Lexer.Pos
+	text = p.Source[start:p.Pos]
+	return NewArithDeprecated(content), text
 }
 
 func (p *Parser) _ParseParamExpansion(inDquote bool) (Node, string) {
@@ -9860,29 +10585,9 @@ func (p *Parser) _LastWordOnOwnLine(nodes []Node) bool {
 }
 
 func (p *Parser) _StripTrailingBackslashFromLastWord(nodes []Node) {
-	var lastNode Node
-	_ = lastNode
-	var lastWord *Word
-	_ = lastWord
-	if !(len(nodes) > 0) {
-		return
-	}
-	lastNode = nodes[len(nodes)-1]
-	lastWord = p._FindLastWord(lastNode)
-	if lastWord != nil && strings.HasSuffix(lastWord.Value, "\\") {
-		lastWord.Value = lastWord.Value[0 : len(lastWord.Value)-1]
-		panic("TODO: incomplete implementation")
-	}
+	panic("TODO: method needs manual implementation")
 }
 
 func (p *Parser) _FindLastWord(node Node) *Word {
-	var lastWord interface{}
-	_ = lastWord
-	var lastRedirect interface{}
-	_ = lastRedirect
-	panic("TODO: isinstance")
-	panic("TODO: isinstance")
-	panic("TODO: isinstance")
-	panic("TODO: isinstance")
-	return nil
+	panic("TODO: method needs manual implementation")
 }

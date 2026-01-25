@@ -215,6 +215,10 @@ class GoTranspiler(ast.NodeVisitor):
                     if field_name not in class_info.fields:
                         py_type = self._annotation_to_str(stmt.annotation)
                         go_type = self._py_type_to_go(py_type)
+                        # Apply field type overrides
+                        override_key = (class_info.name, field_name)
+                        if override_key in self.FIELD_TYPE_OVERRIDES:
+                            go_type = self.FIELD_TYPE_OVERRIDES[override_key]
                         class_info.fields[field_name] = FieldInfo(
                             name=field_name, py_type=py_type, go_type=go_type
                         )
@@ -232,6 +236,8 @@ class GoTranspiler(ast.NodeVisitor):
         ("copy_stack", "_result"): "[]*ParseContext",  # return type hint
         # SavedParserState constructor parameters
         ("__init__", "pending_heredocs"): "[]Node",
+        # Token constructor parameters
+        ("__init__", "parts"): "[]Node",
         ("__init__", "ctx_stack"): "[]*ParseContext",
         # List class methods - parts is always []Node, op_names is map[string]string
         ("_to_sexp_with_precedence", "parts"): "[]Node",
@@ -257,6 +263,8 @@ class GoTranspiler(ast.NodeVisitor):
         # Dynamically created fields for arithmetic parsing
         ("Parser", "_arith_src"): "string",
         ("Parser", "_arith_pos"): "int",
+        # QuoteState uses tuple stack - use custom struct
+        ("QuoteState", "_stack"): "[]quoteStackEntry",
         ("Parser", "_arith_len"): "int",
     }
 
@@ -574,6 +582,8 @@ class GoTranspiler(ast.NodeVisitor):
         self._emit_node_interface()
         # Emit module-level constants
         self._emit_module_constants(node)
+        # Emit helper types
+        self._emit_helper_types()
         # Emit all structs
         self._emit_all_structs()
         # Emit helper functions
@@ -964,6 +974,27 @@ class GoTranspiler(ast.NodeVisitor):
         self.indent -= 1
         self.emit("}")
         self.emit("")
+        # _pop helper - pop from slice (generic)
+        self.emit("func _pop[T any](s *[]T) T {")
+        self.indent += 1
+        self.emit("last := (*s)[len(*s)-1]")
+        self.emit("*s = (*s)[:len(*s)-1]")
+        self.emit("return last")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
+
+    def _emit_helper_types(self):
+        """Emit helper types used by transpiled code."""
+        # quoteStackEntry is used by QuoteState._Stack to hold (single, double) tuples
+        self.emit("// quoteStackEntry holds pushed quote state (single, double)")
+        self.emit("type quoteStackEntry struct {")
+        self.indent += 1
+        self.emit("single bool")
+        self.emit("double bool")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
 
     def _emit_all_structs(self):
         """Emit all struct definitions."""
@@ -1064,9 +1095,9 @@ class GoTranspiler(ast.NodeVisitor):
             if isinstance(node, ast.FunctionDef):
                 self._emit_function(node)
 
-    # Functions that require duck typing (Part 6d) or have complex scoping - skip body for now
+    # Functions that require duck typing (Part 6d) or have complex patterns - skip body for now
     SKIP_BODY_FUNCTIONS = {
-        # Duck typing (Part 6d)
+        # Duck typing (Part 6d) - isinstance-based dispatch
         "_format_cond_body",
         "_format_cond_value",
         "_collect_cmdsubs",
@@ -1075,15 +1106,9 @@ class GoTranspiler(ast.NodeVisitor):
         "_format_cmdsub_node",
         "_format_redirect",
         "_format_heredoc_body",
-        # Complex scoping (need variable hoisting)
-        "_skip_heredoc",
-        "_skip_double_quoted",
+        # Complex for-loop tuple unpacking
         "_find_heredoc_content_end",
-        "_collapse_whitespace",
-        "_normalize_heredoc_delimiter",
-        "_skip_matched_pair",
-        "_skip_single_quoted",
-        # Complex lexer methods (Part 6 cleanup)
+        # Complex lexer methods with walrus operators
         "_parse_matched_pair",
         "_read_bracket_regex",
     }
@@ -1091,35 +1116,18 @@ class GoTranspiler(ast.NodeVisitor):
     # Methods that truly need manual implementation (tuple stacks, complex patterns)
     # KEEP THIS MINIMAL - fix transpiler issues rather than skipping methods
     SKIP_METHODS = {
-        # Tuple stack operations (Python (bool, bool) stack)
-        "pop",  # QuoteState.pop - returns tuple
-        "copy",  # QuoteState.copy - copies tuple stack
-        "outer_double",  # QuoteState.outer_double - tuple stack access
         # Higher-order function patterns and arithmetic parsing
+        # Higher-order function - not called, kept as stub
         "_arith_parse_left_assoc",
-        "_arith_parse_logical_or",
-        "_arith_parse_logical_and",
-        "_arith_parse_bitwise_or",
-        "_arith_parse_bitwise_xor",
-        "_arith_parse_bitwise_and",
-        "_arith_parse_equality",
-        "_arith_parse_comparison",
-        "_arith_parse_shift",
-        "_arith_parse_additive",
-        "_arith_parse_multiplicative",
-        "_arith_parse_ternary",
-        "_arith_parse_assign",
-        "_arith_parse_comma",
-        "_arith_parse_exponentiation",
-        "_arith_parse_unary",
+        # Duck typing / type narrowing needed
         "_arith_parse_postfix",
-        "_arith_parse_primary",
-        "_arith_parse_expansion",
+        # getattr patterns that need type assertions
         "_parse_arith_expr",
-        "_parse_arithmetic_expansion",
-        "_parse_deprecated_arithmetic",
         # Tuple passthrough (returns tuple stored in variable)
         "_parse_param_expansion",
+        # isinstance type narrowing needed
+        "_find_last_word",
+        "_strip_trailing_backslash_from_last_word",
         # Complex type assertions needed
         "parse_redirect",
         "_gather_heredoc_bodies",
@@ -1132,6 +1140,8 @@ class GoTranspiler(ast.NodeVisitor):
         "_peek_list_operator",
         "_parse_simple_pipeline",
         "parse",
+        # Tuple stack in local variable (heredoc tracking)
+        "_parse_backtick_substitution",
     }
 
     def _emit_function(self, node: ast.FunctionDef):
@@ -1195,8 +1205,12 @@ class GoTranspiler(ast.NodeVisitor):
         else:
             self.emit(f"func ({receiver} *{class_info.name}) {go_name}({params_str}) {{")
         self.indent += 1
+        # Check for manually implemented methods first
+        manual_key = (class_info.name, node.name)
+        if manual_key in self.MANUAL_METHODS:
+            self.MANUAL_METHODS[manual_key](self, receiver)
         # Skip body for complex methods
-        if node.name in self.SKIP_METHODS:
+        elif node.name in self.SKIP_METHODS:
             self.emit('panic("TODO: method needs manual implementation")')
         else:
             self._emit_body(node.body, func_info)
@@ -1205,6 +1219,85 @@ class GoTranspiler(ast.NodeVisitor):
         self.emit("")
         self.current_method = None
         self.current_func_info = None
+
+    # Manually implemented methods that need special Go code
+    # Populated after method definitions below
+    MANUAL_METHODS: dict[tuple[str, str], "Callable[[GoTranspiler, str], None]"] = {
+        ("QuoteState", "push"): lambda t, r: GoTranspiler._emit_quotestate_push(t, r),
+        ("QuoteState", "pop"): lambda t, r: GoTranspiler._emit_quotestate_pop(t, r),
+        ("QuoteState", "copy"): lambda t, r: GoTranspiler._emit_quotestate_copy(t, r),
+        ("QuoteState", "outer_double"): lambda t, r: GoTranspiler._emit_quotestate_outer_double(t, r),
+        # Arithmetic parser - inline left_assoc pattern
+        ("Parser", "_arith_parse_logical_or"): lambda t, r: GoTranspiler._emit_arith_left_assoc(t, r, ["||"], "_ArithParseLogicalAnd"),
+        ("Parser", "_arith_parse_logical_and"): lambda t, r: GoTranspiler._emit_arith_left_assoc(t, r, ["&&"], "_ArithParseBitwiseOr"),
+        ("Parser", "_arith_parse_equality"): lambda t, r: GoTranspiler._emit_arith_left_assoc(t, r, ["==", "!="], "_ArithParseComparison"),
+    }
+
+    @staticmethod
+    def _emit_quotestate_push(t: "GoTranspiler", receiver: str):
+        """Emit QuoteState.Push() body."""
+        t.emit(f"{receiver}._Stack = append({receiver}._Stack, quoteStackEntry{{{receiver}.Single, {receiver}.Double}})")
+        t.emit(f"{receiver}.Single = false")
+        t.emit(f"{receiver}.Double = false")
+
+    @staticmethod
+    def _emit_quotestate_pop(t: "GoTranspiler", receiver: str):
+        """Emit QuoteState.Pop() body."""
+        t.emit(f"if len({receiver}._Stack) > 0 {{")
+        t.indent += 1
+        t.emit(f"entry := {receiver}._Stack[len({receiver}._Stack)-1]")
+        t.emit(f"{receiver}._Stack = {receiver}._Stack[:len({receiver}._Stack)-1]")
+        t.emit(f"{receiver}.Single = entry.single")
+        t.emit(f"{receiver}.Double = entry.double")
+        t.indent -= 1
+        t.emit("}")
+
+    @staticmethod
+    def _emit_quotestate_copy(t: "GoTranspiler", receiver: str):
+        """Emit QuoteState.Copy() body."""
+        t.emit("qs := &QuoteState{}")
+        t.emit(f"qs.Single = {receiver}.Single")
+        t.emit(f"qs.Double = {receiver}.Double")
+        t.emit(f"qs._Stack = make([]quoteStackEntry, len({receiver}._Stack))")
+        t.emit(f"copy(qs._Stack, {receiver}._Stack)")
+        t.emit("return qs")
+
+    @staticmethod
+    def _emit_quotestate_outer_double(t: "GoTranspiler", receiver: str):
+        """Emit QuoteState.OuterDouble() body."""
+        t.emit(f"if len({receiver}._Stack) == 0 {{")
+        t.indent += 1
+        t.emit("return false")
+        t.indent -= 1
+        t.emit("}")
+        t.emit(f"return {receiver}._Stack[len({receiver}._Stack)-1].double")
+
+    @staticmethod
+    def _emit_arith_left_assoc(t: "GoTranspiler", receiver: str, ops: list[str], next_fn: str):
+        """Emit inlined left-associative binary operator parsing."""
+        t.emit(f"left := {receiver}.{next_fn}()")
+        t.emit("for {")
+        t.indent += 1
+        t.emit(f"{receiver}._ArithSkipWs()")
+        t.emit("matched := false")
+        for i, op in enumerate(ops):
+            cond = "if" if i == 0 else "} else if"
+            t.emit(f'{cond} {receiver}._ArithMatch("{op}") {{')
+            t.indent += 1
+            t.emit(f'{receiver}._ArithConsume("{op}")')
+            t.emit(f"{receiver}._ArithSkipWs()")
+            t.emit(f'left = NewArithBinaryOp("{op}", left, {receiver}.{next_fn}())')
+            t.emit("matched = true")
+            t.indent -= 1
+        t.emit("}")
+        t.emit("if !matched {")
+        t.indent += 1
+        t.emit("break")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("return left")
 
     def _emit_constructor(self, node: ast.FunctionDef, class_info: ClassInfo):
         """Emit a constructor function."""
@@ -2004,6 +2097,18 @@ class GoTranspiler(ast.NodeVisitor):
                             value = f"{field_type}{{{nils}}}"
                         else:
                             value = self.visit_expr(stmt.value)
+                    # Check for ternary with empty list default: x if x is not None else []
+                    elif (
+                        isinstance(stmt.value, ast.IfExp)
+                        and isinstance(stmt.value.orelse, ast.List)
+                        and not stmt.value.orelse.elts
+                        and field_type
+                        and field_type.startswith("[")
+                    ):
+                        # Emit: _ternary(x != nil, x, []Type{})
+                        test = self._emit_bool_expr(stmt.value.test)
+                        body = self.visit_expr(stmt.value.body)
+                        value = f"_ternary({test}, {body}, {field_type}{{}})"
                     else:
                         value = self.visit_expr(stmt.value)
                     self.emit(f"{receiver}.{field} = {value}")
@@ -2049,6 +2154,18 @@ class GoTranspiler(ast.NodeVisitor):
                             value = f"{field_type}{{{nils}}}"
                         else:
                             value = self.visit_expr(stmt.value)
+                    # Check for ternary with empty list default: x if x is not None else []
+                    elif (
+                        isinstance(stmt.value, ast.IfExp)
+                        and isinstance(stmt.value.orelse, ast.List)
+                        and not stmt.value.orelse.elts
+                        and field_type
+                        and field_type.startswith("[")
+                    ):
+                        # Emit: _ternary(x != nil, x, []Type{})
+                        test = self._emit_bool_expr(stmt.value.test)
+                        body = self.visit_expr(stmt.value.body)
+                        value = f"_ternary({test}, {body}, {field_type}{{}})"
                     else:
                         value = self.visit_expr(stmt.value)
                     self.emit(f"{receiver}.{field} = {value}")
@@ -2107,16 +2224,24 @@ class GoTranspiler(ast.NodeVisitor):
                     target_str = self.visit_expr(target)
                     # Generate synthetic variable names for tuple elements
                     elem_vars = [f"{target_str}{i}" for i in range(len(ret_info))]
-                    # Check if all elem_vars are already declared (redeclaration)
-                    all_declared = all(v in self.declared_vars for v in elem_vars)
+                    # Check which vars are actually used later (to avoid declaring unused ones)
+                    used_vars = []
+                    for v in elem_vars:
+                        if v in self.declared_vars:
+                            used_vars.append(v)  # Already declared means it's used
+                        else:
+                            used_vars.append("_")  # Not declared means unused, use blank identifier
+                    # Check if all used elem_vars are already declared (redeclaration)
+                    non_blank = [v for v in used_vars if v != "_"]
+                    all_declared = all(v in self.declared_vars for v in non_blank)
                     for i, v in enumerate(elem_vars):
-                        self.declared_vars.add(v)
-                        # Track element type for boolean context handling
-                        self.var_types[v] = ret_info[i]
+                        if v != "_" and used_vars[i] != "_":
+                            self.declared_vars.add(v)
+                            self.var_types[v] = ret_info[i]
                     self.tuple_vars[target_str] = elem_vars
                     call_str = self.visit_expr(stmt.value)
                     op = "=" if all_declared else ":="
-                    self.emit(f"{', '.join(elem_vars)} {op} {call_str}")
+                    self.emit(f"{', '.join(used_vars)} {op} {call_str}")
                     return
             target_str = self.visit_expr(target)
             # Check if this is a new variable (local name, not attribute)
@@ -2454,14 +2579,18 @@ class GoTranspiler(ast.NodeVisitor):
             if isinstance(s, ast.Assign):
                 for target in s.targets:
                     if isinstance(target, ast.Name):
-                        # For tuple-returning functions, collect the synthetic vars
+                        # For tuple-returning functions, only collect vars that are predeclared
+                        # (i.e., actually used) - unused ones will use _ in the assignment
                         if isinstance(s.value, ast.Call):
                             ret_info = self._get_return_type_info(s.value)
                             if ret_info and len(ret_info) > 1:
                                 go_name = self._snake_to_camel(target.id)
                                 go_name = self._safe_go_name(go_name)
                                 for i, elem_type in enumerate(ret_info):
-                                    vars[f"{go_name}{i}"] = elem_type
+                                    synth_name = f"{go_name}{i}"
+                                    # Only collect if already predeclared (actually used)
+                                    if synth_name in self.declared_vars:
+                                        vars[synth_name] = elem_type
                                 continue
                             # Skip assignments from methods that force := usage
                             if isinstance(s.value.func, ast.Attribute):
@@ -2894,9 +3023,67 @@ class GoTranspiler(ast.NodeVisitor):
         else:
             self.emit("panic(nil)")
 
+    def _has_return_in_block(self, stmts: list[ast.stmt]) -> bool:
+        """Check if a block contains return statements (complex try/except pattern)."""
+        for s in stmts:
+            if isinstance(s, ast.Return):
+                return True
+            if isinstance(s, ast.If):
+                if self._has_return_in_block(s.body) or self._has_return_in_block(s.orelse):
+                    return True
+            if isinstance(s, (ast.For, ast.While)):
+                if self._has_return_in_block(s.body):
+                    return True
+        return False
+
     def _emit_stmt_Try(self, stmt: ast.Try):
         """Emit try/except as defer/recover pattern."""
-        raise NotImplementedError("try/except")
+        # We'll wrap the try block in an immediately-invoked function with defer/recover
+        # Pattern: func() { defer func() { if r := recover(); r != nil { handler } }(); body }()
+        if not stmt.handlers:
+            # No handlers, just emit body
+            for s in stmt.body:
+                self._emit_stmt(s)
+            return
+        # Check for complex patterns (return statements inside try) - skip these
+        if self._has_return_in_block(stmt.body) or self._has_return_in_block(stmt.handlers[0].body):
+            raise NotImplementedError("try/except with return")
+        # Single handler expected (all our cases)
+        handler = stmt.handlers[0]
+        # Determine the pattern based on handler body
+        is_reraise = False
+        is_silent_pass = False
+        handler_stmts = []
+        for h in handler.body:
+            if isinstance(h, ast.Raise):
+                is_reraise = True
+            elif isinstance(h, ast.Pass):
+                is_silent_pass = True
+            else:
+                handler_stmts.append(h)
+        # Start the IIFE
+        self.emit("func() {")
+        self.indent += 1
+        # Emit the defer/recover
+        self.emit("defer func() {")
+        self.indent += 1
+        self.emit("if r := recover(); r != nil {")
+        self.indent += 1
+        # Emit handler statements (cleanup before re-raise, or fallback assignment)
+        for h in handler_stmts:
+            self._emit_stmt(h)
+        if is_reraise:
+            self.emit("panic(r)")
+        # If silent pass, we just swallow the panic (no action needed)
+        self.indent -= 1
+        self.emit("}")
+        self.indent -= 1
+        self.emit("}()")
+        # Emit try body
+        for s in stmt.body:
+            self._emit_stmt(s)
+        self.indent -= 1
+        self.emit("}()")
 
     def _format_params(self, params: list[ParamInfo]) -> str:
         """Format parameter list for Go function signature."""
@@ -3169,6 +3356,10 @@ class GoTranspiler(ast.NodeVisitor):
         """Check if attribute is a method on an interface type."""
         # Node interface methods
         if attr in ("kind", "to_sexp"):
+            # Check if value is self in a non-Node class (like ParseContext) - kind is a field there
+            if isinstance(value, ast.Name) and value.id == "self":
+                if self.current_class and not self.symbols.is_node_subclass(self.current_class):
+                    return False  # It's a field access in a non-Node class
             # Check if value is likely a Node
             if isinstance(value, ast.Name):
                 name = value.id
@@ -3562,6 +3753,9 @@ class GoTranspiler(ast.NodeVisitor):
                 return f"len({var_name}) > 0"
             if var_type == "string":
                 return f"len({var_name}) > 0"
+            # Check if it's an int type (needs != 0 check)
+            if var_type == "int":
+                return f"{var_name} != 0"
             # Check by variable name heuristics for Node types
             if node.id.endswith(("_node", "Node", "_result")) or node.id in (
                 "paramNode", "arithNode", "cmdNode", "node", "result"
@@ -4112,8 +4306,15 @@ class GoTranspiler(ast.NodeVisitor):
         return f"{obj} = append({obj}, {arg})"
 
     def _emit_pop(self, obj: str, args: list[str]) -> str:
-        """Emit pop call."""
-        raise NotImplementedError("list.pop()")
+        """Emit pop call - returns last element and removes it.
+        For slices: use _pop helper
+        For objects with Pop() method (like QuoteState): call the method
+        """
+        # Check if this is an object with a Pop() method
+        obj_type = self.var_types.get(obj, "")
+        if obj_type in ("*QuoteState", "QuoteState"):
+            return f"{obj}.Pop()"
+        return f"_pop(&{obj})"
 
     def _emit_extend(self, obj: str, args: list[str]) -> str:
         """Emit extend call."""
@@ -4290,7 +4491,33 @@ class GoTranspiler(ast.NodeVisitor):
 
     def _emit_isinstance(self, args: list[str]) -> str:
         """Emit isinstance check using type assertion."""
-        raise NotImplementedError("isinstance")
+        if not hasattr(self, "_current_call_node") or not self._current_call_node:
+            raise NotImplementedError("isinstance: no call node context")
+        call_node = self._current_call_node
+        if len(call_node.args) < 2:
+            raise NotImplementedError("isinstance: need 2 args")
+        obj = args[0]
+        type_arg = call_node.args[1]
+        # Extract type names from AST
+        type_names: list[str] = []
+        if isinstance(type_arg, ast.Name):
+            type_names.append(type_arg.id)
+        elif isinstance(type_arg, ast.Tuple):
+            for elt in type_arg.elts:
+                if isinstance(elt, ast.Name):
+                    type_names.append(elt.id)
+        if not type_names:
+            raise NotImplementedError(f"isinstance: unsupported type pattern {ast.dump(type_arg)}")
+        # Generate Go type assertion(s)
+        if len(type_names) == 1:
+            return f"func() bool {{ _, ok := {obj}.(*{type_names[0]}); return ok }}()"
+        # Multiple types - check each in turn
+        checks = []
+        for i, tn in enumerate(type_names):
+            var = f"ok{i+1}"
+            checks.append(f"_, {var} := {obj}.(*{tn})")
+        return_expr = " || ".join(f"ok{i+1}" for i in range(len(type_names)))
+        return f"func() bool {{ {'; '.join(checks)}; return {return_expr} }}()"
 
     def _emit_getattr(self, args: list[str]) -> str:
         """Emit getattr call."""

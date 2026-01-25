@@ -5299,71 +5299,10 @@ func (w *Word) _StripArithLineContinuations(value string) string {
 func (w *Word) _CollectCmdsubs(node Node) []Node {
 	var result []Node
 	_ = result
-	var nodeKind interface{}
-	_ = nodeKind
-	var elements []Node
-	_ = elements
-	var parts []Node
-	_ = parts
-	var expr Node
-	_ = expr
-	var left Node
-	_ = left
-	var right Node
-	_ = right
-	var operand Node
-	_ = operand
-	var condition Node
-	_ = condition
-	var trueValue Node
-	_ = trueValue
-	var falseValue Node
-	_ = falseValue
 	result = []Node{}
-	nodeKind = _getattr(node, "kind", nil)
-	if nodeKind == "cmdsub" {
-		result = append(result, node)
-	} else if nodeKind == "array" {
-		elements = _getattr(node, "elements", []interface{}{}).([]Node)
-		for _, elem := range elements {
-			parts = _getattr(elem, "parts", []interface{}{}).([]Node)
-			for _, p := range parts {
-				if _getattr(p, "kind", nil) == "cmdsub" {
-					result = append(result, p)
-				} else {
-					result = append(result, w._CollectCmdsubs(p)...)
-				}
-			}
-		}
-	} else {
-		expr = _getattr(node, "expression", nil).(Node)
-		if expr != nil {
-			result = append(result, w._CollectCmdsubs(expr)...)
-		}
-	}
-	left = _getattr(node, "left", nil).(Node)
-	if left != nil {
-		result = append(result, w._CollectCmdsubs(left)...)
-	}
-	right = _getattr(node, "right", nil).(Node)
-	if right != nil {
-		result = append(result, w._CollectCmdsubs(right)...)
-	}
-	operand = _getattr(node, "operand", nil).(Node)
-	if operand != nil {
-		result = append(result, w._CollectCmdsubs(operand)...)
-	}
-	condition = _getattr(node, "condition", nil).(Node)
-	if condition != nil {
-		result = append(result, w._CollectCmdsubs(condition)...)
-	}
-	trueValue = _getattr(node, "true_value", nil).(Node)
-	if trueValue != nil {
-		result = append(result, w._CollectCmdsubs(trueValue)...)
-	}
-	falseValue = _getattr(node, "false_value", nil).(Node)
-	if falseValue != nil {
-		result = append(result, w._CollectCmdsubs(falseValue)...)
+	switch n := node.(type) {
+	case *CommandSubstitution:
+		result = append(result, n)
 	}
 	return result
 }
@@ -5371,28 +5310,10 @@ func (w *Word) _CollectCmdsubs(node Node) []Node {
 func (w *Word) _CollectProcsubs(node Node) []Node {
 	var result []Node
 	_ = result
-	var nodeKind interface{}
-	_ = nodeKind
-	var elements []Node
-	_ = elements
-	var parts []Node
-	_ = parts
 	result = []Node{}
-	nodeKind = _getattr(node, "kind", nil)
-	if nodeKind == "procsub" {
-		result = append(result, node)
-	} else if nodeKind == "array" {
-		elements = _getattr(node, "elements", []interface{}{}).([]Node)
-		for _, elem := range elements {
-			parts = _getattr(elem, "parts", []interface{}{}).([]Node)
-			for _, p := range parts {
-				if _getattr(p, "kind", nil) == "procsub" {
-					result = append(result, p)
-				} else {
-					result = append(result, w._CollectProcsubs(p)...)
-				}
-			}
-		}
+	switch n := node.(type) {
+	case *ProcessSubstitution:
+		result = append(result, n)
 	}
 	return result
 }
@@ -5446,6 +5367,8 @@ func (w *Word) _FormatCommandSubstitutions(value string, inArith bool) string {
 	_ = parser
 	var parsed Node
 	_ = parsed
+	var cmdsubNode Node
+	_ = cmdsubNode
 	var hasPipe bool
 	_ = hasPipe
 	var prefix string
@@ -5658,8 +5581,9 @@ func (w *Word) _FormatCommandSubstitutions(value string, inArith bool) string {
 			i = j
 		} else if _IsExpansionStart(value, i, "${") && i+2 < len(value) && _IsFunsubChar(string(value[i+2])) && !(_IsBackslashEscaped(value, i)) {
 			j = _FindFunsubEnd(value, i+2)
-			if cmdsubIdx < len(cmdsubParts) && _getattr(cmdsubParts[cmdsubIdx], "brace", false).(bool) {
-				node = cmdsubParts[cmdsubIdx]
+			cmdsubNode = _ternary(cmdsubIdx < len(cmdsubParts), cmdsubParts[cmdsubIdx], nil)
+			if func() bool { t, ok := cmdsubNode.(*CommandSubstitution); return ok && t.Brace }() {
+				node = cmdsubNode
 				formatted = _FormatCmdsubNode(node.(*CommandSubstitution).Command, 0, false, false, false)
 				hasPipe = string(value[i+2]) == "|"
 				prefix = _ternary(hasPipe, "${|", "${ ")
@@ -7249,8 +7173,8 @@ func NewConditionalExpr(body interface{}, redirects []Node) *ConditionalExpr {
 }
 
 func (c *ConditionalExpr) ToSexp() string {
-	var bodyKind interface{}
-	_ = bodyKind
+	var body interface{}
+	_ = body
 	var escaped string
 	_ = escaped
 	var result string
@@ -7259,12 +7183,11 @@ func (c *ConditionalExpr) ToSexp() string {
 	_ = redirectParts
 	var redirectSexps string
 	_ = redirectSexps
-	bodyKind = _getattr(c.Body, "kind", nil)
-	if bodyKind == nil {
-		escaped = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(c.Body.(string), "\\", "\\\\"), "\"", "\\\""), "\n", "\\n")
+	body = c.Body
+	switch b := body.(type) {
+	case string:
+		escaped = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(b, "\\", "\\\\"), "\"", "\\\""), "\n", "\\n")
 		result = "(cond \"" + escaped + "\")"
-	} else {
-		result = "(cond " + c.Body.(Node).ToSexp() + ")"
 	}
 	if len(c.Redirects) > 0 {
 		redirectParts = []string{}
@@ -7420,6 +7343,9 @@ func NewParser(source string, inProcessSub bool, extglob bool) *Parser {
 	p._At_command_start = false
 	p._In_array_literal = false
 	p._In_assign_builtin = false
+	p._Arith_src = ""
+	p._Arith_pos = 0
+	p._Arith_len = 0
 	return p
 }
 

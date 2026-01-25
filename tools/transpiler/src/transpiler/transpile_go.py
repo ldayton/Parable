@@ -1434,6 +1434,16 @@ class GoTranspiler(ast.NodeVisitor):
                 elif isinstance(stmt.value, ast.IfExp):
                     if self._is_string_expr(stmt.value.body) or self._is_string_expr(stmt.value.orelse):
                         self.var_types[var_name] = "string"
+                # If assigning from self.field, infer type from field (for union types)
+                elif isinstance(stmt.value, ast.Attribute):
+                    if isinstance(stmt.value.value, ast.Name) and stmt.value.value.id == "self":
+                        field_name = stmt.value.attr
+                        if self.current_class:
+                            class_info = self.symbols.classes.get(self.current_class)
+                            if class_info and field_name in class_info.fields:
+                                field_type = class_info.fields[field_name].go_type
+                                if field_type:
+                                    self.var_types[var_name] = field_type
         # Look for append calls to infer list element types
         if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
             call = stmt.value
@@ -1504,7 +1514,9 @@ class GoTranspiler(ast.NodeVisitor):
                     if isinstance(node.value, ast.Name):
                         var_name = self._snake_to_camel(node.value.id)
                         var_name = self._safe_go_name(var_name)
-                        if var_name not in self.var_types or self.var_types[var_name] == "interface{}":
+                        # Only upgrade untyped vars to Node, not interface{} which is
+                        # intentional for union types like CondNode | str
+                        if var_name not in self.var_types:
                             self.var_types[var_name] = "Node"
             # Detect function calls - infer argument types from function parameters
             if isinstance(node, ast.Call):
@@ -4351,9 +4363,61 @@ class GoTranspiler(ast.NodeVisitor):
     def visit_expr_BoolOp(self, node: ast.BoolOp) -> str:
         """Convert boolean operations (and/or)."""
         op = " && " if isinstance(node.op, ast.And) else " || "
+        # Check for isinstance(x, T) and x.attr pattern
+        if isinstance(node.op, ast.And) and len(node.values) >= 2:
+            isinstance_info = self._detect_isinstance_call(node.values[0])
+            if isinstance_info:
+                var_name, type_name = isinstance_info
+                # Check if subsequent operands access attributes on the same variable
+                if self._subsequent_ops_use_var(node.values[1:], var_name):
+                    return self._emit_isinstance_and_attr(var_name, type_name, node.values[1:])
         # Use _emit_bool_expr for each operand to handle truthiness conversions
         values = [self._emit_bool_expr(v) for v in node.values]
         return op.join(values)
+
+    def _detect_isinstance_call(self, node: ast.expr) -> tuple[str, str] | None:
+        """Detect isinstance(var, Type) call. Returns (var_name, type_name) or None."""
+        if not isinstance(node, ast.Call):
+            return None
+        if not isinstance(node.func, ast.Name) or node.func.id != "isinstance":
+            return None
+        if len(node.args) != 2:
+            return None
+        if not isinstance(node.args[0], ast.Name):
+            return None
+        if not isinstance(node.args[1], ast.Name):
+            return None
+        return (node.args[0].id, node.args[1].id)
+
+    def _subsequent_ops_use_var(self, operands: list[ast.expr], var_name: str) -> bool:
+        """Check if any operand accesses an attribute on the given variable."""
+        for op in operands:
+            if isinstance(op, ast.Attribute):
+                if isinstance(op.value, ast.Name) and op.value.id == var_name:
+                    return True
+        return False
+
+    def _emit_isinstance_and_attr(self, var_name: str, type_name: str, subsequent_ops: list[ast.expr]) -> str:
+        """Emit combined isinstance + attribute access pattern.
+
+        Pattern: isinstance(x, T) and x.attr
+        Go: func() bool { t, ok := x.(*T); return ok && t.Attr }()
+        """
+        go_var = self._snake_to_camel(var_name)
+        go_var = self._safe_go_name(go_var)
+        # Emit subsequent conditions, replacing var access with casted variable
+        casted_var = "t"
+        conditions = ["ok"]
+        for op in subsequent_ops:
+            if isinstance(op, ast.Attribute) and isinstance(op.value, ast.Name) and op.value.id == var_name:
+                # Replace x.attr with t.Attr
+                go_attr = self._to_go_field_name(op.attr)
+                conditions.append(f"{casted_var}.{go_attr}")
+            else:
+                # Other condition, emit as-is
+                conditions.append(self._emit_bool_expr(op))
+        return_expr = " && ".join(conditions)
+        return f"func() bool {{ {casted_var}, ok := {go_var}.(*{type_name}); return {return_expr} }}()"
 
     def visit_expr_IfExp(self, node: ast.IfExp) -> str:
         """Convert ternary expression. Go doesn't have ternary, use helper func."""
@@ -4770,16 +4834,23 @@ class GoTranspiler(ast.NodeVisitor):
             switch_var = go_var + "T"  # Avoid shadowing
         self.emit(f"switch {switch_var} := {go_var}.(type) {{")
         for stmt, _, type_name in cases:
-            self.emit(f"case *{type_name}:")
+            # Convert Python type name to Go type (e.g., str -> string)
+            go_type = self.TYPE_MAP.get(type_name, type_name)
+            # Primitives don't get * prefix, class types do
+            if type_name in self.TYPE_MAP:
+                case_type = go_type
+            else:
+                case_type = f"*{go_type}"
+            self.emit(f"case {case_type}:")
             self.indent += 1
             # Set up type switch context for variable rewriting
             old_switch_var = self._type_switch_var
             old_switch_type = self._type_switch_type
             self._type_switch_var = (go_var, switch_var)
-            self._type_switch_type = f"*{type_name}"
+            self._type_switch_type = case_type
             # Track narrowed type for field access
             old_var_type = self.var_types.get(switch_var)
-            self.var_types[switch_var] = f"*{type_name}"
+            self.var_types[switch_var] = case_type
             try:
                 for s in stmt.body:
                     self._emit_stmt(s)

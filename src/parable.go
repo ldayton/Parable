@@ -7803,6 +7803,10 @@ func (c *ConditionalExpr) ToSexp() string {
 	case string:
 		escaped = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(b, "\\", "\\\\"), "\"", "\\\""), "\n", "\\n")
 		result = "(cond \"" + escaped + "\")"
+	default:
+		if n, ok := body.(Node); ok {
+			result = "(cond " + n.ToSexp() + ")"
+		}
 	}
 	if len(c.Redirects) > 0 {
 		redirectParts = []string{}

@@ -86,8 +86,8 @@ run-corpus *ARGS:
     tools/bash-oracle/src/oracle/run_corpus.py {{ARGS}}
 
 # Verify lock file is up to date
-lock-check:
-    uv lock --check 2>&1 | sed -u "s/^/[lock] /" | tee /tmp/{{project}}-{{run_id}}-lock.log
+verify-lock:
+    uv lock --check 2>&1 | sed -u "s/^/[verify-lock] /" | tee /tmp/{{project}}-{{run_id}}-verify-lock.log
 
 # Ensure biome is installed (prevents race condition in parallel JS checks)
 _ensure-biome:
@@ -95,7 +95,7 @@ _ensure-biome:
 
 # Internal: run all parallel checks
 [parallel]
-_check-parallel: test-all lint fmt lock-check check-dump-ast check-style check-transpile test-js fmt-js fmt-dts check-dts
+_check-parallel: test-all lint fmt verify-lock check-dump-ast check-style verify-js verify-dts test-js fmt-js fmt-dts
 
 # Run all checks (tests, lint, format, lock, style) in parallel
 check: _ensure-biome _check-parallel
@@ -135,6 +135,7 @@ transpile-js output="src/parable.js":
     uv run --directory tools/transpiler transpiler --transpile-js "$(pwd)/src/parable.py" > "$js_out"
     npx -y @biomejs/biome format --write "$js_out" >/dev/null 2>&1
     npx -y @biomejs/biome format --write "$js_out" >/dev/null 2>&1
+    npx -y -p typescript tsc --noEmit
 
 # Generate TypeScript definitions from JavaScript
 transpile-dts input="src/parable.js" output="src/parable.d.ts" py_src="src/parable.py":
@@ -148,6 +149,7 @@ transpile-dts input="src/parable.js" output="src/parable.d.ts" py_src="src/parab
     [[ "$py_in" = /* ]] || py_in="$(pwd)/$py_in"
     uv run --directory tools/transpiler transpiler --transpile-dts "$js_in" "$py_in" > "$dts_out"
     npx -y @biomejs/biome format --write "$dts_out" >/dev/null 2>&1
+    npx -y -p typescript tsc --noEmit
 
 # Transpile Python to Go
 transpile-go output="src/parable.go":
@@ -159,30 +161,34 @@ transpile-go output="src/parable.go":
     gofmt -w "$go_out"
     go build -C src -o /dev/null .
 
-# Check that parable.js and parable.d.ts are up-to-date with transpiler output
-check-transpile:
+# Verify parable.js is up-to-date with transpiler output
+verify-js:
     @just transpile-js /tmp/{{project}}-{{run_id}}-transpile.js && \
-    just transpile-dts /tmp/{{project}}-{{run_id}}-transpile.js /tmp/{{project}}-{{run_id}}-transpile.d.ts && \
     if diff -q src/parable.js /tmp/{{project}}-{{run_id}}-transpile.js >/dev/null 2>&1; then \
-        echo "[check-transpile-js] OK"; \
+        echo "[verify-js] OK"; \
     else \
-        echo "[check-transpile-js] FAIL: parable.js is out of date, run 'just transpile'" >&2; \
-        exit 1; \
-    fi && \
-    if diff -q src/parable.d.ts /tmp/{{project}}-{{run_id}}-transpile.d.ts >/dev/null 2>&1; then \
-        echo "[check-transpile-dts] OK"; \
-    else \
-        echo "[check-transpile-dts] FAIL: parable.d.ts is out of date, run 'just transpile'" >&2; \
+        echo "[verify-js] FAIL: parable.js is out of date, run 'just transpile-js'" >&2; \
         exit 1; \
     fi
 
-# Check that parable.go is up-to-date with transpiler output
-check-transpile-go:
+# Verify parable.d.ts is up-to-date with transpiler output
+verify-dts:
+    @just transpile-js /tmp/{{project}}-{{run_id}}-transpile.js && \
+    just transpile-dts /tmp/{{project}}-{{run_id}}-transpile.js /tmp/{{project}}-{{run_id}}-transpile.d.ts && \
+    if diff -q src/parable.d.ts /tmp/{{project}}-{{run_id}}-transpile.d.ts >/dev/null 2>&1; then \
+        echo "[verify-dts] OK"; \
+    else \
+        echo "[verify-dts] FAIL: parable.d.ts is out of date, run 'just transpile-dts'" >&2; \
+        exit 1; \
+    fi
+
+# Verify parable.go is up-to-date with transpiler output
+verify-go:
     @just transpile-go /tmp/{{project}}-{{run_id}}-transpile.go && \
     if diff -q src/parable.go /tmp/{{project}}-{{run_id}}-transpile.go >/dev/null 2>&1; then \
-        echo "[check-transpile-go] OK"; \
+        echo "[verify-go] OK"; \
     else \
-        echo "[check-transpile-go] FAIL: parable.go is out of date, run 'just transpile-go'" >&2; \
+        echo "[verify-go] FAIL: parable.go is out of date, run 'just transpile-go'" >&2; \
         exit 1; \
     fi
 
@@ -191,7 +197,7 @@ build-go:
     go build -C src -o /dev/null .
 
 # Run Go tests
-test-go *ARGS:
+test-go *ARGS: verify-go
     go run -C src ./cmd/run-tests {{ARGS}}
 
 # Format Go (--fix to apply changes)
@@ -213,7 +219,7 @@ fmt-go *ARGS:
     fi
 
 # Run JavaScript tests
-test-js *ARGS: check-transpile
+test-js *ARGS: verify-js
     node tests/bin/run-js-tests.js {{ARGS}}
 
 # Format JavaScript (--fix to apply changes)
@@ -225,7 +231,3 @@ fmt-js *ARGS:
 # Format TypeScript definitions (--fix to apply changes)
 fmt-dts *ARGS:
     npx -y @biomejs/biome format {{ if ARGS == "--fix" { "--write" } else { "" } }} src/parable.d.ts 2>&1 | sed -u "s/^/[fmt-dts] /" | tee /tmp/{{project}}-{{run_id}}-fmt-dts.log
-
-# Type-check TypeScript definitions
-check-dts:
-    npx -y -p typescript tsc --noEmit 2>&1 | sed -u "s/^/[check-dts] /" | tee /tmp/{{project}}-{{run_id}}-check-dts.log

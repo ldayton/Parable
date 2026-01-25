@@ -3,7 +3,9 @@
     "strict": true,
     "noEmit": true,
     "moduleResolution": "node",
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "allowJs": true,
+    "checkJs": true
   },
-  "include": ["src/parable.d.ts"]
+  "include": ["src/parable.js", "src/parable.d.ts"]
 }

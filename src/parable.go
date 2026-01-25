@@ -6231,7 +6231,12 @@ func (w *Word) _FormatCommandSubstitutions(value string, inArith bool) string {
 			i = j
 		} else if _IsExpansionStart(value, i, "${") && i+2 < _runeLen(value) && _IsFunsubChar(_runeAt(value, i+2)) && !(_IsBackslashEscaped(value, i)) {
 			j = _FindFunsubEnd(value, i+2)
-			cmdsubNode = _ternary(cmdsubIdx < len(cmdsubParts), cmdsubParts[cmdsubIdx], nil)
+			cmdsubNode = func() Node {
+				if cmdsubIdx < len(cmdsubParts) {
+					return cmdsubParts[cmdsubIdx]
+				}
+				return nil
+			}()
 			if func() bool { t, ok := cmdsubNode.(*CommandSubstitution); return ok && t.Brace }() {
 				node = cmdsubNode
 				formatted = _FormatCmdsubNode(node.(*CommandSubstitution).Command, 0, false, false, false)
@@ -8389,7 +8394,7 @@ func (p *Parser) _ParseLoopBody(context string) Node {
 	}
 	if p._LexConsumeWord("do") {
 		body = p.ParseListUntil(map[string]struct{}{"done": {}})
-		if body == nil {
+		if _isNilNode(body) {
 			panic(NewParseError("Expected commands after 'do'", p._LexPeekToken().Pos, 0))
 		}
 		p.SkipWhitespaceAndNewlines()
@@ -10779,7 +10784,7 @@ func (p *Parser) ParseSubshell() *Subshell {
 	p.Advance()
 	p._SetState(ParserStateFlags_PST_SUBSHELL)
 	body = p.ParseList(true)
-	if body == nil {
+	if _isNilNode(body) {
 		p._ClearState(ParserStateFlags_PST_SUBSHELL)
 		panic(NewParseError("Expected command in subshell", p.Pos, 0))
 	}
@@ -11003,7 +11008,7 @@ func (p *Parser) _ParseCondTerm() Node {
 	p._CondSkipWhitespace()
 	if CondUnaryOps[word1.Value] {
 		operand = p._ParseCondWord()
-		if operand == nil {
+		if _isNilNode(operand) {
 			panic(NewParseError("Expected operand after "+word1.Value, p.Pos, 0))
 		}
 		return NewUnaryTest(word1.Value, operand)
@@ -11081,7 +11086,7 @@ func (p *Parser) ParseBraceGroup() *BraceGroup {
 	}
 	p.SkipWhitespaceAndNewlines()
 	body = p.ParseList(true)
-	if body == nil {
+	if _isNilNode(body) {
 		panic(NewParseError("Expected command in brace group", p._LexPeekToken().Pos, 0))
 	}
 	p.SkipWhitespace()
@@ -11109,7 +11114,7 @@ func (p *Parser) ParseIf() *If {
 		return nil
 	}
 	condition = p.ParseListUntil(map[string]struct{}{"then": {}})
-	if condition == nil {
+	if _isNilNode(condition) {
 		panic(NewParseError("Expected condition after 'if'", p._LexPeekToken().Pos, 0))
 	}
 	p.SkipWhitespaceAndNewlines()
@@ -11117,7 +11122,7 @@ func (p *Parser) ParseIf() *If {
 		panic(NewParseError("Expected 'then' after if condition", p._LexPeekToken().Pos, 0))
 	}
 	thenBody = p.ParseListUntil(map[string]struct{}{"elif": {}, "else": {}, "fi": {}})
-	if thenBody == nil {
+	if _isNilNode(thenBody) {
 		panic(NewParseError("Expected commands after 'then'", p._LexPeekToken().Pos, 0))
 	}
 	p.SkipWhitespaceAndNewlines()
@@ -11125,7 +11130,7 @@ func (p *Parser) ParseIf() *If {
 	if p._LexIsAtReservedWord("elif") {
 		p._LexConsumeWord("elif")
 		elifCondition = p.ParseListUntil(map[string]struct{}{"then": {}})
-		if elifCondition == nil {
+		if _isNilNode(elifCondition) {
 			panic(NewParseError("Expected condition after 'elif'", p._LexPeekToken().Pos, 0))
 		}
 		p.SkipWhitespaceAndNewlines()
@@ -11133,7 +11138,7 @@ func (p *Parser) ParseIf() *If {
 			panic(NewParseError("Expected 'then' after elif condition", p._LexPeekToken().Pos, 0))
 		}
 		elifThenBody = p.ParseListUntil(map[string]struct{}{"elif": {}, "else": {}, "fi": {}})
-		if elifThenBody == nil {
+		if _isNilNode(elifThenBody) {
 			panic(NewParseError("Expected commands after 'then'", p._LexPeekToken().Pos, 0))
 		}
 		p.SkipWhitespaceAndNewlines()
@@ -11143,7 +11148,7 @@ func (p *Parser) ParseIf() *If {
 		} else if p._LexIsAtReservedWord("else") {
 			p._LexConsumeWord("else")
 			innerElse = p.ParseListUntil(map[string]struct{}{"fi": {}})
-			if innerElse == nil {
+			if _isNilNode(innerElse) {
 				panic(NewParseError("Expected commands after 'else'", p._LexPeekToken().Pos, 0))
 			}
 		}
@@ -11151,7 +11156,7 @@ func (p *Parser) ParseIf() *If {
 	} else if p._LexIsAtReservedWord("else") {
 		p._LexConsumeWord("else")
 		elseBody = p.ParseListUntil(map[string]struct{}{"fi": {}})
-		if elseBody == nil {
+		if _isNilNode(elseBody) {
 			panic(NewParseError("Expected commands after 'else'", p._LexPeekToken().Pos, 0))
 		}
 	}
@@ -11171,7 +11176,7 @@ func (p *Parser) _ParseElifChain() *If {
 	_ = elseBody
 	p._LexConsumeWord("elif")
 	condition = p.ParseListUntil(map[string]struct{}{"then": {}})
-	if condition == nil {
+	if _isNilNode(condition) {
 		panic(NewParseError("Expected condition after 'elif'", p._LexPeekToken().Pos, 0))
 	}
 	p.SkipWhitespaceAndNewlines()
@@ -11179,7 +11184,7 @@ func (p *Parser) _ParseElifChain() *If {
 		panic(NewParseError("Expected 'then' after elif condition", p._LexPeekToken().Pos, 0))
 	}
 	thenBody = p.ParseListUntil(map[string]struct{}{"elif": {}, "else": {}, "fi": {}})
-	if thenBody == nil {
+	if _isNilNode(thenBody) {
 		panic(NewParseError("Expected commands after 'then'", p._LexPeekToken().Pos, 0))
 	}
 	p.SkipWhitespaceAndNewlines()
@@ -11189,7 +11194,7 @@ func (p *Parser) _ParseElifChain() *If {
 	} else if p._LexIsAtReservedWord("else") {
 		p._LexConsumeWord("else")
 		elseBody = p.ParseListUntil(map[string]struct{}{"fi": {}})
-		if elseBody == nil {
+		if _isNilNode(elseBody) {
 			panic(NewParseError("Expected commands after 'else'", p._LexPeekToken().Pos, 0))
 		}
 	}
@@ -11206,7 +11211,7 @@ func (p *Parser) ParseWhile() *While {
 		return nil
 	}
 	condition = p.ParseListUntil(map[string]struct{}{"do": {}})
-	if condition == nil {
+	if _isNilNode(condition) {
 		panic(NewParseError("Expected condition after 'while'", p._LexPeekToken().Pos, 0))
 	}
 	p.SkipWhitespaceAndNewlines()
@@ -11214,7 +11219,7 @@ func (p *Parser) ParseWhile() *While {
 		panic(NewParseError("Expected 'do' after while condition", p._LexPeekToken().Pos, 0))
 	}
 	body = p.ParseListUntil(map[string]struct{}{"done": {}})
-	if body == nil {
+	if _isNilNode(body) {
 		panic(NewParseError("Expected commands after 'do'", p._LexPeekToken().Pos, 0))
 	}
 	p.SkipWhitespaceAndNewlines()
@@ -11234,7 +11239,7 @@ func (p *Parser) ParseUntil() *Until {
 		return nil
 	}
 	condition = p.ParseListUntil(map[string]struct{}{"do": {}})
-	if condition == nil {
+	if _isNilNode(condition) {
 		panic(NewParseError("Expected condition after 'until'", p._LexPeekToken().Pos, 0))
 	}
 	p.SkipWhitespaceAndNewlines()
@@ -11242,7 +11247,7 @@ func (p *Parser) ParseUntil() *Until {
 		panic(NewParseError("Expected 'do' after until condition", p._LexPeekToken().Pos, 0))
 	}
 	body = p.ParseListUntil(map[string]struct{}{"done": {}})
-	if body == nil {
+	if _isNilNode(body) {
 		panic(NewParseError("Expected commands after 'do'", p._LexPeekToken().Pos, 0))
 	}
 	p.SkipWhitespaceAndNewlines()
@@ -11340,7 +11345,7 @@ func (p *Parser) ParseFor() Node {
 		panic(NewParseError("Expected 'do' in for loop", p._LexPeekToken().Pos, 0))
 	}
 	body = p.ParseListUntil(map[string]struct{}{"done": {}})
-	if body == nil {
+	if _isNilNode(body) {
 		panic(NewParseError("Expected commands after 'do'", p._LexPeekToken().Pos, 0))
 	}
 	p.SkipWhitespaceAndNewlines()
@@ -11748,26 +11753,26 @@ func (p *Parser) ParseCoproc() *Coproc {
 	}
 	if ch == "{" {
 		body = p.ParseBraceGroup()
-		if body != nil {
+		if !_isNilNode(body) {
 			return NewCoproc(body, name)
 		}
 	}
 	if ch == "(" {
 		if p.Pos+1 < p.Length && string(p.Source_runes[p.Pos+1]) == "(" {
 			body = p.ParseArithmeticCommand()
-			if body != nil {
+			if !_isNilNode(body) {
 				return NewCoproc(body, name)
 			}
 		}
 		body = p.ParseSubshell()
-		if body != nil {
+		if !_isNilNode(body) {
 			return NewCoproc(body, name)
 		}
 	}
 	nextWord = p._LexPeekReservedWord()
 	if nextWord != "" && CompoundKeywords[nextWord] {
 		body = p.ParseCompoundCommand()
-		if body != nil {
+		if !_isNilNode(body) {
 			return NewCoproc(body, name)
 		}
 	}
@@ -11787,7 +11792,7 @@ func (p *Parser) ParseCoproc() *Coproc {
 			if ch == "{" {
 				name = potentialName
 				body = p.ParseBraceGroup()
-				if body != nil {
+				if !_isNilNode(body) {
 					return NewCoproc(body, name)
 				}
 			} else if ch == "(" {
@@ -11797,13 +11802,13 @@ func (p *Parser) ParseCoproc() *Coproc {
 				} else {
 					body = p.ParseSubshell()
 				}
-				if body != nil {
+				if !_isNilNode(body) {
 					return NewCoproc(body, name)
 				}
 			} else if nextWord != "" && CompoundKeywords[nextWord] {
 				name = potentialName
 				body = p.ParseCompoundCommand()
-				if body != nil {
+				if !_isNilNode(body) {
 					return NewCoproc(body, name)
 				}
 			}
@@ -11811,7 +11816,7 @@ func (p *Parser) ParseCoproc() *Coproc {
 		p.Pos = wordStart
 	}
 	body = p.ParseCommand()
-	if body != nil {
+	if !_isNilNode(body) {
 		return NewCoproc(body, name)
 	}
 	panic(NewParseError("Expected command after coproc", p.Pos, 0))
@@ -11857,7 +11862,7 @@ func (p *Parser) ParseFunction() *Function {
 		}
 		p.SkipWhitespaceAndNewlines()
 		body = p._ParseCompoundCommand()
-		if body == nil {
+		if _isNilNode(body) {
 			panic(NewParseError("Expected function body", p.Pos, 0))
 		}
 		return NewFunction(name, body)
@@ -11916,7 +11921,7 @@ func (p *Parser) ParseFunction() *Function {
 	p.Advance()
 	p.SkipWhitespaceAndNewlines()
 	body = p._ParseCompoundCommand()
-	if body == nil {
+	if _isNilNode(body) {
 		panic(NewParseError("Expected function body", p.Pos, 0))
 	}
 	return NewFunction(name, body)
@@ -12004,7 +12009,7 @@ func (p *Parser) ParseListUntil(stopWords map[string]struct{}) Node {
 		return nil
 	}
 	pipeline = p.ParsePipeline()
-	if pipeline == nil {
+	if _isNilNode(pipeline) {
 		return nil
 	}
 	parts = []Node{pipeline}
@@ -12057,7 +12062,7 @@ func (p *Parser) ParseListUntil(stopWords map[string]struct{}) Node {
 			break
 		}
 		pipeline = p.ParsePipeline()
-		if pipeline == nil {
+		if _isNilNode(pipeline) {
 			panic(NewParseError("Expected command after "+op, p.Pos, 0))
 		}
 		parts = append(parts, pipeline)
@@ -12241,7 +12246,7 @@ func (p *Parser) ParsePipeline() Node {
 	} else if prefixOrder == "negation_time" {
 		result = NewTime(result, timePosix)
 		result = NewNegation(result)
-	} else if result == nil {
+	} else if _isNilNode(result) {
 		return nil
 	}
 	return result
@@ -12255,7 +12260,7 @@ func (p *Parser) _ParseSimplePipeline() Node {
 	var isPipeBoth bool
 	_ = isPipeBoth
 	cmd = p.ParseCompoundCommand()
-	if cmd == nil {
+	if _isNilNode(cmd) {
 		return nil
 	}
 	commands = []Node{cmd}
@@ -12277,7 +12282,7 @@ func (p *Parser) _ParseSimplePipeline() Node {
 			commands = append(commands, NewPipeBoth())
 		}
 		cmd = p.ParseCompoundCommand()
-		if cmd == nil {
+		if _isNilNode(cmd) {
 			panic(NewParseError("Expected command after |", p.Pos, 0))
 		}
 		commands = append(commands, cmd)
@@ -12340,7 +12345,7 @@ func (p *Parser) ParseList(newlineAsSeparator bool) Node {
 		p.SkipWhitespace()
 	}
 	pipeline = p.ParsePipeline()
-	if pipeline == nil {
+	if _isNilNode(pipeline) {
 		return nil
 	}
 	parts = []Node{pipeline}
@@ -12412,7 +12417,7 @@ func (p *Parser) ParseList(newlineAsSeparator bool) Node {
 			}
 		}
 		pipeline = p.ParsePipeline()
-		if pipeline == nil {
+		if _isNilNode(pipeline) {
 			panic(NewParseError("Expected command after "+op, p.Pos, 0))
 		}
 		parts = append(parts, pipeline)
@@ -12473,7 +12478,7 @@ func (p *Parser) Parse() []Node {
 	}
 	for !(p.AtEnd()) {
 		result = p.ParseList(false)
-		if result != nil {
+		if !_isNilNode(result) {
 			results = append(results, result)
 		}
 		p.SkipWhitespace()

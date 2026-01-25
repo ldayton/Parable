@@ -950,6 +950,27 @@ class GoTranspiler(ast.NodeVisitor):
         self.indent -= 1
         self.emit("}")
         self.emit("")
+        # _strIsDigits helper - str.isdigit() equivalent (true if non-empty and all digits)
+        self.emit("func _strIsDigits(s string) bool {")
+        self.indent += 1
+        self.emit("if len(s) == 0 {")
+        self.indent += 1
+        self.emit("return false")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("for _, r := range s {")
+        self.indent += 1
+        self.emit("if !unicode.IsDigit(r) {")
+        self.indent += 1
+        self.emit("return false")
+        self.indent -= 1
+        self.emit("}")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("return true")
+        self.indent -= 1
+        self.emit("}")
+        self.emit("")
         # _getattr helper - getattr(obj, attr, default) equivalent using reflection
         self.emit("func _getattr(obj interface{}, attr string, def interface{}) interface{} {")
         self.indent += 1
@@ -6784,8 +6805,8 @@ class GoTranspiler(ast.NodeVisitor):
         return f"unicode.IsLetter(_runeFromChar({obj}))"
 
     def _emit_isdigit(self, obj: str, args: list[str]) -> str:
-        """Emit isdigit check."""
-        return f"unicode.IsDigit(_runeFromChar({obj}))"
+        """Emit isdigit check - true if non-empty and all characters are digits."""
+        return f"_strIsDigits({obj})"
 
     def _emit_isalnum(self, obj: str, args: list[str]) -> str:
         """Emit isalnum check."""

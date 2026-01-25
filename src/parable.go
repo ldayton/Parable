@@ -1332,23 +1332,542 @@ func _ConsumeBracketClass(s string, start int, depth int) (int, []string, bool) 
 }
 
 func _FormatCondBody(node Node) string {
-	panic("TODO: function needs manual transpilation")
+	kind := node.Kind()
+	if kind == "unary-test" {
+		ut := node.(*UnaryTest)
+		operandVal := ut.Operand.(*Word).GetCondFormattedValue()
+		return ut.Op + " " + operandVal
+	}
+	if kind == "binary-test" {
+		bt := node.(*BinaryTest)
+		leftVal := bt.Left.(*Word).GetCondFormattedValue()
+		rightVal := bt.Right.(*Word).GetCondFormattedValue()
+		return leftVal + " " + bt.Op + " " + rightVal
+	}
+	if kind == "cond-and" {
+		ca := node.(*CondAnd)
+		return _FormatCondBody(ca.Left) + " && " + _FormatCondBody(ca.Right)
+	}
+	if kind == "cond-or" {
+		co := node.(*CondOr)
+		return _FormatCondBody(co.Left) + " || " + _FormatCondBody(co.Right)
+	}
+	if kind == "cond-not" {
+		cn := node.(*CondNot)
+		return "! " + _FormatCondBody(cn.Operand)
+	}
+	if kind == "cond-paren" {
+		cp := node.(*CondParen)
+		return "( " + _FormatCondBody(cp.Inner) + " )"
+	}
+	return ""
 }
 
 func _StartsWithSubshell(node Node) bool {
-	panic("TODO: function needs manual transpilation")
+	if node.Kind() == "subshell" {
+		return true
+	}
+	if node.Kind() == "list" {
+		list := node.(*List)
+		for _, p := range list.Parts {
+			if p.Kind() != "operator" {
+				return _StartsWithSubshell(p)
+			}
+		}
+		return false
+	}
+	if node.Kind() == "pipeline" {
+		pipeline := node.(*Pipeline)
+		if len(pipeline.Commands) > 0 {
+			return _StartsWithSubshell(pipeline.Commands[0])
+		}
+		return false
+	}
+	return false
 }
 
 func _FormatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bool, procsubFirst bool) string {
-	panic("TODO: function needs manual transpilation")
+	if node == nil {
+		return ""
+	}
+	sp := _RepeatStr(" ", indent)
+	innerSp := _RepeatStr(" ", indent+4)
+	switch node.Kind() {
+	case "empty":
+		return ""
+	case "command":
+		cmd := node.(*Command)
+		parts := []string{}
+		for _, wn := range cmd.Words {
+			w := wn.(*Word)
+			val := w._ExpandAllAnsiCQuotes(w.Value)
+			val = w._StripLocaleStringDollars(val)
+			val = w._NormalizeArrayWhitespace(val)
+			val = w._FormatCommandSubstitutions(val, false)
+			parts = append(parts, val)
+		}
+		heredocs := []Node{}
+		for _, r := range cmd.Redirects {
+			if r.Kind() == "heredoc" {
+				heredocs = append(heredocs, r)
+			}
+		}
+		for _, r := range cmd.Redirects {
+			parts = append(parts, _FormatRedirect(r, compactRedirects, true))
+		}
+		var result string
+		if compactRedirects && len(cmd.Words) > 0 && len(cmd.Redirects) > 0 {
+			wordParts := strings.Join(parts[:len(cmd.Words)], " ")
+			redirectParts := strings.Join(parts[len(cmd.Words):], "")
+			result = wordParts + redirectParts
+		} else {
+			result = strings.Join(parts, " ")
+		}
+		for _, h := range heredocs {
+			result = result + _FormatHeredocBody(h)
+		}
+		return result
+	case "pipeline":
+		pipeline := node.(*Pipeline)
+		type cmdPair struct {
+			cmd           Node
+			needsRedirect bool
+		}
+		cmds := []cmdPair{}
+		i := 0
+		for i < len(pipeline.Commands) {
+			c := pipeline.Commands[i]
+			if c.Kind() == "pipe-both" {
+				i++
+				continue
+			}
+			needsRedirect := i+1 < len(pipeline.Commands) && pipeline.Commands[i+1].Kind() == "pipe-both"
+			cmds = append(cmds, cmdPair{c, needsRedirect})
+			i++
+		}
+		resultParts := []string{}
+		for idx, pair := range cmds {
+			formatted := _FormatCmdsubNode(pair.cmd, indent, inProcsub, false, procsubFirst && idx == 0)
+			isLast := idx == len(cmds)-1
+			hasHeredoc := false
+			if pair.cmd.Kind() == "command" {
+				c := pair.cmd.(*Command)
+				for _, r := range c.Redirects {
+					if r.Kind() == "heredoc" {
+						hasHeredoc = true
+						break
+					}
+				}
+			}
+			if pair.needsRedirect {
+				if hasHeredoc {
+					firstNl := strings.Index(formatted, "\n")
+					if firstNl != -1 {
+						formatted = _Substring(formatted, 0, firstNl) + " 2>&1" + _Substring(formatted, firstNl, len(formatted))
+					} else {
+						formatted = formatted + " 2>&1"
+					}
+				} else {
+					formatted = formatted + " 2>&1"
+				}
+			}
+			if !isLast && hasHeredoc {
+				firstNl := strings.Index(formatted, "\n")
+				if firstNl != -1 {
+					formatted = _Substring(formatted, 0, firstNl) + " |" + _Substring(formatted, firstNl, len(formatted))
+				}
+			}
+			resultParts = append(resultParts, formatted)
+		}
+		compactPipe := inProcsub && len(cmds) > 0 && cmds[0].cmd.Kind() == "subshell"
+		result := ""
+		for idx, part := range resultParts {
+			if idx > 0 {
+				if strings.HasSuffix(result, "\n") {
+					result = result + "  " + part
+				} else if compactPipe {
+					result = result + "|" + part
+				} else {
+					result = result + " | " + part
+				}
+			} else {
+				result = part
+			}
+		}
+		return result
+	case "list":
+		list := node.(*List)
+		hasHeredoc := false
+		for _, p := range list.Parts {
+			if p.Kind() == "command" {
+				c := p.(*Command)
+				for _, r := range c.Redirects {
+					if r.Kind() == "heredoc" {
+						hasHeredoc = true
+						break
+					}
+				}
+			} else if p.Kind() == "pipeline" {
+				pl := p.(*Pipeline)
+				for _, c := range pl.Commands {
+					if c.Kind() == "command" {
+						cmd := c.(*Command)
+						for _, r := range cmd.Redirects {
+							if r.Kind() == "heredoc" {
+								hasHeredoc = true
+								break
+							}
+						}
+					}
+					if hasHeredoc {
+						break
+					}
+				}
+			}
+		}
+		resultList := []string{}
+		skippedSemi := false
+		cmdCount := 0
+		for _, p := range list.Parts {
+			if p.Kind() == "operator" {
+				op := p.(*Operator)
+				if op.Op == ";" {
+					if len(resultList) > 0 && strings.HasSuffix(resultList[len(resultList)-1], "\n") {
+						skippedSemi = true
+						continue
+					}
+					if len(resultList) >= 3 && resultList[len(resultList)-2] == "\n" && strings.HasSuffix(resultList[len(resultList)-3], "\n") {
+						skippedSemi = true
+						continue
+					}
+					resultList = append(resultList, ";")
+					skippedSemi = false
+				} else if op.Op == "\n" {
+					if len(resultList) > 0 && resultList[len(resultList)-1] == ";" {
+						skippedSemi = false
+						continue
+					}
+					if len(resultList) > 0 && strings.HasSuffix(resultList[len(resultList)-1], "\n") {
+						if skippedSemi {
+							resultList = append(resultList, " ")
+						} else {
+							resultList = append(resultList, "\n")
+						}
+						skippedSemi = false
+						continue
+					}
+					resultList = append(resultList, "\n")
+					skippedSemi = false
+				} else if op.Op == "&" {
+					if len(resultList) > 0 && strings.Contains(resultList[len(resultList)-1], "<<") && strings.Contains(resultList[len(resultList)-1], "\n") {
+						last := resultList[len(resultList)-1]
+						if strings.Contains(last, " |") || strings.HasPrefix(last, "|") {
+							resultList[len(resultList)-1] = last + " &"
+						} else {
+							firstNl := strings.Index(last, "\n")
+							resultList[len(resultList)-1] = _Substring(last, 0, firstNl) + " &" + _Substring(last, firstNl, len(last))
+						}
+					} else {
+						resultList = append(resultList, " &")
+					}
+				} else {
+					if len(resultList) > 0 && strings.Contains(resultList[len(resultList)-1], "<<") && strings.Contains(resultList[len(resultList)-1], "\n") {
+						last := resultList[len(resultList)-1]
+						firstNl := strings.Index(last, "\n")
+						resultList[len(resultList)-1] = _Substring(last, 0, firstNl) + " " + op.Op + " " + _Substring(last, firstNl, len(last))
+					} else {
+						resultList = append(resultList, " "+op.Op)
+					}
+				}
+			} else {
+				if len(resultList) > 0 && !strings.HasSuffix(resultList[len(resultList)-1], " ") && !strings.HasSuffix(resultList[len(resultList)-1], "\n") {
+					resultList = append(resultList, " ")
+				}
+				formattedCmd := _FormatCmdsubNode(p, indent, inProcsub, compactRedirects, procsubFirst && cmdCount == 0)
+				if len(resultList) > 0 {
+					last := resultList[len(resultList)-1]
+					if strings.Contains(last, " || \n") || strings.Contains(last, " && \n") {
+						formattedCmd = " " + formattedCmd
+					}
+				}
+				if skippedSemi {
+					formattedCmd = " " + formattedCmd
+					skippedSemi = false
+				}
+				resultList = append(resultList, formattedCmd)
+				cmdCount++
+			}
+		}
+		s := strings.Join(resultList, "")
+		if strings.Contains(s, " &\n") && strings.HasSuffix(s, "\n") {
+			return s + " "
+		}
+		for strings.HasSuffix(s, ";") {
+			s = _Substring(s, 0, len(s)-1)
+		}
+		if !hasHeredoc {
+			for strings.HasSuffix(s, "\n") {
+				s = _Substring(s, 0, len(s)-1)
+			}
+		}
+		return s
+	case "if":
+		ifNode := node.(*If)
+		cond := _FormatCmdsubNode(ifNode.Condition, indent, false, false, false)
+		thenBody := _FormatCmdsubNode(ifNode.Then_body, indent+4, false, false, false)
+		result := "if " + cond + "; then\n" + innerSp + thenBody + ";"
+		if ifNode.Else_body != nil {
+			elseBody := _FormatCmdsubNode(ifNode.Else_body, indent+4, false, false, false)
+			result = result + "\n" + sp + "else\n" + innerSp + elseBody + ";"
+		}
+		result = result + "\n" + sp + "fi"
+		return result
+	case "while":
+		whileNode := node.(*While)
+		cond := _FormatCmdsubNode(whileNode.Condition, indent, false, false, false)
+		body := _FormatCmdsubNode(whileNode.Body, indent+4, false, false, false)
+		result := "while " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done"
+		for _, r := range whileNode.Redirects {
+			result = result + " " + _FormatRedirect(r, false, false)
+		}
+		return result
+	case "until":
+		untilNode := node.(*Until)
+		cond := _FormatCmdsubNode(untilNode.Condition, indent, false, false, false)
+		body := _FormatCmdsubNode(untilNode.Body, indent+4, false, false, false)
+		result := "until " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done"
+		for _, r := range untilNode.Redirects {
+			result = result + " " + _FormatRedirect(r, false, false)
+		}
+		return result
+	case "for":
+		forNode := node.(*For)
+		varName := forNode.Var
+		body := _FormatCmdsubNode(forNode.Body, indent+4, false, false, false)
+		var result string
+		if forNode.Words != nil {
+			wordVals := []string{}
+			for _, wn := range forNode.Words {
+				wordVals = append(wordVals, wn.(*Word).Value)
+			}
+			words := strings.Join(wordVals, " ")
+			if words != "" {
+				result = "for " + varName + " in " + words + ";\n" + sp + "do\n" + innerSp + body + ";\n" + sp + "done"
+			} else {
+				result = "for " + varName + " in ;\n" + sp + "do\n" + innerSp + body + ";\n" + sp + "done"
+			}
+		} else {
+			result = "for " + varName + " in \"$@\";\n" + sp + "do\n" + innerSp + body + ";\n" + sp + "done"
+		}
+		for _, r := range forNode.Redirects {
+			result = result + " " + _FormatRedirect(r, false, false)
+		}
+		return result
+	case "for-arith":
+		forArith := node.(*ForArith)
+		body := _FormatCmdsubNode(forArith.Body, indent+4, false, false, false)
+		result := "for ((" + forArith.Init + "; " + forArith.Cond + "; " + forArith.Incr + "))\ndo\n" + innerSp + body + ";\n" + sp + "done"
+		for _, r := range forArith.Redirects {
+			result = result + " " + _FormatRedirect(r, false, false)
+		}
+		return result
+	case "case":
+		caseNode := node.(*Case)
+		word := caseNode.Word.(*Word).Value
+		patterns := []string{}
+		for i, pn := range caseNode.Patterns {
+			p := pn.(*CasePattern)
+			pat := strings.ReplaceAll(p.Pattern, "|", " | ")
+			var body string
+			if p.Body != nil {
+				body = _FormatCmdsubNode(p.Body, indent+8, false, false, false)
+			} else {
+				body = ""
+			}
+			term := p.Terminator
+			patIndent := _RepeatStr(" ", indent+8)
+			termIndent := _RepeatStr(" ", indent+4)
+			var bodyPart string
+			if body != "" {
+				bodyPart = patIndent + body + "\n"
+			} else {
+				bodyPart = "\n"
+			}
+			if i == 0 {
+				patterns = append(patterns, " "+pat+")\n"+bodyPart+termIndent+term)
+			} else {
+				patterns = append(patterns, pat+")\n"+bodyPart+termIndent+term)
+			}
+		}
+		patternStr := strings.Join(patterns, "\n"+_RepeatStr(" ", indent+4))
+		redirects := ""
+		if len(caseNode.Redirects) > 0 {
+			redirectParts := []string{}
+			for _, r := range caseNode.Redirects {
+				redirectParts = append(redirectParts, _FormatRedirect(r, false, false))
+			}
+			redirects = " " + strings.Join(redirectParts, " ")
+		}
+		return "case " + word + " in" + patternStr + "\n" + sp + "esac" + redirects
+	case "function":
+		funcNode := node.(*Function)
+		name := funcNode.Name
+		var innerBody Node
+		if funcNode.Body.Kind() == "brace-group" {
+			bg := funcNode.Body.(*BraceGroup)
+			innerBody = bg.Body
+		} else {
+			innerBody = funcNode.Body
+		}
+		body := _FormatCmdsubNode(innerBody, indent+4, false, false, false)
+		body = strings.TrimSuffix(body, ";")
+		return "function " + name + " () \n{ \n" + innerSp + body + "\n}"
+	case "subshell":
+		subshell := node.(*Subshell)
+		body := _FormatCmdsubNode(subshell.Body, indent, inProcsub, compactRedirects, false)
+		redirects := ""
+		if len(subshell.Redirects) > 0 {
+			redirectParts := []string{}
+			for _, r := range subshell.Redirects {
+				redirectParts = append(redirectParts, _FormatRedirect(r, false, false))
+			}
+			redirects = strings.Join(redirectParts, " ")
+		}
+		if procsubFirst {
+			if redirects != "" {
+				return "(" + body + ") " + redirects
+			}
+			return "(" + body + ")"
+		}
+		if redirects != "" {
+			return "( " + body + " ) " + redirects
+		}
+		return "( " + body + " )"
+	case "brace-group":
+		bg := node.(*BraceGroup)
+		body := _FormatCmdsubNode(bg.Body, indent, false, false, false)
+		body = strings.TrimSuffix(body, ";")
+		var terminator string
+		if strings.HasSuffix(body, " &") {
+			terminator = " }"
+		} else {
+			terminator = "; }"
+		}
+		redirects := ""
+		if len(bg.Redirects) > 0 {
+			redirectParts := []string{}
+			for _, r := range bg.Redirects {
+				redirectParts = append(redirectParts, _FormatRedirect(r, false, false))
+			}
+			redirects = strings.Join(redirectParts, " ")
+		}
+		if redirects != "" {
+			return "{ " + body + terminator + " " + redirects
+		}
+		return "{ " + body + terminator
+	case "arith-cmd":
+		arith := node.(*ArithmeticCommand)
+		return "((" + arith.Raw_content + "))"
+	case "cond-expr":
+		condExpr := node.(*ConditionalExpr)
+		body := _FormatCondBody(condExpr.Body.(Node))
+		return "[[ " + body + " ]]"
+	case "negation":
+		neg := node.(*Negation)
+		if neg.Pipeline != nil {
+			return "! " + _FormatCmdsubNode(neg.Pipeline, indent, false, false, false)
+		}
+		return "! "
+	case "time":
+		timeNode := node.(*Time)
+		var prefix string
+		if timeNode.Posix {
+			prefix = "time -p "
+		} else {
+			prefix = "time "
+		}
+		if timeNode.Pipeline != nil {
+			return prefix + _FormatCmdsubNode(timeNode.Pipeline, indent, false, false, false)
+		}
+		return prefix
+	}
+	return ""
 }
 
 func _FormatRedirect(r Node, compact bool, heredocOpOnly bool) string {
-	panic("TODO: function needs manual transpilation")
+	if r.Kind() == "heredoc" {
+		h := r.(*HereDoc)
+		var op string
+		if h.Strip_tabs {
+			op = "<<-"
+		} else {
+			op = "<<"
+		}
+		if h.Fd != 0 {
+			op = strconv.Itoa(h.Fd) + op
+		}
+		var delim string
+		if h.Quoted {
+			delim = "'" + h.Delimiter + "'"
+		} else {
+			delim = h.Delimiter
+		}
+		if heredocOpOnly {
+			return op + delim
+		}
+		return op + delim + "\n" + h.Content + h.Delimiter + "\n"
+	}
+	rd := r.(*Redirect)
+	op := rd.Op
+	if op == "1>" {
+		op = ">"
+	} else if op == "0<" {
+		op = "<"
+	}
+	targetWord := rd.Target.(*Word)
+	target := targetWord.Value
+	target = targetWord._ExpandAllAnsiCQuotes(target)
+	target = targetWord._StripLocaleStringDollars(target)
+	target = targetWord._FormatCommandSubstitutions(target, false)
+	if strings.HasPrefix(target, "&") {
+		wasInputClose := false
+		if target == "&-" && strings.HasSuffix(op, "<") {
+			wasInputClose = true
+			op = _Substring(op, 0, len(op)-1) + ">"
+		}
+		afterAmp := _Substring(target, 1, len(target))
+		isLiteralFd := afterAmp == "-" || (len(afterAmp) > 0 && afterAmp[0] >= '0' && afterAmp[0] <= '9')
+		if isLiteralFd {
+			if op == ">" || op == ">&" {
+				if wasInputClose {
+					op = "0>"
+				} else {
+					op = "1>"
+				}
+			} else if op == "<" || op == "<&" {
+				op = "0<"
+			}
+		} else {
+			if op == "1>" {
+				op = ">"
+			} else if op == "0<" {
+				op = "<"
+			}
+		}
+		return op + target
+	}
+	if strings.HasSuffix(op, "&") {
+		return op + target
+	}
+	if compact {
+		return op + target
+	}
+	return op + " " + target
 }
 
 func _FormatHeredocBody(r Node) string {
-	panic("TODO: function needs manual transpilation")
+	h := r.(*HereDoc)
+	return "\n" + h.Content + h.Delimiter + "\n"
 }
 
 func _LookaheadForEsac(value string, start int, caseDepth int) bool {
@@ -1948,7 +2467,76 @@ func _SkipHeredoc(value string, start int) int {
 }
 
 func _FindHeredocContentEnd(source string, start int, delimiters []interface{}) (int, int) {
-	panic("TODO: function needs manual transpilation")
+	if len(delimiters) == 0 {
+		return start, start
+	}
+	pos := start
+	for pos < len(source) && string(source[pos]) != "\n" {
+		pos++
+	}
+	if pos >= len(source) {
+		return start, start
+	}
+	contentStart := pos
+	pos++
+	for _, dt := range delimiters {
+		delimTuple := dt.([]interface{})
+		delimiter := delimTuple[0].(string)
+		stripTabs := delimTuple[1].(bool)
+		for pos < len(source) {
+			lineStart := pos
+			lineEnd := pos
+			for lineEnd < len(source) && string(source[lineEnd]) != "\n" {
+				lineEnd++
+			}
+			line := _Substring(source, lineStart, lineEnd)
+			for lineEnd < len(source) {
+				trailingBs := 0
+				for j := len(line) - 1; j >= 0; j-- {
+					if string(line[j]) == "\\" {
+						trailingBs++
+					} else {
+						break
+					}
+				}
+				if trailingBs%2 == 0 {
+					break
+				}
+				line = _Substring(line, 0, len(line)-1)
+				lineEnd++
+				nextLineStart := lineEnd
+				for lineEnd < len(source) && string(source[lineEnd]) != "\n" {
+					lineEnd++
+				}
+				line = line + _Substring(source, nextLineStart, lineEnd)
+			}
+			var lineStripped string
+			if stripTabs {
+				lineStripped = strings.TrimLeft(line, "\t")
+			} else {
+				lineStripped = line
+			}
+			if lineStripped == delimiter {
+				if lineEnd < len(source) {
+					pos = lineEnd + 1
+				} else {
+					pos = lineEnd
+				}
+				break
+			}
+			if strings.HasPrefix(lineStripped, delimiter) && len(lineStripped) > len(delimiter) {
+				tabsStripped := len(line) - len(lineStripped)
+				pos = lineStart + tabsStripped + len(delimiter)
+				break
+			}
+			if lineEnd < len(source) {
+				pos = lineEnd + 1
+			} else {
+				pos = lineEnd
+			}
+		}
+	}
+	return contentStart, pos
 }
 
 func _IsWordBoundary(s string, pos int, wordLen int) bool {

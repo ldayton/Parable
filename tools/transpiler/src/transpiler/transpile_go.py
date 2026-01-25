@@ -1133,16 +1133,9 @@ class GoTranspiler(ast.NodeVisitor):
     # Functions that require duck typing (Part 6d) or have complex patterns - skip body for now
     SKIP_BODY_FUNCTIONS = {
         # Duck typing (Part 6d) - isinstance-based dispatch
-        "_format_cond_body",
         "_format_cond_value",
         "_collect_cmdsubs",
         "_collect_assignments",
-        "_starts_with_subshell",
-        "_format_cmdsub_node",
-        "_format_redirect",
-        "_format_heredoc_body",
-        # Complex for-loop tuple unpacking
-        "_find_heredoc_content_end",
         # Complex lexer methods with walrus operators
         "_parse_matched_pair",
         "_read_bracket_regex",
@@ -1171,8 +1164,11 @@ class GoTranspiler(ast.NodeVisitor):
         else:
             self.emit(f"func {go_name}({params_str}) {{")
         self.indent += 1
+        # Check for manually implemented functions first
+        if node.name in self.MANUAL_FUNCTIONS:
+            self.MANUAL_FUNCTIONS[node.name](self)
         # Skip body for complex functions
-        if node.name in self.SKIP_BODY_FUNCTIONS:
+        elif node.name in self.SKIP_BODY_FUNCTIONS:
             self.emit('panic("TODO: function needs manual transpilation")')
         else:
             self._emit_body(node.body, func_info)
@@ -1351,6 +1347,993 @@ class GoTranspiler(ast.NodeVisitor):
         t.emit(f"{receiver}._Pending_heredocs = append({receiver}._Pending_heredocs, heredoc)")
         t.emit(f"{receiver}._ClearState(ParserStateFlags_PST_HEREDOC)")
         t.emit("return heredoc")
+
+    # Manually implemented top-level functions
+    # Populated after method definitions below
+    MANUAL_FUNCTIONS: dict[str, "Callable[[GoTranspiler], None]"] = {
+        "_format_heredoc_body": lambda t: GoTranspiler._emit_format_heredoc_body(t),
+        "_starts_with_subshell": lambda t: GoTranspiler._emit_starts_with_subshell(t),
+        "_format_cond_body": lambda t: GoTranspiler._emit_format_cond_body(t),
+        "_format_redirect": lambda t: GoTranspiler._emit_format_redirect(t),
+        "_find_heredoc_content_end": lambda t: GoTranspiler._emit_find_heredoc_content_end(t),
+        "_format_cmdsub_node": lambda t: GoTranspiler._emit_format_cmdsub_node(t),
+    }
+
+    @staticmethod
+    def _emit_format_heredoc_body(t: "GoTranspiler"):
+        """Emit _FormatHeredocBody body."""
+        t.emit('h := r.(*HereDoc)')
+        t.emit('return "\\n" + h.Content + h.Delimiter + "\\n"')
+
+    @staticmethod
+    def _emit_starts_with_subshell(t: "GoTranspiler"):
+        """Emit _StartsWithSubshell body."""
+        t.emit('if node.Kind() == "subshell" {')
+        t.indent += 1
+        t.emit("return true")
+        t.indent -= 1
+        t.emit("}")
+        t.emit('if node.Kind() == "list" {')
+        t.indent += 1
+        t.emit("list := node.(*List)")
+        t.emit("for _, p := range list.Parts {")
+        t.indent += 1
+        t.emit('if p.Kind() != "operator" {')
+        t.indent += 1
+        t.emit("return _StartsWithSubshell(p)")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("return false")
+        t.indent -= 1
+        t.emit("}")
+        t.emit('if node.Kind() == "pipeline" {')
+        t.indent += 1
+        t.emit("pipeline := node.(*Pipeline)")
+        t.emit("if len(pipeline.Commands) > 0 {")
+        t.indent += 1
+        t.emit("return _StartsWithSubshell(pipeline.Commands[0])")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("return false")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("return false")
+
+    @staticmethod
+    def _emit_format_cond_body(t: "GoTranspiler"):
+        """Emit _FormatCondBody body."""
+        t.emit("kind := node.Kind()")
+        t.emit('if kind == "unary-test" {')
+        t.indent += 1
+        t.emit("ut := node.(*UnaryTest)")
+        t.emit("operandVal := ut.Operand.(*Word).GetCondFormattedValue()")
+        t.emit('return ut.Op + " " + operandVal')
+        t.indent -= 1
+        t.emit("}")
+        t.emit('if kind == "binary-test" {')
+        t.indent += 1
+        t.emit("bt := node.(*BinaryTest)")
+        t.emit("leftVal := bt.Left.(*Word).GetCondFormattedValue()")
+        t.emit("rightVal := bt.Right.(*Word).GetCondFormattedValue()")
+        t.emit('return leftVal + " " + bt.Op + " " + rightVal')
+        t.indent -= 1
+        t.emit("}")
+        t.emit('if kind == "cond-and" {')
+        t.indent += 1
+        t.emit("ca := node.(*CondAnd)")
+        t.emit('return _FormatCondBody(ca.Left) + " && " + _FormatCondBody(ca.Right)')
+        t.indent -= 1
+        t.emit("}")
+        t.emit('if kind == "cond-or" {')
+        t.indent += 1
+        t.emit("co := node.(*CondOr)")
+        t.emit('return _FormatCondBody(co.Left) + " || " + _FormatCondBody(co.Right)')
+        t.indent -= 1
+        t.emit("}")
+        t.emit('if kind == "cond-not" {')
+        t.indent += 1
+        t.emit("cn := node.(*CondNot)")
+        t.emit('return "! " + _FormatCondBody(cn.Operand)')
+        t.indent -= 1
+        t.emit("}")
+        t.emit('if kind == "cond-paren" {')
+        t.indent += 1
+        t.emit("cp := node.(*CondParen)")
+        t.emit('return "( " + _FormatCondBody(cp.Inner) + " )"')
+        t.indent -= 1
+        t.emit("}")
+        t.emit('return ""')
+
+    @staticmethod
+    def _emit_format_redirect(t: "GoTranspiler"):
+        """Emit _FormatRedirect body."""
+        t.emit('if r.Kind() == "heredoc" {')
+        t.indent += 1
+        t.emit("h := r.(*HereDoc)")
+        t.emit("var op string")
+        t.emit("if h.Strip_tabs {")
+        t.indent += 1
+        t.emit('op = "<<-"')
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit('op = "<<"')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("if h.Fd != 0 {")
+        t.indent += 1
+        t.emit("op = strconv.Itoa(h.Fd) + op")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("var delim string")
+        t.emit("if h.Quoted {")
+        t.indent += 1
+        t.emit('delim = "\'" + h.Delimiter + "\'"')
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit("delim = h.Delimiter")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("if heredocOpOnly {")
+        t.indent += 1
+        t.emit("return op + delim")
+        t.indent -= 1
+        t.emit("}")
+        t.emit('return op + delim + "\\n" + h.Content + h.Delimiter + "\\n"')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("rd := r.(*Redirect)")
+        t.emit("op := rd.Op")
+        t.emit('if op == "1>" {')
+        t.indent += 1
+        t.emit('op = ">"')
+        t.indent -= 1
+        t.emit('} else if op == "0<" {')
+        t.indent += 1
+        t.emit('op = "<"')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("targetWord := rd.Target.(*Word)")
+        t.emit("target := targetWord.Value")
+        t.emit("target = targetWord._ExpandAllAnsiCQuotes(target)")
+        t.emit("target = targetWord._StripLocaleStringDollars(target)")
+        t.emit("target = targetWord._FormatCommandSubstitutions(target, false)")
+        t.emit('if strings.HasPrefix(target, "&") {')
+        t.indent += 1
+        t.emit("wasInputClose := false")
+        t.emit('if target == "&-" && strings.HasSuffix(op, "<") {')
+        t.indent += 1
+        t.emit("wasInputClose = true")
+        t.emit('op = _Substring(op, 0, len(op)-1) + ">"')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("afterAmp := _Substring(target, 1, len(target))")
+        t.emit('isLiteralFd := afterAmp == "-" || (len(afterAmp) > 0 && afterAmp[0] >= \'0\' && afterAmp[0] <= \'9\')')
+        t.emit("if isLiteralFd {")
+        t.indent += 1
+        t.emit('if op == ">" || op == ">&" {')
+        t.indent += 1
+        t.emit("if wasInputClose {")
+        t.indent += 1
+        t.emit('op = "0>"')
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit('op = "1>"')
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit('} else if op == "<" || op == "<&" {')
+        t.indent += 1
+        t.emit('op = "0<"')
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit('if op == "1>" {')
+        t.indent += 1
+        t.emit('op = ">"')
+        t.indent -= 1
+        t.emit('} else if op == "0<" {')
+        t.indent += 1
+        t.emit('op = "<"')
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("return op + target")
+        t.indent -= 1
+        t.emit("}")
+        t.emit('if strings.HasSuffix(op, "&") {')
+        t.indent += 1
+        t.emit("return op + target")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("if compact {")
+        t.indent += 1
+        t.emit("return op + target")
+        t.indent -= 1
+        t.emit("}")
+        t.emit('return op + " " + target')
+
+    @staticmethod
+    def _emit_find_heredoc_content_end(t: "GoTranspiler"):
+        """Emit _FindHeredocContentEnd body."""
+        t.emit("if len(delimiters) == 0 {")
+        t.indent += 1
+        t.emit("return start, start")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("pos := start")
+        t.emit('for pos < len(source) && string(source[pos]) != "\\n" {')
+        t.indent += 1
+        t.emit("pos++")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("if pos >= len(source) {")
+        t.indent += 1
+        t.emit("return start, start")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("contentStart := pos")
+        t.emit("pos++")
+        t.emit("for _, dt := range delimiters {")
+        t.indent += 1
+        t.emit("delimTuple := dt.([]interface{})")
+        t.emit("delimiter := delimTuple[0].(string)")
+        t.emit("stripTabs := delimTuple[1].(bool)")
+        t.emit("for pos < len(source) {")
+        t.indent += 1
+        t.emit("lineStart := pos")
+        t.emit("lineEnd := pos")
+        t.emit('for lineEnd < len(source) && string(source[lineEnd]) != "\\n" {')
+        t.indent += 1
+        t.emit("lineEnd++")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("line := _Substring(source, lineStart, lineEnd)")
+        t.emit("for lineEnd < len(source) {")
+        t.indent += 1
+        t.emit("trailingBs := 0")
+        t.emit("for j := len(line) - 1; j >= 0; j-- {")
+        t.indent += 1
+        t.emit('if string(line[j]) == "\\\\" {')
+        t.indent += 1
+        t.emit("trailingBs++")
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit("break")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("if trailingBs%2 == 0 {")
+        t.indent += 1
+        t.emit("break")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("line = _Substring(line, 0, len(line)-1)")
+        t.emit("lineEnd++")
+        t.emit("nextLineStart := lineEnd")
+        t.emit('for lineEnd < len(source) && string(source[lineEnd]) != "\\n" {')
+        t.indent += 1
+        t.emit("lineEnd++")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("line = line + _Substring(source, nextLineStart, lineEnd)")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("var lineStripped string")
+        t.emit("if stripTabs {")
+        t.indent += 1
+        t.emit('lineStripped = strings.TrimLeft(line, "\\t")')
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit("lineStripped = line")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("if lineStripped == delimiter {")
+        t.indent += 1
+        t.emit("if lineEnd < len(source) {")
+        t.indent += 1
+        t.emit("pos = lineEnd + 1")
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit("pos = lineEnd")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("break")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("if strings.HasPrefix(lineStripped, delimiter) && len(lineStripped) > len(delimiter) {")
+        t.indent += 1
+        t.emit("tabsStripped := len(line) - len(lineStripped)")
+        t.emit("pos = lineStart + tabsStripped + len(delimiter)")
+        t.emit("break")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("if lineEnd < len(source) {")
+        t.indent += 1
+        t.emit("pos = lineEnd + 1")
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit("pos = lineEnd")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("return contentStart, pos")
+
+    @staticmethod
+    def _emit_format_cmdsub_node(t: "GoTranspiler"):
+        """Emit _FormatCmdsubNode body - large switch on node.Kind()."""
+        t.emit("if node == nil {")
+        t.indent += 1
+        t.emit('return ""')
+        t.indent -= 1
+        t.emit("}")
+        t.emit('sp := _RepeatStr(" ", indent)')
+        t.emit('innerSp := _RepeatStr(" ", indent+4)')
+        t.emit("switch node.Kind() {")
+        # case "empty"
+        t.emit('case "empty":')
+        t.indent += 1
+        t.emit('return ""')
+        t.indent -= 1
+        # case "command"
+        t.emit('case "command":')
+        t.indent += 1
+        t.emit("cmd := node.(*Command)")
+        t.emit("parts := []string{}")
+        t.emit("for _, wn := range cmd.Words {")
+        t.indent += 1
+        t.emit("w := wn.(*Word)")
+        t.emit("val := w._ExpandAllAnsiCQuotes(w.Value)")
+        t.emit("val = w._StripLocaleStringDollars(val)")
+        t.emit("val = w._NormalizeArrayWhitespace(val)")
+        t.emit("val = w._FormatCommandSubstitutions(val, false)")
+        t.emit("parts = append(parts, val)")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("heredocs := []Node{}")
+        t.emit("for _, r := range cmd.Redirects {")
+        t.indent += 1
+        t.emit('if r.Kind() == "heredoc" {')
+        t.indent += 1
+        t.emit("heredocs = append(heredocs, r)")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("for _, r := range cmd.Redirects {")
+        t.indent += 1
+        t.emit("parts = append(parts, _FormatRedirect(r, compactRedirects, true))")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("var result string")
+        t.emit("if compactRedirects && len(cmd.Words) > 0 && len(cmd.Redirects) > 0 {")
+        t.indent += 1
+        t.emit('wordParts := strings.Join(parts[:len(cmd.Words)], " ")')
+        t.emit('redirectParts := strings.Join(parts[len(cmd.Words):], "")')
+        t.emit("result = wordParts + redirectParts")
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit('result = strings.Join(parts, " ")')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("for _, h := range heredocs {")
+        t.indent += 1
+        t.emit("result = result + _FormatHeredocBody(h)")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("return result")
+        t.indent -= 1
+        # case "pipeline"
+        t.emit('case "pipeline":')
+        t.indent += 1
+        t.emit("pipeline := node.(*Pipeline)")
+        t.emit("type cmdPair struct {")
+        t.indent += 1
+        t.emit("cmd Node")
+        t.emit("needsRedirect bool")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("cmds := []cmdPair{}")
+        t.emit("i := 0")
+        t.emit("for i < len(pipeline.Commands) {")
+        t.indent += 1
+        t.emit("c := pipeline.Commands[i]")
+        t.emit('if c.Kind() == "pipe-both" {')
+        t.indent += 1
+        t.emit("i++")
+        t.emit("continue")
+        t.indent -= 1
+        t.emit("}")
+        t.emit('needsRedirect := i+1 < len(pipeline.Commands) && pipeline.Commands[i+1].Kind() == "pipe-both"')
+        t.emit("cmds = append(cmds, cmdPair{c, needsRedirect})")
+        t.emit("i++")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("resultParts := []string{}")
+        t.emit("for idx, pair := range cmds {")
+        t.indent += 1
+        t.emit("formatted := _FormatCmdsubNode(pair.cmd, indent, inProcsub, false, procsubFirst && idx == 0)")
+        t.emit("isLast := idx == len(cmds)-1")
+        t.emit("hasHeredoc := false")
+        t.emit('if pair.cmd.Kind() == "command" {')
+        t.indent += 1
+        t.emit("c := pair.cmd.(*Command)")
+        t.emit("for _, r := range c.Redirects {")
+        t.indent += 1
+        t.emit('if r.Kind() == "heredoc" {')
+        t.indent += 1
+        t.emit("hasHeredoc = true")
+        t.emit("break")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("if pair.needsRedirect {")
+        t.indent += 1
+        t.emit("if hasHeredoc {")
+        t.indent += 1
+        t.emit('firstNl := strings.Index(formatted, "\\n")')
+        t.emit("if firstNl != -1 {")
+        t.indent += 1
+        t.emit('formatted = _Substring(formatted, 0, firstNl) + " 2>&1" + _Substring(formatted, firstNl, len(formatted))')
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit('formatted = formatted + " 2>&1"')
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit('formatted = formatted + " 2>&1"')
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("if !isLast && hasHeredoc {")
+        t.indent += 1
+        t.emit('firstNl := strings.Index(formatted, "\\n")')
+        t.emit("if firstNl != -1 {")
+        t.indent += 1
+        t.emit('formatted = _Substring(formatted, 0, firstNl) + " |" + _Substring(formatted, firstNl, len(formatted))')
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("resultParts = append(resultParts, formatted)")
+        t.indent -= 1
+        t.emit("}")
+        t.emit('compactPipe := inProcsub && len(cmds) > 0 && cmds[0].cmd.Kind() == "subshell"')
+        t.emit('result := ""')
+        t.emit("for idx, part := range resultParts {")
+        t.indent += 1
+        t.emit("if idx > 0 {")
+        t.indent += 1
+        t.emit('if strings.HasSuffix(result, "\\n") {')
+        t.indent += 1
+        t.emit('result = result + "  " + part')
+        t.indent -= 1
+        t.emit("} else if compactPipe {")
+        t.indent += 1
+        t.emit('result = result + "|" + part')
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit('result = result + " | " + part')
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit("result = part")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("return result")
+        t.indent -= 1
+        # case "list"
+        t.emit('case "list":')
+        t.indent += 1
+        t.emit("list := node.(*List)")
+        t.emit("hasHeredoc := false")
+        t.emit("for _, p := range list.Parts {")
+        t.indent += 1
+        t.emit('if p.Kind() == "command" {')
+        t.indent += 1
+        t.emit("c := p.(*Command)")
+        t.emit("for _, r := range c.Redirects {")
+        t.indent += 1
+        t.emit('if r.Kind() == "heredoc" {')
+        t.indent += 1
+        t.emit("hasHeredoc = true")
+        t.emit("break")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit('} else if p.Kind() == "pipeline" {')
+        t.indent += 1
+        t.emit("pl := p.(*Pipeline)")
+        t.emit("for _, c := range pl.Commands {")
+        t.indent += 1
+        t.emit('if c.Kind() == "command" {')
+        t.indent += 1
+        t.emit("cmd := c.(*Command)")
+        t.emit("for _, r := range cmd.Redirects {")
+        t.indent += 1
+        t.emit('if r.Kind() == "heredoc" {')
+        t.indent += 1
+        t.emit("hasHeredoc = true")
+        t.emit("break")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("if hasHeredoc {")
+        t.indent += 1
+        t.emit("break")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("resultList := []string{}")
+        t.emit("skippedSemi := false")
+        t.emit("cmdCount := 0")
+        t.emit("for _, p := range list.Parts {")
+        t.indent += 1
+        t.emit('if p.Kind() == "operator" {')
+        t.indent += 1
+        t.emit("op := p.(*Operator)")
+        t.emit('if op.Op == ";" {')
+        t.indent += 1
+        t.emit('if len(resultList) > 0 && strings.HasSuffix(resultList[len(resultList)-1], "\\n") {')
+        t.indent += 1
+        t.emit("skippedSemi = true")
+        t.emit("continue")
+        t.indent -= 1
+        t.emit("}")
+        t.emit('if len(resultList) >= 3 && resultList[len(resultList)-2] == "\\n" && strings.HasSuffix(resultList[len(resultList)-3], "\\n") {')
+        t.indent += 1
+        t.emit("skippedSemi = true")
+        t.emit("continue")
+        t.indent -= 1
+        t.emit("}")
+        t.emit('resultList = append(resultList, ";")')
+        t.emit("skippedSemi = false")
+        t.indent -= 1
+        t.emit('} else if op.Op == "\\n" {')
+        t.indent += 1
+        t.emit('if len(resultList) > 0 && resultList[len(resultList)-1] == ";" {')
+        t.indent += 1
+        t.emit("skippedSemi = false")
+        t.emit("continue")
+        t.indent -= 1
+        t.emit("}")
+        t.emit('if len(resultList) > 0 && strings.HasSuffix(resultList[len(resultList)-1], "\\n") {')
+        t.indent += 1
+        t.emit("if skippedSemi {")
+        t.indent += 1
+        t.emit('resultList = append(resultList, " ")')
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit('resultList = append(resultList, "\\n")')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("skippedSemi = false")
+        t.emit("continue")
+        t.indent -= 1
+        t.emit("}")
+        t.emit('resultList = append(resultList, "\\n")')
+        t.emit("skippedSemi = false")
+        t.indent -= 1
+        t.emit('} else if op.Op == "&" {')
+        t.indent += 1
+        t.emit('if len(resultList) > 0 && strings.Contains(resultList[len(resultList)-1], "<<") && strings.Contains(resultList[len(resultList)-1], "\\n") {')
+        t.indent += 1
+        t.emit("last := resultList[len(resultList)-1]")
+        t.emit('if strings.Contains(last, " |") || strings.HasPrefix(last, "|") {')
+        t.indent += 1
+        t.emit('resultList[len(resultList)-1] = last + " &"')
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit('firstNl := strings.Index(last, "\\n")')
+        t.emit('resultList[len(resultList)-1] = _Substring(last, 0, firstNl) + " &" + _Substring(last, firstNl, len(last))')
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit('resultList = append(resultList, " &")')
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit('if len(resultList) > 0 && strings.Contains(resultList[len(resultList)-1], "<<") && strings.Contains(resultList[len(resultList)-1], "\\n") {')
+        t.indent += 1
+        t.emit("last := resultList[len(resultList)-1]")
+        t.emit('firstNl := strings.Index(last, "\\n")')
+        t.emit('resultList[len(resultList)-1] = _Substring(last, 0, firstNl) + " " + op.Op + " " + _Substring(last, firstNl, len(last))')
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit('resultList = append(resultList, " "+op.Op)')
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit('if len(resultList) > 0 && !strings.HasSuffix(resultList[len(resultList)-1], " ") && !strings.HasSuffix(resultList[len(resultList)-1], "\\n") {')
+        t.indent += 1
+        t.emit('resultList = append(resultList, " ")')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("formattedCmd := _FormatCmdsubNode(p, indent, inProcsub, compactRedirects, procsubFirst && cmdCount == 0)")
+        t.emit("if len(resultList) > 0 {")
+        t.indent += 1
+        t.emit("last := resultList[len(resultList)-1]")
+        t.emit('if strings.Contains(last, " || \\n") || strings.Contains(last, " && \\n") {')
+        t.indent += 1
+        t.emit('formattedCmd = " " + formattedCmd')
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("if skippedSemi {")
+        t.indent += 1
+        t.emit('formattedCmd = " " + formattedCmd')
+        t.emit("skippedSemi = false")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("resultList = append(resultList, formattedCmd)")
+        t.emit("cmdCount++")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.emit('s := strings.Join(resultList, "")')
+        t.emit('if strings.Contains(s, " &\\n") && strings.HasSuffix(s, "\\n") {')
+        t.indent += 1
+        t.emit('return s + " "')
+        t.indent -= 1
+        t.emit("}")
+        t.emit('for strings.HasSuffix(s, ";") {')
+        t.indent += 1
+        t.emit("s = _Substring(s, 0, len(s)-1)")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("if !hasHeredoc {")
+        t.indent += 1
+        t.emit('for strings.HasSuffix(s, "\\n") {')
+        t.indent += 1
+        t.emit("s = _Substring(s, 0, len(s)-1)")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("return s")
+        t.indent -= 1
+        # case "if"
+        t.emit('case "if":')
+        t.indent += 1
+        t.emit("ifNode := node.(*If)")
+        t.emit("cond := _FormatCmdsubNode(ifNode.Condition, indent, false, false, false)")
+        t.emit("thenBody := _FormatCmdsubNode(ifNode.Then_body, indent+4, false, false, false)")
+        t.emit('result := "if " + cond + "; then\\n" + innerSp + thenBody + ";"')
+        t.emit("if ifNode.Else_body != nil {")
+        t.indent += 1
+        t.emit("elseBody := _FormatCmdsubNode(ifNode.Else_body, indent+4, false, false, false)")
+        t.emit('result = result + "\\n" + sp + "else\\n" + innerSp + elseBody + ";"')
+        t.indent -= 1
+        t.emit("}")
+        t.emit('result = result + "\\n" + sp + "fi"')
+        t.emit("return result")
+        t.indent -= 1
+        # case "while"
+        t.emit('case "while":')
+        t.indent += 1
+        t.emit("whileNode := node.(*While)")
+        t.emit("cond := _FormatCmdsubNode(whileNode.Condition, indent, false, false, false)")
+        t.emit("body := _FormatCmdsubNode(whileNode.Body, indent+4, false, false, false)")
+        t.emit('result := "while " + cond + "; do\\n" + innerSp + body + ";\\n" + sp + "done"')
+        t.emit("for _, r := range whileNode.Redirects {")
+        t.indent += 1
+        t.emit('result = result + " " + _FormatRedirect(r, false, false)')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("return result")
+        t.indent -= 1
+        # case "until"
+        t.emit('case "until":')
+        t.indent += 1
+        t.emit("untilNode := node.(*Until)")
+        t.emit("cond := _FormatCmdsubNode(untilNode.Condition, indent, false, false, false)")
+        t.emit("body := _FormatCmdsubNode(untilNode.Body, indent+4, false, false, false)")
+        t.emit('result := "until " + cond + "; do\\n" + innerSp + body + ";\\n" + sp + "done"')
+        t.emit("for _, r := range untilNode.Redirects {")
+        t.indent += 1
+        t.emit('result = result + " " + _FormatRedirect(r, false, false)')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("return result")
+        t.indent -= 1
+        # case "for"
+        t.emit('case "for":')
+        t.indent += 1
+        t.emit("forNode := node.(*For)")
+        t.emit("varName := forNode.Var")
+        t.emit("body := _FormatCmdsubNode(forNode.Body, indent+4, false, false, false)")
+        t.emit("var result string")
+        t.emit("if forNode.Words != nil {")
+        t.indent += 1
+        t.emit("wordVals := []string{}")
+        t.emit("for _, wn := range forNode.Words {")
+        t.indent += 1
+        t.emit("wordVals = append(wordVals, wn.(*Word).Value)")
+        t.indent -= 1
+        t.emit("}")
+        t.emit('words := strings.Join(wordVals, " ")')
+        t.emit('if words != "" {')
+        t.indent += 1
+        t.emit('result = "for " + varName + " in " + words + ";\\n" + sp + "do\\n" + innerSp + body + ";\\n" + sp + "done"')
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit('result = "for " + varName + " in ;\\n" + sp + "do\\n" + innerSp + body + ";\\n" + sp + "done"')
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit('result = "for " + varName + " in \\"$@\\";\\n" + sp + "do\\n" + innerSp + body + ";\\n" + sp + "done"')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("for _, r := range forNode.Redirects {")
+        t.indent += 1
+        t.emit('result = result + " " + _FormatRedirect(r, false, false)')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("return result")
+        t.indent -= 1
+        # case "for-arith"
+        t.emit('case "for-arith":')
+        t.indent += 1
+        t.emit("forArith := node.(*ForArith)")
+        t.emit("body := _FormatCmdsubNode(forArith.Body, indent+4, false, false, false)")
+        t.emit('result := "for ((" + forArith.Init + "; " + forArith.Cond + "; " + forArith.Incr + "))\\ndo\\n" + innerSp + body + ";\\n" + sp + "done"')
+        t.emit("for _, r := range forArith.Redirects {")
+        t.indent += 1
+        t.emit('result = result + " " + _FormatRedirect(r, false, false)')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("return result")
+        t.indent -= 1
+        # case "case"
+        t.emit('case "case":')
+        t.indent += 1
+        t.emit("caseNode := node.(*Case)")
+        t.emit("word := caseNode.Word.(*Word).Value")
+        t.emit("patterns := []string{}")
+        t.emit("for i, pn := range caseNode.Patterns {")
+        t.indent += 1
+        t.emit("p := pn.(*CasePattern)")
+        t.emit('pat := strings.ReplaceAll(p.Pattern, "|", " | ")')
+        t.emit("var body string")
+        t.emit("if p.Body != nil {")
+        t.indent += 1
+        t.emit("body = _FormatCmdsubNode(p.Body, indent+8, false, false, false)")
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit('body = ""')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("term := p.Terminator")
+        t.emit('patIndent := _RepeatStr(" ", indent+8)')
+        t.emit('termIndent := _RepeatStr(" ", indent+4)')
+        t.emit("var bodyPart string")
+        t.emit('if body != "" {')
+        t.indent += 1
+        t.emit('bodyPart = patIndent + body + "\\n"')
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit('bodyPart = "\\n"')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("if i == 0 {")
+        t.indent += 1
+        t.emit('patterns = append(patterns, " "+pat+")\\n"+bodyPart+termIndent+term)')
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit('patterns = append(patterns, pat+")\\n"+bodyPart+termIndent+term)')
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.emit('patternStr := strings.Join(patterns, "\\n"+_RepeatStr(" ", indent+4))')
+        t.emit('redirects := ""')
+        t.emit("if len(caseNode.Redirects) > 0 {")
+        t.indent += 1
+        t.emit("redirectParts := []string{}")
+        t.emit("for _, r := range caseNode.Redirects {")
+        t.indent += 1
+        t.emit("redirectParts = append(redirectParts, _FormatRedirect(r, false, false))")
+        t.indent -= 1
+        t.emit("}")
+        t.emit('redirects = " " + strings.Join(redirectParts, " ")')
+        t.indent -= 1
+        t.emit("}")
+        t.emit('return "case " + word + " in" + patternStr + "\\n" + sp + "esac" + redirects')
+        t.indent -= 1
+        # case "function"
+        t.emit('case "function":')
+        t.indent += 1
+        t.emit("funcNode := node.(*Function)")
+        t.emit("name := funcNode.Name")
+        t.emit("var innerBody Node")
+        t.emit('if funcNode.Body.Kind() == "brace-group" {')
+        t.indent += 1
+        t.emit("bg := funcNode.Body.(*BraceGroup)")
+        t.emit("innerBody = bg.Body")
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit("innerBody = funcNode.Body")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("body := _FormatCmdsubNode(innerBody, indent+4, false, false, false)")
+        t.emit('body = strings.TrimSuffix(body, ";")')
+        t.emit('return "function " + name + " () \\n{ \\n" + innerSp + body + "\\n}"')
+        t.indent -= 1
+        # case "subshell"
+        t.emit('case "subshell":')
+        t.indent += 1
+        t.emit("subshell := node.(*Subshell)")
+        t.emit("body := _FormatCmdsubNode(subshell.Body, indent, inProcsub, compactRedirects, false)")
+        t.emit('redirects := ""')
+        t.emit("if len(subshell.Redirects) > 0 {")
+        t.indent += 1
+        t.emit("redirectParts := []string{}")
+        t.emit("for _, r := range subshell.Redirects {")
+        t.indent += 1
+        t.emit("redirectParts = append(redirectParts, _FormatRedirect(r, false, false))")
+        t.indent -= 1
+        t.emit("}")
+        t.emit('redirects = strings.Join(redirectParts, " ")')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("if procsubFirst {")
+        t.indent += 1
+        t.emit('if redirects != "" {')
+        t.indent += 1
+        t.emit('return "(" + body + ") " + redirects')
+        t.indent -= 1
+        t.emit("}")
+        t.emit('return "(" + body + ")"')
+        t.indent -= 1
+        t.emit("}")
+        t.emit('if redirects != "" {')
+        t.indent += 1
+        t.emit('return "( " + body + " ) " + redirects')
+        t.indent -= 1
+        t.emit("}")
+        t.emit('return "( " + body + " )"')
+        t.indent -= 1
+        # case "brace-group"
+        t.emit('case "brace-group":')
+        t.indent += 1
+        t.emit("bg := node.(*BraceGroup)")
+        t.emit("body := _FormatCmdsubNode(bg.Body, indent, false, false, false)")
+        t.emit('body = strings.TrimSuffix(body, ";")')
+        t.emit("var terminator string")
+        t.emit('if strings.HasSuffix(body, " &") {')
+        t.indent += 1
+        t.emit('terminator = " }"')
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit('terminator = "; }"')
+        t.indent -= 1
+        t.emit("}")
+        t.emit('redirects := ""')
+        t.emit("if len(bg.Redirects) > 0 {")
+        t.indent += 1
+        t.emit("redirectParts := []string{}")
+        t.emit("for _, r := range bg.Redirects {")
+        t.indent += 1
+        t.emit("redirectParts = append(redirectParts, _FormatRedirect(r, false, false))")
+        t.indent -= 1
+        t.emit("}")
+        t.emit('redirects = strings.Join(redirectParts, " ")')
+        t.indent -= 1
+        t.emit("}")
+        t.emit('if redirects != "" {')
+        t.indent += 1
+        t.emit('return "{ " + body + terminator + " " + redirects')
+        t.indent -= 1
+        t.emit("}")
+        t.emit('return "{ " + body + terminator')
+        t.indent -= 1
+        # case "arith-cmd"
+        t.emit('case "arith-cmd":')
+        t.indent += 1
+        t.emit("arith := node.(*ArithmeticCommand)")
+        t.emit('return "((" + arith.Raw_content + "))"')
+        t.indent -= 1
+        # case "cond-expr"
+        t.emit('case "cond-expr":')
+        t.indent += 1
+        t.emit("condExpr := node.(*ConditionalExpr)")
+        t.emit("body := _FormatCondBody(condExpr.Body.(Node))")
+        t.emit('return "[[ " + body + " ]]"')
+        t.indent -= 1
+        # case "negation"
+        t.emit('case "negation":')
+        t.indent += 1
+        t.emit("neg := node.(*Negation)")
+        t.emit("if neg.Pipeline != nil {")
+        t.indent += 1
+        t.emit('return "! " + _FormatCmdsubNode(neg.Pipeline, indent, false, false, false)')
+        t.indent -= 1
+        t.emit("}")
+        t.emit('return "! "')
+        t.indent -= 1
+        # case "time"
+        t.emit('case "time":')
+        t.indent += 1
+        t.emit("timeNode := node.(*Time)")
+        t.emit("var prefix string")
+        t.emit("if timeNode.Posix {")
+        t.indent += 1
+        t.emit('prefix = "time -p "')
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit('prefix = "time "')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("if timeNode.Pipeline != nil {")
+        t.indent += 1
+        t.emit("return prefix + _FormatCmdsubNode(timeNode.Pipeline, indent, false, false, false)")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("return prefix")
+        t.indent -= 1
+        # default
+        t.emit("}")
+        t.emit('return ""')
 
     def _emit_constructor(self, node: ast.FunctionDef, class_info: ClassInfo):
         """Emit a constructor function."""

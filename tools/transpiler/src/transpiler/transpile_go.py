@@ -654,6 +654,13 @@ class GoTranspiler(ast.NodeVisitor):
 
     def visit_Module(self, node: ast.Module):
         """Emit package declaration and all definitions."""
+        # Package comment with usage example
+        self.emit("// Package parable is a recursive descent parser for bash.")
+        self.emit("//")
+        self.emit("// MIT License - https://github.com/ldayton/Parable")
+        self.emit("//")
+        self.emit('//   import "parable"')
+        self.emit('//   ast, err := parable.Parse("ps aux | grep python")')
         self.emit("package parable")
         self.emit("")
         # Emit imports

@@ -1,3 +1,9 @@
+// Package parable is a recursive descent parser for bash.
+//
+// MIT License - https://github.com/ldayton/Parable
+//
+//	import "parable"
+//	ast, err := parable.Parse("ps aux | grep python")
 package parable
 
 import (

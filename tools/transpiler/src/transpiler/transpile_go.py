@@ -7956,63 +7956,6 @@ class GoTranspiler(ast.NodeVisitor):
             return f"_runeLen({arg_str})"
         return f"len({arg_str})"
 
-    def _is_string_expr(self, node: ast.expr) -> bool:
-        """Check if node evaluates to a string type."""
-        if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            return True
-        if isinstance(node, ast.Name):
-            go_name = self._to_go_var(node.id)
-            var_type = self.var_types.get(go_name, "")
-            if var_type == "string":
-                return True
-            # Common string variable names
-            if node.id in (
-                "s",
-                "text",
-                "source",
-                "inner",
-                "value",
-                "char",
-                "c",
-                "line",
-                "name",
-                "word",
-                "op",
-                "delimiter",
-                "prefix",
-                "suffix",
-            ):
-                return True
-        if isinstance(node, ast.Attribute):
-            if node.attr in (
-                "source",
-                "text",
-                "value",
-                "line",
-                "inner",
-                "name",
-                "word",
-                "pattern",
-                "_arith_src",
-            ):
-                return True
-        # String method calls return strings
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-            method = node.func.attr
-            if method in (
-                "strip",
-                "lstrip",
-                "rstrip",
-                "lower",
-                "upper",
-                "replace",
-                "join",
-                "format",
-                "split",
-            ):
-                return True
-        return False
-
     def _emit_ord(self, args: list[str]) -> str:
         """Emit ord() call - get code point of a character.
 

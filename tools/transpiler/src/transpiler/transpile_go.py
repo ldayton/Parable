@@ -283,6 +283,8 @@ class GoTranspiler(ast.NodeVisitor):
         ("_to_sexp_and_or", "op_names"): "map[string]string",
         # Redirect handling - only reads, no mutation
         ("_append_redirects", "redirects"): "[]Node",
+        # Bytearray mutation - needs pointer to avoid losing appends
+        ("_append_with_ctlesc", "result"): "*[]byte",
     }
 
     # Override field types for fields without proper annotations
@@ -3411,6 +3413,9 @@ class GoTranspiler(ast.NodeVisitor):
                     if param_type and param_type not in ("interface{}", "[]interface{}") and isinstance(arg, ast.Name):
                         var_name = self._snake_to_camel(arg.id)
                         var_name = self._safe_go_name(var_name)
+                        # Don't propagate pointer-to-slice types - caller should use slice type and add &
+                        if param_type.startswith("*[]"):
+                            param_type = param_type[1:]  # Strip leading * for slices only
                         if var_name not in self.var_types or self.var_types[var_name] == "interface{}":
                             self.var_types[var_name] = param_type
 
@@ -6709,6 +6714,10 @@ class GoTranspiler(ast.NodeVisitor):
             if elem_type == "string":
                 if orig_args and self._is_byte_expr(orig_args[0]):
                     arg = f"string({arg})"
+            # If appending an int to *[]byte, convert to byte
+            if elem_type == "byte" and orig_args:
+                if self._is_int_expr(orig_args[0]):
+                    arg = f"byte({arg})"
             return f"*{obj} = append(*{obj}, {arg})"
         # If appending interface{} to []Node, add type assertion
         if obj_type == "[]Node" and orig_args:

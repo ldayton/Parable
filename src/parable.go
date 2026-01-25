@@ -9090,7 +9090,10 @@ func (p *Parser) _ParseDeprecatedArithmetic() (Node, string) {
 }
 
 func (p *Parser) _ParseParamExpansion(inDquote bool) (Node, string) {
-	panic("TODO: method needs manual implementation")
+	p._SyncLexer()
+	result0, result1 := p._Lexer._ReadParamExpansion(inDquote)
+	p._SyncParser()
+	return result0, result1
 }
 
 func (p *Parser) ParseRedirect() interface{} {

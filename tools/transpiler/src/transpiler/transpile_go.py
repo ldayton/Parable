@@ -130,6 +130,7 @@ class GoTranspiler(ast.NodeVisitor):
         self.byte_vars: set[str] = set()  # Track variables holding bytes (from string subscripts)
         self.tuple_vars: dict[str, list[str]] = {}  # Map tuple var name to element var names
         self.tuple_func_vars: dict[str, str] = {}  # Map var name to tuple-returning function name
+        self.returned_vars: set[str] = set()  # Track variables used in return statements
         self.union_field_types: dict[tuple[str, str], str] = {}  # Map (receiver, field) to current type
         self._type_switch_var: tuple[str, str] | None = None  # (original_var, switch_var) during type switch
         self._type_switch_type: str | None = None  # Current narrowed type in type switch case
@@ -1155,8 +1156,6 @@ class GoTranspiler(ast.NodeVisitor):
         "_arith_parse_left_assoc",
         # getattr patterns that need type assertions
         "_parse_arith_expr",
-        # Tuple passthrough (returns tuple stored in variable)
-        "_parse_param_expansion",
         # Complex type assertions needed
         "_parse_heredoc",
         "_parse_heredoc_delimiter",
@@ -1363,6 +1362,7 @@ class GoTranspiler(ast.NodeVisitor):
         self.byte_vars = set()  # Reset byte variable tracking
         self.var_types: dict[str, str] = {}  # Inferred types for local vars
         self.tuple_vars = {}  # Reset tuple variable tracking
+        self.returned_vars = set()  # Reset returned variable tracking
         # Track return type for nil → zero value conversion
         self.current_return_type = func_info.return_type if func_info else ""
         if func_info:
@@ -1375,6 +1375,8 @@ class GoTranspiler(ast.NodeVisitor):
         # Pre-declare ALL local variables at function top (C-style)
         # This avoids Go's block-scoping issues entirely
         self._predeclare_all_locals(stmts)
+        # Pre-scan for variables used in return statements (needed for tuple passthrough)
+        self._scan_returned_vars(stmts)
         # Emit all statements
         emitted_any = False
         skip_until = 0  # Skip statements consumed by type switch
@@ -1416,6 +1418,42 @@ class GoTranspiler(ast.NodeVisitor):
         if not emitted_any:
             if func_info and func_info.return_type:
                 self.emit(f'panic("TODO: empty body")')
+
+    def _scan_returned_vars(self, stmts: list[ast.stmt]):
+        """Pre-scan statements to find variables used in return statements."""
+        for stmt in stmts:
+            self._scan_stmt_for_returns(stmt)
+
+    def _scan_stmt_for_returns(self, stmt: ast.stmt):
+        """Recursively scan a statement for return statements with variable values."""
+        if isinstance(stmt, ast.Return):
+            if isinstance(stmt.value, ast.Name):
+                var_name = self._snake_to_camel(stmt.value.id)
+                var_name = self._safe_go_name(var_name)
+                self.returned_vars.add(var_name)
+        elif isinstance(stmt, ast.If):
+            for s in stmt.body:
+                self._scan_stmt_for_returns(s)
+            for s in stmt.orelse:
+                self._scan_stmt_for_returns(s)
+        elif isinstance(stmt, (ast.For, ast.While)):
+            for s in stmt.body:
+                self._scan_stmt_for_returns(s)
+            for s in stmt.orelse:
+                self._scan_stmt_for_returns(s)
+        elif isinstance(stmt, ast.With):
+            for s in stmt.body:
+                self._scan_stmt_for_returns(s)
+        elif isinstance(stmt, ast.Try):
+            for s in stmt.body:
+                self._scan_stmt_for_returns(s)
+            for handler in stmt.handlers:
+                for s in handler.body:
+                    self._scan_stmt_for_returns(s)
+            for s in stmt.orelse:
+                self._scan_stmt_for_returns(s)
+            for s in stmt.finalbody:
+                self._scan_stmt_for_returns(s)
 
     def _analyze_var_types(self, stmts: list[ast.stmt]):
         """Pre-analyze statements to infer variable types from usage."""
@@ -2386,10 +2424,12 @@ class GoTranspiler(ast.NodeVisitor):
                     # Generate synthetic variable names for tuple elements
                     elem_vars = [f"{target_str}{i}" for i in range(len(ret_info))]
                     # Check which vars are actually used later (to avoid declaring unused ones)
+                    # If the base variable is returned, we need all synthetic vars declared
+                    need_all = target_str in self.returned_vars
                     used_vars = []
                     for v in elem_vars:
-                        if v in self.declared_vars:
-                            used_vars.append(v)  # Already declared means it's used
+                        if v in self.declared_vars or need_all:
+                            used_vars.append(v)  # Already declared or returned means it's used
                         else:
                             used_vars.append("_")  # Not declared means unused, use blank identifier
                     # Check if all used elem_vars are already declared (redeclaration)
@@ -2609,6 +2649,16 @@ class GoTranspiler(ast.NodeVisitor):
             # Check for attribute access returning Node when we need concrete type
             elif self.current_return_type.startswith("*") and self._is_node_field_access(stmt.value):
                 value = f"{self.visit_expr(stmt.value)}.({self.current_return_type})"
+            # Check for returning a tuple variable (passthrough pattern)
+            elif isinstance(stmt.value, ast.Name):
+                var_name = self._snake_to_camel(stmt.value.id)
+                var_name = self._safe_go_name(var_name)
+                if var_name in self.tuple_vars:
+                    elem_vars = self.tuple_vars[var_name]
+                    self.emit(f"return {', '.join(elem_vars)}")
+                    return
+                # Use visit_expr to handle type switch variable rewriting
+                value = self.visit_expr(stmt.value)
             else:
                 value = self.visit_expr(stmt.value)
             self.emit(f"return {value}")

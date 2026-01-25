@@ -52,6 +52,7 @@ Required annotations (for Go/TS transpiler):
     bare dict              x: dict                   x: dict[str, int]
     bare set               x: set                    x: set[str]
     bare tuple             -> tuple:                 -> tuple[int, str]:
+    unannotated field      self.x = CONST            self.x: int = CONST
 """
 
 import ast
@@ -67,6 +68,81 @@ def is_bare_collection(annotation):
     if isinstance(annotation, ast.Name):
         return annotation.id in BARE_COLLECTION_TYPES
     return False
+
+
+def is_obvious_literal(node):
+    """Check if node is a literal with obvious type (str, int, bool, float)."""
+    if isinstance(node, ast.Constant):
+        return isinstance(node.value, (str, int, bool, float)) and node.value is not None
+    # True/False are Names in older Python, Constants in newer
+    if isinstance(node, ast.Name) and node.id in ("True", "False"):
+        return True
+    return False
+
+
+def check_unannotated_field_assigns(tree):
+    """Check for self.x = val assignments that should have type annotations.
+
+    Skips assignments where type is obvious:
+    - Value is an annotated parameter (type flows from param)
+    - Value is a literal (str, int, bool, float)
+    """
+    errors = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        # Collect all annotated field names for this class
+        annotated_fields = set()
+        for item in ast.walk(node):
+            if isinstance(item, ast.AnnAssign):
+                # Class-level: x: int = 0
+                if isinstance(item.target, ast.Name):
+                    annotated_fields.add(item.target.id)
+                # Method-level: self.x: int = 0
+                if isinstance(item.target, ast.Attribute):
+                    if isinstance(item.target.value, ast.Name):
+                        if item.target.value.id == "self":
+                            annotated_fields.add(item.target.attr)
+        # Check each method for unannotated field assignments
+        for item in node.body:
+            if not isinstance(item, ast.FunctionDef):
+                continue
+            # Collect annotated parameter names
+            annotated_params = set()
+            for arg in item.args.args:
+                if arg.annotation is not None:
+                    annotated_params.add(arg.arg)
+            # Walk method body for self.x = val assignments
+            for stmt in ast.walk(item):
+                if not isinstance(stmt, ast.Assign):
+                    continue
+                for target in stmt.targets:
+                    if not isinstance(target, ast.Attribute):
+                        continue
+                    if not isinstance(target.value, ast.Name):
+                        continue
+                    if target.value.id != "self":
+                        continue
+                    field_name = target.attr
+                    # Skip if already annotated somewhere
+                    if field_name in annotated_fields:
+                        continue
+                    # Skip if value is just an annotated parameter
+                    if isinstance(stmt.value, ast.Name):
+                        if stmt.value.id in annotated_params:
+                            annotated_fields.add(field_name)
+                            continue
+                    # Skip if value is an obvious literal
+                    if is_obvious_literal(stmt.value):
+                        annotated_fields.add(field_name)
+                        continue
+                    # Flag it
+                    errors.append(
+                        (stmt.lineno, "unannotated field: self." + field_name + " needs type annotation")
+                    )
+                    # Add to annotated_fields to avoid duplicate errors
+                    annotated_fields.add(field_name)
+    return errors
 
 
 def find_python_files(directory):
@@ -89,6 +165,9 @@ def check_file(filepath):
 
     tree = ast.parse(source, filepath)
     errors = []
+
+    # Check for unannotated field assignments
+    errors.extend(check_unannotated_field_assigns(tree))
 
     for node in ast.walk(tree):
         lineno = getattr(node, "lineno", 0)

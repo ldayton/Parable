@@ -215,7 +215,7 @@ class Token:
         self.type = type_
         self.value = value
         self.pos = pos
-        self.parts = parts if parts is not None else []
+        self.parts: list[Node] = parts if parts is not None else []
         self.word = word  # Parsed Word object for WORD tokens
 
     def __repr__(self) -> str:
@@ -366,7 +366,7 @@ class ParseContext:
         self.case_depth = 0  # Nested case statements
         self.arith_depth = 0  # Nested $((...)) expressions
         self.arith_paren_depth = 0  # Grouping parens inside arithmetic
-        self.quote = QuoteState()
+        self.quote: QuoteState = QuoteState()
 
     def copy(self) -> ParseContext:
         """Create a deep copy of this context."""
@@ -427,12 +427,12 @@ class Lexer:
     def __init__(self, source: str, extglob: bool = False):
         self.source = source
         self.pos = 0
-        self.length = len(source)
-        self.quote = QuoteState()
+        self.length: int = len(source)
+        self.quote: QuoteState = QuoteState()
         self._token_cache: Token | None = None
         # Parser state flags for context-sensitive tokenization
-        self._parser_state = ParserStateFlags.NONE
-        self._dolbrace_state = DolbraceState.NONE
+        self._parser_state: int = ParserStateFlags.NONE
+        self._dolbrace_state: int = DolbraceState.NONE
         # Pending heredocs tracked during word parsing
         self._pending_heredocs: list[Node] = []
         # Extglob parsing enabled (bash shopt extglob)
@@ -6708,7 +6708,7 @@ class Parser:
     def __init__(self, source: str, in_process_sub: bool = False, extglob: bool = False):
         self.source = source
         self.pos = 0
-        self.length = len(source)
+        self.length: int = len(source)
         self._pending_heredocs: list[HereDoc] = []
         # Track heredoc content that was consumed into command/process substitutions
         # and needs to be skipped when we reach a newline
@@ -6718,16 +6718,16 @@ class Parser:
         # Extglob parsing enabled (bash shopt extglob)
         self._extglob = extglob
         # Context stack for tracking nested parsing scopes
-        self._ctx = ContextStack()
+        self._ctx: ContextStack = ContextStack()
         # Lexer for tokenization
-        self._lexer = Lexer(source, extglob=extglob)
+        self._lexer: Lexer = Lexer(source, extglob=extglob)
         self._lexer._parser = self  # Back-reference for expansion parsing
         # Token history for context-sensitive parsing (last 4 tokens like bash)
         self._token_history: list[Token | None] = [None, None, None, None]
         # Parser state flags for context-sensitive decisions
-        self._parser_state = ParserStateFlags.NONE
+        self._parser_state: int = ParserStateFlags.NONE
         # Dolbrace state for ${...} parameter expansion parsing
-        self._dolbrace_state = DolbraceState.NONE
+        self._dolbrace_state: int = DolbraceState.NONE
         # EOF token mechanism for inline command substitution parsing
         self._eof_token: str | None = None
         # Word parsing context for Lexer sync

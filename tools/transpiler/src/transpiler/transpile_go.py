@@ -6159,6 +6159,21 @@ class GoTranspiler(ast.NodeVisitor):
                 return self._emit_in_check(node.left, comparator, negated=False)
             if isinstance(op, ast.NotIn):
                 return self._emit_in_check(node.left, comparator, negated=True)
+            # Handle Node-typed field compared to None - use _isNilNode() to catch typed nils
+            if isinstance(op, ast.Is) and isinstance(comparator, ast.Constant) and comparator.value is None:
+                if isinstance(node.left, ast.Attribute) and isinstance(node.left.value, ast.Name) and node.left.value.id == "self" and self.current_class:
+                    class_info = self.symbols.classes.get(self.current_class)
+                    if class_info and node.left.attr in class_info.fields:
+                        field_type = class_info.fields[node.left.attr].go_type or ""
+                        if field_type == "Node":
+                            return f"_isNilNode({result})"
+            if isinstance(op, ast.IsNot) and isinstance(comparator, ast.Constant) and comparator.value is None:
+                if isinstance(node.left, ast.Attribute) and isinstance(node.left.value, ast.Name) and node.left.value.id == "self" and self.current_class:
+                    class_info = self.symbols.classes.get(self.current_class)
+                    if class_info and node.left.attr in class_info.fields:
+                        field_type = class_info.fields[node.left.attr].go_type or ""
+                        if field_type == "Node":
+                            return f"!_isNilNode({result})"
             # Handle string subscript compared with single-char string
             right = self._emit_comparand(comparator, node.left)
             op_str = self._cmpop_to_go(op)

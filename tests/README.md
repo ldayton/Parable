@@ -7,6 +7,7 @@ Every test validated against real bash 5.3 ASTs.
 ```bash
 just test       # Python (3.14)
 just test-js    # JavaScript
+just test-go    # Go
 just test-all   # All Python versions (3.10-3.14, PyPy)
 ```
 

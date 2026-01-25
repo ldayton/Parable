@@ -14,7 +14,7 @@ Parse bash exactly as bash does. Python, Javascript, or Go—your choice. One fi
 
 ## Philosophy
 
-**LLM-driven development.** This project is an exercise in maximizing what LLMs can do. An 11,000-line recursive descent parser for one of the gnarliest grammars in computing, built and maintained almost entirely through AI assistance—it wouldn't exist without them. When performance and clarity conflict, clarity wins. Verbose beats clever. The code should be readable by both humans and models.
+**LLM-driven development.** This project is an exercise in maximizing what LLMs can do. An 11,000-line recursive descent parser for one of the gnarliest grammars in computing, plus two custom transpilers, built and maintained almost entirely through AI assistance—it wouldn't exist without them.
 
 **Match bash exactly.** Bash is the oracle. We [patched](https://github.com/ldayton/bash-oracle) GNU Bash 5.3 so it reveals its internal parse tree, then test against it. No spec interpretation, no "close enough"—if bash parses it one way, so do we. Bash always tells the truth, even when it's lying.
 

@@ -93,9 +93,13 @@ verify-lock:
 _ensure-biome:
     @npx -y @biomejs/biome --version >/dev/null 2>&1
 
+# Test oldest and newest Python versions (for quick checks)
+[parallel]
+test-bounds: test-cpy38 test-cpy314
+
 # Internal: run all parallel checks
 [parallel]
-_check-parallel: test-all lint fmt verify-lock check-dump-ast check-style verify-js verify-dts test-js fmt-js fmt-dts
+_check-parallel: test-bounds lint fmt verify-lock check-dump-ast check-style verify-js verify-dts test-js fmt-js fmt-dts test-go
 
 # Run all checks (tests, lint, format, lock, style) in parallel
 check: _ensure-biome _check-parallel

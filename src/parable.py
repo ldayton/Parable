@@ -9,7 +9,8 @@ ast = parse("ps aux | grep python | awk '{print $2}'")
 
 from __future__ import annotations
 
-from typing import Callable, Union
+from collections.abc import Callable
+from typing import Union
 
 
 class ParseError(Exception):
@@ -3011,7 +3012,13 @@ class Word(Node):
         elif isinstance(node, ArithBinaryOp) or isinstance(node, ArithComma):
             result.extend(self._collect_cmdsubs(node.left))
             result.extend(self._collect_cmdsubs(node.right))
-        elif isinstance(node, ArithUnaryOp) or isinstance(node, ArithPreIncr) or isinstance(node, ArithPostIncr) or isinstance(node, ArithPreDecr) or isinstance(node, ArithPostDecr):
+        elif (
+            isinstance(node, ArithUnaryOp)
+            or isinstance(node, ArithPreIncr)
+            or isinstance(node, ArithPostIncr)
+            or isinstance(node, ArithPreDecr)
+            or isinstance(node, ArithPostDecr)
+        ):
             result.extend(self._collect_cmdsubs(node.operand))
         elif isinstance(node, ArithTernary):
             result.extend(self._collect_cmdsubs(node.condition))
@@ -4038,7 +4045,11 @@ class If(Node):
     redirects: list[Node]
 
     def __init__(
-        self, condition: Node, then_body: Node, else_body: Node | None = None, redirects: list[Node] | None = None
+        self,
+        condition: Node,
+        then_body: Node,
+        else_body: Node | None = None,
+        redirects: list[Node] | None = None,
     ):
         self.kind = "if"
         self.condition = condition
@@ -4168,7 +4179,9 @@ class ForArith(Node):
     body: Node
     redirects: list[Node]
 
-    def __init__(self, init: str, cond: str, incr: str, body: Node, redirects: list[Node] | None = None):
+    def __init__(
+        self, init: str, cond: str, incr: str, body: Node, redirects: list[Node] | None = None
+    ):
         self.kind = "for-arith"
         self.init = init
         self.cond = cond
@@ -4265,7 +4278,9 @@ class Case(Node):
     patterns: list[CasePattern]
     redirects: list[Node]
 
-    def __init__(self, word: Word, patterns: list[CasePattern], redirects: list[Node] | None = None):
+    def __init__(
+        self, word: Word, patterns: list[CasePattern], redirects: list[Node] | None = None
+    ):
         self.kind = "case"
         self.word = word
         self.patterns = patterns
@@ -7227,7 +7242,9 @@ class Parser:
             raise ParseError("Unterminated double quote", pos=start)
         chars.append(self.advance())
 
-    def _parse_dollar_expansion(self, chars: list[str], parts: list[Node], in_dquote: bool = False) -> bool:
+    def _parse_dollar_expansion(
+        self, chars: list[str], parts: list[Node], in_dquote: bool = False
+    ) -> bool:
         """Handle $ expansions. Returns True if expansion parsed, False if bare $."""
         # Check $(( -> arithmetic expansion
         if (

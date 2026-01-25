@@ -61,7 +61,6 @@ import ast
 import os
 import sys
 
-
 BARE_COLLECTION_TYPES = {"list", "dict", "set", "tuple"}
 
 
@@ -140,7 +139,10 @@ def check_unannotated_field_assigns(tree):
                         continue
                     # Flag it
                     errors.append(
-                        (stmt.lineno, "unannotated field: self." + field_name + " needs type annotation")
+                        (
+                            stmt.lineno,
+                            "unannotated field: self." + field_name + " needs type annotation",
+                        )
                     )
                     # Add to annotated_fields to avoid duplicate errors
                     annotated_fields.add(field_name)
@@ -267,7 +269,9 @@ def check_file(filepath):
         if isinstance(node, ast.Assign):
             if len(node.targets) == 1 and isinstance(node.targets[0], ast.Tuple):
                 if isinstance(node.value, ast.Name):
-                    errors.append((lineno, "tuple unpack from variable: unpack directly from call instead"))
+                    errors.append(
+                        (lineno, "tuple unpack from variable: unpack directly from call instead")
+                    )
 
         # step slicing (basic slicing a[x:y] is allowed, step slicing a[::n] is not)
         if isinstance(node, ast.Subscript):
@@ -339,9 +343,9 @@ def check_file(filepath):
         if isinstance(node, ast.Import):
             errors.append((lineno, "import: not allowed, code must be self-contained"))
 
-        # from ... import (allow __future__ and typing)
+        # from ... import (allow __future__, typing, collections.abc)
         if isinstance(node, ast.ImportFrom):
-            if node.module not in ("__future__", "typing"):
+            if node.module not in ("__future__", "typing", "collections.abc"):
                 errors.append((lineno, "from import: not allowed, code must be self-contained"))
 
         # missing return type annotation (skip __init__ and __new__)
@@ -364,14 +368,30 @@ def check_file(filepath):
             for arg in node.args.args:
                 if arg.annotation and is_bare_collection(arg.annotation):
                     errors.append(
-                        (lineno, "bare " + arg.annotation.id + ": " + arg.arg + " in " + node.name + "() needs type parameter")
+                        (
+                            lineno,
+                            "bare "
+                            + arg.annotation.id
+                            + ": "
+                            + arg.arg
+                            + " in "
+                            + node.name
+                            + "() needs type parameter",
+                        )
                     )
 
         # bare collection in return type annotation
         if isinstance(node, ast.FunctionDef):
             if node.returns and is_bare_collection(node.returns):
                 errors.append(
-                    (lineno, "bare " + node.returns.id + ": " + node.name + "() return needs type parameter")
+                    (
+                        lineno,
+                        "bare "
+                        + node.returns.id
+                        + ": "
+                        + node.name
+                        + "() return needs type parameter",
+                    )
                 )
 
         # bare collection in variable annotation
@@ -379,7 +399,10 @@ def check_file(filepath):
             if is_bare_collection(node.annotation):
                 target_name = node.target.id if isinstance(node.target, ast.Name) else "?"
                 errors.append(
-                    (lineno, "bare " + node.annotation.id + ": " + target_name + " needs type parameter")
+                    (
+                        lineno,
+                        "bare " + node.annotation.id + ": " + target_name + " needs type parameter",
+                    )
                 )
 
     return errors

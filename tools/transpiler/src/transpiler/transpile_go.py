@@ -4551,9 +4551,10 @@ class GoTranspiler(ast.NodeVisitor):
 
     def visit_expr_BoolOp(self, node: ast.BoolOp) -> str:
         """Convert boolean operations (and/or)."""
-        op = " && " if isinstance(node.op, ast.And) else " || "
+        is_and = isinstance(node.op, ast.And)
+        op = " && " if is_and else " || "
         # Check for isinstance(x, T) and x.attr pattern
-        if isinstance(node.op, ast.And) and len(node.values) >= 2:
+        if is_and and len(node.values) >= 2:
             isinstance_info = self._detect_isinstance_call(node.values[0])
             if isinstance_info:
                 var_name, type_name = isinstance_info
@@ -4561,7 +4562,17 @@ class GoTranspiler(ast.NodeVisitor):
                 if self._subsequent_ops_use_var(node.values[1:], var_name):
                     return self._emit_isinstance_and_attr(var_name, type_name, node.values[1:])
         # Use _emit_bool_expr for each operand to handle truthiness conversions
-        values = [self._emit_bool_expr(v) for v in node.values]
+        # Parenthesize nested BoolOps with different operators due to precedence
+        # In Go, && has higher precedence than ||, so:
+        # - Or inside And needs parentheses: a && (b || c)
+        # - And inside Or does not: a || b && c is already correct
+        values = []
+        for v in node.values:
+            expr = self._emit_bool_expr(v)
+            # If this is an And and the value is an Or BoolOp, wrap in parentheses
+            if is_and and isinstance(v, ast.BoolOp) and isinstance(v.op, ast.Or):
+                expr = f"({expr})"
+            values.append(expr)
         return op.join(values)
 
     def _detect_isinstance_call(self, node: ast.expr) -> tuple[str, str] | None:
@@ -4877,7 +4888,10 @@ class GoTranspiler(ast.NodeVisitor):
             self._current_call_node = None
             return result
         # Handle helper functions
-        if name in ("_substring", "_sublist"):
+        if name == "_substring":
+            # Use helper function with bounds checking (Python slicing is safe)
+            return f"_Substring({args[0]}, {args[1]}, {args[2]})"
+        if name == "_sublist":
             return f"{args[0]}[{args[1]}:{args[2]}]"
         if name == "_repeat_str":
             return f"strings.Repeat({args[0]}, {args[1]})"

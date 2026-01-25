@@ -78,7 +78,9 @@ def _is_whitespace_no_newline(c: str) -> bool:
 
 
 def _substring(s: str, start: int, end: int) -> str:
-    """Extract substring from start to end (exclusive)."""
+    """Extract substring from start to end (exclusive), clamped to string length."""
+    if end > len(s):
+        end = len(s)
     return s[start:end]
 
 
@@ -476,7 +478,7 @@ class Lexer:
 
     def lookahead(self, n: int) -> str:
         """Return next n characters without consuming."""
-        return self.source[self.pos : self.pos + n]
+        return _substring(self.source, self.pos, self.pos + n)
 
     def is_metachar(self, c: str) -> bool:
         """Return True if c is a shell metacharacter."""

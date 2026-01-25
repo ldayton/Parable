@@ -100,8 +100,8 @@ _check-parallel: test-all lint fmt lock-check check-dump-ast check-style check-t
 # Run all checks (tests, lint, format, lock, style) in parallel
 check: _ensure-biome _check-parallel
 
-# Quick check: test, transpile, test-js
-quick-check: test transpile test-js
+# Quick check: test, transpile-js, test-js
+quick-check: test transpile-js test-js
 
 # Run benchmarks, optionally comparing refs: bench [ref1] [ref2] [--fast]
 bench *ARGS:
@@ -175,9 +175,7 @@ transpile-go output="src/parable.go":
     [[ "$go_out" = /* ]] || go_out="$(pwd)/$go_out"
     uv run --directory tools/transpiler transpiler --transpile-go "$(pwd)/src/parable.py" > "$go_out"
     gofmt -w "$go_out"
-
-# Transpile Python to JavaScript and generate TypeScript definitions
-transpile: (transpile-js) (transpile-dts)
+    go build -C src -o /dev/null .
 
 # Check that parable.js and parable.d.ts are up-to-date with transpiler output
 check-transpile:

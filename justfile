@@ -234,11 +234,11 @@ fmt-dts *ARGS:
 
 # Benchmark test suite
 benchmark:
-    hyperfine --warmup 2 --runs 5 'uv run tests/bin/run-tests.py 2>&1'
+    hyperfine --warmup 2 --runs ${RUNS:-5} 'uv run tests/bin/run-tests.py 2>&1'
 
 # Benchmark real corpus (requires ~/source/bigtable-bash)
 benchmark-corpus:
-    hyperfine --warmup 2 --runs 5 'uv run tools/bash-oracle/src/oracle/run_corpus.py 2>&1'
+    hyperfine --warmup 2 --runs ${RUNS:-5} 'uv run tools/bash-oracle/src/oracle/run_corpus.py 2>&1'
 
 # Profile on corpus (cProfile + flameprof)
 profile:

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"time"
@@ -127,7 +128,7 @@ func runTestInner(testInput, testExpected string, extglob bool) (passed bool, ac
 			// Other panic
 			passed = false
 			actual = "<exception>"
-			errMsg = fmt.Sprintf("%v", r)
+			errMsg = fmt.Sprintf("%v\n%s", r, debug.Stack())
 		}
 	}()
 	nodes := parable.Parse(testInput, extglob)

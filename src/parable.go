@@ -10585,9 +10585,55 @@ func (p *Parser) _LastWordOnOwnLine(nodes []Node) bool {
 }
 
 func (p *Parser) _StripTrailingBackslashFromLastWord(nodes []Node) {
-	panic("TODO: method needs manual implementation")
+	var lastNode Node
+	_ = lastNode
+	var lastWord *Word
+	_ = lastWord
+	if !(len(nodes) > 0) {
+		return
+	}
+	lastNode = nodes[len(nodes)-1]
+	lastWord = p._FindLastWord(lastNode)
+	if lastWord != nil && strings.HasSuffix(lastWord.Value, "\\") {
+		lastWord.Value = lastWord.Value[0 : len(lastWord.Value)-1]
+		if !(len(lastWord.Value) > 0) && func() bool { _, ok := lastNode.(*Command); return ok }() && len(lastNode.(*Command).Words) > 0 {
+			_pop(&lastNode.(*Command).Words)
+		}
+	}
 }
 
 func (p *Parser) _FindLastWord(node Node) *Word {
-	panic("TODO: method needs manual implementation")
+	var lastWord *Word
+	_ = lastWord
+	var lastRedirect Node
+	_ = lastRedirect
+	switch n := node.(type) {
+	case *Word:
+		return n
+	case *Command:
+		if len(n.Words) > 0 {
+			lastWord = n.Words[len(n.Words)-1].(*Word)
+			if strings.HasSuffix(lastWord.Value, "\\") {
+				return lastWord
+			}
+		}
+		if len(n.Redirects) > 0 {
+			lastRedirect = n.Redirects[len(n.Redirects)-1]
+			if func() bool { _, ok := lastRedirect.(*Redirect); return ok }() {
+				return lastRedirect.(*Redirect).Target.(*Word)
+			}
+		}
+		if len(n.Words) > 0 {
+			return n.Words[len(n.Words)-1].(*Word)
+		}
+	case *Pipeline:
+		if len(n.Commands) > 0 {
+			return p._FindLastWord(n.Commands[len(n.Commands)-1])
+		}
+	case *List:
+		if len(n.Parts) > 0 {
+			return p._FindLastWord(n.Parts[len(n.Parts)-1])
+		}
+	}
+	return nil
 }

@@ -100,6 +100,8 @@ class GoTranspiler(ast.NodeVisitor):
         self.tuple_vars: dict[str, list[str]] = {}  # Map tuple var name to element var names
         self.tuple_func_vars: dict[str, str] = {}  # Map var name to tuple-returning function name
         self.union_field_types: dict[tuple[str, str], str] = {}  # Map (receiver, field) to current type
+        self._type_switch_var: tuple[str, str] | None = None  # (original_var, switch_var) during type switch
+        self._type_switch_type: str | None = None  # Current narrowed type in type switch case
 
     def emit(self, text: str):
         """Emit a line of Go code at the current indentation level."""
@@ -1126,9 +1128,6 @@ class GoTranspiler(ast.NodeVisitor):
         "_parse_arith_expr",
         # Tuple passthrough (returns tuple stored in variable)
         "_parse_param_expansion",
-        # isinstance type narrowing needed
-        "_find_last_word",
-        "_strip_trailing_backslash_from_last_word",
         # Complex type assertions needed
         "parse_redirect",
         "_gather_heredoc_bodies",
@@ -1344,10 +1343,26 @@ class GoTranspiler(ast.NodeVisitor):
         self._predeclare_all_locals(stmts)
         # Emit all statements
         emitted_any = False
-        for stmt in stmts:
+        skip_until = 0  # Skip statements consumed by type switch
+        for i, stmt in enumerate(stmts):
+            if i < skip_until:
+                continue
             # Skip docstrings
             if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant):
                 if isinstance(stmt.value.value, str):
+                    continue
+            # Check for isinstance chain that can be emitted as type switch
+            isinstance_chain = self._collect_isinstance_chain(stmts, i)
+            if len(isinstance_chain) >= 1:
+                try:
+                    self._emit_type_switch(isinstance_chain[0][1], isinstance_chain)
+                    emitted_any = True
+                    skip_until = i + len(isinstance_chain)
+                    continue
+                except NotImplementedError as e:
+                    self.emit(f'panic("TODO: {e}")')
+                    emitted_any = True
+                    skip_until = i + len(isinstance_chain)
                     continue
             try:
                 self._emit_stmt(stmt)
@@ -1667,6 +1682,11 @@ class GoTranspiler(ast.NodeVisitor):
                         var_name = self._safe_go_name(var_name)
                         if var_name not in assignments:
                             assignments[var_name] = stmt.value
+                            # Infer type now while we have isinstance context
+                            expr_type = self._infer_type_from_expr(stmt.value)
+                            if expr_type and expr_type not in ("interface{}", "[]interface{}"):
+                                if var_name not in self.var_types or self.var_types[var_name] in ("interface{}", "[]interface{}"):
+                                    self.var_types[var_name] = expr_type
                     elif isinstance(target, ast.Tuple):
                         # Don't pre-declare tuple unpacking targets
                         # The unpacking statement itself uses := which declares them
@@ -1683,7 +1703,22 @@ class GoTranspiler(ast.NodeVisitor):
             elif isinstance(stmt, ast.While):
                 self._collect_all_assignments(stmt.body, assignments)
             elif isinstance(stmt, ast.If):
-                self._collect_all_assignments(stmt.body, assignments)
+                # Check for isinstance pattern to narrow type during collection
+                isinstance_info = self._detect_isinstance_if(stmt.test)
+                if isinstance_info:
+                    var_py, type_name = isinstance_info
+                    var_go = self._snake_to_camel(var_py)
+                    var_go = self._safe_go_name(var_go)
+                    old_type = self.var_types.get(var_go)
+                    self.var_types[var_go] = f"*{type_name}"
+                    self._collect_all_assignments(stmt.body, assignments)
+                    # Restore original type
+                    if old_type is not None:
+                        self.var_types[var_go] = old_type
+                    else:
+                        self.var_types.pop(var_go, None)
+                else:
+                    self._collect_all_assignments(stmt.body, assignments)
                 if stmt.orelse:
                     self._collect_all_assignments(stmt.orelse, assignments)
             elif isinstance(stmt, ast.With):
@@ -2298,6 +2333,9 @@ class GoTranspiler(ast.NodeVisitor):
                 # Add type assertion for tuple element access when target has known type
                 if target_type and target_type != "interface{}" and self._is_tuple_element_access(stmt.value):
                     value = f"{value}.({target_type})"
+                # Add type assertion for subscript on []Node when target is concrete ptr type
+                if target_type and target_type.startswith("*") and self._is_node_list_subscript(stmt.value):
+                    value = f"{value}.({target_type})"
             # For method calls to certain patterns, use := to create new local (avoids scope issues)
             # This handles cases where same var name is used in sibling if blocks
             # But skip this if the variable was already pre-declared
@@ -2426,6 +2464,12 @@ class GoTranspiler(ast.NodeVisitor):
             # Check for interface field being returned as concrete pointer type
             elif self.current_return_type.startswith("*") and self._is_interface_field(stmt.value):
                 value = f"{self.visit_expr(stmt.value)}.({self.current_return_type})"
+            # Check for []Node subscript being returned as concrete pointer type
+            elif self.current_return_type.startswith("*") and self._is_node_list_subscript(stmt.value):
+                value = f"{self.visit_expr(stmt.value)}.({self.current_return_type})"
+            # Check for attribute access returning Node when we need concrete type
+            elif self.current_return_type.startswith("*") and self._is_node_field_access(stmt.value):
+                value = f"{self.visit_expr(stmt.value)}.({self.current_return_type})"
             else:
                 value = self.visit_expr(stmt.value)
             self.emit(f"return {value}")
@@ -2524,6 +2568,37 @@ class GoTranspiler(ast.NodeVisitor):
                     field_type = class_info.fields[node.attr].go_type or ""
                     return field_type in ("Node", "interface{}")
         return False
+
+    def _is_node_field_access(self, node: ast.expr) -> bool:
+        """Check if node is an attribute access that returns Node."""
+        if not isinstance(node, ast.Attribute):
+            return False
+        # Check if the field type is Node
+        field_type = self._get_field_type_from_attr(node)
+        return field_type in ("Node", "interface{}")
+
+    def _get_field_type_from_attr(self, node: ast.Attribute) -> str:
+        """Get the field type from an attribute access expression."""
+        if isinstance(node.value, ast.Name):
+            var_name = self._snake_to_camel(node.value.id)
+            var_name = self._safe_go_name(var_name)
+            var_type = self.var_types.get(var_name, "")
+            class_name = var_type.lstrip("*")
+            if class_name in self.symbols.classes:
+                class_info = self.symbols.classes[class_name]
+                if node.attr in class_info.fields:
+                    return class_info.fields[node.attr].go_type or ""
+        # For more complex expressions, try to infer the type
+        field_name = node.attr
+        type_assertion = self._get_type_for_field(field_name)
+        if type_assertion:
+            # The field needs a type assertion, meaning it's probably Node
+            class_name = type_assertion.lstrip("*")
+            if class_name in self.symbols.classes:
+                class_info = self.symbols.classes[class_name]
+                if field_name in class_info.fields:
+                    return class_info.fields[field_name].go_type or ""
+        return ""
 
     def _emit_stmt_If(self, stmt: ast.If):
         """Emit if statement."""
@@ -2739,6 +2814,28 @@ class GoTranspiler(ast.NodeVisitor):
                             # Extract element type from slice type
                             if field_type.startswith("[]"):
                                 return field_type[2:]  # []Node -> Node
+                # var.attr[i] -> look up var's type, then field type
+                elif isinstance(node.value.value, ast.Name):
+                    var_name = self._snake_to_camel(node.value.value.id)
+                    var_name = self._safe_go_name(var_name)
+                    var_type = self.var_types.get(var_name, "")
+                    # Extract class name from *ClassName
+                    if var_type.startswith("*"):
+                        class_name = var_type[1:]
+                        if class_name in self.symbols.classes:
+                            class_info = self.symbols.classes[class_name]
+                            if node.value.attr in class_info.fields:
+                                field_info = class_info.fields[node.value.attr]
+                                # Use Python type for more specific inference
+                                py_type = field_info.py_type
+                                if py_type.startswith("list["):
+                                    inner_py = py_type[5:-1]
+                                    # Convert inner type with concrete_nodes=True
+                                    elem_type = self._py_type_to_go(inner_py, concrete_nodes=True)
+                                    return elem_type
+                                field_type = field_info.go_type or ""
+                                if field_type.startswith("[]"):
+                                    return field_type[2:]  # []*Word -> *Word
             # Variable subscript
             if isinstance(node.value, ast.Name):
                 var_name = self._snake_to_camel(node.value.id)
@@ -3215,7 +3312,11 @@ class GoTranspiler(ast.NodeVisitor):
             return "".join(p.capitalize() for p in parts)
         # Convert to camelCase and handle reserved words
         camel = self._snake_to_camel(name)
-        return self._safe_go_name(camel)
+        result = self._safe_go_name(camel)
+        # Rewrite variable references in type switch context
+        if self._type_switch_var and result == self._type_switch_var[0]:
+            return self._type_switch_var[1]
+        return result
 
     def _safe_go_name(self, name: str) -> str:
         """Make sure name is not a Go reserved word."""
@@ -3311,6 +3412,9 @@ class GoTranspiler(ast.NodeVisitor):
         if isinstance(node, ast.Name):
             var_name = self._snake_to_camel(node.id)
             var_name = self._safe_go_name(var_name)
+            # If in type switch and this is the switched variable, use narrowed type
+            if self._type_switch_var and var_name == self._type_switch_var[0]:
+                return self._type_switch_type or ""
             return self.var_types.get(var_name, "")
         # Subscript on a slice - get the element type
         if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name):
@@ -3340,6 +3444,7 @@ class GoTranspiler(ast.NodeVisitor):
             "redirects": "*Command",
             "op": "*Operator",
             "value": "*Word",  # For Target.Value where Target is Node
+            "target": "*Redirect",  # For Redirect.Target
         }
         return field_to_type.get(field_name)
 
@@ -3809,6 +3914,23 @@ class GoTranspiler(ast.NodeVisitor):
             # Optional Node fields need nil check
             if node.attr in ("else_body", "condition", "else_clause", "finally_clause", "body"):
                 return f"{self.visit_expr(node)} != nil"
+            # Look up field type from local variable's class
+            if isinstance(node.value, ast.Name) and node.value.id != "self":
+                var_name = self._snake_to_camel(node.value.id)
+                var_name = self._safe_go_name(var_name)
+                var_type = self.var_types.get(var_name, "")
+                if var_type.startswith("*"):
+                    class_name = var_type[1:]
+                    if class_name in self.symbols.classes:
+                        class_info = self.symbols.classes[class_name]
+                        if node.attr in class_info.fields:
+                            field_type = class_info.fields[node.attr].go_type or ""
+                            if field_type == "string":
+                                return f"len({self.visit_expr(node)}) > 0"
+                            if field_type.startswith("[]") or field_type.startswith("map["):
+                                return f"len({self.visit_expr(node)}) > 0"
+                            if field_type == "Node" or field_type.startswith("*"):
+                                return f"{self.visit_expr(node)} != nil"
             # Look up field type from class
             if isinstance(node.value, ast.Name) and node.value.id == "self" and self.current_class:
                 class_info = self.symbols.classes.get(self.current_class)
@@ -3935,6 +4057,29 @@ class GoTranspiler(ast.NodeVisitor):
             var_type = self.var_types.get(var_name, "")
             if var_type == "interface{}":
                 return True
+
+    def _is_node_list_subscript(self, node: ast.expr) -> bool:
+        """Check if expression is a subscript on a []Node field (returns Node)."""
+        if not isinstance(node, ast.Subscript):
+            return False
+        if isinstance(node.slice, ast.Slice):
+            return False  # Slice returns slice, not element
+        # Check for var.field[i] pattern
+        if isinstance(node.value, ast.Attribute) and isinstance(node.value.value, ast.Name):
+            var_name = self._snake_to_camel(node.value.value.id)
+            var_name = self._safe_go_name(var_name)
+            var_type = self.var_types.get(var_name, "")
+            # Check if this is the type switch variable
+            if self._type_switch_var and var_name == self._type_switch_var[0]:
+                var_type = self._type_switch_type or ""
+            if var_type.startswith("*"):
+                class_name = var_type[1:]
+                if class_name in self.symbols.classes:
+                    class_info = self.symbols.classes[class_name]
+                    if node.value.attr in class_info.fields:
+                        field_type = class_info.fields[node.value.attr].go_type or ""
+                        if field_type == "[]Node":
+                            return True
         return False
 
     def _is_byte_expr(self, node: ast.expr) -> bool:
@@ -4567,6 +4712,88 @@ class GoTranspiler(ast.NodeVisitor):
             checks.append(f"_, {var} := {obj}.(*{tn})")
         return_expr = " || ".join(f"ok{i+1}" for i in range(len(type_names)))
         return f"func() bool {{ {'; '.join(checks)}; return {return_expr} }}()"
+
+    def _detect_isinstance_if(self, test: ast.expr) -> tuple[str, str] | None:
+        """Detect if test is `isinstance(var, Type)`. Returns (var_name, type_name) or None."""
+        if not isinstance(test, ast.Call):
+            return None
+        if not isinstance(test.func, ast.Name) or test.func.id != "isinstance":
+            return None
+        if len(test.args) != 2:
+            return None
+        var_arg, type_arg = test.args
+        if not isinstance(var_arg, ast.Name):
+            return None
+        if not isinstance(type_arg, ast.Name):
+            return None  # Only single type for now, not tuples
+        return (var_arg.id, type_arg.id)
+
+    def _collect_isinstance_chain(
+        self, stmts: list[ast.stmt], start_idx: int
+    ) -> list[tuple[ast.If, str, str]]:
+        """Collect consecutive `if isinstance(same_var, T):` statements.
+        Returns list of (stmt, var_name, type_name) tuples."""
+        result: list[tuple[ast.If, str, str]] = []
+        if start_idx >= len(stmts):
+            return result
+        first_stmt = stmts[start_idx]
+        if not isinstance(first_stmt, ast.If):
+            return result
+        first_info = self._detect_isinstance_if(first_stmt.test)
+        if not first_info:
+            return result
+        target_var = first_info[0]
+        result.append((first_stmt, first_info[0], first_info[1]))
+        # Look for more isinstance checks on the same variable
+        for i in range(start_idx + 1, len(stmts)):
+            stmt = stmts[i]
+            if not isinstance(stmt, ast.If):
+                break
+            info = self._detect_isinstance_if(stmt.test)
+            if not info or info[0] != target_var:
+                break
+            # Must not have elif/else - only simple if isinstance(...):
+            if stmt.orelse:
+                break
+            result.append((stmt, info[0], info[1]))
+        return result
+
+    def _emit_type_switch(
+        self, var_name: str, cases: list[tuple[ast.If, str, str]]
+    ):
+        """Emit Go type switch for isinstance chain."""
+        go_var = self._snake_to_camel(var_name)
+        go_var = self._safe_go_name(go_var)
+        # Use short switch variable name (e.g., node -> n)
+        switch_var = go_var[0].lower()
+        if switch_var == go_var:
+            switch_var = go_var + "T"  # Avoid shadowing
+        self.emit(f"switch {switch_var} := {go_var}.(type) {{")
+        for stmt, _, type_name in cases:
+            self.emit(f"case *{type_name}:")
+            self.indent += 1
+            # Set up type switch context for variable rewriting
+            old_switch_var = self._type_switch_var
+            old_switch_type = self._type_switch_type
+            self._type_switch_var = (go_var, switch_var)
+            self._type_switch_type = f"*{type_name}"
+            # Track narrowed type for field access
+            old_var_type = self.var_types.get(switch_var)
+            self.var_types[switch_var] = f"*{type_name}"
+            try:
+                for s in stmt.body:
+                    self._emit_stmt(s)
+            except NotImplementedError:
+                self.emit('panic("TODO: incomplete implementation")')
+            # Restore context
+            self._type_switch_var = old_switch_var
+            self._type_switch_type = old_switch_type
+            if old_var_type is not None:
+                self.var_types[switch_var] = old_var_type
+            else:
+                self.var_types.pop(switch_var, None)
+            self.indent -= 1
+        self.emit("}")
 
     def _emit_getattr(self, args: list[str]) -> str:
         """Emit getattr call."""

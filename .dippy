@@ -31,3 +31,6 @@ allow node -e
 allow bin/parable-dump.py
 allow ~/source/bash-oracle/bash-oracle *
 deny tests/bin/run-tests.py *bigtable* "There's no test runner for the bigtable tests, if `just check` passes, you're ready to commit"
+
+#---- Go ----#
+allow go run

@@ -8039,44 +8039,378 @@ func (p *Parser) _IsAssignmentWord(word Node) bool {
 }
 
 func (p *Parser) _ParseBacktickSubstitution() (Node, string) {
-	panic("TODO: method needs manual implementation")
+	if p.AtEnd() || p.Peek() != "`" {
+		return nil, ""
+	}
+
+	start := p.Pos
+	p.Advance()
+
+	contentChars := []string{}
+	textChars := []string{"`"}
+
+	type heredocInfo struct {
+		delimiter string
+		stripTabs bool
+	}
+	pendingHeredocs := []heredocInfo{}
+	inHeredocBody := false
+	currentHeredocDelim := ""
+	currentHeredocStrip := false
+
+	for !p.AtEnd() && (inHeredocBody || p.Peek() != "`") {
+		if inHeredocBody {
+			lineStart := p.Pos
+			lineEnd := lineStart
+			for lineEnd < p.Length && string(p.Source[lineEnd]) != "\n" {
+				lineEnd++
+			}
+			line := _Substring(p.Source, lineStart, lineEnd)
+			checkLine := line
+			if currentHeredocStrip {
+				checkLine = strings.TrimLeft(line, "\t")
+			}
+
+			if checkLine == currentHeredocDelim {
+				for _, ch := range line {
+					contentChars = append(contentChars, string(ch))
+					textChars = append(textChars, string(ch))
+				}
+				p.Pos = lineEnd
+				if p.Pos < p.Length && string(p.Source[p.Pos]) == "\n" {
+					contentChars = append(contentChars, "\n")
+					textChars = append(textChars, "\n")
+					p.Advance()
+				}
+				inHeredocBody = false
+				if len(pendingHeredocs) > 0 {
+					currentHeredocDelim = pendingHeredocs[0].delimiter
+					currentHeredocStrip = pendingHeredocs[0].stripTabs
+					pendingHeredocs = pendingHeredocs[1:]
+					inHeredocBody = true
+				}
+			} else if strings.HasPrefix(checkLine, currentHeredocDelim) && len(checkLine) > len(currentHeredocDelim) {
+				tabsStripped := len(line) - len(checkLine)
+				endPos := tabsStripped + len(currentHeredocDelim)
+				for i := 0; i < endPos; i++ {
+					contentChars = append(contentChars, string(line[i]))
+					textChars = append(textChars, string(line[i]))
+				}
+				p.Pos = lineStart + endPos
+				inHeredocBody = false
+				if len(pendingHeredocs) > 0 {
+					currentHeredocDelim = pendingHeredocs[0].delimiter
+					currentHeredocStrip = pendingHeredocs[0].stripTabs
+					pendingHeredocs = pendingHeredocs[1:]
+					inHeredocBody = true
+				}
+			} else {
+				for _, ch := range line {
+					contentChars = append(contentChars, string(ch))
+					textChars = append(textChars, string(ch))
+				}
+				p.Pos = lineEnd
+				if p.Pos < p.Length && string(p.Source[p.Pos]) == "\n" {
+					contentChars = append(contentChars, "\n")
+					textChars = append(textChars, "\n")
+					p.Advance()
+				}
+			}
+			continue
+		}
+
+		c := p.Peek()
+
+		if c == "\\" && p.Pos+1 < p.Length {
+			nextC := string(p.Source[p.Pos+1])
+			if nextC == "\n" {
+				p.Advance()
+				p.Advance()
+			} else if _IsEscapeCharInBacktick(nextC) {
+				p.Advance()
+				escaped := p.Advance()
+				contentChars = append(contentChars, escaped)
+				textChars = append(textChars, "\\")
+				textChars = append(textChars, escaped)
+			} else {
+				ch := p.Advance()
+				contentChars = append(contentChars, ch)
+				textChars = append(textChars, ch)
+			}
+			continue
+		}
+
+		if c == "<" && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "<" {
+			if p.Pos+2 < p.Length && string(p.Source[p.Pos+2]) == "<" {
+				contentChars = append(contentChars, p.Advance())
+				textChars = append(textChars, "<")
+				contentChars = append(contentChars, p.Advance())
+				textChars = append(textChars, "<")
+				contentChars = append(contentChars, p.Advance())
+				textChars = append(textChars, "<")
+				for !p.AtEnd() && _IsWhitespaceNoNewline(p.Peek()) {
+					ch := p.Advance()
+					contentChars = append(contentChars, ch)
+					textChars = append(textChars, ch)
+				}
+				for !p.AtEnd() && !_IsWhitespace(p.Peek()) && p.Peek() != "(" && p.Peek() != ")" {
+					if p.Peek() == "\\" && p.Pos+1 < p.Length {
+						ch := p.Advance()
+						contentChars = append(contentChars, ch)
+						textChars = append(textChars, ch)
+						ch = p.Advance()
+						contentChars = append(contentChars, ch)
+						textChars = append(textChars, ch)
+					} else if p.Peek() == "\"" || p.Peek() == "'" {
+						quote := p.Peek()
+						ch := p.Advance()
+						contentChars = append(contentChars, ch)
+						textChars = append(textChars, ch)
+						for !p.AtEnd() && p.Peek() != quote {
+							if quote == "\"" && p.Peek() == "\\" {
+								ch = p.Advance()
+								contentChars = append(contentChars, ch)
+								textChars = append(textChars, ch)
+							}
+							ch = p.Advance()
+							contentChars = append(contentChars, ch)
+							textChars = append(textChars, ch)
+						}
+						if !p.AtEnd() {
+							ch = p.Advance()
+							contentChars = append(contentChars, ch)
+							textChars = append(textChars, ch)
+						}
+					} else {
+						ch := p.Advance()
+						contentChars = append(contentChars, ch)
+						textChars = append(textChars, ch)
+					}
+				}
+				continue
+			}
+
+			contentChars = append(contentChars, p.Advance())
+			textChars = append(textChars, "<")
+			contentChars = append(contentChars, p.Advance())
+			textChars = append(textChars, "<")
+			stripTabs := false
+			if !p.AtEnd() && p.Peek() == "-" {
+				stripTabs = true
+				contentChars = append(contentChars, p.Advance())
+				textChars = append(textChars, "-")
+			}
+			for !p.AtEnd() && _IsWhitespaceNoNewline(p.Peek()) {
+				ch := p.Advance()
+				contentChars = append(contentChars, ch)
+				textChars = append(textChars, ch)
+			}
+			delimiterChars := []string{}
+			if !p.AtEnd() {
+				ch := p.Peek()
+				if _IsQuote(ch) {
+					quote := p.Advance()
+					contentChars = append(contentChars, quote)
+					textChars = append(textChars, quote)
+					for !p.AtEnd() && p.Peek() != quote {
+						dch := p.Advance()
+						contentChars = append(contentChars, dch)
+						textChars = append(textChars, dch)
+						delimiterChars = append(delimiterChars, dch)
+					}
+					if !p.AtEnd() {
+						closing := p.Advance()
+						contentChars = append(contentChars, closing)
+						textChars = append(textChars, closing)
+					}
+				} else if ch == "\\" {
+					esc := p.Advance()
+					contentChars = append(contentChars, esc)
+					textChars = append(textChars, esc)
+					if !p.AtEnd() {
+						dch := p.Advance()
+						contentChars = append(contentChars, dch)
+						textChars = append(textChars, dch)
+						delimiterChars = append(delimiterChars, dch)
+					}
+					for !p.AtEnd() && !_IsMetachar(p.Peek()) {
+						dch := p.Advance()
+						contentChars = append(contentChars, dch)
+						textChars = append(textChars, dch)
+						delimiterChars = append(delimiterChars, dch)
+					}
+				} else {
+					for !p.AtEnd() && !_IsMetachar(p.Peek()) && p.Peek() != "`" {
+						ch := p.Peek()
+						if _IsQuote(ch) {
+							quote := p.Advance()
+							contentChars = append(contentChars, quote)
+							textChars = append(textChars, quote)
+							for !p.AtEnd() && p.Peek() != quote {
+								dch := p.Advance()
+								contentChars = append(contentChars, dch)
+								textChars = append(textChars, dch)
+								delimiterChars = append(delimiterChars, dch)
+							}
+							if !p.AtEnd() {
+								closing := p.Advance()
+								contentChars = append(contentChars, closing)
+								textChars = append(textChars, closing)
+							}
+						} else if ch == "\\" {
+							esc := p.Advance()
+							contentChars = append(contentChars, esc)
+							textChars = append(textChars, esc)
+							if !p.AtEnd() {
+								dch := p.Advance()
+								contentChars = append(contentChars, dch)
+								textChars = append(textChars, dch)
+								delimiterChars = append(delimiterChars, dch)
+							}
+						} else {
+							dch := p.Advance()
+							contentChars = append(contentChars, dch)
+							textChars = append(textChars, dch)
+							delimiterChars = append(delimiterChars, dch)
+						}
+					}
+				}
+			}
+			delimiter := strings.Join(delimiterChars, "")
+			if delimiter != "" {
+				pendingHeredocs = append(pendingHeredocs, heredocInfo{delimiter, stripTabs})
+			}
+			continue
+		}
+
+		if c == "\n" {
+			ch := p.Advance()
+			contentChars = append(contentChars, ch)
+			textChars = append(textChars, ch)
+			if len(pendingHeredocs) > 0 {
+				currentHeredocDelim = pendingHeredocs[0].delimiter
+				currentHeredocStrip = pendingHeredocs[0].stripTabs
+				pendingHeredocs = pendingHeredocs[1:]
+				inHeredocBody = true
+			}
+			continue
+		}
+
+		ch := p.Advance()
+		contentChars = append(contentChars, ch)
+		textChars = append(textChars, ch)
+	}
+
+	if p.AtEnd() {
+		panic(NewParseError("Unterminated backtick", start, 0))
+	}
+
+	p.Advance()
+	textChars = append(textChars, "`")
+	text := strings.Join(textChars, "")
+	content := strings.Join(contentChars, "")
+
+	if len(pendingHeredocs) > 0 {
+		delimiters := make([]interface{}, len(pendingHeredocs))
+		for i, h := range pendingHeredocs {
+			delimiters[i] = []interface{}{h.delimiter, h.stripTabs}
+		}
+		heredocStart, heredocEnd := _FindHeredocContentEnd(p.Source, p.Pos, delimiters)
+		if heredocEnd > heredocStart {
+			content = content + _Substring(p.Source, heredocStart, heredocEnd)
+			if p._Cmdsub_heredoc_end < 0 {
+				p._Cmdsub_heredoc_end = heredocEnd
+			} else {
+				if heredocEnd > p._Cmdsub_heredoc_end {
+					p._Cmdsub_heredoc_end = heredocEnd
+				}
+			}
+		}
+	}
+
+	subParser := NewParser(content, false, p._Extglob)
+	cmd := subParser.ParseList(true)
+	if cmd == nil {
+		cmd = NewEmpty()
+	}
+
+	return NewCommandSubstitution(cmd, false), text
 }
 
 func (p *Parser) _ParseProcessSubstitution() (Node, string) {
-	var start int
-	_ = start
-	var direction string
-	_ = direction
-	var saved *SavedParserState
-	_ = saved
-	var oldInProcessSub bool
-	_ = oldInProcessSub
-	var cmd Node
-	_ = cmd
-	var textEnd int
-	_ = textEnd
-	var text string
-	_ = text
-	var e interface{}
-	_ = e
-	var contentStartChar string
-	_ = contentStartChar
-	if p.AtEnd() || !(_IsRedirectChar(p.Peek())) {
+	if p.AtEnd() || !_IsRedirectChar(p.Peek()) {
 		return nil, ""
 	}
-	start = p.Pos
-	direction = p.Advance()
+
+	start := p.Pos
+	direction := p.Advance()
+
 	if p.AtEnd() || p.Peek() != "(" {
 		p.Pos = start
 		return nil, ""
 	}
 	p.Advance()
-	saved = p._SaveParserState()
-	oldInProcessSub = p._In_process_sub
+
+	saved := p._SaveParserState()
+	oldInProcessSub := p._In_process_sub
 	p._In_process_sub = true
 	p._SetState(ParserStateFlags_PST_EOFTOKEN)
 	p._Eof_token = ")"
-	panic("TODO: try/except with return")
+
+	var result struct {
+		node Node
+		text string
+		ok   bool
+	}
+
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				result.ok = false
+			}
+		}()
+
+		cmd := p.ParseList(true)
+		if cmd == nil {
+			cmd = NewEmpty()
+		}
+
+		p.SkipWhitespaceAndNewlines()
+		if p.AtEnd() || p.Peek() != ")" {
+			panic("not at closing paren")
+		}
+
+		p.Advance()
+		text := _Substring(p.Source, start, p.Pos)
+		text = _StripLineContinuationsCommentAware(text)
+		result.node = NewProcessSubstitution(direction, cmd)
+		result.text = text
+		result.ok = true
+	}()
+
+	p._RestoreParserState(saved)
+	p._In_process_sub = oldInProcessSub
+
+	if result.ok {
+		return result.node, result.text
+	}
+
+	contentStartChar := ""
+	if start+2 < p.Length {
+		contentStartChar = string(p.Source[start+2])
+	}
+
+	if contentStartChar == " " || contentStartChar == "\t" || contentStartChar == "\n" {
+		panic(NewParseError("Invalid process substitution", start, 0))
+	}
+
+	p.Pos = start + 2
+	p._Lexer.Pos = p.Pos
+	p._Lexer._ParseMatchedPair("(", ")", 0, false)
+	p.Pos = p._Lexer.Pos
+	text := _Substring(p.Source, start, p.Pos)
+	text = _StripLineContinuationsCommentAware(text)
+	return nil, text
 }
 
 func (p *Parser) _ParseArrayLiteral() (Node, string) {

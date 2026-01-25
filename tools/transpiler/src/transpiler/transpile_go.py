@@ -1154,8 +1154,6 @@ class GoTranspiler(ast.NodeVisitor):
         # Higher-order function patterns and arithmetic parsing
         # Higher-order function - not called, kept as stub
         "_arith_parse_left_assoc",
-        # Tuple stack in local variable (heredoc tracking)
-        "_parse_backtick_substitution",
     }
 
     def _emit_function(self, node: ast.FunctionDef):
@@ -1249,6 +1247,10 @@ class GoTranspiler(ast.NodeVisitor):
         ("Parser", "_gather_heredoc_bodies"): lambda t, r: GoTranspiler._emit_gather_heredoc_bodies(t, r),
         # Heredoc parsing - needs type assertion for _pending_heredocs iteration
         ("Parser", "_parse_heredoc"): lambda t, r: GoTranspiler._emit_parse_heredoc(t, r),
+        # Process substitution - try/except pattern with recover
+        ("Parser", "_parse_process_substitution"): lambda t, r: GoTranspiler._emit_parse_process_substitution(t, r),
+        # Backtick substitution - complex heredoc tracking in local vars
+        ("Parser", "_parse_backtick_substitution"): lambda t, r: GoTranspiler._emit_parse_backtick_substitution(t, r),
     }
 
     @staticmethod
@@ -1437,6 +1439,540 @@ class GoTranspiler(ast.NodeVisitor):
         t.emit(f"{receiver}._Pending_heredocs = append({receiver}._Pending_heredocs, heredoc)")
         t.emit(f"{receiver}._ClearState(ParserStateFlags_PST_HEREDOC)")
         t.emit("return heredoc")
+
+    @staticmethod
+    def _emit_parse_process_substitution(t: "GoTranspiler", receiver: str):
+        """Emit _ParseProcessSubstitution with panic recovery for try/except pattern."""
+        # Initial checks
+        t.emit(f"if {receiver}.AtEnd() || !_IsRedirectChar({receiver}.Peek()) {{")
+        t.indent += 1
+        t.emit('return nil, ""')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        t.emit(f"start := {receiver}.Pos")
+        t.emit(f"direction := {receiver}.Advance()")
+        t.emit("")
+        t.emit(f'if {receiver}.AtEnd() || {receiver}.Peek() != "(" {{')
+        t.indent += 1
+        t.emit(f"{receiver}.Pos = start")
+        t.emit('return nil, ""')
+        t.indent -= 1
+        t.emit("}")
+        t.emit(f"{receiver}.Advance()")
+        t.emit("")
+        # Save state
+        t.emit(f"saved := {receiver}._SaveParserState()")
+        t.emit(f"oldInProcessSub := {receiver}._In_process_sub")
+        t.emit(f"{receiver}._In_process_sub = true")
+        t.emit(f"{receiver}._SetState(ParserStateFlags_PST_EOFTOKEN)")
+        t.emit(f'{receiver}._Eof_token = ")"')
+        t.emit("")
+        # Use defer/recover for panic recovery
+        t.emit("var result struct {")
+        t.indent += 1
+        t.emit("node Node")
+        t.emit("text string")
+        t.emit("ok   bool")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        t.emit("func() {")
+        t.indent += 1
+        t.emit("defer func() {")
+        t.indent += 1
+        t.emit("if r := recover(); r != nil {")
+        t.indent += 1
+        t.emit("result.ok = false")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}()")
+        t.emit("")
+        t.emit(f"cmd := {receiver}.ParseList(true)")
+        t.emit("if cmd == nil {")
+        t.indent += 1
+        t.emit("cmd = NewEmpty()")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        t.emit(f"{receiver}.SkipWhitespaceAndNewlines()")
+        t.emit(f'if {receiver}.AtEnd() || {receiver}.Peek() != ")" {{')
+        t.indent += 1
+        t.emit('panic("not at closing paren")')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        t.emit(f"{receiver}.Advance()")
+        t.emit(f"text := _Substring({receiver}.Source, start, {receiver}.Pos)")
+        t.emit("text = _StripLineContinuationsCommentAware(text)")
+        t.emit("result.node = NewProcessSubstitution(direction, cmd)")
+        t.emit("result.text = text")
+        t.emit("result.ok = true")
+        t.indent -= 1
+        t.emit("}()")
+        t.emit("")
+        # Restore state
+        t.emit(f"{receiver}._RestoreParserState(saved)")
+        t.emit(f"{receiver}._In_process_sub = oldInProcessSub")
+        t.emit("")
+        t.emit("if result.ok {")
+        t.indent += 1
+        t.emit("return result.node, result.text")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        # Error case - check if we should error or fall back
+        t.emit('contentStartChar := ""')
+        t.emit(f"if start+2 < {receiver}.Length {{")
+        t.indent += 1
+        t.emit(f"contentStartChar = string({receiver}.Source[start+2])")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        t.emit('if contentStartChar == " " || contentStartChar == "\\t" || contentStartChar == "\\n" {')
+        t.indent += 1
+        t.emit('panic(NewParseError("Invalid process substitution", start, 0))')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        # Fall back to matched pair scanning
+        t.emit(f"{receiver}.Pos = start + 2")
+        t.emit(f"{receiver}._Lexer.Pos = {receiver}.Pos")
+        t.emit(f'{receiver}._Lexer._ParseMatchedPair("(", ")", 0, false)')
+        t.emit(f"{receiver}.Pos = {receiver}._Lexer.Pos")
+        t.emit(f"text := _Substring({receiver}.Source, start, {receiver}.Pos)")
+        t.emit("text = _StripLineContinuationsCommentAware(text)")
+        t.emit("return nil, text")
+
+    @staticmethod
+    def _emit_parse_backtick_substitution(t: "GoTranspiler", receiver: str):
+        """Emit _ParseBacktickSubstitution with heredoc tracking."""
+        # Initial check
+        t.emit(f'if {receiver}.AtEnd() || {receiver}.Peek() != "`" {{')
+        t.indent += 1
+        t.emit('return nil, ""')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        t.emit(f"start := {receiver}.Pos")
+        t.emit(f"{receiver}.Advance()")
+        t.emit("")
+        # Initialize tracking vars
+        t.emit("contentChars := []string{}")
+        t.emit('textChars := []string{"`"}')
+        t.emit("")
+        # Heredoc tracking
+        t.emit("type heredocInfo struct {")
+        t.indent += 1
+        t.emit("delimiter string")
+        t.emit("stripTabs bool")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("pendingHeredocs := []heredocInfo{}")
+        t.emit("inHeredocBody := false")
+        t.emit('currentHeredocDelim := ""')
+        t.emit("currentHeredocStrip := false")
+        t.emit("")
+        # Main loop
+        t.emit(f'for !{receiver}.AtEnd() && (inHeredocBody || {receiver}.Peek() != "`") {{')
+        t.indent += 1
+        # Heredoc body mode
+        t.emit("if inHeredocBody {")
+        t.indent += 1
+        t.emit(f"lineStart := {receiver}.Pos")
+        t.emit("lineEnd := lineStart")
+        t.emit(f'for lineEnd < {receiver}.Length && string({receiver}.Source[lineEnd]) != "\\n" {{')
+        t.indent += 1
+        t.emit("lineEnd++")
+        t.indent -= 1
+        t.emit("}")
+        t.emit(f"line := _Substring({receiver}.Source, lineStart, lineEnd)")
+        t.emit("checkLine := line")
+        t.emit("if currentHeredocStrip {")
+        t.indent += 1
+        t.emit('checkLine = strings.TrimLeft(line, "\\t")')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        # Found delimiter
+        t.emit("if checkLine == currentHeredocDelim {")
+        t.indent += 1
+        t.emit("for _, ch := range line {")
+        t.indent += 1
+        t.emit("contentChars = append(contentChars, string(ch))")
+        t.emit("textChars = append(textChars, string(ch))")
+        t.indent -= 1
+        t.emit("}")
+        t.emit(f"{receiver}.Pos = lineEnd")
+        t.emit(f'if {receiver}.Pos < {receiver}.Length && string({receiver}.Source[{receiver}.Pos]) == "\\n" {{')
+        t.indent += 1
+        t.emit('contentChars = append(contentChars, "\\n")')
+        t.emit('textChars = append(textChars, "\\n")')
+        t.emit(f"{receiver}.Advance()")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("inHeredocBody = false")
+        t.emit("if len(pendingHeredocs) > 0 {")
+        t.indent += 1
+        t.emit("currentHeredocDelim = pendingHeredocs[0].delimiter")
+        t.emit("currentHeredocStrip = pendingHeredocs[0].stripTabs")
+        t.emit("pendingHeredocs = pendingHeredocs[1:]")
+        t.emit("inHeredocBody = true")
+        t.indent -= 1
+        t.emit("}")
+        # Delimiter with trailing content
+        t.emit("} else if strings.HasPrefix(checkLine, currentHeredocDelim) && len(checkLine) > len(currentHeredocDelim) {")
+        t.indent += 1
+        t.emit("tabsStripped := len(line) - len(checkLine)")
+        t.emit("endPos := tabsStripped + len(currentHeredocDelim)")
+        t.emit("for i := 0; i < endPos; i++ {")
+        t.indent += 1
+        t.emit("contentChars = append(contentChars, string(line[i]))")
+        t.emit("textChars = append(textChars, string(line[i]))")
+        t.indent -= 1
+        t.emit("}")
+        t.emit(f"{receiver}.Pos = lineStart + endPos")
+        t.emit("inHeredocBody = false")
+        t.emit("if len(pendingHeredocs) > 0 {")
+        t.indent += 1
+        t.emit("currentHeredocDelim = pendingHeredocs[0].delimiter")
+        t.emit("currentHeredocStrip = pendingHeredocs[0].stripTabs")
+        t.emit("pendingHeredocs = pendingHeredocs[1:]")
+        t.emit("inHeredocBody = true")
+        t.indent -= 1
+        t.emit("}")
+        # Not delimiter - add line
+        t.emit("} else {")
+        t.indent += 1
+        t.emit("for _, ch := range line {")
+        t.indent += 1
+        t.emit("contentChars = append(contentChars, string(ch))")
+        t.emit("textChars = append(textChars, string(ch))")
+        t.indent -= 1
+        t.emit("}")
+        t.emit(f"{receiver}.Pos = lineEnd")
+        t.emit(f'if {receiver}.Pos < {receiver}.Length && string({receiver}.Source[{receiver}.Pos]) == "\\n" {{')
+        t.indent += 1
+        t.emit('contentChars = append(contentChars, "\\n")')
+        t.emit('textChars = append(textChars, "\\n")')
+        t.emit(f"{receiver}.Advance()")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("continue")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        # Normal character processing
+        t.emit(f"c := {receiver}.Peek()")
+        t.emit("")
+        # Escape handling
+        t.emit(f'if c == "\\\\" && {receiver}.Pos+1 < {receiver}.Length {{')
+        t.indent += 1
+        t.emit(f"nextC := string({receiver}.Source[{receiver}.Pos+1])")
+        t.emit('if nextC == "\\n" {')
+        t.indent += 1
+        t.emit(f"{receiver}.Advance()")
+        t.emit(f"{receiver}.Advance()")
+        t.indent -= 1
+        t.emit("} else if _IsEscapeCharInBacktick(nextC) {")
+        t.indent += 1
+        t.emit(f"{receiver}.Advance()")
+        t.emit(f"escaped := {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, escaped)")
+        t.emit('textChars = append(textChars, "\\\\")')
+        t.emit("textChars = append(textChars, escaped)")
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit(f"ch := {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, ch)")
+        t.emit("textChars = append(textChars, ch)")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("continue")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        # Heredoc declaration
+        t.emit(f'if c == "<" && {receiver}.Pos+1 < {receiver}.Length && string({receiver}.Source[{receiver}.Pos+1]) == "<" {{')
+        t.indent += 1
+        # Check for here-string <<<
+        t.emit(f'if {receiver}.Pos+2 < {receiver}.Length && string({receiver}.Source[{receiver}.Pos+2]) == "<" {{')
+        t.indent += 1
+        t.emit(f"contentChars = append(contentChars, {receiver}.Advance())")
+        t.emit('textChars = append(textChars, "<")')
+        t.emit(f"contentChars = append(contentChars, {receiver}.Advance())")
+        t.emit('textChars = append(textChars, "<")')
+        t.emit(f"contentChars = append(contentChars, {receiver}.Advance())")
+        t.emit('textChars = append(textChars, "<")')
+        t.emit(f"for !{receiver}.AtEnd() && _IsWhitespaceNoNewline({receiver}.Peek()) {{")
+        t.indent += 1
+        t.emit(f"ch := {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, ch)")
+        t.emit("textChars = append(textChars, ch)")
+        t.indent -= 1
+        t.emit("}")
+        t.emit(f'for !{receiver}.AtEnd() && !_IsWhitespace({receiver}.Peek()) && {receiver}.Peek() != "(" && {receiver}.Peek() != ")" {{')
+        t.indent += 1
+        t.emit(f'if {receiver}.Peek() == "\\\\" && {receiver}.Pos+1 < {receiver}.Length {{')
+        t.indent += 1
+        t.emit(f"ch := {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, ch)")
+        t.emit("textChars = append(textChars, ch)")
+        t.emit(f"ch = {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, ch)")
+        t.emit("textChars = append(textChars, ch)")
+        t.emit(f'}} else if {receiver}.Peek() == "\\"" || {receiver}.Peek() == "\'" {{')
+        t.indent += 1
+        t.emit(f"quote := {receiver}.Peek()")
+        t.emit(f"ch := {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, ch)")
+        t.emit("textChars = append(textChars, ch)")
+        t.emit(f"for !{receiver}.AtEnd() && {receiver}.Peek() != quote {{")
+        t.indent += 1
+        t.emit(f'if quote == "\\"" && {receiver}.Peek() == "\\\\" {{')
+        t.indent += 1
+        t.emit(f"ch = {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, ch)")
+        t.emit("textChars = append(textChars, ch)")
+        t.indent -= 1
+        t.emit("}")
+        t.emit(f"ch = {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, ch)")
+        t.emit("textChars = append(textChars, ch)")
+        t.indent -= 1
+        t.emit("}")
+        t.emit(f"if !{receiver}.AtEnd() {{")
+        t.indent += 1
+        t.emit(f"ch = {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, ch)")
+        t.emit("textChars = append(textChars, ch)")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit(f"ch := {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, ch)")
+        t.emit("textChars = append(textChars, ch)")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("continue")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        # Regular heredoc <<
+        t.emit(f"contentChars = append(contentChars, {receiver}.Advance())")
+        t.emit('textChars = append(textChars, "<")')
+        t.emit(f"contentChars = append(contentChars, {receiver}.Advance())")
+        t.emit('textChars = append(textChars, "<")')
+        t.emit("stripTabs := false")
+        t.emit(f'if !{receiver}.AtEnd() && {receiver}.Peek() == "-" {{')
+        t.indent += 1
+        t.emit("stripTabs = true")
+        t.emit(f"contentChars = append(contentChars, {receiver}.Advance())")
+        t.emit('textChars = append(textChars, "-")')
+        t.indent -= 1
+        t.emit("}")
+        # Skip whitespace
+        t.emit(f"for !{receiver}.AtEnd() && _IsWhitespaceNoNewline({receiver}.Peek()) {{")
+        t.indent += 1
+        t.emit(f"ch := {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, ch)")
+        t.emit("textChars = append(textChars, ch)")
+        t.indent -= 1
+        t.emit("}")
+        # Parse delimiter
+        t.emit("delimiterChars := []string{}")
+        t.emit(f"if !{receiver}.AtEnd() {{")
+        t.indent += 1
+        t.emit(f"ch := {receiver}.Peek()")
+        t.emit("if _IsQuote(ch) {")
+        t.indent += 1
+        t.emit(f"quote := {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, quote)")
+        t.emit("textChars = append(textChars, quote)")
+        t.emit(f"for !{receiver}.AtEnd() && {receiver}.Peek() != quote {{")
+        t.indent += 1
+        t.emit(f"dch := {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, dch)")
+        t.emit("textChars = append(textChars, dch)")
+        t.emit("delimiterChars = append(delimiterChars, dch)")
+        t.indent -= 1
+        t.emit("}")
+        t.emit(f"if !{receiver}.AtEnd() {{")
+        t.indent += 1
+        t.emit(f"closing := {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, closing)")
+        t.emit("textChars = append(textChars, closing)")
+        t.indent -= 1
+        t.emit("}")
+        t.emit('} else if ch == "\\\\" {')
+        t.indent += 1
+        t.emit(f"esc := {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, esc)")
+        t.emit("textChars = append(textChars, esc)")
+        t.emit(f"if !{receiver}.AtEnd() {{")
+        t.indent += 1
+        t.emit(f"dch := {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, dch)")
+        t.emit("textChars = append(textChars, dch)")
+        t.emit("delimiterChars = append(delimiterChars, dch)")
+        t.indent -= 1
+        t.emit("}")
+        t.emit(f"for !{receiver}.AtEnd() && !_IsMetachar({receiver}.Peek()) {{")
+        t.indent += 1
+        t.emit(f"dch := {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, dch)")
+        t.emit("textChars = append(textChars, dch)")
+        t.emit("delimiterChars = append(delimiterChars, dch)")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("} else {")
+        t.indent += 1
+        t.emit(f'for !{receiver}.AtEnd() && !_IsMetachar({receiver}.Peek()) && {receiver}.Peek() != "`" {{')
+        t.indent += 1
+        t.emit(f"ch := {receiver}.Peek()")
+        t.emit("if _IsQuote(ch) {")
+        t.indent += 1
+        t.emit(f"quote := {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, quote)")
+        t.emit("textChars = append(textChars, quote)")
+        t.emit(f"for !{receiver}.AtEnd() && {receiver}.Peek() != quote {{")
+        t.indent += 1
+        t.emit(f"dch := {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, dch)")
+        t.emit("textChars = append(textChars, dch)")
+        t.emit("delimiterChars = append(delimiterChars, dch)")
+        t.indent -= 1
+        t.emit("}")
+        t.emit(f"if !{receiver}.AtEnd() {{")
+        t.indent += 1
+        t.emit(f"closing := {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, closing)")
+        t.emit("textChars = append(textChars, closing)")
+        t.indent -= 1
+        t.emit("}")
+        t.emit('} else if ch == "\\\\" {')
+        t.indent += 1
+        t.emit(f"esc := {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, esc)")
+        t.emit("textChars = append(textChars, esc)")
+        t.emit(f"if !{receiver}.AtEnd() {{")
+        t.indent += 1
+        t.emit(f"dch := {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, dch)")
+        t.emit("textChars = append(textChars, dch)")
+        t.emit("delimiterChars = append(delimiterChars, dch)")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("} else {")
+        t.indent += 1
+        t.emit(f"dch := {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, dch)")
+        t.emit("textChars = append(textChars, dch)")
+        t.emit("delimiterChars = append(delimiterChars, dch)")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.emit('delimiter := strings.Join(delimiterChars, "")')
+        t.emit('if delimiter != "" {')
+        t.indent += 1
+        t.emit("pendingHeredocs = append(pendingHeredocs, heredocInfo{delimiter, stripTabs})")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("continue")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        # Newline - check for heredoc body mode
+        t.emit('if c == "\\n" {')
+        t.indent += 1
+        t.emit(f"ch := {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, ch)")
+        t.emit("textChars = append(textChars, ch)")
+        t.emit("if len(pendingHeredocs) > 0 {")
+        t.indent += 1
+        t.emit("currentHeredocDelim = pendingHeredocs[0].delimiter")
+        t.emit("currentHeredocStrip = pendingHeredocs[0].stripTabs")
+        t.emit("pendingHeredocs = pendingHeredocs[1:]")
+        t.emit("inHeredocBody = true")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("continue")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        # Regular character
+        t.emit(f"ch := {receiver}.Advance()")
+        t.emit("contentChars = append(contentChars, ch)")
+        t.emit("textChars = append(textChars, ch)")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        # Check for unterminated backtick
+        t.emit(f"if {receiver}.AtEnd() {{")
+        t.indent += 1
+        t.emit('panic(NewParseError("Unterminated backtick", start, 0))')
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        t.emit(f"{receiver}.Advance()")
+        t.emit('textChars = append(textChars, "`")')
+        t.emit('text := strings.Join(textChars, "")')
+        t.emit('content := strings.Join(contentChars, "")')
+        t.emit("")
+        # Handle heredocs whose bodies follow the closing backtick
+        t.emit("if len(pendingHeredocs) > 0 {")
+        t.indent += 1
+        t.emit("delimiters := make([]interface{}, len(pendingHeredocs))")
+        t.emit("for i, h := range pendingHeredocs {")
+        t.indent += 1
+        t.emit("delimiters[i] = []interface{}{h.delimiter, h.stripTabs}")
+        t.indent -= 1
+        t.emit("}")
+        t.emit(f"heredocStart, heredocEnd := _FindHeredocContentEnd({receiver}.Source, {receiver}.Pos, delimiters)")
+        t.emit("if heredocEnd > heredocStart {")
+        t.indent += 1
+        t.emit(f"content = content + _Substring({receiver}.Source, heredocStart, heredocEnd)")
+        t.emit(f"if {receiver}._Cmdsub_heredoc_end < 0 {{")
+        t.indent += 1
+        t.emit(f"{receiver}._Cmdsub_heredoc_end = heredocEnd")
+        t.indent -= 1
+        t.emit("} else {")
+        t.indent += 1
+        t.emit(f"if heredocEnd > {receiver}._Cmdsub_heredoc_end {{")
+        t.indent += 1
+        t.emit(f"{receiver}._Cmdsub_heredoc_end = heredocEnd")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        # Parse the content as a command list
+        t.emit(f"subParser := NewParser(content, false, {receiver}._Extglob)")
+        t.emit("cmd := subParser.ParseList(true)")
+        t.emit("if cmd == nil {")
+        t.indent += 1
+        t.emit("cmd = NewEmpty()")
+        t.indent -= 1
+        t.emit("}")
+        t.emit("")
+        t.emit("return NewCommandSubstitution(cmd, false), text")
 
     def _emit_constructor(self, node: ast.FunctionDef, class_info: ClassInfo):
         """Emit a constructor function."""

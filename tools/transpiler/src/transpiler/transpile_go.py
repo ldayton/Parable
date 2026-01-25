@@ -6759,6 +6759,10 @@ class GoTranspiler(ast.NodeVisitor):
 
     def visit_expr_IfExp(self, node: ast.IfExp) -> str:
         """Convert ternary expression. Go doesn't have ternary, use helper func."""
+        # Check for pattern: arr[idx] if idx < len(arr) else None
+        # This requires lazy evaluation to avoid index-out-of-bounds panic
+        if self._is_bounds_guarded_subscript(node):
+            return self._emit_lazy_ternary(node)
         test = self._emit_bool_expr(node.test)
         body = self.visit_expr(node.body)
         orelse = self.visit_expr(node.orelse)
@@ -6776,6 +6780,54 @@ class GoTranspiler(ast.NodeVisitor):
                 body = f"Node({body})"
         # Use an inline if helper function
         return f"_ternary({test}, {body}, {orelse})"
+
+    def _is_bounds_guarded_subscript(self, node: ast.IfExp) -> bool:
+        """Check if ternary is: arr[idx] if idx < len(arr) else None."""
+        # Body must be subscript access
+        if not isinstance(node.body, ast.Subscript):
+            return False
+        # Orelse must be None
+        if not (isinstance(node.orelse, ast.Constant) and node.orelse.value is None):
+            return False
+        # Test must be Compare with single < operator
+        if not isinstance(node.test, ast.Compare):
+            return False
+        if len(node.test.ops) != 1 or not isinstance(node.test.ops[0], ast.Lt):
+            return False
+        if len(node.test.comparators) != 1:
+            return False
+        # Right side of compare must be len(arr) where arr matches subscript value
+        comparator = node.test.comparators[0]
+        if not isinstance(comparator, ast.Call):
+            return False
+        if not (isinstance(comparator.func, ast.Name) and comparator.func.id == "len"):
+            return False
+        if len(comparator.args) != 1:
+            return False
+        # Check arr in len(arr) matches arr in arr[idx]
+        len_arg = comparator.args[0]
+        subscript_value = node.body.value
+        if not self._ast_names_equal(len_arg, subscript_value):
+            return False
+        # Check idx in idx < len(arr) matches idx in arr[idx]
+        left_idx = node.test.left
+        subscript_idx = node.body.slice
+        return self._ast_names_equal(left_idx, subscript_idx)
+
+    def _ast_names_equal(self, a: ast.expr, b: ast.expr) -> bool:
+        """Check if two AST nodes represent the same name/attribute."""
+        if isinstance(a, ast.Name) and isinstance(b, ast.Name):
+            return a.id == b.id
+        if isinstance(a, ast.Attribute) and isinstance(b, ast.Attribute):
+            return a.attr == b.attr and self._ast_names_equal(a.value, b.value)
+        return False
+
+    def _emit_lazy_ternary(self, node: ast.IfExp) -> str:
+        """Emit IIFE for lazy evaluation of bounds-guarded subscript."""
+        test = self._emit_bool_expr(node.test)
+        body = self.visit_expr(node.body)
+        body_type = self._infer_type_from_expr(node.body)
+        return f"func() {body_type} {{ if {test} {{ return {body} }}; return nil }}()"
 
     def visit_expr_Call(self, node: ast.Call) -> str:
         """Convert function/method calls."""

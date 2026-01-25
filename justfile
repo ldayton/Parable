@@ -103,24 +103,6 @@ check: _ensure-biome _check-parallel
 # Quick check: test, transpile-js, test-js
 quick-check: test transpile-js test-js
 
-# Run benchmarks, optionally comparing refs: bench [ref1] [ref2] [--fast]
-bench *ARGS:
-    #!/usr/bin/env bash
-    refs=()
-    flags=()
-    for arg in {{ARGS}}; do
-        if [[ "$arg" == --* ]]; then
-            flags+=("$arg")
-        else
-            refs+=("$arg")
-        fi
-    done
-    if [[ ${#refs[@]} -eq 0 ]]; then
-        PYTHONPATH=src uvx --with pyperf python bench/bench_parse.py "${flags[@]}"
-    else
-        uvx --with pyperf python bench/bench-compare.py "${refs[@]}" "${flags[@]}"
-    fi
-
 # Lint (--fix to apply changes)
 lint *ARGS:
     uvx ruff check {{ if ARGS == "--fix" { "--fix" } else { "" } }} 2>&1 | sed -u "s/^/[lint] /" | tee /tmp/{{project}}-{{run_id}}-lint.log
@@ -233,25 +215,6 @@ fmt-go *ARGS:
 # Run JavaScript tests
 test-js *ARGS: check-transpile
     node tests/bin/run-js-tests.js {{ARGS}}
-
-# Run JS benchmarks, optionally comparing refs: bench-js [ref1] [ref2] [--fast]
-bench-js *ARGS:
-    #!/usr/bin/env bash
-    [[ -d bench/node_modules ]] || npm --prefix bench install
-    refs=()
-    flags=()
-    for arg in {{ARGS}}; do
-        if [[ "$arg" == --* ]]; then
-            flags+=("$arg")
-        else
-            refs+=("$arg")
-        fi
-    done
-    if [[ ${#refs[@]} -eq 0 ]]; then
-        node bench/bench_parse.js "${flags[@]}"
-    else
-        node bench/bench-compare.js "${refs[@]}" "${flags[@]}"
-    fi
 
 # Format JavaScript (--fix to apply changes)
 # Note: biome format is run twice due to https://github.com/biomejs/biome/issues/4383

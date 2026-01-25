@@ -2,6 +2,8 @@
 """Transpile parable.py's restricted Python subset to Go."""
 
 import ast
+import shutil
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -8047,7 +8049,16 @@ def main():
         sys.exit(1)
     source = Path(sys.argv[1]).read_text()
     transpiler = GoTranspiler()
-    print(transpiler.transpile(source))
+    code = transpiler.transpile(source)
+    if shutil.which("goimports"):
+        result = subprocess.run(
+            ["goimports"], input=code, capture_output=True, text=True
+        )
+        if result.returncode == 0:
+            code = result.stdout
+        else:
+            print(f"goimports failed: {result.stderr}", file=sys.stderr)
+    print(code)
 
 
 if __name__ == "__main__":

@@ -402,26 +402,28 @@ class GoTranspiler(ast.NodeVisitor):
 
     def _annotation_to_str(self, node: ast.expr | None) -> str:
         """Convert type annotation AST to string."""
-        if node is None:
-            return ""
-        if isinstance(node, ast.Name):
-            return node.id
-        if isinstance(node, ast.Constant):
-            return str(node.value) if node.value is not None else "None"
-        if isinstance(node, ast.Subscript):
-            base = self._annotation_to_str(node.value)
-            if isinstance(node.slice, ast.Tuple):
-                args = ", ".join(self._annotation_to_str(e) for e in node.slice.elts)
-            else:
-                args = self._annotation_to_str(node.slice)
-            return f"{base}[{args}]"
-        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
-            left = self._annotation_to_str(node.left)
-            right = self._annotation_to_str(node.right)
-            return f"{left} | {right}"
-        if isinstance(node, ast.Attribute):
-            return node.attr
-        return ""
+        match node:
+            case None:
+                return ""
+            case ast.Name(id=name):
+                return name
+            case ast.Constant(value=None):
+                return "None"
+            case ast.Constant(value=v):
+                return str(v)
+            case ast.Subscript(value=val, slice=ast.Tuple(elts=elts)):
+                base = self._annotation_to_str(val)
+                args = ", ".join(self._annotation_to_str(e) for e in elts)
+                return f"{base}[{args}]"
+            case ast.Subscript(value=val, slice=slc):
+                base = self._annotation_to_str(val)
+                return f"{base}[{self._annotation_to_str(slc)}]"
+            case ast.BinOp(left=left, right=right, op=ast.BitOr()):
+                return f"{self._annotation_to_str(left)} | {self._annotation_to_str(right)}"
+            case ast.Attribute(attr=attr):
+                return attr
+            case _:
+                return ""
 
     def _py_type_to_go(self, py_type: str, concrete_nodes: bool = False) -> str:
         """Convert Python type string to Go type.
@@ -591,63 +593,51 @@ class GoTranspiler(ast.NodeVisitor):
 
     def _infer_type(self, node: ast.expr, param_types: dict[str, str]) -> str:
         """Infer Go type from an expression."""
-        if isinstance(node, ast.Constant):
-            if isinstance(node.value, bool):
+        match node:
+            case ast.Constant(value=bool()):
                 return "bool"
-            if isinstance(node.value, int):
+            case ast.Constant(value=int()):
                 return "int"
-            if isinstance(node.value, str):
+            case ast.Constant(value=str()):
                 return "string"
-            if node.value is None:
+            case ast.Constant(value=None):
                 return ""
-        if isinstance(node, ast.List):
-            if node.elts:
-                elem_type = self._infer_type(node.elts[0], param_types)
-                return "[]" + elem_type
-            return "[]interface{}"
-        if isinstance(node, ast.Dict):
-            if node.values and all(
-                isinstance(v, ast.Constant) and isinstance(v.value, str) for v in node.values
+            case ast.List(elts=[first, *_]):
+                return "[]" + self._infer_type(first, param_types)
+            case ast.List():
+                return "[]interface{}"
+            case ast.Dict(values=values) if values and all(
+                isinstance(v, ast.Constant) and isinstance(v.value, str) for v in values
             ):
                 return "map[string]string"
-            return "map[string]interface{}"
-        if isinstance(node, ast.Name):
-            if node.id in param_types:
-                return self._py_type_to_go(param_types[node.id])
-            if node.id == "True" or node.id == "False":
+            case ast.Dict():
+                return "map[string]interface{}"
+            case ast.Name(id=name) if name in param_types:
+                return self._py_type_to_go(param_types[name])
+            case ast.Name(id="True" | "False"):
                 return "bool"
-            if node.id == "None":
+            case ast.Name(id="None"):
                 return ""
-        if isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Name):
-                func_name = node.func.id
-                # Built-in functions with known return types
-                if func_name == "len":
-                    return "int"
-                if func_name in self.symbols.classes:
-                    info = self.symbols.classes[func_name]
-                    if info.is_node:
-                        return "Node"
-                    return "*" + func_name
-                if func_name == "QuoteState":
-                    return "*QuoteState"
-                if func_name == "ContextStack":
-                    return "*ContextStack"
-        if isinstance(node, ast.Attribute):
-            if isinstance(node.value, ast.Name) and node.value.id in param_types:
-                return self._py_type_to_go(param_types[node.value.id])
-            # Handle class constants (e.g., ParserStateFlags.NONE) - these are ints
-            if isinstance(node.value, ast.Name):
-                class_name = node.value.id
-                if class_name in (
-                    "ParserStateFlags",
-                    "DolbraceState",
-                    "TokenType",
-                    "MatchedPairFlags",
-                    "WordCtx",
-                    "ParseContext",
-                ):
-                    return "int"
+            case ast.Call(func=ast.Name(id="len")):
+                return "int"
+            case ast.Call(func=ast.Name(id=func_name)) if func_name in self.symbols.classes:
+                info = self.symbols.classes[func_name]
+                return "Node" if info.is_node else "*" + func_name
+            case ast.Call(func=ast.Name(id="QuoteState")):
+                return "*QuoteState"
+            case ast.Call(func=ast.Name(id="ContextStack")):
+                return "*ContextStack"
+            case ast.Attribute(value=ast.Name(id=obj_name)) if obj_name in param_types:
+                return self._py_type_to_go(param_types[obj_name])
+            case ast.Attribute(value=ast.Name(id=class_name)) if class_name in (
+                "ParserStateFlags",
+                "DolbraceState",
+                "TokenType",
+                "MatchedPairFlags",
+                "WordCtx",
+                "ParseContext",
+            ):
+                return "int"
         return "interface{}"
 
     # ========== Code Emission ==========
@@ -6982,220 +6972,177 @@ class GoTranspiler(ast.NodeVisitor):
         # Use rune literals for byte expressions (string subscripts or byte-typed variables)
         # But not for variables that could be strings from method calls
         if self._is_byte_expr(left) and not self._could_be_string_from_method(left):
-            if isinstance(node, ast.Constant) and isinstance(node.value, str):
-                if len(node.value) == 1:
-                    return self._char_to_rune_literal(node.value)
+            match node:
+                case ast.Constant(value=str() as s) if len(s) == 1:
+                    return self._char_to_rune_literal(s)
         # Handle comparison to None - use "" only for known string variables
-        if isinstance(node, ast.Constant) and node.value is None:
-            if isinstance(left, ast.Name):
-                var_name = self._to_go_var(left.id)
-                var_type = self.var_types.get(var_name, "")
-                # For int variables with sentinel value, compare to -1
-                if var_type == "int":
-                    return "-1"
-                # Only convert to "" for string variables, not slices/pointers
-                if var_type == "string":
-                    return '""'
-                # Heuristic: common string variable names from nullable functions
-                if left.id in ("c", "ch", "eof_token", "op", "param", "content", "nested", "arg"):
-                    return '""'
-                # Heuristic: position variables use -1 sentinel
-                if (
-                    left.id.endswith("_pos")
-                    or left.id.endswith("Pos")
-                    or left.id in ("bracket_start_pos", "bracketStartPos")
-                ):
-                    return "-1"
-            # Handle attribute access (e.g., l._eof_token, self.op)
-            if isinstance(left, ast.Attribute):
-                # Look up field type from class
-                if (
-                    isinstance(left.value, ast.Name)
-                    and left.value.id == "self"
-                    and self.current_class
-                ):
-                    class_info = self.symbols.classes.get(self.current_class)
-                    if class_info and left.attr in class_info.fields:
-                        field_type = class_info.fields[left.attr].go_type or ""
-                        if field_type == "string":
-                            return '""'
-                        if field_type == "int":
+        match node:
+            case ast.Constant(value=None):
+                match left:
+                    case ast.Name(id=name):
+                        var_name = self._to_go_var(name)
+                        var_type = self.var_types.get(var_name, "")
+                        if var_type == "int":
                             return "-1"
-                # Heuristic: common string field names
-                if left.attr in ("_eof_token", "op", "arg", "param"):
-                    return '""'
-            # Handle method calls that return string (e.g., _lex_peek_case_terminator())
-            if isinstance(left, ast.Call) and isinstance(left.func, ast.Attribute):
-                method = left.func.attr
-                class_name = self._infer_object_class(left.func.value)
-                if class_name:
-                    class_info = self.symbols.classes.get(class_name)
-                    if class_info and method in class_info.methods:
-                        ret_type = class_info.methods[method].return_type or ""
-                        if ret_type == "string":
+                        if var_type == "string":
                             return '""'
-                        if ret_type == "int":
+                        if name in (
+                            "c",
+                            "ch",
+                            "eof_token",
+                            "op",
+                            "param",
+                            "content",
+                            "nested",
+                            "arg",
+                        ):
+                            return '""'
+                        if (
+                            name.endswith("_pos")
+                            or name.endswith("Pos")
+                            or name in ("bracket_start_pos", "bracketStartPos")
+                        ):
                             return "-1"
+                    case ast.Attribute(value=ast.Name(id="self"), attr=attr) if self.current_class:
+                        class_info = self.symbols.classes.get(self.current_class)
+                        if class_info and attr in class_info.fields:
+                            field_type = class_info.fields[attr].go_type or ""
+                            if field_type == "string":
+                                return '""'
+                            if field_type == "int":
+                                return "-1"
+                    case ast.Attribute(attr=attr) if attr in ("_eof_token", "op", "arg", "param"):
+                        return '""'
+                    case ast.Call(func=ast.Attribute(attr=method) as func):
+                        class_name = self._infer_object_class(func.value)
+                        if class_name:
+                            class_info = self.symbols.classes.get(class_name)
+                            if class_info and method in class_info.methods:
+                                ret_type = class_info.methods[method].return_type or ""
+                                if ret_type == "string":
+                                    return '""'
+                                if ret_type == "int":
+                                    return "-1"
         return self.visit_expr(node)
 
     def _is_getattr_call(self, node: ast.expr) -> bool:
         """Check if expression is a getattr() call."""
-        if not isinstance(node, ast.Call):
-            return False
-        if isinstance(node.func, ast.Name) and node.func.id == "getattr":
-            return True
+        match node:
+            case ast.Call(func=ast.Name(id="getattr")):
+                return True
         return False
 
     def _is_tuple_element_access(self, node: ast.expr) -> bool:
         """Check if expression is accessing a tuple element (subscript on interface{} var)."""
-        if not isinstance(node, ast.Subscript):
-            return False
-        if not isinstance(node.slice, ast.Constant):
-            return False
-        if isinstance(node.value, ast.Name):
-            var_name = self._to_go_var(node.value.id)
-            var_type = self.var_types.get(var_name, "")
-            if var_type == "interface{}":
-                return True
+        match node:
+            case ast.Subscript(value=ast.Name(id=name), slice=ast.Constant()):
+                return self.var_types.get(self._to_go_var(name), "") == "interface{}"
+        return False
 
     def _is_node_list_subscript(self, node: ast.expr) -> bool:
         """Check if expression is a subscript on a []Node field (returns Node)."""
-        if not isinstance(node, ast.Subscript):
-            return False
-        if isinstance(node.slice, ast.Slice):
-            return False  # Slice returns slice, not element
-        # Check for var.field[i] pattern
-        if isinstance(node.value, ast.Attribute) and isinstance(node.value.value, ast.Name):
-            var_name = self._to_go_var(node.value.value.id)
-            var_type = self.var_types.get(var_name, "")
-            # Check if this is the type switch variable
-            if self._type_switch_var and var_name == self._type_switch_var[0]:
-                var_type = self._type_switch_type or ""
-            if var_type.startswith("*"):
-                class_name = var_type[1:]
-                if class_name in self.symbols.classes:
-                    class_info = self.symbols.classes[class_name]
-                    if node.value.attr in class_info.fields:
-                        field_type = class_info.fields[node.value.attr].go_type or ""
-                        if field_type == "[]Node":
-                            return True
+        match node:
+            case ast.Subscript(slice=ast.Slice()):
+                return False  # Slice returns slice, not element
+            case ast.Subscript(value=ast.Attribute(value=ast.Name(id=var_id), attr=attr)):
+                var_name = self._to_go_var(var_id)
+                var_type = self.var_types.get(var_name, "")
+                if self._type_switch_var and var_name == self._type_switch_var[0]:
+                    var_type = self._type_switch_type or ""
+                if var_type.startswith("*"):
+                    class_name = var_type[1:]
+                    if class_name in self.symbols.classes:
+                        class_info = self.symbols.classes[class_name]
+                        if attr in class_info.fields:
+                            field_type = class_info.fields[attr].go_type or ""
+                            if field_type == "[]Node":
+                                return True
         return False
 
     def _is_byte_expr(self, node: ast.expr) -> bool:
         """Check if expression evaluates to a byte/rune (e.g., rune slice subscript or byte variable)."""
         # Note: string subscripts are now converted to string() so they're not byte expressions
-        # Check if it's a subscript of a rune slice
-        if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name):
-            var_name = self._to_go_var(node.value.id)
-            var_type = self.var_types.get(var_name, "")
-            if var_type == "[]rune":
-                return True
-        # Check if it's a variable known to be a byte or rune
-        if isinstance(node, ast.Name):
-            var_name = self._to_go_var(node.id)
-            var_type = self.var_types.get(var_name, "")
-            if var_type in ("byte", "rune"):
-                return True
+        match node:
+            case ast.Subscript(value=ast.Name(id=name)):
+                return self.var_types.get(self._to_go_var(name), "") == "[]rune"
+            case ast.Name(id=name):
+                return self.var_types.get(self._to_go_var(name), "") in ("byte", "rune")
         return False
 
     def _could_be_string_from_method(self, node: ast.expr) -> bool:
         """Check if a variable could be a string from method calls like advance/peek.
         Used to avoid treating such variables as runes even if typed from for-range."""
-        if not isinstance(node, ast.Name):
-            return False
-        # Variable 'ch' is commonly reassigned from advance() after being used in for-range
-        # Only include specific names known to have this dual-use pattern
-        return node.id in ("ch", "dch", "esc", "quote", "closing")
+        match node:
+            case ast.Name(id=name) if name in ("ch", "dch", "esc", "quote", "closing"):
+                return True
+        return False
 
     def _is_int_expr(self, node: ast.expr) -> bool:
         """Check if expression evaluates to an int."""
-        if (
-            isinstance(node, ast.Constant)
-            and isinstance(node.value, int)
-            and not isinstance(node.value, bool)
-        ):
-            return True
-        if isinstance(node, ast.Name):
-            var_name = self._to_go_var(node.id)
-            var_type = self.var_types.get(var_name, "")
-            if var_type == "int":
+        match node:
+            case ast.Constant(value=int()) if not isinstance(node.value, bool):
                 return True
-        # ord() returns int
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "ord":
-            return True
-        if isinstance(node, ast.BinOp):
-            # Only arithmetic operations (not string concat) yield int
-            if isinstance(
-                node.op, (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod, ast.Pow)
-            ):
+            case ast.Name(id=name) if self.var_types.get(self._to_go_var(name), "") == "int":
+                return True
+            case ast.Call(func=ast.Name(id="ord")):
+                return True
+            case ast.BinOp(op=ast.Add(), left=left, right=right):
                 # Add can be string concat, so check operands
-                if isinstance(node.op, ast.Add):
-                    if self._is_string_expr(node.left) or self._is_string_expr(node.right):
-                        return False
-                return self._is_int_expr(node.left) or self._is_int_expr(node.right)
-            # Bitwise ops are always int
-            if isinstance(node.op, (ast.BitOr, ast.BitAnd, ast.BitXor, ast.LShift, ast.RShift)):
+                if self._is_string_expr(left) or self._is_string_expr(right):
+                    return False
+                return self._is_int_expr(left) or self._is_int_expr(right)
+            case ast.BinOp(
+                op=ast.Sub() | ast.Mult() | ast.Div() | ast.FloorDiv() | ast.Mod() | ast.Pow(),
+                left=left,
+                right=right,
+            ):
+                return self._is_int_expr(left) or self._is_int_expr(right)
+            case ast.BinOp(
+                op=ast.BitOr() | ast.BitAnd() | ast.BitXor() | ast.LShift() | ast.RShift()
+            ):
                 return True
         return False
 
     def _is_string_expr(self, node: ast.expr) -> bool:
         """Check if expression evaluates to a string."""
-        if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            return True
-        if isinstance(node, ast.Name):
-            var_name = self._to_go_var(node.id)
-            var_type = self.var_types.get(var_name, "")
-            if var_type == "string":
+        match node:
+            case ast.Constant(value=str()):
                 return True
-        # String concatenation
-        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-            if self._is_string_expr(node.left) or self._is_string_expr(node.right):
+            case ast.Name(id=name) if self.var_types.get(self._to_go_var(name), "") == "string":
                 return True
-        # String slice (not single-char subscript which is byte)
-        if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Slice):
-            if self._is_string_subscript(node):
+            case ast.BinOp(op=ast.Add(), left=left, right=right):
+                return self._is_string_expr(left) or self._is_string_expr(right)
+            case ast.Subscript(slice=ast.Slice()) if self._is_string_subscript(node):
                 return True
-        # Call that returns string
-        if isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Name):
-                if node.func.id == "_substring":
-                    return True
-            if isinstance(node.func, ast.Attribute):
-                method = node.func.attr
-                if method in (
-                    "join",
-                    "lower",
-                    "upper",
-                    "strip",
-                    "lstrip",
-                    "rstrip",
-                    "replace",
-                    "format",
-                    "decode",
-                    "encode",
-                ):
-                    return True
+            case ast.Call(func=ast.Name(id="_substring")):
+                return True
+            case ast.Call(func=ast.Attribute(attr=method)) if method in (
+                "join",
+                "lower",
+                "upper",
+                "strip",
+                "lstrip",
+                "rstrip",
+                "replace",
+                "format",
+                "decode",
+                "encode",
+            ):
+                return True
         return False
 
     def _is_ord_of_byte(self, node: ast.expr) -> bool:
         """Check if node is ord() called on a byte expression or string subscript."""
-        if not isinstance(node, ast.Call):
-            return False
-        if not isinstance(node.func, ast.Name) or node.func.id != "ord":
-            return False
-        if not node.args:
-            return False
-        arg = node.args[0]
-        # String subscripts give bytes, even though we convert them to string elsewhere
-        if self._is_string_subscript(arg):
-            return True
-        if self._is_byte_expr(arg):
-            return True
-        if isinstance(arg, ast.Name):
-            var_name = self._to_go_var(arg.id)
-            var_type = self.var_types.get(var_name, "")
-            if var_type in ("byte", "rune"):
-                return True
+        match node:
+            case ast.Call(func=ast.Name(id="ord"), args=[arg]):
+                if self._is_string_subscript(arg) or self._is_byte_expr(arg):
+                    return True
+                match arg:
+                    case ast.Name(id=name) if self.var_types.get(self._to_go_var(name), "") in (
+                        "byte",
+                        "rune",
+                    ):
+                        return True
         return False
 
     def _extract_ord_arg(self, node: ast.Call) -> str:

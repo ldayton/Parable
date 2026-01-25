@@ -41,11 +41,112 @@ Banned constructions:
     yield                 yield x                   return list or use callback
     yield from            yield from iter           explicit loop
     zip                   for a, b in zip(x, y)     indexed loop
+    getattr               getattr(x, 'y', None)     direct attribute access
+    tuple from variable   a, b = op (op is var)     unpack directly: a, b = func()
+
+Required annotations (for Go/TS transpiler):
+
+    Missing                Example                   Required
+    --------------------   ------------------------  --------------------------
+    return type            def f():                  def f() -> int:
+    parameter type         def f(x):                 def f(x: int):
+    bare list              x: list                   x: list[Node]
+    bare dict              x: dict                   x: dict[str, int]
+    bare set               x: set                    x: set[str]
+    bare tuple             -> tuple:                 -> tuple[int, str]:
+    unannotated field      self.x = CONST            self.x: int = CONST
 """
 
 import ast
 import os
 import sys
+
+BARE_COLLECTION_TYPES = {"list", "dict", "set", "tuple"}
+
+
+def is_bare_collection(annotation):
+    """Check if annotation is a bare collection type without parameters."""
+    if isinstance(annotation, ast.Name):
+        return annotation.id in BARE_COLLECTION_TYPES
+    return False
+
+
+def is_obvious_literal(node):
+    """Check if node is a literal with obvious type (str, int, bool, float)."""
+    if isinstance(node, ast.Constant):
+        return isinstance(node.value, (str, int, bool, float)) and node.value is not None
+    # True/False are Names in older Python, Constants in newer
+    if isinstance(node, ast.Name) and node.id in ("True", "False"):
+        return True
+    return False
+
+
+def check_unannotated_field_assigns(tree):
+    """Check for self.x = val assignments that should have type annotations.
+
+    Skips assignments where type is obvious:
+    - Value is an annotated parameter (type flows from param)
+    - Value is a literal (str, int, bool, float)
+    """
+    errors = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        # Collect all annotated field names for this class
+        annotated_fields = set()
+        for item in ast.walk(node):
+            if isinstance(item, ast.AnnAssign):
+                # Class-level: x: int = 0
+                if isinstance(item.target, ast.Name):
+                    annotated_fields.add(item.target.id)
+                # Method-level: self.x: int = 0
+                if isinstance(item.target, ast.Attribute):
+                    if isinstance(item.target.value, ast.Name):
+                        if item.target.value.id == "self":
+                            annotated_fields.add(item.target.attr)
+        # Check each method for unannotated field assignments
+        for item in node.body:
+            if not isinstance(item, ast.FunctionDef):
+                continue
+            # Collect annotated parameter names
+            annotated_params = set()
+            for arg in item.args.args:
+                if arg.annotation is not None:
+                    annotated_params.add(arg.arg)
+            # Walk method body for self.x = val assignments
+            for stmt in ast.walk(item):
+                if not isinstance(stmt, ast.Assign):
+                    continue
+                for target in stmt.targets:
+                    if not isinstance(target, ast.Attribute):
+                        continue
+                    if not isinstance(target.value, ast.Name):
+                        continue
+                    if target.value.id != "self":
+                        continue
+                    field_name = target.attr
+                    # Skip if already annotated somewhere
+                    if field_name in annotated_fields:
+                        continue
+                    # Skip if value is just an annotated parameter
+                    if isinstance(stmt.value, ast.Name):
+                        if stmt.value.id in annotated_params:
+                            annotated_fields.add(field_name)
+                            continue
+                    # Skip if value is an obvious literal
+                    if is_obvious_literal(stmt.value):
+                        annotated_fields.add(field_name)
+                        continue
+                    # Flag it
+                    errors.append(
+                        (
+                            stmt.lineno,
+                            "unannotated field: self." + field_name + " needs type annotation",
+                        )
+                    )
+                    # Add to annotated_fields to avoid duplicate errors
+                    annotated_fields.add(field_name)
+    return errors
 
 
 def find_python_files(directory):
@@ -68,6 +169,9 @@ def check_file(filepath):
 
     tree = ast.parse(source, filepath)
     errors = []
+
+    # Check for unannotated field assignments
+    errors.extend(check_unannotated_field_assigns(tree))
 
     for node in ast.walk(tree):
         lineno = getattr(node, "lineno", 0)
@@ -154,6 +258,21 @@ def check_file(filepath):
             if isinstance(node.func, ast.Name) and node.func.id == "hasattr":
                 errors.append((lineno, "hasattr: use explicit field check instead"))
 
+        # getattr
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name) and node.func.id == "getattr":
+                errors.append((lineno, "getattr: use direct attribute access instead"))
+
+        # tuple unpack from variable (Go can't store multi-return in single var)
+        # BAD:  op = func(); ...; a, b = op
+        # GOOD: a, b = func()  or  a, b = x, y
+        if isinstance(node, ast.Assign):
+            if len(node.targets) == 1 and isinstance(node.targets[0], ast.Tuple):
+                if isinstance(node.value, ast.Name):
+                    errors.append(
+                        (lineno, "tuple unpack from variable: unpack directly from call instead")
+                    )
+
         # step slicing (basic slicing a[x:y] is allowed, step slicing a[::n] is not)
         if isinstance(node, ast.Subscript):
             if isinstance(node.slice, ast.Slice):
@@ -224,10 +343,67 @@ def check_file(filepath):
         if isinstance(node, ast.Import):
             errors.append((lineno, "import: not allowed, code must be self-contained"))
 
-        # from ... import (allow __future__ and typing)
+        # from ... import (allow __future__, typing, collections.abc)
         if isinstance(node, ast.ImportFrom):
-            if node.module not in ("__future__", "typing"):
+            if node.module not in ("__future__", "typing", "collections.abc"):
                 errors.append((lineno, "from import: not allowed, code must be self-contained"))
+
+        # missing return type annotation (skip __init__ and __new__)
+        if isinstance(node, ast.FunctionDef):
+            if node.returns is None and node.name not in ("__init__", "__new__"):
+                errors.append((lineno, "missing return type: def " + node.name + "() -> ..."))
+
+        # missing parameter type annotation (skip self/cls)
+        if isinstance(node, ast.FunctionDef):
+            for i, arg in enumerate(node.args.args):
+                if arg.arg in ("self", "cls") and i == 0:
+                    continue
+                if arg.annotation is None:
+                    errors.append(
+                        (lineno, "missing param type: " + arg.arg + " in " + node.name + "()")
+                    )
+
+        # bare collection in parameter annotation
+        if isinstance(node, ast.FunctionDef):
+            for arg in node.args.args:
+                if arg.annotation and is_bare_collection(arg.annotation):
+                    errors.append(
+                        (
+                            lineno,
+                            "bare "
+                            + arg.annotation.id
+                            + ": "
+                            + arg.arg
+                            + " in "
+                            + node.name
+                            + "() needs type parameter",
+                        )
+                    )
+
+        # bare collection in return type annotation
+        if isinstance(node, ast.FunctionDef):
+            if node.returns and is_bare_collection(node.returns):
+                errors.append(
+                    (
+                        lineno,
+                        "bare "
+                        + node.returns.id
+                        + ": "
+                        + node.name
+                        + "() return needs type parameter",
+                    )
+                )
+
+        # bare collection in variable annotation
+        if isinstance(node, ast.AnnAssign):
+            if is_bare_collection(node.annotation):
+                target_name = node.target.id if isinstance(node.target, ast.Name) else "?"
+                errors.append(
+                    (
+                        lineno,
+                        "bare " + node.annotation.id + ": " + target_name + " needs type parameter",
+                    )
+                )
 
     return errors
 

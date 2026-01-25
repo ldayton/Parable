@@ -9,13 +9,14 @@ ast = parse("ps aux | grep python | awk '{print $2}'")
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Union
 
 
 class ParseError(Exception):
     """Raised when parsing fails."""
 
-    def __init__(self, message: str, pos: int = None, line: int = None):
+    def __init__(self, message: str, pos: int | None = None, line: int | None = None):
         self.message = message
         self.pos = pos
         self.line = line
@@ -78,7 +79,9 @@ def _is_whitespace_no_newline(c: str) -> bool:
 
 
 def _substring(s: str, start: int, end: int) -> str:
-    """Extract substring from start to end (exclusive)."""
+    """Extract substring from start to end (exclusive), clamped to string length."""
+    if end > len(s):
+        end = len(s)
     return s[start:end]
 
 
@@ -123,7 +126,7 @@ def _is_expansion_start(s: str, pos: int, delimiter: str) -> bool:
     return _count_consecutive_dollars_before(s, pos) % 2 == 0
 
 
-def _sublist(lst: list, start: int, end: int) -> list:
+def _sublist(lst: list[Node], start: int, end: int) -> list[Node]:
     """Extract sublist from start to end (exclusive)."""
     return lst[start:end]
 
@@ -210,12 +213,12 @@ class Token:
     """
 
     def __init__(
-        self, type_: int, value: str, pos: int, parts: list = None, word: Word | None = None
+        self, type_: int, value: str, pos: int, parts: list | None = None, word: Word | None = None
     ):
         self.type = type_
         self.value = value
         self.pos = pos
-        self.parts = parts if parts is not None else []
+        self.parts: list[Node] = parts if parts is not None else []
         self.word = word  # Parsed Word object for WORD tokens
 
     def __repr__(self) -> str:
@@ -290,8 +293,8 @@ class SavedParserState:
         self,
         parser_state: int,
         dolbrace_state: int,
-        pending_heredocs: list,
-        ctx_stack: list,
+        pending_heredocs: list[Node],
+        ctx_stack: list[ParseContext],
         eof_token: str | None = None,
     ):
         self.parser_state = parser_state
@@ -366,7 +369,7 @@ class ParseContext:
         self.case_depth = 0  # Nested case statements
         self.arith_depth = 0  # Nested $((...)) expressions
         self.arith_paren_depth = 0  # Grouping parens inside arithmetic
-        self.quote = QuoteState()
+        self.quote: QuoteState = QuoteState()
 
     def copy(self) -> ParseContext:
         """Create a deep copy of this context."""
@@ -406,14 +409,14 @@ class ContextStack:
             return self._stack.pop()
         return self._stack[0]
 
-    def copy_stack(self) -> list:
+    def copy_stack(self) -> list[ParseContext]:
         """Return a deep copy of the context stack for state saving."""
         result = []
         for ctx in self._stack:
             result.append(ctx.copy())
         return result
 
-    def restore_from(self, saved_stack: list) -> None:
+    def restore_from(self, saved_stack: list[ParseContext]) -> None:
         """Restore the context stack from a saved copy."""
         result = []
         for ctx in saved_stack:
@@ -427,14 +430,14 @@ class Lexer:
     def __init__(self, source: str, extglob: bool = False):
         self.source = source
         self.pos = 0
-        self.length = len(source)
-        self.quote = QuoteState()
+        self.length: int = len(source)
+        self.quote: QuoteState = QuoteState()
         self._token_cache: Token | None = None
         # Parser state flags for context-sensitive tokenization
-        self._parser_state = ParserStateFlags.NONE
-        self._dolbrace_state = DolbraceState.NONE
+        self._parser_state: int = ParserStateFlags.NONE
+        self._dolbrace_state: int = DolbraceState.NONE
         # Pending heredocs tracked during word parsing
-        self._pending_heredocs: list = []
+        self._pending_heredocs: list[Node] = []
         # Extglob parsing enabled (bash shopt extglob)
         self._extglob = extglob
         # Reference to Parser for expansion parsing callbacks (set by Parser)
@@ -444,7 +447,7 @@ class Lexer:
         # Last token returned by next_token (for context-sensitive parsing)
         self._last_read_token: Token | None = None
         # Word parsing context (set by Parser before peeking)
-        self._word_context = WORD_CTX_NORMAL
+        self._word_context: int = WORD_CTX_NORMAL
         self._at_command_start = False
         self._in_array_literal = False
         self._in_assign_builtin = False
@@ -476,7 +479,7 @@ class Lexer:
 
     def lookahead(self, n: int) -> str:
         """Return next n characters without consuming."""
-        return self.source[self.pos : self.pos + n]
+        return _substring(self.source, self.pos, self.pos + n)
 
     def is_metachar(self, c: str) -> bool:
         """Return True if c is a shell metacharacter."""
@@ -673,7 +676,7 @@ class Lexer:
         return _is_metachar(ch) and bracket_depth == 0
 
     def _read_bracket_expression(
-        self, chars: list, parts: list, for_regex: bool = False, paren_depth: int = 0
+        self, chars: list[str], parts: list[Node], for_regex: bool = False, paren_depth: int = 0
     ) -> bool:
         """Scan [...] bracket expression. Returns True if consumed, False if [ is literal.
 
@@ -2093,7 +2096,7 @@ class Word(Node):
     value: str
     parts: list[Node]
 
-    def __init__(self, value: str, parts: list[Node] = None):
+    def __init__(self, value: str, parts: list[Node] | None = None):
         self.kind = "word"
         self.value = value
         if parts is None:
@@ -2128,7 +2131,7 @@ class Word(Node):
         escaped = value.replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
         return '(word "' + escaped + '")'
 
-    def _append_with_ctlesc(self, result: bytearray, byte_val: int):
+    def _append_with_ctlesc(self, result: bytearray, byte_val: int) -> None:
         """Append byte to result (CTLESC doubling happens later in to_sexp)."""
         result.append(byte_val)
 
@@ -2991,59 +2994,50 @@ class Word(Node):
                 i += 1
         return "".join(result)
 
-    def _collect_cmdsubs(self, node) -> list:
+    def _collect_cmdsubs(self, node: Node) -> list[Node]:
         """Recursively collect CommandSubstitution nodes from an AST node."""
-        result = []
-        node_kind = getattr(node, "kind", None)
-        if node_kind == "cmdsub":
+        result: list[Node] = []
+        if isinstance(node, CommandSubstitution):
             result.append(node)
-        elif node_kind == "array":
-            # Array node - collect from each element's parts
-            elements = getattr(node, "elements", [])
-            for elem in elements:
-                parts = getattr(elem, "parts", [])
-                for p in parts:
-                    if getattr(p, "kind", None) == "cmdsub":
+        elif isinstance(node, Array):
+            for elem in node.elements:
+                for p in elem.parts:
+                    if isinstance(p, CommandSubstitution):
                         result.append(p)
                     else:
                         result.extend(self._collect_cmdsubs(p))
-        else:
-            expr = getattr(node, "expression", None)
-            if expr is not None:
-                # ArithmeticExpansion, ArithBinaryOp, etc.
-                result.extend(self._collect_cmdsubs(expr))
-        left = getattr(node, "left", None)
-        if left is not None:
-            result.extend(self._collect_cmdsubs(left))
-        right = getattr(node, "right", None)
-        if right is not None:
-            result.extend(self._collect_cmdsubs(right))
-        operand = getattr(node, "operand", None)
-        if operand is not None:
-            result.extend(self._collect_cmdsubs(operand))
-        condition = getattr(node, "condition", None)
-        if condition is not None:
-            result.extend(self._collect_cmdsubs(condition))
-        true_value = getattr(node, "true_value", None)
-        if true_value is not None:
-            result.extend(self._collect_cmdsubs(true_value))
-        false_value = getattr(node, "false_value", None)
-        if false_value is not None:
-            result.extend(self._collect_cmdsubs(false_value))
+        elif isinstance(node, ArithmeticExpansion):
+            if node.expression is not None:
+                result.extend(self._collect_cmdsubs(node.expression))
+        elif isinstance(node, ArithBinaryOp) or isinstance(node, ArithComma):
+            result.extend(self._collect_cmdsubs(node.left))
+            result.extend(self._collect_cmdsubs(node.right))
+        elif (
+            isinstance(node, ArithUnaryOp)
+            or isinstance(node, ArithPreIncr)
+            or isinstance(node, ArithPostIncr)
+            or isinstance(node, ArithPreDecr)
+            or isinstance(node, ArithPostDecr)
+        ):
+            result.extend(self._collect_cmdsubs(node.operand))
+        elif isinstance(node, ArithTernary):
+            result.extend(self._collect_cmdsubs(node.condition))
+            result.extend(self._collect_cmdsubs(node.if_true))
+            result.extend(self._collect_cmdsubs(node.if_false))
+        elif isinstance(node, ArithAssign):
+            result.extend(self._collect_cmdsubs(node.target))
+            result.extend(self._collect_cmdsubs(node.value))
         return result
 
-    def _collect_procsubs(self, node) -> list:
+    def _collect_procsubs(self, node: Node) -> list[Node]:
         """Recursively collect ProcessSubstitution nodes from an AST node."""
-        result = []
-        node_kind = getattr(node, "kind", None)
-        if node_kind == "procsub":
+        result: list[Node] = []
+        if isinstance(node, ProcessSubstitution):
             result.append(node)
-        elif node_kind == "array":
-            elements = getattr(node, "elements", [])
-            for elem in elements:
-                parts = getattr(elem, "parts", [])
-                for p in parts:
-                    if getattr(p, "kind", None) == "procsub":
+        elif isinstance(node, Array):
+            for elem in node.elements:
+                for p in elem.parts:
+                    if isinstance(p, ProcessSubstitution):
                         result.append(p)
                     else:
                         result.extend(self._collect_procsubs(p))
@@ -3263,10 +3257,9 @@ class Word(Node):
                 # Find matching close brace
                 j = _find_funsub_end(value, i + 2)
                 # Check if we have a parsed node with brace=True
-                if cmdsub_idx < len(cmdsub_parts) and getattr(
-                    cmdsub_parts[cmdsub_idx], "brace", False
-                ):
-                    node = cmdsub_parts[cmdsub_idx]
+                cmdsub_node = cmdsub_parts[cmdsub_idx] if cmdsub_idx < len(cmdsub_parts) else None
+                if isinstance(cmdsub_node, CommandSubstitution) and cmdsub_node.brace:
+                    node = cmdsub_node
                     formatted = _format_cmdsub_node(node.command)
                     # Determine prefix: ${ or ${|
                     has_pipe = value[i + 2] == "|"
@@ -3623,7 +3616,7 @@ class Command(Node):
     words: list[Word]
     redirects: list[Node]
 
-    def __init__(self, words: list[Word], redirects: list[Node] = None):
+    def __init__(self, words: list[Word], redirects: list[Node] | None = None):
         self.kind = "command"
         self.words = words
         if redirects is None:
@@ -3755,7 +3748,7 @@ class List(Node):
         # Process by precedence: first split on ; and &, then on && and ||
         return self._to_sexp_with_precedence(parts, op_names)
 
-    def _to_sexp_with_precedence(self, parts: list, op_names: dict) -> str:
+    def _to_sexp_with_precedence(self, parts: list[Node], op_names: dict[str, str]) -> str:
         # Process operators by precedence: ; (lowest), then &, then && and ||
         # Use iterative approach to avoid stack overflow on large lists
         # Find all ; or \n positions (may not be at regular intervals due to consecutive ops)
@@ -3792,7 +3785,7 @@ class List(Node):
         # No ; or \n, handle & and higher
         return self._to_sexp_amp_and_higher(parts, op_names)
 
-    def _to_sexp_amp_and_higher(self, parts: list, op_names: dict) -> str:
+    def _to_sexp_amp_and_higher(self, parts: list[Node], op_names: dict[str, str]) -> str:
         # Handle & operator iteratively
         if len(parts) == 1:
             return parts[0].to_sexp()
@@ -3822,7 +3815,7 @@ class List(Node):
         # No &, handle && and ||
         return self._to_sexp_and_or(parts, op_names)
 
-    def _to_sexp_and_or(self, parts: list, op_names: dict) -> str:
+    def _to_sexp_and_or(self, parts: list[Node], op_names: dict[str, str]) -> str:
         # Process && and || left-associatively (already iterative)
         if len(parts) == 1:
             return parts[0].to_sexp()
@@ -3896,7 +3889,7 @@ class Redirect(Node):
     target: Word
     fd: int | None = None
 
-    def __init__(self, op: str, target: Word, fd: int = None):
+    def __init__(self, op: str, target: Word, fd: int | None = None):
         self.kind = "redirect"
         self.op = op
         self.target = target
@@ -3990,7 +3983,7 @@ class HereDoc(Node):
         content: str,
         strip_tabs: bool = False,
         quoted: bool = False,
-        fd: int = None,
+        fd: int | None = None,
         complete: bool = True,
     ):
         self.kind = "heredoc"
@@ -4052,7 +4045,11 @@ class If(Node):
     redirects: list[Node]
 
     def __init__(
-        self, condition: Node, then_body: Node, else_body: Node = None, redirects: list[Node] = None
+        self,
+        condition: Node,
+        then_body: Node,
+        else_body: Node | None = None,
+        redirects: list[Node] | None = None,
     ):
         self.kind = "if"
         self.condition = condition
@@ -4079,7 +4076,7 @@ class While(Node):
     body: Node
     redirects: list[Node]
 
-    def __init__(self, condition: Node, body: Node, redirects: list[Node] = None):
+    def __init__(self, condition: Node, body: Node, redirects: list[Node] | None = None):
         self.kind = "while"
         self.condition = condition
         self.body = body
@@ -4099,7 +4096,7 @@ class Until(Node):
     body: Node
     redirects: list[Node]
 
-    def __init__(self, condition: Node, body: Node, redirects: list[Node] = None):
+    def __init__(self, condition: Node, body: Node, redirects: list[Node] | None = None):
         self.kind = "until"
         self.condition = condition
         self.body = body
@@ -4121,7 +4118,7 @@ class For(Node):
     redirects: list[Node]
 
     def __init__(
-        self, var: str, words: list[Word] | None, body: Node, redirects: list[Node] = None
+        self, var: str, words: list[Word] | None, body: Node, redirects: list[Node] | None = None
     ):
         self.kind = "for"
         self.var = var
@@ -4182,7 +4179,9 @@ class ForArith(Node):
     body: Node
     redirects: list[Node]
 
-    def __init__(self, init: str, cond: str, incr: str, body: Node, redirects: list[Node] = None):
+    def __init__(
+        self, init: str, cond: str, incr: str, body: Node, redirects: list[Node] | None = None
+    ):
         self.kind = "for-arith"
         self.init = init
         self.cond = cond
@@ -4229,7 +4228,7 @@ class Select(Node):
     redirects: list[Node]
 
     def __init__(
-        self, var: str, words: list[Word] | None, body: Node, redirects: list[Node] = None
+        self, var: str, words: list[Word] | None, body: Node, redirects: list[Node] | None = None
     ):
         self.kind = "select"
         self.var = var
@@ -4279,7 +4278,9 @@ class Case(Node):
     patterns: list[CasePattern]
     redirects: list[Node]
 
-    def __init__(self, word: Word, patterns: list[CasePattern], redirects: list[Node] = None):
+    def __init__(
+        self, word: Word, patterns: list[CasePattern], redirects: list[Node] | None = None
+    ):
         self.kind = "case"
         self.word = word
         self.patterns = patterns
@@ -4296,7 +4297,7 @@ class Case(Node):
         return _append_redirects(base, self.redirects)
 
 
-def _consume_single_quote(s: str, start: int) -> tuple:
+def _consume_single_quote(s: str, start: int) -> tuple[int, list[str]]:
     """Consume '...' from start. Returns (end_index, chars_list)."""
     chars = ["'"]
     i = start + 1
@@ -4309,7 +4310,7 @@ def _consume_single_quote(s: str, start: int) -> tuple:
     return (i, chars)
 
 
-def _consume_double_quote(s: str, start: int) -> tuple:
+def _consume_double_quote(s: str, start: int) -> tuple[int, list[str]]:
     """Consume "..." from start, handling escapes. Returns (end_index, chars_list)."""
     chars = ['"']
     i = start + 1
@@ -4337,7 +4338,7 @@ def _has_bracket_close(s: str, start: int, depth: int) -> bool:
     return False
 
 
-def _consume_bracket_class(s: str, start: int, depth: int) -> tuple:
+def _consume_bracket_class(s: str, start: int, depth: int) -> tuple[int, list[str], bool]:
     """Consume [...] bracket expression. Returns (end_index, chars_list, was_bracket)."""
     # First scan to see if this is a valid bracket expression
     scan_pos = start + 1
@@ -4489,7 +4490,7 @@ class ParamExpansion(Node):
     op: str | None = None
     arg: str | None = None
 
-    def __init__(self, param: str, op: str = None, arg: str = None):
+    def __init__(self, param: str, op: str | None = None, arg: str | None = None):
         self.kind = "param"
         self.param = param
         self.op = op
@@ -4590,7 +4591,7 @@ class ArithmeticCommand(Node):
     def __init__(
         self,
         expression: ArithNode | None,
-        redirects: list[Redirect | HereDoc] = None,
+        redirects: list[Redirect | HereDoc] | None = None,
         raw_content: str = "",
     ):
         self.kind = "arith-cmd"
@@ -4953,7 +4954,7 @@ class ConditionalExpr(Node):
     body: CondNode | str  # Parsed node or raw string for backwards compat
     redirects: list[Redirect | HereDoc]
 
-    def __init__(self, body: CondNode | str, redirects: list[Redirect | HereDoc] = None):
+    def __init__(self, body: CondNode | str, redirects: list[Redirect | HereDoc] | None = None):
         self.kind = "cond-expr"
         self.body = body
         if redirects is None:
@@ -4963,13 +4964,12 @@ class ConditionalExpr(Node):
     def to_sexp(self) -> str:
         # bash-oracle format: (cond ...) not (cond-expr ...)
         # Redirects are siblings, not children: (cond ...) (redirect ...)
-        body_kind = getattr(self.body, "kind", None)
-        if body_kind is None:
-            # body is a string
-            escaped = self.body.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+        body = self.body
+        if isinstance(body, str):
+            escaped = body.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
             result = '(cond "' + escaped + '")'
         else:
-            result = "(cond " + self.body.to_sexp() + ")"
+            result = "(cond " + body.to_sexp() + ")"
         if self.redirects:
             redirect_parts = []
             for r in self.redirects:
@@ -5131,7 +5131,7 @@ class Coproc(Node):
     command: Node
     name: str | None = None
 
-    def __init__(self, command: Node, name: str = None):
+    def __init__(self, command: Node, name: str | None = None):
         self.kind = "coproc"
         self.command = command
         self.name = name
@@ -6708,7 +6708,7 @@ class Parser:
     def __init__(self, source: str, in_process_sub: bool = False, extglob: bool = False):
         self.source = source
         self.pos = 0
-        self.length = len(source)
+        self.length: int = len(source)
         self._pending_heredocs: list[HereDoc] = []
         # Track heredoc content that was consumed into command/process substitutions
         # and needs to be skipped when we reach a newline
@@ -6718,23 +6718,27 @@ class Parser:
         # Extglob parsing enabled (bash shopt extglob)
         self._extglob = extglob
         # Context stack for tracking nested parsing scopes
-        self._ctx = ContextStack()
+        self._ctx: ContextStack = ContextStack()
         # Lexer for tokenization
-        self._lexer = Lexer(source, extglob=extglob)
+        self._lexer: Lexer = Lexer(source, extglob=extglob)
         self._lexer._parser = self  # Back-reference for expansion parsing
         # Token history for context-sensitive parsing (last 4 tokens like bash)
         self._token_history: list[Token | None] = [None, None, None, None]
         # Parser state flags for context-sensitive decisions
-        self._parser_state = ParserStateFlags.NONE
+        self._parser_state: int = ParserStateFlags.NONE
         # Dolbrace state for ${...} parameter expansion parsing
-        self._dolbrace_state = DolbraceState.NONE
+        self._dolbrace_state: int = DolbraceState.NONE
         # EOF token mechanism for inline command substitution parsing
         self._eof_token: str | None = None
         # Word parsing context for Lexer sync
-        self._word_context = WORD_CTX_NORMAL
+        self._word_context: int = WORD_CTX_NORMAL
         self._at_command_start = False
         self._in_array_literal = False
         self._in_assign_builtin = False
+        # Arithmetic expression parsing context (for nested parsing)
+        self._arith_src: str = ""
+        self._arith_pos: int = 0
+        self._arith_len: int = 0
 
     def _set_state(self, flag: int) -> None:
         """Set a parser state flag."""
@@ -6929,8 +6933,8 @@ class Parser:
             TokenType.AMP,
         )
 
-    def _lex_peek_operator(self) -> tuple[int, str] | None:
-        """Peek operator token. Returns (token_type, value) or None."""
+    def _lex_peek_operator(self) -> tuple[int, str]:
+        """Peek operator token. Returns (token_type, value) or (0, "") if not an operator."""
         tok = self._lex_peek_token()
         t = tok.type
         # Single-char operators: SEMI(10) through GREATER(18)
@@ -6939,7 +6943,7 @@ class Parser:
             t >= TokenType.AND_AND and t <= TokenType.PIPE_AMP
         ):
             return (t, tok.value)
-        return None
+        return (0, "")
 
     def _lex_peek_reserved_word(self) -> str | None:
         """Peek reserved word. Returns word value if reserved, None otherwise."""
@@ -7215,7 +7219,7 @@ class Parser:
         return self._lexer._is_word_terminator(ctx, ch, bracket_depth, paren_depth)
 
     def _scan_double_quote(
-        self, chars: list, parts: list, start: int, handle_line_continuation: bool = True
+        self, chars: list[str], parts: list[Node], start: int, handle_line_continuation: bool = True
     ) -> None:
         """Scan double-quoted string with expansions. Assumes opening quote consumed."""
         chars.append('"')
@@ -7238,7 +7242,9 @@ class Parser:
             raise ParseError("Unterminated double quote", pos=start)
         chars.append(self.advance())
 
-    def _parse_dollar_expansion(self, chars: list, parts: list, in_dquote: bool = False) -> bool:
+    def _parse_dollar_expansion(
+        self, chars: list[str], parts: list[Node], in_dquote: bool = False
+    ) -> bool:
         """Handle $ expansions. Returns True if expansion parsed, False if bare $."""
         # Check $(( -> arithmetic expansion
         if (
@@ -7888,15 +7894,15 @@ class Parser:
     def _parse_arith_expr(self, content: str) -> Node | None:
         """Parse an arithmetic expression string into AST nodes."""
         # Save any existing arith context (for nested parsing)
-        saved_arith_src = getattr(self, "_arith_src", None)
-        saved_arith_pos = getattr(self, "_arith_pos", None)
-        saved_arith_len = getattr(self, "_arith_len", None)
+        saved_arith_src = self._arith_src
+        saved_arith_pos = self._arith_pos
+        saved_arith_len = self._arith_len
         saved_parser_state = self._parser_state
 
         self._set_state(ParserStateFlags.PST_ARITH)
-        self._arith_src = content
-        self._arith_pos = 0
-        self._arith_len = len(content)
+        self._arith_src: str = content
+        self._arith_pos: int = 0
+        self._arith_len: int = len(content)
         self._arith_skip_ws()
         if self._arith_at_end():
             result = None
@@ -8009,7 +8015,7 @@ class Parser:
             return ArithTernary(cond, if_true, if_false)
         return cond
 
-    def _arith_parse_left_assoc(self, ops: list, parsefn) -> Node:
+    def _arith_parse_left_assoc(self, ops: list[str], parsefn: Callable[[], Node]) -> Node:
         """Parse left-associative binary operators using match/consume."""
         left = parsefn()
         while True:
@@ -10746,10 +10752,9 @@ class Parser:
 
         while True:
             self.skip_whitespace()
-            op = self._lex_peek_operator()
-            if op is None:
+            token_type, value = self._lex_peek_operator()
+            if token_type == 0:
                 break
-            token_type, value = op
             if token_type != TokenType.PIPE and token_type != TokenType.PIPE_AMP:
                 break
 
@@ -10774,10 +10779,9 @@ class Parser:
     def parse_list_operator(self) -> str | None:
         """Parse a list operator (&&, ||, ;, &)."""
         self.skip_whitespace()
-        op = self._lex_peek_operator()
-        if op is None:
+        token_type, _ = self._lex_peek_operator()
+        if token_type == 0:
             return None
-        token_type, value = op
         if token_type == TokenType.AND_AND:
             self._lex_next_token()
             return "&&"

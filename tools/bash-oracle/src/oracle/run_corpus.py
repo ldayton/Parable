@@ -3,6 +3,7 @@
 
 import argparse
 import os
+import random
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -107,6 +108,22 @@ def main():
         type=int,
         help="Stop after N failures (default: run to completion)",
     )
+    parser.add_argument(
+        "--sequential",
+        action="store_true",
+        help="Run sequentially (for profiling)",
+    )
+    parser.add_argument(
+        "--max-files",
+        type=int,
+        help="Limit number of files to process (for profiling)",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=0,
+        help="Random seed for --max-files sampling (default: 0)",
+    )
     args = parser.parse_args()
     max_failures = args.max_failures if args.max_failures is not None else sys.maxsize
 
@@ -116,21 +133,35 @@ def main():
     test_files = sorted(
         os.path.join(CORPUS_DIR, f) for f in os.listdir(CORPUS_DIR) if f.endswith(".tests")
     )
+    if args.max_files:
+        random.seed(args.seed)
+        test_files = random.sample(test_files, min(args.max_files, len(test_files)))
     total_files = len(test_files)
     passed = failed = total = 0
     all_failures = []
-    with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
-        futures = {executor.submit(process_file, f): f for f in test_files}
-        for i, future in enumerate(as_completed(futures)):
-            result = future.result()
+    if args.sequential:
+        for i, test_file in enumerate(test_files):
+            result = process_file(test_file)
             passed += result["passed"]
             failed += result["failed"]
             total += result["total"]
             all_failures.extend(result["failures"])
             print(f"\r{i + 1}/{total_files} files ({failed} failures)", end="", flush=True)
             if failed >= max_failures:
-                executor.shutdown(cancel_futures=True)
                 break
+    else:
+        with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
+            futures = {executor.submit(process_file, f): f for f in test_files}
+            for i, future in enumerate(as_completed(futures)):
+                result = future.result()
+                passed += result["passed"]
+                failed += result["failed"]
+                total += result["total"]
+                all_failures.extend(result["failures"])
+                print(f"\r{i + 1}/{total_files} files ({failed} failures)", end="", flush=True)
+                if failed >= max_failures:
+                    executor.shutdown(cancel_futures=True)
+                    break
     print()
     with open(FAILURES_FILE, "w") as f:
         for failure in all_failures[:max_failures]:

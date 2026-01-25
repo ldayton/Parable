@@ -3492,70 +3492,53 @@ class Word extends Node {
 	}
 
 	_collectCmdsubs(node) {
-		let elements, expr, parts;
 		const result = [];
-		const node_kind = node.kind ?? null;
-		if (node_kind === "cmdsub") {
+		if (node instanceof CommandSubstitution) {
 			result.push(node);
-		} else if (node_kind === "array") {
-			// Array node - collect from each element's parts
-			elements = node.elements ?? [];
-			for (let elem of elements) {
-				parts = elem.parts ?? [];
-				for (let p of parts) {
-					if ((p.kind ?? null) === "cmdsub") {
+		} else if (node instanceof ArrayNode) {
+			for (let elem of node.elements) {
+				for (let p of elem.parts) {
+					if (p instanceof CommandSubstitution) {
 						result.push(p);
 					} else {
 						result.push(...this._collectCmdsubs(p));
 					}
 				}
 			}
-		} else {
-			expr = node.expression ?? null;
-			if (expr != null) {
-				// ArithmeticExpansion, ArithBinaryOp, etc.
-				result.push(...this._collectCmdsubs(expr));
+		} else if (node instanceof ArithmeticExpansion) {
+			if (node.expression != null) {
+				result.push(...this._collectCmdsubs(node.expression));
 			}
-		}
-		const left = node.left ?? null;
-		if (left != null) {
-			result.push(...this._collectCmdsubs(left));
-		}
-		const right = node.right ?? null;
-		if (right != null) {
-			result.push(...this._collectCmdsubs(right));
-		}
-		const operand = node.operand ?? null;
-		if (operand != null) {
-			result.push(...this._collectCmdsubs(operand));
-		}
-		const condition = node.condition ?? null;
-		if (condition != null) {
-			result.push(...this._collectCmdsubs(condition));
-		}
-		const true_value = node.true_value ?? null;
-		if (true_value != null) {
-			result.push(...this._collectCmdsubs(true_value));
-		}
-		const false_value = node.false_value ?? null;
-		if (false_value != null) {
-			result.push(...this._collectCmdsubs(false_value));
+		} else if (node instanceof ArithBinaryOp || node instanceof ArithComma) {
+			result.push(...this._collectCmdsubs(node.left));
+			result.push(...this._collectCmdsubs(node.right));
+		} else if (
+			node instanceof ArithUnaryOp ||
+			node instanceof ArithPreIncr ||
+			node instanceof ArithPostIncr ||
+			node instanceof ArithPreDecr ||
+			node instanceof ArithPostDecr
+		) {
+			result.push(...this._collectCmdsubs(node.operand));
+		} else if (node instanceof ArithTernary) {
+			result.push(...this._collectCmdsubs(node.condition));
+			result.push(...this._collectCmdsubs(node.if_true));
+			result.push(...this._collectCmdsubs(node.if_false));
+		} else if (node instanceof ArithAssign) {
+			result.push(...this._collectCmdsubs(node.target));
+			result.push(...this._collectCmdsubs(node.value));
 		}
 		return result;
 	}
 
 	_collectProcsubs(node) {
-		let elements, parts;
 		const result = [];
-		const node_kind = node.kind ?? null;
-		if (node_kind === "procsub") {
+		if (node instanceof ProcessSubstitution) {
 			result.push(node);
-		} else if (node_kind === "array") {
-			elements = node.elements ?? [];
-			for (let elem of elements) {
-				parts = elem.parts ?? [];
-				for (let p of parts) {
-					if ((p.kind ?? null) === "procsub") {
+		} else if (node instanceof ArrayNode) {
+			for (let elem of node.elements) {
+				for (let p of elem.parts) {
+					if (p instanceof ProcessSubstitution) {
 						result.push(p);
 					} else {
 						result.push(...this._collectProcsubs(p));
@@ -3569,6 +3552,7 @@ class Word extends Node {
 	_formatCommandSubstitutions(value, in_arith = false) {
 		let brace_quote,
 			c,
+			cmdsub_node,
 			compact,
 			depth,
 			direction,
@@ -3841,11 +3825,10 @@ class Word extends Node {
 				// Find matching close brace
 				j = _findFunsubEnd(value, i + 2);
 				// Check if we have a parsed node with brace=True
-				if (
-					cmdsub_idx < cmdsub_parts.length &&
-					(cmdsub_parts[cmdsub_idx].brace ?? false)
-				) {
-					node = cmdsub_parts[cmdsub_idx];
+				cmdsub_node =
+					cmdsub_idx < cmdsub_parts.length ? cmdsub_parts[cmdsub_idx] : null;
+				if (cmdsub_node instanceof CommandSubstitution && cmdsub_node.brace) {
+					node = cmdsub_node;
 					formatted = _formatCmdsubNode(node.command);
 					// Determine prefix: ${ or ${|
 					has_pipe = value[i + 2] === "|";
@@ -5609,16 +5592,15 @@ class ConditionalExpr extends Node {
 		let escaped, redirect_parts, redirect_sexps, result;
 		// bash-oracle format: (cond ...) not (cond-expr ...)
 		// Redirects are siblings, not children: (cond ...) (redirect ...)
-		const body_kind = this.body.kind ?? null;
-		if (body_kind == null) {
-			// body is a string
-			escaped = this.body
+		const body = this.body;
+		if (typeof body === "string") {
+			escaped = body
 				.replaceAll("\\", "\\\\")
 				.replaceAll('"', '\\"')
 				.replaceAll("\n", "\\n");
 			result = `(cond "${escaped}")`;
 		} else {
-			result = `(cond ${this.body.toSexp()})`;
+			result = `(cond ${body.toSexp()})`;
 		}
 		if (this.redirects?.length) {
 			redirect_parts = [];
@@ -7661,6 +7643,10 @@ class Parser {
 		this._at_command_start = false;
 		this._in_array_literal = false;
 		this._in_assign_builtin = false;
+		// Arithmetic expression parsing context (for nested parsing)
+		this._arith_src = "";
+		this._arith_pos = 0;
+		this._arith_len = 0;
 	}
 
 	_setState(flag) {
@@ -7858,7 +7844,7 @@ class Parser {
 		) {
 			return [t, tok.value];
 		}
-		return null;
+		return [0, ""];
 	}
 
 	_lexPeekReservedWord() {
@@ -8922,9 +8908,9 @@ class Parser {
 	_parseArithExpr(content) {
 		let result;
 		// Save any existing arith context (for nested parsing)
-		const saved_arith_src = this._arithSrc ?? null;
-		const saved_arith_pos = this._arithPos ?? null;
-		const saved_arith_len = this._arithLen ?? null;
+		const saved_arith_src = this._arith_src;
+		const saved_arith_pos = this._arith_pos;
+		const saved_arith_len = this._arith_len;
 		const saved_parser_state = this._parser_state;
 		this._setState(ParserStateFlags.PST_ARITH);
 		this._arith_src = content;
@@ -12343,7 +12329,7 @@ class Parser {
 	}
 
 	_parseSimplePipeline() {
-		let is_pipe_both, op, token_type, value;
+		let is_pipe_both, token_type, value;
 		let cmd = this.parseCompoundCommand();
 		if (cmd == null) {
 			return null;
@@ -12351,11 +12337,10 @@ class Parser {
 		const commands = [cmd];
 		while (true) {
 			this.skipWhitespace();
-			op = this._lexPeekOperator();
-			if (op == null) {
+			[token_type, value] = this._lexPeekOperator();
+			if (token_type === 0) {
 				break;
 			}
-			[token_type, value] = op;
 			if (token_type !== TokenType.PIPE && token_type !== TokenType.PIPE_AMP) {
 				break;
 			}
@@ -12380,11 +12365,10 @@ class Parser {
 
 	parseListOperator() {
 		this.skipWhitespace();
-		const op = this._lexPeekOperator();
-		if (op == null) {
+		const [token_type, _] = this._lexPeekOperator();
+		if (token_type === 0) {
 			return null;
 		}
-		const [token_type, value] = op;
 		if (token_type === TokenType.AND_AND) {
 			this._lexNextToken();
 			return "&&";

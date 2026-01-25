@@ -914,7 +914,12 @@ class JSTranspiler(ast.NodeVisitor):
                 )
             return f"Boolean({args})"
         if name == "isinstance":
-            return f"{self.visit_expr(node.args[0])} instanceof {self.visit_expr(node.args[1])}"
+            obj = self.visit_expr(node.args[0])
+            type_node = node.args[1]
+            # Handle isinstance(x, str) -> typeof x === "string"
+            if isinstance(type_node, ast.Name) and type_node.id == "str":
+                return f'typeof {obj} === "string"'
+            return f"{obj} instanceof {self.visit_expr(type_node)}"
         if name == "getattr":
             return self._handle_getattr(node)
         if name == "list":

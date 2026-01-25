@@ -23,7 +23,7 @@ test-cpy314 *ARGS: (_test "3.14" ARGS)
 test-pypy311 *ARGS: (_test "pypy3.11" ARGS)
 
 # Run tests (default: CPython 3.14)
-test *ARGS: (_test "3.14" ARGS)
+test *ARGS: check-style (_test "3.14" ARGS)
 
 # Verify test expectations match bash-oracle (skips if no binary available)
 verify-tests:
@@ -86,40 +86,26 @@ run-corpus *ARGS:
     tools/bash-oracle/src/oracle/run_corpus.py {{ARGS}}
 
 # Verify lock file is up to date
-lock-check:
-    uv lock --check 2>&1 | sed -u "s/^/[lock] /" | tee /tmp/{{project}}-{{run_id}}-lock.log
+verify-lock:
+    uv lock --check 2>&1 | sed -u "s/^/[verify-lock] /" | tee /tmp/{{project}}-{{run_id}}-verify-lock.log
 
 # Ensure biome is installed (prevents race condition in parallel JS checks)
 _ensure-biome:
     @npx -y @biomejs/biome --version >/dev/null 2>&1
 
+# Test oldest and newest Python versions (for quick checks)
+[parallel]
+test-bounds: test-cpy38 test-cpy314
+
 # Internal: run all parallel checks
 [parallel]
-_check-parallel: test-all lint fmt lock-check check-dump-ast check-style check-transpile test-js fmt-js fmt-dts check-dts
+_check-parallel: test-bounds lint fmt verify-lock check-dump-ast check-style verify-js verify-dts test-js fmt-js fmt-dts test-go
 
 # Run all checks (tests, lint, format, lock, style) in parallel
 check: _ensure-biome _check-parallel
 
-# Quick check: test, transpile, test-js
-quick-check: test transpile test-js
-
-# Run benchmarks, optionally comparing refs: bench [ref1] [ref2] [--fast]
-bench *ARGS:
-    #!/usr/bin/env bash
-    refs=()
-    flags=()
-    for arg in {{ARGS}}; do
-        if [[ "$arg" == --* ]]; then
-            flags+=("$arg")
-        else
-            refs+=("$arg")
-        fi
-    done
-    if [[ ${#refs[@]} -eq 0 ]]; then
-        PYTHONPATH=src uvx --with pyperf python bench/bench_parse.py "${flags[@]}"
-    else
-        uvx --with pyperf python bench/bench-compare.py "${refs[@]}" "${flags[@]}"
-    fi
+# Quick check: test, transpile-js, test-js
+quick-check: test transpile-js test-js
 
 # Lint (--fix to apply changes)
 lint *ARGS:
@@ -153,6 +139,7 @@ transpile-js output="src/parable.js":
     uv run --directory tools/transpiler transpiler --transpile-js "$(pwd)/src/parable.py" > "$js_out"
     npx -y @biomejs/biome format --write "$js_out" >/dev/null 2>&1
     npx -y @biomejs/biome format --write "$js_out" >/dev/null 2>&1
+    npx -y -p typescript tsc --noEmit
 
 # Generate TypeScript definitions from JavaScript
 transpile-dts input="src/parable.js" output="src/parable.d.ts" py_src="src/parable.py":
@@ -166,49 +153,78 @@ transpile-dts input="src/parable.js" output="src/parable.d.ts" py_src="src/parab
     [[ "$py_in" = /* ]] || py_in="$(pwd)/$py_in"
     uv run --directory tools/transpiler transpiler --transpile-dts "$js_in" "$py_in" > "$dts_out"
     npx -y @biomejs/biome format --write "$dts_out" >/dev/null 2>&1
+    npx -y -p typescript tsc --noEmit
 
-# Transpile Python to JavaScript and generate TypeScript definitions
-transpile: (transpile-js) (transpile-dts)
+# Transpile Python to Go
+transpile-go output="src/parable.go":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    go_out="{{output}}"
+    [[ "$go_out" = /* ]] || go_out="$(pwd)/$go_out"
+    uv run --directory tools/transpiler transpiler --transpile-go "$(pwd)/src/parable.py" > "$go_out"
+    gofmt -w "$go_out"
+    go build -C src -o /dev/null .
 
-# Check that parable.js and parable.d.ts are up-to-date with transpiler output
-check-transpile:
+# Verify parable.js is up-to-date with transpiler output
+verify-js:
+    @just transpile-js /tmp/{{project}}-{{run_id}}-transpile.js && \
+    if diff -q src/parable.js /tmp/{{project}}-{{run_id}}-transpile.js >/dev/null 2>&1; then \
+        echo "[verify-js] OK"; \
+    else \
+        echo "[verify-js] FAIL: parable.js is out of date, run 'just transpile-js'" >&2; \
+        exit 1; \
+    fi
+
+# Verify parable.d.ts is up-to-date with transpiler output
+verify-dts:
     @just transpile-js /tmp/{{project}}-{{run_id}}-transpile.js && \
     just transpile-dts /tmp/{{project}}-{{run_id}}-transpile.js /tmp/{{project}}-{{run_id}}-transpile.d.ts && \
-    if diff -q src/parable.js /tmp/{{project}}-{{run_id}}-transpile.js >/dev/null 2>&1; then \
-        echo "[check-transpile-js] OK"; \
-    else \
-        echo "[check-transpile-js] FAIL: parable.js is out of date, run 'just transpile'" >&2; \
-        exit 1; \
-    fi && \
     if diff -q src/parable.d.ts /tmp/{{project}}-{{run_id}}-transpile.d.ts >/dev/null 2>&1; then \
-        echo "[check-transpile-dts] OK"; \
+        echo "[verify-dts] OK"; \
     else \
-        echo "[check-transpile-dts] FAIL: parable.d.ts is out of date, run 'just transpile'" >&2; \
+        echo "[verify-dts] FAIL: parable.d.ts is out of date, run 'just transpile-dts'" >&2; \
         exit 1; \
+    fi
+
+# Verify parable.go is up-to-date with transpiler output
+verify-go:
+    @just transpile-go /tmp/{{project}}-{{run_id}}-transpile.go && \
+    if diff -q src/parable.go /tmp/{{project}}-{{run_id}}-transpile.go >/dev/null 2>&1; then \
+        echo "[verify-go] OK"; \
+    else \
+        echo "[verify-go] FAIL: parable.go is out of date, run 'just transpile-go'" >&2; \
+        exit 1; \
+    fi
+
+# Build Go (verifies parable.go compiles)
+build-go:
+    go build -C src -o /dev/null .
+
+# Run Go tests
+test-go *ARGS: verify-go
+    go run -C src ./cmd/run-tests {{ARGS}}
+
+# Format Go (--fix to apply changes)
+fmt-go *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "{{ARGS}}" = "--fix" ]; then
+        gofmt -w src/parable.go
+        echo "[fmt-go] OK"
+    else
+        diff_output=$(gofmt -d src/parable.go)
+        if [ -z "$diff_output" ]; then
+            echo "[fmt-go] OK"
+        else
+            echo "[fmt-go] FAIL: src/parable.go needs formatting, run 'just fmt-go --fix'" >&2
+            echo "$diff_output" >&2
+            exit 1
+        fi
     fi
 
 # Run JavaScript tests
-test-js *ARGS: check-transpile
+test-js *ARGS: verify-js
     node tests/bin/run-js-tests.js {{ARGS}}
-
-# Run JS benchmarks, optionally comparing refs: bench-js [ref1] [ref2] [--fast]
-bench-js *ARGS:
-    #!/usr/bin/env bash
-    [[ -d bench/node_modules ]] || npm --prefix bench install
-    refs=()
-    flags=()
-    for arg in {{ARGS}}; do
-        if [[ "$arg" == --* ]]; then
-            flags+=("$arg")
-        else
-            refs+=("$arg")
-        fi
-    done
-    if [[ ${#refs[@]} -eq 0 ]]; then
-        node bench/bench_parse.js "${flags[@]}"
-    else
-        node bench/bench-compare.js "${refs[@]}" "${flags[@]}"
-    fi
 
 # Format JavaScript (--fix to apply changes)
 # Note: biome format is run twice due to https://github.com/biomejs/biome/issues/4383
@@ -220,6 +236,34 @@ fmt-js *ARGS:
 fmt-dts *ARGS:
     npx -y @biomejs/biome format {{ if ARGS == "--fix" { "--write" } else { "" } }} src/parable.d.ts 2>&1 | sed -u "s/^/[fmt-dts] /" | tee /tmp/{{project}}-{{run_id}}-fmt-dts.log
 
-# Type-check TypeScript definitions
-check-dts:
-    npx -y -p typescript tsc --noEmit 2>&1 | sed -u "s/^/[check-dts] /" | tee /tmp/{{project}}-{{run_id}}-check-dts.log
+# Benchmark test suite
+benchmark:
+    hyperfine --warmup 2 --runs ${RUNS:-5} 'uv run tests/bin/run-tests.py 2>&1'
+
+# Benchmark real corpus (requires ~/source/bigtable-bash)
+benchmark-corpus:
+    hyperfine --warmup 2 --runs ${RUNS:-5} 'uv run tools/bash-oracle/src/oracle/run_corpus.py 2>&1'
+
+# Profile on corpus (cProfile + flameprof)
+profile:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    uv run python -m cProfile -o /tmp/parable-profile.prof tools/bash-oracle/src/oracle/run_corpus.py --sequential --max-files 100
+    uv run python -c "import pstats, json; s = pstats.Stats('/tmp/parable-profile.prof'); s.strip_dirs(); data = [(f'{fn[0]}:{fn[1]}:{fn[2]}', {'calls': int(st[0]), 'tottime': st[2], 'cumtime': st[3]}) for fn, st in s.stats.items()]; data.sort(key=lambda x: -x[1]['tottime']); open('/tmp/parable-profile.json', 'w').write(json.dumps(dict(data[:100]), indent=2))"
+    uvx flameprof /tmp/parable-profile.prof -o /tmp/parable-flamegraph.svg
+    echo ""
+    echo "Output:"
+    echo "  JSON:  /tmp/parable-profile.json"
+    echo "  Image: /tmp/parable-flamegraph.svg"
+    open /tmp/parable-flamegraph.svg 2>/dev/null || true
+
+# Profile test suite instead of corpus
+profile-tests:
+    uv run python -m cProfile -s tottime tests/bin/run-tests.py 2>&1 | head -50 || true
+
+# Profile with scalene (line-level CPU + memory)
+profile-scalene:
+    uvx scalene run --profile-all --outfile /tmp/parable-scalene.json tools/bash-oracle/src/oracle/run_corpus.py --- --sequential --max-files 100 || true
+    @echo ""
+    @echo "Output: /tmp/parable-scalene.json"
+    uvx scalene view /tmp/parable-scalene.json

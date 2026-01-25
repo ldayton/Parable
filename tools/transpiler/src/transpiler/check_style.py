@@ -41,6 +41,8 @@ Banned constructions:
     yield                 yield x                   return list or use callback
     yield from            yield from iter           explicit loop
     zip                   for a, b in zip(x, y)     indexed loop
+    getattr               getattr(x, 'y', None)     direct attribute access
+    tuple from variable   a, b = op (op is var)     unpack directly: a, b = func()
 
 Required annotations (for Go/TS transpiler):
 
@@ -253,6 +255,19 @@ def check_file(filepath):
         if isinstance(node, ast.Call):
             if isinstance(node.func, ast.Name) and node.func.id == "hasattr":
                 errors.append((lineno, "hasattr: use explicit field check instead"))
+
+        # getattr
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name) and node.func.id == "getattr":
+                errors.append((lineno, "getattr: use direct attribute access instead"))
+
+        # tuple unpack from variable (Go can't store multi-return in single var)
+        # BAD:  op = func(); ...; a, b = op
+        # GOOD: a, b = func()  or  a, b = x, y
+        if isinstance(node, ast.Assign):
+            if len(node.targets) == 1 and isinstance(node.targets[0], ast.Tuple):
+                if isinstance(node.value, ast.Name):
+                    errors.append((lineno, "tuple unpack from variable: unpack directly from call instead"))
 
         # step slicing (basic slicing a[x:y] is allowed, step slicing a[::n] is not)
         if isinstance(node, ast.Subscript):

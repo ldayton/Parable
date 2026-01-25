@@ -23,7 +23,7 @@ test-cpy314 *ARGS: (_test "3.14" ARGS)
 test-pypy311 *ARGS: (_test "pypy3.11" ARGS)
 
 # Run tests (default: CPython 3.14)
-test *ARGS: (_test "3.14" ARGS)
+test *ARGS: check-style (_test "3.14" ARGS)
 
 # Verify test expectations match bash-oracle (skips if no binary available)
 verify-tests:

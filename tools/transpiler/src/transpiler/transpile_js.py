@@ -713,7 +713,12 @@ class JSTranspiler(ast.NodeVisitor):
                 # Use fromCodePoint for full unicode support (including > 0xFFFF)
                 return f"String.fromCodePoint({args})"
             if name == "isinstance":
-                return f"{node.args[0].id} instanceof {self.visit_expr(node.args[1])}"
+                obj = self.visit_expr(node.args[0])
+                type_node = node.args[1]
+                # Handle isinstance(x, str) -> typeof x === "string"
+                if isinstance(type_node, ast.Name) and type_node.id == "str":
+                    return f'typeof {obj} === "string"'
+                return f"{obj} instanceof {self.visit_expr(type_node)}"
             if name == "getattr":
                 obj = self.visit_expr(node.args[0])
                 attr_node = node.args[1]

@@ -847,7 +847,7 @@ class Lexer {
 		return true;
 	}
 
-	_parseMatchedPair(open_char, close_char, flags) {
+	_parseMatchedPair(open_char, close_char, flags, initial_was_dollar) {
 		let after_brace_pos,
 			arith_node,
 			arith_text,
@@ -872,11 +872,14 @@ class Lexer {
 		if (flags == null) {
 			flags = 0;
 		}
+		if (initial_was_dollar == null) {
+			initial_was_dollar = false;
+		}
 		start = this.pos;
 		count = 1;
 		chars = [];
 		pass_next = false;
-		was_dollar = false;
+		was_dollar = initial_was_dollar;
 		was_gtlt = false;
 		while (count > 0) {
 			if (this.atEnd()) {
@@ -1139,11 +1142,19 @@ class Lexer {
 		return chars.join("");
 	}
 
-	_collectParamArgument(flags) {
+	_collectParamArgument(flags, was_dollar) {
 		if (flags == null) {
 			flags = MatchedPairFlags.NONE;
 		}
-		return this._parseMatchedPair("{", "}", flags | MatchedPairFlags.DOLBRACE);
+		if (was_dollar == null) {
+			was_dollar = false;
+		}
+		return this._parseMatchedPair(
+			"{",
+			"}",
+			flags | MatchedPairFlags.DOLBRACE,
+			was_dollar,
+		);
 	}
 
 	_readWordInternal(
@@ -2129,6 +2140,7 @@ class Lexer {
 			next_c,
 			op,
 			param,
+			param_ends_with_dollar,
 			parsed,
 			saved_dolbrace,
 			sub_parser,
@@ -2305,9 +2317,11 @@ class Lexer {
 		// Update dolbrace state based on operator
 		this._updateDolbraceForOp(op, param.length > 0);
 		// Parse argument (everything until closing brace)
+		// Pass was_dollar=True if param ends with $ (for $$ handling in nested expansions)
 		try {
 			flags = in_dquote ? MatchedPairFlags.DQUOTE : MatchedPairFlags.NONE;
-			arg = this._collectParamArgument(flags);
+			param_ends_with_dollar = param != null && param.endsWith("$");
+			arg = this._collectParamArgument(flags, param_ends_with_dollar);
 		} catch (e) {
 			this._dolbrace_state = saved_dolbrace;
 			throw e;
@@ -2561,7 +2575,27 @@ class Word extends Node {
 		return result.join("");
 	}
 
-	_expandAnsiCEscapes(value) {
+	_shSingleQuote(s) {
+		let c, result;
+		if (!s) {
+			return "''";
+		}
+		if (s === "'") {
+			return "\\'";
+		}
+		result = ["'"];
+		for (c of s) {
+			if (c === "'") {
+				result.push("'\\''");
+			} else {
+				result.push(c);
+			}
+		}
+		result.push("'");
+		return result.join("");
+	}
+
+	_ansiCToBytes(inner) {
 		let byte_val,
 			c,
 			codepoint,
@@ -2569,33 +2603,24 @@ class Word extends Node {
 			ctrl_val,
 			hex_str,
 			i,
-			inner,
 			j,
 			result,
 			simple,
 			skip_extra;
-		if (!(value.startsWith("'") && value.endsWith("'"))) {
-			return value;
-		}
-		inner = value.slice(1, value.length - 1);
 		result = [];
 		i = 0;
 		while (i < inner.length) {
 			if (inner[i] === "\\" && i + 1 < inner.length) {
 				c = inner[i + 1];
-				// Check simple escapes first
 				simple = _getAnsiEscape(c);
 				if (simple >= 0) {
 					result.push(simple);
 					i += 2;
 				} else if (c === "'") {
-					// bash-oracle outputs \' as '\'' (shell quoting trick)
-					result.push(...[39, 92, 39, 39]);
+					result.push(39);
 					i += 2;
 				} else if (c === "x") {
-					// Check for \x{...} brace syntax (bash 5.3+)
 					if (i + 2 < inner.length && inner[i + 2] === "{") {
-						// Find closing brace or end of hex digits
 						j = i + 3;
 						while (j < inner.length && _isHexDigit(inner[j])) {
 							j += 1;
@@ -2604,18 +2629,16 @@ class Word extends Node {
 						if (j < inner.length && inner[j] === "}") {
 							j += 1;
 						}
-						// If no hex digits, treat as NUL (truncates)
 						if (!hex_str) {
-							return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+							return result;
 						}
 						byte_val = parseInt(hex_str, 16) & 255;
 						if (byte_val === 0) {
-							return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+							return result;
 						}
 						this._appendWithCtlesc(result, byte_val);
 						i = j;
 					} else {
-						// Hex escape \xHH (1-2 hex digits) - raw byte
 						j = i + 2;
 						while (j < inner.length && j < i + 4 && _isHexDigit(inner[j])) {
 							j += 1;
@@ -2623,8 +2646,7 @@ class Word extends Node {
 						if (j > i + 2) {
 							byte_val = parseInt(inner.slice(i + 2, j), 16);
 							if (byte_val === 0) {
-								// NUL truncates string
-								return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+								return result;
 							}
 							this._appendWithCtlesc(result, byte_val);
 							i = j;
@@ -2634,7 +2656,6 @@ class Word extends Node {
 						}
 					}
 				} else if (c === "u") {
-					// Unicode escape \uHHHH (1-4 hex digits) - encode as UTF-8
 					j = i + 2;
 					while (j < inner.length && j < i + 6 && _isHexDigit(inner[j])) {
 						j += 1;
@@ -2642,8 +2663,7 @@ class Word extends Node {
 					if (j > i + 2) {
 						codepoint = parseInt(inner.slice(i + 2, j), 16);
 						if (codepoint === 0) {
-							// NUL truncates string
-							return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+							return result;
 						}
 						result.push(
 							...Array.from(
@@ -2656,7 +2676,6 @@ class Word extends Node {
 						i += 1;
 					}
 				} else if (c === "U") {
-					// Unicode escape \UHHHHHHHH (1-8 hex digits) - encode as UTF-8
 					j = i + 2;
 					while (j < inner.length && j < i + 10 && _isHexDigit(inner[j])) {
 						j += 1;
@@ -2664,8 +2683,7 @@ class Word extends Node {
 					if (j > i + 2) {
 						codepoint = parseInt(inner.slice(i + 2, j), 16);
 						if (codepoint === 0) {
-							// NUL truncates string
-							return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+							return result;
 						}
 						result.push(
 							...Array.from(
@@ -2678,10 +2696,8 @@ class Word extends Node {
 						i += 1;
 					}
 				} else if (c === "c") {
-					// Control character \cX - mask with 0x1f
 					if (i + 3 <= inner.length) {
 						ctrl_char = inner[i + 2];
-						// POSIX: $'\c\\' consumes both backslashes
 						skip_extra = 0;
 						if (
 							ctrl_char === "\\" &&
@@ -2692,8 +2708,7 @@ class Word extends Node {
 						}
 						ctrl_val = ctrl_char.charCodeAt(0) & 31;
 						if (ctrl_val === 0) {
-							// NUL truncates string
-							return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+							return result;
 						}
 						this._appendWithCtlesc(result, ctrl_val);
 						i += 3 + skip_extra;
@@ -2702,7 +2717,6 @@ class Word extends Node {
 						i += 1;
 					}
 				} else if (c === "0") {
-					// Nul or octal \0 or \0NN (up to 3 digits total)
 					j = i + 2;
 					while (j < inner.length && j < i + 4 && _isOctalDigit(inner[j])) {
 						j += 1;
@@ -2710,30 +2724,25 @@ class Word extends Node {
 					if (j > i + 2) {
 						byte_val = parseInt(inner.slice(i + 1, j), 8) & 255;
 						if (byte_val === 0) {
-							// NUL truncates string
-							return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+							return result;
 						}
 						this._appendWithCtlesc(result, byte_val);
 						i = j;
 					} else {
-						// Just \0 - NUL truncates string
-						return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+						return result;
 					}
 				} else if (c >= "1" && c <= "7") {
-					// Octal escape \NNN (1-3 digits) - raw byte, wraps at 256
 					j = i + 1;
 					while (j < inner.length && j < i + 4 && _isOctalDigit(inner[j])) {
 						j += 1;
 					}
 					byte_val = parseInt(inner.slice(i + 1, j), 8) & 255;
 					if (byte_val === 0) {
-						// NUL truncates string
-						return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+						return result;
 					}
 					this._appendWithCtlesc(result, byte_val);
 					i = j;
 				} else {
-					// Unknown escape - preserve as-is
 					result.push(92);
 					result.push(c.charCodeAt(0));
 					i += 2;
@@ -2743,8 +2752,18 @@ class Word extends Node {
 				i += 1;
 			}
 		}
-		// Decode as UTF-8, replacing invalid sequences with U+FFFD
-		return `'${new TextDecoder().decode(new Uint8Array(result))}'`;
+		return result;
+	}
+
+	_expandAnsiCEscapes(value) {
+		let inner, literal_bytes, literal_str;
+		if (!(value.startsWith("'") && value.endsWith("'"))) {
+			return value;
+		}
+		inner = value.slice(1, value.length - 1);
+		literal_bytes = this._ansiCToBytes(inner);
+		literal_str = new TextDecoder().decode(new Uint8Array(literal_bytes));
+		return this._shSingleQuote(literal_str);
 	}
 
 	_expandAllAnsiCQuotes(value) {
@@ -3589,82 +3608,55 @@ class Word extends Node {
 	}
 
 	_collectCmdsubs(node) {
-		let condition,
-			elem,
-			elements,
-			expr,
-			false_value,
-			left,
-			node_kind,
-			operand,
-			p,
-			parts,
-			result,
-			right,
-			true_value;
+		let elem, p, result;
 		result = [];
-		node_kind = node.kind ?? null;
-		if (node_kind === "cmdsub") {
+		if (node instanceof CommandSubstitution) {
 			result.push(node);
-		} else if (node_kind === "array") {
-			// Array node - collect from each element's parts
-			elements = node.elements ?? [];
-			for (elem of elements) {
-				parts = elem.parts ?? [];
-				for (p of parts) {
-					if ((p.kind ?? null) === "cmdsub") {
+		} else if (node instanceof ArrayNode) {
+			for (elem of node.elements) {
+				for (p of elem.parts) {
+					if (p instanceof CommandSubstitution) {
 						result.push(p);
 					} else {
 						result.push(...this._collectCmdsubs(p));
 					}
 				}
 			}
-		} else {
-			expr = node.expression ?? null;
-			if (expr != null) {
-				// ArithmeticExpansion, ArithBinaryOp, etc.
-				result.push(...this._collectCmdsubs(expr));
+		} else if (node instanceof ArithmeticExpansion) {
+			if (node.expression != null) {
+				result.push(...this._collectCmdsubs(node.expression));
 			}
-		}
-		left = node.left ?? null;
-		if (left != null) {
-			result.push(...this._collectCmdsubs(left));
-		}
-		right = node.right ?? null;
-		if (right != null) {
-			result.push(...this._collectCmdsubs(right));
-		}
-		operand = node.operand ?? null;
-		if (operand != null) {
-			result.push(...this._collectCmdsubs(operand));
-		}
-		condition = node.condition ?? null;
-		if (condition != null) {
-			result.push(...this._collectCmdsubs(condition));
-		}
-		true_value = node.true_value ?? null;
-		if (true_value != null) {
-			result.push(...this._collectCmdsubs(true_value));
-		}
-		false_value = node.false_value ?? null;
-		if (false_value != null) {
-			result.push(...this._collectCmdsubs(false_value));
+		} else if (node instanceof ArithBinaryOp || node instanceof ArithComma) {
+			result.push(...this._collectCmdsubs(node.left));
+			result.push(...this._collectCmdsubs(node.right));
+		} else if (
+			node instanceof ArithUnaryOp ||
+			node instanceof ArithPreIncr ||
+			node instanceof ArithPostIncr ||
+			node instanceof ArithPreDecr ||
+			node instanceof ArithPostDecr
+		) {
+			result.push(...this._collectCmdsubs(node.operand));
+		} else if (node instanceof ArithTernary) {
+			result.push(...this._collectCmdsubs(node.condition));
+			result.push(...this._collectCmdsubs(node.if_true));
+			result.push(...this._collectCmdsubs(node.if_false));
+		} else if (node instanceof ArithAssign) {
+			result.push(...this._collectCmdsubs(node.target));
+			result.push(...this._collectCmdsubs(node.value));
 		}
 		return result;
 	}
 
 	_collectProcsubs(node) {
-		let elem, elements, node_kind, p, parts, result;
+		let elem, p, result;
 		result = [];
-		node_kind = node.kind ?? null;
-		if (node_kind === "procsub") {
+		if (node instanceof ProcessSubstitution) {
 			result.push(node);
-		} else if (node_kind === "array") {
-			elements = node.elements ?? [];
-			for (elem of elements) {
-				parts = elem.parts ?? [];
-				for (p of parts) {
-					if ((p.kind ?? null) === "procsub") {
+		} else if (node instanceof ArrayNode) {
+			for (elem of node.elements) {
+				for (p of elem.parts) {
+					if (p instanceof ProcessSubstitution) {
 						result.push(p);
 					} else {
 						result.push(...this._collectProcsubs(p));
@@ -3681,6 +3673,7 @@ class Word extends Node {
 			brace_quote,
 			c,
 			cmdsub_idx,
+			cmdsub_node,
 			cmdsub_parts,
 			compact,
 			deprecated_arith_depth,
@@ -3972,11 +3965,10 @@ class Word extends Node {
 				// Find matching close brace
 				j = _findFunsubEnd(value, i + 2);
 				// Check if we have a parsed node with brace=True
-				if (
-					cmdsub_idx < cmdsub_parts.length &&
-					(cmdsub_parts[cmdsub_idx].brace ?? false)
-				) {
-					node = cmdsub_parts[cmdsub_idx];
+				cmdsub_node =
+					cmdsub_idx < cmdsub_parts.length ? cmdsub_parts[cmdsub_idx] : null;
+				if (cmdsub_node instanceof CommandSubstitution && cmdsub_node.brace) {
+					node = cmdsub_node;
 					formatted = _formatCmdsubNode(node.command);
 					// Determine prefix: ${ or ${|
 					has_pipe = value[i + 2] === "|";
@@ -5843,19 +5835,18 @@ class ConditionalExpr extends Node {
 	}
 
 	toSexp() {
-		let body_kind, escaped, r, redirect_parts, redirect_sexps, result;
+		let body, escaped, r, redirect_parts, redirect_sexps, result;
 		// bash-oracle format: (cond ...) not (cond-expr ...)
 		// Redirects are siblings, not children: (cond ...) (redirect ...)
-		body_kind = this.body.kind ?? null;
-		if (body_kind == null) {
-			// body is a string
-			escaped = this.body
+		body = this.body;
+		if (typeof body === "string") {
+			escaped = body
 				.replaceAll("\\", "\\\\")
 				.replaceAll('"', '\\"')
 				.replaceAll("\n", "\\n");
 			result = `(cond "${escaped}")`;
 		} else {
-			result = `(cond ${this.body.toSexp()})`;
+			result = `(cond ${body.toSexp()})`;
 		}
 		if (this.redirects && this.redirects.length) {
 			redirect_parts = [];
@@ -7968,6 +7959,10 @@ class Parser {
 		this._at_command_start = false;
 		this._in_array_literal = false;
 		this._in_assign_builtin = false;
+		// Arithmetic expression parsing context (for nested parsing)
+		this._arith_src = "";
+		this._arith_pos = 0;
+		this._arith_len = 0;
 	}
 
 	_setState(flag) {
@@ -8170,7 +8165,7 @@ class Parser {
 		) {
 			return [t, tok.value];
 		}
-		return null;
+		return [0, ""];
 	}
 
 	_lexPeekReservedWord() {
@@ -9300,9 +9295,9 @@ class Parser {
 			saved_arith_src,
 			saved_parser_state;
 		// Save any existing arith context (for nested parsing)
-		saved_arith_src = this._arithSrc ?? null;
-		saved_arith_pos = this._arithPos ?? null;
-		saved_arith_len = this._arithLen ?? null;
+		saved_arith_src = this._arith_src;
+		saved_arith_pos = this._arith_pos;
+		saved_arith_len = this._arith_len;
 		saved_parser_state = this._parser_state;
 		this._setState(ParserStateFlags.PST_ARITH);
 		this._arith_src = content;
@@ -12776,7 +12771,7 @@ class Parser {
 	}
 
 	_parseSimplePipeline() {
-		let cmd, commands, is_pipe_both, op, token_type, value;
+		let cmd, commands, is_pipe_both, token_type, value;
 		cmd = this.parseCompoundCommand();
 		if (cmd == null) {
 			return null;
@@ -12784,11 +12779,10 @@ class Parser {
 		commands = [cmd];
 		while (true) {
 			this.skipWhitespace();
-			op = this._lexPeekOperator();
-			if (op == null) {
+			[token_type, value] = this._lexPeekOperator();
+			if (token_type === 0) {
 				break;
 			}
-			[token_type, value] = op;
 			if (token_type !== TokenType.PIPE && token_type !== TokenType.PIPE_AMP) {
 				break;
 			}
@@ -12812,13 +12806,12 @@ class Parser {
 	}
 
 	parseListOperator() {
-		let op, token_type, value;
+		let _, token_type;
 		this.skipWhitespace();
-		op = this._lexPeekOperator();
-		if (op == null) {
+		[token_type, _] = this._lexPeekOperator();
+		if (token_type === 0) {
 			return null;
 		}
-		[token_type, value] = op;
 		if (token_type === TokenType.AND_AND) {
 			this._lexNextToken();
 			return "&&";

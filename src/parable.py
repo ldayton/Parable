@@ -2993,57 +2993,42 @@ class Word(Node):
 
     def _collect_cmdsubs(self, node: Node) -> list[Node]:
         """Recursively collect CommandSubstitution nodes from an AST node."""
-        result = []
-        node_kind = getattr(node, "kind", None)
-        if node_kind == "cmdsub":
+        result: list[Node] = []
+        if isinstance(node, CommandSubstitution):
             result.append(node)
-        elif node_kind == "array":
-            # Array node - collect from each element's parts
-            elements = getattr(node, "elements", [])
-            for elem in elements:
-                parts = getattr(elem, "parts", [])
-                for p in parts:
-                    if getattr(p, "kind", None) == "cmdsub":
+        elif isinstance(node, Array):
+            for elem in node.elements:
+                for p in elem.parts:
+                    if isinstance(p, CommandSubstitution):
                         result.append(p)
                     else:
                         result.extend(self._collect_cmdsubs(p))
-        else:
-            expr = getattr(node, "expression", None)
-            if expr is not None:
-                # ArithmeticExpansion, ArithBinaryOp, etc.
-                result.extend(self._collect_cmdsubs(expr))
-        left = getattr(node, "left", None)
-        if left is not None:
-            result.extend(self._collect_cmdsubs(left))
-        right = getattr(node, "right", None)
-        if right is not None:
-            result.extend(self._collect_cmdsubs(right))
-        operand = getattr(node, "operand", None)
-        if operand is not None:
-            result.extend(self._collect_cmdsubs(operand))
-        condition = getattr(node, "condition", None)
-        if condition is not None:
-            result.extend(self._collect_cmdsubs(condition))
-        true_value = getattr(node, "true_value", None)
-        if true_value is not None:
-            result.extend(self._collect_cmdsubs(true_value))
-        false_value = getattr(node, "false_value", None)
-        if false_value is not None:
-            result.extend(self._collect_cmdsubs(false_value))
+        elif isinstance(node, ArithmeticExpansion):
+            if node.expression is not None:
+                result.extend(self._collect_cmdsubs(node.expression))
+        elif isinstance(node, ArithBinaryOp) or isinstance(node, ArithComma):
+            result.extend(self._collect_cmdsubs(node.left))
+            result.extend(self._collect_cmdsubs(node.right))
+        elif isinstance(node, ArithUnaryOp) or isinstance(node, ArithPreIncr) or isinstance(node, ArithPostIncr) or isinstance(node, ArithPreDecr) or isinstance(node, ArithPostDecr):
+            result.extend(self._collect_cmdsubs(node.operand))
+        elif isinstance(node, ArithTernary):
+            result.extend(self._collect_cmdsubs(node.condition))
+            result.extend(self._collect_cmdsubs(node.if_true))
+            result.extend(self._collect_cmdsubs(node.if_false))
+        elif isinstance(node, ArithAssign):
+            result.extend(self._collect_cmdsubs(node.target))
+            result.extend(self._collect_cmdsubs(node.value))
         return result
 
     def _collect_procsubs(self, node: Node) -> list[Node]:
         """Recursively collect ProcessSubstitution nodes from an AST node."""
-        result = []
-        node_kind = getattr(node, "kind", None)
-        if node_kind == "procsub":
+        result: list[Node] = []
+        if isinstance(node, ProcessSubstitution):
             result.append(node)
-        elif node_kind == "array":
-            elements = getattr(node, "elements", [])
-            for elem in elements:
-                parts = getattr(elem, "parts", [])
-                for p in parts:
-                    if getattr(p, "kind", None) == "procsub":
+        elif isinstance(node, Array):
+            for elem in node.elements:
+                for p in elem.parts:
+                    if isinstance(p, ProcessSubstitution):
                         result.append(p)
                     else:
                         result.extend(self._collect_procsubs(p))
@@ -3263,10 +3248,9 @@ class Word(Node):
                 # Find matching close brace
                 j = _find_funsub_end(value, i + 2)
                 # Check if we have a parsed node with brace=True
-                if cmdsub_idx < len(cmdsub_parts) and getattr(
-                    cmdsub_parts[cmdsub_idx], "brace", False
-                ):
-                    node = cmdsub_parts[cmdsub_idx]
+                cmdsub_node = cmdsub_parts[cmdsub_idx] if cmdsub_idx < len(cmdsub_parts) else None
+                if isinstance(cmdsub_node, CommandSubstitution) and cmdsub_node.brace:
+                    node = cmdsub_node
                     formatted = _format_cmdsub_node(node.command)
                     # Determine prefix: ${ or ${|
                     has_pipe = value[i + 2] == "|"
@@ -4963,13 +4947,12 @@ class ConditionalExpr(Node):
     def to_sexp(self) -> str:
         # bash-oracle format: (cond ...) not (cond-expr ...)
         # Redirects are siblings, not children: (cond ...) (redirect ...)
-        body_kind = getattr(self.body, "kind", None)
-        if body_kind is None:
-            # body is a string
-            escaped = self.body.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+        body = self.body
+        if isinstance(body, str):
+            escaped = body.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
             result = '(cond "' + escaped + '")'
         else:
-            result = "(cond " + self.body.to_sexp() + ")"
+            result = "(cond " + body.to_sexp() + ")"
         if self.redirects:
             redirect_parts = []
             for r in self.redirects:
@@ -6735,6 +6718,10 @@ class Parser:
         self._at_command_start = False
         self._in_array_literal = False
         self._in_assign_builtin = False
+        # Arithmetic expression parsing context (for nested parsing)
+        self._arith_src: str = ""
+        self._arith_pos: int = 0
+        self._arith_len: int = 0
 
     def _set_state(self, flag: int) -> None:
         """Set a parser state flag."""
@@ -6929,8 +6916,8 @@ class Parser:
             TokenType.AMP,
         )
 
-    def _lex_peek_operator(self) -> tuple[int, str] | None:
-        """Peek operator token. Returns (token_type, value) or None."""
+    def _lex_peek_operator(self) -> tuple[int, str]:
+        """Peek operator token. Returns (token_type, value) or (0, "") if not an operator."""
         tok = self._lex_peek_token()
         t = tok.type
         # Single-char operators: SEMI(10) through GREATER(18)
@@ -6939,7 +6926,7 @@ class Parser:
             t >= TokenType.AND_AND and t <= TokenType.PIPE_AMP
         ):
             return (t, tok.value)
-        return None
+        return (0, "")
 
     def _lex_peek_reserved_word(self) -> str | None:
         """Peek reserved word. Returns word value if reserved, None otherwise."""
@@ -7888,9 +7875,9 @@ class Parser:
     def _parse_arith_expr(self, content: str) -> Node | None:
         """Parse an arithmetic expression string into AST nodes."""
         # Save any existing arith context (for nested parsing)
-        saved_arith_src = getattr(self, "_arith_src", None)
-        saved_arith_pos = getattr(self, "_arith_pos", None)
-        saved_arith_len = getattr(self, "_arith_len", None)
+        saved_arith_src = self._arith_src
+        saved_arith_pos = self._arith_pos
+        saved_arith_len = self._arith_len
         saved_parser_state = self._parser_state
 
         self._set_state(ParserStateFlags.PST_ARITH)
@@ -10746,10 +10733,9 @@ class Parser:
 
         while True:
             self.skip_whitespace()
-            op = self._lex_peek_operator()
-            if op is None:
+            token_type, value = self._lex_peek_operator()
+            if token_type == 0:
                 break
-            token_type, value = op
             if token_type != TokenType.PIPE and token_type != TokenType.PIPE_AMP:
                 break
 
@@ -10774,10 +10760,9 @@ class Parser:
     def parse_list_operator(self) -> str | None:
         """Parse a list operator (&&, ||, ;, &)."""
         self.skip_whitespace()
-        op = self._lex_peek_operator()
-        if op is None:
+        token_type, _ = self._lex_peek_operator()
+        if token_type == 0:
             return None
-        token_type, value = op
         if token_type == TokenType.AND_AND:
             self._lex_next_token()
             return "&&"

@@ -10517,7 +10517,86 @@ func (p *Parser) ParseListUntil(stopWords map[string]struct{}) Node {
 }
 
 func (p *Parser) ParseCompoundCommand() Node {
-	panic("TODO: method needs manual implementation")
+	var ch string
+	_ = ch
+	var result Node
+	_ = result
+	var reserved string
+	_ = reserved
+	var word string
+	_ = word
+	var keywordWord string
+	_ = keywordWord
+	var fn *Function
+	_ = fn
+	p.SkipWhitespace()
+	if p.AtEnd() {
+		return nil
+	}
+	ch = p.Peek()
+	if ch == "(" && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "(" {
+		result = p.ParseArithmeticCommand()
+		if result != nil {
+			return result
+		}
+	}
+	if ch == "(" {
+		return p.ParseSubshell()
+	}
+	if ch == "{" {
+		result = p.ParseBraceGroup()
+		if result != nil {
+			return result
+		}
+	}
+	if ch == "[" && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "[" {
+		result = p.ParseConditionalExpr()
+		if result != nil {
+			return result
+		}
+	}
+	reserved = p._LexPeekReservedWord()
+	if reserved == "" && p._In_process_sub {
+		word = p.PeekWord()
+		if word != "" && len(word) > 1 && string(word[0]) == "}" {
+			keywordWord = word[1:]
+			if ReservedWords[keywordWord] || _containsAny([]interface{}{"{", "}", "[[", "]]", "!", "time"}, keywordWord) {
+				reserved = keywordWord
+			}
+		}
+	}
+	if _containsAny([]interface{}{"fi", "then", "elif", "else", "done", "esac", "do", "in"}, reserved) {
+		panic(NewParseError(fmt.Sprintf("Unexpected reserved word '%v'", reserved), p._LexPeekToken().Pos, 0))
+	}
+	if reserved == "if" {
+		return p.ParseIf()
+	}
+	if reserved == "while" {
+		return p.ParseWhile()
+	}
+	if reserved == "until" {
+		return p.ParseUntil()
+	}
+	if reserved == "for" {
+		return p.ParseFor()
+	}
+	if reserved == "select" {
+		return p.ParseSelect()
+	}
+	if reserved == "case" {
+		return p.ParseCase()
+	}
+	if reserved == "function" {
+		return p.ParseFunction()
+	}
+	if reserved == "coproc" {
+		return p.ParseCoproc()
+	}
+	fn = p.ParseFunction()
+	if fn != nil {
+		return fn
+	}
+	return p.ParseCommand()
 }
 
 func (p *Parser) ParsePipeline() Node {

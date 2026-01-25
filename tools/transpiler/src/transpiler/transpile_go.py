@@ -1162,7 +1162,6 @@ class GoTranspiler(ast.NodeVisitor):
         "_gather_heredoc_bodies",
         "_parse_heredoc",
         "_parse_heredoc_delimiter",
-        "parse_compound_command",
         "parse_list",
         "parse",
         # Tuple stack in local variable (heredoc tracking)
@@ -2846,12 +2845,15 @@ class GoTranspiler(ast.NodeVisitor):
         # Slice expression - preserves the slice type
         if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Slice):
             # parts[0:i] where parts is []Node -> []Node
+            # word[1:] where word is string -> string
             if isinstance(node.value, ast.Name):
                 var_name = self._snake_to_camel(node.value.id)
                 var_name = self._safe_go_name(var_name)
                 var_type = self.var_types.get(var_name, "")
                 if var_type.startswith("[]"):
                     return var_type  # []Node -> []Node (slicing preserves type)
+                if var_type == "string":
+                    return "string"  # string[1:] -> string
         # Subscript - infer element type from collection type
         if isinstance(node, ast.Subscript) and not isinstance(node.slice, ast.Slice):
             # Get the collection type

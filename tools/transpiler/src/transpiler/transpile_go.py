@@ -1385,6 +1385,14 @@ class GoTranspiler(ast.NodeVisitor):
                     emitted_any = True
                     skip_until = i + len(isinstance_chain)
                     continue
+            # Check for assign-then-check-return pattern (typed-nil fix)
+            assign_check = self._detect_assign_check_return(stmts, i)
+            if assign_check:
+                var_name, method_call, return_type = assign_check
+                self._emit_assign_check_return(var_name, method_call, return_type)
+                emitted_any = True
+                skip_until = i + 2  # Skip both statements
+                continue
             try:
                 self._emit_stmt(stmt)
                 emitted_any = True
@@ -5036,6 +5044,103 @@ class GoTranspiler(ast.NodeVisitor):
                 break
             result.append((stmt, info[0], info[1]))
         return result
+
+    def _detect_assign_check_return(
+        self, stmts: list[ast.stmt], idx: int
+    ) -> tuple[str, ast.Call, str] | None:
+        """Detect pattern: result = self.method(); if result: return result
+        Returns (var_name, method_call, return_type) or None.
+        This pattern causes typed-nil issues when method returns concrete type
+        but variable is interface type."""
+        if idx + 1 >= len(stmts):
+            return None
+        # First statement must be: result = self.method()
+        assign = stmts[idx]
+        if not isinstance(assign, ast.Assign):
+            return None
+        if len(assign.targets) != 1:
+            return None
+        target = assign.targets[0]
+        if not isinstance(target, ast.Name):
+            return None
+        var_name = target.id
+        # RHS must be a method call
+        if not isinstance(assign.value, ast.Call):
+            return None
+        call = assign.value
+        if not isinstance(call.func, ast.Attribute):
+            return None
+        if not isinstance(call.func.value, ast.Name) or call.func.value.id != "self":
+            return None
+        method_name = call.func.attr
+        # Check if this method returns a concrete pointer type
+        return_type = self._get_method_return_type(method_name)
+        if not return_type or not return_type.startswith("*"):
+            return None
+        # Variable must be interface type (Node)
+        go_var = self._snake_to_camel(var_name)
+        go_var = self._safe_go_name(go_var)
+        var_type = self.var_types.get(go_var, "")
+        if var_type != "Node":
+            return None
+        # Second statement must be: if result: return result
+        if_stmt = stmts[idx + 1]
+        if not isinstance(if_stmt, ast.If):
+            return None
+        # Test must be just the variable name (truthy check)
+        if not isinstance(if_stmt.test, ast.Name) or if_stmt.test.id != var_name:
+            return None
+        # Body must be single return statement returning the same variable
+        if len(if_stmt.body) != 1:
+            return None
+        ret = if_stmt.body[0]
+        if not isinstance(ret, ast.Return) or not isinstance(ret.value, ast.Name):
+            return None
+        if ret.value.id != var_name:
+            return None
+        # Must not have else clause
+        if if_stmt.orelse:
+            return None
+        return (var_name, call, return_type)
+
+    def _get_method_return_type(self, method_name: str) -> str | None:
+        """Get the return type of a method if it's a concrete pointer type."""
+        # Parser methods that return concrete types
+        parser_methods = {
+            "parse_brace_group": "*BraceGroup",
+            "parse_subshell": "*Subshell",
+            "parse_if": "*If",
+            "parse_while": "*While",
+            "parse_until": "*Until",
+            "parse_for": "*For",
+            "parse_select": "*Select",
+            "parse_case": "*Case",
+            "parse_function": "*Function",
+            "parse_coproc": "*Coproc",
+            "parse_arithmetic_command": "*ArithmeticCommand",
+            "parse_conditional_expr": "*ConditionalExpr",
+            "parse_comment": "*Comment",
+        }
+        return parser_methods.get(method_name)
+
+    def _emit_assign_check_return(
+        self, var_name: str, method_call: ast.Call, return_type: str
+    ):
+        """Emit pattern: if tmp := method(); tmp != nil { return tmp }
+        This avoids typed-nil interface issues."""
+        go_var = self._snake_to_camel(var_name)
+        go_var = self._safe_go_name(go_var)
+        # Generate the method call expression
+        call_expr = self.visit_expr(method_call)
+        # Use a short temp variable name
+        tmp_var = go_var[0].lower() + "Tmp"
+        if tmp_var == go_var:
+            tmp_var = go_var + "Tmp"
+        self.emit(f"if {tmp_var} := {call_expr}; {tmp_var} != nil {{")
+        self.indent += 1
+        self.emit(f"return {tmp_var}")
+        self.indent -= 1
+        self.emit("}")
 
     def _emit_type_switch(
         self, var_name: str, cases: list[tuple[ast.If, str, str]]

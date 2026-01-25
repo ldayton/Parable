@@ -10620,9 +10620,8 @@ func (p *Parser) ParseFunction() *Function {
 func (p *Parser) _ParseCompoundCommand() Node {
 	var result Node
 	_ = result
-	result = p.ParseBraceGroup()
-	if result != nil {
-		return result
+	if rTmp := p.ParseBraceGroup(); rTmp != nil {
+		return rTmp
 	}
 	if !(p.AtEnd()) && p.Peek() == "(" && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "(" {
 		result = p.ParseArithmeticCommand()
@@ -10630,37 +10629,29 @@ func (p *Parser) _ParseCompoundCommand() Node {
 			return result
 		}
 	}
-	result = p.ParseSubshell()
-	if result != nil {
-		return result
+	if rTmp := p.ParseSubshell(); rTmp != nil {
+		return rTmp
 	}
-	result = p.ParseConditionalExpr()
-	if result != nil {
-		return result
+	if rTmp := p.ParseConditionalExpr(); rTmp != nil {
+		return rTmp
 	}
-	result = p.ParseIf()
-	if result != nil {
-		return result
+	if rTmp := p.ParseIf(); rTmp != nil {
+		return rTmp
 	}
-	result = p.ParseWhile()
-	if result != nil {
-		return result
+	if rTmp := p.ParseWhile(); rTmp != nil {
+		return rTmp
 	}
-	result = p.ParseUntil()
-	if result != nil {
-		return result
+	if rTmp := p.ParseUntil(); rTmp != nil {
+		return rTmp
 	}
-	result = p.ParseFor()
-	if result != nil {
-		return result
+	if rTmp := p.ParseFor(); rTmp != nil {
+		return rTmp
 	}
-	result = p.ParseCase()
-	if result != nil {
-		return result
+	if rTmp := p.ParseCase(); rTmp != nil {
+		return rTmp
 	}
-	result = p.ParseSelect()
-	if result != nil {
-		return result
+	if rTmp := p.ParseSelect(); rTmp != nil {
+		return rTmp
 	}
 	return nil
 }

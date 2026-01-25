@@ -2206,7 +2206,7 @@ class GoTranspiler(ast.NodeVisitor):
         t.emit('op = "<<"')
         t.indent -= 1
         t.emit("}")
-        t.emit("if h.Fd != 0 {")
+        t.emit("if h.Fd > 0 {")
         t.indent += 1
         t.emit("op = strconv.Itoa(h.Fd) + op")
         t.indent -= 1

@@ -7123,7 +7123,35 @@ class GoTranspiler(ast.NodeVisitor):
             else:
                 self.var_types.pop(switch_var, None)
             self.indent -= 1
+        # Check if the last isinstance has an else branch that doesn't contain more isinstance checks
+        # This handles patterns like: if isinstance(body, str): ... else: body.to_sexp()
+        last_stmt = cases[-1][0]
+        if last_stmt.orelse and not self._else_contains_isinstance(last_stmt.orelse, cases[0][1]):
+            self.emit("default:")
+            self.indent += 1
+            # In the default case, the switch variable still holds the value but with interface{} type
+            old_switch_var = self._type_switch_var
+            self._type_switch_var = (go_var, switch_var)
+            try:
+                for s in last_stmt.orelse:
+                    self._emit_stmt(s)
+            except NotImplementedError:
+                self.emit('panic("TODO: incomplete implementation")')
+            self._type_switch_var = old_switch_var
+            self.indent -= 1
         self.emit("}")
+
+    def _else_contains_isinstance(self, stmts: list[ast.stmt], var_name: str) -> bool:
+        """Check if else branch contains isinstance checks on the same variable."""
+        for stmt in stmts:
+            if isinstance(stmt, ast.If):
+                info = self._detect_isinstance_if(stmt.test)
+                if info and info[0] == var_name:
+                    return True
+                # Recursively check elif/else branches
+                if stmt.orelse and self._else_contains_isinstance(stmt.orelse, var_name):
+                    return True
+        return False
 
     def _emit_getattr(self, args: list[str]) -> str:
         """Emit getattr call."""

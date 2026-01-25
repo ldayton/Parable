@@ -1,6 +1,6 @@
 # Fuzzer Agent
 
-Strands SDK agent that autonomously finds and fixes fuzzer bugs.
+Autonomous agent that finds and fixes fuzzer bugs. Supports Strands SDK or Claude Agent SDK.
 
 ```
 usage: fuzzer-agent [-h] [--model MODEL] [--prices]

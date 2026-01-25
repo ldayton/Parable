@@ -2,10 +2,32 @@
 """Transpile parable.py's restricted Python subset to Go."""
 
 import ast
+import shutil
+import subprocess
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+
+
+@dataclass
+class ScopeInfo:
+    """Information about a scope in the scope tree."""
+
+    id: int
+    parent: int | None  # None for function scope (root)
+    depth: int  # 0 for function scope
+
+
+@dataclass
+class VarInfo:
+    """Information about a variable's usage across scopes."""
+
+    name: str
+    go_type: str
+    assign_scopes: set[int] = field(default_factory=set)  # All scope IDs where assigned
+    read_scopes: set[int] = field(default_factory=set)  # Scope IDs where read
+    first_value: "ast.expr | None" = None  # First assigned value (for type inference)
 
 
 @dataclass
@@ -139,6 +161,12 @@ class GoTranspiler(ast.NodeVisitor):
             None  # (original_var, switch_var) during type switch
         )
         self._type_switch_type: str | None = None  # Current narrowed type in type switch case
+        # Scope tracking for idiomatic variable declarations
+        self.scope_tree: dict[int, ScopeInfo] = {}
+        self.next_scope_id: int = 0
+        self.var_usage: dict[str, VarInfo] = {}
+        self.hoisted_vars: dict[str, int] = {}  # var -> scope_id to declare at
+        self.scope_id_map: dict[int, int] = {}  # AST node id -> scope_id (for emission phase)
 
     def emit(self, text: str):
         """Emit a line of Go code at the current indentation level."""
@@ -3280,6 +3308,12 @@ class GoTranspiler(ast.NodeVisitor):
         self.tuple_vars = {}  # Reset tuple variable tracking
         self.returned_vars = set()  # Reset returned variable tracking
         self.var_assign_sources: dict[str, str] = {}  # Track assignment sources for type inference
+        # Reset scope tracking
+        self.scope_tree = {0: ScopeInfo(0, None, 0)}
+        self.next_scope_id = 1
+        self.var_usage = {}
+        self.hoisted_vars = {}
+        self.scope_id_map = {}
         # Track return type for nil → zero value conversion
         self.current_return_type = func_info.return_type if func_info else ""
         if func_info:
@@ -3289,9 +3323,17 @@ class GoTranspiler(ast.NodeVisitor):
                 self.var_types[go_name] = p.go_type
         # Pre-pass: analyze variable types from usage
         self._analyze_var_types(stmts)
-        # Pre-declare ALL local variables at function top (C-style)
-        # This avoids Go's block-scoping issues entirely
-        self._predeclare_all_locals(stmts)
+        # Collect variable scopes and compute hoisting
+        self._collect_var_scopes(stmts, scope_id=0)
+        self._compute_hoisting()
+        # Exclude variables that are only used in assign-check-return patterns
+        # (these get rewritten to if tmp := ...; tmp != nil { return tmp })
+        self._exclude_assign_check_return_vars(stmts)
+        # Populate var_types with append element types for all vars (not just hoisted)
+        # This ensures inline := declarations get correct types for empty list init
+        self._populate_var_types_from_usage(stmts)
+        # Emit hoisted declarations for function scope (scope 0)
+        self._emit_hoisted_vars(0, stmts)
         # Pre-scan for variables used in return statements (needed for tuple passthrough)
         self._scan_returned_vars(stmts)
         # Emit all statements
@@ -3641,6 +3683,416 @@ class GoTranspiler(ast.NodeVisitor):
             if method in ("find", "rfind", "index"):
                 return "int"
         return ""
+
+    # ========== Scope-Aware Variable Declaration ==========
+
+    def _new_scope(self, parent: int) -> int:
+        """Create a new scope as a child of parent."""
+        scope_id = self.next_scope_id
+        self.next_scope_id += 1
+        parent_depth = self.scope_tree[parent].depth if parent in self.scope_tree else -1
+        self.scope_tree[scope_id] = ScopeInfo(scope_id, parent, parent_depth + 1)
+        return scope_id
+
+    def _is_ancestor(self, ancestor: int, descendant: int) -> bool:
+        """True if ancestor is a proper ancestor of descendant."""
+        current = self.scope_tree[descendant].parent
+        while current is not None:
+            if current == ancestor:
+                return True
+            current = self.scope_tree[current].parent
+        return False
+
+    def _is_ancestor_or_equal(self, ancestor: int, descendant: int) -> bool:
+        """True if ancestor is an ancestor of or equal to descendant."""
+        return ancestor == descendant or self._is_ancestor(ancestor, descendant)
+
+    def _compute_lca(self, scope_ids: set[int]) -> int:
+        """Compute lowest common ancestor of a set of scopes."""
+        if len(scope_ids) == 1:
+            return next(iter(scope_ids))
+
+        def ancestors(s: int) -> set[int]:
+            result = {s}
+            current = self.scope_tree[s].parent
+            while current is not None:
+                result.add(current)
+                current = self.scope_tree[current].parent
+            return result
+
+        common = ancestors(next(iter(scope_ids)))
+        for s in scope_ids:
+            common &= ancestors(s)
+        # Return deepest common ancestor
+        return max(common, key=lambda s: self.scope_tree[s].depth)
+
+    def _needs_hoisting(self, var_info: VarInfo) -> tuple[bool, int | None]:
+        """Determine if a variable needs hoisting and to which scope."""
+        if not var_info.assign_scopes:
+            return (False, None)
+        all_scopes = var_info.assign_scopes | var_info.read_scopes
+        if not all_scopes:
+            return (False, None)
+        lca = self._compute_lca(all_scopes)
+        # Case 1: Assignments in sibling/divergent branches (e.g., if/else)
+        # Must hoist if LCA is not one of the assignment scopes
+        if lca not in var_info.assign_scopes:
+            return (True, lca)
+        # Case 2: Assignment in inner scope, read in outer scope
+        for assign_scope in var_info.assign_scopes:
+            for read_scope in var_info.read_scopes:
+                if not self._is_ancestor_or_equal(assign_scope, read_scope):
+                    return (True, lca)
+        # Case 3: Multiple assignments where inner would shadow outer
+        if len(var_info.assign_scopes) > 1:
+            min_scope = min(var_info.assign_scopes, key=lambda s: self.scope_tree[s].depth)
+            for scope in var_info.assign_scopes:
+                if scope != min_scope and not self._is_ancestor(min_scope, scope):
+                    return (True, lca)
+        return (False, None)
+
+    def _record_var_assign(self, var: str, scope_id: int, value: ast.expr | None):
+        """Record a variable assignment at a scope."""
+        if var not in self.var_usage:
+            self.var_usage[var] = VarInfo(var, "")
+        self.var_usage[var].assign_scopes.add(scope_id)
+        # Infer type from first assignment
+        if not self.var_usage[var].go_type and value:
+            self.var_usage[var].first_value = value
+
+    def _record_var_read(self, var: str, scope_id: int):
+        """Record a variable read at a scope."""
+        if var not in self.var_usage:
+            self.var_usage[var] = VarInfo(var, "")
+        self.var_usage[var].read_scopes.add(scope_id)
+
+    def _collect_var_scopes(self, stmts: list[ast.stmt], scope_id: int):
+        """Collect variable assignment/read scopes recursively."""
+        for stmt in stmts:
+            # Store scope mapping for emission phase
+            self.scope_id_map[id(stmt)] = scope_id
+            if isinstance(stmt, ast.Assign):
+                for target in stmt.targets:
+                    if isinstance(target, ast.Name):
+                        # For tuple-returning function calls, collect synthetic vars
+                        if isinstance(stmt.value, ast.Call):
+                            ret_info = self._get_return_type_info(stmt.value)
+                            if ret_info and len(ret_info) > 1:
+                                var_name = self._snake_to_camel(target.id)
+                                var_name = self._safe_go_name(var_name)
+                                for i, elem_type in enumerate(ret_info):
+                                    synth_name = f"{var_name}{i}"
+                                    self._record_var_assign(synth_name, scope_id, None)
+                                    self.var_types[synth_name] = elem_type
+                                continue
+                        var_name = self._snake_to_camel(target.id)
+                        var_name = self._safe_go_name(var_name)
+                        self._record_var_assign(var_name, scope_id, stmt.value)
+                        # Infer type while we have context
+                        expr_type = self._infer_type_from_expr(stmt.value)
+                        if expr_type and expr_type not in ("interface{}", "[]interface{}"):
+                            if var_name not in self.var_types or self.var_types[var_name] in (
+                                "interface{}",
+                                "[]interface{}",
+                            ):
+                                self.var_types[var_name] = expr_type
+                    # Tuple targets use := (handled separately)
+            elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
+                var_name = self._snake_to_camel(stmt.target.id)
+                var_name = self._safe_go_name(var_name)
+                self._record_var_assign(var_name, scope_id, stmt.value)
+            elif isinstance(stmt, ast.If):
+                # Check for isinstance pattern to narrow type during collection
+                isinstance_info = self._detect_isinstance_if(stmt.test)
+                then_scope = self._new_scope(parent=scope_id)
+                if isinstance_info:
+                    var_py, type_name = isinstance_info
+                    var_go = self._snake_to_camel(var_py)
+                    var_go = self._safe_go_name(var_go)
+                    old_type = self.var_types.get(var_go)
+                    self.var_types[var_go] = f"*{type_name}"
+                    self._collect_var_scopes(stmt.body, then_scope)
+                    if old_type is not None:
+                        self.var_types[var_go] = old_type
+                    else:
+                        self.var_types.pop(var_go, None)
+                else:
+                    self._collect_var_scopes(stmt.body, then_scope)
+                if stmt.orelse:
+                    else_scope = self._new_scope(parent=scope_id)
+                    self._collect_var_scopes(stmt.orelse, else_scope)
+            elif isinstance(stmt, ast.While):
+                body_scope = self._new_scope(parent=scope_id)
+                self._collect_var_scopes(stmt.body, body_scope)
+            elif isinstance(stmt, ast.For):
+                # Loop var handled by range syntax, just recurse
+                body_scope = self._new_scope(parent=scope_id)
+                self._collect_var_scopes(stmt.body, body_scope)
+            elif isinstance(stmt, ast.With):
+                # Collect with-item variables
+                for item in stmt.items:
+                    if item.optional_vars and isinstance(item.optional_vars, ast.Name):
+                        var_name = self._snake_to_camel(item.optional_vars.id)
+                        var_name = self._safe_go_name(var_name)
+                        self._record_var_assign(var_name, scope_id, None)
+                body_scope = self._new_scope(parent=scope_id)
+                self._collect_var_scopes(stmt.body, body_scope)
+            elif isinstance(stmt, ast.Try):
+                body_scope = self._new_scope(parent=scope_id)
+                self._collect_var_scopes(stmt.body, body_scope)
+                # Track exception handler variable names to exclude from read collection
+                # (Go uses recover() pattern, not exception variables)
+                except_vars: set[str] = set()
+                for handler in stmt.handlers:
+                    handler_scope = self._new_scope(parent=scope_id)
+                    if handler.name:
+                        var_name = self._snake_to_camel(handler.name)
+                        var_name = self._safe_go_name(var_name)
+                        except_vars.add(var_name)
+                        # Don't record the exception variable - Go uses recover() pattern
+                    self._collect_var_scopes(handler.body, handler_scope)
+                # Remove exception vars from read tracking (they become 'r' in Go)
+                for var in except_vars:
+                    if var in self.var_usage:
+                        self.var_usage[var].read_scopes.clear()
+                        self.var_usage[var].assign_scopes.clear()
+                if stmt.orelse:
+                    else_scope = self._new_scope(parent=scope_id)
+                    self._collect_var_scopes(stmt.orelse, else_scope)
+                if stmt.finalbody:
+                    finally_scope = self._new_scope(parent=scope_id)
+                    self._collect_var_scopes(stmt.finalbody, finally_scope)
+            # Collect reads from all expressions in this statement
+            self._collect_reads_in_scope(stmt, scope_id)
+
+    def _collect_reads_in_scope(self, node: ast.AST, scope_id: int):
+        """Collect variable reads from any AST node."""
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+            var_name = self._snake_to_camel(node.id)
+            var_name = self._safe_go_name(var_name)
+            self._record_var_read(var_name, scope_id)
+        # Handle tuple element access: result[0] -> result0
+        elif isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name):
+            if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, int):
+                var_name = self._snake_to_camel(node.value.id)
+                var_name = self._safe_go_name(var_name)
+                self._record_var_read(f"{var_name}{node.slice.value}", scope_id)
+        for child in ast.iter_child_nodes(node):
+            self._collect_reads_in_scope(child, scope_id)
+
+    def _compute_hoisting(self):
+        """Determine which vars need hoisting vs inline :="""
+        # Collect all reads first to filter unused vars
+        reads: set[str] = set()
+        for var, info in self.var_usage.items():
+            if info.read_scopes:
+                reads.add(var)
+        # Collect append types and nullable vars for type inference
+        # (These require the full statement list, so we reuse existing methods)
+        for var, info in self.var_usage.items():
+            if var not in reads:
+                continue  # Skip unused vars
+            needs_hoist, hoist_scope = self._needs_hoisting(info)
+            if needs_hoist and hoist_scope is not None:
+                self.hoisted_vars[var] = hoist_scope
+
+    def _exclude_assign_check_return_vars(self, stmts: list[ast.stmt]):
+        """Remove vars from hoisting that are only used in assign-check-return patterns."""
+        consumed_vars: set[str] = set()
+        self._scan_assign_check_return_vars(stmts, consumed_vars)
+        for var in consumed_vars:
+            if var in self.hoisted_vars:
+                del self.hoisted_vars[var]
+            if var in self.var_usage:
+                del self.var_usage[var]
+            # Also clear var_types so pattern detection works during emission
+            if var in self.var_types:
+                del self.var_types[var]
+
+    def _scan_assign_check_return_vars(self, stmts: list[ast.stmt], consumed: set[str]):
+        """Recursively scan for vars consumed by assign-check-return patterns."""
+        i = 0
+        while i < len(stmts):
+            stmt = stmts[i]
+            # Check for the pattern: result = self.method(); if result: return result
+            # Use a looser check that doesn't require the var type to be "Node"
+            match = self._detect_assign_check_return_loose(stmts, i)
+            if match:
+                go_var = match
+                consumed.add(go_var)
+                i += 2  # Skip both statements
+                continue
+            # Recurse into nested blocks
+            if isinstance(stmt, ast.If):
+                self._scan_assign_check_return_vars(stmt.body, consumed)
+                if stmt.orelse:
+                    self._scan_assign_check_return_vars(stmt.orelse, consumed)
+            elif isinstance(stmt, ast.While):
+                self._scan_assign_check_return_vars(stmt.body, consumed)
+            elif isinstance(stmt, ast.For):
+                self._scan_assign_check_return_vars(stmt.body, consumed)
+            elif isinstance(stmt, ast.Try):
+                self._scan_assign_check_return_vars(stmt.body, consumed)
+                for handler in stmt.handlers:
+                    self._scan_assign_check_return_vars(handler.body, consumed)
+            i += 1
+
+    def _detect_assign_check_return_loose(self, stmts: list[ast.stmt], idx: int) -> str | None:
+        """Looser version of _detect_assign_check_return for pre-scan.
+        Returns the Go variable name if pattern matches, None otherwise.
+        Doesn't require var_types to be populated."""
+        if idx + 1 >= len(stmts):
+            return None
+        # First statement must be: result = self.method()
+        assign = stmts[idx]
+        if not isinstance(assign, ast.Assign):
+            return None
+        if len(assign.targets) != 1:
+            return None
+        target = assign.targets[0]
+        if not isinstance(target, ast.Name):
+            return None
+        var_name = target.id
+        # RHS must be a method call
+        if not isinstance(assign.value, ast.Call):
+            return None
+        call = assign.value
+        if not isinstance(call.func, ast.Attribute):
+            return None
+        if not isinstance(call.func.value, ast.Name) or call.func.value.id != "self":
+            return None
+        method_name = call.func.attr
+        # Check if this method returns a concrete pointer type
+        return_type = self._get_method_return_type(method_name)
+        if not return_type or not return_type.startswith("*"):
+            return None
+        # Second statement must be: if result: return result
+        if_stmt = stmts[idx + 1]
+        if not isinstance(if_stmt, ast.If):
+            return None
+        # Test must be just the variable name (truthy check)
+        test_var_name = None
+        if isinstance(if_stmt.test, ast.Name):
+            test_var_name = if_stmt.test.id
+        elif isinstance(if_stmt.test, ast.Compare):
+            cmp = if_stmt.test
+            if (
+                isinstance(cmp.left, ast.Name)
+                and len(cmp.ops) == 1
+                and isinstance(cmp.ops[0], ast.IsNot)
+                and len(cmp.comparators) == 1
+                and isinstance(cmp.comparators[0], ast.Constant)
+                and cmp.comparators[0].value is None
+            ):
+                test_var_name = cmp.left.id
+        if test_var_name != var_name:
+            return None
+        # Body must be: return result
+        if len(if_stmt.body) != 1:
+            return None
+        ret = if_stmt.body[0]
+        if not isinstance(ret, ast.Return):
+            return None
+        if not isinstance(ret.value, ast.Name) or ret.value.id != var_name:
+            return None
+        # No else branch
+        if if_stmt.orelse:
+            return None
+        go_var = self._snake_to_camel(var_name)
+        go_var = self._safe_go_name(go_var)
+        return go_var
+
+    def _populate_var_types_from_usage(self, stmts: list[ast.stmt]):
+        """Populate var_types for all variables based on usage patterns."""
+        append_types = self._collect_append_element_types(stmts)
+        nullable_node_vars = self._collect_nullable_node_vars(stmts)
+        nullable_string_vars = self._collect_nullable_string_vars(stmts)
+        multi_node_vars = self._collect_multi_node_type_vars(stmts)
+        for var, _info in self.var_usage.items():
+            go_type = self.var_types.get(var)
+            # Check append() calls for element type
+            if var in append_types:
+                elem_type = append_types[var]
+                if elem_type and (
+                    not go_type or go_type in ("interface{}", "[]interface{}", "[]string")
+                ):
+                    self.var_types[var] = f"[]{elem_type}"
+                    continue
+            # Check if var is None-initialized but later assigned Node types
+            if var in nullable_node_vars:
+                if not go_type or go_type == "interface{}":
+                    self.var_types[var] = "Node"
+                    continue
+            # Check if var is None-initialized but later assigned string types
+            if var in nullable_string_vars:
+                if not go_type or go_type == "interface{}":
+                    self.var_types[var] = "string"
+                    continue
+            # Check if var is assigned multiple different concrete Node types
+            if var in multi_node_vars:
+                if go_type and go_type.startswith("*") and go_type[1:] in self.symbols.classes:
+                    if self.symbols.classes[go_type[1:]].is_node:
+                        self.var_types[var] = "Node"
+                        continue
+            # Infer from name if no specific type
+            if not go_type or go_type in ("interface{}", "[]interface{}"):
+                name_type = self._infer_var_type_from_name(var)
+                if name_type:
+                    self.var_types[var] = name_type
+
+    def _emit_hoisted_vars(self, scope_id: int, stmts: list[ast.stmt]):
+        """Emit hoisted variable declarations for a scope."""
+        # Collect additional type info
+        append_types = self._collect_append_element_types(stmts)
+        nullable_node_vars = self._collect_nullable_node_vars(stmts)
+        nullable_string_vars = self._collect_nullable_string_vars(stmts)
+        multi_node_vars = self._collect_multi_node_type_vars(stmts)
+        for var, hoist_scope in self.hoisted_vars.items():
+            if hoist_scope != scope_id:
+                continue
+            if var in self.declared_vars:
+                continue
+            # Get type from var_types first
+            go_type = self.var_types.get(var)
+            # Try to infer from first value if no type yet
+            info = self.var_usage.get(var)
+            if info and info.first_value and not go_type:
+                go_type = self._infer_type_from_expr(info.first_value)
+            # Check append() calls for element type
+            if var in append_types:
+                elem_type = append_types[var]
+                if elem_type and (
+                    not go_type or go_type in ("interface{}", "[]interface{}", "[]string")
+                ):
+                    go_type = f"[]{elem_type}"
+            # Check if var is None-initialized but later assigned Node types
+            if var in nullable_node_vars:
+                if not go_type or go_type == "interface{}":
+                    go_type = "Node"
+            # Check if var is None-initialized but later assigned string types
+            if var in nullable_string_vars:
+                if not go_type or go_type == "interface{}":
+                    go_type = "string"
+            # Check if var is assigned multiple different concrete Node types
+            if var in multi_node_vars:
+                if go_type and go_type.startswith("*") and go_type[1:] in self.symbols.classes:
+                    if self.symbols.classes[go_type[1:]].is_node:
+                        go_type = "Node"
+            if not go_type or go_type in ("interface{}", "[]interface{}"):
+                go_type = self._infer_var_type_from_name(var) or go_type or "interface{}"
+            # Special case: 'results' in a method that returns []Node
+            if var.lower() == "results" and self.current_method:
+                method_ret = self._get_current_method_return_type()
+                if method_ret == "[]Node":
+                    go_type = method_ret
+            # Special case: if expr says byte but name says string, prefer string
+            if go_type == "byte":
+                name_type = self._infer_var_type_from_name(var)
+                if name_type == "string":
+                    go_type = "string"
+            self.emit(f"var {var} {go_type}")
+            self.declared_vars.add(var)
+            self.var_types[var] = go_type
 
     def _predeclare_all_locals(self, stmts: list[ast.stmt]):
         """Pre-declare ALL local variables at function top (C-style).
@@ -4516,6 +4968,19 @@ class GoTranspiler(ast.NodeVisitor):
                     self._track_tuple_func_assignment(target_str, stmt.value)
                     # Track assignment source for procsub/cmdsub type inference
                     self._track_assign_source(target_str, stmt.value)
+                    # Track type for subsequent accesses (e.g., subscript on interface{})
+                    if target_str not in self.var_types:
+                        inferred_type = self._infer_type_from_expr(stmt.value)
+                        if inferred_type:
+                            self.var_types[target_str] = inferred_type
+                    # Add type assertion for tuple element access (inline declaration)
+                    target_type = self.var_types.get(target_str, "")
+                    if (
+                        target_type
+                        and target_type != "interface{}"
+                        and self._is_tuple_element_access(stmt.value)
+                    ):
+                        value = f"{value}.({target_type})"
                     self.emit(f"{target_str} := {value}")
                     return
             # Use inferred type for empty list assignment to typed variables
@@ -6402,6 +6867,17 @@ class GoTranspiler(ast.NodeVisitor):
         # Handle power
         if isinstance(node.op, ast.Pow):
             return f"int(math.Pow(float64({left}), float64({right})))"
+        # Handle true division (Python / always returns float)
+        if isinstance(node.op, ast.Div):
+            return f"float64({left}) / float64({right})"
+        # Width-rank auto-casting for mixed int/float arithmetic
+        if isinstance(node.op, (ast.Add, ast.Sub, ast.Mult)):
+            left_type = self._infer_type_from_expr(node.left)
+            right_type = self._infer_type_from_expr(node.right)
+            if left_type == "float64" and right_type == "int":
+                right = f"float64({right})"
+            elif left_type == "int" and right_type == "float64":
+                left = f"float64({left})"
         return f"{left} {op} {right}"
 
     def _binop_to_go(self, op: ast.operator) -> str:
@@ -7785,11 +8261,13 @@ class GoTranspiler(ast.NodeVisitor):
         return_type = self._get_method_return_type(method_name)
         if not return_type or not return_type.startswith("*"):
             return None
-        # Variable must be interface type (Node)
+        # Variable should be interface type (Node) or untyped (for assign-check-return pattern)
+        # The pattern transformation avoids typed-nil issues and unused variable issues
         go_var = self._snake_to_camel(var_name)
         go_var = self._safe_go_name(go_var)
         var_type = self.var_types.get(go_var, "")
-        if var_type != "Node":
+        # Accept if type is Node, empty (untyped), or interface{}
+        if var_type not in ("Node", "", "interface{}"):
             return None
         # Second statement must be: if result: return result
         # OR: if result is not None: return result
@@ -8048,7 +8526,14 @@ def main():
         sys.exit(1)
     source = Path(sys.argv[1]).read_text()
     transpiler = GoTranspiler()
-    print(transpiler.transpile(source))
+    code = transpiler.transpile(source)
+    if shutil.which("goimports"):
+        result = subprocess.run(["goimports"], input=code, capture_output=True, text=True)
+        if result.returncode == 0:
+            code = result.stdout
+        else:
+            print(f"goimports failed: {result.stderr}", file=sys.stderr)
+    print(code)
 
 
 if __name__ == "__main__":

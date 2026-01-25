@@ -1,3 +1,3 @@
-module github.com/parable-parser/parable
+module parable
 
 go 1.21

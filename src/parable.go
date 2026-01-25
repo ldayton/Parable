@@ -1131,16 +1131,10 @@ func _StartsWithAt(s string, pos int, prefix string) bool {
 }
 
 func _CountConsecutiveDollarsBefore(s string, pos int) int {
-	var count int
-	_ = count
-	var k int
-	_ = k
 	var bsCount int
-	_ = bsCount
 	var j int
-	_ = j
-	count = 0
-	k = pos - 1
+	count := 0
+	k := pos - 1
 	for k >= 0 && _runeAt(s, k) == "$" {
 		bsCount = 0
 		j = k - 1
@@ -1169,12 +1163,8 @@ func _Sublist(lst []Node, start int, end int) []Node {
 }
 
 func _RepeatStr(s string, n int) string {
-	var result []string
-	_ = result
-	var i int
-	_ = i
-	result = []string{}
-	i = 0
+	result := []string{}
+	i := 0
 	for i < n {
 		result = append(result, s)
 		i += 1
@@ -1183,24 +1173,14 @@ func _RepeatStr(s string, n int) string {
 }
 
 func _StripLineContinuationsCommentAware(text string) string {
-	var result []string
-	_ = result
-	var i int
-	_ = i
 	var inComment bool
-	_ = inComment
-	var quote *QuoteState
-	_ = quote
 	var c string
-	_ = c
 	var numPrecedingBackslashes int
-	_ = numPrecedingBackslashes
 	var j int
-	_ = j
-	result = []string{}
-	i = 0
+	result := []string{}
+	i := 0
 	inComment = false
-	quote = NewQuoteState()
+	quote := NewQuoteState()
 	for i < _runeLen(text) {
 		c = _runeAt(text, i)
 		if c == "\\" && i+1 < _runeLen(text) && _runeAt(text, i+1) == "\n" {
@@ -1240,7 +1220,6 @@ func _StripLineContinuationsCommentAware(text string) string {
 
 func _AppendRedirects(base string, redirects []Node) string {
 	var parts []string
-	_ = parts
 	if len(redirects) > 0 {
 		parts = []string{}
 		for _, r := range redirects {
@@ -1252,12 +1231,8 @@ func _AppendRedirects(base string, redirects []Node) string {
 }
 
 func _ConsumeSingleQuote(s string, start int) (int, []string) {
-	var chars []string
-	_ = chars
-	var i int
-	_ = i
-	chars = []string{"'"}
-	i = start + 1
+	chars := []string{"'"}
+	i := start + 1
 	for i < _runeLen(s) && _runeAt(s, i) != "'" {
 		chars = append(chars, _runeAt(s, i))
 		i += 1
@@ -1270,12 +1245,8 @@ func _ConsumeSingleQuote(s string, start int) (int, []string) {
 }
 
 func _ConsumeDoubleQuote(s string, start int) (int, []string) {
-	var chars []string
-	_ = chars
-	var i int
-	_ = i
-	chars = []string{"\""}
-	i = start + 1
+	chars := []string{"\""}
+	i := start + 1
 	for i < _runeLen(s) && _runeAt(s, i) != "\"" {
 		if _runeAt(s, i) == "\\" && i+1 < _runeLen(s) {
 			chars = append(chars, _runeAt(s, i))
@@ -1292,9 +1263,7 @@ func _ConsumeDoubleQuote(s string, start int) (int, []string) {
 }
 
 func _HasBracketClose(s string, start int, depth int) bool {
-	var i int
-	_ = i
-	i = start
+	i := start
 	for i < _runeLen(s) {
 		if _runeAt(s, i) == "]" {
 			return true
@@ -1308,15 +1277,8 @@ func _HasBracketClose(s string, start int, depth int) bool {
 }
 
 func _ConsumeBracketClass(s string, start int, depth int) (int, []string, bool) {
-	var scanPos int
-	_ = scanPos
 	var isBracket bool
-	_ = isBracket
-	var chars []string
-	_ = chars
-	var i int
-	_ = i
-	scanPos = start + 1
+	scanPos := start + 1
 	if scanPos < _runeLen(s) && (_runeAt(s, scanPos) == "!" || _runeAt(s, scanPos) == "^") {
 		scanPos += 1
 	}
@@ -1342,8 +1304,8 @@ func _ConsumeBracketClass(s string, start int, depth int) (int, []string, bool) 
 	if !(isBracket) {
 		return start + 1, []string{"["}, false
 	}
-	chars = []string{"["}
-	i = start + 1
+	chars := []string{"["}
+	i := start + 1
 	if i < _runeLen(s) && (_runeAt(s, i) == "!" || _runeAt(s, i) == "^") {
 		chars = append(chars, _runeAt(s, i))
 		i += 1
@@ -1905,17 +1867,10 @@ func _FormatHeredocBody(r Node) string {
 }
 
 func _LookaheadForEsac(value string, start int, caseDepth int) bool {
-	var i int
-	_ = i
-	var depth int
-	_ = depth
-	var quote *QuoteState
-	_ = quote
 	var c string
-	_ = c
-	i = start
-	depth = caseDepth
-	quote = NewQuoteState()
+	i := start
+	depth := caseDepth
+	quote := NewQuoteState()
 	for i < _runeLen(value) {
 		c = _runeAt(value, i)
 		if c == "\\" && i+1 < _runeLen(value) && quote.Double {
@@ -1961,9 +1916,7 @@ func _LookaheadForEsac(value string, start int, caseDepth int) bool {
 }
 
 func _SkipBacktick(value string, start int) int {
-	var i int
-	_ = i
-	i = start + 1
+	i := start + 1
 	for i < _runeLen(value) && _runeAt(value, i) != "`" {
 		if _runeAt(value, i) == "\\" && i+1 < _runeLen(value) {
 			i += 2
@@ -1978,9 +1931,7 @@ func _SkipBacktick(value string, start int) int {
 }
 
 func _SkipSingleQuoted(s string, start int) int {
-	var i int
-	_ = i
-	i = start
+	i := start
 	for i < _runeLen(s) && _runeAt(s, i) != "'" {
 		i += 1
 	}
@@ -1989,13 +1940,9 @@ func _SkipSingleQuoted(s string, start int) int {
 
 func _SkipDoubleQuoted(s string, start int) int {
 	var passNext bool
-	_ = passNext
 	var backq bool
-	_ = backq
 	var c string
-	_ = c
 	var i int
-	_ = i
 	i, n := start, _runeLen(s)
 	passNext = false
 	backq = false
@@ -2042,13 +1989,9 @@ func _SkipDoubleQuoted(s string, start int) int {
 }
 
 func _IsValidArithmeticStart(value string, start int) bool {
-	var scanParen int
-	_ = scanParen
 	var scanI int
-	_ = scanI
 	var scanC string
-	_ = scanC
-	scanParen = 0
+	scanParen := 0
 	scanI = start + 3
 	for scanI < _runeLen(value) {
 		scanC = _runeAt(value, scanI)
@@ -2073,17 +2016,10 @@ func _IsValidArithmeticStart(value string, start int) bool {
 }
 
 func _FindFunsubEnd(value string, start int) int {
-	var depth int
-	_ = depth
-	var i int
-	_ = i
-	var quote *QuoteState
-	_ = quote
 	var c string
-	_ = c
-	depth = 1
-	i = start
-	quote = NewQuoteState()
+	depth := 1
+	i := start
+	quote := NewQuoteState()
 	for i < _runeLen(value) && depth > 0 {
 		c = _runeAt(value, i)
 		if c == "\\" && i+1 < _runeLen(value) && !(quote.Single) {
@@ -2118,28 +2054,16 @@ func _FindFunsubEnd(value string, start int) int {
 }
 
 func _FindCmdsubEnd(value string, start int) int {
-	var depth int
-	_ = depth
 	var i int
-	_ = i
-	var caseDepth int
-	_ = caseDepth
 	var inCasePatterns bool
-	_ = inCasePatterns
-	var arithDepth int
-	_ = arithDepth
-	var arithParenDepth int
-	_ = arithParenDepth
 	var c string
-	_ = c
 	var j int
-	_ = j
-	depth = 1
+	depth := 1
 	i = start
-	caseDepth = 0
+	caseDepth := 0
 	inCasePatterns = false
-	arithDepth = 0
-	arithParenDepth = 0
+	arithDepth := 0
+	arithParenDepth := 0
 	for i < _runeLen(value) && depth > 0 {
 		c = _runeAt(value, i)
 		if c == "\\" && i+1 < _runeLen(value) {
@@ -2265,19 +2189,12 @@ func _FindCmdsubEnd(value string, start int) int {
 }
 
 func _FindBracedParamEnd(value string, start int) int {
-	var depth int
-	_ = depth
 	var i int
-	_ = i
 	var inDouble bool
-	_ = inDouble
 	var dolbraceState int
-	_ = dolbraceState
 	var c string
-	_ = c
 	var end int
-	_ = end
-	depth = 1
+	depth := 1
 	i = start
 	inDouble = false
 	dolbraceState = DolbraceState_PARAM
@@ -2339,35 +2256,18 @@ func _FindBracedParamEnd(value string, start int) int {
 
 func _SkipHeredoc(value string, start int) int {
 	var i int
-	_ = i
 	var delimStart int
-	_ = delimStart
 	var quoteChar string
-	_ = quoteChar
 	var delimiter string
-	_ = delimiter
-	var parenDepth int
-	_ = parenDepth
-	var quote *QuoteState
-	_ = quote
 	var inBacktick bool
-	_ = inBacktick
 	var c string
-	_ = c
 	var lineStart int
-	_ = lineStart
 	var lineEnd int
-	_ = lineEnd
 	var line string
-	_ = line
 	var trailingBs int
-	_ = trailingBs
 	var nextLineStart int
-	_ = nextLineStart
 	var stripped string
-	_ = stripped
 	var tabsStripped int
-	_ = tabsStripped
 	i = start + 2
 	if i < _runeLen(value) && _runeAt(value, i) == "-" {
 		i += 1
@@ -2404,8 +2304,8 @@ func _SkipHeredoc(value string, start int) int {
 		}
 		delimiter = _Substring(value, delimStart, i)
 	}
-	parenDepth = 0
-	quote = NewQuoteState()
+	parenDepth := 0
+	quote := NewQuoteState()
 	inBacktick = false
 	for i < _runeLen(value) && _runeAt(value, i) != "\n" {
 		c = _runeAt(value, i)
@@ -2575,9 +2475,6 @@ func _FindHeredocContentEnd(source string, start int, delimiters []interface{}) 
 
 func _IsWordBoundary(s string, pos int, wordLen int) bool {
 	var prev string
-	_ = prev
-	var end int
-	_ = end
 	if pos > 0 {
 		prev = _runeAt(s, pos-1)
 		if (unicode.IsLetter(_runeFromChar(prev)) || unicode.IsDigit(_runeFromChar(prev))) || prev == "_" {
@@ -2587,7 +2484,7 @@ func _IsWordBoundary(s string, pos int, wordLen int) bool {
 			return false
 		}
 	}
-	end = pos + wordLen
+	end := pos + wordLen
 	if end < _runeLen(s) && ((unicode.IsLetter(_runeFromChar(_runeAt(s, end))) || unicode.IsDigit(_runeFromChar(_runeAt(s, end)))) || _runeAt(s, end) == "_") {
 		return false
 	}
@@ -2599,13 +2496,8 @@ func _IsQuote(c string) bool {
 }
 
 func _CollapseWhitespace(s string) string {
-	var result []string
-	_ = result
 	var prevWasWs bool
-	_ = prevWasWs
-	var joined string
-	_ = joined
-	result = []string{}
+	result := []string{}
 	prevWasWs = false
 	for _, c := range s {
 		if c == ' ' || c == '\t' {
@@ -2618,14 +2510,12 @@ func _CollapseWhitespace(s string) string {
 			prevWasWs = false
 		}
 	}
-	joined = strings.Join(result, "")
+	joined := strings.Join(result, "")
 	return strings.TrimSpace(joined)
 }
 
 func _CountTrailingBackslashes(s string) int {
-	var count int
-	_ = count
-	count = 0
+	count := 0
 	for i := _runeLen(s) - 1; i > -1; i += -1 {
 		if _runeAt(s, i) == "\\" {
 			count += 1
@@ -2637,18 +2527,11 @@ func _CountTrailingBackslashes(s string) int {
 }
 
 func _NormalizeHeredocDelimiter(delimiter string) string {
-	var result []string
-	_ = result
-	var i int
-	_ = i
 	var depth int
-	_ = depth
 	var inner []string
-	_ = inner
 	var innerStr string
-	_ = innerStr
-	result = []string{}
-	i = 0
+	result := []string{}
+	i := 0
 	for i < _runeLen(delimiter) {
 		if i+1 < _runeLen(delimiter) && _Substring(delimiter, i, i+2) == "$(" {
 			result = append(result, "$(")
@@ -2768,21 +2651,12 @@ func _IsWordEndContext(c string) bool {
 }
 
 func _SkipMatchedPair(s string, start int, open string, close string, flags int) int {
-	var n int
-	_ = n
 	var i int
-	_ = i
-	var depth int
-	_ = depth
 	var passNext bool
-	_ = passNext
 	var backq bool
-	_ = backq
 	var c string
-	_ = c
 	var literal int
-	_ = literal
-	n = _runeLen(s)
+	n := _runeLen(s)
 	if (flags & SmpPastOpen) != 0 {
 		i = start
 	} else {
@@ -2791,7 +2665,7 @@ func _SkipMatchedPair(s string, start int, open string, close string, flags int)
 		}
 		i = start + 1
 	}
-	depth = 1
+	depth := 1
 	passNext = false
 	backq = false
 	for i < n && depth > 0 {
@@ -2851,13 +2725,9 @@ func _SkipSubscript(s string, start int, flags int) int {
 
 func _Assignment(s string, flags int) int {
 	var i int
-	_ = i
 	var c string
-	_ = c
 	var subFlags int
-	_ = subFlags
 	var end int
-	_ = end
 	if !(len(s) > 0) {
 		return -1
 	}
@@ -2900,19 +2770,15 @@ func _Assignment(s string, flags int) int {
 }
 
 func _IsArrayAssignmentPrefix(chars []string) bool {
-	var s string
-	_ = s
 	var i int
-	_ = i
 	var end int
-	_ = end
 	if !(len(chars) > 0) {
 		return false
 	}
 	if !(unicode.IsLetter(_runeFromChar(chars[0])) || chars[0] == "_") {
 		return false
 	}
-	s = strings.Join(chars, "")
+	s := strings.Join(chars, "")
 	i = 1
 	for i < _runeLen(s) && ((unicode.IsLetter(_runeFromChar(_runeAt(s, i))) || unicode.IsDigit(_runeFromChar(_runeAt(s, i)))) || _runeAt(s, i) == "_") {
 		i += 1
@@ -2951,12 +2817,8 @@ func _IsNegationBoundary(c string) bool {
 }
 
 func _IsBackslashEscaped(value string, idx int) bool {
-	var bsCount int
-	_ = bsCount
-	var j int
-	_ = j
-	bsCount = 0
-	j = idx - 1
+	bsCount := 0
+	j := idx - 1
 	for j >= 0 && _runeAt(value, j) == "\\" {
 		bsCount += 1
 		j -= 1
@@ -2965,12 +2827,8 @@ func _IsBackslashEscaped(value string, idx int) bool {
 }
 
 func _IsDollarDollarParen(value string, idx int) bool {
-	var dollarCount int
-	_ = dollarCount
-	var j int
-	_ = j
-	dollarCount = 0
-	j = idx - 1
+	dollarCount := 0
+	j := idx - 1
 	for j >= 0 && _runeAt(value, j) == "$" {
 		dollarCount += 1
 		j -= 1
@@ -3022,9 +2880,7 @@ func _IsValidIdentifier(name string) bool {
 }
 
 func Parse(source string, extglob bool) []Node {
-	var parser *Parser
-	_ = parser
-	parser = NewParser(source, false, extglob)
+	parser := NewParser(source, false, extglob)
 	return parser.Parse()
 }
 
@@ -3105,9 +2961,7 @@ func NewParseContext(kind int) *ParseContext {
 }
 
 func (p *ParseContext) Copy() *ParseContext {
-	var ctx *ParseContext
-	_ = ctx
-	ctx = NewParseContext(p.Kind)
+	ctx := NewParseContext(p.Kind)
 	ctx.Paren_depth = p.Paren_depth
 	ctx.Brace_depth = p.Brace_depth
 	ctx.Bracket_depth = p.Bracket_depth
@@ -3140,9 +2994,7 @@ func (c *ContextStack) Pop() *ParseContext {
 }
 
 func (c *ContextStack) CopyStack() []*ParseContext {
-	var result []*ParseContext
-	_ = result
-	result = []*ParseContext{}
+	result := []*ParseContext{}
 	for _, ctx := range c._Stack {
 		result = append(result, ctx.Copy())
 	}
@@ -3150,9 +3002,7 @@ func (c *ContextStack) CopyStack() []*ParseContext {
 }
 
 func (c *ContextStack) RestoreFrom(savedStack []*ParseContext) {
-	var result []*ParseContext
-	_ = result
-	result = []*ParseContext{}
+	result := []*ParseContext{}
 	for _, ctx := range savedStack {
 		result = append(result, ctx.Copy())
 	}
@@ -3194,12 +3044,10 @@ func (l *Lexer) Peek() string {
 }
 
 func (l *Lexer) Advance() string {
-	var c string
-	_ = c
 	if l.Pos >= l.Length {
 		return ""
 	}
-	c = string(l.Source_runes[l.Pos])
+	c := string(l.Source_runes[l.Pos])
 	l.Pos += 1
 	return string(c)
 }
@@ -3217,21 +3065,13 @@ func (l *Lexer) IsMetachar(c string) bool {
 }
 
 func (l *Lexer) _ReadOperator() *Token {
-	var start int
-	_ = start
-	var c string
-	_ = c
-	var two string
-	_ = two
-	var three string
-	_ = three
-	start = l.Pos
-	c = l.Peek()
+	start := l.Pos
+	c := l.Peek()
 	if c == "" {
 		return nil
 	}
-	two = l.Lookahead(2)
-	three = l.Lookahead(3)
+	two := l.Lookahead(2)
+	three := l.Lookahead(3)
 	if three == ";;&" {
 		l.Pos += 3
 		return NewToken(TokenType_SEMI_SEMI_AMP, three, start, nil, nil)
@@ -3345,7 +3185,6 @@ func (l *Lexer) _ReadOperator() *Token {
 
 func (l *Lexer) SkipBlanks() {
 	var c string
-	_ = c
 	for l.Pos < l.Length {
 		c = string(l.Source_runes[l.Pos])
 		if c != " " && c != "\t" {
@@ -3357,7 +3196,6 @@ func (l *Lexer) SkipBlanks() {
 
 func (l *Lexer) _SkipComment() bool {
 	var prev string
-	_ = prev
 	if l.Pos >= l.Length {
 		return false
 	}
@@ -3380,13 +3218,9 @@ func (l *Lexer) _SkipComment() bool {
 }
 
 func (l *Lexer) _ReadSingleQuote(start int) (string, bool) {
-	var chars []string
-	_ = chars
 	var sawNewline bool
-	_ = sawNewline
 	var c string
-	_ = c
-	chars = []string{"'"}
+	chars := []string{"'"}
 	sawNewline = false
 	for l.Pos < l.Length {
 		c = string(l.Source_runes[l.Pos])
@@ -3447,15 +3281,10 @@ func (l *Lexer) _IsWordTerminator(ctx int, ch string, bracketDepth int, parenDep
 
 func (l *Lexer) _ReadBracketExpression(chars *[]string, parts *[]Node, forRegex bool, parenDepth int) bool {
 	var scan int
-	_ = scan
 	var bracketWillClose bool
-	_ = bracketWillClose
 	var sc string
-	_ = sc
 	var nextCh string
-	_ = nextCh
 	var c string
-	_ = c
 	if forRegex {
 		scan = l.Pos + 1
 		if scan < l.Length && string(l.Source_runes[scan]) == "^" {
@@ -3563,35 +3392,19 @@ func (l *Lexer) _ReadBracketExpression(chars *[]string, parts *[]Node, forRegex 
 }
 
 func (l *Lexer) _ParseMatchedPair(openChar string, closeChar string, flags int, initialWasDollar bool) string {
-	var start int
-	_ = start
-	var count int
-	_ = count
-	var chars []string
-	_ = chars
 	var passNext bool
-	_ = passNext
 	var wasDollar bool
-	_ = wasDollar
 	var wasGtlt bool
-	_ = wasGtlt
 	var ch string
-	_ = ch
 	var quoteFlags int
-	_ = quoteFlags
 	var nested string
-	_ = nested
 	var nextCh string
-	_ = nextCh
 	var afterBracePos int
-	_ = afterBracePos
 	var inDquote bool
-	_ = inDquote
 	var direction string
-	_ = direction
-	start = l.Pos
-	count = 1
-	chars = []string{}
+	start := l.Pos
+	count := 1
+	chars := []string{}
 	passNext = false
 	wasDollar = initialWasDollar
 	wasGtlt = false
@@ -3819,71 +3632,37 @@ func (l *Lexer) _CollectParamArgument(flags int, wasDollar bool) string {
 }
 
 func (l *Lexer) _ReadWordInternal(ctx int, atCommandStart bool, inArrayLiteral bool, inAssignBuiltin bool) *Word {
-	var start int
-	_ = start
-	var chars []string
-	_ = chars
-	var parts []Node
-	_ = parts
-	var bracketDepth int
-	_ = bracketDepth
 	var bracketStartPos int
-	_ = bracketStartPos
 	var seenEquals bool
-	_ = seenEquals
-	var parenDepth int
-	_ = parenDepth
 	var ch string
-	_ = ch
 	var prevChar string
-	_ = prevChar
 	var forRegex bool
-	_ = forRegex
 	var content string
-	_ = content
 	var trackNewline bool
-	_ = trackNewline
 	var inSingleInDquote bool
-	_ = inSingleInDquote
 	var c string
-	_ = c
 	var nextC string
-	_ = nextC
 	var cmdsubResult0 Node
-	_ = cmdsubResult0
 	var cmdsubResult1 string
-	_ = cmdsubResult1
 	var handleLineContinuation bool
-	_ = handleLineContinuation
 	var nextCh string
-	_ = nextCh
 	var ansiResult0 Node
-	_ = ansiResult0
 	var ansiResult1 string
-	_ = ansiResult1
 	var localeResult0 Node
-	_ = localeResult0
 	var localeResult1 string
-	_ = localeResult1
 	var localeResult2 []Node
-	_ = localeResult2
 	var procsubResult0 Node
-	_ = procsubResult0
 	var procsubResult1 string
-	_ = procsubResult1
 	var isArrayAssign bool
-	_ = isArrayAssign
 	var arrayResult0 Node
-	_ = arrayResult0
 	var arrayResult1 string
-	_ = arrayResult1
-	start = l.Pos
-	chars = []string{}
-	parts = []Node{}
-	bracketDepth = 0
+	start := l.Pos
+	chars := []string{}
+	parts := []Node{}
+	bracketDepth := 0
 	bracketStartPos = -1
 	seenEquals = false
-	parenDepth = 0
+	parenDepth := 0
 	for !(l.AtEnd()) {
 		ch = l.Peek()
 		if ctx == WordCtxRegex {
@@ -4160,30 +3939,20 @@ func (l *Lexer) _ReadWordInternal(ctx int, atCommandStart bool, inArrayLiteral b
 }
 
 func (l *Lexer) _ReadWord() *Token {
-	var start int
-	_ = start
-	var c string
-	_ = c
-	var isProcsub bool
-	_ = isProcsub
-	var isRegexParen bool
-	_ = isRegexParen
-	var word *Word
-	_ = word
-	start = l.Pos
+	start := l.Pos
 	if l.Pos >= l.Length {
 		return nil
 	}
-	c = l.Peek()
+	c := l.Peek()
 	if c == "" {
 		return nil
 	}
-	isProcsub = (c == "<" || c == ">") && l.Pos+1 < l.Length && string(l.Source_runes[l.Pos+1]) == "("
-	isRegexParen = l._Word_context == WordCtxRegex && (c == "(" || c == ")")
+	isProcsub := (c == "<" || c == ">") && l.Pos+1 < l.Length && string(l.Source_runes[l.Pos+1]) == "("
+	isRegexParen := l._Word_context == WordCtxRegex && (c == "(" || c == ")")
 	if l.IsMetachar(c) && !(isProcsub) && !(isRegexParen) {
 		return nil
 	}
-	word = l._ReadWordInternal(l._Word_context, l._At_command_start, l._In_array_literal, l._In_assign_builtin)
+	word := l._ReadWordInternal(l._Word_context, l._At_command_start, l._In_array_literal, l._In_assign_builtin)
 	if word == nil {
 		return nil
 	}
@@ -4192,7 +3961,6 @@ func (l *Lexer) _ReadWord() *Token {
 
 func (l *Lexer) NextToken() *Token {
 	var tok *Token
-	_ = tok
 	if l._Token_cache != nil {
 		tok = l._Token_cache
 		l._Token_cache = nil
@@ -4240,7 +4008,6 @@ func (l *Lexer) NextToken() *Token {
 
 func (l *Lexer) PeekToken() *Token {
 	var savedLast *Token
-	_ = savedLast
 	if l._Token_cache == nil {
 		savedLast = l._Last_read_token
 		l._Token_cache = l.NextToken()
@@ -4250,30 +4017,18 @@ func (l *Lexer) PeekToken() *Token {
 }
 
 func (l *Lexer) _ReadAnsiCQuote() (Node, string) {
-	var start int
-	_ = start
-	var contentChars []string
-	_ = contentChars
 	var foundClose bool
-	_ = foundClose
 	var ch string
-	_ = ch
-	var text string
-	_ = text
-	var content string
-	_ = content
-	var node *AnsiCQuote
-	_ = node
 	if l.AtEnd() || l.Peek() != "$" {
 		return nil, ""
 	}
 	if l.Pos+1 >= l.Length || string(l.Source_runes[l.Pos+1]) != "'" {
 		return nil, ""
 	}
-	start = l.Pos
+	start := l.Pos
 	l.Advance()
 	l.Advance()
-	contentChars = []string{}
+	contentChars := []string{}
 	foundClose = false
 	for !(l.AtEnd()) {
 		ch = l.Peek()
@@ -4293,9 +4048,9 @@ func (l *Lexer) _ReadAnsiCQuote() (Node, string) {
 	if !(foundClose) {
 		panic(NewMatchedPairError("unexpected EOF while looking for matching `''", start, 0))
 	}
-	text = _Substring(l.Source, start, l.Pos)
-	content = strings.Join(contentChars, "")
-	node = NewAnsiCQuote(content)
+	text := _Substring(l.Source, start, l.Pos)
+	content := strings.Join(contentChars, "")
+	node := NewAnsiCQuote(content)
 	return node, text
 }
 
@@ -4312,33 +4067,20 @@ func (l *Lexer) _SyncFromParser() {
 }
 
 func (l *Lexer) _ReadLocaleString() (Node, string, []Node) {
-	var start int
-	_ = start
-	var contentChars []string
-	_ = contentChars
-	var innerParts []Node
-	_ = innerParts
 	var foundClose bool
-	_ = foundClose
 	var ch string
-	_ = ch
 	var nextCh string
-	_ = nextCh
-	var content string
-	_ = content
-	var text string
-	_ = text
 	if l.AtEnd() || l.Peek() != "$" {
 		return nil, "", []Node{}
 	}
 	if l.Pos+1 >= l.Length || string(l.Source_runes[l.Pos+1]) != "\"" {
 		return nil, "", []Node{}
 	}
-	start = l.Pos
+	start := l.Pos
 	l.Advance()
 	l.Advance()
-	contentChars = []string{}
-	innerParts = []Node{}
+	contentChars := []string{}
+	innerParts := []Node{}
 	foundClose = false
 	for !(l.AtEnd()) {
 		ch = l.Peek()
@@ -4421,21 +4163,19 @@ func (l *Lexer) _ReadLocaleString() (Node, string, []Node) {
 		l.Pos = start
 		return nil, "", []Node{}
 	}
-	content = strings.Join(contentChars, "")
-	text = "$\"" + content + "\""
+	content := strings.Join(contentChars, "")
+	text := "$\"" + content + "\""
 	return NewLocaleString(content), text, innerParts
 }
 
 func (l *Lexer) _UpdateDolbraceForOp(op string, hasParam bool) {
-	var firstChar string
-	_ = firstChar
 	if l._Dolbrace_state == DolbraceState_NONE {
 		return
 	}
 	if op == "" || _runeLen(op) == 0 {
 		return
 	}
-	firstChar = _runeAt(op, 0)
+	firstChar := _runeAt(op, 0)
 	if l._Dolbrace_state == DolbraceState_PARAM && hasParam {
 		if strings.Contains("%#^,", firstChar) {
 			l._Dolbrace_state = DolbraceState_QUOTE
@@ -4454,14 +4194,11 @@ func (l *Lexer) _UpdateDolbraceForOp(op string, hasParam bool) {
 }
 
 func (l *Lexer) _ConsumeParamOperator() string {
-	var ch string
-	_ = ch
 	var nextCh string
-	_ = nextCh
 	if l.AtEnd() {
 		return ""
 	}
-	ch = l.Peek()
+	ch := l.Peek()
 	if ch == ":" {
 		l.Advance()
 		if l.AtEnd() {
@@ -4535,17 +4272,10 @@ func (l *Lexer) _ConsumeParamOperator() string {
 }
 
 func (l *Lexer) _ParamSubscriptHasClose(startPos int) bool {
-	var depth int
-	_ = depth
-	var i int
-	_ = i
-	var quote *QuoteState
-	_ = quote
 	var c string
-	_ = c
-	depth = 1
-	i = startPos + 1
-	quote = NewQuoteState()
+	depth := 1
+	i := startPos + 1
+	quote := NewQuoteState()
 	for i < l.Length {
 		c = string(l.Source_runes[i])
 		if quote.Single {
@@ -4597,18 +4327,13 @@ func (l *Lexer) _ParamSubscriptHasClose(startPos int) bool {
 }
 
 func (l *Lexer) _ConsumeParamName() string {
-	var ch string
-	_ = ch
 	var nameChars []string
-	_ = nameChars
 	var c string
-	_ = c
 	var content string
-	_ = content
 	if l.AtEnd() {
 		return ""
 	}
-	ch = l.Peek()
+	ch := l.Peek()
 	if _IsSpecialParam(ch) {
 		if ch == "$" && l.Pos+1 < l.Length && strings.Contains("{'\"", string(l.Source_runes[l.Pos+1])) {
 			return ""
@@ -4652,28 +4377,20 @@ func (l *Lexer) _ConsumeParamName() string {
 }
 
 func (l *Lexer) _ReadParamExpansion(inDquote bool) (Node, string) {
-	var start int
-	_ = start
-	var ch string
-	_ = ch
 	var text string
-	_ = text
 	var nameStart int
-	_ = nameStart
 	var c string
-	_ = c
 	var name string
-	_ = name
 	if l.AtEnd() || l.Peek() != "$" {
 		return nil, ""
 	}
-	start = l.Pos
+	start := l.Pos
 	l.Advance()
 	if l.AtEnd() {
 		l.Pos = start
 		return nil, ""
 	}
-	ch = l.Peek()
+	ch := l.Peek()
 	if ch == "{" {
 		l.Advance()
 		return l._ReadBracedParam(start, inDquote)
@@ -4702,52 +4419,29 @@ func (l *Lexer) _ReadParamExpansion(inDquote bool) (Node, string) {
 }
 
 func (l *Lexer) _ReadBracedParam(start int, inDquote bool) (Node, string) {
-	var savedDolbrace int
-	_ = savedDolbrace
-	var ch string
-	_ = ch
 	var param string
-	_ = param
 	var text string
-	_ = text
 	var suffix string
-	_ = suffix
 	var trailing string
-	_ = trailing
 	var op string
-	_ = op
 	var arg string
-	_ = arg
 	var content string
-	_ = content
 	var dollarCount int
-	_ = dollarCount
 	var backtickPos int
-	_ = backtickPos
 	var bc string
-	_ = bc
 	var nextC string
-	_ = nextC
 	var flags int
-	_ = flags
 	var paramEndsWithDollar bool
-	_ = paramEndsWithDollar
-	var e interface{}
-	_ = e
 	var inner string
-	_ = inner
 	var subParser *Parser
-	_ = subParser
 	var parsed Node
-	_ = parsed
 	var formatted string
-	_ = formatted
 	if l.AtEnd() {
 		panic(NewMatchedPairError("unexpected EOF looking for `}'", start, 0))
 	}
-	savedDolbrace = l._Dolbrace_state
+	savedDolbrace := l._Dolbrace_state
 	l._Dolbrace_state = DolbraceState_PARAM
-	ch = l.Peek()
+	ch := l.Peek()
 	if _IsFunsubChar(ch) {
 		l._Dolbrace_state = savedDolbrace
 		return l._ReadFunsub(start)
@@ -4916,9 +4610,6 @@ func NewWord(value string, parts []Node) *Word {
 
 func (w *Word) ToSexp() string {
 	var value string
-	_ = value
-	var escaped string
-	_ = escaped
 	value = w.Value
 	value = w._ExpandAllAnsiCQuotes(value)
 	value = w._StripLocaleStringDollars(value)
@@ -4932,7 +4623,7 @@ func (w *Word) ToSexp() string {
 	if strings.HasSuffix(value, "\\\\") && !(strings.HasSuffix(value, "\\\\\\\\")) {
 		value = value + "\\\\"
 	}
-	escaped = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(value, "\"", "\\\""), "\n", "\\n"), "\t", "\\t")
+	escaped := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(value, "\"", "\\\""), "\n", "\\n"), "\t", "\\t")
 	return "(word \"" + escaped + "\")"
 }
 
@@ -4941,14 +4632,9 @@ func (w *Word) _AppendWithCtlesc(result *[]byte, byteVal int) {
 }
 
 func (w *Word) _DoubleCtlescSmart(value string) string {
-	var result []rune
-	_ = result
-	var quote *QuoteState
-	_ = quote
 	var bsCount int
-	_ = bsCount
-	result = []rune{}
-	quote = NewQuoteState()
+	result := []rune{}
+	quote := NewQuoteState()
 	for _, c := range value {
 		if c == '\'' && !(quote.Double) {
 			quote.Single = !(quote.Single)
@@ -4978,23 +4664,13 @@ func (w *Word) _DoubleCtlescSmart(value string) string {
 }
 
 func (w *Word) _NormalizeParamExpansionNewlines(value string) string {
-	var result []string
-	_ = result
-	var i int
-	_ = i
-	var quote *QuoteState
-	_ = quote
 	var c string
-	_ = c
 	var hadLeadingNewline bool
-	_ = hadLeadingNewline
 	var depth int
-	_ = depth
 	var ch string
-	_ = ch
-	result = []string{}
-	i = 0
-	quote = NewQuoteState()
+	result := []string{}
+	i := 0
+	quote := NewQuoteState()
 	for i < _runeLen(value) {
 		c = _runeAt(value, i)
 		if c == "'" && !(quote.Double) {
@@ -5058,15 +4734,13 @@ func (w *Word) _NormalizeParamExpansionNewlines(value string) string {
 }
 
 func (w *Word) _ShSingleQuote(s string) string {
-	var result []string
-	_ = result
 	if !(len(s) > 0) {
 		return "''"
 	}
 	if s == "'" {
 		return "\\'"
 	}
-	result = []string{"'"}
+	result := []string{"'"}
 	for _, c := range s {
 		if c == '\'' {
 			result = append(result, "'\\''")
@@ -5079,29 +4753,17 @@ func (w *Word) _ShSingleQuote(s string) string {
 }
 
 func (w *Word) _AnsiCToBytes(inner string) []byte {
-	var result []byte
-	_ = result
 	var i int
-	_ = i
 	var c string
-	_ = c
 	var simple int
-	_ = simple
 	var j int
-	_ = j
 	var hexStr string
-	_ = hexStr
 	var byteVal int
-	_ = byteVal
 	var codepoint int
-	_ = codepoint
 	var ctrlChar string
-	_ = ctrlChar
 	var skipExtra int
-	_ = skipExtra
 	var ctrlVal int
-	_ = ctrlVal
-	result = []byte{}
+	result := []byte{}
 	i = 0
 	for i < _runeLen(inner) {
 		if _runeAt(inner, i) == "\\" && i+1 < _runeLen(inner) {
@@ -5238,71 +4900,40 @@ func (w *Word) _AnsiCToBytes(inner string) []byte {
 }
 
 func (w *Word) _ExpandAnsiCEscapes(value string) string {
-	var inner string
-	_ = inner
-	var literalBytes []byte
-	_ = literalBytes
-	var literalStr string
-	_ = literalStr
 	if !(strings.HasPrefix(value, "'") && strings.HasSuffix(value, "'")) {
 		return value
 	}
-	inner = _Substring(value, 1, _runeLen(value)-1)
-	literalBytes = w._AnsiCToBytes(inner)
-	literalStr = string(literalBytes)
+	inner := _Substring(value, 1, _runeLen(value)-1)
+	literalBytes := w._AnsiCToBytes(inner)
+	literalStr := string(literalBytes)
 	return w._ShSingleQuote(literalStr)
 }
 
 func (w *Word) _ExpandAllAnsiCQuotes(value string) string {
-	var result []string
-	_ = result
 	var i int
-	_ = i
-	var quote *QuoteState
-	_ = quote
 	var inBacktick bool
-	_ = inBacktick
-	var braceDepth int
-	_ = braceDepth
 	var ch string
-	_ = ch
 	var effectiveInDquote bool
-	_ = effectiveInDquote
 	var isAnsiC bool
-	_ = isAnsiC
 	var j int
-	_ = j
 	var ansiStr string
-	_ = ansiStr
 	var expanded string
-	_ = expanded
 	var outerInDquote bool
-	_ = outerInDquote
 	var inner string
-	_ = inner
 	var resultStr string
-	_ = resultStr
 	var inPattern bool
-	_ = inPattern
 	var lastBraceIdx int
-	_ = lastBraceIdx
 	var afterBrace string
-	_ = afterBrace
 	var varNameLen int
-	_ = varNameLen
 	var c interface{}
-	_ = c
 	var opStart string
-	_ = opStart
 	var firstChar string
-	_ = firstChar
 	var rest string
-	_ = rest
-	result = []string{}
+	result := []string{}
 	i = 0
-	quote = NewQuoteState()
+	quote := NewQuoteState()
 	inBacktick = false
-	braceDepth = 0
+	braceDepth := 0
 	for i < _runeLen(value) {
 		ch = _runeAt(value, i)
 		if ch == "`" && !(quote.Single) {
@@ -5438,30 +5069,15 @@ func (w *Word) _ExpandAllAnsiCQuotes(value string) string {
 }
 
 func (w *Word) _StripLocaleStringDollars(value string) string {
-	var result []string
-	_ = result
-	var i int
-	_ = i
-	var braceDepth int
-	_ = braceDepth
-	var bracketDepth int
-	_ = bracketDepth
-	var quote *QuoteState
-	_ = quote
-	var braceQuote *QuoteState
-	_ = braceQuote
 	var bracketInDoubleQuote bool
-	_ = bracketInDoubleQuote
 	var ch string
-	_ = ch
 	var dollarCount int
-	_ = dollarCount
-	result = []string{}
-	i = 0
-	braceDepth = 0
-	bracketDepth = 0
-	quote = NewQuoteState()
-	braceQuote = NewQuoteState()
+	result := []string{}
+	i := 0
+	braceDepth := 0
+	bracketDepth := 0
+	quote := NewQuoteState()
+	braceQuote := NewQuoteState()
 	bracketInDoubleQuote = false
 	for i < _runeLen(value) {
 		ch = _runeAt(value, i)
@@ -5534,23 +5150,9 @@ func (w *Word) _StripLocaleStringDollars(value string) string {
 }
 
 func (w *Word) _NormalizeArrayWhitespace(value string) string {
-	var i int
-	_ = i
 	var depth int
-	_ = depth
-	var prefix string
-	_ = prefix
-	var openParenPos int
-	_ = openParenPos
 	var closeParenPos int
-	_ = closeParenPos
-	var inner string
-	_ = inner
-	var suffix string
-	_ = suffix
-	var result string
-	_ = result
-	i = 0
+	i := 0
 	if !(i < _runeLen(value) && (unicode.IsLetter(_runeFromChar(_runeAt(value, i))) || _runeAt(value, i) == "_")) {
 		return value
 	}
@@ -5579,8 +5181,8 @@ func (w *Word) _NormalizeArrayWhitespace(value string) string {
 	if !(i+1 < _runeLen(value) && _runeAt(value, i) == "=" && _runeAt(value, i+1) == "(") {
 		return value
 	}
-	prefix = _Substring(value, 0, i+1)
-	openParenPos = i + 1
+	prefix := _Substring(value, 0, i+1)
+	openParenPos := i + 1
 	if strings.HasSuffix(value, ")") {
 		closeParenPos = _runeLen(value) - 1
 	} else {
@@ -5589,27 +5191,20 @@ func (w *Word) _NormalizeArrayWhitespace(value string) string {
 			return value
 		}
 	}
-	inner = _Substring(value, openParenPos+1, closeParenPos)
-	suffix = _Substring(value, closeParenPos+1, _runeLen(value))
-	result = w._NormalizeArrayInner(inner)
+	inner := _Substring(value, openParenPos+1, closeParenPos)
+	suffix := _Substring(value, closeParenPos+1, _runeLen(value))
+	result := w._NormalizeArrayInner(inner)
 	return prefix + "(" + result + ")" + suffix
 }
 
 func (w *Word) _FindMatchingParen(value string, openPos int) int {
-	var i int
-	_ = i
-	var depth int
-	_ = depth
-	var quote *QuoteState
-	_ = quote
 	var ch string
-	_ = ch
 	if openPos >= _runeLen(value) || _runeAt(value, openPos) != "(" {
 		return -1
 	}
-	i = openPos + 1
-	depth = 1
-	quote = NewQuoteState()
+	i := openPos + 1
+	depth := 1
+	quote := NewQuoteState()
 	for i < _runeLen(value) && depth > 0 {
 		ch = _runeAt(value, i)
 		if ch == "\\" && i+1 < _runeLen(value) && !(quote.Single) {
@@ -5650,31 +5245,18 @@ func (w *Word) _FindMatchingParen(value string, openPos int) int {
 }
 
 func (w *Word) _NormalizeArrayInner(inner string) string {
-	var normalized []string
-	_ = normalized
 	var i int
-	_ = i
 	var inWhitespace bool
-	_ = inWhitespace
-	var braceDepth int
-	_ = braceDepth
-	var bracketDepth int
-	_ = bracketDepth
 	var ch string
-	_ = ch
 	var j int
-	_ = j
 	var dqContent []string
-	_ = dqContent
 	var dqBraceDepth int
-	_ = dqBraceDepth
 	var depth int
-	_ = depth
-	normalized = []string{}
+	normalized := []string{}
 	i = 0
 	inWhitespace = true
-	braceDepth = 0
-	bracketDepth = 0
+	braceDepth := 0
+	bracketDepth := 0
 	for i < _runeLen(inner) {
 		ch = _runeAt(inner, i)
 		if _IsWhitespace(ch) {
@@ -5852,28 +5434,16 @@ func (w *Word) _NormalizeArrayInner(inner string) string {
 }
 
 func (w *Word) _StripArithLineContinuations(value string) string {
-	var result []string
-	_ = result
-	var i int
-	_ = i
 	var start int
-	_ = start
 	var depth int
-	_ = depth
 	var arithContent []string
-	_ = arithContent
 	var firstCloseIdx int
-	_ = firstCloseIdx
 	var numBackslashes int
-	_ = numBackslashes
 	var j int
-	_ = j
 	var content string
-	_ = content
 	var closing string
-	_ = closing
-	result = []string{}
-	i = 0
+	result := []string{}
+	i := 0
 	for i < _runeLen(value) {
 		if _IsExpansionStart(value, i, "$((") {
 			start = i
@@ -5947,9 +5517,7 @@ func (w *Word) _StripArithLineContinuations(value string) string {
 }
 
 func (w *Word) _CollectCmdsubs(node Node) []Node {
-	var result []Node
-	_ = result
-	result = []Node{}
+	result := []Node{}
 	switch n := node.(type) {
 	case *CommandSubstitution:
 		result = append(result, n)
@@ -5958,9 +5526,7 @@ func (w *Word) _CollectCmdsubs(node Node) []Node {
 }
 
 func (w *Word) _CollectProcsubs(node Node) []Node {
-	var result []Node
-	_ = result
-	result = []Node{}
+	result := []Node{}
 	switch n := node.(type) {
 	case *ProcessSubstitution:
 		result = append(result, n)
@@ -5969,100 +5535,40 @@ func (w *Word) _CollectProcsubs(node Node) []Node {
 }
 
 func (w *Word) _FormatCommandSubstitutions(value string, inArith bool) string {
-	var cmdsubParts []Node
-	_ = cmdsubParts
-	var procsubParts []Node
-	_ = procsubParts
 	var hasArith bool
-	_ = hasArith
-	var hasBraceCmdsub bool
-	_ = hasBraceCmdsub
 	var hasUntrackedCmdsub bool
-	_ = hasUntrackedCmdsub
 	var hasUntrackedProcsub bool
-	_ = hasUntrackedProcsub
-	var idx int
-	_ = idx
-	var scanQuote *QuoteState
-	_ = scanQuote
-	var hasParamWithProcsubPattern bool
-	_ = hasParamWithProcsubPattern
-	var result []string
-	_ = result
 	var i int
-	_ = i
-	var cmdsubIdx int
-	_ = cmdsubIdx
-	var procsubIdx int
-	_ = procsubIdx
-	var mainQuote *QuoteState
-	_ = mainQuote
-	var extglobDepth int
-	_ = extglobDepth
-	var deprecatedArithDepth int
-	_ = deprecatedArithDepth
-	var arithDepth int
-	_ = arithDepth
-	var arithParenDepth int
-	_ = arithParenDepth
 	var j int
-	_ = j
 	var inner string
-	_ = inner
 	var node Node
-	_ = node
 	var formatted string
-	_ = formatted
 	var parser *Parser
-	_ = parser
 	var parsed Node
-	_ = parsed
 	var cmdsubNode Node
-	_ = cmdsubNode
 	var hasPipe bool
-	_ = hasPipe
 	var prefix string
-	_ = prefix
 	var origInner string
-	_ = origInner
 	var endsWithNewline bool
-	_ = endsWithNewline
 	var suffix string
-	_ = suffix
 	var isProcsub bool
-	_ = isProcsub
 	var direction string
-	_ = direction
 	var compact bool
-	_ = compact
 	var rawContent string
-	_ = rawContent
 	var leadingWsEnd int
-	_ = leadingWsEnd
 	var leadingWs string
-	_ = leadingWs
 	var stripped string
-	_ = stripped
 	var normalizedWs string
-	_ = normalizedWs
 	var spaced string
-	_ = spaced
 	var rawStripped string
-	_ = rawStripped
 	var finalOutput string
-	_ = finalOutput
 	var depth int
-	_ = depth
 	var terminator string
-	_ = terminator
 	var braceQuote *QuoteState
-	_ = braceQuote
 	var c string
-	_ = c
 	var formattedInner string
-	_ = formattedInner
-	cmdsubParts = []Node{}
-	procsubParts = []Node{}
+	cmdsubParts := []Node{}
+	procsubParts := []Node{}
 	hasArith = false
 	for _, p := range w.Parts {
 		if p.Kind() == "cmdsub" {
@@ -6076,11 +5582,11 @@ func (w *Word) _FormatCommandSubstitutions(value string, inArith bool) string {
 			procsubParts = append(procsubParts, w._CollectProcsubs(p)...)
 		}
 	}
-	hasBraceCmdsub = strings.Index(value, "${ ") != -1 || strings.Index(value, "${\t") != -1 || strings.Index(value, "${\n") != -1 || strings.Index(value, "${|") != -1
+	hasBraceCmdsub := strings.Index(value, "${ ") != -1 || strings.Index(value, "${\t") != -1 || strings.Index(value, "${\n") != -1 || strings.Index(value, "${|") != -1
 	hasUntrackedCmdsub = false
 	hasUntrackedProcsub = false
-	idx = 0
-	scanQuote = NewQuoteState()
+	idx := 0
+	scanQuote := NewQuoteState()
 	for idx < _runeLen(value) {
 		if _runeAt(value, idx) == "\"" {
 			scanQuote.Double = !(scanQuote.Double)
@@ -6106,19 +5612,19 @@ func (w *Word) _FormatCommandSubstitutions(value string, inArith bool) string {
 			idx += 1
 		}
 	}
-	hasParamWithProcsubPattern = strings.Contains(value, "${") && (strings.Contains(value, "<(") || strings.Contains(value, ">("))
+	hasParamWithProcsubPattern := strings.Contains(value, "${") && (strings.Contains(value, "<(") || strings.Contains(value, ">("))
 	if !(len(cmdsubParts) > 0) && !(len(procsubParts) > 0) && !(hasBraceCmdsub) && !(hasUntrackedCmdsub) && !(hasUntrackedProcsub) && !(hasParamWithProcsubPattern) {
 		return value
 	}
-	result = []string{}
+	result := []string{}
 	i = 0
-	cmdsubIdx = 0
-	procsubIdx = 0
-	mainQuote = NewQuoteState()
-	extglobDepth = 0
-	deprecatedArithDepth = 0
-	arithDepth = 0
-	arithParenDepth = 0
+	cmdsubIdx := 0
+	procsubIdx := 0
+	mainQuote := NewQuoteState()
+	extglobDepth := 0
+	deprecatedArithDepth := 0
+	arithDepth := 0
+	arithParenDepth := 0
 	for i < _runeLen(value) {
 		if i > 0 && _IsExtglobPrefix(_runeAt(value, i-1)) && _runeAt(value, i) == "(" && !(_IsBackslashEscaped(value, i-1)) {
 			extglobDepth += 1
@@ -6460,30 +5966,16 @@ func (w *Word) _FormatCommandSubstitutions(value string, inArith bool) string {
 }
 
 func (w *Word) _NormalizeExtglobWhitespace(value string) string {
-	var result []string
-	_ = result
-	var i int
-	_ = i
-	var extglobQuote *QuoteState
-	_ = extglobQuote
-	var deprecatedArithDepth int
-	_ = deprecatedArithDepth
 	var prefixChar string
-	_ = prefixChar
 	var depth int
-	_ = depth
 	var patternParts []string
-	_ = patternParts
 	var currentPart []string
-	_ = currentPart
 	var hasPipe bool
-	_ = hasPipe
 	var partContent string
-	_ = partContent
-	result = []string{}
-	i = 0
-	extglobQuote = NewQuoteState()
-	deprecatedArithDepth = 0
+	result := []string{}
+	i := 0
+	extglobQuote := NewQuoteState()
+	deprecatedArithDepth := 0
 	for i < _runeLen(value) {
 		if _runeAt(value, i) == "\"" {
 			extglobQuote.Double = !(extglobQuote.Double)
@@ -6572,9 +6064,7 @@ func (w *Word) _NormalizeExtglobWhitespace(value string) string {
 }
 
 func (w *Word) GetCondFormattedValue() string {
-	var value string
-	_ = value
-	value = w._ExpandAllAnsiCQuotes(w.Value)
+	value := w._ExpandAllAnsiCQuotes(w.Value)
 	value = w._StripLocaleStringDollars(value)
 	value = w._FormatCommandSubstitutions(value, false)
 	value = w._NormalizeExtglobWhitespace(value)
@@ -6594,18 +6084,14 @@ func NewCommand(words []Node, redirects []Node) *Command {
 }
 
 func (c *Command) ToSexp() string {
-	var parts []string
-	_ = parts
-	var inner string
-	_ = inner
-	parts = []string{}
+	parts := []string{}
 	for _, w := range c.Words {
 		parts = append(parts, w.ToSexp())
 	}
 	for _, r := range c.Redirects {
 		parts = append(parts, r.ToSexp())
 	}
-	inner = strings.Join(parts, " ")
+	inner := strings.Join(parts, " ")
 	if !(len(inner) > 0) {
 		return "(command)"
 	}
@@ -6620,33 +6106,16 @@ func NewPipeline(commands []Node) *Pipeline {
 }
 
 func (p *Pipeline) ToSexp() string {
-	var cmds []interface{}
-	_ = cmds
-	var i int
-	_ = i
 	var cmd Node
-	_ = cmd
 	var needsRedirect bool
-	_ = needsRedirect
 	var pair interface{}
-	_ = pair
 	var needs bool
-	_ = needs
-	var lastPair interface{}
-	_ = lastPair
-	var lastCmd Node
-	_ = lastCmd
-	var lastNeeds bool
-	_ = lastNeeds
 	var result string
-	_ = result
-	var j int
-	_ = j
 	if len(p.Commands) == 1 {
 		return p.Commands[0].ToSexp()
 	}
-	cmds = []interface{}{}
-	i = 0
+	cmds := []interface{}{}
+	i := 0
 	for i < len(p.Commands) {
 		cmd = p.Commands[i]
 		if cmd.Kind() == "pipe-both" {
@@ -6663,11 +6132,11 @@ func (p *Pipeline) ToSexp() string {
 		needs = pair.([]interface{})[1].(bool)
 		return p._CmdSexp(cmd, needs)
 	}
-	lastPair = cmds[len(cmds)-1]
-	lastCmd = lastPair.([]interface{})[0].(Node)
-	lastNeeds = lastPair.([]interface{})[1].(bool)
+	lastPair := cmds[len(cmds)-1]
+	lastCmd := lastPair.([]interface{})[0].(Node)
+	lastNeeds := lastPair.([]interface{})[1].(bool)
 	result = p._CmdSexp(lastCmd, lastNeeds)
-	j = len(cmds) - 2
+	j := len(cmds) - 2
 	for j >= 0 {
 		pair = cmds[j]
 		cmd = pair.([]interface{})[0].(Node)
@@ -6684,7 +6153,6 @@ func (p *Pipeline) ToSexp() string {
 
 func (p *Pipeline) _CmdSexp(cmd Node, needsRedirect bool) string {
 	var parts []string
-	_ = parts
 	if !(needsRedirect) {
 		return cmd.ToSexp()
 	}
@@ -6711,23 +6179,14 @@ func NewList(parts []Node) *List {
 
 func (l *List) ToSexp() string {
 	var parts []Node
-	_ = parts
-	var opNames map[string]string
-	_ = opNames
 	var left []Node
-	_ = left
 	var right []Node
-	_ = right
 	var leftSexp string
-	_ = leftSexp
 	var rightSexp string
-	_ = rightSexp
 	var innerParts []Node
-	_ = innerParts
 	var innerList Node
-	_ = innerList
 	parts = append([]Node{}, l.Parts...)
-	opNames = map[string]string{"&&": "and", "||": "or", ";": "semi", "\n": "semi", "&": "background"}
+	opNames := map[string]string{"&&": "and", "||": "or", ";": "semi", "\n": "semi", "&": "background"}
 	for len(parts) > 1 && parts[len(parts)-1].Kind() == "operator" && (parts[len(parts)-1].(*Operator).Op == ";" || parts[len(parts)-1].(*Operator).Op == "\n") {
 		parts = parts[0 : len(parts)-1]
 	}
@@ -6763,17 +6222,11 @@ func (l *List) ToSexp() string {
 }
 
 func (l *List) _ToSexpWithPrecedence(parts []Node, opNames map[string]string) string {
-	var semiPositions []int
-	_ = semiPositions
 	var segments [][]Node
-	_ = segments
 	var start int
-	_ = start
 	var seg []Node
-	_ = seg
 	var result string
-	_ = result
-	semiPositions = []int{}
+	semiPositions := []int{}
 	for i := 0; i < len(parts); i++ {
 		if parts[i].Kind() == "operator" && (parts[i].(*Operator).Op == ";" || parts[i].(*Operator).Op == "\n") {
 			semiPositions = append(semiPositions, i)
@@ -6806,18 +6259,13 @@ func (l *List) _ToSexpWithPrecedence(parts []Node, opNames map[string]string) st
 }
 
 func (l *List) _ToSexpAmpAndHigher(parts []Node, opNames map[string]string) string {
-	var ampPositions []int
-	_ = ampPositions
 	var segments [][]Node
-	_ = segments
 	var start int
-	_ = start
 	var result string
-	_ = result
 	if len(parts) == 1 {
 		return parts[0].ToSexp()
 	}
-	ampPositions = []int{}
+	ampPositions := []int{}
 	for i := 1; i < len(parts)-1; i += 2 {
 		if parts[i].Kind() == "operator" && parts[i].(*Operator).Op == "&" {
 			ampPositions = append(ampPositions, i)
@@ -6842,13 +6290,9 @@ func (l *List) _ToSexpAmpAndHigher(parts []Node, opNames map[string]string) stri
 
 func (l *List) _ToSexpAndOr(parts []Node, opNames map[string]string) string {
 	var result string
-	_ = result
 	var op Node
-	_ = op
 	var cmd Node
-	_ = cmd
 	var opName string
-	_ = opName
 	if len(parts) == 1 {
 		return parts[0].ToSexp()
 	}
@@ -6870,9 +6314,7 @@ func NewOperator(op string) *Operator {
 }
 
 func (o *Operator) ToSexp() string {
-	var names map[string]string
-	_ = names
-	names = map[string]string{"&&": "and", "||": "or", ";": "semi", "&": "bg", "|": "pipe"}
+	names := map[string]string{"&&": "and", "||": "or", ";": "semi", "&": "bg", "|": "pipe"}
 	return "(" + _mapGet(names, o.Op, o.Op) + ")"
 }
 
@@ -6918,17 +6360,11 @@ func NewRedirect(op string, target Node, fd int) *Redirect {
 
 func (r *Redirect) ToSexp() string {
 	var op string
-	_ = op
 	var j int
-	_ = j
 	var targetVal string
-	_ = targetVal
 	var raw string
-	_ = raw
 	var fdTarget string
-	_ = fdTarget
 	var outVal string
-	_ = outVal
 	op = strings.TrimLeft(r.Op, "0123456789")
 	if strings.HasPrefix(op, "{") {
 		j = 1
@@ -7008,11 +6444,8 @@ func NewHereDoc(delimiter string, content string, stripTabs bool, quoted bool, f
 }
 
 func (h *HereDoc) ToSexp() string {
-	var op string
-	_ = op
 	var content string
-	_ = content
-	op = _ternary(h.Strip_tabs, "<<-", "<<")
+	op := _ternary(h.Strip_tabs, "<<-", "<<")
 	content = h.Content
 	if strings.HasSuffix(content, "\\") && !(strings.HasSuffix(content, "\\\\")) {
 		content = content + "\\"
@@ -7029,9 +6462,7 @@ func NewSubshell(body Node, redirects []Node) *Subshell {
 }
 
 func (s *Subshell) ToSexp() string {
-	var base string
-	_ = base
-	base = "(subshell " + s.Body.ToSexp() + ")"
+	base := "(subshell " + s.Body.ToSexp() + ")"
 	return _AppendRedirects(base, s.Redirects)
 }
 
@@ -7044,9 +6475,7 @@ func NewBraceGroup(body Node, redirects []Node) *BraceGroup {
 }
 
 func (b *BraceGroup) ToSexp() string {
-	var base string
-	_ = base
-	base = "(brace-group " + b.Body.ToSexp() + ")"
+	base := "(brace-group " + b.Body.ToSexp() + ")"
 	return _AppendRedirects(base, b.Redirects)
 }
 
@@ -7065,7 +6494,6 @@ func NewIf(condition Node, thenBody Node, elseBody Node, redirects []Node) *If {
 
 func (i *If) ToSexp() string {
 	var result string
-	_ = result
 	result = "(if " + i.Condition.ToSexp() + " " + i.Then_body.ToSexp()
 	if i.Else_body != nil {
 		result = result + " " + i.Else_body.ToSexp()
@@ -7090,9 +6518,7 @@ func NewWhile(condition Node, body Node, redirects []Node) *While {
 }
 
 func (w *While) ToSexp() string {
-	var base string
-	_ = base
-	base = "(while " + w.Condition.ToSexp() + " " + w.Body.ToSexp() + ")"
+	base := "(while " + w.Condition.ToSexp() + " " + w.Body.ToSexp() + ")"
 	return _AppendRedirects(base, w.Redirects)
 }
 
@@ -7109,9 +6535,7 @@ func NewUntil(condition Node, body Node, redirects []Node) *Until {
 }
 
 func (u *Until) ToSexp() string {
-	var base string
-	_ = base
-	base = "(until " + u.Condition.ToSexp() + " " + u.Body.ToSexp() + ")"
+	base := "(until " + u.Condition.ToSexp() + " " + u.Body.ToSexp() + ")"
 	return _AppendRedirects(base, u.Redirects)
 }
 
@@ -7130,19 +6554,9 @@ func NewFor(variable string, words []Node, body Node, redirects []Node) *For {
 
 func (f *For) ToSexp() string {
 	var suffix string
-	_ = suffix
 	var redirectParts []string
-	_ = redirectParts
-	var tempWord *Word
-	_ = tempWord
-	var varFormatted string
-	_ = varFormatted
-	var varEscaped string
-	_ = varEscaped
 	var wordParts []string
-	_ = wordParts
 	var wordStrs string
-	_ = wordStrs
 	suffix = ""
 	if len(f.Redirects) > 0 {
 		redirectParts = []string{}
@@ -7151,9 +6565,9 @@ func (f *For) ToSexp() string {
 		}
 		suffix = " " + strings.Join(redirectParts, " ")
 	}
-	tempWord = NewWord(f.Var, []Node{})
-	varFormatted = tempWord._FormatCommandSubstitutions(f.Var, false)
-	varEscaped = strings.ReplaceAll(strings.ReplaceAll(varFormatted, "\\", "\\\\"), "\"", "\\\"")
+	tempWord := NewWord(f.Var, []Node{})
+	varFormatted := tempWord._FormatCommandSubstitutions(f.Var, false)
+	varEscaped := strings.ReplaceAll(strings.ReplaceAll(varFormatted, "\\", "\\\\"), "\"", "\\\"")
 	if f.Words == nil {
 		return "(for (word \"" + varEscaped + "\") (in (word \"\\\"$@\\\"\")) " + f.Body.ToSexp() + ")" + suffix
 	} else if len(f.Words) == 0 {
@@ -7184,23 +6598,7 @@ func NewForArith(init string, cond string, incr string, body Node, redirects []N
 
 func (f *ForArith) ToSexp() string {
 	var suffix string
-	_ = suffix
 	var redirectParts []string
-	_ = redirectParts
-	var initVal string
-	_ = initVal
-	var condVal string
-	_ = condVal
-	var incrVal string
-	_ = incrVal
-	var initStr string
-	_ = initStr
-	var condStr string
-	_ = condStr
-	var incrStr string
-	_ = incrStr
-	var bodyStr string
-	_ = bodyStr
 	suffix = ""
 	if len(f.Redirects) > 0 {
 		redirectParts = []string{}
@@ -7209,13 +6607,13 @@ func (f *ForArith) ToSexp() string {
 		}
 		suffix = " " + strings.Join(redirectParts, " ")
 	}
-	initVal = _ternary(f.Init != "", f.Init, "1")
-	condVal = _ternary(f.Cond != "", f.Cond, "1")
-	incrVal = _ternary(f.Incr != "", f.Incr, "1")
-	initStr = _FormatArithVal(initVal)
-	condStr = _FormatArithVal(condVal)
-	incrStr = _FormatArithVal(incrVal)
-	bodyStr = f.Body.ToSexp()
+	initVal := _ternary(f.Init != "", f.Init, "1")
+	condVal := _ternary(f.Cond != "", f.Cond, "1")
+	incrVal := _ternary(f.Incr != "", f.Incr, "1")
+	initStr := _FormatArithVal(initVal)
+	condStr := _FormatArithVal(condVal)
+	incrStr := _FormatArithVal(incrVal)
+	bodyStr := f.Body.ToSexp()
 	return fmt.Sprintf("(arith-for (init (word \"%v\")) (test (word \"%v\")) (step (word \"%v\")) %v)%v", initStr, condStr, incrStr, bodyStr, suffix)
 }
 
@@ -7234,17 +6632,10 @@ func NewSelect(variable string, words []Node, body Node, redirects []Node) *Sele
 
 func (s *Select) ToSexp() string {
 	var suffix string
-	_ = suffix
 	var redirectParts []string
-	_ = redirectParts
-	var varEscaped string
-	_ = varEscaped
 	var wordParts []string
-	_ = wordParts
 	var wordStrs string
-	_ = wordStrs
 	var inClause string
-	_ = inClause
 	suffix = ""
 	if len(s.Redirects) > 0 {
 		redirectParts = []string{}
@@ -7253,7 +6644,7 @@ func (s *Select) ToSexp() string {
 		}
 		suffix = " " + strings.Join(redirectParts, " ")
 	}
-	varEscaped = strings.ReplaceAll(strings.ReplaceAll(s.Var, "\\", "\\\\"), "\"", "\\\"")
+	varEscaped := strings.ReplaceAll(strings.ReplaceAll(s.Var, "\\", "\\\\"), "\"", "\\\"")
 	if s.Words != nil {
 		wordParts = []string{}
 		for _, w := range s.Words {
@@ -7284,16 +6675,12 @@ func NewCase(word Node, patterns []Node, redirects []Node) *Case {
 }
 
 func (c *Case) ToSexp() string {
-	var parts []string
-	_ = parts
-	var base string
-	_ = base
-	parts = []string{}
+	parts := []string{}
 	parts = append(parts, "(case "+c.Word.ToSexp())
 	for _, p := range c.Patterns {
 		parts = append(parts, p.ToSexp())
 	}
-	base = strings.Join(parts, " ") + ")"
+	base := strings.Join(parts, " ") + ")"
 	return _AppendRedirects(base, c.Redirects)
 }
 
@@ -7307,30 +6694,15 @@ func NewCasePattern(pattern string, body Node, terminator string) *CasePattern {
 }
 
 func (c *CasePattern) ToSexp() string {
-	var alternatives []string
-	_ = alternatives
 	var current []string
-	_ = current
 	var i int
-	_ = i
-	var depth int
-	_ = depth
 	var ch string
-	_ = ch
 	var result0 int
-	_ = result0
 	var result1 []string
-	_ = result1
-	var wordList []string
-	_ = wordList
-	var patternStr string
-	_ = patternStr
-	var parts []string
-	_ = parts
-	alternatives = []string{}
+	alternatives := []string{}
 	current = []string{}
 	i = 0
-	depth = 0
+	depth := 0
 	for i < _runeLen(c.Pattern) {
 		ch = _runeAt(c.Pattern, i)
 		if ch == "\\" && i+1 < _runeLen(c.Pattern) {
@@ -7376,12 +6748,12 @@ func (c *CasePattern) ToSexp() string {
 		}
 	}
 	alternatives = append(alternatives, strings.Join(current, ""))
-	wordList = []string{}
+	wordList := []string{}
 	for _, alt := range alternatives {
 		wordList = append(wordList, NewWord(alt, nil).ToSexp())
 	}
-	patternStr = strings.Join(wordList, " ")
-	parts = []string{"(pattern (" + patternStr + ")"}
+	patternStr := strings.Join(wordList, " ")
+	parts := []string{"(pattern (" + patternStr + ")"}
 	if c.Body != nil {
 		parts = append(parts, " "+c.Body.ToSexp())
 	} else {
@@ -7413,15 +6785,10 @@ func NewParamExpansion(param string, op string, arg string) *ParamExpansion {
 }
 
 func (p *ParamExpansion) ToSexp() string {
-	var escapedParam string
-	_ = escapedParam
 	var escapedOp string
-	_ = escapedOp
 	var argVal string
-	_ = argVal
 	var escapedArg string
-	_ = escapedArg
-	escapedParam = strings.ReplaceAll(strings.ReplaceAll(p.Param, "\\", "\\\\"), "\"", "\\\"")
+	escapedParam := strings.ReplaceAll(strings.ReplaceAll(p.Param, "\\", "\\\\"), "\"", "\\\"")
 	if p.Op != "" {
 		escapedOp = strings.ReplaceAll(strings.ReplaceAll(p.Op, "\\", "\\\\"), "\"", "\\\"")
 		if p.Arg != "" {
@@ -7443,9 +6810,7 @@ func NewParamLength(param string) *ParamLength {
 }
 
 func (p *ParamLength) ToSexp() string {
-	var escaped string
-	_ = escaped
-	escaped = strings.ReplaceAll(strings.ReplaceAll(p.Param, "\\", "\\\\"), "\"", "\\\"")
+	escaped := strings.ReplaceAll(strings.ReplaceAll(p.Param, "\\", "\\\\"), "\"", "\\\"")
 	return "(param-len \"" + escaped + "\")"
 }
 
@@ -7459,15 +6824,10 @@ func NewParamIndirect(param string, op string, arg string) *ParamIndirect {
 }
 
 func (p *ParamIndirect) ToSexp() string {
-	var escaped string
-	_ = escaped
 	var escapedOp string
-	_ = escapedOp
 	var argVal string
-	_ = argVal
 	var escapedArg string
-	_ = escapedArg
-	escaped = strings.ReplaceAll(strings.ReplaceAll(p.Param, "\\", "\\\\"), "\"", "\\\"")
+	escaped := strings.ReplaceAll(strings.ReplaceAll(p.Param, "\\", "\\\\"), "\"", "\\\"")
 	if p.Op != "" {
 		escapedOp = strings.ReplaceAll(strings.ReplaceAll(p.Op, "\\", "\\\\"), "\"", "\\\"")
 		if p.Arg != "" {
@@ -7523,19 +6883,11 @@ func NewArithmeticCommand(expression Node, redirects []Node, rawContent string) 
 }
 
 func (a *ArithmeticCommand) ToSexp() string {
-	var formatted string
-	_ = formatted
-	var escaped string
-	_ = escaped
-	var result string
-	_ = result
 	var redirectParts []string
-	_ = redirectParts
 	var redirectSexps string
-	_ = redirectSexps
-	formatted = NewWord(a.Raw_content, nil)._FormatCommandSubstitutions(a.Raw_content, true)
-	escaped = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(formatted, "\\", "\\\\"), "\"", "\\\""), "\n", "\\n"), "\t", "\\t")
-	result = "(arith (word \"" + escaped + "\"))"
+	formatted := NewWord(a.Raw_content, nil)._FormatCommandSubstitutions(a.Raw_content, true)
+	escaped := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(formatted, "\\", "\\\\"), "\"", "\\\""), "\n", "\\n"), "\t", "\\t")
+	result := "(arith (word \"" + escaped + "\"))"
 	if len(a.Redirects) > 0 {
 		redirectParts = []string{}
 		for _, r := range a.Redirects {
@@ -7717,9 +7069,7 @@ func NewArithDeprecated(expression string) *ArithDeprecated {
 }
 
 func (a *ArithDeprecated) ToSexp() string {
-	var escaped string
-	_ = escaped
-	escaped = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(a.Expression, "\\", "\\\\"), "\"", "\\\""), "\n", "\\n")
+	escaped := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(a.Expression, "\\", "\\\\"), "\"", "\\\""), "\n", "\\n")
 	return "(arith-deprecated \"" + escaped + "\")"
 }
 
@@ -7731,9 +7081,7 @@ func NewArithConcat(parts []Node) *ArithConcat {
 }
 
 func (a *ArithConcat) ToSexp() string {
-	var sexps []string
-	_ = sexps
-	sexps = []string{}
+	sexps := []string{}
 	for _, p := range a.Parts {
 		sexps = append(sexps, p.ToSexp())
 	}
@@ -7748,9 +7096,7 @@ func NewAnsiCQuote(content string) *AnsiCQuote {
 }
 
 func (a *AnsiCQuote) ToSexp() string {
-	var escaped string
-	_ = escaped
-	escaped = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(a.Content, "\\", "\\\\"), "\"", "\\\""), "\n", "\\n")
+	escaped := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(a.Content, "\\", "\\\\"), "\"", "\\\""), "\n", "\\n")
 	return "(ansi-c \"" + escaped + "\")"
 }
 
@@ -7762,9 +7108,7 @@ func NewLocaleString(content string) *LocaleString {
 }
 
 func (l *LocaleString) ToSexp() string {
-	var escaped string
-	_ = escaped
-	escaped = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(l.Content, "\\", "\\\\"), "\"", "\\\""), "\n", "\\n")
+	escaped := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(l.Content, "\\", "\\\\"), "\"", "\\\""), "\n", "\\n")
 	return "(locale \"" + escaped + "\")"
 }
 
@@ -7828,17 +7172,11 @@ func NewConditionalExpr(body interface{}, redirects []Node) *ConditionalExpr {
 }
 
 func (c *ConditionalExpr) ToSexp() string {
-	var body interface{}
-	_ = body
 	var escaped string
-	_ = escaped
 	var result string
-	_ = result
 	var redirectParts []string
-	_ = redirectParts
 	var redirectSexps string
-	_ = redirectSexps
-	body = c.Body
+	body := c.Body
 	switch b := body.(type) {
 	case string:
 		escaped = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(b, "\\", "\\\\"), "\"", "\\\""), "\n", "\\n")
@@ -7866,9 +7204,7 @@ func NewUnaryTest(op string, operand Node) *UnaryTest {
 }
 
 func (u *UnaryTest) ToSexp() string {
-	var operandVal string
-	_ = operandVal
-	operandVal = u.Operand.(*Word).GetCondFormattedValue()
+	operandVal := u.Operand.(*Word).GetCondFormattedValue()
 	return "(cond-unary \"" + u.Op + "\" (cond-term \"" + operandVal + "\"))"
 }
 
@@ -7882,12 +7218,8 @@ func NewBinaryTest(op string, left Node, right Node) *BinaryTest {
 }
 
 func (b *BinaryTest) ToSexp() string {
-	var leftVal string
-	_ = leftVal
-	var rightVal string
-	_ = rightVal
-	leftVal = b.Left.(*Word).GetCondFormattedValue()
-	rightVal = b.Right.(*Word).GetCondFormattedValue()
+	leftVal := b.Left.(*Word).GetCondFormattedValue()
+	rightVal := b.Right.(*Word).GetCondFormattedValue()
 	return "(cond-binary \"" + b.Op + "\" (cond-term \"" + leftVal + "\") (cond-term \"" + rightVal + "\"))"
 }
 
@@ -7945,18 +7277,14 @@ func NewArray(elements []Node) *Array {
 }
 
 func (a *Array) ToSexp() string {
-	var parts []string
-	_ = parts
-	var inner string
-	_ = inner
 	if !(len(a.Elements) > 0) {
 		return "(array)"
 	}
-	parts = []string{}
+	parts := []string{}
 	for _, e := range a.Elements {
 		parts = append(parts, e.ToSexp())
 	}
-	inner = strings.Join(parts, " ")
+	inner := strings.Join(parts, " ")
 	return "(array " + inner + ")"
 }
 
@@ -7970,7 +7298,6 @@ func NewCoproc(command Node, name string) *Coproc {
 
 func (c *Coproc) ToSexp() string {
 	var name string
-	_ = name
 	if c.Name != "" {
 		name = c.Name
 	} else {
@@ -8035,15 +7362,13 @@ func (p *Parser) _RecordToken(tok *Token) {
 }
 
 func (p *Parser) _UpdateDolbraceForOp(op string, hasParam bool) {
-	var firstChar string
-	_ = firstChar
 	if p._Dolbrace_state == DolbraceState_NONE {
 		return
 	}
 	if op == "" || _runeLen(op) == 0 {
 		return
 	}
-	firstChar = _runeAt(op, 0)
+	firstChar := _runeAt(op, 0)
 	if p._Dolbrace_state == DolbraceState_PARAM && hasParam {
 		if strings.Contains("%#^,", firstChar) {
 			p._Dolbrace_state = DolbraceState_QUOTE
@@ -8084,16 +7409,12 @@ func (p *Parser) _SyncParser() {
 }
 
 func (p *Parser) _LexPeekToken() *Token {
-	var savedPos int
-	_ = savedPos
-	var result *Token
-	_ = result
 	if p._Lexer._Token_cache != nil && p._Lexer._Token_cache.Pos == p.Pos && p._Lexer._Cached_word_context == p._Word_context && p._Lexer._Cached_at_command_start == p._At_command_start && p._Lexer._Cached_in_array_literal == p._In_array_literal && p._Lexer._Cached_in_assign_builtin == p._In_assign_builtin {
 		return p._Lexer._Token_cache
 	}
-	savedPos = p.Pos
+	savedPos := p.Pos
 	p._SyncLexer()
-	result = p._Lexer.PeekToken()
+	result := p._Lexer.PeekToken()
 	p._Lexer._Cached_word_context = p._Word_context
 	p._Lexer._Cached_at_command_start = p._At_command_start
 	p._Lexer._Cached_in_array_literal = p._In_array_literal
@@ -8105,7 +7426,6 @@ func (p *Parser) _LexPeekToken() *Token {
 
 func (p *Parser) _LexNextToken() *Token {
 	var tok *Token
-	_ = tok
 	if p._Lexer._Token_cache != nil && p._Lexer._Token_cache.Pos == p.Pos && p._Lexer._Cached_word_context == p._Word_context && p._Lexer._Cached_at_command_start == p._At_command_start && p._Lexer._Cached_in_array_literal == p._In_array_literal && p._Lexer._Cached_in_assign_builtin == p._In_assign_builtin {
 		tok = p._Lexer.NextToken()
 		p.Pos = p._Lexer._Post_read_pos
@@ -8130,31 +7450,21 @@ func (p *Parser) _LexSkipBlanks() {
 }
 
 func (p *Parser) _LexSkipComment() bool {
-	var result bool
-	_ = result
 	p._SyncLexer()
-	result = p._Lexer._SkipComment()
+	result := p._Lexer._SkipComment()
 	p._SyncParser()
 	return result
 }
 
 func (p *Parser) _LexIsCommandTerminator() bool {
-	var tok *Token
-	_ = tok
-	var t int
-	_ = t
-	tok = p._LexPeekToken()
-	t = tok.Type
+	tok := p._LexPeekToken()
+	t := tok.Type
 	return _containsAny([]interface{}{TokenType_EOF, TokenType_NEWLINE, TokenType_PIPE, TokenType_SEMI, TokenType_LPAREN, TokenType_RPAREN, TokenType_AMP}, t)
 }
 
 func (p *Parser) _LexPeekOperator() (int, string) {
-	var tok *Token
-	_ = tok
-	var t int
-	_ = t
-	tok = p._LexPeekToken()
-	t = tok.Type
+	tok := p._LexPeekToken()
+	t := tok.Type
 	if t >= TokenType_SEMI && t <= TokenType_GREATER || t >= TokenType_AND_AND && t <= TokenType_PIPE_AMP {
 		return t, tok.Value
 	}
@@ -8162,11 +7472,8 @@ func (p *Parser) _LexPeekOperator() (int, string) {
 }
 
 func (p *Parser) _LexPeekReservedWord() string {
-	var tok *Token
-	_ = tok
 	var word string
-	_ = word
-	tok = p._LexPeekToken()
+	tok := p._LexPeekToken()
 	if tok.Type != TokenType_WORD {
 		return ""
 	}
@@ -8181,18 +7488,13 @@ func (p *Parser) _LexPeekReservedWord() string {
 }
 
 func (p *Parser) _LexIsAtReservedWord(word string) bool {
-	var reserved string
-	_ = reserved
-	reserved = p._LexPeekReservedWord()
+	reserved := p._LexPeekReservedWord()
 	return reserved == word
 }
 
 func (p *Parser) _LexConsumeWord(expected string) bool {
-	var tok *Token
-	_ = tok
 	var word string
-	_ = word
-	tok = p._LexPeekToken()
+	tok := p._LexPeekToken()
 	if tok.Type != TokenType_WORD {
 		return false
 	}
@@ -8208,12 +7510,8 @@ func (p *Parser) _LexConsumeWord(expected string) bool {
 }
 
 func (p *Parser) _LexPeekCaseTerminator() string {
-	var tok *Token
-	_ = tok
-	var t int
-	_ = t
-	tok = p._LexPeekToken()
-	t = tok.Type
+	tok := p._LexPeekToken()
+	t := tok.Type
 	if t == TokenType_SEMI_SEMI {
 		return ";;"
 	}
@@ -8238,20 +7536,16 @@ func (p *Parser) Peek() string {
 }
 
 func (p *Parser) Advance() string {
-	var ch string
-	_ = ch
 	if p.AtEnd() {
 		return ""
 	}
-	ch = string(p.Source_runes[p.Pos])
+	ch := string(p.Source_runes[p.Pos])
 	p.Pos += 1
 	return string(ch)
 }
 
 func (p *Parser) PeekAt(offset int) string {
-	var pos int
-	_ = pos
-	pos = p.Pos + offset
+	pos := p.Pos + offset
 	if pos < 0 || pos >= p.Length {
 		return ""
 	}
@@ -8263,12 +7557,10 @@ func (p *Parser) Lookahead(n int) string {
 }
 
 func (p *Parser) _IsBangFollowedByProcsub() bool {
-	var nextChar string
-	_ = nextChar
 	if p.Pos+2 >= p.Length {
 		return false
 	}
-	nextChar = string(p.Source_runes[p.Pos+1])
+	nextChar := string(p.Source_runes[p.Pos+1])
 	if nextChar != ">" && nextChar != "<" {
 		return false
 	}
@@ -8277,7 +7569,6 @@ func (p *Parser) _IsBangFollowedByProcsub() bool {
 
 func (p *Parser) SkipWhitespace() {
 	var ch string
-	_ = ch
 	for !(p.AtEnd()) {
 		p._LexSkipBlanks()
 		if p.AtEnd() {
@@ -8297,7 +7588,6 @@ func (p *Parser) SkipWhitespace() {
 
 func (p *Parser) SkipWhitespaceAndNewlines() {
 	var ch string
-	_ = ch
 	for !(p.AtEnd()) {
 		ch = p.Peek()
 		if _IsWhitespace(ch) {
@@ -8323,14 +7613,11 @@ func (p *Parser) SkipWhitespaceAndNewlines() {
 }
 
 func (p *Parser) _AtListTerminatingBracket() bool {
-	var ch string
-	_ = ch
 	var nextPos int
-	_ = nextPos
 	if p.AtEnd() {
 		return false
 	}
-	ch = p.Peek()
+	ch := p.Peek()
 	if p._Eof_token != "" && ch == p._Eof_token {
 		return true
 	}
@@ -8348,12 +7635,10 @@ func (p *Parser) _AtListTerminatingBracket() bool {
 }
 
 func (p *Parser) _AtEofToken() bool {
-	var tok *Token
-	_ = tok
 	if p._Eof_token == "" {
 		return false
 	}
-	tok = p._LexPeekToken()
+	tok := p._LexPeekToken()
 	if p._Eof_token == ")" {
 		return tok.Type == TokenType_RPAREN
 	}
@@ -8364,11 +7649,8 @@ func (p *Parser) _AtEofToken() bool {
 }
 
 func (p *Parser) _CollectRedirects() []Node {
-	var redirects []Node
-	_ = redirects
 	var redirect interface{}
-	_ = redirect
-	redirects = []Node{}
+	redirects := []Node{}
 	for true {
 		p.SkipWhitespace()
 		redirect = p.ParseRedirect()
@@ -8382,9 +7664,7 @@ func (p *Parser) _CollectRedirects() []Node {
 
 func (p *Parser) _ParseLoopBody(context string) Node {
 	var brace *BraceGroup
-	_ = brace
 	var body Node
-	_ = body
 	if p.Peek() == "{" {
 		brace = p.ParseBraceGroup()
 		if brace == nil {
@@ -8407,21 +7687,15 @@ func (p *Parser) _ParseLoopBody(context string) Node {
 }
 
 func (p *Parser) PeekWord() string {
-	var savedPos int
-	_ = savedPos
-	var chars []string
-	_ = chars
 	var ch string
-	_ = ch
 	var word string
-	_ = word
-	savedPos = p.Pos
+	savedPos := p.Pos
 	p.SkipWhitespace()
 	if p.AtEnd() || _IsMetachar(p.Peek()) {
 		p.Pos = savedPos
 		return ""
 	}
-	chars = []string{}
+	chars := []string{}
 	for !(p.AtEnd()) && !(_IsMetachar(p.Peek())) {
 		ch = p.Peek()
 		if _IsQuote(ch) {
@@ -8447,17 +7721,11 @@ func (p *Parser) PeekWord() string {
 }
 
 func (p *Parser) ConsumeWord(expected string) bool {
-	var savedPos int
-	_ = savedPos
-	var word string
-	_ = word
 	var keywordWord string
-	_ = keywordWord
 	var hasLeadingBrace bool
-	_ = hasLeadingBrace
-	savedPos = p.Pos
+	savedPos := p.Pos
 	p.SkipWhitespace()
-	word = p.PeekWord()
+	word := p.PeekWord()
 	keywordWord = word
 	hasLeadingBrace = false
 	if word != "" && p._In_process_sub && _runeLen(word) > 1 && _runeAt(word, 0) == "}" {
@@ -8489,9 +7757,7 @@ func (p *Parser) _IsWordTerminator(ctx int, ch string, bracketDepth int, parenDe
 
 func (p *Parser) _ScanDoubleQuote(chars *[]string, parts *[]Node, start int, handleLineContinuation bool) {
 	var c string
-	_ = c
 	var nextC string
-	_ = nextC
 	*chars = append(*chars, "\"")
 	for !(p.AtEnd()) && p.Peek() != "\"" {
 		c = p.Peek()
@@ -8520,9 +7786,7 @@ func (p *Parser) _ScanDoubleQuote(chars *[]string, parts *[]Node, start int, han
 
 func (p *Parser) _ParseDollarExpansion(chars *[]string, parts *[]Node, inDquote bool) bool {
 	var result0 Node
-	_ = result0
 	var result1 string
-	_ = result1
 	if p.Pos+2 < p.Length && string(p.Source_runes[p.Pos+1]) == "(" && string(p.Source_runes[p.Pos+2]) == "(" {
 		result0, result1 = p._ParseArithmeticExpansion()
 		if result0 != nil {
@@ -8571,8 +7835,6 @@ func (p *Parser) _ParseWordInternal(ctx int, atCommandStart bool, inArrayLiteral
 }
 
 func (p *Parser) ParseWord(atCommandStart bool, inArrayLiteral bool, inAssignBuiltin bool) *Word {
-	var tok *Token
-	_ = tok
 	p.SkipWhitespace()
 	if p.AtEnd() {
 		return nil
@@ -8580,7 +7842,7 @@ func (p *Parser) ParseWord(atCommandStart bool, inArrayLiteral bool, inAssignBui
 	p._At_command_start = atCommandStart
 	p._In_array_literal = inArrayLiteral
 	p._In_assign_builtin = inAssignBuiltin
-	tok = p._LexPeekToken()
+	tok := p._LexPeekToken()
 	if tok.Type != TokenType_WORD {
 		p._At_command_start = false
 		p._In_array_literal = false
@@ -9055,21 +8317,14 @@ func (p *Parser) _ParseProcessSubstitution() (Node, string) {
 }
 
 func (p *Parser) _ParseArrayLiteral() (Node, string) {
-	var start int
-	_ = start
-	var elements []Node
-	_ = elements
 	var word *Word
-	_ = word
-	var text string
-	_ = text
 	if p.AtEnd() || p.Peek() != "(" {
 		return nil, ""
 	}
-	start = p.Pos
+	start := p.Pos
 	p.Advance()
 	p._SetState(ParserStateFlags_PST_COMPASSIGN)
-	elements = []Node{}
+	elements := []Node{}
 	for true {
 		p.SkipWhitespaceAndNewlines()
 		if p.AtEnd() {
@@ -9094,40 +8349,28 @@ func (p *Parser) _ParseArrayLiteral() (Node, string) {
 		panic(NewParseError("Expected ) to close array literal", p.Pos, 0))
 	}
 	p.Advance()
-	text = _Substring(p.Source, start, p.Pos)
+	text := _Substring(p.Source, start, p.Pos)
 	p._ClearState(ParserStateFlags_PST_COMPASSIGN)
 	return NewArray(elements), text
 }
 
 func (p *Parser) _ParseArithmeticExpansion() (Node, string) {
-	var start int
-	_ = start
-	var contentStart int
-	_ = contentStart
-	var depth int
-	_ = depth
 	var firstClosePos int
-	_ = firstClosePos
 	var c string
-	_ = c
 	var content string
-	_ = content
-	var text string
-	_ = text
 	var expr Node
-	_ = expr
 	if p.AtEnd() || p.Peek() != "$" {
 		return nil, ""
 	}
-	start = p.Pos
+	start := p.Pos
 	if p.Pos+2 >= p.Length || string(p.Source_runes[p.Pos+1]) != "(" || string(p.Source_runes[p.Pos+2]) != "(" {
 		return nil, ""
 	}
 	p.Advance()
 	p.Advance()
 	p.Advance()
-	contentStart = p.Pos
-	depth = 2
+	contentStart := p.Pos
+	depth := 2
 	firstClosePos = -1
 	for !(p.AtEnd()) && depth > 0 {
 		c = p.Peek()
@@ -9187,7 +8430,7 @@ func (p *Parser) _ParseArithmeticExpansion() (Node, string) {
 		content = _Substring(p.Source, contentStart, p.Pos)
 	}
 	p.Advance()
-	text = _Substring(p.Source, start, p.Pos)
+	text := _Substring(p.Source, start, p.Pos)
 	parseOk := true
 	func() {
 		defer func() {
@@ -9205,20 +8448,11 @@ func (p *Parser) _ParseArithmeticExpansion() (Node, string) {
 }
 
 func (p *Parser) _ParseArithExpr(content string) Node {
-	var savedArithSrc string
-	_ = savedArithSrc
-	var savedArithPos int
-	_ = savedArithPos
-	var savedArithLen int
-	_ = savedArithLen
-	var savedParserState int
-	_ = savedParserState
 	var result Node
-	_ = result
-	savedArithSrc = p._Arith_src
-	savedArithPos = p._Arith_pos
-	savedArithLen = p._Arith_len
-	savedParserState = p._Parser_state
+	savedArithSrc := p._Arith_src
+	savedArithPos := p._Arith_pos
+	savedArithLen := p._Arith_len
+	savedParserState := p._Parser_state
 	p._SetState(ParserStateFlags_PST_ARITH)
 	p._Arith_src = content
 	p._Arith_pos = 0
@@ -9243,9 +8477,7 @@ func (p *Parser) _ArithAtEnd() bool {
 }
 
 func (p *Parser) _ArithPeek(offset int) string {
-	var pos int
-	_ = pos
-	pos = p._Arith_pos + offset
+	pos := p._Arith_pos + offset
 	if pos >= p._Arith_len {
 		return ""
 	}
@@ -9253,19 +8485,16 @@ func (p *Parser) _ArithPeek(offset int) string {
 }
 
 func (p *Parser) _ArithAdvance() string {
-	var c string
-	_ = c
 	if p._ArithAtEnd() {
 		return ""
 	}
-	c = _runeAt(p._Arith_src, p._Arith_pos)
+	c := _runeAt(p._Arith_src, p._Arith_pos)
 	p._Arith_pos += 1
 	return c
 }
 
 func (p *Parser) _ArithSkipWs() {
 	var c string
-	_ = c
 	for !(p._ArithAtEnd()) {
 		c = _runeAt(p._Arith_src, p._Arith_pos)
 		if _IsWhitespace(c) {
@@ -9292,9 +8521,7 @@ func (p *Parser) _ArithConsume(s string) bool {
 
 func (p *Parser) _ArithParseComma() Node {
 	var left Node
-	_ = left
 	var right Node
-	_ = right
 	left = p._ArithParseAssign()
 	for true {
 		p._ArithSkipWs()
@@ -9310,15 +8537,10 @@ func (p *Parser) _ArithParseComma() Node {
 }
 
 func (p *Parser) _ArithParseAssign() Node {
-	var left Node
-	_ = left
-	var assignOps []string
-	_ = assignOps
 	var right Node
-	_ = right
-	left = p._ArithParseTernary()
+	left := p._ArithParseTernary()
 	p._ArithSkipWs()
-	assignOps = []string{"<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "^=", "|=", "="}
+	assignOps := []string{"<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "^=", "|=", "="}
 	for _, op := range assignOps {
 		if p._ArithMatch(op) {
 			if op == "=" && p._ArithPeek(1) == "=" {
@@ -9334,13 +8556,9 @@ func (p *Parser) _ArithParseAssign() Node {
 }
 
 func (p *Parser) _ArithParseTernary() Node {
-	var cond Node
-	_ = cond
 	var ifTrue Node
-	_ = ifTrue
 	var ifFalse Node
-	_ = ifFalse
-	cond = p._ArithParseLogicalOr()
+	cond := p._ArithParseLogicalOr()
 	p._ArithSkipWs()
 	if p._ArithConsume("?") {
 		p._ArithSkipWs()
@@ -9407,9 +8625,7 @@ func (p *Parser) _ArithParseLogicalAnd() Node {
 
 func (p *Parser) _ArithParseBitwiseOr() Node {
 	var left Node
-	_ = left
 	var right Node
-	_ = right
 	left = p._ArithParseBitwiseXor()
 	for true {
 		p._ArithSkipWs()
@@ -9427,9 +8643,7 @@ func (p *Parser) _ArithParseBitwiseOr() Node {
 
 func (p *Parser) _ArithParseBitwiseXor() Node {
 	var left Node
-	_ = left
 	var right Node
-	_ = right
 	left = p._ArithParseBitwiseAnd()
 	for true {
 		p._ArithSkipWs()
@@ -9447,9 +8661,7 @@ func (p *Parser) _ArithParseBitwiseXor() Node {
 
 func (p *Parser) _ArithParseBitwiseAnd() Node {
 	var left Node
-	_ = left
 	var right Node
-	_ = right
 	left = p._ArithParseEquality()
 	for true {
 		p._ArithSkipWs()
@@ -9490,9 +8702,7 @@ func (p *Parser) _ArithParseEquality() Node {
 
 func (p *Parser) _ArithParseComparison() Node {
 	var left Node
-	_ = left
 	var right Node
-	_ = right
 	left = p._ArithParseShift()
 	for true {
 		p._ArithSkipWs()
@@ -9525,9 +8735,7 @@ func (p *Parser) _ArithParseComparison() Node {
 
 func (p *Parser) _ArithParseShift() Node {
 	var left Node
-	_ = left
 	var right Node
-	_ = right
 	left = p._ArithParseAdditive()
 	for true {
 		p._ArithSkipWs()
@@ -9556,13 +8764,9 @@ func (p *Parser) _ArithParseShift() Node {
 
 func (p *Parser) _ArithParseAdditive() Node {
 	var left Node
-	_ = left
 	var c string
-	_ = c
 	var c2 string
-	_ = c2
 	var right Node
-	_ = right
 	left = p._ArithParseMultiplicative()
 	for true {
 		p._ArithSkipWs()
@@ -9587,13 +8791,9 @@ func (p *Parser) _ArithParseAdditive() Node {
 
 func (p *Parser) _ArithParseMultiplicative() Node {
 	var left Node
-	_ = left
 	var c string
-	_ = c
 	var c2 string
-	_ = c2
 	var right Node
-	_ = right
 	left = p._ArithParseExponentiation()
 	for true {
 		p._ArithSkipWs()
@@ -9622,11 +8822,8 @@ func (p *Parser) _ArithParseMultiplicative() Node {
 }
 
 func (p *Parser) _ArithParseExponentiation() Node {
-	var left Node
-	_ = left
 	var right Node
-	_ = right
-	left = p._ArithParseUnary()
+	left := p._ArithParseUnary()
 	p._ArithSkipWs()
 	if p._ArithMatch("**") {
 		p._ArithConsume("**")
@@ -9639,9 +8836,6 @@ func (p *Parser) _ArithParseExponentiation() Node {
 
 func (p *Parser) _ArithParseUnary() Node {
 	var operand Node
-	_ = operand
-	var c string
-	_ = c
 	p._ArithSkipWs()
 	if p._ArithMatch("++") {
 		p._ArithConsume("++")
@@ -9655,7 +8849,7 @@ func (p *Parser) _ArithParseUnary() Node {
 		operand = p._ArithParseUnary()
 		return NewArithPreDecr(operand)
 	}
-	c = p._ArithPeek(0)
+	c := p._ArithPeek(0)
 	if c == "!" {
 		p._ArithAdvance()
 		p._ArithSkipWs()
@@ -9685,9 +8879,7 @@ func (p *Parser) _ArithParseUnary() Node {
 
 func (p *Parser) _ArithParsePostfix() Node {
 	var left Node
-	_ = left
 	var index Node
-	_ = index
 	left = p._ArithParsePrimary()
 	for true {
 		p._ArithSkipWs()
@@ -9718,14 +8910,10 @@ func (p *Parser) _ArithParsePostfix() Node {
 }
 
 func (p *Parser) _ArithParsePrimary() Node {
-	var c string
-	_ = c
 	var expr Node
-	_ = expr
 	var escapedChar string
-	_ = escapedChar
 	p._ArithSkipWs()
-	c = p._ArithPeek(0)
+	c := p._ArithPeek(0)
 	if c == "(" {
 		p._ArithAdvance()
 		p._ArithSkipWs()
@@ -9767,23 +8955,18 @@ func (p *Parser) _ArithParsePrimary() Node {
 }
 
 func (p *Parser) _ArithParseExpansion() Node {
-	var c string
-	_ = c
-	var nameChars []string
-	_ = nameChars
 	var ch string
-	_ = ch
 	if !(p._ArithConsume("$")) {
 		panic(NewParseError("Expected '$'", p._Arith_pos, 0))
 	}
-	c = p._ArithPeek(0)
+	c := p._ArithPeek(0)
 	if c == "(" {
 		return p._ArithParseCmdsub()
 	}
 	if c == "{" {
 		return p._ArithParseBracedParam()
 	}
-	nameChars = []string{}
+	nameChars := []string{}
 	for !(p._ArithAtEnd()) {
 		ch = p._ArithPeek(0)
 		if (unicode.IsLetter(_runeFromChar(ch)) || unicode.IsDigit(_runeFromChar(ch))) || ch == "_" {
@@ -9803,19 +8986,10 @@ func (p *Parser) _ArithParseExpansion() Node {
 
 func (p *Parser) _ArithParseCmdsub() Node {
 	var depth int
-	_ = depth
 	var contentStart int
-	_ = contentStart
 	var ch string
-	_ = ch
 	var content string
-	_ = content
 	var innerExpr Node
-	_ = innerExpr
-	var subParser *Parser
-	_ = subParser
-	var cmd Node
-	_ = cmd
 	p._ArithAdvance()
 	if p._ArithPeek(0) == "(" {
 		p._ArithAdvance()
@@ -9861,24 +9035,14 @@ func (p *Parser) _ArithParseCmdsub() Node {
 	}
 	content = _Substring(p._Arith_src, contentStart, p._Arith_pos)
 	p._ArithAdvance()
-	subParser = NewParser(content, false, p._Extglob)
-	cmd = subParser.ParseList(true)
+	subParser := NewParser(content, false, p._Extglob)
+	cmd := subParser.ParseList(true)
 	return NewCommandSubstitution(cmd, false)
 }
 
 func (p *Parser) _ArithParseBracedParam() Node {
 	var nameChars []string
-	_ = nameChars
 	var ch string
-	_ = ch
-	var name string
-	_ = name
-	var opChars []string
-	_ = opChars
-	var depth int
-	_ = depth
-	var opStr string
-	_ = opStr
 	p._ArithAdvance()
 	if p._ArithPeek(0) == "!" {
 		p._ArithAdvance()
@@ -9910,9 +9074,9 @@ func (p *Parser) _ArithParseBracedParam() Node {
 		}
 		nameChars = append(nameChars, p._ArithAdvance())
 	}
-	name = strings.Join(nameChars, "")
-	opChars = []string{}
-	depth = 1
+	name := strings.Join(nameChars, "")
+	opChars := []string{}
+	depth := 1
 	for !(p._ArithAtEnd()) && depth > 0 {
 		ch = p._ArithPeek(0)
 		if ch == "{" {
@@ -9929,7 +9093,7 @@ func (p *Parser) _ArithParseBracedParam() Node {
 		}
 	}
 	p._ArithConsume("}")
-	opStr = strings.Join(opChars, "")
+	opStr := strings.Join(opChars, "")
 	if strings.HasPrefix(opStr, ":-") {
 		return NewParamExpansion(name, ":-", _Substring(opStr, 2, _runeLen(opStr)))
 	}
@@ -9967,16 +9131,12 @@ func (p *Parser) _ArithParseBracedParam() Node {
 }
 
 func (p *Parser) _ArithParseSingleQuote() Node {
-	var contentStart int
-	_ = contentStart
-	var content string
-	_ = content
 	p._ArithAdvance()
-	contentStart = p._Arith_pos
+	contentStart := p._Arith_pos
 	for !(p._ArithAtEnd()) && p._ArithPeek(0) != "'" {
 		p._ArithAdvance()
 	}
-	content = _Substring(p._Arith_src, contentStart, p._Arith_pos)
+	content := _Substring(p._Arith_src, contentStart, p._Arith_pos)
 	if !(p._ArithConsume("'")) {
 		panic(NewParseError("Unterminated single quote in arithmetic", p._Arith_pos, 0))
 	}
@@ -9984,14 +9144,9 @@ func (p *Parser) _ArithParseSingleQuote() Node {
 }
 
 func (p *Parser) _ArithParseDoubleQuote() Node {
-	var contentStart int
-	_ = contentStart
 	var c string
-	_ = c
-	var content string
-	_ = content
 	p._ArithAdvance()
-	contentStart = p._Arith_pos
+	contentStart := p._Arith_pos
 	for !(p._ArithAtEnd()) && p._ArithPeek(0) != "\"" {
 		c = p._ArithPeek(0)
 		if c == "\\" && !(p._ArithAtEnd()) {
@@ -10001,7 +9156,7 @@ func (p *Parser) _ArithParseDoubleQuote() Node {
 			p._ArithAdvance()
 		}
 	}
-	content = _Substring(p._Arith_src, contentStart, p._Arith_pos)
+	content := _Substring(p._Arith_src, contentStart, p._Arith_pos)
 	if !(p._ArithConsume("\"")) {
 		panic(NewParseError("Unterminated double quote in arithmetic", p._Arith_pos, 0))
 	}
@@ -10009,18 +9164,9 @@ func (p *Parser) _ArithParseDoubleQuote() Node {
 }
 
 func (p *Parser) _ArithParseBacktick() Node {
-	var contentStart int
-	_ = contentStart
 	var c string
-	_ = c
-	var content string
-	_ = content
-	var subParser *Parser
-	_ = subParser
-	var cmd Node
-	_ = cmd
 	p._ArithAdvance()
-	contentStart = p._Arith_pos
+	contentStart := p._Arith_pos
 	for !(p._ArithAtEnd()) && p._ArithPeek(0) != "`" {
 		c = p._ArithPeek(0)
 		if c == "\\" && !(p._ArithAtEnd()) {
@@ -10030,29 +9176,22 @@ func (p *Parser) _ArithParseBacktick() Node {
 			p._ArithAdvance()
 		}
 	}
-	content = _Substring(p._Arith_src, contentStart, p._Arith_pos)
+	content := _Substring(p._Arith_src, contentStart, p._Arith_pos)
 	if !(p._ArithConsume("`")) {
 		panic(NewParseError("Unterminated backtick in arithmetic", p._Arith_pos, 0))
 	}
-	subParser = NewParser(content, false, p._Extglob)
-	cmd = subParser.ParseList(true)
+	subParser := NewParser(content, false, p._Extglob)
+	cmd := subParser.ParseList(true)
 	return NewCommandSubstitution(cmd, false)
 }
 
 func (p *Parser) _ArithParseNumberOrVar() Node {
-	var chars []string
-	_ = chars
-	var c string
-	_ = c
 	var ch string
-	_ = ch
 	var prefix string
-	_ = prefix
 	var expansion Node
-	_ = expansion
 	p._ArithSkipWs()
-	chars = []string{}
-	c = p._ArithPeek(0)
+	chars := []string{}
+	c := p._ArithPeek(0)
 	if _strIsDigits(c) {
 		for !(p._ArithAtEnd()) {
 			ch = p._ArithPeek(0)
@@ -10084,25 +9223,19 @@ func (p *Parser) _ArithParseNumberOrVar() Node {
 }
 
 func (p *Parser) _ParseDeprecatedArithmetic() (Node, string) {
-	var start int
-	_ = start
-	var content string
-	_ = content
-	var text string
-	_ = text
 	if p.AtEnd() || p.Peek() != "$" {
 		return nil, ""
 	}
-	start = p.Pos
+	start := p.Pos
 	if p.Pos+1 >= p.Length || string(p.Source_runes[p.Pos+1]) != "[" {
 		return nil, ""
 	}
 	p.Advance()
 	p.Advance()
 	p._Lexer.Pos = p.Pos
-	content = p._Lexer._ParseMatchedPair("[", "]", MatchedPairFlags_ARITH, false)
+	content := p._Lexer._ParseMatchedPair("[", "]", MatchedPairFlags_ARITH, false)
 	p.Pos = p._Lexer.Pos
-	text = _Substring(p.Source, start, p.Pos)
+	text := _Substring(p.Source, start, p.Pos)
 	return NewArithDeprecated(content), text
 }
 
@@ -10114,51 +9247,30 @@ func (p *Parser) _ParseParamExpansion(inDquote bool) (Node, string) {
 }
 
 func (p *Parser) ParseRedirect() interface{} {
-	var start int
-	_ = start
 	var fd int
-	_ = fd
 	var varfd string
-	_ = varfd
 	var saved int
-	_ = saved
 	var varnameChars []string
-	_ = varnameChars
 	var inBracket bool
-	_ = inBracket
 	var ch string
-	_ = ch
 	var varname string
-	_ = varname
 	var isValidVarfd bool
-	_ = isValidVarfd
 	var left int
-	_ = left
 	var right int
-	_ = right
 	var base string
-	_ = base
 	var fdChars []string
-	_ = fdChars
 	var op string
-	_ = op
 	var target *Word
-	_ = target
 	var stripTabs bool
-	_ = stripTabs
 	var nextCh string
-	_ = nextCh
 	var wordStart int
-	_ = wordStart
 	var fdTarget string
-	_ = fdTarget
 	var innerWord *Word
-	_ = innerWord
 	p.SkipWhitespace()
 	if p.AtEnd() {
 		return nil
 	}
-	start = p.Pos
+	start := p.Pos
 	fd = -1
 	varfd = ""
 	if p.Peek() == "{" {
@@ -10373,28 +9485,17 @@ func (p *Parser) ParseRedirect() interface{} {
 
 func (p *Parser) _ParseHeredocDelimiter() (string, bool) {
 	var quoted bool
-	_ = quoted
-	var delimiterChars []string
-	_ = delimiterChars
 	var ch string
-	_ = ch
 	var c string
-	_ = c
 	var nextCh string
-	_ = nextCh
 	var esc string
-	_ = esc
 	var escVal int
-	_ = escVal
 	var depth int
-	_ = depth
 	var dollarCount int
-	_ = dollarCount
 	var j int
-	_ = j
 	p.SkipWhitespace()
 	quoted = false
-	delimiterChars = []string{}
+	delimiterChars := []string{}
 	for true {
 		for !(p.AtEnd()) && !(_IsMetachar(p.Peek())) {
 			ch = p.Peek()
@@ -10587,18 +9688,11 @@ func (p *Parser) _ParseHeredocDelimiter() (string, bool) {
 }
 
 func (p *Parser) _ReadHeredocLine(quoted bool) (string, int) {
-	var lineStart int
-	_ = lineStart
-	var lineEnd int
-	_ = lineEnd
 	var line string
-	_ = line
 	var trailingBs int
-	_ = trailingBs
 	var nextLineStart int
-	_ = nextLineStart
-	lineStart = p.Pos
-	lineEnd = p.Pos
+	lineStart := p.Pos
+	lineEnd := p.Pos
 	for lineEnd < p.Length && string(p.Source_runes[lineEnd]) != "\n" {
 		lineEnd += 1
 	}
@@ -10622,15 +9716,9 @@ func (p *Parser) _ReadHeredocLine(quoted bool) (string, int) {
 }
 
 func (p *Parser) _LineMatchesDelimiter(line string, delimiter string, stripTabs bool) (bool, string) {
-	var checkLine string
-	_ = checkLine
-	var normalizedCheck string
-	_ = normalizedCheck
-	var normalizedDelim string
-	_ = normalizedDelim
-	checkLine = _ternary(stripTabs, strings.TrimLeft(line, "\t"), line)
-	normalizedCheck = _NormalizeHeredocDelimiter(checkLine)
-	normalizedDelim = _NormalizeHeredocDelimiter(delimiter)
+	checkLine := _ternary(stripTabs, strings.TrimLeft(line, "\t"), line)
+	normalizedCheck := _NormalizeHeredocDelimiter(checkLine)
+	normalizedDelim := _NormalizeHeredocDelimiter(delimiter)
 	return normalizedCheck == normalizedDelim, checkLine
 }
 
@@ -10722,22 +9810,13 @@ func (p *Parser) _ParseHeredoc(fd int, stripTabs bool) *HereDoc {
 }
 
 func (p *Parser) ParseCommand() *Command {
-	var words []Node
-	_ = words
-	var redirects []Node
-	_ = redirects
 	var reserved string
-	_ = reserved
 	var redirect interface{}
-	_ = redirect
 	var allAssignments bool
-	_ = allAssignments
 	var inAssignBuiltin bool
-	_ = inAssignBuiltin
 	var word *Word
-	_ = word
-	words = []Node{}
-	redirects = []Node{}
+	words := []Node{}
+	redirects := []Node{}
 	for true {
 		p.SkipWhitespace()
 		if p._LexIsCommandTerminator() {
@@ -10775,15 +9854,13 @@ func (p *Parser) ParseCommand() *Command {
 }
 
 func (p *Parser) ParseSubshell() *Subshell {
-	var body Node
-	_ = body
 	p.SkipWhitespace()
 	if p.AtEnd() || p.Peek() != "(" {
 		return nil
 	}
 	p.Advance()
 	p._SetState(ParserStateFlags_PST_SUBSHELL)
-	body = p.ParseList(true)
+	body := p.ParseList(true)
 	if _isNilNode(body) {
 		p._ClearState(ParserStateFlags_PST_SUBSHELL)
 		panic(NewParseError("Expected command in subshell", p.Pos, 0))
@@ -10799,27 +9876,16 @@ func (p *Parser) ParseSubshell() *Subshell {
 }
 
 func (p *Parser) ParseArithmeticCommand() *ArithmeticCommand {
-	var savedPos int
-	_ = savedPos
-	var contentStart int
-	_ = contentStart
-	var depth int
-	_ = depth
 	var c string
-	_ = c
-	var content string
-	_ = content
-	var expr Node
-	_ = expr
 	p.SkipWhitespace()
 	if p.AtEnd() || p.Peek() != "(" || p.Pos+1 >= p.Length || string(p.Source_runes[p.Pos+1]) != "(" {
 		return nil
 	}
-	savedPos = p.Pos
+	savedPos := p.Pos
 	p.Advance()
 	p.Advance()
-	contentStart = p.Pos
-	depth = 1
+	contentStart := p.Pos
+	depth := 1
 	for !(p.AtEnd()) && depth > 0 {
 		c = p.Peek()
 		if c == "'" {
@@ -10870,24 +9936,20 @@ func (p *Parser) ParseArithmeticCommand() *ArithmeticCommand {
 		p.Pos = savedPos
 		return nil
 	}
-	content = _Substring(p.Source, contentStart, p.Pos)
+	content := _Substring(p.Source, contentStart, p.Pos)
 	content = strings.ReplaceAll(content, "\\\n", "")
 	p.Advance()
 	p.Advance()
-	expr = p._ParseArithExpr(content)
+	expr := p._ParseArithExpr(content)
 	return NewArithmeticCommand(expr, p._CollectRedirects(), content)
 }
 
 func (p *Parser) ParseConditionalExpr() *ConditionalExpr {
-	var nextPos int
-	_ = nextPos
-	var body Node
-	_ = body
 	p.SkipWhitespace()
 	if p.AtEnd() || p.Peek() != "[" || p.Pos+1 >= p.Length || string(p.Source_runes[p.Pos+1]) != "[" {
 		return nil
 	}
-	nextPos = p.Pos + 2
+	nextPos := p.Pos + 2
 	if nextPos < p.Length && !(_IsWhitespace(string(p.Source_runes[nextPos])) || string(p.Source_runes[nextPos]) == "\\" && nextPos+1 < p.Length && string(p.Source_runes[nextPos+1]) == "\n") {
 		return nil
 	}
@@ -10895,7 +9957,7 @@ func (p *Parser) ParseConditionalExpr() *ConditionalExpr {
 	p.Advance()
 	p._SetState(ParserStateFlags_PST_CONDEXPR)
 	p._Word_context = WordCtxCond
-	body = p._ParseCondOr()
+	body := p._ParseCondOr()
 	for !(p.AtEnd()) && _IsWhitespaceNoNewline(p.Peek()) {
 		p.Advance()
 	}
@@ -10931,12 +9993,9 @@ func (p *Parser) _CondAtEnd() bool {
 }
 
 func (p *Parser) _ParseCondOr() Node {
-	var left Node
-	_ = left
 	var right Node
-	_ = right
 	p._CondSkipWhitespace()
-	left = p._ParseCondAnd()
+	left := p._ParseCondAnd()
 	p._CondSkipWhitespace()
 	if !(p._CondAtEnd()) && p.Peek() == "|" && p.Pos+1 < p.Length && string(p.Source_runes[p.Pos+1]) == "|" {
 		p.Advance()
@@ -10948,12 +10007,9 @@ func (p *Parser) _ParseCondOr() Node {
 }
 
 func (p *Parser) _ParseCondAnd() Node {
-	var left Node
-	_ = left
 	var right Node
-	_ = right
 	p._CondSkipWhitespace()
-	left = p._ParseCondTerm()
+	left := p._ParseCondTerm()
 	p._CondSkipWhitespace()
 	if !(p._CondAtEnd()) && p.Peek() == "&" && p.Pos+1 < p.Length && string(p.Source_runes[p.Pos+1]) == "&" {
 		p.Advance()
@@ -10966,19 +10022,11 @@ func (p *Parser) _ParseCondAnd() Node {
 
 func (p *Parser) _ParseCondTerm() Node {
 	var operand Node
-	_ = operand
 	var inner Node
-	_ = inner
-	var word1 *Word
-	_ = word1
 	var op string
-	_ = op
 	var word2 *Word
-	_ = word2
 	var savedPos int
-	_ = savedPos
 	var opWord *Word
-	_ = opWord
 	p._CondSkipWhitespace()
 	if p._CondAtEnd() {
 		panic(NewParseError("Unexpected end of conditional expression", p.Pos, 0))
@@ -11001,7 +10049,7 @@ func (p *Parser) _ParseCondTerm() Node {
 		p.Advance()
 		return NewCondParen(inner)
 	}
-	word1 = p._ParseCondWord()
+	word1 := p._ParseCondWord()
 	if word1 == nil {
 		panic(NewParseError("Expected word in conditional expression", p.Pos, 0))
 	}
@@ -11044,13 +10092,11 @@ func (p *Parser) _ParseCondTerm() Node {
 }
 
 func (p *Parser) _ParseCondWord() *Word {
-	var c string
-	_ = c
 	p._CondSkipWhitespace()
 	if p._CondAtEnd() {
 		return nil
 	}
-	c = p.Peek()
+	c := p.Peek()
 	if _IsParen(c) {
 		return nil
 	}
@@ -11064,28 +10110,24 @@ func (p *Parser) _ParseCondWord() *Word {
 }
 
 func (p *Parser) _ParseCondRegexWord() *Word {
-	var result *Word
-	_ = result
 	p._CondSkipWhitespace()
 	if p._CondAtEnd() {
 		return nil
 	}
 	p._SetState(ParserStateFlags_PST_REGEXP)
-	result = p._ParseWordInternal(WordCtxRegex, false, false)
+	result := p._ParseWordInternal(WordCtxRegex, false, false)
 	p._ClearState(ParserStateFlags_PST_REGEXP)
 	p._Word_context = WordCtxCond
 	return result
 }
 
 func (p *Parser) ParseBraceGroup() *BraceGroup {
-	var body Node
-	_ = body
 	p.SkipWhitespace()
 	if !(p._LexConsumeWord("{")) {
 		return nil
 	}
 	p.SkipWhitespaceAndNewlines()
-	body = p.ParseList(true)
+	body := p.ParseList(true)
 	if _isNilNode(body) {
 		panic(NewParseError("Expected command in brace group", p._LexPeekToken().Pos, 0))
 	}
@@ -11097,23 +10139,15 @@ func (p *Parser) ParseBraceGroup() *BraceGroup {
 }
 
 func (p *Parser) ParseIf() *If {
-	var condition Node
-	_ = condition
-	var thenBody Node
-	_ = thenBody
 	var elseBody Node
-	_ = elseBody
 	var elifCondition Node
-	_ = elifCondition
 	var elifThenBody Node
-	_ = elifThenBody
 	var innerElse Node
-	_ = innerElse
 	p.SkipWhitespace()
 	if !(p._LexConsumeWord("if")) {
 		return nil
 	}
-	condition = p.ParseListUntil(map[string]struct{}{"then": {}})
+	condition := p.ParseListUntil(map[string]struct{}{"then": {}})
 	if _isNilNode(condition) {
 		panic(NewParseError("Expected condition after 'if'", p._LexPeekToken().Pos, 0))
 	}
@@ -11121,7 +10155,7 @@ func (p *Parser) ParseIf() *If {
 	if !(p._LexConsumeWord("then")) {
 		panic(NewParseError("Expected 'then' after if condition", p._LexPeekToken().Pos, 0))
 	}
-	thenBody = p.ParseListUntil(map[string]struct{}{"elif": {}, "else": {}, "fi": {}})
+	thenBody := p.ParseListUntil(map[string]struct{}{"elif": {}, "else": {}, "fi": {}})
 	if _isNilNode(thenBody) {
 		panic(NewParseError("Expected commands after 'then'", p._LexPeekToken().Pos, 0))
 	}
@@ -11168,14 +10202,9 @@ func (p *Parser) ParseIf() *If {
 }
 
 func (p *Parser) _ParseElifChain() *If {
-	var condition Node
-	_ = condition
-	var thenBody Node
-	_ = thenBody
 	var elseBody Node
-	_ = elseBody
 	p._LexConsumeWord("elif")
-	condition = p.ParseListUntil(map[string]struct{}{"then": {}})
+	condition := p.ParseListUntil(map[string]struct{}{"then": {}})
 	if _isNilNode(condition) {
 		panic(NewParseError("Expected condition after 'elif'", p._LexPeekToken().Pos, 0))
 	}
@@ -11183,7 +10212,7 @@ func (p *Parser) _ParseElifChain() *If {
 	if !(p._LexConsumeWord("then")) {
 		panic(NewParseError("Expected 'then' after elif condition", p._LexPeekToken().Pos, 0))
 	}
-	thenBody = p.ParseListUntil(map[string]struct{}{"elif": {}, "else": {}, "fi": {}})
+	thenBody := p.ParseListUntil(map[string]struct{}{"elif": {}, "else": {}, "fi": {}})
 	if _isNilNode(thenBody) {
 		panic(NewParseError("Expected commands after 'then'", p._LexPeekToken().Pos, 0))
 	}
@@ -11202,15 +10231,11 @@ func (p *Parser) _ParseElifChain() *If {
 }
 
 func (p *Parser) ParseWhile() *While {
-	var condition Node
-	_ = condition
-	var body Node
-	_ = body
 	p.SkipWhitespace()
 	if !(p._LexConsumeWord("while")) {
 		return nil
 	}
-	condition = p.ParseListUntil(map[string]struct{}{"do": {}})
+	condition := p.ParseListUntil(map[string]struct{}{"do": {}})
 	if _isNilNode(condition) {
 		panic(NewParseError("Expected condition after 'while'", p._LexPeekToken().Pos, 0))
 	}
@@ -11218,7 +10243,7 @@ func (p *Parser) ParseWhile() *While {
 	if !(p._LexConsumeWord("do")) {
 		panic(NewParseError("Expected 'do' after while condition", p._LexPeekToken().Pos, 0))
 	}
-	body = p.ParseListUntil(map[string]struct{}{"done": {}})
+	body := p.ParseListUntil(map[string]struct{}{"done": {}})
 	if _isNilNode(body) {
 		panic(NewParseError("Expected commands after 'do'", p._LexPeekToken().Pos, 0))
 	}
@@ -11230,15 +10255,11 @@ func (p *Parser) ParseWhile() *While {
 }
 
 func (p *Parser) ParseUntil() *Until {
-	var condition Node
-	_ = condition
-	var body Node
-	_ = body
 	p.SkipWhitespace()
 	if !(p._LexConsumeWord("until")) {
 		return nil
 	}
-	condition = p.ParseListUntil(map[string]struct{}{"do": {}})
+	condition := p.ParseListUntil(map[string]struct{}{"do": {}})
 	if _isNilNode(condition) {
 		panic(NewParseError("Expected condition after 'until'", p._LexPeekToken().Pos, 0))
 	}
@@ -11246,7 +10267,7 @@ func (p *Parser) ParseUntil() *Until {
 	if !(p._LexConsumeWord("do")) {
 		panic(NewParseError("Expected 'do' after until condition", p._LexPeekToken().Pos, 0))
 	}
-	body = p.ParseListUntil(map[string]struct{}{"done": {}})
+	body := p.ParseListUntil(map[string]struct{}{"done": {}})
 	if _isNilNode(body) {
 		panic(NewParseError("Expected commands after 'do'", p._LexPeekToken().Pos, 0))
 	}
@@ -11259,19 +10280,11 @@ func (p *Parser) ParseUntil() *Until {
 
 func (p *Parser) ParseFor() Node {
 	var varWord *Word
-	_ = varWord
 	var varName string
-	_ = varName
 	var words []Node
-	_ = words
 	var sawDelimiter bool
-	_ = sawDelimiter
 	var word *Word
-	_ = word
 	var braceGroup *BraceGroup
-	_ = braceGroup
-	var body Node
-	_ = body
 	p.SkipWhitespace()
 	if !(p._LexConsumeWord("for")) {
 		return nil
@@ -11344,7 +10357,7 @@ func (p *Parser) ParseFor() Node {
 	if !(p._LexConsumeWord("do")) {
 		panic(NewParseError("Expected 'do' in for loop", p._LexPeekToken().Pos, 0))
 	}
-	body = p.ParseListUntil(map[string]struct{}{"done": {}})
+	body := p.ParseListUntil(map[string]struct{}{"done": {}})
 	if _isNilNode(body) {
 		panic(NewParseError("Expected commands after 'do'", p._LexPeekToken().Pos, 0))
 	}
@@ -11356,27 +10369,13 @@ func (p *Parser) ParseFor() Node {
 }
 
 func (p *Parser) _ParseForArith() *ForArith {
-	var parts []string
-	_ = parts
 	var current []string
-	_ = current
-	var parenDepth int
-	_ = parenDepth
 	var ch string
-	_ = ch
-	var init string
-	_ = init
-	var cond string
-	_ = cond
-	var incr string
-	_ = incr
-	var body Node
-	_ = body
 	p.Advance()
 	p.Advance()
-	parts = []string{}
+	parts := []string{}
 	current = []string{}
-	parenDepth = 0
+	parenDepth := 0
 	for !(p.AtEnd()) {
 		ch = p.Peek()
 		if ch == "(" {
@@ -11405,33 +10404,27 @@ func (p *Parser) _ParseForArith() *ForArith {
 	if len(parts) != 3 {
 		panic(NewParseError("Expected three expressions in for ((;;))", p.Pos, 0))
 	}
-	init = parts[0]
-	cond = parts[1]
-	incr = parts[2]
+	init := parts[0]
+	cond := parts[1]
+	incr := parts[2]
 	p.SkipWhitespace()
 	if !(p.AtEnd()) && p.Peek() == ";" {
 		p.Advance()
 	}
 	p.SkipWhitespaceAndNewlines()
-	body = p._ParseLoopBody("for loop")
+	body := p._ParseLoopBody("for loop")
 	return NewForArith(init, cond, incr, body, p._CollectRedirects())
 }
 
 func (p *Parser) ParseSelect() *Select {
-	var varName string
-	_ = varName
 	var words []Node
-	_ = words
 	var word *Word
-	_ = word
-	var body Node
-	_ = body
 	p.SkipWhitespace()
 	if !(p._LexConsumeWord("select")) {
 		return nil
 	}
 	p.SkipWhitespace()
-	varName = p.PeekWord()
+	varName := p.PeekWord()
 	if varName == "" {
 		panic(NewParseError("Expected variable name after 'select'", p._LexPeekToken().Pos, 0))
 	}
@@ -11468,14 +10461,12 @@ func (p *Parser) ParseSelect() *Select {
 		}
 	}
 	p.SkipWhitespaceAndNewlines()
-	body = p._ParseLoopBody("select")
+	body := p._ParseLoopBody("select")
 	return NewSelect(varName, words, body, p._CollectRedirects())
 }
 
 func (p *Parser) _ConsumeCaseTerminator() string {
-	var term string
-	_ = term
-	term = p._LexPeekCaseTerminator()
+	term := p._LexPeekCaseTerminator()
 	if term != "" {
 		p._LexNextToken()
 		return term
@@ -11484,52 +10475,30 @@ func (p *Parser) _ConsumeCaseTerminator() string {
 }
 
 func (p *Parser) ParseCase() *Case {
-	var word *Word
-	_ = word
-	var patterns []Node
-	_ = patterns
 	var saved int
-	_ = saved
 	var isPattern bool
-	_ = isPattern
 	var nextCh string
-	_ = nextCh
 	var patternChars []string
-	_ = patternChars
 	var extglobDepth int
-	_ = extglobDepth
 	var ch string
-	_ = ch
 	var parenDepth int
-	_ = parenDepth
 	var c string
-	_ = c
 	var isCharClass bool
-	_ = isCharClass
 	var scanPos int
-	_ = scanPos
 	var scanDepth int
-	_ = scanDepth
 	var hasFirstBracketLiteral bool
-	_ = hasFirstBracketLiteral
 	var sc string
-	_ = sc
 	var pattern string
-	_ = pattern
 	var body Node
-	_ = body
 	var isEmptyBody bool
-	_ = isEmptyBody
 	var isAtTerminator bool
-	_ = isAtTerminator
 	var terminator string
-	_ = terminator
 	if !(p.ConsumeWord("case")) {
 		return nil
 	}
 	p._SetState(ParserStateFlags_PST_CASESTMT)
 	p.SkipWhitespace()
-	word = p.ParseWord(false, false, false)
+	word := p.ParseWord(false, false, false)
 	if word == nil {
 		panic(NewParseError("Expected word after 'case'", p._LexPeekToken().Pos, 0))
 	}
@@ -11538,7 +10507,7 @@ func (p *Parser) ParseCase() *Case {
 		panic(NewParseError("Expected 'in' after case word", p._LexPeekToken().Pos, 0))
 	}
 	p.SkipWhitespaceAndNewlines()
-	patterns = []Node{}
+	patterns := []Node{}
 	p._SetState(ParserStateFlags_PST_CASEPAT)
 	for true {
 		p.SkipWhitespaceAndNewlines()
@@ -11730,17 +10699,9 @@ func (p *Parser) ParseCase() *Case {
 
 func (p *Parser) ParseCoproc() *Coproc {
 	var name string
-	_ = name
 	var ch string
-	_ = ch
 	var body Node
-	_ = body
 	var nextWord string
-	_ = nextWord
-	var wordStart int
-	_ = wordStart
-	var potentialName string
-	_ = potentialName
 	p.SkipWhitespace()
 	if !(p._LexConsumeWord("coproc")) {
 		return nil
@@ -11776,8 +10737,8 @@ func (p *Parser) ParseCoproc() *Coproc {
 			return NewCoproc(body, name)
 		}
 	}
-	wordStart = p.Pos
-	potentialName = p.PeekWord()
+	wordStart := p.Pos
+	potentialName := p.PeekWord()
 	if len(potentialName) > 0 {
 		for !(p.AtEnd()) && !(_IsMetachar(p.Peek())) && !(_IsQuote(p.Peek())) {
 			p.Advance()
@@ -11823,27 +10784,13 @@ func (p *Parser) ParseCoproc() *Coproc {
 }
 
 func (p *Parser) ParseFunction() *Function {
-	var savedPos int
-	_ = savedPos
 	var name string
-	_ = name
 	var body Node
-	_ = body
-	var nameStart int
-	_ = nameStart
-	var braceDepth int
-	_ = braceDepth
-	var i int
-	_ = i
-	var posAfterName int
-	_ = posAfterName
-	var hasWhitespace bool
-	_ = hasWhitespace
 	p.SkipWhitespace()
 	if p.AtEnd() {
 		return nil
 	}
-	savedPos = p.Pos
+	savedPos := p.Pos
 	if p._LexIsAtReservedWord("function") {
 		p._LexConsumeWord("function")
 		p.SkipWhitespace()
@@ -11875,7 +10822,7 @@ func (p *Parser) ParseFunction() *Function {
 		return nil
 	}
 	p.SkipWhitespace()
-	nameStart = p.Pos
+	nameStart := p.Pos
 	for !(p.AtEnd()) && !(_IsMetachar(p.Peek())) && !(_IsQuote(p.Peek())) && !(_IsParen(p.Peek())) {
 		p.Advance()
 	}
@@ -11884,8 +10831,8 @@ func (p *Parser) ParseFunction() *Function {
 		p.Pos = savedPos
 		return nil
 	}
-	braceDepth = 0
-	i = 0
+	braceDepth := 0
+	i := 0
 	for i < _runeLen(name) {
 		if _IsExpansionStart(name, i, "${") {
 			braceDepth += 1
@@ -11901,9 +10848,9 @@ func (p *Parser) ParseFunction() *Function {
 		p.Pos = savedPos
 		return nil
 	}
-	posAfterName = p.Pos
+	posAfterName := p.Pos
 	p.SkipWhitespace()
-	hasWhitespace = p.Pos > posAfterName
+	hasWhitespace := p.Pos > posAfterName
 	if !(hasWhitespace) && len(name) > 0 && strings.Contains("*?@+!$", _runeAt(name, _runeLen(name)-1)) {
 		p.Pos = savedPos
 		return nil
@@ -11928,8 +10875,6 @@ func (p *Parser) ParseFunction() *Function {
 }
 
 func (p *Parser) _ParseCompoundCommand() Node {
-	var result Node
-	_ = result
 	if rTmp := p.ParseBraceGroup(); rTmp != nil {
 		return rTmp
 	}
@@ -11967,9 +10912,6 @@ func (p *Parser) _ParseCompoundCommand() Node {
 
 func (p *Parser) _AtListUntilTerminator(stopWords map[string]struct{}) bool {
 	var nextPos int
-	_ = nextPos
-	var reserved string
-	_ = reserved
 	if p.AtEnd() {
 		return true
 	}
@@ -11982,7 +10924,7 @@ func (p *Parser) _AtListUntilTerminator(stopWords map[string]struct{}) bool {
 			return true
 		}
 	}
-	reserved = p._LexPeekReservedWord()
+	reserved := p._LexPeekReservedWord()
 	if reserved != "" && func() bool { _, ok := stopWords[reserved]; return ok }() {
 		return true
 	}
@@ -11993,18 +10935,11 @@ func (p *Parser) _AtListUntilTerminator(stopWords map[string]struct{}) bool {
 }
 
 func (p *Parser) ParseListUntil(stopWords map[string]struct{}) Node {
-	var reserved string
-	_ = reserved
 	var pipeline Node
-	_ = pipeline
-	var parts []Node
-	_ = parts
 	var op string
-	_ = op
 	var nextOp string
-	_ = nextOp
 	p.SkipWhitespaceAndNewlines()
-	reserved = p._LexPeekReservedWord()
+	reserved := p._LexPeekReservedWord()
 	if reserved != "" && func() bool { _, ok := stopWords[reserved]; return ok }() {
 		return nil
 	}
@@ -12012,7 +10947,7 @@ func (p *Parser) ParseListUntil(stopWords map[string]struct{}) Node {
 	if _isNilNode(pipeline) {
 		return nil
 	}
-	parts = []Node{pipeline}
+	parts := []Node{pipeline}
 	for true {
 		p.SkipWhitespace()
 		op = p.ParseListOperator()
@@ -12074,23 +11009,14 @@ func (p *Parser) ParseListUntil(stopWords map[string]struct{}) Node {
 }
 
 func (p *Parser) ParseCompoundCommand() Node {
-	var ch string
-	_ = ch
-	var result Node
-	_ = result
 	var reserved string
-	_ = reserved
 	var word string
-	_ = word
 	var keywordWord string
-	_ = keywordWord
-	var fn *Function
-	_ = fn
 	p.SkipWhitespace()
 	if p.AtEnd() {
 		return nil
 	}
-	ch = p.Peek()
+	ch := p.Peek()
 	if ch == "(" && p.Pos+1 < p.Length && string(p.Source_runes[p.Pos+1]) == "(" {
 		if rTmp := p.ParseArithmeticCommand(); rTmp != nil {
 			return rTmp
@@ -12146,24 +11072,18 @@ func (p *Parser) ParseCompoundCommand() Node {
 	if reserved == "coproc" {
 		return p.ParseCoproc()
 	}
-	fn = p.ParseFunction()
-	if fn != nil {
-		return fn
+	if fTmp := p.ParseFunction(); fTmp != nil {
+		return fTmp
 	}
 	return p.ParseCommand()
 }
 
 func (p *Parser) ParsePipeline() Node {
 	var prefixOrder string
-	_ = prefixOrder
 	var timePosix bool
-	_ = timePosix
 	var saved int
-	_ = saved
 	var inner Node
-	_ = inner
 	var result Node
-	_ = result
 	p.SkipWhitespace()
 	prefixOrder = ""
 	timePosix = false
@@ -12254,16 +11174,12 @@ func (p *Parser) ParsePipeline() Node {
 
 func (p *Parser) _ParseSimplePipeline() Node {
 	var cmd Node
-	_ = cmd
-	var commands []Node
-	_ = commands
 	var isPipeBoth bool
-	_ = isPipeBoth
 	cmd = p.ParseCompoundCommand()
 	if _isNilNode(cmd) {
 		return nil
 	}
-	commands = []Node{cmd}
+	commands := []Node{cmd}
 	for true {
 		p.SkipWhitespace()
 		tokenType, value := p._LexPeekOperator()
@@ -12320,25 +11236,16 @@ func (p *Parser) ParseListOperator() string {
 }
 
 func (p *Parser) _PeekListOperator() string {
-	var savedPos int
-	_ = savedPos
-	var op string
-	_ = op
-	savedPos = p.Pos
-	op = p.ParseListOperator()
+	savedPos := p.Pos
+	op := p.ParseListOperator()
 	p.Pos = savedPos
 	return op
 }
 
 func (p *Parser) ParseList(newlineAsSeparator bool) Node {
 	var pipeline Node
-	_ = pipeline
-	var parts []Node
-	_ = parts
 	var op string
-	_ = op
 	var nextOp string
-	_ = nextOp
 	if newlineAsSeparator {
 		p.SkipWhitespaceAndNewlines()
 	} else {
@@ -12348,7 +11255,7 @@ func (p *Parser) ParseList(newlineAsSeparator bool) Node {
 	if _isNilNode(pipeline) {
 		return nil
 	}
-	parts = []Node{pipeline}
+	parts := []Node{pipeline}
 	if p._InState(ParserStateFlags_PST_EOFTOKEN) && p._AtEofToken() {
 		return _ternary(len(parts) == 1, parts[0], Node(NewList(parts)))
 	}
@@ -12432,37 +11339,26 @@ func (p *Parser) ParseList(newlineAsSeparator bool) Node {
 }
 
 func (p *Parser) ParseComment() Node {
-	var start int
-	_ = start
-	var text string
-	_ = text
 	if p.AtEnd() || p.Peek() != "#" {
 		return nil
 	}
-	start = p.Pos
+	start := p.Pos
 	for !(p.AtEnd()) && p.Peek() != "\n" {
 		p.Advance()
 	}
-	text = _Substring(p.Source, start, p.Pos)
+	text := _Substring(p.Source, start, p.Pos)
 	return NewComment(text)
 }
 
 func (p *Parser) Parse() []Node {
-	var source string
-	_ = source
-	var results []Node
-	_ = results
 	var comment Node
-	_ = comment
 	var result Node
-	_ = result
 	var foundNewline bool
-	_ = foundNewline
-	source = strings.TrimSpace(p.Source)
+	source := strings.TrimSpace(p.Source)
 	if !(len(source) > 0) {
 		return []Node{NewEmpty()}
 	}
-	results = []Node{}
+	results := []Node{}
 	for true {
 		p.SkipWhitespace()
 		for !(p.AtEnd()) && p.Peek() == "\n" {
@@ -12513,15 +11409,11 @@ func (p *Parser) _LastWordOnOwnLine(nodes []Node) bool {
 }
 
 func (p *Parser) _StripTrailingBackslashFromLastWord(nodes []Node) {
-	var lastNode Node
-	_ = lastNode
-	var lastWord *Word
-	_ = lastWord
 	if !(len(nodes) > 0) {
 		return
 	}
-	lastNode = nodes[len(nodes)-1]
-	lastWord = p._FindLastWord(lastNode)
+	lastNode := nodes[len(nodes)-1]
+	lastWord := p._FindLastWord(lastNode)
 	if lastWord != nil && strings.HasSuffix(lastWord.Value, "\\") {
 		lastWord.Value = _Substring(lastWord.Value, 0, _runeLen(lastWord.Value)-1)
 		if !(len(lastWord.Value) > 0) && func() bool { _, ok := lastNode.(*Command); return ok }() && len(lastNode.(*Command).Words) > 0 {
@@ -12532,9 +11424,7 @@ func (p *Parser) _StripTrailingBackslashFromLastWord(nodes []Node) {
 
 func (p *Parser) _FindLastWord(node Node) *Word {
 	var lastWord *Word
-	_ = lastWord
 	var lastRedirect Node
-	_ = lastRedirect
 	switch n := node.(type) {
 	case *Word:
 		return n

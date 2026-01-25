@@ -8653,7 +8653,304 @@ func (p *Parser) _IsAssignmentWord(word Node) bool {
 }
 
 func (p *Parser) _ParseBacktickSubstitution() (Node, string) {
-	panic("TODO: method needs manual implementation")
+	if p.AtEnd() || p.Peek() != "`" {
+		return nil, ""
+	}
+	start := p.Pos
+	p.Advance() // consume opening `
+	var contentChars []string
+	textChars := []string{"`"} // opening backtick
+	// Heredoc state tracking
+	type heredocEntry struct {
+		delim     string
+		stripTabs bool
+	}
+	var pendingHeredocs []heredocEntry
+	inHeredocBody := false
+	currentHeredocDelim := ""
+	currentHeredocStrip := false
+	for !p.AtEnd() && (inHeredocBody || p.Peek() != "`") {
+		// When in heredoc body, scan for delimiter line by line
+		if inHeredocBody {
+			lineStart := p.Pos
+			lineEnd := lineStart
+			for lineEnd < p.Length && p.Source[lineEnd] != '\n' {
+				lineEnd++
+			}
+			line := p.Source[lineStart:lineEnd]
+			checkLine := line
+			if currentHeredocStrip {
+				checkLine = strings.TrimLeft(line, "\t")
+			}
+			if checkLine == currentHeredocDelim {
+				// Found delimiter - add line to content and exit body mode
+				for _, ch := range line {
+					contentChars = append(contentChars, string(ch))
+					textChars = append(textChars, string(ch))
+				}
+				p.Pos = lineEnd
+				if p.Pos < p.Length && p.Source[p.Pos] == '\n' {
+					contentChars = append(contentChars, "\n")
+					textChars = append(textChars, "\n")
+					p.Advance()
+				}
+				inHeredocBody = false
+				if len(pendingHeredocs) > 0 {
+					currentHeredocDelim = pendingHeredocs[0].delim
+					currentHeredocStrip = pendingHeredocs[0].stripTabs
+					pendingHeredocs = pendingHeredocs[1:]
+					inHeredocBody = true
+				}
+			} else if strings.HasPrefix(checkLine, currentHeredocDelim) && len(checkLine) > len(currentHeredocDelim) {
+				// Delimiter with trailing content
+				tabsStripped := len(line) - len(checkLine)
+				endPos := tabsStripped + len(currentHeredocDelim)
+				for i := 0; i < endPos; i++ {
+					contentChars = append(contentChars, string(line[i]))
+					textChars = append(textChars, string(line[i]))
+				}
+				p.Pos = lineStart + endPos
+				inHeredocBody = false
+				if len(pendingHeredocs) > 0 {
+					currentHeredocDelim = pendingHeredocs[0].delim
+					currentHeredocStrip = pendingHeredocs[0].stripTabs
+					pendingHeredocs = pendingHeredocs[1:]
+					inHeredocBody = true
+				}
+			} else {
+				// Not delimiter - add line and newline to content
+				for _, ch := range line {
+					contentChars = append(contentChars, string(ch))
+					textChars = append(textChars, string(ch))
+				}
+				p.Pos = lineEnd
+				if p.Pos < p.Length && p.Source[p.Pos] == '\n' {
+					contentChars = append(contentChars, "\n")
+					textChars = append(textChars, "\n")
+					p.Advance()
+				}
+			}
+			continue
+		}
+		c := p.Peek()
+		// Escape handling
+		if c == "\\" && p.Pos+1 < p.Length {
+			nextC := string(p.Source[p.Pos+1])
+			if nextC == "\n" {
+				// Line continuation: skip both backslash and newline
+				p.Advance()
+				p.Advance()
+			} else if _IsEscapeCharInBacktick(nextC) {
+				// Escape sequence: skip backslash in content, keep both in text
+				p.Advance()
+				escaped := p.Advance()
+				contentChars = append(contentChars, escaped)
+				textChars = append(textChars, "\\")
+				textChars = append(textChars, escaped)
+			} else {
+				// Backslash is literal before other characters
+				ch := p.Advance()
+				contentChars = append(contentChars, ch)
+				textChars = append(textChars, ch)
+			}
+			continue
+		}
+		// Heredoc declaration
+		if c == "<" && p.Pos+1 < p.Length && p.Source[p.Pos+1] == '<' {
+			// Check for here-string <<<
+			if p.Pos+2 < p.Length && p.Source[p.Pos+2] == '<' {
+				contentChars = append(contentChars, p.Advance())
+				textChars = append(textChars, "<")
+				contentChars = append(contentChars, p.Advance())
+				textChars = append(textChars, "<")
+				contentChars = append(contentChars, p.Advance())
+				textChars = append(textChars, "<")
+				// Skip whitespace and here-string word
+				for !p.AtEnd() && _IsWhitespaceNoNewline(p.Peek()) {
+					ch := p.Advance()
+					contentChars = append(contentChars, ch)
+					textChars = append(textChars, ch)
+				}
+				for !p.AtEnd() && !_IsWhitespace(p.Peek()) && p.Peek() != "(" && p.Peek() != ")" {
+					if p.Peek() == "\\" && p.Pos+1 < p.Length {
+						ch := p.Advance()
+						contentChars = append(contentChars, ch)
+						textChars = append(textChars, ch)
+						ch = p.Advance()
+						contentChars = append(contentChars, ch)
+						textChars = append(textChars, ch)
+					} else if p.Peek() == "\"" || p.Peek() == "'" {
+						quote := p.Peek()
+						ch := p.Advance()
+						contentChars = append(contentChars, ch)
+						textChars = append(textChars, ch)
+						for !p.AtEnd() && p.Peek() != quote {
+							if quote == "\"" && p.Peek() == "\\" {
+								ch = p.Advance()
+								contentChars = append(contentChars, ch)
+								textChars = append(textChars, ch)
+							}
+							ch = p.Advance()
+							contentChars = append(contentChars, ch)
+							textChars = append(textChars, ch)
+						}
+						if !p.AtEnd() {
+							ch = p.Advance()
+							contentChars = append(contentChars, ch)
+							textChars = append(textChars, ch)
+						}
+					} else {
+						ch := p.Advance()
+						contentChars = append(contentChars, ch)
+						textChars = append(textChars, ch)
+					}
+				}
+				continue
+			}
+			// Heredoc <<
+			contentChars = append(contentChars, p.Advance())
+			textChars = append(textChars, "<")
+			contentChars = append(contentChars, p.Advance())
+			textChars = append(textChars, "<")
+			stripTabs := false
+			if !p.AtEnd() && p.Peek() == "-" {
+				stripTabs = true
+				contentChars = append(contentChars, p.Advance())
+				textChars = append(textChars, "-")
+			}
+			// Skip whitespace
+			for !p.AtEnd() && _IsWhitespaceNoNewline(p.Peek()) {
+				ch := p.Advance()
+				contentChars = append(contentChars, ch)
+				textChars = append(textChars, ch)
+			}
+			// Parse delimiter
+			var delimiterChars []string
+			if !p.AtEnd() {
+				ch := p.Peek()
+				if _IsQuote(ch) {
+					quote := p.Advance()
+					contentChars = append(contentChars, quote)
+					textChars = append(textChars, quote)
+					for !p.AtEnd() && p.Peek() != quote {
+						dch := p.Advance()
+						contentChars = append(contentChars, dch)
+						textChars = append(textChars, dch)
+						delimiterChars = append(delimiterChars, dch)
+					}
+					if !p.AtEnd() {
+						closing := p.Advance()
+						contentChars = append(contentChars, closing)
+						textChars = append(textChars, closing)
+					}
+				} else if ch == "\\" {
+					esc := p.Advance()
+					contentChars = append(contentChars, esc)
+					textChars = append(textChars, esc)
+					if !p.AtEnd() {
+						dch := p.Advance()
+						contentChars = append(contentChars, dch)
+						textChars = append(textChars, dch)
+						delimiterChars = append(delimiterChars, dch)
+					}
+					for !p.AtEnd() && !_IsMetachar(p.Peek()) {
+						dch := p.Advance()
+						contentChars = append(contentChars, dch)
+						textChars = append(textChars, dch)
+						delimiterChars = append(delimiterChars, dch)
+					}
+				} else {
+					// Stop at backtick (closes substitution) or metachar
+					for !p.AtEnd() && !_IsMetachar(p.Peek()) && p.Peek() != "`" {
+						ch := p.Peek()
+						if _IsQuote(ch) {
+							quote := p.Advance()
+							contentChars = append(contentChars, quote)
+							textChars = append(textChars, quote)
+							for !p.AtEnd() && p.Peek() != quote {
+								dch := p.Advance()
+								contentChars = append(contentChars, dch)
+								textChars = append(textChars, dch)
+								delimiterChars = append(delimiterChars, dch)
+							}
+							if !p.AtEnd() {
+								closing := p.Advance()
+								contentChars = append(contentChars, closing)
+								textChars = append(textChars, closing)
+							}
+						} else if ch == "\\" {
+							esc := p.Advance()
+							contentChars = append(contentChars, esc)
+							textChars = append(textChars, esc)
+							if !p.AtEnd() {
+								dch := p.Advance()
+								contentChars = append(contentChars, dch)
+								textChars = append(textChars, dch)
+								delimiterChars = append(delimiterChars, dch)
+							}
+						} else {
+							dch := p.Advance()
+							contentChars = append(contentChars, dch)
+							textChars = append(textChars, dch)
+							delimiterChars = append(delimiterChars, dch)
+						}
+					}
+				}
+			}
+			delimiter := strings.Join(delimiterChars, "")
+			if delimiter != "" {
+				pendingHeredocs = append(pendingHeredocs, heredocEntry{delimiter, stripTabs})
+			}
+			continue
+		}
+		// Newline - check for heredoc body mode
+		if c == "\n" {
+			ch := p.Advance()
+			contentChars = append(contentChars, ch)
+			textChars = append(textChars, ch)
+			if len(pendingHeredocs) > 0 {
+				currentHeredocDelim = pendingHeredocs[0].delim
+				currentHeredocStrip = pendingHeredocs[0].stripTabs
+				pendingHeredocs = pendingHeredocs[1:]
+				inHeredocBody = true
+			}
+			continue
+		}
+		// Regular character
+		ch := p.Advance()
+		contentChars = append(contentChars, ch)
+		textChars = append(textChars, ch)
+	}
+	if p.AtEnd() {
+		panic(NewParseError("Unterminated backtick", start, 0))
+	}
+	p.Advance() // consume closing `
+	textChars = append(textChars, "`")
+	text := strings.Join(textChars, "")
+	content := strings.Join(contentChars, "")
+	// Check for heredocs whose bodies follow the closing backtick
+	if len(pendingHeredocs) > 0 {
+		delimiters := make([]interface{}, len(pendingHeredocs))
+		for i, h := range pendingHeredocs {
+			delimiters[i] = []interface{}{h.delim, h.stripTabs}
+		}
+		heredocStart, heredocEnd := _FindHeredocContentEnd(p.Source, p.Pos, delimiters)
+		if heredocEnd > heredocStart {
+			content = content + p.Source[heredocStart:heredocEnd]
+			if p._Cmdsub_heredoc_end == -1 {
+				p._Cmdsub_heredoc_end = heredocEnd
+			} else if heredocEnd > p._Cmdsub_heredoc_end {
+				p._Cmdsub_heredoc_end = heredocEnd
+			}
+		}
+	}
+	// Parse the content as a command list
+	subParser := NewParser(content, false, p._Extglob)
+	cmd := subParser.ParseList(true)
+	if cmd == nil {
+		cmd = NewEmpty()
+	}
+	return NewCommandSubstitution(cmd, false), text
 }
 
 func (p *Parser) _ParseProcessSubstitution() (Node, string) {
@@ -9789,15 +10086,452 @@ func (p *Parser) _ParseDeprecatedArithmetic() (Node, string) {
 }
 
 func (p *Parser) _ParseParamExpansion(inDquote bool) (Node, string) {
-	panic("TODO: method needs manual implementation")
+	p._SyncLexer()
+	result, text := p._Lexer._ReadParamExpansion(inDquote)
+	p._SyncParser()
+	return result, text
 }
 
 func (p *Parser) ParseRedirect() interface{} {
-	panic("TODO: method needs manual implementation")
+	p.SkipWhitespace()
+	if p.AtEnd() {
+		return nil
+	}
+	start := p.Pos
+	var fd *int
+	var varfd string
+	// Check for variable fd {varname} or {varname[subscript]} before redirect
+	if p.Peek() == "{" {
+		saved := p.Pos
+		p.Advance() // consume {
+		var varnameChars []string
+		inBracket := false
+		for !p.AtEnd() && !_IsRedirectChar(p.Peek()) {
+			ch := p.Peek()
+			if ch == "}" && !inBracket {
+				break
+			} else if ch == "[" {
+				inBracket = true
+				varnameChars = append(varnameChars, p.Advance())
+			} else if ch == "]" {
+				inBracket = false
+				varnameChars = append(varnameChars, p.Advance())
+			} else if (unicode.IsLetter(_runeFromChar(ch)) || unicode.IsDigit(_runeFromChar(ch))) || ch == "_" {
+				varnameChars = append(varnameChars, p.Advance())
+			} else if inBracket && !_IsMetachar(ch) {
+				varnameChars = append(varnameChars, p.Advance())
+			} else {
+				break
+			}
+		}
+		varname := strings.Join(varnameChars, "")
+		isValidVarfd := false
+		if varname != "" {
+			if unicode.IsLetter(_runeFromChar(string(varname[0]))) || varname[0] == '_' {
+				if strings.Contains(varname, "[") || strings.Contains(varname, "]") {
+					left := strings.Index(varname, "[")
+					right := strings.LastIndex(varname, "]")
+					if left != -1 && right == len(varname)-1 && right > left+1 {
+						base := varname[:left]
+						if base != "" && (unicode.IsLetter(_runeFromChar(string(base[0]))) || base[0] == '_') {
+							isValidVarfd = true
+							for _, c := range base[1:] {
+								if !((unicode.IsLetter(c) || unicode.IsDigit(c)) || c == '_') {
+									isValidVarfd = false
+									break
+								}
+							}
+						}
+					}
+				} else {
+					isValidVarfd = true
+					for _, c := range varname[1:] {
+						if !((unicode.IsLetter(c) || unicode.IsDigit(c)) || c == '_') {
+							isValidVarfd = false
+							break
+						}
+					}
+				}
+			}
+		}
+		if !p.AtEnd() && p.Peek() == "}" && isValidVarfd {
+			p.Advance() // consume }
+			varfd = varname
+		} else {
+			// Not a valid variable fd, restore
+			p.Pos = saved
+		}
+	}
+	// Check for optional fd number before redirect (if no varfd)
+	if varfd == "" && !p.AtEnd() && _IsDigit(p.Peek()) {
+		var fdChars []string
+		for !p.AtEnd() && _IsDigit(p.Peek()) {
+			fdChars = append(fdChars, p.Advance())
+		}
+		fdNum, _ := strconv.Atoi(strings.Join(fdChars, ""))
+		fd = &fdNum
+	}
+	if p.AtEnd() {
+		p.Pos = start
+		return nil
+	}
+	ch := p.Peek()
+	// Handle &> and &>> (redirect both stdout and stderr)
+	if ch == "&" && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == ">" {
+		if fd != nil || varfd != "" {
+			p.Pos = start
+			return nil
+		}
+		p.Advance() // consume &
+		p.Advance() // consume >
+		op := "&>"
+		if !p.AtEnd() && p.Peek() == ">" {
+			p.Advance()
+			op = "&>>"
+		}
+		p.SkipWhitespace()
+		target := p.ParseWord(false, false, false)
+		if target == nil {
+			panic(NewParseError("Expected target for redirect "+op, p.Pos, 0))
+		}
+		return NewRedirect(op, target, -1)
+	}
+	if !_IsRedirectChar(ch) {
+		p.Pos = start
+		return nil
+	}
+	// Check for process substitution <(...) or >(...) - not a redirect
+	if fd == nil && varfd == "" && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "(" {
+		p.Pos = start
+		return nil
+	}
+	// Parse the redirect operator
+	op := p.Advance()
+	stripTabs := false
+	if !p.AtEnd() {
+		nextCh := p.Peek()
+		if op == ">" && nextCh == ">" {
+			p.Advance()
+			op = ">>"
+		} else if op == "<" && nextCh == "<" {
+			p.Advance()
+			if !p.AtEnd() && p.Peek() == "<" {
+				p.Advance()
+				op = "<<<"
+			} else if !p.AtEnd() && p.Peek() == "-" {
+				p.Advance()
+				op = "<<"
+				stripTabs = true
+			} else {
+				op = "<<"
+			}
+		} else if op == "<" && nextCh == ">" {
+			p.Advance()
+			op = "<>"
+		} else if op == ">" && nextCh == "|" {
+			p.Advance()
+			op = ">|"
+		} else if fd == nil && varfd == "" && op == ">" && nextCh == "&" {
+			if p.Pos+1 >= p.Length || !_IsDigitOrDash(string(p.Source[p.Pos+1])) {
+				p.Advance()
+				op = ">&"
+			}
+		} else if fd == nil && varfd == "" && op == "<" && nextCh == "&" {
+			if p.Pos+1 >= p.Length || !_IsDigitOrDash(string(p.Source[p.Pos+1])) {
+				p.Advance()
+				op = "<&"
+			}
+		}
+	}
+	// Handle here document
+	if op == "<<" {
+		fdVal := 0
+		if fd != nil {
+			fdVal = *fd
+		}
+		return p._ParseHeredoc(fdVal, stripTabs)
+	}
+	// Combine fd or varfd with operator if present
+	if varfd != "" {
+		op = "{" + varfd + "}" + op
+	} else if fd != nil {
+		op = strconv.Itoa(*fd) + op
+	}
+	// Handle fd duplication targets like &1, &2, &-, &10-, &$var
+	var target *Word
+	if !p.AtEnd() && p.Peek() == "&" {
+		p.Advance() // consume &
+		p.SkipWhitespace()
+		// Check for "& -" followed by non-metachar
+		if !p.AtEnd() && p.Peek() == "-" {
+			if p.Pos+1 < p.Length && !_IsMetachar(string(p.Source[p.Pos+1])) {
+				p.Advance()
+				target = NewWord("&-", nil)
+			}
+		}
+		if target == nil {
+			if !p.AtEnd() && (_IsDigit(p.Peek()) || p.Peek() == "-") {
+				wordStart := p.Pos
+				var fdChars []string
+				for !p.AtEnd() && _IsDigit(p.Peek()) {
+					fdChars = append(fdChars, p.Advance())
+				}
+				fdTarget := strings.Join(fdChars, "")
+				// Handle just - for close, or N- for move syntax
+				if !p.AtEnd() && p.Peek() == "-" {
+					fdTarget += p.Advance()
+				}
+				// If more word characters follow, treat the whole target as a word
+				if fdTarget != "-" && !p.AtEnd() && !_IsMetachar(p.Peek()) {
+					p.Pos = wordStart
+					innerWord := p.ParseWord(false, false, false)
+					if innerWord != nil {
+						target = NewWord("&"+innerWord.Value, nil)
+						target.Parts = innerWord.Parts
+					} else {
+						panic(NewParseError("Expected target for redirect "+op, p.Pos, 0))
+					}
+				} else {
+					target = NewWord("&"+fdTarget, nil)
+				}
+			} else {
+				// Could be &$var or &word
+				innerWord := p.ParseWord(false, false, false)
+				if innerWord != nil {
+					target = NewWord("&"+innerWord.Value, nil)
+					target.Parts = innerWord.Parts
+				} else {
+					panic(NewParseError("Expected target for redirect "+op, p.Pos, 0))
+				}
+			}
+		}
+	} else {
+		p.SkipWhitespace()
+		// Handle >& - or <& - where space precedes the close syntax
+		if (op == ">&" || op == "<&") && !p.AtEnd() && p.Peek() == "-" {
+			if p.Pos+1 < p.Length && !_IsMetachar(string(p.Source[p.Pos+1])) {
+				p.Advance()
+				target = NewWord("&-", nil)
+			} else {
+				target = p.ParseWord(false, false, false)
+			}
+		} else {
+			target = p.ParseWord(false, false, false)
+		}
+	}
+	if target == nil {
+		panic(NewParseError("Expected target for redirect "+op, p.Pos, 0))
+	}
+	return NewRedirect(op, target, -1)
 }
 
 func (p *Parser) _ParseHeredocDelimiter() (string, bool) {
-	panic("TODO: method needs manual implementation")
+	p.SkipWhitespace()
+	quoted := false
+	var delimiterChars []string
+	for {
+		for !p.AtEnd() && !_IsMetachar(p.Peek()) {
+			ch := p.Peek()
+			if ch == "\"" {
+				quoted = true
+				p.Advance()
+				for !p.AtEnd() && p.Peek() != "\"" {
+					delimiterChars = append(delimiterChars, p.Advance())
+				}
+				if !p.AtEnd() {
+					p.Advance()
+				}
+			} else if ch == "'" {
+				quoted = true
+				p.Advance()
+				for !p.AtEnd() && p.Peek() != "'" {
+					c := p.Advance()
+					if c == "\n" {
+						p._Saw_newline_in_single_quote = true
+					}
+					delimiterChars = append(delimiterChars, c)
+				}
+				if !p.AtEnd() {
+					p.Advance()
+				}
+			} else if ch == "\\" {
+				p.Advance()
+				if !p.AtEnd() {
+					nextCh := p.Peek()
+					if nextCh == "\n" {
+						// Backslash-newline: continue delimiter on next line
+						p.Advance()
+					} else {
+						// Regular escape - quotes the next char
+						quoted = true
+						delimiterChars = append(delimiterChars, p.Advance())
+					}
+				}
+			} else if ch == "$" && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "'" {
+				// ANSI-C quoting $'...' - skip $ and quotes, expand escapes
+				quoted = true
+				p.Advance() // skip $
+				p.Advance() // skip opening '
+				for !p.AtEnd() && p.Peek() != "'" {
+					c := p.Peek()
+					if c == "\\" && p.Pos+1 < p.Length {
+						p.Advance() // skip backslash
+						esc := p.Peek()
+						escVal := _GetAnsiEscape(esc)
+						if escVal >= 0 {
+							delimiterChars = append(delimiterChars, string(rune(escVal)))
+							p.Advance()
+						} else if esc == "'" {
+							delimiterChars = append(delimiterChars, p.Advance())
+						} else {
+							delimiterChars = append(delimiterChars, p.Advance())
+						}
+					} else {
+						delimiterChars = append(delimiterChars, p.Advance())
+					}
+				}
+				if !p.AtEnd() {
+					p.Advance() // skip closing '
+				}
+			} else if _IsExpansionStart(p.Source, p.Pos, "$(") {
+				// Command substitution embedded in delimiter
+				delimiterChars = append(delimiterChars, p.Advance()) // $
+				delimiterChars = append(delimiterChars, p.Advance()) // (
+				depth := 1
+				for !p.AtEnd() && depth > 0 {
+					c := p.Peek()
+					if c == "(" {
+						depth++
+					} else if c == ")" {
+						depth--
+					}
+					delimiterChars = append(delimiterChars, p.Advance())
+				}
+			} else if ch == "$" && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "{" {
+				// Check if this is $${ where $$ is PID and { ends delimiter
+				dollarCount := 0
+				j := p.Pos - 1
+				for j >= 0 && p.Source[j] == '$' {
+					dollarCount++
+					j--
+				}
+				if j >= 0 && p.Source[j] == '\\' {
+					dollarCount--
+				}
+				if dollarCount%2 == 1 {
+					// Odd number of $ before: this $ pairs with previous to form $$
+					delimiterChars = append(delimiterChars, p.Advance()) // $
+				} else {
+					// Parameter expansion embedded in delimiter
+					delimiterChars = append(delimiterChars, p.Advance()) // $
+					delimiterChars = append(delimiterChars, p.Advance()) // {
+					depth := 0
+					for !p.AtEnd() {
+						c := p.Peek()
+						if c == "{" {
+							depth++
+						} else if c == "}" {
+							delimiterChars = append(delimiterChars, p.Advance())
+							if depth == 0 {
+								break
+							}
+							depth--
+							if depth == 0 && !p.AtEnd() && _IsMetachar(p.Peek()) {
+								break
+							}
+							continue
+						}
+						delimiterChars = append(delimiterChars, p.Advance())
+					}
+				}
+			} else if ch == "$" && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "[" {
+				// Check if this is $$[ where $$ is PID and [ ends delimiter
+				dollarCount := 0
+				j := p.Pos - 1
+				for j >= 0 && p.Source[j] == '$' {
+					dollarCount++
+					j--
+				}
+				if j >= 0 && p.Source[j] == '\\' {
+					dollarCount--
+				}
+				if dollarCount%2 == 1 {
+					delimiterChars = append(delimiterChars, p.Advance()) // $
+				} else {
+					// Arithmetic expansion $[...] embedded in delimiter
+					delimiterChars = append(delimiterChars, p.Advance()) // $
+					delimiterChars = append(delimiterChars, p.Advance()) // [
+					depth := 1
+					for !p.AtEnd() && depth > 0 {
+						c := p.Peek()
+						if c == "[" {
+							depth++
+						} else if c == "]" {
+							depth--
+						}
+						delimiterChars = append(delimiterChars, p.Advance())
+					}
+				}
+			} else if ch == "`" {
+				// Backtick command substitution embedded in delimiter
+				delimiterChars = append(delimiterChars, p.Advance()) // `
+				for !p.AtEnd() && p.Peek() != "`" {
+					c := p.Peek()
+					if c == "'" {
+						// Single-quoted string inside backtick
+						delimiterChars = append(delimiterChars, p.Advance())
+						for !p.AtEnd() && p.Peek() != "'" && p.Peek() != "`" {
+							delimiterChars = append(delimiterChars, p.Advance())
+						}
+						if !p.AtEnd() && p.Peek() == "'" {
+							delimiterChars = append(delimiterChars, p.Advance())
+						}
+					} else if c == "\"" {
+						// Double-quoted string inside backtick
+						delimiterChars = append(delimiterChars, p.Advance())
+						for !p.AtEnd() && p.Peek() != "\"" && p.Peek() != "`" {
+							if p.Peek() == "\\" && p.Pos+1 < p.Length {
+								delimiterChars = append(delimiterChars, p.Advance())
+							}
+							delimiterChars = append(delimiterChars, p.Advance())
+						}
+						if !p.AtEnd() && p.Peek() == "\"" {
+							delimiterChars = append(delimiterChars, p.Advance())
+						}
+					} else if c == "\\" && p.Pos+1 < p.Length {
+						delimiterChars = append(delimiterChars, p.Advance())
+						delimiterChars = append(delimiterChars, p.Advance())
+					} else {
+						delimiterChars = append(delimiterChars, p.Advance())
+					}
+				}
+				if !p.AtEnd() {
+					delimiterChars = append(delimiterChars, p.Advance()) // closing `
+				}
+			} else {
+				delimiterChars = append(delimiterChars, p.Advance())
+			}
+		}
+		// Check for process substitution syntax <( or >( which is part of delimiter
+		if !p.AtEnd() && (p.Peek() == "<" || p.Peek() == ">") && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "(" {
+			// Process substitution embedded in delimiter
+			delimiterChars = append(delimiterChars, p.Advance()) // < or >
+			delimiterChars = append(delimiterChars, p.Advance()) // (
+			depth := 1
+			for !p.AtEnd() && depth > 0 {
+				c := p.Peek()
+				if c == "(" {
+					depth++
+				} else if c == ")" {
+					depth--
+				}
+				delimiterChars = append(delimiterChars, p.Advance())
+			}
+			continue // Try to collect more delimiter characters
+		}
+		break
+	}
+	return strings.Join(delimiterChars, ""), quoted
 }
 
 func (p *Parser) _ReadHeredocLine(quoted bool) (string, int) {
@@ -9849,11 +10583,80 @@ func (p *Parser) _LineMatchesDelimiter(line string, delimiter string, stripTabs 
 }
 
 func (p *Parser) _GatherHeredocBodies() {
-	panic("TODO: method needs manual implementation")
+	for _, node := range p._Pending_heredocs {
+		heredoc := node.(*HereDoc)
+		var contentLines []string
+		lineStart := p.Pos
+		for p.Pos < p.Length {
+			lineStart = p.Pos
+			line, lineEnd := p._ReadHeredocLine(heredoc.Quoted)
+			matches, checkLine := p._LineMatchesDelimiter(line, heredoc.Delimiter, heredoc.Strip_tabs)
+			if matches {
+				if lineEnd < p.Length {
+					p.Pos = lineEnd + 1
+				} else {
+					p.Pos = lineEnd
+				}
+				break
+			}
+			// Check for delimiter followed by cmdsub/procsub closer
+			normalizedCheck := _NormalizeHeredocDelimiter(checkLine)
+			normalizedDelim := _NormalizeHeredocDelimiter(heredoc.Delimiter)
+			// In command substitution: line starts with delimiter - heredoc ends there
+			if p._Eof_token == ")" && strings.HasPrefix(normalizedCheck, normalizedDelim) {
+				tabsStripped := len(line) - len(checkLine)
+				p.Pos = lineStart + tabsStripped + len(heredoc.Delimiter)
+				break
+			}
+			// At EOF with line starting with delimiter - heredoc terminates (process sub case)
+			if lineEnd >= p.Length && strings.HasPrefix(normalizedCheck, normalizedDelim) && p._In_process_sub {
+				tabsStripped := len(line) - len(checkLine)
+				p.Pos = lineStart + tabsStripped + len(heredoc.Delimiter)
+				break
+			}
+			// Add line to content
+			if heredoc.Strip_tabs {
+				line = strings.TrimLeft(line, "\t")
+			}
+			if lineEnd < p.Length {
+				contentLines = append(contentLines, line+"\n")
+				p.Pos = lineEnd + 1
+			} else {
+				// EOF - bash keeps trailing newline unless escaped by odd backslash
+				addNewline := true
+				if !heredoc.Quoted && _CountTrailingBackslashes(line)%2 == 1 {
+					addNewline = false
+				}
+				if addNewline {
+					contentLines = append(contentLines, line+"\n")
+				} else {
+					contentLines = append(contentLines, line)
+				}
+				p.Pos = p.Length
+			}
+		}
+		heredoc.Content = strings.Join(contentLines, "")
+	}
+	p._Pending_heredocs = nil
 }
 
 func (p *Parser) _ParseHeredoc(fd int, stripTabs bool) *HereDoc {
-	panic("TODO: method needs manual implementation")
+	startPos := p.Pos
+	p._SetState(ParserStateFlags_PST_HEREDOC)
+	delimiter, quoted := p._ParseHeredocDelimiter()
+	// Check if we've already registered this heredoc (can happen due to re-tokenization)
+	for _, existing := range p._Pending_heredocs {
+		if existing.(*HereDoc)._Start_pos == startPos && existing.(*HereDoc).Delimiter == delimiter {
+			p._ClearState(ParserStateFlags_PST_HEREDOC)
+			return existing.(*HereDoc)
+		}
+	}
+	// Create stub HereDoc with empty content - will be filled in later
+	heredoc := NewHereDoc(delimiter, "", stripTabs, quoted, fd, false)
+	heredoc._Start_pos = startPos
+	p._Pending_heredocs = append(p._Pending_heredocs, heredoc)
+	p._ClearState(ParserStateFlags_PST_HEREDOC)
+	return heredoc
 }
 
 func (p *Parser) ParseCommand() *Command {
@@ -11219,27 +12022,370 @@ func (p *Parser) ParseListUntil(stopWords map[string]struct{}) Node {
 }
 
 func (p *Parser) ParseCompoundCommand() Node {
-	panic("TODO: method needs manual implementation")
+	p.SkipWhitespace()
+	if p.AtEnd() {
+		return nil
+	}
+	ch := p.Peek()
+	// Arithmetic command ((...)) - check before subshell
+	if ch == "(" && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "(" {
+		result := p.ParseArithmeticCommand()
+		if result != nil {
+			return result
+		}
+		// Not arithmetic (e.g., '(( x ) )' is nested subshells) - fall through
+	}
+	// Subshell
+	if ch == "(" {
+		return p.ParseSubshell()
+	}
+	// Brace group
+	if ch == "{" {
+		result := p.ParseBraceGroup()
+		if result != nil {
+			return result
+		}
+		// Fall through to simple command if not a brace group
+	}
+	// Conditional expression [[ ]] - check before reserved words
+	if ch == "[" && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "[" {
+		result := p.ParseConditionalExpr()
+		if result != nil {
+			return result
+		}
+		// Fall through to simple command if [[ is not a conditional keyword
+	}
+	// Check for reserved words using Lexer
+	reserved := p._LexPeekReservedWord()
+	// In command substitutions, handle leading } for keyword matching
+	if reserved == "" && p._In_process_sub {
+		word := p.PeekWord()
+		if word != "" && len(word) > 1 && word[0] == '}' {
+			keywordWord := word[1:]
+			if _, ok := p._Lexer.RESERVED_WORDS[keywordWord]; ok {
+				reserved = keywordWord
+			} else if keywordWord == "{" || keywordWord == "}" || keywordWord == "[[" ||
+				keywordWord == "]]" || keywordWord == "!" || keywordWord == "time" {
+				reserved = keywordWord
+			}
+		}
+	}
+	// Reserved words that cannot start a statement
+	if reserved == "fi" || reserved == "then" || reserved == "elif" || reserved == "else" ||
+		reserved == "done" || reserved == "esac" || reserved == "do" || reserved == "in" {
+		tok := p._LexPeekToken()
+		panic(NewParseError("Unexpected reserved word '"+reserved+"'", tok.Pos, 0))
+	}
+	// If statement
+	if reserved == "if" {
+		return p.ParseIf()
+	}
+	// While loop
+	if reserved == "while" {
+		return p.ParseWhile()
+	}
+	// Until loop
+	if reserved == "until" {
+		return p.ParseUntil()
+	}
+	// For loop
+	if reserved == "for" {
+		return p.ParseFor()
+	}
+	// Select statement
+	if reserved == "select" {
+		return p.ParseSelect()
+	}
+	// Case statement
+	if reserved == "case" {
+		return p.ParseCase()
+	}
+	// Function definition (function keyword form)
+	if reserved == "function" {
+		return p.ParseFunction()
+	}
+	// Coproc
+	if reserved == "coproc" {
+		return p.ParseCoproc()
+	}
+	// Try POSIX function definition (name() form) before simple command
+	function := p.ParseFunction()
+	if function != nil {
+		return function
+	}
+	// Simple command
+	return p.ParseCommand()
 }
 
 func (p *Parser) ParsePipeline() Node {
-	panic("TODO: method needs manual implementation")
+	p.SkipWhitespace()
+	// Track order of prefixes
+	var prefixOrder string
+	timePosix := false
+	// Check for 'time' prefix first
+	if p._LexIsAtReservedWord("time") {
+		p._LexConsumeWord("time")
+		prefixOrder = "time"
+		p.SkipWhitespace()
+		// Check for -p flag
+		if !p.AtEnd() && p.Peek() == "-" {
+			saved := p.Pos
+			p.Advance()
+			if !p.AtEnd() && p.Peek() == "p" {
+				p.Advance()
+				if p.AtEnd() || _IsMetachar(p.Peek()) {
+					timePosix = true
+				} else {
+					p.Pos = saved
+				}
+			} else {
+				p.Pos = saved
+			}
+		}
+		p.SkipWhitespace()
+		// Check for -- (end of options) - implies -p per bash-oracle
+		if !p.AtEnd() && p.Pos+1 < p.Length && string(p.Source[p.Pos:p.Pos+2]) == "--" {
+			if p.Pos+2 >= p.Length || _IsWhitespace(string(p.Source[p.Pos+2])) {
+				p.Advance()
+				p.Advance()
+				timePosix = true
+				p.SkipWhitespace()
+			}
+		}
+		// Skip nested time keywords (time time X collapses to time X)
+		for p._LexIsAtReservedWord("time") {
+			p._LexConsumeWord("time")
+			p.SkipWhitespace()
+			// Check for -p after nested time
+			if !p.AtEnd() && p.Peek() == "-" {
+				saved := p.Pos
+				p.Advance()
+				if !p.AtEnd() && p.Peek() == "p" {
+					p.Advance()
+					if p.AtEnd() || _IsMetachar(p.Peek()) {
+						timePosix = true
+					} else {
+						p.Pos = saved
+					}
+				} else {
+					p.Pos = saved
+				}
+			}
+		}
+		p.SkipWhitespace()
+		// Check for ! after time
+		if !p.AtEnd() && p.Peek() == "!" {
+			if (p.Pos+1 >= p.Length || _IsNegationBoundary(string(p.Source[p.Pos+1]))) && !p._IsBangFollowedByProcsub() {
+				p.Advance()
+				prefixOrder = "time_negation"
+				p.SkipWhitespace()
+			}
+		}
+	} else if !p.AtEnd() && p.Peek() == "!" {
+		// Check for '!' negation prefix (if no time yet)
+		if (p.Pos+1 >= p.Length || _IsNegationBoundary(string(p.Source[p.Pos+1]))) && !p._IsBangFollowedByProcsub() {
+			p.Advance()
+			p.SkipWhitespace()
+			// Recursively parse pipeline to handle ! ! cmd, ! time cmd, etc.
+			inner := p.ParsePipeline()
+			// Double negation cancels out
+			if inner != nil && inner.Kind() == "negation" {
+				neg := inner.(*Negation)
+				if neg.Pipeline != nil {
+					return neg.Pipeline
+				}
+				return NewCommand(nil, nil)
+			}
+			return NewNegation(inner)
+		}
+	}
+	// Parse the actual pipeline
+	result := p._ParseSimplePipeline()
+	// Wrap based on prefix order
+	if prefixOrder == "time" {
+		result = NewTime(result, timePosix)
+	} else if prefixOrder == "negation" {
+		result = NewNegation(result)
+	} else if prefixOrder == "time_negation" {
+		// time ! cmd -> Negation(Time(cmd)) per bash-oracle
+		result = NewTime(result, timePosix)
+		result = NewNegation(result)
+	} else if prefixOrder == "negation_time" {
+		// ! time cmd -> Negation(Time(cmd))
+		result = NewTime(result, timePosix)
+		result = NewNegation(result)
+	} else if result == nil {
+		return nil
+	}
+	return result
 }
 
 func (p *Parser) _ParseSimplePipeline() Node {
-	panic("TODO: method needs manual implementation")
+	cmd := p.ParseCompoundCommand()
+	if cmd == nil {
+		return nil
+	}
+	commands := []Node{cmd}
+	for {
+		p.SkipWhitespace()
+		tokenType, _ := p._LexPeekOperator()
+		if tokenType == 0 {
+			break
+		}
+		if tokenType != TokenType_PIPE && tokenType != TokenType_PIPE_AMP {
+			break
+		}
+		p._LexNextToken()
+		isPipeBoth := tokenType == TokenType_PIPE_AMP
+		p.SkipWhitespaceAndNewlines()
+		if isPipeBoth {
+			commands = append(commands, NewPipeBoth())
+		}
+		nextCmd := p.ParseCompoundCommand()
+		if nextCmd == nil {
+			panic(NewParseError("Expected command after |", p.Pos, 0))
+		}
+		commands = append(commands, nextCmd)
+	}
+	if len(commands) == 1 {
+		return commands[0]
+	}
+	return NewPipeline(commands)
 }
 
 func (p *Parser) ParseListOperator() string {
-	panic("TODO: method needs manual implementation")
+	p.SkipWhitespace()
+	tokenType, _ := p._LexPeekOperator()
+	if tokenType == 0 {
+		return ""
+	}
+	switch tokenType {
+	case TokenType_AND_AND:
+		p._LexNextToken()
+		return "&&"
+	case TokenType_OR_OR:
+		p._LexNextToken()
+		return "||"
+	case TokenType_SEMI:
+		p._LexNextToken()
+		return ";"
+	case TokenType_AMP:
+		p._LexNextToken()
+		return "&"
+	}
+	return ""
 }
 
 func (p *Parser) _PeekListOperator() string {
-	panic("TODO: method needs manual implementation")
+	savedPos := p.Pos
+	op := p.ParseListOperator()
+	p.Pos = savedPos
+	return op
 }
 
 func (p *Parser) ParseList(newlineAsSeparator bool) Node {
-	panic("TODO: method needs manual implementation")
+	if newlineAsSeparator {
+		p.SkipWhitespaceAndNewlines()
+	} else {
+		p.SkipWhitespace()
+	}
+	pipeline := p.ParsePipeline()
+	if pipeline == nil {
+		return nil
+	}
+	parts := []Node{pipeline}
+	// Grammar-level EOF token check (like Bash's simple_list rule)
+	if p._InState(ParserStateFlags_PST_EOFTOKEN) && p._AtEofToken() {
+		if len(parts) == 1 {
+			return parts[0]
+		}
+		return NewList(parts)
+	}
+	for {
+		// Check for explicit operator FIRST (without consuming newlines)
+		p.SkipWhitespace()
+		op := p.ParseListOperator()
+		if op == "" {
+			// No explicit operator - check for newline as implicit separator
+			if !p.AtEnd() && p.Peek() == "\n" {
+				if !newlineAsSeparator {
+					break // top-level: newline ends this parse
+				}
+				// compound_list: newline acts as separator
+				p.Advance() // consume \n
+				p._GatherHeredocBodies()
+				if p._Cmdsub_heredoc_end != -1 && p._Cmdsub_heredoc_end > p.Pos {
+					p.Pos = p._Cmdsub_heredoc_end
+					p._Cmdsub_heredoc_end = -1
+				}
+				p.SkipWhitespaceAndNewlines()
+				if p.AtEnd() || p._AtListTerminatingBracket() {
+					break
+				}
+				// Validate next thing is a command start, not bare operator
+				nextOp := p._PeekListOperator()
+				if nextOp == "&" || nextOp == ";" {
+					// Bare & or ; after newline - newline terminated the list
+					break
+				}
+				op = "\n"
+			} else {
+				break // no operator, no newline - done
+			}
+		}
+		if op == "" {
+			break
+		}
+		parts = append(parts, NewOperator(op))
+		// Handle trailing newlines AFTER the operator
+		if op == "&&" || op == "||" {
+			p.SkipWhitespaceAndNewlines() // always allowed
+		} else if op == "&" {
+			p.SkipWhitespace()
+			if p.AtEnd() || p._AtListTerminatingBracket() {
+				break // & at end - backgrounds last command
+			}
+			if p.Peek() == "\n" {
+				if newlineAsSeparator {
+					p.SkipWhitespaceAndNewlines()
+					if p.AtEnd() || p._AtListTerminatingBracket() {
+						break
+					}
+				} else {
+					break // simple_list: newline ends
+				}
+			}
+		} else if op == ";" {
+			p.SkipWhitespace()
+			if p.AtEnd() || p._AtListTerminatingBracket() {
+				break
+			}
+			if p.Peek() == "\n" {
+				if newlineAsSeparator {
+					p.SkipWhitespaceAndNewlines()
+					if p.AtEnd() || p._AtListTerminatingBracket() {
+						break
+					}
+				} else {
+					break // simple_list: newline ends
+				}
+			}
+		}
+		// op == "\n" already handled above
+		pipeline = p.ParsePipeline()
+		if pipeline == nil {
+			panic(NewParseError("Expected command after "+op, p.Pos, 0))
+		}
+		parts = append(parts, pipeline)
+		// Grammar-level EOF token check after each command
+		if p._InState(ParserStateFlags_PST_EOFTOKEN) && p._AtEofToken() {
+			break
+		}
+	}
+	if len(parts) == 1 {
+		return parts[0]
+	}
+	return NewList(parts)
 }
 
 func (p *Parser) ParseComment() Node {
@@ -11259,7 +12405,67 @@ func (p *Parser) ParseComment() Node {
 }
 
 func (p *Parser) Parse() []Node {
-	panic("TODO: method needs manual implementation")
+	source := strings.TrimSpace(p.Source)
+	if source == "" {
+		return []Node{NewEmpty()}
+	}
+	var results []Node
+	// Skip leading comments (bash-oracle doesn't output them)
+	for {
+		p.SkipWhitespace()
+		// Skip newlines but not comments
+		for !p.AtEnd() && p.Peek() == "\n" {
+			p.Advance()
+		}
+		if p.AtEnd() {
+			break
+		}
+		comment := p.ParseComment()
+		if comment == nil {
+			break
+		}
+		// Don't add to results - bash-oracle doesn't output comments
+	}
+	// Parse statements separated by newlines as separate top-level nodes
+	for !p.AtEnd() {
+		result := p.ParseList(false)
+		if result != nil {
+			results = append(results, result)
+		}
+		p.SkipWhitespace()
+		// Skip newlines (and any pending heredoc content) between statements
+		foundNewline := false
+		for !p.AtEnd() && p.Peek() == "\n" {
+			foundNewline = true
+			p.Advance()
+			// Gather pending heredoc content after newline
+			p._GatherHeredocBodies()
+			if p._Cmdsub_heredoc_end != -1 && p._Cmdsub_heredoc_end > p.Pos {
+				p.Pos = p._Cmdsub_heredoc_end
+				p._Cmdsub_heredoc_end = -1
+			}
+			p.SkipWhitespace()
+		}
+		// If no newline and not at end, we have unparsed content
+		if !foundNewline && !p.AtEnd() {
+			panic(NewParseError("Syntax error", p.Pos, 0))
+		}
+	}
+	if len(results) == 0 {
+		return []Node{NewEmpty()}
+	}
+	// bash-oracle strips trailing backslash at EOF when there was a newline
+	// inside single quotes and the last word is on the same line as other content
+	if p._Saw_newline_in_single_quote && len(p.Source) > 0 && p.Source[len(p.Source)-1] == '\\' {
+		// Check for backslash-newline pattern at end (don't strip)
+		if !(len(p.Source) >= 3 && p.Source[len(p.Source)-3:len(p.Source)-1] == "\\\n") {
+			// Check if the last word started on its own line
+			if !p._LastWordOnOwnLine(results) {
+				p._StripTrailingBackslashFromLastWord(results)
+			}
+		}
+	}
+	return results
 }
 
 func (p *Parser) _LastWordOnOwnLine(nodes []Node) bool {
@@ -11267,9 +12473,54 @@ func (p *Parser) _LastWordOnOwnLine(nodes []Node) bool {
 }
 
 func (p *Parser) _StripTrailingBackslashFromLastWord(nodes []Node) {
-	panic("TODO: method needs manual implementation")
+	if len(nodes) == 0 {
+		return
+	}
+	lastNode := nodes[len(nodes)-1]
+	lastWord := p._FindLastWord(lastNode)
+	if lastWord != nil && strings.HasSuffix(lastWord.Value, "\\") {
+		lastWord.Value = _Substring(lastWord.Value, 0, len(lastWord.Value)-1)
+		// If the word is now empty, remove it from the command
+		if lastWord.Value == "" {
+			if cmd, ok := lastNode.(*Command); ok && len(cmd.Words) > 0 {
+				cmd.Words = cmd.Words[:len(cmd.Words)-1]
+			}
+		}
+	}
 }
 
 func (p *Parser) _FindLastWord(node Node) *Word {
-	panic("TODO: method needs manual implementation")
+	switch n := node.(type) {
+	case *Word:
+		return n
+	case *Command:
+		// For trailing backslash stripping, prioritize words ending with backslash
+		if len(n.Words) > 0 {
+			lastWord := n.Words[len(n.Words)-1].(*Word)
+			if strings.HasSuffix(lastWord.Value, "\\") {
+				return lastWord
+			}
+		}
+		// Redirects come after words in s-expression output, so check redirects first
+		if len(n.Redirects) > 0 {
+			lastRedirect := n.Redirects[len(n.Redirects)-1]
+			if redir, ok := lastRedirect.(*Redirect); ok {
+				if word, ok := redir.Target.(*Word); ok {
+					return word
+				}
+			}
+		}
+		if len(n.Words) > 0 {
+			return n.Words[len(n.Words)-1].(*Word)
+		}
+	case *Pipeline:
+		if len(n.Commands) > 0 {
+			return p._FindLastWord(n.Commands[len(n.Commands)-1])
+		}
+	case *List:
+		if len(n.Parts) > 0 {
+			return p._FindLastWord(n.Parts[len(n.Parts)-1])
+		}
+	}
+	return nil
 }

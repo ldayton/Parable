@@ -6033,12 +6033,12 @@ func (p *Pipeline) _CmdSexp(cmd Node, needsRedirect bool) string {
 	if !(needsRedirect) {
 		return cmd.ToSexp()
 	}
-	if cmd.Kind() == "command" {
+	if c, ok := cmd.(*Command); ok {
 		parts = []string{}
-		for _, w := range cmd.(*Command).Words {
+		for _, w := range c.Words {
 			parts = append(parts, w.ToSexp())
 		}
-		for _, r := range cmd.(*Command).Redirects {
+		for _, r := range c.Redirects {
 			parts = append(parts, r.ToSexp())
 		}
 		parts = append(parts, "(redirect \">&\" 1)")
@@ -8640,7 +8640,37 @@ func (p *Parser) _ArithParseUnary() Node {
 }
 
 func (p *Parser) _ArithParsePostfix() Node {
-	panic("TODO: method needs manual implementation")
+	var left Node
+	_ = left
+	var index Node
+	_ = index
+	left = p._ArithParsePrimary()
+	for true {
+		p._ArithSkipWs()
+		if p._ArithMatch("++") {
+			p._ArithConsume("++")
+			left = NewArithPostIncr(left)
+		} else if p._ArithMatch("--") {
+			p._ArithConsume("--")
+			left = NewArithPostDecr(left)
+		} else if p._ArithPeek(0) == "[" {
+			if l, ok := left.(*ArithVar); ok {
+				p._ArithAdvance()
+				p._ArithSkipWs()
+				index = p._ArithParseComma()
+				p._ArithSkipWs()
+				if !(p._ArithConsume("]")) {
+					panic(NewParseError("Expected ']' in array subscript", p._Arith_pos, 0))
+				}
+				left = NewArithSubscript(l.Name, index)
+			} else {
+				break
+			}
+		} else {
+			break
+		}
+	}
+	return left
 }
 
 func (p *Parser) _ArithParsePrimary() Node {

@@ -86,6 +86,37 @@ class GoTranspiler(ast.NodeVisitor):
         "ProcessSub": "*ProcessSubstitution",
     }
 
+    # Node kind string -> Go type name mapping (for kind-based type narrowing)
+    KIND_TO_TYPE = {
+        # Arithmetic nodes
+        "var": "ArithVar",
+        "number": "ArithNumber",
+        "binary-op": "ArithBinaryOp",
+        "unary-op": "ArithUnaryOp",
+        "pre-incr": "ArithPreIncr",
+        "post-incr": "ArithPostIncr",
+        "pre-decr": "ArithPreDecr",
+        "post-decr": "ArithPostDecr",
+        "assign": "ArithAssign",
+        "ternary": "ArithTernary",
+        "subscript": "ArithSubscript",
+        "comma": "ArithComma",
+        "escape": "ArithEscape",
+        "arith-deprecated": "ArithDeprecated",
+        "arith-concat": "ArithConcat",
+        "empty": "ArithEmpty",
+        # Command nodes
+        "command": "Command",
+        "pipeline": "Pipeline",
+        "list": "List",
+        "subshell": "Subshell",
+        "brace-group": "BraceGroup",
+        "negation": "Negation",
+        "heredoc": "HereDoc",
+        "redirect": "Redirect",
+        "word": "Word",
+    }
+
     def __init__(self):
         self.indent = 0
         self.output: list[str] = []
@@ -1122,8 +1153,6 @@ class GoTranspiler(ast.NodeVisitor):
         # Higher-order function patterns and arithmetic parsing
         # Higher-order function - not called, kept as stub
         "_arith_parse_left_assoc",
-        # Duck typing / type narrowing needed
-        "_arith_parse_postfix",
         # getattr patterns that need type assertions
         "_parse_arith_expr",
         # Tuple passthrough (returns tuple stored in variable)
@@ -2292,6 +2321,12 @@ class GoTranspiler(ast.NodeVisitor):
                     self.emit(f"{', '.join(used_vars)} {op} {call_str}")
                     return
             target_str = self.visit_expr(target)
+            # If in type switch context and assigning to the switched variable,
+            # assign to the original variable (not the narrowed one)
+            if isinstance(target, ast.Name) and self._type_switch_var:
+                orig_var, narrowed_var = self._type_switch_var
+                if target_str == narrowed_var:
+                    target_str = orig_var
             # Check if this is a new variable (local name, not attribute)
             if isinstance(target, ast.Name):
                 if target_str not in self.declared_vars:
@@ -2971,8 +3006,71 @@ class GoTranspiler(ast.NodeVisitor):
                 return (receiver_type, field_name, disc_var)
         return None
 
+    def _detect_kind_check(self, test: ast.expr) -> tuple[str, str] | None:
+        """Detect `var.kind == "literal"`. Returns (var_name, kind_literal) or None."""
+        if not isinstance(test, ast.Compare):
+            return None
+        if len(test.ops) != 1 or not isinstance(test.ops[0], ast.Eq):
+            return None
+        if not isinstance(test.left, ast.Attribute) or test.left.attr != "kind":
+            return None
+        if not isinstance(test.left.value, ast.Name):
+            return None
+        comp = test.comparators[0]
+        if not isinstance(comp, ast.Constant) or not isinstance(comp.value, str):
+            return None
+        if comp.value not in self.KIND_TO_TYPE:
+            return None
+        return (test.left.value.id, comp.value)
+
+    def _emit_kind_type_narrowing(self, stmt: ast.If, kind_info: tuple[str, str], is_first: bool):
+        """Emit kind-based type narrowing as Go type assertion."""
+        var_name, kind_literal = kind_info
+        type_name = self.KIND_TO_TYPE[kind_literal]
+        go_var = self._snake_to_camel(var_name)
+        go_var = self._safe_go_name(go_var)
+        narrowed_var = go_var[0].lower()
+        if narrowed_var == go_var:
+            narrowed_var = go_var + "T"
+        if is_first:
+            self.emit(f"if {narrowed_var}, ok := {go_var}.(*{type_name}); ok {{")
+        else:
+            self.emit_raw("\t" * self.indent + f"}} else if {narrowed_var}, ok := {go_var}.(*{type_name}); ok {{")
+        self.indent += 1
+        # Set type narrowing context (reuses existing _type_switch_var mechanism)
+        old_switch_var = self._type_switch_var
+        old_switch_type = self._type_switch_type
+        self._type_switch_var = (go_var, narrowed_var)
+        self._type_switch_type = f"*{type_name}"
+        try:
+            for s in stmt.body:
+                self._emit_stmt(s)
+        except NotImplementedError:
+            self.emit('panic("TODO")')
+        # Restore context
+        self._type_switch_var = old_switch_var
+        self._type_switch_type = old_switch_type
+        self.indent -= 1
+        # Handle elif/else chains
+        if stmt.orelse:
+            if len(stmt.orelse) == 1 and isinstance(stmt.orelse[0], ast.If):
+                self._emit_if_chain(stmt.orelse[0], is_first=False)
+            else:
+                self.emit_raw("\t" * self.indent + "} else {")
+                self.indent += 1
+                for s in stmt.orelse:
+                    self._emit_stmt(s)
+                self.indent -= 1
+                self.emit("}")
+        else:
+            self.emit("}")
+
     def _emit_if_chain(self, stmt: ast.If, is_first: bool):
         """Emit if/elif/else chain."""
+        # Check for kind-based type narrowing
+        kind_info = self._detect_kind_check(stmt.test)
+        if kind_info:
+            return self._emit_kind_type_narrowing(stmt, kind_info, is_first)
         test = self._emit_bool_expr(stmt.test)
         # Check for union field discriminator pattern
         union_info = self._detect_union_discriminator(stmt.test)

@@ -97,7 +97,7 @@ func parseTestFile(filepath string) []testCase {
 	return tests
 }
 
-var whitespaceRe = regexp.MustCompile(`\s+`)
+var whitespaceRe = regexp.MustCompile(`[\s\v]+`)
 
 func normalize(s string) string {
 	return strings.TrimSpace(whitespaceRe.ReplaceAllString(s, " "))

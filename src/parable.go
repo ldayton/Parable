@@ -9404,7 +9404,7 @@ func (p *Parser) _LineMatchesDelimiter(line string, delimiter string, stripTabs 
 }
 
 func (p *Parser) _GatherHeredocBodies() {
-	// Minimal implementation: just return if no pending heredocs
+	// Minimal implementation: return if no pending heredocs
 	// Full heredoc support requires implementing the full algorithm
 	if len(p._Pending_heredocs) == 0 {
 		return

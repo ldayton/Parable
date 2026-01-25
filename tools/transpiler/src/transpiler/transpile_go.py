@@ -1158,7 +1158,6 @@ class GoTranspiler(ast.NodeVisitor):
         # Tuple passthrough (returns tuple stored in variable)
         "_parse_param_expansion",
         # Complex type assertions needed
-        "_gather_heredoc_bodies",
         "_parse_heredoc",
         "_parse_heredoc_delimiter",
         # Tuple stack in local variable (heredoc tracking)
@@ -1252,6 +1251,8 @@ class GoTranspiler(ast.NodeVisitor):
         ("Parser", "_arith_parse_logical_or"): lambda t, r: GoTranspiler._emit_arith_left_assoc(t, r, ["||"], "_ArithParseLogicalAnd"),
         ("Parser", "_arith_parse_logical_and"): lambda t, r: GoTranspiler._emit_arith_left_assoc(t, r, ["&&"], "_ArithParseBitwiseOr"),
         ("Parser", "_arith_parse_equality"): lambda t, r: GoTranspiler._emit_arith_left_assoc(t, r, ["==", "!="], "_ArithParseComparison"),
+        # Heredoc gathering - minimal implementation (full heredocs not yet supported)
+        ("Parser", "_gather_heredoc_bodies"): lambda t, r: GoTranspiler._emit_gather_heredoc_bodies(t, r),
     }
 
     @staticmethod
@@ -1319,6 +1320,18 @@ class GoTranspiler(ast.NodeVisitor):
         t.indent -= 1
         t.emit("}")
         t.emit("return left")
+
+    @staticmethod
+    def _emit_gather_heredoc_bodies(t: "GoTranspiler", receiver: str):
+        """Emit minimal _GatherHeredocBodies - returns early if no pending heredocs."""
+        t.emit("// Minimal implementation: return if no pending heredocs")
+        t.emit("// Full heredoc support requires implementing the full algorithm")
+        t.emit(f"if len({receiver}._Pending_heredocs) == 0 {{")
+        t.indent += 1
+        t.emit("return")
+        t.indent -= 1
+        t.emit("}")
+        t.emit('panic("TODO: heredoc gathering not yet implemented")')
 
     def _emit_constructor(self, node: ast.FunctionDef, class_info: ClassInfo):
         """Emit a constructor function."""

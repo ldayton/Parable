@@ -225,13 +225,14 @@ class GoTranspiler(ast.NodeVisitor):
 
     # Override parameter types for functions with bare "list" annotations
     # Maps (method_name, param_name) -> Go type
+    # Use *[]T (pointer-to-slice) for parameters that are mutated by the callee
     PARAM_TYPE_OVERRIDES = {
-        ("_read_bracket_expression", "chars"): "[]string",
-        ("_read_bracket_expression", "parts"): "[]Node",
-        ("_parse_dollar_expansion", "chars"): "[]string",
-        ("_parse_dollar_expansion", "parts"): "[]Node",
-        ("_scan_double_quote", "chars"): "[]string",
-        ("_scan_double_quote", "parts"): "[]Node",
+        ("_read_bracket_expression", "chars"): "*[]string",
+        ("_read_bracket_expression", "parts"): "*[]Node",
+        ("_parse_dollar_expansion", "chars"): "*[]string",
+        ("_parse_dollar_expansion", "parts"): "*[]Node",
+        ("_scan_double_quote", "chars"): "*[]string",
+        ("_scan_double_quote", "parts"): "*[]Node",
         ("restore_from", "saved_stack"): "[]*ParseContext",
         ("copy_stack", "_result"): "[]*ParseContext",  # return type hint
         # SavedParserState constructor parameters
@@ -246,7 +247,7 @@ class GoTranspiler(ast.NodeVisitor):
         ("_to_sexp_amp_and_higher", "op_names"): "map[string]string",
         ("_to_sexp_and_or", "parts"): "[]Node",
         ("_to_sexp_and_or", "op_names"): "map[string]string",
-        # Redirect handling
+        # Redirect handling - only reads, no mutation
         ("_append_redirects", "redirects"): "[]Node",
     }
 
@@ -3607,6 +3608,39 @@ class GoTranspiler(ast.NodeVisitor):
                 break
         return result
 
+    def _add_address_of_for_ptr_slice_params(
+        self, class_name: str, method: str, args: list[str], orig_args: list[ast.expr]
+    ) -> list[str]:
+        """Add & when passing slice to pointer-to-slice parameter."""
+        class_info = self.symbols.classes.get(class_name)
+        if not class_info:
+            return args
+        # Try original name first, then camelCase, then PascalCase
+        method_key = method
+        if method_key not in class_info.methods:
+            method_key = self._snake_to_camel(method)
+        if method_key not in class_info.methods:
+            method_key = self._snake_to_pascal(method)
+        if method_key not in class_info.methods:
+            return args
+        func_info = class_info.methods[method_key]
+        result = list(args)
+        for i, arg_str in enumerate(result):
+            if i >= len(func_info.params) or i >= len(orig_args):
+                break
+            param = func_info.params[i]
+            param_type = param.go_type
+            if not param_type or not param_type.startswith("*[]"):
+                continue
+            # Check if the argument is a slice variable (not already a pointer)
+            if isinstance(orig_args[i], ast.Name):
+                var_name = self._snake_to_camel(orig_args[i].id)
+                var_name = self._safe_go_name(var_name)
+                arg_type = self.var_types.get(var_name, "")
+                if arg_type and arg_type.startswith("[]") and not arg_type.startswith("[]*"):
+                    result[i] = f"&{arg_str}"
+        return result
+
     def visit_expr_Subscript(self, node: ast.Subscript) -> str:
         """Convert subscript access (indexing/slicing)."""
         # Check if accessing tuple variable element (cmdsub_result[0] -> cmdsubResult0)
@@ -4207,6 +4241,8 @@ class GoTranspiler(ast.NodeVisitor):
             method_key = f"{class_name}.{method}"
             args = self._merge_keyword_args_for_method(class_name, method, args, node.keywords)
             args = self._fill_default_args_for_method(class_name, method, args)
+            # Add & when passing slice to pointer-to-slice parameter
+            args = self._add_address_of_for_ptr_slice_params(class_name, method, args, node.args)
         args_str = ", ".join(args)
         # Handle Node interface methods - may need type assertion
         if method in ("to_sexp", "kind"):
@@ -4262,6 +4298,19 @@ class GoTranspiler(ast.NodeVisitor):
         """Emit append call - Go requires reassignment."""
         arg = args[0]
         obj_type = self.var_types.get(obj, "")
+        # Handle pointer-to-slice types - dereference for append
+        if obj_type.startswith("*[]"):
+            elem_type = obj_type[3:]  # e.g., "*[]Node" -> "Node"
+            # If appending interface{} to *[]Node, add type assertion
+            if elem_type == "Node" and orig_args:
+                arg_type = self._infer_type_from_expr(orig_args[0])
+                if arg_type == "interface{}":
+                    arg = f"{arg}.(Node)"
+            # If appending a byte to a *[]string, convert
+            if elem_type == "string":
+                if orig_args and self._is_byte_expr(orig_args[0]):
+                    arg = f"string({arg})"
+            return f"*{obj} = append(*{obj}, {arg})"
         # If appending interface{} to []Node, add type assertion
         if obj_type == "[]Node" and orig_args:
             arg_type = self._infer_type_from_expr(orig_args[0])

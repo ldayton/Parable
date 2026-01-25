@@ -256,3 +256,10 @@ profile:
 # Profile test suite instead of corpus
 profile-tests:
     uv run python -m cProfile -s tottime tests/bin/run-tests.py 2>&1 | head -50 || true
+
+# Profile with scalene (line-level CPU + memory)
+profile-scalene:
+    uvx scalene run --profile-all --outfile /tmp/parable-scalene.json tools/bash-oracle/src/oracle/run_corpus.py --- --sequential --max-files 100 || true
+    @echo ""
+    @echo "Output: /tmp/parable-scalene.json"
+    uvx scalene view /tmp/parable-scalene.json

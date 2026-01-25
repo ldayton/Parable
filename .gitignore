@@ -13,3 +13,4 @@ tools/bash-oracle/bash-oracle
 tools/bash-oracle/bin/failures.txt
 tools/bash-oracle/bin/negation-cmdsub.txt
 /bugs.tests
+scalene-profile.html

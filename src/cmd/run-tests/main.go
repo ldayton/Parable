@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/parable-parser/parable"
+	"parable"
 )
 
 type testCase struct {

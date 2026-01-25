@@ -163,7 +163,7 @@ transpile-go output="src/parable.go":
     [[ "$go_out" = /* ]] || go_out="$(pwd)/$go_out"
     uv run --directory tools/transpiler transpiler --transpile-go "$(pwd)/src/parable.py" > "$go_out"
     gofmt -w "$go_out"
-    go build -C src -o /dev/null parable.go
+    go build -C src -o /dev/null .
 
 # Verify parable.js is up-to-date with transpiler output
 verify-js:
@@ -198,7 +198,7 @@ verify-go:
 
 # Build Go (verifies parable.go compiles)
 build-go:
-    go build -C src -o /dev/null parable.go
+    go build -C src -o /dev/null .
 
 # Run Go tests
 test-go *ARGS: verify-go

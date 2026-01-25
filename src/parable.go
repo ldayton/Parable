@@ -8690,7 +8690,47 @@ func (p *Parser) _ParseProcessSubstitution() (Node, string) {
 	p._In_process_sub = true
 	p._SetState(ParserStateFlags_PST_EOFTOKEN)
 	p._Eof_token = ")"
-	panic("TODO: try/except with return")
+	var parseErr interface{}
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				parseErr = r
+			}
+		}()
+		cmd = p.ParseList(true)
+	}()
+	if parseErr != nil {
+		p._RestoreParserState(saved)
+		p._In_process_sub = oldInProcessSub
+		contentStartChar = ""
+		if start+2 < len(p.Source) {
+			contentStartChar = string(p.Source[start+2])
+		}
+		if contentStartChar == " " || contentStartChar == "\t" || contentStartChar == "\n" {
+			panic(parseErr)
+		}
+		p.Pos = start + 2
+		p._Lexer.Pos = p.Pos
+		p._Lexer._ParseMatchedPair("(", ")", 0, false)
+		p.Pos = p._Lexer.Pos
+		text = _Substring(p.Source, start, p.Pos)
+		text = _StripLineContinuationsCommentAware(text)
+		return nil, text
+	}
+	if cmd == nil {
+		cmd = NewEmpty()
+	}
+	p.SkipWhitespaceAndNewlines()
+	if p.AtEnd() || p.Peek() != ")" {
+		panic(NewParseError("Invalid process substitution", start, 0))
+	}
+	p.Advance()
+	textEnd = p.Pos
+	text = _Substring(p.Source, start, textEnd)
+	text = _StripLineContinuationsCommentAware(text)
+	p._RestoreParserState(saved)
+	p._In_process_sub = oldInProcessSub
+	return NewProcessSubstitution(direction, cmd), text
 }
 
 func (p *Parser) _ParseArrayLiteral() (Node, string) {
@@ -8827,12 +8867,43 @@ func (p *Parser) _ParseArithmeticExpansion() (Node, string) {
 	}
 	p.Advance()
 	text = p.Source[start:p.Pos]
-	panic("TODO: try/except with return")
+	var parseErr interface{}
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				parseErr = r
+			}
+		}()
+		expr = p._ParseArithExpr(content)
+	}()
+	if parseErr != nil {
+		p.Pos = start
+		return nil, ""
+	}
 	return NewArithmeticExpansion(expr), text
 }
 
 func (p *Parser) _ParseArithExpr(content string) Node {
-	panic("TODO: method needs manual implementation")
+	savedArithSrc := p._Arith_src
+	savedArithPos := p._Arith_pos
+	savedArithLen := p._Arith_len
+	savedParserState := p._Parser_state
+	p._SetState(ParserStateFlags_PST_ARITH)
+	p._Arith_src = content
+	p._Arith_pos = 0
+	p._Arith_len = len(content)
+	p._ArithSkipWs()
+	var result Node
+	if p._ArithAtEnd() {
+		result = nil
+	} else {
+		result = p._ArithParseComma()
+	}
+	p._Parser_state = savedParserState
+	p._Arith_src = savedArithSrc
+	p._Arith_pos = savedArithPos
+	p._Arith_len = savedArithLen
+	return result
 }
 
 func (p *Parser) _ArithAtEnd() bool {
@@ -8963,7 +9034,25 @@ func (p *Parser) _ArithParseTernary() Node {
 }
 
 func (p *Parser) _ArithParseLeftAssoc(ops []string, parsefn interface{}) Node {
-	panic("TODO: method needs manual implementation")
+	fn := parsefn.(func() Node)
+	left := fn()
+	for {
+		p._ArithSkipWs()
+		matched := false
+		for _, op := range ops {
+			if p._ArithMatch(op) {
+				p._ArithConsume(op)
+				p._ArithSkipWs()
+				left = NewArithBinaryOp(op, left, fn())
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			break
+		}
+	}
+	return left
 }
 
 func (p *Parser) _ArithParseLogicalOr() Node {
@@ -9281,7 +9370,33 @@ func (p *Parser) _ArithParseUnary() Node {
 }
 
 func (p *Parser) _ArithParsePostfix() Node {
-	panic("TODO: method needs manual implementation")
+	left := p._ArithParsePrimary()
+	for {
+		p._ArithSkipWs()
+		if p._ArithMatch("++") {
+			p._ArithConsume("++")
+			left = NewArithPostIncr(left)
+		} else if p._ArithMatch("--") {
+			p._ArithConsume("--")
+			left = NewArithPostDecr(left)
+		} else if p._ArithPeek(0) == "[" {
+			if left.Kind() == "var" {
+				p._ArithAdvance()
+				p._ArithSkipWs()
+				index := p._ArithParseComma()
+				p._ArithSkipWs()
+				if !p._ArithConsume("]") {
+					panic(NewParseError("Expected ']' in array subscript", p._Arith_pos, 0))
+				}
+				left = NewArithSubscript(left.(*ArithVar).Name, index)
+			} else {
+				break
+			}
+		} else {
+			break
+		}
+	}
+	return left
 }
 
 func (p *Parser) _ArithParsePrimary() Node {

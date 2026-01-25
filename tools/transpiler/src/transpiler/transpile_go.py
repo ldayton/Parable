@@ -1133,16 +1133,9 @@ class GoTranspiler(ast.NodeVisitor):
     # Functions that require duck typing (Part 6d) or have complex patterns - skip body for now
     SKIP_BODY_FUNCTIONS = {
         # Duck typing (Part 6d) - isinstance-based dispatch
-        "_format_cond_body",
         "_format_cond_value",
         "_collect_cmdsubs",
         "_collect_assignments",
-        "_starts_with_subshell",
-        "_format_cmdsub_node",
-        "_format_redirect",
-        "_format_heredoc_body",
-        # Complex for-loop tuple unpacking
-        "_find_heredoc_content_end",
         # Complex lexer methods with walrus operators
         "_parse_matched_pair",
         "_read_bracket_regex",
@@ -1169,8 +1162,11 @@ class GoTranspiler(ast.NodeVisitor):
         else:
             self.emit(f"func {go_name}({params_str}) {{")
         self.indent += 1
+        # Check for manually implemented functions first
+        if node.name in self.MANUAL_FUNCTIONS:
+            self.MANUAL_FUNCTIONS[node.name](self)
         # Skip body for complex functions
-        if node.name in self.SKIP_BODY_FUNCTIONS:
+        elif node.name in self.SKIP_BODY_FUNCTIONS:
             self.emit('panic("TODO: function needs manual transpilation")')
         else:
             self._emit_body(node.body, func_info)

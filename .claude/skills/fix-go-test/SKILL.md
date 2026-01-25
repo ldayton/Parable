@@ -1,9 +1,9 @@
 ---
 name: fix-go-test
-description: Fix the first failing Go transpiler test, verify improvement
+description: Fix a random failing Go transpiler test, verify improvement
 ---
 
-Fix one failing test in the Go transpiler, then verify the fix reduced failures.
+Fix a randomly-selected failing test in the Go transpiler, then verify the fix reduced failures.
 
 ## Workflow
 
@@ -23,7 +23,7 @@ Run with filter to see failing tests with details (limited to 50):
 go run -C src ./cmd/run-tests -f "oils/misc.tests" 2>&1 | head -100
 ```
 
-If the first failure is a large multi-command test (like `arith` or `builtins`), look for a simpler single-command test. Tests in `oils/` or `parable/` directories tend to be smaller.
+**Select a random failure** from the list, not the first one. If your random selection is a large multi-command test (like `arith` or `builtins`), pick a different random test. Tests in `oils/` or `parable/` directories tend to be smaller.
 
 To get details on a specific test:
 ```bash

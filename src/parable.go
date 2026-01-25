@@ -11901,9 +11901,8 @@ func (p *Parser) _ParseCompoundCommand() Node {
 		return rTmp
 	}
 	if !(p.AtEnd()) && p.Peek() == "(" && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "(" {
-		result = p.ParseArithmeticCommand()
-		if result != nil {
-			return result
+		if rTmp := p.ParseArithmeticCommand(); rTmp != nil {
+			return rTmp
 		}
 	}
 	if rTmp := p.ParseSubshell(); rTmp != nil {
@@ -12060,24 +12059,21 @@ func (p *Parser) ParseCompoundCommand() Node {
 	}
 	ch = p.Peek()
 	if ch == "(" && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "(" {
-		result = p.ParseArithmeticCommand()
-		if result != nil {
-			return result
+		if rTmp := p.ParseArithmeticCommand(); rTmp != nil {
+			return rTmp
 		}
 	}
 	if ch == "(" {
 		return p.ParseSubshell()
 	}
 	if ch == "{" {
-		result = p.ParseBraceGroup()
-		if result != nil {
-			return result
+		if rTmp := p.ParseBraceGroup(); rTmp != nil {
+			return rTmp
 		}
 	}
 	if ch == "[" && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "[" {
-		result = p.ParseConditionalExpr()
-		if result != nil {
-			return result
+		if rTmp := p.ParseConditionalExpr(); rTmp != nil {
+			return rTmp
 		}
 	}
 	reserved = p._LexPeekReservedWord()

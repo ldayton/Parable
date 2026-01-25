@@ -231,3 +231,28 @@ fmt-js *ARGS:
 # Format TypeScript definitions (--fix to apply changes)
 fmt-dts *ARGS:
     npx -y @biomejs/biome format {{ if ARGS == "--fix" { "--write" } else { "" } }} src/parable.d.ts 2>&1 | sed -u "s/^/[fmt-dts] /" | tee /tmp/{{project}}-{{run_id}}-fmt-dts.log
+
+# Benchmark test suite
+benchmark:
+    hyperfine --warmup 2 --runs 5 'uv run tests/bin/run-tests.py 2>&1'
+
+# Benchmark real corpus (requires ~/source/bigtable-bash)
+benchmark-corpus:
+    hyperfine --warmup 2 --runs 5 'uv run tools/bash-oracle/src/oracle/run_corpus.py 2>&1'
+
+# Profile on corpus (cProfile + flameprof)
+profile:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    uv run python -m cProfile -o /tmp/parable-profile.prof tools/bash-oracle/src/oracle/run_corpus.py --sequential --max-files 100
+    uv run python -c "import pstats, json; s = pstats.Stats('/tmp/parable-profile.prof'); s.strip_dirs(); data = [(f'{fn[0]}:{fn[1]}:{fn[2]}', {'calls': int(st[0]), 'tottime': st[2], 'cumtime': st[3]}) for fn, st in s.stats.items()]; data.sort(key=lambda x: -x[1]['tottime']); open('/tmp/parable-profile.json', 'w').write(json.dumps(dict(data[:100]), indent=2))"
+    uvx flameprof /tmp/parable-profile.prof -o /tmp/parable-flamegraph.svg
+    echo ""
+    echo "Output:"
+    echo "  JSON:  /tmp/parable-profile.json"
+    echo "  Image: /tmp/parable-flamegraph.svg"
+    open /tmp/parable-flamegraph.svg 2>/dev/null || true
+
+# Profile test suite instead of corpus
+profile-tests:
+    uv run python -m cProfile -s tottime tests/bin/run-tests.py 2>&1 | head -50 || true

@@ -2485,7 +2485,7 @@ class GoTranspiler(ast.NodeVisitor):
     @staticmethod
     def _emit_format_cmdsub_node(t: "GoTranspiler"):
         """Emit _FormatCmdsubNode body - large switch on node.Kind()."""
-        t.emit("if node == nil {")
+        t.emit("if _isNilNode(node) {")
         t.indent += 1
         t.emit('return ""')
         t.indent -= 1

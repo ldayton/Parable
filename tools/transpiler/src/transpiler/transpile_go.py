@@ -1154,8 +1154,6 @@ class GoTranspiler(ast.NodeVisitor):
         # Higher-order function patterns and arithmetic parsing
         # Higher-order function - not called, kept as stub
         "_arith_parse_left_assoc",
-        # getattr patterns that need type assertions
-        "_parse_arith_expr",
         # Complex type assertions needed
         "_parse_heredoc",
         "_parse_heredoc_delimiter",
@@ -3405,6 +3403,105 @@ class GoTranspiler(ast.NodeVisitor):
                     return True
         return False
 
+    def _is_try_assign_except_return(self, stmt: ast.Try) -> bool:
+        """Check if this is a 'try: x = call() except: return fallback' pattern."""
+        # Must have exactly one statement in try body that's an assignment
+        if len(stmt.body) != 1:
+            return False
+        if not isinstance(stmt.body[0], ast.Assign):
+            return False
+        assign = stmt.body[0]
+        # Must assign to a single name
+        if len(assign.targets) != 1 or not isinstance(assign.targets[0], ast.Name):
+            return False
+        # Must have exactly one handler
+        if len(stmt.handlers) != 1:
+            return False
+        handler = stmt.handlers[0]
+        # Handler must end with a return statement
+        if not handler.body or not isinstance(handler.body[-1], ast.Return):
+            return False
+        return True
+
+    def _emit_try_assign_except_return(self, stmt: ast.Try):
+        """Emit 'try: x = call() except: cleanup; return fallback' pattern.
+
+        Generates:
+            var x Type
+            parseOk := true
+            func() {
+                defer func() { if r := recover(); r != nil { parseOk = false } }()
+                x = call()
+            }()
+            if !parseOk { cleanup; return fallback }
+        """
+        assign = stmt.body[0]
+        var_name = self._snake_to_camel(assign.targets[0].id)
+        var_name = self._safe_go_name(var_name)
+        handler = stmt.handlers[0]
+        # Get the return statement (last in handler)
+        return_stmt = handler.body[-1]
+        # Get cleanup statements (all but the return)
+        cleanup_stmts = handler.body[:-1]
+        # Pre-declare the variable with its type (infer from call if possible)
+        # Skip if already declared (e.g., by _predeclare_all_locals)
+        if var_name not in self.declared_vars:
+            var_type = self._infer_call_return_type(assign.value)
+            if var_type:
+                self.emit(f"var {var_name} {var_type}")
+            else:
+                self.emit(f"var {var_name} interface{{}}")
+            self.declared_vars.add(var_name)
+        # Emit the success flag
+        self.emit("parseOk := true")
+        self.declared_vars.add("parseOk")
+        # Emit IIFE with defer/recover
+        self.emit("func() {")
+        self.indent += 1
+        self.emit("defer func() {")
+        self.indent += 1
+        self.emit("if r := recover(); r != nil {")
+        self.indent += 1
+        self.emit("parseOk = false")
+        self.indent -= 1
+        self.emit("}")
+        self.indent -= 1
+        self.emit("}()")
+        # Emit the assignment
+        call_expr = self.visit_expr(assign.value)
+        self.emit(f"{var_name} = {call_expr}")
+        self.indent -= 1
+        self.emit("}()")
+        # Emit the error check and fallback
+        self.emit("if !parseOk {")
+        self.indent += 1
+        for s in cleanup_stmts:
+            self._emit_stmt(s)
+        self._emit_stmt(return_stmt)
+        self.indent -= 1
+        self.emit("}")
+
+    def _infer_call_return_type(self, node: ast.expr) -> str | None:
+        """Infer the return type of a function call."""
+        if not isinstance(node, ast.Call):
+            return None
+        func_name = None
+        if isinstance(node.func, ast.Attribute):
+            func_name = node.func.attr
+        elif isinstance(node.func, ast.Name):
+            func_name = node.func.id
+        if not func_name:
+            return None
+        go_func_name = self._to_go_func_name(func_name)
+        # Check if it's a known method
+        if go_func_name in self.TUPLE_ELEMENT_TYPES:
+            # Returns first element type for tuple-returning funcs
+            return self.TUPLE_ELEMENT_TYPES[go_func_name][0]
+        # Common return types for parser methods
+        if "parse" in func_name.lower() or "Parse" in go_func_name:
+            return "Node"
+        return None
+
     def _emit_stmt_Try(self, stmt: ast.Try):
         """Emit try/except as defer/recover pattern."""
         # We'll wrap the try block in an immediately-invoked function with defer/recover
@@ -3413,6 +3510,11 @@ class GoTranspiler(ast.NodeVisitor):
             # No handlers, just emit body
             for s in stmt.body:
                 self._emit_stmt(s)
+            return
+        # Check for "try assign, except return fallback" pattern:
+        # try: result = call() except Error: cleanup; return fallback
+        if self._is_try_assign_except_return(stmt):
+            self._emit_try_assign_except_return(stmt)
             return
         # Check for complex patterns (return statements inside try) - skip these
         if self._has_return_in_block(stmt.body) or self._has_return_in_block(stmt.handlers[0].body):

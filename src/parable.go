@@ -8213,12 +8213,54 @@ func (p *Parser) _ParseArithmeticExpansion() (Node, string) {
 	}
 	p.Advance()
 	text = _Substring(p.Source, start, p.Pos)
-	panic("TODO: try/except with return")
+	parseOk := true
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				parseOk = false
+			}
+		}()
+		expr = p._ParseArithExpr(content)
+	}()
+	if !parseOk {
+		p.Pos = start
+		return nil, ""
+	}
 	return NewArithmeticExpansion(expr), text
 }
 
 func (p *Parser) _ParseArithExpr(content string) Node {
-	panic("TODO: method needs manual implementation")
+	var savedArithSrc string
+	_ = savedArithSrc
+	var savedArithPos int
+	_ = savedArithPos
+	var savedArithLen int
+	_ = savedArithLen
+	var savedParserState int
+	_ = savedParserState
+	var result Node
+	_ = result
+	savedArithSrc = p._Arith_src
+	savedArithPos = p._Arith_pos
+	savedArithLen = p._Arith_len
+	savedParserState = p._Parser_state
+	p._SetState(ParserStateFlags_PST_ARITH)
+	p._Arith_src = content
+	p._Arith_pos = 0
+	p._Arith_len = len(content)
+	p._ArithSkipWs()
+	if p._ArithAtEnd() {
+		result = nil
+	} else {
+		result = p._ArithParseComma()
+	}
+	p._Parser_state = savedParserState
+	if savedArithSrc != "" {
+		p._Arith_src = savedArithSrc
+		p._Arith_pos = savedArithPos
+		p._Arith_len = savedArithLen
+	}
+	return result
 }
 
 func (p *Parser) _ArithAtEnd() bool {

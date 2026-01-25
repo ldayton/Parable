@@ -48,11 +48,25 @@ Required annotations (for Go/TS transpiler):
     --------------------   ------------------------  --------------------------
     return type            def f():                  def f() -> int:
     parameter type         def f(x):                 def f(x: int):
+    bare list              x: list                   x: list[Node]
+    bare dict              x: dict                   x: dict[str, int]
+    bare set               x: set                    x: set[str]
+    bare tuple             -> tuple:                 -> tuple[int, str]:
 """
 
 import ast
 import os
 import sys
+
+
+BARE_COLLECTION_TYPES = {"list", "dict", "set", "tuple"}
+
+
+def is_bare_collection(annotation):
+    """Check if annotation is a bare collection type without parameters."""
+    if isinstance(annotation, ast.Name):
+        return annotation.id in BARE_COLLECTION_TYPES
+    return False
 
 
 def find_python_files(directory):
@@ -250,6 +264,29 @@ def check_file(filepath):
                     errors.append(
                         (lineno, "missing param type: " + arg.arg + " in " + node.name + "()")
                     )
+
+        # bare collection in parameter annotation
+        if isinstance(node, ast.FunctionDef):
+            for arg in node.args.args:
+                if arg.annotation and is_bare_collection(arg.annotation):
+                    errors.append(
+                        (lineno, "bare " + arg.annotation.id + ": " + arg.arg + " in " + node.name + "() needs type parameter")
+                    )
+
+        # bare collection in return type annotation
+        if isinstance(node, ast.FunctionDef):
+            if node.returns and is_bare_collection(node.returns):
+                errors.append(
+                    (lineno, "bare " + node.returns.id + ": " + node.name + "() return needs type parameter")
+                )
+
+        # bare collection in variable annotation
+        if isinstance(node, ast.AnnAssign):
+            if is_bare_collection(node.annotation):
+                target_name = node.target.id if isinstance(node.target, ast.Name) else "?"
+                errors.append(
+                    (lineno, "bare " + node.annotation.id + ": " + target_name + " needs type parameter")
+                )
 
     return errors
 

@@ -123,7 +123,7 @@ def _is_expansion_start(s: str, pos: int, delimiter: str) -> bool:
     return _count_consecutive_dollars_before(s, pos) % 2 == 0
 
 
-def _sublist(lst: list, start: int, end: int) -> list:
+def _sublist(lst: list[Node], start: int, end: int) -> list[Node]:
     """Extract sublist from start to end (exclusive)."""
     return lst[start:end]
 
@@ -290,8 +290,8 @@ class SavedParserState:
         self,
         parser_state: int,
         dolbrace_state: int,
-        pending_heredocs: list,
-        ctx_stack: list,
+        pending_heredocs: list[Node],
+        ctx_stack: list[ParseContext],
         eof_token: str | None = None,
     ):
         self.parser_state = parser_state
@@ -406,14 +406,14 @@ class ContextStack:
             return self._stack.pop()
         return self._stack[0]
 
-    def copy_stack(self) -> list:
+    def copy_stack(self) -> list[ParseContext]:
         """Return a deep copy of the context stack for state saving."""
         result = []
         for ctx in self._stack:
             result.append(ctx.copy())
         return result
 
-    def restore_from(self, saved_stack: list) -> None:
+    def restore_from(self, saved_stack: list[ParseContext]) -> None:
         """Restore the context stack from a saved copy."""
         result = []
         for ctx in saved_stack:
@@ -434,7 +434,7 @@ class Lexer:
         self._parser_state = ParserStateFlags.NONE
         self._dolbrace_state = DolbraceState.NONE
         # Pending heredocs tracked during word parsing
-        self._pending_heredocs: list = []
+        self._pending_heredocs: list[Node] = []
         # Extglob parsing enabled (bash shopt extglob)
         self._extglob = extglob
         # Reference to Parser for expansion parsing callbacks (set by Parser)
@@ -673,7 +673,7 @@ class Lexer:
         return _is_metachar(ch) and bracket_depth == 0
 
     def _read_bracket_expression(
-        self, chars: list, parts: list, for_regex: bool = False, paren_depth: int = 0
+        self, chars: list[str], parts: list[Node], for_regex: bool = False, paren_depth: int = 0
     ) -> bool:
         """Scan [...] bracket expression. Returns True if consumed, False if [ is literal.
 
@@ -2991,7 +2991,7 @@ class Word(Node):
                 i += 1
         return "".join(result)
 
-    def _collect_cmdsubs(self, node: Node) -> list:
+    def _collect_cmdsubs(self, node: Node) -> list[Node]:
         """Recursively collect CommandSubstitution nodes from an AST node."""
         result = []
         node_kind = getattr(node, "kind", None)
@@ -3032,7 +3032,7 @@ class Word(Node):
             result.extend(self._collect_cmdsubs(false_value))
         return result
 
-    def _collect_procsubs(self, node: Node) -> list:
+    def _collect_procsubs(self, node: Node) -> list[Node]:
         """Recursively collect ProcessSubstitution nodes from an AST node."""
         result = []
         node_kind = getattr(node, "kind", None)
@@ -3755,7 +3755,7 @@ class List(Node):
         # Process by precedence: first split on ; and &, then on && and ||
         return self._to_sexp_with_precedence(parts, op_names)
 
-    def _to_sexp_with_precedence(self, parts: list, op_names: dict) -> str:
+    def _to_sexp_with_precedence(self, parts: list[Node], op_names: dict[str, str]) -> str:
         # Process operators by precedence: ; (lowest), then &, then && and ||
         # Use iterative approach to avoid stack overflow on large lists
         # Find all ; or \n positions (may not be at regular intervals due to consecutive ops)
@@ -3792,7 +3792,7 @@ class List(Node):
         # No ; or \n, handle & and higher
         return self._to_sexp_amp_and_higher(parts, op_names)
 
-    def _to_sexp_amp_and_higher(self, parts: list, op_names: dict) -> str:
+    def _to_sexp_amp_and_higher(self, parts: list[Node], op_names: dict[str, str]) -> str:
         # Handle & operator iteratively
         if len(parts) == 1:
             return parts[0].to_sexp()
@@ -3822,7 +3822,7 @@ class List(Node):
         # No &, handle && and ||
         return self._to_sexp_and_or(parts, op_names)
 
-    def _to_sexp_and_or(self, parts: list, op_names: dict) -> str:
+    def _to_sexp_and_or(self, parts: list[Node], op_names: dict[str, str]) -> str:
         # Process && and || left-associatively (already iterative)
         if len(parts) == 1:
             return parts[0].to_sexp()
@@ -4296,7 +4296,7 @@ class Case(Node):
         return _append_redirects(base, self.redirects)
 
 
-def _consume_single_quote(s: str, start: int) -> tuple:
+def _consume_single_quote(s: str, start: int) -> tuple[int, list[str]]:
     """Consume '...' from start. Returns (end_index, chars_list)."""
     chars = ["'"]
     i = start + 1
@@ -4309,7 +4309,7 @@ def _consume_single_quote(s: str, start: int) -> tuple:
     return (i, chars)
 
 
-def _consume_double_quote(s: str, start: int) -> tuple:
+def _consume_double_quote(s: str, start: int) -> tuple[int, list[str]]:
     """Consume "..." from start, handling escapes. Returns (end_index, chars_list)."""
     chars = ['"']
     i = start + 1
@@ -4337,7 +4337,7 @@ def _has_bracket_close(s: str, start: int, depth: int) -> bool:
     return False
 
 
-def _consume_bracket_class(s: str, start: int, depth: int) -> tuple:
+def _consume_bracket_class(s: str, start: int, depth: int) -> tuple[int, list[str], bool]:
     """Consume [...] bracket expression. Returns (end_index, chars_list, was_bracket)."""
     # First scan to see if this is a valid bracket expression
     scan_pos = start + 1
@@ -7215,7 +7215,7 @@ class Parser:
         return self._lexer._is_word_terminator(ctx, ch, bracket_depth, paren_depth)
 
     def _scan_double_quote(
-        self, chars: list, parts: list, start: int, handle_line_continuation: bool = True
+        self, chars: list[str], parts: list[Node], start: int, handle_line_continuation: bool = True
     ) -> None:
         """Scan double-quoted string with expansions. Assumes opening quote consumed."""
         chars.append('"')
@@ -7238,7 +7238,7 @@ class Parser:
             raise ParseError("Unterminated double quote", pos=start)
         chars.append(self.advance())
 
-    def _parse_dollar_expansion(self, chars: list, parts: list, in_dquote: bool = False) -> bool:
+    def _parse_dollar_expansion(self, chars: list[str], parts: list[Node], in_dquote: bool = False) -> bool:
         """Handle $ expansions. Returns True if expansion parsed, False if bare $."""
         # Check $(( -> arithmetic expansion
         if (
@@ -8009,7 +8009,7 @@ class Parser:
             return ArithTernary(cond, if_true, if_false)
         return cond
 
-    def _arith_parse_left_assoc(self, ops: list, parsefn: Callable[[], Node]) -> Node:
+    def _arith_parse_left_assoc(self, ops: list[str], parsefn: Callable[[], Node]) -> Node:
         """Parse left-associative binary operators using match/consume."""
         left = parsefn()
         while True:

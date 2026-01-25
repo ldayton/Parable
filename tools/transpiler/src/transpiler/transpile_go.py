@@ -3168,6 +3168,24 @@ class GoTranspiler(ast.NodeVisitor):
             if func_info and func_info.return_type:
                 self.emit(f'panic("TODO: empty body")')
 
+    def _emit_stmts_with_patterns(self, stmts: list[ast.stmt]):
+        """Emit statements with pattern detection for typed-nil fixes."""
+        skip_until = 0
+        for i, stmt in enumerate(stmts):
+            if i < skip_until:
+                continue
+            # Check for assign-then-check-return pattern (typed-nil fix)
+            assign_check = self._detect_assign_check_return(stmts, i)
+            if assign_check:
+                var_name, method_call, return_type = assign_check
+                self._emit_assign_check_return(var_name, method_call, return_type)
+                skip_until = i + 2  # Skip both statements
+                continue
+            try:
+                self._emit_stmt(stmt)
+            except NotImplementedError as e:
+                self.emit(f'panic("TODO: {e}")')
+
     def _scan_returned_vars(self, stmts: list[ast.stmt]):
         """Pre-scan statements to find variables used in return statements."""
         for stmt in stmts:
@@ -5009,11 +5027,7 @@ class GoTranspiler(ast.NodeVisitor):
         # Set union field type for body (nil branch = string for discriminator == nil)
         if union_key:
             self.union_field_types[union_key] = nil_type
-        try:
-            for s in stmt.body:
-                self._emit_stmt(s)
-        except NotImplementedError:
-            self.emit('panic("TODO: incomplete implementation")')
+        self._emit_stmts_with_patterns(stmt.body)
         # Clear union field type after body
         if union_key:
             del self.union_field_types[union_key]
@@ -5028,11 +5042,7 @@ class GoTranspiler(ast.NodeVisitor):
                 self.indent += 1
                 if union_key:
                     self.union_field_types[union_key] = non_nil_type
-                try:
-                    for s in stmt.orelse:
-                        self._emit_stmt(s)
-                except NotImplementedError:
-                    self.emit('panic("TODO: incomplete implementation")')
+                self._emit_stmts_with_patterns(stmt.orelse)
                 if union_key:
                     del self.union_field_types[union_key]
                 self.indent -= 1
@@ -7023,11 +7033,28 @@ class GoTranspiler(ast.NodeVisitor):
         if var_type != "Node":
             return None
         # Second statement must be: if result: return result
+        # OR: if result is not None: return result
         if_stmt = stmts[idx + 1]
         if not isinstance(if_stmt, ast.If):
             return None
         # Test must be just the variable name (truthy check)
-        if not isinstance(if_stmt.test, ast.Name) or if_stmt.test.id != var_name:
+        # OR a comparison: result is not None
+        test_var_name = None
+        if isinstance(if_stmt.test, ast.Name):
+            test_var_name = if_stmt.test.id
+        elif isinstance(if_stmt.test, ast.Compare):
+            # Check for: result is not None
+            cmp = if_stmt.test
+            if (
+                isinstance(cmp.left, ast.Name)
+                and len(cmp.ops) == 1
+                and isinstance(cmp.ops[0], ast.IsNot)
+                and len(cmp.comparators) == 1
+                and isinstance(cmp.comparators[0], ast.Constant)
+                and cmp.comparators[0].value is None
+            ):
+                test_var_name = cmp.left.id
+        if test_var_name != var_name:
             return None
         # Body must be single return statement returning the same variable
         if len(if_stmt.body) != 1:

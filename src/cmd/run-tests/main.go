@@ -196,7 +196,8 @@ func main() {
 	baseDir, _ := filepath.Abs(filepath.Join(testDir, ".."))
 	for _, fpath := range testFiles {
 		tests := parseTestFile(fpath)
-		relPath, _ := filepath.Rel(baseDir, fpath)
+		absFpath, _ := filepath.Abs(fpath)
+		relPath, _ := filepath.Rel(baseDir, absFpath)
 		for _, tc := range tests {
 			if *filterPattern != "" && !strings.Contains(tc.name, *filterPattern) && !strings.Contains(relPath, *filterPattern) {
 				continue

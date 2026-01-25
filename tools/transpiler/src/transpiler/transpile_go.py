@@ -1162,7 +1162,6 @@ class GoTranspiler(ast.NodeVisitor):
         "_gather_heredoc_bodies",
         "_parse_heredoc",
         "_parse_heredoc_delimiter",
-        "parse_list",
         "parse",
         # Tuple stack in local variable (heredoc tracking)
         "_parse_backtick_substitution",
@@ -4541,6 +4540,18 @@ class GoTranspiler(ast.NodeVisitor):
         test = self._emit_bool_expr(node.test)
         body = self.visit_expr(node.body)
         orelse = self.visit_expr(node.orelse)
+        # Check if we need to cast for Node interface compatibility
+        body_type = self._infer_type_from_expr(node.body)
+        orelse_type = self._infer_type_from_expr(node.orelse)
+        # If one is Node and other is *SomeNodeSubclass, cast to Node
+        if body_type == "Node" and orelse_type.startswith("*"):
+            class_name = orelse_type[1:]
+            if class_name in self.symbols.classes and self.symbols.classes[class_name].is_node:
+                orelse = f"Node({orelse})"
+        elif orelse_type == "Node" and body_type.startswith("*"):
+            class_name = body_type[1:]
+            if class_name in self.symbols.classes and self.symbols.classes[class_name].is_node:
+                body = f"Node({body})"
         # Use an inline if helper function
         return f"_ternary({test}, {body}, {orelse})"
 

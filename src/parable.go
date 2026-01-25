@@ -10777,7 +10777,104 @@ func (p *Parser) _PeekListOperator() string {
 }
 
 func (p *Parser) ParseList(newlineAsSeparator bool) Node {
-	panic("TODO: method needs manual implementation")
+	var pipeline Node
+	_ = pipeline
+	var parts []Node
+	_ = parts
+	var op string
+	_ = op
+	var nextOp string
+	_ = nextOp
+	if newlineAsSeparator {
+		p.SkipWhitespaceAndNewlines()
+	} else {
+		p.SkipWhitespace()
+	}
+	pipeline = p.ParsePipeline()
+	if pipeline == nil {
+		return nil
+	}
+	parts = []Node{pipeline}
+	if p._InState(ParserStateFlags_PST_EOFTOKEN) && p._AtEofToken() {
+		return _ternary(len(parts) == 1, parts[0], Node(NewList(parts)))
+	}
+	for true {
+		p.SkipWhitespace()
+		op = p.ParseListOperator()
+		if op == "" {
+			if !(p.AtEnd()) && p.Peek() == "\n" {
+				if !(newlineAsSeparator) {
+					break
+				}
+				p.Advance()
+				p._GatherHeredocBodies()
+				if p._Cmdsub_heredoc_end != -1 && p._Cmdsub_heredoc_end > p.Pos {
+					p.Pos = p._Cmdsub_heredoc_end
+					p._Cmdsub_heredoc_end = -1
+				}
+				p.SkipWhitespaceAndNewlines()
+				if p.AtEnd() || p._AtListTerminatingBracket() {
+					break
+				}
+				nextOp = p._PeekListOperator()
+				if _containsAny([]interface{}{"&", ";"}, nextOp) {
+					break
+				}
+				op = "\n"
+			} else {
+				break
+			}
+		}
+		if op == "" {
+			break
+		}
+		parts = append(parts, NewOperator(op))
+		if _containsAny([]interface{}{"&&", "||"}, op) {
+			p.SkipWhitespaceAndNewlines()
+		} else if op == "&" {
+			p.SkipWhitespace()
+			if p.AtEnd() || p._AtListTerminatingBracket() {
+				break
+			}
+			if p.Peek() == "\n" {
+				if newlineAsSeparator {
+					p.SkipWhitespaceAndNewlines()
+					if p.AtEnd() || p._AtListTerminatingBracket() {
+						break
+					}
+				} else {
+					break
+				}
+			}
+		} else if op == ";" {
+			p.SkipWhitespace()
+			if p.AtEnd() || p._AtListTerminatingBracket() {
+				break
+			}
+			if p.Peek() == "\n" {
+				if newlineAsSeparator {
+					p.SkipWhitespaceAndNewlines()
+					if p.AtEnd() || p._AtListTerminatingBracket() {
+						break
+					}
+				} else {
+					break
+				}
+			}
+		}
+		pipeline = p.ParsePipeline()
+		if pipeline == nil {
+			panic(NewParseError("Expected command after "+op, p.Pos, 0))
+		}
+		parts = append(parts, pipeline)
+		if p._InState(ParserStateFlags_PST_EOFTOKEN) && p._AtEofToken() {
+			break
+		}
+	}
+	if len(parts) == 1 {
+		return parts[0]
+	}
+	return NewList(parts)
 }
 
 func (p *Parser) ParseComment() Node {

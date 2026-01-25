@@ -1165,9 +1165,6 @@ class GoTranspiler(ast.NodeVisitor):
         "parse_compound_command",
         "parse_pipeline",
         "parse_list",
-        "parse_list_operator",
-        "_peek_list_operator",
-        "_parse_simple_pipeline",
         "parse",
         # Tuple stack in local variable (heredoc tracking)
         "_parse_backtick_substitution",
@@ -2416,12 +2413,16 @@ class GoTranspiler(ast.NodeVisitor):
         """Emit tuple unpacking: a, b = x, y"""
         target_names = []
         for elt in target.elts:
-            name = self.visit_expr(elt)
-            target_names.append(name)
-            if isinstance(elt, ast.Name):
-                camel = self._snake_to_camel(elt.id)
-                camel = self._safe_go_name(camel)
-                self.declared_vars.add(camel)
+            # Handle Python's discard pattern: _, x = func()
+            if isinstance(elt, ast.Name) and elt.id == "_":
+                target_names.append("_")
+            else:
+                name = self.visit_expr(elt)
+                target_names.append(name)
+                if isinstance(elt, ast.Name):
+                    camel = self._snake_to_camel(elt.id)
+                    camel = self._safe_go_name(camel)
+                    self.declared_vars.add(camel)
         # Handle value side
         if isinstance(value, ast.Tuple):
             # a, b = x, y - for tuple literals, check if vars exist
@@ -2432,6 +2433,10 @@ class GoTranspiler(ast.NodeVisitor):
             # This ensures fresh local variables are created in the current scope
             value_expr = self.visit_expr(value)
             self.emit(f"{', '.join(target_names)} := {value_expr}")
+            # Suppress unused variable warnings for non-blank tuple elements
+            for name in target_names:
+                if name != "_":
+                    self.emit(f"_ = {name}")
         else:
             # Other cases - need to unpack at runtime
             raise NotImplementedError(f"Tuple unpacking from {type(value).__name__}")

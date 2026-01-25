@@ -3083,6 +3083,8 @@ func (l *Lexer) _ParseMatchedPair(openChar string, closeChar string, flags int, 
 				l._SyncToParser()
 				inDquote = (flags&MatchedPairFlags_DQUOTE != 0)
 				paramNode, paramText := l._Parser._ParseParamExpansion(inDquote)
+				_ = paramNode
+				_ = paramText
 				l._SyncFromParser()
 				if paramNode != nil {
 					chars = append(chars, paramText)
@@ -3099,6 +3101,8 @@ func (l *Lexer) _ParseMatchedPair(openChar string, closeChar string, flags int, 
 				l._SyncToParser()
 				if l.Pos+2 < l.Length && string(l.Source[l.Pos+2]) == "(" {
 					arithNode, arithText := l._Parser._ParseArithmeticExpansion()
+					_ = arithNode
+					_ = arithText
 					l._SyncFromParser()
 					if arithNode != nil {
 						chars = append(chars, arithText)
@@ -3107,6 +3111,8 @@ func (l *Lexer) _ParseMatchedPair(openChar string, closeChar string, flags int, 
 					} else {
 						l._SyncToParser()
 						cmdNode, cmdText := l._Parser._ParseCommandSubstitution()
+						_ = cmdNode
+						_ = cmdText
 						l._SyncFromParser()
 						if cmdNode != nil {
 							chars = append(chars, cmdText)
@@ -3121,6 +3127,8 @@ func (l *Lexer) _ParseMatchedPair(openChar string, closeChar string, flags int, 
 					}
 				} else {
 					cmdNode, cmdText := l._Parser._ParseCommandSubstitution()
+					_ = cmdNode
+					_ = cmdText
 					l._SyncFromParser()
 					if cmdNode != nil {
 						chars = append(chars, cmdText)
@@ -3138,6 +3146,8 @@ func (l *Lexer) _ParseMatchedPair(openChar string, closeChar string, flags int, 
 				l.Pos -= 1
 				l._SyncToParser()
 				arithNode, arithText := l._Parser._ParseDeprecatedArithmetic()
+				_ = arithNode
+				_ = arithText
 				l._SyncFromParser()
 				if arithNode != nil {
 					chars = append(chars, arithText)
@@ -3156,6 +3166,8 @@ func (l *Lexer) _ParseMatchedPair(openChar string, closeChar string, flags int, 
 			l.Pos -= 1
 			l._SyncToParser()
 			procsubNode, procsubText := l._Parser._ParseProcessSubstitution()
+			_ = procsubNode
+			_ = procsubText
 			l._SyncFromParser()
 			if procsubNode != nil {
 				chars = append(chars, procsubText)
@@ -3328,6 +3340,8 @@ func (l *Lexer) _ReadWordInternal(ctx int, atCommandStart bool, inArrayLiteral b
 			l.Advance()
 			trackNewline = ctx == WordCtxNormal
 			content, sawNewline := l._ReadSingleQuote(start)
+			_ = content
+			_ = sawNewline
 			chars = append(chars, content)
 			if trackNewline && sawNewline && l._Parser != nil {
 				l._Parser._Saw_newline_in_single_quote = true
@@ -3718,6 +3732,8 @@ func (l *Lexer) _ReadLocaleString() (Node, string, []Node) {
 		} else if ch == "$" && l.Pos+2 < l.Length && string(l.Source[l.Pos+1]) == "(" && string(l.Source[l.Pos+2]) == "(" {
 			l._SyncToParser()
 			arithNode, arithText := l._Parser._ParseArithmeticExpansion()
+			_ = arithNode
+			_ = arithText
 			l._SyncFromParser()
 			if arithNode != nil {
 				innerParts = append(innerParts, arithNode.(Node))
@@ -3725,6 +3741,8 @@ func (l *Lexer) _ReadLocaleString() (Node, string, []Node) {
 			} else {
 				l._SyncToParser()
 				cmdsubNode, cmdsubText := l._Parser._ParseCommandSubstitution()
+				_ = cmdsubNode
+				_ = cmdsubText
 				l._SyncFromParser()
 				if cmdsubNode != nil {
 					innerParts = append(innerParts, cmdsubNode.(Node))
@@ -3736,6 +3754,8 @@ func (l *Lexer) _ReadLocaleString() (Node, string, []Node) {
 		} else if _IsExpansionStart(l.Source, l.Pos, "$(") {
 			l._SyncToParser()
 			cmdsubNode, cmdsubText := l._Parser._ParseCommandSubstitution()
+			_ = cmdsubNode
+			_ = cmdsubText
 			l._SyncFromParser()
 			if cmdsubNode != nil {
 				innerParts = append(innerParts, cmdsubNode.(Node))
@@ -3746,6 +3766,8 @@ func (l *Lexer) _ReadLocaleString() (Node, string, []Node) {
 		} else if ch == "$" {
 			l._SyncToParser()
 			paramNode, paramText := l._Parser._ParseParamExpansion(false)
+			_ = paramNode
+			_ = paramText
 			l._SyncFromParser()
 			if paramNode != nil {
 				innerParts = append(innerParts, paramNode.(Node))
@@ -3756,6 +3778,8 @@ func (l *Lexer) _ReadLocaleString() (Node, string, []Node) {
 		} else if ch == "`" {
 			l._SyncToParser()
 			cmdsubNode, cmdsubText := l._Parser._ParseBacktickSubstitution()
+			_ = cmdsubNode
+			_ = cmdsubText
 			l._SyncFromParser()
 			if cmdsubNode != nil {
 				innerParts = append(innerParts, cmdsubNode.(Node))
@@ -10501,15 +10525,81 @@ func (p *Parser) ParsePipeline() Node {
 }
 
 func (p *Parser) _ParseSimplePipeline() Node {
-	panic("TODO: method needs manual implementation")
+	var cmd Node
+	_ = cmd
+	var commands []Node
+	_ = commands
+	var isPipeBoth bool
+	_ = isPipeBoth
+	cmd = p.ParseCompoundCommand()
+	if cmd == nil {
+		return nil
+	}
+	commands = []Node{cmd}
+	for true {
+		p.SkipWhitespace()
+		tokenType, value := p._LexPeekOperator()
+		_ = tokenType
+		_ = value
+		if tokenType == 0 {
+			break
+		}
+		if tokenType != TokenType_PIPE && tokenType != TokenType_PIPE_AMP {
+			break
+		}
+		p._LexNextToken()
+		isPipeBoth = tokenType == TokenType_PIPE_AMP
+		p.SkipWhitespaceAndNewlines()
+		if isPipeBoth {
+			commands = append(commands, NewPipeBoth())
+		}
+		cmd = p.ParseCompoundCommand()
+		if cmd == nil {
+			panic(NewParseError("Expected command after |", p.Pos, 0))
+		}
+		commands = append(commands, cmd)
+	}
+	if len(commands) == 1 {
+		return commands[0]
+	}
+	return NewPipeline(commands)
 }
 
 func (p *Parser) ParseListOperator() string {
-	panic("TODO: method needs manual implementation")
+	p.SkipWhitespace()
+	tokenType, _ := p._LexPeekOperator()
+	_ = tokenType
+	if tokenType == 0 {
+		return ""
+	}
+	if tokenType == TokenType_AND_AND {
+		p._LexNextToken()
+		return "&&"
+	}
+	if tokenType == TokenType_OR_OR {
+		p._LexNextToken()
+		return "||"
+	}
+	if tokenType == TokenType_SEMI {
+		p._LexNextToken()
+		return ";"
+	}
+	if tokenType == TokenType_AMP {
+		p._LexNextToken()
+		return "&"
+	}
+	return ""
 }
 
 func (p *Parser) _PeekListOperator() string {
-	panic("TODO: method needs manual implementation")
+	var savedPos int
+	_ = savedPos
+	var op string
+	_ = op
+	savedPos = p.Pos
+	op = p.ParseListOperator()
+	p.Pos = savedPos
+	return op
 }
 
 func (p *Parser) ParseList(newlineAsSeparator bool) Node {

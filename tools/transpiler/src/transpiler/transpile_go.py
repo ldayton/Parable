@@ -1338,7 +1338,7 @@ class GoTranspiler(ast.NodeVisitor):
         # Track current method for return type inference
         self.current_method = node.name
         self.current_func_info = func_info
-        go_name = self._to_go_method_name(node.name)
+        go_name = self._to_go_func_name(node.name)
         params_str = self._format_params(func_info.params)
         return_str = func_info.return_type
         receiver = class_info.name[0].lower()
@@ -3295,7 +3295,7 @@ class GoTranspiler(ast.NodeVisitor):
         # Reset declared vars and add parameters
         self.declared_vars = set()
         for p in func_info.params:
-            self.declared_vars.add(self._to_go_param_name(p.name))
+            self.declared_vars.add(self._to_go_var(p.name))
         # Create the struct
         self.emit(f"{receiver} := &{class_info.name}{{}}")
         self.declared_vars.add(receiver)
@@ -3325,7 +3325,7 @@ class GoTranspiler(ast.NodeVisitor):
         self.current_return_type = func_info.return_type if func_info else ""
         if func_info:
             for p in func_info.params:
-                go_name = self._to_go_param_name(p.name)
+                go_name = self._to_go_var(p.name)
                 self.declared_vars.add(go_name)
                 self.var_types[go_name] = p.go_type
         # Pre-pass: analyze variable types from usage
@@ -4668,7 +4668,7 @@ class GoTranspiler(ast.NodeVisitor):
         func_info = class_info.methods.get("__init__")
         if func_info:
             for p in func_info.params:
-                go_name = self._to_go_param_name(p.name)
+                go_name = self._to_go_var(p.name)
                 self.declared_vars.add(go_name)
                 self.var_types[go_name] = p.go_type
         for stmt in stmts:
@@ -6063,7 +6063,7 @@ class GoTranspiler(ast.NodeVisitor):
         """Format parameter list for Go function signature."""
         parts = []
         for p in params:
-            go_name = self._to_go_param_name(p.name)
+            go_name = self._to_go_var(p.name)
             go_type = p.go_type or "interface{}"
             parts.append(f"{go_name} {go_type}")
         return ", ".join(parts)
@@ -6074,44 +6074,6 @@ class GoTranspiler(ast.NodeVisitor):
             # Keep leading underscore for private functions
             return name[0] + self._snake_to_pascal(name[1:])
         return self._snake_to_pascal(name)
-
-    def _to_go_method_name(self, name: str) -> str:
-        """Convert Python method name to Go method name."""
-        if name.startswith("_"):
-            return name[0] + self._snake_to_pascal(name[1:])
-        return self._snake_to_pascal(name)
-
-    def _to_go_param_name(self, name: str) -> str:
-        """Convert Python parameter name to Go parameter name."""
-        # Handle reserved words
-        reserved = {
-            "type": "typ",
-            "func": "fn",
-            "var": "variable",
-            "range": "rng",
-            "map": "m",
-            "interface": "iface",
-            "chan": "ch",
-            "select": "sel",
-            "case": "caseVal",
-            "default": "defaultVal",
-            "package": "pkg",
-            "import": "imp",
-            "go": "goVal",
-            "defer": "deferVal",
-            "return": "ret",
-            "break": "brk",
-            "continue": "cont",
-            "fallthrough": "fallthru",
-            "if": "ifVal",
-            "else": "elseVal",
-            "for": "forVal",
-            "switch": "switchVal",
-            "const": "constVal",
-            "struct": "structVal",
-        }
-        camel = self._snake_to_camel(name)
-        return reserved.get(camel, camel)
 
     def _snake_to_pascal(self, name: str) -> str:
         """Convert snake_case to PascalCase."""
@@ -6246,7 +6208,7 @@ class GoTranspiler(ast.NodeVisitor):
         value = self.visit_expr(node.value)
         # Check if this is accessing a method that should be called (like node.kind -> node.Kind())
         if self._is_interface_method(node.value, attr_name):
-            go_attr = self._to_go_method_name(attr_name)
+            go_attr = self._to_go_func_name(attr_name)
             return f"{value}.{go_attr}()"
         attr = self._to_go_field_name(attr_name)
         # Check if accessing a union field with a type hint
@@ -7672,7 +7634,7 @@ class GoTranspiler(ast.NodeVisitor):
             # Method is not on Node interface - need to find which struct has it
             struct_type = self._find_method_owner(method)
             if struct_type:
-                go_method = self._to_go_method_name(method)
+                go_method = self._to_go_func_name(method)
                 return f"{obj}.({struct_type}).{go_method}({args_str})"
         # Handle Python string/list methods
         if method == "append":
@@ -7711,7 +7673,7 @@ class GoTranspiler(ast.NodeVisitor):
                 self._current_method_node = None
                 return result
         # Default: convert to Go method call
-        go_method = self._to_go_method_name(method)
+        go_method = self._to_go_func_name(method)
         return f"{obj}.{go_method}({args_str})"
 
     def _emit_append(
@@ -8341,7 +8303,7 @@ class GoTranspiler(ast.NodeVisitor):
 
     def visit_expr_Lambda(self, node: ast.Lambda) -> str:
         """Convert lambda expressions."""
-        params = [self._to_go_param_name(a.arg) for a in node.args.args]
+        params = [self._to_go_var(a.arg) for a in node.args.args]
         params_str = ", ".join(f"{p} interface{{}}" for p in params)
         body = self.visit_expr(node.body)
         return f"func({params_str}) interface{{}} {{ return {body} }}"

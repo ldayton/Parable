@@ -5714,7 +5714,7 @@ func (w *Word) _FormatCommandSubstitutions(value string, inArith bool) string {
 				inner = value[i+2 : j-1]
 				if inArith {
 					result = append(result, direction+"("+inner+")")
-				} else if len(strings.TrimSpace(inner)) > 0 {
+				} else if strings.TrimSpace(inner) != "" {
 					stripped = strings.TrimLeft(inner, " \t")
 					result = append(result, direction+"("+stripped+")")
 				} else {
@@ -9091,7 +9091,261 @@ func (p *Parser) _ParseParamExpansion(inDquote bool) (Node, string) {
 }
 
 func (p *Parser) ParseRedirect() interface{} {
-	panic("TODO: method needs manual implementation")
+	var start int
+	_ = start
+	var fd int
+	_ = fd
+	var varfd string
+	_ = varfd
+	var saved int
+	_ = saved
+	var varnameChars []string
+	_ = varnameChars
+	var inBracket bool
+	_ = inBracket
+	var ch string
+	_ = ch
+	var varname string
+	_ = varname
+	var isValidVarfd bool
+	_ = isValidVarfd
+	var left int
+	_ = left
+	var right int
+	_ = right
+	var base string
+	_ = base
+	var fdChars []string
+	_ = fdChars
+	var op string
+	_ = op
+	var target *Word
+	_ = target
+	var stripTabs bool
+	_ = stripTabs
+	var nextCh string
+	_ = nextCh
+	var wordStart int
+	_ = wordStart
+	var fdTarget string
+	_ = fdTarget
+	var innerWord *Word
+	_ = innerWord
+	p.SkipWhitespace()
+	if p.AtEnd() {
+		return nil
+	}
+	start = p.Pos
+	fd = -1
+	varfd = ""
+	if p.Peek() == "{" {
+		saved = p.Pos
+		p.Advance()
+		varnameChars = []string{}
+		inBracket = false
+		for !(p.AtEnd()) && !(_IsRedirectChar(p.Peek())) {
+			ch = p.Peek()
+			if ch == "}" && !(inBracket) {
+				break
+			} else if ch == "[" {
+				inBracket = true
+				varnameChars = append(varnameChars, p.Advance())
+			} else if ch == "]" {
+				inBracket = false
+				varnameChars = append(varnameChars, p.Advance())
+			} else if (unicode.IsLetter(_runeFromChar(ch)) || unicode.IsDigit(_runeFromChar(ch))) || ch == "_" {
+				varnameChars = append(varnameChars, p.Advance())
+			} else if inBracket && !(_IsMetachar(ch)) {
+				varnameChars = append(varnameChars, p.Advance())
+			} else {
+				break
+			}
+		}
+		varname = strings.Join(varnameChars, "")
+		isValidVarfd = false
+		if len(varname) > 0 {
+			if unicode.IsLetter(_runeFromChar(string(varname[0]))) || string(varname[0]) == "_" {
+				if strings.Contains(varname, "[") || strings.Contains(varname, "]") {
+					left = strings.Index(varname, "[")
+					right = strings.LastIndex(varname, "]")
+					if left != -1 && right == len(varname)-1 && right > left+1 {
+						base = varname[0:left]
+						if len(base) > 0 && unicode.IsLetter(_runeFromChar(string(base[0]))) || string(base[0]) == "_" {
+							isValidVarfd = true
+							for _, c := range base[1:] {
+								if !((unicode.IsLetter(_runeFromChar(c)) || unicode.IsDigit(_runeFromChar(c))) || c == '_') {
+									isValidVarfd = false
+									break
+								}
+							}
+						}
+					}
+				} else {
+					isValidVarfd = true
+					for _, c := range varname[1:] {
+						if !((unicode.IsLetter(_runeFromChar(c)) || unicode.IsDigit(_runeFromChar(c))) || c == '_') {
+							isValidVarfd = false
+							break
+						}
+					}
+				}
+			}
+		}
+		if !(p.AtEnd()) && p.Peek() == "}" && isValidVarfd {
+			p.Advance()
+			varfd = varname
+		} else {
+			p.Pos = saved
+		}
+	}
+	if varfd == "" && p.Peek() != "" && unicode.IsDigit(_runeFromChar(p.Peek())) {
+		fdChars = []string{}
+		for !(p.AtEnd()) && unicode.IsDigit(_runeFromChar(p.Peek())) {
+			fdChars = append(fdChars, p.Advance())
+		}
+		fd = _mustAtoi(strings.Join(fdChars, ""))
+	}
+	ch = p.Peek()
+	if ch == "&" && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == ">" {
+		if fd != -1 || varfd != "" {
+			p.Pos = start
+			return nil
+		}
+		p.Advance()
+		p.Advance()
+		if !(p.AtEnd()) && p.Peek() == ">" {
+			p.Advance()
+			op = "&>>"
+		} else {
+			op = "&>"
+		}
+		p.SkipWhitespace()
+		target = p.ParseWord(false, false, false)
+		if target == nil {
+			panic(NewParseError("Expected target for redirect "+op, p.Pos, 0))
+		}
+		return NewRedirect(op, target, 0)
+	}
+	if ch == "" || !(_IsRedirectChar(ch)) {
+		p.Pos = start
+		return nil
+	}
+	if fd == -1 && p.Pos+1 < p.Length && string(p.Source[p.Pos+1]) == "(" {
+		p.Pos = start
+		return nil
+	}
+	op = p.Advance()
+	stripTabs = false
+	if !(p.AtEnd()) {
+		nextCh = p.Peek()
+		if op == ">" && nextCh == ">" {
+			p.Advance()
+			op = ">>"
+		} else if op == "<" && nextCh == "<" {
+			p.Advance()
+			if !(p.AtEnd()) && p.Peek() == "<" {
+				p.Advance()
+				op = "<<<"
+			} else if !(p.AtEnd()) && p.Peek() == "-" {
+				p.Advance()
+				op = "<<"
+				stripTabs = true
+			} else {
+				op = "<<"
+			}
+		} else if op == "<" && nextCh == ">" {
+			p.Advance()
+			op = "<>"
+		} else if op == ">" && nextCh == "|" {
+			p.Advance()
+			op = ">|"
+		} else if fd == -1 && varfd == "" && op == ">" && nextCh == "&" {
+			if p.Pos+1 >= p.Length || !(_IsDigitOrDash(string(p.Source[p.Pos+1]))) {
+				p.Advance()
+				op = ">&"
+			}
+		} else if fd == -1 && varfd == "" && op == "<" && nextCh == "&" {
+			if p.Pos+1 >= p.Length || !(_IsDigitOrDash(string(p.Source[p.Pos+1]))) {
+				p.Advance()
+				op = "<&"
+			}
+		}
+	}
+	if op == "<<" {
+		return p._ParseHeredoc(fd, stripTabs)
+	}
+	if varfd != "" {
+		op = "{" + varfd + "}" + op
+	} else if fd != -1 {
+		op = fmt.Sprint(fd) + op
+	}
+	if !(p.AtEnd()) && p.Peek() == "&" {
+		p.Advance()
+		p.SkipWhitespace()
+		if !(p.AtEnd()) && p.Peek() == "-" {
+			if p.Pos+1 < p.Length && !(_IsMetachar(string(p.Source[p.Pos+1]))) {
+				p.Advance()
+				target = NewWord("&-", nil)
+			} else {
+				target = nil
+			}
+		} else {
+			target = nil
+		}
+		if target == nil {
+			if !(p.AtEnd()) && unicode.IsDigit(_runeFromChar(p.Peek())) || p.Peek() == "-" {
+				wordStart = p.Pos
+				fdChars = []string{}
+				for !(p.AtEnd()) && unicode.IsDigit(_runeFromChar(p.Peek())) {
+					fdChars = append(fdChars, p.Advance())
+				}
+				if len(fdChars) > 0 {
+					fdTarget = strings.Join(fdChars, "")
+				} else {
+					fdTarget = ""
+				}
+				if !(p.AtEnd()) && p.Peek() == "-" {
+					fdTarget += p.Advance()
+				}
+				if fdTarget != "-" && !(p.AtEnd()) && !(_IsMetachar(p.Peek())) {
+					p.Pos = wordStart
+					innerWord = p.ParseWord(false, false, false)
+					if innerWord != nil {
+						target = NewWord("&"+innerWord.Value, nil)
+						target.Parts = innerWord.Parts
+					} else {
+						panic(NewParseError("Expected target for redirect "+op, p.Pos, 0))
+					}
+				} else {
+					target = NewWord("&"+fdTarget, nil)
+				}
+			} else {
+				innerWord = p.ParseWord(false, false, false)
+				if innerWord != nil {
+					target = NewWord("&"+innerWord.Value, nil)
+					target.Parts = innerWord.Parts
+				} else {
+					panic(NewParseError("Expected target for redirect "+op, p.Pos, 0))
+				}
+			}
+		}
+	} else {
+		p.SkipWhitespace()
+		if _containsAny([]interface{}{">&", "<&"}, op) && !(p.AtEnd()) && p.Peek() == "-" {
+			if p.Pos+1 < p.Length && !(_IsMetachar(string(p.Source[p.Pos+1]))) {
+				p.Advance()
+				target = NewWord("&-", nil)
+			} else {
+				target = p.ParseWord(false, false, false)
+			}
+		} else {
+			target = p.ParseWord(false, false, false)
+		}
+	}
+	if target == nil {
+		panic(NewParseError("Expected target for redirect "+op, p.Pos, 0))
+	}
+	return NewRedirect(op, target, 0)
 }
 
 func (p *Parser) _ParseHeredocDelimiter() (string, bool) {
@@ -10600,7 +10854,7 @@ func (p *Parser) ParseCompoundCommand() Node {
 }
 
 func (p *Parser) ParsePipeline() Node {
-	var prefixOrder interface{}
+	var prefixOrder string
 	_ = prefixOrder
 	var timePosix bool
 	_ = timePosix
@@ -10611,7 +10865,7 @@ func (p *Parser) ParsePipeline() Node {
 	var result Node
 	_ = result
 	p.SkipWhitespace()
-	prefixOrder = nil
+	prefixOrder = ""
 	timePosix = false
 	if p._LexIsAtReservedWord("time") {
 		p._LexConsumeWord("time")
@@ -10894,7 +11148,64 @@ func (p *Parser) ParseComment() Node {
 }
 
 func (p *Parser) Parse() []Node {
-	panic("TODO: method needs manual implementation")
+	var source string
+	_ = source
+	var results []Node
+	_ = results
+	var comment Node
+	_ = comment
+	var result Node
+	_ = result
+	var foundNewline bool
+	_ = foundNewline
+	source = strings.TrimSpace(p.Source)
+	if !(len(source) > 0) {
+		return []Node{NewEmpty()}
+	}
+	results = []Node{}
+	for true {
+		p.SkipWhitespace()
+		for !(p.AtEnd()) && p.Peek() == "\n" {
+			p.Advance()
+		}
+		if p.AtEnd() {
+			break
+		}
+		comment = p.ParseComment()
+		if !(comment != nil) {
+			break
+		}
+	}
+	for !(p.AtEnd()) {
+		result = p.ParseList(false)
+		if result != nil {
+			results = append(results, result)
+		}
+		p.SkipWhitespace()
+		foundNewline = false
+		for !(p.AtEnd()) && p.Peek() == "\n" {
+			foundNewline = true
+			p.Advance()
+			p._GatherHeredocBodies()
+			if p._Cmdsub_heredoc_end != -1 && p._Cmdsub_heredoc_end > p.Pos {
+				p.Pos = p._Cmdsub_heredoc_end
+				p._Cmdsub_heredoc_end = -1
+			}
+			p.SkipWhitespace()
+		}
+		if !(foundNewline) && !(p.AtEnd()) {
+			panic(NewParseError("Syntax error", p.Pos, 0))
+		}
+	}
+	if !(len(results) > 0) {
+		return []Node{NewEmpty()}
+	}
+	if p._Saw_newline_in_single_quote && p.Source != "" && string(p.Source[len(p.Source)-1]) == "\\" && !(len(p.Source) >= 3 && p.Source[len(p.Source)-3:len(p.Source)-1] == "\\\n") {
+		if !(p._LastWordOnOwnLine(results)) {
+			p._StripTrailingBackslashFromLastWord(results)
+		}
+	}
+	return results
 }
 
 func (p *Parser) _LastWordOnOwnLine(nodes []Node) bool {

@@ -1158,11 +1158,9 @@ class GoTranspiler(ast.NodeVisitor):
         # Tuple passthrough (returns tuple stored in variable)
         "_parse_param_expansion",
         # Complex type assertions needed
-        "parse_redirect",
         "_gather_heredoc_bodies",
         "_parse_heredoc",
         "_parse_heredoc_delimiter",
-        "parse",
         # Tuple stack in local variable (heredoc tracking)
         "_parse_backtick_substitution",
     }
@@ -1637,6 +1635,8 @@ class GoTranspiler(ast.NodeVisitor):
         append_types = self._collect_append_element_types(stmts)
         # Collect variables that are None-initialized but later assigned Node types
         nullable_node_vars = self._collect_nullable_node_vars(stmts)
+        # Collect variables that are None-initialized but later assigned string types
+        nullable_string_vars = self._collect_nullable_string_vars(stmts)
         # Collect variables assigned multiple different concrete Node types
         multi_node_vars = self._collect_multi_node_type_vars(stmts)
         # Emit var declarations for all collected variables that are actually read
@@ -1661,6 +1661,10 @@ class GoTranspiler(ast.NodeVisitor):
                 if var_name in nullable_node_vars:
                     if not go_type or go_type == "interface{}":
                         go_type = "Node"
+                # Check if var is None-initialized but later assigned string types
+                if var_name in nullable_string_vars:
+                    if not go_type or go_type == "interface{}":
+                        go_type = "string"
                 # Check if var is assigned multiple different concrete Node types
                 if var_name in multi_node_vars:
                     if go_type and go_type.startswith("*") and go_type[1:] in self.symbols.classes:
@@ -1669,8 +1673,9 @@ class GoTranspiler(ast.NodeVisitor):
                 if not go_type or go_type in ("interface{}", "[]interface{}"):
                     # Try harder - check if it's a known pattern
                     go_type = self._infer_var_type_from_name(var_name) or go_type or "interface{}"
-                # Special case: 'result' in a method that returns []Node
-                if var_name.lower() == "result" and self.current_method:
+                # Special case: 'results' (plural) in a method that returns []Node
+                # Don't apply to 'result' (singular) which may be a single Node
+                if var_name.lower() == "results" and self.current_method:
                     method_ret = self._get_current_method_return_type()
                     if method_ret == "[]Node":
                         go_type = method_ret
@@ -1891,6 +1896,70 @@ class GoTranspiler(ast.NodeVisitor):
         node_vars: set[str] = set()
         self._collect_node_assigned_vars(stmts, none_vars, node_vars)
         return node_vars
+
+    def _collect_nullable_string_vars(self, stmts: list[ast.stmt]) -> set[str]:
+        """Collect variables that are first assigned None but later assigned strings.
+
+        Pattern:
+            varfd = None
+            if cond:
+                varfd = varname  # a string
+
+        These should be typed as string (using "" for None), not interface{}.
+        """
+        # First pass: collect vars assigned None
+        none_vars: set[str] = set()
+        self._collect_none_assigned_vars(stmts, none_vars)
+        # Second pass: check if any of those vars are later assigned string types
+        string_vars: set[str] = set()
+        self._collect_string_assigned_vars(stmts, none_vars, string_vars)
+        return string_vars
+
+    def _collect_string_assigned_vars(self, stmts: list[ast.stmt], candidates: set[str], result: set[str]):
+        """Find candidate vars later assigned string values."""
+        for stmt in stmts:
+            if isinstance(stmt, ast.Assign):
+                for target in stmt.targets:
+                    if isinstance(target, ast.Name):
+                        var_name = self._snake_to_camel(target.id)
+                        var_name = self._safe_go_name(var_name)
+                        if var_name in candidates and self._is_string_returning_expr(stmt.value):
+                            result.add(var_name)
+            # Recurse into control flow
+            if isinstance(stmt, ast.If):
+                self._collect_string_assigned_vars(stmt.body, candidates, result)
+                self._collect_string_assigned_vars(stmt.orelse, candidates, result)
+            elif isinstance(stmt, ast.For):
+                self._collect_string_assigned_vars(stmt.body, candidates, result)
+            elif isinstance(stmt, ast.While):
+                self._collect_string_assigned_vars(stmt.body, candidates, result)
+            elif isinstance(stmt, ast.Try):
+                self._collect_string_assigned_vars(stmt.body, candidates, result)
+                for handler in stmt.handlers:
+                    self._collect_string_assigned_vars(handler.body, candidates, result)
+            elif isinstance(stmt, ast.With):
+                self._collect_string_assigned_vars(stmt.body, candidates, result)
+
+    def _is_string_returning_expr(self, node: ast.expr) -> bool:
+        """Check if an expression returns a string type."""
+        # String literals
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return True
+        # Variable reference - check if we know its type
+        if isinstance(node, ast.Name):
+            var_name = self._snake_to_camel(node.id)
+            var_name = self._safe_go_name(var_name)
+            var_type = self.var_types.get(var_name, "")
+            return var_type == "string"
+        # JoinedStr (f-string)
+        if isinstance(node, ast.JoinedStr):
+            return True
+        # String methods
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            method = node.func.attr
+            if method in ("join", "strip", "lstrip", "rstrip", "lower", "upper", "replace"):
+                return True
+        return False
 
     def _collect_none_assigned_vars(self, stmts: list[ast.stmt], result: set[str]):
         """Find variables first assigned None."""
@@ -2903,6 +2972,9 @@ class GoTranspiler(ast.NodeVisitor):
                 if method in ("outer_double", "outer_single", "OuterDouble", "OuterSingle",
                               "startswith", "endswith", "isalpha", "isdigit", "isalnum", "isspace"):
                     return "bool"
+                # Methods that return int
+                if method in ("find", "rfind", "index", "rindex", "count"):
+                    return "int"
                 # Methods that return string
                 if method in ("_parse_matched_pair", "_ParseMatchedPair",
                               "advance", "Advance", "peek", "Peek",
@@ -4089,8 +4161,9 @@ class GoTranspiler(ast.NodeVisitor):
         # For string methods that return strings, check if non-empty
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
             method = node.func.attr
-            if method in ("strip", "lstrip", "rstrip", "lower", "upper", "replace"):
-                return f'len({self.visit_expr(node)}) > 0'
+            if method in ("strip", "lstrip", "rstrip", "lower", "upper", "replace",
+                          "peek", "Peek", "peek_word", "PeekWord"):
+                return f'{self.visit_expr(node)} != ""'
         # Default: just emit the expression
         return self.visit_expr(node)
 

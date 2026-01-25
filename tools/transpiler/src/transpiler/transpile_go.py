@@ -6403,6 +6403,17 @@ class GoTranspiler(ast.NodeVisitor):
         # Handle power
         if isinstance(node.op, ast.Pow):
             return f"int(math.Pow(float64({left}), float64({right})))"
+        # Handle true division (Python / always returns float)
+        if isinstance(node.op, ast.Div):
+            return f"float64({left}) / float64({right})"
+        # Width-rank auto-casting for mixed int/float arithmetic
+        if isinstance(node.op, (ast.Add, ast.Sub, ast.Mult)):
+            left_type = self._infer_type_from_expr(node.left)
+            right_type = self._infer_type_from_expr(node.right)
+            if left_type == "float64" and right_type == "int":
+                right = f"float64({right})"
+            elif left_type == "int" and right_type == "float64":
+                left = f"float64({left})"
         return f"{left} {op} {right}"
 
     def _binop_to_go(self, op: ast.operator) -> str:

@@ -437,10 +437,7 @@ string([]rune(s)[start:end])  // Go
 2. **Error accumulation**: Parable collects multiple parse errors. Go pattern is typically fail-fast. Keep Python's behavior or simplify?
    - Recommend: Keep panic/recover pattern, matches Go stdlib parser
 
-3. **Performance**: Go should be faster than Python. Worth benchmarking?
-   - Defer until working transpiler exists
-
-4. **Testing**: How to verify transpiled Go matches Python behavior?
+3. **Testing**: How to verify transpiled Go matches Python behavior?
    - Share existing fuzz corpus, compare s-expression output
 
 5. **`strconv.Atoi` and friends**: Python `int(s)` doesn't return errors.
@@ -681,7 +678,6 @@ type MatchedPairError struct {
 - [ ] Add `just transpile` to run all three (js, dts, go)
 - [ ] Add `check-transpile-go` to `just check`
 - [ ] Add `test-go` to `just check`
-- [ ] Benchmark: `just bench-go`
 - [ ] Documentation updates
 
 **Exit criterion**: `just check` includes Go, CI passes

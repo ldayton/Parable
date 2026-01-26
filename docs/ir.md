@@ -592,6 +592,44 @@ TypeSwitch {
 
 Resolve Python `Union[...]` and `X | Y` type aliases to IR `Union` with explicit variants.
 
+### Type Inference
+
+Two-pass local inference. All function signatures are annotated; only local variables and expressions need inference.
+
+**Pass 1 — Symbol Collection:**
+- Struct definitions → field names and types
+- Function signatures → parameter types, return types
+- Module constants → names and types
+- Union type aliases → variant lists
+
+**Pass 2 — Expression Typing:**
+
+Traverse each function body. Compute `Expr.typ` bottom-up:
+
+| Expression | Type Rule |
+|------------|-----------|
+| `IntLit`, `FloatLit`, `StringLit`, `BoolLit` | Literal's intrinsic type |
+| `NilLit` | Context-dependent (from annotation or assignment target) |
+| `Var` | Lookup in scope: parameter type or previously inferred local |
+| `FieldAccess` | Lookup field type on struct |
+| `Index` on `Slice(T)` | `T` |
+| `Index` on `Map(K,V)` | `V` |
+| `Index` on `str` | `str` (single character) |
+| `Call` | Function's return type from symbol table |
+| `MethodCall` | Method's return type from struct definition |
+| `BinaryOp` | Fixed rules: `int + int → int`, `str + str → str`, `x == y → bool` |
+| `UnaryOp` | `!bool → bool`, `-int → int` |
+
+**Local Variable Typing:**
+
+On first assignment `x = expr`, record `x`'s type as `expr.typ`. Subsequent assignments must have compatible type (same type or subtype). Reassignment to incompatible type is a frontend error.
+
+**Narrowing Scope:**
+
+Maintain a `narrowed: dict[str, Type]` map per scope. When entering `if node.kind == "command":`, set `narrowed["node"] = StructRef("Command")`. Variable lookups check `narrowed` before declared type. On scope exit, restore previous narrowing state.
+
+**Principle:** No unification, no constraint solving. Types flow forward from annotations and initializers. This suffices because all function boundaries are annotated. See [Pierce & Turner, Local Type Inference](https://www.cis.upenn.edu/~bcpierce/papers/lti-toplas.pdf).
+
 ## Backend Responsibilities
 
 Backends (IR → target) handle only syntax:

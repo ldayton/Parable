@@ -2,47 +2,11 @@
 
 Areas requiring additional specification, based on analysis of `parable.py` (~11,000 lines, ~60 AST node types).
 
-| Pri | Gap                             | Issue                                         |
-| --- | ------------------------------- | --------------------------------------------- |
-| P1  | Error Type Mapping              | Inheritance representation unclear            |
-| P1  | Type Inference Algorithm        | Rules for expression types, locals, narrowing |
-| P2  | Union Type Details              | Frontend discovery algorithm                  |
-| P2  | Class to Struct Extraction      | Field source: annotation vs `__init__`        |
-| P2  | Optional vs Nullable vs Default | Three concepts conflated in Python            |
-
-## Priority 1 — Important
-
-### Error Type Mapping
-
-parable.py defines:
-
-```python
-class ParseError(Exception):
-    def __init__(self, message: str, pos: int | None = None, line: int | None = None):
-
-class MatchedPairError(ParseError):  # inheritance
-```
-
-**Gaps**:
-1. Exception inheritance → how represented? Go: separate types? Rust: enum variants?
-2. Optional fields `pos`, `line` → always present in IR error type, or Optional?
-3. `_format_message()` method on error → include in IR or backend-generate?
-
-**Needed**: Specify error type definition in IR. Clarify inheritance flattening.
-
-### Type Inference Algorithm
-
-The spec says frontend performs "type inference from annotations and usage" but doesn't specify how.
-
-**Unspecified**:
-1. **Symbol table construction** — What pass order? How to handle forward references to classes/functions defined later in file?
-2. **Expression type rules** — `a + b` with two strings: `StringConcat` or `BinaryOp`? `a[i]` on `str`: `str` or `rune`?
-3. **Local variable typing** — `x = foo()` then `x = bar()` with different return types. Error, or union, or last-write-wins?
-4. **Collection element narrowing** — "Usage shows specific types" requires whole-program analysis. What if field assigned `Word` in one method, `Redirect` in another?
-5. **Walrus operator scope** — `if (x := parse()):` — type of `x` after the `if` block?
-6. **Tuple unpacking** — `node, text = parse()` — how to assign types to `node` and `text`?
-
-**Needed**: Specify inference algorithm or at least the rules for each expression form.
+| Pri | Gap                             | Issue                                    |
+| --- | ------------------------------- | ---------------------------------------- |
+| P2  | Union Type Details              | Frontend discovery algorithm             |
+| P2  | Class to Struct Extraction      | Field source: annotation vs `__init__`   |
+| P2  | Optional vs Nullable vs Default | Three concepts conflated in Python       |
 
 ## Priority 2 — Needed
 

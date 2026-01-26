@@ -4170,6 +4170,17 @@ class For(Node):
             )
 
 
+def _format_arith_val(s: str) -> str:
+    """Format arithmetic value for sexp output."""
+    w = Word(s, [])
+    val = w._expand_all_ansi_c_quotes(s)
+    val = w._strip_locale_string_dollars(val)
+    val = w._format_command_substitutions(val)
+    val = val.replace("\\", "\\\\").replace('"', '\\"')
+    val = val.replace("\n", "\\n").replace("\t", "\\t")
+    return val
+
+
 class ForArith(Node):
     """A C-style for loop: for ((init; cond; incr)); do ... done."""
 
@@ -4193,16 +4204,6 @@ class ForArith(Node):
 
     def to_sexp(self) -> str:
         # bash-oracle format: (arith-for (init (word "x")) (test (word "y")) (step (word "z")) body)
-        def format_arith_val(s: str) -> str:
-            # Use Word's methods to expand ANSI-C quotes and strip locale $
-            w = Word(s, [])
-            val = w._expand_all_ansi_c_quotes(s)
-            val = w._strip_locale_string_dollars(val)
-            val = w._format_command_substitutions(val)
-            val = val.replace("\\", "\\\\").replace('"', '\\"')
-            val = val.replace("\n", "\\n").replace("\t", "\\t")
-            return val
-
         suffix = ""
         if self.redirects:
             redirect_parts = []
@@ -4212,9 +4213,9 @@ class ForArith(Node):
         init_val = self.init if self.init else "1"
         cond_val = self.cond if self.cond else "1"
         incr_val = self.incr if self.incr else "1"
-        init_str = format_arith_val(init_val)
-        cond_str = format_arith_val(cond_val)
-        incr_str = format_arith_val(incr_val)
+        init_str = _format_arith_val(init_val)
+        cond_str = _format_arith_val(cond_val)
+        incr_str = _format_arith_val(incr_val)
         body_str = self.body.to_sexp()
         return f'(arith-for (init (word "{init_str}")) (test (word "{cond_str}")) (step (word "{incr_str}")) {body_str}){suffix}'
 

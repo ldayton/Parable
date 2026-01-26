@@ -12,6 +12,85 @@ parable.py → [Python AST] → Frontend → [IR] → Backend → target code
 
 **TypeScript strategy**: Backend emits `.ts` files; `tsc` produces `.js` + `.d.ts`. No separate JS backend needed.
 
+## Source Language Subset
+
+parable.py uses a restricted Python subset designed for straightforward transpilation. The style checker (`check_style.py`) enforces these constraints.
+
+### Banned Constructs
+
+| Category              | Banned                                                    | Use Instead                                       |
+| --------------------- | --------------------------------------------------------- | ------------------------------------------------- |
+| **Generators**        | `yield`, `yield from`, `(x for x in y)`                   | Return list or use callback                       |
+| **Async**             | `async def`, `await`, `async for`, `async with`           | Synchronous code only                             |
+| **Closures**          | `nonlocal`, `global`, `lambda`, nested functions          | Pass as parameter, module-level function          |
+| **Metaprogramming**   | `@decorator`, `getattr`, `hasattr`, `type()`, `__class__` | Direct calls, explicit field access, `isinstance` |
+| **OOP patterns**      | `@staticmethod`, `@classmethod`, `@property`              | Module-level function, explicit getter            |
+| **Pattern matching**  | `match`/`case`                                            | `if`/`elif` chain                                 |
+| **Context managers**  | `with` statement                                          | `try`/`finally`                                   |
+| **Python idioms**     | `a < b < c`, `x or []`, `x ** 2`, `pow()`                 | Explicit comparisons, `if x is None`, multiply    |
+| **Iteration helpers** | `all`, `any`                                              | Explicit loop with early return                   |
+| **Assignment**        | `del`, tuple unpack from variable, mutable default        | Reassign, unpack from call, `None` default        |
+| **Call spreading**    | `f(*args)`, `f(**kwargs)`                                 | Pass arguments explicitly                         |
+| **Inheritance**       | Multiple inheritance, nested classes                      | Single inheritance, module-level classes          |
+| **Dunder methods**    | `__str__`, `__eq__`, etc.                                 | Only `__init__`, `__new__`, `__repr__` allowed    |
+| **Exceptions**        | Bare `except:`, `assert`                                  | `except ExceptionType:`, `if not x: raise`        |
+| **Identity**          | `is`/`is not` with non-None                               | `==` (except `x is None`)                         |
+| **Imports**           | Any except `__future__`, `typing`, `collections.abc`      | Self-contained code                               |
+
+### Required Annotations
+
+All functions must have return type and parameter type annotations. Collection types must be parameterized.
+
+```python
+# Required
+def parse(source: str, pos: int) -> tuple[Node | None, str]: ...
+
+# Banned (missing types, bare collections)
+def parse(source, pos): ...
+def get_items() -> list: ...
+```
+
+### Allowed Constructs
+
+The subset includes: classes, methods, functions, `if`/`elif`/`else`, `while`, `for x in collection`, `try`/`except`/`finally`, `raise`, slicing `a[x:y]` and `a[::step]`, negative indexing `lst[-1]`, `isinstance`, `len`, string/list/dict/set operations, `Union` types, `| None` optionals, f-strings (limited), list/dict/set comprehensions, `:=` walrus operator, `enumerate`, `zip`, `reversed`, `//` floor division.
+
+## Source Code Properties
+
+Beyond style rules, parable.py has structural properties relevant to transpilation:
+
+### AST Structure
+- **Strict tree**: Parent→child references only. No cycles, no shared nodes, no back-references.
+- **Immutable after construction**: Nodes are built once and never modified.
+- **Single inheritance**: All AST nodes inherit from `Node`. No multiple inheritance.
+- **Discriminated union**: Every node has `self.kind = "literal"` set in `__init__`.
+
+### Type System
+- **Explicit unions**: `ArithNode = Union[ArithNumber, ArithVar, ...]` defined at module level.
+- **Optional via union**: `T | None` for nullable values.
+- **No type aliases**: Types are used directly or via explicit `Union`.
+
+### Control Flow
+- **Type dispatch via `.kind`**: `if node.kind == "command":` pattern, not `isinstance`.
+- **Error handling**: `raise ParseError(msg, pos)` / `raise MatchedPairError(msg, pos)`.
+- **Soft failure**: Return `(None, "")` tuple to signal "try alternative".
+- **No recursion limits**: Call depth bounded by input nesting, not problematic.
+
+### Data Patterns
+- **Two-phase returns**: `tuple[Node | None, str]` — parsed node plus raw text consumed.
+- **String building**: `chars: list[str]` → `chars.append(ch)` → `"".join(chars)`.
+- **State via attributes**: `self.pos`, `self.source`, `self._stack` — mutable instance state.
+- **Enum-like constants**: `class TokenType:` with `EOF = 0`, `WORD = 1`, etc.
+
+### What Does NOT Exist
+- No lambdas or closures
+- No decorators
+- No metaclasses
+- No descriptors or properties
+- No `__getattr__` / `__setattr__` magic
+- No multiple inheritance
+- No abstract base classes (just convention)
+- No external dependencies
+
 ## Types
 
 ### Primitives

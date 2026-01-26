@@ -7,6 +7,7 @@ All analysis happens here; backends just emit syntax.
 from __future__ import annotations
 
 import ast
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .go_overrides import FIELD_TYPE_OVERRIDES, PARAM_TYPE_OVERRIDES, RETURN_TYPE_OVERRIDES
@@ -39,6 +40,7 @@ from .ir import (
     StructRef,
     Struct,
     SymbolTable,
+    TupleAssign,
     Type,
 )
 
@@ -56,12 +58,24 @@ TYPE_MAP: dict[str, Type] = {
 }
 
 
+@dataclass
+class TypeContext:
+    """Context for bidirectional type inference (Pierce & Turner style)."""
+    expected: Type | None = None  # Top-down expected type from parent
+    var_types: dict[str, Type] = field(default_factory=dict)  # Variable types in scope
+    return_type: Type | None = None  # Current function's return type
+
+
 class Frontend:
     """Converts Python AST to IR Module."""
 
     def __init__(self) -> None:
         self.symbols = SymbolTable()
         self._node_types: set[str] = set()  # classes that inherit from Node
+        # Type inference context
+        self._current_func_info: FuncInfo | None = None
+        self._current_class_name: str = ""
+        self._type_ctx: TypeContext = TypeContext()
 
     def transpile(self, source: str) -> Module:
         """Parse Python source and produce IR Module."""
@@ -147,9 +161,12 @@ class Frontend:
     def _collect_init_fields(self, init: ast.FunctionDef, info: StructInfo) -> None:
         """Collect fields assigned in __init__."""
         param_types: dict[str, str] = {}
+        # Record __init__ parameter order (excluding self) for constructor calls
         for arg in init.args.args:
-            if arg.arg != "self" and arg.annotation:
-                param_types[arg.arg] = self._annotation_to_str(arg.annotation)
+            if arg.arg != "self":
+                info.init_params.append(arg.arg)
+                if arg.annotation:
+                    param_types[arg.arg] = self._annotation_to_str(arg.annotation)
         for stmt in ast.walk(init):
             if isinstance(stmt, ast.AnnAssign):
                 if (
@@ -185,7 +202,7 @@ class Frontend:
                             )
 
     def _collect_constants(self, tree: ast.Module) -> None:
-        """Pass 5: Collect module-level constants (all-caps names with int values)."""
+        """Pass 5: Collect module-level and class-level constants."""
         for node in tree.body:
             if isinstance(node, ast.Assign) and len(node.targets) == 1:
                 target = node.targets[0]
@@ -193,15 +210,26 @@ class Frontend:
                     # All-caps name = constant
                     if isinstance(node.value, ast.Constant) and isinstance(node.value.value, int):
                         self.symbols.constants[target.id] = INT
+            # Collect class-level constants (e.g., TokenType.EOF = 0)
+            elif isinstance(node, ast.ClassDef):
+                for stmt in node.body:
+                    if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+                        target = stmt.targets[0]
+                        if isinstance(target, ast.Name) and target.id.isupper():
+                            if isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, int):
+                                # Store as ClassName_CONST_NAME
+                                const_name = f"{node.name}_{target.id}"
+                                self.symbols.constants[const_name] = INT
 
     def _extract_func_info(
         self, node: ast.FunctionDef, is_method: bool = False
     ) -> FuncInfo:
         """Extract function signature information."""
         params = []
-        for arg in node.args.args:
-            if arg.arg == "self":
-                continue
+        non_self_args = [a for a in node.args.args if a.arg != "self"]
+        n_params = len(non_self_args)
+        n_defaults = len(node.args.defaults) if node.args.defaults else 0
+        for i, arg in enumerate(non_self_args):
             py_type = self._annotation_to_str(arg.annotation) if arg.annotation else ""
             typ = self._py_type_to_ir(py_type) if py_type else Interface("any")
             # Check for overrides
@@ -209,14 +237,14 @@ class Frontend:
             if override_key in PARAM_TYPE_OVERRIDES:
                 typ = self._go_type_to_ir(PARAM_TYPE_OVERRIDES[override_key])
             has_default = False
+            default_value = None
             # Check if this param has a default
-            if node.args.defaults:
-                n_defaults = len(node.args.defaults)
-                n_params = len([a for a in node.args.args if a.arg != "self"])
-                param_idx = len(params)
-                if param_idx >= n_params - n_defaults:
-                    has_default = True
-            params.append(ParamInfo(name=arg.arg, typ=typ, has_default=has_default))
+            if i >= n_params - n_defaults:
+                has_default = True
+                default_idx = i - (n_params - n_defaults)
+                if node.args.defaults and default_idx < len(node.args.defaults):
+                    default_value = self._lower_expr(node.args.defaults[default_idx])
+            params.append(ParamInfo(name=arg.arg, typ=typ, has_default=has_default, default_value=default_value))
         return_type = VOID
         if node.returns:
             py_return = self._annotation_to_str(node.returns)
@@ -235,7 +263,7 @@ class Frontend:
         """Build IR Module from collected symbols."""
         from . import ir
         module = Module(name="parable")
-        # Build constants
+        # Build constants (module-level and class-level)
         for node in tree.body:
             if isinstance(node, ast.Assign) and len(node.targets) == 1:
                 target = node.targets[0]
@@ -244,6 +272,18 @@ class Frontend:
                     module.constants.append(
                         Constant(name=target.id, typ=INT, value=value, loc=self._loc_from_node(node))
                     )
+            elif isinstance(node, ast.ClassDef):
+                # Build class-level constants
+                for stmt in node.body:
+                    if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+                        target = stmt.targets[0]
+                        if isinstance(target, ast.Name) and target.id.isupper():
+                            const_name = f"{node.name}_{target.id}"
+                            if const_name in self.symbols.constants:
+                                value = self._lower_expr(stmt.value)
+                                module.constants.append(
+                                    Constant(name=const_name, typ=INT, value=value, loc=self._loc_from_node(stmt))
+                                )
         # Build structs
         for node in tree.body:
             if isinstance(node, ast.ClassDef):
@@ -296,9 +336,23 @@ class Frontend:
         if func_info:
             for p in func_info.params:
                 params.append(
-                    Param(name=p.name, typ=p.typ, loc=Loc.unknown())
+                    Param(name=p.name, typ=p.typ, default=p.default_value, loc=Loc.unknown())
                 )
-        body = self._lower_stmts(node.body) if with_body else []
+        body = []
+        if with_body:
+            # Set up type context for this function
+            self._current_func_info = func_info
+            self._current_class_name = ""
+            # Collect variable types from body and add parameters
+            var_types = self._collect_var_types(node.body)
+            if func_info:
+                for p in func_info.params:
+                    var_types[p.name] = p.typ
+            self._type_ctx = TypeContext(
+                return_type=func_info.return_type if func_info else VOID,
+                var_types=var_types,
+            )
+            body = self._lower_stmts(node.body)
         return Function(
             name=node.name,
             params=params,
@@ -315,10 +369,25 @@ class Frontend:
         if func_info:
             for p in func_info.params:
                 params.append(
-                    Param(name=p.name, typ=p.typ, loc=Loc.unknown())
+                    Param(name=p.name, typ=p.typ, default=p.default_value, loc=Loc.unknown())
                 )
         from .ir import Receiver
-        body = self._lower_stmts(node.body) if with_body else []
+        body = []
+        if with_body:
+            # Set up type context for this method
+            self._current_func_info = func_info
+            self._current_class_name = class_name
+            # Collect variable types from body and add parameters + self
+            var_types = self._collect_var_types(node.body)
+            if func_info:
+                for p in func_info.params:
+                    var_types[p.name] = p.typ
+            var_types["self"] = Pointer(StructRef(class_name))
+            self._type_ctx = TypeContext(
+                return_type=func_info.return_type if func_info else VOID,
+                var_types=var_types,
+            )
+            body = self._lower_stmts(node.body)
         return Function(
             name=node.name,
             params=params,
@@ -518,7 +587,8 @@ class Frontend:
             return Slice(elem)
         if go_type.startswith("*"):
             target = go_type[1:]
-            return Pointer(StructRef(target))
+            # Recursively parse the target type (could be slice, struct, etc.)
+            return Pointer(self._go_type_to_ir(target))
         if go_type.startswith("map["):
             # Parse map[K]V
             bracket_end = go_type.find("]")
@@ -630,6 +700,191 @@ class Frontend:
         return parts
 
     # ============================================================
+    # LOCAL TYPE INFERENCE (Pierce & Turner style)
+    # ============================================================
+
+    def _collect_var_types(self, stmts: list[ast.stmt]) -> dict[str, Type]:
+        """Pre-scan function body to collect variable types from usage patterns."""
+        var_types: dict[str, Type] = {}
+        for stmt in ast.walk(ast.Module(body=stmts, type_ignores=[])):
+            # Infer from append() calls: var.append(x) -> var is []T where T = type(x)
+            if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+                call = stmt.value
+                if isinstance(call.func, ast.Attribute) and call.func.attr == "append":
+                    if isinstance(call.func.value, ast.Name) and call.args:
+                        var_name = call.func.value.id
+                        elem_type = self._infer_element_type_from_append_arg(call.args[0])
+                        if elem_type != Interface("any"):
+                            var_types[var_name] = Slice(elem_type)
+            # Infer from annotated assignments
+            if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
+                py_type = self._annotation_to_str(stmt.annotation)
+                var_types[stmt.target.id] = self._py_type_to_ir(py_type)
+            # Infer from return statements: if returning var and return type is known
+            if isinstance(stmt, ast.Return) and stmt.value:
+                if isinstance(stmt.value, ast.Name):
+                    var_name = stmt.value.id
+                    if self._current_func_info and isinstance(self._current_func_info.return_type, Slice):
+                        var_types[var_name] = self._current_func_info.return_type
+            # Infer from field assignments: self.field = var -> var has field's type
+            if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+                target = stmt.targets[0]
+                if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name):
+                    if target.value.id == "self" and isinstance(stmt.value, ast.Name):
+                        var_name = stmt.value.id
+                        field_name = target.attr
+                        # Look up field type from current class
+                        if self._current_class_name in self.symbols.structs:
+                            struct_info = self.symbols.structs[self._current_class_name]
+                            field_info = struct_info.fields.get(field_name)
+                            if field_info:
+                                var_types[var_name] = field_info.typ
+                # Infer from method call assignments: var = self.method() -> var has method's return type
+                if isinstance(target, ast.Name) and isinstance(stmt.value, ast.Call):
+                    var_name = target.id
+                    call = stmt.value
+                    if isinstance(call.func, ast.Attribute):
+                        method_name = call.func.attr
+                        # Get object type
+                        if isinstance(call.func.value, ast.Name):
+                            obj_name = call.func.value.id
+                            if obj_name == "self" and self._current_class_name:
+                                struct_info = self.symbols.structs.get(self._current_class_name)
+                                if struct_info:
+                                    method_info = struct_info.methods.get(method_name)
+                                    if method_info:
+                                        var_types[var_name] = method_info.return_type
+                # Infer from literal assignments
+                if isinstance(target, ast.Name):
+                    var_name = target.id
+                    if isinstance(stmt.value, ast.Constant):
+                        if isinstance(stmt.value.value, bool):
+                            var_types[var_name] = BOOL
+                        elif isinstance(stmt.value.value, int):
+                            var_types[var_name] = INT
+                        elif isinstance(stmt.value.value, str):
+                            var_types[var_name] = STRING
+                    elif isinstance(stmt.value, ast.Name):
+                        if stmt.value.id in ("True", "False"):
+                            var_types[var_name] = BOOL
+        return var_types
+
+    def _infer_element_type_from_append_arg(self, arg: ast.expr) -> Type:
+        """Infer slice element type from what's being appended."""
+        # Method call that returns a pointer: .Copy() returns same type
+        if isinstance(arg, ast.Call) and isinstance(arg.func, ast.Attribute):
+            method = arg.func.attr
+            if method == "Copy":
+                # x.Copy() where x is ctx -> *ParseContext
+                if isinstance(arg.func.value, ast.Name):
+                    var = arg.func.value.id
+                    if var == "ctx":
+                        return Pointer(StructRef("ParseContext"))
+        # Constructor calls
+        if isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name):
+            class_name = arg.func.id
+            if class_name in self.symbols.structs:
+                info = self.symbols.structs[class_name]
+                if info.is_node:
+                    return Interface("Node")
+                return Pointer(StructRef(class_name))
+        return Interface("any")
+
+    def _synthesize_type(self, expr: "ir.Expr") -> Type:
+        """Bottom-up type synthesis: compute type from expression structure."""
+        from . import ir
+        # Literals have known types
+        if isinstance(expr, (ir.IntLit, ir.FloatLit, ir.StringLit, ir.BoolLit)):
+            return expr.typ
+        # Variable lookup
+        if isinstance(expr, ir.Var):
+            if expr.name in self._type_ctx.var_types:
+                return self._type_ctx.var_types[expr.name]
+            # Check function parameters
+            if self._current_func_info:
+                for p in self._current_func_info.params:
+                    if p.name == expr.name:
+                        return p.typ
+        # Field access - look up field type
+        if isinstance(expr, ir.FieldAccess):
+            obj_type = self._synthesize_type(expr.obj)
+            return self._synthesize_field_type(obj_type, expr.field)
+        # Method call - look up return type
+        if isinstance(expr, ir.MethodCall):
+            obj_type = self._synthesize_type(expr.obj)
+            return self._synthesize_method_return_type(obj_type, expr.method)
+        # Index - derive element type
+        if isinstance(expr, ir.Index):
+            obj_type = self._synthesize_type(expr.obj)
+            return self._synthesize_index_type(obj_type)
+        return expr.typ
+
+    def _synthesize_field_type(self, obj_type: Type, field: str) -> Type:
+        """Look up field type from struct info."""
+        # Handle Pointer(StructRef(...))
+        if isinstance(obj_type, Pointer) and isinstance(obj_type.target, StructRef):
+            struct_name = obj_type.target.name
+            if struct_name in self.symbols.structs:
+                field_info = self.symbols.structs[struct_name].fields.get(field)
+                if field_info:
+                    return field_info.typ
+        # Handle direct StructRef
+        if isinstance(obj_type, StructRef):
+            if obj_type.name in self.symbols.structs:
+                field_info = self.symbols.structs[obj_type.name].fields.get(field)
+                if field_info:
+                    return field_info.typ
+        return Interface("any")
+
+    def _synthesize_method_return_type(self, obj_type: Type, method: str) -> Type:
+        """Look up method return type from struct info."""
+        # Extract struct name from various type wrappers
+        struct_name = self._extract_struct_name(obj_type)
+        if struct_name and struct_name in self.symbols.structs:
+            method_info = self.symbols.structs[struct_name].methods.get(method)
+            if method_info:
+                return method_info.return_type
+        return Interface("any")
+
+    def _extract_struct_name(self, typ: Type) -> str | None:
+        """Extract struct name from wrapped types like Pointer, Optional, etc."""
+        if isinstance(typ, StructRef):
+            return typ.name
+        if isinstance(typ, Pointer):
+            return self._extract_struct_name(typ.target)
+        if isinstance(typ, Optional):
+            return self._extract_struct_name(typ.inner)
+        return None
+
+    def _synthesize_index_type(self, obj_type: Type) -> Type:
+        """Derive element type from indexing a container."""
+        if isinstance(obj_type, Slice):
+            return obj_type.element
+        if isinstance(obj_type, Map):
+            return obj_type.value
+        if obj_type == STRING:
+            return BYTE  # string[i] returns byte in Go
+        return Interface("any")
+
+    def _coerce(self, expr: "ir.Expr", from_type: Type, to_type: Type) -> "ir.Expr":
+        """Apply type coercions when synthesized type doesn't match expected."""
+        from . import ir
+        # byte → string: wrap with string() cast
+        if from_type == BYTE and to_type == STRING:
+            return ir.Cast(expr=expr, to_type=STRING, typ=STRING, loc=expr.loc)
+        # nil → string: convert to empty string
+        if isinstance(expr, ir.NilLit) and to_type == STRING:
+            return ir.StringLit(value="", typ=STRING, loc=expr.loc)
+        # []interface{} → []T: use typed slice
+        if isinstance(from_type, Slice) and isinstance(to_type, Slice):
+            if from_type.element == Interface("any"):
+                # Update the expression's type to the expected slice type
+                expr.typ = to_type
+                if isinstance(expr, ir.SliceLit):
+                    expr.element_type = to_type.element
+        return expr
+
+    # ============================================================
     # EXPRESSION LOWERING (Phase 3)
     # ============================================================
 
@@ -661,17 +916,45 @@ class Frontend:
                 # Methods like .startswith(), .endswith(), .isdigit() return bool
                 if node.func.attr in ("startswith", "endswith", "isdigit", "isalpha", "isalnum", "isspace"):
                     return self._lower_expr(node)
+                # Check if the method returns bool by looking up its return type
+                method_return_type = self._infer_expr_type_from_ast(node)
+                if method_return_type == BOOL:
+                    return self._lower_expr(node)
             elif isinstance(node.func, ast.Name):
                 if node.func.id in ("isinstance", "hasattr", "callable", "bool"):
                     return self._lower_expr(node)
+                # Check if the function returns bool by looking up its return type
+                func_name = node.func.id
+                if func_name in self.symbols.functions:
+                    func_info = self.symbols.functions[func_name]
+                    if func_info.return_type == BOOL:
+                        return self._lower_expr(node)
         # Non-boolean expression - needs truthy check
         expr = self._lower_expr(node)
+        # Use the IR expression's type if available, otherwise infer from AST
+        expr_type = expr.typ if hasattr(expr, 'typ') and expr.typ != Interface("any") else self._infer_expr_type_from_ast(node)
+        # Bool expressions don't need nil check
+        if expr_type == BOOL:
+            return expr
+        # String truthy check: s != ""
+        if expr_type == STRING:
+            return ir.BinaryOp(op="!=", left=expr, right=ir.StringLit(value="", typ=STRING), typ=BOOL, loc=self._loc_from_node(node))
+        # Int truthy check: n != 0
+        if expr_type == INT:
+            return ir.BinaryOp(op="!=", left=expr, right=ir.IntLit(value=0, typ=INT), typ=BOOL, loc=self._loc_from_node(node))
         # Check attribute access (likely pointer/optional)
         if isinstance(node, ast.Attribute):
             return ir.IsNil(expr=expr, negated=True, typ=BOOL, loc=self._loc_from_node(node))
-        # Check name that might be pointer
+        # Check name that might be pointer - but only if type is unknown or pointer
         if isinstance(node, ast.Name):
-            return ir.IsNil(expr=expr, negated=True, typ=BOOL, loc=self._loc_from_node(node))
+            # If type is unknown, assume pointer
+            if expr_type == Interface("any"):
+                return ir.IsNil(expr=expr, negated=True, typ=BOOL, loc=self._loc_from_node(node))
+            # If type is a pointer, use nil check
+            if isinstance(expr_type, (Pointer, Optional)):
+                return ir.IsNil(expr=expr, negated=True, typ=BOOL, loc=self._loc_from_node(node))
+            # Otherwise just return the expression (shouldn't reach here for valid types)
+            return expr
         # For other expressions, assume it's a pointer check
         return ir.IsNil(expr=expr, negated=True, typ=BOOL, loc=self._loc_from_node(node))
 
@@ -711,6 +994,12 @@ class Frontend:
 
     def _lower_expr_Attribute(self, node: ast.Attribute) -> "ir.Expr":
         from . import ir
+        # Check for class constant access (e.g., TokenType.EOF -> TokenType_EOF)
+        if isinstance(node.value, ast.Name):
+            class_name = node.value.id
+            const_name = f"{class_name}_{node.attr}"
+            if const_name in self.symbols.constants:
+                return ir.Var(name=const_name, typ=INT, loc=self._loc_from_node(node))
         obj = self._lower_expr(node.value)
         return ir.FieldAccess(
             obj=obj, field=node.attr, typ=Interface("any"), loc=self._loc_from_node(node)
@@ -726,14 +1015,96 @@ class Frontend:
                 obj=obj, low=low, high=high, typ=Interface("any"), loc=self._loc_from_node(node)
             )
         idx = self._lower_expr(node.slice)
-        return ir.Index(obj=obj, index=idx, typ=Interface("any"), loc=self._loc_from_node(node))
+        index_expr = ir.Index(obj=obj, index=idx, typ=Interface("any"), loc=self._loc_from_node(node))
+        # Check if indexing a string field - if so, wrap with Cast to string
+        # In Go, string[i] returns byte, but Python returns str
+        if self._is_string_index(node):
+            return ir.Cast(expr=index_expr, to_type=STRING, typ=STRING, loc=self._loc_from_node(node))
+        return index_expr
+
+    def _is_string_index(self, node: ast.Subscript) -> bool:
+        """Check if this is indexing a string (field or variable)."""
+        # Check for self.source[...] pattern
+        if isinstance(node.value, ast.Attribute):
+            if isinstance(node.value.value, ast.Name) and node.value.value.id == "self":
+                field = node.value.attr
+                if self._current_class_name in self.symbols.structs:
+                    struct_info = self.symbols.structs[self._current_class_name]
+                    field_info = struct_info.fields.get(field)
+                    if field_info and field_info.typ == STRING:
+                        return True
+        # Check for string variable[...] pattern
+        if isinstance(node.value, ast.Name):
+            var_name = node.value.id
+            if var_name in self._type_ctx.var_types:
+                if self._type_ctx.var_types[var_name] == STRING:
+                    return True
+        return False
+
+    def _infer_expr_type_from_ast(self, node: ast.expr) -> Type:
+        """Infer the type of a Python AST expression without lowering it."""
+        # Constant literals
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, bool):
+                return BOOL
+            if isinstance(node.value, int):
+                return INT
+            if isinstance(node.value, str):
+                return STRING
+            if isinstance(node.value, float):
+                return FLOAT
+        # Variable lookup
+        if isinstance(node, ast.Name):
+            if node.id in self._type_ctx.var_types:
+                return self._type_ctx.var_types[node.id]
+            # Check function parameters
+            if self._current_func_info:
+                for p in self._current_func_info.params:
+                    if p.name == node.id:
+                        return p.typ
+        # Field access on self
+        if isinstance(node, ast.Attribute):
+            if isinstance(node.value, ast.Name) and node.value.id == "self":
+                field = node.attr
+                if self._current_class_name in self.symbols.structs:
+                    struct_info = self.symbols.structs[self._current_class_name]
+                    field_info = struct_info.fields.get(field)
+                    if field_info:
+                        return field_info.typ
+        # Method call - look up return type
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            obj_type = self._infer_expr_type_from_ast(node.func.value)
+            return self._synthesize_method_return_type(obj_type, node.func.attr)
+        # String indexing returns string (after our Cast)
+        if isinstance(node, ast.Subscript) and self._is_string_index(node):
+            return STRING
+        # BinOp - infer type based on operator
+        if isinstance(node, ast.BinOp):
+            if isinstance(node.op, (ast.BitAnd, ast.BitOr, ast.BitXor, ast.LShift, ast.RShift)):
+                return INT
+            if isinstance(node.op, (ast.Add, ast.Sub, ast.Mult, ast.FloorDiv, ast.Mod)):
+                left_type = self._infer_expr_type_from_ast(node.left)
+                right_type = self._infer_expr_type_from_ast(node.right)
+                if left_type == INT or right_type == INT:
+                    return INT
+        return Interface("any")
 
     def _lower_expr_BinOp(self, node: ast.BinOp) -> "ir.Expr":
         from . import ir
         left = self._lower_expr(node.left)
         right = self._lower_expr(node.right)
         op = self._binop_to_str(node.op)
-        return ir.BinaryOp(op=op, left=left, right=right, typ=Interface("any"), loc=self._loc_from_node(node))
+        # Infer result type based on operator
+        result_type: Type = Interface("any")
+        if isinstance(node.op, (ast.BitAnd, ast.BitOr, ast.BitXor, ast.LShift, ast.RShift)):
+            result_type = INT
+        elif isinstance(node.op, (ast.Add, ast.Sub, ast.Mult, ast.FloorDiv, ast.Mod)):
+            # Check if operands are ints
+            left_type = self._infer_expr_type_from_ast(node.left)
+            right_type = self._infer_expr_type_from_ast(node.right)
+            if left_type == INT or right_type == INT:
+                result_type = INT
+        return ir.BinaryOp(op=op, left=left, right=right, typ=result_type, loc=self._loc_from_node(node))
 
     def _lower_expr_Compare(self, node: ast.Compare) -> "ir.Expr":
         from . import ir
@@ -744,9 +1115,34 @@ class Frontend:
             op = self._cmpop_to_str(node.ops[0])
             # Special case for "is None" / "is not None"
             if isinstance(node.ops[0], ast.Is) and isinstance(node.comparators[0], ast.Constant) and node.comparators[0].value is None:
+                # For strings, compare to empty string; for bools, compare to false
+                left_type = self._infer_expr_type_from_ast(node.left)
+                if left_type == STRING:
+                    cmp_op = "=="
+                    return ir.BinaryOp(op=cmp_op, left=left, right=ir.StringLit(value="", typ=STRING), typ=BOOL, loc=self._loc_from_node(node))
+                if left_type == BOOL:
+                    return ir.UnaryOp(op="!", operand=left, typ=BOOL, loc=self._loc_from_node(node))
                 return ir.IsNil(expr=left, negated=False, typ=BOOL, loc=self._loc_from_node(node))
             if isinstance(node.ops[0], ast.IsNot) and isinstance(node.comparators[0], ast.Constant) and node.comparators[0].value is None:
+                # For strings, compare to non-empty string; for bools, just use the bool itself
+                left_type = self._infer_expr_type_from_ast(node.left)
+                if left_type == STRING:
+                    cmp_op = "!="
+                    return ir.BinaryOp(op=cmp_op, left=left, right=ir.StringLit(value="", typ=STRING), typ=BOOL, loc=self._loc_from_node(node))
+                if left_type == BOOL:
+                    return left  # bool is its own truthy value
                 return ir.IsNil(expr=left, negated=True, typ=BOOL, loc=self._loc_from_node(node))
+            # Handle string vs pointer/optional string comparison: dereference the pointer side
+            left_type = self._infer_expr_type_from_ast(node.left)
+            right_type = self._infer_expr_type_from_ast(node.comparators[0])
+            if left_type == STRING and isinstance(right_type, (Optional, Pointer)):
+                inner = right_type.inner if isinstance(right_type, Optional) else right_type.target
+                if inner == STRING:
+                    right = ir.UnaryOp(op="*", operand=right, typ=STRING, loc=self._loc_from_node(node))
+            elif right_type == STRING and isinstance(left_type, (Optional, Pointer)):
+                inner = left_type.inner if isinstance(left_type, Optional) else left_type.target
+                if inner == STRING:
+                    left = ir.UnaryOp(op="*", operand=left, typ=STRING, loc=self._loc_from_node(node))
             return ir.BinaryOp(op=op, left=left, right=right, typ=BOOL, loc=self._loc_from_node(node))
         # Chain comparisons - convert to AND of pairwise comparisons
         result = None
@@ -785,10 +1181,13 @@ class Frontend:
             method = node.func.attr
             # Handle Python list methods that need special Go treatment
             if method == "append" and args:
+                # Look up actual type of the object (might be pointer to slice for params)
+                obj_type = self._infer_expr_type_from_ast(node.func.value)
                 # list.append(x) -> append(list, x) in Go (handled via MethodCall for now)
                 return ir.MethodCall(
                     obj=obj, method="append", args=args,
-                    receiver_type=Slice(Interface("any")), typ=VOID, loc=self._loc_from_node(node)
+                    receiver_type=obj_type if obj_type != Interface("any") else Slice(Interface("any")),
+                    typ=VOID, loc=self._loc_from_node(node)
                 )
             if method == "pop" and not args:
                 # list.pop() -> return last element and shrink slice
@@ -796,9 +1195,13 @@ class Frontend:
                     obj=obj, method="pop", args=[],
                     receiver_type=Slice(Interface("any")), typ=Interface("any"), loc=self._loc_from_node(node)
                 )
+            # Infer receiver type for proper method lookup
+            obj_type = self._infer_expr_type_from_ast(node.func.value)
+            # Infer return type
+            ret_type = self._synthesize_method_return_type(obj_type, method)
             return ir.MethodCall(
                 obj=obj, method=method, args=args,
-                receiver_type=Interface("any"), typ=Interface("any"), loc=self._loc_from_node(node)
+                receiver_type=obj_type, typ=ret_type, loc=self._loc_from_node(node)
             )
         # Free function call
         if isinstance(node.func, ast.Name):
@@ -806,6 +1209,16 @@ class Frontend:
             # Check for len()
             if func_name == "len" and args:
                 return ir.Len(expr=args[0], typ=INT, loc=self._loc_from_node(node))
+            # Check for bool() - convert to comparison
+            if func_name == "bool" and args:
+                # bool(x) -> x != 0 for ints, x != "" for strings, x != nil for pointers
+                arg_type = self._infer_expr_type_from_ast(node.args[0])
+                if arg_type == INT:
+                    return ir.BinaryOp(op="!=", left=args[0], right=ir.IntLit(value=0, typ=INT), typ=BOOL, loc=self._loc_from_node(node))
+                if arg_type == STRING:
+                    return ir.BinaryOp(op="!=", left=args[0], right=ir.StringLit(value="", typ=STRING), typ=BOOL, loc=self._loc_from_node(node))
+                # Default: assume pointer/optional, check != nil
+                return ir.IsNil(expr=args[0], negated=True, typ=BOOL, loc=self._loc_from_node(node))
             # Check for list() copy
             if func_name == "list" and args:
                 # list(x) is a copy operation
@@ -815,9 +1228,15 @@ class Frontend:
                 )
             # Check for constructor calls (class names)
             if func_name in self.symbols.structs:
-                # Constructor call -> StructLit
+                # Constructor call -> StructLit with fields mapped from positional args
+                struct_info = self.symbols.structs[func_name]
+                fields: dict[str, ir.Expr] = {}
+                for i, arg_expr in enumerate(args):
+                    if i < len(struct_info.init_params):
+                        param_name = struct_info.init_params[i]
+                        fields[param_name] = arg_expr
                 return ir.StructLit(
-                    struct_name=func_name, fields={},
+                    struct_name=func_name, fields=fields,
                     typ=Pointer(StructRef(func_name)), loc=self._loc_from_node(node)
                 )
             return ir.Call(func=func_name, args=args, typ=Interface("any"), loc=self._loc_from_node(node))
@@ -828,17 +1247,25 @@ class Frontend:
         cond = self._lower_expr(node.test)
         then_expr = self._lower_expr(node.body)
         else_expr = self._lower_expr(node.orelse)
+        # Infer type from branches - prefer then branch, fall back to else
+        result_type = self._infer_expr_type_from_ast(node.body)
+        if result_type == Interface("any"):
+            result_type = self._infer_expr_type_from_ast(node.orelse)
         return ir.Ternary(
             cond=cond, then_expr=then_expr, else_expr=else_expr,
-            typ=Interface("any"), loc=self._loc_from_node(node)
+            typ=result_type, loc=self._loc_from_node(node)
         )
 
     def _lower_expr_List(self, node: ast.List) -> "ir.Expr":
         from . import ir
         elements = [self._lower_expr(e) for e in node.elts]
+        # Infer element type from first element if available
+        element_type: Type = Interface("any")
+        if node.elts:
+            element_type = self._infer_expr_type_from_ast(node.elts[0])
         return ir.SliceLit(
-            element_type=Interface("any"), elements=elements,
-            typ=Slice(Interface("any")), loc=self._loc_from_node(node)
+            element_type=element_type, elements=elements,
+            typ=Slice(element_type), loc=self._loc_from_node(node)
         )
 
     def _lower_expr_Dict(self, node: ast.Dict) -> "ir.Expr":
@@ -919,7 +1346,7 @@ class Frontend:
         value = self._lower_expr(node.value)
         if len(node.targets) == 1:
             target = node.targets[0]
-            # Handle tuple unpacking: a, b = expr.pop()
+            # Handle tuple unpacking: a, b = func() where func returns tuple
             if isinstance(target, ast.Tuple) and len(target.elts) == 2:
                 # Special case for popping from stack with tuple unpacking
                 if isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Attribute):
@@ -939,6 +1366,29 @@ class Frontend:
                             ir.Assign(target=lval0, value=ir.FieldAccess(obj=entry_var, field="Single", typ=BOOL)),
                             ir.Assign(target=lval1, value=ir.FieldAccess(obj=entry_var, field="Double", typ=BOOL)),
                         ], loc=self._loc_from_node(node))
+                    else:
+                        # General tuple unpacking: a, b = obj.method()
+                        lval0 = self._lower_lvalue(target.elts[0])
+                        lval1 = self._lower_lvalue(target.elts[1])
+                        return ir.TupleAssign(
+                            targets=[lval0, lval1],
+                            value=value,
+                            loc=self._loc_from_node(node)
+                        )
+                # General tuple unpacking for function calls: a, b = func()
+                if isinstance(node.value, ast.Call):
+                    lval0 = self._lower_lvalue(target.elts[0])
+                    lval1 = self._lower_lvalue(target.elts[1])
+                    return ir.TupleAssign(
+                        targets=[lval0, lval1],
+                        value=value,
+                        loc=self._loc_from_node(node)
+                    )
+            # Coerce value to target type if known
+            if isinstance(target, ast.Name) and target.id in self._type_ctx.var_types:
+                expected_type = self._type_ctx.var_types[target.id]
+                from_type = self._synthesize_type(value)
+                value = self._coerce(value, from_type, expected_type)
             lval = self._lower_lvalue(target)
             return ir.Assign(target=lval, value=value, loc=self._loc_from_node(node))
         # Multiple targets - emit first one (simplification)
@@ -951,6 +1401,9 @@ class Frontend:
         typ = self._py_type_to_ir(py_type)
         if node.value:
             value = self._lower_expr(node.value)
+            # Coerce value to annotated type
+            from_type = self._synthesize_type(value)
+            value = self._coerce(value, from_type, typ)
         else:
             value = None
         if isinstance(node.target, ast.Name):
@@ -971,6 +1424,10 @@ class Frontend:
     def _lower_stmt_Return(self, node: ast.Return) -> "ir.Stmt":
         from . import ir
         value = self._lower_expr(node.value) if node.value else None
+        # Apply type coercion based on function return type
+        if value and self._type_ctx.return_type:
+            from_type = self._synthesize_type(value)
+            value = self._coerce(value, from_type, self._type_ctx.return_type)
         return ir.Return(value=value, loc=self._loc_from_node(node))
 
     def _lower_stmt_If(self, node: ast.If) -> "ir.Stmt":

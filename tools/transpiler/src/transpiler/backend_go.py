@@ -35,6 +35,7 @@ from .ir import (
     ForClassic,
     ForRange,
     Function,
+    FuncInfo,
     FuncType,
     If,
     Index,
@@ -79,6 +80,7 @@ from .ir import (
     StructRef,
     Ternary,
     TryCatch,
+    TupleAssign,
     TupleLit,
     Tuple,
     Type,
@@ -112,10 +114,13 @@ class GoBackend:
         self.indent = 0
         self._receiver_name: str = ""  # Current method receiver name
         self._declared_vars: set[str] = set()  # Track declared local variables
+        self._module: Module | None = None  # Current module being emitted
+        self._hoisted_vars: dict[str, Type] = {}  # Variables needing hoisting
 
     def emit(self, module: Module) -> str:
         """Emit Go code from IR Module."""
         self.output = []
+        self._module = module
         self._emit_header(module)
         self._emit_constants(module.constants)
         for struct in module.structs:
@@ -178,6 +183,9 @@ class GoBackend:
         """Emit function or method definition."""
         # Reset declared vars for new function scope
         self._declared_vars = set()
+        self._hoisted_vars = {}
+        # Pre-analyze to find variables needing hoisting (assigned in multiple branches)
+        self._find_multi_branch_vars(func.body, depth=0)
         # Add parameters to declared vars
         param_names = {self._to_camel(p.name) for p in func.params}
         for p in func.params:
@@ -206,11 +214,93 @@ class GoBackend:
             else:
                 self._line(f"func {name}({params}) {{")
         self.indent += 1
+        # Emit hoisted var declarations (skip invalid tuple types)
+        for var_name, var_type in self._hoisted_vars.items():
+            go_type = self._type_to_go(var_type)
+            # Skip tuple types - they can't be declared as variables in Go
+            if go_type.startswith("(") and "," in go_type:
+                continue
+            self._line(f"var {var_name} {go_type}")
+            self._declared_vars.add(var_name)
         for stmt in func.body:
             self._emit_stmt(stmt)
         self.indent -= 1
         self._line("}")
         self._line("")
+
+    def _find_multi_branch_vars(self, stmts: list[Stmt], depth: int) -> dict[str, Type]:
+        """Find variables assigned in statements, processing nested structures."""
+        var_types: dict[str, Type] = {}  # Variables found at this level
+        for stmt in stmts:
+            if isinstance(stmt, Assign) and isinstance(stmt.target, VarLV):
+                var_name = self._to_camel(stmt.target.name)
+                var_type = stmt.value.typ if hasattr(stmt.value, 'typ') else Interface("any")
+                var_types[var_name] = var_type
+            elif isinstance(stmt, TupleAssign):
+                # Handle tuple assignments - need to get individual types from tuple
+                value_type = stmt.value.typ if hasattr(stmt.value, 'typ') else None
+                for i, t in enumerate(stmt.targets):
+                    if isinstance(t, VarLV) and t.name != "_":
+                        var_name = self._to_camel(t.name)
+                        # Try to extract element type from Tuple type
+                        if isinstance(value_type, Tuple) and i < len(value_type.elements):
+                            var_type = value_type.elements[i]
+                        else:
+                            # Fallback to interface{} for unknown types
+                            var_type = Interface("any")
+                        var_types[var_name] = var_type
+            elif isinstance(stmt, If):
+                # Collect all variables assigned in any branch of if/elif/else chain
+                all_branch_vars = self._collect_if_chain_vars(stmt, depth + 1)
+                # Variables assigned in 2+ branches need hoisting
+                for var, (var_type, count) in all_branch_vars.items():
+                    if count >= 2 and var not in self._hoisted_vars:
+                        self._hoisted_vars[var] = var_type
+                # Also return all vars found (for parent level comparison)
+                for var, (var_type, _) in all_branch_vars.items():
+                    if var not in var_types:
+                        var_types[var] = var_type
+            elif isinstance(stmt, While):
+                inner_vars = self._find_multi_branch_vars(stmt.body, depth + 1)
+                var_types.update(inner_vars)
+            elif isinstance(stmt, ForRange):
+                inner_vars = self._find_multi_branch_vars(stmt.body, depth + 1)
+                var_types.update(inner_vars)
+            elif isinstance(stmt, Block):
+                child_vars = self._find_multi_branch_vars(stmt.body, depth)
+                var_types.update(child_vars)
+        return var_types
+
+    def _collect_if_chain_vars(self, if_stmt: If, depth: int) -> dict[str, tuple[Type, int]]:
+        """Collect variables assigned in an if/elif/else chain with counts."""
+        result: dict[str, tuple[Type, int]] = {}
+        # Process then branch (recursively finds vars in nested ifs too)
+        then_vars = self._find_multi_branch_vars(if_stmt.then_body, depth)
+        for var, var_type in then_vars.items():
+            if var in result:
+                result[var] = (result[var][0], result[var][1] + 1)
+            else:
+                result[var] = (var_type, 1)
+        # Process else branch (may be elif chain)
+        if if_stmt.else_body:
+            # Check if else is a single If (elif)
+            if len(if_stmt.else_body) == 1 and isinstance(if_stmt.else_body[0], If):
+                # Recursively collect from elif chain
+                elif_vars = self._collect_if_chain_vars(if_stmt.else_body[0], depth)
+                for var, (var_type, count) in elif_vars.items():
+                    if var in result:
+                        result[var] = (result[var][0], result[var][1] + count)
+                    else:
+                        result[var] = (var_type, count)
+            else:
+                # Regular else block
+                else_vars = self._find_multi_branch_vars(if_stmt.else_body, depth)
+                for var, var_type in else_vars.items():
+                    if var in result:
+                        result[var] = (result[var][0], result[var][1] + 1)
+                    else:
+                        result[var] = (var_type, 1)
+        return result
 
     # ============================================================
     # STATEMENT EMISSION
@@ -245,6 +335,31 @@ class GoBackend:
                 return
         self._line(f"{target} = {value}")
 
+    def _emit_stmt_TupleAssign(self, stmt: TupleAssign) -> None:
+        # Handle underscore (blank identifier) targets
+        target_strs = []
+        for t in stmt.targets:
+            if isinstance(t, VarLV) and t.name == "_":
+                target_strs.append("_")
+            else:
+                target_strs.append(self._emit_lvalue(t))
+        targets = ", ".join(target_strs)
+        value = self._emit_expr(stmt.value)
+        # Check if any non-underscore targets are new declarations
+        all_declared = True
+        for t in stmt.targets:
+            if isinstance(t, VarLV):
+                if t.name == "_":
+                    continue  # underscore doesn't count
+                var_name = self._to_camel(t.name)
+                if var_name not in self._declared_vars:
+                    all_declared = False
+                    self._declared_vars.add(var_name)
+        if all_declared:
+            self._line(f"{targets} = {value}")
+        else:
+            self._line(f"{targets} := {value}")
+
     def _emit_stmt_OpAssign(self, stmt: OpAssign) -> None:
         target = self._emit_lvalue(stmt.target)
         value = self._emit_expr(stmt.value)
@@ -255,7 +370,11 @@ class GoBackend:
         if isinstance(stmt.expr, MethodCall) and stmt.expr.method == "append" and stmt.expr.args:
             obj = self._emit_expr(stmt.expr.obj)
             arg = self._emit_expr(stmt.expr.args[0])
-            self._line(f"{obj} = append({obj}, {arg})")
+            # Check if receiver is a pointer to slice - need to dereference
+            if isinstance(stmt.expr.receiver_type, Pointer) and isinstance(stmt.expr.receiver_type.target, Slice):
+                self._line(f"*{obj} = append(*{obj}, {arg})")
+            else:
+                self._line(f"{obj} = append({obj}, {arg})")
             return
         expr = self._emit_expr(stmt.expr)
         # Filter out placeholder expressions (after camelCase conversion)
@@ -264,8 +383,13 @@ class GoBackend:
 
     def _emit_stmt_Return(self, stmt: Return) -> None:
         if stmt.value:
-            val = self._emit_expr(stmt.value)
-            self._line(f"return {val}")
+            # For TupleLit, emit as multiple return values, not a struct
+            if isinstance(stmt.value, TupleLit):
+                vals = ", ".join(self._emit_expr(e) for e in stmt.value.elements)
+                self._line(f"return {vals}")
+            else:
+                val = self._emit_expr(stmt.value)
+                self._line(f"return {val}")
         else:
             self._line("return")
 
@@ -489,6 +613,9 @@ class GoBackend:
     def _emit_expr_Var(self, expr: Var) -> str:
         if expr.name == "self":
             return self._receiver_name if self._receiver_name else "self"
+        # Constants (names with underscore separators from class constants) use PascalCase
+        if "_" in expr.name and expr.name[0].isupper():
+            return self._to_pascal(expr.name)
         return self._to_camel(expr.name)
 
     def _emit_expr_FieldAccess(self, expr: FieldAccess) -> str:
@@ -525,6 +652,10 @@ class GoBackend:
     def _emit_expr_MethodCall(self, expr: MethodCall) -> str:
         obj = self._emit_expr(expr.obj)
         method = expr.method  # Keep original for special cases
+        # Handle Python string.join() -> strings.Join(seq, sep)
+        if method == "join" and expr.args:
+            seq = self._emit_expr(expr.args[0])
+            return f"strings.Join({seq}, {obj})"
         # Handle Python list methods specially - only for slice types
         if isinstance(expr.receiver_type, Slice):
             if method == "append" and expr.args:
@@ -535,9 +666,40 @@ class GoBackend:
             if method == "copy":
                 # Slice copy: append([]T{}, slice...)
                 return f"append({obj}[:0:0], {obj}...)"
+        # Fill in missing default arguments
+        args_list = list(expr.args)
+        method_func = self._lookup_method(expr.receiver_type, method)
+        if method_func and len(args_list) < len(method_func.params):
+            for i in range(len(args_list), len(method_func.params)):
+                param = method_func.params[i]
+                if param.default is not None:
+                    args_list.append(param.default)
         method = self._to_pascal(method)
-        args = ", ".join(self._emit_expr(a) for a in expr.args)
+        args = ", ".join(self._emit_expr(a) for a in args_list)
         return f"{obj}.{method}({args})"
+
+    def _lookup_method(self, receiver_type: Type, method: str) -> Function | None:
+        """Look up method Function from receiver type."""
+        if self._module is None:
+            return None
+        struct_name = self._extract_struct_name(receiver_type)
+        if struct_name:
+            for struct in self._module.structs:
+                if struct.name == struct_name:
+                    for m in struct.methods:
+                        if m.name == method:
+                            return m
+        return None
+
+    def _extract_struct_name(self, typ: Type) -> str | None:
+        """Extract struct name from wrapped types."""
+        if isinstance(typ, StructRef):
+            return typ.name
+        if isinstance(typ, Pointer):
+            return self._extract_struct_name(typ.target)
+        if isinstance(typ, Optional):
+            return self._extract_struct_name(typ.inner)
+        return None
 
     def _emit_expr_StaticCall(self, expr: StaticCall) -> str:
         on_type = self._type_to_go(expr.on_type)

@@ -283,6 +283,14 @@ class Assign(Stmt):
 
 
 @dataclass
+class TupleAssign(Stmt):
+    """Multi-value assignment: a, b = func()"""
+
+    targets: list[LValue]
+    value: Expr
+
+
+@dataclass
 class OpAssign(Stmt):
     """Compound assignment: +=, -=, etc."""
 
@@ -736,6 +744,7 @@ class StructInfo:
     methods: dict[str, FuncInfo] = field(default_factory=dict)
     is_node: bool = False  # True if implements Node interface
     bases: list[str] = field(default_factory=list)
+    init_params: list[str] = field(default_factory=list)  # __init__ param order
 
 
 @dataclass
@@ -765,3 +774,4 @@ class ParamInfo:
     name: str
     typ: Type
     has_default: bool = False
+    default_value: "Expr | None" = None  # IR expression for default value

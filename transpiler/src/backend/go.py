@@ -528,10 +528,15 @@ func _parseInt(s string, base int) int {
         hoisted_vars = getattr(stmt, 'hoisted_vars', [])
         for name, typ in hoisted_vars:
             type_str = self._type_to_go(typ) if typ else "interface{}"
-            # If type is interface{} but function returns a non-tuple pointer type, use that
-            # (common pattern: variable assigned in branches and returned)
+            # If type is interface{} but function returns a specific type, try to infer
             if type_str == "interface{}" and self._current_return_type:
-                if not isinstance(self._current_return_type, Tuple):
+                if isinstance(self._current_return_type, Tuple):
+                    # For tuple returns, check if variable is returned in a known position
+                    # Common pattern: return node, text -> text is second element (string)
+                    ret_type = self._infer_tuple_element_type(name, stmt, self._current_return_type)
+                    if ret_type:
+                        type_str = self._type_to_go(ret_type)
+                else:
                     ret_str = self._type_to_go(self._current_return_type)
                     if ret_str and ret_str != "interface{}" and ret_str != "":
                         type_str = ret_str
@@ -1188,6 +1193,30 @@ func _parseInt(s string, base int) int {
         if isinstance(typ, StringSlice):
             return "string"
         return "interface{}"
+
+    def _infer_tuple_element_type(self, var_name: str, stmt: If, ret_type: Tuple) -> Type | None:
+        """Infer which tuple element a variable corresponds to by scanning returns."""
+        from src.ir import Return, TupleLit, Var
+        def scan_for_return_position(stmts: list) -> int | None:
+            for s in stmts:
+                if isinstance(s, Return) and s.value and isinstance(s.value, TupleLit):
+                    for i, elem in enumerate(s.value.elements):
+                        if isinstance(elem, Var) and elem.name == var_name:
+                            return i
+                elif isinstance(s, If):
+                    pos = scan_for_return_position(s.then_body)
+                    if pos is not None:
+                        return pos
+                    pos = scan_for_return_position(s.else_body)
+                    if pos is not None:
+                        return pos
+            return None
+        pos = scan_for_return_position(stmt.then_body)
+        if pos is None:
+            pos = scan_for_return_position(stmt.else_body)
+        if pos is not None and pos < len(ret_type.elements):
+            return ret_type.elements[pos]
+        return None
 
     # ============================================================
     # NAME CONVERSION

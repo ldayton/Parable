@@ -9,7 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
-REPO_ROOT = SCRIPT_DIR.parent.parent.parent.parent
+TESTS_DIR = SCRIPT_DIR.parent
+REPO_ROOT = TESTS_DIR.parent
 _default_oracle = Path.home() / "source" / "bash-oracle" / "bash-oracle"
 ORACLE_PATH = Path(os.environ.get("BASH_ORACLE") or _default_oracle)
 if not ORACLE_PATH.exists():
@@ -178,8 +179,7 @@ def worker_process(work_queue, result_queue, stop_event) -> None:
 
 
 def main():
-    tests_dir = REPO_ROOT / "tests"
-    test_files = sorted(tests_dir.glob("**/*.tests"))
+    test_files = sorted(TESTS_DIR.glob("**/*.tests"))
 
     # Collect all test cases
     all_tests: list[TestCase] = []

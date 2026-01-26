@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert tree-sitter-bash corpus to .tests format using bash-oracle."""
+"""Convert Oils corpus to .tests format using bash-oracle."""
 
 import os
 import subprocess
@@ -23,29 +23,33 @@ def get_oracle_output(bash_program: str, oracle_path: Path) -> str | None:
         return None
 
 
-def parse_treesitter_file(content: str) -> list[dict]:
-    """Parse a tree-sitter-bash corpus file into test entries."""
+def parse_oils_file(content: str) -> list[dict]:
+    """Parse an Oils corpus file into test entries."""
     tests = []
     lines = content.split("\n")
     i = 0
     while i < len(lines):
-        # Look for separator line (all = signs)
-        if lines[i].startswith("==="):
+        # Look for separator line
+        if lines[i].startswith("=" * 20):
             i += 1
             if i >= len(lines):
                 break
-            # Next line is test name
-            name = lines[i].strip()
+            # Next line is "filename: test name"
+            header = lines[i]
+            if ":" in header:
+                name = header.split(":", 1)[1].strip()
+            else:
+                name = header.strip()
             i += 1
             # Skip second separator
-            if i < len(lines) and lines[i].startswith("==="):
+            if i < len(lines) and lines[i].startswith("=" * 20):
                 i += 1
             # Skip blank lines
             while i < len(lines) and not lines[i].strip():
                 i += 1
             # Collect code until dashed separator
             code_lines = []
-            while i < len(lines) and not lines[i].startswith("---"):
+            while i < len(lines) and not lines[i].startswith("-" * 20):
                 code_lines.append(lines[i])
                 i += 1
             # Remove trailing blank lines from code
@@ -54,8 +58,8 @@ def parse_treesitter_file(content: str) -> list[dict]:
             code = "\n".join(code_lines)
             if code.strip():
                 tests.append({"name": name, "code": code})
-            # Skip until next separator
-            while i < len(lines) and not lines[i].startswith("==="):
+            # Skip dashed separator and everything until next test
+            while i < len(lines) and not lines[i].startswith("=" * 20):
                 i += 1
         else:
             i += 1
@@ -65,8 +69,8 @@ def parse_treesitter_file(content: str) -> list[dict]:
 def convert_file(corpus_path: Path, output_dir: Path, oracle_path: Path) -> tuple[int, int]:
     """Convert a single corpus file to .tests format."""
     content = corpus_path.read_text()
-    tests = parse_treesitter_file(content)
-    output_lines = [f"# Converted from tree-sitter-bash corpus: {corpus_path.name}"]
+    tests = parse_oils_file(content)
+    output_lines = [f"# Converted from Oils corpus: {corpus_path.name}"]
     output_lines.append("")
     success = 0
     failed = 0
@@ -94,7 +98,7 @@ def main():
     oracle_path = Path(os.environ.get("BASH_ORACLE") or _default)
     if not oracle_path.exists():
         sys.exit(f"bash-oracle not found at {oracle_path}")
-    corpus_dir = script_dir.parent.parent / "tests" / "corpus" / "tree-sitter-bash"
+    corpus_dir = script_dir.parent / "corpus" / "oils"
     output_dir = corpus_dir
     corpus_files = sorted(corpus_dir.glob("*.txt"))
     if not corpus_files:
@@ -102,6 +106,8 @@ def main():
         sys.exit(1)
     total_success = total_failed = 0
     for corpus_path in corpus_files:
+        if corpus_path.name == "ORIGIN.md":
+            continue
         success, failed = convert_file(corpus_path, output_dir, oracle_path)
         total_success += success
         total_failed += failed

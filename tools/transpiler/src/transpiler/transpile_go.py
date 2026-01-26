@@ -6,91 +6,24 @@ import shutil
 import subprocess
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass, field
 from pathlib import Path
 
-
-@dataclass
-class ScopeInfo:
-    """Information about a scope in the scope tree."""
-
-    id: int
-    parent: int | None  # None for function scope (root)
-    depth: int  # 0 for function scope
-
-
-@dataclass
-class VarInfo:
-    """Information about a variable's usage across scopes."""
-
-    name: str
-    go_type: str
-    assign_scopes: set[int] = field(default_factory=set)  # All scope IDs where assigned
-    read_scopes: set[int] = field(default_factory=set)  # Scope IDs where read
-    first_value: "ast.expr | None" = None  # First assigned value (for type inference)
-
-
-@dataclass
-class FieldInfo:
-    """Information about a struct field."""
-
-    name: str
-    py_type: str  # Original Python type annotation
-    go_type: str  # Resolved Go type
-
-
-@dataclass
-class ParamInfo:
-    """Information about a function parameter."""
-
-    name: str
-    py_type: str
-    go_type: str
-    default: ast.expr | None = None
-
-
-@dataclass
-class FuncInfo:
-    """Information about a function or method."""
-
-    name: str
-    params: list[ParamInfo]
-    return_type: str  # Go type
-    is_method: bool = False
-    receiver_type: str = ""  # For methods, the type that owns this method
-
-
-@dataclass
-class ClassInfo:
-    """Information about a class/struct."""
-
-    name: str
-    bases: list[str]
-    fields: dict[str, FieldInfo] = field(default_factory=dict)
-    methods: dict[str, FuncInfo] = field(default_factory=dict)
-    is_node: bool = False  # True if this is a Node subclass
-    constants: dict[str, int | str] = field(default_factory=dict)  # Class-level constants
-
-
-class SymbolTable:
-    """Symbol table for type resolution."""
-
-    def __init__(self):
-        self.classes: dict[str, ClassInfo] = {}
-        self.functions: dict[str, FuncInfo] = {}
-        self.constants: dict[str, str] = {}  # name -> Go type
-
-    def is_node_subclass(self, class_name: str) -> bool:
-        """Check if a class is a Node subclass (directly or transitively)."""
-        if class_name == "Node":
-            return True
-        info = self.classes.get(class_name)
-        if not info:
-            return False
-        for base in info.bases:
-            if self.is_node_subclass(base):
-                return True
-        return False
+from .go_overrides import (
+    FIELD_TYPE_OVERRIDES,
+    PARAM_TYPE_OVERRIDES,
+    RETURN_TYPE_OVERRIDES,
+    TUPLE_ELEMENT_TYPES,
+    UNION_FIELDS,
+)
+from .go_types import (
+    ClassInfo,
+    FieldInfo,
+    FuncInfo,
+    ParamInfo,
+    ScopeInfo,
+    SymbolTable,
+    VarInfo,
+)
 
 
 class GoTranspiler(ast.NodeVisitor):
@@ -284,88 +217,11 @@ class GoTranspiler(ast.NodeVisitor):
                         go_type = self._py_type_to_go(py_type)
                         # Apply field type overrides
                         override_key = (class_info.name, field_name)
-                        if override_key in self.FIELD_TYPE_OVERRIDES:
-                            go_type = self.FIELD_TYPE_OVERRIDES[override_key]
+                        if override_key in FIELD_TYPE_OVERRIDES:
+                            go_type = FIELD_TYPE_OVERRIDES[override_key]
                         class_info.fields[field_name] = FieldInfo(
                             name=field_name, py_type=py_type, go_type=go_type
                         )
-
-    # Override parameter types for functions with bare "list" annotations
-    # Maps (method_name, param_name) -> Go type
-    # Use *[]T (pointer-to-slice) for parameters that are mutated by the callee
-    PARAM_TYPE_OVERRIDES = {
-        ("_read_bracket_expression", "chars"): "*[]string",
-        ("_read_bracket_expression", "parts"): "*[]Node",
-        ("_parse_dollar_expansion", "chars"): "*[]string",
-        ("_parse_dollar_expansion", "parts"): "*[]Node",
-        ("_scan_double_quote", "chars"): "*[]string",
-        ("_scan_double_quote", "parts"): "*[]Node",
-        ("restore_from", "saved_stack"): "[]*ParseContext",
-        ("copy_stack", "_result"): "[]*ParseContext",  # return type hint
-        # SavedParserState constructor parameters
-        ("__init__", "pending_heredocs"): "[]Node",
-        # Token constructor parameters
-        ("__init__", "parts"): "[]Node",
-        ("__init__", "ctx_stack"): "[]*ParseContext",
-        # List class methods - parts is always []Node, op_names is map[string]string
-        ("_to_sexp_with_precedence", "parts"): "[]Node",
-        ("_to_sexp_with_precedence", "op_names"): "map[string]string",
-        ("_to_sexp_amp_and_higher", "parts"): "[]Node",
-        ("_to_sexp_amp_and_higher", "op_names"): "map[string]string",
-        ("_to_sexp_and_or", "parts"): "[]Node",
-        ("_to_sexp_and_or", "op_names"): "map[string]string",
-        # Redirect handling - only reads, no mutation
-        ("_append_redirects", "redirects"): "[]Node",
-        # Bytearray mutation - needs pointer to avoid losing appends
-        ("_append_with_ctlesc", "result"): "*[]byte",
-    }
-
-    # Override field types for fields without proper annotations
-    # Maps (class_name, field_name) -> Go type (field_name is Python name, lowercase)
-    FIELD_TYPE_OVERRIDES = {
-        ("Lexer", "_word_context"): "int",
-        ("Parser", "_word_context"): "int",
-        # Source_runes for rune-based indexing (Unicode support)
-        ("Lexer", "source_runes"): "[]rune",
-        ("Parser", "source_runes"): "[]rune",
-        # Untyped list fields that need concrete slice types
-        ("SavedParserState", "pending_heredocs"): "[]Node",
-        ("SavedParserState", "ctx_stack"): "[]*ParseContext",
-        ("SavedParserState", "token_history"): "[]*Token",
-        ("Parser", "_token_history"): "[]*Token",
-        # Dynamically created fields for arithmetic parsing
-        ("Parser", "_arith_src"): "string",
-        ("Parser", "_arith_pos"): "int",
-        # QuoteState uses tuple stack - use custom struct
-        ("QuoteState", "_stack"): "[]quoteStackEntry",
-        ("Parser", "_arith_len"): "int",
-    }
-
-    # Override return types for methods that return generic list
-    # Maps method_name -> Go return type
-    RETURN_TYPE_OVERRIDES = {
-        "_collect_cmdsubs": "[]Node",
-        "_collect_procsubs": "[]Node",
-        "_collect_redirects": "[]Node",
-        "copy_stack": "[]*ParseContext",
-        "parse_for": "Node",  # Returns For | ForArith | None
-    }
-
-    # Tuple element types for functions returning tuples with typed elements
-    # Maps function_name -> {element_index -> Go type}
-    TUPLE_ELEMENT_TYPES = {
-        "_ConsumeSingleQuote": {0: "int", 1: "[]string"},
-        "_ConsumeDoubleQuote": {0: "int", 1: "[]string"},
-        "_ConsumeBracketClass": {0: "int", 1: "[]string"},
-    }
-
-    # Union field discriminators for Node | str union types
-    # Maps (receiver_type, field_name) -> (discriminator_var, nil_type, non_nil_type)
-    # discriminator_var is the variable that holds getattr(field, "kind", nil)
-    # field_name is the Python name (lowercase), not the Go name
-    UNION_FIELDS = {
-        ("ConditionalExpr", "body"): ("bodyKind", "string", "Node"),
-    }
 
     def _extract_func_info(self, node: ast.FunctionDef, is_method: bool = False) -> FuncInfo:
         """Extract function signature information."""
@@ -377,8 +233,8 @@ class GoTranspiler(ast.NodeVisitor):
             go_type = self._py_type_to_go(py_type) if py_type else "interface{}"
             # Check for overrides
             override_key = (node.name, arg.arg)
-            if override_key in self.PARAM_TYPE_OVERRIDES:
-                go_type = self.PARAM_TYPE_OVERRIDES[override_key]
+            if override_key in PARAM_TYPE_OVERRIDES:
+                go_type = PARAM_TYPE_OVERRIDES[override_key]
             params.append(ParamInfo(name=arg.arg, py_type=py_type, go_type=go_type))
         # Handle defaults
         defaults = node.args.defaults
@@ -391,8 +247,8 @@ class GoTranspiler(ast.NodeVisitor):
             py_return = self._annotation_to_str(node.returns)
             return_type = self._py_return_type_to_go(py_return)
         # Apply return type overrides
-        if node.name in self.RETURN_TYPE_OVERRIDES:
-            return_type = self.RETURN_TYPE_OVERRIDES[node.name]
+        if node.name in RETURN_TYPE_OVERRIDES:
+            return_type = RETURN_TYPE_OVERRIDES[node.name]
         return FuncInfo(
             name=node.name,
             params=params,
@@ -1194,8 +1050,8 @@ class GoTranspiler(ast.NodeVisitor):
             go_type = field_info.go_type or "interface{}"
             # Check for field type overrides
             override_key = (name, field_name)
-            if override_key in self.FIELD_TYPE_OVERRIDES:
-                go_type = self.FIELD_TYPE_OVERRIDES[override_key]
+            if override_key in FIELD_TYPE_OVERRIDES:
+                go_type = FIELD_TYPE_OVERRIDES[override_key]
             # For Node structs, make 'kind' lowercase to avoid conflict with Kind() method
             if is_node and field_name == "kind":
                 self.emit(f"kind {go_type}")
@@ -1203,7 +1059,7 @@ class GoTranspiler(ast.NodeVisitor):
                 go_name = self._to_go_field_name(field_name)
                 self.emit(f"{go_name} {go_type}")
         # Emit additional fields from FIELD_TYPE_OVERRIDES that don't exist in the class
-        for (class_name, field_name), go_type in self.FIELD_TYPE_OVERRIDES.items():
+        for (class_name, field_name), go_type in FIELD_TYPE_OVERRIDES.items():
             if class_name == name and field_name not in info.fields:
                 go_name = self._to_go_field_name(field_name)
                 self.emit(f"{go_name} {go_type}")
@@ -5206,7 +5062,7 @@ class GoTranspiler(ast.NodeVisitor):
             func_name = value.func.attr
         if func_name:
             go_func_name = self._to_go_func_name(func_name)
-            if go_func_name in self.TUPLE_ELEMENT_TYPES:
+            if go_func_name in TUPLE_ELEMENT_TYPES:
                 self.tuple_func_vars[var_name] = go_func_name
 
     def _track_assign_source(self, var_name: str, value: ast.expr):
@@ -5649,7 +5505,7 @@ class GoTranspiler(ast.NodeVisitor):
             return None
         disc_var = self._to_go_var(test.left.id)
         # Check if this discriminator matches any union field
-        for (receiver_type, field_name), (expected_disc, _, _) in self.UNION_FIELDS.items():
+        for (receiver_type, field_name), (expected_disc, _, _) in UNION_FIELDS.items():
             if disc_var == expected_disc:
                 return (receiver_type, field_name, disc_var)
         return None
@@ -5740,7 +5596,7 @@ class GoTranspiler(ast.NodeVisitor):
         union_key = None
         if union_info:
             receiver_type, field_name, disc_var = union_info
-            _, nil_type, non_nil_type = self.UNION_FIELDS[(receiver_type, field_name)]
+            _, nil_type, non_nil_type = UNION_FIELDS[(receiver_type, field_name)]
             union_key = (receiver_type, field_name)
         if is_first:
             self.emit(f"if {test} {{")
@@ -5988,9 +5844,9 @@ class GoTranspiler(ast.NodeVisitor):
             return None
         go_func_name = self._to_go_func_name(func_name)
         # Check if it's a known method
-        if go_func_name in self.TUPLE_ELEMENT_TYPES:
+        if go_func_name in TUPLE_ELEMENT_TYPES:
             # Returns first element type for tuple-returning funcs
-            return self.TUPLE_ELEMENT_TYPES[go_func_name][0]
+            return TUPLE_ELEMENT_TYPES[go_func_name][0]
         # Common return types for parser methods
         if "parse" in func_name.lower() or "Parse" in go_func_name:
             return "Node"
@@ -6707,8 +6563,8 @@ class GoTranspiler(ast.NodeVisitor):
                 if var_name in self.tuple_func_vars and isinstance(node.slice, ast.Constant):
                     func_name = self.tuple_func_vars[var_name]
                     idx = node.slice.value
-                    if func_name in self.TUPLE_ELEMENT_TYPES:
-                        elem_types = self.TUPLE_ELEMENT_TYPES[func_name]
+                    if func_name in TUPLE_ELEMENT_TYPES:
+                        elem_types = TUPLE_ELEMENT_TYPES[func_name]
                         if idx in elem_types:
                             elem_type = elem_types[idx]
                             # Only add type assertion for slice types (e.g., []string)

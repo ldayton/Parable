@@ -133,6 +133,10 @@ function firstWordPos(tokens: Token[]): number {
 
 function maxInt(a: number, b: number): number {
   return ((a > b) ? a : b);
+}
+
+function defaultKinds(): Map<string, number> {
+  return new Map([["word", 1], ["num", 2], ["op", 3]]);
 }"""
 
 

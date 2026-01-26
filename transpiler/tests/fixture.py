@@ -29,6 +29,8 @@ from src.ir import (
     IsNil,
     Len,
     Loc,
+    Map,
+    MapLit,
     MethodCall,
     # Declarations
     Module,
@@ -850,6 +852,30 @@ def make_fixture() -> Module:
         ],
     )
 
+    # --- Function: default_kinds (exercises Map, MapLit) ---
+    string_int_map = Map(key=STRING, value=INT)
+    default_kinds_func = Function(
+        name="default_kinds",
+        params=[],
+        ret=string_int_map,
+        body=[
+            Return(
+                value=MapLit(
+                    key_type=STRING,
+                    value_type=INT,
+                    entries=[
+                        (StringLit(value="word", typ=STRING, loc=L), IntLit(value=1, typ=INT, loc=L)),
+                        (StringLit(value="num", typ=STRING, loc=L), IntLit(value=2, typ=INT, loc=L)),
+                        (StringLit(value="op", typ=STRING, loc=L), IntLit(value=3, typ=INT, loc=L)),
+                    ],
+                    typ=string_int_map,
+                    loc=L,
+                ),
+                loc=L,
+            ),
+        ],
+    )
+
     return Module(
         name="fixture",
         structs=[token_struct, lexer_struct],
@@ -863,6 +889,7 @@ def make_fixture() -> Module:
             sum_positions_func,
             first_word_pos_func,
             max_int_func,
+            default_kinds_func,
         ],
         constants=[eof_const],
     )

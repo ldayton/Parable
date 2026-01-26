@@ -56,6 +56,7 @@ from src.ir import (
     Slice,
     SliceExpr,
     SliceLit,
+    StaticCall,
     StringConcat,
     StringFormat,
     StringLit,
@@ -1140,6 +1141,25 @@ def make_fixture() -> Module:
         ],
     )
 
+    # --- Function: call_static (exercises StaticCall) ---
+    call_static_func = Function(
+        name="call_static",
+        params=[],
+        ret=token_ref,
+        body=[
+            Return(
+                value=StaticCall(
+                    on_type=token_ref,
+                    method="empty",
+                    args=[],
+                    typ=token_ref,
+                    loc=L,
+                ),
+                loc=L,
+            ),
+        ],
+    )
+
     return Module(
         name="fixture",
         structs=[token_struct, lexer_struct],
@@ -1164,6 +1184,7 @@ def make_fixture() -> Module:
             make_int_slice_func,
             int_to_float_func,
             known_kinds_func,
+            call_static_func,
         ],
         constants=[eof_const],
     )

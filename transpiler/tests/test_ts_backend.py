@@ -204,6 +204,10 @@ function intToFloat(n: number): number {
 
 function knownKinds(): Set<string> {
   return new Set(["word", "num", "op"]);
+}
+
+function callStatic(): Token {
+  return Token.empty();
 }"""
 
 

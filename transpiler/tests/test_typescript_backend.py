@@ -157,14 +157,11 @@ function kindPriority(kind: string): number {
   switch (kind) {
     case "word":
       return 1;
-      break;
     case "num":
     case "float":
       return 2;
-      break;
     case "op":
       return 3;
-      break;
     default:
       return 0;
   }
@@ -199,7 +196,7 @@ function makeIntSlice(n: number): number[] {
 }
 
 function intToFloat(n: number): number {
-  return (n as number);
+  return n;
 }
 
 function knownKinds(): Set<string> {

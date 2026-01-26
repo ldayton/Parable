@@ -328,7 +328,8 @@ class TsBackend:
             self.indent += 1
             for s in case.body:
                 self._emit_stmt(s)
-            self._line("break;")
+            if not _ends_with_return(case.body):
+                self._line("break;")
             self.indent -= 1
         if default:
             self._line("default:")
@@ -462,7 +463,11 @@ class TsBackend:
             case Ternary(cond=cond, then_expr=then_expr, else_expr=else_expr):
                 return f"({self._expr(cond)} ? {self._expr(then_expr)} : {self._expr(else_expr)})"
             case Cast(expr=inner, to_type=to_type):
-                return f"({self._expr(inner)} as {self._type(to_type)})"
+                ts_type = self._type(to_type)
+                from_type = self._type(inner.typ) if hasattr(inner, 'typ') else None
+                if from_type == ts_type:
+                    return self._expr(inner)
+                return f"({self._expr(inner)} as {ts_type})"
             case TypeAssert(expr=inner, asserted=asserted):
                 return f"({self._expr(inner)} as {self._type(asserted)})"
             case IsType(expr=inner, tested_type=tested_type):
@@ -632,3 +637,8 @@ def _binary_op(op: str) -> str:
 def _string_literal(value: str) -> str:
     escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
     return f'"{escaped}"'
+
+
+def _ends_with_return(body: list[Stmt]) -> bool:
+    """Check if a statement list ends with a return (no break needed)."""
+    return bool(body) and isinstance(body[-1], Return)

@@ -441,12 +441,14 @@ class PythonBackend:
                 return f"{type_name}.{method}({args_str})"
             case BinaryOp(op=op, left=left, right=right):
                 py_op = _binary_op(op)
-                return f"({self._expr(left)} {py_op} {self._expr(right)})"
+                left_str = self._maybe_paren(left, op, is_left=True)
+                right_str = self._maybe_paren(right, op, is_left=False)
+                return f"{left_str} {py_op} {right_str}"
             case UnaryOp(op=op, operand=operand):
                 py_op = _unary_op(op)
                 return f"{py_op}{self._expr(operand)}"
             case Ternary(cond=cond, then_expr=then_expr, else_expr=else_expr):
-                return f"({self._expr(then_expr)} if {self._expr(cond)} else {self._expr(else_expr)})"
+                return f"{self._expr(then_expr)} if {self._cond_expr(cond)} else {self._expr(else_expr)}"
             case Cast(expr=inner):
                 # Python doesn't have casts, just return the expression
                 return self._expr(inner)
@@ -458,12 +460,13 @@ class PythonBackend:
                 return f"isinstance({self._expr(inner)}, {type_name})"
             case IsNil(expr=inner, negated=negated):
                 op = "is not" if negated else "is"
-                return f"({self._expr(inner)} {op} None)"
+                return f"{self._expr(inner)} {op} None"
             case Len(expr=inner):
                 return f"len({self._expr(inner)})"
-            case MakeSlice(length=length):
+            case MakeSlice(element_type=element_type, length=length):
                 if length is not None:
-                    return f"[None] * {self._expr(length)}"
+                    zero = self._zero_value(element_type)
+                    return f"[{zero}] * {self._expr(length)}"
                 return "[]"
             case MakeMap():
                 return "{}"
@@ -571,6 +574,37 @@ class PythonBackend:
             case _:
                 return self._type(typ)
 
+    def _zero_value(self, typ: Type) -> str:
+        match typ:
+            case Primitive(kind="int") | Primitive(kind="byte"):
+                return "0"
+            case Primitive(kind="float"):
+                return "0.0"
+            case Primitive(kind="bool"):
+                return "False"
+            case Primitive(kind="string"):
+                return '""'
+            case _:
+                return "None"
+
+    def _cond_expr(self, expr: Expr) -> str:
+        """Emit a condition expression, wrapping in parens only if needed for ternary."""
+        match expr:
+            case BinaryOp(op=op) if op in ("and", "or", "&&", "||"):
+                return f"({self._expr(expr)})"
+            case _:
+                return self._expr(expr)
+
+    def _maybe_paren(self, expr: Expr, parent_op: str, is_left: bool) -> str:
+        """Wrap expression in parens if needed for operator precedence."""
+        match expr:
+            case BinaryOp(op=child_op):
+                if _needs_parens(child_op, parent_op, is_left):
+                    return f"({self._expr(expr)})"
+            case Ternary():
+                return f"({self._expr(expr)})"
+        return self._expr(expr)
+
 
 def _primitive_type(kind: str) -> str:
     match kind:
@@ -615,6 +649,28 @@ def _unary_op(op: str) -> str:
             return "not "
         case _:
             return op
+
+
+# Precedence levels (higher = binds tighter)
+_PRECEDENCE = {
+    "or": 1, "||": 1,
+    "and": 2, "&&": 2,
+    "==": 3, "!=": 3, "<": 3, ">": 3, "<=": 3, ">=": 3,
+    "+": 4, "-": 4,
+    "*": 5, "/": 5, "%": 5,
+}
+
+
+def _needs_parens(child_op: str, parent_op: str, is_left: bool) -> bool:
+    """Determine if a child binary op needs parens inside a parent binary op."""
+    child_prec = _PRECEDENCE.get(child_op, 0)
+    parent_prec = _PRECEDENCE.get(parent_op, 0)
+    if child_prec < parent_prec:
+        return True
+    if child_prec == parent_prec and not is_left:
+        # Same precedence on right side needs parens for non-associative ops
+        return child_op in ("==", "!=", "<", ">", "<=", ">=")
+    return False
 
 
 def _string_literal(value: str) -> str:

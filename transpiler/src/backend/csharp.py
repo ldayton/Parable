@@ -502,6 +502,8 @@ class CSharpBackend:
                 return f"{self._expr(obj)}.{_to_pascal(field)}"
             case Index(obj=obj, index=index):
                 obj_str = self._expr(obj)
+                if isinstance(obj.typ, Tuple) and isinstance(index, IntLit):
+                    return f"{obj_str}.Item{index.value + 1}"
                 idx_str = self._expr(index)
                 return f"{obj_str}[{idx_str}]"
             case SliceExpr(obj=obj, low=low, high=high):
@@ -663,13 +665,11 @@ class CSharpBackend:
     def _format_string(self, template: str, args: list[Expr]) -> str:
         import re
         result = template
-        result = re.sub(r'\{(\d+)\}', r'{\1}', result)
-        result = result.replace("%v", "{0}")
+        for i, arg in enumerate(args):
+            result = result.replace(f"{{{i}}}", f"{{{self._expr(arg)}}}")
+        result = result.replace("%v", f"{{{self._expr(args[0])}}}" if args else "")
         escaped = result.replace("\\", "\\\\").replace('"', '\\"')
-        args_str = ", ".join(self._expr(a) for a in args)
-        if args_str:
-            return f'string.Format("{escaped}", {args_str})'
-        return f'"{escaped}"'
+        return f'$"{escaped}"'
 
     def _lvalue(self, lv: LValue) -> str:
         match lv:

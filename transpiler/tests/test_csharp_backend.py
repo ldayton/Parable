@@ -101,8 +101,8 @@ public static class FixtureFunctions
                 continue;
             }
             (Token, bool) result = lx.ScanWord();
-            Token tok = result[0];
-            bool ok = result[1];
+            Token tok = result.Item1;
+            bool ok = result.Item2;
             if (!ok)
             {
                 throw new Exception("unexpected character");
@@ -233,7 +233,7 @@ public static class FixtureFunctions
 
     public static string DescribeToken(Token tok)
     {
-        return string.Format("Token({0}, {1}, {2})", tok.Kind, tok.Text, tok.Pos);
+        return $"Token({tok.Kind}, {tok.Text}, {tok.Pos})";
     }
 
     public static void SetFirstKind(List<Token> tokens, string kind)

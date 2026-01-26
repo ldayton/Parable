@@ -26,7 +26,7 @@ class Token:
     pos: int
 
     def is_word(self) -> bool:
-        return (self.kind == "word")
+        return self.kind == "word"
 
 
 @dataclass
@@ -36,7 +36,7 @@ class Lexer:
     current: Token | None
 
     def peek(self) -> int:
-        if (self.pos >= len(self.source)):
+        if self.pos >= len(self.source):
             return EOF
         return self.source[self.pos]
 
@@ -45,22 +45,22 @@ class Lexer:
 
     def scan_word(self) -> tuple[Token, bool]:
         start: int = self.pos
-        while ((self.peek() != EOF) and not is_space(self.peek())):
+        while self.peek() != EOF and not is_space(self.peek()):
             self.advance()
-        if (self.pos == start):
+        if self.pos == start:
             return (Token(), False)
         text: str = self.source[start:self.pos]
         return (Token(kind="word", text=text, pos=start), True)
 
 
 def is_space(ch: int) -> bool:
-    return ((ch == 32) or (ch == 10))
+    return ch == 32 or ch == 10
 
 
 def tokenize(source: str) -> list[Token]:
     lx: Lexer = Lexer(source=source, pos=0, current=None)
     tokens: list[Token] = []
-    while (lx.peek() != EOF):
+    while lx.peek() != EOF:
         ch: int = lx.peek()
         if is_space(ch):
             lx.advance()
@@ -77,7 +77,7 @@ def tokenize(source: str) -> list[Token]:
 def count_words(tokens: list[Token]) -> int:
     count: int = 0
     for tok in tokens:
-        if (tok.kind == "word"):
+        if tok.kind == "word":
             count += 1
     return count
 
@@ -88,14 +88,14 @@ def format_token(tok: Token) -> str:
 
 def find_token(tokens: list[Token], kind: str) -> Token | None:
     for tok in tokens:
-        if (tok.kind == kind):
+        if tok.kind == kind:
             return tok
     return None
 
 
 def example_nil_check(tokens: list[Token]) -> str:
     tok: Token | None = find_token(tokens, "word")
-    if (tok is None):
+    if tok is None:
         return ""
     return tok.text
 
@@ -103,23 +103,23 @@ def example_nil_check(tokens: list[Token]) -> str:
 def sum_positions(tokens: list[Token]) -> int:
     sum: int = 0
     i: int = 0
-    while (i < len(tokens)):
-        sum = (sum + tokens[i].pos)
-        i = (i + 1)
+    while i < len(tokens):
+        sum = sum + tokens[i].pos
+        i = i + 1
     return sum
 
 
 def first_word_pos(tokens: list[Token]) -> int:
     pos: int = -1
     for tok in tokens:
-        if (tok.kind == "word"):
+        if tok.kind == "word":
             pos = tok.pos
             break
     return pos
 
 
 def max_int(a: int, b: int) -> int:
-    return (a if (a > b) else b)
+    return a if a > b else b
 
 
 def default_kinds() -> dict[str, int]:
@@ -128,8 +128,8 @@ def default_kinds() -> dict[str, int]:
 
 def scoped_work(x: int) -> int:
     result: int = 0
-    temp: int = (x * 2)
-    result = (temp + 1)
+    temp: int = x * 2
+    result = temp + 1
     return result
 
 
@@ -163,12 +163,12 @@ def describe_token(tok: Token) -> str:
 
 
 def set_first_kind(tokens: list[Token], kind: str) -> None:
-    if (len(tokens) > 0):
+    if len(tokens) > 0:
         tokens[0] = Token(kind=kind, text="", pos=0)
 
 
 def make_int_slice(n: int) -> list[int]:
-    return [None] * n
+    return [0] * n
 
 
 def int_to_float(n: int) -> float:
@@ -192,7 +192,7 @@ def get_array_first(arr: list[int]) -> int:
 
 
 def maybe_get(tokens: list[Token], idx: int) -> Token | None:
-    if (idx >= len(tokens)):
+    if idx >= len(tokens):
         return None
     return tokens[idx]
 

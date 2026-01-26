@@ -51,6 +51,8 @@ from src.ir import (
     Raise,
     Receiver,
     Return,
+    Set,
+    SetLit,
     Slice,
     SliceExpr,
     SliceLit,
@@ -1115,6 +1117,29 @@ def make_fixture() -> Module:
         ],
     )
 
+    # --- Function: known_kinds (exercises Set, SetLit) ---
+    string_set = Set(element=STRING)
+    known_kinds_func = Function(
+        name="known_kinds",
+        params=[],
+        ret=string_set,
+        body=[
+            Return(
+                value=SetLit(
+                    element_type=STRING,
+                    elements=[
+                        StringLit(value="word", typ=STRING, loc=L),
+                        StringLit(value="num", typ=STRING, loc=L),
+                        StringLit(value="op", typ=STRING, loc=L),
+                    ],
+                    typ=string_set,
+                    loc=L,
+                ),
+                loc=L,
+            ),
+        ],
+    )
+
     return Module(
         name="fixture",
         structs=[token_struct, lexer_struct],
@@ -1138,6 +1163,7 @@ def make_fixture() -> Module:
             set_first_kind_func,
             make_int_slice_func,
             int_to_float_func,
+            known_kinds_func,
         ],
         constants=[eof_const],
     )

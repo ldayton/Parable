@@ -200,6 +200,10 @@ function makeIntSlice(n: number): number[] {
 
 function intToFloat(n: number): number {
   return (n as number);
+}
+
+function knownKinds(): Set<string> {
+  return new Set(["word", "num", "op"]);
 }"""
 
 

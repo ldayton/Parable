@@ -179,41 +179,25 @@ class EmitFunctionsMixin:
 
     def _emit_body(self, stmts: list[ast.stmt], func_info: FuncInfo | None = None):
         """Emit function/method body statements."""
-        # Reset declared vars and add parameters
-        self.declared_vars = set()
-        self.byte_vars = set()  # Reset byte variable tracking
-        self.var_types: dict[str, str] = {}  # Inferred types for local vars
-        self.tuple_vars = {}  # Reset tuple variable tracking
-        self.returned_vars = set()  # Reset returned variable tracking
-        self.var_assign_sources: dict[str, str] = {}  # Track assignment sources for type inference
-        # Reset scope tracking
-        self.scope_tree = {0: ScopeInfo(0, None, 0)}
-        self.next_scope_id = 1
-        self.var_usage = {}
-        self.hoisted_vars = {}
-        self.scope_id_map = {}
         # Track return type for nil → zero value conversion
         self.current_return_type = func_info.return_type if func_info else ""
-        if func_info:
-            for p in func_info.params:
-                go_name = self._to_go_var(p.name)
-                self.declared_vars.add(go_name)
-                self.var_types[go_name] = p.go_type
-        # Pre-pass: analyze variable types from usage
-        self._analyze_var_types(stmts)
-        # Collect variable scopes and compute hoisting
-        self._collect_var_scopes(stmts, scope_id=0)
-        self._compute_hoisting()
-        # Exclude variables that are only used in assign-check-return patterns
-        # (these get rewritten to if tmp := ...; tmp != nil { return tmp })
-        self._exclude_assign_check_return_vars(stmts)
-        # Populate var_types with append element types for all vars (not just hoisted)
-        # This ensures inline := declarations get correct types for empty list init
-        self._populate_var_types_from_usage(stmts)
+        # Run all analysis first
+        analysis = self._analyze_function(stmts, func_info)
+        # Bridge: copy analysis results to self for emission (temporary)
+        self.declared_vars = analysis.declared_vars
+        self.var_types = analysis.var_types
+        self.scope_tree = analysis.scope_tree
+        self.next_scope_id = len(analysis.scope_tree) + 1
+        self.var_usage = analysis.var_usage
+        self.hoisted_vars = analysis.hoisted_vars
+        self.scope_id_map = analysis.scope_id_map
+        self.returned_vars = analysis.returned_vars
+        self.byte_vars = analysis.byte_vars
+        self.tuple_vars = analysis.tuple_vars
+        self.tuple_func_vars = analysis.tuple_func_vars
+        self.var_assign_sources = analysis.var_assign_sources
         # Emit hoisted declarations for function scope (scope 0)
         self._emit_hoisted_vars(0, stmts)
-        # Pre-scan for variables used in return statements (needed for tuple passthrough)
-        self._scan_returned_vars(stmts)
         # Emit all statements
         emitted_any = False
         skip_until = 0  # Skip statements consumed by type switch
@@ -270,18 +254,18 @@ class EmitFunctionsMixin:
                 analysis.declared_vars.add(go_name)
                 analysis.var_types[go_name] = p.go_type
         # Temporarily swap self state with analysis fields so existing methods work
-        old_declared = self.declared_vars
-        old_var_types = self.var_types
-        old_scope_tree = self.scope_tree
-        old_next_scope_id = self.next_scope_id
-        old_var_usage = self.var_usage
-        old_hoisted_vars = self.hoisted_vars
-        old_scope_id_map = self.scope_id_map
-        old_returned_vars = self.returned_vars
-        old_byte_vars = self.byte_vars
-        old_tuple_vars = self.tuple_vars
-        old_tuple_func_vars = self.tuple_func_vars
-        old_var_assign_sources = self.var_assign_sources
+        old_declared = getattr(self, "declared_vars", set())
+        old_var_types = getattr(self, "var_types", {})
+        old_scope_tree = getattr(self, "scope_tree", {})
+        old_next_scope_id = getattr(self, "next_scope_id", 1)
+        old_var_usage = getattr(self, "var_usage", {})
+        old_hoisted_vars = getattr(self, "hoisted_vars", {})
+        old_scope_id_map = getattr(self, "scope_id_map", {})
+        old_returned_vars = getattr(self, "returned_vars", set())
+        old_byte_vars = getattr(self, "byte_vars", set())
+        old_tuple_vars = getattr(self, "tuple_vars", {})
+        old_tuple_func_vars = getattr(self, "tuple_func_vars", {})
+        old_var_assign_sources = getattr(self, "var_assign_sources", {})
         try:
             self.declared_vars = analysis.declared_vars
             self.var_types = analysis.var_types

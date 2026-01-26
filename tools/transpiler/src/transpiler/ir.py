@@ -642,6 +642,13 @@ class SetLit(Expr):
 
 
 @dataclass
+class TupleLit(Expr):
+    """Tuple literal. Go: anonymous struct or multiple values."""
+
+    elements: list[Expr]
+
+
+@dataclass
 class StructLit(Expr):
     """Struct instantiation."""
 

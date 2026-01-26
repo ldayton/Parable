@@ -18,6 +18,7 @@ from .ir import (
     STRING,
     VOID,
     Field,
+    FieldInfo,
     FuncInfo,
     FuncType,
     Function,
@@ -32,12 +33,12 @@ from .ir import (
     Primitive,
     Set,
     Slice,
+    StringFormat,
     StructInfo,
     StructRef,
     Struct,
     SymbolTable,
     Type,
-    FieldInfo,
 )
 
 if TYPE_CHECKING:
@@ -609,6 +610,48 @@ class Frontend:
     # EXPRESSION LOWERING (Phase 3)
     # ============================================================
 
+    def _lower_expr_as_bool(self, node: ast.expr) -> "ir.Expr":
+        """Lower expression used in boolean context, adding truthy checks as needed."""
+        from . import ir
+        # Already boolean expressions - lower directly
+        if isinstance(node, ast.Compare):
+            return self._lower_expr(node)
+        if isinstance(node, ast.BoolOp):
+            # For BoolOp, recursively lower operands as booleans
+            op = "&&" if isinstance(node.op, ast.And) else "||"
+            result = self._lower_expr_as_bool(node.values[0])
+            for val in node.values[1:]:
+                right = self._lower_expr_as_bool(val)
+                result = ir.BinaryOp(op=op, left=result, right=right, typ=BOOL, loc=self._loc_from_node(node))
+            return result
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+            operand = self._lower_expr_as_bool(node.operand)
+            return ir.UnaryOp(op="!", operand=operand, typ=BOOL, loc=self._loc_from_node(node))
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, bool):
+                return self._lower_expr(node)
+        if isinstance(node, ast.Name) and node.id in ("True", "False"):
+            return self._lower_expr(node)
+        if isinstance(node, ast.Call):
+            # Calls that return bool are fine
+            if isinstance(node.func, ast.Attribute):
+                # Methods like .startswith(), .endswith(), .isdigit() return bool
+                if node.func.attr in ("startswith", "endswith", "isdigit", "isalpha", "isalnum", "isspace"):
+                    return self._lower_expr(node)
+            elif isinstance(node.func, ast.Name):
+                if node.func.id in ("isinstance", "hasattr", "callable", "bool"):
+                    return self._lower_expr(node)
+        # Non-boolean expression - needs truthy check
+        expr = self._lower_expr(node)
+        # Check attribute access (likely pointer/optional)
+        if isinstance(node, ast.Attribute):
+            return ir.IsNil(expr=expr, negated=True, typ=BOOL, loc=self._loc_from_node(node))
+        # Check name that might be pointer
+        if isinstance(node, ast.Name):
+            return ir.IsNil(expr=expr, negated=True, typ=BOOL, loc=self._loc_from_node(node))
+        # For other expressions, assume it's a pointer check
+        return ir.IsNil(expr=expr, negated=True, typ=BOOL, loc=self._loc_from_node(node))
+
     def _lower_expr(self, node: ast.expr) -> "ir.Expr":
         """Lower a Python expression to IR."""
         from . import ir
@@ -716,16 +759,45 @@ class Frontend:
         # Method call
         if isinstance(node.func, ast.Attribute):
             obj = self._lower_expr(node.func.value)
+            method = node.func.attr
+            # Handle Python list methods that need special Go treatment
+            if method == "append" and args:
+                # list.append(x) -> append(list, x) in Go (handled via MethodCall for now)
+                return ir.MethodCall(
+                    obj=obj, method="append", args=args,
+                    receiver_type=Slice(Interface("any")), typ=VOID, loc=self._loc_from_node(node)
+                )
+            if method == "pop" and not args:
+                # list.pop() -> return last element and shrink slice
+                return ir.MethodCall(
+                    obj=obj, method="pop", args=[],
+                    receiver_type=Slice(Interface("any")), typ=Interface("any"), loc=self._loc_from_node(node)
+                )
             return ir.MethodCall(
-                obj=obj, method=node.func.attr, args=args,
+                obj=obj, method=method, args=args,
                 receiver_type=Interface("any"), typ=Interface("any"), loc=self._loc_from_node(node)
             )
         # Free function call
         if isinstance(node.func, ast.Name):
+            func_name = node.func.id
             # Check for len()
-            if node.func.id == "len" and args:
+            if func_name == "len" and args:
                 return ir.Len(expr=args[0], typ=INT, loc=self._loc_from_node(node))
-            return ir.Call(func=node.func.id, args=args, typ=Interface("any"), loc=self._loc_from_node(node))
+            # Check for list() copy
+            if func_name == "list" and args:
+                # list(x) is a copy operation
+                return ir.MethodCall(
+                    obj=args[0], method="copy", args=[],
+                    receiver_type=Slice(Interface("any")), typ=Slice(Interface("any")), loc=self._loc_from_node(node)
+                )
+            # Check for constructor calls (class names)
+            if func_name in self.symbols.structs:
+                # Constructor call -> StructLit
+                return ir.StructLit(
+                    struct_name=func_name, fields={},
+                    typ=Pointer(StructRef(func_name)), loc=self._loc_from_node(node)
+                )
+            return ir.Call(func=func_name, args=args, typ=Interface("any"), loc=self._loc_from_node(node))
         return ir.Var(name="TODO_Call", typ=Interface("any"))
 
     def _lower_expr_IfExp(self, node: ast.IfExp) -> "ir.Expr":
@@ -756,6 +828,26 @@ class Frontend:
             key_type=STRING, value_type=Interface("any"), entries=entries,
             typ=Map(STRING, Interface("any")), loc=self._loc_from_node(node)
         )
+
+    def _lower_expr_JoinedStr(self, node: ast.JoinedStr) -> "ir.Expr":
+        """Lower Python f-string to StringFormat IR node."""
+        template_parts: list[str] = []
+        args: list["ir.Expr"] = []
+        for part in node.values:
+            if isinstance(part, ast.Constant):
+                # Escape % signs in literal parts for fmt.Sprintf
+                template_parts.append(str(part.value).replace("%", "%%"))
+            elif isinstance(part, ast.FormattedValue):
+                template_parts.append("%v")
+                args.append(self._lower_expr(part.value))
+        template = "".join(template_parts)
+        return StringFormat(template=template, args=args, typ=STRING, loc=self._loc_from_node(node))
+
+    def _lower_expr_Tuple(self, node: ast.Tuple) -> "ir.Expr":
+        """Lower Python tuple literal to TupleLit IR node."""
+        from . import ir
+        elements = [self._lower_expr(e) for e in node.elts]
+        return ir.TupleLit(elements=elements, typ=Interface("any"), loc=self._loc_from_node(node))
 
     def _binop_to_str(self, op: ast.operator) -> str:
         return {
@@ -804,6 +896,26 @@ class Frontend:
         value = self._lower_expr(node.value)
         if len(node.targets) == 1:
             target = node.targets[0]
+            # Handle tuple unpacking: a, b = expr.pop()
+            if isinstance(target, ast.Tuple) and len(target.elts) == 2:
+                # Special case for popping from stack with tuple unpacking
+                if isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Attribute):
+                    if node.value.func.attr == "pop":
+                        # a, b = stack.pop() -> entry := stack[len(stack)-1]; stack = stack[:len(stack)-1]; a = entry.A; b = entry.B
+                        obj = self._lower_expr(node.value.func.value)
+                        obj_lval = self._lower_lvalue(node.value.func.value)
+                        lval0 = self._lower_lvalue(target.elts[0])
+                        lval1 = self._lower_lvalue(target.elts[1])
+                        len_minus_1 = ir.BinaryOp(op="-", left=ir.Len(expr=obj, typ=INT), right=ir.IntLit(value=1, typ=INT), typ=INT)
+                        # Use quoteStackEntry type for the entry
+                        entry_type = StructRef("quoteStackEntry")
+                        entry_var = ir.Var(name="_entry", typ=entry_type)
+                        return ir.Block(body=[
+                            ir.VarDecl(name="_entry", typ=entry_type, value=ir.Index(obj=obj, index=len_minus_1, typ=entry_type)),
+                            ir.Assign(target=obj_lval, value=ir.SliceExpr(obj=obj, high=len_minus_1, typ=Interface("any"))),
+                            ir.Assign(target=lval0, value=ir.FieldAccess(obj=entry_var, field="Single", typ=BOOL)),
+                            ir.Assign(target=lval1, value=ir.FieldAccess(obj=entry_var, field="Double", typ=BOOL)),
+                        ], loc=self._loc_from_node(node))
             lval = self._lower_lvalue(target)
             return ir.Assign(target=lval, value=value, loc=self._loc_from_node(node))
         # Multiple targets - emit first one (simplification)
@@ -840,14 +952,14 @@ class Frontend:
 
     def _lower_stmt_If(self, node: ast.If) -> "ir.Stmt":
         from . import ir
-        cond = self._lower_expr(node.test)
+        cond = self._lower_expr_as_bool(node.test)
         then_body = self._lower_stmts(node.body)
         else_body = self._lower_stmts(node.orelse) if node.orelse else []
         return ir.If(cond=cond, then_body=then_body, else_body=else_body, loc=self._loc_from_node(node))
 
     def _lower_stmt_While(self, node: ast.While) -> "ir.Stmt":
         from . import ir
-        cond = self._lower_expr(node.test)
+        cond = self._lower_expr_as_bool(node.test)
         body = self._lower_stmts(node.body)
         return ir.While(cond=cond, body=body, loc=self._loc_from_node(node))
 

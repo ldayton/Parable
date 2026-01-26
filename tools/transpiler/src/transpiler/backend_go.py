@@ -79,6 +79,7 @@ from .ir import (
     StructRef,
     Ternary,
     TryCatch,
+    TupleLit,
     Tuple,
     Type,
     TypeAssert,
@@ -110,6 +111,7 @@ class GoBackend:
         self.output: list[str] = []
         self.indent = 0
         self._receiver_name: str = ""  # Current method receiver name
+        self._declared_vars: set[str] = set()  # Track declared local variables
 
     def emit(self, module: Module) -> str:
         """Emit Go code from IR Module."""
@@ -124,6 +126,22 @@ class GoBackend:
     def _emit_header(self, module: Module) -> None:
         """Emit package declaration and imports."""
         self._line(f"package {module.name}")
+        self._line("")
+        self._line("import (")
+        self.indent += 1
+        self._line('"fmt"')
+        self._line('"strings"')
+        self.indent -= 1
+        self._line(")")
+        self._line("")
+        # Emit helper type aliases
+        self._line("// quoteStackEntry holds pushed quote state (single, double)")
+        self._line("type quoteStackEntry struct {")
+        self.indent += 1
+        self._line("Single bool")
+        self._line("Double bool")
+        self.indent -= 1
+        self._line("}")
         self._line("")
 
     def _emit_struct(self, struct: Struct) -> None:
@@ -143,12 +161,23 @@ class GoBackend:
 
     def _emit_function(self, func: Function) -> None:
         """Emit function or method definition."""
+        # Reset declared vars for new function scope
+        self._declared_vars = set()
+        # Add parameters to declared vars
+        param_names = {self._to_camel(p.name) for p in func.params}
+        for p in func.params:
+            self._declared_vars.add(self._to_camel(p.name))
         params = ", ".join(
             f"{self._to_camel(p.name)} {self._type_to_go(p.typ)}" for p in func.params
         )
         ret = self._type_to_go(func.ret) if func.ret != VOID else ""
         if func.receiver:
+            # Use first letter of receiver name, but avoid collision with params
             recv_name = func.receiver.name[0].lower()
+            if recv_name in param_names:
+                # Collision - use full receiver type name's first letter instead
+                recv_type_name = self._type_to_go(func.receiver.typ).lstrip("*")
+                recv_name = recv_type_name[0].lower() + "0"
             self._receiver_name = recv_name
             recv_type = self._type_to_go(func.receiver.typ)
             if func.receiver.pointer:
@@ -192,6 +221,13 @@ class GoBackend:
     def _emit_stmt_Assign(self, stmt: Assign) -> None:
         target = self._emit_lvalue(stmt.target)
         value = self._emit_expr(stmt.value)
+        # For simple variable assignments, use := for first declaration
+        if isinstance(stmt.target, VarLV):
+            var_name = self._to_camel(stmt.target.name)
+            if var_name not in self._declared_vars:
+                self._declared_vars.add(var_name)
+                self._line(f"{target} := {value}")
+                return
         self._line(f"{target} = {value}")
 
     def _emit_stmt_OpAssign(self, stmt: OpAssign) -> None:
@@ -200,6 +236,12 @@ class GoBackend:
         self._line(f"{target} {stmt.op}= {value}")
 
     def _emit_stmt_ExprStmt(self, stmt: ExprStmt) -> None:
+        # Special handling for append - needs to be an assignment in Go
+        if isinstance(stmt.expr, MethodCall) and stmt.expr.method == "append" and stmt.expr.args:
+            obj = self._emit_expr(stmt.expr.obj)
+            arg = self._emit_expr(stmt.expr.args[0])
+            self._line(f"{obj} = append({obj}, {arg})")
+            return
         expr = self._emit_expr(stmt.expr)
         # Filter out placeholder expressions (after camelCase conversion)
         if expr and not expr.startswith(("skip", "pass", "localFunc", "unknown")):
@@ -442,6 +484,16 @@ class GoBackend:
     def _emit_expr_Index(self, expr: Index) -> str:
         obj = self._emit_expr(expr.obj)
         idx = self._emit_expr(expr.index)
+        # Handle tuple indexing on struct types (stack entries)
+        # Pattern: stack[i][0] -> stack[i].Single, stack[i][1] -> stack[i].Double
+        if isinstance(expr.index, IntLit) and expr.index.value in (0, 1):
+            # Check if we're indexing into a stack entry (another Index on "stack")
+            if isinstance(expr.obj, Index):
+                inner_obj = self._emit_expr(expr.obj.obj)
+                if "stack" in inner_obj.lower() or "Stack" in inner_obj:
+                    inner_idx = self._emit_expr(expr.obj.index)
+                    field = "Single" if expr.index.value == 0 else "Double"
+                    return f"{inner_obj}[{inner_idx}].{field}"
         return f"{obj}[{idx}]"
 
     def _emit_expr_SliceExpr(self, expr: SliceExpr) -> str:
@@ -457,7 +509,19 @@ class GoBackend:
 
     def _emit_expr_MethodCall(self, expr: MethodCall) -> str:
         obj = self._emit_expr(expr.obj)
-        method = self._to_pascal(expr.method)
+        method = expr.method  # Keep original for special cases
+        # Handle Python list methods specially
+        if method == "append" and expr.args:
+            arg = self._emit_expr(expr.args[0])
+            return f"append({obj}, {arg})"
+        if method == "pop" and not expr.args:
+            # Pop returns last element - this is tricky in Go
+            # For statement context, this will be handled differently
+            return f"{obj}[len({obj})-1]"
+        if method == "copy":
+            # Slice copy: append([]T{}, slice...)
+            return f"append({obj}[:0:0], {obj}...)"
+        method = self._to_pascal(method)
         args = ", ".join(self._emit_expr(a) for a in expr.args)
         return f"{obj}.{method}({args})"
 
@@ -554,13 +618,34 @@ class GoBackend:
         )
         return f"&{expr.struct_name}{{{fields}}}"
 
+    def _emit_expr_TupleLit(self, expr: TupleLit) -> str:
+        """Emit tuple literal as anonymous struct."""
+        # For 2-element tuples commonly used in quoteStackEntry, emit as struct{A, B type}{}
+        elements = ", ".join(self._emit_expr(e) for e in expr.elements)
+        if len(expr.elements) == 2:
+            # Common pattern: struct{Single, Double bool}{val1, val2}
+            return f"struct{{Single, Double bool}}{{{elements}}}"
+        # Fallback: use numbered fields
+        fields = ", ".join(f"F{i}: {self._emit_expr(e)}" for i, e in enumerate(expr.elements))
+        return f"struct{{}}{{{fields}}}"
+
     def _emit_expr_StringConcat(self, expr: StringConcat) -> str:
         parts = " + ".join(self._emit_expr(p) for p in expr.parts)
         return f"({parts})"
 
     def _emit_expr_StringFormat(self, expr: StringFormat) -> str:
         args = ", ".join(self._emit_expr(a) for a in expr.args)
-        return f'fmt.Sprintf("{expr.template}", {args})'
+        # Escape special characters in template
+        escaped = (
+            expr.template.replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("\n", "\\n")
+            .replace("\t", "\\t")
+            .replace("\r", "\\r")
+        )
+        if args:
+            return f'fmt.Sprintf("{escaped}", {args})'
+        return f'"{escaped}"'
 
     # ============================================================
     # LVALUE EMISSION
@@ -643,11 +728,16 @@ class GoBackend:
     # ============================================================
 
     def _to_pascal(self, name: str) -> str:
-        """Convert snake_case to PascalCase."""
-        if name.startswith("_"):
+        """Convert snake_case to PascalCase. Private methods (underscore prefix) become unexported."""
+        is_private = name.startswith("_")
+        if is_private:
             name = name[1:]
         parts = name.split("_")
-        return "".join(p.capitalize() for p in parts)
+        result = "".join(p.capitalize() for p in parts)
+        if is_private:
+            # Make first letter lowercase for unexported (private) names
+            return result[0].lower() + result[1:] if result else result
+        return result
 
     def _to_camel(self, name: str) -> str:
         """Convert snake_case to camelCase."""

@@ -5,3 +5,11 @@ requires-python = ">=3.14"
 
 [project.scripts]
 transpile = "cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

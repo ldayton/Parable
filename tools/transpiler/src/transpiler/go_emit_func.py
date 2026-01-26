@@ -183,6 +183,7 @@ class EmitFunctionsMixin:
         self.current_return_type = func_info.return_type if func_info else ""
         # Run all analysis first
         analysis = self._analyze_function(stmts, func_info)
+        self._analysis = analysis
         # Bridge: copy analysis results to self for emission (temporary)
         self.declared_vars = analysis.declared_vars
         self.var_types = analysis.var_types
@@ -600,15 +601,18 @@ class EmitFunctionsMixin:
     def _emit_constructor_body(self, stmts: list[ast.stmt], class_info: ClassInfo):
         """Emit constructor body, handling self.x = y assignments."""
         receiver = class_info.name[0].lower()
-        # Set up var_types with parameter types for if statement handling
-        self.var_types = {}
-        self.declared_vars = set()
+        # Set up minimal analysis for constructor body
+        analysis = FunctionAnalysis()
         func_info = class_info.methods.get("__init__")
         if func_info:
             for p in func_info.params:
                 go_name = self._to_go_var(p.name)
-                self.declared_vars.add(go_name)
-                self.var_types[go_name] = p.go_type
+                analysis.declared_vars.add(go_name)
+                analysis.var_types[go_name] = p.go_type
+        self._analysis = analysis
+        # Bridge: also set on self for compatibility
+        self.var_types = analysis.var_types
+        self.declared_vars = analysis.declared_vars
         for stmt in stmts:
             # Skip docstrings
             if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant):

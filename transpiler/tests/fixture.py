@@ -5,6 +5,7 @@ Exercises core IR constructs needed for parable.py transpilation.
 
 from src.ir import (
     BOOL,
+    FLOAT,
     INT,
     STRING,
     VOID,
@@ -20,6 +21,7 @@ from src.ir import (
     Field,
     FieldAccess,
     FieldLV,
+    FloatLit,
     ForClassic,
     ForRange,
     Function,
@@ -990,6 +992,16 @@ def make_fixture() -> Module:
         ],
     )
 
+    # --- Function: pi (exercises FloatLit) ---
+    pi_func = Function(
+        name="pi",
+        params=[],
+        ret=FLOAT,
+        body=[
+            Return(value=FloatLit(value=3.14159, typ=FLOAT, loc=L), loc=L),
+        ],
+    )
+
     return Module(
         name="fixture",
         structs=[token_struct, lexer_struct],
@@ -1007,6 +1019,7 @@ def make_fixture() -> Module:
             scoped_work_func,
             kind_priority_func,
             safe_tokenize_func,
+            pi_func,
         ],
         constants=[eof_const],
     )

@@ -173,6 +173,10 @@ function safeTokenize(source: string): Token[] {
     tokens = [];
   }
   return tokens;
+}
+
+function pi(): number {
+  return 3.14159;
 }"""
 
 

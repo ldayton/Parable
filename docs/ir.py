@@ -119,9 +119,13 @@ class Interface(Type):
 
 @dataclass(frozen=True)
 class Union(Type):
-    """Sum type. Go: interface, Rust: enum, C: tagged union."""
+    """Sum type. Go: interface, Rust: enum, C: tagged union.
 
-    variants: tuple[Type, ...]
+    All unions are closed (fixed variants) and discriminated via .kind field.
+    """
+
+    name: str
+    variants: tuple[StructRef, ...]
 
 
 @dataclass(frozen=True)
@@ -217,6 +221,7 @@ class Function:
     ret: Type
     body: list[Stmt]
     receiver: Receiver | None = None  # for methods
+    fallible: bool = False  # can raise ParseError
     loc: Loc = field(default_factory=Loc.unknown)
 
 
@@ -256,7 +261,7 @@ class Constant:
 # ============================================================
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Stmt:
     """Base for all statements."""
 
@@ -401,20 +406,29 @@ class Block(Stmt):
 
 
 @dataclass
-class TryBlock(Stmt):
-    """Error handling. Go: if err != nil, JS: try/catch, Rust: match Result."""
+class TryCatch(Stmt):
+    """Backtracking for error recovery. Go: defer/recover, JS: try/catch, Rust: match Result."""
 
     body: list[Stmt]
-    catch_var: str
-    catch_type: Type
-    catch_body: list[Stmt]
+    catch_var: str | None = None  # None if error ignored
+    catch_body: list[Stmt] = field(default_factory=list)
+    reraise: bool = False  # catch cleans up then re-raises
 
 
 @dataclass
-class Throw(Stmt):
-    """Raise/throw error. Go: return err, JS: throw, Rust: return Err()."""
+class Raise(Stmt):
+    """Raise error in fallible function. Go: panic, JS: throw, Rust: return Err()."""
 
-    error: Expr
+    error_type: str  # "ParseError", "MatchedPairError"
+    message: Expr
+    pos: Expr
+
+
+@dataclass
+class SoftFail(Stmt):
+    """Return None to signal 'try alternative'. Go: return nil, Rust: return None."""
+
+    pass
 
 
 # ============================================================
@@ -422,7 +436,7 @@ class Throw(Stmt):
 # ============================================================
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Expr:
     """Base for all expressions. All expressions carry their resolved type."""
 
@@ -672,7 +686,7 @@ class StringFormat(Expr):
 # ============================================================
 
 
-@dataclass
+@dataclass(kw_only=True)
 class LValue:
     """Base for assignment targets."""
 
@@ -833,7 +847,7 @@ class CBackend(Backend):
 
     Special handling:
         - Arena allocation for AST nodes
-        - Fat strings (ptr + len) instead of null-terminated
+        - Strings as ptr+len instead of null-terminated
         - Type-specific collection generation
     """
 

@@ -90,7 +90,6 @@ class SwiftBackend:
         self.lines: list[str] = []
         self.receiver_name: str | None = None
         self.current_class: str = ""
-        self.optional_vars: set[str] = set()  # Track vars declared as Optional
 
     def emit(self, module: Module) -> str:
         """Emit Swift code from IR Module."""
@@ -182,7 +181,6 @@ class SwiftBackend:
         self._line(f"var {to_camel(fld.name)}: {typ}")
 
     def _emit_function(self, func: Function) -> None:
-        self.optional_vars = set()  # Reset for each function
         params = self._params(func.params)
         ret = self._type(func.ret)
         name = to_camel(func.name)
@@ -230,9 +228,6 @@ class SwiftBackend:
                 swift_type = self._type(typ)
                 var_name = to_camel(name)
                 keyword = "var" if getattr(stmt, 'is_reassigned', False) else "let"
-                # Track variables declared as Optional for later unwrapping
-                if isinstance(typ, Optional):
-                    self.optional_vars.add(var_name)
                 if value is not None:
                     val = self._expr(value)
                     self._line(f"{keyword} {var_name}: {swift_type} = {val}")
@@ -458,11 +453,8 @@ class SwiftBackend:
                 return to_camel(name)
             case FieldAccess(obj=obj, field=field):
                 obj_str = self._expr(obj)
-                # Force unwrap if accessing field on optional type or optional variable
-                needs_unwrap = isinstance(obj.typ, Optional)
-                if isinstance(obj, Var) and to_camel(obj.name) in self.optional_vars:
-                    needs_unwrap = True
-                if needs_unwrap:
+                # Force unwrap if accessing field on optional type
+                if isinstance(obj.typ, Optional):
                     return f"{obj_str}!.{to_camel(field)}"
                 return f"{obj_str}.{to_camel(field)}"
             case Index(obj=obj, index=index):

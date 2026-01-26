@@ -90,7 +90,6 @@ class RustBackend:
         self.lines: list[str] = []
         self.receiver_name: str | None = None
         self.current_func_ret: Type | None = None
-        self.optional_vars: set[str] = set()  # Track vars declared as Optional
 
     def emit(self, module: Module) -> str:
         """Emit Rust code from IR Module."""
@@ -175,7 +174,6 @@ class RustBackend:
         ret = self._type(func.ret)
         name = to_snake(func.name)
         self.current_func_ret = func.ret
-        self.optional_vars = set()
         if ret == "()":
             self._line(f"fn {name}({params}) {{")
         else:
@@ -187,7 +185,6 @@ class RustBackend:
         self.indent -= 1
         self._line("}")
         self.current_func_ret = None
-        self.optional_vars = set()
 
     def _emit_method(self, func: Function) -> None:
         params = self._method_params(func.params, func.receiver)
@@ -196,7 +193,6 @@ class RustBackend:
         if func.receiver:
             self.receiver_name = func.receiver.name
         self.current_func_ret = func.ret
-        self.optional_vars = set()
         if ret == "()":
             self._line(f"fn {name}({params}) {{")
         else:
@@ -209,7 +205,6 @@ class RustBackend:
         self._line("}")
         self.receiver_name = None
         self.current_func_ret = None
-        self.optional_vars = set()
 
     def _params(self, params: list) -> str:
         parts = []
@@ -318,9 +313,6 @@ class RustBackend:
             case VarDecl(name=name, typ=typ, value=value, mutable=mutable):
                 rust_type = self._type(typ)
                 mut = "mut " if getattr(stmt, 'is_reassigned', False) else ""
-                # Track variables declared as Optional
-                if isinstance(typ, Optional):
-                    self.optional_vars.add(name)
                 if value is not None:
                     val = self._expr(value)
                     self._line(f"let {mut}{to_snake(name)}: {rust_type} = {val};")
@@ -566,11 +558,11 @@ class RustBackend:
             case FieldAccess(obj=obj, field=field):
                 obj_expr = self._expr(obj)
                 # Unwrap if accessing field on an Optional variable
-                if isinstance(obj, Var) and obj.name in self.optional_vars:
+                if isinstance(obj, Var) and isinstance(obj.typ, Optional):
                     obj_expr = f"{obj_expr}.as_ref().unwrap()"
                 field_access = f"{obj_expr}.{to_snake(field)}"
                 # Clone String fields accessed from references
-                if (isinstance(obj, Var) and obj.name in self.optional_vars and
+                if (isinstance(obj, Var) and isinstance(obj.typ, Optional) and
                     hasattr(expr, 'typ') and isinstance(expr.typ, Primitive) and expr.typ.kind == "string"):
                     field_access = f"{field_access}.clone()"
                 return field_access

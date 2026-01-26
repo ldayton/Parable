@@ -740,7 +740,7 @@ def make_fixture() -> Module:
             # return tok.text
             Return(
                 value=FieldAccess(
-                    obj=Var(name="tok", typ=token_ref, loc=L), field="text", typ=STRING, loc=L
+                    obj=Var(name="tok", typ=opt_token, loc=L), field="text", typ=STRING, loc=L
                 ),
                 loc=L,
             ),

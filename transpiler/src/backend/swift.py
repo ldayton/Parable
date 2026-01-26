@@ -226,10 +226,10 @@ class SwiftBackend:
 
     def _emit_stmt(self, stmt: Stmt) -> None:
         match stmt:
-            case VarDecl(name=name, typ=typ, value=value, mutable=mutable):
+            case VarDecl(name=name, typ=typ, value=value):
                 swift_type = self._type(typ)
                 var_name = to_camel(name)
-                keyword = "var" if mutable else "let"
+                keyword = "var" if getattr(stmt, 'is_reassigned', False) else "let"
                 # Track variables declared as Optional for later unwrapping
                 if isinstance(typ, Optional):
                     self.optional_vars.add(var_name)

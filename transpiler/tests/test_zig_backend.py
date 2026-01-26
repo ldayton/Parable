@@ -41,14 +41,14 @@ pub const Lexer = struct {
     }
 
     pub fn scan_word(self: *Lexer) struct { f0: Token, f1: bool } {
-        var start = self.pos;
+        const start = self.pos;
         while (self.peek() != EOF and !is_space(self.peek())) {
             self.advance();
         }
         if (self.pos == start) {
             return .{ .f0 = Token{}, .f1 = false };
         }
-        var text: []const u8 = self.source[@intCast(start)..@intCast(self.pos)];
+        const text: []const u8 = self.source[@intCast(start)..@intCast(self.pos)];
         return .{ .f0 = Token{ .kind = "word", .text = text, .pos = start }, .f1 = true };
     }
 };
@@ -61,14 +61,14 @@ pub fn tokenize(source: []const u8) ArrayList(Token) {
     var lx = Lexer{ .source = source, .pos = 0, .current = null };
     var tokens: ArrayList(Token) = ArrayList(Token).init(allocator);
     while (lx.peek() != EOF) {
-        var ch = lx.peek();
+        const ch = lx.peek();
         if (is_space(ch)) {
             lx.advance();
             continue;
         }
-        var result = lx.scan_word();
-        var tok = result.f0;
-        var ok = result.f1;
+        const result = lx.scan_word();
+        const tok = result.f0;
+        const ok = result.f1;
         if (!ok) {
             @panic("unexpected character");
         }
@@ -101,7 +101,7 @@ pub fn find_token(tokens: ArrayList(Token), kind: []const u8) ?Token {
 }
 
 pub fn example_nil_check(tokens: ArrayList(Token)) []const u8 {
-    var tok = find_token(tokens, "word");
+    const tok = find_token(tokens, "word");
     if (tok == null) {
         return "";
     }
@@ -140,7 +140,7 @@ pub fn default_kinds() std.StringHashMap(i64) {
 pub fn scoped_work(x: i64) i64 {
     var result: i64 = 0;
     {
-        var temp: i64 = x * 2;
+        const temp: i64 = x * 2;
         result = temp + 1;
     }
     return result;

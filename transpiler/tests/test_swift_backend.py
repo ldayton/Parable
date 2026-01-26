@@ -54,14 +54,14 @@ class Lexer {
     }
 
     func scanWord() -> (Token, Bool) {
-        var start: Int = self.pos
+        let start: Int = self.pos
         while ((self.peek() != Constants.EOF) && !isSpace(self.peek())) {
             self.advance()
         }
         if (self.pos == start) {
             return (Token(), false)
         }
-        var text: String = String(self.source[self.source.index(self.source.startIndex, offsetBy: start)..<self.source.index(self.source.startIndex, offsetBy: self.pos)])
+        let text: String = String(self.source[self.source.index(self.source.startIndex, offsetBy: start)..<self.source.index(self.source.startIndex, offsetBy: self.pos)])
         return (Token(kind: "word", text: text, pos: start), true)
     }
 }
@@ -74,14 +74,14 @@ func tokenize(_ source: String) -> [Token] {
     var lx: Lexer = Lexer(source: source, pos: 0, current: nil)
     var tokens: [Token] = [Token]()
     while (lx.peek() != Constants.EOF) {
-        var ch: Int = lx.peek()
+        let ch: Int = lx.peek()
         if isSpace(ch) {
             lx.advance()
             continue
         }
-        var result: (Token, Bool) = lx.scanWord()
-        var tok: Token = result.0
-        var ok: Bool = result.1
+        let result: (Token, Bool) = lx.scanWord()
+        let tok: Token = result.0
+        let ok: Bool = result.1
         if !ok {
             fatalError("unexpected character")
         }
@@ -114,7 +114,7 @@ func findToken(_ tokens: [Token], _ kind: String) -> Token? {
 }
 
 func exampleNilCheck(_ tokens: [Token]) -> String {
-    var tok: Token? = findToken(tokens, "word")
+    let tok: Token? = findToken(tokens, "word")
     if (tok == nil) {
         return ""
     }
@@ -153,7 +153,7 @@ func defaultKinds() -> [String: Int] {
 func scopedWork(_ x: Int) -> Int {
     var result: Int = 0
     do {
-        var temp: Int = (x * 2)
+        let temp: Int = (x * 2)
         result = (temp + 1)
     }
     return result

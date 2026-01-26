@@ -210,10 +210,10 @@ class ZigBackend:
 
     def _emit_stmt(self, stmt: Stmt) -> None:
         match stmt:
-            case VarDecl(name=name, typ=typ, value=value, mutable=mutable):
+            case VarDecl(name=name, typ=typ, value=value):
                 zig_type = self._type(typ)
                 self.var_types[name] = typ  # Track variable type
-                keyword = "var" if mutable else "const"
+                keyword = "var" if getattr(stmt, 'is_reassigned', False) else "const"
                 if value is not None:
                     val = self._expr(value)
                     # Omit type when it can be inferred (simple expressions)

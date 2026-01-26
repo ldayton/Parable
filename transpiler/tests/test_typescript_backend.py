@@ -50,14 +50,14 @@ class Lexer {
   }
 
   scanWord(): [Token, boolean] {
-    let start = this.pos;
+    const start = this.pos;
     while (this.peek() !== EOF && !isSpace(this.peek())) {
       this.advance();
     }
     if (this.pos === start) {
       return [new Token(), false];
     }
-    let text = this.source.slice(start, this.pos);
+    const text = this.source.slice(start, this.pos);
     return [new Token("word", text, start), true];
   }
 }
@@ -70,14 +70,14 @@ function tokenize(source: string): Token[] {
   let lx = new Lexer(source, 0, null);
   let tokens: Token[] = [];
   while (lx.peek() !== EOF) {
-    let ch = lx.peek();
+    const ch = lx.peek();
     if (isSpace(ch)) {
       lx.advance();
       continue;
     }
-    let result = lx.scanWord();
-    let tok = result[0];
-    let ok = result[1];
+    const result = lx.scanWord();
+    const tok = result[0];
+    const ok = result[1];
     if (!ok) {
       throw new ParseError("unexpected character", lx.pos);
     }
@@ -110,7 +110,7 @@ function findToken(tokens: Token[], kind: string): Token | null {
 }
 
 function exampleNilCheck(tokens: Token[]): string {
-  let tok = findToken(tokens, "word");
+  const tok = findToken(tokens, "word");
   if (tok === null) {
     return "";
   }
@@ -147,7 +147,7 @@ function defaultKinds(): Map<string, number> {
 function scopedWork(x: number): number {
   let result = 0;
   {
-    let temp = x * 2;
+    const temp = x * 2;
     result = temp + 1;
   }
   return result;

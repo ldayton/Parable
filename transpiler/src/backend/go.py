@@ -367,22 +367,30 @@ func _strIsLower(s string) bool {
         if isinstance(stmt.expr, MethodCall) and stmt.expr.method == "append" and stmt.expr.args:
             obj = self._emit_expr(stmt.expr.obj)
             arg = self._emit_expr(stmt.expr.args[0])
-            # Check if appending pointer to slice of values - dereference
             arg_type = stmt.expr.args[0].typ if hasattr(stmt.expr.args[0], 'typ') else None
             recv_type = stmt.expr.receiver_type
+
+            def needs_deref(arg_type, elem_type):
+                """Check if pointer arg needs dereference when appending to slice."""
+                if not isinstance(arg_type, Pointer) or not isinstance(arg_type.target, StructRef):
+                    return False
+                if isinstance(elem_type, StructRef) and arg_type.target.name == elem_type.name:
+                    return True
+                if isinstance(elem_type, Interface) and arg_type.target.name == elem_type.name:
+                    return True
+                return False
+
             # Handle pointer-to-slice receiver
             if isinstance(recv_type, Pointer) and isinstance(recv_type.target, Slice):
                 elem_type = recv_type.target.element
-                if (isinstance(arg_type, Pointer) and isinstance(elem_type, StructRef) and
-                    isinstance(arg_type.target, StructRef) and arg_type.target.name == elem_type.name):
+                if needs_deref(arg_type, elem_type):
                     self._line(f"*{obj} = append(*{obj}, *{arg})")
                 else:
                     self._line(f"*{obj} = append(*{obj}, {arg})")
             # Handle regular slice receiver
             elif isinstance(recv_type, Slice):
                 elem_type = recv_type.element
-                if (isinstance(arg_type, Pointer) and isinstance(elem_type, StructRef) and
-                    isinstance(arg_type.target, StructRef) and arg_type.target.name == elem_type.name):
+                if needs_deref(arg_type, elem_type):
                     self._line(f"{obj} = append({obj}, *{arg})")
                 else:
                     self._line(f"{obj} = append({obj}, {arg})")
@@ -451,6 +459,8 @@ func _strIsLower(s string) bool {
                 self._line("}")
         else:
             self._line("}")
+        # Restore scope after the entire if statement - vars declared inside aren't visible outside
+        self._declared_vars = saved_vars
 
     def _emit_stmt_If_inline(self, stmt: If) -> None:
         """Emit if statement without leading newline (for else if chains)."""
@@ -476,6 +486,8 @@ func _strIsLower(s string) bool {
                 self._line("}")
         else:
             self._line("}")
+        # Restore scope after the entire if statement
+        self._declared_vars = saved_vars
 
     def _emit_stmt_While(self, stmt: While) -> None:
         cond = self._emit_expr(stmt.cond)
@@ -730,11 +742,18 @@ func _strIsLower(s string) bool {
         if isinstance(expr.receiver_type, Slice):
             if method == "append" and expr.args:
                 arg = self._emit_expr(expr.args[0])
-                # If appending pointer to slice of values, dereference
+                # If appending pointer to slice of values/interfaces, dereference
                 arg_type = expr.args[0].typ if hasattr(expr.args[0], 'typ') else None
                 elem_type = expr.receiver_type.element
-                if (isinstance(arg_type, Pointer) and isinstance(elem_type, StructRef) and
-                    isinstance(arg_type.target, StructRef) and arg_type.target.name == elem_type.name):
+                needs_deref = False
+                if isinstance(arg_type, Pointer) and isinstance(arg_type.target, StructRef):
+                    # Check if element is StructRef with same name
+                    if isinstance(elem_type, StructRef) and arg_type.target.name == elem_type.name:
+                        needs_deref = True
+                    # Or element is Interface with same name (Node interface)
+                    elif isinstance(elem_type, Interface) and arg_type.target.name == elem_type.name:
+                        needs_deref = True
+                if needs_deref:
                     return f"append({obj}, *{arg})"
                 return f"append({obj}, {arg})"
             if method == "extend" and expr.args:

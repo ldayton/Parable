@@ -214,8 +214,8 @@ class TsBackend:
 
     def _emit_stmt(self, stmt: Stmt) -> None:
         match stmt:
-            case VarDecl(name=name, typ=typ, value=value, mutable=mutable):
-                keyword = "let" if mutable else "const"
+            case VarDecl(name=name, typ=typ, value=value):
+                keyword = "let" if getattr(stmt, 'is_reassigned', False) else "const"
                 if value is not None:
                     val = self._expr(value)
                     if _can_infer_type(value):
@@ -390,8 +390,8 @@ class TsBackend:
 
     def _stmt_inline(self, stmt: Stmt) -> str:
         match stmt:
-            case VarDecl(name=name, typ=typ, value=value, mutable=mutable):
-                keyword = "let" if mutable else "const"
+            case VarDecl(name=name, typ=typ, value=value):
+                keyword = "let" if getattr(stmt, 'is_reassigned', False) else "const"
                 if value is not None:
                     if _can_infer_type(value):
                         return f"{keyword} {_camel(name)} = {self._expr(value)}"

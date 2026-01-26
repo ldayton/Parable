@@ -27,6 +27,7 @@ from src.ir import (
     Function,
     If,
     Index,
+    IndexLV,
     InterfaceDef,
     # Expressions
     IntLit,
@@ -1036,6 +1037,45 @@ def make_fixture() -> Module:
         ],
     )
 
+    # --- Function: set_first_kind (exercises IndexLV) ---
+    set_first_kind_func = Function(
+        name="set_first_kind",
+        params=[Param(name="tokens", typ=token_slice), Param(name="kind", typ=STRING)],
+        ret=VOID,
+        body=[
+            If(
+                cond=BinaryOp(
+                    op=">",
+                    left=Len(expr=Var(name="tokens", typ=token_slice, loc=L), typ=INT, loc=L),
+                    right=IntLit(value=0, typ=INT, loc=L),
+                    typ=BOOL,
+                    loc=L,
+                ),
+                then_body=[
+                    Assign(
+                        target=IndexLV(
+                            obj=Var(name="tokens", typ=token_slice, loc=L),
+                            index=IntLit(value=0, typ=INT, loc=L),
+                            loc=L,
+                        ),
+                        value=StructLit(
+                            struct_name="Token",
+                            fields={
+                                "kind": Var(name="kind", typ=STRING, loc=L),
+                                "text": StringLit(value="", typ=STRING, loc=L),
+                                "pos": IntLit(value=0, typ=INT, loc=L),
+                            },
+                            typ=token_ref,
+                            loc=L,
+                        ),
+                        loc=L,
+                    ),
+                ],
+                loc=L,
+            ),
+        ],
+    )
+
     return Module(
         name="fixture",
         structs=[token_struct, lexer_struct],
@@ -1056,6 +1096,7 @@ def make_fixture() -> Module:
             safe_tokenize_func,
             pi_func,
             describe_token_func,
+            set_first_kind_func,
         ],
         constants=[eof_const],
     )

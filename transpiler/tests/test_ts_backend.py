@@ -186,6 +186,12 @@ function pi(): number {
 
 function describeToken(tok: Token): string {
   return `Token(${tok.kind}, ${tok.text}, ${tok.pos})`;
+}
+
+function setFirstKind(tokens: Token[], kind: string): void {
+  if ((tokens.length > 0)) {
+    tokens[0] = new Token(kind, "", 0);
+  }
 }"""
 
 

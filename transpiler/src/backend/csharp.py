@@ -574,11 +574,18 @@ class CSharpBackend:
                 type_name = self._type_name_for_check(on_type)
                 return f"{type_name}.{_to_pascal(method)}({args_str})"
             case BinaryOp(op=op, left=left, right=right):
+                # Idiomatic: len(x) > 0 → x.Any(), len(x) == 0 → !x.Any()
+                if isinstance(left, Len) and isinstance(right, IntLit) and right.value == 0:
+                    inner_str = self._expr(left.expr)
+                    if op == ">" or op == "!=":
+                        return f"{inner_str}.Any()"
+                    if op == "==":
+                        return f"!{inner_str}.Any()"
                 cs_op = _binary_op(op)
                 left_str = self._expr(left)
                 right_str = self._expr(right)
-                # Only wrap in parens for non-comparison ops to avoid double parens
-                if cs_op in ("==", "!=", "<", ">", "<=", ">="):
+                # Don't wrap comparisons or logical ops in parens
+                if cs_op in ("==", "!=", "<", ">", "<=", ">=", "||", "&&"):
                     return f"{left_str} {cs_op} {right_str}"
                 return f"({left_str} {cs_op} {right_str})"
             case UnaryOp(op=op, operand=operand):

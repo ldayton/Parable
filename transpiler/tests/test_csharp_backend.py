@@ -68,7 +68,7 @@ public class Lexer
     public (Token, bool) ScanWord()
     {
         int start = this.Pos;
-        while ((this.Peek() != Constants.Eof && !IsSpace(this.Peek())))
+        while (this.Peek() != Constants.Eof && !IsSpace(this.Peek()))
         {
             this.Advance();
         }
@@ -85,7 +85,7 @@ public static class FixtureFunctions
 {
     public static bool IsSpace(int ch)
     {
-        return (ch == 32 || ch == 10);
+        return ch == 32 || ch == 10;
     }
 
     public static List<Token> Tokenize(string source)
@@ -238,7 +238,7 @@ public static class FixtureFunctions
 
     public static void SetFirstKind(List<Token> tokens, string kind)
     {
-        if (tokens.Count > 0)
+        if (tokens.Any())
         {
             tokens[0] = new Token(kind, "", 0);
         }

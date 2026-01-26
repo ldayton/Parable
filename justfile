@@ -257,6 +257,32 @@ coverage:
     echo "  JSON: /tmp/parable-coverage.json"
     open /tmp/parable-coverage/index.html 2>/dev/null || true
 
+# Run coverage analysis on JavaScript test suite
+coverage-js:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    npx -y c8 --reporter=html --reporter=json --reports-dir=/tmp/parable-coverage-js node tests/bin/run-js-tests.js
+    echo ""
+    echo "Output:"
+    echo "  HTML: /tmp/parable-coverage-js/index.html"
+    echo "  JSON: /tmp/parable-coverage-js/coverage-final.json"
+    open /tmp/parable-coverage-js/index.html 2>/dev/null || true
+
+# Run coverage analysis on Go test suite
+coverage-go:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    rm -rf /tmp/parable-coverage-go-raw
+    mkdir -p /tmp/parable-coverage-go-raw
+    GOCOVERDIR=/tmp/parable-coverage-go-raw go run -C src -cover ./cmd/run-tests
+    go tool covdata textfmt -i=/tmp/parable-coverage-go-raw -o=/tmp/parable-coverage-go.txt
+    cd src && go tool cover -html=/tmp/parable-coverage-go.txt -o=/tmp/parable-coverage-go.html
+    echo ""
+    echo "Output:"
+    echo "  HTML: /tmp/parable-coverage-go.html"
+    echo "  Text: /tmp/parable-coverage-go.txt"
+    open /tmp/parable-coverage-go.html 2>/dev/null || true
+
 # Profile on corpus (cProfile + flameprof)
 profile:
     #!/usr/bin/env bash

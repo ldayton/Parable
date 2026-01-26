@@ -59,8 +59,13 @@ if TYPE_CHECKING:
         def _compute_hoisting(self) -> None: ...
         def _exclude_assign_check_return_vars(self, stmts: list[ast.stmt]) -> None: ...
         def _populate_var_types_from_usage(self, stmts: list[ast.stmt]) -> None: ...
-        def _emit_hoisted_vars(self, scope_id: int, stmts: list[ast.stmt]) -> None: ...
         def _infer_object_class(self, node: ast.expr) -> str: ...
+        def _collect_append_element_types(self, stmts: list[ast.stmt]) -> dict[str, str]: ...
+        def _collect_nullable_node_vars(self, stmts: list[ast.stmt]) -> set[str]: ...
+        def _collect_nullable_string_vars(self, stmts: list[ast.stmt]) -> set[str]: ...
+        def _collect_multi_node_type_vars(self, stmts: list[ast.stmt]) -> set[str]: ...
+        def _infer_var_type_from_name(self, var_name: str) -> str: ...
+        def _get_current_method_return_type(self) -> str: ...
         def _format_params(self, params: list[ParamInfo]) -> str: ...
         def _infer_type_from_expr(self, node: ast.expr) -> str: ...
 
@@ -705,3 +710,57 @@ class EmitFunctionsMixin:
         if not isinstance(call.func.value.func, ast.Name):
             return False
         return call.func.value.func.id == "super"
+
+    def _emit_hoisted_vars(self, scope_id: int, stmts: list[ast.stmt]):
+        """Emit hoisted variable declarations for a scope."""
+        # Collect additional type info
+        append_types = self._collect_append_element_types(stmts)
+        nullable_node_vars = self._collect_nullable_node_vars(stmts)
+        nullable_string_vars = self._collect_nullable_string_vars(stmts)
+        multi_node_vars = self._collect_multi_node_type_vars(stmts)
+        for var, hoist_scope in self.hoisted_vars.items():
+            if hoist_scope != scope_id:
+                continue
+            if var in self.declared_vars:
+                continue
+            # Get type from var_types first
+            go_type = self.var_types.get(var)
+            # Try to infer from first value if no type yet
+            info = self.var_usage.get(var)
+            if info and info.first_value and not go_type:
+                go_type = self._infer_type_from_expr(info.first_value)
+            # Check append() calls for element type
+            if var in append_types:
+                elem_type = append_types[var]
+                if elem_type and (
+                    not go_type or go_type in ("interface{}", "[]interface{}", "[]string")
+                ):
+                    go_type = f"[]{elem_type}"
+            # Check if var is None-initialized but later assigned Node types
+            if var in nullable_node_vars:
+                if not go_type or go_type == "interface{}":
+                    go_type = "Node"
+            # Check if var is None-initialized but later assigned string types
+            if var in nullable_string_vars:
+                if not go_type or go_type == "interface{}":
+                    go_type = "string"
+            # Check if var is assigned multiple different concrete Node types
+            if var in multi_node_vars:
+                if go_type and go_type.startswith("*") and go_type[1:] in self.symbols.classes:
+                    if self.symbols.classes[go_type[1:]].is_node:
+                        go_type = "Node"
+            if not go_type or go_type in ("interface{}", "[]interface{}"):
+                go_type = self._infer_var_type_from_name(var) or go_type or "interface{}"
+            # Special case: 'results' in a method that returns []Node
+            if var.lower() == "results" and self.current_method:
+                method_ret = self._get_current_method_return_type()
+                if method_ret == "[]Node":
+                    go_type = method_ret
+            # Special case: if expr says byte but name says string, prefer string
+            if go_type == "byte":
+                name_type = self._infer_var_type_from_name(var)
+                if name_type == "string":
+                    go_type = "string"
+            self.emit(f"var {var} {go_type}")
+            self.declared_vars.add(var)
+            self.var_types[var] = go_type

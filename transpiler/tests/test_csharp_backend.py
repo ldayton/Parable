@@ -34,7 +34,7 @@ public class Token
 
     public bool IsWord()
     {
-        return (this.Kind == "word");
+        return this.Kind == "word";
     }
 }
 
@@ -53,7 +53,7 @@ public class Lexer
 
     public int Peek()
     {
-        if ((this.Pos >= this.Source.Length))
+        if (this.Pos >= this.Source.Length)
         {
             return Constants.Eof;
         }
@@ -68,11 +68,11 @@ public class Lexer
     public (Token, bool) ScanWord()
     {
         int start = this.Pos;
-        while (((this.Peek() != Constants.Eof) && !IsSpace(this.Peek())))
+        while ((this.Peek() != Constants.Eof && !IsSpace(this.Peek())))
         {
             this.Advance();
         }
-        if ((this.Pos == start))
+        if (this.Pos == start)
         {
             return (new Token(), false);
         }
@@ -85,14 +85,14 @@ public static class FixtureFunctions
 {
     public static bool IsSpace(int ch)
     {
-        return ((ch == 32) || (ch == 10));
+        return (ch == 32 || ch == 10);
     }
 
     public static List<Token> Tokenize(string source)
     {
         Lexer lx = new Lexer(source, 0, null);
         List<Token> tokens = new List<Token>();
-        while ((lx.Peek() != Constants.Eof))
+        while (lx.Peek() != Constants.Eof)
         {
             int ch = lx.Peek();
             if (IsSpace(ch))
@@ -117,7 +117,7 @@ public static class FixtureFunctions
         int count = 0;
         foreach (Token tok in tokens)
         {
-            if ((tok.Kind == "word"))
+            if (tok.Kind == "word")
             {
                 count += 1;
             }
@@ -134,7 +134,7 @@ public static class FixtureFunctions
     {
         foreach (Token tok in tokens)
         {
-            if ((tok.Kind == kind))
+            if (tok.Kind == kind)
             {
                 return tok;
             }
@@ -145,7 +145,7 @@ public static class FixtureFunctions
     public static string ExampleNilCheck(List<Token> tokens)
     {
         Token tok = FindToken(tokens, "word");
-        if ((tok == null))
+        if (tok == null)
         {
             return "";
         }
@@ -155,7 +155,7 @@ public static class FixtureFunctions
     public static int SumPositions(List<Token> tokens)
     {
         int sum = 0;
-        for (int i = 0; (i < tokens.Count); i = (i + 1))
+        for (int i = 0; i < tokens.Count; i++)
         {
             sum = (sum + tokens[i].Pos);
         }
@@ -167,7 +167,7 @@ public static class FixtureFunctions
         int pos = -1;
         foreach (Token tok in tokens)
         {
-            if ((tok.Kind == "word"))
+            if (tok.Kind == "word")
             {
                 pos = tok.Pos;
                 break;
@@ -178,7 +178,7 @@ public static class FixtureFunctions
 
     public static int MaxInt(int a, int b)
     {
-        return ((a > b) ? a : b);
+        return (a > b ? a : b);
     }
 
     public static Dictionary<string, int> DefaultKinds()
@@ -219,7 +219,7 @@ public static class FixtureFunctions
         {
             tokens = Tokenize(source);
         }
-        catch (Exception e)
+        catch (Exception)
         {
             tokens = new List<Token>();
         }
@@ -238,7 +238,7 @@ public static class FixtureFunctions
 
     public static void SetFirstKind(List<Token> tokens, string kind)
     {
-        if ((tokens.Count > 0))
+        if (tokens.Count > 0)
         {
             tokens[0] = new Token(kind, "", 0);
         }
@@ -276,7 +276,7 @@ public static class FixtureFunctions
 
     public static Token MaybeGet(List<Token> tokens, int idx)
     {
-        if ((idx >= tokens.Count))
+        if (idx >= tokens.Count)
         {
             return null;
         }

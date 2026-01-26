@@ -446,8 +446,21 @@ class CSharpBackend:
                     return f"{cs_type} {var_name} = {self._expr(value)}"
                 return f"{cs_type} {var_name}"
             case Assign(target=target, value=value):
+                # Detect i = i + 1 pattern and emit i++ instead
+                if isinstance(target, VarLV) and isinstance(value, BinaryOp):
+                    if value.op == "+" and isinstance(value.right, IntLit) and value.right.value == 1:
+                        if isinstance(value.left, Var) and value.left.name == target.name:
+                            return f"{self._lvalue(target)}++"
+                    if value.op == "-" and isinstance(value.right, IntLit) and value.right.value == 1:
+                        if isinstance(value.left, Var) and value.left.name == target.name:
+                            return f"{self._lvalue(target)}--"
                 return f"{self._lvalue(target)} = {self._expr(value)}"
             case OpAssign(target=target, op=op, value=value):
+                # Use ++ for += 1
+                if op == "+" and isinstance(value, IntLit) and value.value == 1:
+                    return f"{self._lvalue(target)}++"
+                if op == "-" and isinstance(value, IntLit) and value.value == 1:
+                    return f"{self._lvalue(target)}--"
                 return f"{self._lvalue(target)} {op}= {self._expr(value)}"
             case _:
                 return ""
@@ -465,9 +478,13 @@ class CSharpBackend:
         for s in body:
             self._emit_stmt(s)
         self.indent -= 1
-        var = _to_camel(catch_var) if catch_var else "ex"
         self._line("}")
-        self._line(f"catch (Exception {var})")
+        # Only include exception variable if it's actually used
+        if catch_var and self._var_used_in_stmts(catch_var, catch_body):
+            var = _to_camel(catch_var)
+            self._line(f"catch (Exception {var})")
+        else:
+            self._line("catch (Exception)")
         self._line("{")
         self.indent += 1
         for s in catch_body:
@@ -476,6 +493,45 @@ class CSharpBackend:
             self._line("throw;")
         self.indent -= 1
         self._line("}")
+
+    def _var_used_in_stmts(self, var_name: str, stmts: list[Stmt]) -> bool:
+        """Check if a variable is used in a list of statements."""
+        for stmt in stmts:
+            if self._var_used_in_stmt(var_name, stmt):
+                return True
+        return False
+
+    def _var_used_in_stmt(self, var_name: str, stmt: Stmt) -> bool:
+        """Check if a variable is used in a statement."""
+        match stmt:
+            case ExprStmt(expr=expr):
+                return self._var_used_in_expr(var_name, expr)
+            case Return(value=value):
+                return value is not None and self._var_used_in_expr(var_name, value)
+            case Assign(value=value):
+                return self._var_used_in_expr(var_name, value)
+            case If(cond=cond, then_body=then_body, else_body=else_body):
+                return (self._var_used_in_expr(var_name, cond) or
+                        self._var_used_in_stmts(var_name, then_body) or
+                        self._var_used_in_stmts(var_name, else_body or []))
+            case _:
+                return False
+
+    def _var_used_in_expr(self, var_name: str, expr: Expr) -> bool:
+        """Check if a variable is used in an expression."""
+        match expr:
+            case Var(name=name):
+                return name == var_name
+            case Call(args=args):
+                return any(self._var_used_in_expr(var_name, a) for a in args)
+            case MethodCall(obj=obj, args=args):
+                return (self._var_used_in_expr(var_name, obj) or
+                        any(self._var_used_in_expr(var_name, a) for a in args))
+            case BinaryOp(left=left, right=right):
+                return (self._var_used_in_expr(var_name, left) or
+                        self._var_used_in_expr(var_name, right))
+            case _:
+                return False
 
     def _expr(self, expr: Expr) -> str:
         match expr:
@@ -521,6 +577,9 @@ class CSharpBackend:
                 cs_op = _binary_op(op)
                 left_str = self._expr(left)
                 right_str = self._expr(right)
+                # Only wrap in parens for non-comparison ops to avoid double parens
+                if cs_op in ("==", "!=", "<", ">", "<=", ">="):
+                    return f"{left_str} {cs_op} {right_str}"
                 return f"({left_str} {cs_op} {right_str})"
             case UnaryOp(op=op, operand=operand):
                 return f"{op}{self._expr(operand)}"
@@ -536,8 +595,8 @@ class CSharpBackend:
                 return f"({self._expr(inner)} is {type_name})"
             case IsNil(expr=inner, negated=negated):
                 if negated:
-                    return f"({self._expr(inner)} != null)"
-                return f"({self._expr(inner)} == null)"
+                    return f"{self._expr(inner)} != null"
+                return f"{self._expr(inner)} == null"
             case Len(expr=inner):
                 inner_str = self._expr(inner)
                 if isinstance(inner.typ, Primitive) and inner.typ.kind == "string":

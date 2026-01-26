@@ -4837,6 +4837,16 @@ class For extends Node {
 	}
 }
 
+function _formatArithVal(s) {
+	const w = new Word(s, []);
+	let val = w._expandAllAnsiCQuotes(s);
+	val = w._stripLocaleStringDollars(val);
+	val = w._formatCommandSubstitutions(val);
+	val = val.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+	val = val.replaceAll("\n", "\\n").replaceAll("\t", "\\t");
+	return val;
+}
+
 class ForArith extends Node {
 	constructor(init, cond, incr, body, redirects) {
 		super();
@@ -4852,17 +4862,6 @@ class ForArith extends Node {
 	toSexp() {
 		let redirect_parts;
 		// bash-oracle format: (arith-for (init (word "x")) (test (word "y")) (step (word "z")) body)
-		function formatArithVal(s) {
-			// Use Word's methods to expand ANSI-C quotes and strip locale $
-			const w = new Word(s, []);
-			let val = w._expandAllAnsiCQuotes(s);
-			val = w._stripLocaleStringDollars(val);
-			val = w._formatCommandSubstitutions(val);
-			val = val.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
-			val = val.replaceAll("\n", "\\n").replaceAll("\t", "\\t");
-			return val;
-		}
-
 		let suffix = "";
 		if (this.redirects?.length) {
 			redirect_parts = [];
@@ -4874,9 +4873,9 @@ class ForArith extends Node {
 		const init_val = this.init ? this.init : "1";
 		const cond_val = this.cond ? this.cond : "1";
 		const incr_val = this.incr ? this.incr : "1";
-		const init_str = formatArithVal(init_val);
-		const cond_str = formatArithVal(cond_val);
-		const incr_str = formatArithVal(incr_val);
+		const init_str = _formatArithVal(init_val);
+		const cond_str = _formatArithVal(cond_val);
+		const incr_str = _formatArithVal(incr_val);
 		const body_str = this.body.toSexp();
 		return `(arith-for (init (word "${init_str}")) (test (word "${cond_str}")) (step (word "${incr_str}")) ${body_str})${suffix}`;
 	}

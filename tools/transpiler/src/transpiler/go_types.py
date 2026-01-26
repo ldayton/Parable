@@ -85,6 +85,64 @@ class FunctionAnalysis:
     scope_id_map: dict[int, int] = field(default_factory=dict)
 
 
+@dataclass
+class EmissionContext:
+    """Mutable context passed through emission methods."""
+
+    analysis: FunctionAnalysis
+    symbols: SymbolTable
+    current_class: str | None = None
+    current_method: str | None = None
+    current_func_info: FuncInfo | None = None
+    current_return_type: str = ""
+    indent: int = 0
+    emitted_hoisted: set[str] = field(default_factory=set)
+
+    @property
+    def var_types(self) -> dict[str, str]:
+        return self.analysis.var_types
+
+    @property
+    def declared_vars(self) -> set[str]:
+        return self.analysis.declared_vars
+
+    @property
+    def scope_tree(self) -> dict[int, ScopeInfo]:
+        return self.analysis.scope_tree
+
+    @property
+    def var_usage(self) -> dict[str, VarInfo]:
+        return self.analysis.var_usage
+
+    @property
+    def hoisted_vars(self) -> dict[str, int]:
+        return self.analysis.hoisted_vars
+
+    @property
+    def scope_id_map(self) -> dict[int, int]:
+        return self.analysis.scope_id_map
+
+    @property
+    def returned_vars(self) -> set[str]:
+        return self.analysis.returned_vars
+
+    @property
+    def byte_vars(self) -> set[str]:
+        return self.analysis.byte_vars
+
+    @property
+    def tuple_vars(self) -> dict[str, list[str]]:
+        return self.analysis.tuple_vars
+
+    @property
+    def tuple_func_vars(self) -> dict[str, str]:
+        return self.analysis.tuple_func_vars
+
+    @property
+    def var_assign_sources(self) -> dict[str, str]:
+        return self.analysis.var_assign_sources
+
+
 class SymbolTable:
     """Symbol table for type resolution."""
 

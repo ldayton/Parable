@@ -57,7 +57,7 @@ class TypeSystemMixin:
     """Mixin providing type conversion methods for Go transpiler."""
 
     # These are expected to be set by the main class
-    symbols: "SymbolTable"
+    symbols: SymbolTable
 
     def _annotation_to_str(self, node: ast.expr | None) -> str:
         """Convert type annotation AST to string."""

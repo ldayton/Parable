@@ -5,11 +5,18 @@ from __future__ import annotations
 import ast
 from typing import TYPE_CHECKING
 
+from .go_ast_utils import (
+    detect_kind_check,
+    detect_union_discriminator,
+    has_return_in_block,
+    is_string_char_subscript,
+    is_try_assign_except_return,
+)
 from .go_overrides import TUPLE_ELEMENT_TYPES, UNION_FIELDS
 from .go_type_system import KIND_TO_TYPE
 
 if TYPE_CHECKING:
-    from .go_types import FuncInfo, SymbolTable
+    pass
 
 
 class EmitStatementsMixin:
@@ -98,7 +105,7 @@ class EmitStatementsMixin:
                             return
                     value = self.visit_expr(stmt.value)
                     # Track if this variable holds a byte (from string subscript)
-                    if self._is_string_char_subscript(stmt.value):
+                    if is_string_char_subscript(stmt.value):
                         self.byte_vars.add(target_str)
                     # Track if assigned from a tuple-returning function
                     self._track_tuple_func_assignment(target_str, stmt.value)
@@ -127,7 +134,7 @@ class EmitStatementsMixin:
                     return
             value = self.visit_expr(stmt.value)
             # Track if this variable holds a byte (from string subscript)
-            if isinstance(target, ast.Name) and self._is_string_char_subscript(stmt.value):
+            if isinstance(target, ast.Name) and is_string_char_subscript(stmt.value):
                 self.byte_vars.add(target_str)
             # Track assignment source for procsub/cmdsub type inference
             if isinstance(target, ast.Name):
@@ -321,9 +328,7 @@ class EmitStatementsMixin:
                 else:
                     value = self._nil_to_zero_value(self.current_return_type)
             # Check for single-char string subscript (byte) being returned as string
-            elif self.current_return_type == "string" and self._is_string_char_subscript(
-                stmt.value
-            ):
+            elif self.current_return_type == "string" and is_string_char_subscript(stmt.value):
                 value = f"string({self.visit_expr(stmt.value)})"
             # Check for byte variable being returned as string
             elif self.current_return_type == "string" and self._is_byte_variable(stmt.value):
@@ -373,25 +378,6 @@ class EmitStatementsMixin:
             if expected_type.startswith("[]"):
                 return f"{expected_type}{{}}"
         return self.visit_expr(node)
-
-    def _is_string_char_subscript(self, node: ast.expr) -> bool:
-        """Check if node is a single-character string subscript (returns byte in Go)."""
-        if not isinstance(node, ast.Subscript):
-            return False
-        # Must be single index, not slice
-        if isinstance(node.slice, ast.Slice):
-            return False
-        # Check if the value being subscripted is a known string attribute
-        if isinstance(node.value, ast.Attribute):
-            # Common string fields: source, Source
-            if node.value.attr.lower() == "source":
-                return True
-        # Also handle local variables that are strings
-        if isinstance(node.value, ast.Name):
-            name = node.value.id
-            if name in ("source", "s", "text", "line"):
-                return True
-        return False
 
     def _track_tuple_func_assignment(self, var_name: str, value: ast.expr):
         """Track if a variable is assigned from a known tuple-returning function."""
@@ -562,60 +548,6 @@ class EmitStatementsMixin:
                 vars.update(nested)
         return vars
 
-    def _detect_union_discriminator(self, test: ast.expr) -> tuple[str, str, str] | None:
-        """Detect if test is a union field discriminator comparison (var == nil).
-        Returns (receiver, field, discriminator_var) if found, None otherwise."""
-        # Look for pattern: discriminatorVar == nil
-        if not isinstance(test, ast.Compare):
-            return None
-        if len(test.ops) != 1 or not isinstance(test.ops[0], (ast.Eq, ast.Is)):
-            return None
-        if len(test.comparators) != 1:
-            return None
-        # Check if comparing to None/nil
-        comp = test.comparators[0]
-        if not (isinstance(comp, ast.Constant) and comp.value is None):
-            return None
-        # Check if left side is a discriminator variable
-        if not isinstance(test.left, ast.Name):
-            return None
-        disc_var = self._to_go_var(test.left.id)
-        # Check if this discriminator matches any union field
-        for (receiver_type, field_name), (expected_disc, _, _) in UNION_FIELDS.items():
-            if disc_var == expected_disc:
-                return (receiver_type, field_name, disc_var)
-        return None
-
-    def _detect_kind_check(self, test: ast.expr) -> tuple[str, str] | None:
-        """Detect `var.kind == "literal"` or `var is not None and var.kind == "literal"`.
-        Returns (var_name, kind_literal) or None."""
-        # Handle compound: `var is not None and var.kind == "literal"`
-        # Go type assertion handles nil check implicitly, so we can emit just the assertion
-        if isinstance(test, ast.BoolOp) and isinstance(test.op, ast.And):
-            for value in test.values:
-                result = self._detect_simple_kind_check(value)
-                if result:
-                    return result
-            return None
-        return self._detect_simple_kind_check(test)
-
-    def _detect_simple_kind_check(self, test: ast.expr) -> tuple[str, str] | None:
-        """Detect simple `var.kind == "literal"`. Returns (var_name, kind_literal) or None."""
-        if not isinstance(test, ast.Compare):
-            return None
-        if len(test.ops) != 1 or not isinstance(test.ops[0], ast.Eq):
-            return None
-        if not isinstance(test.left, ast.Attribute) or test.left.attr != "kind":
-            return None
-        if not isinstance(test.left.value, ast.Name):
-            return None
-        comp = test.comparators[0]
-        if not isinstance(comp, ast.Constant) or not isinstance(comp.value, str):
-            return None
-        if comp.value not in KIND_TO_TYPE:
-            return None
-        return (test.left.value.id, comp.value)
-
     def _emit_kind_type_narrowing(self, stmt: ast.If, kind_info: tuple[str, str], is_first: bool):
         """Emit kind-based type narrowing as Go type assertion."""
         var_name, kind_literal = kind_info
@@ -663,12 +595,12 @@ class EmitStatementsMixin:
     def _emit_if_chain(self, stmt: ast.If, is_first: bool):
         """Emit if/elif/else chain."""
         # Check for kind-based type narrowing
-        kind_info = self._detect_kind_check(stmt.test)
+        kind_info = detect_kind_check(stmt.test)
         if kind_info:
             return self._emit_kind_type_narrowing(stmt, kind_info, is_first)
         test = self._emit_bool_expr(stmt.test)
         # Check for union field discriminator pattern
-        union_info = self._detect_union_discriminator(stmt.test)
+        union_info = detect_union_discriminator(stmt.test, self._to_go_var)
         union_key = None
         if union_info:
             receiver_type, field_name, disc_var = union_info
@@ -817,39 +749,6 @@ class EmitStatementsMixin:
         else:
             self.emit("panic(nil)")
 
-    def _has_return_in_block(self, stmts: list[ast.stmt]) -> bool:
-        """Check if a block contains return statements (complex try/except pattern)."""
-        for s in stmts:
-            if isinstance(s, ast.Return):
-                return True
-            if isinstance(s, ast.If):
-                if self._has_return_in_block(s.body) or self._has_return_in_block(s.orelse):
-                    return True
-            if isinstance(s, (ast.For, ast.While)):
-                if self._has_return_in_block(s.body):
-                    return True
-        return False
-
-    def _is_try_assign_except_return(self, stmt: ast.Try) -> bool:
-        """Check if this is a 'try: x = call() except: return fallback' pattern."""
-        # Must have exactly one statement in try body that's an assignment
-        if len(stmt.body) != 1:
-            return False
-        if not isinstance(stmt.body[0], ast.Assign):
-            return False
-        assign = stmt.body[0]
-        # Must assign to a single name
-        if len(assign.targets) != 1 or not isinstance(assign.targets[0], ast.Name):
-            return False
-        # Must have exactly one handler
-        if len(stmt.handlers) != 1:
-            return False
-        handler = stmt.handlers[0]
-        # Handler must end with a return statement
-        if not handler.body or not isinstance(handler.body[-1], ast.Return):
-            return False
-        return True
-
     def _emit_try_assign_except_return(self, stmt: ast.Try):
         """Emit 'try: x = call() except: cleanup; return fallback' pattern.
 
@@ -939,11 +838,11 @@ class EmitStatementsMixin:
             return
         # Check for "try assign, except return fallback" pattern:
         # try: result = call() except Error: cleanup; return fallback
-        if self._is_try_assign_except_return(stmt):
+        if is_try_assign_except_return(stmt):
             self._emit_try_assign_except_return(stmt)
             return
         # Check for complex patterns (return statements inside try) - skip these
-        if self._has_return_in_block(stmt.body) or self._has_return_in_block(stmt.handlers[0].body):
+        if has_return_in_block(stmt.body) or has_return_in_block(stmt.handlers[0].body):
             raise NotImplementedError("try/except with return")
         # Single handler expected (all our cases)
         handler = stmt.handlers[0]

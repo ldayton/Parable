@@ -18,7 +18,17 @@ from .go_type_system import TypeSystemMixin
 from .go_types import FuncInfo, ParamInfo, ScopeInfo, SymbolTable, VarInfo
 
 
-class GoTranspiler(NamingMixin, TypeSystemMixin, SymbolsMixin, EmitExpressionsMixin, EmitStatementsMixin, EmitFunctionsMixin, ScopeAnalysisMixin, EmitStructureMixin, ast.NodeVisitor):
+class GoTranspiler(
+    NamingMixin,
+    TypeSystemMixin,
+    SymbolsMixin,
+    EmitExpressionsMixin,
+    EmitStatementsMixin,
+    EmitFunctionsMixin,
+    ScopeAnalysisMixin,
+    EmitStructureMixin,
+    ast.NodeVisitor,
+):
     """Transpiles Python AST to Go source code."""
 
     def __init__(self):

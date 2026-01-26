@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 # ========== QuoteState methods ==========
 
 
-def emit_quotestate_push(t: "GoTranspiler", receiver: str):
+def emit_quotestate_push(t: GoTranspiler, receiver: str):
     """Emit QuoteState.Push() body."""
     t.emit(
         f"{receiver}._Stack = append({receiver}._Stack, quoteStackEntry{{{receiver}.Single, {receiver}.Double}})"
@@ -21,7 +21,7 @@ def emit_quotestate_push(t: "GoTranspiler", receiver: str):
     t.emit(f"{receiver}.Double = false")
 
 
-def emit_quotestate_pop(t: "GoTranspiler", receiver: str):
+def emit_quotestate_pop(t: GoTranspiler, receiver: str):
     """Emit QuoteState.Pop() body."""
     t.emit(f"if len({receiver}._Stack) > 0 {{")
     t.indent += 1
@@ -33,7 +33,7 @@ def emit_quotestate_pop(t: "GoTranspiler", receiver: str):
     t.emit("}")
 
 
-def emit_quotestate_copy(t: "GoTranspiler", receiver: str):
+def emit_quotestate_copy(t: GoTranspiler, receiver: str):
     """Emit QuoteState.Copy() body."""
     t.emit("qs := &QuoteState{}")
     t.emit(f"qs.Single = {receiver}.Single")
@@ -43,7 +43,7 @@ def emit_quotestate_copy(t: "GoTranspiler", receiver: str):
     t.emit("return qs")
 
 
-def emit_quotestate_outer_double(t: "GoTranspiler", receiver: str):
+def emit_quotestate_outer_double(t: GoTranspiler, receiver: str):
     """Emit QuoteState.OuterDouble() body."""
     t.emit(f"if len({receiver}._Stack) == 0 {{")
     t.indent += 1
@@ -56,7 +56,7 @@ def emit_quotestate_outer_double(t: "GoTranspiler", receiver: str):
 # ========== Arithmetic parser ==========
 
 
-def emit_arith_left_assoc(t: "GoTranspiler", receiver: str, ops: list[str], next_fn: str):
+def emit_arith_left_assoc(t: GoTranspiler, receiver: str, ops: list[str], next_fn: str):
     """Emit inlined left-associative binary operator parsing."""
     t.emit(f"left := {receiver}.{next_fn}()")
     t.emit("for {")
@@ -86,7 +86,7 @@ def emit_arith_left_assoc(t: "GoTranspiler", receiver: str, ops: list[str], next
 # ========== Heredoc methods ==========
 
 
-def emit_gather_heredoc_bodies(t: "GoTranspiler", receiver: str):
+def emit_gather_heredoc_bodies(t: GoTranspiler, receiver: str):
     """Emit full _GatherHeredocBodies implementation."""
     t.emit(f"for _, heredocNode := range {receiver}._Pending_heredocs {{")
     t.indent += 1
@@ -188,7 +188,7 @@ def emit_gather_heredoc_bodies(t: "GoTranspiler", receiver: str):
     t.emit(f"{receiver}._Pending_heredocs = []Node{{}}")
 
 
-def emit_parse_heredoc(t: "GoTranspiler", receiver: str):
+def emit_parse_heredoc(t: GoTranspiler, receiver: str):
     """Emit _ParseHeredoc with proper type assertion for _pending_heredocs."""
     t.emit(f"startPos := {receiver}.Pos")
     t.emit(f"{receiver}._SetState(ParserStateFlags_PST_HEREDOC)")
@@ -211,7 +211,7 @@ def emit_parse_heredoc(t: "GoTranspiler", receiver: str):
     t.emit("return heredoc")
 
 
-def emit_parse_process_substitution(t: "GoTranspiler", receiver: str):
+def emit_parse_process_substitution(t: GoTranspiler, receiver: str):
     """Emit _ParseProcessSubstitution with panic recovery for try/except pattern."""
     # Initial checks
     t.emit(f"if {receiver}.AtEnd() || !_IsRedirectChar({receiver}.Peek()) {{")
@@ -300,9 +300,7 @@ def emit_parse_process_substitution(t: "GoTranspiler", receiver: str):
     t.indent -= 1
     t.emit("}")
     t.emit("")
-    t.emit(
-        'if contentStartChar == " " || contentStartChar == "\\t" || contentStartChar == "\\n" {'
-    )
+    t.emit('if contentStartChar == " " || contentStartChar == "\\t" || contentStartChar == "\\n" {')
     t.indent += 1
     t.emit('panic(NewParseError("Invalid process substitution", start, 0))')
     t.indent -= 1
@@ -318,7 +316,7 @@ def emit_parse_process_substitution(t: "GoTranspiler", receiver: str):
     t.emit("return nil, text")
 
 
-def emit_parse_backtick_substitution(t: "GoTranspiler", receiver: str):
+def emit_parse_backtick_substitution(t: GoTranspiler, receiver: str):
     """Emit _ParseBacktickSubstitution with heredoc tracking."""
     # Initial check
     t.emit(f'if {receiver}.AtEnd() || {receiver}.Peek() != "`" {{')
@@ -763,7 +761,7 @@ def emit_parse_backtick_substitution(t: "GoTranspiler", receiver: str):
     t.emit("return NewCommandSubstitution(cmd, false), text")
 
 
-def emit_parse_command_substitution(t: "GoTranspiler", receiver: str):
+def emit_parse_command_substitution(t: GoTranspiler, receiver: str):
     """Emit _ParseCommandSubstitution with _isNilNode check for typed nil."""
     # Variable declarations
     t.emit("var start int")
@@ -795,9 +793,7 @@ def emit_parse_command_substitution(t: "GoTranspiler", receiver: str):
     t.emit("")
     # Save state and set up for parsing
     t.emit(f"saved = {receiver}._SaveParserState()")
-    t.emit(
-        f"{receiver}._SetState(ParserStateFlags_PST_CMDSUBST | ParserStateFlags_PST_EOFTOKEN)"
-    )
+    t.emit(f"{receiver}._SetState(ParserStateFlags_PST_CMDSUBST | ParserStateFlags_PST_EOFTOKEN)")
     t.emit(f'{receiver}._Eof_token = ")"')
     t.emit("")
     # Parse command list with _isNilNode check for typed nil
@@ -826,7 +822,7 @@ def emit_parse_command_substitution(t: "GoTranspiler", receiver: str):
     t.emit("return NewCommandSubstitution(cmd, false), text")
 
 
-def emit_parse_funsub(t: "GoTranspiler", receiver: str):
+def emit_parse_funsub(t: GoTranspiler, receiver: str):
     """Emit _ParseFunsub with _isNilNode check for typed nil."""
     # Variable declarations
     t.emit("var saved *SavedParserState")
@@ -845,9 +841,7 @@ def emit_parse_funsub(t: "GoTranspiler", receiver: str):
     t.emit("")
     # Save state and set up for parsing
     t.emit(f"saved = {receiver}._SaveParserState()")
-    t.emit(
-        f"{receiver}._SetState(ParserStateFlags_PST_CMDSUBST | ParserStateFlags_PST_EOFTOKEN)"
-    )
+    t.emit(f"{receiver}._SetState(ParserStateFlags_PST_CMDSUBST | ParserStateFlags_PST_EOFTOKEN)")
     t.emit(f'{receiver}._Eof_token = "}}"')
     t.emit("")
     # Parse command list with _isNilNode check for typed nil
@@ -877,13 +871,13 @@ def emit_parse_funsub(t: "GoTranspiler", receiver: str):
 # ========== Manual functions (module-level) ==========
 
 
-def emit_format_heredoc_body(t: "GoTranspiler"):
+def emit_format_heredoc_body(t: GoTranspiler):
     """Emit _FormatHeredocBody body."""
     t.emit("h := r.(*HereDoc)")
     t.emit('return "\\n" + h.Content + h.Delimiter + "\\n"')
 
 
-def emit_starts_with_subshell(t: "GoTranspiler"):
+def emit_starts_with_subshell(t: GoTranspiler):
     """Emit _StartsWithSubshell body."""
     t.emit('if node.Kind() == "subshell" {')
     t.indent += 1
@@ -919,7 +913,7 @@ def emit_starts_with_subshell(t: "GoTranspiler"):
     t.emit("return false")
 
 
-def emit_format_cond_body(t: "GoTranspiler"):
+def emit_format_cond_body(t: GoTranspiler):
     """Emit _FormatCondBody body."""
     t.emit("kind := node.Kind()")
     t.emit('if kind == "unary-test" {')
@@ -964,7 +958,7 @@ def emit_format_cond_body(t: "GoTranspiler"):
     t.emit('return ""')
 
 
-def emit_format_redirect(t: "GoTranspiler"):
+def emit_format_redirect(t: GoTranspiler):
     """Emit _FormatRedirect body."""
     t.emit('if r.Kind() == "heredoc" {')
     t.indent += 1
@@ -1080,7 +1074,7 @@ def emit_format_redirect(t: "GoTranspiler"):
     t.emit('return op + " " + target')
 
 
-def emit_find_heredoc_content_end(t: "GoTranspiler"):
+def emit_find_heredoc_content_end(t: GoTranspiler):
     """Emit _FindHeredocContentEnd body."""
     t.emit("if len(delimiters) == 0 {")
     t.indent += 1
@@ -1171,9 +1165,7 @@ def emit_find_heredoc_content_end(t: "GoTranspiler"):
     t.emit("break")
     t.indent -= 1
     t.emit("}")
-    t.emit(
-        "if strings.HasPrefix(lineStripped, delimiter) && len(lineStripped) > len(delimiter) {"
-    )
+    t.emit("if strings.HasPrefix(lineStripped, delimiter) && len(lineStripped) > len(delimiter) {")
     t.indent += 1
     t.emit("tabsStripped := len(line) - len(lineStripped)")
     t.emit("pos = lineStart + tabsStripped + len(delimiter)")
@@ -1196,7 +1188,7 @@ def emit_find_heredoc_content_end(t: "GoTranspiler"):
     t.emit("return contentStart, pos")
 
 
-def emit_format_cmdsub_node(t: "GoTranspiler"):
+def emit_format_cmdsub_node(t: GoTranspiler):
     """Emit _FormatCmdsubNode body - large switch on node.Kind()."""
     t.emit("if _isNilNode(node) {")
     t.indent += 1
@@ -1384,7 +1376,7 @@ def emit_format_cmdsub_node(t: "GoTranspiler"):
     _emit_format_cmdsub_node_remaining(t)
 
 
-def _emit_format_cmdsub_node_list(t: "GoTranspiler"):
+def _emit_format_cmdsub_node_list(t: GoTranspiler):
     """Helper to emit the list case of _FormatCmdsubNode."""
     # case "list"
     t.emit('case "list":')
@@ -1448,9 +1440,7 @@ def _emit_format_cmdsub_node_list(t: "GoTranspiler"):
     t.emit("op := p.(*Operator)")
     t.emit('if op.Op == ";" {')
     t.indent += 1
-    t.emit(
-        'if len(resultList) > 0 && strings.HasSuffix(resultList[len(resultList)-1], "\\n") {'
-    )
+    t.emit('if len(resultList) > 0 && strings.HasSuffix(resultList[len(resultList)-1], "\\n") {')
     t.indent += 1
     t.emit("skippedSemi = true")
     t.emit("continue")
@@ -1475,9 +1465,7 @@ def _emit_format_cmdsub_node_list(t: "GoTranspiler"):
     t.emit("continue")
     t.indent -= 1
     t.emit("}")
-    t.emit(
-        'if len(resultList) > 0 && strings.HasSuffix(resultList[len(resultList)-1], "\\n") {'
-    )
+    t.emit('if len(resultList) > 0 && strings.HasSuffix(resultList[len(resultList)-1], "\\n") {')
     t.indent += 1
     t.emit("if skippedSemi {")
     t.indent += 1
@@ -1594,7 +1582,7 @@ def _emit_format_cmdsub_node_list(t: "GoTranspiler"):
     t.indent -= 1
 
 
-def _emit_format_cmdsub_node_remaining(t: "GoTranspiler"):
+def _emit_format_cmdsub_node_remaining(t: GoTranspiler):
     """Helper to emit remaining cases of _FormatCmdsubNode."""
     # case "if"
     t.emit('case "if":')
@@ -1826,9 +1814,7 @@ def _emit_format_cmdsub_node_remaining(t: "GoTranspiler"):
     t.emit('case "subshell":')
     t.indent += 1
     t.emit("subshell := node.(*Subshell)")
-    t.emit(
-        "body := _FormatCmdsubNode(subshell.Body, indent, inProcsub, compactRedirects, false)"
-    )
+    t.emit("body := _FormatCmdsubNode(subshell.Body, indent, inProcsub, compactRedirects, false)")
     t.emit('redirects := ""')
     t.emit("if len(subshell.Redirects) > 0 {")
     t.indent += 1
@@ -1946,7 +1932,7 @@ def _emit_format_cmdsub_node_remaining(t: "GoTranspiler"):
 # ========== Dictionary Mappings ==========
 
 
-MANUAL_METHODS: dict[tuple[str, str], Callable[["GoTranspiler", str], None]] = {
+MANUAL_METHODS: dict[tuple[str, str], Callable[[GoTranspiler, str], None]] = {
     ("QuoteState", "push"): emit_quotestate_push,
     ("QuoteState", "pop"): emit_quotestate_pop,
     ("QuoteState", "copy"): emit_quotestate_copy,
@@ -1976,7 +1962,7 @@ MANUAL_METHODS: dict[tuple[str, str], Callable[["GoTranspiler", str], None]] = {
 }
 
 
-MANUAL_FUNCTIONS: dict[str, Callable[["GoTranspiler"], None]] = {
+MANUAL_FUNCTIONS: dict[str, Callable[[GoTranspiler], None]] = {
     "_format_heredoc_body": emit_format_heredoc_body,
     "_starts_with_subshell": emit_starts_with_subshell,
     "_format_cond_body": emit_format_cond_body,

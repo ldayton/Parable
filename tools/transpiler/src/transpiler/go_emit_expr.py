@@ -9,7 +9,7 @@ from .go_overrides import TUPLE_ELEMENT_TYPES
 from .go_type_system import TYPE_MAP
 
 if TYPE_CHECKING:
-    from .go_types import FuncInfo, SymbolTable
+    pass
 
 
 class EmitExpressionsMixin:

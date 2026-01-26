@@ -5,8 +5,9 @@ from __future__ import annotations
 import ast
 from typing import TYPE_CHECKING
 
+from .go_ast_utils import is_super_call
 from .go_manual import MANUAL_FUNCTIONS, MANUAL_METHODS
-from .go_types import FunctionAnalysis, ScopeInfo
+from .go_types import EmissionContext, FunctionAnalysis, ScopeInfo
 
 if TYPE_CHECKING:
     from .go_types import ClassInfo, FuncInfo, ParamInfo, SymbolTable, VarInfo
@@ -49,9 +50,7 @@ if TYPE_CHECKING:
         def _emit_stmt(self, stmt: ast.stmt) -> None: ...
         def _collect_isinstance_chain(self, stmts: list[ast.stmt], idx: int) -> list: ...
         def _emit_type_switch(self, var_name: str, cases: list) -> None: ...
-        def _detect_assign_check_return(
-            self, stmts: list[ast.stmt], idx: int
-        ) -> tuple | None: ...
+        def _detect_assign_check_return(self, stmts: list[ast.stmt], idx: int) -> tuple | None: ...
         def _emit_assign_check_return(
             self, var_name: str, call: ast.Call, ret_type: str
         ) -> None: ...
@@ -184,7 +183,19 @@ class EmitFunctionsMixin:
         # Run all analysis first
         analysis = self._analyze_function(stmts, func_info)
         self._analysis = analysis
+        # Create emission context for this function body
+        ctx = EmissionContext(
+            analysis=analysis,
+            symbols=self.symbols,
+            current_class=self.current_class,
+            current_method=self.current_method,
+            current_func_info=func_info,
+            current_return_type=self.current_return_type,
+            indent=self.indent,
+        )
+        self._ctx = ctx
         # Bridge: copy analysis results to self for emission (temporary)
+        # TODO: migrate emission methods to use self._ctx instead
         self.declared_vars = analysis.declared_vars
         self.var_types = analysis.var_types
         self.scope_tree = analysis.scope_tree
@@ -242,7 +253,7 @@ class EmitFunctionsMixin:
                 self.emit('panic("TODO: empty body")')
 
     def _analyze_function(
-        self, stmts: list[ast.stmt], func_info: "FuncInfo | None"
+        self, stmts: list[ast.stmt], func_info: FuncInfo | None
     ) -> FunctionAnalysis:
         """Perform all analysis for a function body, returning analysis results."""
         analysis = FunctionAnalysis()
@@ -610,7 +621,19 @@ class EmitFunctionsMixin:
                 analysis.declared_vars.add(go_name)
                 analysis.var_types[go_name] = p.go_type
         self._analysis = analysis
+        # Create emission context for constructor body
+        ctx = EmissionContext(
+            analysis=analysis,
+            symbols=self.symbols,
+            current_class=class_info.name,
+            current_method="__init__",
+            current_func_info=func_info,
+            current_return_type="",
+            indent=self.indent,
+        )
+        self._ctx = ctx
         # Bridge: also set on self for compatibility
+        # TODO: migrate emission methods to use self._ctx instead
         self.var_types = analysis.var_types
         self.declared_vars = analysis.declared_vars
         for stmt in stmts:
@@ -618,7 +641,7 @@ class EmitFunctionsMixin:
             if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant):
                 continue
             # Handle super().__init__() - skip for now, Go doesn't have super
-            if self._is_super_call(stmt):
+            if is_super_call(stmt):
                 continue
             # Handle self.x = y assignments
             if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
@@ -744,26 +767,7 @@ class EmitFunctionsMixin:
                     continue
             self._emit_stmt(stmt)
 
-    def _is_super_call(self, stmt: ast.stmt) -> bool:
-        """Check if statement is super().__init__() call."""
-        if not isinstance(stmt, ast.Expr):
-            return False
-        if not isinstance(stmt.value, ast.Call):
-            return False
-        call = stmt.value
-        if not isinstance(call.func, ast.Attribute):
-            return False
-        if call.func.attr != "__init__":
-            return False
-        if not isinstance(call.func.value, ast.Call):
-            return False
-        if not isinstance(call.func.value.func, ast.Name):
-            return False
-        return call.func.value.func.id == "super"
-
-    def _emit_hoisted_vars(
-        self, analysis: FunctionAnalysis, scope_id: int, stmts: list[ast.stmt]
-    ):
+    def _emit_hoisted_vars(self, analysis: FunctionAnalysis, scope_id: int, stmts: list[ast.stmt]):
         """Emit hoisted variable declarations for a scope."""
         # Collect additional type info
         append_types = self._collect_append_element_types(stmts)

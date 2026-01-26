@@ -15,6 +15,7 @@ class EmitStructureMixin:
     # Functions that are replaced by hardcoded Go implementations (skip transpilation)
     SKIP_FUNCTIONS = {
         "_substring",  # Replaced by rune-based _Substring in _emit_helpers()
+        "_format_arith_val",  # Manual Go implementation in _emit_helpers()
     }
 
     # Functions that require duck typing (Part 6d) or have complex patterns - skip body for now

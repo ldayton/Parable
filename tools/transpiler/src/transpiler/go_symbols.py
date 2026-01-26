@@ -16,7 +16,7 @@ class SymbolsMixin:
     """Mixin providing symbol collection methods for Go transpiler."""
 
     # These are expected to be set by the main class
-    symbols: "SymbolTable"
+    symbols: SymbolTable
 
     def _collect_symbols(self, tree: ast.Module):
         """Collect all type information in multiple passes."""

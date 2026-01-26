@@ -7,7 +7,6 @@ Banned constructions:
 
     Construction          Example                   Use instead
     --------------------  ------------------------  --------------------------
-    // floor division     a // b                    int(a / b)
     **kwargs              def f(**kwargs):          explicit parameters
     all                   all(x for x in lst)       explicit loop with early return
     any                   any(x for x in lst)       explicit loop with early return
@@ -19,30 +18,38 @@ Banned constructions:
     chained comparison    a < b < c                 a < b and b < c
     decorator             @cache                    call wrapper manually
     del statement         del x                     reassign or let go out of scope
-    dict comprehension    {k: v for k, v in ...}    explicit loop
-    enumerate             for i, x in enumerate()   manual index counter
     generator expression  (x for x in ...)          explicit loop
     global                global x                  pass as parameter
     hasattr               hasattr(x, 'y')           explicit field check
     import                import x                  not allowed (self-contained)
     import from           from x import y           not allowed (except __future__, typing)
     loop else             for x: ... else:          use flag variable
-    list comprehension    [x*2 for x in items]      explicit loop
     match/case            match x:                  if/elif chain
-    negative index        lst[-1]                   lst[len(lst)-1]
     nonlocal              nonlocal x                pass as parameter
     or-default            x or []                   if x is None: x = []
-    reversed              reversed(lst)             reverse index loop
-    set comprehension     {x for x in items}        explicit loop
-    step slicing          a[::2], a[1:10:2]         explicit index math
     try else              try: ... else:            move else code after try block
-    walrus operator       if (x := foo()):          assign, then test
     with statement        with open(f) as x:        try/finally
     yield                 yield x                   return list or use callback
     yield from            yield from iter           explicit loop
-    zip                   for a, b in zip(x, y)     indexed loop
     getattr               getattr(x, 'y', None)     direct attribute access
     tuple from variable   a, b = op (op is var)     unpack directly: a, b = func()
+    lambda                lambda x: x+1             named function
+    **exponentiation      x ** 2                    x * x or loop
+    pow                   pow(x, 2)                 multiplication
+    staticmethod          @staticmethod             module-level function
+    classmethod           @classmethod              module-level function
+    property              @property                 explicit getter method
+    multiple inherit      class Foo(A, B):          single inheritance
+    nested function       def f(): def g():         flatten or pass callback
+    nested class          class A: class B:         module-level classes
+    dunder methods        __str__, __eq__, etc      only __init__/__new__/__repr__ allowed
+    bare except           except:                   except ExceptionType:
+    type()                type(x)                   isinstance()
+    __class__             x.__class__               isinstance()
+    *args in call         f(*items)                 unpack explicitly
+    **kwargs in call      f(**d)                    pass args explicitly
+    is/is not (non-None)  x is y                    x == y (except None checks)
+    mutable default       def f(x=[]):              x=None then if x is None
 
 Required annotations (for Go/TS transpiler):
 
@@ -149,6 +156,26 @@ def check_unannotated_field_assigns(tree):
     return errors
 
 
+def check_nested_functions(tree):
+    """Check for function definitions inside other functions."""
+    errors = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        # Look for FunctionDef in body (direct children only to avoid class methods)
+        for stmt in node.body:
+            if isinstance(stmt, ast.FunctionDef):
+                errors.append(
+                    (
+                        stmt.lineno,
+                        "nested function '"
+                        + stmt.name
+                        + "': define at module level or pass as callback",
+                    )
+                )
+    return errors
+
+
 def find_python_files(directory):
     """Find all .py files recursively."""
     result = []
@@ -173,16 +200,11 @@ def check_file(filepath):
     # Check for unannotated field assignments
     errors.extend(check_unannotated_field_assigns(tree))
 
+    # Check for nested functions
+    errors.extend(check_nested_functions(tree))
+
     for node in ast.walk(tree):
         lineno = getattr(node, "lineno", 0)
-
-        # list/dict/set comprehensions
-        if isinstance(node, ast.ListComp):
-            errors.append((lineno, "list comprehension: use explicit for loop with append"))
-        if isinstance(node, ast.DictComp):
-            errors.append((lineno, "dict comprehension: use explicit for loop with assignment"))
-        if isinstance(node, ast.SetComp):
-            errors.append((lineno, "set comprehension: use explicit for loop with add"))
 
         # generator expression
         if isinstance(node, ast.GeneratorExp):
@@ -190,12 +212,20 @@ def check_file(filepath):
 
         # decorator
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            if node.decorator_list:
-                errors.append((lineno, "decorator: call wrapper function manually"))
-
-        # walrus operator
-        if isinstance(node, ast.NamedExpr):
-            errors.append((lineno, "walrus operator :=: assign to variable first, then test"))
+            for dec in node.decorator_list:
+                dec_name = None
+                if isinstance(dec, ast.Name):
+                    dec_name = dec.id
+                elif isinstance(dec, ast.Attribute):
+                    dec_name = dec.attr
+                if dec_name == "staticmethod":
+                    errors.append((lineno, "@staticmethod: use module-level function instead"))
+                elif dec_name == "classmethod":
+                    errors.append((lineno, "@classmethod: use module-level function instead"))
+                elif dec_name == "property":
+                    errors.append((lineno, "@property: use explicit getter method instead"))
+                else:
+                    errors.append((lineno, "decorator: call wrapper function manually"))
 
         # with statement
         if isinstance(node, ast.With):
@@ -273,22 +303,6 @@ def check_file(filepath):
                         (lineno, "tuple unpack from variable: unpack directly from call instead")
                     )
 
-        # step slicing (basic slicing a[x:y] is allowed, step slicing a[::n] is not)
-        if isinstance(node, ast.Subscript):
-            if isinstance(node.slice, ast.Slice):
-                if node.slice.step is not None:
-                    errors.append((lineno, "step slicing: use explicit index math instead"))
-
-        # negative indexing
-        if isinstance(node, ast.Subscript):
-            if isinstance(node.slice, ast.Constant):
-                if isinstance(node.slice.value, int) and node.slice.value < 0:
-                    errors.append((lineno, "negative index: use len(x)-n instead"))
-            # Also check UnaryOp with USub (e.g., -1 as expression)
-            if isinstance(node.slice, ast.UnaryOp):
-                if isinstance(node.slice.op, ast.USub):
-                    errors.append((lineno, "negative index: use len(x)-n instead"))
-
         # all()
         if isinstance(node, ast.Call):
             if isinstance(node.func, ast.Name) and node.func.id == "all":
@@ -298,21 +312,6 @@ def check_file(filepath):
         if isinstance(node, ast.Call):
             if isinstance(node.func, ast.Name) and node.func.id == "any":
                 errors.append((lineno, "any(): use explicit loop with early return"))
-
-        # enumerate()
-        if isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Name) and node.func.id == "enumerate":
-                errors.append((lineno, "enumerate(): use manual index counter"))
-
-        # reversed()
-        if isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Name) and node.func.id == "reversed":
-                errors.append((lineno, "reversed(): use reverse index loop"))
-
-        # zip()
-        if isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Name) and node.func.id == "zip":
-                errors.append((lineno, "zip(): use indexed loop"))
 
         # loop else (for...else, while...else) - Python-specific
         if isinstance(node, (ast.For, ast.While)):
@@ -326,10 +325,6 @@ def check_file(filepath):
                     errors.append((lineno, "or-default: use 'if x is None: x = ...' instead"))
                 if isinstance(val, ast.Constant) and val.value in (0, "", None, False):
                     errors.append((lineno, "or-default: use 'if x is None: x = ...' instead"))
-
-        # // floor division
-        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.FloorDiv):
-            errors.append((lineno, "//: use int(a / b) instead"))
 
         # del statement
         if isinstance(node, ast.Delete):
@@ -404,6 +399,104 @@ def check_file(filepath):
                         "bare " + node.annotation.id + ": " + target_name + " needs type parameter",
                     )
                 )
+
+        # lambda
+        if isinstance(node, ast.Lambda):
+            errors.append((lineno, "lambda: use named function instead"))
+
+        # ** exponentiation
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
+            errors.append((lineno, "**: use multiplication or helper function"))
+
+        # pow()
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name) and node.func.id == "pow":
+                errors.append((lineno, "pow(): use multiplication instead"))
+
+        # type()
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name) and node.func.id == "type":
+                errors.append((lineno, "type(): use isinstance() instead"))
+
+        # multiple inheritance (exclude Exception from base count)
+        if isinstance(node, ast.ClassDef):
+            real_bases = []
+            for b in node.bases:
+                if isinstance(b, ast.Name) and b.id == "Exception":
+                    continue
+                real_bases.append(b)
+            if len(real_bases) > 1:
+                errors.append((lineno, "multiple inheritance: use single base class"))
+
+        # nested class
+        if isinstance(node, ast.ClassDef):
+            for child in node.body:
+                if isinstance(child, ast.ClassDef):
+                    errors.append((child.lineno, "nested class: define at module level"))
+
+        # bare except
+        if isinstance(node, ast.ExceptHandler):
+            if node.type is None:
+                errors.append((lineno, "bare except: specify exception type"))
+
+        # dunder methods (except __init__, __new__, __repr__)
+        if isinstance(node, ast.FunctionDef):
+            if node.name.startswith("__") and node.name.endswith("__"):
+                if node.name not in ("__init__", "__new__", "__repr__"):
+                    errors.append(
+                        (
+                            lineno,
+                            "dunder method "
+                            + node.name
+                            + ": only __init__/__new__/__repr__ allowed",
+                        )
+                    )
+
+        # *args in call (starred argument)
+        if isinstance(node, ast.Call):
+            for arg in node.args:
+                if isinstance(arg, ast.Starred):
+                    errors.append((lineno, "*args in call: unpack arguments explicitly"))
+                    break
+
+        # **kwargs in call
+        if isinstance(node, ast.Call):
+            for kw in node.keywords:
+                if kw.arg is None:  # **kwargs
+                    errors.append((lineno, "**kwargs in call: pass arguments explicitly"))
+                    break
+
+        # is/is not with non-None
+        if isinstance(node, ast.Compare):
+            left = node.left
+            for i, op in enumerate(node.ops):
+                comparator = node.comparators[i]
+                if isinstance(op, (ast.Is, ast.IsNot)):
+                    left_is_none = isinstance(left, ast.Constant) and left.value is None
+                    right_is_none = (
+                        isinstance(comparator, ast.Constant) and comparator.value is None
+                    )
+                    if not left_is_none and not right_is_none:
+                        errors.append((lineno, "is/is not: only use with None, use == otherwise"))
+                left = comparator
+
+        # mutable default argument
+        if isinstance(node, ast.FunctionDef):
+            all_defaults = list(node.args.defaults)
+            for d in node.args.kw_defaults:
+                if d is not None:
+                    all_defaults.append(d)
+            for default in all_defaults:
+                if isinstance(default, (ast.List, ast.Dict, ast.Set)):
+                    errors.append(
+                        (lineno, "mutable default argument: use None and initialize in body")
+                    )
+                    break
+
+        # __class__ attribute access
+        if isinstance(node, ast.Attribute):
+            if node.attr == "__class__":
+                errors.append((lineno, "__class__: use isinstance() instead"))
 
     return errors
 

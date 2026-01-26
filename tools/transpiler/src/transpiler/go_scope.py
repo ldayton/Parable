@@ -16,7 +16,7 @@ class ScopeAnalysisMixin:
     """Mixin providing scope analysis and variable hoisting for Go transpiler."""
 
     # Instance attributes (set by main class)
-    symbols: "SymbolTable"
+    symbols: SymbolTable
     scope_tree: dict[int, ScopeInfo]
     next_scope_id: int
     var_usage: dict[str, VarInfo]
@@ -25,7 +25,7 @@ class ScopeAnalysisMixin:
     var_types: dict[str, str]
     declared_vars: set[str]
     current_method: str | None
-    current_func_info: "FuncInfo | None"
+    current_func_info: FuncInfo | None
     indent: int
 
     # ========== Scope-Aware Variable Declaration ==========

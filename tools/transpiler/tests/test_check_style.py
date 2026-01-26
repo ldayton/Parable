@@ -1,12 +1,13 @@
 """Tests for check_style.py banned construct detection."""
 
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from transpiler.check_style import check_file
 import tempfile
+
+from transpiler.check_style import check_file
 
 
 def check_code(code: str) -> list[tuple[int, str]]:
@@ -323,4 +324,5 @@ class Foo:
 
 if __name__ == "__main__":
     import pytest
+
     pytest.main([__file__, "-v"])

@@ -21,9 +21,7 @@ Backends handle only syntax emission — no analysis.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum, auto
 from typing import Literal
-
 
 # ============================================================
 # SOURCE LOCATIONS

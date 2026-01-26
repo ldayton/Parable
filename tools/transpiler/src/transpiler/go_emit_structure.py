@@ -12,16 +12,6 @@ if TYPE_CHECKING:
 class EmitStructureMixin:
     """Mixin for module-level and struct code emission."""
 
-    # Type hints for attributes from GoTranspiler
-    indent: int
-    symbols: dict
-
-    # Type hints for methods from other mixins
-    def emit(self, text: str) -> None: ...
-    def _to_go_field_name(self, name: str) -> str: ...
-    def _emit_all_methods(self, tree: ast.Module) -> None: ...
-    def _emit_function(self, node: ast.FunctionDef) -> None: ...
-
     # Functions that are replaced by hardcoded Go implementations (skip transpilation)
     SKIP_FUNCTIONS = {
         "_substring",  # Replaced by rune-based _Substring in _emit_helpers()

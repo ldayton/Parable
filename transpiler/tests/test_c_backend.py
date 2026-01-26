@@ -216,7 +216,7 @@ String example_nil_check(TokenSlice tokens) {
 int sum_positions(TokenSlice tokens) {
     int sum = 0;
     for (int i = 0; i < tokens.len; i++) {
-        sum = sum + tokens.data[i]->pos;
+        sum += tokens.data[i]->pos;
     }
     return sum;
 }

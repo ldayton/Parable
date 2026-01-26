@@ -157,7 +157,7 @@ public static class FixtureFunctions
         int sum = 0;
         for (int i = 0; i < tokens.Count; i++)
         {
-            sum = (sum + tokens[i].Pos);
+            sum += tokens[i].Pos;
         }
         return sum;
     }

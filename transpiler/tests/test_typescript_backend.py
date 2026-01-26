@@ -119,8 +119,8 @@ function exampleNilCheck(tokens: Token[]): string {
 
 function sumPositions(tokens: Token[]): number {
   let sum = 0;
-  for (let i = 0; i < tokens.length; i++) {
-    sum = sum + tokens[i].pos;
+  for (let i = 0; i < tokens.length; i += 1) {
+    sum += tokens[i].pos;
   }
   return sum;
 }

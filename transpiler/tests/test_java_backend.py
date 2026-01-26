@@ -126,8 +126,8 @@ final class FixtureFunctions {
 
     static int sumPositions(List<Token> tokens) {
         int sum = 0;
-        for (int i = 0; i < tokens.size(); i++) {
-            sum = sum + tokens.get(i).pos;
+        for (int i = 0; i < tokens.size(); i += 1) {
+            sum += tokens.get(i).pos;
         }
         return sum;
     }

@@ -5,6 +5,7 @@ Architecture:
 
 The frontend handles all analysis (types, scopes, patterns, symbols).
 Backends handle only syntax emission - no analysis.
+Middleend annotations are added dynamically at runtime, not defined here.
 """
 
 from __future__ import annotations

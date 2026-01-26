@@ -10,7 +10,7 @@ Transpiles `../src/parable.py` → Go via an intermediate representation.
 ../src/parable.py  →  frontend.py  →  IR  →  middleend.py  →  backend/go.py  →  ../src/parable.go
 ```
 
-- `./src/ir.py` - IR node definitions (types, expressions, statements)
+- `./src/ir.py` - IR node definitions (types, expressions, statements). Does NOT define middleend annotations.
 - `./src/frontend.py` - Python AST → IR
 - `./src/middleend.py` - IR analysis and transformations
 - `./src/backend/go.py` - IR → Go code
@@ -42,9 +42,11 @@ just errors        # show Go compilation errors
 - Handle all Python-specific semantics (truthiness, iteration, string methods, etc.)
 - Resolve source language idioms into generic IR constructs
 
-**Middleend** - IR analysis
+**Middleend** - IR analysis (read-only)
 - Analyze IR to gather information needed by backends
-- Compute derived properties (e.g., which variables need pointers)
+- Annotate nodes with computed properties at runtime (e.g., `stmt.is_declaration = True`)
+- Annotations are dynamic attributes, NOT defined in ir.py
+- No transformations - only adds information, never rewrites IR
 - No source language knowledge, no target language knowledge
 
 **Backend** - Target language emission

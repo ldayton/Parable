@@ -112,7 +112,6 @@ class GoBackend:
         self.output: list[str] = []
         self.indent = 0
         self._receiver_name: str = ""  # Current method receiver name
-        self._declared_vars: set[str] = set()  # Track declared local variables
         self._tuple_vars: dict[str, Tuple] = {}  # Track tuple-typed variables
 
     def emit(self, module: Module) -> str:
@@ -227,6 +226,15 @@ func _strIsLower(s string) bool {
 
     def _emit_struct(self, struct: Struct) -> None:
         """Emit struct definition."""
+        # Emit Node as an interface (it's the abstract base for AST nodes)
+        if struct.name == "Node":
+            self._line(f"type {struct.name} interface {{")
+            self.indent += 1
+            self._line("isNode()")  # Marker method for type safety
+            self.indent -= 1
+            self._line("}")
+            self._line("")
+            return
         self._line(f"type {struct.name} struct {{")
         self.indent += 1
         for field in struct.fields:
@@ -236,19 +244,18 @@ func _strIsLower(s string) bool {
         self.indent -= 1
         self._line("}")
         self._line("")
+        # If struct implements Node, emit the marker method
+        if "Node" in struct.implements:
+            self._line(f"func (self *{struct.name}) isNode() {{}}")
+            self._line("")
         # Emit methods
         for method in struct.methods:
             self._emit_function(method)
 
     def _emit_function(self, func: Function) -> None:
         """Emit function or method definition."""
-        # Reset declared vars and tuple tracking for new function scope
-        self._declared_vars = set()
+        # Reset tuple tracking for new function scope
         self._tuple_vars = {}
-        # Add parameters to declared vars
-        param_names = {self._to_camel(p.name) for p in func.params}
-        for p in func.params:
-            self._declared_vars.add(self._to_camel(p.name))
         params = ", ".join(
             f"{self._to_camel(p.name)} {self._type_to_go(p.typ)}" for p in func.params
         )
@@ -290,7 +297,6 @@ func _strIsLower(s string) bool {
     def _emit_stmt_VarDecl(self, stmt: VarDecl) -> None:
         go_type = self._type_to_go(stmt.typ)
         name = self._to_camel(stmt.name)
-        self._declared_vars.add(name)
         # Track tuple vars for later tuple indexing
         if isinstance(stmt.typ, Tuple):
             self._tuple_vars[name] = stmt.typ
@@ -307,37 +313,25 @@ func _strIsLower(s string) bool {
     def _emit_stmt_Assign(self, stmt: Assign) -> None:
         target = self._emit_lvalue(stmt.target)
         value = self._emit_expr(stmt.value)
-        # For simple variable assignments, use := for first declaration
-        if isinstance(stmt.target, VarLV):
-            var_name = self._to_camel(stmt.target.name)
-            if var_name not in self._declared_vars:
-                self._declared_vars.add(var_name)
-                self._line(f"{target} := {value}")
-                return
-        self._line(f"{target} = {value}")
+        if stmt.is_declaration:
+            self._line(f"{target} := {value}")
+        else:
+            self._line(f"{target} = {value}")
 
     def _emit_stmt_TupleAssign(self, stmt: TupleAssign) -> None:
         """Emit tuple unpacking: a, b := func()"""
         targets = []
-        all_new = True
         for t in stmt.targets:
             if isinstance(t, VarLV):
-                # Handle _ (discard) specially
                 if t.name == "_":
                     targets.append("_")
                 else:
-                    name = self._to_camel(t.name)
-                    targets.append(name)
-                    if name in self._declared_vars:
-                        all_new = False
-                    else:
-                        self._declared_vars.add(name)
+                    targets.append(self._to_camel(t.name))
             else:
                 targets.append(self._emit_lvalue(t))
-                all_new = False
         target_str = ", ".join(targets)
         value = self._emit_expr(stmt.value)
-        if all_new:
+        if stmt.is_declaration:
             self._line(f"{target_str} := {value}")
         else:
             self._line(f"{target_str} = {value}")
@@ -373,11 +367,17 @@ func _strIsLower(s string) bool {
                     return True
                 return False
 
+            def needs_byte_cast(arg_type, elem_type):
+                """Check if int arg needs cast to byte when appending to []byte."""
+                return arg_type == INT and elem_type == BYTE
+
             # Handle pointer-to-slice receiver
             if isinstance(recv_type, Pointer) and isinstance(recv_type.target, Slice):
                 elem_type = recv_type.target.element
                 if needs_deref(arg_type, elem_type):
                     self._line(f"*{obj} = append(*{obj}, *{arg})")
+                elif needs_byte_cast(arg_type, elem_type):
+                    self._line(f"*{obj} = append(*{obj}, byte({arg}))")
                 else:
                     self._line(f"*{obj} = append(*{obj}, {arg})")
             # Handle regular slice receiver
@@ -385,6 +385,8 @@ func _strIsLower(s string) bool {
                 elem_type = recv_type.element
                 if needs_deref(arg_type, elem_type):
                     self._line(f"{obj} = append({obj}, *{arg})")
+                elif needs_byte_cast(arg_type, elem_type):
+                    self._line(f"{obj} = append({obj}, byte({arg}))")
                 else:
                     self._line(f"{obj} = append({obj}, {arg})")
             else:
@@ -432,7 +434,6 @@ func _strIsLower(s string) bool {
         cond = self._emit_expr(stmt.cond)
         self._line(f"if {cond} {{")
         self.indent += 1
-        saved_vars = self._declared_vars.copy()  # Save scope
         for s in stmt.then_body:
             self._emit_stmt(s)
         self.indent -= 1
@@ -440,47 +441,38 @@ func _strIsLower(s string) bool {
             # Check if else body is a single If (elif chain)
             if len(stmt.else_body) == 1 and isinstance(stmt.else_body[0], If):
                 self._line_raw("} else ")
-                self._declared_vars = saved_vars.copy()  # Restore for else branch
                 self._emit_stmt_If_inline(stmt.else_body[0])
             else:
                 self._line("} else {")
                 self.indent += 1
-                self._declared_vars = saved_vars.copy()  # Restore for else branch
                 for s in stmt.else_body:
                     self._emit_stmt(s)
                 self.indent -= 1
                 self._line("}")
         else:
             self._line("}")
-        # Restore scope after the entire if statement - vars declared inside aren't visible outside
-        self._declared_vars = saved_vars
 
     def _emit_stmt_If_inline(self, stmt: If) -> None:
         """Emit if statement without leading newline (for else if chains)."""
         cond = self._emit_expr(stmt.cond)
         self.output[-1] += f"if {cond} {{"
         self.indent += 1
-        saved_vars = self._declared_vars.copy()  # Save scope
         for s in stmt.then_body:
             self._emit_stmt(s)
         self.indent -= 1
         if stmt.else_body:
             if len(stmt.else_body) == 1 and isinstance(stmt.else_body[0], If):
                 self._line_raw("} else ")
-                self._declared_vars = saved_vars.copy()  # Restore for else branch
                 self._emit_stmt_If_inline(stmt.else_body[0])
             else:
                 self._line("} else {")
                 self.indent += 1
-                self._declared_vars = saved_vars.copy()  # Restore for else branch
                 for s in stmt.else_body:
                     self._emit_stmt(s)
                 self.indent -= 1
                 self._line("}")
         else:
             self._line("}")
-        # Restore scope after the entire if statement
-        self._declared_vars = saved_vars
 
     def _emit_stmt_While(self, stmt: While) -> None:
         cond = self._emit_expr(stmt.cond)
@@ -758,6 +750,45 @@ func _strIsLower(s string) bool {
             return f"_strIsUpper({obj})"
         if method == "islower":
             return f"_strIsLower({obj})"
+        # Handle Python string methods that map to strings package
+        if method == "startswith" and expr.args:
+            arg = self._emit_expr(expr.args[0])
+            return f"strings.HasPrefix({obj}, {arg})"
+        if method == "endswith" and expr.args:
+            arg = self._emit_expr(expr.args[0])
+            return f"strings.HasSuffix({obj}, {arg})"
+        if method == "replace" and len(expr.args) >= 2:
+            old = self._emit_expr(expr.args[0])
+            new = self._emit_expr(expr.args[1])
+            # Python's replace replaces all occurrences by default
+            return f"strings.ReplaceAll({obj}, {old}, {new})"
+        if method == "lower":
+            return f"strings.ToLower({obj})"
+        if method == "upper":
+            return f"strings.ToUpper({obj})"
+        if method == "strip":
+            return f"strings.TrimSpace({obj})"
+        if method == "lstrip":
+            if expr.args:
+                arg = self._emit_expr(expr.args[0])
+                return f"strings.TrimLeft({obj}, {arg})"
+            return f"strings.TrimLeft({obj}, \" \\t\\n\\r\")"
+        if method == "rstrip":
+            if expr.args:
+                arg = self._emit_expr(expr.args[0])
+                return f"strings.TrimRight({obj}, {arg})"
+            return f"strings.TrimRight({obj}, \" \\t\\n\\r\")"
+        if method == "split":
+            if expr.args:
+                arg = self._emit_expr(expr.args[0])
+                return f"strings.Split({obj}, {arg})"
+            return f"strings.Fields({obj})"
+        if method == "count" and expr.args:
+            arg = self._emit_expr(expr.args[0])
+            return f"strings.Count({obj}, {arg})"
+        if method == "find" and expr.args:
+            arg = self._emit_expr(expr.args[0])
+            return f"strings.Index({obj}, {arg})"
         method = self._to_pascal(method)
         args = ", ".join(self._emit_expr(a) for a in expr.args)
         return f"{obj}.{method}({args})"
@@ -769,6 +800,18 @@ func _strIsLower(s string) bool {
         return f"{on_type}.{method}({args})"
 
     def _emit_expr_BinaryOp(self, expr: BinaryOp) -> str:
+        # Handle single-char string comparisons with runes
+        # In Go, for-range over string yields runes, so "'" must become '\''
+        if expr.op in ("==", "!="):
+            left_is_rune = isinstance(expr.left, Var) and expr.left.typ == RUNE
+            right_is_rune = isinstance(expr.right, Var) and expr.right.typ == RUNE
+            left_str = self._emit_expr(expr.left)
+            right_str = self._emit_expr(expr.right)
+            if left_is_rune and isinstance(expr.right, StringLit) and len(expr.right.value) == 1:
+                right_str = self._emit_rune_literal(expr.right.value)
+            elif right_is_rune and isinstance(expr.left, StringLit) and len(expr.left.value) == 1:
+                left_str = self._emit_rune_literal(expr.left.value)
+            return f"{left_str} {expr.op} {right_str}"
         left = self._emit_expr(expr.left)
         right = self._emit_expr(expr.right)
         # Handle 'in' and 'not in' operators
@@ -781,6 +824,25 @@ func _strIsLower(s string) bool {
         if expr.op in ("&&", "||", "==", "!=", "<", ">", "<=", ">=", "+", "-", "*"):
             return f"{left} {expr.op} {right}"
         return f"({left} {expr.op} {right})"
+
+    def _emit_rune_literal(self, char: str) -> str:
+        """Emit a single character as a Go rune literal."""
+        if char == "'":
+            return "'\\''"
+        if char == "\\":
+            return "'\\\\'"
+        if char == "\n":
+            return "'\\n'"
+        if char == "\t":
+            return "'\\t'"
+        if char == "\r":
+            return "'\\r'"
+        if char == '"':
+            return "'\"'"
+        # Control characters and special bytes
+        if ord(char) < 32 or ord(char) > 126:
+            return f"'\\x{ord(char):02x}'"
+        return f"'{char}'"
 
     def _emit_expr_UnaryOp(self, expr: UnaryOp) -> str:
         operand = self._emit_expr(expr.operand)

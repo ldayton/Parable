@@ -122,8 +122,8 @@ module Fixture
     sum = 0
     i = 0
     while i < tokens.length
-      sum = sum + tokens[i].pos
-      i = i + 1
+      sum += tokens[i].pos
+      i += 1
     end
     sum
   end

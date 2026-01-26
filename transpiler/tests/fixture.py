@@ -769,35 +769,25 @@ def make_fixture() -> Module:
                     typ=BOOL,
                     loc=L,
                 ),
-                post=Assign(
+                post=OpAssign(
                     target=VarLV(name="i", loc=L),
-                    value=BinaryOp(
-                        op="+",
-                        left=Var(name="i", typ=INT, loc=L),
-                        right=IntLit(value=1, typ=INT, loc=L),
-                        typ=INT,
-                        loc=L,
-                    ),
+                    op="+",
+                    value=IntLit(value=1, typ=INT, loc=L),
                     loc=L,
                 ),
                 body=[
-                    # sum = sum + tokens[i].pos
-                    Assign(
+                    # sum += tokens[i].pos
+                    OpAssign(
                         target=VarLV(name="sum", loc=L),
-                        value=BinaryOp(
-                            op="+",
-                            left=Var(name="sum", typ=INT, loc=L),
-                            right=FieldAccess(
-                                obj=Index(
-                                    obj=Var(name="tokens", typ=token_slice, loc=L),
-                                    index=Var(name="i", typ=INT, loc=L),
-                                    typ=token_ref,
-                                    loc=L,
-                                ),
-                                field="pos",
-                                typ=INT,
+                        op="+",
+                        value=FieldAccess(
+                            obj=Index(
+                                obj=Var(name="tokens", typ=token_slice, loc=L),
+                                index=Var(name="i", typ=INT, loc=L),
+                                typ=token_ref,
                                 loc=L,
                             ),
+                            field="pos",
                             typ=INT,
                             loc=L,
                         ),

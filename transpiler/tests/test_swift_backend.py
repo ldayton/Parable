@@ -125,8 +125,8 @@ func sumPositions(_ tokens: [Token]) -> Int {
     var sum: Int = 0
     var i: Int = 0
     while (i < tokens.count) {
-        sum = (sum + tokens[i].pos)
-        i = (i + 1)
+        sum += tokens[i].pos
+        i += 1
     }
     return sum
 }

@@ -1,6 +1,7 @@
 """Tests for Go backend."""
 
 from src.backend.go import GoBackend
+from src.middleend import analyze
 from tests.fixture import make_fixture
 
 EXPECTED = """\
@@ -296,6 +297,7 @@ func AcceptUnion(obj interface{}) bool {
 
 def test_fixture_emits_correct_go() -> None:
     module = make_fixture()
+    analyze(module)
     backend = GoBackend()
     output = backend.emit(module)
     assert output == EXPECTED

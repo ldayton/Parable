@@ -6,7 +6,14 @@ import sys
 def main():
     """Route to transpiler subcommands."""
     args = sys.argv[1:]
-    if "--transpile-go" in args:
+    if "--transpile-go-ir" in args:
+        # New IR-based pipeline (experimental)
+        args.remove("--transpile-go-ir")
+        sys.argv = [sys.argv[0]] + args
+        from .transpile_go_ir import main as transpile_go_ir_main
+
+        transpile_go_ir_main()
+    elif "--transpile-go" in args:
         args.remove("--transpile-go")
         sys.argv = [sys.argv[0]] + args
         from .transpile_go import main as transpile_go_main

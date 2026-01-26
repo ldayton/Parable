@@ -387,16 +387,23 @@ func _parseInt(s string, base int) int {
                 targets.append(self._emit_lvalue(t))
         target_str = ", ".join(targets)
         value = self._emit_expr(stmt.value)
-        if getattr(stmt, 'is_declaration', False):
-            # Check if ANY target was hoisted - use = instead of :=
-            any_hoisted = any(
-                isinstance(t, VarLV) and t.name in self._hoisted_in_try
-                for t in stmt.targets
-            )
-            if any_hoisted:
-                self._line(f"{target_str} = {value}")
-            else:
-                self._line(f"{target_str} := {value}")
+        is_decl = getattr(stmt, 'is_declaration', False)
+        new_targets = getattr(stmt, 'new_targets', [])
+        # Check if ANY target was hoisted - those use = instead of :=
+        any_hoisted = any(
+            isinstance(t, VarLV) and t.name in self._hoisted_in_try
+            for t in stmt.targets
+        )
+        # Go's := handles mixed declarations - if ANY target is new (and not hoisted), use :=
+        has_new_unhoisted = any(
+            isinstance(t, VarLV) and t.name in new_targets and t.name not in self._hoisted_in_try
+            for t in stmt.targets
+        )
+        if is_decl and not any_hoisted:
+            self._line(f"{target_str} := {value}")
+        elif has_new_unhoisted:
+            # Mixed case: some new, some existing - Go's := handles this
+            self._line(f"{target_str} := {value}")
         else:
             self._line(f"{target_str} = {value}")
 
@@ -517,6 +524,14 @@ func _parseInt(s string, base int) int {
             self._line("return")
 
     def _emit_stmt_If(self, stmt: If) -> None:
+        # Emit hoisted variable declarations before the if
+        hoisted_vars = getattr(stmt, 'hoisted_vars', [])
+        for name, typ in hoisted_vars:
+            type_str = self._type_to_go(typ) if typ else "interface{}"
+            go_name = self._to_camel(name)
+            self._line(f"var {go_name} {type_str}")
+            self._hoisted_in_try.add(name)
+
         cond = self._emit_expr(stmt.cond)
         self._line(f"if {cond} {{")
         self.indent += 1

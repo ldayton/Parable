@@ -7,6 +7,7 @@ Annotations added:
     Assign.is_declaration: bool  - first assignment to a new variable
     TupleAssign.is_declaration: bool - first assignment to new variables
     TryCatch.hoisted_vars: list[tuple[str, Type | None]] - variables needing hoisting
+    If.hoisted_vars: list[tuple[str, Type | None]] - variables needing hoisting from branches
 """
 
 from src.ir import (
@@ -42,7 +43,7 @@ from src.ir import (
 def analyze(module: Module) -> None:
     """Run all analysis passes, annotating IR nodes in place."""
     _analyze_reassignments(module)
-    _analyze_try_hoisting_all(module)
+    _analyze_hoisting_all(module)
 
 
 def _collect_assigned_vars(stmts: list[Stmt]) -> set[str]:
@@ -258,16 +259,19 @@ def _analyze_function(func: Function) -> None:
         elif isinstance(stmt, TupleAssign):
             # Check if all targets are new declarations
             all_new = True
+            new_targets: list[str] = []
             for target in stmt.targets:
                 if isinstance(target, VarLV):
                     if (target.name in assigned or target.name in declared or
                         target.name in params or target.name in local_assigned):
                         all_new = False
                     else:
+                        new_targets.append(target.name)
                         local_assigned.add(target.name)
                 else:
                     all_new = False
             stmt.is_declaration = all_new
+            stmt.new_targets = new_targets  # Track which specific targets are new
             for target in stmt.targets:
                 if isinstance(target, VarLV) and not stmt.is_declaration:
                     mark_reassigned(target.name)
@@ -357,7 +361,7 @@ def _analyze_function(func: Function) -> None:
 
 
 # ============================================================
-# TRY-CATCH HOISTING ANALYSIS
+# VARIABLE HOISTING ANALYSIS
 # ============================================================
 
 
@@ -399,8 +403,8 @@ def _vars_first_assigned_in(stmts: list[Stmt], already_declared: set[str]) -> di
     return result
 
 
-def _analyze_try_hoisting(func: Function) -> None:
-    """Annotate TryCatch nodes with variables needing hoisting."""
+def _analyze_hoisting(func: Function) -> None:
+    """Annotate TryCatch and If nodes with variables needing hoisting."""
     # Collect function-level declared variables
     func_declared = set(p.name for p in func.params)
     for stmt in func.body:
@@ -408,7 +412,7 @@ def _analyze_try_hoisting(func: Function) -> None:
             func_declared.add(stmt.name)
 
     def analyze_stmts(stmts: list[Stmt], outer_declared: set[str]) -> None:
-        """Analyze statements, annotating TryCatch nodes."""
+        """Analyze statements, annotating nodes that need hoisting."""
         declared = set(outer_declared)
 
         for i, stmt in enumerate(stmts):
@@ -435,6 +439,31 @@ def _analyze_try_hoisting(func: Function) -> None:
                 analyze_stmts(stmt.body, declared)
                 analyze_stmts(stmt.catch_body, declared)
 
+            elif isinstance(stmt, If):
+                # Find vars first assigned inside if branches
+                inner_new = _vars_first_assigned_in(
+                    stmt.then_body + stmt.else_body, declared
+                )
+
+                # Find vars used after this statement
+                used_after = _collect_used_vars(stmts[i + 1:])
+
+                # Vars needing hoisting = first assigned inside AND used after
+                needs_hoisting = [
+                    (name, typ) for name, typ in inner_new.items()
+                    if name in used_after
+                ]
+                stmt.hoisted_vars = needs_hoisting
+
+                # These are now effectively declared for subsequent analysis
+                declared.update(name for name, _ in needs_hoisting)
+
+                # Recurse into if branches
+                if stmt.init:
+                    analyze_stmts([stmt.init], declared)
+                analyze_stmts(stmt.then_body, declared)
+                analyze_stmts(stmt.else_body, declared)
+
             elif isinstance(stmt, VarDecl):
                 declared.add(stmt.name)
             elif isinstance(stmt, Assign) and getattr(stmt, 'is_declaration', False):
@@ -444,11 +473,6 @@ def _analyze_try_hoisting(func: Function) -> None:
                 for target in stmt.targets:
                     if isinstance(target, VarLV):
                         declared.add(target.name)
-            elif isinstance(stmt, If):
-                if stmt.init:
-                    analyze_stmts([stmt.init], declared)
-                analyze_stmts(stmt.then_body, declared)
-                analyze_stmts(stmt.else_body, declared)
             elif isinstance(stmt, While):
                 analyze_stmts(stmt.body, declared)
             elif isinstance(stmt, ForRange):
@@ -467,10 +491,10 @@ def _analyze_try_hoisting(func: Function) -> None:
     analyze_stmts(func.body, func_declared)
 
 
-def _analyze_try_hoisting_all(module: Module) -> None:
-    """Run try-catch hoisting analysis on all functions."""
+def _analyze_hoisting_all(module: Module) -> None:
+    """Run hoisting analysis on all functions."""
     for func in module.functions:
-        _analyze_try_hoisting(func)
+        _analyze_hoisting(func)
     for struct in module.structs:
         for method in struct.methods:
-            _analyze_try_hoisting(method)
+            _analyze_hoisting(method)

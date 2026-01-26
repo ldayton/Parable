@@ -1581,24 +1581,24 @@ func _FormatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects b
 						resultList = append(resultList, " "+op.Op)
 					}
 				}
-			} else {
-				if len(resultList) > 0 && !strings.HasSuffix(resultList[len(resultList)-1], " ") && !strings.HasSuffix(resultList[len(resultList)-1], "\n") {
-					resultList = append(resultList, " ")
-				}
-				formattedCmd := _FormatCmdsubNode(p, indent, inProcsub, compactRedirects, procsubFirst && cmdCount == 0)
-				if len(resultList) > 0 {
-					last := resultList[len(resultList)-1]
-					if strings.Contains(last, " || \n") || strings.Contains(last, " && \n") {
-						formattedCmd = " " + formattedCmd
-					}
-				}
-				if skippedSemi {
-					formattedCmd = " " + formattedCmd
-					skippedSemi = false
-				}
-				resultList = append(resultList, formattedCmd)
-				cmdCount++
+				continue
 			}
+			if len(resultList) > 0 && !strings.HasSuffix(resultList[len(resultList)-1], " ") && !strings.HasSuffix(resultList[len(resultList)-1], "\n") {
+				resultList = append(resultList, " ")
+			}
+			formattedCmd := _FormatCmdsubNode(p, indent, inProcsub, compactRedirects, procsubFirst && cmdCount == 0)
+			if len(resultList) > 0 {
+				last := resultList[len(resultList)-1]
+				if strings.Contains(last, " || \n") || strings.Contains(last, " && \n") {
+					formattedCmd = " " + formattedCmd
+				}
+			}
+			if skippedSemi {
+				formattedCmd = " " + formattedCmd
+				skippedSemi = false
+			}
+			resultList = append(resultList, formattedCmd)
+			cmdCount++
 		}
 		s := strings.Join(resultList, "")
 		if strings.Contains(s, " &\n") && strings.HasSuffix(s, "\n") {
@@ -1608,9 +1608,7 @@ func _FormatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects b
 			s = _Substring(s, 0, len(s)-1)
 		}
 		if !hasHeredoc {
-			for strings.HasSuffix(s, "\n") {
-				s = _Substring(s, 0, len(s)-1)
-			}
+			s = strings.TrimSuffix(s, "\n")
 		}
 		return s
 	case "if":
@@ -1670,6 +1668,29 @@ func _FormatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects b
 		body := _FormatCmdsubNode(forArith.Body, indent+4, false, false, false)
 		result := "for ((" + forArith.Init + "; " + forArith.Cond + "; " + forArith.Incr + "))\ndo\n" + innerSp + body + ";\n" + sp + "done"
 		for _, r := range forArith.Redirects {
+			result = result + " " + _FormatRedirect(r, false, false)
+		}
+		return result
+	case "select":
+		selectNode := node.(*Select)
+		varName := selectNode.Var
+		body := _FormatCmdsubNode(selectNode.Body, indent+4, false, false, false)
+		var result string
+		if selectNode.Words != nil {
+			wordVals := []string{}
+			for _, wn := range selectNode.Words {
+				wordVals = append(wordVals, wn.(*Word).Value)
+			}
+			words := strings.Join(wordVals, " ")
+			if words != "" {
+				result = "select " + varName + " in " + words + ";\n" + sp + "do\n" + innerSp + body + ";\n" + sp + "done"
+			} else {
+				result = "select " + varName + " in ;\n" + sp + "do\n" + innerSp + body + ";\n" + sp + "done"
+			}
+		} else {
+			result = "select " + varName + " in \"$@\";\n" + sp + "do\n" + innerSp + body + ";\n" + sp + "done"
+		}
+		for _, r := range selectNode.Redirects {
 			result = result + " " + _FormatRedirect(r, false, false)
 		}
 		return result

@@ -48,7 +48,7 @@ func (l *Lexer) Advance()  {
 	lx.Pos += 1
 }
 
-func (l *Lexer) ScanWord() (Token, bool) {
+func (l *Lexer) ScanWord() struct{ F0 Token, F1 bool } {
 	var start int = lx.Pos
 	for ((lx.Peek() != Eof) && !IsSpace(lx.Peek())) {
 		lx.Advance()
@@ -73,7 +73,7 @@ func Tokenize(source string) []Token {
 			lx.Advance()
 			continue
 		}
-		var result (Token, bool) = lx.ScanWord()
+		var result struct{ F0 Token, F1 bool } = lx.ScanWord()
 		var tok Token = result[0]
 		var ok bool = result[1]
 		if !ok {
@@ -118,7 +118,7 @@ func ExampleNilCheck(tokens []Token) string {
 func SumPositions(tokens []Token) int {
 	var sum int = 0
 	for i := 0; (i < len(tokens)); i = (i + 1) {
-		sum := (sum + tokens[i].Pos)
+		sum = (sum + tokens[i].Pos)
 	}
 	return sum
 }
@@ -127,7 +127,7 @@ func FirstWordPos(tokens []Token) int {
 	var pos int = -1
 	for _, tok := range tokens {
 		if (tok.Kind == "word") {
-			pos := tok.Pos
+			pos = tok.Pos
 			break
 		}
 	}
@@ -146,7 +146,7 @@ func ScopedWork(x int) int {
 	var result int = 0
 	{
 		var temp int = (x * 2)
-		result := (temp + 1)
+		result = (temp + 1)
 	}
 	return result
 }
@@ -169,7 +169,7 @@ func SafeTokenize(source string) []Token {
 	func() {
 		defer func() {
 			if e := recover(); e != nil {
-				tokens := []Token{}
+				tokens = []Token{}
 			}
 		}()
 		tokens = Tokenize(source)
@@ -182,7 +182,7 @@ func Pi() float64 {
 }
 
 func DescribeToken(tok Token) string {
-	return fmt.Sprintf("Token({0}, {1}, {2})", tok.Kind, tok.Text, tok.Pos)
+	return fmt.Sprintf("Token(%v, %v, %v)", tok.Kind, tok.Text, tok.Pos)
 }
 
 func SetFirstKind(tokens []Token, kind string) {
@@ -230,7 +230,7 @@ func IdentityStr(s string) string {
 	return s
 }
 
-func AcceptUnion(obj ) bool {
+func AcceptUnion(obj interface{}) bool {
 	return true
 }
 """

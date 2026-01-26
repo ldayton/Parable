@@ -227,6 +227,7 @@ class GoBackend:
     def _emit_stmt_VarDecl(self, stmt: VarDecl) -> None:
         go_type = self._type_to_go(stmt.typ)
         name = self._to_camel(stmt.name)
+        self._declared_vars.add(name)
         if stmt.value:
             val = self._emit_expr(stmt.value)
             self._line(f"var {name} {go_type} = {val}")
@@ -508,11 +509,13 @@ class GoBackend:
     def _emit_expr_Index(self, expr: Index) -> str:
         obj = self._emit_expr(expr.obj)
         idx = self._emit_expr(expr.index)
-        # Handle tuple indexing on struct types (stack entries)
-        # Pattern: stack[i][0] -> stack[i].Single, stack[i][1] -> stack[i].Double
-        if isinstance(expr.index, IntLit) and expr.index.value in (0, 1):
-            # Check if we're indexing into a stack entry (another Index on "stack")
-            if isinstance(expr.obj, Index):
+        # Handle tuple indexing - Go structs use field access, not indexing
+        if isinstance(expr.index, IntLit):
+            # Check if indexing into a tuple type (struct with F0, F1, etc.)
+            if hasattr(expr, 'obj_type') and isinstance(expr.obj_type, Tuple):
+                return f"{obj}.F{expr.index.value}"
+            # Handle stack entry pattern: stack[i][0] -> stack[i].Single
+            if expr.index.value in (0, 1) and isinstance(expr.obj, Index):
                 inner_obj = self._emit_expr(expr.obj.obj)
                 if "stack" in inner_obj.lower() or "Stack" in inner_obj:
                     inner_idx = self._emit_expr(expr.obj.index)
@@ -662,9 +665,13 @@ class GoBackend:
 
     def _emit_expr_StringFormat(self, expr: StringFormat) -> str:
         args = ", ".join(self._emit_expr(a) for a in expr.args)
+        # Convert Python-style {0}, {1} placeholders to Go-style %v
+        import re
+        template = expr.template
+        template = re.sub(r'\{(\d+)\}', '%v', template)
         # Escape special characters in template
         escaped = (
-            expr.template.replace("\\", "\\\\")
+            template.replace("\\", "\\\\")
             .replace('"', '\\"')
             .replace("\n", "\\n")
             .replace("\t", "\\t")
@@ -720,8 +727,10 @@ class GoBackend:
         if isinstance(typ, Set):
             return f"map[{self._type_to_go(typ.element)}]struct{{}}"
         if isinstance(typ, Tuple):
-            parts = ", ".join(self._type_to_go(e) for e in typ.elements)
-            return f"({parts})"
+            # Go doesn't have tuple types for variables; use struct for storage
+            # For function returns, caller handles multiple return values specially
+            fields = ", ".join(f"F{i} {self._type_to_go(e)}" for i, e in enumerate(typ.elements))
+            return f"struct{{ {fields} }}"
         if isinstance(typ, Pointer):
             return f"*{self._type_to_go(typ.target)}"
         if isinstance(typ, Optional):
@@ -739,7 +748,8 @@ class GoBackend:
                 return ""  # void return
             return typ.name
         if isinstance(typ, Union):
-            return typ.name  # Interface type
+            # Go uses interface{} for union types (or a custom interface if named)
+            return typ.name if typ.name else "interface{}"
         if isinstance(typ, FuncType):
             params = ", ".join(self._type_to_go(p) for p in typ.params)
             ret = self._type_to_go(typ.ret)

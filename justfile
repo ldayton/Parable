@@ -105,7 +105,7 @@ _check-parallel: test-bounds lint fmt verify-lock check-dump-ast check-style ver
 check: _ensure-biome _check-parallel
 
 # Quick check: test, transpile-js, test-js, transpile-go, test-go
-quick-check: test transpile-js test-js transpile-go test-go
+quick-check: check-style test transpile-js test-js transpile-go test-go
 
 # Lint (--fix to apply changes)
 lint *ARGS:

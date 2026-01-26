@@ -23,7 +23,7 @@ Primitive { kind: "string" | "int" | "bool" | "float" | "byte" | "rune" | "void"
 | `int`    | `int`     | `number`  | `i64`    | `int64_t`       |
 | `float`  | `float64` | `number`  | `f64`    | `double`        |
 | `bool`   | `bool`    | `boolean` | `bool`   | `bool`          |
-| `string` | `string`  | `string`  | `String` | `Str` (fat ptr) |
+| `string` | `string`  | `string`  | `String` | `Str` (ptr+len) |
 | `byte`   | `byte`    | `number`  | `u8`     | `uint8_t`       |
 | `rune`   | `rune`    | `number`  | `char`   | `int32_t`       |
 | `void`   | —         | `void`    | `()`     | `void`          |
@@ -264,13 +264,11 @@ Continue { label: string? }
 
 ### Error Handling
 
-Based on parable.py analysis: 308 methods, 88 raise sites, only 3 catch sites.
-
 **Two failure modes:**
-- **Soft failure**: Returns `None` — "try alternative parsing" (93 sites)
-- **Hard failure**: Raises exception — "committed and failed" (88 sites)
+- **Soft failure**: Returns `None` — "try alternative parsing"
+- **Hard failure**: Raises exception — "committed and failed"
 
-Exceptions are NOT used for control flow. Most propagate to top; only 3 backtracking points catch them.
+Exceptions are NOT used for control flow. Most propagate to top; few backtracking points catch them.
 
 **Error type:**
 ```
@@ -294,7 +292,7 @@ Bare calls propagate errors automatically:
 | ------- | ------------ | ------------ | --------- | ------------ |
 | Default | panic floats | throw floats | `call()?` | check + goto |
 
-**Backtracking** (3 sites in parable.py):
+**Backtracking** (rare):
 ```
 TryCatch {
     body: [Stmt]
@@ -317,12 +315,12 @@ SoftFail { }                    // return None / (None, "")
 | ---------- | ------------ | ------------- | ------------- | ------------- |
 | `SoftFail` | `return nil` | `return null` | `return None` | `return NULL` |
 
-### Other
+### Returns and Blocks
 
 ```
 Return { value: Expr? }
-ExprStmt { expr: Expr }
-Block { body: [Stmt] }
+ExprStmt { expr: Expr }                 // expression used as statement
+Block { body: [Stmt] }                  // scoped statement group
 ```
 
 ## Expressions
@@ -336,7 +334,7 @@ IntLit { value: int }
 FloatLit { value: float }
 StringLit { value: string }
 BoolLit { value: bool }
-NilLit { }
+NilLit { }                              // nil/null/None
 ```
 
 ### Access
@@ -488,7 +486,7 @@ Uses `bumpalo::Bump`. Sidesteps ownership inference.
 
 ### C Backend
 
-Arena allocation with fat strings:
+Arena allocation with ptr+len strings:
 
 ```c
 typedef struct { const char *data; size_t len; } Str;
@@ -510,6 +508,41 @@ Python's `if x:` has type-dependent meaning. Parable restricts this to four unam
 | `list[T]`   | `if items:` | Non-empty    | `BinaryOp(">", Len(items), 0)`     |
 | `str`       | `if s:`     | Non-empty    | `BinaryOp("!=", s, StringLit(""))` |
 
-**Constraint:** No variable may have a type where truthiness is ambiguous (e.g., `list[T] | None` where `if x:` could mean "not None" or "non-empty"). The frontend infers types and selects the appropriate transform.
+**Constraint:** No variable may have a type where truthiness is ambiguous (e.g., `list[T] | None` where `if x:` could mean "not None" or "non-empty"). The frontend infers types and selects the appropriate transform. Style enforcement requires explicit `is not None` checks for Optional parameters.
 
-**Enforcement:** `check_style.py` should require explicit `is not None` checks for Optional parameters, preventing `if opt_param:` in favor of `if opt_param is not None:`.
+## Union Types
+
+All unions are **closed** (fixed variants) and discriminated via `.kind` string field.
+
+```
+Union { name: string, variants: [StructRef] }
+```
+
+| IR      | Go                     | JS             | Rust   | C            |
+| ------- | ---------------------- | -------------- | ------ | ------------ |
+| `Union` | interface + type switch | class + `kind` | `enum` | tagged union |
+
+## Ownership Model
+
+AST is a **strict tree**: parent→child only, no cycles, no shared nodes, no back-references.
+
+Nodes are immutable after construction. All nodes live until parse completion.
+
+Arena allocation with single lifetime `'arena`. No reference counting needed.
+
+## String Handling
+
+Two string representations:
+
+```
+StringRef { start: u32, end: u32 }    // Byte range into source buffer
+ArenaStr { ptr: *const u8, len: u32 } // Arena-allocated
+```
+
+| Field type | Representation | Example |
+| ---------- | -------------- | ------- |
+| Parameter names, delimiters | `StringRef` | `ParamExpansion.param`, `HereDoc.delimiter` |
+| Constructed content | `ArenaStr` | `Word.value`, `AnsiCQuote.content` |
+| Operator literals | `&'static str` | `Operator.op` |
+
+Input buffer must outlive AST, or copy referenced ranges into arena at parse end.

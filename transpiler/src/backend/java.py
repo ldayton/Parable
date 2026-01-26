@@ -91,6 +91,7 @@ class JavaBackend:
         self.current_class: str = ""
         self.tuple_records: dict[tuple, str] = {}  # tuple signature -> record name
         self.tuple_counter = 0
+        self.optional_tuples: set[tuple] = set()  # (T, bool) patterns -> use Optional<T>
 
     def emit(self, module: Module) -> str:
         """Emit Java code from IR Module."""
@@ -98,6 +99,7 @@ class JavaBackend:
         self.lines = []
         self.tuple_records = {}
         self.tuple_counter = 0
+        self.optional_tuples = set()
         self._collect_tuple_types(module)
         self._emit_module(module)
         return "\n".join(self.lines)
@@ -107,7 +109,12 @@ class JavaBackend:
         def visit_type(typ: Type) -> None:
             if isinstance(typ, Tuple):
                 sig = tuple(self._type(t) for t in typ.elements)
-                if sig not in self.tuple_records:
+                # Detect (T, bool) pattern - use Optional<T> instead of synthetic record
+                if (len(typ.elements) == 2
+                    and isinstance(typ.elements[1], Primitive)
+                    and typ.elements[1].kind == "bool"):
+                    self.optional_tuples.add(sig)
+                elif sig not in self.tuple_records:
                     self.tuple_counter += 1
                     self.tuple_records[sig] = f"Tuple{self.tuple_counter}"
         def visit_func(func: Function) -> None:
@@ -334,10 +341,13 @@ class JavaBackend:
             case Return(value=value):
                 if value is not None:
                     if isinstance(value, TupleLit):
-                        # Use record type for tuple returns
-                        record_name = self._tuple_record_name(value.typ)
-                        elements = ", ".join(self._expr(e) for e in value.elements)
-                        self._line(f"return new {record_name}({elements});")
+                        # Check if this is an optional tuple (T, bool)
+                        if self._is_optional_tuple(value.typ):
+                            self._line(f"return {self._emit_optional_tuple(value)};")
+                        else:
+                            record_name = self._tuple_record_name(value.typ)
+                            elements = ", ".join(self._expr(e) for e in value.elements)
+                            self._line(f"return new {record_name}({elements});")
                     else:
                         self._line(f"return {self._expr(value)};")
                 else:
@@ -576,7 +586,15 @@ class JavaBackend:
             case Index(obj=obj, index=index):
                 obj_str = self._expr(obj)
                 idx_str = self._expr(index)
-                # Use record field access for tuples
+                # Use Optional methods for (T, bool) tuples
+                if isinstance(obj.typ, Tuple) and self._is_optional_tuple(obj.typ):
+                    if isinstance(index, IntLit):
+                        if index.value == 0:
+                            return f"{obj_str}.get()"
+                        if index.value == 1:
+                            return f"{obj_str}.isPresent()"
+                    return f"{obj_str}.get()"  # fallback
+                # Use record field access for other tuples
                 if isinstance(obj.typ, Tuple):
                     if isinstance(index, IntLit):
                         return f"{obj_str}.f{index.value}()"
@@ -618,11 +636,11 @@ class JavaBackend:
                     return f"{left_str}.equals({right_str})"
                 if java_op == "!=" and _is_string_type(left.typ):
                     return f"!{left_str}.equals({right_str})"
-                return f"({left_str} {java_op} {right_str})"
+                return f"{left_str} {java_op} {right_str}"
             case UnaryOp(op=op, operand=operand):
                 return f"{op}{self._expr(operand)}"
             case Ternary(cond=cond, then_expr=then_expr, else_expr=else_expr):
-                return f"({self._expr(cond)} ? {self._expr(then_expr)} : {self._expr(else_expr)})"
+                return f"{self._expr(cond)} ? {self._expr(then_expr)} : {self._expr(else_expr)}"
             case Cast(expr=inner, to_type=to_type):
                 return self._cast(inner, to_type)
             case TypeAssert(expr=inner, asserted=asserted, safe=safe):
@@ -633,8 +651,8 @@ class JavaBackend:
                 return f"({self._expr(inner)} instanceof {type_name})"
             case IsNil(expr=inner, negated=negated):
                 if negated:
-                    return f"({self._expr(inner)} != null)"
-                return f"({self._expr(inner)} == null)"
+                    return f"{self._expr(inner)} != null"
+                return f"{self._expr(inner)} == null"
             case Len(expr=inner):
                 inner_str = self._expr(inner)
                 if isinstance(inner.typ, Primitive) and inner.typ.kind == "string":
@@ -643,41 +661,32 @@ class JavaBackend:
                     return f"{inner_str}.length"
                 return f"{inner_str}.size()"
             case MakeSlice(element_type=element_type, length=length, capacity=capacity):
-                typ = self._type(element_type)
                 if capacity:
                     cap = self._expr(capacity)
-                    return f"new ArrayList<{_box_type(typ)}>({cap})"
+                    return f"new ArrayList<>({cap})"
                 if length:
                     length_str = self._expr(length)
-                    return f"new ArrayList<{_box_type(typ)}>({length_str})"
-                return f"new ArrayList<{_box_type(typ)}>()"
+                    return f"new ArrayList<>({length_str})"
+                return "new ArrayList<>()"
             case MakeMap(key_type=key_type, value_type=value_type):
-                kt = _box_type(self._type(key_type))
-                vt = _box_type(self._type(value_type))
-                return f"new HashMap<{kt}, {vt}>()"
+                return "new HashMap<>()"
             case SliceLit(elements=elements, element_type=element_type):
                 if not elements:
-                    typ = _box_type(self._type(element_type))
-                    return f"new ArrayList<{typ}>()"
+                    return "new ArrayList<>()"
                 elems = ", ".join(self._expr(e) for e in elements)
-                typ = _box_type(self._type(element_type))
-                return f"new ArrayList<{typ}>(Arrays.asList({elems}))"
+                return f"new ArrayList<>(List.of({elems}))"
             case MapLit(entries=entries, key_type=key_type, value_type=value_type):
-                kt = _box_type(self._type(key_type))
-                vt = _box_type(self._type(value_type))
                 if not entries:
-                    return f"new HashMap<{kt}, {vt}>()"
-                # Java doesn't have map literals, use Map.of() or build manually
+                    return "new HashMap<>()"
                 pairs = ", ".join(
                     f"{self._expr(k)}, {self._expr(v)}" for k, v in entries
                 )
-                return f"new HashMap<{kt}, {vt}>(Map.of({pairs}))"
+                return f"new HashMap<>(Map.of({pairs}))"
             case SetLit(elements=elements, element_type=element_type):
-                et = _box_type(self._type(element_type))
                 if not elements:
-                    return f"new HashSet<{et}>()"
+                    return "new HashSet<>()"
                 elems = ", ".join(self._expr(e) for e in elements)
-                return f"new HashSet<{et}>(Arrays.asList({elems}))"
+                return f"new HashSet<>(Set.of({elems}))"
             case StructLit(struct_name=struct_name, fields=fields):
                 if not fields:
                     return f"new {struct_name}()"
@@ -685,6 +694,8 @@ class JavaBackend:
                 args = ", ".join(self._expr(v) for v in fields.values())
                 return f"new {struct_name}({args})"
             case TupleLit(elements=elements, typ=typ):
+                if self._is_optional_tuple(typ):
+                    return self._emit_optional_tuple(expr)
                 record_name = self._tuple_record_name(typ)
                 elems = ", ".join(self._expr(e) for e in elements)
                 return f"new {record_name}({elems})"
@@ -807,7 +818,10 @@ class JavaBackend:
                 et = _box_type(self._type(element))
                 return f"Set<{et}>"
             case Tuple(elements=elements):
-                # Use generated record type
+                sig = tuple(self._type(t) for t in elements)
+                if sig in self.optional_tuples:
+                    inner = _box_type(self._type(elements[0]))
+                    return f"Optional<{inner}>"
                 return self._tuple_record_name(typ)
             case Pointer(target=target):
                 return self._type(target)
@@ -858,6 +872,26 @@ class JavaBackend:
             return self.tuple_records.get(sig, "Object[]")
         return "Object[]"
 
+    def _is_optional_tuple(self, typ: Type) -> bool:
+        """Check if this tuple type should be represented as Optional<T>."""
+        if isinstance(typ, Tuple):
+            sig = tuple(self._type(t) for t in typ.elements)
+            return sig in self.optional_tuples
+        return False
+
+    def _emit_optional_tuple(self, lit: TupleLit) -> str:
+        """Emit a (T, bool) tuple as Optional<T>."""
+        value_expr = self._expr(lit.elements[0])
+        ok_expr = lit.elements[1]
+        # If the bool is a literal, we can emit Optional.of() or Optional.empty()
+        if isinstance(ok_expr, BoolLit):
+            if ok_expr.value:
+                return f"Optional.of({value_expr})"
+            return "Optional.empty()"
+        # If bool is a variable, we need a conditional
+        ok_str = self._expr(ok_expr)
+        return f"({ok_str} ? Optional.of({value_expr}) : Optional.empty())"
+
     def _default_value(self, typ: Type) -> str:
         match typ:
             case Primitive(kind="string"):
@@ -873,8 +907,7 @@ class JavaBackend:
             case Primitive(kind="rune"):
                 return "0"
             case Slice():
-                elem = _box_type(self._type(typ.element))
-                return f"new ArrayList<{elem}>()"
+                return "new ArrayList<>()"
             case Optional():
                 return "null"
             case _:

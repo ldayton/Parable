@@ -182,6 +182,10 @@ function safeTokenize(source: string): Token[] {
 
 function pi(): number {
   return 3.14159;
+}
+
+function describeToken(tok: Token): string {
+  return `Token(${tok.kind}, ${tok.text}, ${tok.pos})`;
 }"""
 
 

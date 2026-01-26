@@ -52,6 +52,7 @@ from src.ir import (
     SliceExpr,
     SliceLit,
     StringConcat,
+    StringFormat,
     StringLit,
     Struct,
     StructLit,
@@ -1013,6 +1014,28 @@ def make_fixture() -> Module:
         ],
     )
 
+    # --- Function: describe_token (exercises StringFormat) ---
+    describe_token_func = Function(
+        name="describe_token",
+        params=[Param(name="tok", typ=token_ref)],
+        ret=STRING,
+        body=[
+            Return(
+                value=StringFormat(
+                    template="Token({0}, {1}, {2})",
+                    args=[
+                        FieldAccess(obj=Var(name="tok", typ=token_ref, loc=L), field="kind", typ=STRING, loc=L),
+                        FieldAccess(obj=Var(name="tok", typ=token_ref, loc=L), field="text", typ=STRING, loc=L),
+                        FieldAccess(obj=Var(name="tok", typ=token_ref, loc=L), field="pos", typ=INT, loc=L),
+                    ],
+                    typ=STRING,
+                    loc=L,
+                ),
+                loc=L,
+            ),
+        ],
+    )
+
     return Module(
         name="fixture",
         structs=[token_struct, lexer_struct],
@@ -1032,6 +1055,7 @@ def make_fixture() -> Module:
             kind_priority_func,
             safe_tokenize_func,
             pi_func,
+            describe_token_func,
         ],
         constants=[eof_const],
     )

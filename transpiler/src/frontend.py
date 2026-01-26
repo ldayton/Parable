@@ -44,6 +44,8 @@ from .ir import (
     Tuple,
     TupleAssign,
     Type,
+    TypeCase,
+    TypeSwitch,
 )
 
 if TYPE_CHECKING:
@@ -1516,6 +1518,13 @@ class Frontend:
             if func_name == "chr" and len(args) == 1:
                 rune_cast = ir.Cast(expr=args[0], to_type=RUNE, typ=RUNE, loc=self._loc_from_node(node))
                 return ir.Cast(expr=rune_cast, to_type=STRING, typ=STRING, loc=self._loc_from_node(node))
+            # Check for isinstance(x, Type) -> IsType expression
+            if func_name == "isinstance" and len(node.args) == 2:
+                expr = self._lower_expr(node.args[0])
+                if isinstance(node.args[1], ast.Name):
+                    type_name = node.args[1].id
+                    tested_type = self._resolve_type_name(type_name)
+                    return ir.IsType(expr=expr, tested_type=tested_type, typ=BOOL, loc=self._loc_from_node(node))
             # Check for constructor calls (class names)
             if func_name in self.symbols.structs:
                 # Constructor call -> StructLit with fields mapped from positional args
@@ -1758,8 +1767,107 @@ class Frontend:
             value = self._coerce(value, from_type, self._type_ctx.return_type)
         return ir.Return(value=value, loc=self._loc_from_node(node))
 
+    def _is_isinstance_call(self, node: ast.expr) -> tuple[str, str] | None:
+        """Check if node is isinstance(var, Type). Returns (var_name, type_name) or None."""
+        if not isinstance(node, ast.Call):
+            return None
+        if not isinstance(node.func, ast.Name) or node.func.id != "isinstance":
+            return None
+        if len(node.args) != 2:
+            return None
+        if not isinstance(node.args[0], ast.Name):
+            return None
+        if not isinstance(node.args[1], ast.Name):
+            return None
+        return (node.args[0].id, node.args[1].id)
+
+    def _extract_isinstance_or_chain(self, node: ast.expr) -> tuple[str, list[str]] | None:
+        """Extract isinstance checks from 'or' expression. Returns (var_name, [type_names]) or None."""
+        # Handle simple isinstance call
+        simple = self._is_isinstance_call(node)
+        if simple:
+            return (simple[0], [simple[1]])
+        # Handle isinstance(x, A) or isinstance(x, B) or ...
+        if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.Or):
+            var_name: str | None = None
+            type_names: list[str] = []
+            for value in node.values:
+                check = self._is_isinstance_call(value)
+                if not check:
+                    return None  # Not all are isinstance calls
+                if var_name is None:
+                    var_name = check[0]
+                elif var_name != check[0]:
+                    return None  # Different variables
+                type_names.append(check[1])
+            if var_name and type_names:
+                return (var_name, type_names)
+        return None
+
+    def _collect_isinstance_chain(self, node: ast.If, var_name: str) -> tuple[list["ir.TypeCase"], list["ir.Stmt"]]:
+        """Collect isinstance checks on same variable into TypeSwitch cases."""
+        from . import ir
+        cases: list[ir.TypeCase] = []
+        current = node
+        while True:
+            # Check for single isinstance or isinstance-or-chain
+            check = self._extract_isinstance_or_chain(current.test)
+            if not check or check[0] != var_name:
+                break
+            _, type_names = check
+            # Lower body once, generate case for each type
+            # For or chains, duplicate the body for each type
+            for type_name in type_names:
+                typ = self._resolve_type_name(type_name)
+                # Temporarily narrow the variable type for this branch
+                old_type = self._type_ctx.var_types.get(var_name)
+                self._type_ctx.var_types[var_name] = typ
+                body = [self._lower_stmt(s) for s in current.body]
+                # Restore original type
+                if old_type is not None:
+                    self._type_ctx.var_types[var_name] = old_type
+                else:
+                    self._type_ctx.var_types.pop(var_name, None)
+                cases.append(ir.TypeCase(typ=typ, body=body, loc=self._loc_from_node(current)))
+            # Check for elif isinstance chain
+            if len(current.orelse) == 1 and isinstance(current.orelse[0], ast.If):
+                current = current.orelse[0]
+            elif current.orelse:
+                # Has else block - becomes default
+                default = [self._lower_stmt(s) for s in current.orelse]
+                return cases, default
+            else:
+                return cases, []
+        # Reached non-isinstance condition - treat rest as default
+        if current != node:
+            default = [self._lower_stmt(ast.If(test=current.test, body=current.body, orelse=current.orelse))]
+            return cases, default
+        return [], []
+
+    def _resolve_type_name(self, name: str) -> Type:
+        """Resolve a class name to an IR type (for isinstance checks)."""
+        if name in self.symbols.structs:
+            return Pointer(StructRef(name))
+        return Interface(name)
+
     def _lower_stmt_If(self, node: ast.If) -> "ir.Stmt":
         from . import ir
+        # Check for isinstance chain pattern (including 'or' patterns)
+        isinstance_check = self._extract_isinstance_or_chain(node.test)
+        if isinstance_check:
+            var_name, _ = isinstance_check
+            # Try to collect full isinstance chain on same variable
+            cases, default = self._collect_isinstance_chain(node, var_name)
+            if cases:
+                var_expr = self._lower_expr(ast.Name(id=var_name, ctx=ast.Load()))
+                return TypeSwitch(
+                    expr=var_expr,
+                    binding=var_name,
+                    cases=cases,
+                    default=default,
+                    loc=self._loc_from_node(node)
+                )
+        # Fall back to regular If emission
         cond = self._lower_expr_as_bool(node.test)
         then_body = self._lower_stmts(node.body)
         else_body = self._lower_stmts(node.orelse) if node.orelse else []

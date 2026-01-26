@@ -391,6 +391,8 @@ class TsBackend:
                 if value is not None:
                     return f"{keyword} {_camel(name)}: {ts_type} = {self._expr(value)}"
                 return f"{keyword} {_camel(name)}: {ts_type}"
+            case Assign(target=VarLV(name=name), value=BinaryOp(op=op, left=Var(name=left_name), right=IntLit(value=1))) if name == left_name and op in ("+", "-"):
+                return f"{_camel(name)}++" if op == "+" else f"{_camel(name)}--"
             case Assign(target=target, value=value):
                 return f"{self._lvalue(target)} = {self._expr(value)}"
             case OpAssign(target=target, op=op, value=value):
@@ -457,11 +459,13 @@ class TsBackend:
                 return f"{type_name}.{_camel(method)}({args_str})"
             case BinaryOp(op=op, left=left, right=right):
                 ts_op = _binary_op(op)
-                return f"({self._expr(left)} {ts_op} {self._expr(right)})"
+                left_str = self._expr_with_precedence(left, op, is_right=False)
+                right_str = self._expr_with_precedence(right, op, is_right=True)
+                return f"{left_str} {ts_op} {right_str}"
             case UnaryOp(op=op, operand=operand):
                 return f"{op}{self._expr(operand)}"
             case Ternary(cond=cond, then_expr=then_expr, else_expr=else_expr):
-                return f"({self._expr(cond)} ? {self._expr(then_expr)} : {self._expr(else_expr)})"
+                return f"{self._expr(cond)} ? {self._expr(then_expr)} : {self._expr(else_expr)}"
             case Cast(expr=inner, to_type=to_type):
                 ts_type = self._type(to_type)
                 from_type = self._type(inner.typ) if hasattr(inner, 'typ') else None
@@ -472,10 +476,10 @@ class TsBackend:
                 return f"({self._expr(inner)} as {self._type(asserted)})"
             case IsType(expr=inner, tested_type=tested_type):
                 type_name = self._type_name_for_check(tested_type)
-                return f"({self._expr(inner)} instanceof {type_name})"
+                return f"{self._expr(inner)} instanceof {type_name}"
             case IsNil(expr=inner, negated=negated):
                 op = "!==" if negated else "==="
-                return f"({self._expr(inner)} {op} null)"
+                return f"{self._expr(inner)} {op} null"
             case Len(expr=inner):
                 return f"{self._expr(inner)}.length"
             case MakeSlice(element_type=_, length=length, capacity=_):
@@ -520,6 +524,17 @@ class TsBackend:
             return f"{obj_str}.slice({self._expr(low)})"
         else:
             return f"{obj_str}.slice({self._expr(low)}, {self._expr(high)})"
+
+    def _expr_with_precedence(self, expr: Expr, parent_op: str, is_right: bool) -> str:
+        """Wrap expr in parens if needed based on operator precedence."""
+        inner = self._expr(expr)
+        if not isinstance(expr, BinaryOp):
+            return inner
+        child_prec = _op_precedence(expr.op)
+        parent_prec = _op_precedence(parent_op)
+        # Need parens if child has lower precedence, or same precedence on right side
+        needs_parens = child_prec < parent_prec or (child_prec == parent_prec and is_right)
+        return f"({inner})" if needs_parens else inner
 
     def _format_string(self, template: str, args: list[Expr]) -> str:
         result = template
@@ -642,3 +657,22 @@ def _string_literal(value: str) -> str:
 def _ends_with_return(body: list[Stmt]) -> bool:
     """Check if a statement list ends with a return (no break needed)."""
     return bool(body) and isinstance(body[-1], Return)
+
+
+def _op_precedence(op: str) -> int:
+    """Return precedence level for binary operator (higher = binds tighter)."""
+    match op:
+        case "||":
+            return 1
+        case "&&":
+            return 2
+        case "==" | "!=" | "===" | "!==":
+            return 3
+        case "<" | ">" | "<=" | ">=":
+            return 4
+        case "+" | "-":
+            return 5
+        case "*" | "/" | "%":
+            return 6
+        case _:
+            return 10

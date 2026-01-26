@@ -48,9 +48,9 @@ func (l *Lexer) Advance()  {
 	lx.Pos += 1
 }
 
-func (l *Lexer) ScanWord() struct{ F0 Token, F1 bool } {
+func (l *Lexer) ScanWord() (Token, bool) {
 	var start int = lx.Pos
-	for ((lx.Peek() != Eof) && !IsSpace(lx.Peek())) {
+	for (lx.Peek() != Eof) && !IsSpace(lx.Peek()) {
 		lx.Advance()
 	}
 	if (lx.Pos == start) {
@@ -61,7 +61,7 @@ func (l *Lexer) ScanWord() struct{ F0 Token, F1 bool } {
 }
 
 func IsSpace(ch int) bool {
-	return ((ch == 32) || (ch == 10))
+	return (ch == 32) || (ch == 10)
 }
 
 func Tokenize(source string) []Token {
@@ -74,8 +74,8 @@ func Tokenize(source string) []Token {
 			continue
 		}
 		var result struct{ F0 Token, F1 bool } = lx.ScanWord()
-		var tok Token = result[0]
-		var ok bool = result[1]
+		var tok Token = result.F0
+		var ok bool = result.F1
 		if !ok {
 			panic("unexpected character")
 		}
@@ -117,7 +117,7 @@ func ExampleNilCheck(tokens []Token) string {
 
 func SumPositions(tokens []Token) int {
 	var sum int = 0
-	for i := 0; (i < len(tokens)); i = (i + 1) {
+	for i := 0; (i < len(tokens)); i++ {
 		sum = (sum + tokens[i].Pos)
 	}
 	return sum
@@ -135,7 +135,10 @@ func FirstWordPos(tokens []Token) int {
 }
 
 func MaxInt(a int, b int) int {
-	return func() int { if (a > b) { return a } else { return b } }()
+	if (a > b) {
+		return a
+	}
+	return b
 }
 
 func DefaultKinds() map[string]int {

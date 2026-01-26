@@ -23,7 +23,7 @@ class Token {
   }
 
   isWord(): boolean {
-    return (this.kind === "word");
+    return this.kind === "word";
   }
 }
 
@@ -39,7 +39,7 @@ class Lexer {
   }
 
   peek(): number {
-    if ((this.pos >= this.source.length)) {
+    if (this.pos >= this.source.length) {
       return EOF;
     }
     return this.source[this.pos];
@@ -51,10 +51,10 @@ class Lexer {
 
   scanWord(): [Token, boolean] {
     let start: number = this.pos;
-    while (((this.peek() !== EOF) && !isSpace(this.peek()))) {
+    while (this.peek() !== EOF && !isSpace(this.peek())) {
       this.advance();
     }
-    if ((this.pos === start)) {
+    if (this.pos === start) {
       return [new Token(), false];
     }
     let text: string = this.source.slice(start, this.pos);
@@ -63,13 +63,13 @@ class Lexer {
 }
 
 function isSpace(ch: number): boolean {
-  return ((ch === 32) || (ch === 10));
+  return ch === 32 || ch === 10;
 }
 
 function tokenize(source: string): Token[] {
   let lx: Lexer = new Lexer(source, 0, null);
   let tokens: Token[] = [];
-  while ((lx.peek() !== EOF)) {
+  while (lx.peek() !== EOF) {
     let ch: number = lx.peek();
     if (isSpace(ch)) {
       lx.advance();
@@ -89,7 +89,7 @@ function tokenize(source: string): Token[] {
 function countWords(tokens: Token[]): number {
   let count: number = 0;
   for (const tok of tokens) {
-    if ((tok.kind === "word")) {
+    if (tok.kind === "word") {
       count += 1;
     }
   }
@@ -102,7 +102,7 @@ function formatToken(tok: Token): string {
 
 function findToken(tokens: Token[], kind: string): Token | null {
   for (const tok of tokens) {
-    if ((tok.kind === kind)) {
+    if (tok.kind === kind) {
       return tok;
     }
   }
@@ -111,7 +111,7 @@ function findToken(tokens: Token[], kind: string): Token | null {
 
 function exampleNilCheck(tokens: Token[]): string {
   let tok: Token | null = findToken(tokens, "word");
-  if ((tok === null)) {
+  if (tok === null) {
     return "";
   }
   return tok.text;
@@ -119,8 +119,8 @@ function exampleNilCheck(tokens: Token[]): string {
 
 function sumPositions(tokens: Token[]): number {
   let sum: number = 0;
-  for (let i: number = 0; (i < tokens.length); i = (i + 1)) {
-    sum = (sum + tokens[i].pos);
+  for (let i: number = 0; i < tokens.length; i++) {
+    sum = sum + tokens[i].pos;
   }
   return sum;
 }
@@ -128,7 +128,7 @@ function sumPositions(tokens: Token[]): number {
 function firstWordPos(tokens: Token[]): number {
   let pos: number = -1;
   for (const tok of tokens) {
-    if ((tok.kind === "word")) {
+    if (tok.kind === "word") {
       pos = tok.pos;
       break;
     }
@@ -137,7 +137,7 @@ function firstWordPos(tokens: Token[]): number {
 }
 
 function maxInt(a: number, b: number): number {
-  return ((a > b) ? a : b);
+  return a > b ? a : b;
 }
 
 function defaultKinds(): Map<string, number> {
@@ -147,8 +147,8 @@ function defaultKinds(): Map<string, number> {
 function scopedWork(x: number): number {
   let result: number = 0;
   {
-    let temp: number = (x * 2);
-    result = (temp + 1);
+    let temp: number = x * 2;
+    result = temp + 1;
   }
   return result;
 }
@@ -186,7 +186,7 @@ function describeToken(tok: Token): string {
 }
 
 function setFirstKind(tokens: Token[], kind: string): void {
-  if ((tokens.length > 0)) {
+  if (tokens.length > 0) {
     tokens[0] = new Token(kind, "", 0);
   }
 }
@@ -216,7 +216,7 @@ function getArrayFirst(arr: number[]): number {
 }
 
 function maybeGet(tokens: Token[], idx: number): Token | null {
-  if ((idx >= tokens.length)) {
+  if (idx >= tokens.length) {
     return null;
   }
   return tokens[idx];

@@ -112,6 +112,7 @@ class GoBackend:
         self.indent = 0
         self._receiver_name: str = ""  # Current method receiver name
         self._declared_vars: set[str] = set()  # Track declared local variables
+        self._tuple_vars: dict[str, Tuple] = {}  # Track tuple-typed variables
 
     def emit(self, module: Module) -> str:
         """Emit Go code from IR Module."""
@@ -176,8 +177,9 @@ class GoBackend:
 
     def _emit_function(self, func: Function) -> None:
         """Emit function or method definition."""
-        # Reset declared vars for new function scope
+        # Reset declared vars and tuple tracking for new function scope
         self._declared_vars = set()
+        self._tuple_vars = {}
         # Add parameters to declared vars
         param_names = {self._to_camel(p.name) for p in func.params}
         for p in func.params:
@@ -185,7 +187,7 @@ class GoBackend:
         params = ", ".join(
             f"{self._to_camel(p.name)} {self._type_to_go(p.typ)}" for p in func.params
         )
-        ret = self._type_to_go(func.ret) if func.ret != VOID else ""
+        ret = self._return_type_to_go(func.ret) if func.ret != VOID else ""
         if func.receiver:
             # Use first letter of receiver name, but avoid collision with params
             recv_name = func.receiver.name[0].lower()
@@ -228,6 +230,9 @@ class GoBackend:
         go_type = self._type_to_go(stmt.typ)
         name = self._to_camel(stmt.name)
         self._declared_vars.add(name)
+        # Track tuple vars for later tuple indexing
+        if isinstance(stmt.typ, Tuple):
+            self._tuple_vars[name] = stmt.typ
         if stmt.value:
             val = self._emit_expr(stmt.value)
             self._line(f"var {name} {go_type} = {val}")
@@ -273,6 +278,17 @@ class GoBackend:
             if isinstance(stmt.value, TupleLit):
                 vals = ", ".join(self._emit_expr(e) for e in stmt.value.elements)
                 self._line(f"return {vals}")
+            # For Ternary, expand to idiomatic if-else return
+            elif isinstance(stmt.value, Ternary):
+                cond = self._emit_expr(stmt.value.cond)
+                then_val = self._emit_expr(stmt.value.then_expr)
+                else_val = self._emit_expr(stmt.value.else_expr)
+                self._line(f"if {cond} {{")
+                self.indent += 1
+                self._line(f"return {then_val}")
+                self.indent -= 1
+                self._line("}")
+                self._line(f"return {else_val}")
             else:
                 val = self._emit_expr(stmt.value)
                 self._line(f"return {val}")
@@ -370,7 +386,28 @@ class GoBackend:
                 return f"{name} := {val}"
             return f"var {name} {self._type_to_go(stmt.typ)}"
         if isinstance(stmt, Assign):
-            return f"{self._emit_lvalue(stmt.target)} = {self._emit_expr(stmt.value)}"
+            # Detect i = i + 1 pattern and emit as i++
+            target = self._emit_lvalue(stmt.target)
+            if isinstance(stmt.value, BinaryOp) and stmt.value.op == "+":
+                if isinstance(stmt.value.right, IntLit) and stmt.value.right.value == 1:
+                    if isinstance(stmt.value.left, Var):
+                        left_name = self._to_camel(stmt.value.left.name)
+                        if left_name == target:
+                            return f"{target}++"
+                # Also check for 1 + i
+                if isinstance(stmt.value.left, IntLit) and stmt.value.left.value == 1:
+                    if isinstance(stmt.value.right, Var):
+                        right_name = self._to_camel(stmt.value.right.name)
+                        if right_name == target:
+                            return f"{target}++"
+            # Detect i = i - 1 pattern and emit as i--
+            if isinstance(stmt.value, BinaryOp) and stmt.value.op == "-":
+                if isinstance(stmt.value.right, IntLit) and stmt.value.right.value == 1:
+                    if isinstance(stmt.value.left, Var):
+                        left_name = self._to_camel(stmt.value.left.name)
+                        if left_name == target:
+                            return f"{target}--"
+            return f"{target} = {self._emit_expr(stmt.value)}"
         if isinstance(stmt, OpAssign):
             return f"{self._emit_lvalue(stmt.target)} {stmt.op}= {self._emit_expr(stmt.value)}"
         return ""
@@ -509,8 +546,13 @@ class GoBackend:
     def _emit_expr_Index(self, expr: Index) -> str:
         obj = self._emit_expr(expr.obj)
         idx = self._emit_expr(expr.index)
-        # Handle tuple indexing - Go structs use field access, not indexing
+        # Handle tuple indexing - use field access for tuple types
         if isinstance(expr.index, IntLit):
+            # Check if indexing into a known tuple variable
+            if isinstance(expr.obj, Var):
+                var_name = self._to_camel(expr.obj.name)
+                if var_name in self._tuple_vars:
+                    return f"{obj}.F{expr.index.value}"
             # Check if indexing into a tuple type (struct with F0, F1, etc.)
             if hasattr(expr, 'obj_type') and isinstance(expr.obj_type, Tuple):
                 return f"{obj}.F{expr.index.value}"
@@ -569,6 +611,9 @@ class GoBackend:
             return f"strings.Contains({right}, {left})"
         if expr.op == "not in":
             return f"!strings.Contains({right}, {left})"
+        # Only wrap in parens for complex/ambiguous expressions
+        if expr.op in ("&&", "||"):
+            return f"{left} {expr.op} {right}"
         return f"({left} {expr.op} {right})"
 
     def _emit_expr_UnaryOp(self, expr: UnaryOp) -> str:
@@ -706,6 +751,14 @@ class GoBackend:
     # TYPE EMISSION
     # ============================================================
 
+    def _return_type_to_go(self, typ: Type) -> str:
+        """Convert IR Type to Go return type string (handles tuples specially)."""
+        if isinstance(typ, Tuple):
+            # Use Go's multiple return value syntax for function returns
+            types = ", ".join(self._type_to_go(e) for e in typ.elements)
+            return f"({types})"
+        return self._type_to_go(typ)
+
     def _type_to_go(self, typ: Type) -> str:
         """Convert IR Type to Go type string."""
         if isinstance(typ, Primitive):
@@ -728,7 +781,6 @@ class GoBackend:
             return f"map[{self._type_to_go(typ.element)}]struct{{}}"
         if isinstance(typ, Tuple):
             # Go doesn't have tuple types for variables; use struct for storage
-            # For function returns, caller handles multiple return values specially
             fields = ", ".join(f"F{i} {self._type_to_go(e)}" for i, e in enumerate(typ.elements))
             return f"struct{{ {fields} }}"
         if isinstance(typ, Pointer):

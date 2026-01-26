@@ -367,7 +367,18 @@ class PythonBackend:
         post: Stmt | None,
         body: list[Stmt],
     ) -> None:
-        # Python doesn't have C-style for loops; emit as while loop
+        # Check for simple iteration pattern: for i := 0; i < len(x); i++
+        if (range_info := _extract_range_pattern(init, cond, post)) is not None:
+            var_name, iterable_expr = range_info
+            self._line(f"for {var_name} in range(len({self._expr(iterable_expr)})):")
+            self.indent += 1
+            if not body:
+                self._line("pass")
+            for s in body:
+                self._emit_stmt(s)
+            self.indent -= 1
+            return
+        # Fallback: emit as while loop
         if init is not None:
             self._emit_stmt(init)
         cond_str = self._expr(cond) if cond else "True"
@@ -676,3 +687,48 @@ def _needs_parens(child_op: str, parent_op: str, is_left: bool) -> bool:
 def _string_literal(value: str) -> str:
     escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
     return f'"{escaped}"'
+
+
+def _extract_range_pattern(
+    init: Stmt | None, cond: Expr | None, post: Stmt | None
+) -> tuple[str, Expr] | None:
+    """Extract simple range iteration pattern: for i := 0; i < len(x); i++.
+
+    Returns (var_name, iterable_expr) if pattern matches, None otherwise.
+    """
+    if init is None or cond is None or post is None:
+        return None
+    # Check init: i := 0
+    if not isinstance(init, VarDecl):
+        return None
+    if not isinstance(init.value, IntLit) or init.value.value != 0:
+        return None
+    var_name = init.name
+    # Check cond: i < len(x)
+    if not isinstance(cond, BinaryOp) or cond.op != "<":
+        return None
+    if not isinstance(cond.left, Var) or cond.left.name != var_name:
+        return None
+    if not isinstance(cond.right, Len):
+        return None
+    iterable_expr = cond.right.expr
+    # Check post: i = i + 1 or i += 1
+    if isinstance(post, OpAssign):
+        if post.op != "+" or not isinstance(post.target, VarLV):
+            return None
+        if post.target.name != var_name:
+            return None
+        if not isinstance(post.value, IntLit) or post.value.value != 1:
+            return None
+    elif isinstance(post, Assign):
+        if not isinstance(post.target, VarLV) or post.target.name != var_name:
+            return None
+        if not isinstance(post.value, BinaryOp) or post.value.op != "+":
+            return None
+        if not isinstance(post.value.left, Var) or post.value.left.name != var_name:
+            return None
+        if not isinstance(post.value.right, IntLit) or post.value.right.value != 1:
+            return None
+    else:
+        return None
+    return (var_name, iterable_expr)

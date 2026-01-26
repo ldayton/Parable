@@ -89,13 +89,77 @@ class JavaBackend:
         self.lines: list[str] = []
         self.receiver_name: str | None = None
         self.current_class: str = ""
+        self.tuple_records: dict[tuple, str] = {}  # tuple signature -> record name
+        self.tuple_counter = 0
 
     def emit(self, module: Module) -> str:
         """Emit Java code from IR Module."""
         self.indent = 0
         self.lines = []
+        self.tuple_records = {}
+        self.tuple_counter = 0
+        self._collect_tuple_types(module)
         self._emit_module(module)
         return "\n".join(self.lines)
+
+    def _collect_tuple_types(self, module: Module) -> None:
+        """Collect all unique tuple types used in the module."""
+        def visit_type(typ: Type) -> None:
+            if isinstance(typ, Tuple):
+                sig = tuple(self._type(t) for t in typ.elements)
+                if sig not in self.tuple_records:
+                    self.tuple_counter += 1
+                    self.tuple_records[sig] = f"Tuple{self.tuple_counter}"
+        def visit_func(func: Function) -> None:
+            visit_type(func.ret)
+            for stmt in func.body:
+                visit_stmt(stmt)
+        def visit_stmt(stmt: Stmt) -> None:
+            match stmt:
+                case VarDecl(typ=typ, value=value):
+                    visit_type(typ)
+                    if value:
+                        visit_expr(value)
+                case Return(value=value):
+                    if value:
+                        visit_expr(value)
+                case If(then_body=then_body, else_body=else_body):
+                    for s in then_body:
+                        visit_stmt(s)
+                    for s in else_body:
+                        visit_stmt(s)
+                case While(body=body):
+                    for s in body:
+                        visit_stmt(s)
+                case ForRange(body=body):
+                    for s in body:
+                        visit_stmt(s)
+                case ForClassic(body=body):
+                    for s in body:
+                        visit_stmt(s)
+                case Block(body=body):
+                    for s in body:
+                        visit_stmt(s)
+                case TryCatch(body=body, catch_body=catch_body):
+                    for s in body:
+                        visit_stmt(s)
+                    for s in catch_body:
+                        visit_stmt(s)
+                case _:
+                    pass
+        def visit_expr(expr: Expr) -> None:
+            match expr:
+                case MethodCall(typ=typ):
+                    visit_type(typ)
+                case TupleLit(typ=typ):
+                    visit_type(typ)
+                case _:
+                    pass
+        for struct in module.structs:
+            for method in struct.methods:
+                visit_func(method)
+        for func in module.functions:
+            visit_func(func)
 
     def _line(self, text: str = "") -> None:
         if text:
@@ -114,6 +178,10 @@ class JavaBackend:
             self.indent -= 1
             self._line("}")
             self._line("")
+        # Emit record definitions for tuple types
+        for sig, name in self.tuple_records.items():
+            self._emit_tuple_record(name, sig)
+            self._line("")
         for iface in module.interfaces:
             self._emit_interface(iface)
             self._line("")
@@ -125,6 +193,11 @@ class JavaBackend:
             pass
         if module.functions:
             self._emit_functions_class(module)
+
+    def _emit_tuple_record(self, name: str, sig: tuple) -> None:
+        """Emit a record definition for a tuple type."""
+        fields = ", ".join(f"{typ} f{i}" for i, typ in enumerate(sig))
+        self._line(f"record {name}({fields}) {{}}")
 
     def _emit_constant(self, const: Constant) -> None:
         typ = self._type(const.typ)
@@ -261,9 +334,10 @@ class JavaBackend:
             case Return(value=value):
                 if value is not None:
                     if isinstance(value, TupleLit):
-                        # Java doesn't have multiple returns - use array or record
+                        # Use record type for tuple returns
+                        record_name = self._tuple_record_name(value.typ)
                         elements = ", ".join(self._expr(e) for e in value.elements)
-                        self._line(f"return new Object[]{{{elements}}};")
+                        self._line(f"return new {record_name}({elements});")
                     else:
                         self._line(f"return {self._expr(value)};")
                 else:
@@ -442,6 +516,12 @@ class JavaBackend:
                     return f"{java_type} {var_name} = {self._expr(value)}"
                 return f"{java_type} {var_name}"
             case Assign(target=target, value=value):
+                # Check for i = i + 1 pattern and convert to i++
+                if isinstance(value, BinaryOp) and value.op == "+":
+                    if isinstance(value.right, IntLit) and value.right.value == 1:
+                        if isinstance(target, VarLV) and isinstance(value.left, Var):
+                            if target.name == value.left.name:
+                                return f"{_to_camel(target.name)}++"
                 return f"{self._lvalue(target)} = {self._expr(value)}"
             case OpAssign(target=target, op=op, value=value):
                 return f"{self._lvalue(target)} {op}= {self._expr(value)}"
@@ -496,6 +576,11 @@ class JavaBackend:
             case Index(obj=obj, index=index):
                 obj_str = self._expr(obj)
                 idx_str = self._expr(index)
+                # Use record field access for tuples
+                if isinstance(obj.typ, Tuple):
+                    if isinstance(index, IntLit):
+                        return f"{obj_str}.f{index.value}()"
+                    return f"{obj_str}.f{idx_str}()"
                 # Use .get() for ArrayList, .charAt() for String
                 if isinstance(obj.typ, Slice):
                     return f"{obj_str}.get({idx_str})"
@@ -590,9 +675,10 @@ class JavaBackend:
                 # Need to pass fields in constructor order - assume same order as defined
                 args = ", ".join(self._expr(v) for v in fields.values())
                 return f"new {struct_name}({args})"
-            case TupleLit(elements=elements):
+            case TupleLit(elements=elements, typ=typ):
+                record_name = self._tuple_record_name(typ)
                 elems = ", ".join(self._expr(e) for e in elements)
-                return f"new Object[]{{{elems}}}"
+                return f"new {record_name}({elems})"
             case StringConcat(parts=parts):
                 return " + ".join(self._expr(p) for p in parts)
             case StringFormat(template=template, args=args):
@@ -712,8 +798,8 @@ class JavaBackend:
                 et = _box_type(self._type(element))
                 return f"HashSet<{et}>"
             case Tuple(elements=elements):
-                # Java doesn't have tuples - use Object[]
-                return "Object[]"
+                # Use generated record type
+                return self._tuple_record_name(typ)
             case Pointer(target=target):
                 return self._type(target)
             case Optional(inner=inner):
@@ -755,6 +841,13 @@ class JavaBackend:
                 return self._type(element)
             case _:
                 return "Object"
+
+    def _tuple_record_name(self, typ: Type) -> str:
+        """Get the record name for a tuple type."""
+        if isinstance(typ, Tuple):
+            sig = tuple(self._type(t) for t in typ.elements)
+            return self.tuple_records.get(sig, "Object[]")
+        return "Object[]"
 
     def _default_value(self, typ: Type) -> str:
         match typ:

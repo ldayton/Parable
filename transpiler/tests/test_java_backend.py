@@ -10,6 +10,8 @@ final class Constants {
     public static final int EOF = -1;
 }
 
+record Tuple1(Token f0, boolean f1) {}
+
 interface Scanner {
     int peek();
     void advance();
@@ -53,16 +55,16 @@ class Lexer {
         this.pos += 1;
     }
 
-    Object[] scanWord() {
+    Tuple1 scanWord() {
         int start = this.pos;
         while (((this.peek() != Constants.EOF) && !isSpace(this.peek()))) {
             this.advance();
         }
         if ((this.pos == start)) {
-            return new Object[]{new Token(), false};
+            return new Tuple1(new Token(), false);
         }
         String text = this.source.substring(start, this.pos);
-        return new Object[]{new Token("word", text, start), true};
+        return new Tuple1(new Token("word", text, start), true);
     }
 }
 
@@ -82,9 +84,9 @@ final class FixtureFunctions {
                 lx.advance();
                 continue;
             }
-            Object[] result = lx.scanWord();
-            Token tok = result[0];
-            boolean ok = result[1];
+            Tuple1 result = lx.scanWord();
+            Token tok = result.f0();
+            boolean ok = result.f1();
             if (!ok) {
                 throw new RuntimeException("unexpected character");
             }
@@ -126,7 +128,7 @@ final class FixtureFunctions {
 
     static int sumPositions(ArrayList<Token> tokens) {
         int sum = 0;
-        for (int i = 0; (i < tokens.size()); i = (i + 1)) {
+        for (int i = 0; (i < tokens.size()); i++) {
             sum = (sum + tokens.get(i).pos);
         }
         return sum;

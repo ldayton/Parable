@@ -215,11 +215,15 @@ class TsBackend:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value, mutable=mutable):
                 keyword = "let" if mutable else "const"
-                ts_type = self._type(typ)
                 if value is not None:
                     val = self._expr(value)
-                    self._line(f"{keyword} {_camel(name)}: {ts_type} = {val};")
+                    if _can_infer_type(value):
+                        self._line(f"{keyword} {_camel(name)} = {val};")
+                    else:
+                        ts_type = self._type(typ)
+                        self._line(f"{keyword} {_camel(name)}: {ts_type} = {val};")
                 else:
+                    ts_type = self._type(typ)
                     self._line(f"{keyword} {_camel(name)}: {ts_type};")
             case Assign(target=target, value=value):
                 lv = self._lvalue(target)
@@ -387,9 +391,13 @@ class TsBackend:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value, mutable=mutable):
                 keyword = "let" if mutable else "const"
-                ts_type = self._type(typ)
                 if value is not None:
-                    return f"{keyword} {_camel(name)}: {ts_type} = {self._expr(value)}"
+                    if _can_infer_type(value):
+                        return f"{keyword} {_camel(name)} = {self._expr(value)}"
+                    else:
+                        ts_type = self._type(typ)
+                        return f"{keyword} {_camel(name)}: {ts_type} = {self._expr(value)}"
+                ts_type = self._type(typ)
                 return f"{keyword} {_camel(name)}: {ts_type}"
             case Assign(target=VarLV(name=name), value=BinaryOp(op=op, left=Var(name=left_name), right=IntLit(value=1))) if name == left_name and op in ("+", "-"):
                 return f"{_camel(name)}++" if op == "+" else f"{_camel(name)}--"
@@ -676,3 +684,34 @@ def _op_precedence(op: str) -> int:
             return 6
         case _:
             return 10
+
+
+def _can_infer_type(value: Expr) -> bool:
+    """Check if TypeScript can infer the type from the value expression."""
+    match value:
+        case IntLit() | FloatLit() | StringLit() | BoolLit():
+            return True
+        case NilLit():
+            return False  # null needs type annotation
+        case Var() | FieldAccess() | Index():
+            return True
+        case Call() | MethodCall() | StaticCall():
+            return True
+        case BinaryOp() | UnaryOp() | Ternary():
+            return True
+        case SliceLit(elements=elements):
+            return len(elements) > 0  # Empty array needs type
+        case MapLit(entries=entries):
+            return len(entries) > 0  # Empty map needs type
+        case SetLit(elements=elements):
+            return len(elements) > 0  # Empty set needs type
+        case StructLit() | TupleLit():
+            return True
+        case SliceExpr() | Len() | Cast() | TypeAssert():
+            return True
+        case MakeSlice() | MakeMap():
+            return False  # new Array(n) and new Map() need type annotations
+        case StringConcat() | StringFormat():
+            return True
+        case _:
+            return False

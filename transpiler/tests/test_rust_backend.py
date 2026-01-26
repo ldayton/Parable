@@ -21,7 +21,7 @@ struct Token {
 
 impl Token {
     fn is_word(&mut self) -> bool {
-        return (self.kind == "word".to_string());
+        return self.kind == "word";
     }
 }
 
@@ -33,7 +33,7 @@ struct Lexer {
 
 impl Lexer {
     fn peek(&mut self) -> i64 {
-        if (self.pos >= self.source.len()) {
+        if self.pos >= self.source.len() {
             return EOF;
         }
         return self.source[self.pos];
@@ -45,10 +45,10 @@ impl Lexer {
 
     fn scan_word(&mut self) -> (Token, bool) {
         let mut start: i64 = self.pos;
-        while ((self.peek() != EOF) && !is_space(self.peek())) {
+        while self.peek() != EOF && !is_space(self.peek()) {
             self.advance();
         }
-        if (self.pos == start) {
+        if self.pos == start {
             return (Token::default(), false);
         }
         let mut text: String = self.source[start..self.pos].to_string();
@@ -57,13 +57,13 @@ impl Lexer {
 }
 
 fn is_space(ch: i64) -> bool {
-    return ((ch == 32) || (ch == 10));
+    return ch == 32 || ch == 10;
 }
 
 fn tokenize(source: String) -> Vec<Token> {
     let mut lx: Lexer = Lexer { source: source, pos: 0, current: None };
     let mut tokens: Vec<Token> = vec![];
-    while (lx.peek() != EOF) {
+    while lx.peek() != EOF {
         let mut ch: i64 = lx.peek();
         if is_space(ch) {
             lx.advance();
@@ -83,7 +83,7 @@ fn tokenize(source: String) -> Vec<Token> {
 fn count_words(tokens: Vec<Token>) -> i64 {
     let mut count: i64 = 0;
     for tok in tokens.iter() {
-        if (tok.kind == "word".to_string()) {
+        if tok.kind == "word" {
             count += 1;
         }
     }
@@ -96,7 +96,7 @@ fn format_token(tok: Token) -> String {
 
 fn find_token(tokens: Vec<Token>, kind: String) -> Option<Token> {
     for tok in tokens.iter() {
-        if (tok.kind == kind) {
+        if tok.kind == kind {
             return tok;
         }
     }
@@ -114,7 +114,7 @@ fn example_nil_check(tokens: Vec<Token>) -> String {
 fn sum_positions(tokens: Vec<Token>) -> i64 {
     let mut sum: i64 = 0;
     let mut i: i64 = 0;
-    while (i < tokens.len()) {
+    while i < tokens.len() {
         sum = (sum + tokens[i].pos);
         i = (i + 1);
     }
@@ -124,7 +124,7 @@ fn sum_positions(tokens: Vec<Token>) -> i64 {
 fn first_word_pos(tokens: Vec<Token>) -> i64 {
     let mut pos: i64 = -1;
     for tok in tokens.iter() {
-        if (tok.kind == "word".to_string()) {
+        if tok.kind == "word" {
             pos = tok.pos;
             break;
         }
@@ -133,7 +133,7 @@ fn first_word_pos(tokens: Vec<Token>) -> i64 {
 }
 
 fn max_int(a: i64, b: i64) -> i64 {
-    return if (a > b) { a } else { b };
+    return if a > b { a } else { b };
 }
 
 fn default_kinds() -> HashMap<String, i64> {
@@ -186,7 +186,7 @@ fn describe_token(tok: Token) -> String {
 }
 
 fn set_first_kind(tokens: Vec<Token>, kind: String) {
-    if (tokens.len() > 0) {
+    if tokens.len() > 0 {
         tokens[0] = Token { kind: kind, text: "".to_string(), pos: 0 };
     }
 }
@@ -216,7 +216,7 @@ fn get_array_first(arr: [i64; 10]) -> i64 {
 }
 
 fn maybe_get(tokens: Vec<Token>, idx: i64) -> Option<Token> {
-    if (idx >= tokens.len()) {
+    if idx >= tokens.len() {
         return None;
     }
     return tokens[idx];

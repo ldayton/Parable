@@ -473,7 +473,16 @@ class RustBackend:
                 return f"{type_name}::{_to_snake(method)}({args_str})"
             case BinaryOp(op=op, left=left, right=right):
                 rust_op = _binary_op(op)
-                return f"({self._expr(left)} {rust_op} {self._expr(right)})"
+                left_str = self._expr(left)
+                # For string equality comparisons, use bare &str literal (no .to_string())
+                if op in ("==", "!=") and isinstance(right, StringLit):
+                    right_str = _string_literal_bare(right.value)
+                else:
+                    right_str = self._expr(right)
+                # Only parenthesize if needed for precedence
+                if op in ("==", "!=", "<", ">", "<=", ">=", "&&", "||"):
+                    return f"{left_str} {rust_op} {right_str}"
+                return f"({left_str} {rust_op} {right_str})"
             case UnaryOp(op=op, operand=operand):
                 return f"{op}{self._expr(operand)}"
             case Ternary(cond=cond, then_expr=then_expr, else_expr=else_expr):
@@ -711,3 +720,9 @@ def _to_snake(name: str) -> str:
 def _string_literal(value: str) -> str:
     escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
     return f'"{escaped}".to_string()'
+
+
+def _string_literal_bare(value: str) -> str:
+    """String literal without .to_string() - for comparisons with &str."""
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
+    return f'"{escaped}"'

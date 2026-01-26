@@ -50,14 +50,14 @@ class Lexer {
   }
 
   scanWord(): [Token, boolean] {
-    let start: number = this.pos;
+    let start = this.pos;
     while (this.peek() !== EOF && !isSpace(this.peek())) {
       this.advance();
     }
     if (this.pos === start) {
       return [new Token(), false];
     }
-    let text: string = this.source.slice(start, this.pos);
+    let text = this.source.slice(start, this.pos);
     return [new Token("word", text, start), true];
   }
 }
@@ -67,17 +67,17 @@ function isSpace(ch: number): boolean {
 }
 
 function tokenize(source: string): Token[] {
-  let lx: Lexer = new Lexer(source, 0, null);
+  let lx = new Lexer(source, 0, null);
   let tokens: Token[] = [];
   while (lx.peek() !== EOF) {
-    let ch: number = lx.peek();
+    let ch = lx.peek();
     if (isSpace(ch)) {
       lx.advance();
       continue;
     }
-    let result: [Token, boolean] = lx.scanWord();
-    let tok: Token = result[0];
-    let ok: boolean = result[1];
+    let result = lx.scanWord();
+    let tok = result[0];
+    let ok = result[1];
     if (!ok) {
       throw new ParseError("unexpected character", lx.pos);
     }
@@ -87,7 +87,7 @@ function tokenize(source: string): Token[] {
 }
 
 function countWords(tokens: Token[]): number {
-  let count: number = 0;
+  let count = 0;
   for (const tok of tokens) {
     if (tok.kind === "word") {
       count += 1;
@@ -110,7 +110,7 @@ function findToken(tokens: Token[], kind: string): Token | null {
 }
 
 function exampleNilCheck(tokens: Token[]): string {
-  let tok: Token | null = findToken(tokens, "word");
+  let tok = findToken(tokens, "word");
   if (tok === null) {
     return "";
   }
@@ -118,15 +118,15 @@ function exampleNilCheck(tokens: Token[]): string {
 }
 
 function sumPositions(tokens: Token[]): number {
-  let sum: number = 0;
-  for (let i: number = 0; i < tokens.length; i++) {
+  let sum = 0;
+  for (let i = 0; i < tokens.length; i++) {
     sum = sum + tokens[i].pos;
   }
   return sum;
 }
 
 function firstWordPos(tokens: Token[]): number {
-  let pos: number = -1;
+  let pos = -1;
   for (const tok of tokens) {
     if (tok.kind === "word") {
       pos = tok.pos;
@@ -145,9 +145,9 @@ function defaultKinds(): Map<string, number> {
 }
 
 function scopedWork(x: number): number {
-  let result: number = 0;
+  let result = 0;
   {
-    let temp: number = x * 2;
+    let temp = x * 2;
     result = temp + 1;
   }
   return result;

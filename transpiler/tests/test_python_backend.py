@@ -102,10 +102,8 @@ def example_nil_check(tokens: list[Token]) -> str:
 
 def sum_positions(tokens: list[Token]) -> int:
     sum: int = 0
-    i: int = 0
-    while i < len(tokens):
+    for i in range(len(tokens)):
         sum = sum + tokens[i].pos
-        i = i + 1
     return sum
 
 

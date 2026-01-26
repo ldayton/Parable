@@ -306,13 +306,6 @@ func _strIsLower(s string) bool {
 
     def _emit_stmt_Assign(self, stmt: Assign) -> None:
         target = self._emit_lvalue(stmt.target)
-        # Detect x = x + y pattern and emit as x += y
-        if isinstance(stmt.value, BinaryOp) and stmt.value.op in ("+", "-", "*", "/", "%", "&", "|", "^"):
-            if isinstance(stmt.target, VarLV) and isinstance(stmt.value.left, Var):
-                if self._to_camel(stmt.target.name) == self._to_camel(stmt.value.left.name):
-                    right = self._emit_expr(stmt.value.right)
-                    self._line(f"{target} {stmt.value.op}= {right}")
-                    return
         value = self._emit_expr(stmt.value)
         # For simple variable assignments, use := for first declaration
         if isinstance(stmt.target, VarLV):
@@ -536,30 +529,17 @@ func _strIsLower(s string) bool {
                 return f"{name} := {val}"
             return f"var {name} {self._type_to_go(stmt.typ)}"
         if isinstance(stmt, Assign):
-            # Detect i = i + 1 pattern and emit as i++
             target = self._emit_lvalue(stmt.target)
-            if isinstance(stmt.value, BinaryOp) and stmt.value.op == "+":
-                if isinstance(stmt.value.right, IntLit) and stmt.value.right.value == 1:
-                    if isinstance(stmt.value.left, Var):
-                        left_name = self._to_camel(stmt.value.left.name)
-                        if left_name == target:
-                            return f"{target}++"
-                # Also check for 1 + i
-                if isinstance(stmt.value.left, IntLit) and stmt.value.left.value == 1:
-                    if isinstance(stmt.value.right, Var):
-                        right_name = self._to_camel(stmt.value.right.name)
-                        if right_name == target:
-                            return f"{target}++"
-            # Detect i = i - 1 pattern and emit as i--
-            if isinstance(stmt.value, BinaryOp) and stmt.value.op == "-":
-                if isinstance(stmt.value.right, IntLit) and stmt.value.right.value == 1:
-                    if isinstance(stmt.value.left, Var):
-                        left_name = self._to_camel(stmt.value.left.name)
-                        if left_name == target:
-                            return f"{target}--"
             return f"{target} = {self._emit_expr(stmt.value)}"
         if isinstance(stmt, OpAssign):
-            return f"{self._emit_lvalue(stmt.target)} {stmt.op}= {self._emit_expr(stmt.value)}"
+            target = self._emit_lvalue(stmt.target)
+            # Emit i++ / i-- for idiomatic Go
+            if isinstance(stmt.value, IntLit) and stmt.value.value == 1:
+                if stmt.op == "+":
+                    return f"{target}++"
+                if stmt.op == "-":
+                    return f"{target}--"
+            return f"{target} {stmt.op}= {self._emit_expr(stmt.value)}"
         return ""
 
     def _emit_stmt_Break(self, stmt: Break) -> None:

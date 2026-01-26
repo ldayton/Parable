@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from .frontend import Frontend
+from .middleend import analyze, transform
 from .backend.go import GoBackend
 
 
@@ -16,6 +17,8 @@ def main() -> None:
     source = Path(sys.argv[1]).read_text()
     fe = Frontend()
     module = fe.transpile(source)
+    analyze(module)
+    transform(module)
     be = GoBackend()
     code = be.emit(module)
     print(code)

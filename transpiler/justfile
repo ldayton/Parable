@@ -19,6 +19,10 @@ check:
 test: go
     go run -C ../src ./cmd/run-tests
 
+# Run backend tests
+test-backends:
+    uv run pytest
+
 # Show Go compilation errors (uses temp copy of src/)
 errors:
     @rm -rf /tmp/parable-src && cp -r ../src /tmp/parable-src

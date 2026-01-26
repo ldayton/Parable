@@ -15,6 +15,7 @@ from src.ir import (
     BoolLit,
     Break,
     Call,
+    Cast,
     Constant,
     Continue,
     ExprStmt,
@@ -1096,6 +1097,24 @@ def make_fixture() -> Module:
         ],
     )
 
+    # --- Function: int_to_float (exercises Cast) ---
+    int_to_float_func = Function(
+        name="int_to_float",
+        params=[Param(name="n", typ=INT)],
+        ret=FLOAT,
+        body=[
+            Return(
+                value=Cast(
+                    expr=Var(name="n", typ=INT, loc=L),
+                    to_type=FLOAT,
+                    typ=FLOAT,
+                    loc=L,
+                ),
+                loc=L,
+            ),
+        ],
+    )
+
     return Module(
         name="fixture",
         structs=[token_struct, lexer_struct],
@@ -1118,6 +1137,7 @@ def make_fixture() -> Module:
             describe_token_func,
             set_first_kind_func,
             make_int_slice_func,
+            int_to_float_func,
         ],
         constants=[eof_const],
     )

@@ -196,6 +196,10 @@ function setFirstKind(tokens: Token[], kind: string): void {
 
 function makeIntSlice(n: number): number[] {
   return new Array(n);
+}
+
+function intToFloat(n: number): number {
+  return (n as number);
 }"""
 
 

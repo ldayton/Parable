@@ -166,6 +166,7 @@ class Module:
     """A complete transpilation unit."""
 
     name: str
+    doc: str | None = None  # module docstring
     structs: list[Struct] = field(default_factory=list)
     interfaces: list[InterfaceDef] = field(default_factory=list)
     functions: list[Function] = field(default_factory=list)
@@ -177,6 +178,7 @@ class Struct:
     """Struct/class definition."""
 
     name: str
+    doc: str | None = None  # class docstring
     fields: list[Field] = field(default_factory=list)
     methods: list[Function] = field(default_factory=list)
     implements: list[str] = field(default_factory=list)  # interface names
@@ -220,6 +222,7 @@ class Function:
     params: list[Param]
     ret: Type
     body: list[Stmt]
+    doc: str | None = None  # function/method docstring
     receiver: Receiver | None = None  # for methods
     fallible: bool = False  # can raise ParseError
     loc: Loc = field(default_factory=Loc.unknown)

@@ -121,6 +121,7 @@ Line is 1-indexed, column is 0-indexed. Enables error messages, source maps, IDE
 ```
 Module {
     name: string
+    doc: string?                // module docstring
     structs: [Struct]
     interfaces: [InterfaceDef]
     functions: [Function]
@@ -133,6 +134,7 @@ Module {
 ```
 Struct {
     name: string
+    doc: string?                // class docstring
     fields: [Field]
     methods: [Function]
     implements: [string]        // interface names
@@ -160,6 +162,7 @@ Function {
     params: [Param]
     ret: Type
     body: [Stmt]
+    doc: string?                // function/method docstring
     receiver: Receiver?         // present for methods
     fallible: bool              // can raise ParseError
 }

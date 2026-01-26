@@ -510,17 +510,16 @@ class GoBackend:
     def _emit_expr_MethodCall(self, expr: MethodCall) -> str:
         obj = self._emit_expr(expr.obj)
         method = expr.method  # Keep original for special cases
-        # Handle Python list methods specially
-        if method == "append" and expr.args:
-            arg = self._emit_expr(expr.args[0])
-            return f"append({obj}, {arg})"
-        if method == "pop" and not expr.args:
-            # Pop returns last element - this is tricky in Go
-            # For statement context, this will be handled differently
-            return f"{obj}[len({obj})-1]"
-        if method == "copy":
-            # Slice copy: append([]T{}, slice...)
-            return f"append({obj}[:0:0], {obj}...)"
+        # Handle Python list methods specially - only for slice types
+        if isinstance(expr.receiver_type, Slice):
+            if method == "append" and expr.args:
+                arg = self._emit_expr(expr.args[0])
+                return f"append({obj}, {arg})"
+            if method == "pop" and not expr.args:
+                return f"{obj}[len({obj})-1]"
+            if method == "copy":
+                # Slice copy: append([]T{}, slice...)
+                return f"append({obj}[:0:0], {obj}...)"
         method = self._to_pascal(method)
         args = ", ".join(self._emit_expr(a) for a in expr.args)
         return f"{obj}.{method}({args})"
@@ -748,6 +747,9 @@ class GoBackend:
         parts = name.split("_")
         if not parts:
             return name
+        # All-caps names (constants) should use PascalCase in Go
+        if name.isupper():
+            return "".join(p.capitalize() for p in parts)
         result = parts[0] + "".join(p.capitalize() for p in parts[1:])
         # Handle Go reserved words
         if result in GO_RESERVED:

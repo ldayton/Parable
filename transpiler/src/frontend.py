@@ -1108,8 +1108,9 @@ class Frontend:
             return ir.BoolLit(value=False, typ=BOOL, loc=self._loc_from_node(node))
         if node.id == "None":
             return ir.NilLit(typ=Interface("any"), loc=self._loc_from_node(node))
-        # Variable reference - type will be resolved during analysis
-        return ir.Var(name=node.id, typ=Interface("any"), loc=self._loc_from_node(node))
+        # Look up variable type from context
+        var_type = self._type_ctx.var_types.get(node.id, Interface("any"))
+        return ir.Var(name=node.id, typ=var_type, loc=self._loc_from_node(node))
 
     def _lower_expr_Attribute(self, node: ast.Attribute) -> "ir.Expr":
         from . import ir
@@ -1651,8 +1652,10 @@ class Frontend:
 
     def _lower_stmt_For(self, node: ast.For) -> "ir.Stmt":
         from . import ir
+        from .ir import RUNE
         iterable = self._lower_expr(node.iter)
-        body = self._lower_stmts(node.body)
+        # Determine loop variable types based on iterable type
+        iterable_type = self._infer_expr_type_from_ast(node.iter)
         # Determine index and value names
         index = None
         value = None
@@ -1661,11 +1664,19 @@ class Frontend:
                 pass  # Discard
             else:
                 value = node.target.id
+                # Iterating over string yields runes
+                if iterable_type == STRING:
+                    self._type_ctx.var_types[value] = RUNE
         elif isinstance(node.target, ast.Tuple) and len(node.target.elts) == 2:
             if isinstance(node.target.elts[0], ast.Name):
                 index = node.target.elts[0].id if node.target.elts[0].id != "_" else None
             if isinstance(node.target.elts[1], ast.Name):
                 value = node.target.elts[1].id if node.target.elts[1].id != "_" else None
+                # for i, c in string yields index (int) and rune
+                if iterable_type == STRING and value:
+                    self._type_ctx.var_types[value] = RUNE
+        # Lower body after setting up loop variable types
+        body = self._lower_stmts(node.body)
         return ir.ForRange(index=index, value=value, iterable=iterable, body=body, loc=self._loc_from_node(node))
 
     def _lower_stmt_Break(self, node: ast.Break) -> "ir.Stmt":

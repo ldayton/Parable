@@ -219,6 +219,38 @@ func _strIsLower(s string) bool {
 	}
 	return len(s) > 0
 }
+
+// Range generates a slice of integers similar to Python's range()
+// Range(end) -> [0, 1, ..., end-1]
+// Range(start, end) -> [start, start+1, ..., end-1]
+// Range(start, end, step) -> [start, start+step, ..., last < end]
+func Range(args ...int) []int {
+	var start, end, step int
+	switch len(args) {
+	case 1:
+		start, end, step = 0, args[0], 1
+	case 2:
+		start, end, step = args[0], args[1], 1
+	case 3:
+		start, end, step = args[0], args[1], args[2]
+	default:
+		return nil
+	}
+	if step == 0 {
+		return nil
+	}
+	var result []int
+	if step > 0 {
+		for i := start; i < end; i += step {
+			result = append(result, i)
+		}
+	} else {
+		for i := start; i > end; i += step {
+			result = append(result, i)
+		}
+	}
+	return result
+}
 '''
         for line in helpers.strip().split('\n'):
             self._line_raw(line)
@@ -699,7 +731,11 @@ func _strIsLower(s string) bool {
         return f"{obj}[{low}:{high}]"
 
     def _emit_expr_Call(self, expr: Call) -> str:
-        func = self._to_pascal(expr.func)
+        # Go builtins stay lowercase
+        if expr.func in ("append", "cap", "close", "copy", "delete", "panic", "recover", "print", "println"):
+            func = expr.func
+        else:
+            func = self._to_pascal(expr.func)
         args = ", ".join(self._emit_expr(a) for a in expr.args)
         return f"{func}({args})"
 

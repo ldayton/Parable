@@ -97,8 +97,8 @@ def _analyze_function(func: Function) -> None:
     def is_new_declaration(lv, local_assigned: set[str]) -> bool:
         """Check if this lvalue represents a first assignment to a variable."""
         if isinstance(lv, VarLV):
-            return (lv.name not in assigned and lv.name not in declared and
-                    lv.name not in params and lv.name not in local_assigned)
+            # Check against parameters and local_assigned (which includes VarDecls in current branch)
+            return lv.name not in params and lv.name not in local_assigned
         return False
 
     def check_lvalue(lv) -> None:
@@ -121,7 +121,7 @@ def _analyze_function(func: Function) -> None:
         if isinstance(stmt, VarDecl):
             stmt.is_reassigned = False
             declared[stmt.name] = stmt
-            assigned.add(stmt.name)
+            local_assigned.add(stmt.name)  # Add to branch-local, not global
             if stmt.value:
                 check_expr(stmt.value)
         elif isinstance(stmt, Assign):
@@ -129,7 +129,7 @@ def _analyze_function(func: Function) -> None:
             stmt.is_declaration = is_new_declaration(stmt.target, local_assigned)
             if isinstance(stmt.target, VarLV) and stmt.is_declaration:
                 local_assigned.add(stmt.target.name)
-                assigned.add(stmt.target.name)  # Also add to outer scope for inner blocks
+                # Note: Don't add to outer 'assigned' - if-else branches need separate scopes
             check_lvalue(stmt.target)
             check_expr(stmt.value)
         elif isinstance(stmt, OpAssign):
@@ -161,18 +161,14 @@ def _analyze_function(func: Function) -> None:
             check_expr(stmt.cond)
             if stmt.init:
                 check_stmt(stmt.init, local_assigned)
-            # Collect variables assigned in if-else branches first
-            # Then pre-mark them as "assigned" so all branches use = not :=
-            then_vars = _collect_assigned_vars(stmt.then_body)
-            else_vars = _collect_assigned_vars(stmt.else_body)
-            branch_vars = then_vars | else_vars
-            # Add branch vars to assigned so they're treated as pre-existing
-            assigned.update(branch_vars)
-            # Process branches
+            # Each branch inherits parent's assignments so they can see outer declarations
+            # But siblings don't see each other's declarations
+            then_assigned: set[str] = set(local_assigned)
             for s in stmt.then_body:
-                check_stmt(s, local_assigned)
+                check_stmt(s, then_assigned)
+            else_assigned: set[str] = set(local_assigned)
             for s in stmt.else_body:
-                check_stmt(s, local_assigned)
+                check_stmt(s, else_assigned)
         elif isinstance(stmt, While):
             check_expr(stmt.cond)
             for s in stmt.body:
@@ -193,11 +189,13 @@ def _analyze_function(func: Function) -> None:
             for s in stmt.body:
                 check_stmt(s, local_assigned)
         elif isinstance(stmt, TryCatch):
-            # TryCatch body is wrapped in a closure, so it has its own scope
-            try_assigned: set[str] = set()
+            # TryCatch body is wrapped in a closure in Go
+            # Closures CAN access outer variables, so inherit parent's assignments
+            # But new declarations inside the closure can't escape
+            try_assigned: set[str] = set(local_assigned)
             for s in stmt.body:
                 check_stmt(s, try_assigned)
-            catch_assigned: set[str] = set()
+            catch_assigned: set[str] = set(local_assigned)
             for s in stmt.catch_body:
                 check_stmt(s, catch_assigned)
         elif isinstance(stmt, Match):

@@ -282,20 +282,20 @@ class Frontend:
                                 module.constants.append(
                                     Constant(name=const_name, typ=INT, value=value, loc=self._loc_from_node(stmt))
                                 )
-        # Build structs
+        # Build structs (with method bodies)
         for node in tree.body:
             if isinstance(node, ast.ClassDef):
-                struct = self._build_struct(node)
+                struct = self._build_struct(node, with_body=True)
                 if struct:
                     module.structs.append(struct)
-        # Build functions
+        # Build functions (with bodies)
         for node in tree.body:
             if isinstance(node, ast.FunctionDef):
-                func = self._build_function_shell(node)
+                func = self._build_function_shell(node, with_body=True)
                 module.functions.append(func)
         return module
 
-    def _build_struct(self, node: ast.ClassDef) -> Struct | None:
+    def _build_struct(self, node: ast.ClassDef, with_body: bool = False) -> Struct | None:
         """Build IR Struct from class definition."""
         info = self.symbols.structs.get(node.name)
         if not info:
@@ -310,11 +310,11 @@ class Frontend:
                     loc=Loc.unknown(),
                 )
             )
-        # Build methods (shells only for Phase 2)
+        # Build methods
         methods = []
         for stmt in node.body:
             if isinstance(stmt, ast.FunctionDef) and stmt.name != "__init__":
-                method = self._build_method_shell(stmt, node.name)
+                method = self._build_method_shell(stmt, node.name, with_body=with_body)
                 methods.append(method)
         implements = []
         if info.is_node:
@@ -806,6 +806,31 @@ class Frontend:
                 return method_info.return_type
         return Interface("any")
 
+    def _fill_default_args(self, obj_type: Type, method: str, args: list) -> list:
+        """Fill in missing arguments with default values for methods with optional params."""
+        from . import ir
+        struct_name = self._extract_struct_name(obj_type)
+        if not struct_name or struct_name not in self.symbols.structs:
+            return args
+        method_info = self.symbols.structs[struct_name].methods.get(method)
+        if not method_info:
+            return args
+        # Check if we need to add default values
+        n_provided = len(args)
+        n_expected = len(method_info.params)
+        if n_provided >= n_expected:
+            return args
+        # Add missing defaults
+        result = list(args)
+        for i in range(n_provided, n_expected):
+            param = method_info.params[i]
+            if param.has_default and param.default_value is not None:
+                result.append(param.default_value)
+            else:
+                # No default available - leave as is (will cause compile error)
+                break
+        return result
+
     def _extract_struct_name(self, typ: Type) -> str | None:
         """Extract struct name from wrapped types like Pointer, Optional, etc."""
         if isinstance(typ, StructRef):
@@ -902,6 +927,9 @@ class Frontend:
         # Int truthy check: n != 0
         if expr_type == INT:
             return ir.BinaryOp(op="!=", left=expr, right=ir.IntLit(value=0, typ=INT), typ=BOOL, loc=self._loc_from_node(node))
+        # Slice/Map/Set truthy check: len(x) > 0
+        if isinstance(expr_type, (Slice, Map, Set)):
+            return ir.BinaryOp(op=">", left=ir.Len(expr=expr, typ=INT, loc=self._loc_from_node(node)), right=ir.IntLit(value=0, typ=INT), typ=BOOL, loc=self._loc_from_node(node))
         # Check attribute access (likely pointer/optional)
         if isinstance(node, ast.Attribute):
             return ir.IsNil(expr=expr, negated=True, typ=BOOL, loc=self._loc_from_node(node))
@@ -1092,6 +1120,19 @@ class Frontend:
                 if left_type == BOOL:
                     return left  # bool is its own truthy value
                 return ir.IsNil(expr=left, negated=True, typ=BOOL, loc=self._loc_from_node(node))
+            # Handle "x in (a, b, c)" -> "x == a || x == b || x == c"
+            if isinstance(node.ops[0], (ast.In, ast.NotIn)) and isinstance(node.comparators[0], ast.Tuple):
+                negated = isinstance(node.ops[0], ast.NotIn)
+                cmp_op = "!=" if negated else "=="
+                join_op = "&&" if negated else "||"
+                elts = node.comparators[0].elts
+                if elts:
+                    result = ir.BinaryOp(op=cmp_op, left=left, right=self._lower_expr(elts[0]), typ=BOOL, loc=self._loc_from_node(node))
+                    for elt in elts[1:]:
+                        cmp = ir.BinaryOp(op=cmp_op, left=left, right=self._lower_expr(elt), typ=BOOL, loc=self._loc_from_node(node))
+                        result = ir.BinaryOp(op=join_op, left=result, right=cmp, typ=BOOL, loc=self._loc_from_node(node))
+                    return result
+                return ir.BoolLit(value=not negated, typ=BOOL, loc=self._loc_from_node(node))
             # Handle string vs pointer/optional string comparison: dereference the pointer side
             left_type = self._infer_expr_type_from_ast(node.left)
             right_type = self._infer_expr_type_from_ast(node.comparators[0])
@@ -1120,14 +1161,18 @@ class Frontend:
     def _lower_expr_BoolOp(self, node: ast.BoolOp) -> "ir.Expr":
         from . import ir
         op = "&&" if isinstance(node.op, ast.And) else "||"
-        result = self._lower_expr(node.values[0])
+        result = self._lower_expr_as_bool(node.values[0])
         for val in node.values[1:]:
-            right = self._lower_expr(val)
+            right = self._lower_expr_as_bool(val)
             result = ir.BinaryOp(op=op, left=result, right=right, typ=BOOL, loc=self._loc_from_node(node))
         return result
 
     def _lower_expr_UnaryOp(self, node: ast.UnaryOp) -> "ir.Expr":
         from . import ir
+        # For 'not' operator, convert operand to boolean first
+        if isinstance(node.op, ast.Not):
+            operand = self._lower_expr_as_bool(node.operand)
+            return ir.UnaryOp(op="!", operand=operand, typ=BOOL, loc=self._loc_from_node(node))
         operand = self._lower_expr(node.operand)
         op = self._unaryop_to_str(node.op)
         return ir.UnaryOp(op=op, operand=operand, typ=Interface("any"), loc=self._loc_from_node(node))
@@ -1157,6 +1202,8 @@ class Frontend:
                 )
             # Infer receiver type for proper method lookup
             obj_type = self._infer_expr_type_from_ast(node.func.value)
+            # Fill in default values for missing parameters
+            args = self._fill_default_args(obj_type, method, args)
             # Infer return type
             ret_type = self._synthesize_method_return_type(obj_type, method)
             return ir.MethodCall(

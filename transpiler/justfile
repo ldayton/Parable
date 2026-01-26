@@ -19,8 +19,9 @@ check:
 test: go
     go run -C ../src ./cmd/run-tests
 
-# Show Go compilation errors
+# Show Go compilation errors (uses temp copy of src/)
 errors:
+    @rm -rf /tmp/parable-src && cp -r ../src /tmp/parable-src
     @uv run python -m src.cli ../src/parable.py > /tmp/parable-ir.go 2>&1 || true
-    @gofmt /tmp/parable-ir.go > /tmp/parable.go 2>/dev/null || true
-    @go build -C ../src -o /dev/null . 2>&1 | head -50 || true
+    @gofmt /tmp/parable-ir.go > /tmp/parable-src/parable.go 2>/dev/null || true
+    @go build -C /tmp/parable-src -o /dev/null . 2>&1 | head -50 || true

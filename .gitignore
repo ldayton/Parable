@@ -4,6 +4,7 @@ node_modules/
 .venv-*/
 .pytest_cache/
 .ruff_cache/
+.coverage
 .pyperf/
 .DS_Store
 .claude/*

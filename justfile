@@ -104,8 +104,8 @@ _check-parallel: test-bounds lint fmt verify-lock check-dump-ast check-style ver
 # Run all checks (tests, lint, format, lock, style) in parallel
 check: _ensure-biome _check-parallel
 
-# Quick check: test, transpile-js, test-js
-quick-check: test transpile-js test-js
+# Quick check: test, transpile-js, test-js, transpile-go, test-go
+quick-check: test transpile-js test-js transpile-go test-go
 
 # Lint (--fix to apply changes)
 lint *ARGS:
@@ -243,6 +243,19 @@ benchmark:
 # Benchmark real corpus (requires ~/source/bigtable-bash)
 benchmark-corpus:
     hyperfine --warmup 2 --runs ${RUNS:-5} 'uv run tools/bash-oracle/src/oracle/run_corpus.py 2>&1'
+
+# Run coverage analysis on test suite
+coverage:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    uv run --with coverage coverage run tests/bin/run-tests.py
+    uv run --with coverage coverage html -d /tmp/parable-coverage
+    uv run --with coverage coverage json -o /tmp/parable-coverage.json
+    echo ""
+    echo "Output:"
+    echo "  HTML: /tmp/parable-coverage/index.html"
+    echo "  JSON: /tmp/parable-coverage.json"
+    open /tmp/parable-coverage/index.html 2>/dev/null || true
 
 # Profile on corpus (cProfile + flameprof)
 profile:

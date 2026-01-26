@@ -109,6 +109,9 @@ class ZigBackend:
         self._line("const Allocator = std.mem.Allocator;")
         self._line("const ArrayList = std.ArrayList;")
         self._line("")
+        self._line("var gpa = std.heap.GeneralPurposeAllocator(.{}){};")
+        self._line("const allocator = gpa.allocator();")
+        self._line("")
         if module.constants:
             for const in module.constants:
                 self._emit_constant(const)
@@ -317,24 +320,52 @@ class ZigBackend:
 
     def _emit_match(self, expr: Expr, cases: list, default: list[Stmt]) -> None:
         expr_str = self._expr(expr)
-        self._line(f"switch ({expr_str}) {{")
-        self.indent += 1
-        for case in cases:
-            patterns = ", ".join(self._expr(p) for p in case.patterns)
-            self._line(f"{patterns} => {{")
+        # Check if matching on strings - Zig can't switch on strings, use if-else
+        is_string_match = _is_string_type(expr.typ) if hasattr(expr, 'typ') else False
+        if is_string_match:
+            self._emit_string_match(expr_str, cases, default)
+        else:
+            self._line(f"switch ({expr_str}) {{")
+            self.indent += 1
+            for case in cases:
+                patterns = ", ".join(self._expr(p) for p in case.patterns)
+                self._line(f"{patterns} => {{")
+                self.indent += 1
+                for s in case.body:
+                    self._emit_stmt(s)
+                self.indent -= 1
+                self._line("},")
+            if default:
+                self._line("else => {")
+                self.indent += 1
+                for s in default:
+                    self._emit_stmt(s)
+                self.indent -= 1
+                self._line("},")
+            self.indent -= 1
+            self._line("}")
+
+    def _emit_string_match(self, expr_str: str, cases: list, default: list[Stmt]) -> None:
+        """Emit string matching as if-else chain using mem.eql."""
+        for i, case in enumerate(cases):
+            # Build condition: check all patterns with OR
+            conditions = []
+            for p in case.patterns:
+                pat_str = self._expr(p)
+                conditions.append(f"mem.eql(u8, {expr_str}, {pat_str})")
+            cond = " or ".join(conditions)
+            keyword = "if" if i == 0 else "} else if"
+            self._line(f"{keyword} ({cond}) {{")
             self.indent += 1
             for s in case.body:
                 self._emit_stmt(s)
             self.indent -= 1
-            self._line("},")
         if default:
-            self._line("else => {")
+            self._line("} else {")
             self.indent += 1
             for s in default:
                 self._emit_stmt(s)
             self.indent -= 1
-            self._line("},")
-        self.indent -= 1
         self._line("}")
 
     def _emit_for_range(
@@ -420,6 +451,9 @@ class ZigBackend:
             case FieldAccess(obj=obj, field=field):
                 return f"{self._expr(obj)}.{_to_snake(field)}"
             case Index(obj=obj, index=index):
+                # Check if indexing a tuple - use field access instead
+                if isinstance(obj.typ, Tuple) and isinstance(index, IntLit):
+                    return f"{self._expr(obj)}.@\"{index.value}\""
                 return f"{self._expr(obj)}[{self._expr(index)}]"
             case SliceExpr(obj=obj, low=low, high=high):
                 return self._slice_expr(obj, low, high)
@@ -463,9 +497,9 @@ class ZigBackend:
             case MakeSlice(element_type=element_type, length=length, capacity=capacity):
                 typ = self._type(element_type)
                 if capacity:
-                    return f"try ArrayList({typ}).initCapacity(allocator, {self._expr(capacity)})"
+                    return f"ArrayList({typ}).initCapacity(allocator, {self._expr(capacity)}) catch unreachable"
                 if length:
-                    return f"try allocator.alloc({typ}, {self._expr(length)})"
+                    return f"allocator.alloc({typ}, @intCast({self._expr(length)})) catch unreachable"
                 return f"ArrayList({typ}).init(allocator)"
             case MakeMap(key_type=key_type, value_type=value_type):
                 kt = self._type(key_type)
@@ -510,7 +544,7 @@ class ZigBackend:
         # Handle slice methods
         if isinstance(receiver_type, Slice):
             if method == "append" and args:
-                return f"try {self._expr(obj)}.append({args_str})"
+                return f"{self._expr(obj)}.append({args_str}) catch unreachable"
             if method == "pop" and not args:
                 return f"{self._expr(obj)}.pop()"
         return f"{self._expr(obj)}.{_to_snake(method)}({args_str})"
@@ -581,8 +615,8 @@ class ZigBackend:
             case Set(element=element):
                 return f"std.AutoHashMap({self._type(element)}, void)"
             case Tuple(elements=elements):
-                # Zig uses anonymous structs for tuples
-                parts = ", ".join(self._type(e) for e in elements)
+                # Zig uses structs with @"0", @"1" field names for tuple-like access
+                parts = ", ".join(f"@\"{i}\": {self._type(e)}" for i, e in enumerate(elements))
                 return f"struct {{ {parts} }}"
             case Pointer(target=target):
                 return f"*{self._type(target)}"
@@ -597,7 +631,11 @@ class ZigBackend:
             case Union(name=name, variants=variants):
                 if name:
                     return name
-                return "union"
+                if variants:
+                    # Generate anonymous tagged union
+                    fields = ", ".join(f"v{i}: {self._type(v)}" for i, v in enumerate(variants))
+                    return f"union(enum) {{ {fields} }}"
+                return "anytype"
             case FuncType(params=params, ret=ret):
                 params_str = ", ".join(self._type(p) for p in params)
                 ret_str = self._type(ret)

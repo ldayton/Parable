@@ -9,6 +9,9 @@ const mem = std.mem;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 
+var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+const allocator = gpa.allocator();
+
 pub const EOF: i64 = -1;
 
 pub const Token = struct {
@@ -37,7 +40,7 @@ pub const Lexer = struct {
         self.pos += 1;
     }
 
-    pub fn scan_word(self: *Lexer) struct { Token, bool } {
+    pub fn scan_word(self: *Lexer) struct { @"0": Token, @"1": bool } {
         var start: i64 = self.pos;
         while (((self.peek() != EOF) and !is_space(self.peek()))) {
             _ = self.advance();
@@ -63,13 +66,13 @@ pub fn tokenize(source: []const u8) []const Token {
             _ = lx.advance();
             continue;
         }
-        var result: struct { Token, bool } = lx.scan_word();
-        var tok: Token = result[0];
-        var ok: bool = result[1];
+        var result: struct { @"0": Token, @"1": bool } = lx.scan_word();
+        var tok: Token = result.@"0";
+        var ok: bool = result.@"1";
         if (!ok) {
             @panic("unexpected character");
         }
-        _ = try tokens.append(tok);
+        _ = tokens.append(tok) catch unreachable;
     }
     return tokens;
 }
@@ -144,19 +147,14 @@ pub fn scoped_work(x: i64) i64 {
 }
 
 pub fn kind_priority(kind: []const u8) i64 {
-    switch (kind) {
-        "word" => {
-            return 1;
-        },
-        "num", "float" => {
-            return 2;
-        },
-        "op" => {
-            return 3;
-        },
-        else => {
-            return 0;
-        },
+    if (mem.eql(u8, kind, "word")) {
+        return 1;
+    } else if (mem.eql(u8, kind, "num") or mem.eql(u8, kind, "float")) {
+        return 2;
+    } else if (mem.eql(u8, kind, "op")) {
+        return 3;
+    } else {
+        return 0;
     }
 }
 
@@ -184,7 +182,7 @@ pub fn set_first_kind(tokens: []const Token, kind: []const u8) void {
 }
 
 pub fn make_int_slice(n: i64) []const i64 {
-    return try allocator.alloc(i64, n);
+    return allocator.alloc(i64, @intCast(n)) catch unreachable;
 }
 
 pub fn int_to_float(n: i64) f64 {
@@ -222,7 +220,7 @@ pub fn identity_str(s: []const u8) []const u8 {
     return s;
 }
 
-pub fn accept_union(obj: union) bool {
+pub fn accept_union(obj: union(enum) { v0: Token, v1: Lexer }) bool {
     return true;
 }
 """

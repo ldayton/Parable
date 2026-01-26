@@ -319,6 +319,12 @@ class CBackend:
                 self._line(f"{proto};")
             self._line("")
 
+    def _param(self, name: str, typ: Type) -> str:
+        """Format a parameter declaration, handling array types specially."""
+        if isinstance(typ, Array):
+            return f"{self._type(typ.element)} {name}[{typ.size}]"
+        return f"{self._type(typ)} {name}"
+
     def _prototype(self, func: Function, struct: Struct | None) -> str:
         ret = self._type(func.ret) if func.ret != VOID else "void"
         params = []
@@ -328,14 +334,14 @@ class CBackend:
         else:
             name = func.name
         for p in func.params:
-            params.append(f"{self._type(p.typ)} {p.name}")
+            params.append(self._param(p.name, p.typ))
         return f"{ret} {name}({', '.join(params) if params else 'void'})"
 
     def _emit_function(self, func: Function) -> None:
         self.declared_vars = set(p.name for p in func.params)
         self.receiver_name = None
         ret = self._type(func.ret) if func.ret != VOID else "void"
-        params = [f"{self._type(p.typ)} {p.name}" for p in func.params]
+        params = [self._param(p.name, p.typ) for p in func.params]
         self._line(f"{ret} {func.name}({', '.join(params) if params else 'void'}) {{")
         self.indent += 1
         for stmt in func.body:
@@ -346,10 +352,10 @@ class CBackend:
 
     def _emit_method(self, struct: Struct, func: Function) -> None:
         self.declared_vars = {"self"} | set(p.name for p in func.params)
-        self.receiver_name = "self"
+        self.receiver_name = func.receiver.name if func.receiver else "self"
         self.current_struct = struct.name
         ret = self._type(func.ret) if func.ret != VOID else "void"
-        params = [f"{struct.name}* self"] + [f"{self._type(p.typ)} {p.name}" for p in func.params]
+        params = [f"{struct.name}* self"] + [self._param(p.name, p.typ) for p in func.params]
         self._line(f"{ret} {struct.name}_{func.name}({', '.join(params)}) {{")
         self.indent += 1
         for stmt in func.body:
@@ -440,23 +446,45 @@ class CBackend:
                 self.indent -= 1
                 self._line("}")
             case Match(expr=expr, cases=cases, default=default):
-                self._line(f"switch ({self._expr(expr)}) {{")
-                for case in cases:
-                    for p in case.patterns:
-                        self._line(f"case {self._expr(p)}:")
-                    self.indent += 1
-                    for s in case.body:
-                        self._emit_stmt(s)
-                    self._line("break;")
-                    self.indent -= 1
-                if default:
-                    self._line("default:")
-                    self.indent += 1
-                    for s in default:
-                        self._emit_stmt(s)
-                    self._line("break;")
-                    self.indent -= 1
-                self._line("}")
+                # String matching requires if-else chain with strcmp
+                if self._is_str(expr.typ):
+                    expr_var = self._expr(expr)
+                    first = True
+                    for case in cases:
+                        conds = [f'strcmp({expr_var}.data, {self._raw_str(p)}) == 0' for p in case.patterns]
+                        cond = " || ".join(conds)
+                        keyword = "if" if first else "} else if"
+                        self._line(f"{keyword} ({cond}) {{")
+                        first = False
+                        self.indent += 1
+                        for s in case.body:
+                            self._emit_stmt(s)
+                        self.indent -= 1
+                    if default:
+                        self._line("} else {")
+                        self.indent += 1
+                        for s in default:
+                            self._emit_stmt(s)
+                        self.indent -= 1
+                    self._line("}")
+                else:
+                    self._line(f"switch ({self._expr(expr)}) {{")
+                    for case in cases:
+                        for p in case.patterns:
+                            self._line(f"case {self._expr(p)}:")
+                        self.indent += 1
+                        for s in case.body:
+                            self._emit_stmt(s)
+                        self._line("break;")
+                        self.indent -= 1
+                    if default:
+                        self._line("default:")
+                        self.indent += 1
+                        for s in default:
+                            self._emit_stmt(s)
+                        self._line("break;")
+                        self.indent -= 1
+                    self._line("}")
             case TryCatch(body=body, catch_body=catch_body):
                 self._line("/* try */")
                 for s in body:
@@ -489,7 +517,7 @@ class CBackend:
                 return str(v)
             case StringLit(value=v):
                 escaped = v.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-                return f'"{escaped}"'
+                return f'String_new("{escaped}")'
             case BoolLit(value=v):
                 return "true" if v else "false"
             case NilLit():
@@ -526,8 +554,8 @@ class CBackend:
             case BinaryOp(op=op, left=left, right=right):
                 l, r = self._expr(left), self._expr(right)
                 if self._is_str(left.typ) or self._is_str(right.typ) or isinstance(left, StringLit) or isinstance(right, StringLit):
-                    ld = l if isinstance(left, StringLit) else f"{l}.data"
-                    rd = r if isinstance(right, StringLit) else f"{r}.data"
+                    ld = self._raw_str(left)
+                    rd = self._raw_str(right)
                     if op == "==":
                         return f"(strcmp({ld}, {rd}) == 0)"
                     if op == "!=":
@@ -575,11 +603,11 @@ class CBackend:
                 if not parts:
                     return 'String_new("")'
                 if len(parts) == 1:
-                    return self._expr(parts[0])
+                    return self._str_expr(parts[0])
                 # Build concatenation using parable_strcat
-                result = self._expr(parts[0])
+                result = self._str_expr(parts[0])
                 for p in parts[1:]:
-                    result = f"parable_strcat({result}, {self._expr(p)})"
+                    result = f"parable_strcat({result}, {self._str_expr(p)})"
                 return result
             case StringFormat(template=template, args=args):
                 # Convert {0}, {1} to %s, %d, etc.
@@ -673,6 +701,17 @@ class CBackend:
 
     def _is_str(self, typ: Type) -> bool:
         return isinstance(typ, Primitive) and typ.kind == "string"
+
+    def _str_expr(self, expr: Expr) -> str:
+        """Emit a string expression as String struct (for strcat etc)."""
+        return self._expr(expr)
+
+    def _raw_str(self, expr: Expr) -> str:
+        """Emit a raw C string literal for use with strcmp etc."""
+        if isinstance(expr, StringLit):
+            escaped = expr.value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+            return f'"{escaped}"'
+        return f"{self._expr(expr)}.data"
 
     def _format_spec(self, typ: Type) -> str:
         """Get printf format specifier for a type."""

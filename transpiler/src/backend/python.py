@@ -81,6 +81,27 @@ from src.ir import (
 )
 
 
+# Python builtins that shouldn't be shadowed by variable names
+_PYTHON_BUILTINS = frozenset({
+    "abs", "all", "any", "ascii", "bin", "bool", "breakpoint", "bytearray",
+    "bytes", "callable", "chr", "classmethod", "compile", "complex", "delattr",
+    "dict", "dir", "divmod", "enumerate", "eval", "exec", "filter", "float",
+    "format", "frozenset", "getattr", "globals", "hasattr", "hash", "help",
+    "hex", "id", "input", "int", "isinstance", "issubclass", "iter", "len",
+    "list", "locals", "map", "max", "memoryview", "min", "next", "object",
+    "oct", "open", "ord", "pow", "print", "property", "range", "repr",
+    "reversed", "round", "set", "setattr", "slice", "sorted", "staticmethod",
+    "str", "sum", "super", "tuple", "type", "vars", "zip",
+})
+
+
+def _safe_name(name: str) -> str:
+    """Rename variables that shadow Python builtins."""
+    if name in _PYTHON_BUILTINS:
+        return name + "_"
+    return name
+
+
 class PythonBackend:
     """Emit Python code from IR."""
 
@@ -221,11 +242,12 @@ class PythonBackend:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value):
                 py_type = self._type(typ)
+                safe = _safe_name(name)
                 if value is not None:
                     val = self._expr(value)
-                    self._line(f"{name}: {py_type} = {val}")
+                    self._line(f"{safe}: {py_type} = {val}")
                 else:
-                    self._line(f"{name}: {py_type}")
+                    self._line(f"{safe}: {py_type}")
             case Assign(target=target, value=value):
                 lv = self._lvalue(target)
                 val = self._expr(value)
@@ -345,12 +367,14 @@ class PythonBackend:
         body: list[Stmt],
     ) -> None:
         iter_expr = self._expr(iterable)
-        if index is not None and value is not None:
-            self._line(f"for {index}, {value} in enumerate({iter_expr}):")
-        elif value is not None:
-            self._line(f"for {value} in {iter_expr}:")
-        elif index is not None:
-            self._line(f"for {index} in range(len({iter_expr})):")
+        idx = _safe_name(index) if index else None
+        val = _safe_name(value) if value else None
+        if idx is not None and val is not None:
+            self._line(f"for {idx}, {val} in enumerate({iter_expr}):")
+        elif val is not None:
+            self._line(f"for {val} in {iter_expr}:")
+        elif idx is not None:
+            self._line(f"for {idx} in range(len({iter_expr})):")
         else:
             self._line(f"for _ in {iter_expr}:")
         self.indent += 1
@@ -370,7 +394,7 @@ class PythonBackend:
         # Check for simple iteration pattern: for i := 0; i < len(x); i++
         if (range_info := _extract_range_pattern(init, cond, post)) is not None:
             var_name, iterable_expr = range_info
-            self._line(f"for {var_name} in range(len({self._expr(iterable_expr)})):")
+            self._line(f"for {_safe_name(var_name)} in range(len({self._expr(iterable_expr)})):")
             self.indent += 1
             if not body:
                 self._line("pass")
@@ -406,7 +430,7 @@ class PythonBackend:
         for s in body:
             self._emit_stmt(s)
         self.indent -= 1
-        var = catch_var if catch_var else "_e"
+        var = _safe_name(catch_var) if catch_var else "_e"
         self._line(f"except Exception as {var}:")
         self.indent += 1
         if not catch_body and not reraise:
@@ -432,7 +456,7 @@ class PythonBackend:
             case Var(name=name):
                 if name == self.receiver_name:
                     return "self"
-                return name
+                return _safe_name(name)
             case FieldAccess(obj=obj, field=field):
                 return f"{self._expr(obj)}.{field}"
             case Index(obj=obj, index=index):
@@ -528,7 +552,7 @@ class PythonBackend:
             case VarLV(name=name):
                 if name == self.receiver_name:
                     return "self"
-                return name
+                return _safe_name(name)
             case FieldLV(obj=obj, field=field):
                 return f"{self._expr(obj)}.{field}"
             case IndexLV(obj=obj, index=index):

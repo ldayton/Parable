@@ -3,8 +3,7 @@
 from src.backend.c import CBackend
 from tests.fixture import make_fixture
 
-EXPECTED = """\
-#include <stdio.h>
+EXPECTED = """#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
@@ -110,7 +109,7 @@ double int_to_float(int n);
 void* known_kinds(void);
 Token* call_static(void);
 void* new_kind_map(void);
-int get_array_first(int[10] arr);
+int get_array_first(int arr[10]);
 Token* maybe_get(TokenSlice tokens, int idx);
 void set_via_ptr(int* ptr, int val);
 String identity_str(String s);
@@ -137,7 +136,7 @@ TokenSlice tokenize(String source) {
         Token* tok = result.f0;
         bool ok = result.f1;
         if (!ok) {
-            PARABLE_PANIC("unexpected character");
+            PARABLE_PANIC(String_new("unexpected character"));
         }
         TokenSlice_append(&tokens, tok);
     }
@@ -156,7 +155,7 @@ int count_words(TokenSlice tokens) {
 }
 
 String format_token(Token* tok) {
-    return parable_strcat(parable_strcat(tok->kind, ":"), tok->text);
+    return parable_strcat(parable_strcat(tok->kind, String_new(":")), tok->text);
 }
 
 Token* find_token(TokenSlice tokens, String kind) {
@@ -170,9 +169,9 @@ Token* find_token(TokenSlice tokens, String kind) {
 }
 
 String example_nil_check(TokenSlice tokens) {
-    Token* tok = find_token(tokens, "word");
+    Token* tok = find_token(tokens, String_new("word"));
     if ((tok == NULL)) {
-        return "";
+        return String_new("");
     }
     return tok->text;
 }
@@ -215,20 +214,14 @@ int scoped_work(int x) {
 }
 
 int kind_priority(String kind) {
-    switch (kind) {
-    case "word":
+    if (strcmp(kind.data, "word") == 0) {
         return 1;
-        break;
-    case "num":
-    case "float":
+    } else if (strcmp(kind.data, "num") == 0 || strcmp(kind.data, "float") == 0) {
         return 2;
-        break;
-    case "op":
+    } else if (strcmp(kind.data, "op") == 0) {
         return 3;
-        break;
-    default:
+    } else {
         return 0;
-        break;
     }
 }
 
@@ -250,7 +243,7 @@ String describe_token(Token* tok) {
 
 void set_first_kind(TokenSlice tokens, String kind) {
     if ((tokens.len > 0)) {
-        tokens.data[0] = (&(Token){.kind = kind, .text = "", .pos = 0});
+        tokens.data[0] = (&(Token){.kind = kind, .text = String_new(""), .pos = 0});
     }
 }
 
@@ -274,7 +267,7 @@ void* new_kind_map(void) {
     return /* MakeMap */;
 }
 
-int get_array_first(int[10] arr) {
+int get_array_first(int arr[10]) {
     return arr[0];
 }
 
@@ -298,30 +291,30 @@ bool accept_union(void* obj) {
 }
 
 bool Token_is_word(Token* self) {
-    return (strcmp(t->kind.data, "word") == 0);
+    return (strcmp(self->kind.data, "word") == 0);
 }
 
 int Lexer_peek(Lexer* self) {
-    if ((lx->pos >= lx->source.len)) {
+    if ((self->pos >= self->source.len)) {
         return EOF;
     }
-    return lx->source.data[lx->pos];
+    return self->source.data[self->pos];
 }
 
 void Lexer_advance(Lexer* self) {
-    lx->pos += 1;
+    self->pos += 1;
 }
 
 Tuple1 Lexer_scan_word(Lexer* self) {
-    int start = lx->pos;
-    while (((Lexer_peek(lx) != EOF) && !is_space(Lexer_peek(lx)))) {
-        Lexer_advance(lx);
+    int start = self->pos;
+    while (((Lexer_peek(self) != EOF) && !is_space(Lexer_peek(self)))) {
+        Lexer_advance(self);
     }
-    if ((lx->pos == start)) {
+    if ((self->pos == start)) {
         return (Tuple1){.f0 = (&(Token){}), .f1 = false};
     }
-    String text = parable_slice(lx->source, start, lx->pos);
-    return (Tuple1){.f0 = (&(Token){.kind = "word", .text = text, .pos = start}), .f1 = true};
+    String text = parable_slice(self->source, start, self->pos);
+    return (Tuple1){.f0 = (&(Token){.kind = String_new("word"), .text = text, .pos = start}), .f1 = true};
 }
 """
 

@@ -90,6 +90,13 @@ class Set(Type):
 
 
 @dataclass(frozen=True)
+class Tuple(Type):
+    """Fixed-size heterogeneous sequence. Go: multiple returns, TS: [T1, T2], Rust: (T1, T2)."""
+
+    elements: tuple[Type, ...]
+
+
+@dataclass(frozen=True)
 class Pointer(Type):
     """Pointer with ownership tracking for Rust/C.
 

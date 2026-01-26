@@ -143,6 +143,16 @@ Set { element: Type }
 | -------- | ------------ | -------- | ------------- | -------------- |
 | `Set(T)` | `map[T]bool` | `Set<T>` | `HashSet<T>`  | generated hash |
 
+```
+Tuple { elements: [Type] }
+```
+
+| IR             | Go           | TS           | Rust         | C                    |
+| -------------- | ------------ | ------------ | ------------ | -------------------- |
+| `Tuple(T1,T2)` | `(T1, T2)`   | `[T1, T2]`   | `(T1, T2)`   | struct or out-params |
+
+Used for multi-value returns like `tuple[Node | None, str]`. Go emits multiple return values; other backends use native tuples.
+
 ### Pointers and Optionals
 
 ```

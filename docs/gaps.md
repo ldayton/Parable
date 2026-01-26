@@ -4,36 +4,11 @@ Areas requiring additional specification, based on analysis of `parable.py` (~11
 
 | Pri | Gap                             | Issue                                         |
 | --- | ------------------------------- | --------------------------------------------- |
-| P0  | Two-Phase Return Pattern        | No `TupleType` for `tuple[Node \| None, str]` |
 | P1  | Error Type Mapping              | Inheritance representation unclear            |
 | P1  | Type Inference Algorithm        | Rules for expression types, locals, narrowing |
 | P2  | Union Type Details              | Frontend discovery algorithm                  |
 | P2  | Class to Struct Extraction      | Field source: annotation vs `__init__`        |
 | P2  | Optional vs Nullable vs Default | Three concepts conflated in Python            |
-
-## Priority 0 — Blocking
-
-### Two-Phase Return Pattern
-
-Many parsing methods return `tuple[Node | None, str]` — the parsed node plus raw text consumed:
-
-```python
-def _parse_command_substitution(self) -> tuple[Node | None, str]:
-    ...
-    return (CommandSubstitution(cmd), raw_text)
-    # or
-    return (None, "")  # soft failure
-```
-
-**Current IR gap**: No representation for multi-value returns. Options:
-
-| Strategy      | Go                        | Rust                     | TS                       | C                         |
-| ------------- | ------------------------- | ------------------------ | ------------------------ | ------------------------- |
-| Tuple return  | `(Node, string)`          | `(Option<Node>, String)` | `[Node \| null, string]` | out-param                 |
-| Result struct | `ParseResult{Node, Text}` | `ParseResult`            | `ParseResult`            | `ParseResult*`            |
-| Out parameter | `parse(..., &text)`       | `parse(..., &mut text)`  | N/A                      | `parse(..., char** text)` |
-
-**Needed**: Add `TupleType` to IR, or specify struct-wrapping convention for multi-returns.
 
 ## Priority 1 — Important
 

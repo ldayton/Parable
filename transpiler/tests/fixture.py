@@ -34,6 +34,7 @@ from src.ir import (
     IsNil,
     Len,
     Loc,
+    MakeSlice,
     Map,
     MapLit,
     Match,
@@ -1076,6 +1077,25 @@ def make_fixture() -> Module:
         ],
     )
 
+    # --- Function: make_int_slice (exercises MakeSlice) ---
+    int_slice = Slice(INT)
+    make_int_slice_func = Function(
+        name="make_int_slice",
+        params=[Param(name="n", typ=INT)],
+        ret=int_slice,
+        body=[
+            Return(
+                value=MakeSlice(
+                    element_type=INT,
+                    length=Var(name="n", typ=INT, loc=L),
+                    typ=int_slice,
+                    loc=L,
+                ),
+                loc=L,
+            ),
+        ],
+    )
+
     return Module(
         name="fixture",
         structs=[token_struct, lexer_struct],
@@ -1097,6 +1117,7 @@ def make_fixture() -> Module:
             pi_func,
             describe_token_func,
             set_first_kind_func,
+            make_int_slice_func,
         ],
         constants=[eof_const],
     )

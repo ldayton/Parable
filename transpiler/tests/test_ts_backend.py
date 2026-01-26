@@ -192,6 +192,10 @@ function setFirstKind(tokens: Token[], kind: string): void {
   if ((tokens.length > 0)) {
     tokens[0] = new Token(kind, "", 0);
   }
+}
+
+function makeIntSlice(n: number): number[] {
+  return new Array(n);
 }"""
 
 

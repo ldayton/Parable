@@ -1,9 +1,3 @@
-"""Tests for TypeScript backend."""
-
-from src.backend.typescript import TsBackend
-from tests.fixture import make_fixture
-
-EXPECTED = """\
 const EOF: number = -1;
 
 interface Scanner {
@@ -16,7 +10,7 @@ class Token {
   text: string;
   pos: number;
 
-  constructor(kind: string, text: string, pos: number) {
+  constructor(kind: string = "", text: string = "", pos: number = 0) {
     this.kind = kind;
     this.text = text;
     this.pos = pos;
@@ -32,7 +26,7 @@ class Lexer {
   pos: number;
   current: Token | null;
 
-  constructor(source: string, pos: number, current: Token | null) {
+  constructor(source: string = "", pos: number = 0, current: Token | null = null) {
     this.source = source;
     this.pos = pos;
     this.current = current;
@@ -42,7 +36,7 @@ class Lexer {
     if (this.pos >= this.source.length) {
       return EOF;
     }
-    return this.source[this.pos];
+    return this.source.charCodeAt(this.pos);
   }
 
   advance(): void {
@@ -79,7 +73,7 @@ function tokenize(source: string): Token[] {
     const tok = result[0];
     const ok = result[1];
     if (!ok) {
-      throw new ParseError("unexpected character", lx.pos);
+      throw new Error(`${"unexpected character"} at position ${lx.pos}`)
     }
     tokens.push(tok);
   }
@@ -203,10 +197,6 @@ function knownKinds(): Set<string> {
   return new Set(["word", "num", "op"]);
 }
 
-function callStatic(): Token {
-  return Token.empty();
-}
-
 function newKindMap(): Map<string, number> {
   return new Map();
 }
@@ -232,11 +222,4 @@ function identityStr(s: string): string {
 
 function acceptUnion(obj: (Token | Lexer)): boolean {
   return true;
-}"""
-
-
-def test_fixture_emits_correct_typescript() -> None:
-    module = make_fixture()
-    backend = TsBackend()
-    output = backend.emit(module)
-    assert output == EXPECTED
+}

@@ -68,6 +68,7 @@ from src.ir import (
     Ternary,
     TryCatch,
     Tuple,
+    TupleAssign,
     TupleLit,
     Type,
     TypeAssert,
@@ -330,6 +331,13 @@ class RustBackend:
                             return
                 val = self._expr(value)
                 self._line(f"{lv} = {val};")
+            case TupleAssign(targets=targets, value=value):
+                lvalues = ", ".join(self._lvalue(t) for t in targets)
+                val = self._expr(value)
+                if getattr(stmt, 'is_declaration', False):
+                    self._line(f"let ({lvalues}) = {val};")
+                else:
+                    self._line(f"({lvalues}) = {val};")
             case OpAssign(target=target, op=op, value=value):
                 lv = self._lvalue(target)
                 val = self._expr(value)

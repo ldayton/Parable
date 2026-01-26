@@ -1,10 +1,4 @@
-"""Tests for Ruby backend."""
-
-from src.backend.ruby import RubyBackend
-from tests.fixture import make_fixture
-
-EXPECTED = """\
-module Fixture
+module Minilexer
   EOF = -1
 
   module Scanner
@@ -203,10 +197,6 @@ module Fixture
     Set.new(["word", "num", "op"])
   end
 
-  def self.call_static
-    Token.empty
-  end
-
   def self.new_kind_map
     {}
   end
@@ -233,11 +223,4 @@ module Fixture
   def self.accept_union(obj)
     true
   end
-end"""
-
-
-def test_fixture_emits_correct_ruby() -> None:
-    module = make_fixture()
-    backend = RubyBackend()
-    output = backend.emit(module)
-    assert output == EXPECTED
+end

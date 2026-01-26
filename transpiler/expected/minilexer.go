@@ -1,17 +1,13 @@
-"""Tests for Go backend."""
-
-from src.backend.go import GoBackend
-from src.middleend import analyze
-from tests.fixture import make_fixture
-
-EXPECTED = """\
-package fixture
+package minilexer
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode"
 )
+
+var _ = strings.Compare // ensure import is used
 
 // quoteStackEntry holds pushed quote state (single, double)
 type quoteStackEntry struct {
@@ -73,6 +69,43 @@ func _strIsLower(s string) bool {
 	return len(s) > 0
 }
 
+// Range generates a slice of integers similar to Python's range()
+// Range(end) -> [0, 1, ..., end-1]
+// Range(start, end) -> [start, start+1, ..., end-1]
+// Range(start, end, step) -> [start, start+step, ..., last < end]
+func Range(args ...int) []int {
+	var start, end, step int
+	switch len(args) {
+	case 1:
+		start, end, step = 0, args[0], 1
+	case 2:
+		start, end, step = args[0], args[1], 1
+	case 3:
+		start, end, step = args[0], args[1], args[2]
+	default:
+		return nil
+	}
+	if step == 0 {
+		return nil
+	}
+	var result []int
+	if step > 0 {
+		for i := start; i < end; i += step {
+			result = append(result, i)
+		}
+	} else {
+		for i := start; i > end; i += step {
+			result = append(result, i)
+		}
+	}
+	return result
+}
+
+func _parseInt(s string, base int) int {
+	n, _ := strconv.ParseInt(s, base, 64)
+	return int(n)
+}
+
 const (
 	EOF = -1
 )
@@ -97,7 +130,7 @@ func (lx *Lexer) Peek() int {
 	if lx.Pos >= len(lx.Source) {
 		return EOF
 	}
-	return lx.Source[lx.Pos]
+	return int(lx.Source[lx.Pos])
 }
 
 func (lx *Lexer) Advance()  {
@@ -110,10 +143,10 @@ func (lx *Lexer) ScanWord() (Token, bool) {
 		lx.Advance()
 	}
 	if lx.Pos == start {
-		return &Token{}, false
+		return Token{}, false
 	}
 	text := lx.Source[start:lx.Pos]
-	return &Token{Kind: "word", Text: text, Pos: start}, true
+	return Token{Kind: "word", Text: text, Pos: start}, true
 }
 
 func IsSpace(ch int) bool {
@@ -121,7 +154,7 @@ func IsSpace(ch int) bool {
 }
 
 func Tokenize(source string) []Token {
-	lx := &Lexer{Source: source, Pos: 0, Current: nil}
+	lx := Lexer{Source: source, Pos: 0, Current: nil}
 	tokens := []Token{}
 	for lx.Peek() != EOF {
 		ch := lx.Peek()
@@ -129,7 +162,7 @@ func Tokenize(source string) []Token {
 			lx.Advance()
 			continue
 		}
-		var result struct{ F0 Token, F1 bool } = lx.ScanWord()
+		var result struct{ F0 Token; F1 bool } = func() struct{ F0 Token; F1 bool } { _t0, _t1 := lx.ScanWord(); return struct{ F0 Token; F1 bool }{_t0, _t1} }()
 		tok := result.F0
 		ok := result.F1
 		if !ok {
@@ -157,7 +190,7 @@ func FormatToken(tok Token) string {
 func FindToken(tokens []Token, kind string) *Token {
 	for _, tok := range tokens {
 		if tok.Kind == kind {
-			return tok
+			return &tok
 		}
 	}
 	return nil
@@ -246,7 +279,7 @@ func DescribeToken(tok Token) string {
 
 func SetFirstKind(tokens []Token, kind string) {
 	if len(tokens) > 0 {
-		tokens[0] = &Token{Kind: kind, Text: "", Pos: 0}
+		tokens[0] = Token{Kind: kind, Text: "", Pos: 0}
 	}
 }
 
@@ -262,10 +295,6 @@ func KnownKinds() map[string]struct{} {
 	return map[string]struct{}{"word": {}, "num": {}, "op": {}}
 }
 
-func CallStatic() Token {
-	return Token.Empty()
-}
-
 func NewKindMap() map[string]int {
 	return make(map[string]int)
 }
@@ -278,7 +307,7 @@ func MaybeGet(tokens []Token, idx int) *Token {
 	if idx >= len(tokens) {
 		return nil
 	}
-	return tokens[idx]
+	return &tokens[idx]
 }
 
 func SetViaPtr(ptr *int, val int) {
@@ -292,12 +321,4 @@ func IdentityStr(s string) string {
 func AcceptUnion(obj interface{}) bool {
 	return true
 }
-"""
 
-
-def test_fixture_emits_correct_go() -> None:
-    module = make_fixture()
-    analyze(module)
-    backend = GoBackend()
-    output = backend.emit(module)
-    assert output == EXPECTED

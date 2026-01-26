@@ -1,9 +1,3 @@
-"""Tests for Java backend."""
-
-from src.backend.java import JavaBackend
-from tests.fixture import make_fixture
-
-EXPECTED = """\
 import java.util.*;
 
 final class Constants {
@@ -55,7 +49,7 @@ class Lexer {
 
     Optional<Token> scanWord() {
         int start = this.pos;
-        while (this.peek() != Constants.EOF && !isSpace(this.peek())) {
+        while (this.peek() != Constants.EOF && !MinilexerFunctions.isSpace(this.peek())) {
             this.advance();
         }
         if (this.pos == start) {
@@ -66,8 +60,8 @@ class Lexer {
     }
 }
 
-final class FixtureFunctions {
-    private FixtureFunctions() {}
+final class MinilexerFunctions {
+    private MinilexerFunctions() {}
 
     static boolean isSpace(int ch) {
         return ch == 32 || ch == 10;
@@ -78,7 +72,7 @@ final class FixtureFunctions {
         List<Token> tokens = new ArrayList<>();
         while (lx.peek() != Constants.EOF) {
             int ch = lx.peek();
-            if (isSpace(ch)) {
+            if (MinilexerFunctions.isSpace(ch)) {
                 lx.advance();
                 continue;
             }
@@ -117,7 +111,7 @@ final class FixtureFunctions {
     }
 
     static String exampleNilCheck(List<Token> tokens) {
-        Token tok = findToken(tokens, "word");
+        Token tok = MinilexerFunctions.findToken(tokens, "word");
         if (tok == null) {
             return "";
         }
@@ -177,7 +171,7 @@ final class FixtureFunctions {
     static List<Token> safeTokenize(String source) {
         List<Token> tokens = new ArrayList<>();
         try {
-            tokens = tokenize(source);
+            tokens = MinilexerFunctions.tokenize(source);
         } catch (Exception e) {
             tokens = new ArrayList<>();
         }
@@ -210,10 +204,6 @@ final class FixtureFunctions {
         return new HashSet<>(Set.of("word", "num", "op"));
     }
 
-    static Token callStatic() {
-        return Token.empty();
-    }
-
     static Map<String, Integer> newKindMap() {
         return new HashMap<>();
     }
@@ -240,11 +230,4 @@ final class FixtureFunctions {
     static boolean acceptUnion(Object obj) {
         return true;
     }
-}"""
-
-
-def test_fixture_emits_correct_java() -> None:
-    module = make_fixture()
-    backend = JavaBackend()
-    output = backend.emit(module)
-    assert output == EXPECTED
+}

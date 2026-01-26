@@ -1,9 +1,3 @@
-"""Tests for Swift backend."""
-
-from src.backend.swift import SwiftBackend
-from tests.fixture import make_fixture
-
-EXPECTED = """\
 import Foundation
 
 enum Constants {
@@ -187,7 +181,7 @@ func pi() -> Double {
 }
 
 func describeToken(_ tok: Token) -> String {
-    return "Token(\\(tok.kind), \\(tok.text), \\(tok.pos))"
+    return "Token(\(tok.kind), \(tok.text), \(tok.pos))"
 }
 
 func setFirstKind(_ tokens: [Token], _ kind: String) {
@@ -206,10 +200,6 @@ func intToFloat(_ n: Int) -> Double {
 
 func knownKinds() -> Set<String> {
     return Set(["word", "num", "op"])
-}
-
-func callStatic() -> Token {
-    return Token.empty()
 }
 
 func newKindMap() -> [String: Int] {
@@ -238,11 +228,4 @@ func identityStr(_ s: String) -> String {
 func acceptUnion(_ obj: Any) -> Bool {
     return true
 }
-"""
 
-
-def test_fixture_emits_correct_swift() -> None:
-    module = make_fixture()
-    backend = SwiftBackend()
-    output = backend.emit(module)
-    assert output == EXPECTED

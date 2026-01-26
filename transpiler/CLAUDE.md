@@ -12,7 +12,7 @@ Transpiles `../src/parable.py` → Go via an intermediate representation.
 
 - `./src/ir.py` - IR node definitions (types, expressions, statements). Does NOT define middleend annotations.
 - `./src/frontend.py` - Python AST → IR
-- `./src/middleend.py` - IR analysis and transformations
+- `./src/middleend.py` - IR analysis (scope/flow tracking, dynamic annotations)
 - `./src/backend/go.py` - IR → Go code
 - `./src/cli.py` - CLI entry point
 
@@ -31,7 +31,7 @@ just emit          # transpile to stdout
 just go            # transpile and write to ../src/parable.go
 just check         # transpile and verify Go compiles
 just test          # transpile, write, run Go tests
-just test-backends # run backend tests (pytest)
+just test-all      # run all backend compilation tests
 just errors        # show Go compilation errors
 ```
 
@@ -39,19 +39,26 @@ just errors        # show Go compilation errors
 
 **Frontend** - Source language translation
 - Parse Python AST and emit IR
-- Handle all Python-specific semantics (truthiness, iteration, string methods, etc.)
-- Resolve source language idioms into generic IR constructs
+- Handle ALL Python-specific semantics:
+  - String methods (`join`, `split`, `isalnum`, etc.) → generic IR calls
+  - Operators (`in`, `not in`) → appropriate IR expressions
+  - Tuple indexing → `FieldAccess`, not `Index`
+  - Pointer/deref decisions → emit `Deref` nodes when needed
+- The IR should be complete - backends should never compensate for frontend gaps
 
 **Middleend** - IR analysis (read-only)
-- Analyze IR to gather information needed by backends
-- Annotate nodes with computed properties at runtime (e.g., `stmt.is_declaration = True`)
+- Compute properties that require scope/flow tracking:
+  - `is_declaration` - first assignment to a variable (needs scope tracking)
+  - `is_reassigned` - variable assigned after declaration
+  - `is_modified` - parameter mutated in function body
 - Annotations are dynamic attributes, NOT defined in ir.py
 - No transformations - only adds information, never rewrites IR
 - No source language knowledge, no target language knowledge
 
 **Backend** - Target language emission
-- Pure syntax emission from IR nodes
-- No analysis, no decisions - just print what the IR says
-- No Python-specific code (no `join`, `append`, `isalnum` translations)
-- No Parable-specific code (no `Node`, `Stack`, field name assumptions)
+- Syntax emission from IR nodes using IR's type information
+- Legitimate: type-based syntax choices (e.g., `Slice` → `[]T`, `var x T` vs `x :=`)
+- NOT legitimate: compensating for missing frontend translations
+- No Python-specific code (no `join`, `isalnum` - frontend's job)
+- No Parable-specific code (no `Node`, `quoteStackEntry`, `"stack"` heuristics)
 - Generic: could emit any target language from the same IR

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from src.backend.util import escape_string
 from src.ir import (
+    INT,
+    STRING,
     Array,
     Assign,
     BinaryOp,
@@ -65,6 +67,7 @@ from src.ir import (
     Struct,
     StructLit,
     StructRef,
+    TupleAssign,
     TupleLit,
     Ternary,
     TryCatch,
@@ -167,8 +170,10 @@ class TsBackend:
         self._line(f"{_camel(fld.name)}: {typ};")
 
     def _emit_constructor(self, struct: Struct) -> None:
+        # Add default values so parameterless construction works
         params = ", ".join(
-            f"{_camel(f.name)}: {self._type(f.typ)}" for f in struct.fields
+            f"{_camel(f.name)}: {self._type(f.typ)} = {self._default_value(f.typ)}"
+            for f in struct.fields
         )
         self._line(f"constructor({params}) {{")
         self.indent += 1
@@ -177,6 +182,25 @@ class TsBackend:
             self._line(f"this.{name} = {name};")
         self.indent -= 1
         self._line("}")
+
+    def _default_value(self, typ: Type) -> str:
+        """Return default value for a type."""
+        if isinstance(typ, Primitive):
+            if typ.kind == "string":
+                return '""'
+            if typ.kind in ("int", "float", "byte", "rune"):
+                return "0"
+            if typ.kind == "bool":
+                return "false"
+        if isinstance(typ, Optional):
+            return "null"
+        if isinstance(typ, (Slice, Array)):
+            return "[]"
+        if isinstance(typ, Map):
+            return "new Map()"
+        if isinstance(typ, Set):
+            return "new Set()"
+        return "null"
 
     def _emit_function(self, func: Function) -> None:
         if func.doc:
@@ -230,6 +254,13 @@ class TsBackend:
                 lv = self._lvalue(target)
                 val = self._expr(value)
                 self._line(f"{lv} = {val};")
+            case TupleAssign(targets=targets, value=value):
+                lvalues = ", ".join(self._lvalue(t) for t in targets)
+                val = self._expr(value)
+                if getattr(stmt, 'is_declaration', False):
+                    self._line(f"const [{lvalues}] = {val};")
+                else:
+                    self._line(f"[{lvalues}] = {val};")
             case OpAssign(target=target, op=op, value=value):
                 lv = self._lvalue(target)
                 val = self._expr(value)
@@ -297,7 +328,8 @@ class TsBackend:
             case Raise(error_type=error_type, message=message, pos=pos):
                 msg = self._expr(message)
                 p = self._expr(pos)
-                self._line(f"throw new {error_type}({msg}, {p});")
+                # Use standard Error since custom error types aren't defined
+                self._line(f"throw new Error(`${{{msg}}} at position ${{{p}}}`)")
             case SoftFail():
                 self._line("return null;")
             case _:
@@ -451,8 +483,14 @@ class TsBackend:
                 return _camel(name)
             case FieldAccess(obj=obj, field=field):
                 return f"{self._expr(obj)}.{_camel(field)}"
-            case Index(obj=obj, index=index):
-                return f"{self._expr(obj)}[{self._expr(index)}]"
+            case Index(obj=obj, index=index, typ=typ):
+                obj_str = self._expr(obj)
+                idx_str = self._expr(index)
+                # String indexing returns char code (number) in our IR
+                obj_type = getattr(obj, 'typ', None)
+                if obj_type == STRING and typ == INT:
+                    return f"{obj_str}.charCodeAt({idx_str})"
+                return f"{obj_str}[{idx_str}]"
             case SliceExpr(obj=obj, low=low, high=high):
                 return self._slice_expr(obj, low, high)
             case Call(func=func, args=args):

@@ -101,6 +101,7 @@ class JavaBackend:
         self.tuple_records = {}
         self.tuple_counter = 0
         self.optional_tuples = set()
+        self._module_name = module.name
         self._collect_tuple_types(module)
         self._emit_module(module)
         return "\n".join(self.lines)
@@ -612,7 +613,9 @@ class JavaBackend:
                 return self._slice_expr(obj, low, high)
             case Call(func=func, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
-                return f"{to_camel(func)}({args_str})"
+                # Module-level functions are in {ModuleName}Functions class
+                func_class = f"{to_pascal(self._module_name)}Functions"
+                return f"{func_class}.{to_camel(func)}({args_str})"
             case MethodCall(obj=obj, method=method, args=args, receiver_type=receiver_type):
                 return self._method_call(obj, method, args, receiver_type)
             case StaticCall(on_type=on_type, method=method, args=args):

@@ -6,14 +6,6 @@ requires-python = ">=3.14"
 [project.scripts]
 transpile = "src.cli:main"
 
-[dependency-groups]
-dev = [
-    "pytest>=9.0.2",
-]
-
-[tool.pytest.ini_options]
-pythonpath = ["."]
-
 # Run these with: uv run --script <name>
 # Or add them to justfile
 

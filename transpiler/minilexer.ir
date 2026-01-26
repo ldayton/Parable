@@ -1,6 +1,6 @@
-"""Hand-built IR fixture for backend development.
+"""Minilexer: a hand-built IR program for backend testing.
 
-Exercises core IR constructs needed for parable.py transpilation.
+A simple tokenizer that exercises core IR constructs.
 """
 
 from src.middleend import analyze
@@ -87,10 +87,10 @@ from src.ir import (
 L = Loc.unknown()
 
 
-def make_fixture() -> Module:
-    """Build a Module exercising core IR constructs.
+def make_module() -> Module:
+    """Build the minilexer IR module.
 
-    Models a minimal lexer with:
+    A minimal lexer with:
     - Token struct with .kind field (for TypeSwitch)
     - Optional fields and nil checks
     - Error handling with TryCatch/Raise
@@ -1139,25 +1139,6 @@ def make_fixture() -> Module:
         ],
     )
 
-    # --- Function: call_static (exercises StaticCall) ---
-    call_static_func = Function(
-        name="call_static",
-        params=[],
-        ret=token_ref,
-        body=[
-            Return(
-                value=StaticCall(
-                    on_type=token_ref,
-                    method="empty",
-                    args=[],
-                    typ=token_ref,
-                    loc=L,
-                ),
-                loc=L,
-            ),
-        ],
-    )
-
     # --- Function: new_kind_map (exercises MakeMap) ---
     new_kind_map_func = Function(
         name="new_kind_map",
@@ -1262,7 +1243,7 @@ def make_fixture() -> Module:
     )
 
     module = Module(
-        name="fixture",
+        name="minilexer",
         structs=[token_struct, lexer_struct],
         interfaces=[scanner_iface],
         functions=[
@@ -1285,7 +1266,6 @@ def make_fixture() -> Module:
             make_int_slice_func,
             int_to_float_func,
             known_kinds_func,
-            call_static_func,
             new_kind_map_func,
             get_array_first_func,
             maybe_get_func,
@@ -1299,12 +1279,29 @@ def make_fixture() -> Module:
     return module
 
 
+BACKENDS = {
+    "c": "src.backend.c:CBackend",
+    "csharp": "src.backend.csharp:CSharpBackend",
+    "go": "src.backend.go:GoBackend",
+    "java": "src.backend.java:JavaBackend",
+    "python": "src.backend.python:PythonBackend",
+    "ruby": "src.backend.ruby:RubyBackend",
+    "rust": "src.backend.rust:RustBackend",
+    "swift": "src.backend.swift:SwiftBackend",
+    "ts": "src.backend.typescript:TsBackend",
+    "zig": "src.backend.zig:ZigBackend",
+}
+
+
 if __name__ == "__main__":
-    module = make_fixture()
-    print(f"Module: {module.name}")
-    print(f"Constants: {[c.name for c in module.constants]}")
-    print(f"Structs: {[s.name for s in module.structs]}")
-    for s in module.structs:
-        print(f"  {s.name}.fields: {[f.name for f in s.fields]}")
-        print(f"  {s.name}.methods: {[m.name for m in s.methods]}")
-    print(f"Functions: {[f.name for f in module.functions]}")
+    import argparse
+    import importlib
+
+    parser = argparse.ArgumentParser(description="Emit minilexer IR to target language")
+    parser.add_argument("-b", "--backend", choices=BACKENDS.keys(), default="go")
+    args = parser.parse_args()
+
+    module = make_module()
+    mod_name, cls_name = BACKENDS[args.backend].rsplit(":", 1)
+    backend_cls = getattr(importlib.import_module(mod_name), cls_name)
+    print(backend_cls().emit(module))

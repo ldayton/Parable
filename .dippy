@@ -10,14 +10,7 @@ deny uv run ruff "Use `just fmt --fix and just lint --fix`"
 deny uv run tests "use `just test`"
 
 #---- Just targets ----#
-allow just check
-allow just check-style
-allow just fmt
-allow just lint
-allow just profile*
-allow just test*
-deny just test-all "Don't worry about other Python versions, `just test` and `just check` are all you need"
-allow just transpile*
+allow just
 deny just -C "Don't use -C, run bare targets"
 
 #---- Bash ----#

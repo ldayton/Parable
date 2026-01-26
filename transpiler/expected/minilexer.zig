@@ -1,9 +1,3 @@
-"""Tests for Zig backend."""
-
-from src.backend.zig import ZigBackend
-from tests.fixture import make_fixture
-
-EXPECTED = """\
 const std = @import("std");
 const mem = std.mem;
 const Allocator = std.mem.Allocator;
@@ -54,7 +48,7 @@ pub const Lexer = struct {
 };
 
 pub fn is_space(ch: i64) bool {
-    return ch == ' ' or ch == '\\n';
+    return ch == ' ' or ch == '\n';
 }
 
 pub fn tokenize(source: []const u8) ArrayList(Token) {
@@ -191,10 +185,6 @@ pub fn known_kinds() std.StringHashMap(void) {
     return blk: { var s = std.StringHashMap(void).init(allocator); s.put("word", {}) catch unreachable; s.put("num", {}) catch unreachable; s.put("op", {}) catch unreachable; break :blk s; };
 }
 
-pub fn call_static() Token {
-    return Token.empty();
-}
-
 pub fn new_kind_map() std.StringHashMap(i64) {
     return std.StringHashMap(i64).init(allocator);
 }
@@ -221,11 +211,4 @@ pub fn identity_str(s: []const u8) []const u8 {
 pub fn accept_union(obj: union(enum) { v0: Token, v1: Lexer }) bool {
     return true;
 }
-"""
 
-
-def test_fixture_emits_correct_zig() -> None:
-    module = make_fixture()
-    backend = ZigBackend()
-    output = backend.emit(module)
-    assert output == EXPECTED

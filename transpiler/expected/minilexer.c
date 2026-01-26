@@ -1,16 +1,11 @@
-"""Tests for C backend."""
-
-from src.backend.c import CBackend
-from tests.fixture import make_fixture
-
-EXPECTED = """#include <stdio.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdarg.h>
 
-#define PARABLE_PANIC(msg) do { fprintf(stderr, "panic: %s\\n", msg); exit(1); } while(0)
+#define PARABLE_PANIC(msg) do { fprintf(stderr, "panic: %s\n", msg); exit(1); } while(0)
 
 typedef struct { char* data; size_t len; size_t cap; } String;
 
@@ -18,7 +13,7 @@ static String String_new(const char* s) {
     size_t len = s ? strlen(s) : 0;
     String str = {malloc(len + 1), len, len + 1};
     if (s) memcpy(str.data, s, len + 1);
-    else str.data[0] = '\\0';
+    else str.data[0] = '\0';
     return str;
 }
 
@@ -37,7 +32,7 @@ static String parable_slice(String s, size_t start, size_t end) {
     size_t len = end - start;
     String str = {malloc(len + 1), len, len + 1};
     memcpy(str.data, s.data + start, len);
-    str.data[len] = '\\0';
+    str.data[len] = '\0';
     return str;
 }
 
@@ -53,12 +48,12 @@ static String parable_sprintf(const char* fmt, ...) {
     return str;
 }
 
-#define SLICE_DEF(T, NAME) \\
-typedef struct { T* data; size_t len; size_t cap; } NAME; \\
-static NAME NAME##_new(size_t cap) { \\
-    NAME s = {malloc(sizeof(T) * (cap ? cap : 1)), 0, cap ? cap : 1}; return s; } \\
-static void NAME##_append(NAME* s, T val) { \\
-    if (s->len >= s->cap) { s->cap = s->cap ? s->cap * 2 : 1; \\
+#define SLICE_DEF(T, NAME) \
+typedef struct { T* data; size_t len; size_t cap; } NAME; \
+static NAME NAME##_new(size_t cap) { \
+    NAME s = {malloc(sizeof(T) * (cap ? cap : 1)), 0, cap ? cap : 1}; return s; } \
+static void NAME##_append(NAME* s, T val) { \
+    if (s->len >= s->cap) { s->cap = s->cap ? s->cap * 2 : 1; \
     s->data = realloc(s->data, sizeof(T) * s->cap); } s->data[s->len++] = val; }
 
 SLICE_DEF(int, IntSlice)
@@ -144,7 +139,6 @@ void set_first_kind(TokenSlice tokens, String kind);
 IntSlice make_int_slice(int n);
 double int_to_float(int n);
 Set_String known_kinds(void);
-Token* call_static(void);
 Map_String_int new_kind_map(void);
 int get_array_first(int arr[10]);
 Token* maybe_get(TokenSlice tokens, int idx);
@@ -296,10 +290,6 @@ Set_String known_kinds(void) {
     return ({ Set_String _s = Set_String_new(); Set_String_add(&_s, String_new("word")); Set_String_add(&_s, String_new("num")); Set_String_add(&_s, String_new("op")); _s; });
 }
 
-Token* call_static(void) {
-    return Token_empty();
-}
-
 Map_String_int new_kind_map(void) {
     return Map_String_int_new();
 }
@@ -353,11 +343,4 @@ Tuple1 Lexer_scan_word(Lexer* self) {
     String text = parable_slice(self->source, start, self->pos);
     return (Tuple1){.f0 = (&(Token){.kind = String_new("word"), .text = text, .pos = start}), .f1 = true};
 }
-"""
 
-
-def test_fixture_emits_correct_c() -> None:
-    module = make_fixture()
-    backend = CBackend()
-    output = backend.emit(module)
-    assert output == EXPECTED

@@ -95,6 +95,7 @@ class CSharpBackend:
         """Emit C# code from IR Module."""
         self.indent = 0
         self.lines = []
+        self._module_name = module.name
         self._emit_module(module)
         return "\n".join(self.lines)
 
@@ -165,6 +166,10 @@ class CSharpBackend:
     def _emit_constructor(self, struct: Struct) -> None:
         if not struct.fields:
             return
+        # Emit parameterless constructor for default initialization
+        self._line(f"public {struct.name}() {{ }}")
+        self._line("")
+        # Emit parameterized constructor
         params = ", ".join(
             f"{self._type(f.typ)} {to_camel(f.name)}" for f in struct.fields
         )
@@ -567,7 +572,9 @@ class CSharpBackend:
                 return self._slice_expr(obj, low, high)
             case Call(func=func, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
-                return f"{to_pascal(func)}({args_str})"
+                # Module-level functions are in {ModuleName}Functions class
+                func_class = f"{to_pascal(self._module_name)}Functions"
+                return f"{func_class}.{to_pascal(func)}({args_str})"
             case MethodCall(obj=obj, method=method, args=args, receiver_type=receiver_type):
                 return self._method_call(obj, method, args, receiver_type)
             case StaticCall(on_type=on_type, method=method, args=args):

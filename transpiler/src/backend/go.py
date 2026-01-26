@@ -146,10 +146,13 @@ class GoBackend:
         self._line("import (")
         self.indent += 1
         self._line('"fmt"')
+        self._line('"strconv"')
         self._line('"strings"')
         self._line('"unicode"')
         self.indent -= 1
         self._line(")")
+        self._line("")
+        self._line("var _ = strings.Compare // ensure import is used")
         self._line("")
         # Emit helper type aliases
         self._line("// quoteStackEntry holds pushed quote state (single, double)")
@@ -251,6 +254,11 @@ func Range(args ...int) []int {
 	}
 	return result
 }
+
+func _parseInt(s string, base int) int {
+	n, _ := strconv.ParseInt(s, base, 64)
+	return int(n)
+}
 '''
         for line in helpers.strip().split('\n'):
             self._line_raw(line)
@@ -288,6 +296,7 @@ func Range(args ...int) []int {
         """Emit function or method definition."""
         # Reset tuple tracking for new function scope
         self._tuple_vars = {}
+        self._current_return_type = func.ret
         params = ", ".join(
             f"{self._to_camel(p.name)} {self._type_to_go(p.typ)}" for p in func.params
         )
@@ -332,6 +341,15 @@ func Range(args ...int) []int {
         # Track tuple vars for later tuple indexing
         if isinstance(stmt.typ, Tuple):
             self._tuple_vars[name] = stmt.typ
+            # For function calls returning tuples, wrap in IIFE to convert
+            # multiple return values to struct
+            if stmt.value and isinstance(stmt.value, (Call, MethodCall)):
+                call_expr = self._emit_expr(stmt.value)
+                n = len(stmt.typ.elements)
+                tmp_vars = ", ".join(f"_t{i}" for i in range(n))
+                field_vals = ", ".join(f"_t{i}" for i in range(n))
+                self._line(f"var {name} {go_type} = func() {go_type} {{ {tmp_vars} := {call_expr}; return {go_type}{{{field_vals}}} }}()")
+                return
         if stmt.value:
             val = self._emit_expr(stmt.value)
             # Use short declaration for simple types, explicit var for complex types
@@ -473,6 +491,13 @@ func Range(args ...int) []int {
                 self._line(f"return {else_val}")
             else:
                 val = self._emit_expr(stmt.value)
+                # If function returns Optional (pointer) but value is a non-pointer type, add &
+                ret_type = getattr(self, '_current_return_type', None)
+                val_type = getattr(stmt.value, 'typ', None)
+                if (isinstance(ret_type, Optional) and
+                    val_type and not isinstance(val_type, (Optional, Pointer)) and
+                    not isinstance(stmt.value, NilLit)):
+                    val = f"&{val}"
                 self._line(f"return {val}")
         else:
             self._line("return")
@@ -737,7 +762,12 @@ func Range(args ...int) []int {
                     inner_idx = self._emit_expr(expr.obj.index)
                     field = "Single" if expr.index.value == 0 else "Double"
                     return f"{inner_obj}[{inner_idx}].{field}"
-        return f"{obj}[{idx}]"
+        result = f"{obj}[{idx}]"
+        # In Go, indexing a string returns byte, cast to int if needed
+        obj_type = getattr(expr.obj, 'typ', None)
+        if obj_type == STRING and expr.typ == INT:
+            result = f"int({result})"
+        return result
 
     def _emit_expr_SliceExpr(self, expr: SliceExpr) -> str:
         obj = self._emit_expr(expr.obj)
@@ -746,8 +776,8 @@ func Range(args ...int) []int {
         return f"{obj}[{low}:{high}]"
 
     def _emit_expr_Call(self, expr: Call) -> str:
-        # Go builtins stay lowercase
-        if expr.func in ("append", "cap", "close", "copy", "delete", "panic", "recover", "print", "println"):
+        # Go builtins and our helpers stay as-is
+        if expr.func in ("append", "cap", "close", "copy", "delete", "panic", "recover", "print", "println", "_parseInt"):
             func = expr.func
         else:
             func = self._to_pascal(expr.func)
@@ -840,6 +870,9 @@ func Range(args ...int) []int {
         if method == "find" and expr.args:
             arg = self._emit_expr(expr.args[0])
             return f"strings.Index({obj}, {arg})"
+        if method == "rfind" and expr.args:
+            arg = self._emit_expr(expr.args[0])
+            return f"strings.LastIndex({obj}, {arg})"
         method = self._to_pascal(method)
         args = ", ".join(self._emit_expr(a) for a in expr.args)
         return f"{obj}.{method}({args})"
@@ -898,7 +931,7 @@ func Range(args ...int) []int {
     def _emit_expr_UnaryOp(self, expr: UnaryOp) -> str:
         operand = self._emit_expr(expr.operand)
         # Wrap complex operands in parens for ! operator
-        if expr.op == "!" and isinstance(expr.operand, (BinaryOp, UnaryOp)):
+        if expr.op == "!" and isinstance(expr.operand, (BinaryOp, UnaryOp, IsNil)):
             return f"{expr.op}({operand})"
         return f"{expr.op}{operand}"
 
@@ -984,7 +1017,10 @@ func Range(args ...int) []int {
         fields = ", ".join(
             f"{self._to_pascal(k)}: {self._emit_expr(v)}" for k, v in expr.fields.items()
         )
-        return f"&{expr.struct_name}{{{fields}}}"
+        lit = f"{expr.struct_name}{{{fields}}}"
+        if isinstance(expr.typ, Pointer):
+            return f"&{lit}"
+        return lit
 
     def _emit_expr_TupleLit(self, expr: TupleLit) -> str:
         """Emit tuple literal as anonymous struct."""
@@ -1074,7 +1110,7 @@ func Range(args ...int) []int {
             return f"map[{self._type_to_go(typ.element)}]struct{{}}"
         if isinstance(typ, Tuple):
             # Go doesn't have tuple types for variables; use struct for storage
-            fields = ", ".join(f"F{i} {self._type_to_go(e)}" for i, e in enumerate(typ.elements))
+            fields = "; ".join(f"F{i} {self._type_to_go(e)}" for i, e in enumerate(typ.elements))
             return f"struct{{ {fields} }}"
         if isinstance(typ, Pointer):
             return f"*{self._type_to_go(typ.target)}"

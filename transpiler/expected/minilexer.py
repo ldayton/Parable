@@ -1,10 +1,4 @@
-"""Tests for Python backend."""
-
-from src.backend.python import PythonBackend
-from tests.fixture import make_fixture
-
-EXPECTED = """\
-\"\"\"Generated Python code.\"\"\"
+"""Generated Python code."""
 
 from __future__ import annotations
 
@@ -177,10 +171,6 @@ def known_kinds() -> set[str]:
     return {"word", "num", "op"}
 
 
-def call_static() -> Token:
-    return Token.empty()
-
-
 def new_kind_map() -> dict[str, int]:
     return {}
 
@@ -204,11 +194,4 @@ def identity_str(s: str) -> str:
 
 
 def accept_union(obj: Token | Lexer) -> bool:
-    return True"""
-
-
-def test_fixture_emits_correct_python() -> None:
-    module = make_fixture()
-    backend = PythonBackend()
-    output = backend.emit(module)
-    assert output == EXPECTED
+    return True

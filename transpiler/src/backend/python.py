@@ -68,6 +68,7 @@ from src.ir import (
     Ternary,
     TryCatch,
     Tuple,
+    TupleAssign,
     TupleLit,
     Type,
     TypeAssert,
@@ -253,6 +254,10 @@ class PythonBackend:
                 lv = self._lvalue(target)
                 val = self._expr(value)
                 self._line(f"{lv} = {val}")
+            case TupleAssign(targets=targets, value=value):
+                lvalues = ", ".join(self._lvalue(t) for t in targets)
+                val = self._expr(value)
+                self._line(f"{lvalues} = {val}")
             case OpAssign(target=target, op=op, value=value):
                 lv = self._lvalue(target)
                 val = self._expr(value)
@@ -543,9 +548,34 @@ class PythonBackend:
         return f"{obj_str}[{low_str}:{high_str}]"
 
     def _format_string(self, template: str, args: list[Expr]) -> str:
+        import re
+        # First escape literal braces that aren't placeholders
+        # Replace {N} with a marker, escape all other braces, then restore
+        markers = {}
         result = template
-        for i, arg in enumerate(args):
-            result = result.replace(f"{{{i}}}", f"{{{self._expr(arg)}}}", 1)
+        for i in range(len(args)):
+            marker = f"\x00PLACEHOLDER{i}\x00"
+            markers[marker] = i
+            result = result.replace(f"{{{i}}}", marker, 1)
+        # Also mark %v placeholders
+        pv_markers = []
+        while "%v" in result:
+            marker = f"\x00PV{len(pv_markers)}\x00"
+            pv_markers.append(marker)
+            result = result.replace("%v", marker, 1)
+        # Escape literal braces for f-string
+        result = result.replace("{", "{{").replace("}", "}}")
+        # Restore placeholders as f-string interpolations
+        for marker, i in markers.items():
+            if i < len(args):
+                result = result.replace(marker, f"{{{self._expr(args[i])}}}")
+        for j, marker in enumerate(pv_markers):
+            if j < len(args):
+                result = result.replace(marker, f"{{{self._expr(args[j])}}}")
+        # Use triple quotes for multi-line strings, escape quotes otherwise
+        if "\n" in result:
+            return f'f"""{result}"""'
+        result = result.replace('"', '\\"')
         return f'f"{result}"'
 
     def _lvalue(self, lv: LValue) -> str:
@@ -683,6 +713,8 @@ def _unary_op(op: str) -> str:
     match op:
         case "!":
             return "not "
+        case "&":
+            return ""  # Python has no address-of operator; objects are references
         case _:
             return op
 

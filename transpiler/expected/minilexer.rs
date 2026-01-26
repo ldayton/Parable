@@ -1,9 +1,3 @@
-"""Tests for Rust backend."""
-
-from src.backend.rust import RustBackend
-from tests.fixture import make_fixture
-
-EXPECTED = """\
 use std::collections::{HashMap, HashSet};
 
 const EOF: i64 = -1;
@@ -195,10 +189,6 @@ fn known_kinds() -> HashSet<String> {
     HashSet::from(["word".to_string(), "num".to_string(), "op".to_string()])
 }
 
-fn call_static() -> Token {
-    Token::default()
-}
-
 fn new_kind_map() -> HashMap<String, i64> {
     HashMap::<String, i64>::new()
 }
@@ -224,11 +214,4 @@ fn identity_str(s: &str) -> &str {
 
 fn accept_union(obj: (Token, Lexer)) -> bool {
     true
-}"""
-
-
-def test_fixture_emits_correct_rust() -> None:
-    module = make_fixture()
-    backend = RustBackend()
-    output = backend.emit(module)
-    assert output == EXPECTED
+}

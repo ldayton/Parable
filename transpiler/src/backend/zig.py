@@ -500,7 +500,7 @@ class ZigBackend:
                 # Cast index to usize if it's an integer expression
                 idx_str = self._expr(index)
                 if _needs_usize_cast(index):
-                    idx_str = f"@intCast({idx_str})"
+                    idx_str = f"@as(usize, @intCast({idx_str}))"
                 return f"{obj_str}[{idx_str}]"
             case SliceExpr(obj=obj, low=low, high=high):
                 return self._slice_expr(obj, low, high)
@@ -525,9 +525,9 @@ class ZigBackend:
                 right_str = self._expr(right)
                 # Cast int to usize when comparing with .len (but not literals)
                 if _is_len_expr(right) and _is_int_type(left.typ) and not isinstance(left, IntLit):
-                    left_str = f"@intCast({left_str})"
+                    left_str = f"@as(usize, @intCast({left_str}))"
                 elif _is_len_expr(left) and _is_int_type(right.typ) and not isinstance(right, IntLit):
-                    right_str = f"@intCast({right_str})"
+                    right_str = f"@as(usize, @intCast({right_str}))"
                 if _needs_parens(left):
                     left_str = f"({left_str})"
                 if _needs_parens(right):
@@ -562,12 +562,12 @@ class ZigBackend:
                 if capacity:
                     cap_str = self._expr(capacity)
                     if _needs_usize_cast(capacity):
-                        cap_str = f"@intCast({cap_str})"
+                        cap_str = f"@as(usize, @intCast({cap_str}))"
                     return f"ArrayList({typ}).initCapacity(allocator, {cap_str}) catch unreachable"
                 if length:
                     len_str = self._expr(length)
                     if _needs_usize_cast(length):
-                        len_str = f"@intCast({len_str})"
+                        len_str = f"@as(usize, @intCast({len_str}))"
                     return f"ArrayList({typ}).initCapacity(allocator, {len_str}) catch unreachable"
                 return f"ArrayList({typ}).init(allocator)"
             case MakeMap(key_type=key_type, value_type=value_type):
@@ -633,8 +633,8 @@ class ZigBackend:
     def _slice_expr(self, obj: Expr, low: Expr | None, high: Expr | None) -> str:
         obj_str = self._expr(obj)
         # Cast indices to usize
-        low_str = f"@intCast({self._expr(low)})" if low and _needs_usize_cast(low) else (self._expr(low) if low else "0")
-        high_str = f"@intCast({self._expr(high)})" if high and _needs_usize_cast(high) else (self._expr(high) if high else None)
+        low_str = f"@as(usize, @intCast({self._expr(low)}))" if low and _needs_usize_cast(low) else (self._expr(low) if low else "0")
+        high_str = f"@as(usize, @intCast({self._expr(high)}))" if high and _needs_usize_cast(high) else (self._expr(high) if high else None)
         if high_str:
             return f"{obj_str}[{low_str}..{high_str}]"
         else:
@@ -646,14 +646,14 @@ class ZigBackend:
         # Zig uses @intCast, @floatFromInt, etc.
         if isinstance(to_type, Primitive):
             if to_type.kind == "int":
-                return f"@intCast({inner_str})"
+                return f"@as(i64, @intCast({inner_str}))"
             if to_type.kind == "float":
                 # Int to float uses @floatFromInt
                 if hasattr(inner, 'typ') and isinstance(inner.typ, Primitive) and inner.typ.kind == "int":
-                    return f"@floatFromInt({inner_str})"
-                return f"@floatCast({inner_str})"
+                    return f"@as(f64, @floatFromInt({inner_str}))"
+                return f"@as(f64, @floatCast({inner_str}))"
             if to_type.kind == "byte":
-                return f"@intCast({inner_str})"
+                return f"@as(u8, @intCast({inner_str}))"
         return f"@as({zig_type}, {inner_str})"
 
     def _format_string(self, template: str, args: list[Expr]) -> str:
@@ -682,7 +682,7 @@ class ZigBackend:
                     obj_str = f"{obj_str}.items"
                 idx_str = self._expr(index)
                 if _needs_usize_cast(index):
-                    idx_str = f"@intCast({idx_str})"
+                    idx_str = f"@as(usize, @intCast({idx_str}))"
                 return f"{obj_str}[{idx_str}]"
             case DerefLV(ptr=ptr):
                 return f"{self._expr(ptr)}.*"

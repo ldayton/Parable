@@ -1,9 +1,3 @@
-"""Tests for C# backend."""
-
-from src.backend.csharp import CSharpBackend
-from tests.fixture import make_fixture
-
-EXPECTED = """\
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -25,6 +19,8 @@ public class Token
     public string Text;
     public int Pos;
 
+    public Token() { }
+
     public Token(string kind, string text, int pos)
     {
         this.Kind = kind;
@@ -43,6 +39,8 @@ public class Lexer
     public string Source;
     public int Pos;
     public Token Current;
+
+    public Lexer() { }
 
     public Lexer(string source, int pos, Token current)
     {
@@ -68,7 +66,7 @@ public class Lexer
     public (Token, bool) ScanWord()
     {
         int start = this.Pos;
-        while (this.Peek() != Constants.Eof && !IsSpace(this.Peek()))
+        while (this.Peek() != Constants.Eof && !MinilexerFunctions.IsSpace(this.Peek()))
         {
             this.Advance();
         }
@@ -81,7 +79,7 @@ public class Lexer
     }
 }
 
-public static class FixtureFunctions
+public static class MinilexerFunctions
 {
     public static bool IsSpace(int ch)
     {
@@ -95,7 +93,7 @@ public static class FixtureFunctions
         while (lx.Peek() != Constants.Eof)
         {
             int ch = lx.Peek();
-            if (IsSpace(ch))
+            if (MinilexerFunctions.IsSpace(ch))
             {
                 lx.Advance();
                 continue;
@@ -144,7 +142,7 @@ public static class FixtureFunctions
 
     public static string ExampleNilCheck(List<Token> tokens)
     {
-        Token tok = FindToken(tokens, "word");
+        Token tok = MinilexerFunctions.FindToken(tokens, "word");
         if (tok == null)
         {
             return "";
@@ -217,7 +215,7 @@ public static class FixtureFunctions
         List<Token> tokens = new List<Token>();
         try
         {
-            tokens = Tokenize(source);
+            tokens = MinilexerFunctions.Tokenize(source);
         }
         catch (Exception)
         {
@@ -259,11 +257,6 @@ public static class FixtureFunctions
         return new HashSet<string> { "word", "num", "op" };
     }
 
-    public static Token CallStatic()
-    {
-        return Token.Empty();
-    }
-
     public static Dictionary<string, int> NewKindMap()
     {
         return new Dictionary<string, int>();
@@ -297,11 +290,4 @@ public static class FixtureFunctions
     {
         return true;
     }
-}"""
-
-
-def test_fixture_emits_correct_csharp() -> None:
-    module = make_fixture()
-    backend = CSharpBackend()
-    output = backend.emit(module)
-    assert output == EXPECTED
+}

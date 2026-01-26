@@ -19,13 +19,74 @@ check:
 test: go
     go run -C ../src ./cmd/run-tests
 
-# Run backend tests
-test-backends:
-    uv run pytest
-
 # Show Go compilation errors (uses temp copy of src/)
 errors:
     @rm -rf /tmp/parable-src && cp -r ../src /tmp/parable-src
     @uv run python -m src.cli ../src/parable.py > /tmp/parable-ir.go 2>&1 || true
     @gofmt /tmp/parable-ir.go > /tmp/parable-src/parable.go 2>/dev/null || true
     @go build -C /tmp/parable-src -o /dev/null . 2>&1 | head -50 || true
+
+# Run all minilexer backend tests
+test-all: test-c test-csharp test-go test-java test-python test-ruby test-rust test-swift test-ts test-zig
+
+# Minilexer → Java
+test-java:
+    uv run python minilexer.ir -b java > /tmp/Minilexer.java
+    diff -u expected/Minilexer.java /tmp/Minilexer.java
+    javac /tmp/Minilexer.java -d /tmp
+
+# Minilexer → C#
+test-csharp:
+    uv run python minilexer.ir -b csharp > /tmp/Minilexer.cs
+    diff -u expected/Minilexer.cs /tmp/Minilexer.cs
+    @rm -rf /tmp/minilexer-csharp && mkdir -p /tmp/minilexer-csharp
+    @cp /tmp/Minilexer.cs /tmp/minilexer-csharp/
+    @echo '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Library</OutputType><TargetFramework>net9.0</TargetFramework></PropertyGroup></Project>' > /tmp/minilexer-csharp/minilexer.csproj
+    dotnet build /tmp/minilexer-csharp -v q
+
+# Minilexer → C
+test-c:
+    uv run python minilexer.ir -b c > /tmp/minilexer.c
+    diff -u expected/minilexer.c /tmp/minilexer.c
+    clang -fsyntax-only /tmp/minilexer.c
+
+# Minilexer → Swift (compile skipped - too slow)
+test-swift:
+    uv run python minilexer.ir -b swift > /tmp/minilexer.swift
+    diff -u expected/minilexer.swift /tmp/minilexer.swift
+
+# Minilexer → Ruby
+test-ruby:
+    uv run python minilexer.ir -b ruby > /tmp/minilexer.rb
+    diff -u expected/minilexer.rb /tmp/minilexer.rb
+    ruby -c /tmp/minilexer.rb
+
+# Minilexer → Zig
+test-zig:
+    uv run python minilexer.ir -b zig > /tmp/minilexer.zig
+    diff -u expected/minilexer.zig /tmp/minilexer.zig
+    zig ast-check /tmp/minilexer.zig
+
+# Minilexer → Go
+test-go:
+    uv run python minilexer.ir -b go > /tmp/minilexer.go
+    diff -u expected/minilexer.go /tmp/minilexer.go
+    go build -o /dev/null /tmp/minilexer.go
+
+# Minilexer → Python
+test-python:
+    uv run python minilexer.ir -b python > /tmp/minilexer.py
+    diff -u expected/minilexer.py /tmp/minilexer.py
+    python3 -m py_compile /tmp/minilexer.py
+
+# Minilexer → Rust
+test-rust:
+    uv run python minilexer.ir -b rust > /tmp/minilexer.rs
+    diff -u expected/minilexer.rs /tmp/minilexer.rs
+    rustc --crate-type=lib --emit=metadata -o /tmp/minilexer.rmeta /tmp/minilexer.rs
+
+# Minilexer → TypeScript
+test-ts:
+    uv run python minilexer.ir -b ts > /tmp/minilexer.ts
+    diff -u expected/minilexer.ts /tmp/minilexer.ts
+    tsc --noEmit --lib es2015 /tmp/minilexer.ts

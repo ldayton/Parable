@@ -54,6 +54,7 @@ from src.ir import (
     StructRef,
     Tuple,
     Ternary,
+    TryCatch,
     TupleLit,
     UnaryOp,
     Var,
@@ -949,6 +950,46 @@ def make_fixture() -> Module:
         ],
     )
 
+    # --- Function: safe_tokenize (exercises TryCatch) ---
+    safe_tokenize_func = Function(
+        name="safe_tokenize",
+        params=[Param(name="source", typ=STRING)],
+        ret=token_slice,
+        body=[
+            VarDecl(
+                name="tokens",
+                typ=token_slice,
+                value=SliceLit(element_type=token_ref, elements=[], typ=token_slice, loc=L),
+                mutable=True,
+                loc=L,
+            ),
+            TryCatch(
+                body=[
+                    Assign(
+                        target=VarLV(name="tokens", loc=L),
+                        value=Call(
+                            func="tokenize",
+                            args=[Var(name="source", typ=STRING, loc=L)],
+                            typ=token_slice,
+                            loc=L,
+                        ),
+                        loc=L,
+                    ),
+                ],
+                catch_var="e",
+                catch_body=[
+                    Assign(
+                        target=VarLV(name="tokens", loc=L),
+                        value=SliceLit(element_type=token_ref, elements=[], typ=token_slice, loc=L),
+                        loc=L,
+                    ),
+                ],
+                loc=L,
+            ),
+            Return(value=Var(name="tokens", typ=token_slice, loc=L), loc=L),
+        ],
+    )
+
     return Module(
         name="fixture",
         structs=[token_struct, lexer_struct],
@@ -965,6 +1006,7 @@ def make_fixture() -> Module:
             default_kinds_func,
             scoped_work_func,
             kind_priority_func,
+            safe_tokenize_func,
         ],
         constants=[eof_const],
     )

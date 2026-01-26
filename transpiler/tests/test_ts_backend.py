@@ -163,6 +163,16 @@ function kindPriority(kind: string): number {
     default:
       return 0;
   }
+}
+
+function safeTokenize(source: string): Token[] {
+  let tokens: Token[] = [];
+  try {
+    tokens = tokenize(source);
+  } catch (e) {
+    tokens = [];
+  }
+  return tokens;
 }"""
 
 

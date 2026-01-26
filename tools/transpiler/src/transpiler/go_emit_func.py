@@ -162,13 +162,8 @@ class EmitFunctionsMixin:
         receiver = class_info.name[0].lower()
         self.emit(f"func New{class_info.name}({params_str}) *{class_info.name} {{")
         self.indent += 1
-        # Reset declared vars and add parameters
-        self.declared_vars = set()
-        for p in func_info.params:
-            self.declared_vars.add(self._to_go_var(p.name))
         # Create the struct
         self.emit(f"{receiver} := &{class_info.name}{{}}")
-        self.declared_vars.add(receiver)
         # Emit body
         self._emit_constructor_body(node.body, class_info)
         self.emit(f"return {receiver}")
@@ -180,10 +175,14 @@ class EmitFunctionsMixin:
         """Emit function/method body statements."""
         # Track return type for nil → zero value conversion
         self.current_return_type = func_info.return_type if func_info else ""
-        # Run all analysis first
-        analysis = self._analyze_function(stmts, func_info)
-        self._analysis = analysis
-        # Create emission context for this function body
+        # Create analysis and ctx BEFORE analysis runs
+        analysis = FunctionAnalysis()
+        analysis.scope_tree[0] = ScopeInfo(0, None, 0)
+        if func_info:
+            for p in func_info.params:
+                go_name = self._to_go_var(p.name)
+                analysis.declared_vars.add(go_name)
+                analysis.var_types[go_name] = p.go_type
         ctx = EmissionContext(
             analysis=analysis,
             symbols=self.symbols,
@@ -194,20 +193,9 @@ class EmitFunctionsMixin:
             indent=self.indent,
         )
         self._ctx = ctx
-        # Bridge: copy analysis results to self for emission (temporary)
-        # TODO: migrate emission methods to use self._ctx instead
-        self.declared_vars = analysis.declared_vars
-        self.var_types = analysis.var_types
-        self.scope_tree = analysis.scope_tree
-        self.next_scope_id = len(analysis.scope_tree) + 1
-        self.var_usage = analysis.var_usage
-        self.hoisted_vars = analysis.hoisted_vars
-        self.scope_id_map = analysis.scope_id_map
-        self.returned_vars = analysis.returned_vars
-        self.byte_vars = analysis.byte_vars
-        self.tuple_vars = analysis.tuple_vars
-        self.tuple_func_vars = analysis.tuple_func_vars
-        self.var_assign_sources = analysis.var_assign_sources
+        self._analysis = analysis
+        # Run analysis (populates ctx via reference)
+        self._run_analysis(stmts)
         # Emit hoisted declarations for function scope (scope 0)
         self._emit_hoisted_vars(analysis, 0, stmts)
         # Emit all statements
@@ -252,67 +240,14 @@ class EmitFunctionsMixin:
             if func_info and func_info.return_type:
                 self.emit('panic("TODO: empty body")')
 
-    def _analyze_function(
-        self, stmts: list[ast.stmt], func_info: FuncInfo | None
-    ) -> FunctionAnalysis:
-        """Perform all analysis for a function body, returning analysis results."""
-        analysis = FunctionAnalysis()
-        # Initialize scope tree with function scope (scope 0)
-        analysis.scope_tree[0] = ScopeInfo(0, None, 0)
-        # Initialize from params
-        if func_info:
-            for p in func_info.params:
-                go_name = self._to_go_var(p.name)
-                analysis.declared_vars.add(go_name)
-                analysis.var_types[go_name] = p.go_type
-        # Temporarily swap self state with analysis fields so existing methods work
-        old_declared = getattr(self, "declared_vars", set())
-        old_var_types = getattr(self, "var_types", {})
-        old_scope_tree = getattr(self, "scope_tree", {})
-        old_next_scope_id = getattr(self, "next_scope_id", 1)
-        old_var_usage = getattr(self, "var_usage", {})
-        old_hoisted_vars = getattr(self, "hoisted_vars", {})
-        old_scope_id_map = getattr(self, "scope_id_map", {})
-        old_returned_vars = getattr(self, "returned_vars", set())
-        old_byte_vars = getattr(self, "byte_vars", set())
-        old_tuple_vars = getattr(self, "tuple_vars", {})
-        old_tuple_func_vars = getattr(self, "tuple_func_vars", {})
-        old_var_assign_sources = getattr(self, "var_assign_sources", {})
-        try:
-            self.declared_vars = analysis.declared_vars
-            self.var_types = analysis.var_types
-            self.scope_tree = analysis.scope_tree
-            self.next_scope_id = 1
-            self.var_usage = analysis.var_usage
-            self.hoisted_vars = analysis.hoisted_vars
-            self.scope_id_map = analysis.scope_id_map
-            self.returned_vars = analysis.returned_vars
-            self.byte_vars = analysis.byte_vars
-            self.tuple_vars = analysis.tuple_vars
-            self.tuple_func_vars = analysis.tuple_func_vars
-            self.var_assign_sources = analysis.var_assign_sources
-            # Run analysis methods
-            self._analyze_var_types(stmts)
-            self._collect_var_scopes(stmts, scope_id=0)
-            self._compute_hoisting()
-            self._exclude_assign_check_return_vars(stmts)
-            self._populate_var_types_from_usage(stmts)
-            self._scan_returned_vars(stmts)
-        finally:
-            # Restore old state
-            self.declared_vars = old_declared
-            self.var_types = old_var_types
-            self.scope_tree = old_scope_tree
-            self.next_scope_id = old_next_scope_id
-            self.var_usage = old_var_usage
-            self.hoisted_vars = old_hoisted_vars
-            self.scope_id_map = old_scope_id_map
-            self.returned_vars = old_returned_vars
-            self.byte_vars = old_byte_vars
-            self.tuple_vars = old_tuple_vars
-            self.tuple_func_vars = old_tuple_func_vars
-            self.var_assign_sources = old_var_assign_sources
-        return analysis
+    def _run_analysis(self, stmts: list[ast.stmt]):
+        """Run analysis methods - _ctx must be set before calling."""
+        self._analyze_var_types(stmts)
+        self._collect_var_scopes(stmts, scope_id=0)
+        self._compute_hoisting()
+        self._exclude_assign_check_return_vars(stmts)
+        self._populate_var_types_from_usage(stmts)
+        self._scan_returned_vars(stmts)
 
     def _emit_stmts_with_patterns(self, stmts: list[ast.stmt]):
         """Emit statements with pattern detection for typed-nil fixes."""
@@ -342,7 +277,7 @@ class EmitFunctionsMixin:
         if isinstance(stmt, ast.Return):
             if isinstance(stmt.value, ast.Name):
                 var_name = self._to_go_var(stmt.value.id)
-                self.returned_vars.add(var_name)
+                self._ctx.returned_vars.add(var_name)
         elif isinstance(stmt, ast.If):
             for s in stmt.body:
                 self._scan_stmt_for_returns(s)
@@ -381,7 +316,7 @@ class EmitFunctionsMixin:
                 py_type = ast.unparse(stmt.annotation)
                 go_type = self._py_type_to_go(py_type)
                 if go_type:
-                    self.var_types[var_name] = go_type
+                    self._ctx.var_types[var_name] = go_type
             except Exception:
                 pass
         if isinstance(stmt, ast.Assign):
@@ -391,24 +326,24 @@ class EmitFunctionsMixin:
                 if isinstance(stmt.value, ast.List):
                     if not stmt.value.elts:
                         # Only set if not already known from annotation
-                        if var_name not in self.var_types:
+                        if var_name not in self._ctx.var_types:
                             # For result variables, use return type if available
                             if var_name == "result" and self.current_return_type.startswith("[]"):
-                                self.var_types[var_name] = self.current_return_type
+                                self._ctx.var_types[var_name] = self.current_return_type
                             else:
-                                self.var_types[var_name] = "[]interface{}"  # default for empty
+                                self._ctx.var_types[var_name] = "[]interface{}"  # default for empty
                     else:
                         # Infer from first element
                         elem_type = self._infer_literal_elem_type(stmt.value.elts[0])
-                        if var_name not in self.var_types:
-                            self.var_types[var_name] = f"[]{elem_type}"
+                        if var_name not in self._ctx.var_types:
+                            self._ctx.var_types[var_name] = f"[]{elem_type}"
                 # If assigning from string subscript (single index, not slice), treat as string
                 # (we convert to string() during emission)
                 elif isinstance(stmt.value, ast.Subscript) and not isinstance(
                     stmt.value.slice, ast.Slice
                 ):
                     if self._is_string_subscript(stmt.value):
-                        self.var_types[var_name] = "string"
+                        self._ctx.var_types[var_name] = "string"
                 # If assigning from a method call that returns string
                 elif isinstance(stmt.value, ast.Call) and isinstance(
                     stmt.value.func, ast.Attribute
@@ -428,7 +363,7 @@ class EmitFunctionsMixin:
                         "peek",
                         "peek_at",
                     ):  # Parser methods returning string
-                        self.var_types[var_name] = "string"
+                        self._ctx.var_types[var_name] = "string"
                 # If assigning from _ternary(cond, a, b), infer type from a/b
                 elif isinstance(stmt.value, ast.Call) and isinstance(stmt.value.func, ast.Name):
                     if stmt.value.func.id == "_ternary" and len(stmt.value.args) >= 3:
@@ -436,13 +371,13 @@ class EmitFunctionsMixin:
                         if self._is_string_expr(stmt.value.args[1]) or self._is_string_expr(
                             stmt.value.args[2]
                         ):
-                            self.var_types[var_name] = "string"
+                            self._ctx.var_types[var_name] = "string"
                 # If assigning from inline ternary (a if cond else b), infer type from a/b
                 elif isinstance(stmt.value, ast.IfExp):
                     if self._is_string_expr(stmt.value.body) or self._is_string_expr(
                         stmt.value.orelse
                     ):
-                        self.var_types[var_name] = "string"
+                        self._ctx.var_types[var_name] = "string"
                 # If assigning from self.field, infer type from field (for union types)
                 elif isinstance(stmt.value, ast.Attribute):
                     if isinstance(stmt.value.value, ast.Name) and stmt.value.value.id == "self":
@@ -452,7 +387,7 @@ class EmitFunctionsMixin:
                             if class_info and field_name in class_info.fields:
                                 field_type = class_info.fields[field_name].go_type
                                 if field_type:
-                                    self.var_types[var_name] = field_type
+                                    self._ctx.var_types[var_name] = field_type
         # Look for append calls to infer list element types
         if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
             call = stmt.value
@@ -460,9 +395,9 @@ class EmitFunctionsMixin:
                 if isinstance(call.func.value, ast.Name) and call.args:
                     var_name = self._to_go_var(call.func.value.id)
                     elem_type = self._infer_elem_type_from_arg(call.args[0])
-                    if elem_type and var_name in self.var_types:
-                        if self.var_types[var_name] == "[]interface{}":
-                            self.var_types[var_name] = f"[]{elem_type}"
+                    if elem_type and var_name in self._ctx.var_types:
+                        if self._ctx.var_types[var_name] == "[]interface{}":
+                            self._ctx.var_types[var_name] = f"[]{elem_type}"
         # Look for assignments to self.field = var to infer var type from field type
         if isinstance(stmt, ast.Assign):
             for target in stmt.targets:
@@ -475,9 +410,9 @@ class EmitFunctionsMixin:
                             class_info = self.symbols.classes.get(self.current_class)
                             if class_info and field_name in class_info.fields:
                                 field_type = class_info.fields[field_name].go_type
-                                if field_type and var_name in self.var_types:
-                                    if self.var_types[var_name] == "[]interface{}":
-                                        self.var_types[var_name] = field_type
+                                if field_type and var_name in self._ctx.var_types:
+                                    if self._ctx.var_types[var_name] == "[]interface{}":
+                                        self._ctx.var_types[var_name] = field_type
         # Recurse into control flow
         if isinstance(stmt, ast.If):
             self._analyze_var_types(stmt.body)
@@ -492,7 +427,7 @@ class EmitFunctionsMixin:
                 iter_base = iter_base.value
             if isinstance(iter_base, ast.Name):
                 iter_var = self._snake_to_camel(iter_base.id)
-                iter_type = self.var_types.get(iter_var, "")
+                iter_type = self._ctx.var_types.get(iter_var, "")
                 if iter_type == "string" or iter_base.id in ("name", "text", "s", "source"):
                     # Loop variable is rune when ranging over string
                     if isinstance(stmt.target, ast.Tuple):
@@ -501,10 +436,10 @@ class EmitFunctionsMixin:
                             c_var = stmt.target.elts[1]
                             if isinstance(c_var, ast.Name):
                                 var_name = self._to_go_var(c_var.id)
-                                self.var_types[var_name] = "rune"
+                                self._ctx.var_types[var_name] = "rune"
                     elif isinstance(stmt.target, ast.Name):
                         var_name = self._to_go_var(stmt.target.id)
-                        self.var_types[var_name] = "rune"
+                        self._ctx.var_types[var_name] = "rune"
             self._analyze_var_types(stmt.body)
         # Infer types from usage patterns: Node methods and boolean context
         self._infer_types_from_usage(stmt)
@@ -520,8 +455,8 @@ class EmitFunctionsMixin:
                         var_name = self._to_go_var(node.value.id)
                         # Only upgrade untyped vars to Node, not interface{} which is
                         # intentional for union types like CondNode | str
-                        if var_name not in self.var_types:
-                            self.var_types[var_name] = "Node"
+                        if var_name not in self._ctx.var_types:
+                            self._ctx.var_types[var_name] = "Node"
             # Detect function calls - infer argument types from function parameters
             if isinstance(node, ast.Call):
                 self._infer_types_from_call_args(node)
@@ -554,17 +489,17 @@ class EmitFunctionsMixin:
                         if param_type.startswith("*[]"):
                             param_type = param_type[1:]  # Strip leading * for slices only
                         if (
-                            var_name not in self.var_types
-                            or self.var_types[var_name] == "interface{}"
+                            var_name not in self._ctx.var_types
+                            or self._ctx.var_types[var_name] == "interface{}"
                         ):
-                            self.var_types[var_name] = param_type
+                            self._ctx.var_types[var_name] = param_type
 
     def _infer_expr_type(self, node: ast.expr) -> str:
         """Infer the Go type of an expression."""
         # Variable reference
         if isinstance(node, ast.Name):
             var_name = self._to_go_var(node.id)
-            return self.var_types.get(var_name, "")
+            return self._ctx.var_types.get(var_name, "")
         # Attribute access (self.field or obj.field)
         if isinstance(node, ast.Attribute):
             if isinstance(node.value, ast.Name):
@@ -586,8 +521,8 @@ class EmitFunctionsMixin:
                 return "bool"
         if isinstance(node, ast.Name):
             var_name = self._to_go_var(node.id)
-            if var_name in self.var_types:
-                return self.var_types[var_name]
+            if var_name in self._ctx.var_types:
+                return self._ctx.var_types[var_name]
             # Common string variable names
             if node.id in ("s", "c", "char", "text", "value", "line"):
                 return "string"
@@ -620,7 +555,6 @@ class EmitFunctionsMixin:
                 go_name = self._to_go_var(p.name)
                 analysis.declared_vars.add(go_name)
                 analysis.var_types[go_name] = p.go_type
-        self._analysis = analysis
         # Create emission context for constructor body
         ctx = EmissionContext(
             analysis=analysis,
@@ -632,10 +566,7 @@ class EmitFunctionsMixin:
             indent=self.indent,
         )
         self._ctx = ctx
-        # Bridge: also set on self for compatibility
-        # TODO: migrate emission methods to use self._ctx instead
-        self.var_types = analysis.var_types
-        self.declared_vars = analysis.declared_vars
+        self._analysis = analysis
         for stmt in stmts:
             # Skip docstrings
             if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant):

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from .go_types import ScopeInfo, VarInfo
 
 if TYPE_CHECKING:
-    from .go_types import FuncInfo, SymbolTable
+    from .go_types import EmissionContext, FuncInfo, SymbolTable
 
 
 class ScopeAnalysisMixin:
@@ -17,13 +17,7 @@ class ScopeAnalysisMixin:
 
     # Instance attributes (set by main class)
     symbols: SymbolTable
-    scope_tree: dict[int, ScopeInfo]
-    next_scope_id: int
-    var_usage: dict[str, VarInfo]
-    hoisted_vars: dict[str, int]
-    scope_id_map: dict[int, int]
-    var_types: dict[str, str]
-    declared_vars: set[str]
+    _ctx: EmissionContext
     current_method: str | None
     current_func_info: FuncInfo | None
     indent: int
@@ -32,19 +26,19 @@ class ScopeAnalysisMixin:
 
     def _new_scope(self, parent: int) -> int:
         """Create a new scope as a child of parent."""
-        scope_id = self.next_scope_id
-        self.next_scope_id += 1
-        parent_depth = self.scope_tree[parent].depth if parent in self.scope_tree else -1
-        self.scope_tree[scope_id] = ScopeInfo(scope_id, parent, parent_depth + 1)
+        scope_id = self._ctx.next_scope_id
+        self._ctx.next_scope_id += 1
+        parent_depth = self._ctx.scope_tree[parent].depth if parent in self._ctx.scope_tree else -1
+        self._ctx.scope_tree[scope_id] = ScopeInfo(scope_id, parent, parent_depth + 1)
         return scope_id
 
     def _is_ancestor(self, ancestor: int, descendant: int) -> bool:
         """True if ancestor is a proper ancestor of descendant."""
-        current = self.scope_tree[descendant].parent
+        current = self._ctx.scope_tree[descendant].parent
         while current is not None:
             if current == ancestor:
                 return True
-            current = self.scope_tree[current].parent
+            current = self._ctx.scope_tree[current].parent
         return False
 
     def _is_ancestor_or_equal(self, ancestor: int, descendant: int) -> bool:
@@ -58,17 +52,17 @@ class ScopeAnalysisMixin:
 
         def ancestors(s: int) -> set[int]:
             result = {s}
-            current = self.scope_tree[s].parent
+            current = self._ctx.scope_tree[s].parent
             while current is not None:
                 result.add(current)
-                current = self.scope_tree[current].parent
+                current = self._ctx.scope_tree[current].parent
             return result
 
         common = ancestors(next(iter(scope_ids)))
         for s in scope_ids:
             common &= ancestors(s)
         # Return deepest common ancestor
-        return max(common, key=lambda s: self.scope_tree[s].depth)
+        return max(common, key=lambda s: self._ctx.scope_tree[s].depth)
 
     def _needs_hoisting(self, var_info: VarInfo) -> tuple[bool, int | None]:
         """Determine if a variable needs hoisting and to which scope."""
@@ -89,7 +83,7 @@ class ScopeAnalysisMixin:
                     return (True, lca)
         # Case 3: Multiple assignments where inner would shadow outer
         if len(var_info.assign_scopes) > 1:
-            min_scope = min(var_info.assign_scopes, key=lambda s: self.scope_tree[s].depth)
+            min_scope = min(var_info.assign_scopes, key=lambda s: self._ctx.scope_tree[s].depth)
             for scope in var_info.assign_scopes:
                 if scope != min_scope and not self._is_ancestor(min_scope, scope):
                     return (True, lca)
@@ -97,24 +91,24 @@ class ScopeAnalysisMixin:
 
     def _record_var_assign(self, var: str, scope_id: int, value: ast.expr | None):
         """Record a variable assignment at a scope."""
-        if var not in self.var_usage:
-            self.var_usage[var] = VarInfo(var, "")
-        self.var_usage[var].assign_scopes.add(scope_id)
+        if var not in self._ctx.var_usage:
+            self._ctx.var_usage[var] = VarInfo(var, "")
+        self._ctx.var_usage[var].assign_scopes.add(scope_id)
         # Infer type from first assignment
-        if not self.var_usage[var].go_type and value:
-            self.var_usage[var].first_value = value
+        if not self._ctx.var_usage[var].go_type and value:
+            self._ctx.var_usage[var].first_value = value
 
     def _record_var_read(self, var: str, scope_id: int):
         """Record a variable read at a scope."""
-        if var not in self.var_usage:
-            self.var_usage[var] = VarInfo(var, "")
-        self.var_usage[var].read_scopes.add(scope_id)
+        if var not in self._ctx.var_usage:
+            self._ctx.var_usage[var] = VarInfo(var, "")
+        self._ctx.var_usage[var].read_scopes.add(scope_id)
 
     def _collect_var_scopes(self, stmts: list[ast.stmt], scope_id: int):
         """Collect variable assignment/read scopes recursively."""
         for stmt in stmts:
             # Store scope mapping for emission phase
-            self.scope_id_map[id(stmt)] = scope_id
+            self._ctx.scope_id_map[id(stmt)] = scope_id
             if isinstance(stmt, ast.Assign):
                 for target in stmt.targets:
                     if isinstance(target, ast.Name):
@@ -126,18 +120,20 @@ class ScopeAnalysisMixin:
                                 for i, elem_type in enumerate(ret_info):
                                     synth_name = f"{var_name}{i}"
                                     self._record_var_assign(synth_name, scope_id, None)
-                                    self.var_types[synth_name] = elem_type
+                                    self._ctx.var_types[synth_name] = elem_type
                                 continue
                         var_name = self._to_go_var(target.id)
                         self._record_var_assign(var_name, scope_id, stmt.value)
                         # Infer type while we have context
                         expr_type = self._infer_type_from_expr(stmt.value)
                         if expr_type and expr_type not in ("interface{}", "[]interface{}"):
-                            if var_name not in self.var_types or self.var_types[var_name] in (
+                            if var_name not in self._ctx.var_types or self._ctx.var_types[
+                                var_name
+                            ] in (
                                 "interface{}",
                                 "[]interface{}",
                             ):
-                                self.var_types[var_name] = expr_type
+                                self._ctx.var_types[var_name] = expr_type
                     # Tuple targets use := (handled separately)
             elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
                 var_name = self._to_go_var(stmt.target.id)
@@ -149,13 +145,13 @@ class ScopeAnalysisMixin:
                 if isinstance_info:
                     var_py, type_name = isinstance_info
                     var_go = self._to_go_var(var_py)
-                    old_type = self.var_types.get(var_go)
-                    self.var_types[var_go] = f"*{type_name}"
+                    old_type = self._ctx.var_types.get(var_go)
+                    self._ctx.var_types[var_go] = f"*{type_name}"
                     self._collect_var_scopes(stmt.body, then_scope)
                     if old_type is not None:
-                        self.var_types[var_go] = old_type
+                        self._ctx.var_types[var_go] = old_type
                     else:
-                        self.var_types.pop(var_go, None)
+                        self._ctx.var_types.pop(var_go, None)
                 else:
                     self._collect_var_scopes(stmt.body, then_scope)
                 if stmt.orelse:
@@ -191,9 +187,9 @@ class ScopeAnalysisMixin:
                     self._collect_var_scopes(handler.body, handler_scope)
                 # Remove exception vars from read tracking (they become 'r' in Go)
                 for var in except_vars:
-                    if var in self.var_usage:
-                        self.var_usage[var].read_scopes.clear()
-                        self.var_usage[var].assign_scopes.clear()
+                    if var in self._ctx.var_usage:
+                        self._ctx.var_usage[var].read_scopes.clear()
+                        self._ctx.var_usage[var].assign_scopes.clear()
                 if stmt.orelse:
                     else_scope = self._new_scope(parent=scope_id)
                     self._collect_var_scopes(stmt.orelse, else_scope)
@@ -220,30 +216,30 @@ class ScopeAnalysisMixin:
         """Determine which vars need hoisting vs inline :="""
         # Collect all reads first to filter unused vars
         reads: set[str] = set()
-        for var, info in self.var_usage.items():
+        for var, info in self._ctx.var_usage.items():
             if info.read_scopes:
                 reads.add(var)
         # Collect append types and nullable vars for type inference
         # (These require the full statement list, so we reuse existing methods)
-        for var, info in self.var_usage.items():
+        for var, info in self._ctx.var_usage.items():
             if var not in reads:
                 continue  # Skip unused vars
             needs_hoist, hoist_scope = self._needs_hoisting(info)
             if needs_hoist and hoist_scope is not None:
-                self.hoisted_vars[var] = hoist_scope
+                self._ctx.hoisted_vars[var] = hoist_scope
 
     def _exclude_assign_check_return_vars(self, stmts: list[ast.stmt]):
         """Remove vars from hoisting that are only used in assign-check-return patterns."""
         consumed_vars: set[str] = set()
         self._scan_assign_check_return_vars(stmts, consumed_vars)
         for var in consumed_vars:
-            if var in self.hoisted_vars:
-                del self.hoisted_vars[var]
-            if var in self.var_usage:
-                del self.var_usage[var]
+            if var in self._ctx.hoisted_vars:
+                del self._ctx.hoisted_vars[var]
+            if var in self._ctx.var_usage:
+                del self._ctx.var_usage[var]
             # Also clear var_types so pattern detection works during emission
-            if var in self.var_types:
-                del self.var_types[var]
+            if var in self._ctx.var_types:
+                del self._ctx.var_types[var]
 
     def _scan_assign_check_return_vars(self, stmts: list[ast.stmt], consumed: set[str]):
         """Recursively scan for vars consumed by assign-check-return patterns."""
@@ -345,37 +341,37 @@ class ScopeAnalysisMixin:
         nullable_node_vars = self._collect_nullable_node_vars(stmts)
         nullable_string_vars = self._collect_nullable_string_vars(stmts)
         multi_node_vars = self._collect_multi_node_type_vars(stmts)
-        for var, _info in self.var_usage.items():
-            go_type = self.var_types.get(var)
+        for var, _info in self._ctx.var_usage.items():
+            go_type = self._ctx.var_types.get(var)
             # Check append() calls for element type
             if var in append_types:
                 elem_type = append_types[var]
                 if elem_type and (
                     not go_type or go_type in ("interface{}", "[]interface{}", "[]string")
                 ):
-                    self.var_types[var] = f"[]{elem_type}"
+                    self._ctx.var_types[var] = f"[]{elem_type}"
                     continue
             # Check if var is None-initialized but later assigned Node types
             if var in nullable_node_vars:
                 if not go_type or go_type == "interface{}":
-                    self.var_types[var] = "Node"
+                    self._ctx.var_types[var] = "Node"
                     continue
             # Check if var is None-initialized but later assigned string types
             if var in nullable_string_vars:
                 if not go_type or go_type == "interface{}":
-                    self.var_types[var] = "string"
+                    self._ctx.var_types[var] = "string"
                     continue
             # Check if var is assigned multiple different concrete Node types
             if var in multi_node_vars:
                 if go_type and go_type.startswith("*") and go_type[1:] in self.symbols.classes:
                     if self.symbols.classes[go_type[1:]].is_node:
-                        self.var_types[var] = "Node"
+                        self._ctx.var_types[var] = "Node"
                         continue
             # Infer from name if no specific type
             if not go_type or go_type in ("interface{}", "[]interface{}"):
                 name_type = self._infer_var_type_from_name(var)
                 if name_type:
-                    self.var_types[var] = name_type
+                    self._ctx.var_types[var] = name_type
 
     def _predeclare_all_locals(self, stmts: list[ast.stmt]):
         """Pre-declare ALL local variables at function top (C-style).
@@ -399,9 +395,9 @@ class ScopeAnalysisMixin:
         multi_node_vars = self._collect_multi_node_type_vars(stmts)
         # Emit var declarations for all collected variables that are actually read
         for var_name, first_value in assignments.items():
-            if var_name not in self.declared_vars and var_name in reads:
+            if var_name not in self._ctx.declared_vars and var_name in reads:
                 # Try to get type from var_types first (from annotations, etc.)
-                go_type = self.var_types.get(var_name)
+                go_type = self._ctx.var_types.get(var_name)
                 # But always try to infer from expression for more specific types
                 if first_value is not None:
                     expr_type = self._infer_type_from_expr(first_value)
@@ -451,8 +447,8 @@ class ScopeAnalysisMixin:
                 self.emit(f"var {var_name} {go_type}")
                 # Suppress unused variable warning immediately
                 self.emit(f"_ = {var_name}")
-                self.declared_vars.add(var_name)
-                self.var_types[var_name] = go_type
+                self._ctx.declared_vars.add(var_name)
+                self._ctx.var_types[var_name] = go_type
 
     def _get_current_method_return_type(self) -> str:
         """Get the return type of the current method being emitted."""
@@ -478,7 +474,7 @@ class ScopeAnalysisMixin:
                                     if synth_name not in assignments:
                                         assignments[synth_name] = None
                                         # Store type for pre-declaration
-                                        self.var_types[synth_name] = elem_type
+                                        self._ctx.var_types[synth_name] = elem_type
                                 continue
                         var_name = self._to_go_var(target.id)
                         if var_name not in assignments:
@@ -486,11 +482,13 @@ class ScopeAnalysisMixin:
                             # Infer type now while we have isinstance context
                             expr_type = self._infer_type_from_expr(stmt.value)
                             if expr_type and expr_type not in ("interface{}", "[]interface{}"):
-                                if var_name not in self.var_types or self.var_types[var_name] in (
+                                if var_name not in self._ctx.var_types or self._ctx.var_types[
+                                    var_name
+                                ] in (
                                     "interface{}",
                                     "[]interface{}",
                                 ):
-                                    self.var_types[var_name] = expr_type
+                                    self._ctx.var_types[var_name] = expr_type
                     elif isinstance(target, ast.Tuple):
                         # Don't pre-declare tuple unpacking targets
                         # The unpacking statement itself uses := which declares them
@@ -511,14 +509,14 @@ class ScopeAnalysisMixin:
                 if isinstance_info:
                     var_py, type_name = isinstance_info
                     var_go = self._to_go_var(var_py)
-                    old_type = self.var_types.get(var_go)
-                    self.var_types[var_go] = f"*{type_name}"
+                    old_type = self._ctx.var_types.get(var_go)
+                    self._ctx.var_types[var_go] = f"*{type_name}"
                     self._collect_all_assignments(stmt.body, assignments)
                     # Restore original type
                     if old_type is not None:
-                        self.var_types[var_go] = old_type
+                        self._ctx.var_types[var_go] = old_type
                     else:
-                        self.var_types.pop(var_go, None)
+                        self._ctx.var_types.pop(var_go, None)
                 else:
                     self._collect_all_assignments(stmt.body, assignments)
                 if stmt.orelse:
@@ -607,8 +605,8 @@ class ScopeAnalysisMixin:
         # Variable reference - check var_types or infer from name
         if isinstance(node, ast.Name):
             var_name = self._to_go_var(node.id)
-            if var_name in self.var_types:
-                vtype = self.var_types[var_name]
+            if var_name in self._ctx.var_types:
+                vtype = self._ctx.var_types[var_name]
                 # Convert concrete Node types to Node interface for slice compatibility
                 if vtype.startswith("*") and vtype[1:] in self.symbols.classes:
                     if self.symbols.classes[vtype[1:]].is_node:
@@ -706,7 +704,7 @@ class ScopeAnalysisMixin:
             return True
         # Variable reference - check if we know its type
         if isinstance(node, ast.Name):
-            var_type = self.var_types.get(self._to_go_var(node.id), "")
+            var_type = self._ctx.var_types.get(self._to_go_var(node.id), "")
             return var_type == "string"
         # JoinedStr (f-string)
         if isinstance(node, ast.JoinedStr):

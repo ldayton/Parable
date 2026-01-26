@@ -15,7 +15,7 @@ from .go_naming import NamingMixin
 from .go_scope import ScopeAnalysisMixin
 from .go_symbols import SymbolsMixin
 from .go_type_system import TypeSystemMixin
-from .go_types import FuncInfo, ParamInfo, ScopeInfo, SymbolTable, VarInfo
+from .go_types import FuncInfo, ParamInfo, SymbolTable
 
 
 class GoTranspiler(
@@ -39,12 +39,7 @@ class GoTranspiler(
         self.current_class: str | None = None
         self.current_method: str | None = None  # Current method name being emitted
         self.current_func_info: FuncInfo | None = None  # Current method's FuncInfo
-        self.declared_vars: set[str] = set()  # Track declared local variables per function
         self.current_return_type: str = ""  # Go return type of current function/method
-        self.byte_vars: set[str] = set()  # Track variables holding bytes (from string subscripts)
-        self.tuple_vars: dict[str, list[str]] = {}  # Map tuple var name to element var names
-        self.tuple_func_vars: dict[str, str] = {}  # Map var name to tuple-returning function name
-        self.returned_vars: set[str] = set()  # Track variables used in return statements
         self.union_field_types: dict[
             tuple[str, str], str
         ] = {}  # Map (receiver, field) to current type
@@ -52,12 +47,6 @@ class GoTranspiler(
             None  # (original_var, switch_var) during type switch
         )
         self._type_switch_type: str | None = None  # Current narrowed type in type switch case
-        # Scope tracking for idiomatic variable declarations
-        self.scope_tree: dict[int, ScopeInfo] = {}
-        self.next_scope_id: int = 0
-        self.var_usage: dict[str, VarInfo] = {}
-        self.hoisted_vars: dict[str, int] = {}  # var -> scope_id to declare at
-        self.scope_id_map: dict[int, int] = {}  # AST node id -> scope_id (for emission phase)
 
     def emit(self, text: str):
         """Emit a line of Go code at the current indentation level."""
@@ -163,8 +152,8 @@ class GoTranspiler(
         if isinstance(node, ast.Name):
             # Look up variable type from var_types (includes parameters)
             var_name = self._to_go_var(node.id)
-            if var_name in self.var_types:
-                return self.var_types[var_name]
+            if var_name in self._ctx.var_types:
+                return self._ctx.var_types[var_name]
             # Common variable names with known types
             if node.id in ("start", "end", "pos", "i", "j", "n", "length", "count", "depth"):
                 return "int"
@@ -194,7 +183,7 @@ class GoTranspiler(
             # word[1:] where word is string -> string
             if isinstance(node.value, ast.Name):
                 var_name = self._to_go_var(node.value.id)
-                var_type = self.var_types.get(var_name, "")
+                var_type = self._ctx.var_types.get(var_name, "")
                 if var_type.startswith("[]"):
                     return var_type  # []Node -> []Node (slicing preserves type)
                 if var_type == "string":
@@ -215,7 +204,7 @@ class GoTranspiler(
                 # var.attr[i] -> look up var's type, then field type
                 elif isinstance(node.value.value, ast.Name):
                     var_name = self._to_go_var(node.value.value.id)
-                    var_type = self.var_types.get(var_name, "")
+                    var_type = self._ctx.var_types.get(var_name, "")
                     # Extract class name from *ClassName
                     if var_type.startswith("*"):
                         class_name = var_type[1:]
@@ -236,7 +225,7 @@ class GoTranspiler(
             # Variable subscript
             if isinstance(node.value, ast.Name):
                 var_name = self._to_go_var(node.value.id)
-                var_type = self.var_types.get(var_name, "")
+                var_type = self._ctx.var_types.get(var_name, "")
                 if var_type.startswith("[]"):
                     return var_type[2:]  # []Node -> Node
         # Method calls with known return types

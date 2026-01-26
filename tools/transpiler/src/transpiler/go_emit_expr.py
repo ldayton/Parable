@@ -121,7 +121,7 @@ class EmitExpressionsMixin:
         # Variable reference
         if isinstance(node, ast.Name):
             var_name = self._to_go_var(node.id)
-            return self.var_types.get(var_name, "")
+            return self._ctx.var_types.get(var_name, "")
         # Attribute access - look up field type in struct
         if isinstance(node, ast.Attribute):
             # self.x -> look up field type in current class
@@ -145,11 +145,11 @@ class EmitExpressionsMixin:
             # If in type switch and this is the switched variable, use narrowed type
             if self._type_switch_var and var_name == self._type_switch_var[0]:
                 return self._type_switch_type or ""
-            return self.var_types.get(var_name, "")
+            return self._ctx.var_types.get(var_name, "")
         # Subscript on a slice - get the element type
         if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name):
             var_name = self._to_go_var(node.value.id)
-            var_type = self.var_types.get(var_name, "")
+            var_type = self._ctx.var_types.get(var_name, "")
             if var_type.startswith("[]"):
                 return var_type[2:]  # []Node -> Node
         # Attribute access - look up field type in struct
@@ -171,7 +171,7 @@ class EmitExpressionsMixin:
         if field_name == "command" and value_node is not None:
             if isinstance(value_node, ast.Name):
                 var_name = self._to_go_var(value_node.id)
-                source = getattr(self, "var_assign_sources", {}).get(var_name, "")
+                source = self._ctx.var_assign_sources.get(var_name, "")
                 if source == "procsub_parts":
                     return "*ProcessSubstitution"
                 elif source == "cmdsub_parts":
@@ -230,7 +230,7 @@ class EmitExpressionsMixin:
         # If it's a variable with interface{} type, needs assertion
         if isinstance(value, ast.Name):
             var_name = self._to_go_var(value.id)
-            var_type = self.var_types.get(var_name, "")
+            var_type = self._ctx.var_types.get(var_name, "")
             # If type is interface{}, needs assertion
             if var_type == "interface{}":
                 return True
@@ -369,7 +369,7 @@ class EmitExpressionsMixin:
                 return self.current_class
             # Check local variable type
             var_name = self._to_go_var(node.id)
-            var_type = self.var_types.get(var_name, "")
+            var_type = self._ctx.var_types.get(var_name, "")
             # Extract class name from pointer type like "*Word"
             if var_type.startswith("*"):
                 class_name = var_type[1:]
@@ -489,7 +489,7 @@ class EmitExpressionsMixin:
             # Check if the argument is a slice variable (not already a pointer)
             if isinstance(orig_args[i], ast.Name):
                 var_name = self._to_go_var(orig_args[i].id)
-                arg_type = self.var_types.get(var_name, "")
+                arg_type = self._ctx.var_types.get(var_name, "")
                 if arg_type and arg_type.startswith("[]") and not arg_type.startswith("[]*"):
                     result[i] = f"&{arg_str}"
         return result
@@ -499,9 +499,9 @@ class EmitExpressionsMixin:
         # Check if accessing tuple variable element (cmdsub_result[0] -> cmdsubResult0)
         if isinstance(node.value, ast.Name) and isinstance(node.slice, ast.Constant):
             var_name = self._to_go_var(node.value.id)
-            if var_name in self.tuple_vars and isinstance(node.slice.value, int):
+            if var_name in self._ctx.tuple_vars and isinstance(node.slice.value, int):
                 idx = node.slice.value
-                elem_vars = self.tuple_vars[var_name]
+                elem_vars = self._ctx.tuple_vars[var_name]
                 if 0 <= idx < len(elem_vars):
                     return elem_vars[idx]
         value = self.visit_expr(node.value)
@@ -598,15 +598,15 @@ class EmitExpressionsMixin:
         # Check if indexing an interface{} variable (needs type assertion)
         if isinstance(node.value, ast.Name):
             var_name = self._to_go_var(node.value.id)
-            var_type = self.var_types.get(var_name, "")
+            var_type = self._ctx.var_types.get(var_name, "")
             if var_type == "interface{}":
                 # Type assert to []interface{} then index
                 base_expr = f"{value}.([]interface{{}})[{index}]"
                 # Check if we know the element type from a tuple function
                 # Only add assertion for slice types (for append contexts); simple types
                 # are handled by the assignment handler
-                if var_name in self.tuple_func_vars and isinstance(node.slice, ast.Constant):
-                    func_name = self.tuple_func_vars[var_name]
+                if var_name in self._ctx.tuple_func_vars and isinstance(node.slice, ast.Constant):
+                    func_name = self._ctx.tuple_func_vars[var_name]
                     idx = node.slice.value
                     if func_name in TUPLE_ELEMENT_TYPES:
                         elem_types = TUPLE_ELEMENT_TYPES[func_name]
@@ -680,12 +680,12 @@ class EmitExpressionsMixin:
         if isinstance(node, ast.Subscript):
             if isinstance(node.value, ast.Name) and isinstance(node.slice, ast.Constant):
                 var_name = self._to_go_var(node.value.id)
-                if var_name in self.tuple_vars and isinstance(node.slice.value, int):
+                if var_name in self._ctx.tuple_vars and isinstance(node.slice.value, int):
                     idx = node.slice.value
-                    elem_vars = self.tuple_vars[var_name]
+                    elem_vars = self._ctx.tuple_vars[var_name]
                     if 0 <= idx < len(elem_vars):
                         elem_var = elem_vars[idx]
-                        elem_type = self.var_types.get(elem_var, "")
+                        elem_type = self._ctx.var_types.get(elem_var, "")
                         if elem_type == "Node" or elem_type.startswith("*"):
                             return f"{elem_var} != nil"
                         if elem_type.startswith("[]") or elem_type.startswith("map["):
@@ -695,7 +695,7 @@ class EmitExpressionsMixin:
         # If it's a simple Name that might be a slice/map/string, convert appropriately
         if isinstance(node, ast.Name):
             var_name = self._to_go_var(node.id)
-            var_type = self.var_types.get(var_name, "")
+            var_type = self._ctx.var_types.get(var_name, "")
             # Check if it's a Node type (interface, might be nil)
             if var_type == "Node" or var_type.startswith("*"):
                 return f"{var_name} != nil"
@@ -747,7 +747,7 @@ class EmitExpressionsMixin:
             # Look up field type from local variable's class
             if isinstance(node.value, ast.Name) and node.value.id != "self":
                 var_name = self._to_go_var(node.value.id)
-                var_type = self.var_types.get(var_name, "")
+                var_type = self._ctx.var_types.get(var_name, "")
                 if var_type.startswith("*"):
                     class_name = var_type[1:]
                     if class_name in self.symbols.classes:
@@ -836,7 +836,7 @@ class EmitExpressionsMixin:
                 # Check for local variable of type Node
                 if isinstance(node.left, ast.Name):
                     var_name = self._to_go_var(node.left.id)
-                    var_type = self.var_types.get(var_name, "")
+                    var_type = self._ctx.var_types.get(var_name, "")
                     if var_type == "Node":
                         return f"_isNilNode({result})"
             if (
@@ -859,7 +859,7 @@ class EmitExpressionsMixin:
                 # Check for local variable of type Node
                 if isinstance(node.left, ast.Name):
                     var_name = self._to_go_var(node.left.id)
-                    var_type = self.var_types.get(var_name, "")
+                    var_type = self._ctx.var_types.get(var_name, "")
                     if var_type == "Node":
                         return f"!_isNilNode({result})"
             # Handle string subscript compared with single-char string
@@ -882,7 +882,7 @@ class EmitExpressionsMixin:
                 match left:
                     case ast.Name(id=name):
                         var_name = self._to_go_var(name)
-                        var_type = self.var_types.get(var_name, "")
+                        var_type = self._ctx.var_types.get(var_name, "")
                         if var_type == "int":
                             return "-1"
                         if var_type == "string":
@@ -937,7 +937,7 @@ class EmitExpressionsMixin:
         """Check if expression is accessing a tuple element (subscript on interface{} var)."""
         match node:
             case ast.Subscript(value=ast.Name(id=name), slice=ast.Constant()):
-                return self.var_types.get(self._to_go_var(name), "") == "interface{}"
+                return self._ctx.var_types.get(self._to_go_var(name), "") == "interface{}"
         return False
 
     def _is_node_list_subscript(self, node: ast.expr) -> bool:
@@ -947,7 +947,7 @@ class EmitExpressionsMixin:
                 return False  # Slice returns slice, not element
             case ast.Subscript(value=ast.Attribute(value=ast.Name(id=var_id), attr=attr)):
                 var_name = self._to_go_var(var_id)
-                var_type = self.var_types.get(var_name, "")
+                var_type = self._ctx.var_types.get(var_name, "")
                 if self._type_switch_var and var_name == self._type_switch_var[0]:
                     var_type = self._type_switch_type or ""
                 if var_type.startswith("*"):
@@ -965,9 +965,9 @@ class EmitExpressionsMixin:
         # Note: string subscripts are now converted to string() so they're not byte expressions
         match node:
             case ast.Subscript(value=ast.Name(id=name)):
-                return self.var_types.get(self._to_go_var(name), "") == "[]rune"
+                return self._ctx.var_types.get(self._to_go_var(name), "") == "[]rune"
             case ast.Name(id=name):
-                return self.var_types.get(self._to_go_var(name), "") in ("byte", "rune")
+                return self._ctx.var_types.get(self._to_go_var(name), "") in ("byte", "rune")
         return False
 
     def _could_be_string_from_method(self, node: ast.expr) -> bool:
@@ -983,7 +983,7 @@ class EmitExpressionsMixin:
         match node:
             case ast.Constant(value=int()) if not isinstance(node.value, bool):
                 return True
-            case ast.Name(id=name) if self.var_types.get(self._to_go_var(name), "") == "int":
+            case ast.Name(id=name) if self._ctx.var_types.get(self._to_go_var(name), "") == "int":
                 return True
             case ast.Call(func=ast.Name(id="ord")):
                 return True
@@ -1009,7 +1009,9 @@ class EmitExpressionsMixin:
         match node:
             case ast.Constant(value=str()):
                 return True
-            case ast.Name(id=name) if self.var_types.get(self._to_go_var(name), "") == "string":
+            case ast.Name(id=name) if (
+                self._ctx.var_types.get(self._to_go_var(name), "") == "string"
+            ):
                 return True
             case ast.BinOp(op=ast.Add(), left=left, right=right):
                 return self._is_string_expr(left) or self._is_string_expr(right)
@@ -1039,7 +1041,9 @@ class EmitExpressionsMixin:
                 if self._is_string_subscript(arg) or self._is_byte_expr(arg):
                     return True
                 match arg:
-                    case ast.Name(id=name) if self.var_types.get(self._to_go_var(name), "") in (
+                    case ast.Name(id=name) if self._ctx.var_types.get(
+                        self._to_go_var(name), ""
+                    ) in (
                         "byte",
                         "rune",
                     ):
@@ -1068,7 +1072,7 @@ class EmitExpressionsMixin:
             inner_var = node.value.value
             if isinstance(inner_var, ast.Name):
                 var_name = self._to_go_var(inner_var.id)
-                var_type = self.var_types.get(var_name, "")
+                var_type = self._ctx.var_types.get(var_name, "")
                 # If subscripting into a []string element, the result is a byte
                 if var_type == "[]string":
                     return True
@@ -1088,7 +1092,7 @@ class EmitExpressionsMixin:
             name = node.value.id
             # Check var_types first
             go_name = self._to_go_var(name)
-            var_type = self.var_types.get(go_name, "")
+            var_type = self._ctx.var_types.get(go_name, "")
             if var_type == "string":
                 return True
             # Common string variable names
@@ -1151,7 +1155,7 @@ class EmitExpressionsMixin:
         if isinstance(node.value, ast.Name):
             name = node.value.id
             go_name = self._to_go_var(name)
-            var_type = self.var_types.get(go_name, "")
+            var_type = self._ctx.var_types.get(go_name, "")
             if var_type == "string":
                 return True
             # Common string variable names
@@ -1252,7 +1256,7 @@ class EmitExpressionsMixin:
         # String membership - variable with string type
         if isinstance(container, ast.Name):
             var_name = self._to_go_var(container.id)
-            var_type = self.var_types.get(var_name, "")
+            var_type = self._ctx.var_types.get(var_name, "")
             if var_type == "string":
                 container_expr = self.visit_expr(container)
                 # If left is a byte expression, use ContainsRune
@@ -1274,7 +1278,7 @@ class EmitExpressionsMixin:
             is_module_set = name.isupper() or (name.startswith("_") and name[1:].isupper())
             # Check if it's a parameter/variable typed as map[string]struct{}
             var_name = self._to_go_var(name)
-            var_type = self.var_types.get(var_name, "")
+            var_type = self._ctx.var_types.get(var_name, "")
             is_set_type = var_type.startswith("map[") and var_type.endswith("]struct{}")
             if is_module_set:
                 # Module-level sets use map[string]bool - direct access works
@@ -1529,7 +1533,7 @@ class EmitExpressionsMixin:
     ) -> str:
         """Emit append call - Go requires reassignment."""
         arg = args[0]
-        obj_type = self.var_types.get(obj, "")
+        obj_type = self._ctx.var_types.get(obj, "")
         # Handle pointer-to-slice types - dereference for append
         if obj_type.startswith("*[]"):
             elem_type = obj_type[3:]  # e.g., "*[]Node" -> "Node"
@@ -1578,7 +1582,7 @@ class EmitExpressionsMixin:
             elif orig_args and isinstance(orig_args[0], ast.Name):
                 # Variable - check its type
                 var_name = self._to_go_var(orig_args[0].id)
-                var_type = self.var_types.get(var_name, "")
+                var_type = self._ctx.var_types.get(var_name, "")
                 if var_type == "string":
                     # String variable appended to []byte - use spread
                     return f"{obj} = append({obj}, []byte({arg})...)"
@@ -1603,7 +1607,7 @@ class EmitExpressionsMixin:
         For objects with Pop() method (like QuoteState): call the method
         """
         # Check if this is an object with a Pop() method
-        obj_type = self.var_types.get(obj, "")
+        obj_type = self._ctx.var_types.get(obj, "")
         if obj_type in ("*QuoteState", "QuoteState"):
             return f"{obj}.Pop()"
         return f"_pop(&{obj})"
@@ -1616,7 +1620,7 @@ class EmitExpressionsMixin:
         """Emit join call - strings.Join or string() for []rune or []byte."""
         list_arg = args[0]
         # Check if the list argument is a []rune or []byte variable
-        list_type = self.var_types.get(list_arg, "")
+        list_type = self._ctx.var_types.get(list_arg, "")
         if list_type == "[]rune":
             # For []rune with empty separator, just convert to string
             if obj == '""':
@@ -1790,7 +1794,7 @@ class EmitExpressionsMixin:
             # Also check if it's a variable with byte type
             if call_args and isinstance(call_args[0], ast.Name):
                 var_name = self._to_go_var(call_args[0].id)
-                var_type = self.var_types.get(var_name, "")
+                var_type = self._ctx.var_types.get(var_name, "")
                 if var_type in ("byte", "rune"):
                     return f"int({arg})"  # Already a byte/rune, convert to int
         return f"int(rune({arg}[0]))"
@@ -1905,7 +1909,7 @@ class EmitExpressionsMixin:
         # Variable should be interface type (Node) or untyped (for assign-check-return pattern)
         # The pattern transformation avoids typed-nil issues and unused variable issues
         go_var = self._to_go_var(var_name)
-        var_type = self.var_types.get(go_var, "")
+        var_type = self._ctx.var_types.get(go_var, "")
         # Accept if type is Node, empty (untyped), or interface{}
         if var_type not in ("Node", "", "interface{}"):
             return None
@@ -2006,8 +2010,8 @@ class EmitExpressionsMixin:
             self._type_switch_var = (go_var, switch_var)
             self._type_switch_type = case_type
             # Track narrowed type for field access
-            old_var_type = self.var_types.get(switch_var)
-            self.var_types[switch_var] = case_type
+            old_var_type = self._ctx.var_types.get(switch_var)
+            self._ctx.var_types[switch_var] = case_type
             try:
                 for s in stmt.body:
                     self._emit_stmt(s)
@@ -2017,9 +2021,9 @@ class EmitExpressionsMixin:
             self._type_switch_var = old_switch_var
             self._type_switch_type = old_switch_type
             if old_var_type is not None:
-                self.var_types[switch_var] = old_var_type
+                self._ctx.var_types[switch_var] = old_var_type
             else:
-                self.var_types.pop(switch_var, None)
+                self._ctx.var_types.pop(switch_var, None)
             self.indent -= 1
         # Check if the last isinstance has an else branch that doesn't contain more isinstance checks
         # This handles patterns like: if isinstance(body, str): ... else: body.to_sexp()
@@ -2097,7 +2101,7 @@ class EmitExpressionsMixin:
         # Handle variable references - look up type
         if isinstance(node, ast.Name):
             var_name = self._to_go_var(node.id)
-            var_type = self.var_types.get(var_name, "")
+            var_type = self._ctx.var_types.get(var_name, "")
             if var_type and var_type != "interface{}":
                 return var_type
         return "interface{}"

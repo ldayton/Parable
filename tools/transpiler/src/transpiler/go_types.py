@@ -83,6 +83,7 @@ class FunctionAnalysis:
     tuple_func_vars: dict[str, str] = field(default_factory=dict)
     var_assign_sources: dict[str, str] = field(default_factory=dict)
     scope_id_map: dict[int, int] = field(default_factory=dict)
+    next_scope_id: int = 1
 
 
 @dataclass
@@ -141,6 +142,14 @@ class EmissionContext:
     @property
     def var_assign_sources(self) -> dict[str, str]:
         return self.analysis.var_assign_sources
+
+    @property
+    def next_scope_id(self) -> int:
+        return self.analysis.next_scope_id
+
+    @next_scope_id.setter
+    def next_scope_id(self, value: int) -> None:
+        self.analysis.next_scope_id = value
 
 
 class SymbolTable:

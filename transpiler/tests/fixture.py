@@ -10,6 +10,7 @@ from src.ir import (
     VOID,
     Assign,
     BinaryOp,
+    Block,
     BoolLit,
     Break,
     Call,
@@ -876,6 +877,45 @@ def make_fixture() -> Module:
         ],
     )
 
+    # --- Function: scoped_work (exercises Block) ---
+    scoped_work_func = Function(
+        name="scoped_work",
+        params=[Param(name="x", typ=INT)],
+        ret=INT,
+        body=[
+            VarDecl(name="result", typ=INT, value=IntLit(value=0, typ=INT, loc=L), mutable=True, loc=L),
+            Block(
+                body=[
+                    VarDecl(
+                        name="temp",
+                        typ=INT,
+                        value=BinaryOp(
+                            op="*",
+                            left=Var(name="x", typ=INT, loc=L),
+                            right=IntLit(value=2, typ=INT, loc=L),
+                            typ=INT,
+                            loc=L,
+                        ),
+                        loc=L,
+                    ),
+                    Assign(
+                        target=VarLV(name="result", loc=L),
+                        value=BinaryOp(
+                            op="+",
+                            left=Var(name="temp", typ=INT, loc=L),
+                            right=IntLit(value=1, typ=INT, loc=L),
+                            typ=INT,
+                            loc=L,
+                        ),
+                        loc=L,
+                    ),
+                ],
+                loc=L,
+            ),
+            Return(value=Var(name="result", typ=INT, loc=L), loc=L),
+        ],
+    )
+
     return Module(
         name="fixture",
         structs=[token_struct, lexer_struct],
@@ -890,6 +930,7 @@ def make_fixture() -> Module:
             first_word_pos_func,
             max_int_func,
             default_kinds_func,
+            scoped_work_func,
         ],
         constants=[eof_const],
     )

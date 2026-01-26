@@ -137,6 +137,15 @@ function maxInt(a: number, b: number): number {
 
 function defaultKinds(): Map<string, number> {
   return new Map([["word", 1], ["num", 2], ["op", 3]]);
+}
+
+function scopedWork(x: number): number {
+  let result: number = 0;
+  {
+    let temp: number = (x * 2);
+    result = (temp + 1);
+  }
+  return result;
 }"""
 
 

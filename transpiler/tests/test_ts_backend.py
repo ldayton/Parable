@@ -212,6 +212,10 @@ function callStatic(): Token {
 
 function newKindMap(): Map<string, number> {
   return new Map();
+}
+
+function getArrayFirst(arr: number[]): number {
+  return arr[0];
 }"""
 
 

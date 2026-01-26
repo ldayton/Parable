@@ -4,6 +4,7 @@ Exercises core IR constructs needed for parable.py transpilation.
 """
 
 from src.ir import (
+    Array,
     BOOL,
     FLOAT,
     INT,
@@ -1179,6 +1180,25 @@ def make_fixture() -> Module:
         ],
     )
 
+    # --- Function: get_array_first (exercises Array) ---
+    int_array = Array(element=INT, size=10)
+    get_array_first_func = Function(
+        name="get_array_first",
+        params=[Param(name="arr", typ=int_array)],
+        ret=INT,
+        body=[
+            Return(
+                value=Index(
+                    obj=Var(name="arr", typ=int_array, loc=L),
+                    index=IntLit(value=0, typ=INT, loc=L),
+                    typ=INT,
+                    loc=L,
+                ),
+                loc=L,
+            ),
+        ],
+    )
+
     return Module(
         name="fixture",
         structs=[token_struct, lexer_struct],
@@ -1205,6 +1225,7 @@ def make_fixture() -> Module:
             known_kinds_func,
             call_static_func,
             new_kind_map_func,
+            get_array_first_func,
         ],
         constants=[eof_const],
     )

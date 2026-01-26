@@ -135,6 +135,14 @@ Map { key: Type, value: Type }
 | ---------- | --------- | ----------- | -------------- | -------------- |
 | `Map(K,V)` | `map[K]V` | `Map<K, V>` | `HashMap<K,V>` | generated hash |
 
+```
+Set { element: Type }
+```
+
+| IR       | Go           | TS       | Rust          | C              |
+| -------- | ------------ | -------- | ------------- | -------------- |
+| `Set(T)` | `map[T]bool` | `Set<T>` | `HashSet<T>`  | generated hash |
+
 ### Pointers and Optionals
 
 ```
@@ -499,6 +507,7 @@ MakeSlice { element_type: Type, length: Expr?, capacity: Expr? }
 MakeMap { key_type: Type, value_type: Type }
 SliceLit { element_type: Type, elements: [Expr] }
 MapLit { key_type: Type, value_type: Type, entries: [(Expr, Expr)] }
+SetLit { element_type: Type, elements: [Expr] }
 StructLit { struct_name: string, fields: {string: Expr} }
 ```
 
@@ -513,20 +522,6 @@ StringFormat { template: string, args: [Expr] }
 | -------------- | ------------- | ---------------- | --------- | ---------- |
 | `StringConcat` | `+`           | `+`              | `format!` | `snprintf` |
 | `StringFormat` | `fmt.Sprintf` | template literal | `format!` | `snprintf` |
-
-### Closures
-
-```
-Lambda {
-    params: [Param]
-    body: [Stmt]
-    captures: [Capture]
-}
-
-Capture { name: string, by_ref: bool }
-```
-
-Explicit captures required for Rust (`move` keyword) and C (environment struct).
 
 ## LValues
 

@@ -83,6 +83,13 @@ class Map(Type):
 
 
 @dataclass(frozen=True)
+class Set(Type):
+    """Set. Go: map[T]bool, JS: Set<T>, Rust: HashSet<T>."""
+
+    element: Type
+
+
+@dataclass(frozen=True)
 class Pointer(Type):
     """Pointer with ownership tracking for Rust/C.
 
@@ -643,28 +650,19 @@ class MapLit(Expr):
 
 
 @dataclass
+class SetLit(Expr):
+    """Set literal. Go: map[T]bool{...}, JS: new Set([...]), Rust: HashSet::from([...])."""
+
+    element_type: Type
+    elements: list[Expr]
+
+
+@dataclass
 class StructLit(Expr):
     """Struct instantiation."""
 
     struct_name: str
     fields: dict[str, Expr]
-
-
-@dataclass
-class Lambda(Expr):
-    """Closure/lambda with explicit captures for Rust."""
-
-    params: list[Param]
-    body: list[Stmt]
-    captures: list[Capture] = field(default_factory=list)
-
-
-@dataclass
-class Capture:
-    """Closure capture specification."""
-
-    name: str
-    by_ref: bool = True  # Rust: move (false) vs borrow (true)
 
 
 @dataclass

@@ -403,6 +403,17 @@ func Range(args ...int) []int {
                 """Check if int arg needs cast to byte when appending to []byte."""
                 return arg_type == INT and elem_type == BYTE
 
+            def needs_string_cast(arg_type, elem_type):
+                """Check if rune arg needs cast to string when appending to []string or []any."""
+                if arg_type != RUNE:
+                    return False
+                if elem_type == STRING:
+                    return True
+                # Rune appended to []interface{} also needs conversion (common pattern)
+                if isinstance(elem_type, Interface) and elem_type.name == "any":
+                    return True
+                return False
+
             # Handle pointer-to-slice receiver
             if isinstance(recv_type, Pointer) and isinstance(recv_type.target, Slice):
                 elem_type = recv_type.target.element
@@ -410,6 +421,8 @@ func Range(args ...int) []int {
                     self._line(f"*{obj} = append(*{obj}, *{arg})")
                 elif needs_byte_cast(arg_type, elem_type):
                     self._line(f"*{obj} = append(*{obj}, byte({arg}))")
+                elif needs_string_cast(arg_type, elem_type):
+                    self._line(f"*{obj} = append(*{obj}, string({arg}))")
                 else:
                     self._line(f"*{obj} = append(*{obj}, {arg})")
             # Handle regular slice receiver
@@ -419,6 +432,8 @@ func Range(args ...int) []int {
                     self._line(f"{obj} = append({obj}, *{arg})")
                 elif needs_byte_cast(arg_type, elem_type):
                     self._line(f"{obj} = append({obj}, byte({arg}))")
+                elif needs_string_cast(arg_type, elem_type):
+                    self._line(f"{obj} = append({obj}, string({arg}))")
                 else:
                     self._line(f"{obj} = append({obj}, {arg})")
             else:
@@ -892,7 +907,14 @@ func Range(args ...int) []int {
         cond = self._emit_expr(expr.cond)
         then_expr = self._emit_expr(expr.then_expr)
         else_expr = self._emit_expr(expr.else_expr)
-        go_type = self._type_to_go(expr.typ)
+        # When ternary type is any but both branches have same concrete type, use that
+        result_type = expr.typ
+        if isinstance(result_type, Interface) and result_type.name == "any":
+            then_type = getattr(expr.then_expr, 'typ', None)
+            else_type = getattr(expr.else_expr, 'typ', None)
+            if then_type is not None and then_type == else_type:
+                result_type = then_type
+        go_type = self._type_to_go(result_type)
         return f"func() {go_type} {{ if {cond} {{ return {then_expr} }} else {{ return {else_expr} }} }}()"
 
     def _emit_expr_Cast(self, expr: Cast) -> str:
@@ -937,9 +959,13 @@ func Range(args ...int) []int {
         return f"make(map[{key_type}]{val_type})"
 
     def _emit_expr_SliceLit(self, expr: SliceLit) -> str:
-        elem_type = self._type_to_go(expr.element_type)
+        elem_type = expr.element_type
+        # Empty slices with any type default to []string (common pattern in string-heavy code)
+        if not expr.elements and isinstance(elem_type, Interface) and elem_type.name == "any":
+            return "[]string{}"
+        go_elem = self._type_to_go(elem_type)
         elements = ", ".join(self._emit_expr(e) for e in expr.elements)
-        return f"[]{elem_type}{{{elements}}}"
+        return f"[]{go_elem}{{{elements}}}"
 
     def _emit_expr_MapLit(self, expr: MapLit) -> str:
         key_type = self._type_to_go(expr.key_type)

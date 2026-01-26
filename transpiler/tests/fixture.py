@@ -48,6 +48,7 @@ from src.ir import (
     StructLit,
     StructRef,
     Tuple,
+    Ternary,
     TupleLit,
     UnaryOp,
     Var,
@@ -824,6 +825,31 @@ def make_fixture() -> Module:
         ],
     )
 
+    # --- Function: max_int (exercises Ternary) ---
+    max_int_func = Function(
+        name="max_int",
+        params=[Param(name="a", typ=INT), Param(name="b", typ=INT)],
+        ret=INT,
+        body=[
+            Return(
+                value=Ternary(
+                    cond=BinaryOp(
+                        op=">",
+                        left=Var(name="a", typ=INT, loc=L),
+                        right=Var(name="b", typ=INT, loc=L),
+                        typ=BOOL,
+                        loc=L,
+                    ),
+                    then_expr=Var(name="a", typ=INT, loc=L),
+                    else_expr=Var(name="b", typ=INT, loc=L),
+                    typ=INT,
+                    loc=L,
+                ),
+                loc=L,
+            ),
+        ],
+    )
+
     return Module(
         name="fixture",
         structs=[token_struct, lexer_struct],
@@ -836,6 +862,7 @@ def make_fixture() -> Module:
             example_nil_check_func,
             sum_positions_func,
             first_word_pos_func,
+            max_int_func,
         ],
         constants=[eof_const],
     )

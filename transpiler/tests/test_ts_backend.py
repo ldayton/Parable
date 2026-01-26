@@ -129,6 +129,10 @@ function firstWordPos(tokens: Token[]): number {
     }
   }
   return pos;
+}
+
+function maxInt(a: number, b: number): number {
+  return ((a > b) ? a : b);
 }"""
 
 

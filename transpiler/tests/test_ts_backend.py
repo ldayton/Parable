@@ -118,6 +118,17 @@ function sumPositions(tokens: Token[]): number {
     sum = (sum + tokens[i].pos);
   }
   return sum;
+}
+
+function firstWordPos(tokens: Token[]): number {
+  let pos: number = -1;
+  for (const tok of tokens) {
+    if ((tok.kind === "word")) {
+      pos = tok.pos;
+      break;
+    }
+  }
+  return pos;
 }"""
 
 

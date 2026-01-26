@@ -11,6 +11,7 @@ from src.ir import (
     Assign,
     BinaryOp,
     BoolLit,
+    Break,
     Call,
     Constant,
     Continue,
@@ -774,6 +775,55 @@ def make_fixture() -> Module:
         ],
     )
 
+    # --- Function: first_word_pos (exercises Break) ---
+    first_word_pos_func = Function(
+        name="first_word_pos",
+        params=[Param(name="tokens", typ=token_slice)],
+        ret=INT,
+        body=[
+            VarDecl(
+                name="pos", typ=INT, value=IntLit(value=-1, typ=INT, loc=L), mutable=True, loc=L
+            ),
+            ForRange(
+                index=None,
+                value="tok",
+                iterable=Var(name="tokens", typ=token_slice, loc=L),
+                body=[
+                    If(
+                        cond=BinaryOp(
+                            op="==",
+                            left=FieldAccess(
+                                obj=Var(name="tok", typ=token_ref, loc=L),
+                                field="kind",
+                                typ=STRING,
+                                loc=L,
+                            ),
+                            right=StringLit(value="word", typ=STRING, loc=L),
+                            typ=BOOL,
+                            loc=L,
+                        ),
+                        then_body=[
+                            Assign(
+                                target=VarLV(name="pos", loc=L),
+                                value=FieldAccess(
+                                    obj=Var(name="tok", typ=token_ref, loc=L),
+                                    field="pos",
+                                    typ=INT,
+                                    loc=L,
+                                ),
+                                loc=L,
+                            ),
+                            Break(loc=L),
+                        ],
+                        loc=L,
+                    ),
+                ],
+                loc=L,
+            ),
+            Return(value=Var(name="pos", typ=INT, loc=L), loc=L),
+        ],
+    )
+
     return Module(
         name="fixture",
         structs=[token_struct, lexer_struct],
@@ -785,6 +835,7 @@ def make_fixture() -> Module:
             find_token_func,
             example_nil_check_func,
             sum_positions_func,
+            first_word_pos_func,
         ],
         constants=[eof_const],
     )

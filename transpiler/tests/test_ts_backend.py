@@ -227,6 +227,10 @@ function maybeGet(tokens: Token[], idx: number): Token | null {
 
 function setViaPtr(ptr: number, val: number): void {
   ptr = val;
+}
+
+function identityStr(s: string): string {
+  return s;
 }"""
 
 

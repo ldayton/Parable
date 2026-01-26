@@ -65,6 +65,7 @@ from src.ir import (
     StringConcat,
     StringFormat,
     StringLit,
+    StringSlice,
     Struct,
     StructLit,
     StructRef,
@@ -1246,6 +1247,17 @@ def make_fixture() -> Module:
         ],
     )
 
+    # --- Function: identity_str (exercises StringSlice) ---
+    str_slice = StringSlice()
+    identity_str_func = Function(
+        name="identity_str",
+        params=[Param(name="s", typ=str_slice)],
+        ret=str_slice,
+        body=[
+            Return(value=Var(name="s", typ=str_slice, loc=L), loc=L),
+        ],
+    )
+
     return Module(
         name="fixture",
         structs=[token_struct, lexer_struct],
@@ -1275,6 +1287,7 @@ def make_fixture() -> Module:
             get_array_first_func,
             maybe_get_func,
             set_via_ptr_func,
+            identity_str_func,
         ],
         constants=[eof_const],
     )

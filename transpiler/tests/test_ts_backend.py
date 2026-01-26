@@ -146,6 +146,23 @@ function scopedWork(x: number): number {
     result = (temp + 1);
   }
   return result;
+}
+
+function kindPriority(kind: string): number {
+  switch (kind) {
+    case "word":
+      return 1;
+      break;
+    case "num":
+    case "float":
+      return 2;
+      break;
+    case "op":
+      return 3;
+      break;
+    default:
+      return 0;
+  }
 }"""
 
 

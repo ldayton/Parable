@@ -32,6 +32,8 @@ from src.ir import (
     Loc,
     Map,
     MapLit,
+    Match,
+    MatchCase,
     MethodCall,
     # Declarations
     Module,
@@ -916,6 +918,37 @@ def make_fixture() -> Module:
         ],
     )
 
+    # --- Function: kind_priority (exercises Match) ---
+    kind_priority_func = Function(
+        name="kind_priority",
+        params=[Param(name="kind", typ=STRING)],
+        ret=INT,
+        body=[
+            Match(
+                expr=Var(name="kind", typ=STRING, loc=L),
+                cases=[
+                    MatchCase(
+                        patterns=[StringLit(value="word", typ=STRING, loc=L)],
+                        body=[Return(value=IntLit(value=1, typ=INT, loc=L), loc=L)],
+                    ),
+                    MatchCase(
+                        patterns=[
+                            StringLit(value="num", typ=STRING, loc=L),
+                            StringLit(value="float", typ=STRING, loc=L),
+                        ],
+                        body=[Return(value=IntLit(value=2, typ=INT, loc=L), loc=L)],
+                    ),
+                    MatchCase(
+                        patterns=[StringLit(value="op", typ=STRING, loc=L)],
+                        body=[Return(value=IntLit(value=3, typ=INT, loc=L), loc=L)],
+                    ),
+                ],
+                default=[Return(value=IntLit(value=0, typ=INT, loc=L), loc=L)],
+                loc=L,
+            ),
+        ],
+    )
+
     return Module(
         name="fixture",
         structs=[token_struct, lexer_struct],
@@ -931,6 +964,7 @@ def make_fixture() -> Module:
             max_int_func,
             default_kinds_func,
             scoped_work_func,
+            kind_priority_func,
         ],
         constants=[eof_const],
     )

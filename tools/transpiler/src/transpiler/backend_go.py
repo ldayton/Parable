@@ -95,6 +95,13 @@ from .ir import (
 if TYPE_CHECKING:
     pass
 
+# Go reserved words that need renaming
+GO_RESERVED = {
+    "break", "case", "chan", "const", "continue", "default", "defer", "else",
+    "fallthrough", "for", "func", "go", "goto", "if", "import", "interface",
+    "map", "package", "range", "return", "select", "struct", "switch", "type", "var",
+}
+
 
 class GoBackend:
     """Emit Go code from IR Module."""
@@ -102,6 +109,7 @@ class GoBackend:
     def __init__(self) -> None:
         self.output: list[str] = []
         self.indent = 0
+        self._receiver_name: str = ""  # Current method receiver name
 
     def emit(self, module: Module) -> str:
         """Emit Go code from IR Module."""
@@ -141,11 +149,13 @@ class GoBackend:
         ret = self._type_to_go(func.ret) if func.ret != VOID else ""
         if func.receiver:
             recv_name = func.receiver.name[0].lower()
+            self._receiver_name = recv_name
             recv_type = self._type_to_go(func.receiver.typ)
             if func.receiver.pointer:
                 recv_type = "*" + recv_type.lstrip("*")
             self._line(f"func ({recv_name} {recv_type}) {self._to_pascal(func.name)}({params}) {ret} {{")
         else:
+            self._receiver_name = ""
             name = self._to_pascal(func.name)
             if ret:
                 self._line(f"func {name}({params}) {ret} {{")
@@ -191,7 +201,8 @@ class GoBackend:
 
     def _emit_stmt_ExprStmt(self, stmt: ExprStmt) -> None:
         expr = self._emit_expr(stmt.expr)
-        if expr and not expr.startswith("_skip"):
+        # Filter out placeholder expressions (after camelCase conversion)
+        if expr and not expr.startswith(("skip", "pass", "localFunc", "unknown")):
             self._line(expr)
 
     def _emit_stmt_Return(self, stmt: Return) -> None:
@@ -420,7 +431,7 @@ class GoBackend:
 
     def _emit_expr_Var(self, expr: Var) -> str:
         if expr.name == "self":
-            return "self"  # Will be replaced by receiver name in context
+            return self._receiver_name if self._receiver_name else "self"
         return self._to_camel(expr.name)
 
     def _emit_expr_FieldAccess(self, expr: FieldAccess) -> str:
@@ -459,6 +470,11 @@ class GoBackend:
     def _emit_expr_BinaryOp(self, expr: BinaryOp) -> str:
         left = self._emit_expr(expr.left)
         right = self._emit_expr(expr.right)
+        # Handle 'in' and 'not in' operators
+        if expr.op == "in":
+            return f"strings.Contains({right}, {left})"
+        if expr.op == "not in":
+            return f"!strings.Contains({right}, {left})"
         return f"({left} {expr.op} {right})"
 
     def _emit_expr_UnaryOp(self, expr: UnaryOp) -> str:
@@ -607,6 +623,8 @@ class GoBackend:
         if isinstance(typ, Interface):
             if typ.name == "any":
                 return "interface{}"
+            if typ.name == "None":
+                return ""  # void return
             return typ.name
         if isinstance(typ, Union):
             return typ.name  # Interface type
@@ -640,7 +658,11 @@ class GoBackend:
         parts = name.split("_")
         if not parts:
             return name
-        return parts[0] + "".join(p.capitalize() for p in parts[1:])
+        result = parts[0] + "".join(p.capitalize() for p in parts[1:])
+        # Handle Go reserved words
+        if result in GO_RESERVED:
+            return result + "_"
+        return result
 
     # ============================================================
     # OUTPUT HELPERS

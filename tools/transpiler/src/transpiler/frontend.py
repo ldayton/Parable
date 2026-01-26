@@ -432,7 +432,7 @@ class Frontend:
 
     def _py_return_type_to_ir(self, py_type: str) -> Type:
         """Convert Python return type to IR, handling tuples as multiple returns."""
-        if not py_type:
+        if not py_type or py_type == "None":
             return VOID
         # Handle unions before tuple
         if " | " in py_type:

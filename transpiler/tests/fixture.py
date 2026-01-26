@@ -45,11 +45,13 @@ from src.ir import (
     MethodCall,
     MethodSig,
     # Declarations
+    DerefLV,
     Module,
     NilLit,
     OpAssign,
     Optional,
     Param,
+    Pointer,
     Raise,
     Receiver,
     Return,
@@ -1229,6 +1231,21 @@ def make_fixture() -> Module:
         ],
     )
 
+    # --- Function: set_via_ptr (exercises Pointer, DerefLV) ---
+    int_ptr = Pointer(target=INT)
+    set_via_ptr_func = Function(
+        name="set_via_ptr",
+        params=[Param(name="ptr", typ=int_ptr), Param(name="val", typ=INT)],
+        ret=VOID,
+        body=[
+            Assign(
+                target=DerefLV(ptr=Var(name="ptr", typ=int_ptr, loc=L), loc=L),
+                value=Var(name="val", typ=INT, loc=L),
+                loc=L,
+            ),
+        ],
+    )
+
     return Module(
         name="fixture",
         structs=[token_struct, lexer_struct],
@@ -1257,6 +1274,7 @@ def make_fixture() -> Module:
             new_kind_map_func,
             get_array_first_func,
             maybe_get_func,
+            set_via_ptr_func,
         ],
         constants=[eof_const],
     )

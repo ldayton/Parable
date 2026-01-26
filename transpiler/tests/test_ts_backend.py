@@ -223,6 +223,10 @@ function maybeGet(tokens: Token[], idx: number): Token | null {
     return null;
   }
   return tokens[idx];
+}
+
+function setViaPtr(ptr: number, val: number): void {
+  ptr = val;
 }"""
 
 

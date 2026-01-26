@@ -454,6 +454,11 @@ class RustBackend:
             case FieldAccess(obj=obj, field=field):
                 return f"{self._expr(obj)}.{_to_snake(field)}"
             case Index(obj=obj, index=index):
+                # Tuple indexing uses .0, .1 syntax in Rust
+                if hasattr(expr, 'obj_type') and isinstance(expr.obj_type, Tuple):
+                    return f"{self._expr(obj)}.{index.value}"
+                if isinstance(index, IntLit) and hasattr(obj, 'typ') and isinstance(obj.typ, Tuple):
+                    return f"{self._expr(obj)}.{index.value}"
                 return f"{self._expr(obj)}[{self._expr(index)}]"
             case SliceExpr(obj=obj, low=low, high=high):
                 return self._slice_expr(obj, low, high)
@@ -548,12 +553,15 @@ class RustBackend:
 
     def _slice_expr(self, obj: Expr, low: Expr | None, high: Expr | None) -> str:
         obj_str = self._expr(obj)
+        # Use .to_string() for String types, .to_vec() for slices
+        is_string = hasattr(obj, 'typ') and isinstance(obj.typ, Primitive) and obj.typ.kind == "string"
+        convert = ".to_string()" if is_string else ".to_vec()"
         if low and high:
-            return f"{obj_str}[{self._expr(low)}..{self._expr(high)}].to_vec()"
+            return f"{obj_str}[{self._expr(low)}..{self._expr(high)}]{convert}"
         elif low:
-            return f"{obj_str}[{self._expr(low)}..].to_vec()"
+            return f"{obj_str}[{self._expr(low)}..]{convert}"
         elif high:
-            return f"{obj_str}[..{self._expr(high)}].to_vec()"
+            return f"{obj_str}[..{self._expr(high)}]{convert}"
         return f"{obj_str}.clone()"
 
     def _format_string(self, template: str, args: list[Expr]) -> str:

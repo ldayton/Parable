@@ -51,7 +51,7 @@ impl Lexer {
         if (self.pos == start) {
             return (Token::default(), false);
         }
-        let mut text: String = self.source[start..self.pos].to_vec();
+        let mut text: String = self.source[start..self.pos].to_string();
         return (Token { kind: "word".to_string(), text: text, pos: start }, true);
     }
 }
@@ -70,8 +70,8 @@ fn tokenize(source: String) -> Vec<Token> {
             continue;
         }
         let mut result: (Token, bool) = lx.scan_word();
-        let mut tok: Token = result[0];
-        let mut ok: bool = result[1];
+        let mut tok: Token = result.0;
+        let mut ok: bool = result.1;
         if !ok {
             panic!("{}", "unexpected character".to_string());
         }

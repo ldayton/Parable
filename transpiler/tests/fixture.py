@@ -58,6 +58,7 @@ from src.ir import (
     Slice,
     SliceExpr,
     SliceLit,
+    SoftFail,
     StaticCall,
     StringConcat,
     StringFormat,
@@ -1199,6 +1200,35 @@ def make_fixture() -> Module:
         ],
     )
 
+    # --- Function: maybe_get (exercises SoftFail) ---
+    maybe_get_func = Function(
+        name="maybe_get",
+        params=[Param(name="tokens", typ=token_slice), Param(name="idx", typ=INT)],
+        ret=opt_token,
+        body=[
+            If(
+                cond=BinaryOp(
+                    op=">=",
+                    left=Var(name="idx", typ=INT, loc=L),
+                    right=Len(expr=Var(name="tokens", typ=token_slice, loc=L), typ=INT, loc=L),
+                    typ=BOOL,
+                    loc=L,
+                ),
+                then_body=[SoftFail(loc=L)],
+                loc=L,
+            ),
+            Return(
+                value=Index(
+                    obj=Var(name="tokens", typ=token_slice, loc=L),
+                    index=Var(name="idx", typ=INT, loc=L),
+                    typ=token_ref,
+                    loc=L,
+                ),
+                loc=L,
+            ),
+        ],
+    )
+
     return Module(
         name="fixture",
         structs=[token_struct, lexer_struct],
@@ -1226,6 +1256,7 @@ def make_fixture() -> Module:
             call_static_func,
             new_kind_map_func,
             get_array_first_func,
+            maybe_get_func,
         ],
         constants=[eof_const],
     )

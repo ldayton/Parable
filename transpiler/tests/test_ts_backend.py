@@ -216,6 +216,13 @@ function newKindMap(): Map<string, number> {
 
 function getArrayFirst(arr: number[]): number {
   return arr[0];
+}
+
+function maybeGet(tokens: Token[], idx: number): Token | null {
+  if ((idx >= tokens.length)) {
+    return null;
+  }
+  return tokens[idx];
 }"""
 
 

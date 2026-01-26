@@ -74,6 +74,7 @@ from src.ir import (
     TryCatch,
     TupleLit,
     UnaryOp,
+    Union,
     Var,
     # Statements
     VarDecl,
@@ -1258,6 +1259,17 @@ def make_fixture() -> Module:
         ],
     )
 
+    # --- Function: accept_union (exercises Union) ---
+    token_or_lexer = Union(name="", variants=(token_ref, lexer_ref))
+    accept_union_func = Function(
+        name="accept_union",
+        params=[Param(name="obj", typ=token_or_lexer)],
+        ret=BOOL,
+        body=[
+            Return(value=BoolLit(value=True, typ=BOOL, loc=L), loc=L),
+        ],
+    )
+
     return Module(
         name="fixture",
         structs=[token_struct, lexer_struct],
@@ -1288,6 +1300,7 @@ def make_fixture() -> Module:
             maybe_get_func,
             set_via_ptr_func,
             identity_str_func,
+            accept_union_func,
         ],
         constants=[eof_const],
     )

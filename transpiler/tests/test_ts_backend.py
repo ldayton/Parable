@@ -231,6 +231,10 @@ function setViaPtr(ptr: number, val: number): void {
 
 function identityStr(s: string): string {
   return s;
+}
+
+function acceptUnion(obj: (Token | Lexer)): boolean {
+  return true;
 }"""
 
 

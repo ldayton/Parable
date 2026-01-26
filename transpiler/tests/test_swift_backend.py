@@ -80,10 +80,10 @@ func tokenize(_ source: String) -> [Token] {
             continue
         }
         var result: (Token, Bool) = lx.scanWord()
-        var tok: Token = result[0]
-        var ok: Bool = result[1]
+        var tok: Token = result.0
+        var ok: Bool = result.1
         if !ok {
-            throw NSError(domain: "unexpected character", code: 0)
+            fatalError("unexpected character")
         }
         tokens.append(tok)
     }
@@ -118,7 +118,7 @@ func exampleNilCheck(_ tokens: [Token]) -> String {
     if (tok == nil) {
         return ""
     }
-    return tok.text
+    return tok!.text
 }
 
 func sumPositions(_ tokens: [Token]) -> Int {
@@ -187,7 +187,7 @@ func pi() -> Double {
 }
 
 func describeToken(_ tok: Token) -> String {
-    return String(format: "Token(%@, %@, %@)", tok.kind, tok.text, tok.pos)
+    return "Token(\\(tok.kind), \\(tok.text), \\(tok.pos))"
 }
 
 func setFirstKind(_ tokens: [Token], _ kind: String) {

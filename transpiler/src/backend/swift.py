@@ -89,6 +89,7 @@ class SwiftBackend:
         self.lines: list[str] = []
         self.receiver_name: str | None = None
         self.current_class: str = ""
+        self.optional_vars: set[str] = set()  # Track vars declared as Optional
 
     def emit(self, module: Module) -> str:
         """Emit Swift code from IR Module."""
@@ -180,6 +181,7 @@ class SwiftBackend:
         self._line(f"var {_to_camel(fld.name)}: {typ}")
 
     def _emit_function(self, func: Function) -> None:
+        self.optional_vars = set()  # Reset for each function
         params = self._params(func.params)
         ret = self._type(func.ret)
         name = _to_camel(func.name)
@@ -227,6 +229,9 @@ class SwiftBackend:
                 swift_type = self._type(typ)
                 var_name = _to_camel(name)
                 keyword = "var" if mutable else "let"
+                # Track variables declared as Optional for later unwrapping
+                if isinstance(typ, Optional):
+                    self.optional_vars.add(var_name)
                 if value is not None:
                     val = self._expr(value)
                     self._line(f"{keyword} {var_name}: {swift_type} = {val}")
@@ -300,7 +305,7 @@ class SwiftBackend:
                 self._emit_try_catch(body, catch_var, catch_body, reraise)
             case Raise(error_type=error_type, message=message, pos=pos):
                 msg = self._expr(message)
-                self._line(f"throw NSError(domain: {msg}, code: 0)")
+                self._line(f"fatalError({msg})")
             case SoftFail():
                 self._line("return nil")
             case _:
@@ -451,9 +456,19 @@ class SwiftBackend:
                     return f"Constants.{_to_screaming_snake(name)}"
                 return _to_camel(name)
             case FieldAccess(obj=obj, field=field):
-                return f"{self._expr(obj)}.{_to_camel(field)}"
+                obj_str = self._expr(obj)
+                # Force unwrap if accessing field on optional type or optional variable
+                needs_unwrap = isinstance(obj.typ, Optional)
+                if isinstance(obj, Var) and _to_camel(obj.name) in self.optional_vars:
+                    needs_unwrap = True
+                if needs_unwrap:
+                    return f"{obj_str}!.{_to_camel(field)}"
+                return f"{obj_str}.{_to_camel(field)}"
             case Index(obj=obj, index=index):
                 obj_str = self._expr(obj)
+                # Swift tuples use .0, .1 syntax, not [0], [1]
+                if isinstance(obj.typ, Tuple) and isinstance(index, IntLit):
+                    return f"{obj_str}.{index.value}"
                 idx_str = self._expr(index)
                 return f"{obj_str}[{idx_str}]"
             case SliceExpr(obj=obj, low=low, high=high):
@@ -610,13 +625,15 @@ class SwiftBackend:
 
     def _format_string(self, template: str, args: list[Expr]) -> str:
         import re
-        # Convert {0}, {1}, etc. to %@
-        result = re.sub(r'\{\d+\}', '%@', template)
-        result = result.replace("%v", "%@")
+        # Use Swift string interpolation instead of String(format:)
+        result = template
+        for i, arg in enumerate(args):
+            arg_str = self._expr(arg)
+            result = result.replace(f"{{{i}}}", f"\\({arg_str})")
+        result = result.replace("%v", "\\()")  # handle any remaining %v
         escaped = result.replace("\\", "\\\\").replace('"', '\\"')
-        args_str = ", ".join(self._expr(a) for a in args)
-        if args_str:
-            return f'String(format: "{escaped}", {args_str})'
+        # Unescape the interpolation we just added
+        escaped = escaped.replace("\\\\(", "\\(")
         return f'"{escaped}"'
 
     def _lvalue(self, lv: LValue) -> str:

@@ -182,6 +182,15 @@ Param {
 }
 ```
 
+**Default parameters:** Go lacks default arguments. Emission strategy by pattern:
+
+| Pattern                  | Go Emission                 | Example                                             |
+| ------------------------ | --------------------------- | --------------------------------------------------- |
+| `bool = False`           | Omit; zero value is `false` | `func F(debug bool)`                                |
+| `T \| None = None`       | Omit; zero value is `nil`   | `func F(opts *Options)`                             |
+| Multiple optional        | Options struct              | `func F(opts FOptions)` with `FOptions{Field: val}` |
+| Single trailing optional | Variadic                    | `func F(required int, opt ...string)`               |
+
 ### Constant
 
 ```
@@ -458,12 +467,46 @@ The frontend (Python AST → IR) performs all analysis:
 1. **Type inference** — Resolve types from annotations and usage
 2. **Symbol resolution** — Build table of structs, methods, functions
 3. **Scope analysis** — Variable lifetimes, hoisting requirements
-4. **Ownership analysis** — Mark `Pointer.owned` for Rust/C
+4. **Ownership analysis** — Mark `Pointer.owned` for Rust/C (see Ownership Model)
 5. **Method resolution** — Fill `MethodCall.receiver_type`
 6. **Nil analysis** — `x is None` → `IsNil`
 7. **Truthiness** — `if items:` → `if len(items) > 0`
-8. **Type narrowing** — `isinstance` → `TypeSwitch`
+8. **Type narrowing** — `isinstance` → `TypeSwitch` (see below)
 9. **Fallibility analysis** — Mark functions containing `raise` as `fallible=true`
+
+### Type Narrowing
+
+Convert `isinstance` chains to `TypeSwitch`:
+
+```python
+# Python source
+if isinstance(node, CommandSubstitution):
+    process(node.command)
+elif isinstance(node, ArithBinaryOp) or isinstance(node, ArithComma):
+    process_binary(node)
+```
+
+```
+// IR
+TypeSwitch {
+    expr: node
+    binding: "node"
+    cases: [
+        TypeCase { typ: StructRef("CommandSubstitution"), body: [...] }
+        TypeCase { typ: Union("", [StructRef("ArithBinaryOp"), StructRef("ArithComma")]), body: [...] }
+    ]
+}
+```
+
+**Collection element types:** When a field is annotated `list[Node]` but usage shows specific types, the frontend narrows:
+
+| Annotation          | Actual Usage          | Resolved Type                         |
+| ------------------- | --------------------- | ------------------------------------- |
+| `list[Node]`        | Only `Word` assigned  | `Slice(StructRef("Word"))`            |
+| `list[Node]`        | Mixed expansion types | `Slice(Union("Expansion", [...]))`    |
+| `ArithNode \| None` | Type alias            | `Optional(Union("ArithNode", [...]))` |
+
+Resolve Python `Union[...]` and `X | Y` type aliases to IR `Union` with explicit variants.
 
 ## Backend Responsibilities
 
@@ -551,8 +594,8 @@ All unions are **closed** (fixed variants) and discriminated via `.kind` string 
 Union { name: string, variants: [StructRef] }
 ```
 
-| IR      | Go                     | TS             | Rust   | C            |
-| ------- | ---------------------- | -------------- | ------ | ------------ |
+| IR      | Go                      | TS             | Rust   | C            |
+| ------- | ----------------------- | -------------- | ------ | ------------ |
 | `Union` | interface + type switch | class + `kind` | `enum` | tagged union |
 
 ## Ownership Model
@@ -563,6 +606,16 @@ Nodes are immutable after construction. All nodes live until parse completion.
 
 Arena allocation with single lifetime `'arena`. No reference counting needed.
 
+**Ownership rule:** All child references are owned. No inference needed for parable.py:
+
+| Field Pattern   | Ownership        | Rust                          | C                   |
+| --------------- | ---------------- | ----------------------------- | ------------------- |
+| `field: Node`   | Owned            | `Box<Node>` or `&'arena Node` | `Node*` (arena)     |
+| `field: [Node]` | Owned collection | `Vec<&'arena Node>`           | `NodeSlice` (arena) |
+| `field: Node?`  | Owned optional   | `Option<&'arena Node>`        | `Node*` (nullable)  |
+
+Back-references (if ever needed) would use indices, not pointers: `parent_idx: u32`.
+
 ## String Handling
 
 Two string representations:
@@ -572,10 +625,10 @@ StringRef { start: u32, end: u32 }    // Byte range into source buffer
 ArenaStr { ptr: *const u8, len: u32 } // Arena-allocated
 ```
 
-| Field type | Representation | Example |
-| ---------- | -------------- | ------- |
-| Parameter names, delimiters | `StringRef` | `ParamExpansion.param`, `HereDoc.delimiter` |
-| Constructed content | `ArenaStr` | `Word.value`, `AnsiCQuote.content` |
-| Operator literals | `&'static str` | `Operator.op` |
+| Field type                  | Representation | Example                                     |
+| --------------------------- | -------------- | ------------------------------------------- |
+| Parameter names, delimiters | `StringRef`    | `ParamExpansion.param`, `HereDoc.delimiter` |
+| Constructed content         | `ArenaStr`     | `Word.value`, `AnsiCQuote.content`          |
+| Operator literals           | `&'static str` | `Operator.op`                               |
 
 Input buffer must outlive AST, or copy referenced ranges into arena at parse end.

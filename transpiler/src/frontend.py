@@ -16,6 +16,7 @@ from .ir import (
     BYTE,
     FLOAT,
     INT,
+    RUNE,
     STRING,
     VOID,
     Constant,
@@ -755,6 +756,51 @@ class Frontend:
                     # Comparisons and bool ops always produce bool
                     elif isinstance(stmt.value, (ast.Compare, ast.BoolOp)):
                         var_types[var_name] = BOOL
+                    # Infer from field access: var = obj.field -> var has field's type
+                    elif isinstance(stmt.value, ast.Attribute):
+                        # Look up field type using local var_types (not self._type_ctx)
+                        attr_node = stmt.value
+                        field_name = attr_node.attr
+                        obj_type: Type = Interface("any")
+                        if isinstance(attr_node.value, ast.Name):
+                            obj_name = attr_node.value.id
+                            if obj_name == "self" and self._current_class_name:
+                                obj_type = Pointer(StructRef(self._current_class_name))
+                            elif obj_name in var_types:
+                                obj_type = var_types[obj_name]
+                        struct_name = self._extract_struct_name(obj_type)
+                        if struct_name and struct_name in self.symbols.structs:
+                            field_info = self.symbols.structs[struct_name].fields.get(field_name)
+                            if field_info:
+                                var_types[var_name] = field_info.typ
+                    # Infer from subscript/slice on strings: var = str[...] -> string
+                    elif isinstance(stmt.value, ast.Subscript):
+                        container_type: Type = Interface("any")
+                        if isinstance(stmt.value.value, ast.Name):
+                            container_name = stmt.value.value.id
+                            if container_name in var_types:
+                                container_type = var_types[container_name]
+                        if container_type == STRING:
+                            var_types[var_name] = STRING
+                    # Infer from method calls: var = obj.method() -> method return type
+                    elif isinstance(stmt.value, ast.Call) and isinstance(stmt.value.func, ast.Attribute):
+                        method_name = stmt.value.func.attr
+                        obj_type: Type = Interface("any")
+                        if isinstance(stmt.value.func.value, ast.Name):
+                            obj_name = stmt.value.func.value.id
+                            if obj_name == "self" and self._current_class_name:
+                                obj_type = Pointer(StructRef(self._current_class_name))
+                            elif obj_name in var_types:
+                                obj_type = var_types[obj_name]
+                            # Handle known string functions
+                            elif obj_name == "strings" and method_name in ("Join", "Replace", "ToLower", "ToUpper", "Trim", "TrimSpace"):
+                                var_types[var_name] = STRING
+                                continue
+                        struct_name = self._extract_struct_name(obj_type)
+                        if struct_name and struct_name in self.symbols.structs:
+                            method_info = self.symbols.structs[struct_name].methods.get(method_name)
+                            if method_info:
+                                var_types[var_name] = method_info.return_type
             # Handle tuple unpacking: a, b = func() where func returns tuple
             if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
                 target = stmt.targets[0]
@@ -779,6 +825,9 @@ class Frontend:
                         class_name = stmt.value.func.id
                         if class_name in self.symbols.structs:
                             var_types[target.id] = Pointer(StructRef(class_name))
+                        # Handle free function calls: var = func()
+                        elif class_name in self.symbols.functions:
+                            var_types[target.id] = self.symbols.functions[class_name].return_type
         return var_types, tuple_vars, sentinel_ints
 
     def _infer_element_type_from_append_arg(self, arg: ast.expr) -> Type:
@@ -850,6 +899,15 @@ class Frontend:
 
     def _synthesize_method_return_type(self, obj_type: Type, method: str) -> Type:
         """Look up method return type from struct info."""
+        # String methods that return string
+        if obj_type == STRING and method in ("join", "replace", "lower", "upper", "strip", "lstrip", "rstrip", "format"):
+            return STRING
+        # String methods that return int
+        if obj_type == STRING and method in ("find", "rfind", "index", "rindex", "count"):
+            return INT
+        # String methods that return bool
+        if obj_type == STRING and method in ("startswith", "endswith", "isdigit", "isalpha", "isalnum", "isspace"):
+            return BOOL
         # Extract struct name from various type wrappers
         struct_name = self._extract_struct_name(obj_type)
         if struct_name and struct_name in self.symbols.structs:
@@ -1141,14 +1199,22 @@ class Frontend:
         if isinstance(node.slice, ast.Slice):
             low = self._convert_negative_index(node.slice.lower, obj, node) if node.slice.lower else None
             high = self._convert_negative_index(node.slice.upper, obj, node) if node.slice.upper else None
+            # Slicing preserves type - string slice is still string, slice of slice is still slice
+            slice_type: Type = self._infer_expr_type_from_ast(node.value)
+            if slice_type == Interface("any"):
+                slice_type = obj.typ if hasattr(obj, 'typ') else Interface("any")
             return ir.SliceExpr(
-                obj=obj, low=low, high=high, typ=Interface("any"), loc=self._loc_from_node(node)
+                obj=obj, low=low, high=high, typ=slice_type, loc=self._loc_from_node(node)
             )
         idx = self._convert_negative_index(node.slice, obj, node)
         index_expr = ir.Index(obj=obj, index=idx, typ=Interface("any"), loc=self._loc_from_node(node))
-        # Check if indexing a string field - if so, wrap with Cast to string
+        # Check if indexing a string - if so, wrap with Cast to string
         # In Go, string[i] returns byte, but Python returns str
-        if self._is_string_index(node):
+        # Check both AST inference and lowered expression type
+        is_string = self._infer_expr_type_from_ast(node.value) == STRING
+        if not is_string and hasattr(obj, 'typ') and obj.typ == STRING:
+            is_string = True
+        if is_string:
             return ir.Cast(expr=index_expr, to_type=STRING, typ=STRING, loc=self._loc_from_node(node))
         return index_expr
 
@@ -1170,11 +1236,6 @@ class Frontend:
                     )
         # Not a negative constant, lower normally
         return self._lower_expr(idx_node)
-
-    def _is_string_index(self, node: ast.Subscript) -> bool:
-        """Check if this is indexing a string (field or variable or expression)."""
-        val_type = self._infer_expr_type_from_ast(node.value)
-        return val_type == STRING
 
     def _infer_expr_type_from_ast(self, node: ast.expr) -> Type:
         """Infer the type of a Python AST expression without lowering it."""
@@ -1219,6 +1280,11 @@ class Frontend:
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
             obj_type = self._infer_expr_type_from_ast(node.func.value)
             return self._synthesize_method_return_type(obj_type, node.func.attr)
+        # Free function call - look up return type
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            func_name = node.func.id
+            if func_name in self.symbols.functions:
+                return self.symbols.functions[func_name].return_type
         # Subscript - derive element type from container
         if isinstance(node, ast.Subscript):
             val_type = self._infer_expr_type_from_ast(node.value)
@@ -1350,8 +1416,25 @@ class Frontend:
         args = [self._lower_expr(a) for a in node.args]
         # Method call
         if isinstance(node.func, ast.Attribute):
-            obj = self._lower_expr(node.func.value)
             method = node.func.attr
+            # Handle chr(n).encode("utf-8") -> []byte(string(rune(n)))
+            if method == "encode" and isinstance(node.func.value, ast.Call):
+                inner_call = node.func.value
+                if isinstance(inner_call.func, ast.Name) and inner_call.func.id == "chr":
+                    # chr(n).encode("utf-8") -> cast to []byte
+                    chr_arg = self._lower_expr(inner_call.args[0])
+                    rune_cast = ir.Cast(expr=chr_arg, to_type=RUNE, typ=RUNE, loc=self._loc_from_node(node))
+                    str_cast = ir.Cast(expr=rune_cast, to_type=STRING, typ=STRING, loc=self._loc_from_node(node))
+                    return ir.Cast(expr=str_cast, to_type=Slice(BYTE), typ=Slice(BYTE), loc=self._loc_from_node(node))
+            # Handle str.encode("utf-8") -> []byte(str)
+            if method == "encode":
+                obj = self._lower_expr(node.func.value)
+                return ir.Cast(expr=obj, to_type=Slice(BYTE), typ=Slice(BYTE), loc=self._loc_from_node(node))
+            # Handle bytes.decode("utf-8") -> string(bytes)
+            if method == "decode":
+                obj = self._lower_expr(node.func.value)
+                return ir.Cast(expr=obj, to_type=STRING, typ=STRING, loc=self._loc_from_node(node))
+            obj = self._lower_expr(node.func.value)
             # Handle Python list methods that need special Go treatment
             if method == "append" and args:
                 # Look up actual type of the object (might be pointer to slice for params)
@@ -1362,14 +1445,14 @@ class Frontend:
                     receiver_type=obj_type if obj_type != Interface("any") else Slice(Interface("any")),
                     typ=VOID, loc=self._loc_from_node(node)
                 )
-            if method == "pop" and not args:
-                # list.pop() -> return last element and shrink slice
-                return ir.MethodCall(
-                    obj=obj, method="pop", args=[],
-                    receiver_type=Slice(Interface("any")), typ=Interface("any"), loc=self._loc_from_node(node)
-                )
             # Infer receiver type for proper method lookup
             obj_type = self._infer_expr_type_from_ast(node.func.value)
+            if method == "pop" and not args and isinstance(obj_type, Slice):
+                # list.pop() -> return last element and shrink slice (only for slices)
+                return ir.MethodCall(
+                    obj=obj, method="pop", args=[],
+                    receiver_type=obj_type, typ=obj_type.element, loc=self._loc_from_node(node)
+                )
             # Merge keyword arguments into args at proper positions
             args = self._merge_keyword_args(obj_type, method, args, node)
             # Fill in default values for any remaining missing parameters
@@ -1405,6 +1488,34 @@ class Frontend:
                     obj=args[0], method="copy", args=[],
                     receiver_type=Slice(Interface("any")), typ=Slice(Interface("any")), loc=self._loc_from_node(node)
                 )
+            # Check for bytearray() constructor
+            if func_name == "bytearray" and not args:
+                return ir.MakeSlice(
+                    element_type=BYTE, length=None, capacity=None,
+                    typ=Slice(BYTE), loc=self._loc_from_node(node)
+                )
+            # Check for int(s, base) conversion
+            if func_name == "int" and len(args) == 2:
+                return ir.Call(
+                    func="_parseInt", args=args,
+                    typ=INT, loc=self._loc_from_node(node)
+                )
+            # Check for ord(c) -> int(c[0]) (get Unicode code point)
+            if func_name == "ord" and len(args) == 1:
+                # ord(c) -> cast the first character to int
+                # In Go: int(c[0]) for strings, int(c) for bytes/runes
+                arg_type = self._infer_expr_type_from_ast(node.args[0])
+                if arg_type in (BYTE, RUNE):
+                    # Already a byte/rune: just cast to int
+                    return ir.Cast(expr=args[0], to_type=INT, typ=INT, loc=self._loc_from_node(node))
+                else:
+                    # String or unknown: index to get first byte, then cast to int
+                    indexed = ir.Index(obj=args[0], index=ir.IntLit(value=0, typ=INT), typ=BYTE)
+                    return ir.Cast(expr=indexed, to_type=INT, typ=INT, loc=self._loc_from_node(node))
+            # Check for chr(n) -> string(rune(n))
+            if func_name == "chr" and len(args) == 1:
+                rune_cast = ir.Cast(expr=args[0], to_type=RUNE, typ=RUNE, loc=self._loc_from_node(node))
+                return ir.Cast(expr=rune_cast, to_type=STRING, typ=STRING, loc=self._loc_from_node(node))
             # Check for constructor calls (class names)
             if func_name in self.symbols.structs:
                 # Constructor call -> StructLit with fields mapped from positional args
@@ -1588,6 +1699,11 @@ class Frontend:
                 expected_type = self._type_ctx.var_types[target.id]
                 from_type = self._synthesize_type(value)
                 value = self._coerce(value, from_type, expected_type)
+            # Track variable type dynamically for later use in nested scopes
+            if isinstance(target, ast.Name) and target.id not in self._type_ctx.var_types:
+                value_type = self._synthesize_type(value)
+                if value_type != Interface("any"):
+                    self._type_ctx.var_types[target.id] = value_type
             lval = self._lower_lvalue(target)
             return ir.Assign(target=lval, value=value, loc=self._loc_from_node(node))
         # Multiple targets - emit first one (simplification)

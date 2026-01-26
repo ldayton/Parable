@@ -113,6 +113,7 @@ class GoBackend:
         self.indent = 0
         self._receiver_name: str = ""  # Current method receiver name
         self._tuple_vars: dict[str, Tuple] = {}  # Track tuple-typed variables
+        self._hoisted_in_try: set[str] = set()  # Variables hoisted from try blocks
 
     def emit(self, module: Module) -> str:
         """Emit Go code from IR Module."""
@@ -294,8 +295,9 @@ func _parseInt(s string, base int) int {
 
     def _emit_function(self, func: Function) -> None:
         """Emit function or method definition."""
-        # Reset tuple tracking for new function scope
+        # Reset tracking for new function scope
         self._tuple_vars = {}
+        self._hoisted_in_try = set()
         self._current_return_type = func.ret
         params = ", ".join(
             f"{self._to_camel(p.name)} {self._type_to_go(p.typ)}" for p in func.params
@@ -363,8 +365,12 @@ func _parseInt(s string, base int) int {
     def _emit_stmt_Assign(self, stmt: Assign) -> None:
         target = self._emit_lvalue(stmt.target)
         value = self._emit_expr(stmt.value)
-        if stmt.is_declaration:
-            self._line(f"{target} := {value}")
+        if getattr(stmt, 'is_declaration', False):
+            # Check if this var was hoisted - use = instead of :=
+            if isinstance(stmt.target, VarLV) and stmt.target.name in self._hoisted_in_try:
+                self._line(f"{target} = {value}")
+            else:
+                self._line(f"{target} := {value}")
         else:
             self._line(f"{target} = {value}")
 
@@ -381,8 +387,16 @@ func _parseInt(s string, base int) int {
                 targets.append(self._emit_lvalue(t))
         target_str = ", ".join(targets)
         value = self._emit_expr(stmt.value)
-        if stmt.is_declaration:
-            self._line(f"{target_str} := {value}")
+        if getattr(stmt, 'is_declaration', False):
+            # Check if ANY target was hoisted - use = instead of :=
+            any_hoisted = any(
+                isinstance(t, VarLV) and t.name in self._hoisted_in_try
+                for t in stmt.targets
+            )
+            if any_hoisted:
+                self._line(f"{target_str} = {value}")
+            else:
+                self._line(f"{target_str} := {value}")
         else:
             self._line(f"{target_str} = {value}")
 
@@ -627,6 +641,14 @@ func _parseInt(s string, base int) int {
         self._line("}")
 
     def _emit_stmt_TryCatch(self, stmt: TryCatch) -> None:
+        # Emit hoisted variable declarations before the IIFE
+        hoisted_vars = getattr(stmt, 'hoisted_vars', [])
+        for name, typ in hoisted_vars:
+            type_str = self._type_to_go(typ) if typ else "interface{}"
+            go_name = self._to_camel(name)
+            self._line(f"var {go_name} {type_str}")
+            self._hoisted_in_try.add(name)
+
         # Go uses defer/recover pattern
         self._line("func() {")
         self.indent += 1
@@ -649,6 +671,7 @@ func _parseInt(s string, base int) int {
             self._emit_stmt(s)
         self.indent -= 1
         self._line("}()")
+        # Keep hoisted vars tracked - they remain in scope for the rest of the function
 
     def _emit_stmt_Raise(self, stmt: Raise) -> None:
         msg = self._emit_expr(stmt.message)

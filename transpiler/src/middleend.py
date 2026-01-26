@@ -6,6 +6,7 @@ Annotations added:
     Param.is_unused: bool        - parameter is never referenced in function body
     Assign.is_declaration: bool  - first assignment to a new variable
     TupleAssign.is_declaration: bool - first assignment to new variables
+    TryCatch.hoisted_vars: list[tuple[str, Type | None]] - variables needing hoisting
 """
 
 from src.ir import (
@@ -27,7 +28,9 @@ from src.ir import (
     Return,
     Stmt,
     TryCatch,
+    Tuple,
     TupleAssign,
+    Type,
     TypeSwitch,
     Var,
     VarDecl,
@@ -39,6 +42,7 @@ from src.ir import (
 def analyze(module: Module) -> None:
     """Run all analysis passes, annotating IR nodes in place."""
     _analyze_reassignments(module)
+    _analyze_try_hoisting_all(module)
 
 
 def _collect_assigned_vars(stmts: list[Stmt]) -> set[str]:
@@ -350,3 +354,123 @@ def _analyze_function(func: Function) -> None:
     for p in func.params:
         if p.name not in used_vars:
             p.is_unused = True
+
+
+# ============================================================
+# TRY-CATCH HOISTING ANALYSIS
+# ============================================================
+
+
+def _vars_first_assigned_in(stmts: list[Stmt], already_declared: set[str]) -> dict[str, Type | None]:
+    """Find variables first assigned in these statements (not already declared)."""
+    result: dict[str, Type | None] = {}
+    for stmt in stmts:
+        if isinstance(stmt, Assign) and getattr(stmt, 'is_declaration', False):
+            if isinstance(stmt.target, VarLV):
+                name = stmt.target.name
+                if name not in already_declared and name not in result:
+                    result[name] = getattr(stmt.value, 'typ', None)
+        elif isinstance(stmt, TupleAssign) and getattr(stmt, 'is_declaration', False):
+            for i, target in enumerate(stmt.targets):
+                if isinstance(target, VarLV):
+                    name = target.name
+                    if name not in already_declared and name not in result:
+                        # Type from tuple element if available
+                        val_typ = getattr(stmt.value, 'typ', None)
+                        if isinstance(val_typ, Tuple) and i < len(val_typ.elements):
+                            result[name] = val_typ.elements[i]
+                        else:
+                            result[name] = None
+        # Recurse into nested structures
+        elif isinstance(stmt, If):
+            result.update(_vars_first_assigned_in(stmt.then_body, already_declared | set(result.keys())))
+            result.update(_vars_first_assigned_in(stmt.else_body, already_declared | set(result.keys())))
+        elif isinstance(stmt, While):
+            result.update(_vars_first_assigned_in(stmt.body, already_declared | set(result.keys())))
+        elif isinstance(stmt, ForRange):
+            result.update(_vars_first_assigned_in(stmt.body, already_declared | set(result.keys())))
+        elif isinstance(stmt, ForClassic):
+            result.update(_vars_first_assigned_in(stmt.body, already_declared | set(result.keys())))
+        elif isinstance(stmt, Block):
+            result.update(_vars_first_assigned_in(stmt.body, already_declared | set(result.keys())))
+        elif isinstance(stmt, TryCatch):
+            result.update(_vars_first_assigned_in(stmt.body, already_declared | set(result.keys())))
+            result.update(_vars_first_assigned_in(stmt.catch_body, already_declared | set(result.keys())))
+    return result
+
+
+def _analyze_try_hoisting(func: Function) -> None:
+    """Annotate TryCatch nodes with variables needing hoisting."""
+    # Collect function-level declared variables
+    func_declared = set(p.name for p in func.params)
+    for stmt in func.body:
+        if isinstance(stmt, VarDecl):
+            func_declared.add(stmt.name)
+
+    def analyze_stmts(stmts: list[Stmt], outer_declared: set[str]) -> None:
+        """Analyze statements, annotating TryCatch nodes."""
+        declared = set(outer_declared)
+
+        for i, stmt in enumerate(stmts):
+            if isinstance(stmt, TryCatch):
+                # Find vars first assigned inside try/catch bodies
+                inner_new = _vars_first_assigned_in(
+                    stmt.body + stmt.catch_body, declared
+                )
+
+                # Find vars used after this statement
+                used_after = _collect_used_vars(stmts[i + 1:])
+
+                # Vars needing hoisting = first assigned inside AND used after
+                needs_hoisting = [
+                    (name, typ) for name, typ in inner_new.items()
+                    if name in used_after
+                ]
+                stmt.hoisted_vars = needs_hoisting
+
+                # These are now effectively declared for subsequent analysis
+                declared.update(name for name, _ in needs_hoisting)
+
+                # Recurse into try/catch bodies
+                analyze_stmts(stmt.body, declared)
+                analyze_stmts(stmt.catch_body, declared)
+
+            elif isinstance(stmt, VarDecl):
+                declared.add(stmt.name)
+            elif isinstance(stmt, Assign) and getattr(stmt, 'is_declaration', False):
+                if isinstance(stmt.target, VarLV):
+                    declared.add(stmt.target.name)
+            elif isinstance(stmt, TupleAssign) and getattr(stmt, 'is_declaration', False):
+                for target in stmt.targets:
+                    if isinstance(target, VarLV):
+                        declared.add(target.name)
+            elif isinstance(stmt, If):
+                if stmt.init:
+                    analyze_stmts([stmt.init], declared)
+                analyze_stmts(stmt.then_body, declared)
+                analyze_stmts(stmt.else_body, declared)
+            elif isinstance(stmt, While):
+                analyze_stmts(stmt.body, declared)
+            elif isinstance(stmt, ForRange):
+                analyze_stmts(stmt.body, declared)
+            elif isinstance(stmt, ForClassic):
+                if stmt.init:
+                    analyze_stmts([stmt.init], declared)
+                analyze_stmts(stmt.body, declared)
+            elif isinstance(stmt, Block):
+                analyze_stmts(stmt.body, declared)
+            elif isinstance(stmt, (Match, TypeSwitch)):
+                for case in stmt.cases:
+                    analyze_stmts(case.body, declared)
+                analyze_stmts(stmt.default, declared)
+
+    analyze_stmts(func.body, func_declared)
+
+
+def _analyze_try_hoisting_all(module: Module) -> None:
+    """Run try-catch hoisting analysis on all functions."""
+    for func in module.functions:
+        _analyze_try_hoisting(func)
+    for struct in module.structs:
+        for method in struct.methods:
+            _analyze_try_hoisting(method)

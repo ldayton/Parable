@@ -79,6 +79,7 @@ from src.ir import (
     StructRef,
     Ternary,
     TryCatch,
+    TupleAssign,
     TupleLit,
     Tuple,
     Type,
@@ -147,6 +148,7 @@ class GoBackend:
         self.indent += 1
         self._line('"fmt"')
         self._line('"strings"')
+        self._line('"unicode"')
         self.indent -= 1
         self._line(")")
         self._line("")
@@ -158,6 +160,69 @@ class GoBackend:
         self._line("Double bool")
         self.indent -= 1
         self._line("}")
+        self._line("")
+        # Emit string character classification helpers
+        self._emit_string_helpers()
+
+    def _emit_string_helpers(self) -> None:
+        """Emit helper functions for Python string methods."""
+        helpers = '''
+func _strIsAlnum(s string) bool {
+	for _, r := range s {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			return false
+		}
+	}
+	return len(s) > 0
+}
+
+func _strIsAlpha(s string) bool {
+	for _, r := range s {
+		if !unicode.IsLetter(r) {
+			return false
+		}
+	}
+	return len(s) > 0
+}
+
+func _strIsDigit(s string) bool {
+	for _, r := range s {
+		if !unicode.IsDigit(r) {
+			return false
+		}
+	}
+	return len(s) > 0
+}
+
+func _strIsSpace(s string) bool {
+	for _, r := range s {
+		if !unicode.IsSpace(r) {
+			return false
+		}
+	}
+	return len(s) > 0
+}
+
+func _strIsUpper(s string) bool {
+	for _, r := range s {
+		if !unicode.IsUpper(r) {
+			return false
+		}
+	}
+	return len(s) > 0
+}
+
+func _strIsLower(s string) bool {
+	for _, r := range s {
+		if !unicode.IsLower(r) {
+			return false
+		}
+	}
+	return len(s) > 0
+}
+'''
+        for line in helpers.strip().split('\n'):
+            self._line_raw(line)
         self._line("")
 
     def _emit_struct(self, struct: Struct) -> None:
@@ -189,12 +254,8 @@ class GoBackend:
         )
         ret = self._return_type_to_go(func.ret) if func.ret != VOID else ""
         if func.receiver:
-            # Use first letter of receiver name, but avoid collision with params
-            recv_name = func.receiver.name[0].lower()
-            if recv_name in param_names:
-                # Collision - use full receiver type name's first letter instead
-                recv_type_name = self._type_to_go(func.receiver.typ).lstrip("*")
-                recv_name = recv_type_name[0].lower() + "0"
+            # Use the receiver name from IR directly (converted to camelCase)
+            recv_name = self._to_camel(func.receiver.name)
             self._receiver_name = recv_name
             recv_type = self._type_to_go(func.receiver.typ)
             if func.receiver.pointer:
@@ -235,12 +296,23 @@ class GoBackend:
             self._tuple_vars[name] = stmt.typ
         if stmt.value:
             val = self._emit_expr(stmt.value)
-            self._line(f"var {name} {go_type} = {val}")
+            # Use short declaration for simple types, explicit var for complex types
+            if isinstance(stmt.typ, (Tuple, Slice, Map, Set)) and not isinstance(stmt.value, (SliceLit, MapLit, SetLit, MakeSlice, MakeMap)):
+                self._line(f"var {name} {go_type} = {val}")
+            else:
+                self._line(f"{name} := {val}")
         else:
             self._line(f"var {name} {go_type}")
 
     def _emit_stmt_Assign(self, stmt: Assign) -> None:
         target = self._emit_lvalue(stmt.target)
+        # Detect x = x + y pattern and emit as x += y
+        if isinstance(stmt.value, BinaryOp) and stmt.value.op in ("+", "-", "*", "/", "%", "&", "|", "^"):
+            if isinstance(stmt.target, VarLV) and isinstance(stmt.value.left, Var):
+                if self._to_camel(stmt.target.name) == self._to_camel(stmt.value.left.name):
+                    right = self._emit_expr(stmt.value.right)
+                    self._line(f"{target} {stmt.value.op}= {right}")
+                    return
         value = self._emit_expr(stmt.value)
         # For simple variable assignments, use := for first declaration
         if isinstance(stmt.target, VarLV):
@@ -251,8 +323,42 @@ class GoBackend:
                 return
         self._line(f"{target} = {value}")
 
+    def _emit_stmt_TupleAssign(self, stmt: TupleAssign) -> None:
+        """Emit tuple unpacking: a, b := func()"""
+        targets = []
+        all_new = True
+        for t in stmt.targets:
+            if isinstance(t, VarLV):
+                # Handle _ (discard) specially
+                if t.name == "_":
+                    targets.append("_")
+                else:
+                    name = self._to_camel(t.name)
+                    targets.append(name)
+                    if name in self._declared_vars:
+                        all_new = False
+                    else:
+                        self._declared_vars.add(name)
+            else:
+                targets.append(self._emit_lvalue(t))
+                all_new = False
+        target_str = ", ".join(targets)
+        value = self._emit_expr(stmt.value)
+        if all_new:
+            self._line(f"{target_str} := {value}")
+        else:
+            self._line(f"{target_str} = {value}")
+
     def _emit_stmt_OpAssign(self, stmt: OpAssign) -> None:
         target = self._emit_lvalue(stmt.target)
+        # Convert += 1 to ++ and -= 1 to --
+        if isinstance(stmt.value, IntLit) and stmt.value.value == 1:
+            if stmt.op == "+":
+                self._line(f"{target}++")
+                return
+            if stmt.op == "-":
+                self._line(f"{target}--")
+                return
         value = self._emit_expr(stmt.value)
         self._line(f"{target} {stmt.op}= {value}")
 
@@ -299,6 +405,7 @@ class GoBackend:
         cond = self._emit_expr(stmt.cond)
         self._line(f"if {cond} {{")
         self.indent += 1
+        saved_vars = self._declared_vars.copy()  # Save scope
         for s in stmt.then_body:
             self._emit_stmt(s)
         self.indent -= 1
@@ -306,10 +413,12 @@ class GoBackend:
             # Check if else body is a single If (elif chain)
             if len(stmt.else_body) == 1 and isinstance(stmt.else_body[0], If):
                 self._line_raw("} else ")
+                self._declared_vars = saved_vars.copy()  # Restore for else branch
                 self._emit_stmt_If_inline(stmt.else_body[0])
             else:
                 self._line("} else {")
                 self.indent += 1
+                self._declared_vars = saved_vars.copy()  # Restore for else branch
                 for s in stmt.else_body:
                     self._emit_stmt(s)
                 self.indent -= 1
@@ -322,16 +431,19 @@ class GoBackend:
         cond = self._emit_expr(stmt.cond)
         self.output[-1] += f"if {cond} {{"
         self.indent += 1
+        saved_vars = self._declared_vars.copy()  # Save scope
         for s in stmt.then_body:
             self._emit_stmt(s)
         self.indent -= 1
         if stmt.else_body:
             if len(stmt.else_body) == 1 and isinstance(stmt.else_body[0], If):
                 self._line_raw("} else ")
+                self._declared_vars = saved_vars.copy()  # Restore for else branch
                 self._emit_stmt_If_inline(stmt.else_body[0])
             else:
                 self._line("} else {")
                 self.indent += 1
+                self._declared_vars = saved_vars.copy()  # Restore for else branch
                 for s in stmt.else_body:
                     self._emit_stmt(s)
                 self.indent -= 1
@@ -593,6 +705,19 @@ class GoBackend:
             if method == "copy":
                 # Slice copy: append([]T{}, slice...)
                 return f"append({obj}[:0:0], {obj}...)"
+        # Handle Python string character classification methods (always, type inference may be imprecise)
+        if method == "isalnum":
+            return f"_strIsAlnum({obj})"
+        if method == "isalpha":
+            return f"_strIsAlpha({obj})"
+        if method == "isdigit":
+            return f"_strIsDigit({obj})"
+        if method == "isspace":
+            return f"_strIsSpace({obj})"
+        if method == "isupper":
+            return f"_strIsUpper({obj})"
+        if method == "islower":
+            return f"_strIsLower({obj})"
         method = self._to_pascal(method)
         args = ", ".join(self._emit_expr(a) for a in expr.args)
         return f"{obj}.{method}({args})"
@@ -611,13 +736,17 @@ class GoBackend:
             return f"strings.Contains({right}, {left})"
         if expr.op == "not in":
             return f"!strings.Contains({right}, {left})"
-        # Only wrap in parens for complex/ambiguous expressions
-        if expr.op in ("&&", "||"):
+        # Don't wrap comparison, logical, or simple arithmetic in parens
+        # Go handles precedence well and parens around conditions look unidiomatic
+        if expr.op in ("&&", "||", "==", "!=", "<", ">", "<=", ">=", "+", "-", "*"):
             return f"{left} {expr.op} {right}"
         return f"({left} {expr.op} {right})"
 
     def _emit_expr_UnaryOp(self, expr: UnaryOp) -> str:
         operand = self._emit_expr(expr.operand)
+        # Wrap complex operands in parens for ! operator
+        if expr.op == "!" and isinstance(expr.operand, (BinaryOp, UnaryOp)):
+            return f"{expr.op}({operand})"
         return f"{expr.op}{operand}"
 
     def _emit_expr_Ternary(self, expr: Ternary) -> str:
@@ -706,7 +835,7 @@ class GoBackend:
 
     def _emit_expr_StringConcat(self, expr: StringConcat) -> str:
         parts = " + ".join(self._emit_expr(p) for p in expr.parts)
-        return f"({parts})"
+        return parts
 
     def _emit_expr_StringFormat(self, expr: StringFormat) -> str:
         args = ", ".join(self._emit_expr(a) for a in expr.args)
@@ -822,7 +951,8 @@ class GoBackend:
         if is_private:
             name = name[1:]
         parts = name.split("_")
-        result = "".join(p.capitalize() for p in parts)
+        # Use upper on first char only (not capitalize which lowercases rest)
+        result = "".join((p[0].upper() + p[1:]) if p else "" for p in parts)
         if is_private:
             # Make first letter lowercase for unexported (private) names
             return result[0].lower() + result[1:] if result else result
@@ -837,10 +967,13 @@ class GoBackend:
         parts = name.split("_")
         if not parts:
             return name
+        # Use upper on first char only (not capitalize which lowercases rest)
+        def upper_first(s: str) -> str:
+            return (s[0].upper() + s[1:]) if s else ""
         # All-caps names (constants) should use PascalCase in Go
         if name.isupper():
-            return "".join(p.capitalize() for p in parts)
-        result = parts[0] + "".join(p.capitalize() for p in parts[1:])
+            return "".join(upper_first(p) for p in parts)
+        result = parts[0] + "".join(upper_first(p) for p in parts[1:])
         # Handle Go reserved words
         if result in GO_RESERVED:
             return result + "_"

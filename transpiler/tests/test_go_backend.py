@@ -9,6 +9,7 @@ package fixture
 import (
 	"fmt"
 	"strings"
+	"unicode"
 )
 
 // quoteStackEntry holds pushed quote state (single, double)
@@ -17,8 +18,62 @@ type quoteStackEntry struct {
 	Double bool
 }
 
+func _strIsAlnum(s string) bool {
+	for _, r := range s {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			return false
+		}
+	}
+	return len(s) > 0
+}
+
+func _strIsAlpha(s string) bool {
+	for _, r := range s {
+		if !unicode.IsLetter(r) {
+			return false
+		}
+	}
+	return len(s) > 0
+}
+
+func _strIsDigit(s string) bool {
+	for _, r := range s {
+		if !unicode.IsDigit(r) {
+			return false
+		}
+	}
+	return len(s) > 0
+}
+
+func _strIsSpace(s string) bool {
+	for _, r := range s {
+		if !unicode.IsSpace(r) {
+			return false
+		}
+	}
+	return len(s) > 0
+}
+
+func _strIsUpper(s string) bool {
+	for _, r := range s {
+		if !unicode.IsUpper(r) {
+			return false
+		}
+	}
+	return len(s) > 0
+}
+
+func _strIsLower(s string) bool {
+	for _, r := range s {
+		if !unicode.IsLower(r) {
+			return false
+		}
+	}
+	return len(s) > 0
+}
+
 const (
-	Eof = -1
+	EOF = -1
 )
 
 type Token struct {
@@ -28,7 +83,7 @@ type Token struct {
 }
 
 func (t *Token) IsWord() bool {
-	return (t.Kind == "word")
+	return t.Kind == "word"
 }
 
 type Lexer struct {
@@ -37,45 +92,45 @@ type Lexer struct {
 	Current *Token
 }
 
-func (l *Lexer) Peek() int {
-	if (lx.Pos >= len(lx.Source)) {
-		return Eof
+func (lx *Lexer) Peek() int {
+	if lx.Pos >= len(lx.Source) {
+		return EOF
 	}
 	return lx.Source[lx.Pos]
 }
 
-func (l *Lexer) Advance()  {
-	lx.Pos += 1
+func (lx *Lexer) Advance()  {
+	lx.Pos++
 }
 
-func (l *Lexer) ScanWord() (Token, bool) {
-	var start int = lx.Pos
-	for (lx.Peek() != Eof) && !IsSpace(lx.Peek()) {
+func (lx *Lexer) ScanWord() (Token, bool) {
+	start := lx.Pos
+	for lx.Peek() != EOF && !IsSpace(lx.Peek()) {
 		lx.Advance()
 	}
-	if (lx.Pos == start) {
+	if lx.Pos == start {
 		return &Token{}, false
 	}
-	var text string = lx.Source[start:lx.Pos]
+	text := lx.Source[start:lx.Pos]
 	return &Token{Kind: "word", Text: text, Pos: start}, true
 }
 
 func IsSpace(ch int) bool {
-	return (ch == 32) || (ch == 10)
+	return ch == 32 || ch == 10
 }
 
 func Tokenize(source string) []Token {
-	var lx Lexer = &Lexer{Source: source, Pos: 0, Current: nil}
-	var tokens []Token = []Token{}
-	for (lx.Peek() != Eof) {
-		var ch int = lx.Peek()
+	lx := &Lexer{Source: source, Pos: 0, Current: nil}
+	tokens := []Token{}
+	for lx.Peek() != EOF {
+		ch := lx.Peek()
 		if IsSpace(ch) {
 			lx.Advance()
 			continue
 		}
 		var result struct{ F0 Token, F1 bool } = lx.ScanWord()
-		var tok Token = result.F0
-		var ok bool = result.F1
+		tok := result.F0
+		ok := result.F1
 		if !ok {
 			panic("unexpected character")
 		}
@@ -85,22 +140,22 @@ func Tokenize(source string) []Token {
 }
 
 func CountWords(tokens []Token) int {
-	var count int = 0
+	count := 0
 	for _, tok := range tokens {
-		if (tok.Kind == "word") {
-			count += 1
+		if tok.Kind == "word" {
+			count++
 		}
 	}
 	return count
 }
 
 func FormatToken(tok Token) string {
-	return (tok.Kind + ":" + tok.Text)
+	return tok.Kind + ":" + tok.Text
 }
 
 func FindToken(tokens []Token, kind string) *Token {
 	for _, tok := range tokens {
-		if (tok.Kind == kind) {
+		if tok.Kind == kind {
 			return tok
 		}
 	}
@@ -108,7 +163,7 @@ func FindToken(tokens []Token, kind string) *Token {
 }
 
 func ExampleNilCheck(tokens []Token) string {
-	var tok *Token = FindToken(tokens, "word")
+	tok := FindToken(tokens, "word")
 	if tok == nil {
 		return ""
 	}
@@ -116,17 +171,17 @@ func ExampleNilCheck(tokens []Token) string {
 }
 
 func SumPositions(tokens []Token) int {
-	var sum int = 0
-	for i := 0; (i < len(tokens)); i++ {
-		sum = (sum + tokens[i].Pos)
+	sum := 0
+	for i := 0; i < len(tokens); i++ {
+		sum += tokens[i].Pos
 	}
 	return sum
 }
 
 func FirstWordPos(tokens []Token) int {
-	var pos int = -1
+	pos := -1
 	for _, tok := range tokens {
-		if (tok.Kind == "word") {
+		if tok.Kind == "word" {
 			pos = tok.Pos
 			break
 		}
@@ -135,7 +190,7 @@ func FirstWordPos(tokens []Token) int {
 }
 
 func MaxInt(a int, b int) int {
-	if (a > b) {
+	if a > b {
 		return a
 	}
 	return b
@@ -146,10 +201,10 @@ func DefaultKinds() map[string]int {
 }
 
 func ScopedWork(x int) int {
-	var result int = 0
+	result := 0
 	{
-		var temp int = (x * 2)
-		result = (temp + 1)
+		temp := x * 2
+		result = temp + 1
 	}
 	return result
 }
@@ -168,7 +223,7 @@ func KindPriority(kind string) int {
 }
 
 func SafeTokenize(source string) []Token {
-	var tokens []Token = []Token{}
+	tokens := []Token{}
 	func() {
 		defer func() {
 			if e := recover(); e != nil {
@@ -189,7 +244,7 @@ func DescribeToken(tok Token) string {
 }
 
 func SetFirstKind(tokens []Token, kind string) {
-	if (len(tokens) > 0) {
+	if len(tokens) > 0 {
 		tokens[0] = &Token{Kind: kind, Text: "", Pos: 0}
 	}
 }
@@ -219,7 +274,7 @@ func GetArrayFirst(arr [10]int) int {
 }
 
 func MaybeGet(tokens []Token, idx int) *Token {
-	if (idx >= len(tokens)) {
+	if idx >= len(tokens) {
 		return nil
 	}
 	return tokens[idx]

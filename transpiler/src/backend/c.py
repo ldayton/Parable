@@ -91,13 +91,20 @@ class CBackend:
         self.current_struct: str = ""
         self.declared_vars: set[str] = set()
         self.structs: dict[str, Struct] = {}
+        self.tuple_types: dict[tuple[str, ...], str] = {}  # (elem_types...) -> struct name
+        self.tuple_counter = 0
 
     def emit(self, module: Module) -> str:
         self.indent = 0
         self.lines = []
+        self.tuple_types = {}
+        self.tuple_counter = 0
         self.structs = {s.name: s for s in module.structs}
+        # Pre-scan to collect tuple types
+        self._collect_tuple_types(module)
         self._emit_header(module)
         self._emit_forward_decls(module)
+        self._emit_tuple_defs()
         self._emit_type_defs(module)
         self._emit_constants(module.constants)
         for struct in module.structs:
@@ -116,12 +123,90 @@ class CBackend:
         else:
             self.lines.append("")
 
+    def _collect_tuple_types(self, module: Module) -> None:
+        """Pre-scan module to collect all tuple types used."""
+        for func in module.functions:
+            self._collect_tuple_from_type(func.ret)
+            for p in func.params:
+                self._collect_tuple_from_type(p.typ)
+            for stmt in func.body:
+                self._collect_tuple_from_stmt(stmt)
+        for struct in module.structs:
+            for method in struct.methods:
+                self._collect_tuple_from_type(method.ret)
+                for stmt in method.body:
+                    self._collect_tuple_from_stmt(stmt)
+
+    def _collect_tuple_from_type(self, typ: Type) -> None:
+        if isinstance(typ, Tuple):
+            self._register_tuple(typ)
+        elif isinstance(typ, Slice):
+            self._collect_tuple_from_type(typ.element)
+        elif isinstance(typ, Optional):
+            self._collect_tuple_from_type(typ.inner)
+
+    def _collect_tuple_from_stmt(self, stmt: Stmt) -> None:
+        match stmt:
+            case VarDecl(typ=typ, value=value):
+                self._collect_tuple_from_type(typ)
+                if value:
+                    self._collect_tuple_from_expr(value)
+            case Assign(value=value):
+                self._collect_tuple_from_expr(value)
+            case Return(value=value):
+                if value:
+                    self._collect_tuple_from_expr(value)
+            case If(then_body=then_body, else_body=else_body):
+                for s in then_body:
+                    self._collect_tuple_from_stmt(s)
+                for s in else_body:
+                    self._collect_tuple_from_stmt(s)
+            case While(body=body):
+                for s in body:
+                    self._collect_tuple_from_stmt(s)
+            case ForRange(body=body):
+                for s in body:
+                    self._collect_tuple_from_stmt(s)
+            case ForClassic(body=body):
+                for s in body:
+                    self._collect_tuple_from_stmt(s)
+            case Block(body=body):
+                for s in body:
+                    self._collect_tuple_from_stmt(s)
+            case _:
+                pass
+
+    def _collect_tuple_from_expr(self, expr: Expr) -> None:
+        if isinstance(expr, TupleLit):
+            if isinstance(expr.typ, Tuple):
+                self._register_tuple(expr.typ)
+            for e in expr.elements:
+                self._collect_tuple_from_expr(e)
+        elif hasattr(expr, 'typ') and isinstance(expr.typ, Tuple):
+            self._register_tuple(expr.typ)
+
+    def _register_tuple(self, typ: Tuple) -> str:
+        key = tuple(self._type(e) for e in typ.elements)
+        if key not in self.tuple_types:
+            self.tuple_counter += 1
+            self.tuple_types[key] = f"Tuple{self.tuple_counter}"
+        return self.tuple_types[key]
+
+    def _emit_tuple_defs(self) -> None:
+        if not self.tuple_types:
+            return
+        for elem_types, name in self.tuple_types.items():
+            fields = "; ".join(f"{t} f{i}" for i, t in enumerate(elem_types))
+            self._line(f"typedef struct {{ {fields}; }} {name};")
+        self._line("")
+
     def _emit_header(self, module: Module) -> None:
         self._line("#include <stdio.h>")
         self._line("#include <stdlib.h>")
         self._line("#include <string.h>")
         self._line("#include <stdbool.h>")
         self._line("#include <stdint.h>")
+        self._line("#include <stdarg.h>")
         self._line("")
         self._line("#define PARABLE_PANIC(msg) do { fprintf(stderr, \"panic: %s\\n\", msg); exit(1); } while(0)")
         self._line("")
@@ -133,6 +218,43 @@ class CBackend:
         self._line("String str = {malloc(len + 1), len, len + 1};")
         self._line("if (s) memcpy(str.data, s, len + 1);")
         self._line("else str.data[0] = '\\0';")
+        self._line("return str;")
+        self.indent -= 1
+        self._line("}")
+        self._line("")
+        self._line("static String parable_strcat(String a, String b) {")
+        self.indent += 1
+        self._line("size_t len = a.len + b.len;")
+        self._line("String str = {malloc(len + 1), len, len + 1};")
+        self._line("memcpy(str.data, a.data, a.len);")
+        self._line("memcpy(str.data + a.len, b.data, b.len + 1);")
+        self._line("return str;")
+        self.indent -= 1
+        self._line("}")
+        self._line("")
+        self._line("static String parable_slice(String s, size_t start, size_t end) {")
+        self.indent += 1
+        self._line("if (start > s.len) start = s.len;")
+        self._line("if (end > s.len) end = s.len;")
+        self._line("if (start > end) start = end;")
+        self._line("size_t len = end - start;")
+        self._line("String str = {malloc(len + 1), len, len + 1};")
+        self._line("memcpy(str.data, s.data + start, len);")
+        self._line("str.data[len] = '\\0';")
+        self._line("return str;")
+        self.indent -= 1
+        self._line("}")
+        self._line("")
+        self._line("static String parable_sprintf(const char* fmt, ...) {")
+        self.indent += 1
+        self._line("va_list args, args2;")
+        self._line("va_start(args, fmt);")
+        self._line("va_copy(args2, args);")
+        self._line("int len = vsnprintf(NULL, 0, fmt, args);")
+        self._line("va_end(args);")
+        self._line("String str = {malloc(len + 1), len, len + 1};")
+        self._line("vsnprintf(str.data, len + 1, fmt, args2);")
+        self._line("va_end(args2);")
         self._line("return str;")
         self.indent -= 1
         self._line("}")
@@ -379,11 +501,17 @@ class CBackend:
                 return f"{self._expr(obj)}{op}{field}"
             case Index(obj=obj, index=index):
                 o, i = self._expr(obj), self._expr(index)
+                # Tuple indexing: access .f0, .f1, etc.
+                if isinstance(obj.typ, Tuple) and isinstance(index, IntLit):
+                    return f"{o}.f{index.value}"
                 if isinstance(obj.typ, Slice) or (isinstance(obj.typ, Primitive) and obj.typ.kind == "string"):
                     return f"{o}.data[{i}]"
                 return f"{o}[{i}]"
             case SliceExpr(obj=obj, low=low, high=high):
-                return f"/* slice */"
+                o = self._expr(obj)
+                l = self._expr(low) if low else "0"
+                h = self._expr(high) if high else f"{o}.len"
+                return f"parable_slice({o}, {l}, {h})"
             case Call(func=func, args=args):
                 return f"{func}({', '.join(self._expr(a) for a in args)})"
             case MethodCall(obj=obj, method=method, args=args, receiver_type=rt):
@@ -435,12 +563,39 @@ class CBackend:
             case StructLit(struct_name=name, fields=fields):
                 fs = ", ".join(f".{k} = {self._expr(v)}" for k, v in fields.items())
                 return f"(&({name}){{{fs}}})"
-            case TupleLit():
-                return "/* TupleLit */"
+            case TupleLit(elements=elements):
+                if isinstance(expr.typ, Tuple):
+                    tup_name = self._type(expr.typ)
+                    fields = ", ".join(f".f{i} = {self._expr(e)}" for i, e in enumerate(elements))
+                    return f"({tup_name}){{{fields}}}"
+                # Fallback
+                elems = ", ".join(self._expr(e) for e in elements)
+                return f"/* tuple */({elems})"
             case StringConcat(parts=parts):
-                return " + ".join(self._expr(p) for p in parts) if parts else 'String_new("")'
+                if not parts:
+                    return 'String_new("")'
+                if len(parts) == 1:
+                    return self._expr(parts[0])
+                # Build concatenation using parable_strcat
+                result = self._expr(parts[0])
+                for p in parts[1:]:
+                    result = f"parable_strcat({result}, {self._expr(p)})"
+                return result
             case StringFormat(template=template, args=args):
-                return f'/* format("{template}") */'
+                # Convert {0}, {1} to %s, %d, etc.
+                fmt = template
+                specs = []
+                for i, arg in enumerate(args):
+                    spec = self._format_spec(arg.typ) if hasattr(arg, "typ") else "%s"
+                    fmt = fmt.replace(f"{{{i}}}", spec, 1)
+                    # For strings, pass .data; for other types pass the value
+                    if hasattr(arg, "typ") and self._is_str(arg.typ):
+                        specs.append(f"{self._expr(arg)}.data")
+                    else:
+                        specs.append(self._expr(arg))
+                escaped = fmt.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+                args_str = ", ".join(specs)
+                return f'parable_sprintf("{escaped}", {args_str})' if args_str else f'String_new("{escaped}")'
             case _:
                 return f"/* TODO: {type(expr).__name__} */"
 
@@ -477,8 +632,12 @@ class CBackend:
                 return f"{n}*"
             case Interface() | Map() | Union():
                 return "void*"
-            case Tuple():
-                return "/* tuple */"
+            case Tuple(elements=elements):
+                key = tuple(self._type(e) for e in elements)
+                if key in self.tuple_types:
+                    return self.tuple_types[key]
+                # Fallback: register on the fly
+                return self._register_tuple(typ)
             case StringSlice():
                 return "String"
         return "void*"
@@ -514,3 +673,9 @@ class CBackend:
 
     def _is_str(self, typ: Type) -> bool:
         return isinstance(typ, Primitive) and typ.kind == "string"
+
+    def _format_spec(self, typ: Type) -> str:
+        """Get printf format specifier for a type."""
+        if isinstance(typ, Primitive):
+            return {"string": "%s", "int": "%d", "bool": "%d", "float": "%f", "byte": "%c", "rune": "%c"}.get(typ.kind, "%s")
+        return "%s"

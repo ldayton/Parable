@@ -9,6 +9,7 @@ EXPECTED = """\
 #include <string.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdarg.h>
 
 #define PARABLE_PANIC(msg) do { fprintf(stderr, "panic: %s\\n", msg); exit(1); } while(0)
 
@@ -19,6 +20,37 @@ static String String_new(const char* s) {
     String str = {malloc(len + 1), len, len + 1};
     if (s) memcpy(str.data, s, len + 1);
     else str.data[0] = '\\0';
+    return str;
+}
+
+static String parable_strcat(String a, String b) {
+    size_t len = a.len + b.len;
+    String str = {malloc(len + 1), len, len + 1};
+    memcpy(str.data, a.data, a.len);
+    memcpy(str.data + a.len, b.data, b.len + 1);
+    return str;
+}
+
+static String parable_slice(String s, size_t start, size_t end) {
+    if (start > s.len) start = s.len;
+    if (end > s.len) end = s.len;
+    if (start > end) start = end;
+    size_t len = end - start;
+    String str = {malloc(len + 1), len, len + 1};
+    memcpy(str.data, s.data + start, len);
+    str.data[len] = '\\0';
+    return str;
+}
+
+static String parable_sprintf(const char* fmt, ...) {
+    va_list args, args2;
+    va_start(args, fmt);
+    va_copy(args2, args);
+    int len = vsnprintf(NULL, 0, fmt, args);
+    va_end(args);
+    String str = {malloc(len + 1), len, len + 1};
+    vsnprintf(str.data, len + 1, fmt, args2);
+    va_end(args2);
     return str;
 }
 
@@ -37,6 +69,8 @@ SLICE_DEF(String, StringSlice)
 
 typedef struct Token Token;
 typedef struct Lexer Lexer;
+
+typedef struct { Token* f0; bool f1; } Tuple1;
 
 SLICE_DEF(Token*, TokenSlice)
 SLICE_DEF(Lexer*, LexerSlice)
@@ -84,7 +118,7 @@ bool accept_union(void* obj);
 bool Token_is_word(Token* self);
 int Lexer_peek(Lexer* self);
 void Lexer_advance(Lexer* self);
-/* tuple */ Lexer_scan_word(Lexer* self);
+Tuple1 Lexer_scan_word(Lexer* self);
 
 bool is_space(int ch) {
     return ((ch == 32) || (ch == 10));
@@ -99,9 +133,9 @@ TokenSlice tokenize(String source) {
             Lexer_advance(lx);
             continue;
         }
-        /* tuple */ result = Lexer_scan_word(lx);
-        Token* tok = result[0];
-        bool ok = result[1];
+        Tuple1 result = Lexer_scan_word(lx);
+        Token* tok = result.f0;
+        bool ok = result.f1;
         if (!ok) {
             PARABLE_PANIC("unexpected character");
         }
@@ -122,7 +156,7 @@ int count_words(TokenSlice tokens) {
 }
 
 String format_token(Token* tok) {
-    return tok->kind + ":" + tok->text;
+    return parable_strcat(parable_strcat(tok->kind, ":"), tok->text);
 }
 
 Token* find_token(TokenSlice tokens, String kind) {
@@ -211,7 +245,7 @@ double pi(void) {
 }
 
 String describe_token(Token* tok) {
-    return /* format("Token({0}, {1}, {2})") */;
+    return parable_sprintf("Token(%s, %s, %d)", tok->kind.data, tok->text.data, tok->pos);
 }
 
 void set_first_kind(TokenSlice tokens, String kind) {
@@ -278,16 +312,16 @@ void Lexer_advance(Lexer* self) {
     lx->pos += 1;
 }
 
-/* tuple */ Lexer_scan_word(Lexer* self) {
+Tuple1 Lexer_scan_word(Lexer* self) {
     int start = lx->pos;
     while (((Lexer_peek(lx) != EOF) && !is_space(Lexer_peek(lx)))) {
         Lexer_advance(lx);
     }
     if ((lx->pos == start)) {
-        return /* TupleLit */;
+        return (Tuple1){.f0 = (&(Token){}), .f1 = false};
     }
-    String text = /* slice */;
-    return /* TupleLit */;
+    String text = parable_slice(lx->source, start, lx->pos);
+    return (Tuple1){.f0 = (&(Token){.kind = "word", .text = text, .pos = start}), .f1 = true};
 }
 """
 

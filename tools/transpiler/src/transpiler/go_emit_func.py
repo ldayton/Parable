@@ -7,7 +7,14 @@ from typing import TYPE_CHECKING
 
 from .go_ast_utils import is_super_call
 from .go_manual import MANUAL_FUNCTIONS, MANUAL_METHODS
-from .go_types import EmissionContext, FunctionAnalysis, ScopeInfo
+from .go_types import (
+    AssignCheckReturnData,
+    EmissionContext,
+    FunctionAnalysis,
+    IsinstanceChainData,
+    PatternMatch,
+    ScopeInfo,
+)
 
 if TYPE_CHECKING:
     from .go_types import ClassInfo, FuncInfo, ParamInfo, SymbolTable, VarInfo
@@ -198,36 +205,24 @@ class EmitFunctionsMixin:
         self._run_analysis(stmts)
         # Emit hoisted declarations for function scope (scope 0)
         self._emit_hoisted_vars(analysis, 0, stmts)
+        # Build pattern lookup by start index
+        pattern_map = {p.start_idx: p for p in self._ctx.patterns}
         # Emit all statements
         emitted_any = False
-        skip_until = 0  # Skip statements consumed by type switch
-        for i, stmt in enumerate(stmts):
-            if i < skip_until:
-                continue
+        i = 0
+        while i < len(stmts):
+            stmt = stmts[i]
             # Skip docstrings
             if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant):
                 if isinstance(stmt.value.value, str):
+                    i += 1
                     continue
-            # Check for isinstance chain that can be emitted as type switch
-            isinstance_chain = self._collect_isinstance_chain(stmts, i)
-            if len(isinstance_chain) >= 1:
-                try:
-                    self._emit_type_switch(isinstance_chain[0][1], isinstance_chain)
-                    emitted_any = True
-                    skip_until = i + len(isinstance_chain)
-                    continue
-                except NotImplementedError as e:
-                    self.emit(f'panic("TODO: {e}")')
-                    emitted_any = True
-                    skip_until = i + len(isinstance_chain)
-                    continue
-            # Check for assign-then-check-return pattern (typed-nil fix)
-            assign_check = self._detect_assign_check_return(stmts, i)
-            if assign_check:
-                var_name, method_call, return_type = assign_check
-                self._emit_assign_check_return(var_name, method_call, return_type)
+            # Check for pre-detected patterns
+            if i in pattern_map:
+                p = pattern_map[i]
+                self._emit_pattern(p)
                 emitted_any = True
-                skip_until = i + 2  # Skip both statements
+                i = p.end_idx
                 continue
             try:
                 self._emit_stmt(stmt)
@@ -235,6 +230,7 @@ class EmitFunctionsMixin:
             except NotImplementedError as e:
                 self.emit(f'panic("TODO: {e}")')
                 emitted_any = True
+            i += 1
         # If function has return type but body is empty, add placeholder
         if not emitted_any:
             if func_info and func_info.return_type:
@@ -245,27 +241,96 @@ class EmitFunctionsMixin:
         self._analyze_var_types(stmts)
         self._collect_var_scopes(stmts, scope_id=0)
         self._compute_hoisting()
+        self._detect_patterns(stmts)
         self._exclude_assign_check_return_vars(stmts)
         self._populate_var_types_from_usage(stmts)
         self._scan_returned_vars(stmts)
 
-    def _emit_stmts_with_patterns(self, stmts: list[ast.stmt]):
-        """Emit statements with pattern detection for typed-nil fixes."""
-        skip_until = 0
-        for i, stmt in enumerate(stmts):
-            if i < skip_until:
+    def _detect_patterns(self, stmts: list[ast.stmt]):
+        """Pre-detect all code patterns before emission."""
+        i = 0
+        while i < len(stmts):
+            # Check isinstance chain first (higher priority)
+            chain = self._collect_isinstance_chain(stmts, i)
+            if len(chain) >= 1:
+                self._ctx.patterns.append(
+                    PatternMatch(
+                        start_idx=i,
+                        end_idx=i + len(chain),
+                        kind="isinstance_chain",
+                        data=IsinstanceChainData(var_name=chain[0][1], cases=chain),
+                    )
+                )
+                i += len(chain)
                 continue
-            # Check for assign-then-check-return pattern (typed-nil fix)
-            assign_check = self._detect_assign_check_return(stmts, i)
-            if assign_check:
-                var_name, method_call, return_type = assign_check
-                self._emit_assign_check_return(var_name, method_call, return_type)
-                skip_until = i + 2  # Skip both statements
+            # Check assign-check-return (skip var_types check during analysis phase)
+            acr = self._detect_assign_check_return(stmts, i, check_var_types=False)
+            if acr:
+                var_name, call, ret_type = acr
+                self._ctx.patterns.append(
+                    PatternMatch(
+                        start_idx=i,
+                        end_idx=i + 2,
+                        kind="assign_check_return",
+                        data=AssignCheckReturnData(
+                            var_name=var_name, method_call=call, return_type=ret_type
+                        ),
+                    )
+                )
+                i += 2
                 continue
+            i += 1
+
+    def _emit_pattern(self, pattern: PatternMatch):
+        """Emit code for a pre-detected pattern."""
+        if pattern.kind == "isinstance_chain":
+            data: IsinstanceChainData = pattern.data
             try:
-                self._emit_stmt(stmt)
+                self._emit_type_switch(data.var_name, data.cases)
             except NotImplementedError as e:
                 self.emit(f'panic("TODO: {e}")')
+        elif pattern.kind == "assign_check_return":
+            data_acr: AssignCheckReturnData = pattern.data
+            self._emit_assign_check_return(
+                data_acr.var_name, data_acr.method_call, data_acr.return_type
+            )
+
+    def _emit_stmts_with_patterns(self, stmts: list[ast.stmt]):
+        """Emit statements with pattern detection for typed-nil fixes."""
+        # Detect patterns for this nested block
+        patterns: list[PatternMatch] = []
+        i = 0
+        while i < len(stmts):
+            acr = self._detect_assign_check_return(stmts, i)
+            if acr:
+                var_name, call, ret_type = acr
+                patterns.append(
+                    PatternMatch(
+                        start_idx=i,
+                        end_idx=i + 2,
+                        kind="assign_check_return",
+                        data=AssignCheckReturnData(
+                            var_name=var_name, method_call=call, return_type=ret_type
+                        ),
+                    )
+                )
+                i += 2
+                continue
+            i += 1
+        # Build pattern lookup and emit
+        pattern_map = {p.start_idx: p for p in patterns}
+        i = 0
+        while i < len(stmts):
+            if i in pattern_map:
+                p = pattern_map[i]
+                self._emit_pattern(p)
+                i = p.end_idx
+                continue
+            try:
+                self._emit_stmt(stmts[i])
+            except NotImplementedError as e:
+                self.emit(f'panic("TODO: {e}")')
+            i += 1
 
     def _scan_returned_vars(self, stmts: list[ast.stmt]):
         """Pre-scan statements to find variables used in return statements."""

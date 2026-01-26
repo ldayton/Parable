@@ -230,6 +230,17 @@ class ScopeAnalysisMixin:
 
     def _exclude_assign_check_return_vars(self, stmts: list[ast.stmt]):
         """Remove vars from hoisting that are only used in assign-check-return patterns."""
+        # Use pre-detected patterns from analysis
+        for pattern in self._ctx.patterns:
+            if pattern.kind == "assign_check_return":
+                go_var = self._to_go_var(pattern.data.var_name)
+                if go_var in self._ctx.hoisted_vars:
+                    del self._ctx.hoisted_vars[go_var]
+                if go_var in self._ctx.var_usage:
+                    del self._ctx.var_usage[go_var]
+                if go_var in self._ctx.var_types:
+                    del self._ctx.var_types[go_var]
+        # Also scan nested blocks for additional patterns
         consumed_vars: set[str] = set()
         self._scan_assign_check_return_vars(stmts, consumed_vars)
         for var in consumed_vars:
@@ -237,7 +248,6 @@ class ScopeAnalysisMixin:
                 del self._ctx.hoisted_vars[var]
             if var in self._ctx.var_usage:
                 del self._ctx.var_usage[var]
-            # Also clear var_types so pattern detection works during emission
             if var in self._ctx.var_types:
                 del self._ctx.var_types[var]
 

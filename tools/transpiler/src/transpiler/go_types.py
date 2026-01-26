@@ -4,6 +4,34 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass, field
+from typing import Any
+
+
+@dataclass
+class IsinstanceChainData:
+    """Data for an isinstance chain pattern."""
+
+    var_name: str
+    cases: list[tuple[ast.If, str, str]]  # (stmt, var, type)
+
+
+@dataclass
+class AssignCheckReturnData:
+    """Data for an assign-check-return pattern."""
+
+    var_name: str
+    method_call: ast.Call
+    return_type: str
+
+
+@dataclass
+class PatternMatch:
+    """A detected code pattern with its location and data."""
+
+    start_idx: int  # Index in stmts list
+    end_idx: int  # Index after last consumed stmt
+    kind: str  # "isinstance_chain" or "assign_check_return"
+    data: Any  # Pattern-specific data
 
 
 @dataclass
@@ -84,6 +112,7 @@ class FunctionAnalysis:
     var_assign_sources: dict[str, str] = field(default_factory=dict)
     scope_id_map: dict[int, int] = field(default_factory=dict)
     next_scope_id: int = 1
+    patterns: list[PatternMatch] = field(default_factory=list)
 
 
 @dataclass
@@ -150,6 +179,10 @@ class EmissionContext:
     @next_scope_id.setter
     def next_scope_id(self, value: int) -> None:
         self.analysis.next_scope_id = value
+
+    @property
+    def patterns(self) -> list[PatternMatch]:
+        return self.analysis.patterns
 
 
 class SymbolTable:

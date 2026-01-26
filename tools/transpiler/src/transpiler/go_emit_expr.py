@@ -1875,12 +1875,17 @@ class EmitExpressionsMixin:
         return result
 
     def _detect_assign_check_return(
-        self, stmts: list[ast.stmt], idx: int
+        self, stmts: list[ast.stmt], idx: int, *, check_var_types: bool = True
     ) -> tuple[str, ast.Call, str] | None:
         """Detect pattern: result = self.method(); if result: return result
         Returns (var_name, method_call, return_type) or None.
         This pattern causes typed-nil issues when method returns concrete type
-        but variable is interface type."""
+        but variable is interface type.
+
+        Args:
+            check_var_types: If True, verify the variable type is Node/empty/interface{}.
+                             Set to False during analysis phase before types are populated.
+        """
         if idx + 1 >= len(stmts):
             return None
         # First statement must be: result = self.method()
@@ -1908,11 +1913,12 @@ class EmitExpressionsMixin:
             return None
         # Variable should be interface type (Node) or untyped (for assign-check-return pattern)
         # The pattern transformation avoids typed-nil issues and unused variable issues
-        go_var = self._to_go_var(var_name)
-        var_type = self._ctx.var_types.get(go_var, "")
-        # Accept if type is Node, empty (untyped), or interface{}
-        if var_type not in ("Node", "", "interface{}"):
-            return None
+        if check_var_types:
+            go_var = self._to_go_var(var_name)
+            var_type = self._ctx.var_types.get(go_var, "")
+            # Accept if type is Node, empty (untyped), or interface{}
+            if var_type not in ("Node", "", "interface{}"):
+                return None
         # Second statement must be: if result: return result
         # OR: if result is not None: return result
         if_stmt = stmts[idx + 1]

@@ -3,6 +3,7 @@
 Annotations added:
     VarDecl.is_reassigned: bool  - variable is assigned after its declaration
     Param.is_modified: bool      - parameter is assigned/mutated in function body
+    Param.is_unused: bool        - parameter is never referenced in function body
     Assign.is_declaration: bool  - first assignment to a new variable
     TupleAssign.is_declaration: bool - first assignment to new variables
 """
@@ -68,6 +69,117 @@ def _collect_assigned_vars(stmts: list[Stmt]) -> set[str]:
     return result
 
 
+def _collect_used_vars(stmts: list[Stmt]) -> set[str]:
+    """Collect all variable names referenced in statements and expressions."""
+    result: set[str] = set()
+
+    def visit_expr(expr) -> None:
+        if expr is None:
+            return
+        if isinstance(expr, Var):
+            result.add(expr.name)
+        # Recursively visit all expression attributes
+        for attr in ('obj', 'left', 'right', 'operand', 'cond', 'then_expr', 'else_expr',
+                     'expr', 'index', 'low', 'high', 'ptr', 'value', 'message', 'pos',
+                     'iterable', 'target', 'inner', 'on_type', 'length', 'capacity'):
+            if hasattr(expr, attr):
+                visit_expr(getattr(expr, attr))
+        if hasattr(expr, 'args'):
+            for arg in expr.args:
+                visit_expr(arg)
+        if hasattr(expr, 'elements'):
+            for elem in expr.elements:
+                visit_expr(elem)
+        if hasattr(expr, 'parts'):
+            for part in expr.parts:
+                visit_expr(part)
+        if hasattr(expr, 'entries'):
+            entries = expr.entries
+            if isinstance(entries, dict):
+                for v in entries.values():
+                    visit_expr(v)
+            else:
+                for item in entries:
+                    if isinstance(item, tuple) and len(item) == 2:
+                        visit_expr(item[1])
+        if hasattr(expr, 'fields') and isinstance(expr.fields, dict):
+            for v in expr.fields.values():
+                visit_expr(v)
+
+    def visit_stmt(stmt: Stmt) -> None:
+        if isinstance(stmt, VarDecl):
+            if stmt.value:
+                visit_expr(stmt.value)
+        elif isinstance(stmt, (Assign, OpAssign)):
+            visit_expr(stmt.value)
+            # Also check lvalue targets for variable usage
+            target = stmt.target
+            if hasattr(target, 'obj'):
+                visit_expr(target.obj)
+            if hasattr(target, 'index'):
+                visit_expr(target.index)
+            if hasattr(target, 'ptr'):
+                visit_expr(target.ptr)
+        elif isinstance(stmt, TupleAssign):
+            visit_expr(stmt.value)
+        elif isinstance(stmt, ExprStmt):
+            visit_expr(stmt.expr)
+        elif isinstance(stmt, Return):
+            if stmt.value:
+                visit_expr(stmt.value)
+        elif isinstance(stmt, If):
+            visit_expr(stmt.cond)
+            if stmt.init:
+                visit_stmt(stmt.init)
+            for s in stmt.then_body:
+                visit_stmt(s)
+            for s in stmt.else_body:
+                visit_stmt(s)
+        elif isinstance(stmt, While):
+            visit_expr(stmt.cond)
+            for s in stmt.body:
+                visit_stmt(s)
+        elif isinstance(stmt, ForRange):
+            visit_expr(stmt.iterable)
+            for s in stmt.body:
+                visit_stmt(s)
+        elif isinstance(stmt, ForClassic):
+            if stmt.init:
+                visit_stmt(stmt.init)
+            if stmt.cond:
+                visit_expr(stmt.cond)
+            if stmt.post:
+                visit_stmt(stmt.post)
+            for s in stmt.body:
+                visit_stmt(s)
+        elif isinstance(stmt, Block):
+            for s in stmt.body:
+                visit_stmt(s)
+        elif isinstance(stmt, TryCatch):
+            for s in stmt.body:
+                visit_stmt(s)
+            for s in stmt.catch_body:
+                visit_stmt(s)
+        elif isinstance(stmt, Match):
+            visit_expr(stmt.expr)
+            for case in stmt.cases:
+                for s in case.body:
+                    visit_stmt(s)
+            for s in stmt.default:
+                visit_stmt(s)
+        elif isinstance(stmt, TypeSwitch):
+            visit_expr(stmt.expr)
+            for case in stmt.cases:
+                for s in case.body:
+                    visit_stmt(s)
+            for s in stmt.default:
+                visit_stmt(s)
+
+    for stmt in stmts:
+        visit_stmt(stmt)
+    return result
+
+
 def _analyze_reassignments(module: Module) -> None:
     """Find variables and parameters that are reassigned/modified."""
     for func in module.functions:
@@ -86,7 +198,11 @@ def _analyze_function(func: Function) -> None:
     # Initialize annotations
     for p in func.params:
         p.is_modified = False
+        p.is_unused = False
         assigned.add(p.name)  # Parameters are already "assigned"
+
+    # Collect all referenced variable names
+    used_vars: set[str] = _collect_used_vars(func.body)
 
     def mark_reassigned(name: str) -> None:
         if name in declared:
@@ -229,3 +345,8 @@ def _analyze_function(func: Function) -> None:
     func_assigned: set[str] = set()
     for stmt in func.body:
         check_stmt(stmt, func_assigned)
+
+    # Mark unused parameters
+    for p in func.params:
+        if p.name not in used_vars:
+            p.is_unused = True

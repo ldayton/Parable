@@ -193,7 +193,12 @@ class ZigBackend:
         parts = []
         for p in params:
             typ = self._type(p.typ)
-            parts.append(f"{to_snake(p.name)}: {typ}")
+            # Use _ for unused parameters to avoid Zig error
+            if getattr(p, 'is_unused', False):
+                name = "_"
+            else:
+                name = to_snake(p.name)
+            parts.append(f"{name}: {typ}")
         return ", ".join(parts)
 
     def _method_params(self, params: list, receiver: Receiver | None) -> str:

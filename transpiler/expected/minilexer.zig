@@ -24,10 +24,10 @@ pub const Lexer = struct {
     current: ?Token,
 
     pub fn peek(self: *Lexer) i64 {
-        if (@intCast(self.pos) >= self.source.len) {
+        if (@as(usize, @intCast(self.pos)) >= self.source.len) {
             return EOF;
         }
-        return self.source[@intCast(self.pos)];
+        return self.source[@as(usize, @intCast(self.pos))];
     }
 
     pub fn advance(self: *Lexer) void {
@@ -42,7 +42,7 @@ pub const Lexer = struct {
         if (self.pos == start) {
             return .{ .f0 = Token{}, .f1 = false };
         }
-        const text: []const u8 = self.source[@intCast(start)..@intCast(self.pos)];
+        const text: []const u8 = self.source[@as(usize, @intCast(start))..@as(usize, @intCast(self.pos))];
         return .{ .f0 = Token{ .kind = "word", .text = text, .pos = start }, .f1 = true };
     }
 };
@@ -105,8 +105,8 @@ pub fn example_nil_check(tokens: ArrayList(Token)) []const u8 {
 pub fn sum_positions(tokens: ArrayList(Token)) i64 {
     var sum: i64 = 0;
     var i: i64 = 0;
-    while (@intCast(i) < tokens.items.len) {
-        sum += tokens.items[@intCast(i)].pos;
+    while (@as(usize, @intCast(i)) < tokens.items.len) {
+        sum += tokens.items[@as(usize, @intCast(i))].pos;
         i += 1;
     }
     return sum;
@@ -174,11 +174,11 @@ pub fn set_first_kind(tokens: ArrayList(Token), kind: []const u8) void {
 }
 
 pub fn make_int_slice(n: i64) ArrayList(i64) {
-    return ArrayList(i64).initCapacity(allocator, @intCast(n)) catch unreachable;
+    return ArrayList(i64).initCapacity(allocator, @as(usize, @intCast(n))) catch unreachable;
 }
 
 pub fn int_to_float(n: i64) f64 {
-    return @floatFromInt(n);
+    return @as(f64, @floatFromInt(n));
 }
 
 pub fn known_kinds() std.StringHashMap(void) {
@@ -194,10 +194,10 @@ pub fn get_array_first(arr: [10]i64) i64 {
 }
 
 pub fn maybe_get(tokens: ArrayList(Token), idx: i64) ?Token {
-    if (@intCast(idx) >= tokens.items.len) {
+    if (@as(usize, @intCast(idx)) >= tokens.items.len) {
         return null;
     }
-    return tokens.items[@intCast(idx)];
+    return tokens.items[@as(usize, @intCast(idx))];
 }
 
 pub fn set_via_ptr(ptr: *i64, val: i64) void {
@@ -208,7 +208,7 @@ pub fn identity_str(s: []const u8) []const u8 {
     return s;
 }
 
-pub fn accept_union(obj: union(enum) { v0: Token, v1: Lexer }) bool {
+pub fn accept_union(_: union(enum) { v0: Token, v1: Lexer }) bool {
     return true;
 }
 

@@ -71,10 +71,47 @@ typedef struct Lexer Lexer;
 
 typedef struct { Token* f0; bool f1; } Tuple1;
 
+typedef struct { String key; int val; bool used; } Map_String_int_Entry;
+typedef struct { Map_String_int_Entry* data; size_t cap; size_t len; } Map_String_int;
+static Map_String_int Map_String_int_new(void) { Map_String_int m = {calloc(16, sizeof(Map_String_int_Entry)), 16, 0}; return m; }
+static size_t Map_String_int_hash(String k) { size_t h = 5381; for (size_t i = 0; i < k.len; i++) h = ((h << 5) + h) + k.data[i]; return h; }
+static bool Map_String_int_eq(String a, String b) { return a.len == b.len && memcmp(a.data, b.data, a.len) == 0; }
+static void Map_String_int_set(Map_String_int* m, String k, int v) {
+    if (m->len * 2 >= m->cap) { size_t nc = m->cap * 2; Map_String_int_Entry* nd = calloc(nc, sizeof(Map_String_int_Entry));
+    for (size_t i = 0; i < m->cap; i++) if (m->data[i].used) { size_t j = Map_String_int_hash(m->data[i].key) % nc; while (nd[j].used) j = (j+1) % nc; nd[j] = m->data[i]; }
+    free(m->data); m->data = nd; m->cap = nc; }
+    size_t i = Map_String_int_hash(k) % m->cap; while (m->data[i].used && !Map_String_int_eq(m->data[i].key, k)) i = (i+1) % m->cap;
+    if (!m->data[i].used) m->len++;
+    m->data[i] = (Map_String_int_Entry){k, v, true};
+}
+static int Map_String_int_get(Map_String_int* m, String k) {
+    size_t i = Map_String_int_hash(k) % m->cap;
+    while (m->data[i].used) { if (Map_String_int_eq(m->data[i].key, k)) return m->data[i].val; i = (i+1) % m->cap; }
+    return 0;
+}
+typedef struct { String val; bool used; } Set_String_Entry;
+typedef struct { Set_String_Entry* data; size_t cap; size_t len; } Set_String;
+static Set_String Set_String_new(void) { Set_String s = {calloc(16, sizeof(Set_String_Entry)), 16, 0}; return s; }
+static size_t Set_String_hash(String k) { size_t h = 5381; for (size_t i = 0; i < k.len; i++) h = ((h << 5) + h) + k.data[i]; return h; }
+static bool Set_String_eq(String a, String b) { return a.len == b.len && memcmp(a.data, b.data, a.len) == 0; }
+static void Set_String_add(Set_String* s, String v) {
+    if (s->len * 2 >= s->cap) { size_t nc = s->cap * 2; Set_String_Entry* nd = calloc(nc, sizeof(Set_String_Entry));
+    for (size_t i = 0; i < s->cap; i++) if (s->data[i].used) { size_t j = Set_String_hash(s->data[i].val) % nc; while (nd[j].used) j = (j+1) % nc; nd[j] = s->data[i]; }
+    free(s->data); s->data = nd; s->cap = nc; }
+    size_t i = Set_String_hash(v) % s->cap; while (s->data[i].used && !Set_String_eq(s->data[i].val, v)) i = (i+1) % s->cap;
+    if (!s->data[i].used) s->len++;
+    s->data[i] = (Set_String_Entry){v, true};
+}
+static bool Set_String_contains(Set_String* s, String v) {
+    size_t i = Set_String_hash(v) % s->cap;
+    while (s->data[i].used) { if (Set_String_eq(s->data[i].val, v)) return true; i = (i+1) % s->cap; }
+    return false;
+}
+
 SLICE_DEF(Token*, TokenSlice)
 SLICE_DEF(Lexer*, LexerSlice)
 
-static const int EOF = -1;
+static const int PARABLE_EOF = -1;
 
 struct Token {
     String kind;
@@ -97,7 +134,7 @@ String example_nil_check(TokenSlice tokens);
 int sum_positions(TokenSlice tokens);
 int first_word_pos(TokenSlice tokens);
 int max_int(int a, int b);
-void* default_kinds(void);
+Map_String_int default_kinds(void);
 int scoped_work(int x);
 int kind_priority(String kind);
 TokenSlice safe_tokenize(String source);
@@ -106,9 +143,9 @@ String describe_token(Token* tok);
 void set_first_kind(TokenSlice tokens, String kind);
 IntSlice make_int_slice(int n);
 double int_to_float(int n);
-void* known_kinds(void);
+Set_String known_kinds(void);
 Token* call_static(void);
-void* new_kind_map(void);
+Map_String_int new_kind_map(void);
 int get_array_first(int arr[10]);
 Token* maybe_get(TokenSlice tokens, int idx);
 void set_via_ptr(int* ptr, int val);
@@ -120,13 +157,13 @@ void Lexer_advance(Lexer* self);
 Tuple1 Lexer_scan_word(Lexer* self);
 
 bool is_space(int ch) {
-    return ((ch == 32) || (ch == 10));
+    return ch == 32 || ch == 10;
 }
 
 TokenSlice tokenize(String source) {
     Lexer* lx = (&(Lexer){.source = source, .pos = 0, .current = NULL});
     TokenSlice tokens = TokenSlice_new(0);
-    while ((Lexer_peek(lx) != EOF)) {
+    while (Lexer_peek(lx) != PARABLE_EOF) {
         int ch = Lexer_peek(lx);
         if (is_space(ch)) {
             Lexer_advance(lx);
@@ -147,8 +184,8 @@ int count_words(TokenSlice tokens) {
     int count = 0;
     for (size_t _i = 0; _i < tokens.len; _i++) {
         Token* tok = tokens.data[_i];
-        if ((strcmp(tok->kind.data, "word") == 0)) {
-            count += 1;
+        if (strcmp(tok->kind.data, "word") == 0) {
+            count++;
         }
     }
     return count;
@@ -161,7 +198,7 @@ String format_token(Token* tok) {
 Token* find_token(TokenSlice tokens, String kind) {
     for (size_t _i = 0; _i < tokens.len; _i++) {
         Token* tok = tokens.data[_i];
-        if ((strcmp(tok->kind.data, kind.data) == 0)) {
+        if (strcmp(tok->kind.data, kind.data) == 0) {
             return tok;
         }
     }
@@ -170,7 +207,7 @@ Token* find_token(TokenSlice tokens, String kind) {
 
 String example_nil_check(TokenSlice tokens) {
     Token* tok = find_token(tokens, String_new("word"));
-    if ((tok == NULL)) {
+    if (tok == NULL) {
         return String_new("");
     }
     return tok->text;
@@ -178,8 +215,8 @@ String example_nil_check(TokenSlice tokens) {
 
 int sum_positions(TokenSlice tokens) {
     int sum = 0;
-    for (int i = 0; (i < tokens.len); i = (i + 1)) {
-        sum = (sum + tokens.data[i]->pos);
+    for (int i = 0; i < tokens.len; i++) {
+        sum = sum + tokens.data[i]->pos;
     }
     return sum;
 }
@@ -188,7 +225,7 @@ int first_word_pos(TokenSlice tokens) {
     int pos = -1;
     for (size_t _i = 0; _i < tokens.len; _i++) {
         Token* tok = tokens.data[_i];
-        if ((strcmp(tok->kind.data, "word") == 0)) {
+        if (strcmp(tok->kind.data, "word") == 0) {
             pos = tok->pos;
             break;
         }
@@ -197,18 +234,18 @@ int first_word_pos(TokenSlice tokens) {
 }
 
 int max_int(int a, int b) {
-    return ((a > b) ? a : b);
+    return a > b ? a : b;
 }
 
-void* default_kinds(void) {
-    return /* MapLit(3) */;
+Map_String_int default_kinds(void) {
+    return ({ Map_String_int _m = Map_String_int_new(); Map_String_int_set(&_m, String_new("word"), 1); Map_String_int_set(&_m, String_new("num"), 2); Map_String_int_set(&_m, String_new("op"), 3); _m; });
 }
 
 int scoped_work(int x) {
     int result = 0;
     {
-        int temp = (x * 2);
-        result = (temp + 1);
+        int temp = x * 2;
+        result = temp + 1;
     }
     return result;
 }
@@ -242,7 +279,7 @@ String describe_token(Token* tok) {
 }
 
 void set_first_kind(TokenSlice tokens, String kind) {
-    if ((tokens.len > 0)) {
+    if (tokens.len > 0) {
         tokens.data[0] = (&(Token){.kind = kind, .text = String_new(""), .pos = 0});
     }
 }
@@ -252,19 +289,19 @@ IntSlice make_int_slice(int n) {
 }
 
 double int_to_float(int n) {
-    return ((double)n);
+    return (double)n;
 }
 
-void* known_kinds(void) {
-    return /* SetLit(3) */;
+Set_String known_kinds(void) {
+    return ({ Set_String _s = Set_String_new(); Set_String_add(&_s, String_new("word")); Set_String_add(&_s, String_new("num")); Set_String_add(&_s, String_new("op")); _s; });
 }
 
 Token* call_static(void) {
     return Token_empty();
 }
 
-void* new_kind_map(void) {
-    return /* MakeMap */;
+Map_String_int new_kind_map(void) {
+    return Map_String_int_new();
 }
 
 int get_array_first(int arr[10]) {
@@ -272,7 +309,7 @@ int get_array_first(int arr[10]) {
 }
 
 Token* maybe_get(TokenSlice tokens, int idx) {
-    if ((idx >= tokens.len)) {
+    if (idx >= tokens.len) {
         return NULL;
     }
     return tokens.data[idx];
@@ -291,26 +328,26 @@ bool accept_union(void* obj) {
 }
 
 bool Token_is_word(Token* self) {
-    return (strcmp(self->kind.data, "word") == 0);
+    return strcmp(self->kind.data, "word") == 0;
 }
 
 int Lexer_peek(Lexer* self) {
-    if ((self->pos >= self->source.len)) {
-        return EOF;
+    if (self->pos >= self->source.len) {
+        return PARABLE_EOF;
     }
     return self->source.data[self->pos];
 }
 
 void Lexer_advance(Lexer* self) {
-    self->pos += 1;
+    self->pos++;
 }
 
 Tuple1 Lexer_scan_word(Lexer* self) {
     int start = self->pos;
-    while (((Lexer_peek(self) != EOF) && !is_space(Lexer_peek(self)))) {
+    while (Lexer_peek(self) != PARABLE_EOF && !is_space(Lexer_peek(self))) {
         Lexer_advance(self);
     }
-    if ((self->pos == start)) {
+    if (self->pos == start) {
         return (Tuple1){.f0 = (&(Token){}), .f1 = false};
     }
     String text = parable_slice(self->source, start, self->pos);

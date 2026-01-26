@@ -93,18 +93,24 @@ class CBackend:
         self.structs: dict[str, Struct] = {}
         self.tuple_types: dict[tuple[str, ...], str] = {}  # (elem_types...) -> struct name
         self.tuple_counter = 0
+        self.map_types: set[tuple[str, str]] = set()  # (key_type, value_type)
+        self.set_types: set[str] = set()  # element_type
 
     def emit(self, module: Module) -> str:
         self.indent = 0
         self.lines = []
         self.tuple_types = {}
         self.tuple_counter = 0
+        self.map_types = set()
+        self.set_types = set()
         self.structs = {s.name: s for s in module.structs}
-        # Pre-scan to collect tuple types
+        # Pre-scan to collect tuple/map/set types
         self._collect_tuple_types(module)
+        self._collect_map_set_types(module)
         self._emit_header(module)
         self._emit_forward_decls(module)
         self._emit_tuple_defs()
+        self._emit_map_set_defs()
         self._emit_type_defs(module)
         self._emit_constants(module.constants)
         for struct in module.structs:
@@ -200,6 +206,135 @@ class CBackend:
             self._line(f"typedef struct {{ {fields}; }} {name};")
         self._line("")
 
+    def _collect_map_set_types(self, module: Module) -> None:
+        """Pre-scan module to collect all map/set types used."""
+        for func in module.functions:
+            self._collect_map_set_from_type(func.ret)
+            for stmt in func.body:
+                self._collect_map_set_from_stmt(stmt)
+        for struct in module.structs:
+            for method in struct.methods:
+                self._collect_map_set_from_type(method.ret)
+                for stmt in method.body:
+                    self._collect_map_set_from_stmt(stmt)
+
+    def _collect_map_set_from_type(self, typ: Type) -> None:
+        if isinstance(typ, Map):
+            self.map_types.add((self._type(typ.key), self._type(typ.value)))
+        elif isinstance(typ, Set):
+            self.set_types.add(self._type(typ.element))
+
+    def _collect_map_set_from_stmt(self, stmt: Stmt) -> None:
+        match stmt:
+            case VarDecl(typ=typ, value=value):
+                self._collect_map_set_from_type(typ)
+                if value:
+                    self._collect_map_set_from_expr(value)
+            case Return(value=value):
+                if value:
+                    self._collect_map_set_from_expr(value)
+            case If(then_body=then_body, else_body=else_body):
+                for s in then_body:
+                    self._collect_map_set_from_stmt(s)
+                for s in else_body:
+                    self._collect_map_set_from_stmt(s)
+            case While(body=body) | ForRange(body=body) | ForClassic(body=body) | Block(body=body):
+                for s in body:
+                    self._collect_map_set_from_stmt(s)
+            case _:
+                pass
+
+    def _collect_map_set_from_expr(self, expr: Expr) -> None:
+        if isinstance(expr, MapLit):
+            self.map_types.add((self._type(expr.key_type), self._type(expr.value_type)))
+        elif isinstance(expr, SetLit):
+            self.set_types.add(self._type(expr.element_type))
+        elif isinstance(expr, MakeMap):
+            self.map_types.add((self._type(expr.key_type), self._type(expr.value_type)))
+
+    def _emit_map_set_defs(self) -> None:
+        if not self.map_types and not self.set_types:
+            return
+        for key_t, val_t in sorted(self.map_types):
+            name = self._map_type_name(key_t, val_t)
+            self._emit_map_def(name, key_t, val_t)
+        for elem_t in sorted(self.set_types):
+            name = self._set_type_name(elem_t)
+            self._emit_set_def(name, elem_t)
+        self._line("")
+
+    def _map_type_name(self, key_t: str, val_t: str) -> str:
+        k = key_t.replace("*", "Ptr").replace(" ", "")
+        v = val_t.replace("*", "Ptr").replace(" ", "")
+        return f"Map_{k}_{v}"
+
+    def _set_type_name(self, elem_t: str) -> str:
+        e = elem_t.replace("*", "Ptr").replace(" ", "")
+        return f"Set_{e}"
+
+    def _emit_map_def(self, name: str, key_t: str, val_t: str) -> None:
+        # Simple open-addressing hash map
+        self._line(f"typedef struct {{ {key_t} key; {val_t} val; bool used; }} {name}_Entry;")
+        self._line(f"typedef struct {{ {name}_Entry* data; size_t cap; size_t len; }} {name};")
+        self._line(f"static {name} {name}_new(void) {{ {name} m = {{calloc(16, sizeof({name}_Entry)), 16, 0}}; return m; }}")
+        # Hash function - use djb2 for strings, identity for ints
+        if key_t == "String":
+            self._line(f"static size_t {name}_hash({key_t} k) {{ size_t h = 5381; for (size_t i = 0; i < k.len; i++) h = ((h << 5) + h) + k.data[i]; return h; }}")
+            self._line(f"static bool {name}_eq({key_t} a, {key_t} b) {{ return a.len == b.len && memcmp(a.data, b.data, a.len) == 0; }}")
+        else:
+            self._line(f"static size_t {name}_hash({key_t} k) {{ return (size_t)k * 2654435761u; }}")
+            self._line(f"static bool {name}_eq({key_t} a, {key_t} b) {{ return a == b; }}")
+        self._line(f"static void {name}_set({name}* m, {key_t} k, {val_t} v) {{")
+        self.indent += 1
+        self._line(f"if (m->len * 2 >= m->cap) {{ size_t nc = m->cap * 2; {name}_Entry* nd = calloc(nc, sizeof({name}_Entry));")
+        self._line(f"for (size_t i = 0; i < m->cap; i++) if (m->data[i].used) {{ size_t j = {name}_hash(m->data[i].key) % nc; while (nd[j].used) j = (j+1) % nc; nd[j] = m->data[i]; }}")
+        self._line("free(m->data); m->data = nd; m->cap = nc; }")
+        self._line(f"size_t i = {name}_hash(k) % m->cap; while (m->data[i].used && !{name}_eq(m->data[i].key, k)) i = (i+1) % m->cap;")
+        self._line("if (!m->data[i].used) m->len++;")
+        self._line(f"m->data[i] = ({name}_Entry){{k, v, true}};")
+        self.indent -= 1
+        self._line("}")
+        self._line(f"static {val_t} {name}_get({name}* m, {key_t} k) {{")
+        self.indent += 1
+        self._line(f"size_t i = {name}_hash(k) % m->cap;")
+        self._line(f"while (m->data[i].used) {{ if ({name}_eq(m->data[i].key, k)) return m->data[i].val; i = (i+1) % m->cap; }}")
+        # Return zero value - use simple 0 for primitives, {0} compound literal for structs
+        if val_t in ("int", "bool", "double", "char", "size_t", "int32_t"):
+            self._line("return 0;")
+        else:
+            self._line(f"return ({val_t}){{0}};")
+        self.indent -= 1
+        self._line("}")
+
+    def _emit_set_def(self, name: str, elem_t: str) -> None:
+        # Simple open-addressing hash set
+        self._line(f"typedef struct {{ {elem_t} val; bool used; }} {name}_Entry;")
+        self._line(f"typedef struct {{ {name}_Entry* data; size_t cap; size_t len; }} {name};")
+        self._line(f"static {name} {name}_new(void) {{ {name} s = {{calloc(16, sizeof({name}_Entry)), 16, 0}}; return s; }}")
+        if elem_t == "String":
+            self._line(f"static size_t {name}_hash({elem_t} k) {{ size_t h = 5381; for (size_t i = 0; i < k.len; i++) h = ((h << 5) + h) + k.data[i]; return h; }}")
+            self._line(f"static bool {name}_eq({elem_t} a, {elem_t} b) {{ return a.len == b.len && memcmp(a.data, b.data, a.len) == 0; }}")
+        else:
+            self._line(f"static size_t {name}_hash({elem_t} k) {{ return (size_t)k * 2654435761u; }}")
+            self._line(f"static bool {name}_eq({elem_t} a, {elem_t} b) {{ return a == b; }}")
+        self._line(f"static void {name}_add({name}* s, {elem_t} v) {{")
+        self.indent += 1
+        self._line(f"if (s->len * 2 >= s->cap) {{ size_t nc = s->cap * 2; {name}_Entry* nd = calloc(nc, sizeof({name}_Entry));")
+        self._line(f"for (size_t i = 0; i < s->cap; i++) if (s->data[i].used) {{ size_t j = {name}_hash(s->data[i].val) % nc; while (nd[j].used) j = (j+1) % nc; nd[j] = s->data[i]; }}")
+        self._line("free(s->data); s->data = nd; s->cap = nc; }")
+        self._line(f"size_t i = {name}_hash(v) % s->cap; while (s->data[i].used && !{name}_eq(s->data[i].val, v)) i = (i+1) % s->cap;")
+        self._line("if (!s->data[i].used) s->len++;")
+        self._line(f"s->data[i] = ({name}_Entry){{v, true}};")
+        self.indent -= 1
+        self._line("}")
+        self._line(f"static bool {name}_contains({name}* s, {elem_t} v) {{")
+        self.indent += 1
+        self._line(f"size_t i = {name}_hash(v) % s->cap;")
+        self._line(f"while (s->data[i].used) {{ if ({name}_eq(s->data[i].val, v)) return true; i = (i+1) % s->cap; }}")
+        self._line("return false;")
+        self.indent -= 1
+        self._line("}")
+
     def _emit_header(self, module: Module) -> None:
         self._line("#include <stdio.h>")
         self._line("#include <stdlib.h>")
@@ -286,16 +421,24 @@ class CBackend:
         if module.structs:
             self._line("")
 
+    # Names that shadow C stdlib - remap them
+    RESERVED_NAMES = {"EOF": "PARABLE_EOF", "NULL": "PARABLE_NULL", "errno": "parable_errno"}
+
+    def _safe_name(self, name: str) -> str:
+        """Remap names that would shadow C stdlib."""
+        return self.RESERVED_NAMES.get(name, name)
+
     def _emit_constants(self, constants: list[Constant]) -> None:
         if not constants:
             return
         for const in constants:
             c_type = self._type(const.typ)
             value = self._expr(const.value)
+            name = self._safe_name(const.name)
             if isinstance(const.typ, Primitive) and const.typ.kind == "string":
-                self._line(f"static const char* {const.name} = {value};")
+                self._line(f"static const char* {name} = {value};")
             else:
-                self._line(f"static const {c_type} {const.name} = {value};")
+                self._line(f"static const {c_type} {name} = {value};")
         self._line("")
 
     def _emit_struct(self, struct: Struct) -> None:
@@ -369,12 +512,22 @@ class CBackend:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value):
                 self.declared_vars.add(name)
+                safe = self._safe_name(name)
                 if value:
-                    self._line(f"{self._type(typ)} {name} = {self._expr(value)};")
+                    self._line(f"{self._type(typ)} {safe} = {self._expr(value)};")
                 else:
-                    self._line(f"{self._type(typ)} {name};")
+                    self._line(f"{self._type(typ)} {safe};")
             case Assign(target=target, value=value):
                 lv = self._lvalue(target)
+                # Detect x = x + 1 -> x++ or x = x - 1 -> x--
+                if isinstance(target, VarLV) and isinstance(value, BinaryOp):
+                    if isinstance(value.left, Var) and value.left.name == target.name:
+                        if value.op == "+" and isinstance(value.right, IntLit) and value.right.value == 1:
+                            self._line(f"{lv}++;")
+                            return
+                        if value.op == "-" and isinstance(value.right, IntLit) and value.right.value == 1:
+                            self._line(f"{lv}--;")
+                            return
                 val = self._expr(value)
                 if isinstance(target, VarLV) and target.name not in self.declared_vars:
                     self.declared_vars.add(target.name)
@@ -382,7 +535,16 @@ class CBackend:
                 else:
                     self._line(f"{lv} = {val};")
             case OpAssign(target=target, op=op, value=value):
-                self._line(f"{self._lvalue(target)} {op}= {self._expr(value)};")
+                lv = self._lvalue(target)
+                # Convert += 1 to ++ and -= 1 to --
+                if isinstance(value, IntLit) and value.value == 1:
+                    if op == "+":
+                        self._line(f"{lv}++;")
+                        return
+                    if op == "-":
+                        self._line(f"{lv}--;")
+                        return
+                self._line(f"{lv} {op}= {self._expr(value)};")
             case ExprStmt(expr=expr):
                 if isinstance(expr, MethodCall) and expr.method == "append":
                     obj = self._expr(expr.obj)
@@ -502,11 +664,27 @@ class CBackend:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value):
                 self.declared_vars.add(name)
-                return f"{self._type(typ)} {name} = {self._expr(value)}" if value else f"{self._type(typ)} {name}"
+                safe = self._safe_name(name)
+                return f"{self._type(typ)} {safe} = {self._expr(value)}" if value else f"{self._type(typ)} {safe}"
             case Assign(target=target, value=value):
-                return f"{self._lvalue(target)} = {self._expr(value)}"
+                lv = self._lvalue(target)
+                # Detect x = x + 1 -> x++ or x = x - 1 -> x--
+                if isinstance(target, VarLV) and isinstance(value, BinaryOp):
+                    if isinstance(value.left, Var) and value.left.name == target.name:
+                        if value.op == "+" and isinstance(value.right, IntLit) and value.right.value == 1:
+                            return f"{lv}++"
+                        if value.op == "-" and isinstance(value.right, IntLit) and value.right.value == 1:
+                            return f"{lv}--"
+                return f"{lv} = {self._expr(value)}"
             case OpAssign(target=target, op=op, value=value):
-                return f"{self._lvalue(target)} {op}= {self._expr(value)}"
+                lv = self._lvalue(target)
+                # Convert += 1 to ++ and -= 1 to --
+                if isinstance(value, IntLit) and value.value == 1:
+                    if op == "+":
+                        return f"{lv}++"
+                    if op == "-":
+                        return f"{lv}--"
+                return f"{lv} {op}= {self._expr(value)}"
         return ""
 
     def _expr(self, expr: Expr) -> str:
@@ -523,7 +701,9 @@ class CBackend:
             case NilLit():
                 return "NULL"
             case Var(name=name):
-                return "self" if name == self.receiver_name else name
+                if name == self.receiver_name:
+                    return "self"
+                return self._safe_name(name)
             case FieldAccess(obj=obj, field=field, through_pointer=ptr):
                 op = "->" if ptr or self._is_ptr(obj) else "."
                 return f"{self._expr(obj)}{op}{field}"
@@ -557,26 +737,27 @@ class CBackend:
                     ld = self._raw_str(left)
                     rd = self._raw_str(right)
                     if op == "==":
-                        return f"(strcmp({ld}, {rd}) == 0)"
+                        return f"strcmp({ld}, {rd}) == 0"
                     if op == "!=":
-                        return f"(strcmp({ld}, {rd}) != 0)"
+                        return f"strcmp({ld}, {rd}) != 0"
                 op = {"and": "&&", "or": "||", "&&": "&&", "||": "||"}.get(op, op)
-                return f"({l} {op} {r})"
+                return f"{l} {op} {r}"
             case UnaryOp(op=op, operand=operand):
                 op = "!" if op == "not" else op
                 return f"{op}{self._expr(operand)}"
             case Ternary(cond=cond, then_expr=then_expr, else_expr=else_expr):
-                return f"({self._expr(cond)} ? {self._expr(then_expr)} : {self._expr(else_expr)})"
+                return f"{self._expr(cond)} ? {self._expr(then_expr)} : {self._expr(else_expr)}"
             case Cast(expr=inner, to_type=to_type):
-                return f"(({self._type(to_type)}){self._expr(inner)})"
+                return f"({self._type(to_type)}){self._expr(inner)}"
             case IsNil(expr=inner, negated=neg):
-                return f"({self._expr(inner)} {'!=' if neg else '=='} NULL)"
+                return f"{self._expr(inner)} {'!=' if neg else '=='} NULL"
             case Len(expr=inner):
                 return f"{self._expr(inner)}.len"
             case MakeSlice(element_type=et, length=length):
                 return f"{self._slice_type_elem(et)}_new({self._expr(length) if length else '0'})"
-            case MakeMap():
-                return "/* MakeMap */"
+            case MakeMap(key_type=kt, value_type=vt):
+                name = self._map_type_name(self._type(kt), self._type(vt))
+                return f"{name}_new()"
             case SliceLit(elements=elements, element_type=et):
                 st = self._slice_type_elem(et)
                 if not elements:
@@ -584,10 +765,20 @@ class CBackend:
                 ct = self._type(et)
                 elems = ", ".join(self._expr(e) for e in elements)
                 return f"(({st}){{({ct}[]){{{elems}}}, {len(elements)}, {len(elements)}}})"
-            case MapLit(entries=entries):
-                return f"/* MapLit({len(entries)}) */"
-            case SetLit(elements=elements):
-                return f"/* SetLit({len(elements)}) */"
+            case MapLit(key_type=kt, value_type=vt, entries=entries):
+                name = self._map_type_name(self._type(kt), self._type(vt))
+                if not entries:
+                    return f"{name}_new()"
+                # Use GNU statement expression to build and populate map
+                sets = " ".join(f"{name}_set(&_m, {self._expr(k)}, {self._expr(v)});" for k, v in entries)
+                return f"({{ {name} _m = {name}_new(); {sets} _m; }})"
+            case SetLit(element_type=et, elements=elements):
+                name = self._set_type_name(self._type(et))
+                if not elements:
+                    return f"{name}_new()"
+                # Use GNU statement expression to build and populate set
+                adds = " ".join(f"{name}_add(&_s, {self._expr(e)});" for e in elements)
+                return f"({{ {name} _s = {name}_new(); {adds} _s; }})"
             case StructLit(struct_name=name, fields=fields):
                 fs = ", ".join(f".{k} = {self._expr(v)}" for k, v in fields.items())
                 return f"(&({name}){{{fs}}})"
@@ -630,7 +821,9 @@ class CBackend:
     def _lvalue(self, lv: LValue) -> str:
         match lv:
             case VarLV(name=name):
-                return "self" if name == self.receiver_name else name
+                if name == self.receiver_name:
+                    return "self"
+                return self._safe_name(name)
             case FieldLV(obj=obj, field=field):
                 op = "->" if self._is_ptr(obj) else "."
                 return f"{self._expr(obj)}{op}{field}"
@@ -658,7 +851,11 @@ class CBackend:
                 return inner if "*" in inner else f"{inner}*"
             case StructRef(name=n):
                 return f"{n}*"
-            case Interface() | Map() | Union():
+            case Map(key=k, value=v):
+                return self._map_type_name(self._type(k), self._type(v))
+            case Set(element=e):
+                return self._set_type_name(self._type(e))
+            case Interface() | Union():
                 return "void*"
             case Tuple(elements=elements):
                 key = tuple(self._type(e) for e in elements)

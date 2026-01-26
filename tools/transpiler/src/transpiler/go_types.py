@@ -68,6 +68,23 @@ class ClassInfo:
     constants: dict[str, int | str] = field(default_factory=dict)  # Class-level constants
 
 
+@dataclass
+class FunctionAnalysis:
+    """Analysis results for a single function/method body."""
+
+    var_types: dict[str, str] = field(default_factory=dict)
+    hoisted_vars: dict[str, int] = field(default_factory=dict)
+    declared_vars: set[str] = field(default_factory=set)
+    scope_tree: dict[int, ScopeInfo] = field(default_factory=dict)
+    var_usage: dict[str, VarInfo] = field(default_factory=dict)
+    returned_vars: set[str] = field(default_factory=set)
+    byte_vars: set[str] = field(default_factory=set)
+    tuple_vars: dict[str, list[str]] = field(default_factory=dict)
+    tuple_func_vars: dict[str, str] = field(default_factory=dict)
+    var_assign_sources: dict[str, str] = field(default_factory=dict)
+    scope_id_map: dict[int, int] = field(default_factory=dict)
+
+
 class SymbolTable:
     """Symbol table for type resolution."""
 

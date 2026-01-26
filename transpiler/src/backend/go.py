@@ -528,6 +528,13 @@ func _parseInt(s string, base int) int {
         hoisted_vars = getattr(stmt, 'hoisted_vars', [])
         for name, typ in hoisted_vars:
             type_str = self._type_to_go(typ) if typ else "interface{}"
+            # If type is interface{} but function returns a non-tuple pointer type, use that
+            # (common pattern: variable assigned in branches and returned)
+            if type_str == "interface{}" and self._current_return_type:
+                if not isinstance(self._current_return_type, Tuple):
+                    ret_str = self._type_to_go(self._current_return_type)
+                    if ret_str and ret_str != "interface{}" and ret_str != "":
+                        type_str = ret_str
             go_name = self._to_camel(name)
             self._line(f"var {go_name} {type_str}")
             self._hoisted_in_try.add(name)

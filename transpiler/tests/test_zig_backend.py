@@ -19,7 +19,7 @@ pub const Token = struct {
     text: []const u8,
     pos: i64,
 
-    pub fn is_word(self: *Token) bool {
+    pub fn is_word(self: *const Token) bool {
         return mem.eql(u8, self.kind, "word");
     }
 };
@@ -30,56 +30,56 @@ pub const Lexer = struct {
     current: ?Token,
 
     pub fn peek(self: *Lexer) i64 {
-        if ((self.pos >= self.source.len)) {
+        if (@intCast(self.pos) >= self.source.len) {
             return EOF;
         }
-        return self.source[self.pos];
+        return self.source[@intCast(self.pos)];
     }
 
     pub fn advance(self: *Lexer) void {
         self.pos += 1;
     }
 
-    pub fn scan_word(self: *Lexer) struct { @"0": Token, @"1": bool } {
-        var start: i64 = self.pos;
-        while (((self.peek() != EOF) and !is_space(self.peek()))) {
-            _ = self.advance();
+    pub fn scan_word(self: *Lexer) struct { f0: Token, f1: bool } {
+        var start = self.pos;
+        while (self.peek() != EOF and !is_space(self.peek())) {
+            self.advance();
         }
-        if ((self.pos == start)) {
-            return .{ Token{}, false };
+        if (self.pos == start) {
+            return .{ .f0 = Token{}, .f1 = false };
         }
-        var text: []const u8 = self.source[start..self.pos];
-        return .{ Token{ .kind = "word", .text = text, .pos = start }, true };
+        var text: []const u8 = self.source[@intCast(start)..@intCast(self.pos)];
+        return .{ .f0 = Token{ .kind = "word", .text = text, .pos = start }, .f1 = true };
     }
 };
 
 pub fn is_space(ch: i64) bool {
-    return ((ch == 32) or (ch == 10));
+    return ch == ' ' or ch == '\\n';
 }
 
-pub fn tokenize(source: []const u8) []const Token {
-    var lx: Lexer = Lexer{ .source = source, .pos = 0, .current = null };
-    var tokens: []const Token = &[_]Token{};
-    while ((lx.peek() != EOF)) {
-        var ch: i64 = lx.peek();
+pub fn tokenize(source: []const u8) ArrayList(Token) {
+    var lx = Lexer{ .source = source, .pos = 0, .current = null };
+    var tokens: ArrayList(Token) = ArrayList(Token).init(allocator);
+    while (lx.peek() != EOF) {
+        var ch = lx.peek();
         if (is_space(ch)) {
-            _ = lx.advance();
+            lx.advance();
             continue;
         }
-        var result: struct { @"0": Token, @"1": bool } = lx.scan_word();
-        var tok: Token = result.@"0";
-        var ok: bool = result.@"1";
+        var result = lx.scan_word();
+        var tok = result.f0;
+        var ok = result.f1;
         if (!ok) {
             @panic("unexpected character");
         }
-        _ = tokens.append(tok) catch unreachable;
+        tokens.append(tok) catch unreachable;
     }
     return tokens;
 }
 
-pub fn count_words(tokens: []const Token) i64 {
+pub fn count_words(tokens: ArrayList(Token)) i64 {
     var count: i64 = 0;
-    for (tokens) |tok| {
+    for (tokens.items) |tok| {
         if (mem.eql(u8, tok.kind, "word")) {
             count += 1;
         }
@@ -91,8 +91,8 @@ pub fn format_token(tok: Token) []const u8 {
     return tok.kind ++ ":" ++ tok.text;
 }
 
-pub fn find_token(tokens: []const Token, kind: []const u8) ?Token {
-    for (tokens) |tok| {
+pub fn find_token(tokens: ArrayList(Token), kind: []const u8) ?Token {
+    for (tokens.items) |tok| {
         if (mem.eql(u8, tok.kind, kind)) {
             return tok;
         }
@@ -100,27 +100,27 @@ pub fn find_token(tokens: []const Token, kind: []const u8) ?Token {
     return null;
 }
 
-pub fn example_nil_check(tokens: []const Token) []const u8 {
-    var tok: ?Token = find_token(tokens, "word");
+pub fn example_nil_check(tokens: ArrayList(Token)) []const u8 {
+    var tok = find_token(tokens, "word");
     if (tok == null) {
         return "";
     }
-    return tok.text;
+    return tok.?.text;
 }
 
-pub fn sum_positions(tokens: []const Token) i64 {
+pub fn sum_positions(tokens: ArrayList(Token)) i64 {
     var sum: i64 = 0;
     var i: i64 = 0;
-    while ((i < tokens.len)) {
-        sum = (sum + tokens[i].pos);
-        i = (i + 1);
+    while (@intCast(i) < tokens.items.len) {
+        sum = sum + tokens.items[@intCast(i)].pos;
+        i = i + 1;
     }
     return sum;
 }
 
-pub fn first_word_pos(tokens: []const Token) i64 {
+pub fn first_word_pos(tokens: ArrayList(Token)) i64 {
     var pos: i64 = -1;
-    for (tokens) |tok| {
+    for (tokens.items) |tok| {
         if (mem.eql(u8, tok.kind, "word")) {
             pos = tok.pos;
             break;
@@ -130,7 +130,7 @@ pub fn first_word_pos(tokens: []const Token) i64 {
 }
 
 pub fn max_int(a: i64, b: i64) i64 {
-    return if ((a > b)) a else b;
+    return if (a > b) a else b;
 }
 
 pub fn default_kinds() std.StringHashMap(i64) {
@@ -140,8 +140,8 @@ pub fn default_kinds() std.StringHashMap(i64) {
 pub fn scoped_work(x: i64) i64 {
     var result: i64 = 0;
     {
-        var temp: i64 = (x * 2);
-        result = (temp + 1);
+        var temp: i64 = x * 2;
+        result = temp + 1;
     }
     return result;
 }
@@ -158,12 +158,10 @@ pub fn kind_priority(kind: []const u8) i64 {
     }
 }
 
-pub fn safe_tokenize(source: []const u8) []const Token {
-    var tokens: []const Token = &[_]Token{};
-    // try-catch block
-    {
-        tokens = tokenize(source);
-    }
+pub fn safe_tokenize(source: []const u8) ArrayList(Token) {
+    var tokens: ArrayList(Token) = ArrayList(Token).init(allocator);
+    // Note: error handling simplified - Zig uses error unions
+    tokens = tokenize(source);
     return tokens;
 }
 
@@ -175,14 +173,14 @@ pub fn describe_token(tok: Token) []const u8 {
     return std.fmt.allocPrint(allocator, "Token({}, {}, {})", .{ tok.kind, tok.text, tok.pos }) catch unreachable;
 }
 
-pub fn set_first_kind(tokens: []const Token, kind: []const u8) void {
-    if ((tokens.len > 0)) {
-        tokens[0] = Token{ .kind = kind, .text = "", .pos = 0 };
+pub fn set_first_kind(tokens: ArrayList(Token), kind: []const u8) void {
+    if (tokens.items.len > 0) {
+        tokens.items[0] = Token{ .kind = kind, .text = "", .pos = 0 };
     }
 }
 
-pub fn make_int_slice(n: i64) []const i64 {
-    return allocator.alloc(i64, @intCast(n)) catch unreachable;
+pub fn make_int_slice(n: i64) ArrayList(i64) {
+    return ArrayList(i64).initCapacity(allocator, @intCast(n)) catch unreachable;
 }
 
 pub fn int_to_float(n: i64) f64 {
@@ -205,11 +203,11 @@ pub fn get_array_first(arr: [10]i64) i64 {
     return arr[0];
 }
 
-pub fn maybe_get(tokens: []const Token, idx: i64) ?Token {
-    if ((idx >= tokens.len)) {
+pub fn maybe_get(tokens: ArrayList(Token), idx: i64) ?Token {
+    if (@intCast(idx) >= tokens.items.len) {
         return null;
     }
-    return tokens[idx];
+    return tokens.items[@intCast(idx)];
 }
 
 pub fn set_via_ptr(ptr: *i64, val: i64) void {

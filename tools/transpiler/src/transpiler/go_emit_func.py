@@ -6,7 +6,7 @@ import ast
 from typing import TYPE_CHECKING
 
 from .go_manual import MANUAL_FUNCTIONS, MANUAL_METHODS
-from .go_types import ScopeInfo
+from .go_types import FunctionAnalysis, ScopeInfo
 
 if TYPE_CHECKING:
     from .go_types import ClassInfo, FuncInfo, ParamInfo, SymbolTable, VarInfo
@@ -255,6 +255,68 @@ class EmitFunctionsMixin:
         if not emitted_any:
             if func_info and func_info.return_type:
                 self.emit('panic("TODO: empty body")')
+
+    def _analyze_function(
+        self, stmts: list[ast.stmt], func_info: "FuncInfo | None"
+    ) -> FunctionAnalysis:
+        """Perform all analysis for a function body, returning analysis results."""
+        analysis = FunctionAnalysis()
+        # Initialize scope tree with function scope (scope 0)
+        analysis.scope_tree[0] = ScopeInfo(0, None, 0)
+        # Initialize from params
+        if func_info:
+            for p in func_info.params:
+                go_name = self._to_go_var(p.name)
+                analysis.declared_vars.add(go_name)
+                analysis.var_types[go_name] = p.go_type
+        # Temporarily swap self state with analysis fields so existing methods work
+        old_declared = self.declared_vars
+        old_var_types = self.var_types
+        old_scope_tree = self.scope_tree
+        old_next_scope_id = self.next_scope_id
+        old_var_usage = self.var_usage
+        old_hoisted_vars = self.hoisted_vars
+        old_scope_id_map = self.scope_id_map
+        old_returned_vars = self.returned_vars
+        old_byte_vars = self.byte_vars
+        old_tuple_vars = self.tuple_vars
+        old_tuple_func_vars = self.tuple_func_vars
+        old_var_assign_sources = self.var_assign_sources
+        try:
+            self.declared_vars = analysis.declared_vars
+            self.var_types = analysis.var_types
+            self.scope_tree = analysis.scope_tree
+            self.next_scope_id = 1
+            self.var_usage = analysis.var_usage
+            self.hoisted_vars = analysis.hoisted_vars
+            self.scope_id_map = analysis.scope_id_map
+            self.returned_vars = analysis.returned_vars
+            self.byte_vars = analysis.byte_vars
+            self.tuple_vars = analysis.tuple_vars
+            self.tuple_func_vars = analysis.tuple_func_vars
+            self.var_assign_sources = analysis.var_assign_sources
+            # Run analysis methods
+            self._analyze_var_types(stmts)
+            self._collect_var_scopes(stmts, scope_id=0)
+            self._compute_hoisting()
+            self._exclude_assign_check_return_vars(stmts)
+            self._populate_var_types_from_usage(stmts)
+            self._scan_returned_vars(stmts)
+        finally:
+            # Restore old state
+            self.declared_vars = old_declared
+            self.var_types = old_var_types
+            self.scope_tree = old_scope_tree
+            self.next_scope_id = old_next_scope_id
+            self.var_usage = old_var_usage
+            self.hoisted_vars = old_hoisted_vars
+            self.scope_id_map = old_scope_id_map
+            self.returned_vars = old_returned_vars
+            self.byte_vars = old_byte_vars
+            self.tuple_vars = old_tuple_vars
+            self.tuple_func_vars = old_tuple_func_vars
+            self.var_assign_sources = old_var_assign_sources
+        return analysis
 
     def _emit_stmts_with_patterns(self, stmts: list[ast.stmt]):
         """Emit statements with pattern detection for typed-nil fixes."""

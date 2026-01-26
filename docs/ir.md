@@ -499,6 +499,34 @@ void *arena_alloc(Arena *a, size_t size);
 
 No per-node `free()`. Single `arena_free()` at end.
 
+### Python Backend
+
+Emit idiomatic Python, shedding `check_style.py` restrictions. The source is written in restricted Python for transpilation; the Python backend produces clean Pythonic output.
+
+**Easy transforms:**
+```
+lst[len(lst)-1]     →  lst[-1]
+int(a / b)          →  a // b
+a < b and b < c     →  a < b < c
+if x is None: x=[]  →  x = x or []
+TypeSwitch          →  match/case
+```
+
+**Pattern-based transforms:**
+```
+i = 0                       for i, item in enumerate(items):
+for item in items:      →       process(item)
+    process(item)
+    i += 1
+
+for i in range(len(a)):     for x, y in zip(a, b):
+    x = a[i]            →       process(x, y)
+    y = b[i]
+    process(x, y)
+```
+
+**Not recoverable** (not in IR): `**kwargs`, decorators, generators, `async`/`await`.
+
 ## Truthiness Semantics
 
 Python's `if x:` has type-dependent meaning. Parable restricts this to four unambiguous patterns:

@@ -1694,6 +1694,11 @@ class Frontend:
                         value=value,
                         loc=self._loc_from_node(node)
                     )
+            # Handle sentinel ints: var = None -> var = -1
+            if (isinstance(target, ast.Name) and
+                target.id in self._type_ctx.sentinel_ints and
+                isinstance(value, ir.NilLit)):
+                value = ir.IntLit(value=-1, typ=INT, loc=self._loc_from_node(node))
             # Coerce value to target type if known
             if isinstance(target, ast.Name) and target.id in self._type_ctx.var_types:
                 expected_type = self._type_ctx.var_types[target.id]

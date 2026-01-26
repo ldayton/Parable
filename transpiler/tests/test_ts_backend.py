@@ -50,10 +50,10 @@ class Lexer {
       this.advance();
     }
     if ((this.pos === start)) {
-      return new Token();
+      return [new Token(), false];
     }
     let text: string = this.source.slice(start, this.pos);
-    return new Token("word", text, start);
+    return [new Token("word", text, start), true];
   }
 }
 
@@ -70,8 +70,9 @@ function tokenize(source: string): Token[] {
       lx.advance();
       continue;
     }
-    let tok: Token;
-    let ok: boolean;
+    let result: [Token, boolean] = lx.scanWord();
+    let tok: Token = result[0];
+    let ok: boolean = result[1];
     if (!ok) {
       throw new ParseError("unexpected character", lx.pos);
     }
@@ -109,6 +110,14 @@ function exampleNilCheck(tokens: Token[]): string {
     return "";
   }
   return tok.text;
+}
+
+function sumPositions(tokens: Token[]): number {
+  let sum: number = 0;
+  for (let i: number = 0; (i < tokens.length); i = (i + 1)) {
+    sum = (sum + tokens[i].pos);
+  }
+  return sum;
 }"""
 
 

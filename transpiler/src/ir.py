@@ -673,6 +673,13 @@ class StructLit(Expr):
 
 
 @dataclass
+class TupleLit(Expr):
+    """Tuple literal."""
+
+    elements: list[Expr]
+
+
+@dataclass
 class StringConcat(Expr):
     """String concatenation. Go: +, Rust: format!."""
 

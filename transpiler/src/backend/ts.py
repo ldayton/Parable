@@ -64,6 +64,7 @@ from src.ir import (
     Struct,
     StructLit,
     StructRef,
+    TupleLit,
     Ternary,
     TryCatch,
     Tuple,
@@ -494,6 +495,9 @@ class TsBackend:
             case StructLit(struct_name=struct_name, fields=fields):
                 args = ", ".join(self._expr(v) for v in fields.values())
                 return f"new {struct_name}({args})"
+            case TupleLit(elements=elements):
+                elems = ", ".join(self._expr(e) for e in elements)
+                return f"[{elems}]"
             case StringConcat(parts=parts):
                 return " + ".join(self._expr(p) for p in parts)
             case StringFormat(template=template, args=args):

@@ -8,7 +8,9 @@ from src.ir import (
     INT,
     STRING,
     VOID,
+    Assign,
     BinaryOp,
+    BoolLit,
     Call,
     Constant,
     Continue,
@@ -16,6 +18,7 @@ from src.ir import (
     Field,
     FieldAccess,
     FieldLV,
+    ForClassic,
     ForRange,
     Function,
     If,
@@ -44,6 +47,7 @@ from src.ir import (
     StructLit,
     StructRef,
     Tuple,
+    TupleLit,
     UnaryOp,
     Var,
     # Statements
@@ -291,8 +295,13 @@ def make_fixture() -> Module:
                         ),
                         then_body=[
                             Return(
-                                value=StructLit(
-                                    struct_name="Token", fields={}, typ=token_ref, loc=L
+                                value=TupleLit(
+                                    elements=[
+                                        StructLit(struct_name="Token", fields={}, typ=token_ref, loc=L),
+                                        BoolLit(value=False, typ=BOOL, loc=L),
+                                    ],
+                                    typ=Tuple(elements=(token_ref, BOOL)),
+                                    loc=L,
                                 ),
                                 loc=L,
                             ),
@@ -324,14 +333,21 @@ def make_fixture() -> Module:
                     ),
                     # return Token{kind: "word", text: text, pos: start}, true
                     Return(
-                        value=StructLit(
-                            struct_name="Token",
-                            fields={
-                                "kind": StringLit(value="word", typ=STRING, loc=L),
-                                "text": Var(name="text", typ=STRING, loc=L),
-                                "pos": Var(name="start", typ=INT, loc=L),
-                            },
-                            typ=token_ref,
+                        value=TupleLit(
+                            elements=[
+                                StructLit(
+                                    struct_name="Token",
+                                    fields={
+                                        "kind": StringLit(value="word", typ=STRING, loc=L),
+                                        "text": Var(name="text", typ=STRING, loc=L),
+                                        "pos": Var(name="start", typ=INT, loc=L),
+                                    },
+                                    typ=token_ref,
+                                    loc=L,
+                                ),
+                                BoolLit(value=True, typ=BOOL, loc=L),
+                            ],
+                            typ=Tuple(elements=(token_ref, BOOL)),
                             loc=L,
                         ),
                         loc=L,
@@ -456,9 +472,43 @@ def make_fixture() -> Module:
                         ],
                         loc=L,
                     ),
-                    # tok, ok := lx.scan_word()
-                    VarDecl(name="tok", typ=token_ref, value=None, mutable=True, loc=L),
-                    VarDecl(name="ok", typ=BOOL, value=None, mutable=True, loc=L),
+                    # result := lx.scan_word(); tok := result[0]; ok := result[1]
+                    VarDecl(
+                        name="result",
+                        typ=Tuple(elements=(token_ref, BOOL)),
+                        value=MethodCall(
+                            obj=Var(name="lx", typ=lexer_ref, loc=L),
+                            method="scan_word",
+                            args=[],
+                            receiver_type=lexer_ref,
+                            typ=Tuple(elements=(token_ref, BOOL)),
+                            loc=L,
+                        ),
+                        loc=L,
+                    ),
+                    VarDecl(
+                        name="tok",
+                        typ=token_ref,
+                        value=Index(
+                            obj=Var(name="result", typ=Tuple(elements=(token_ref, BOOL)), loc=L),
+                            index=IntLit(value=0, typ=INT, loc=L),
+                            typ=token_ref,
+                            loc=L,
+                        ),
+                        mutable=True,
+                        loc=L,
+                    ),
+                    VarDecl(
+                        name="ok",
+                        typ=BOOL,
+                        value=Index(
+                            obj=Var(name="result", typ=Tuple(elements=(token_ref, BOOL)), loc=L),
+                            index=IntLit(value=1, typ=INT, loc=L),
+                            typ=BOOL,
+                            loc=L,
+                        ),
+                        loc=L,
+                    ),
                     # if !ok: raise ParseError("unexpected char", lx.pos)
                     If(
                         cond=UnaryOp(
@@ -661,6 +711,69 @@ def make_fixture() -> Module:
         ],
     )
 
+    # --- Function: sum_positions (exercises ForClassic, Assign) ---
+    sum_positions_func = Function(
+        name="sum_positions",
+        params=[Param(name="tokens", typ=token_slice)],
+        ret=INT,
+        body=[
+            # sum := 0
+            VarDecl(
+                name="sum", typ=INT, value=IntLit(value=0, typ=INT, loc=L), mutable=True, loc=L
+            ),
+            # for i := 0; i < len(tokens); i = i + 1
+            ForClassic(
+                init=VarDecl(
+                    name="i", typ=INT, value=IntLit(value=0, typ=INT, loc=L), mutable=True, loc=L
+                ),
+                cond=BinaryOp(
+                    op="<",
+                    left=Var(name="i", typ=INT, loc=L),
+                    right=Len(expr=Var(name="tokens", typ=token_slice, loc=L), typ=INT, loc=L),
+                    typ=BOOL,
+                    loc=L,
+                ),
+                post=Assign(
+                    target=VarLV(name="i", loc=L),
+                    value=BinaryOp(
+                        op="+",
+                        left=Var(name="i", typ=INT, loc=L),
+                        right=IntLit(value=1, typ=INT, loc=L),
+                        typ=INT,
+                        loc=L,
+                    ),
+                    loc=L,
+                ),
+                body=[
+                    # sum = sum + tokens[i].pos
+                    Assign(
+                        target=VarLV(name="sum", loc=L),
+                        value=BinaryOp(
+                            op="+",
+                            left=Var(name="sum", typ=INT, loc=L),
+                            right=FieldAccess(
+                                obj=Index(
+                                    obj=Var(name="tokens", typ=token_slice, loc=L),
+                                    index=Var(name="i", typ=INT, loc=L),
+                                    typ=token_ref,
+                                    loc=L,
+                                ),
+                                field="pos",
+                                typ=INT,
+                                loc=L,
+                            ),
+                            typ=INT,
+                            loc=L,
+                        ),
+                        loc=L,
+                    ),
+                ],
+                loc=L,
+            ),
+            Return(value=Var(name="sum", typ=INT, loc=L), loc=L),
+        ],
+    )
+
     return Module(
         name="fixture",
         structs=[token_struct, lexer_struct],
@@ -671,6 +784,7 @@ def make_fixture() -> Module:
             format_token_func,
             find_token_func,
             example_nil_check_func,
+            sum_positions_func,
         ],
         constants=[eof_const],
     )

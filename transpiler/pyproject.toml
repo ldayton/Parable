@@ -4,7 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.14"
 
 [project.scripts]
-transpile = "cli:main"
+transpile = "src.cli:main"
 
 [dependency-groups]
 dev = [
@@ -13,3 +13,10 @@ dev = [
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+
+# Run these with: uv run --script <name>
+# Or add them to justfile
+
+# Usage from transpiler/:
+#   uv run python -m src.cli ../src/parable.py          # emit Go to stdout
+#   uv run python -m src.cli ../src/parable.py | gofmt  # emit formatted Go

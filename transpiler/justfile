@@ -1,0 +1,26 @@
+set shell := ["bash", "-o", "pipefail", "-cu"]
+
+# Transpile parable.py to Go (stdout)
+emit:
+    uv run python -m src.cli ../src/parable.py
+
+# Transpile and write to src/parable.go
+go:
+    uv run python -m src.cli ../src/parable.py > /tmp/parable-ir.go
+    gofmt /tmp/parable-ir.go > ../src/parable.go
+
+# Transpile and check if Go compiles
+check:
+    uv run python -m src.cli ../src/parable.py > /tmp/parable-ir.go
+    gofmt /tmp/parable-ir.go > /tmp/parable.go
+    go build -C ../src -o /dev/null .
+
+# Transpile, write, and run Go tests
+test: go
+    go run -C ../src ./cmd/run-tests
+
+# Show Go compilation errors
+errors:
+    @uv run python -m src.cli ../src/parable.py > /tmp/parable-ir.go 2>&1 || true
+    @gofmt /tmp/parable-ir.go > /tmp/parable.go 2>/dev/null || true
+    @go build -C ../src -o /dev/null . 2>&1 | head -50 || true

@@ -1,21 +1,10 @@
-"""Parable Transpiler IR — Type Definitions
-
-This module defines the intermediate representation for transpiling
-parable.py to multiple target languages (Go, JS, Rust, C).
+"""Transpiler IR - Language-agnostic intermediate representation.
 
 Architecture:
-    parable.py → [Python AST] → Frontend → [IR] → Backend → target code
+    parable.py -> [Python AST] -> Frontend -> [IR] -> Backend -> target code
 
-The frontend handles:
-    - Type inference from annotations and usage
-    - Symbol resolution (structs, methods, functions)
-    - Scope analysis and variable hoisting
-    - Ownership analysis for Rust/C
-    - Method resolution
-    - Nil/truthiness analysis
-    - Type narrowing (isinstance → TypeSwitch)
-
-Backends handle only syntax emission — no analysis.
+The frontend handles all analysis (types, scopes, patterns, symbols).
+Backends handle only syntax emission - no analysis.
 """
 
 from __future__ import annotations
@@ -61,14 +50,14 @@ class Primitive(Type):
 
 @dataclass(frozen=True)
 class Slice(Type):
-    """Growable sequence. Go: []T, JS: Array, Rust: Vec<T>, C: slice struct."""
+    """Growable sequence. Go: []T, JS: Array, Rust: Vec<T>."""
 
     element: Type
 
 
 @dataclass(frozen=True)
 class Array(Type):
-    """Fixed-size array. Go: [N]T, Rust: [T; N], C: T[N]."""
+    """Fixed-size array. Go: [N]T, Rust: [T; N]."""
 
     element: Type
     size: int
@@ -91,18 +80,14 @@ class Set(Type):
 
 @dataclass(frozen=True)
 class Tuple(Type):
-    """Fixed-size heterogeneous sequence. Go: multiple returns, TS: [T1, T2], Rust: (T1, T2)."""
+    """Fixed-size heterogeneous sequence. Go: multiple returns, TS: [T1, T2]."""
 
     elements: tuple[Type, ...]
 
 
 @dataclass(frozen=True)
 class Pointer(Type):
-    """Pointer with ownership tracking for Rust/C.
-
-    owned=True: Rust Box<T>, C owned pointer (caller frees)
-    owned=False: Rust &T, C borrowed pointer
-    """
+    """Pointer with ownership tracking for Rust/C."""
 
     target: Type
     owned: bool = True
@@ -110,7 +95,7 @@ class Pointer(Type):
 
 @dataclass(frozen=True)
 class Optional(Type):
-    """Nullable value. Go: *T/nil, JS: T|null, Rust: Option<T>, C: NULL."""
+    """Nullable value. Go: *T/nil, JS: T|null, Rust: Option<T>."""
 
     inner: Type
 
@@ -131,7 +116,7 @@ class Interface(Type):
 
 @dataclass(frozen=True)
 class Union(Type):
-    """Sum type. Go: interface, Rust: enum, C: tagged union.
+    """Sum type. Go: interface, Rust: enum.
 
     All unions are closed (fixed variants) and discriminated via .kind field.
     """
@@ -142,11 +127,7 @@ class Union(Type):
 
 @dataclass(frozen=True)
 class FuncType(Type):
-    """Function pointer or closure.
-
-    captures=True: closure with environment (Rust: impl Fn, C: struct+fn ptr)
-    captures=False: plain function pointer
-    """
+    """Function pointer or closure."""
 
     params: tuple[Type, ...]
     ret: Type
@@ -155,7 +136,7 @@ class FuncType(Type):
 
 @dataclass(frozen=True)
 class StringSlice(Type):
-    """Borrowed string slice. Go: string, Rust: &str, C: const char* + len."""
+    """Borrowed string slice. Go: string, Rust: &str."""
 
 
 # Singleton types
@@ -178,7 +159,7 @@ class Module:
     """A complete transpilation unit."""
 
     name: str
-    doc: str | None = None  # module docstring
+    doc: str | None = None
     structs: list[Struct] = field(default_factory=list)
     interfaces: list[InterfaceDef] = field(default_factory=list)
     functions: list[Function] = field(default_factory=list)
@@ -190,7 +171,7 @@ class Struct:
     """Struct/class definition."""
 
     name: str
-    doc: str | None = None  # class docstring
+    doc: str | None = None
     fields: list[Field] = field(default_factory=list)
     methods: list[Function] = field(default_factory=list)
     implements: list[str] = field(default_factory=list)  # interface names
@@ -234,7 +215,7 @@ class Function:
     params: list[Param]
     ret: Type
     body: list[Stmt]
-    doc: str | None = None  # function/method docstring
+    doc: str | None = None
     receiver: Receiver | None = None  # for methods
     fallible: bool = False  # can raise ParseError
     loc: Loc = field(default_factory=Loc.unknown)
@@ -302,6 +283,14 @@ class Assign(Stmt):
 
 
 @dataclass
+class TupleAssign(Stmt):
+    """Multi-value assignment: a, b = func()"""
+
+    targets: list[LValue]
+    value: Expr
+
+
+@dataclass
 class OpAssign(Stmt):
     """Compound assignment: +=, -=, etc."""
 
@@ -336,7 +325,7 @@ class If(Stmt):
 
 @dataclass
 class TypeSwitch(Stmt):
-    """Switch on runtime type. isinstance → TypeSwitch in frontend."""
+    """Switch on runtime type. isinstance -> TypeSwitch in frontend."""
 
     expr: Expr
     binding: str  # variable name bound to narrowed type in each case
@@ -422,7 +411,7 @@ class Block(Stmt):
 
 @dataclass
 class TryCatch(Stmt):
-    """Backtracking for error recovery. Go: defer/recover, JS: try/catch, Rust: match Result."""
+    """Backtracking for error recovery. Go: defer/recover, JS: try/catch."""
 
     body: list[Stmt]
     catch_var: str | None = None  # None if error ignored
@@ -432,7 +421,7 @@ class TryCatch(Stmt):
 
 @dataclass
 class Raise(Stmt):
-    """Raise error in fallible function. Go: panic, JS: throw, Rust: return Err()."""
+    """Raise error in fallible function. Go: panic, JS: throw."""
 
     error_type: str  # "ParseError", "MatchedPairError"
     message: Expr
@@ -441,9 +430,7 @@ class Raise(Stmt):
 
 @dataclass
 class SoftFail(Stmt):
-    """Return None to signal 'try alternative'. Go: return nil, Rust: return None."""
-
-    pass
+    """Return None to signal 'try alternative'. Go: return nil."""
 
 
 # ============================================================
@@ -491,8 +478,6 @@ class BoolLit(Expr):
 class NilLit(Expr):
     """Nil/null/None literal."""
 
-    pass
-
 
 @dataclass
 class Var(Expr):
@@ -516,7 +501,7 @@ class Index(Expr):
 
     obj: Expr
     index: Expr
-    bounds_check: bool = True  # C backend can skip
+    bounds_check: bool = True
     returns_optional: bool = False  # Go map returns (v, ok)
 
 
@@ -584,7 +569,7 @@ class Ternary(Expr):
 
 @dataclass
 class Cast(Expr):
-    """Type conversion. Go: T(x), Rust: x as T, C: (T)x."""
+    """Type conversion. Go: T(x), Rust: x as T."""
 
     expr: Expr
     to_type: Type
@@ -601,7 +586,7 @@ class TypeAssert(Expr):
 
 @dataclass
 class IsType(Expr):
-    """Type test. Go: _, ok := x.(T), JS: instanceof, Rust: matches!."""
+    """Type test. Go: _, ok := x.(T), JS: instanceof."""
 
     expr: Expr
     tested_type: Type
@@ -658,9 +643,16 @@ class MapLit(Expr):
 
 @dataclass
 class SetLit(Expr):
-    """Set literal. Go: map[T]bool{...}, JS: new Set([...]), Rust: HashSet::from([...])."""
+    """Set literal. Go: map[T]bool{...}, JS: new Set([...])."""
 
     element_type: Type
+    elements: list[Expr]
+
+
+@dataclass
+class TupleLit(Expr):
+    """Tuple literal. Go: anonymous struct or multiple values."""
+
     elements: list[Expr]
 
 
@@ -673,13 +665,6 @@ class StructLit(Expr):
 
 
 @dataclass
-class TupleLit(Expr):
-    """Tuple literal."""
-
-    elements: list[Expr]
-
-
-@dataclass
 class StringConcat(Expr):
     """String concatenation. Go: +, Rust: format!."""
 
@@ -688,7 +673,7 @@ class StringConcat(Expr):
 
 @dataclass
 class StringFormat(Expr):
-    """Format string. Go: fmt.Sprintf, Rust: format!, C: snprintf."""
+    """Format string. Go: fmt.Sprintf, Rust: format!."""
 
     template: str
     args: list[Expr]
@@ -759,6 +744,7 @@ class StructInfo:
     methods: dict[str, FuncInfo] = field(default_factory=dict)
     is_node: bool = False  # True if implements Node interface
     bases: list[str] = field(default_factory=list)
+    init_params: list[str] = field(default_factory=list)  # __init__ param order
 
 
 @dataclass
@@ -788,80 +774,4 @@ class ParamInfo:
     name: str
     typ: Type
     has_default: bool = False
-
-
-# ============================================================
-# FRONTEND / BACKEND INTERFACES
-# ============================================================
-
-
-class Frontend:
-    """Frontend: Python AST → IR.
-
-    Responsibilities:
-        - Type inference from annotations and usage patterns
-        - Symbol resolution (build SymbolTable)
-        - Scope analysis for variable hoisting
-        - Ownership analysis (mark Pointer.owned for Rust/C)
-        - Method resolution (fill MethodCall.receiver_type)
-        - Nil analysis (x is None → IsNil)
-        - Truthiness analysis (if items: → if len(items) > 0)
-        - Type narrowing (isinstance → TypeSwitch)
-    """
-
-    def transpile(self, source: str) -> Module:
-        """Parse Python source and produce IR Module."""
-        raise NotImplementedError
-
-
-class Backend:
-    """Backend: IR → target code.
-
-    Responsibilities (syntax only):
-        - Name conversion (snake_case → camelCase/PascalCase)
-        - Syntax emission (IR nodes → target syntax)
-        - Target idioms (error handling, etc.)
-        - Formatting (indentation, line breaks)
-
-    Backends should be ~500-800 lines, purely mechanical.
-    """
-
-    def emit(self, module: Module) -> str:
-        """Emit target language code from IR Module."""
-        raise NotImplementedError
-
-
-class GoBackend(Backend):
-    """Emit Go code from IR."""
-
-    pass
-
-
-class TsBackend(Backend):
-    """Emit TypeScript code from IR. Use tsc to produce .js + .d.ts."""
-
-    pass
-
-
-class RustBackend(Backend):
-    """Emit Rust code from IR.
-
-    Special handling:
-        - Arena allocation for AST nodes
-        - Lifetime parameter 'arena on all AST types
-        - bumpalo::Bump for allocation
-    """
-
-    pass
-
-
-class CBackend(Backend):
-    """Emit C code from IR.
-
-    Special handling:
-        - Arena allocation for AST nodes
-        - Strings as ptr+len instead of null-terminated
-        - Type-specific collection generation
-    """
-
-    pass
+    default_value: "Expr | None" = None  # IR expression for default value

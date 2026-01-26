@@ -6,6 +6,11 @@ from tests.fixture import make_fixture
 EXPECTED = """\
 const EOF: number = -1;
 
+interface Scanner {
+  peek(): number;
+  advance(): void;
+}
+
 class Token {
   kind: string;
   text: string;

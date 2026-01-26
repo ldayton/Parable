@@ -27,6 +27,7 @@ from src.ir import (
     Function,
     If,
     Index,
+    InterfaceDef,
     # Expressions
     IntLit,
     IsNil,
@@ -37,6 +38,7 @@ from src.ir import (
     Match,
     MatchCase,
     MethodCall,
+    MethodSig,
     # Declarations
     Module,
     NilLit,
@@ -94,6 +96,15 @@ def make_fixture() -> Module:
         typ=INT,
         value=IntLit(value=-1, typ=INT, loc=L),
         loc=L,
+    )
+
+    # --- Interface: Scanner (exercises InterfaceDef) ---
+    scanner_iface = InterfaceDef(
+        name="Scanner",
+        methods=[
+            MethodSig(name="peek", params=[], ret=INT),
+            MethodSig(name="advance", params=[], ret=VOID),
+        ],
     )
 
     # --- Struct: Token ---
@@ -1005,6 +1016,7 @@ def make_fixture() -> Module:
     return Module(
         name="fixture",
         structs=[token_struct, lexer_struct],
+        interfaces=[scanner_iface],
         functions=[
             is_space_func,
             tokenize_func,

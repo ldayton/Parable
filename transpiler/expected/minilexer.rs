@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::collections::{HashMap, HashSet};
 
 const EOF: i64 = -1;
@@ -135,7 +137,7 @@ fn default_kinds() -> HashMap<String, i64> {
 }
 
 fn scoped_work(x: i64) -> i64 {
-    let mut result: i64 = 0;
+    let result: i64;
     {
         let temp: i64 = x * 2;
         result = temp + 1;
@@ -157,7 +159,7 @@ fn safe_tokenize(source: String) -> Vec<Token> {
     let _result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         tokens = tokenize(source);
     }));
-    if let Err(e) = _result {
+    if let Err(_e) = _result {
         tokens = vec![];
     }
     tokens
@@ -212,6 +214,6 @@ fn identity_str(s: &str) -> &str {
     s
 }
 
-fn accept_union(obj: (Token, Lexer)) -> bool {
+fn accept_union(_obj: (Token, Lexer)) -> bool {
     true
 }

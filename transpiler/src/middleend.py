@@ -2,11 +2,14 @@
 
 Annotations added:
     VarDecl.is_reassigned: bool  - variable is assigned after its declaration
+    VarDecl.assignment_count: int - number of assignments after declaration
+    VarDecl.initial_value_unused: bool - initial value overwritten before any read
     Param.is_modified: bool      - parameter is assigned/mutated in function body
     Param.is_unused: bool        - parameter is never referenced in function body
     Assign.is_declaration: bool  - first assignment to a new variable
     TupleAssign.is_declaration: bool - first assignment to new variables
     TryCatch.hoisted_vars: list[tuple[str, Type | None]] - variables needing hoisting
+    TryCatch.catch_var_unused: bool - catch variable is never referenced
     If.hoisted_vars: list[tuple[str, Type | None]] - variables needing hoisting from branches
 """
 
@@ -43,6 +46,7 @@ from src.ir import (
 def analyze(module: Module) -> None:
     """Run all analysis passes, annotating IR nodes in place."""
     _analyze_reassignments(module)
+    _analyze_initial_value_usage(module)
     _analyze_hoisting_all(module)
 
 
@@ -212,6 +216,7 @@ def _analyze_function(func: Function) -> None:
     def mark_reassigned(name: str) -> None:
         if name in declared:
             declared[name].is_reassigned = True
+            declared[name].assignment_count += 1
         elif name in params:
             params[name].is_modified = True
 
@@ -241,6 +246,7 @@ def _analyze_function(func: Function) -> None:
             local_assigned = set()
         if isinstance(stmt, VarDecl):
             stmt.is_reassigned = False
+            stmt.assignment_count = 0
             declared[stmt.name] = stmt
             local_assigned.add(stmt.name)  # Add to branch-local, not global
             if stmt.value:
@@ -358,6 +364,232 @@ def _analyze_function(func: Function) -> None:
     for p in func.params:
         if p.name not in used_vars:
             p.is_unused = True
+
+
+# ============================================================
+# INITIAL VALUE USAGE ANALYSIS
+# ============================================================
+
+
+def _analyze_initial_value_usage(module: Module) -> None:
+    """Find VarDecls where initial value is overwritten before any read."""
+    for func in module.functions:
+        _analyze_initial_value_in_function(func)
+    for struct in module.structs:
+        for method in struct.methods:
+            _analyze_initial_value_in_function(method)
+
+
+def _analyze_initial_value_in_function(func: Function) -> None:
+    """Analyze a function for unused initial values."""
+    _analyze_initial_value_in_stmts(func.body)
+
+
+def _analyze_initial_value_in_stmts(stmts: list[Stmt]) -> None:
+    """Analyze statements for VarDecls with unused initial values."""
+    for i, stmt in enumerate(stmts):
+        if isinstance(stmt, VarDecl) and stmt.value is not None:
+            stmt.initial_value_unused = _is_written_before_read(stmt.name, stmts[i + 1:])
+        # Recurse into nested structures
+        if isinstance(stmt, If):
+            _analyze_initial_value_in_stmts(stmt.then_body)
+            _analyze_initial_value_in_stmts(stmt.else_body)
+        elif isinstance(stmt, While):
+            _analyze_initial_value_in_stmts(stmt.body)
+        elif isinstance(stmt, ForRange):
+            _analyze_initial_value_in_stmts(stmt.body)
+        elif isinstance(stmt, ForClassic):
+            _analyze_initial_value_in_stmts(stmt.body)
+        elif isinstance(stmt, Block):
+            _analyze_initial_value_in_stmts(stmt.body)
+        elif isinstance(stmt, TryCatch):
+            _analyze_initial_value_in_stmts(stmt.body)
+            _analyze_initial_value_in_stmts(stmt.catch_body)
+            # Check if catch variable is used
+            if stmt.catch_var:
+                used = _collect_used_vars(stmt.catch_body)
+                stmt.catch_var_unused = stmt.catch_var not in used
+            else:
+                stmt.catch_var_unused = True
+        elif isinstance(stmt, (Match, TypeSwitch)):
+            for case in stmt.cases:
+                _analyze_initial_value_in_stmts(case.body)
+            _analyze_initial_value_in_stmts(stmt.default)
+
+
+def _is_written_before_read(name: str, stmts: list[Stmt]) -> bool:
+    """Check if variable is assigned before any read in statement sequence.
+
+    Returns True if the first access to `name` is a write (assignment).
+    Returns False if the first access is a read, or if there's no access.
+    """
+    for stmt in stmts:
+        result = _first_access_type(name, stmt)
+        if result == "read":
+            return False
+        if result == "write":
+            return True
+    return False
+
+
+def _first_access_type(name: str, stmt: Stmt) -> str | None:
+    """Determine if first access to `name` in stmt is 'read', 'write', or None."""
+    if isinstance(stmt, VarDecl):
+        if stmt.value and _expr_reads(name, stmt.value):
+            return "read"
+        return None
+    elif isinstance(stmt, Assign):
+        # Check RHS first (read), then LHS (write)
+        if _expr_reads(name, stmt.value):
+            return "read"
+        if isinstance(stmt.target, VarLV) and stmt.target.name == name:
+            return "write"
+        # Check for reads in complex lvalues
+        if _lvalue_reads(name, stmt.target):
+            return "read"
+        return None
+    elif isinstance(stmt, OpAssign):
+        # OpAssign reads before writing (x += 1 reads x)
+        if isinstance(stmt.target, VarLV) and stmt.target.name == name:
+            return "read"
+        if _expr_reads(name, stmt.value):
+            return "read"
+        if _lvalue_reads(name, stmt.target):
+            return "read"
+        return None
+    elif isinstance(stmt, TupleAssign):
+        if _expr_reads(name, stmt.value):
+            return "read"
+        for target in stmt.targets:
+            if isinstance(target, VarLV) and target.name == name:
+                return "write"
+        return None
+    elif isinstance(stmt, ExprStmt):
+        if _expr_reads(name, stmt.expr):
+            return "read"
+        return None
+    elif isinstance(stmt, Return):
+        if stmt.value and _expr_reads(name, stmt.value):
+            return "read"
+        return None
+    elif isinstance(stmt, Block):
+        # Blocks execute sequentially
+        for s in stmt.body:
+            result = _first_access_type(name, s)
+            if result:
+                return result
+        return None
+    elif isinstance(stmt, If):
+        # Condition is always evaluated
+        if _expr_reads(name, stmt.cond):
+            return "read"
+        # Branches: conservative - if either branch reads first, consider it a read
+        # Only return "write" if BOTH branches write first (guaranteed write)
+        then_result = _first_access_in_stmts(name, stmt.then_body)
+        else_result = _first_access_in_stmts(name, stmt.else_body)
+        if then_result == "read" or else_result == "read":
+            return "read"
+        if then_result == "write" and else_result == "write":
+            return "write"
+        return None
+    elif isinstance(stmt, While):
+        if _expr_reads(name, stmt.cond):
+            return "read"
+        # Loop body might not execute, so can't guarantee write
+        result = _first_access_in_stmts(name, stmt.body)
+        if result == "read":
+            return "read"
+        return None
+    elif isinstance(stmt, ForRange):
+        if _expr_reads(name, stmt.iterable):
+            return "read"
+        result = _first_access_in_stmts(name, stmt.body)
+        if result == "read":
+            return "read"
+        return None
+    elif isinstance(stmt, ForClassic):
+        if stmt.init:
+            result = _first_access_type(name, stmt.init)
+            if result:
+                return result
+        if stmt.cond and _expr_reads(name, stmt.cond):
+            return "read"
+        return None
+    elif isinstance(stmt, TryCatch):
+        # Try body might partially execute
+        result = _first_access_in_stmts(name, stmt.body)
+        if result == "read":
+            return "read"
+        # Catch body might execute
+        catch_result = _first_access_in_stmts(name, stmt.catch_body)
+        if catch_result == "read":
+            return "read"
+        return None
+    return None
+
+
+def _first_access_in_stmts(name: str, stmts: list[Stmt]) -> str | None:
+    """Find first access type in a list of statements."""
+    for stmt in stmts:
+        result = _first_access_type(name, stmt)
+        if result:
+            return result
+    return None
+
+
+def _expr_reads(name: str, expr) -> bool:
+    """Check if expression reads the variable."""
+    if expr is None:
+        return False
+    if isinstance(expr, Var):
+        return expr.name == name
+    # Check all expression children
+    for attr in ('obj', 'left', 'right', 'operand', 'cond', 'then_expr', 'else_expr',
+                 'expr', 'index', 'low', 'high', 'ptr', 'value', 'message', 'pos',
+                 'iterable', 'target', 'inner', 'on_type', 'length', 'capacity'):
+        if hasattr(expr, attr) and _expr_reads(name, getattr(expr, attr)):
+            return True
+    if hasattr(expr, 'args'):
+        for arg in expr.args:
+            if _expr_reads(name, arg):
+                return True
+    if hasattr(expr, 'elements'):
+        for elem in expr.elements:
+            if _expr_reads(name, elem):
+                return True
+    if hasattr(expr, 'parts'):
+        for part in expr.parts:
+            if _expr_reads(name, part):
+                return True
+    if hasattr(expr, 'entries'):
+        entries = expr.entries
+        if isinstance(entries, dict):
+            for v in entries.values():
+                if _expr_reads(name, v):
+                    return True
+        else:
+            for item in entries:
+                if isinstance(item, tuple) and len(item) == 2:
+                    if _expr_reads(name, item[1]):
+                        return True
+    if hasattr(expr, 'fields') and isinstance(expr.fields, dict):
+        for v in expr.fields.values():
+            if _expr_reads(name, v):
+                return True
+    return False
+
+
+def _lvalue_reads(name: str, lv) -> bool:
+    """Check if lvalue reads the variable (e.g., arr[i] reads arr and i)."""
+    if isinstance(lv, VarLV):
+        return False  # Simple var assignment doesn't read
+    elif isinstance(lv, IndexLV):
+        return _expr_reads(name, lv.obj) or _expr_reads(name, lv.index)
+    elif isinstance(lv, FieldLV):
+        return _expr_reads(name, lv.obj)
+    elif isinstance(lv, DerefLV):
+        return _expr_reads(name, lv.ptr)
+    return False
 
 
 # ============================================================

@@ -654,7 +654,11 @@ class CBackend:
                 if catch_body:
                     self._line("/* catch (not supported) */")
             case Raise(message=message):
-                self._line(f"PARABLE_PANIC({self._expr(message)});")
+                if isinstance(message, StringLit):
+                    escaped = message.value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+                    self._line(f'PARABLE_PANIC("{escaped}");')
+                else:
+                    self._line(f"PARABLE_PANIC({self._expr(message)});")
             case SoftFail():
                 self._line("return NULL;")
             case _:

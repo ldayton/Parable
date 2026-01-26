@@ -167,7 +167,7 @@ TokenSlice tokenize(String source) {
         Token* tok = result.f0;
         bool ok = result.f1;
         if (!ok) {
-            PARABLE_PANIC(String_new("unexpected character"));
+            PARABLE_PANIC("unexpected character");
         }
         TokenSlice_append(&tokens, tok);
     }

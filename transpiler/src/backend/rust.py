@@ -106,6 +106,8 @@ class RustBackend:
             self.lines.append("")
 
     def _emit_module(self, module: Module) -> None:
+        self._line("#![allow(dead_code)]")
+        self._line()
         self._line("use std::collections::{HashMap, HashSet};")
         need_blank = True
         if module.constants:
@@ -212,7 +214,8 @@ class RustBackend:
         for p in params:
             typ = self._type(p.typ)
             mut = "mut " if getattr(p, 'is_modified', False) else ""
-            parts.append(f"{mut}{to_snake(p.name)}: {typ}")
+            prefix = "_" if getattr(p, 'is_unused', False) else ""
+            parts.append(f"{mut}{prefix}{to_snake(p.name)}: {typ}")
         return ", ".join(parts)
 
     def _method_params(self, params: list, receiver: Receiver | None) -> str:
@@ -224,7 +227,8 @@ class RustBackend:
                 parts.append("&self")
         for p in params:
             typ = self._type(p.typ)
-            parts.append(f"{to_snake(p.name)}: {typ}")
+            prefix = "_" if getattr(p, 'is_unused', False) else ""
+            parts.append(f"{prefix}{to_snake(p.name)}: {typ}")
         return ", ".join(parts)
 
     def _trait_params(self, params: list) -> str:
@@ -313,8 +317,17 @@ class RustBackend:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value, mutable=mutable):
                 rust_type = self._type(typ)
-                mut = "mut " if getattr(stmt, 'is_reassigned', False) else ""
-                if value is not None:
+                # When initial value is unused, first assignment is initialization, not mutation
+                # So mut is only needed if assigned more than once after that
+                initial_unused = getattr(stmt, 'initial_value_unused', False)
+                if initial_unused:
+                    needs_mut = getattr(stmt, 'assignment_count', 0) > 1
+                else:
+                    needs_mut = getattr(stmt, 'is_reassigned', False)
+                mut = "mut " if needs_mut else ""
+                if initial_unused:
+                    self._line(f"let {mut}{to_snake(name)}: {rust_type};")
+                elif value is not None:
                     val = self._expr(value)
                     self._line(f"let {mut}{to_snake(name)}: {rust_type} = {val};")
                 else:
@@ -399,7 +412,8 @@ class RustBackend:
                 self.indent -= 1
                 self._line("}")
             case TryCatch(body=body, catch_var=catch_var, catch_body=catch_body, reraise=reraise):
-                self._emit_try_catch(body, catch_var, catch_body, reraise)
+                catch_var_unused = getattr(stmt, 'catch_var_unused', False)
+                self._emit_try_catch(body, catch_var, catch_body, reraise, catch_var_unused)
             case Raise(error_type=error_type, message=message, pos=pos):
                 # For string literals, emit panic!("message") directly
                 if isinstance(message, StringLit):
@@ -524,6 +538,7 @@ class RustBackend:
         catch_var: str | None,
         catch_body: list[Stmt],
         reraise: bool,
+        catch_var_unused: bool = False,
     ) -> None:
         self._line("let _result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {")
         self.indent += 1
@@ -531,7 +546,11 @@ class RustBackend:
             self._emit_stmt(s)
         self.indent -= 1
         self._line("}));")
-        var = to_snake(catch_var) if catch_var else "_e"
+        if catch_var:
+            prefix = "_" if catch_var_unused else ""
+            var = f"{prefix}{to_snake(catch_var)}"
+        else:
+            var = "_e"
         self._line(f"if let Err({var}) = _result {{")
         self.indent += 1
         for s in catch_body:

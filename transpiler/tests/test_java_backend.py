@@ -75,9 +75,9 @@ final class FixtureFunctions {
         return ((ch == 32) || (ch == 10));
     }
 
-    static ArrayList<Token> tokenize(String source) {
+    static List<Token> tokenize(String source) {
         Lexer lx = new Lexer(source, 0, null);
-        ArrayList<Token> tokens = new ArrayList<Token>();
+        List<Token> tokens = new ArrayList<Token>();
         while ((lx.peek() != Constants.EOF)) {
             int ch = lx.peek();
             if (isSpace(ch)) {
@@ -95,7 +95,7 @@ final class FixtureFunctions {
         return tokens;
     }
 
-    static int countWords(ArrayList<Token> tokens) {
+    static int countWords(List<Token> tokens) {
         int count = 0;
         for (Token tok : tokens) {
             if (tok.kind.equals("word")) {
@@ -109,7 +109,7 @@ final class FixtureFunctions {
         return tok.kind + ":" + tok.text;
     }
 
-    static Token findToken(ArrayList<Token> tokens, String kind) {
+    static Token findToken(List<Token> tokens, String kind) {
         for (Token tok : tokens) {
             if (tok.kind.equals(kind)) {
                 return tok;
@@ -118,7 +118,7 @@ final class FixtureFunctions {
         return null;
     }
 
-    static String exampleNilCheck(ArrayList<Token> tokens) {
+    static String exampleNilCheck(List<Token> tokens) {
         Token tok = findToken(tokens, "word");
         if ((tok == null)) {
             return "";
@@ -126,7 +126,7 @@ final class FixtureFunctions {
         return tok.text;
     }
 
-    static int sumPositions(ArrayList<Token> tokens) {
+    static int sumPositions(List<Token> tokens) {
         int sum = 0;
         for (int i = 0; (i < tokens.size()); i++) {
             sum = (sum + tokens.get(i).pos);
@@ -134,7 +134,7 @@ final class FixtureFunctions {
         return sum;
     }
 
-    static int firstWordPos(ArrayList<Token> tokens) {
+    static int firstWordPos(List<Token> tokens) {
         int pos = -1;
         for (Token tok : tokens) {
             if (tok.kind.equals("word")) {
@@ -149,7 +149,7 @@ final class FixtureFunctions {
         return ((a > b) ? a : b);
     }
 
-    static HashMap<String, Integer> defaultKinds() {
+    static Map<String, Integer> defaultKinds() {
         return new HashMap<String, Integer>(Map.of("word", 1, "num", 2, "op", 3));
     }
 
@@ -176,8 +176,8 @@ final class FixtureFunctions {
         }
     }
 
-    static ArrayList<Token> safeTokenize(String source) {
-        ArrayList<Token> tokens = new ArrayList<Token>();
+    static List<Token> safeTokenize(String source) {
+        List<Token> tokens = new ArrayList<Token>();
         try {
             tokens = tokenize(source);
         } catch (Exception e) {
@@ -194,13 +194,13 @@ final class FixtureFunctions {
         return String.format("Token(%s, %s, %s)", tok.kind, tok.text, tok.pos);
     }
 
-    static void setFirstKind(ArrayList<Token> tokens, String kind) {
-        if ((tokens.size() > 0)) {
+    static void setFirstKind(List<Token> tokens, String kind) {
+        if (!tokens.isEmpty()) {
             tokens.set(0, new Token(kind, "", 0));
         }
     }
 
-    static ArrayList<Integer> makeIntSlice(int n) {
+    static List<Integer> makeIntSlice(int n) {
         return new ArrayList<Integer>(n);
     }
 
@@ -208,7 +208,7 @@ final class FixtureFunctions {
         return (double) (n);
     }
 
-    static HashSet<String> knownKinds() {
+    static Set<String> knownKinds() {
         return new HashSet<String>(Arrays.asList("word", "num", "op"));
     }
 
@@ -216,7 +216,7 @@ final class FixtureFunctions {
         return Token.empty();
     }
 
-    static HashMap<String, Integer> newKindMap() {
+    static Map<String, Integer> newKindMap() {
         return new HashMap<String, Integer>();
     }
 
@@ -224,7 +224,7 @@ final class FixtureFunctions {
         return arr[0];
     }
 
-    static Token maybeGet(ArrayList<Token> tokens, int idx) {
+    static Token maybeGet(List<Token> tokens, int idx) {
         if ((idx >= tokens.size())) {
             return null;
         }

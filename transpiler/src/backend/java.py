@@ -602,6 +602,15 @@ class JavaBackend:
                 return f"{type_name}.{_to_camel(method)}({args_str})"
             case BinaryOp(op=op, left=left, right=right):
                 java_op = _binary_op(op)
+                # Detect len(x) > 0 -> !x.isEmpty(), len(x) == 0 -> x.isEmpty()
+                if isinstance(left, Len) and isinstance(right, IntLit) and right.value == 0:
+                    inner_str = self._expr(left.expr)
+                    if java_op == ">" or java_op == "!=":
+                        return f"!{inner_str}.isEmpty()"
+                    if java_op == "==":
+                        return f"{inner_str}.isEmpty()"
+                    if java_op == "<=":
+                        return f"{inner_str}.isEmpty()"
                 left_str = self._expr(left)
                 right_str = self._expr(right)
                 # String comparison needs .equals()
@@ -787,16 +796,16 @@ class JavaBackend:
                 return _primitive_type(kind)
             case Slice(element=element):
                 elem = _box_type(self._type(element))
-                return f"ArrayList<{elem}>"
+                return f"List<{elem}>"
             case Array(element=element, size=size):
                 return f"{self._type(element)}[]"
             case Map(key=key, value=value):
                 kt = _box_type(self._type(key))
                 vt = _box_type(self._type(value))
-                return f"HashMap<{kt}, {vt}>"
+                return f"Map<{kt}, {vt}>"
             case Set(element=element):
                 et = _box_type(self._type(element))
-                return f"HashSet<{et}>"
+                return f"Set<{et}>"
             case Tuple(elements=elements):
                 # Use generated record type
                 return self._tuple_record_name(typ)

@@ -8,10 +8,10 @@ module Fixture
   EOF = -1
 
   module Scanner
-    def peek()
+    def peek
       raise NotImplementedError
     end
-    def advance()
+    def advance
       raise NotImplementedError
     end
   end
@@ -26,7 +26,7 @@ module Fixture
     end
 
     def is_word
-      return (@kind == "word")
+      @kind == "word"
     end
   end
 
@@ -40,10 +40,10 @@ module Fixture
     end
 
     def peek
-      if (@pos >= @source.length)
+      if @pos >= @source.length
         return EOF
       end
-      return @source[@pos]
+      @source[@pos]
     end
 
     def advance
@@ -52,25 +52,25 @@ module Fixture
 
     def scan_word
       start = @pos
-      while ((self.peek != EOF) && !is_space(self.peek))
+      while self.peek != EOF && !is_space(self.peek)
         self.advance
       end
-      if (@pos == start)
+      if @pos == start
         return [Token.new, false]
       end
       text = @source[start...@pos]
-      return [Token.new("word", text, start), true]
+      [Token.new("word", text, start), true]
     end
   end
 
   def self.is_space(ch)
-    return ((ch == 32) || (ch == 10))
+    ch == 32 || ch == 10
   end
 
   def self.tokenize(source)
     lx = Lexer.new(source, 0, nil)
     tokens = []
-    while (lx.peek != EOF)
+    while lx.peek != EOF
       ch = lx.peek
       if is_space(ch)
         lx.advance
@@ -84,30 +84,30 @@ module Fixture
       end
       tokens.push(tok)
     end
-    return tokens
+    tokens
   end
 
   def self.count_words(tokens)
     count = 0
     tokens.each do |tok|
-      if (tok.kind == "word")
+      if tok.kind == "word"
         count += 1
       end
     end
-    return count
+    count
   end
 
   def self.format_token(tok)
-    return tok.kind + ":" + tok.text
+    tok.kind + ":" + tok.text
   end
 
   def self.find_token(tokens, kind)
     tokens.each do |tok|
-      if (tok.kind == kind)
+      if tok.kind == kind
         return tok
       end
     end
-    return nil
+    nil
   end
 
   def self.example_nil_check(tokens)
@@ -115,55 +115,55 @@ module Fixture
     if tok.nil?
       return ""
     end
-    return tok.text
+    tok.text
   end
 
   def self.sum_positions(tokens)
     sum = 0
     i = 0
-    while (i < tokens.length)
-      sum = (sum + tokens[i].pos)
-      i = (i + 1)
+    while i < tokens.length
+      sum = sum + tokens[i].pos
+      i = i + 1
     end
-    return sum
+    sum
   end
 
   def self.first_word_pos(tokens)
     pos = -1
     tokens.each do |tok|
-      if (tok.kind == "word")
+      if tok.kind == "word"
         pos = tok.pos
         break
       end
     end
-    return pos
+    pos
   end
 
   def self.max_int(a, b)
-    return ((a > b) ? a : b)
+    a > b ? a : b
   end
 
-  def self.default_kinds()
-    return {"word" => 1, "num" => 2, "op" => 3}
+  def self.default_kinds
+    {"word" => 1, "num" => 2, "op" => 3}
   end
 
   def self.scoped_work(x)
     result = 0
-    temp = (x * 2)
-    result = (temp + 1)
-    return result
+    temp = x * 2
+    result = temp + 1
+    result
   end
 
   def self.kind_priority(kind)
     case kind
     when "word"
-      return 1
+      1
     when "num", "float"
-      return 2
+      2
     when "op"
-      return 3
+      3
     else
-      return 0
+      0
     end
   end
 
@@ -174,52 +174,52 @@ module Fixture
     rescue => e
       tokens = []
     end
-    return tokens
+    tokens
   end
 
-  def self.pi()
-    return 3.14159
+  def self.pi
+    3.14159
   end
 
   def self.describe_token(tok)
-    return "Token(#{tok.kind}, #{tok.text}, #{tok.pos})"
+    "Token(#{tok.kind}, #{tok.text}, #{tok.pos})"
   end
 
   def self.set_first_kind(tokens, kind)
-    if (tokens.length > 0)
+    if tokens.length > 0
       tokens[0] = Token.new(kind, "", 0)
     end
   end
 
   def self.make_int_slice(n)
-    return Array.new(n)
+    Array.new(n)
   end
 
   def self.int_to_float(n)
-    return n.to_f
+    n.to_f
   end
 
-  def self.known_kinds()
-    return Set.new(["word", "num", "op"])
+  def self.known_kinds
+    Set.new(["word", "num", "op"])
   end
 
-  def self.call_static()
-    return Token.empty
+  def self.call_static
+    Token.empty
   end
 
-  def self.new_kind_map()
-    return {}
+  def self.new_kind_map
+    {}
   end
 
   def self.get_array_first(arr)
-    return arr[0]
+    arr[0]
   end
 
   def self.maybe_get(tokens, idx)
-    if (idx >= tokens.length)
+    if idx >= tokens.length
       return nil
     end
-    return tokens[idx]
+    tokens[idx]
   end
 
   def self.set_via_ptr(ptr, val)
@@ -227,11 +227,11 @@ module Fixture
   end
 
   def self.identity_str(s)
-    return s
+    s
   end
 
   def self.accept_union(obj)
-    return true
+    true
   end
 end"""
 

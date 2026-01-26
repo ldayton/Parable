@@ -137,7 +137,10 @@ class RubyBackend:
         for method in iface.methods:
             params = ", ".join(_to_snake(p.name) for p in method.params)
             name = _to_snake(method.name)
-            self._line(f"def {name}({params})")
+            if params:
+                self._line(f"def {name}({params})")
+            else:
+                self._line(f"def {name}")
             self.indent += 1
             self._line("raise NotImplementedError")
             self.indent -= 1
@@ -175,12 +178,14 @@ class RubyBackend:
     def _emit_function(self, func: Function) -> None:
         params = ", ".join(_to_snake(p.name) for p in func.params)
         name = _to_snake(func.name)
-        self._line(f"def self.{name}({params})")
+        if params:
+            self._line(f"def self.{name}({params})")
+        else:
+            self._line(f"def self.{name}")
         self.indent += 1
         if not func.body:
             self._line("raise NotImplementedError")
-        for stmt in func.body:
-            self._emit_stmt(stmt)
+        self._emit_body(func.body)
         self.indent -= 1
         self._line("end")
 
@@ -196,11 +201,28 @@ class RubyBackend:
         self.indent += 1
         if not func.body:
             self._line("raise NotImplementedError")
-        for stmt in func.body:
-            self._emit_stmt(stmt)
+        self._emit_body(func.body)
         self.indent -= 1
         self._line("end")
         self.receiver_name = None
+
+    def _emit_body(self, body: list[Stmt]) -> None:
+        """Emit function body with implicit return for last statement."""
+        if not body:
+            return
+        for stmt in body[:-1]:
+            self._emit_stmt(stmt)
+        last = body[-1]
+        if isinstance(last, Return) and last.value is not None:
+            if isinstance(last.value, TupleLit):
+                elements = ", ".join(self._expr(e) for e in last.value.elements)
+                self._line(f"[{elements}]")
+            else:
+                self._line(self._expr(last.value))
+        elif isinstance(last, Return) and last.value is None:
+            pass  # Implicit nil return
+        else:
+            self._emit_stmt(last)
 
     def _emit_stmt(self, stmt: Stmt) -> None:
         match stmt:
@@ -308,16 +330,28 @@ class RubyBackend:
             patterns = ", ".join(self._expr(p) for p in case.patterns)
             self._line(f"when {patterns}")
             self.indent += 1
-            for s in case.body:
-                self._emit_stmt(s)
+            self._emit_case_body(case.body)
             self.indent -= 1
         if default:
             self._line("else")
             self.indent += 1
-            for s in default:
-                self._emit_stmt(s)
+            self._emit_case_body(default)
             self.indent -= 1
         self._line("end")
+
+    def _emit_case_body(self, body: list[Stmt]) -> None:
+        """Emit case body with implicit return for last statement."""
+        if not body:
+            return
+        for stmt in body[:-1]:
+            self._emit_stmt(stmt)
+        last = body[-1]
+        if isinstance(last, Return) and last.value is not None:
+            self._line(self._expr(last.value))
+        elif isinstance(last, Return) and last.value is None:
+            self._line("nil")
+        else:
+            self._emit_stmt(last)
 
     def _emit_for_range(
         self,
@@ -449,11 +483,11 @@ class RubyBackend:
                 ruby_op = _binary_op(op)
                 left_str = self._expr(left)
                 right_str = self._expr(right)
-                return f"({left_str} {ruby_op} {right_str})"
+                return f"{left_str} {ruby_op} {right_str}"
             case UnaryOp(op=op, operand=operand):
                 return f"{op}{self._expr(operand)}"
             case Ternary(cond=cond, then_expr=then_expr, else_expr=else_expr):
-                return f"({self._expr(cond)} ? {self._expr(then_expr)} : {self._expr(else_expr)})"
+                return f"{self._expr(cond)} ? {self._expr(then_expr)} : {self._expr(else_expr)}"
             case Cast(expr=inner, to_type=to_type):
                 return self._cast(inner, to_type)
             case TypeAssert(expr=inner, asserted=asserted, safe=safe):

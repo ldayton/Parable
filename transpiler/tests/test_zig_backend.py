@@ -112,8 +112,8 @@ pub fn sum_positions(tokens: ArrayList(Token)) i64 {
     var sum: i64 = 0;
     var i: i64 = 0;
     while (@intCast(i) < tokens.items.len) {
-        sum = sum + tokens.items[@intCast(i)].pos;
-        i = i + 1;
+        sum += tokens.items[@intCast(i)].pos;
+        i += 1;
     }
     return sum;
 }
@@ -134,7 +134,7 @@ pub fn max_int(a: i64, b: i64) i64 {
 }
 
 pub fn default_kinds() std.StringHashMap(i64) {
-    return std.StringHashMap(i64).init(allocator);
+    return blk: { var m = std.StringHashMap(i64).init(allocator); m.put("word", 1) catch unreachable; m.put("num", 2) catch unreachable; m.put("op", 3) catch unreachable; break :blk m; };
 }
 
 pub fn scoped_work(x: i64) i64 {
@@ -184,11 +184,11 @@ pub fn make_int_slice(n: i64) ArrayList(i64) {
 }
 
 pub fn int_to_float(n: i64) f64 {
-    return @floatCast(n);
+    return @floatFromInt(n);
 }
 
-pub fn known_kinds() std.AutoHashMap([]const u8, void) {
-    return std.AutoHashMap([]const u8, void).init(allocator);
+pub fn known_kinds() std.StringHashMap(void) {
+    return blk: { var s = std.StringHashMap(void).init(allocator); s.put("word", {}) catch unreachable; s.put("num", {}) catch unreachable; s.put("op", {}) catch unreachable; break :blk s; };
 }
 
 pub fn call_static() Token {

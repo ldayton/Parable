@@ -225,6 +225,19 @@ class ZigBackend:
                     self._line(f"{keyword} {_to_snake(name)}: {zig_type} = {default};")
             case Assign(target=target, value=value):
                 lv = self._lvalue(target)
+                # Detect x = x + 1 -> x += 1 or x = x - 1 -> x -= 1
+                if isinstance(target, VarLV) and isinstance(value, BinaryOp):
+                    if isinstance(value.left, Var) and value.left.name == target.name:
+                        if value.op == "+" and isinstance(value.right, IntLit) and value.right.value == 1:
+                            self._line(f"{lv} += 1;")
+                            return
+                        if value.op == "-" and isinstance(value.right, IntLit) and value.right.value == 1:
+                            self._line(f"{lv} -= 1;")
+                            return
+                        # General case: x = x op y -> x op= y
+                        if value.op in ("+", "-", "*", "/"):
+                            self._line(f"{lv} {value.op}= {self._expr(value.right)};")
+                            return
                 val = self._expr(value)
                 self._line(f"{lv} = {val};")
             case OpAssign(target=target, op=op, value=value):
@@ -572,12 +585,20 @@ class ZigBackend:
             case MapLit(entries=entries, key_type=key_type, value_type=value_type):
                 kt = self._type(key_type)
                 vt = self._type(value_type)
-                if kt == "[]const u8":
-                    return f"std.StringHashMap({vt}).init(allocator)"
-                return f"std.AutoHashMap({kt}, {vt}).init(allocator)"
+                map_type = f"std.StringHashMap({vt})" if kt == "[]const u8" else f"std.AutoHashMap({kt}, {vt})"
+                if not entries:
+                    return f"{map_type}.init(allocator)"
+                # Use block expression to populate map
+                puts = " ".join(f"m.put({self._expr(k)}, {self._expr(v)}) catch unreachable;" for k, v in entries)
+                return f"blk: {{ var m = {map_type}.init(allocator); {puts} break :blk m; }}"
             case SetLit(elements=elements, element_type=element_type):
                 et = self._type(element_type)
-                return f"std.AutoHashMap({et}, void).init(allocator)"
+                set_type = f"std.StringHashMap(void)" if et == "[]const u8" else f"std.AutoHashMap({et}, void)"
+                if not elements:
+                    return f"{set_type}.init(allocator)"
+                # Use block expression to populate set
+                puts = " ".join(f"s.put({self._expr(e)}, {{}}) catch unreachable;" for e in elements)
+                return f"blk: {{ var s = {set_type}.init(allocator); {puts} break :blk s; }}"
             case StructLit(struct_name=struct_name, fields=fields):
                 if not fields:
                     return f"{struct_name}{{}}"
@@ -621,11 +642,14 @@ class ZigBackend:
     def _cast(self, inner: Expr, to_type: Type) -> str:
         inner_str = self._expr(inner)
         zig_type = self._type(to_type)
-        # Zig uses @intCast, @floatCast, etc.
+        # Zig uses @intCast, @floatFromInt, etc.
         if isinstance(to_type, Primitive):
             if to_type.kind == "int":
                 return f"@intCast({inner_str})"
             if to_type.kind == "float":
+                # Int to float uses @floatFromInt
+                if hasattr(inner, 'typ') and isinstance(inner.typ, Primitive) and inner.typ.kind == "int":
+                    return f"@floatFromInt({inner_str})"
                 return f"@floatCast({inner_str})"
             if to_type.kind == "byte":
                 return f"@intCast({inner_str})"
@@ -680,7 +704,10 @@ class ZigBackend:
                     return f"std.StringHashMap({vt})"
                 return f"std.AutoHashMap({kt}, {vt})"
             case Set(element=element):
-                return f"std.AutoHashMap({self._type(element)}, void)"
+                et = self._type(element)
+                if et == "[]const u8":
+                    return "std.StringHashMap(void)"
+                return f"std.AutoHashMap({et}, void)"
             case Tuple(elements=elements):
                 # Use f0, f1, etc. as field names for tuple structs
                 parts = ", ".join(f"f{i}: {self._type(e)}" for i, e in enumerate(elements))

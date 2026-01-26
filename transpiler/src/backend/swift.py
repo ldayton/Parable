@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from src.backend.util import escape_string, to_camel, to_screaming_snake
 from src.ir import (
     Array,
     Assign,
@@ -128,7 +129,7 @@ class SwiftBackend:
     def _emit_constant(self, const: Constant) -> None:
         typ = self._type(const.typ)
         val = self._expr(const.value)
-        name = _to_screaming_snake(const.name)
+        name = to_screaming_snake(const.name)
         self._line(f"static let {name}: {typ} = {val}")
 
     def _emit_interface(self, iface: InterfaceDef) -> None:
@@ -137,7 +138,7 @@ class SwiftBackend:
         for method in iface.methods:
             params = self._params(method.params)
             ret = self._type(method.ret)
-            name = _to_camel(method.name)
+            name = to_camel(method.name)
             if ret == "Void":
                 self._line(f"func {name}({params})")
             else:
@@ -166,25 +167,25 @@ class SwiftBackend:
         if not struct.fields:
             return
         params = ", ".join(
-            f"{_to_camel(f.name)}: {self._type(f.typ)}" for f in struct.fields
+            f"{to_camel(f.name)}: {self._type(f.typ)}" for f in struct.fields
         )
         self._line(f"init({params}) {{")
         self.indent += 1
         for f in struct.fields:
-            name = _to_camel(f.name)
+            name = to_camel(f.name)
             self._line(f"self.{name} = {name}")
         self.indent -= 1
         self._line("}")
 
     def _emit_field(self, fld: Field) -> None:
         typ = self._type(fld.typ)
-        self._line(f"var {_to_camel(fld.name)}: {typ}")
+        self._line(f"var {to_camel(fld.name)}: {typ}")
 
     def _emit_function(self, func: Function) -> None:
         self.optional_vars = set()  # Reset for each function
         params = self._params(func.params)
         ret = self._type(func.ret)
-        name = _to_camel(func.name)
+        name = to_camel(func.name)
         if ret == "Void":
             self._line(f"func {name}({params}) {{")
         else:
@@ -200,7 +201,7 @@ class SwiftBackend:
     def _emit_method(self, func: Function) -> None:
         params = self._params(func.params)
         ret = self._type(func.ret)
-        name = _to_camel(func.name)
+        name = to_camel(func.name)
         if func.receiver:
             self.receiver_name = func.receiver.name
         if ret == "Void":
@@ -220,14 +221,14 @@ class SwiftBackend:
         parts = []
         for p in params:
             typ = self._type(p.typ)
-            parts.append(f"_ {_to_camel(p.name)}: {typ}")
+            parts.append(f"_ {to_camel(p.name)}: {typ}")
         return ", ".join(parts)
 
     def _emit_stmt(self, stmt: Stmt) -> None:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value, mutable=mutable):
                 swift_type = self._type(typ)
-                var_name = _to_camel(name)
+                var_name = to_camel(name)
                 keyword = "var" if mutable else "let"
                 # Track variables declared as Optional for later unwrapping
                 if isinstance(typ, Optional):
@@ -315,7 +316,7 @@ class SwiftBackend:
         self, expr: Expr, binding: str, cases: list[TypeCase], default: list[Stmt]
     ) -> None:
         var = self._expr(expr)
-        bind_name = _to_camel(binding)
+        bind_name = to_camel(binding)
         self._line(f"let {bind_name}: Any = {var}")
         for i, case in enumerate(cases):
             type_name = self._type_name_for_check(case.typ)
@@ -360,8 +361,8 @@ class SwiftBackend:
     ) -> None:
         iter_expr = self._expr(iterable)
         if value is not None and index is not None:
-            idx = _to_camel(index)
-            val = _to_camel(value)
+            idx = to_camel(index)
+            val = to_camel(value)
             self._line(f"for ({idx}, {val}) in {iter_expr}.enumerated() {{")
             self.indent += 1
             for s in body:
@@ -369,7 +370,7 @@ class SwiftBackend:
             self.indent -= 1
             self._line("}")
         elif value is not None:
-            val = _to_camel(value)
+            val = to_camel(value)
             self._line(f"for {val} in {iter_expr} {{")
             self.indent += 1
             for s in body:
@@ -377,7 +378,7 @@ class SwiftBackend:
             self.indent -= 1
             self._line("}")
         elif index is not None:
-            idx = _to_camel(index)
+            idx = to_camel(index)
             self._line(f"for {idx} in 0..<{iter_expr}.count {{")
             self.indent += 1
             for s in body:
@@ -424,7 +425,7 @@ class SwiftBackend:
         for s in body:
             self._emit_stmt(s)
         self.indent -= 1
-        var = _to_camel(catch_var) if catch_var else "error"
+        var = to_camel(catch_var) if catch_var else "error"
         self._line(f"}} catch let {var} {{")
         self.indent += 1
         for s in catch_body:
@@ -453,17 +454,17 @@ class SwiftBackend:
                 if name == self.receiver_name:
                     return "self"
                 if name.isupper():
-                    return f"Constants.{_to_screaming_snake(name)}"
-                return _to_camel(name)
+                    return f"Constants.{to_screaming_snake(name)}"
+                return to_camel(name)
             case FieldAccess(obj=obj, field=field):
                 obj_str = self._expr(obj)
                 # Force unwrap if accessing field on optional type or optional variable
                 needs_unwrap = isinstance(obj.typ, Optional)
-                if isinstance(obj, Var) and _to_camel(obj.name) in self.optional_vars:
+                if isinstance(obj, Var) and to_camel(obj.name) in self.optional_vars:
                     needs_unwrap = True
                 if needs_unwrap:
-                    return f"{obj_str}!.{_to_camel(field)}"
-                return f"{obj_str}.{_to_camel(field)}"
+                    return f"{obj_str}!.{to_camel(field)}"
+                return f"{obj_str}.{to_camel(field)}"
             case Index(obj=obj, index=index):
                 obj_str = self._expr(obj)
                 # Swift tuples use .0, .1 syntax, not [0], [1]
@@ -475,13 +476,13 @@ class SwiftBackend:
                 return self._slice_expr(obj, low, high)
             case Call(func=func, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
-                return f"{_to_camel(func)}({args_str})"
+                return f"{to_camel(func)}({args_str})"
             case MethodCall(obj=obj, method=method, args=args, receiver_type=receiver_type):
                 return self._method_call(obj, method, args, receiver_type)
             case StaticCall(on_type=on_type, method=method, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
                 type_name = self._type_name_for_check(on_type)
-                return f"{type_name}.{_to_camel(method)}({args_str})"
+                return f"{type_name}.{to_camel(method)}({args_str})"
             case BinaryOp(op=op, left=left, right=right):
                 swift_op = _binary_op(op)
                 left_str = self._expr(left)
@@ -539,7 +540,7 @@ class SwiftBackend:
             case StructLit(struct_name=struct_name, fields=fields):
                 if not fields:
                     return f"{struct_name}()"
-                args = ", ".join(f"{_to_camel(k)}: {self._expr(v)}" for k, v in fields.items())
+                args = ", ".join(f"{to_camel(k)}: {self._expr(v)}" for k, v in fields.items())
                 return f"{struct_name}({args})"
             case TupleLit(elements=elements):
                 elems = ", ".join(self._expr(e) for e in elements)
@@ -583,8 +584,8 @@ class SwiftBackend:
             if method == "upper":
                 return f"{obj_str}.uppercased()"
         if args_str:
-            return f"{obj_str}.{_to_camel(method)}({args_str})"
-        return f"{obj_str}.{_to_camel(method)}()"
+            return f"{obj_str}.{to_camel(method)}({args_str})"
+        return f"{obj_str}.{to_camel(method)}()"
 
     def _slice_expr(self, obj: Expr, low: Expr | None, high: Expr | None) -> str:
         obj_str = self._expr(obj)
@@ -641,9 +642,9 @@ class SwiftBackend:
             case VarLV(name=name):
                 if name == self.receiver_name:
                     return "self"
-                return _to_camel(name)
+                return to_camel(name)
             case FieldLV(obj=obj, field=field):
-                return f"{self._expr(obj)}.{_to_camel(field)}"
+                return f"{self._expr(obj)}.{to_camel(field)}"
             case IndexLV(obj=obj, index=index):
                 obj_str = self._expr(obj)
                 idx_str = self._expr(index)
@@ -759,27 +760,5 @@ def _binary_op(op: str) -> str:
             return op
 
 
-def _to_camel(name: str) -> str:
-    """Convert snake_case to camelCase."""
-    if name.startswith("_"):
-        name = name[1:]
-    if "_" not in name:
-        return name[0].lower() + name[1:] if name else name
-    parts = name.split("_")
-    return parts[0].lower() + "".join(p.capitalize() for p in parts[1:])
-
-
-def _to_screaming_snake(name: str) -> str:
-    """Convert to SCREAMING_SNAKE_CASE."""
-    return name.upper()
-
-
 def _string_literal(value: str) -> str:
-    escaped = (
-        value.replace("\\", "\\\\")
-        .replace('"', '\\"')
-        .replace("\n", "\\n")
-        .replace("\t", "\\t")
-        .replace("\r", "\\r")
-    )
-    return f'"{escaped}"'
+    return f'"{escape_string(value)}"'

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from src.backend.util import escape_string, to_snake
 from src.ir import (
     Array,
     Assign,
@@ -90,7 +91,6 @@ class RustBackend:
         self.receiver_name: str | None = None
         self.current_func_ret: Type | None = None
         self.optional_vars: set[str] = set()  # Track vars declared as Optional
-        self.reassigned_vars: set[str] = set()  # Track vars that need mut
 
     def emit(self, module: Module) -> str:
         """Emit Rust code from IR Module."""
@@ -140,9 +140,9 @@ class RustBackend:
             params = self._trait_params(method.params)
             ret = self._type(method.ret)
             if ret == "()":
-                self._line(f"fn {_to_snake(method.name)}({params});")
+                self._line(f"fn {to_snake(method.name)}({params});")
             else:
-                self._line(f"fn {_to_snake(method.name)}({params}) -> {ret};")
+                self._line(f"fn {to_snake(method.name)}({params}) -> {ret};")
         self.indent -= 1
         self._line("}")
 
@@ -168,16 +168,14 @@ class RustBackend:
 
     def _emit_field(self, fld: Field) -> None:
         typ = self._type(fld.typ)
-        self._line(f"{_to_snake(fld.name)}: {typ},")
+        self._line(f"{to_snake(fld.name)}: {typ},")
 
     def _emit_function(self, func: Function) -> None:
-        modified_params = self._find_modified_params(func.body, {p.name for p in func.params})
-        params = self._params(func.params, modified_params)
+        params = self._params(func.params)
         ret = self._type(func.ret)
-        name = _to_snake(func.name)
+        name = to_snake(func.name)
         self.current_func_ret = func.ret
         self.optional_vars = set()
-        self.reassigned_vars = self._find_reassigned_vars(func.body)
         if ret == "()":
             self._line(f"fn {name}({params}) {{")
         else:
@@ -190,17 +188,15 @@ class RustBackend:
         self._line("}")
         self.current_func_ret = None
         self.optional_vars = set()
-        self.reassigned_vars = set()
 
     def _emit_method(self, func: Function) -> None:
-        params = self._method_params(func.params, func.receiver, func.body)
+        params = self._method_params(func.params, func.receiver)
         ret = self._type(func.ret)
-        name = _to_snake(func.name)
+        name = to_snake(func.name)
         if func.receiver:
             self.receiver_name = func.receiver.name
         self.current_func_ret = func.ret
         self.optional_vars = set()
-        self.reassigned_vars = self._find_reassigned_vars(func.body)
         if ret == "()":
             self._line(f"fn {name}({params}) {{")
         else:
@@ -214,160 +210,33 @@ class RustBackend:
         self.receiver_name = None
         self.current_func_ret = None
         self.optional_vars = set()
-        self.reassigned_vars = set()
 
-    def _params(self, params: list, modified_params: set[str] | None = None) -> str:
+    def _params(self, params: list) -> str:
         parts = []
-        modified_params = modified_params or set()
         for p in params:
             typ = self._type(p.typ)
-            # Add mut if parameter is modified in function body
-            mut = "mut " if p.name in modified_params else ""
-            parts.append(f"{mut}{_to_snake(p.name)}: {typ}")
+            mut = "mut " if getattr(p, 'is_modified', False) else ""
+            parts.append(f"{mut}{to_snake(p.name)}: {typ}")
         return ", ".join(parts)
 
-    def _method_params(self, params: list, receiver: Receiver | None, body: list[Stmt] | None = None) -> str:
+    def _method_params(self, params: list, receiver: Receiver | None) -> str:
         parts = []
         if receiver:
-            # Only use &mut self if receiver is explicitly mutable or body modifies self
-            needs_mut = receiver.mutable
-            if body and not needs_mut:
-                # Check if any statement modifies self
-                modified = self._find_modified_params(body, {receiver.name})
-                needs_mut = receiver.name in modified
-            if needs_mut:
+            if receiver.mutable:
                 parts.append("&mut self")
             else:
                 parts.append("&self")
         for p in params:
             typ = self._type(p.typ)
-            parts.append(f"{_to_snake(p.name)}: {typ}")
+            parts.append(f"{to_snake(p.name)}: {typ}")
         return ", ".join(parts)
 
     def _trait_params(self, params: list) -> str:
         parts = ["&self"]
         for p in params:
             typ = self._type(p.typ)
-            parts.append(f"{_to_snake(p.name)}: {typ}")
+            parts.append(f"{to_snake(p.name)}: {typ}")
         return ", ".join(parts)
-
-    def _find_reassigned_vars(self, body: list[Stmt]) -> set[str]:
-        """Find variables that need mut in Rust (reassigned or have mutating methods called)."""
-        declared: set[str] = set()
-        needs_mut: set[str] = set()
-        def check_expr(expr: Expr) -> None:
-            """Check if expression involves mutable method calls."""
-            if isinstance(expr, MethodCall):
-                # Method calls on a var may need mut (conservative: assume they do)
-                if isinstance(expr.obj, Var) and expr.obj.name in declared:
-                    needs_mut.add(expr.obj.name)
-                check_expr(expr.obj)
-                for arg in expr.args:
-                    check_expr(arg)
-            elif isinstance(expr, Call):
-                for arg in expr.args:
-                    check_expr(arg)
-            elif isinstance(expr, BinaryOp):
-                check_expr(expr.left)
-                check_expr(expr.right)
-            elif isinstance(expr, UnaryOp):
-                check_expr(expr.operand)
-        def check_stmt(stmt: Stmt) -> None:
-            if isinstance(stmt, VarDecl):
-                declared.add(stmt.name)
-                if stmt.value:
-                    check_expr(stmt.value)
-            elif isinstance(stmt, (Assign, OpAssign)):
-                target = stmt.target
-                if isinstance(target, VarLV) and target.name in declared:
-                    needs_mut.add(target.name)
-                if hasattr(stmt, 'value'):
-                    check_expr(stmt.value)
-            elif isinstance(stmt, ExprStmt):
-                check_expr(stmt.expr)
-            elif isinstance(stmt, Return) and stmt.value:
-                check_expr(stmt.value)
-            elif isinstance(stmt, If):
-                check_expr(stmt.cond)
-                for s in stmt.then_body:
-                    check_stmt(s)
-                for s in (stmt.else_body or []):
-                    check_stmt(s)
-            elif isinstance(stmt, While):
-                check_expr(stmt.cond)
-                for s in stmt.body:
-                    check_stmt(s)
-            elif isinstance(stmt, ForRange):
-                for s in stmt.body:
-                    check_stmt(s)
-            elif isinstance(stmt, ForClassic):
-                if stmt.init:
-                    check_stmt(stmt.init)
-                if stmt.cond:
-                    check_expr(stmt.cond)
-                for s in stmt.body:
-                    check_stmt(s)
-                if stmt.post:
-                    check_stmt(stmt.post)
-            elif isinstance(stmt, Block):
-                for s in stmt.body:
-                    check_stmt(s)
-            elif isinstance(stmt, TryCatch):
-                for s in stmt.body:
-                    check_stmt(s)
-                for s in stmt.catch_body:
-                    check_stmt(s)
-        for stmt in body:
-            check_stmt(stmt)
-        return needs_mut
-
-    def _find_modified_params(self, body: list[Stmt], param_names: set[str]) -> set[str]:
-        """Find parameters that are modified (assigned to) in the function body."""
-        modified = set()
-        def check_lvalue(lv: LValue) -> None:
-            if isinstance(lv, VarLV) and lv.name in param_names:
-                modified.add(lv.name)
-            elif isinstance(lv, IndexLV):
-                # If indexing into a param, the param is modified
-                if isinstance(lv.obj, Var) and lv.obj.name in param_names:
-                    modified.add(lv.obj.name)
-            elif isinstance(lv, FieldLV):
-                if isinstance(lv.obj, Var) and lv.obj.name in param_names:
-                    modified.add(lv.obj.name)
-            elif isinstance(lv, DerefLV):
-                # If dereferencing a param pointer, the param is modified
-                if isinstance(lv.ptr, Var) and lv.ptr.name in param_names:
-                    modified.add(lv.ptr.name)
-        def check_stmt(stmt: Stmt) -> None:
-            if isinstance(stmt, Assign):
-                check_lvalue(stmt.target)
-            elif isinstance(stmt, OpAssign):
-                check_lvalue(stmt.target)
-            elif isinstance(stmt, If):
-                for s in stmt.then_body:
-                    check_stmt(s)
-                for s in (stmt.else_body or []):
-                    check_stmt(s)
-            elif isinstance(stmt, While):
-                for s in stmt.body:
-                    check_stmt(s)
-            elif isinstance(stmt, ForRange):
-                for s in stmt.body:
-                    check_stmt(s)
-            elif isinstance(stmt, ForClassic):
-                for s in stmt.body:
-                    check_stmt(s)
-            elif isinstance(stmt, Block):
-                for s in stmt.body:
-                    check_stmt(s)
-            elif isinstance(stmt, TryCatch):
-                for s in stmt.body:
-                    check_stmt(s)
-                for s in stmt.catch_body:
-                    check_stmt(s)
-        for stmt in body:
-            check_stmt(stmt)
-        return modified
 
     def _emit_stmts(self, body: list[Stmt]) -> None:
         """Emit statements with tuple destructuring optimization."""
@@ -435,10 +304,10 @@ class RustBackend:
                 return 0
             if stmt.value.index.value != j:
                 return 0
-            bindings.append((stmt.name, stmt.name in self.reassigned_vars))
+            bindings.append((stmt.name, getattr(stmt, 'is_reassigned', False)))
         # All checks passed - emit destructuring
-        muts = ["mut " if needs_mut else "" for _, needs_mut in bindings]
-        names = [_to_snake(name) for name, _ in bindings]
+        muts = ["mut " if is_reassigned else "" for _, is_reassigned in bindings]
+        names = [to_snake(name) for name, _ in bindings]
         binding_str = ", ".join(f"{m}{n}" for m, n in zip(muts, names))
         val_expr = self._expr(first.value)
         self._line(f"let ({binding_str}) = {val_expr};")
@@ -448,18 +317,16 @@ class RustBackend:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value, mutable=mutable):
                 rust_type = self._type(typ)
-                # Only add mut if variable is actually reassigned
-                needs_mut = name in self.reassigned_vars
-                mut = "mut " if needs_mut else ""
+                mut = "mut " if getattr(stmt, 'is_reassigned', False) else ""
                 # Track variables declared as Optional
                 if isinstance(typ, Optional):
                     self.optional_vars.add(name)
                 if value is not None:
                     val = self._expr(value)
-                    self._line(f"let {mut}{_to_snake(name)}: {rust_type} = {val};")
+                    self._line(f"let {mut}{to_snake(name)}: {rust_type} = {val};")
                 else:
                     default = self._default_value(typ)
-                    self._line(f"let {mut}{_to_snake(name)}: {rust_type} = {default};")
+                    self._line(f"let {mut}{to_snake(name)}: {rust_type} = {default};")
             case Assign(target=target, value=value):
                 lv = self._lvalue(target)
                 # Detect x = x + y pattern and emit x += y
@@ -554,7 +421,7 @@ class RustBackend:
         for i, case in enumerate(cases):
             type_name = self._type_name_for_check(case.typ)
             keyword = "if" if i == 0 else "} else if"
-            self._line(f"{keyword} let Some({_to_snake(binding)}) = {var}.downcast_ref::<{type_name}>() {{")
+            self._line(f"{keyword} let Some({to_snake(binding)}) = {var}.downcast_ref::<{type_name}>() {{")
             self.indent += 1
             for s in case.body:
                 self._emit_stmt(s)
@@ -619,11 +486,11 @@ class RustBackend:
     ) -> None:
         iter_expr = self._expr(iterable)
         if index is not None and value is not None:
-            self._line(f"for ({_to_snake(index)}, {_to_snake(value)}) in {iter_expr}.iter().enumerate() {{")
+            self._line(f"for ({to_snake(index)}, {to_snake(value)}) in {iter_expr}.iter().enumerate() {{")
         elif value is not None:
-            self._line(f"for {_to_snake(value)} in {iter_expr}.iter() {{")
+            self._line(f"for {to_snake(value)} in {iter_expr}.iter() {{")
         elif index is not None:
-            self._line(f"for {_to_snake(index)} in 0..{iter_expr}.len() {{")
+            self._line(f"for {to_snake(index)} in 0..{iter_expr}.len() {{")
         else:
             self._line(f"for _ in {iter_expr}.iter() {{")
         self.indent += 1
@@ -664,7 +531,7 @@ class RustBackend:
             self._emit_stmt(s)
         self.indent -= 1
         self._line("}));")
-        var = _to_snake(catch_var) if catch_var else "_e"
+        var = to_snake(catch_var) if catch_var else "_e"
         self._line(f"if let Err({var}) = _result {{")
         self.indent += 1
         for s in catch_body:
@@ -695,13 +562,13 @@ class RustBackend:
                 # Don't snake_case constants (all caps)
                 if name.isupper():
                     return name
-                return _to_snake(name)
+                return to_snake(name)
             case FieldAccess(obj=obj, field=field):
                 obj_expr = self._expr(obj)
                 # Unwrap if accessing field on an Optional variable
                 if isinstance(obj, Var) and obj.name in self.optional_vars:
                     obj_expr = f"{obj_expr}.as_ref().unwrap()"
-                field_access = f"{obj_expr}.{_to_snake(field)}"
+                field_access = f"{obj_expr}.{to_snake(field)}"
                 # Clone String fields accessed from references
                 if (isinstance(obj, Var) and obj.name in self.optional_vars and
                     hasattr(expr, 'typ') and isinstance(expr.typ, Primitive) and expr.typ.kind == "string"):
@@ -728,13 +595,13 @@ class RustBackend:
                 return self._slice_expr(obj, low, high)
             case Call(func=func, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
-                return f"{_to_snake(func)}({args_str})"
+                return f"{to_snake(func)}({args_str})"
             case MethodCall(obj=obj, method=method, args=args, receiver_type=receiver_type):
                 return self._method_call(obj, method, args, receiver_type)
             case StaticCall(on_type=on_type, method=method, args=args):
                 type_name = self._type_name_for_check(on_type)
                 # Map common static methods to Rust equivalents
-                rust_method = _to_snake(method)
+                rust_method = to_snake(method)
                 if rust_method == "empty" and not args:
                     rust_method = "default"
                 args_str = ", ".join(self._expr(a) for a in args)
@@ -820,9 +687,9 @@ class RustBackend:
                 # Use field init shorthand when field name matches variable name
                 parts = []
                 for k, v in fields.items():
-                    field_name = _to_snake(k)
+                    field_name = to_snake(k)
                     val_str = self._expr(v)
-                    if isinstance(v, Var) and _to_snake(v.name) == field_name:
+                    if isinstance(v, Var) and to_snake(v.name) == field_name:
                         parts.append(field_name)
                     else:
                         parts.append(f"{field_name}: {val_str}")
@@ -858,7 +725,7 @@ class RustBackend:
                 return f"{self._expr(obj)}.push({args_str})"
             if method == "pop" and not args:
                 return f"{self._expr(obj)}.pop().unwrap()"
-        return f"{self._expr(obj)}.{_to_snake(method)}({args_str})"
+        return f"{self._expr(obj)}.{to_snake(method)}({args_str})"
 
     def _slice_expr(self, obj: Expr, low: Expr | None, high: Expr | None) -> str:
         obj_str = self._expr(obj)
@@ -892,9 +759,9 @@ class RustBackend:
             case VarLV(name=name):
                 if name == self.receiver_name:
                     return "self"
-                return _to_snake(name)
+                return to_snake(name)
             case FieldLV(obj=obj, field=field):
-                return f"{self._expr(obj)}.{_to_snake(field)}"
+                return f"{self._expr(obj)}.{to_snake(field)}"
             case IndexLV(obj=obj, index=index):
                 idx_expr = self._expr(index)
                 if isinstance(index, IntLit):
@@ -1011,24 +878,10 @@ def _binary_op(op: str) -> str:
             return op
 
 
-def _to_snake(name: str) -> str:
-    """Convert camelCase/PascalCase to snake_case."""
-    if "_" in name:
-        return name.lower()
-    result = []
-    for i, c in enumerate(name):
-        if c.isupper() and i > 0:
-            result.append("_")
-        result.append(c.lower())
-    return "".join(result)
-
-
 def _string_literal(value: str) -> str:
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
-    return f'"{escaped}".to_string()'
+    return f'"{escape_string(value)}".to_string()'
 
 
 def _string_literal_bare(value: str) -> str:
     """String literal without .to_string() - for comparisons with &str."""
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
-    return f'"{escaped}"'
+    return f'"{escape_string(value)}"'

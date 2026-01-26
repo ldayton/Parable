@@ -367,11 +367,37 @@ func _strIsLower(s string) bool {
         if isinstance(stmt.expr, MethodCall) and stmt.expr.method == "append" and stmt.expr.args:
             obj = self._emit_expr(stmt.expr.obj)
             arg = self._emit_expr(stmt.expr.args[0])
-            # Check if receiver is a pointer to slice - need to dereference
-            if isinstance(stmt.expr.receiver_type, Pointer) and isinstance(stmt.expr.receiver_type.target, Slice):
-                self._line(f"*{obj} = append(*{obj}, {arg})")
+            # Check if appending pointer to slice of values - dereference
+            arg_type = stmt.expr.args[0].typ if hasattr(stmt.expr.args[0], 'typ') else None
+            recv_type = stmt.expr.receiver_type
+            # Handle pointer-to-slice receiver
+            if isinstance(recv_type, Pointer) and isinstance(recv_type.target, Slice):
+                elem_type = recv_type.target.element
+                if (isinstance(arg_type, Pointer) and isinstance(elem_type, StructRef) and
+                    isinstance(arg_type.target, StructRef) and arg_type.target.name == elem_type.name):
+                    self._line(f"*{obj} = append(*{obj}, *{arg})")
+                else:
+                    self._line(f"*{obj} = append(*{obj}, {arg})")
+            # Handle regular slice receiver
+            elif isinstance(recv_type, Slice):
+                elem_type = recv_type.element
+                if (isinstance(arg_type, Pointer) and isinstance(elem_type, StructRef) and
+                    isinstance(arg_type.target, StructRef) and arg_type.target.name == elem_type.name):
+                    self._line(f"{obj} = append({obj}, *{arg})")
+                else:
+                    self._line(f"{obj} = append({obj}, {arg})")
             else:
                 self._line(f"{obj} = append({obj}, {arg})")
+            return
+        # Special handling for extend - needs to be an assignment in Go
+        if isinstance(stmt.expr, MethodCall) and stmt.expr.method == "extend" and stmt.expr.args:
+            obj = self._emit_expr(stmt.expr.obj)
+            arg = self._emit_expr(stmt.expr.args[0])
+            # Check if receiver is a pointer to slice - need to dereference
+            if isinstance(stmt.expr.receiver_type, Pointer) and isinstance(stmt.expr.receiver_type.target, Slice):
+                self._line(f"*{obj} = append(*{obj}, {arg}...)")
+            else:
+                self._line(f"{obj} = append({obj}, {arg}...)")
             return
         expr = self._emit_expr(stmt.expr)
         # Filter out placeholder expressions (after camelCase conversion)
@@ -570,7 +596,12 @@ func _strIsLower(s string) bool {
 
     def _emit_stmt_Raise(self, stmt: Raise) -> None:
         msg = self._emit_expr(stmt.message)
-        self._line(f'panic({msg})')
+        # Include position in panic if available (non-zero/non-literal-0)
+        pos = self._emit_expr(stmt.pos)
+        if pos != "0":
+            self._line(f'panic(fmt.Sprintf("%s at position %d", {msg}, {pos}))')
+        else:
+            self._line(f'panic({msg})')
 
     def _emit_stmt_SoftFail(self, stmt: SoftFail) -> None:
         self._line("return nil")
@@ -699,7 +730,17 @@ func _strIsLower(s string) bool {
         if isinstance(expr.receiver_type, Slice):
             if method == "append" and expr.args:
                 arg = self._emit_expr(expr.args[0])
+                # If appending pointer to slice of values, dereference
+                arg_type = expr.args[0].typ if hasattr(expr.args[0], 'typ') else None
+                elem_type = expr.receiver_type.element
+                if (isinstance(arg_type, Pointer) and isinstance(elem_type, StructRef) and
+                    isinstance(arg_type.target, StructRef) and arg_type.target.name == elem_type.name):
+                    return f"append({obj}, *{arg})"
                 return f"append({obj}, {arg})"
+            if method == "extend" and expr.args:
+                # list.extend(other) -> append(list, other...)
+                arg = self._emit_expr(expr.args[0])
+                return f"append({obj}, {arg}...)"
             if method == "pop" and not expr.args:
                 return f"{obj}[len({obj})-1]"
             if method == "copy":
@@ -915,9 +956,12 @@ func _strIsLower(s string) bool {
         if isinstance(typ, Pointer):
             return f"*{self._type_to_go(typ.target)}"
         if isinstance(typ, Optional):
-            # Go uses nil for optionals on pointer types
+            # Go uses nil for optionals - interfaces and pointers can already be nil
             inner = self._type_to_go(typ.inner)
             if inner.startswith("*"):
+                return inner
+            # Interface types can already be nil, don't wrap in pointer
+            if isinstance(typ.inner, Interface):
                 return inner
             return f"*{inner}"
         if isinstance(typ, StructRef):

@@ -3,6 +3,7 @@
 Exercises core IR constructs needed for parable.py transpilation.
 """
 
+from src.middleend import analyze
 from src.ir import (
     Array,
     BOOL,
@@ -1270,7 +1271,7 @@ def make_fixture() -> Module:
         ],
     )
 
-    return Module(
+    module = Module(
         name="fixture",
         structs=[token_struct, lexer_struct],
         interfaces=[scanner_iface],
@@ -1304,6 +1305,8 @@ def make_fixture() -> Module:
         ],
         constants=[eof_const],
     )
+    analyze(module)
+    return module
 
 
 if __name__ == "__main__":

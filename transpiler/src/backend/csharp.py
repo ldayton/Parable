@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from src.backend.util import escape_string, to_camel, to_pascal
 from src.ir import (
     Array,
     Assign,
@@ -129,7 +130,7 @@ class CSharpBackend:
     def _emit_constant(self, const: Constant) -> None:
         typ = self._type(const.typ)
         val = self._expr(const.value)
-        name = _to_pascal(const.name)
+        name = to_pascal(const.name)
         self._line(f"public const {typ} {name} = {val};")
 
     def _emit_interface(self, iface: InterfaceDef) -> None:
@@ -139,7 +140,7 @@ class CSharpBackend:
         for method in iface.methods:
             params = self._params(method.params)
             ret = self._type(method.ret)
-            name = _to_pascal(method.name)
+            name = to_pascal(method.name)
             self._line(f"{ret} {name}({params});")
         self.indent -= 1
         self._line("}")
@@ -165,25 +166,25 @@ class CSharpBackend:
         if not struct.fields:
             return
         params = ", ".join(
-            f"{self._type(f.typ)} {_to_camel(f.name)}" for f in struct.fields
+            f"{self._type(f.typ)} {to_camel(f.name)}" for f in struct.fields
         )
         self._line(f"public {struct.name}({params})")
         self._line("{")
         self.indent += 1
         for f in struct.fields:
-            camel = _to_camel(f.name)
-            pascal = _to_pascal(f.name)
+            camel = to_camel(f.name)
+            pascal = to_pascal(f.name)
             self._line(f"this.{pascal} = {camel};")
         self.indent -= 1
         self._line("}")
 
     def _emit_field(self, fld: Field) -> None:
         typ = self._type(fld.typ)
-        self._line(f"public {typ} {_to_pascal(fld.name)};")
+        self._line(f"public {typ} {to_pascal(fld.name)};")
 
     def _emit_functions_class(self, module: Module) -> None:
         """Emit free functions as static methods in a utility class."""
-        self._line(f"public static class {_to_pascal(module.name)}Functions")
+        self._line(f"public static class {to_pascal(module.name)}Functions")
         self._line("{")
         self.indent += 1
         for i, func in enumerate(module.functions):
@@ -196,7 +197,7 @@ class CSharpBackend:
     def _emit_function(self, func: Function) -> None:
         params = self._params(func.params)
         ret = self._type(func.ret)
-        name = _to_pascal(func.name)
+        name = to_pascal(func.name)
         self._line(f"public static {ret} {name}({params})")
         self._line("{")
         self.indent += 1
@@ -210,7 +211,7 @@ class CSharpBackend:
     def _emit_method(self, func: Function) -> None:
         params = self._params(func.params)
         ret = self._type(func.ret)
-        name = _to_pascal(func.name)
+        name = to_pascal(func.name)
         if func.receiver:
             self.receiver_name = func.receiver.name
         self._line(f"public {ret} {name}({params})")
@@ -228,14 +229,14 @@ class CSharpBackend:
         parts = []
         for p in params:
             typ = self._type(p.typ)
-            parts.append(f"{typ} {_to_camel(p.name)}")
+            parts.append(f"{typ} {to_camel(p.name)}")
         return ", ".join(parts)
 
     def _emit_stmt(self, stmt: Stmt) -> None:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value):
                 cs_type = self._type(typ)
-                var_name = _to_camel(name)
+                var_name = to_camel(name)
                 if value is not None:
                     val = self._expr(value)
                     self._line(f"{cs_type} {var_name} = {val};")
@@ -327,7 +328,7 @@ class CSharpBackend:
         self, expr: Expr, binding: str, cases: list[TypeCase], default: list[Stmt]
     ) -> None:
         var = self._expr(expr)
-        bind_name = _to_camel(binding)
+        bind_name = to_camel(binding)
         self._line(f"var {bind_name} = {var};")
         for i, case in enumerate(cases):
             type_name = self._type_name_for_check(case.typ)
@@ -380,8 +381,8 @@ class CSharpBackend:
     ) -> None:
         iter_expr = self._expr(iterable)
         if value is not None and index is not None:
-            idx = _to_camel(index)
-            val = _to_camel(value)
+            idx = to_camel(index)
+            val = to_camel(value)
             self._line(f"for (int {idx} = 0; {idx} < {iter_expr}.Count; {idx}++)")
             self._line("{")
             self.indent += 1
@@ -392,7 +393,7 @@ class CSharpBackend:
             self.indent -= 1
             self._line("}")
         elif value is not None:
-            val = _to_camel(value)
+            val = to_camel(value)
             elem_type = self._element_type(iterable.typ)
             self._line(f"foreach ({elem_type} {val} in {iter_expr})")
             self._line("{")
@@ -402,7 +403,7 @@ class CSharpBackend:
             self.indent -= 1
             self._line("}")
         elif index is not None:
-            idx = _to_camel(index)
+            idx = to_camel(index)
             self._line(f"for (int {idx} = 0; {idx} < {iter_expr}.Count; {idx}++)")
             self._line("{")
             self.indent += 1
@@ -441,7 +442,7 @@ class CSharpBackend:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value):
                 cs_type = self._type(typ)
-                var_name = _to_camel(name)
+                var_name = to_camel(name)
                 if value:
                     return f"{cs_type} {var_name} = {self._expr(value)}"
                 return f"{cs_type} {var_name}"
@@ -481,7 +482,7 @@ class CSharpBackend:
         self._line("}")
         # Only include exception variable if it's actually used
         if catch_var and self._var_used_in_stmts(catch_var, catch_body):
-            var = _to_camel(catch_var)
+            var = to_camel(catch_var)
             self._line(f"catch (Exception {var})")
         else:
             self._line("catch (Exception)")
@@ -552,10 +553,10 @@ class CSharpBackend:
                 if name == self.receiver_name:
                     return "this"
                 if name.isupper():
-                    return f"Constants.{_to_pascal(name)}"
-                return _to_camel(name)
+                    return f"Constants.{to_pascal(name)}"
+                return to_camel(name)
             case FieldAccess(obj=obj, field=field):
-                return f"{self._expr(obj)}.{_to_pascal(field)}"
+                return f"{self._expr(obj)}.{to_pascal(field)}"
             case Index(obj=obj, index=index):
                 obj_str = self._expr(obj)
                 if isinstance(obj.typ, Tuple) and isinstance(index, IntLit):
@@ -566,13 +567,13 @@ class CSharpBackend:
                 return self._slice_expr(obj, low, high)
             case Call(func=func, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
-                return f"{_to_pascal(func)}({args_str})"
+                return f"{to_pascal(func)}({args_str})"
             case MethodCall(obj=obj, method=method, args=args, receiver_type=receiver_type):
                 return self._method_call(obj, method, args, receiver_type)
             case StaticCall(on_type=on_type, method=method, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
                 type_name = self._type_name_for_check(on_type)
-                return f"{type_name}.{_to_pascal(method)}({args_str})"
+                return f"{type_name}.{to_pascal(method)}({args_str})"
             case BinaryOp(op=op, left=left, right=right):
                 # Idiomatic: len(x) > 0 → x.Any(), len(x) == 0 → !x.Any()
                 if isinstance(left, Len) and isinstance(right, IntLit) and right.value == 0:
@@ -689,7 +690,7 @@ class CSharpBackend:
                 return f"{obj_str}.ToLower()"
             if method == "upper":
                 return f"{obj_str}.ToUpper()"
-        return f"{obj_str}.{_to_pascal(method)}({args_str})"
+        return f"{obj_str}.{to_pascal(method)}({args_str})"
 
     def _slice_expr(self, obj: Expr, low: Expr | None, high: Expr | None) -> str:
         obj_str = self._expr(obj)
@@ -742,9 +743,9 @@ class CSharpBackend:
             case VarLV(name=name):
                 if name == self.receiver_name:
                     return "this"
-                return _to_camel(name)
+                return to_camel(name)
             case FieldLV(obj=obj, field=field):
-                return f"{self._expr(obj)}.{_to_pascal(field)}"
+                return f"{self._expr(obj)}.{to_pascal(field)}"
             case IndexLV(obj=obj, index=index):
                 obj_str = self._expr(obj)
                 idx_str = self._expr(index)
@@ -879,30 +880,5 @@ def _binary_op(op: str) -> str:
             return op
 
 
-def _to_camel(name: str) -> str:
-    """Convert snake_case to camelCase."""
-    if name.startswith("_"):
-        name = name[1:]
-    if "_" not in name:
-        return name[0].lower() + name[1:] if name else name
-    parts = name.split("_")
-    return parts[0].lower() + "".join(p.capitalize() for p in parts[1:])
-
-
-def _to_pascal(name: str) -> str:
-    """Convert snake_case to PascalCase."""
-    if name.startswith("_"):
-        name = name[1:]
-    parts = name.split("_")
-    return "".join(p.capitalize() for p in parts)
-
-
 def _string_literal(value: str) -> str:
-    escaped = (
-        value.replace("\\", "\\\\")
-        .replace('"', '\\"')
-        .replace("\n", "\\n")
-        .replace("\t", "\\t")
-        .replace("\r", "\\r")
-    )
-    return f'"{escaped}"'
+    return f'"{escape_string(value)}"'

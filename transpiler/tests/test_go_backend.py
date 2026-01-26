@@ -132,7 +132,7 @@ func Tokenize(source string) []Token {
 		tok := result.F0
 		ok := result.F1
 		if !ok {
-			panic("unexpected character")
+			panic(fmt.Sprintf("%s at position %d", "unexpected character", lx.Pos))
 		}
 		tokens = append(tokens, tok)
 	}

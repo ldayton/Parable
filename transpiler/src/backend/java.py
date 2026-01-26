@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from src.backend.util import escape_string, to_camel, to_pascal, to_screaming_snake
 from src.ir import (
     Array,
     Assign,
@@ -209,7 +210,7 @@ class JavaBackend:
     def _emit_constant(self, const: Constant) -> None:
         typ = self._type(const.typ)
         val = self._expr(const.value)
-        name = _to_screaming_snake(const.name)
+        name = to_screaming_snake(const.name)
         self._line(f"public static final {typ} {name} = {val};")
 
     def _emit_interface(self, iface: InterfaceDef) -> None:
@@ -218,7 +219,7 @@ class JavaBackend:
         for method in iface.methods:
             params = self._params(method.params)
             ret = self._type(method.ret)
-            name = _to_camel(method.name)
+            name = to_camel(method.name)
             self._line(f"{ret} {name}({params});")
         self.indent -= 1
         self._line("}")
@@ -247,25 +248,25 @@ class JavaBackend:
         if not struct.fields:
             return
         params = ", ".join(
-            f"{self._type(f.typ)} {_to_camel(f.name)}" for f in struct.fields
+            f"{self._type(f.typ)} {to_camel(f.name)}" for f in struct.fields
         )
         self._line(f"{struct.name}({params}) {{")
         self.indent += 1
         for f in struct.fields:
-            name = _to_camel(f.name)
+            name = to_camel(f.name)
             self._line(f"this.{name} = {name};")
         self.indent -= 1
         self._line("}")
 
     def _emit_field(self, fld: Field) -> None:
         typ = self._type(fld.typ)
-        self._line(f"{typ} {_to_camel(fld.name)};")
+        self._line(f"{typ} {to_camel(fld.name)};")
 
     def _emit_functions_class(self, module: Module) -> None:
         """Emit free functions as static methods in a utility class."""
-        self._line(f"final class {_to_pascal(module.name)}Functions {{")
+        self._line(f"final class {to_pascal(module.name)}Functions {{")
         self.indent += 1
-        self._line(f"private {_to_pascal(module.name)}Functions() {{}}")
+        self._line(f"private {to_pascal(module.name)}Functions() {{}}")
         self._line("")
         for i, func in enumerate(module.functions):
             if i > 0:
@@ -277,7 +278,7 @@ class JavaBackend:
     def _emit_function(self, func: Function) -> None:
         params = self._params(func.params)
         ret = self._type(func.ret)
-        name = _to_camel(func.name)
+        name = to_camel(func.name)
         self._line(f"static {ret} {name}({params}) {{")
         self.indent += 1
         if not func.body:
@@ -290,7 +291,7 @@ class JavaBackend:
     def _emit_method(self, func: Function) -> None:
         params = self._params(func.params)
         ret = self._type(func.ret)
-        name = _to_camel(func.name)
+        name = to_camel(func.name)
         if func.receiver:
             self.receiver_name = func.receiver.name
         self._line(f"{ret} {name}({params}) {{")
@@ -307,14 +308,14 @@ class JavaBackend:
         parts = []
         for p in params:
             typ = self._type(p.typ)
-            parts.append(f"{typ} {_to_camel(p.name)}")
+            parts.append(f"{typ} {to_camel(p.name)}")
         return ", ".join(parts)
 
     def _emit_stmt(self, stmt: Stmt) -> None:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value, mutable=mutable):
                 java_type = self._type(typ)
-                var_name = _to_camel(name)
+                var_name = to_camel(name)
                 if value is not None:
                     val = self._expr(value)
                     self._line(f"{java_type} {var_name} = {val};")
@@ -413,7 +414,7 @@ class JavaBackend:
         self, expr: Expr, binding: str, cases: list[TypeCase], default: list[Stmt]
     ) -> None:
         var = self._expr(expr)
-        bind_name = _to_camel(binding)
+        bind_name = to_camel(binding)
         self._line(f"Object {bind_name} = {var};")
         for i, case in enumerate(cases):
             type_name = self._type_name_for_check(case.typ)
@@ -465,8 +466,8 @@ class JavaBackend:
         iter_expr = self._expr(iterable)
         if value is not None and index is not None:
             # Need index - use traditional for loop
-            idx = _to_camel(index)
-            val = _to_camel(value)
+            idx = to_camel(index)
+            val = to_camel(value)
             self._line(f"for (int {idx} = 0; {idx} < {iter_expr}.size(); {idx}++) {{")
             self.indent += 1
             elem_type = self._element_type(iterable.typ)
@@ -476,7 +477,7 @@ class JavaBackend:
             self.indent -= 1
             self._line("}")
         elif value is not None:
-            val = _to_camel(value)
+            val = to_camel(value)
             elem_type = self._element_type(iterable.typ)
             self._line(f"for ({elem_type} {val} : {iter_expr}) {{")
             self.indent += 1
@@ -485,7 +486,7 @@ class JavaBackend:
             self.indent -= 1
             self._line("}")
         elif index is not None:
-            idx = _to_camel(index)
+            idx = to_camel(index)
             self._line(f"for (int {idx} = 0; {idx} < {iter_expr}.size(); {idx}++) {{")
             self.indent += 1
             for s in body:
@@ -521,7 +522,7 @@ class JavaBackend:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value):
                 java_type = self._type(typ)
-                var_name = _to_camel(name)
+                var_name = to_camel(name)
                 if value:
                     return f"{java_type} {var_name} = {self._expr(value)}"
                 return f"{java_type} {var_name}"
@@ -531,7 +532,7 @@ class JavaBackend:
                     if isinstance(value.right, IntLit) and value.right.value == 1:
                         if isinstance(target, VarLV) and isinstance(value.left, Var):
                             if target.name == value.left.name:
-                                return f"{_to_camel(target.name)}++"
+                                return f"{to_camel(target.name)}++"
                 return f"{self._lvalue(target)} = {self._expr(value)}"
             case OpAssign(target=target, op=op, value=value):
                 return f"{self._lvalue(target)} {op}= {self._expr(value)}"
@@ -550,7 +551,7 @@ class JavaBackend:
         for s in body:
             self._emit_stmt(s)
         self.indent -= 1
-        var = _to_camel(catch_var) if catch_var else "e"
+        var = to_camel(catch_var) if catch_var else "e"
         self._line(f"}} catch (Exception {var}) {{")
         self.indent += 1
         for s in catch_body:
@@ -579,10 +580,10 @@ class JavaBackend:
                 if name == self.receiver_name:
                     return "this"
                 if name.isupper():
-                    return f"Constants.{_to_screaming_snake(name)}"
-                return _to_camel(name)
+                    return f"Constants.{to_screaming_snake(name)}"
+                return to_camel(name)
             case FieldAccess(obj=obj, field=field):
-                return f"{self._expr(obj)}.{_to_camel(field)}"
+                return f"{self._expr(obj)}.{to_camel(field)}"
             case Index(obj=obj, index=index):
                 obj_str = self._expr(obj)
                 idx_str = self._expr(index)
@@ -611,13 +612,13 @@ class JavaBackend:
                 return self._slice_expr(obj, low, high)
             case Call(func=func, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
-                return f"{_to_camel(func)}({args_str})"
+                return f"{to_camel(func)}({args_str})"
             case MethodCall(obj=obj, method=method, args=args, receiver_type=receiver_type):
                 return self._method_call(obj, method, args, receiver_type)
             case StaticCall(on_type=on_type, method=method, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
                 type_name = self._type_name_for_check(on_type)
-                return f"{type_name}.{_to_camel(method)}({args_str})"
+                return f"{type_name}.{to_camel(method)}({args_str})"
             case BinaryOp(op=op, left=left, right=right):
                 java_op = _binary_op(op)
                 # Detect len(x) > 0 -> !x.isEmpty(), len(x) == 0 -> x.isEmpty()
@@ -737,7 +738,7 @@ class JavaBackend:
                 return f"{obj_str}.toLowerCase()"
             if method == "upper":
                 return f"{obj_str}.toUpperCase()"
-        return f"{obj_str}.{_to_camel(method)}({args_str})"
+        return f"{obj_str}.{to_camel(method)}({args_str})"
 
     def _slice_expr(self, obj: Expr, low: Expr | None, high: Expr | None) -> str:
         obj_str = self._expr(obj)
@@ -788,9 +789,9 @@ class JavaBackend:
             case VarLV(name=name):
                 if name == self.receiver_name:
                     return "this"
-                return _to_camel(name)
+                return to_camel(name)
             case FieldLV(obj=obj, field=field):
-                return f"{self._expr(obj)}.{_to_camel(field)}"
+                return f"{self._expr(obj)}.{to_camel(field)}"
             case IndexLV(obj=obj, index=index):
                 obj_str = self._expr(obj)
                 idx_str = self._expr(index)
@@ -975,35 +976,5 @@ def _is_string_type(typ: Type) -> bool:
     return False
 
 
-def _to_camel(name: str) -> str:
-    """Convert snake_case to camelCase."""
-    if name.startswith("_"):
-        name = name[1:]
-    if "_" not in name:
-        return name[0].lower() + name[1:] if name else name
-    parts = name.split("_")
-    return parts[0].lower() + "".join(p.capitalize() for p in parts[1:])
-
-
-def _to_pascal(name: str) -> str:
-    """Convert snake_case to PascalCase."""
-    if name.startswith("_"):
-        name = name[1:]
-    parts = name.split("_")
-    return "".join(p.capitalize() for p in parts)
-
-
-def _to_screaming_snake(name: str) -> str:
-    """Convert to SCREAMING_SNAKE_CASE."""
-    return name.upper()
-
-
 def _string_literal(value: str) -> str:
-    escaped = (
-        value.replace("\\", "\\\\")
-        .replace('"', '\\"')
-        .replace("\n", "\\n")
-        .replace("\t", "\\t")
-        .replace("\r", "\\r")
-    )
-    return f'"{escaped}"'
+    return f'"{escape_string(value)}"'

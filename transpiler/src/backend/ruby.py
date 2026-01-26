@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from src.backend.util import escape_string, to_pascal, to_snake
 from src.ir import (
     Array,
     Assign,
@@ -104,7 +105,7 @@ class RubyBackend:
             self.lines.append("")
 
     def _emit_module(self, module: Module) -> None:
-        module_name = _to_pascal(module.name)
+        module_name = to_pascal(module.name)
         self._line(f"module {module_name}")
         self.indent += 1
         if module.constants:
@@ -135,8 +136,8 @@ class RubyBackend:
         self._line(f"module {iface.name}")
         self.indent += 1
         for method in iface.methods:
-            params = ", ".join(_to_snake(p.name) for p in method.params)
-            name = _to_snake(method.name)
+            params = ", ".join(to_snake(p.name) for p in method.params)
+            name = to_snake(method.name)
             if params:
                 self._line(f"def {name}({params})")
             else:
@@ -153,7 +154,7 @@ class RubyBackend:
         self._line(f"class {struct.name}")
         self.indent += 1
         if struct.fields:
-            field_names = ", ".join(f":{_to_snake(f.name)}" for f in struct.fields)
+            field_names = ", ".join(f":{to_snake(f.name)}" for f in struct.fields)
             self._line(f"attr_accessor {field_names}")
             self._line("")
             self._emit_constructor(struct)
@@ -166,18 +167,18 @@ class RubyBackend:
         self.current_class = ""
 
     def _emit_constructor(self, struct: Struct) -> None:
-        params = ", ".join(_to_snake(f.name) for f in struct.fields)
+        params = ", ".join(to_snake(f.name) for f in struct.fields)
         self._line(f"def initialize({params})")
         self.indent += 1
         for f in struct.fields:
-            name = _to_snake(f.name)
+            name = to_snake(f.name)
             self._line(f"@{name} = {name}")
         self.indent -= 1
         self._line("end")
 
     def _emit_function(self, func: Function) -> None:
-        params = ", ".join(_to_snake(p.name) for p in func.params)
-        name = _to_snake(func.name)
+        params = ", ".join(to_snake(p.name) for p in func.params)
+        name = to_snake(func.name)
         if params:
             self._line(f"def self.{name}({params})")
         else:
@@ -190,8 +191,8 @@ class RubyBackend:
         self._line("end")
 
     def _emit_method(self, func: Function) -> None:
-        params = ", ".join(_to_snake(p.name) for p in func.params)
-        name = _to_snake(func.name)
+        params = ", ".join(to_snake(p.name) for p in func.params)
+        name = to_snake(func.name)
         if func.receiver:
             self.receiver_name = func.receiver.name
         if params:
@@ -227,7 +228,7 @@ class RubyBackend:
     def _emit_stmt(self, stmt: Stmt) -> None:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value):
-                var_name = _to_snake(name)
+                var_name = to_snake(name)
                 if value is not None:
                     val = self._expr(value)
                     self._line(f"{var_name} = {val}")
@@ -305,7 +306,7 @@ class RubyBackend:
         self, expr: Expr, binding: str, cases: list[TypeCase], default: list[Stmt]
     ) -> None:
         var = self._expr(expr)
-        bind_name = _to_snake(binding)
+        bind_name = to_snake(binding)
         self._line(f"{bind_name} = {var}")
         self._line(f"case {bind_name}")
         for case in cases:
@@ -362,8 +363,8 @@ class RubyBackend:
     ) -> None:
         iter_expr = self._expr(iterable)
         if value is not None and index is not None:
-            idx = _to_snake(index)
-            val = _to_snake(value)
+            idx = to_snake(index)
+            val = to_snake(value)
             self._line(f"{iter_expr}.each_with_index do |{val}, {idx}|")
             self.indent += 1
             for s in body:
@@ -371,7 +372,7 @@ class RubyBackend:
             self.indent -= 1
             self._line("end")
         elif value is not None:
-            val = _to_snake(value)
+            val = to_snake(value)
             self._line(f"{iter_expr}.each do |{val}|")
             self.indent += 1
             for s in body:
@@ -379,7 +380,7 @@ class RubyBackend:
             self.indent -= 1
             self._line("end")
         elif index is not None:
-            idx = _to_snake(index)
+            idx = to_snake(index)
             self._line(f"(0...{iter_expr}.length).each do |{idx}|")
             self.indent += 1
             for s in body:
@@ -425,7 +426,7 @@ class RubyBackend:
         for s in body:
             self._emit_stmt(s)
         self.indent -= 1
-        var = _to_snake(catch_var) if catch_var else "e"
+        var = to_snake(catch_var) if catch_var else "e"
         self._line(f"rescue => {var}")
         self.indent += 1
         for s in catch_body:
@@ -455,12 +456,12 @@ class RubyBackend:
                     return "self"
                 if name.isupper():
                     return name.upper()
-                return _to_snake(name)
+                return to_snake(name)
             case FieldAccess(obj=obj, field=field):
                 obj_str = self._expr(obj)
                 if obj_str == "self":
-                    return f"@{_to_snake(field)}"
-                return f"{obj_str}.{_to_snake(field)}"
+                    return f"@{to_snake(field)}"
+                return f"{obj_str}.{to_snake(field)}"
             case Index(obj=obj, index=index):
                 obj_str = self._expr(obj)
                 idx_str = self._expr(index)
@@ -469,7 +470,7 @@ class RubyBackend:
                 return self._slice_expr(obj, low, high)
             case Call(func=func, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
-                func_name = _to_snake(func)
+                func_name = to_snake(func)
                 return f"{func_name}({args_str})"
             case MethodCall(obj=obj, method=method, args=args, receiver_type=receiver_type):
                 return self._method_call(obj, method, args, receiver_type)
@@ -477,8 +478,8 @@ class RubyBackend:
                 args_str = ", ".join(self._expr(a) for a in args)
                 type_name = self._type_name_for_check(on_type)
                 if args_str:
-                    return f"{type_name}.{_to_snake(method)}({args_str})"
-                return f"{type_name}.{_to_snake(method)}"
+                    return f"{type_name}.{to_snake(method)}({args_str})"
+                return f"{type_name}.{to_snake(method)}"
             case BinaryOp(op=op, left=left, right=right):
                 ruby_op = _binary_op(op)
                 left_str = self._expr(left)
@@ -569,8 +570,8 @@ class RubyBackend:
             if method == "upper":
                 return f"{obj_str}.upcase"
         if args_str:
-            return f"{obj_str}.{_to_snake(method)}({args_str})"
-        return f"{obj_str}.{_to_snake(method)}"
+            return f"{obj_str}.{to_snake(method)}({args_str})"
+        return f"{obj_str}.{to_snake(method)}"
 
     def _slice_expr(self, obj: Expr, low: Expr | None, high: Expr | None) -> str:
         obj_str = self._expr(obj)
@@ -608,12 +609,12 @@ class RubyBackend:
             case VarLV(name=name):
                 if name == self.receiver_name:
                     return "self"
-                return _to_snake(name)
+                return to_snake(name)
             case FieldLV(obj=obj, field=field):
                 obj_str = self._expr(obj)
                 if obj_str == "self":
-                    return f"@{_to_snake(field)}"
-                return f"{obj_str}.{_to_snake(field)}"
+                    return f"@{to_snake(field)}"
+                return f"{obj_str}.{to_snake(field)}"
             case IndexLV(obj=obj, index=index):
                 return f"{self._expr(obj)}[{self._expr(index)}]"
             case DerefLV(ptr=ptr):
@@ -670,29 +671,5 @@ def _binary_op(op: str) -> str:
             return op
 
 
-def _to_snake(name: str) -> str:
-    """Convert camelCase to snake_case, preserve existing snake_case."""
-    if "_" in name or name.islower():
-        return name
-    import re
-    s1 = re.sub(r'(.)([A-Z][a-z]+)', r'\1_\2', name)
-    return re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
-
-
-def _to_pascal(name: str) -> str:
-    """Convert snake_case to PascalCase."""
-    if name.startswith("_"):
-        name = name[1:]
-    parts = name.split("_")
-    return "".join(p.capitalize() for p in parts)
-
-
 def _string_literal(value: str) -> str:
-    escaped = (
-        value.replace("\\", "\\\\")
-        .replace('"', '\\"')
-        .replace("\n", "\\n")
-        .replace("\t", "\\t")
-        .replace("\r", "\\r")
-    )
-    return f'"{escaped}"'
+    return f'"{escape_string(value)}"'

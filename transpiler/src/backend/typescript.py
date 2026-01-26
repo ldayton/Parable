@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from src.backend.util import escape_string
 from src.ir import (
     Array,
     Assign,
@@ -658,8 +659,7 @@ def _binary_op(op: str) -> str:
 
 
 def _string_literal(value: str) -> str:
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
-    return f'"{escaped}"'
+    return f'"{escape_string(value)}"'
 
 
 def _ends_with_return(body: list[Stmt]) -> bool:

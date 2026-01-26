@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from src.backend.util import escape_string
 from src.ir import (
     Array,
     Assign,
@@ -709,8 +710,7 @@ def _needs_parens(child_op: str, parent_op: str, is_left: bool) -> bool:
 
 
 def _string_literal(value: str) -> str:
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
-    return f'"{escaped}"'
+    return f'"{escape_string(value)}"'
 
 
 def _extract_range_pattern(

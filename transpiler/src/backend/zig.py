@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from src.backend.util import escape_string, to_snake
 from src.ir import (
     Array,
     Assign,
@@ -146,13 +147,13 @@ class ZigBackend:
 
     def _emit_field(self, fld: Field) -> None:
         typ = self._type(fld.typ)
-        self._line(f"{_to_snake(fld.name)}: {typ},")
+        self._line(f"{to_snake(fld.name)}: {typ},")
 
     def _emit_function(self, func: Function) -> None:
         self.var_types = {}  # Reset variable tracking for each function
         params = self._params(func.params)
         ret = self._type(func.ret)
-        name = _to_snake(func.name)
+        name = to_snake(func.name)
         pub = "pub " if not name.startswith("_") else ""
         if ret == "void":
             self._line(f"{pub}fn {name}({params}) void {{")
@@ -171,7 +172,7 @@ class ZigBackend:
         self.var_types = {}  # Reset variable tracking for each method
         params = self._method_params(func.params, func.receiver)
         ret = self._type(func.ret)
-        name = _to_snake(func.name)
+        name = to_snake(func.name)
         pub = "pub " if not name.startswith("_") else ""
         if func.receiver:
             self.receiver_name = func.receiver.name
@@ -192,7 +193,7 @@ class ZigBackend:
         parts = []
         for p in params:
             typ = self._type(p.typ)
-            parts.append(f"{_to_snake(p.name)}: {typ}")
+            parts.append(f"{to_snake(p.name)}: {typ}")
         return ", ".join(parts)
 
     def _method_params(self, params: list, receiver: Receiver | None) -> str:
@@ -204,7 +205,7 @@ class ZigBackend:
                 parts.append(f"self: *const {receiver.typ.name}")
         for p in params:
             typ = self._type(p.typ)
-            parts.append(f"{_to_snake(p.name)}: {typ}")
+            parts.append(f"{to_snake(p.name)}: {typ}")
         return ", ".join(parts)
 
     def _emit_stmt(self, stmt: Stmt) -> None:
@@ -217,12 +218,12 @@ class ZigBackend:
                     val = self._expr(value)
                     # Omit type when it can be inferred (simple expressions)
                     if _can_infer_type(value):
-                        self._line(f"{keyword} {_to_snake(name)} = {val};")
+                        self._line(f"{keyword} {to_snake(name)} = {val};")
                     else:
-                        self._line(f"{keyword} {_to_snake(name)}: {zig_type} = {val};")
+                        self._line(f"{keyword} {to_snake(name)}: {zig_type} = {val};")
                 else:
                     default = self._default_value(typ)
-                    self._line(f"{keyword} {_to_snake(name)}: {zig_type} = {default};")
+                    self._line(f"{keyword} {to_snake(name)}: {zig_type} = {default};")
             case Assign(target=target, value=value):
                 lv = self._lvalue(target)
                 # Detect x = x + 1 -> x += 1 or x = x - 1 -> x -= 1
@@ -318,7 +319,7 @@ class ZigBackend:
     ) -> None:
         var = self._expr(expr)
         self._line(f"// type switch on {var}")
-        self._line(f"const {_to_snake(binding)} = {var};")
+        self._line(f"const {to_snake(binding)} = {var};")
         # Zig doesn't have runtime type switching like Go, emit as if-else chain
         for i, case in enumerate(cases):
             type_name = self._type_name_for_check(case.typ)
@@ -399,11 +400,11 @@ class ZigBackend:
             iter_expr = f"{iter_expr}.items"
         if value is not None and index is not None:
             # Zig for with index requires manual tracking or enumeration
-            self._line(f"for ({iter_expr}, 0..) |{_to_snake(value)}, {_to_snake(index)}| {{")
+            self._line(f"for ({iter_expr}, 0..) |{to_snake(value)}, {to_snake(index)}| {{")
         elif value is not None:
-            self._line(f"for ({iter_expr}) |{_to_snake(value)}| {{")
+            self._line(f"for ({iter_expr}) |{to_snake(value)}| {{")
         elif index is not None:
-            self._line(f"for ({iter_expr}, 0..) |_, {_to_snake(index)}| {{")
+            self._line(f"for ({iter_expr}, 0..) |_, {to_snake(index)}| {{")
         else:
             self._line(f"for ({iter_expr}) |_| {{")
         self.indent += 1
@@ -477,7 +478,7 @@ class ZigBackend:
                     return "self"
                 if name.isupper():
                     return name
-                return _to_snake(name)
+                return to_snake(name)
             case FieldAccess(obj=obj, field=field):
                 obj_str = self._expr(obj)
                 # Unwrap optional with .? before field access
@@ -487,7 +488,7 @@ class ZigBackend:
                     is_optional = isinstance(self.var_types[obj.name], Optional)
                 if is_optional:
                     obj_str = f"{obj_str}.?"
-                return f"{obj_str}.{_to_snake(field)}"
+                return f"{obj_str}.{to_snake(field)}"
             case Index(obj=obj, index=index):
                 # Check if indexing a tuple - use field access instead
                 if isinstance(obj.typ, Tuple) and isinstance(index, IntLit):
@@ -505,13 +506,13 @@ class ZigBackend:
                 return self._slice_expr(obj, low, high)
             case Call(func=func, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
-                return f"{_to_snake(func)}({args_str})"
+                return f"{to_snake(func)}({args_str})"
             case MethodCall(obj=obj, method=method, args=args, receiver_type=receiver_type):
                 return self._method_call(obj, method, args, receiver_type)
             case StaticCall(on_type=on_type, method=method, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
                 type_name = self._type_name_for_check(on_type)
-                return f"{type_name}.{_to_snake(method)}({args_str})"
+                return f"{type_name}.{to_snake(method)}({args_str})"
             case BinaryOp(op=op, left=left, right=right):
                 zig_op = _binary_op(op)
                 # String comparison needs mem.eql
@@ -602,7 +603,7 @@ class ZigBackend:
             case StructLit(struct_name=struct_name, fields=fields):
                 if not fields:
                     return f"{struct_name}{{}}"
-                args = ", ".join(f".{_to_snake(k)} = {self._expr(v)}" for k, v in fields.items())
+                args = ", ".join(f".{to_snake(k)} = {self._expr(v)}" for k, v in fields.items())
                 return f"{struct_name}{{ {args} }}"
             case TupleLit(elements=elements):
                 # Use named fields f0, f1, etc. to match the struct type
@@ -627,7 +628,7 @@ class ZigBackend:
                 return f"{obj_str}.append({args_str}) catch unreachable"
             if method == "pop" and not args:
                 return f"{obj_str}.pop()"
-        return f"{obj_str}.{_to_snake(method)}({args_str})"
+        return f"{obj_str}.{to_snake(method)}({args_str})"
 
     def _slice_expr(self, obj: Expr, low: Expr | None, high: Expr | None) -> str:
         obj_str = self._expr(obj)
@@ -671,9 +672,9 @@ class ZigBackend:
             case VarLV(name=name):
                 if name == self.receiver_name:
                     return "self"
-                return _to_snake(name)
+                return to_snake(name)
             case FieldLV(obj=obj, field=field):
-                return f"{self._expr(obj)}.{_to_snake(field)}"
+                return f"{self._expr(obj)}.{to_snake(field)}"
             case IndexLV(obj=obj, index=index):
                 obj_str = self._expr(obj)
                 # ArrayList needs .items for indexing
@@ -810,23 +811,8 @@ def _is_string_type(typ: Type) -> bool:
     return False
 
 
-def _to_snake(name: str) -> str:
-    """Convert camelCase/PascalCase to snake_case."""
-    if name.startswith("_"):
-        name = name[1:]
-    if "_" in name:
-        return name.lower()
-    result = []
-    for i, c in enumerate(name):
-        if c.isupper() and i > 0:
-            result.append("_")
-        result.append(c.lower())
-    return "".join(result)
-
-
 def _string_literal(value: str) -> str:
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
-    return f'"{escaped}"'
+    return f'"{escape_string(value)}"'
 
 
 def _is_void_expr(expr: Expr) -> bool:

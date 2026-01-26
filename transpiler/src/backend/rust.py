@@ -88,6 +88,9 @@ class RustBackend:
         self.indent = 0
         self.lines: list[str] = []
         self.receiver_name: str | None = None
+        self.current_func_ret: Type | None = None
+        self.optional_vars: set[str] = set()  # Track vars declared as Optional
+        self.reassigned_vars: set[str] = set()  # Track vars that need mut
 
     def emit(self, module: Module) -> str:
         """Emit Rust code from IR Module."""
@@ -144,6 +147,8 @@ class RustBackend:
         self._line("}")
 
     def _emit_struct(self, struct: Struct) -> None:
+        # Add common derives for structs
+        self._line("#[derive(Clone, Default)]")
         self._line(f"struct {struct.name} {{")
         self.indent += 1
         for fld in struct.fields:
@@ -166,9 +171,13 @@ class RustBackend:
         self._line(f"{_to_snake(fld.name)}: {typ},")
 
     def _emit_function(self, func: Function) -> None:
-        params = self._params(func.params)
+        modified_params = self._find_modified_params(func.body, {p.name for p in func.params})
+        params = self._params(func.params, modified_params)
         ret = self._type(func.ret)
         name = _to_snake(func.name)
+        self.current_func_ret = func.ret
+        self.optional_vars = set()
+        self.reassigned_vars = self._find_reassigned_vars(func.body)
         if ret == "()":
             self._line(f"fn {name}({params}) {{")
         else:
@@ -176,17 +185,22 @@ class RustBackend:
         self.indent += 1
         if not func.body:
             self._line("todo!()")
-        for stmt in func.body:
-            self._emit_stmt(stmt)
+        self._emit_body(func.body)
         self.indent -= 1
         self._line("}")
+        self.current_func_ret = None
+        self.optional_vars = set()
+        self.reassigned_vars = set()
 
     def _emit_method(self, func: Function) -> None:
-        params = self._method_params(func.params, func.receiver)
+        params = self._method_params(func.params, func.receiver, func.body)
         ret = self._type(func.ret)
         name = _to_snake(func.name)
         if func.receiver:
             self.receiver_name = func.receiver.name
+        self.current_func_ret = func.ret
+        self.optional_vars = set()
+        self.reassigned_vars = self._find_reassigned_vars(func.body)
         if ret == "()":
             self._line(f"fn {name}({params}) {{")
         else:
@@ -194,23 +208,34 @@ class RustBackend:
         self.indent += 1
         if not func.body:
             self._line("todo!()")
-        for stmt in func.body:
-            self._emit_stmt(stmt)
+        self._emit_body(func.body)
         self.indent -= 1
         self._line("}")
         self.receiver_name = None
+        self.current_func_ret = None
+        self.optional_vars = set()
+        self.reassigned_vars = set()
 
-    def _params(self, params: list) -> str:
+    def _params(self, params: list, modified_params: set[str] | None = None) -> str:
         parts = []
+        modified_params = modified_params or set()
         for p in params:
             typ = self._type(p.typ)
-            parts.append(f"{_to_snake(p.name)}: {typ}")
+            # Add mut if parameter is modified in function body
+            mut = "mut " if p.name in modified_params else ""
+            parts.append(f"{mut}{_to_snake(p.name)}: {typ}")
         return ", ".join(parts)
 
-    def _method_params(self, params: list, receiver: Receiver | None) -> str:
+    def _method_params(self, params: list, receiver: Receiver | None, body: list[Stmt] | None = None) -> str:
         parts = []
         if receiver:
-            if receiver.mutable or receiver.pointer:
+            # Only use &mut self if receiver is explicitly mutable or body modifies self
+            needs_mut = receiver.mutable
+            if body and not needs_mut:
+                # Check if any statement modifies self
+                modified = self._find_modified_params(body, {receiver.name})
+                needs_mut = receiver.name in modified
+            if needs_mut:
                 parts.append("&mut self")
             else:
                 parts.append("&self")
@@ -226,11 +251,209 @@ class RustBackend:
             parts.append(f"{_to_snake(p.name)}: {typ}")
         return ", ".join(parts)
 
+    def _find_reassigned_vars(self, body: list[Stmt]) -> set[str]:
+        """Find variables that need mut in Rust (reassigned or have mutating methods called)."""
+        declared: set[str] = set()
+        needs_mut: set[str] = set()
+        def check_expr(expr: Expr) -> None:
+            """Check if expression involves mutable method calls."""
+            if isinstance(expr, MethodCall):
+                # Method calls on a var may need mut (conservative: assume they do)
+                if isinstance(expr.obj, Var) and expr.obj.name in declared:
+                    needs_mut.add(expr.obj.name)
+                check_expr(expr.obj)
+                for arg in expr.args:
+                    check_expr(arg)
+            elif isinstance(expr, Call):
+                for arg in expr.args:
+                    check_expr(arg)
+            elif isinstance(expr, BinaryOp):
+                check_expr(expr.left)
+                check_expr(expr.right)
+            elif isinstance(expr, UnaryOp):
+                check_expr(expr.operand)
+        def check_stmt(stmt: Stmt) -> None:
+            if isinstance(stmt, VarDecl):
+                declared.add(stmt.name)
+                if stmt.value:
+                    check_expr(stmt.value)
+            elif isinstance(stmt, (Assign, OpAssign)):
+                target = stmt.target
+                if isinstance(target, VarLV) and target.name in declared:
+                    needs_mut.add(target.name)
+                if hasattr(stmt, 'value'):
+                    check_expr(stmt.value)
+            elif isinstance(stmt, ExprStmt):
+                check_expr(stmt.expr)
+            elif isinstance(stmt, Return) and stmt.value:
+                check_expr(stmt.value)
+            elif isinstance(stmt, If):
+                check_expr(stmt.cond)
+                for s in stmt.then_body:
+                    check_stmt(s)
+                for s in (stmt.else_body or []):
+                    check_stmt(s)
+            elif isinstance(stmt, While):
+                check_expr(stmt.cond)
+                for s in stmt.body:
+                    check_stmt(s)
+            elif isinstance(stmt, ForRange):
+                for s in stmt.body:
+                    check_stmt(s)
+            elif isinstance(stmt, ForClassic):
+                if stmt.init:
+                    check_stmt(stmt.init)
+                if stmt.cond:
+                    check_expr(stmt.cond)
+                for s in stmt.body:
+                    check_stmt(s)
+                if stmt.post:
+                    check_stmt(stmt.post)
+            elif isinstance(stmt, Block):
+                for s in stmt.body:
+                    check_stmt(s)
+            elif isinstance(stmt, TryCatch):
+                for s in stmt.body:
+                    check_stmt(s)
+                for s in stmt.catch_body:
+                    check_stmt(s)
+        for stmt in body:
+            check_stmt(stmt)
+        return needs_mut
+
+    def _find_modified_params(self, body: list[Stmt], param_names: set[str]) -> set[str]:
+        """Find parameters that are modified (assigned to) in the function body."""
+        modified = set()
+        def check_lvalue(lv: LValue) -> None:
+            if isinstance(lv, VarLV) and lv.name in param_names:
+                modified.add(lv.name)
+            elif isinstance(lv, IndexLV):
+                # If indexing into a param, the param is modified
+                if isinstance(lv.obj, Var) and lv.obj.name in param_names:
+                    modified.add(lv.obj.name)
+            elif isinstance(lv, FieldLV):
+                if isinstance(lv.obj, Var) and lv.obj.name in param_names:
+                    modified.add(lv.obj.name)
+            elif isinstance(lv, DerefLV):
+                # If dereferencing a param pointer, the param is modified
+                if isinstance(lv.ptr, Var) and lv.ptr.name in param_names:
+                    modified.add(lv.ptr.name)
+        def check_stmt(stmt: Stmt) -> None:
+            if isinstance(stmt, Assign):
+                check_lvalue(stmt.target)
+            elif isinstance(stmt, OpAssign):
+                check_lvalue(stmt.target)
+            elif isinstance(stmt, If):
+                for s in stmt.then_body:
+                    check_stmt(s)
+                for s in (stmt.else_body or []):
+                    check_stmt(s)
+            elif isinstance(stmt, While):
+                for s in stmt.body:
+                    check_stmt(s)
+            elif isinstance(stmt, ForRange):
+                for s in stmt.body:
+                    check_stmt(s)
+            elif isinstance(stmt, ForClassic):
+                for s in stmt.body:
+                    check_stmt(s)
+            elif isinstance(stmt, Block):
+                for s in stmt.body:
+                    check_stmt(s)
+            elif isinstance(stmt, TryCatch):
+                for s in stmt.body:
+                    check_stmt(s)
+                for s in stmt.catch_body:
+                    check_stmt(s)
+        for stmt in body:
+            check_stmt(stmt)
+        return modified
+
+    def _emit_stmts(self, body: list[Stmt]) -> None:
+        """Emit statements with tuple destructuring optimization."""
+        i = 0
+        while i < len(body):
+            # Try to emit tuple destructuring for pattern: let x = tuple; let a = x.0; let b = x.1;
+            consumed = self._try_emit_tuple_destructure(body, i)
+            if consumed > 0:
+                i += consumed
+                continue
+            self._emit_stmt(body[i])
+            i += 1
+
+    def _emit_body(self, body: list[Stmt]) -> None:
+        """Emit function body, using expression return for tail position."""
+        i = 0
+        while i < len(body):
+            stmt = body[i]
+            is_last = i == len(body) - 1
+            # Try to emit tuple destructuring for pattern: let x = tuple; let a = x.0; let b = x.1;
+            consumed = self._try_emit_tuple_destructure(body, i)
+            if consumed > 0:
+                i += consumed
+                continue
+            # Use expression return for final Return statement
+            if is_last and isinstance(stmt, Return) and stmt.value is not None:
+                val_expr = self._expr(stmt.value)
+                # Wrap in Some() if returning non-Optional value in Optional function
+                if (isinstance(self.current_func_ret, Optional) and
+                    hasattr(stmt.value, 'typ') and not isinstance(stmt.value.typ, Optional)):
+                    val_expr = f"Some({val_expr}.clone())"
+                self._line(val_expr)
+            else:
+                self._emit_stmt(stmt)
+            i += 1
+
+    def _try_emit_tuple_destructure(self, body: list[Stmt], start: int) -> int:
+        """Try to emit tuple destructuring. Returns number of statements consumed, or 0."""
+        if start >= len(body):
+            return 0
+        first = body[start]
+        # Pattern: let result: (A, B) = expr; let a = result.0; let b = result.1;
+        if not isinstance(first, VarDecl):
+            return 0
+        if not isinstance(first.typ, Tuple):
+            return 0
+        tuple_var = first.name
+        tuple_len = len(first.typ.elements)
+        # Look for consecutive Index accesses on this tuple var
+        bindings = []
+        for j in range(tuple_len):
+            idx = start + 1 + j
+            if idx >= len(body):
+                return 0
+            stmt = body[idx]
+            if not isinstance(stmt, VarDecl):
+                return 0
+            if not isinstance(stmt.value, Index):
+                return 0
+            if not isinstance(stmt.value.obj, Var):
+                return 0
+            if stmt.value.obj.name != tuple_var:
+                return 0
+            if not isinstance(stmt.value.index, IntLit):
+                return 0
+            if stmt.value.index.value != j:
+                return 0
+            bindings.append((stmt.name, stmt.name in self.reassigned_vars))
+        # All checks passed - emit destructuring
+        muts = ["mut " if needs_mut else "" for _, needs_mut in bindings]
+        names = [_to_snake(name) for name, _ in bindings]
+        binding_str = ", ".join(f"{m}{n}" for m, n in zip(muts, names))
+        val_expr = self._expr(first.value)
+        self._line(f"let ({binding_str}) = {val_expr};")
+        return 1 + tuple_len  # consumed: tuple decl + all index accesses
+
     def _emit_stmt(self, stmt: Stmt) -> None:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value, mutable=mutable):
                 rust_type = self._type(typ)
-                mut = "mut " if mutable else ""
+                # Only add mut if variable is actually reassigned
+                needs_mut = name in self.reassigned_vars
+                mut = "mut " if needs_mut else ""
+                # Track variables declared as Optional
+                if isinstance(typ, Optional):
+                    self.optional_vars.add(name)
                 if value is not None:
                     val = self._expr(value)
                     self._line(f"let {mut}{_to_snake(name)}: {rust_type} = {val};")
@@ -239,6 +462,13 @@ class RustBackend:
                     self._line(f"let {mut}{_to_snake(name)}: {rust_type} = {default};")
             case Assign(target=target, value=value):
                 lv = self._lvalue(target)
+                # Detect x = x + y pattern and emit x += y
+                if isinstance(value, BinaryOp) and value.op in ("+", "-", "*", "/", "%"):
+                    if isinstance(target, VarLV) and isinstance(value.left, Var):
+                        if target.name == value.left.name:
+                            val = self._expr(value.right)
+                            self._line(f"{lv} {value.op}= {val};")
+                            return
                 val = self._expr(value)
                 self._line(f"{lv} = {val};")
             case OpAssign(target=target, op=op, value=value):
@@ -250,7 +480,12 @@ class RustBackend:
                 self._line(f"{e};")
             case Return(value=value):
                 if value is not None:
-                    self._line(f"return {self._expr(value)};")
+                    val_expr = self._expr(value)
+                    # Wrap in Some() if returning non-Optional value in Optional function
+                    if (isinstance(self.current_func_ret, Optional) and
+                        hasattr(value, 'typ') and not isinstance(value.typ, Optional)):
+                        val_expr = f"Some({val_expr}.clone())"
+                    self._line(f"return {val_expr};")
                 else:
                     self._line("return;")
             case If(cond=cond, then_body=then_body, else_body=else_body, init=init):
@@ -258,16 +493,12 @@ class RustBackend:
                     self._emit_stmt(init)
                 self._line(f"if {self._expr(cond)} {{")
                 self.indent += 1
-                if not then_body:
-                    pass
-                for s in then_body:
-                    self._emit_stmt(s)
+                self._emit_stmts(then_body)
                 self.indent -= 1
                 if else_body:
                     self._line("} else {")
                     self.indent += 1
-                    for s in else_body:
-                        self._emit_stmt(s)
+                    self._emit_stmts(else_body)
                     self.indent -= 1
                 self._line("}")
             case TypeSwitch(expr=expr, binding=binding, cases=cases, default=default):
@@ -281,8 +512,7 @@ class RustBackend:
             case While(cond=cond, body=body):
                 self._line(f"while {self._expr(cond)} {{")
                 self.indent += 1
-                for s in body:
-                    self._emit_stmt(s)
+                self._emit_stmts(body)
                 self.indent -= 1
                 self._line("}")
             case Break(label=label):
@@ -298,15 +528,19 @@ class RustBackend:
             case Block(body=body):
                 self._line("{")
                 self.indent += 1
-                for s in body:
-                    self._emit_stmt(s)
+                self._emit_stmts(body)
                 self.indent -= 1
                 self._line("}")
             case TryCatch(body=body, catch_var=catch_var, catch_body=catch_body, reraise=reraise):
                 self._emit_try_catch(body, catch_var, catch_body, reraise)
             case Raise(error_type=error_type, message=message, pos=pos):
-                msg = self._expr(message)
-                self._line(f'panic!("{{}}", {msg});')
+                # For string literals, emit panic!("message") directly
+                if isinstance(message, StringLit):
+                    escaped = message.value.replace("\\", "\\\\").replace('"', '\\"')
+                    self._line(f'panic!("{escaped}");')
+                else:
+                    msg = self._expr(message)
+                    self._line(f'panic!("{{}}", {msg});')
             case SoftFail():
                 self._line("return None;")
             case _:
@@ -342,21 +576,32 @@ class RustBackend:
         self.indent += 1
         for case in cases:
             patterns = " | ".join(self._match_pattern(p) for p in case.patterns)
-            self._line(f"{patterns} => {{")
-            self.indent += 1
-            for s in case.body:
-                self._emit_stmt(s)
-            self.indent -= 1
-            self._line("}")
+            # Use expression syntax for single-return match arms
+            if self._is_single_return(case.body):
+                val = self._expr(case.body[0].value)
+                self._line(f"{patterns} => {val},")
+            else:
+                self._line(f"{patterns} => {{")
+                self.indent += 1
+                self._emit_body(case.body)
+                self.indent -= 1
+                self._line("}")
         if default:
-            self._line("_ => {")
-            self.indent += 1
-            for s in default:
-                self._emit_stmt(s)
-            self.indent -= 1
-            self._line("}")
+            if self._is_single_return(default):
+                val = self._expr(default[0].value)
+                self._line(f"_ => {val},")
+            else:
+                self._line("_ => {")
+                self.indent += 1
+                self._emit_body(default)
+                self.indent -= 1
+                self._line("}")
         self.indent -= 1
         self._line("}")
+
+    def _is_single_return(self, body: list[Stmt]) -> bool:
+        """Check if body is a single Return statement with a value."""
+        return len(body) == 1 and isinstance(body[0], Return) and body[0].value is not None
 
     def _match_pattern(self, p: Expr) -> str:
         """Emit a match pattern (string literals without .to_string())."""
@@ -452,14 +697,33 @@ class RustBackend:
                     return name
                 return _to_snake(name)
             case FieldAccess(obj=obj, field=field):
-                return f"{self._expr(obj)}.{_to_snake(field)}"
+                obj_expr = self._expr(obj)
+                # Unwrap if accessing field on an Optional variable
+                if isinstance(obj, Var) and obj.name in self.optional_vars:
+                    obj_expr = f"{obj_expr}.as_ref().unwrap()"
+                field_access = f"{obj_expr}.{_to_snake(field)}"
+                # Clone String fields accessed from references
+                if (isinstance(obj, Var) and obj.name in self.optional_vars and
+                    hasattr(expr, 'typ') and isinstance(expr.typ, Primitive) and expr.typ.kind == "string"):
+                    field_access = f"{field_access}.clone()"
+                return field_access
             case Index(obj=obj, index=index):
                 # Tuple indexing uses .0, .1 syntax in Rust
                 if hasattr(expr, 'obj_type') and isinstance(expr.obj_type, Tuple):
                     return f"{self._expr(obj)}.{index.value}"
                 if isinstance(index, IntLit) and hasattr(obj, 'typ') and isinstance(obj.typ, Tuple):
                     return f"{self._expr(obj)}.{index.value}"
-                return f"{self._expr(obj)}[{self._expr(index)}]"
+                # String indexing returns byte as i64
+                if hasattr(obj, 'typ') and isinstance(obj.typ, Primitive) and obj.typ.kind == "string":
+                    idx_expr = self._expr(index)
+                    if isinstance(index, IntLit):
+                        return f"{self._expr(obj)}.as_bytes()[{idx_expr}] as i64"
+                    return f"{self._expr(obj)}.as_bytes()[{idx_expr} as usize] as i64"
+                # Cast index to usize for array/slice indexing
+                idx_expr = self._expr(index)
+                if isinstance(index, IntLit):
+                    return f"{self._expr(obj)}[{idx_expr}]"
+                return f"{self._expr(obj)}[{idx_expr} as usize]"
             case SliceExpr(obj=obj, low=low, high=high):
                 return self._slice_expr(obj, low, high)
             case Call(func=func, args=args):
@@ -468,10 +732,25 @@ class RustBackend:
             case MethodCall(obj=obj, method=method, args=args, receiver_type=receiver_type):
                 return self._method_call(obj, method, args, receiver_type)
             case StaticCall(on_type=on_type, method=method, args=args):
-                args_str = ", ".join(self._expr(a) for a in args)
                 type_name = self._type_name_for_check(on_type)
-                return f"{type_name}::{_to_snake(method)}({args_str})"
+                # Map common static methods to Rust equivalents
+                rust_method = _to_snake(method)
+                if rust_method == "empty" and not args:
+                    rust_method = "default"
+                args_str = ", ".join(self._expr(a) for a in args)
+                return f"{type_name}::{rust_method}({args_str})"
             case BinaryOp(op=op, left=left, right=right):
+                # Idiomatic: len(x) > 0 → !x.is_empty(), len(x) == 0 → x.is_empty()
+                if isinstance(left, Len) and isinstance(right, IntLit) and right.value == 0:
+                    inner = self._expr(left.expr)
+                    if op == ">":
+                        return f"!{inner}.is_empty()"
+                    elif op == "==":
+                        return f"{inner}.is_empty()"
+                    elif op == "!=":
+                        return f"!{inner}.is_empty()"
+                    elif op == "<=":
+                        return f"{inner}.is_empty()"
                 rust_op = _binary_op(op)
                 left_str = self._expr(left)
                 # For string equality comparisons, use bare &str literal (no .to_string())
@@ -479,16 +758,14 @@ class RustBackend:
                     right_str = _string_literal_bare(right.value)
                 else:
                     right_str = self._expr(right)
-                # Only parenthesize if needed for precedence
-                if op in ("==", "!=", "<", ">", "<=", ">=", "&&", "||"):
-                    return f"{left_str} {rust_op} {right_str}"
-                return f"({left_str} {rust_op} {right_str})"
+                # Minimal parenthesization - Rust handles operator precedence correctly
+                return f"{left_str} {rust_op} {right_str}"
             case UnaryOp(op=op, operand=operand):
                 return f"{op}{self._expr(operand)}"
             case Ternary(cond=cond, then_expr=then_expr, else_expr=else_expr):
                 return f"if {self._expr(cond)} {{ {self._expr(then_expr)} }} else {{ {self._expr(else_expr)} }}"
             case Cast(expr=inner, to_type=to_type):
-                return f"({self._expr(inner)} as {self._type(to_type)})"
+                return f"{self._expr(inner)} as {self._type(to_type)}"
             case TypeAssert(expr=inner, asserted=asserted, safe=safe):
                 type_name = self._type_name_for_check(asserted)
                 if safe:
@@ -502,12 +779,16 @@ class RustBackend:
                     return f"{self._expr(inner)}.is_some()"
                 return f"{self._expr(inner)}.is_none()"
             case Len(expr=inner):
-                return f"{self._expr(inner)}.len()"
+                # Cast len() to i64 to match our integer type
+                return f"({self._expr(inner)}.len() as i64)"
             case MakeSlice(element_type=element_type, length=length):
                 typ = self._type(element_type)
                 if length is not None:
                     default = self._default_value(element_type)
-                    return f"vec![{default}; {self._expr(length)}]"
+                    len_expr = self._expr(length)
+                    if isinstance(length, IntLit):
+                        return f"vec![{default}; {len_expr}]"
+                    return f"vec![{default}; {len_expr} as usize]"
                 return f"Vec::<{typ}>::new()"
             case MakeMap(key_type=key_type, value_type=value_type):
                 kt = self._type(key_type)
@@ -536,15 +817,34 @@ class RustBackend:
             case StructLit(struct_name=struct_name, fields=fields):
                 if not fields:
                     return f"{struct_name}::default()"
-                args = ", ".join(f"{_to_snake(k)}: {self._expr(v)}" for k, v in fields.items())
-                return f"{struct_name} {{ {args} }}"
+                # Use field init shorthand when field name matches variable name
+                parts = []
+                for k, v in fields.items():
+                    field_name = _to_snake(k)
+                    val_str = self._expr(v)
+                    if isinstance(v, Var) and _to_snake(v.name) == field_name:
+                        parts.append(field_name)
+                    else:
+                        parts.append(f"{field_name}: {val_str}")
+                return f"{struct_name} {{ {', '.join(parts)} }}"
             case TupleLit(elements=elements):
                 elems = ", ".join(self._expr(e) for e in elements)
                 return f"({elems})"
             case StringConcat(parts=parts):
                 if len(parts) == 1:
                     return self._expr(parts[0])
-                return " + ".join(self._expr(p) for p in parts)
+                # In Rust, String + &str works, so first part is String, rest are &str
+                result_parts = []
+                for i, p in enumerate(parts):
+                    if i == 0:
+                        result_parts.append(self._expr(p))
+                    elif isinstance(p, StringLit):
+                        # String literals can be &str directly
+                        result_parts.append(_string_literal_bare(p.value))
+                    else:
+                        # Other String expressions need & to become &str
+                        result_parts.append(f"&{self._expr(p)}")
+                return " + ".join(result_parts)
             case StringFormat(template=template, args=args):
                 return self._format_string(template, args)
             case _:
@@ -565,12 +865,15 @@ class RustBackend:
         # Use .to_string() for String types, .to_vec() for slices
         is_string = hasattr(obj, 'typ') and isinstance(obj.typ, Primitive) and obj.typ.kind == "string"
         convert = ".to_string()" if is_string else ".to_vec()"
-        if low and high:
-            return f"{obj_str}[{self._expr(low)}..{self._expr(high)}]{convert}"
-        elif low:
-            return f"{obj_str}[{self._expr(low)}..]{convert}"
-        elif high:
-            return f"{obj_str}[..{self._expr(high)}]{convert}"
+        # Cast indices to usize
+        low_str = f"({self._expr(low)} as usize)" if low and not isinstance(low, IntLit) else (self._expr(low) if low else None)
+        high_str = f"({self._expr(high)} as usize)" if high and not isinstance(high, IntLit) else (self._expr(high) if high else None)
+        if low_str and high_str:
+            return f"{obj_str}[{low_str}..{high_str}]{convert}"
+        elif low_str:
+            return f"{obj_str}[{low_str}..]{convert}"
+        elif high_str:
+            return f"{obj_str}[..{high_str}]{convert}"
         return f"{obj_str}.clone()"
 
     def _format_string(self, template: str, args: list[Expr]) -> str:
@@ -593,7 +896,10 @@ class RustBackend:
             case FieldLV(obj=obj, field=field):
                 return f"{self._expr(obj)}.{_to_snake(field)}"
             case IndexLV(obj=obj, index=index):
-                return f"{self._expr(obj)}[{self._expr(index)}]"
+                idx_expr = self._expr(index)
+                if isinstance(index, IntLit):
+                    return f"{self._expr(obj)}[{idx_expr}]"
+                return f"{self._expr(obj)}[{idx_expr} as usize]"
             case DerefLV(ptr=ptr):
                 return f"*{self._expr(ptr)}"
             case _:

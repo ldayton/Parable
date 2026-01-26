@@ -208,6 +208,10 @@ function knownKinds(): Set<string> {
 
 function callStatic(): Token {
   return Token.empty();
+}
+
+function newKindMap(): Map<string, number> {
+  return new Map();
 }"""
 
 

@@ -35,6 +35,7 @@ from src.ir import (
     IsNil,
     Len,
     Loc,
+    MakeMap,
     MakeSlice,
     Map,
     MapLit,
@@ -1160,6 +1161,24 @@ def make_fixture() -> Module:
         ],
     )
 
+    # --- Function: new_kind_map (exercises MakeMap) ---
+    new_kind_map_func = Function(
+        name="new_kind_map",
+        params=[],
+        ret=string_int_map,
+        body=[
+            Return(
+                value=MakeMap(
+                    key_type=STRING,
+                    value_type=INT,
+                    typ=string_int_map,
+                    loc=L,
+                ),
+                loc=L,
+            ),
+        ],
+    )
+
     return Module(
         name="fixture",
         structs=[token_struct, lexer_struct],
@@ -1185,6 +1204,7 @@ def make_fixture() -> Module:
             int_to_float_func,
             known_kinds_func,
             call_static_func,
+            new_kind_map_func,
         ],
         constants=[eof_const],
     )

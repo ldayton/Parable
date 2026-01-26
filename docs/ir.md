@@ -1,6 +1,6 @@
 # Parable Transpiler IR
 
-Intermediate representation for Python → {Go, JS, Rust, C} transpilation.
+Intermediate representation for Python → {Go, TS, Rust, C} transpilation.
 
 ```
 parable.py → [Python AST] → Frontend → [IR] → Backend → target code
@@ -10,6 +10,8 @@ parable.py → [Python AST] → Frontend → [IR] → Backend → target code
 
 **Backends** (per target): Pure syntax emission, ~500-800 lines each.
 
+**TypeScript strategy**: Backend emits `.ts` files; `tsc` produces `.js` + `.d.ts`. No separate JS backend needed.
+
 ## Types
 
 ### Primitives
@@ -18,7 +20,7 @@ parable.py → [Python AST] → Frontend → [IR] → Backend → target code
 Primitive { kind: "string" | "int" | "bool" | "float" | "byte" | "rune" | "void" }
 ```
 
-| IR       | Go        | JS        | Rust     | C               |
+| IR       | Go        | TS        | Rust     | C               |
 | -------- | --------- | --------- | -------- | --------------- |
 | `int`    | `int`     | `number`  | `i64`    | `int64_t`       |
 | `float`  | `float64` | `number`  | `f64`    | `double`        |
@@ -34,7 +36,7 @@ Primitive { kind: "string" | "int" | "bool" | "float" | "byte" | "rune" | "void"
 Slice { element: Type }
 ```
 
-| IR         | Go    | JS         | Rust     | C                                      |
+| IR         | Go    | TS         | Rust     | C                                      |
 | ---------- | ----- | ---------- | -------- | -------------------------------------- |
 | `Slice(T)` | `[]T` | `Array<T>` | `Vec<T>` | `struct { T *data; size_t len, cap; }` |
 
@@ -42,7 +44,7 @@ Slice { element: Type }
 Array { element: Type, size: int }
 ```
 
-| IR            | Go     | JS         | Rust     | C      |
+| IR            | Go     | TS         | Rust     | C      |
 | ------------- | ------ | ---------- | -------- | ------ |
 | `Array(T, N)` | `[N]T` | `Array<T>` | `[T; N]` | `T[N]` |
 
@@ -50,7 +52,7 @@ Array { element: Type, size: int }
 Map { key: Type, value: Type }
 ```
 
-| IR         | Go        | JS          | Rust           | C              |
+| IR         | Go        | TS          | Rust           | C              |
 | ---------- | --------- | ----------- | -------------- | -------------- |
 | `Map(K,V)` | `map[K]V` | `Map<K, V>` | `HashMap<K,V>` | generated hash |
 
@@ -60,7 +62,7 @@ Map { key: Type, value: Type }
 Pointer { target: Type, owned: bool }
 ```
 
-| IR                        | Go   | JS  | Rust     | C              |
+| IR                        | Go   | TS  | Rust     | C              |
 | ------------------------- | ---- | --- | -------- | -------------- |
 | `Pointer(T, owned=true)`  | `*T` | ref | `Box<T>` | `T*` (owns)    |
 | `Pointer(T, owned=false)` | `*T` | ref | `&'a T`  | `T*` (borrows) |
@@ -69,7 +71,7 @@ Pointer { target: Type, owned: bool }
 Optional { inner: Type }
 ```
 
-| IR            | Go         | JS          | Rust        | C           |
+| IR            | Go         | TS          | Rust        | C           |
 | ------------- | ---------- | ----------- | ----------- | ----------- |
 | `Optional(T)` | `*T` / nil | `T \| null` | `Option<T>` | `T*` + NULL |
 
@@ -87,7 +89,7 @@ Union { variants: [Type] }          // Sum type (Go interface, Rust enum, C tagg
 FuncType { params: [Type], ret: Type, captures: bool }
 ```
 
-| IR                              | Go          | JS         | Rust           | C               |
+| IR                              | Go          | TS         | Rust           | C               |
 | ------------------------------- | ----------- | ---------- | -------------- | --------------- |
 | `FuncType(..., captures=false)` | `func(...)` | `function` | `fn(...)`      | `T (*)(…)`      |
 | `FuncType(..., captures=true)`  | `func(...)` | `function` | `impl Fn(...)` | struct + fn ptr |
@@ -98,7 +100,7 @@ FuncType { params: [Type], ret: Type, captures: bool }
 StringSlice                         // Borrowed immutable view
 ```
 
-| IR            | Go       | JS       | Rust   | C             |
+| IR            | Go       | TS       | Rust   | C             |
 | ------------- | -------- | -------- | ------ | ------------- |
 | `StringSlice` | `string` | `string` | `&str` | `const char*` |
 
@@ -193,7 +195,7 @@ All statements carry `loc: Loc`.
 VarDecl { name: string, typ: Type, value: Expr?, mutable: bool }
 ```
 
-| IR              | Go           | JS      | Rust      | C            |
+| IR              | Go           | TS      | Rust      | C            |
 | --------------- | ------------ | ------- | --------- | ------------ |
 | `mutable=true`  | `var` / `:=` | `let`   | `let mut` | no qualifier |
 | `mutable=false` | `const`      | `const` | `let`     | `const`      |
@@ -235,7 +237,7 @@ MatchCase { patterns: [Expr], body: [Stmt] }
 
 `TypeSwitch` translates `isinstance` chains:
 
-| IR           | Go                | JS                          | Rust                   | C                 |
+| IR           | Go                | TS                          | Rust                   | C                 |
 | ------------ | ----------------- | --------------------------- | ---------------------- | ----------------- |
 | `TypeSwitch` | `switch x.(type)` | `if (x instanceof T)` chain | `match x { T => ... }` | `switch (x->tag)` |
 
@@ -281,14 +283,14 @@ MatchedPairError extends ParseError   // unclosed construct at EOF
 Raise { error_type: string, message: Expr, pos: Expr }
 ```
 
-| IR      | Go           | JS      | Rust                     | C                 |
+| IR      | Go           | TS      | Rust                     | C                 |
 | ------- | ------------ | ------- | ------------------------ | ----------------- |
 | `Raise` | `panic(...)` | `throw` | `return Err(ParseError)` | `longjmp` or goto |
 
 **Calling fallible functions:**
 
 Bare calls propagate errors automatically:
-| Context | Go           | JS           | Rust      | C            |
+| Context | Go           | TS           | Rust      | C            |
 | ------- | ------------ | ------------ | --------- | ------------ |
 | Default | panic floats | throw floats | `call()?` | check + goto |
 
@@ -302,7 +304,7 @@ TryCatch {
 }
 ```
 
-| IR         | Go              | JS          | Rust                      | C                |
+| IR         | Go              | TS          | Rust                      | C                |
 | ---------- | --------------- | ----------- | ------------------------- | ---------------- |
 | `TryCatch` | `defer/recover` | `try/catch` | `match call() { Ok/Err }` | `setjmp/longjmp` |
 
@@ -311,7 +313,7 @@ TryCatch {
 SoftFail { }                    // return None / (None, "")
 ```
 
-| IR         | Go           | JS            | Rust          | C             |
+| IR         | Go           | TS            | Rust          | C             |
 | ---------- | ------------ | ------------- | ------------- | ------------- |
 | `SoftFail` | `return nil` | `return null` | `return None` | `return NULL` |
 
@@ -395,7 +397,7 @@ Len { expr: Expr }
 
 `IsNil` is explicit (not `BinaryOp("==", x, NilLit)`):
 
-| IR      | Go         | JS           | Rust          | C           |
+| IR      | Go         | TS           | Rust          | C           |
 | ------- | ---------- | ------------ | ------------- | ----------- |
 | `IsNil` | `x == nil` | `x === null` | `x.is_none()` | `x == NULL` |
 
@@ -416,7 +418,7 @@ StringConcat { parts: [Expr] }
 StringFormat { template: string, args: [Expr] }
 ```
 
-| IR             | Go            | JS               | Rust      | C          |
+| IR             | Go            | TS               | Rust      | C          |
 | -------------- | ------------- | ---------------- | --------- | ---------- |
 | `StringConcat` | `+`           | `+`              | `format!` | `snprintf` |
 | `StringFormat` | `fmt.Sprintf` | template literal | `format!` | `snprintf` |
@@ -466,7 +468,7 @@ Backends (IR → target) handle only syntax:
 
 1. **Name conversion** — snake_case → camelCase/PascalCase
 2. **Syntax emission** — IR nodes → target syntax
-3. **Error propagation** — Fallible calls: Go uses panic, Rust uses `?`, JS uses throw
+3. **Error propagation** — Fallible calls: Go uses panic, Rust uses `?`, TS uses throw
 4. **Idioms** — Target-specific patterns (defer/recover, try/catch)
 5. **Formatting** — Indentation, line breaks
 
@@ -518,7 +520,7 @@ All unions are **closed** (fixed variants) and discriminated via `.kind` string 
 Union { name: string, variants: [StructRef] }
 ```
 
-| IR      | Go                     | JS             | Rust   | C            |
+| IR      | Go                     | TS             | Rust   | C            |
 | ------- | ---------------------- | -------------- | ------ | ------------ |
 | `Union` | interface + type switch | class + `kind` | `enum` | tagged union |
 

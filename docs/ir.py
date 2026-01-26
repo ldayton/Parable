@@ -824,8 +824,8 @@ class GoBackend(Backend):
     pass
 
 
-class JsBackend(Backend):
-    """Emit JavaScript code from IR."""
+class TsBackend(Backend):
+    """Emit TypeScript code from IR. Use tsc to produce .js + .d.ts."""
 
     pass
 

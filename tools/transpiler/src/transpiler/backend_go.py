@@ -117,11 +117,26 @@ class GoBackend:
         """Emit Go code from IR Module."""
         self.output = []
         self._emit_header(module)
+        self._emit_constants(module.constants)
         for struct in module.structs:
             self._emit_struct(struct)
         for func in module.functions:
             self._emit_function(func)
         return "\n".join(self.output)
+
+    def _emit_constants(self, constants: list[Constant]) -> None:
+        """Emit module-level constants."""
+        if not constants:
+            return
+        self._line("const (")
+        self.indent += 1
+        for const in constants:
+            name = self._to_pascal(const.name)
+            value = self._emit_expr(const.value)
+            self._line(f"{name} = {value}")
+        self.indent -= 1
+        self._line(")")
+        self._line("")
 
     def _emit_header(self, module: Module) -> None:
         """Emit package declaration and imports."""

@@ -17,6 +17,7 @@ from .ir import (
     INT,
     STRING,
     VOID,
+    Constant,
     Field,
     FieldInfo,
     FuncInfo,
@@ -73,6 +74,8 @@ class Frontend:
         self._collect_signatures(tree)
         # Pass 4: Collect struct fields
         self._collect_fields(tree)
+        # Pass 5: Collect module-level constants
+        self._collect_constants(tree)
         # Build IR Module
         return self._build_module(tree)
 
@@ -181,6 +184,16 @@ class Frontend:
                                 name=field_name, typ=typ, py_name=field_name
                             )
 
+    def _collect_constants(self, tree: ast.Module) -> None:
+        """Pass 5: Collect module-level constants (all-caps names with int values)."""
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and len(node.targets) == 1:
+                target = node.targets[0]
+                if isinstance(target, ast.Name) and target.id.isupper():
+                    # All-caps name = constant
+                    if isinstance(node.value, ast.Constant) and isinstance(node.value.value, int):
+                        self.symbols.constants[target.id] = INT
+
     def _extract_func_info(
         self, node: ast.FunctionDef, is_method: bool = False
     ) -> FuncInfo:
@@ -220,7 +233,17 @@ class Frontend:
 
     def _build_module(self, tree: ast.Module) -> Module:
         """Build IR Module from collected symbols."""
+        from . import ir
         module = Module(name="parable")
+        # Build constants
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and len(node.targets) == 1:
+                target = node.targets[0]
+                if isinstance(target, ast.Name) and target.id in self.symbols.constants:
+                    value = self._lower_expr(node.value)
+                    module.constants.append(
+                        Constant(name=target.id, typ=INT, value=value, loc=self._loc_from_node(node))
+                    )
         # Build structs
         for node in tree.body:
             if isinstance(node, ast.ClassDef):

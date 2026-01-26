@@ -67,21 +67,21 @@ class EmitStatementsMixin:
                     elem_vars = [f"{target_str}{i}" for i in range(len(ret_info))]
                     # Check which vars are actually used later (to avoid declaring unused ones)
                     # If the base variable is returned, we need all synthetic vars declared
-                    need_all = target_str in self.returned_vars
+                    need_all = target_str in self._ctx.returned_vars
                     used_vars = []
                     for v in elem_vars:
-                        if v in self.declared_vars or need_all:
+                        if v in self._ctx.declared_vars or need_all:
                             used_vars.append(v)  # Already declared or returned means it's used
                         else:
                             used_vars.append("_")  # Not declared means unused, use blank identifier
                     # Check if all used elem_vars are already declared (redeclaration)
                     non_blank = [v for v in used_vars if v != "_"]
-                    all_declared = all(v in self.declared_vars for v in non_blank)
+                    all_declared = all(v in self._ctx.declared_vars for v in non_blank)
                     for i, v in enumerate(elem_vars):
                         if v != "_" and used_vars[i] != "_":
-                            self.declared_vars.add(v)
-                            self.var_types[v] = ret_info[i]
-                    self.tuple_vars[target_str] = elem_vars
+                            self._ctx.declared_vars.add(v)
+                            self._ctx.var_types[v] = ret_info[i]
+                    self._ctx.tuple_vars[target_str] = elem_vars
                     call_str = self.visit_expr(stmt.value)
                     op = "=" if all_declared else ":="
                     self.emit(f"{', '.join(used_vars)} {op} {call_str}")
@@ -95,29 +95,29 @@ class EmitStatementsMixin:
                     target_str = orig_var
             # Check if this is a new variable (local name, not attribute)
             if isinstance(target, ast.Name):
-                if target_str not in self.declared_vars:
-                    self.declared_vars.add(target_str)
+                if target_str not in self._ctx.declared_vars:
+                    self._ctx.declared_vars.add(target_str)
                     # Use inferred type for empty list initialization
                     if isinstance(stmt.value, ast.List) and not stmt.value.elts:
-                        if target_str in self.var_types:
-                            go_type = self.var_types[target_str]
+                        if target_str in self._ctx.var_types:
+                            go_type = self._ctx.var_types[target_str]
                             self.emit(f"{target_str} := {go_type}{{}}")
                             return
                     value = self.visit_expr(stmt.value)
                     # Track if this variable holds a byte (from string subscript)
                     if is_string_char_subscript(stmt.value):
-                        self.byte_vars.add(target_str)
+                        self._ctx.byte_vars.add(target_str)
                     # Track if assigned from a tuple-returning function
                     self._track_tuple_func_assignment(target_str, stmt.value)
                     # Track assignment source for procsub/cmdsub type inference
                     self._track_assign_source(target_str, stmt.value)
                     # Track type for subsequent accesses (e.g., subscript on interface{})
-                    if target_str not in self.var_types:
+                    if target_str not in self._ctx.var_types:
                         inferred_type = self._infer_type_from_expr(stmt.value)
                         if inferred_type:
-                            self.var_types[target_str] = inferred_type
+                            self._ctx.var_types[target_str] = inferred_type
                     # Add type assertion for tuple element access (inline declaration)
-                    target_type = self.var_types.get(target_str, "")
+                    target_type = self._ctx.var_types.get(target_str, "")
                     if (
                         target_type
                         and target_type != "interface{}"
@@ -128,14 +128,14 @@ class EmitStatementsMixin:
                     return
             # Use inferred type for empty list assignment to typed variables
             if isinstance(stmt.value, ast.List) and not stmt.value.elts:
-                if target_str in self.var_types:
-                    go_type = self.var_types[target_str]
+                if target_str in self._ctx.var_types:
+                    go_type = self._ctx.var_types[target_str]
                     self.emit(f"{target_str} = {go_type}{{}}")
                     return
             value = self.visit_expr(stmt.value)
             # Track if this variable holds a byte (from string subscript)
             if isinstance(target, ast.Name) and is_string_char_subscript(stmt.value):
-                self.byte_vars.add(target_str)
+                self._ctx.byte_vars.add(target_str)
             # Track assignment source for procsub/cmdsub type inference
             if isinstance(target, ast.Name):
                 self._track_assign_source(target_str, stmt.value)
@@ -157,7 +157,7 @@ class EmitStatementsMixin:
                             value = "-1"
             # Convert byte to string if assigning to string-typed variable
             if isinstance(target, ast.Name):
-                target_type = self.var_types.get(target_str, "")
+                target_type = self._ctx.var_types.get(target_str, "")
                 if target_type == "string" and self._is_byte_expr(stmt.value):
                     value = f"string({value})"
                 # Convert nil to -1 if assigning to int variable
@@ -199,7 +199,7 @@ class EmitStatementsMixin:
             # This handles cases where same var name is used in sibling if blocks
             # But skip this if the variable was already pre-declared
             if isinstance(target, ast.Name) and isinstance(stmt.value, ast.Call):
-                if target_str not in self.declared_vars:  # Not a pre-declared variable
+                if target_str not in self._ctx.declared_vars:  # Not a pre-declared variable
                     # Only do this for known method calls that return strings (like _parse_matched_pair)
                     if isinstance(stmt.value.func, ast.Attribute):
                         method = stmt.value.func.attr
@@ -209,7 +209,7 @@ class EmitStatementsMixin:
                             "_collect_param_argument",
                             "_CollectParamArgument",
                         ):
-                            self.declared_vars.add(target_str)
+                            self._ctx.declared_vars.add(target_str)
                             self.emit(f"{target_str} := {value}")
                             return
             # Track if assigned from a tuple-returning function
@@ -222,8 +222,8 @@ class EmitStatementsMixin:
             value = self.visit_expr(stmt.value)
             for target in stmt.targets:
                 target_str = self.visit_expr(target)
-                if isinstance(target, ast.Name) and target_str not in self.declared_vars:
-                    self.declared_vars.add(target_str)
+                if isinstance(target, ast.Name) and target_str not in self._ctx.declared_vars:
+                    self._ctx.declared_vars.add(target_str)
                     self.emit(f"{target_str} := {value}")
                 else:
                     self.emit(f"{target_str} = {value}")
@@ -240,7 +240,7 @@ class EmitStatementsMixin:
                 target_names.append(name)
                 if isinstance(elt, ast.Name):
                     camel = self._to_go_var(elt.id)
-                    self.declared_vars.add(camel)
+                    self._ctx.declared_vars.add(camel)
         # Handle value side
         if isinstance(value, ast.Tuple):
             # a, b = x, y - for tuple literals, check if vars exist
@@ -274,12 +274,12 @@ class EmitStatementsMixin:
                     if go_base == "int":
                         # Use -1 as sentinel for nullable int (positions are never negative)
                         if isinstance(stmt.target, ast.Name):
-                            if target not in self.declared_vars:
-                                self.declared_vars.add(target)
+                            if target not in self._ctx.declared_vars:
+                                self._ctx.declared_vars.add(target)
                                 self.emit(f"{target} := -1")
                             else:
                                 self.emit(f"{target} = -1")
-                            self.var_types[target] = "int"
+                            self._ctx.var_types[target] = "int"
                             return
             # Use type annotation to determine the Go type for empty lists
             if isinstance(stmt.value, ast.List) and not stmt.value.elts:
@@ -288,14 +288,14 @@ class EmitStatementsMixin:
                     value = f"{go_type}{{}}"
                     # Store type for later use in append inference
                     if isinstance(stmt.target, ast.Name):
-                        self.var_types[target] = go_type
+                        self._ctx.var_types[target] = go_type
                 else:
                     value = self.visit_expr(stmt.value)
             else:
                 value = self.visit_expr(stmt.value)
             # Use := for first declaration, = for reassignment
-            if isinstance(stmt.target, ast.Name) and target not in self.declared_vars:
-                self.declared_vars.add(target)
+            if isinstance(stmt.target, ast.Name) and target not in self._ctx.declared_vars:
+                self._ctx.declared_vars.add(target)
                 self.emit(f"{target} := {value}")
             else:
                 self.emit(f"{target} = {value}")
@@ -349,8 +349,8 @@ class EmitStatementsMixin:
             # Check for returning a tuple variable (passthrough pattern)
             elif isinstance(stmt.value, ast.Name):
                 var_name = self._to_go_var(stmt.value.id)
-                if var_name in self.tuple_vars:
-                    elem_vars = self.tuple_vars[var_name]
+                if var_name in self._ctx.tuple_vars:
+                    elem_vars = self._ctx.tuple_vars[var_name]
                     self.emit(f"return {', '.join(elem_vars)}")
                     return
                 # Use visit_expr to handle type switch variable rewriting
@@ -391,21 +391,21 @@ class EmitStatementsMixin:
         if func_name:
             go_func_name = self._to_go_func_name(func_name)
             if go_func_name in TUPLE_ELEMENT_TYPES:
-                self.tuple_func_vars[var_name] = go_func_name
+                self._ctx.tuple_func_vars[var_name] = go_func_name
 
     def _track_assign_source(self, var_name: str, value: ast.expr):
         """Track assignment source for procsub/cmdsub type inference."""
         if isinstance(value, ast.Subscript) and isinstance(value.value, ast.Name):
             source_name = value.value.id
             if source_name in ("procsub_parts", "cmdsub_parts"):
-                self.var_assign_sources[var_name] = source_name
+                self._ctx.var_assign_sources[var_name] = source_name
 
     def _is_byte_variable(self, node: ast.expr) -> bool:
         """Check if node is a variable known to hold a byte."""
         if not isinstance(node, ast.Name):
             return False
         go_name = self._to_go_var(node.id)
-        return go_name in self.byte_vars
+        return go_name in self._ctx.byte_vars
 
     def _is_interface_field(self, node: ast.expr) -> bool:
         """Check if node is an attribute access on a struct field typed as Node/interface{}."""
@@ -414,7 +414,7 @@ class EmitStatementsMixin:
         # Look up the field type from the receiver's class
         if isinstance(node.value, ast.Name):
             var_name = self._to_go_var(node.value.id)
-            var_type = self.var_types.get(var_name, "")
+            var_type = self._ctx.var_types.get(var_name, "")
             # Strip pointer prefix to get class name
             class_name = var_type.lstrip("*")
             if class_name in self.symbols.classes:
@@ -436,7 +436,7 @@ class EmitStatementsMixin:
         """Get the field type from an attribute access expression."""
         if isinstance(node.value, ast.Name):
             var_name = self._to_go_var(node.value.id)
-            var_type = self.var_types.get(var_name, "")
+            var_type = self._ctx.var_types.get(var_name, "")
             class_name = var_type.lstrip("*")
             if class_name in self.symbols.classes:
                 class_info = self.symbols.classes[class_name]
@@ -475,11 +475,11 @@ class EmitStatementsMixin:
                     all_vars[var] = go_type
         # Pre-declare variables that are new (not already declared)
         for var, go_type in all_vars.items():
-            if var not in self.declared_vars:
+            if var not in self._ctx.declared_vars:
                 # Use known type from var_types if available, else inferred type
-                actual_type = self.var_types.get(var, go_type)
+                actual_type = self._ctx.var_types.get(var, go_type)
                 self.emit(f"var {var} {actual_type}")
-                self.declared_vars.add(var)
+                self._ctx.declared_vars.add(var)
 
     def _collect_if_chain_assignments(self, stmt: ast.If, branch_vars: list[dict[str, str]]):
         """Collect variable assignments from if/elif/else branches."""
@@ -512,7 +512,7 @@ class EmitStatementsMixin:
                                 for i, elem_type in enumerate(ret_info):
                                     synth_name = f"{go_name}{i}"
                                     # Only collect if already predeclared (actually used)
-                                    if synth_name in self.declared_vars:
+                                    if synth_name in self._ctx.declared_vars:
                                         vars[synth_name] = elem_type
                                 continue
                             # Skip assignments from methods that force := usage
@@ -666,7 +666,7 @@ class EmitStatementsMixin:
         if not is_discard and isinstance(stmt.target, ast.Name):
             elem_type = self._get_iter_element_type(stmt.iter)
             if elem_type:
-                self.var_types[target] = elem_type
+                self._ctx.var_types[target] = elem_type
         # Handle `for _ in x:` (discard loop variable)
         if is_discard:
             self.emit(f"for range {iter_expr} {{")
@@ -685,7 +685,7 @@ class EmitStatementsMixin:
         """Get the element type for iterating over an expression."""
         if isinstance(node, ast.Name):
             var_name = self._to_go_var(node.id)
-            var_type = self.var_types.get(var_name, "")
+            var_type = self._ctx.var_types.get(var_name, "")
             if var_type.startswith("[]"):
                 return var_type[2:]  # []interface{} -> interface{}
             if var_type == "string":
@@ -770,16 +770,16 @@ class EmitStatementsMixin:
         cleanup_stmts = handler.body[:-1]
         # Pre-declare the variable with its type (infer from call if possible)
         # Skip if already declared (e.g., by _predeclare_all_locals)
-        if var_name not in self.declared_vars:
+        if var_name not in self._ctx.declared_vars:
             var_type = self._infer_call_return_type(assign.value)
             if var_type:
                 self.emit(f"var {var_name} {var_type}")
             else:
                 self.emit(f"var {var_name} interface{{}}")
-            self.declared_vars.add(var_name)
+            self._ctx.declared_vars.add(var_name)
         # Emit the success flag
         self.emit("parseOk := true")
-        self.declared_vars.add("parseOk")
+        self._ctx.declared_vars.add("parseOk")
         # Emit IIFE with defer/recover
         self.emit("func() {")
         self.indent += 1

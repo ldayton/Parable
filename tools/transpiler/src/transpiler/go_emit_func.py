@@ -197,7 +197,7 @@ class EmitFunctionsMixin:
         self.tuple_func_vars = analysis.tuple_func_vars
         self.var_assign_sources = analysis.var_assign_sources
         # Emit hoisted declarations for function scope (scope 0)
-        self._emit_hoisted_vars(0, stmts)
+        self._emit_hoisted_vars(analysis, 0, stmts)
         # Emit all statements
         emitted_any = False
         skip_until = 0  # Skip statements consumed by type switch
@@ -757,22 +757,24 @@ class EmitFunctionsMixin:
             return False
         return call.func.value.func.id == "super"
 
-    def _emit_hoisted_vars(self, scope_id: int, stmts: list[ast.stmt]):
+    def _emit_hoisted_vars(
+        self, analysis: FunctionAnalysis, scope_id: int, stmts: list[ast.stmt]
+    ):
         """Emit hoisted variable declarations for a scope."""
         # Collect additional type info
         append_types = self._collect_append_element_types(stmts)
         nullable_node_vars = self._collect_nullable_node_vars(stmts)
         nullable_string_vars = self._collect_nullable_string_vars(stmts)
         multi_node_vars = self._collect_multi_node_type_vars(stmts)
-        for var, hoist_scope in self.hoisted_vars.items():
+        for var, hoist_scope in analysis.hoisted_vars.items():
             if hoist_scope != scope_id:
                 continue
-            if var in self.declared_vars:
+            if var in analysis.declared_vars:
                 continue
             # Get type from var_types first
-            go_type = self.var_types.get(var)
+            go_type = analysis.var_types.get(var)
             # Try to infer from first value if no type yet
-            info = self.var_usage.get(var)
+            info = analysis.var_usage.get(var)
             if info and info.first_value and not go_type:
                 go_type = self._infer_type_from_expr(info.first_value)
             # Check append() calls for element type
@@ -808,5 +810,5 @@ class EmitFunctionsMixin:
                 if name_type == "string":
                     go_type = "string"
             self.emit(f"var {var} {go_type}")
-            self.declared_vars.add(var)
-            self.var_types[var] = go_type
+            analysis.declared_vars.add(var)
+            analysis.var_types[var] = go_type

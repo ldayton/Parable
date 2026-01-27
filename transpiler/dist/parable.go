@@ -242,8 +242,8 @@ type Node interface {
 
 type ParseError struct {
 	Message string
-	Pos     *int
-	Line    *int
+	Pos     int
+	Line    int
 }
 
 func (self *ParseError) Error() string {
@@ -251,9 +251,9 @@ func (self *ParseError) Error() string {
 }
 
 func (self *ParseError) formatMessage() string {
-	if self.Line != nil && self.Pos != nil {
+	if self.Line != 0 && self.Pos != 0 {
 		return fmt.Sprintf("Parse error at line %v, position %v: %v", self.Line, self.Pos, self.Message)
-	} else if self.Pos != nil {
+	} else if self.Pos != 0 {
 		return fmt.Sprintf("Parse error at position %v: %v", self.Pos, self.Message)
 	}
 	return fmt.Sprintf("Parse error: %v", self.Message)
@@ -628,7 +628,7 @@ func (self *Lexer) readSingleQuote(start int) (string, bool) {
 			return strings.Join(chars, ""), sawNewline
 		}
 	}
-	panic(fmt.Sprintf("%s at position %d", "Unterminated single quote", start))
+	panic(NewParseError("Unterminated single quote", start, 0))
 }
 
 func (self *Lexer) isWordTerminator(ctx int, ch string, bracketDepth int, parenDepth int) bool {
@@ -790,7 +790,7 @@ func (self *Lexer) parseMatchedPair(openChar string, closeChar string, flags int
 	wasGtlt := false
 	for count > 0 {
 		if self.AtEnd() {
-			panic(fmt.Sprintf("%s at position %d", fmt.Sprintf("unexpected EOF while looking for matching `%v'", closeChar), start))
+			panic(NewMatchedPairError(fmt.Sprintf("unexpected EOF while looking for matching `%v'", closeChar), start, 0))
 		}
 		ch := self.Advance()
 		if (flags&MatchedPairFlagsDOLBRACE) != 0 && self.dolbraceState == DolbraceStateOP {
@@ -1154,7 +1154,7 @@ func (self *Lexer) readWordInternal(ctx int, atCommandStart bool, inArrayLiteral
 					}
 				}
 				if self.AtEnd() {
-					panic(fmt.Sprintf("%s at position %d", "Unterminated double quote", start))
+					panic(NewParseError("Unterminated double quote", start, 0))
 				}
 				chars = append(chars, self.Advance())
 			} else {
@@ -1282,7 +1282,7 @@ func (self *Lexer) readWordInternal(ctx int, atCommandStart bool, inArrayLiteral
 		chars = append(chars, self.Advance())
 	}
 	if bracketDepth > 0 && bracketStartPos != -1 && self.AtEnd() {
-		panic(fmt.Sprintf("%s at position %d", "unexpected EOF looking for `]'", bracketStartPos))
+		panic(NewMatchedPairError("unexpected EOF looking for `]'", bracketStartPos, 0))
 	}
 	if !(len(chars) > 0) {
 		return nil
@@ -1398,7 +1398,7 @@ func (self *Lexer) readAnsiCQuote() (Node, string) {
 		}
 	}
 	if !foundClose {
-		panic(fmt.Sprintf("%s at position %d", "unexpected EOF while looking for matching `''", start))
+		panic(NewMatchedPairError("unexpected EOF while looking for matching `''", start, 0))
 	}
 	text := substring(self.Source, start, self.Pos)
 	content := strings.Join(contentChars, "")
@@ -1752,7 +1752,7 @@ func (self *Lexer) readParamExpansion(inDquote bool) (Node, string) {
 
 func (self *Lexer) readBracedParam(start int, inDquote bool) (Node, string) {
 	if self.AtEnd() {
-		panic(fmt.Sprintf("%s at position %d", "unexpected EOF looking for `}'", start))
+		panic(NewMatchedPairError("unexpected EOF looking for `}'", start, 0))
 	}
 	savedDolbrace := self.dolbraceState
 	self.dolbraceState = DolbraceStatePARAM
@@ -1811,7 +1811,7 @@ func (self *Lexer) readBracedParam(start int, inDquote bool) (Node, string) {
 			}
 			if self.AtEnd() {
 				self.dolbraceState = savedDolbrace
-				panic(fmt.Sprintf("%s at position %d", "unexpected EOF looking for `}'", start))
+				panic(NewMatchedPairError("unexpected EOF looking for `}'", start, 0))
 			}
 			self.Pos = start + 2
 		} else {
@@ -1831,7 +1831,7 @@ func (self *Lexer) readBracedParam(start int, inDquote bool) (Node, string) {
 	}
 	if self.AtEnd() {
 		self.dolbraceState = savedDolbrace
-		panic(fmt.Sprintf("%s at position %d", "unexpected EOF looking for `}'", start))
+		panic(NewMatchedPairError("unexpected EOF looking for `}'", start, 0))
 	}
 	if self.Peek() == "}" {
 		self.Advance()
@@ -1863,7 +1863,7 @@ func (self *Lexer) readBracedParam(start int, inDquote bool) (Node, string) {
 			}
 			if self.AtEnd() {
 				self.dolbraceState = savedDolbrace
-				panic(fmt.Sprintf("%s at position %d", "Unterminated backtick", backtickPos))
+				panic(NewParseError("Unterminated backtick", backtickPos, 0))
 			}
 			self.Advance()
 			op = "`"
@@ -4947,22 +4947,22 @@ func (self *Parser) parseLoopBody(context string) Node {
 	if self.Peek() == "{" {
 		brace := self.ParseBraceGroup()
 		if brace == nil {
-			panic(fmt.Sprintf("%s at position %d", fmt.Sprintf("Expected brace group body in %v", context), self.lexPeekToken().Pos))
+			panic(NewParseError(fmt.Sprintf("Expected brace group body in %v", context), self.lexPeekToken().Pos, 0))
 		}
 		return brace.Body
 	}
 	if self.lexConsumeWord("do") {
 		body := self.ParseListUntil(map[string]struct{}{"done": {}})
 		if _isNilInterface(body) {
-			panic(fmt.Sprintf("%s at position %d", "Expected commands after 'do'", self.lexPeekToken().Pos))
+			panic(NewParseError("Expected commands after 'do'", self.lexPeekToken().Pos, 0))
 		}
 		self.SkipWhitespaceAndNewlines()
 		if !self.lexConsumeWord("done") {
-			panic(fmt.Sprintf("%s at position %d", fmt.Sprintf("Expected 'done' to close %v", context), self.lexPeekToken().Pos))
+			panic(NewParseError(fmt.Sprintf("Expected 'done' to close %v", context), self.lexPeekToken().Pos, 0))
 		}
 		return body
 	}
-	panic(fmt.Sprintf("%s at position %d", fmt.Sprintf("Expected 'do' or '{' in %v", context), self.lexPeekToken().Pos))
+	panic(NewParseError(fmt.Sprintf("Expected 'do' or '{' in %v", context), self.lexPeekToken().Pos, 0))
 }
 
 func (self *Parser) PeekWord() string {
@@ -5053,7 +5053,7 @@ func (self *Parser) scanDoubleQuote(chars *[]string, parts *[]Node, start int, h
 		}
 	}
 	if self.AtEnd() {
-		panic(fmt.Sprintf("%s at position %d", "Unterminated double quote", start))
+		panic(NewParseError("Unterminated double quote", start, 0))
 	}
 	*chars = append(*chars, self.Advance())
 }
@@ -5176,7 +5176,7 @@ func (self *Parser) parseFunsub(start int) (Node, string) {
 	self.SkipWhitespaceAndNewlines()
 	if self.AtEnd() || self.Peek() != "}" {
 		self.restoreParserState(saved)
-		panic(fmt.Sprintf("%s at position %d", "unexpected EOF looking for `}'", start))
+		panic(NewMatchedPairError("unexpected EOF looking for `}'", start, 0))
 	}
 	self.Advance()
 	text := substring(self.Source, start, self.Pos)
@@ -5468,7 +5468,7 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 		textChars = append(textChars, ch)
 	}
 	if self.AtEnd() {
-		panic(fmt.Sprintf("%s at position %d", "Unterminated backtick", start))
+		panic(NewParseError("Unterminated backtick", start, 0))
 	}
 	self.Advance()
 	textChars = append(textChars, "`")
@@ -5545,7 +5545,7 @@ func (self *Parser) parseProcessSubstitution() (result0 Node, result1 string) {
 	}
 	self.SkipWhitespaceAndNewlines()
 	if self.AtEnd() || self.Peek() != ")" {
-		panic(fmt.Sprintf("%s at position %d", "Invalid process substitution", start))
+		panic(NewParseError("Invalid process substitution", start, 0))
 	}
 	self.Advance()
 	textEnd := self.Pos
@@ -5568,7 +5568,7 @@ func (self *Parser) parseArrayLiteral() (Node, string) {
 		self.SkipWhitespaceAndNewlines()
 		if self.AtEnd() {
 			self.clearState(ParserStateFlagsPSTCOMPASSIGN)
-			panic(fmt.Sprintf("%s at position %d", "Unterminated array literal", start))
+			panic(NewParseError("Unterminated array literal", start, 0))
 		}
 		if self.Peek() == ")" {
 			break
@@ -5579,13 +5579,13 @@ func (self *Parser) parseArrayLiteral() (Node, string) {
 				break
 			}
 			self.clearState(ParserStateFlagsPSTCOMPASSIGN)
-			panic(fmt.Sprintf("%s at position %d", "Expected word in array literal", self.Pos))
+			panic(NewParseError("Expected word in array literal", self.Pos, 0))
 		}
 		elements = append(elements, word)
 	}
 	if self.AtEnd() || self.Peek() != ")" {
 		self.clearState(ParserStateFlagsPSTCOMPASSIGN)
-		panic(fmt.Sprintf("%s at position %d", "Expected ) to close array literal", self.Pos))
+		panic(NewParseError("Expected ) to close array literal", self.Pos, 0))
 	}
 	self.Advance()
 	text := substring(self.Source, start, self.Pos)
@@ -5654,7 +5654,7 @@ func (self *Parser) parseArithmeticExpansion() (result0 Node, result1 string) {
 	}
 	if depth != 0 {
 		if self.AtEnd() {
-			panic(fmt.Sprintf("%s at position %d", "unexpected EOF looking for `))'", start))
+			panic(NewMatchedPairError("unexpected EOF looking for `))'", start, 0))
 		}
 		self.Pos = start
 		return nil, ""
@@ -6079,7 +6079,7 @@ func (self *Parser) arithParsePostfix() Node {
 				index := self.arithParseComma()
 				self.arithSkipWs()
 				if !self.arithConsume("]") {
-					panic(fmt.Sprintf("%s at position %d", "Expected ']' in array subscript", self.arithPos))
+					panic(NewParseError("Expected ']' in array subscript", self.arithPos, 0))
 				}
 				left = &ArithSubscript{Array: leftVar.Name, Index: index, Kind: "subscript"}
 			default:
@@ -6101,7 +6101,7 @@ func (self *Parser) arithParsePrimary() Node {
 		expr := self.arithParseComma()
 		self.arithSkipWs()
 		if !self.arithConsume(")") {
-			panic(fmt.Sprintf("%s at position %d", "Expected ')' in arithmetic expression", self.arithPos))
+			panic(NewParseError("Expected ')' in arithmetic expression", self.arithPos, 0))
 		}
 		return expr
 	}
@@ -6124,7 +6124,7 @@ func (self *Parser) arithParsePrimary() Node {
 	if c == "\\" {
 		self.arithAdvance()
 		if self.arithAtEnd() {
-			panic(fmt.Sprintf("%s at position %d", "Unexpected end after backslash in arithmetic", self.arithPos))
+			panic(NewParseError("Unexpected end after backslash in arithmetic", self.arithPos, 0))
 		}
 		escapedChar := self.arithAdvance()
 		return &ArithEscape{Char: escapedChar, Kind: "escape"}
@@ -6137,7 +6137,7 @@ func (self *Parser) arithParsePrimary() Node {
 
 func (self *Parser) arithParseExpansion() Node {
 	if !self.arithConsume("$") {
-		panic(fmt.Sprintf("%s at position %d", "Expected '$'", self.arithPos))
+		panic(NewParseError("Expected '$'", self.arithPos, 0))
 	}
 	c := self.arithPeek(0)
 	if c == "(" {
@@ -6159,7 +6159,7 @@ func (self *Parser) arithParseExpansion() Node {
 		}
 	}
 	if !(len(nameChars) > 0) {
-		panic(fmt.Sprintf("%s at position %d", "Expected variable name after $", self.arithPos))
+		panic(NewParseError("Expected variable name after $", self.arithPos, 0))
 	}
 	return &ParamExpansion{Param: strings.Join(nameChars, ""), Kind: "param"}
 }
@@ -6317,7 +6317,7 @@ func (self *Parser) arithParseSingleQuote() Node {
 	}
 	content := substring(self.arithSrc, contentStart, self.arithPos)
 	if !self.arithConsume("'") {
-		panic(fmt.Sprintf("%s at position %d", "Unterminated single quote in arithmetic", self.arithPos))
+		panic(NewParseError("Unterminated single quote in arithmetic", self.arithPos, 0))
 	}
 	return &ArithNumber{Value: content, Kind: "number"}
 }
@@ -6336,7 +6336,7 @@ func (self *Parser) arithParseDoubleQuote() Node {
 	}
 	content := substring(self.arithSrc, contentStart, self.arithPos)
 	if !self.arithConsume("\"") {
-		panic(fmt.Sprintf("%s at position %d", "Unterminated double quote in arithmetic", self.arithPos))
+		panic(NewParseError("Unterminated double quote in arithmetic", self.arithPos, 0))
 	}
 	return &ArithNumber{Value: content, Kind: "number"}
 }
@@ -6355,7 +6355,7 @@ func (self *Parser) arithParseBacktick() Node {
 	}
 	content := substring(self.arithSrc, contentStart, self.arithPos)
 	if !self.arithConsume("`") {
-		panic(fmt.Sprintf("%s at position %d", "Unterminated backtick in arithmetic", self.arithPos))
+		panic(NewParseError("Unterminated backtick in arithmetic", self.arithPos, 0))
 	}
 	subParser := NewParser(content, false, self.extglob)
 	cmd := subParser.ParseList(true)
@@ -6394,7 +6394,7 @@ func (self *Parser) arithParseNumberOrVar() Node {
 		}
 		return &ArithVar{Name: strings.Join(chars, ""), Kind: "var"}
 	}
-	panic(fmt.Sprintf("%s at position %d", "Unexpected character '"+c+"' in arithmetic expression", self.arithPos))
+	panic(NewParseError("Unexpected character '"+c+"' in arithmetic expression", self.arithPos, 0))
 }
 
 func (self *Parser) parseDeprecatedArithmetic() (Node, string) {
@@ -6517,7 +6517,7 @@ func (self *Parser) ParseRedirect() Node {
 		self.SkipWhitespace()
 		target = self.ParseWord(false, false, false)
 		if target == nil {
-			panic(fmt.Sprintf("%s at position %d", "Expected target for redirect "+op, self.Pos))
+			panic(NewParseError("Expected target for redirect "+op, self.Pos, 0))
 		}
 		return &Redirect{Op: op, Target: target, Kind: "redirect"}
 	}
@@ -6611,7 +6611,7 @@ func (self *Parser) ParseRedirect() Node {
 						target = &Word{Value: "&" + innerWord.Value, Kind: "word"}
 						target.Parts = innerWord.Parts
 					} else {
-						panic(fmt.Sprintf("%s at position %d", "Expected target for redirect "+op, self.Pos))
+						panic(NewParseError("Expected target for redirect "+op, self.Pos, 0))
 					}
 				} else {
 					target = &Word{Value: "&" + fdTarget, Kind: "word"}
@@ -6622,7 +6622,7 @@ func (self *Parser) ParseRedirect() Node {
 					target = &Word{Value: "&" + innerWord.Value, Kind: "word"}
 					target.Parts = innerWord.Parts
 				} else {
-					panic(fmt.Sprintf("%s at position %d", "Expected target for redirect "+op, self.Pos))
+					panic(NewParseError("Expected target for redirect "+op, self.Pos, 0))
 				}
 			}
 		}
@@ -6640,7 +6640,7 @@ func (self *Parser) ParseRedirect() Node {
 		}
 	}
 	if target == nil {
-		panic(fmt.Sprintf("%s at position %d", "Expected target for redirect "+op, self.Pos))
+		panic(NewParseError("Expected target for redirect "+op, self.Pos, 0))
 	}
 	return &Redirect{Op: op, Target: target, Kind: "redirect"}
 }
@@ -7003,12 +7003,12 @@ func (self *Parser) ParseSubshell() *Subshell {
 	body := self.ParseList(true)
 	if _isNilInterface(body) {
 		self.clearState(ParserStateFlagsPSTSUBSHELL)
-		panic(fmt.Sprintf("%s at position %d", "Expected command in subshell", self.Pos))
+		panic(NewParseError("Expected command in subshell", self.Pos, 0))
 	}
 	self.SkipWhitespace()
 	if self.AtEnd() || self.Peek() != ")" {
 		self.clearState(ParserStateFlagsPSTSUBSHELL)
-		panic(fmt.Sprintf("%s at position %d", "Expected ) to close subshell", self.Pos))
+		panic(NewParseError("Expected ) to close subshell", self.Pos, 0))
 	}
 	self.Advance()
 	self.clearState(ParserStateFlagsPSTSUBSHELL)
@@ -7069,7 +7069,7 @@ func (self *Parser) ParseArithmeticCommand() *ArithmeticCommand {
 		}
 	}
 	if self.AtEnd() {
-		panic(fmt.Sprintf("%s at position %d", "unexpected EOF looking for `))'", savedPos))
+		panic(NewMatchedPairError("unexpected EOF looking for `))'", savedPos, 0))
 	}
 	if depth != 1 {
 		self.Pos = savedPos
@@ -7103,7 +7103,7 @@ func (self *Parser) ParseConditionalExpr() *ConditionalExpr {
 	if self.AtEnd() || self.Peek() != "]" || self.Pos+1 >= self.Length || string(self.Source[self.Pos+1]) != "]" {
 		self.clearState(ParserStateFlagsPSTCONDEXPR)
 		self.wordContext = WORDCTXNORMAL
-		panic(fmt.Sprintf("%s at position %d", "Expected ]] to close conditional expression", self.Pos))
+		panic(NewParseError("Expected ]] to close conditional expression", self.Pos, 0))
 	}
 	self.Advance()
 	self.Advance()
@@ -7160,7 +7160,7 @@ func (self *Parser) parseCondAnd() Node {
 func (self *Parser) parseCondTerm() Node {
 	self.condSkipWhitespace()
 	if self.condAtEnd() {
-		panic(fmt.Sprintf("%s at position %d", "Unexpected end of conditional expression", self.Pos))
+		panic(NewParseError("Unexpected end of conditional expression", self.Pos, 0))
 	}
 	var operand Node
 	if self.Peek() == "!" {
@@ -7176,20 +7176,20 @@ func (self *Parser) parseCondTerm() Node {
 		inner := self.parseCondOr()
 		self.condSkipWhitespace()
 		if self.AtEnd() || self.Peek() != ")" {
-			panic(fmt.Sprintf("%s at position %d", "Expected ) in conditional expression", self.Pos))
+			panic(NewParseError("Expected ) in conditional expression", self.Pos, 0))
 		}
 		self.Advance()
 		return &CondParen{Inner: inner, Kind: "cond-paren"}
 	}
 	word1 := self.parseCondWord()
 	if word1 == nil {
-		panic(fmt.Sprintf("%s at position %d", "Expected word in conditional expression", self.Pos))
+		panic(NewParseError("Expected word in conditional expression", self.Pos, 0))
 	}
 	self.condSkipWhitespace()
 	if func() bool { _, ok := CONDUNARYOPS[word1.Value]; return ok }() {
 		operand = self.parseCondWord()
 		if _isNilInterface(operand) {
-			panic(fmt.Sprintf("%s at position %d", "Expected operand after "+word1.Value, self.Pos))
+			panic(NewParseError("Expected operand after "+word1.Value, self.Pos, 0))
 		}
 		return &UnaryTest{Op: word1.Value, Operand: operand, Kind: "unary-test"}
 	}
@@ -7200,7 +7200,7 @@ func (self *Parser) parseCondTerm() Node {
 			self.condSkipWhitespace()
 			word2 = self.parseCondWord()
 			if word2 == nil {
-				panic(fmt.Sprintf("%s at position %d", "Expected operand after "+op, self.Pos))
+				panic(NewParseError("Expected operand after "+op, self.Pos, 0))
 			}
 			return &BinaryTest{Op: op, Left: word1, Right: word2, Kind: "binary-test"}
 		}
@@ -7214,7 +7214,7 @@ func (self *Parser) parseCondTerm() Node {
 				word2 = self.parseCondWord()
 			}
 			if word2 == nil {
-				panic(fmt.Sprintf("%s at position %d", "Expected operand after "+opWord.Value, self.Pos))
+				panic(NewParseError("Expected operand after "+opWord.Value, self.Pos, 0))
 			}
 			return &BinaryTest{Op: opWord.Value, Left: word1, Right: word2, Kind: "binary-test"}
 		} else {
@@ -7262,11 +7262,11 @@ func (self *Parser) ParseBraceGroup() *BraceGroup {
 	self.SkipWhitespaceAndNewlines()
 	body := self.ParseList(true)
 	if _isNilInterface(body) {
-		panic(fmt.Sprintf("%s at position %d", "Expected command in brace group", self.lexPeekToken().Pos))
+		panic(NewParseError("Expected command in brace group", self.lexPeekToken().Pos, 0))
 	}
 	self.SkipWhitespace()
 	if !self.lexConsumeWord("}") {
-		panic(fmt.Sprintf("%s at position %d", "Expected } to close brace group", self.lexPeekToken().Pos))
+		panic(NewParseError("Expected } to close brace group", self.lexPeekToken().Pos, 0))
 	}
 	return &BraceGroup{Body: body, Redirects: self.collectRedirects(), Kind: "brace-group"}
 }
@@ -7278,15 +7278,15 @@ func (self *Parser) ParseIf() *If {
 	}
 	condition := self.ParseListUntil(map[string]struct{}{"then": {}})
 	if _isNilInterface(condition) {
-		panic(fmt.Sprintf("%s at position %d", "Expected condition after 'if'", self.lexPeekToken().Pos))
+		panic(NewParseError("Expected condition after 'if'", self.lexPeekToken().Pos, 0))
 	}
 	self.SkipWhitespaceAndNewlines()
 	if !self.lexConsumeWord("then") {
-		panic(fmt.Sprintf("%s at position %d", "Expected 'then' after if condition", self.lexPeekToken().Pos))
+		panic(NewParseError("Expected 'then' after if condition", self.lexPeekToken().Pos, 0))
 	}
 	thenBody := self.ParseListUntil(map[string]struct{}{"elif": {}, "else": {}, "fi": {}})
 	if _isNilInterface(thenBody) {
-		panic(fmt.Sprintf("%s at position %d", "Expected commands after 'then'", self.lexPeekToken().Pos))
+		panic(NewParseError("Expected commands after 'then'", self.lexPeekToken().Pos, 0))
 	}
 	self.SkipWhitespaceAndNewlines()
 	var elseBody Node
@@ -7294,15 +7294,15 @@ func (self *Parser) ParseIf() *If {
 		self.lexConsumeWord("elif")
 		elifCondition := self.ParseListUntil(map[string]struct{}{"then": {}})
 		if _isNilInterface(elifCondition) {
-			panic(fmt.Sprintf("%s at position %d", "Expected condition after 'elif'", self.lexPeekToken().Pos))
+			panic(NewParseError("Expected condition after 'elif'", self.lexPeekToken().Pos, 0))
 		}
 		self.SkipWhitespaceAndNewlines()
 		if !self.lexConsumeWord("then") {
-			panic(fmt.Sprintf("%s at position %d", "Expected 'then' after elif condition", self.lexPeekToken().Pos))
+			panic(NewParseError("Expected 'then' after elif condition", self.lexPeekToken().Pos, 0))
 		}
 		elifThenBody := self.ParseListUntil(map[string]struct{}{"elif": {}, "else": {}, "fi": {}})
 		if _isNilInterface(elifThenBody) {
-			panic(fmt.Sprintf("%s at position %d", "Expected commands after 'then'", self.lexPeekToken().Pos))
+			panic(NewParseError("Expected commands after 'then'", self.lexPeekToken().Pos, 0))
 		}
 		self.SkipWhitespaceAndNewlines()
 		var innerElse Node
@@ -7312,7 +7312,7 @@ func (self *Parser) ParseIf() *If {
 			self.lexConsumeWord("else")
 			innerElse = self.ParseListUntil(map[string]struct{}{"fi": {}})
 			if _isNilInterface(innerElse) {
-				panic(fmt.Sprintf("%s at position %d", "Expected commands after 'else'", self.lexPeekToken().Pos))
+				panic(NewParseError("Expected commands after 'else'", self.lexPeekToken().Pos, 0))
 			}
 		}
 		elseBody = &If{Condition: elifCondition, ThenBody: elifThenBody, ElseBody: innerElse, Kind: "if"}
@@ -7320,12 +7320,12 @@ func (self *Parser) ParseIf() *If {
 		self.lexConsumeWord("else")
 		elseBody = self.ParseListUntil(map[string]struct{}{"fi": {}})
 		if _isNilInterface(elseBody) {
-			panic(fmt.Sprintf("%s at position %d", "Expected commands after 'else'", self.lexPeekToken().Pos))
+			panic(NewParseError("Expected commands after 'else'", self.lexPeekToken().Pos, 0))
 		}
 	}
 	self.SkipWhitespaceAndNewlines()
 	if !self.lexConsumeWord("fi") {
-		panic(fmt.Sprintf("%s at position %d", "Expected 'fi' to close if statement", self.lexPeekToken().Pos))
+		panic(NewParseError("Expected 'fi' to close if statement", self.lexPeekToken().Pos, 0))
 	}
 	return &If{Condition: condition, ThenBody: thenBody, ElseBody: elseBody, Redirects: self.collectRedirects(), Kind: "if"}
 }
@@ -7334,15 +7334,15 @@ func (self *Parser) parseElifChain() *If {
 	self.lexConsumeWord("elif")
 	condition := self.ParseListUntil(map[string]struct{}{"then": {}})
 	if _isNilInterface(condition) {
-		panic(fmt.Sprintf("%s at position %d", "Expected condition after 'elif'", self.lexPeekToken().Pos))
+		panic(NewParseError("Expected condition after 'elif'", self.lexPeekToken().Pos, 0))
 	}
 	self.SkipWhitespaceAndNewlines()
 	if !self.lexConsumeWord("then") {
-		panic(fmt.Sprintf("%s at position %d", "Expected 'then' after elif condition", self.lexPeekToken().Pos))
+		panic(NewParseError("Expected 'then' after elif condition", self.lexPeekToken().Pos, 0))
 	}
 	thenBody := self.ParseListUntil(map[string]struct{}{"elif": {}, "else": {}, "fi": {}})
 	if _isNilInterface(thenBody) {
-		panic(fmt.Sprintf("%s at position %d", "Expected commands after 'then'", self.lexPeekToken().Pos))
+		panic(NewParseError("Expected commands after 'then'", self.lexPeekToken().Pos, 0))
 	}
 	self.SkipWhitespaceAndNewlines()
 	var elseBody Node
@@ -7352,7 +7352,7 @@ func (self *Parser) parseElifChain() *If {
 		self.lexConsumeWord("else")
 		elseBody = self.ParseListUntil(map[string]struct{}{"fi": {}})
 		if _isNilInterface(elseBody) {
-			panic(fmt.Sprintf("%s at position %d", "Expected commands after 'else'", self.lexPeekToken().Pos))
+			panic(NewParseError("Expected commands after 'else'", self.lexPeekToken().Pos, 0))
 		}
 	}
 	return &If{Condition: condition, ThenBody: thenBody, ElseBody: elseBody, Kind: "if"}
@@ -7365,19 +7365,19 @@ func (self *Parser) ParseWhile() *While {
 	}
 	condition := self.ParseListUntil(map[string]struct{}{"do": {}})
 	if _isNilInterface(condition) {
-		panic(fmt.Sprintf("%s at position %d", "Expected condition after 'while'", self.lexPeekToken().Pos))
+		panic(NewParseError("Expected condition after 'while'", self.lexPeekToken().Pos, 0))
 	}
 	self.SkipWhitespaceAndNewlines()
 	if !self.lexConsumeWord("do") {
-		panic(fmt.Sprintf("%s at position %d", "Expected 'do' after while condition", self.lexPeekToken().Pos))
+		panic(NewParseError("Expected 'do' after while condition", self.lexPeekToken().Pos, 0))
 	}
 	body := self.ParseListUntil(map[string]struct{}{"done": {}})
 	if _isNilInterface(body) {
-		panic(fmt.Sprintf("%s at position %d", "Expected commands after 'do'", self.lexPeekToken().Pos))
+		panic(NewParseError("Expected commands after 'do'", self.lexPeekToken().Pos, 0))
 	}
 	self.SkipWhitespaceAndNewlines()
 	if !self.lexConsumeWord("done") {
-		panic(fmt.Sprintf("%s at position %d", "Expected 'done' to close while loop", self.lexPeekToken().Pos))
+		panic(NewParseError("Expected 'done' to close while loop", self.lexPeekToken().Pos, 0))
 	}
 	return &While{Condition: condition, Body: body, Redirects: self.collectRedirects(), Kind: "while"}
 }
@@ -7389,19 +7389,19 @@ func (self *Parser) ParseUntil() *Until {
 	}
 	condition := self.ParseListUntil(map[string]struct{}{"do": {}})
 	if _isNilInterface(condition) {
-		panic(fmt.Sprintf("%s at position %d", "Expected condition after 'until'", self.lexPeekToken().Pos))
+		panic(NewParseError("Expected condition after 'until'", self.lexPeekToken().Pos, 0))
 	}
 	self.SkipWhitespaceAndNewlines()
 	if !self.lexConsumeWord("do") {
-		panic(fmt.Sprintf("%s at position %d", "Expected 'do' after until condition", self.lexPeekToken().Pos))
+		panic(NewParseError("Expected 'do' after until condition", self.lexPeekToken().Pos, 0))
 	}
 	body := self.ParseListUntil(map[string]struct{}{"done": {}})
 	if _isNilInterface(body) {
-		panic(fmt.Sprintf("%s at position %d", "Expected commands after 'do'", self.lexPeekToken().Pos))
+		panic(NewParseError("Expected commands after 'do'", self.lexPeekToken().Pos, 0))
 	}
 	self.SkipWhitespaceAndNewlines()
 	if !self.lexConsumeWord("done") {
-		panic(fmt.Sprintf("%s at position %d", "Expected 'done' to close until loop", self.lexPeekToken().Pos))
+		panic(NewParseError("Expected 'done' to close until loop", self.lexPeekToken().Pos, 0))
 	}
 	return &Until{Condition: condition, Body: body, Redirects: self.collectRedirects(), Kind: "until"}
 }
@@ -7419,13 +7419,13 @@ func (self *Parser) ParseFor() Node {
 	if self.Peek() == "$" {
 		varWord := self.ParseWord(false, false, false)
 		if varWord == nil {
-			panic(fmt.Sprintf("%s at position %d", "Expected variable name after 'for'", self.lexPeekToken().Pos))
+			panic(NewParseError("Expected variable name after 'for'", self.lexPeekToken().Pos, 0))
 		}
 		varName = varWord.Value
 	} else {
 		varName = self.PeekWord()
 		if varName == "" {
-			panic(fmt.Sprintf("%s at position %d", "Expected variable name after 'for'", self.lexPeekToken().Pos))
+			panic(NewParseError("Expected variable name after 'for'", self.lexPeekToken().Pos, 0))
 		}
 		self.ConsumeWord(varName)
 	}
@@ -7460,7 +7460,7 @@ func (self *Parser) ParseFor() Node {
 				if sawDelimiter {
 					break
 				}
-				panic(fmt.Sprintf("%s at position %d", "Expected ';' or newline before 'do'", self.lexPeekToken().Pos))
+				panic(NewParseError("Expected ';' or newline before 'do'", self.lexPeekToken().Pos, 0))
 			}
 			word := self.ParseWord(false, false, false)
 			if word == nil {
@@ -7473,20 +7473,20 @@ func (self *Parser) ParseFor() Node {
 	if self.Peek() == "{" {
 		braceGroup := self.ParseBraceGroup()
 		if braceGroup == nil {
-			panic(fmt.Sprintf("%s at position %d", "Expected brace group in for loop", self.lexPeekToken().Pos))
+			panic(NewParseError("Expected brace group in for loop", self.lexPeekToken().Pos, 0))
 		}
 		return &For{Var: varName, Words: words, Body: braceGroup.Body, Redirects: self.collectRedirects(), Kind: "for"}
 	}
 	if !self.lexConsumeWord("do") {
-		panic(fmt.Sprintf("%s at position %d", "Expected 'do' in for loop", self.lexPeekToken().Pos))
+		panic(NewParseError("Expected 'do' in for loop", self.lexPeekToken().Pos, 0))
 	}
 	body := self.ParseListUntil(map[string]struct{}{"done": {}})
 	if _isNilInterface(body) {
-		panic(fmt.Sprintf("%s at position %d", "Expected commands after 'do'", self.lexPeekToken().Pos))
+		panic(NewParseError("Expected commands after 'do'", self.lexPeekToken().Pos, 0))
 	}
 	self.SkipWhitespaceAndNewlines()
 	if !self.lexConsumeWord("done") {
-		panic(fmt.Sprintf("%s at position %d", "Expected 'done' to close for loop", self.lexPeekToken().Pos))
+		panic(NewParseError("Expected 'done' to close for loop", self.lexPeekToken().Pos, 0))
 	}
 	return &For{Var: varName, Words: words, Body: body, Redirects: self.collectRedirects(), Kind: "for"}
 }
@@ -7523,7 +7523,7 @@ func (self *Parser) parseForArith() *ForArith {
 		}
 	}
 	if len(parts) != 3 {
-		panic(fmt.Sprintf("%s at position %d", "Expected three expressions in for ((;;))", self.Pos))
+		panic(NewParseError("Expected three expressions in for ((;;))", self.Pos, 0))
 	}
 	init := parts[0]
 	cond := parts[1]
@@ -7545,7 +7545,7 @@ func (self *Parser) ParseSelect() *Select {
 	self.SkipWhitespace()
 	varName := self.PeekWord()
 	if varName == "" {
-		panic(fmt.Sprintf("%s at position %d", "Expected variable name after 'select'", self.lexPeekToken().Pos))
+		panic(NewParseError("Expected variable name after 'select'", self.lexPeekToken().Pos, 0))
 	}
 	self.ConsumeWord(varName)
 	self.SkipWhitespace()
@@ -7601,11 +7601,11 @@ func (self *Parser) ParseCase() *Case {
 	self.SkipWhitespace()
 	word := self.ParseWord(false, false, false)
 	if word == nil {
-		panic(fmt.Sprintf("%s at position %d", "Expected word after 'case'", self.lexPeekToken().Pos))
+		panic(NewParseError("Expected word after 'case'", self.lexPeekToken().Pos, 0))
 	}
 	self.SkipWhitespaceAndNewlines()
 	if !self.lexConsumeWord("in") {
-		panic(fmt.Sprintf("%s at position %d", "Expected 'in' after case word", self.lexPeekToken().Pos))
+		panic(NewParseError("Expected 'in' after case word", self.lexPeekToken().Pos, 0))
 	}
 	self.SkipWhitespaceAndNewlines()
 	patterns := []Node{}
@@ -7769,7 +7769,7 @@ func (self *Parser) ParseCase() *Case {
 		}
 		pattern := strings.Join(patternChars, "")
 		if !(pattern != "") {
-			panic(fmt.Sprintf("%s at position %d", "Expected pattern in case statement", self.lexPeekToken().Pos))
+			panic(NewParseError("Expected pattern in case statement", self.lexPeekToken().Pos, 0))
 		}
 		self.SkipWhitespace()
 		var body Node
@@ -7792,7 +7792,7 @@ func (self *Parser) ParseCase() *Case {
 	self.SkipWhitespaceAndNewlines()
 	if !self.lexConsumeWord("esac") {
 		self.clearState(ParserStateFlagsPSTCASESTMT)
-		panic(fmt.Sprintf("%s at position %d", "Expected 'esac' to close case statement", self.lexPeekToken().Pos))
+		panic(NewParseError("Expected 'esac' to close case statement", self.lexPeekToken().Pos, 0))
 	}
 	self.clearState(ParserStateFlagsPSTCASESTMT)
 	return &Case{Word: word, Patterns: patterns, Redirects: self.collectRedirects(), Kind: "case"}
@@ -7878,7 +7878,7 @@ func (self *Parser) ParseCoproc() *Coproc {
 	if !_isNilInterface(body) {
 		return &Coproc{Command: body, Name: name, Kind: "coproc"}
 	}
-	panic(fmt.Sprintf("%s at position %d", "Expected command after coproc", self.Pos))
+	panic(NewParseError("Expected command after coproc", self.Pos, 0))
 }
 
 func (self *Parser) ParseFunction() *Function {
@@ -7908,7 +7908,7 @@ func (self *Parser) ParseFunction() *Function {
 		self.SkipWhitespaceAndNewlines()
 		body = self.parseCompoundCommand()
 		if _isNilInterface(body) {
-			panic(fmt.Sprintf("%s at position %d", "Expected function body", self.Pos))
+			panic(NewParseError("Expected function body", self.Pos, 0))
 		}
 		return &Function{Name: name, Body: body, Kind: "function"}
 	}
@@ -7967,7 +7967,7 @@ func (self *Parser) ParseFunction() *Function {
 	self.SkipWhitespaceAndNewlines()
 	body = self.parseCompoundCommand()
 	if _isNilInterface(body) {
-		panic(fmt.Sprintf("%s at position %d", "Expected function body", self.Pos))
+		panic(NewParseError("Expected function body", self.Pos, 0))
 	}
 	return &Function{Name: name, Body: body, Kind: "function"}
 }
@@ -8102,7 +8102,7 @@ func (self *Parser) ParseListUntil(stopWords map[string]struct{}) Node {
 		}
 		pipeline = self.ParsePipeline()
 		if _isNilInterface(pipeline) {
-			panic(fmt.Sprintf("%s at position %d", "Expected command after "+op, self.Pos))
+			panic(NewParseError("Expected command after "+op, self.Pos, 0))
 		}
 		parts = append(parts, pipeline)
 	}
@@ -8151,7 +8151,7 @@ func (self *Parser) ParseCompoundCommand() Node {
 		}
 	}
 	if reserved == "fi" || reserved == "then" || reserved == "elif" || reserved == "else" || reserved == "done" || reserved == "esac" || reserved == "do" || reserved == "in" {
-		panic(fmt.Sprintf("%s at position %d", fmt.Sprintf("Unexpected reserved word '%v'", reserved), self.lexPeekToken().Pos))
+		panic(NewParseError(fmt.Sprintf("Unexpected reserved word '%v'", reserved), self.lexPeekToken().Pos, 0))
 	}
 	if reserved == "if" {
 		return self.ParseIf()
@@ -8297,7 +8297,7 @@ func (self *Parser) parseSimplePipeline() Node {
 		}
 		cmd = self.ParseCompoundCommand()
 		if _isNilInterface(cmd) {
-			panic(fmt.Sprintf("%s at position %d", "Expected command after |", self.Pos))
+			panic(NewParseError("Expected command after |", self.Pos, 0))
 		}
 		commands = append(commands, cmd)
 	}
@@ -8422,7 +8422,7 @@ func (self *Parser) ParseList(newlineAsSeparator bool) Node {
 		}
 		pipeline = self.ParsePipeline()
 		if _isNilInterface(pipeline) {
-			panic(fmt.Sprintf("%s at position %d", "Expected command after "+op, self.Pos))
+			panic(NewParseError("Expected command after "+op, self.Pos, 0))
 		}
 		parts = append(parts, pipeline)
 		if self.inState(ParserStateFlagsPSTEOFTOKEN) && self.atEofToken() {
@@ -8484,7 +8484,7 @@ func (self *Parser) Parse() []Node {
 			self.SkipWhitespace()
 		}
 		if !foundNewline && !self.AtEnd() {
-			panic(fmt.Sprintf("%s at position %d", "Syntax error", self.Pos))
+			panic(NewParseError("Syntax error", self.Pos, 0))
 		}
 	}
 	if !(len(results) > 0) {
@@ -10366,6 +10366,18 @@ func isValidIdentifier(name string) bool {
 func Parse(source string, extglob bool) []Node {
 	parser := NewParser(source, false, extglob)
 	return parser.Parse()
+}
+
+func NewParseError(message string, pos int, line int) *ParseError {
+	self := &ParseError{}
+	self.Message = message
+	self.Pos = pos
+	self.Line = line
+	return self
+}
+
+func NewMatchedPairError(message string, pos int, line int) *MatchedPairError {
+	return &MatchedPairError{ParseError{Message: message, Pos: pos, Line: line}}
 }
 
 func NewQuoteState() *QuoteState {

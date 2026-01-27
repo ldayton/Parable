@@ -879,12 +879,17 @@ func _isNilInterface(i interface{}) bool {
 
     def _emit_stmt_Raise(self, stmt: Raise) -> None:
         msg = self._emit_expr(stmt.message)
-        # Include position in panic if available (non-zero/non-literal-0)
         pos = self._emit_expr(stmt.pos)
-        if pos != "0":
-            self._line(f'panic(fmt.Sprintf("%s at position %d", {msg}, {pos}))')
+        if stmt.error_type == "ParseError":
+            self._line(f"panic(NewParseError({msg}, {pos}, 0))")
+        elif stmt.error_type == "MatchedPairError":
+            self._line(f"panic(NewMatchedPairError({msg}, {pos}, 0))")
         else:
-            self._line(f'panic({msg})')
+            # Fallback for other error types
+            if pos != "0":
+                self._line(f'panic(fmt.Sprintf("%s at position %d", {msg}, {pos}))')
+            else:
+                self._line(f'panic({msg})')
 
     def _emit_stmt_SoftFail(self, stmt: SoftFail) -> None:
         self._line("return nil")
@@ -1438,9 +1443,14 @@ func _isNilInterface(i interface{}) bool {
         return f"map[{elem_type}]struct{{}}{{{elements}}}"
 
     def _emit_expr_StructLit(self, expr: StructLit) -> str:
-        fields = ", ".join(
-            f"{self._to_pascal(k)}: {self._emit_expr(v)}" for k, v in expr.fields.items()
-        )
+        parts = []
+        # Handle embedded struct for exception inheritance
+        if expr.embedded_value is not None:
+            parts.append(self._emit_expr(expr.embedded_value))
+        # Add named fields
+        for k, v in expr.fields.items():
+            parts.append(f"{self._to_pascal(k)}: {self._emit_expr(v)}")
+        fields = ", ".join(parts)
         lit = f"{expr.struct_name}{{{fields}}}"
         if isinstance(expr.typ, Pointer):
             return f"&{lit}"

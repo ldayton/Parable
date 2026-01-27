@@ -47,6 +47,11 @@ PARAM_TYPE_OVERRIDES: dict[tuple[str, str], Type] = {
     ("_append_redirects", "redirects"): Slice(StructRef("Node")),
     # Bytearray mutation - needs pointer to avoid losing appends
     ("_append_with_ctlesc", "result"): Pointer(Slice(BYTE)),
+    # ParseError/MatchedPairError constructor uses int, not *int
+    ("NewParseError", "pos"): INT,
+    ("NewParseError", "line"): INT,
+    ("NewMatchedPairError", "pos"): INT,
+    ("NewMatchedPairError", "line"): INT,
 }
 
 # Override field types for fields without proper annotations
@@ -90,6 +95,9 @@ FIELD_TYPE_OVERRIDES: dict[tuple[str, str], Type] = {
     ("BraceGroup", "redirects"): Slice(StructRef("Node")),
     # Redirect.target is Word | None -> *Word in Go
     ("Redirect", "target"): Pointer(StructRef("Word")),
+    # ParseError uses int with 0 sentinel, not *int
+    ("ParseError", "pos"): INT,
+    ("ParseError", "line"): INT,
 }
 
 # Override return types for methods that return generic list
@@ -253,8 +261,11 @@ VAR_TYPE_OVERRIDES: dict[tuple[str, str], Type] = {
 }
 
 # Fields that use -1 sentinel value instead of nil pointer for int | None
-# Maps (class_name, field_name) -> True
-# These fields use `== -1` instead of `== nil` for None comparison
-SENTINEL_INT_FIELDS: set[tuple[str, str]] = {
-    ("Parser", "_cmdsub_heredoc_end"),
+# Maps (class_name, field_name) -> sentinel value
+# These fields use the sentinel value instead of nil for None comparison
+SENTINEL_INT_FIELDS: dict[tuple[str, str], int] = {
+    ("Parser", "_cmdsub_heredoc_end"): -1,
+    # ParseError uses 0 for "no value" (matching old transpiler)
+    ("ParseError", "pos"): 0,
+    ("ParseError", "line"): 0,
 }

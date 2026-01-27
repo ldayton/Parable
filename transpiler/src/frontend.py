@@ -250,6 +250,9 @@ class Frontend:
         for stmt in node.body:
             if isinstance(stmt, ast.FunctionDef) and stmt.name == "__init__":
                 self._collect_init_fields(stmt, info)
+        # Exception classes always need constructors for panic(NewXxx(...)) pattern
+        if info.is_exception:
+            info.needs_constructor = True
 
     def _collect_init_fields(self, init: ast.FunctionDef, info: StructInfo) -> None:
         """Collect fields assigned in __init__."""
@@ -502,7 +505,65 @@ class Frontend:
         ctor_func: Function | None = None
         if with_body and info.needs_constructor and init_ast:
             ctor_func = self._build_constructor(node.name, init_ast, info)
+        elif with_body and info.needs_constructor and embedded_type and not init_ast:
+            # Exception subclass with no __init__ - forward to parent constructor
+            ctor_func = self._build_forwarding_constructor(node.name, embedded_type)
         return struct, ctor_func
+
+    def _build_forwarding_constructor(self, class_name: str, parent_class: str) -> Function:
+        """Build a forwarding constructor for exception subclasses with no __init__."""
+        from . import ir
+        # Get parent class info to copy its parameters
+        parent_info = self.symbols.structs.get(parent_class)
+        if not parent_info:
+            raise ValueError(f"Unknown parent class: {parent_class}")
+        # Build parameters from parent's __init__ params
+        params: list[Param] = []
+        args: list[ir.Var] = []
+        for param_name in parent_info.init_params:
+            # Check for parameter type overrides
+            typ = INT  # Default
+            override_key = (f"New{class_name}", param_name)
+            if override_key in PARAM_TYPE_OVERRIDES:
+                typ = PARAM_TYPE_OVERRIDES[override_key]
+            else:
+                # Try parent constructor override
+                parent_key = (f"New{parent_class}", param_name)
+                if parent_key in PARAM_TYPE_OVERRIDES:
+                    typ = PARAM_TYPE_OVERRIDES[parent_key]
+                else:
+                    # Get from parent's field type
+                    field_info = parent_info.fields.get(param_name)
+                    if field_info:
+                        typ = field_info.typ
+            params.append(Param(name=param_name, typ=typ, loc=Loc.unknown()))
+            args.append(ir.Var(name=param_name, typ=typ))
+        # Build body: return &ClassName{ParentClass{...}}
+        # Use StructLit with embedded type
+        body: list[ir.Stmt] = []
+        # Create parent struct literal
+        parent_lit = ir.StructLit(
+            struct_name=parent_class,
+            fields={param_name: ir.Var(name=param_name, typ=params[i].typ) for i, param_name in enumerate(parent_info.init_params)},
+            typ=StructRef(parent_class),
+        )
+        # Create struct with embedded parent - typ=Pointer makes backend emit &
+        struct_lit = ir.StructLit(
+            struct_name=class_name,
+            fields={},
+            typ=Pointer(StructRef(class_name)),
+            embedded_value=parent_lit,
+        )
+        # Return pointer to struct
+        ret = ir.Return(value=struct_lit)
+        body.append(ret)
+        return Function(
+            name=f"New{class_name}",
+            params=params,
+            ret=Pointer(StructRef(class_name)),
+            body=body,
+            loc=Loc.unknown(),
+        )
 
     def _build_constructor(self, class_name: str, init_ast: ast.FunctionDef, info: StructInfo) -> Function:
         """Build a NewXxx constructor function from __init__ AST."""
@@ -2312,17 +2373,21 @@ class Frontend:
         return ir.BinaryOp(op=op, left=left, right=right, typ=result_type, loc=self._loc_from_node(node))
 
     def _is_sentinel_int(self, node: ast.expr) -> bool:
-        """Check if an expression is a sentinel int (uses -1 for None)."""
-        # Local variable sentinel ints
+        """Check if an expression is a sentinel int (uses a sentinel value for None)."""
+        return self._get_sentinel_value(node) is not None
+
+    def _get_sentinel_value(self, node: ast.expr) -> int | None:
+        """Get the sentinel value for a sentinel int expression, or None if not a sentinel int."""
+        # Local variable sentinel ints (always use -1)
         if isinstance(node, ast.Name) and node.id in self._type_ctx.sentinel_ints:
-            return True
+            return -1
         # Field sentinel ints: self.field
         if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "self":
             class_name = self._current_class_name
             field_name = node.attr
             if (class_name, field_name) in SENTINEL_INT_FIELDS:
-                return True
-        return False
+                return SENTINEL_INT_FIELDS[(class_name, field_name)]
+        return None
 
     def _lower_expr_Compare(self, node: ast.Compare) -> "ir.Expr":
         from . import ir
@@ -2340,9 +2405,10 @@ class Frontend:
                     return ir.BinaryOp(op=cmp_op, left=left, right=ir.StringLit(value="", typ=STRING), typ=BOOL, loc=self._loc_from_node(node))
                 if left_type == BOOL:
                     return ir.UnaryOp(op="!", operand=left, typ=BOOL, loc=self._loc_from_node(node))
-                # For sentinel ints (int | None using -1), compare to -1
-                if self._is_sentinel_int(node.left):
-                    return ir.BinaryOp(op="==", left=left, right=ir.IntLit(value=-1, typ=INT), typ=BOOL, loc=self._loc_from_node(node))
+                # For sentinel ints, compare to the sentinel value
+                sentinel = self._get_sentinel_value(node.left)
+                if sentinel is not None:
+                    return ir.BinaryOp(op="==", left=left, right=ir.IntLit(value=sentinel, typ=INT), typ=BOOL, loc=self._loc_from_node(node))
                 return ir.IsNil(expr=left, negated=False, typ=BOOL, loc=self._loc_from_node(node))
             if isinstance(node.ops[0], ast.IsNot) and isinstance(node.comparators[0], ast.Constant) and node.comparators[0].value is None:
                 # For strings, compare to non-empty string; for bools, just use the bool itself
@@ -2352,9 +2418,10 @@ class Frontend:
                     return ir.BinaryOp(op=cmp_op, left=left, right=ir.StringLit(value="", typ=STRING), typ=BOOL, loc=self._loc_from_node(node))
                 if left_type == BOOL:
                     return left  # bool is its own truthy value
-                # For sentinel ints (int | None using -1), compare to -1
-                if self._is_sentinel_int(node.left):
-                    return ir.BinaryOp(op="!=", left=left, right=ir.IntLit(value=-1, typ=INT), typ=BOOL, loc=self._loc_from_node(node))
+                # For sentinel ints, compare to the sentinel value
+                sentinel = self._get_sentinel_value(node.left)
+                if sentinel is not None:
+                    return ir.BinaryOp(op="!=", left=left, right=ir.IntLit(value=sentinel, typ=INT), typ=BOOL, loc=self._loc_from_node(node))
                 return ir.IsNil(expr=left, negated=True, typ=BOOL, loc=self._loc_from_node(node))
             # Handle "x in (a, b, c)" -> "x == a || x == b || x == c"
             if isinstance(node.ops[0], (ast.In, ast.NotIn)) and isinstance(node.comparators[0], ast.Tuple):
@@ -2835,7 +2902,24 @@ class Frontend:
         # Skip docstrings
         if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
             return ir.ExprStmt(expr=ir.Var(name="_skip_docstring", typ=VOID))
+        # Skip super().__init__() calls - handled by Go embedding
+        if self._is_super_init_call(node.value):
+            return ir.ExprStmt(expr=ir.Var(name="_skip_super_init", typ=VOID))
         return ir.ExprStmt(expr=self._lower_expr(node.value), loc=self._loc_from_node(node))
+
+    def _is_super_init_call(self, node: ast.expr) -> bool:
+        """Check if expression is super().__init__(...)."""
+        if not isinstance(node, ast.Call):
+            return False
+        if not isinstance(node.func, ast.Attribute):
+            return False
+        if node.func.attr != "__init__":
+            return False
+        if not isinstance(node.func.value, ast.Call):
+            return False
+        if not isinstance(node.func.value.func, ast.Name):
+            return False
+        return node.func.value.func.id == "super"
 
     def _lower_stmt_Assign(self, node: ast.Assign) -> "ir.Stmt":
         from . import ir

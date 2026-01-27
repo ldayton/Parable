@@ -665,6 +665,7 @@ class StructLit(Expr):
 
     struct_name: str
     fields: dict[str, Expr]
+    embedded_value: "Expr | None" = None  # For embedded struct literals (exception inheritance)
 
 
 @dataclass

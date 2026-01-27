@@ -168,6 +168,7 @@ class GoBackend:
         self._line("import (")
         self.indent += 1
         self._line('"fmt"')
+        self._line('"reflect"')
         self._line('"strconv"')
         self._line('"strings"')
         self._line('"unicode"')
@@ -292,6 +293,17 @@ func _mapGet[K comparable, V any](m map[K]V, key K, defaultVal V) V {
 // _intToStr converts an integer to its string representation
 func _intToStr(n int) string {
 	return strconv.Itoa(n)
+}
+
+// _isNilInterface checks if an interface value is nil.
+// In Go, an interface is nil only when both type and value are nil.
+// This handles the case where interface contains a typed nil pointer.
+func _isNilInterface(i interface{}) bool {
+	if i == nil {
+		return true
+	}
+	v := reflect.ValueOf(i)
+	return v.Kind() == reflect.Ptr && v.IsNil()
 }
 '''
         for line in helpers.strip().split('\n'):
@@ -1362,6 +1374,16 @@ func _intToStr(n int) string {
 
     def _emit_expr_IsNil(self, expr: IsNil) -> str:
         inner = self._emit_expr(expr.expr)
+        # Check if the expression type is an interface type
+        # In Go, interface nil check requires reflection when interface might
+        # contain a typed nil pointer (e.g., var x SomeInterface = (*Impl)(nil))
+        expr_type = getattr(expr.expr, 'typ', None)
+        is_interface = isinstance(expr_type, Interface)
+        if is_interface:
+            # Use helper function that handles typed nil pointers
+            if expr.negated:
+                return f"!_isNilInterface({inner})"
+            return f"_isNilInterface({inner})"
         if expr.negated:
             return f"{inner} != nil"
         return f"{inner} == nil"

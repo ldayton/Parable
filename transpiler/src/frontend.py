@@ -1726,6 +1726,25 @@ class Frontend:
                     result[i] = param.default_value
         return result
 
+    def _merge_keyword_args_for_func(self, func_info: FuncInfo, args: list, node: ast.Call) -> list:
+        """Merge keyword arguments into positional args at their proper positions for free functions."""
+        if not node.keywords:
+            return args
+        # Build param name -> index map
+        param_indices: dict[str, int] = {}
+        for i, param in enumerate(func_info.params):
+            param_indices[param.name] = i
+        # Extend args list if needed and place keyword args
+        result = list(args)
+        for kw in node.keywords:
+            if kw.arg and kw.arg in param_indices:
+                idx = param_indices[kw.arg]
+                # Extend list if necessary
+                while len(result) <= idx:
+                    result.append(None)
+                result[idx] = self._lower_expr(kw.value)
+        return result
+
     def _fill_default_args_for_func(self, func_info: FuncInfo, args: list) -> list:
         """Fill in missing arguments with default values for free functions with optional params."""
         n_expected = len(func_info.params)
@@ -2782,6 +2801,8 @@ class Frontend:
             if func_name in self.symbols.functions:
                 func_info = self.symbols.functions[func_name]
                 ret_type = func_info.return_type
+                # Merge keyword arguments into positional args
+                args = self._merge_keyword_args_for_func(func_info, args, node)
                 # Fill in default arguments
                 args = self._fill_default_args_for_func(func_info, args)
                 # Dereference * for slice params

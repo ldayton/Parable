@@ -8863,7 +8863,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 			}
 		}
 		for _, r := range node.Redirects {
-			parts = append(parts, formatRedirect(r, false, false))
+			parts = append(parts, formatRedirect(r, compactRedirects, true))
 		}
 		var result string
 		if compactRedirects && len(node.Words) > 0 && len(node.Redirects) > 0 {

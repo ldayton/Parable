@@ -15,8 +15,16 @@ check:
     gofmt /tmp/parable-ir.go > /tmp/parable.go
     go build -C ../src -o /dev/null .
 
-# Transpile, write, and run Go tests
+# Transpile, write, and run Go tests (uses new transpiler output)
 test: go
+    cp dist/parable.go ../src/parable.go
+    go run -C ../src ./cmd/run-tests
+
+# Transpile with new transpiler, build, and run Go parser tests
+test-new-go:
+    uv run python -m src.cli ../src/parable.py > /tmp/parable-ir.go
+    gofmt /tmp/parable-ir.go > ../src/parable.go
+    go build -C ../src -o /tmp/parable-test .
     go run -C ../src ./cmd/run-tests
 
 # Show Go compilation errors (uses temp copy of src/)

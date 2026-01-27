@@ -4,6 +4,10 @@ Converting the existing Go transpiler at `../tools/transpiler/` from a Go-specif
 
 Transpiles `../src/parable.py` → Go via an intermediate representation.
 
+## Current Mission
+
+**Get `just test-new-go` to pass.** This transpiles parable.py with the new transpiler, builds the Go code, and runs the parser test suite (4574 tests).
+
 ## Architecture
 
 ```
@@ -31,8 +35,7 @@ Transpiles `../src/parable.py` → Go via an intermediate representation.
 just emit          # transpile to stdout
 just go            # transpile and write to dist/parable.go
 just check         # transpile and verify Go compiles
-just test          # transpile, write, run Go tests
-just test-all      # run all backend compilation tests
+just test-new-go   # transpile, build, run parser tests (THE GOAL)
 just errors        # show Go compilation errors
 ```
 

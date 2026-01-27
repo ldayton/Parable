@@ -177,6 +177,8 @@ class Struct:
     methods: list[Function] = field(default_factory=list)
     implements: list[str] = field(default_factory=list)  # interface names
     loc: Loc = field(default_factory=Loc.unknown)
+    is_exception: bool = False
+    embedded_type: str | None = None  # For exception inheritance (e.g., "ParseError")
 
 
 @dataclass
@@ -744,6 +746,7 @@ class StructInfo:
     fields: dict[str, FieldInfo] = field(default_factory=dict)
     methods: dict[str, FuncInfo] = field(default_factory=dict)
     is_node: bool = False  # True if implements Node interface
+    is_exception: bool = False  # True if inherits from Exception
     bases: list[str] = field(default_factory=list)
     init_params: list[str] = field(default_factory=list)  # __init__ param order
     param_to_field: dict[str, str] = field(default_factory=dict)  # Maps param name to field name

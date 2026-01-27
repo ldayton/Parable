@@ -234,6 +234,10 @@ type ParseError struct {
 	Line    *int
 }
 
+func (self *ParseError) Error() string {
+	return self.formatMessage()
+}
+
 func (self *ParseError) formatMessage() string {
 	if self.Line != nil && self.Pos != nil {
 		return fmt.Sprintf("Parse error at line %v, position %v: %v", self.Line, self.Pos, self.Message)
@@ -244,6 +248,7 @@ func (self *ParseError) formatMessage() string {
 }
 
 type MatchedPairError struct {
+	ParseError
 }
 
 type TokenType struct {

@@ -154,6 +154,8 @@ class Frontend:
         self._collect_class_names(tree)
         # Pass 2: Mark Node subclasses
         self._mark_node_subclasses()
+        # Pass 2b: Mark Exception subclasses
+        self._mark_exception_subclasses()
         # Pass 3: Collect function and method signatures
         self._collect_signatures(tree)
         # Pass 4: Collect struct fields
@@ -187,6 +189,20 @@ class Frontend:
         if not info:
             return False
         return any(self._is_node_subclass(base) for base in info.bases)
+
+    def _mark_exception_subclasses(self) -> None:
+        """Pass 2b: Mark classes that inherit from Exception."""
+        for name, info in self.symbols.structs.items():
+            info.is_exception = self._is_exception_subclass(name)
+
+    def _is_exception_subclass(self, name: str) -> bool:
+        """Check if a class is an Exception subclass (directly or transitively)."""
+        if name == "Exception":
+            return True
+        info = self.symbols.structs.get(name)
+        if not info:
+            return False
+        return any(self._is_exception_subclass(base) for base in info.bases)
 
     def _collect_signatures(self, tree: ast.Module) -> None:
         """Pass 3: Collect function and method signatures."""
@@ -437,12 +453,20 @@ class Frontend:
         implements = []
         if info.is_node:
             implements.append("Node")
+        # Determine embedded type for exception inheritance
+        embedded_type = None
+        if info.is_exception and info.bases:
+            base = info.bases[0]
+            if base != "Exception" and self._is_exception_subclass(base):
+                embedded_type = base
         return Struct(
             name=node.name,
             fields=fields,
             methods=methods,
             implements=implements,
             loc=self._loc_from_node(node),
+            is_exception=info.is_exception,
+            embedded_type=embedded_type,
         )
 
     def _build_function_shell(self, node: ast.FunctionDef, with_body: bool = False) -> Function:

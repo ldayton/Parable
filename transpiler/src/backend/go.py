@@ -317,6 +317,9 @@ func _intToStr(n int) string {
         """Emit struct definition."""
         self._line(f"type {struct.name} struct {{")
         self.indent += 1
+        # Emit embedded type for exception inheritance
+        if struct.embedded_type:
+            self._line(struct.embedded_type)
         for field in struct.fields:
             go_type = self._type_to_go(field.typ)
             go_name = self._to_pascal(field.name)
@@ -324,6 +327,17 @@ func _intToStr(n int) string {
         self.indent -= 1
         self._line("}")
         self._line("")
+        # Emit Error() method for exceptions (Go error interface)
+        if struct.is_exception:
+            if not struct.embedded_type:
+                # Root exception - emit Error() calling formatMessage()
+                self._line(f"func (self *{struct.name}) Error() string {{")
+                self.indent += 1
+                self._line("return self.formatMessage()")
+                self.indent -= 1
+                self._line("}")
+                self._line("")
+            # Exceptions with embedded_type inherit Error() from parent
         # If struct implements Node interface, emit the interface methods
         if "Node" in struct.implements:
             # GetKind getter for the Kind field

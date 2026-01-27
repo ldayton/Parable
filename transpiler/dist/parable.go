@@ -9211,7 +9211,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		name := node.Name
 		innerBody := func() Node {
 			if node.Body.GetKind() == "brace-group" {
-				return node.Body.(*CasePattern).Body
+				return node.Body.(*BraceGroup).Body
 			} else {
 				return node.Body
 			}

@@ -136,6 +136,7 @@ class TypeContext:
     kind_source_vars: dict[str, str] = field(default_factory=dict)  # Maps kind_var -> node_var for kind = node.kind
     union_types: dict[str, list[str]] = field(default_factory=dict)  # Maps param name -> [struct names] for union params
     list_element_unions: dict[str, list[str]] = field(default_factory=dict)  # Maps list var -> [struct names] for items appended under kind guards
+    narrowed_attr_paths: dict[tuple[str, ...], str] = field(default_factory=dict)  # Maps attr path tuple -> struct name
 
 
 class Frontend:
@@ -2135,7 +2136,13 @@ class Frontend:
                 struct_names = NODE_FIELD_TYPES[node.attr]
                 # If the variable is from a union type, prefer a struct from the union
                 chosen_struct = struct_names[0]  # Default: first in NODE_FIELD_TYPES
-                if isinstance(node.value, ast.Name):
+                # Check if the object expression has a narrowed type from a kind check
+                obj_attr_path = self._get_attr_path(node.value)
+                if obj_attr_path and obj_attr_path in self._type_ctx.narrowed_attr_paths:
+                    narrowed_struct = self._type_ctx.narrowed_attr_paths[obj_attr_path]
+                    if narrowed_struct in struct_names:
+                        chosen_struct = narrowed_struct
+                elif isinstance(node.value, ast.Name):
                     var_name = node.value.id
                     if var_name in self._type_ctx.union_types:
                         union_structs = self._type_ctx.union_types[var_name]
@@ -2787,7 +2794,16 @@ class Frontend:
     def _lower_expr_IfExp(self, node: ast.IfExp) -> "ir.Expr":
         from . import ir
         cond = self._lower_expr_as_bool(node.test)
+        # Check for attribute path kind narrowing in the condition
+        # e.g., node.body.kind == "brace-group" narrows node.body to BraceGroup
+        attr_kind_check = self._extract_attr_kind_check(node.test)
+        if attr_kind_check:
+            attr_path, struct_name = attr_kind_check
+            self._type_ctx.narrowed_attr_paths[attr_path] = struct_name
         then_expr = self._lower_expr(node.body)
+        # Clean up the narrowing after processing then branch
+        if attr_kind_check:
+            del self._type_ctx.narrowed_attr_paths[attr_kind_check[0]]
         else_expr = self._lower_expr(node.orelse)
         # Infer type from branches - prefer then branch, fall back to else
         result_type = self._infer_expr_type_from_ast(node.body)
@@ -3322,6 +3338,34 @@ class Frontend:
                     kind_value = right.value
                     if kind_value in KIND_TO_STRUCT:
                         return (node_var, KIND_TO_STRUCT[kind_value])
+        return None
+
+    def _extract_attr_kind_check(self, node: ast.expr) -> tuple[tuple[str, ...], str] | None:
+        """Extract kind check for attribute paths like `node.body.kind == "value"`.
+        Returns (attr_path_tuple, struct_name) or None."""
+        from .type_overrides import KIND_TO_STRUCT
+        if isinstance(node, ast.Compare) and len(node.ops) == 1 and isinstance(node.ops[0], ast.Eq):
+            left = node.left
+            right = node.comparators[0]
+            # Check for expr.kind == "value" pattern where expr is an attribute chain
+            if (isinstance(left, ast.Attribute) and left.attr == "kind"
+                and isinstance(right, ast.Constant) and isinstance(right.value, str)):
+                kind_value = right.value
+                if kind_value in KIND_TO_STRUCT:
+                    # Extract the attribute path (e.g., node.body -> ("node", "body"))
+                    attr_path = self._get_attr_path(left.value)
+                    if attr_path and len(attr_path) > 1:  # Only for chains, not simple vars
+                        return (attr_path, KIND_TO_STRUCT[kind_value])
+        return None
+
+    def _get_attr_path(self, node: ast.expr) -> tuple[str, ...] | None:
+        """Extract attribute path as tuple (e.g., node.body -> ("node", "body"))."""
+        if isinstance(node, ast.Name):
+            return (node.id,)
+        elif isinstance(node, ast.Attribute) and isinstance(node.value, (ast.Name, ast.Attribute)):
+            base = self._get_attr_path(node.value)
+            if base:
+                return base + (node.attr,)
         return None
 
     def _collect_isinstance_chain(self, node: ast.If, var_name: str) -> tuple[list["ir.TypeCase"], list["ir.Stmt"]]:

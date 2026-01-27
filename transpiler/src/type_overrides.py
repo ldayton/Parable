@@ -155,7 +155,7 @@ NODE_FIELD_TYPES: dict[str, list[str]] = {
     "right": ["ArithBinaryOp"],
     # CasePattern fields - for case pattern handling
     "pattern": ["CasePattern"],
-    "body": ["CasePattern", "For", "ForArith", "While", "Until", "Select", "Conditional"],
+    "body": ["CasePattern", "BraceGroup", "For", "ForArith", "While", "Until", "Select", "Conditional"],
     "terminator": ["CasePattern"],
     # HereDoc fields accessed on Node-typed expressions
     "content": ["HereDoc"],
@@ -196,6 +196,7 @@ KIND_TO_STRUCT: dict[str, str] = {
     "case": "Case",
     "select": "Select",
     "group": "Group",
+    "brace-group": "BraceGroup",
     "word": "Word",
     "array": "Array",
     "assignment": "Assignment",

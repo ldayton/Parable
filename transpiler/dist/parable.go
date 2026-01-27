@@ -9320,7 +9320,7 @@ func formatRedirect(r Node, compact bool, heredocOpOnly bool) string {
 		}
 		return op + delim + "\n" + r.Content + r.Delimiter + "\n"
 	}
-	op := r.(*Operator).Op
+	op := r.(*Redirect).Op
 	if op == "1>" {
 		op = ">"
 	} else if op == "0<" {

@@ -125,8 +125,8 @@ UNION_FIELDS: dict[tuple[str, str], tuple[str, Type, Type]] = {
 NODE_FIELD_TYPES: dict[str, list[str]] = {
     # command field - on CommandSubstitution, ProcessSubstitution, Coproc
     "command": ["CommandSubstitution", "ProcessSubstitution", "Coproc"],
-    # op field - only on Operator
-    "op": ["Operator"],
+    # op field - on Operator (List parts access), Redirect (redirect formatting)
+    "op": ["Operator", "Redirect"],
     # commands field - only on Pipeline
     "commands": ["Pipeline"],
     # parts field - on List (not to be confused with Token.parts)

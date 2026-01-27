@@ -134,6 +134,7 @@ class TypeContext:
     sentinel_ints: set[str] = field(default_factory=set)  # Variables that use -1 sentinel for None
     narrowed_vars: set[str] = field(default_factory=set)  # Variables narrowed from interface type
     kind_source_vars: dict[str, str] = field(default_factory=dict)  # Maps kind_var -> node_var for kind = node.kind
+    union_types: dict[str, list[str]] = field(default_factory=dict)  # Maps param name -> [struct names] for union params
 
 
 class Frontend:
@@ -596,11 +597,21 @@ class Frontend:
             if func_info:
                 for p in func_info.params:
                     var_types[p.name] = p.typ
+            # Extract union types from parameter annotations
+            union_types: dict[str, list[str]] = {}
+            non_self_args = [a for a in node.args.args if a.arg != "self"]
+            for arg in non_self_args:
+                if arg.annotation:
+                    py_type = self._annotation_to_str(arg.annotation)
+                    structs = self._extract_union_struct_names(py_type)
+                    if structs:
+                        union_types[arg.arg] = structs
             self._type_ctx = TypeContext(
                 return_type=func_info.return_type if func_info else VOID,
                 var_types=var_types,
                 tuple_vars=tuple_vars,
                 sentinel_ints=sentinel_ints,
+                union_types=union_types,
             )
             body = self._lower_stmts(node.body)
         return Function(
@@ -633,11 +644,21 @@ class Frontend:
                 for p in func_info.params:
                     var_types[p.name] = p.typ
             var_types["self"] = Pointer(StructRef(class_name))
+            # Extract union types from parameter annotations
+            union_types: dict[str, list[str]] = {}
+            non_self_args = [a for a in node.args.args if a.arg != "self"]
+            for arg in non_self_args:
+                if arg.annotation:
+                    py_type = self._annotation_to_str(arg.annotation)
+                    structs = self._extract_union_struct_names(py_type)
+                    if structs:
+                        union_types[arg.arg] = structs
             self._type_ctx = TypeContext(
                 return_type=func_info.return_type if func_info else VOID,
                 var_types=var_types,
                 tuple_vars=tuple_vars,
                 sentinel_ints=sentinel_ints,
+                union_types=union_types,
             )
             body = self._lower_stmts(node.body)
         return Function(
@@ -836,6 +857,23 @@ class Frontend:
                     return FuncType(params=param_types, ret=ret)
                 return FuncType(params=(), ret=ret)
         return Interface("any")
+
+    def _extract_union_struct_names(self, py_type: str) -> list[str] | None:
+        """Extract struct names from a union type like 'Redirect | HereDoc'.
+        Returns None if not a union of Node subclasses."""
+        if " | " not in py_type:
+            return None
+        parts = self._split_union_types(py_type)
+        if len(parts) <= 1:
+            return None
+        # Filter out None
+        parts = [p for p in parts if p != "None"]
+        if len(parts) <= 1:
+            return None
+        # Check if all parts are Node subclasses
+        if not all(self._is_node_subclass(p) for p in parts):
+            return None
+        return parts
 
     def _make_default_value(self, typ: Type, loc: Loc) -> "ir.Expr":
         """Create a default value expression for a given type."""
@@ -2008,9 +2046,18 @@ class Frontend:
             # Look up which struct types have this field
             if node.attr in NODE_FIELD_TYPES:
                 struct_names = NODE_FIELD_TYPES[node.attr]
-                # Use the first struct type (default assumption)
-                # For command: CommandSubstitution is first (most common case)
-                asserted_type = Pointer(StructRef(struct_names[0]))
+                # If the variable is from a union type, prefer a struct from the union
+                chosen_struct = struct_names[0]  # Default: first in NODE_FIELD_TYPES
+                if isinstance(node.value, ast.Name):
+                    var_name = node.value.id
+                    if var_name in self._type_ctx.union_types:
+                        union_structs = self._type_ctx.union_types[var_name]
+                        # Find intersection of union structs and field structs
+                        for s in union_structs:
+                            if s in struct_names:
+                                chosen_struct = s
+                                break
+                asserted_type = Pointer(StructRef(chosen_struct))
                 obj = ir.TypeAssert(
                     expr=obj, asserted=asserted_type, safe=True,
                     typ=asserted_type, loc=self._loc_from_node(node.value)

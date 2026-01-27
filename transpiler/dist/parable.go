@@ -981,6 +981,7 @@ func (self *Lexer) parseMatchedPair(openChar string, closeChar string, flags int
 		}
 		if ch == "(" && wasGtlt && (flags&(MatchedPairFlagsDOLBRACE|MatchedPairFlagsARRAYSUB)) != 0 {
 			direction := chars[len(chars)-1]
+			chars = chars[:len(chars)-1]
 			self.Pos--
 			self.syncToParser()
 			procsubNode, procsubText := self.parser.parseProcessSubstitution()

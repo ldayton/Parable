@@ -2879,6 +2879,22 @@ class Frontend:
                         value=value,
                         loc=self._loc_from_node(node)
                     )
+            # Handle simple pop: var = list.pop() -> var = list[len(list)-1]; list = list[:len(list)-1]
+            if isinstance(target, ast.Name) and isinstance(node.value, ast.Call):
+                if isinstance(node.value.func, ast.Attribute) and node.value.func.attr == "pop" and not node.value.args:
+                    obj = self._lower_expr(node.value.func.value)
+                    obj_type = self._infer_expr_type_from_ast(node.value.func.value)
+                    if isinstance(obj_type, Slice):
+                        obj_lval = self._lower_lvalue(node.value.func.value)
+                        lval = self._lower_lvalue(target)
+                        elem_type = obj_type.element
+                        len_minus_1 = ir.BinaryOp(op="-", left=ir.Len(expr=obj, typ=INT), right=ir.IntLit(value=1, typ=INT), typ=INT)
+                        block = ir.Block(body=[
+                            ir.Assign(target=lval, value=ir.Index(obj=obj, index=len_minus_1, typ=elem_type)),
+                            ir.Assign(target=obj_lval, value=ir.SliceExpr(obj=obj, high=len_minus_1, typ=obj_type)),
+                        ], loc=self._loc_from_node(node))
+                        block.no_scope = True  # Emit without braces
+                        return block
             # Handle tuple unpacking: a, b = func() where func returns tuple
             if isinstance(target, ast.Tuple) and len(target.elts) == 2:
                 # Special case for popping from stack with tuple unpacking

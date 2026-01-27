@@ -40,10 +40,7 @@ func findTestFiles(directory string) []string {
 			return err
 		}
 		if !info.IsDir() && strings.HasSuffix(path, ".tests") {
-			// Only include tests under parable/ subdirectory
-			if strings.Contains(path, "/parable/") {
-				result = append(result, path)
-			}
+			result = append(result, path)
 		}
 		return nil
 	})

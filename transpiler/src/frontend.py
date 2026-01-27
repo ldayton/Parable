@@ -2585,7 +2585,7 @@ class Frontend:
                         typ=Pointer(StructRef(func_name)),
                         loc=self._loc_from_node(node),
                     )
-                # Simple struct: emit StructLit with fields mapped from positional args
+                # Simple struct: emit StructLit with fields mapped from positional and keyword args
                 fields: dict[str, ir.Expr] = {}
                 for i, arg_ast in enumerate(node.args):
                     if i < len(struct_info.init_params):
@@ -2603,6 +2603,21 @@ class Frontend:
                             fields[field_name] = self._lower_expr_List(arg_ast, expected_type)
                         else:
                             fields[field_name] = args[i]
+                # Handle keyword arguments for specific structs that need them
+                # (ArithmeticCommand needs raw_content for proper sexp output)
+                if func_name == "ArithmeticCommand" and node.keywords:
+                    for kw in node.keywords:
+                        if kw.arg:
+                            # Map param name to field name (handle snake_case to PascalCase)
+                            field_name = struct_info.param_to_field.get(kw.arg, kw.arg)
+                            field_info = struct_info.fields.get(field_name)
+                            expected_type = field_info.typ if field_info else None
+                            if isinstance(expected_type, Pointer) and isinstance(expected_type.target, Slice):
+                                expected_type = expected_type.target
+                            if isinstance(kw.value, ast.List):
+                                fields[field_name] = self._lower_expr_List(kw.value, expected_type)
+                            else:
+                                fields[field_name] = self._lower_expr(kw.value)
                 return ir.StructLit(
                     struct_name=func_name, fields=fields,
                     typ=Pointer(StructRef(func_name)), loc=self._loc_from_node(node)

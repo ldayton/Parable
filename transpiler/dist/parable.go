@@ -326,7 +326,7 @@ func (self *QuoteState) InQuotes() bool {
 }
 
 func (self *QuoteState) Copy() *QuoteState {
-	qs := &QuoteState{}
+	qs := NewQuoteState()
 	qs.Single = self.Single
 	qs.Double = self.Double
 	qs.stack = append(self.stack[:0:0], self.stack...)
@@ -1059,7 +1059,7 @@ func (self *Lexer) readWordInternal(ctx int, atCommandStart bool, inArrayLiteral
 			}
 			break
 		}
-		if ctx == WORDCTXCOND || ctx == WORDCTXREGEX && ch == "[" {
+		if (ctx == WORDCTXCOND || ctx == WORDCTXREGEX) && ch == "[" {
 			forRegex := ctx == WORDCTXREGEX
 			if self.readBracketExpression(&chars, &parts, forRegex, parenDepth) {
 				continue
@@ -1100,7 +1100,7 @@ func (self *Lexer) readWordInternal(ctx int, atCommandStart bool, inArrayLiteral
 			if ctx == WORDCTXNORMAL {
 				chars = append(chars, "\"")
 				inSingleInDquote := false
-				for !self.AtEnd() && inSingleInDquote || self.Peek() != "\"" {
+				for !self.AtEnd() && (inSingleInDquote || self.Peek() != "\"") {
 					c := self.Peek()
 					if inSingleInDquote {
 						chars = append(chars, self.Advance())
@@ -1236,7 +1236,7 @@ func (self *Lexer) readWordInternal(ctx int, atCommandStart bool, inArrayLiteral
 			} else if chars[len(chars)-1] == "=" && len(chars) >= 2 {
 				isArrayAssign = isArrayAssignmentPrefix(chars[:len(chars)-1])
 			}
-			if isArrayAssign && atCommandStart || inAssignBuiltin {
+			if isArrayAssign && (atCommandStart || inAssignBuiltin) {
 				self.syncToParser()
 				arrayResult0, arrayResult1 := self.parser.parseArrayLiteral()
 				self.syncFromParser()
@@ -1289,8 +1289,8 @@ func (self *Lexer) readWord() *Token {
 	if c == "" {
 		return nil
 	}
-	isProcsub := c == "<" || c == ">" && self.Pos+1 < self.Length && string(self.Source[self.Pos+1]) == "("
-	isRegexParen := self.wordContext == WORDCTXREGEX && c == "(" || c == ")"
+	isProcsub := (c == "<" || c == ">") && self.Pos+1 < self.Length && string(self.Source[self.Pos+1]) == "("
+	isRegexParen := self.wordContext == WORDCTXREGEX && (c == "(" || c == ")")
 	if self.IsMetachar(c) && !isProcsub && !isRegexParen {
 		return nil
 	}
@@ -1600,7 +1600,7 @@ func (self *Lexer) consumeParamOperator() string {
 func (self *Lexer) paramSubscriptHasClose(startPos int) bool {
 	depth := 1
 	i := startPos + 1
-	quote := &QuoteState{}
+	quote := NewQuoteState()
 	for i < self.Length {
 		c := string(self.Source[i])
 		if quote.Single {
@@ -1807,7 +1807,7 @@ func (self *Lexer) readBracedParam(start int, inDquote bool) (Node, string) {
 	}
 	param = self.consumeParamName()
 	if !(param != "") {
-		if !self.AtEnd() && strings.Contains("-=+?", self.Peek()) || self.Peek() == ":" && self.Pos+1 < self.Length && isSimpleParamOp(string(self.Source[self.Pos+1])) {
+		if !self.AtEnd() && (strings.Contains("-=+?", self.Peek()) || self.Peek() == ":" && self.Pos+1 < self.Length && isSimpleParamOp(string(self.Source[self.Pos+1]))) {
 			param = ""
 		} else {
 			content := self.parseMatchedPair("{", "}", MatchedPairFlagsDOLBRACE, false)
@@ -1828,7 +1828,7 @@ func (self *Lexer) readBracedParam(start int, inDquote bool) (Node, string) {
 	}
 	op = self.consumeParamOperator()
 	if op == "" {
-		if !self.AtEnd() && self.Peek() == "$" && self.Pos+1 < self.Length && string(self.Source[self.Pos+1]) == "\"" || string(self.Source[self.Pos+1]) == "'" {
+		if !self.AtEnd() && self.Peek() == "$" && self.Pos+1 < self.Length && (string(self.Source[self.Pos+1]) == "\"" || string(self.Source[self.Pos+1]) == "'") {
 			dollarCount := 1 + countConsecutiveDollarsBefore(self.Source, self.Pos)
 			if (dollarCount % 2) == 1 {
 				op = ""
@@ -1856,7 +1856,7 @@ func (self *Lexer) readBracedParam(start int, inDquote bool) (Node, string) {
 			op = "`"
 		} else if !self.AtEnd() && self.Peek() == "$" && self.Pos+1 < self.Length && string(self.Source[self.Pos+1]) == "{" {
 			op = ""
-		} else if !self.AtEnd() && self.Peek() == "'" || self.Peek() == "\"" {
+		} else if !self.AtEnd() && (self.Peek() == "'" || self.Peek() == "\"") {
 			op = ""
 		} else if !self.AtEnd() && self.Peek() == "\\" {
 			op = self.Advance()
@@ -1885,14 +1885,14 @@ func (self *Lexer) readBracedParam(start int, inDquote bool) (Node, string) {
 		paramEndsWithDollar := param != "" && strings.HasSuffix(param, "$")
 		arg = self.collectParamArgument(flags, paramEndsWithDollar)
 	}()
-	if op == "<" || op == ">" && strings.HasPrefix(arg, "(") && strings.HasSuffix(arg, ")") {
+	if (op == "<" || op == ">") && strings.HasPrefix(arg, "(") && strings.HasSuffix(arg, ")") {
 		inner := arg[1 : len(arg)-1]
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
 				}
 			}()
-			subParser := &Parser{Source: inner}
+			subParser := NewParser(inner, true, self.parser.extglob)
 			parsed := subParser.ParseList(true)
 			if parsed != nil && subParser.AtEnd() {
 				formatted := formatCmdsubNode(parsed, 0, true, false, true)
@@ -1941,7 +1941,7 @@ func (self *Word) appendWithCtlesc(result *[]byte, byteVal int) {
 
 func (self *Word) doubleCtlescSmart(value string) string {
 	result := []string{}
-	quote := &QuoteState{}
+	quote := NewQuoteState()
 	for _, c := range value {
 		if c == '\'' && !quote.Double {
 			quote.Single = !quote.Single
@@ -1973,7 +1973,7 @@ func (self *Word) doubleCtlescSmart(value string) string {
 func (self *Word) normalizeParamExpansionNewlines(value string) string {
 	result := []string{}
 	i := 0
-	quote := &QuoteState{}
+	quote := NewQuoteState()
 	for i < len(value) {
 		c := string(value[i])
 		if c == "'" && !quote.Double {
@@ -2205,7 +2205,7 @@ func (self *Word) expandAnsiCEscapes(value string) string {
 func (self *Word) expandAllAnsiCQuotes(value string) string {
 	result := []string{}
 	i := 0
-	quote := &QuoteState{}
+	quote := NewQuoteState()
 	inBacktick := false
 	braceDepth := 0
 	for i < len(value) {
@@ -2347,8 +2347,8 @@ func (self *Word) stripLocaleStringDollars(value string) string {
 	i := 0
 	braceDepth := 0
 	bracketDepth := 0
-	quote := &QuoteState{}
-	braceQuote := &QuoteState{}
+	quote := NewQuoteState()
+	braceQuote := NewQuoteState()
 	bracketInDoubleQuote := false
 	for i < len(value) {
 		ch := string(value[i])
@@ -2356,7 +2356,7 @@ func (self *Word) stripLocaleStringDollars(value string) string {
 			result = append(result, ch)
 			result = append(result, string(value[i+1]))
 			i += 2
-		} else if startsWithAt(value, i, "${") && !quote.Single && !braceQuote.Single && i == 0 || string(value[i-1]) != "$" {
+		} else if startsWithAt(value, i, "${") && !quote.Single && !braceQuote.Single && (i == 0 || string(value[i-1]) != "$") {
 			braceDepth++
 			braceQuote.Double = false
 			braceQuote.Single = false
@@ -2396,7 +2396,7 @@ func (self *Word) stripLocaleStringDollars(value string) string {
 			braceQuote.Single = !braceQuote.Single
 			result = append(result, ch)
 			i++
-		} else if startsWithAt(value, i, "$\"") && !quote.Single && !braceQuote.Single && braceDepth > 0 || bracketDepth > 0 || !quote.Double && !braceQuote.Double && !bracketInDoubleQuote {
+		} else if startsWithAt(value, i, "$\"") && !quote.Single && !braceQuote.Single && (braceDepth > 0 || bracketDepth > 0 || !quote.Double) && !braceQuote.Double && !bracketInDoubleQuote {
 			dollarCount := 1 + countConsecutiveDollarsBefore(value, i)
 			if (dollarCount % 2) == 1 {
 				result = append(result, "\"")
@@ -2422,11 +2422,11 @@ func (self *Word) stripLocaleStringDollars(value string) string {
 
 func (self *Word) normalizeArrayWhitespace(value string) string {
 	i := 0
-	if !(i < len(value) && _strIsAlpha(string(value[i])) || string(value[i]) == "_") {
+	if !(i < len(value) && (_strIsAlpha(string(value[i])) || string(value[i]) == "_")) {
 		return value
 	}
 	i++
-	for i < len(value) && _strIsAlnum(string(value[i])) || string(value[i]) == "_" {
+	for i < len(value) && (_strIsAlnum(string(value[i])) || string(value[i]) == "_") {
 		i++
 	}
 	for i < len(value) && string(value[i]) == "[" {
@@ -2473,7 +2473,7 @@ func (self *Word) findMatchingParen(value string, openPos int) int {
 	}
 	i := openPos + 1
 	depth := 1
-	quote := &QuoteState{}
+	quote := NewQuoteState()
 	for i < len(value) && depth > 0 {
 		ch := string(value[i])
 		if ch == "\\" && i+1 < len(value) && !quote.Single {
@@ -2627,7 +2627,7 @@ func (self *Word) normalizeArrayInner(inner string) string {
 			}
 			normalized = append(normalized, substring(inner, i, j))
 			i = j
-		} else if ch == "<" || ch == ">" && i+1 < len(inner) && string(inner[i+1]) == "(" {
+		} else if (ch == "<" || ch == ">") && i+1 < len(inner) && string(inner[i+1]) == "(" {
 			inWhitespace = false
 			j := i + 2
 			depth := 1
@@ -2867,7 +2867,7 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 	hasUntrackedCmdsub := false
 	hasUntrackedProcsub := false
 	idx := 0
-	scanQuote := &QuoteState{}
+	scanQuote := NewQuoteState()
 	for idx < len(value) {
 		if string(value[idx]) == "\"" {
 			scanQuote.Double = !scanQuote.Double
@@ -2883,7 +2883,7 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 		} else if startsWithAt(value, idx, "$(") && !startsWithAt(value, idx, "$((") && !isBackslashEscaped(value, idx) && !isDollarDollarParen(value, idx) {
 			hasUntrackedCmdsub = true
 			break
-		} else if startsWithAt(value, idx, "<(") || startsWithAt(value, idx, ">(") && !scanQuote.Double {
+		} else if (startsWithAt(value, idx, "<(") || startsWithAt(value, idx, ">(")) && !scanQuote.Double {
 			if idx == 0 || !_strIsAlnum(string(value[idx-1])) && !strings.Contains("\"'", string(value[idx-1])) {
 				hasUntrackedProcsub = true
 				break
@@ -2893,7 +2893,7 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 			idx++
 		}
 	}
-	hasParamWithProcsubPattern := strings.Contains(value, "${") && strings.Contains(value, "<(") || strings.Contains(value, ">(")
+	hasParamWithProcsubPattern := strings.Contains(value, "${") && (strings.Contains(value, "<(") || strings.Contains(value, ">("))
 	if !(len(cmdsubParts) > 0) && !(len(procsubParts) > 0) && !hasBraceCmdsub && !hasUntrackedCmdsub && !hasUntrackedProcsub && !hasParamWithProcsubPattern {
 		return value
 	}
@@ -2901,7 +2901,7 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 	i := 0
 	cmdsubIdx := 0
 	procsubIdx := 0
-	mainQuote := &QuoteState{}
+	mainQuote := NewQuoteState()
 	extglobDepth := 0
 	deprecatedArithDepth := 0
 	arithDepth := 0
@@ -2995,7 +2995,7 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 							formatted = inner
 						}
 					}()
-					parser = &Parser{Source: inner}
+					parser = NewParser(inner, false, false)
 					parsed = parser.ParseList(true)
 					formatted = func() string {
 						if parsed != nil {
@@ -3072,7 +3072,7 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 				result = append(result, substring(value, i, j))
 			}
 			i = j
-		} else if startsWithAt(value, i, ">(") || startsWithAt(value, i, "<(") && !mainQuote.Double && deprecatedArithDepth == 0 && arithDepth == 0 {
+		} else if (startsWithAt(value, i, ">(") || startsWithAt(value, i, "<(")) && !mainQuote.Double && deprecatedArithDepth == 0 && arithDepth == 0 {
 			isProcsub := i == 0 || !_strIsAlnum(string(value[i-1])) && !strings.Contains("\"'", string(value[i-1]))
 			if extglobDepth > 0 {
 				j = findCmdsubEnd(value, i+2)
@@ -3139,7 +3139,7 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 							formatted = inner
 						}
 					}()
-					parser = &Parser{Source: inner}
+					parser = NewParser(inner, false, false)
 					parsed = parser.ParseList(true)
 					if parsed != nil && parser.Pos == len(inner) && !strings.Contains(inner, "\n") {
 						compact = startsWithSubshell(parsed)
@@ -3172,7 +3172,7 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 				result = append(result, string(value[i]))
 				i++
 			}
-		} else if isExpansionStart(value, i, "${ ") || isExpansionStart(value, i, "${\t") || isExpansionStart(value, i, "${\n") || isExpansionStart(value, i, "${|") && !isBackslashEscaped(value, i) {
+		} else if (isExpansionStart(value, i, "${ ") || isExpansionStart(value, i, "${\t") || isExpansionStart(value, i, "${\n") || isExpansionStart(value, i, "${|")) && !isBackslashEscaped(value, i) {
 			prefix := strings.ReplaceAll(strings.ReplaceAll(substring(value, i, i+3), "\t", " "), "\n", " ")
 			j = i + 3
 			depth := 1
@@ -3194,7 +3194,7 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 							result = append(result, substring(value, i, j))
 						}
 					}()
-					parser = &Parser{Source: strings.TrimLeft(inner, " \t\n|")}
+					parser = NewParser(strings.TrimLeft(inner, " \t\n|"), false, false)
 					parsed = parser.ParseList(true)
 					if parsed != nil {
 						formatted = formatCmdsubNode(parsed, 0, false, false, false)
@@ -3217,7 +3217,7 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 		} else if isExpansionStart(value, i, "${") && !isBackslashEscaped(value, i) {
 			j = i + 2
 			depth := 1
-			braceQuote := &QuoteState{}
+			braceQuote := NewQuoteState()
 			for j < len(value) && depth > 0 {
 				c := string(value[j])
 				if c == "\\" && j+1 < len(value) && !braceQuote.Single {
@@ -3279,7 +3279,7 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 func (self *Word) normalizeExtglobWhitespace(value string) string {
 	result := []string{}
 	i := 0
-	extglobQuote := &QuoteState{}
+	extglobQuote := NewQuoteState()
 	deprecatedArithDepth := 0
 	for i < len(value) {
 		if string(value[i]) == "\"" {
@@ -3490,7 +3490,7 @@ func (self *List) GetKind() string { return self.Kind }
 func (self *List) ToSexp() string {
 	parts := append(self.Parts[:0:0], self.Parts...)
 	opNames := map[string]string{"&&": "and", "||": "or", ";": "semi", "\n": "semi", "&": "background"}
-	for len(parts) > 1 && parts[len(parts)-1].GetKind() == "operator" && parts[len(parts)-1].(*Operator).Op == ";" || parts[len(parts)-1].(*Operator).Op == "\n" {
+	for len(parts) > 1 && parts[len(parts)-1].GetKind() == "operator" && (parts[len(parts)-1].(*Operator).Op == ";" || parts[len(parts)-1].(*Operator).Op == "\n") {
 		parts = sublist(parts, 0, len(parts)-1)
 	}
 	if len(parts) == 1 {
@@ -3498,7 +3498,7 @@ func (self *List) ToSexp() string {
 	}
 	if parts[len(parts)-1].GetKind() == "operator" && parts[len(parts)-1].(*Operator).Op == "&" {
 		for _, i := range Range(len(parts)-3, 0, -2) {
-			if parts[i].GetKind() == "operator" && parts[i].(*Operator).Op == ";" || parts[i].(*Operator).Op == "\n" {
+			if parts[i].GetKind() == "operator" && (parts[i].(*Operator).Op == ";" || parts[i].(*Operator).Op == "\n") {
 				left := sublist(parts, 0, i)
 				right := sublist(parts, i+1, len(parts)-1)
 				var leftSexp string
@@ -3529,7 +3529,7 @@ func (self *List) ToSexp() string {
 func (self *List) toSexpWithPrecedence(parts []Node, opNames map[string]string) string {
 	semiPositions := []int{}
 	for _, i := range Range(len(parts)) {
-		if parts[i].GetKind() == "operator" && parts[i].(*Operator).Op == ";" || parts[i].(*Operator).Op == "\n" {
+		if parts[i].GetKind() == "operator" && (parts[i].(*Operator).Op == ";" || parts[i].(*Operator).Op == "\n") {
 			semiPositions = append(semiPositions, i)
 		}
 	}
@@ -3657,9 +3657,9 @@ func (self *Redirect) ToSexp() string {
 	op := strings.TrimLeft(self.Op, "0123456789")
 	if strings.HasPrefix(op, "{") {
 		j := 1
-		if j < len(op) && _strIsAlpha(string(op[j])) || string(op[j]) == "_" {
+		if j < len(op) && (_strIsAlpha(string(op[j])) || string(op[j]) == "_") {
 			j++
-			for j < len(op) && _strIsAlnum(string(op[j])) || string(op[j]) == "_" {
+			for j < len(op) && (_strIsAlnum(string(op[j])) || string(op[j]) == "_") {
 				j++
 			}
 			if j < len(op) && string(op[j]) == "[" {
@@ -3995,7 +3995,7 @@ func (self *CasePattern) ToSexp() string {
 		if ch == "\\" && i+1 < len(self.Pattern) {
 			current = append(current, substring(self.Pattern, i, i+2))
 			i += 2
-		} else if ch == "@" || ch == "?" || ch == "*" || ch == "+" || ch == "!" && i+1 < len(self.Pattern) && string(self.Pattern[i+1]) == "(" {
+		} else if (ch == "@" || ch == "?" || ch == "*" || ch == "+" || ch == "!") && i+1 < len(self.Pattern) && string(self.Pattern[i+1]) == "(" {
 			current = append(current, ch)
 			current = append(current, "(")
 			depth++
@@ -5191,7 +5191,7 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 	inHeredocBody := false
 	currentHeredocDelim := ""
 	currentHeredocStrip := false
-	for !self.AtEnd() && inHeredocBody || self.Peek() != "`" {
+	for !self.AtEnd() && (inHeredocBody || self.Peek() != "`") {
 		if inHeredocBody {
 			lineStart := self.Pos
 			lineEnd := lineStart
@@ -5478,7 +5478,7 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 			}
 		}
 	}
-	subParser := &Parser{Source: content}
+	subParser := NewParser(content, false, self.extglob)
 	cmd := subParser.ParseList(true)
 	if cmd == nil {
 		cmd = &Empty{}
@@ -6138,7 +6138,7 @@ func (self *Parser) arithParseExpansion() Node {
 		ch := self.arithPeek(0)
 		if _strIsAlnum(ch) || ch == "_" {
 			nameChars = append(nameChars, self.arithAdvance())
-		} else if isSpecialParamOrDigit(ch) || ch == "#" && !(len(nameChars) > 0) {
+		} else if (isSpecialParamOrDigit(ch) || ch == "#") && !(len(nameChars) > 0) {
 			nameChars = append(nameChars, self.arithAdvance())
 			break
 		} else {
@@ -6201,7 +6201,7 @@ func (self *Parser) arithParseCmdsub() Node {
 	}
 	content = substring(self.arithSrc, contentStart, self.arithPos)
 	self.arithAdvance()
-	subParser := &Parser{Source: content}
+	subParser := NewParser(content, false, self.extglob)
 	cmd := subParser.ParseList(true)
 	return &CommandSubstitution{Command: cmd}
 }
@@ -6344,7 +6344,7 @@ func (self *Parser) arithParseBacktick() Node {
 	if !self.arithConsume("`") {
 		panic(fmt.Sprintf("%s at position %d", "Unterminated backtick in arithmetic", self.arithPos))
 	}
-	subParser := &Parser{Source: content}
+	subParser := NewParser(content, false, self.extglob)
 	cmd := subParser.ParseList(true)
 	return &CommandSubstitution{Command: cmd}
 }
@@ -6449,7 +6449,7 @@ func (self *Parser) ParseRedirect() Node {
 					right := strings.LastIndex(varname, "]")
 					if left != -1 && right == len(varname)-1 && right > left+1 {
 						base := varname[:left]
-						if base != "" && _strIsAlpha(string(base[0])) || string(base[0]) == "_" {
+						if base != "" && (_strIsAlpha(string(base[0])) || string(base[0]) == "_") {
 							isValidVarfd = true
 							for _, c := range base[1:] {
 								if !(_strIsAlnum(string(c)) || c == '_') {
@@ -6576,7 +6576,7 @@ func (self *Parser) ParseRedirect() Node {
 		}
 		if target == nil {
 			var innerWord *Word
-			if !self.AtEnd() && _strIsDigit(self.Peek()) || self.Peek() == "-" {
+			if !self.AtEnd() && (_strIsDigit(self.Peek()) || self.Peek() == "-") {
 				wordStart := self.Pos
 				fdChars = []string{}
 				for !self.AtEnd() && _strIsDigit(self.Peek()) {
@@ -6615,7 +6615,7 @@ func (self *Parser) ParseRedirect() Node {
 		}
 	} else {
 		self.SkipWhitespace()
-		if op == ">&" || op == "<&" && !self.AtEnd() && self.Peek() == "-" {
+		if (op == ">&" || op == "<&") && !self.AtEnd() && self.Peek() == "-" {
 			if self.Pos+1 < self.Length && !isMetachar(string(self.Source[self.Pos+1])) {
 				self.Advance()
 				target = &Word{Value: "&-"}
@@ -7067,7 +7067,7 @@ func (self *Parser) ParseArithmeticCommand() *ArithmeticCommand {
 	self.Advance()
 	self.Advance()
 	expr := self.parseArithExpr(content)
-	return &ArithmeticCommand{Expression: expr, Redirects: self.collectRedirects()}
+	return &ArithmeticCommand{Expression: expr, Redirects: self.collectRedirects(), RawContent: content}
 }
 
 func (self *Parser) ParseConditionalExpr() *ConditionalExpr {
@@ -8223,14 +8223,14 @@ func (self *Parser) ParsePipeline() Node {
 		}
 		self.SkipWhitespace()
 		if !self.AtEnd() && self.Peek() == "!" {
-			if self.Pos+1 >= self.Length || isNegationBoundary(string(self.Source[self.Pos+1])) && !self.isBangFollowedByProcsub() {
+			if (self.Pos+1 >= self.Length || isNegationBoundary(string(self.Source[self.Pos+1]))) && !self.isBangFollowedByProcsub() {
 				self.Advance()
 				prefixOrder = "time_negation"
 				self.SkipWhitespace()
 			}
 		}
 	} else if !self.AtEnd() && self.Peek() == "!" {
-		if self.Pos+1 >= self.Length || isNegationBoundary(string(self.Source[self.Pos+1])) && !self.isBangFollowedByProcsub() {
+		if (self.Pos+1 >= self.Length || isNegationBoundary(string(self.Source[self.Pos+1]))) && !self.isBangFollowedByProcsub() {
 			self.Advance()
 			self.SkipWhitespace()
 			inner := self.ParsePipeline()
@@ -8570,7 +8570,7 @@ func substring(s string, start int, end int) string {
 }
 
 func startsWithAt(s string, pos int, prefix string) bool {
-	return strings.HasPrefix(s, prefix)
+	return strings.HasPrefix(s[pos:], prefix)
 }
 
 func countConsecutiveDollarsBefore(s string, pos int) int {
@@ -8617,7 +8617,7 @@ func stripLineContinuationsCommentAware(text string) string {
 	result := []string{}
 	i := 0
 	inComment := false
-	quote := &QuoteState{}
+	quote := NewQuoteState()
 	for i < len(text) {
 		c := string(text[i])
 		if c == "\\" && i+1 < len(text) && string(text[i+1]) == "\n" {
@@ -8714,7 +8714,7 @@ func hasBracketClose(s string, start int, depth int) bool {
 		if string(s[i]) == "]" {
 			return true
 		}
-		if string(s[i]) == "|" || string(s[i]) == ")" && depth == 0 {
+		if (string(s[i]) == "|" || string(s[i]) == ")") && depth == 0 {
 			return false
 		}
 		i++
@@ -8724,7 +8724,7 @@ func hasBracketClose(s string, start int, depth int) bool {
 
 func consumeBracketClass(s string, start int, depth int) (int, []string, bool) {
 	scanPos := start + 1
-	if scanPos < len(s) && string(s[scanPos]) == "!" || string(s[scanPos]) == "^" {
+	if scanPos < len(s) && (string(s[scanPos]) == "!" || string(s[scanPos]) == "^") {
 		scanPos++
 	}
 	if scanPos < len(s) && string(s[scanPos]) == "]" {
@@ -8751,7 +8751,7 @@ func consumeBracketClass(s string, start int, depth int) (int, []string, bool) {
 	}
 	chars := []string{"["}
 	i := start + 1
-	if i < len(s) && string(s[i]) == "!" || string(s[i]) == "^" {
+	if i < len(s) && (string(s[i]) == "!" || string(s[i]) == "^") {
 		chars = append(chars, string(s[i]))
 		i++
 	}
@@ -9361,7 +9361,7 @@ func formatHeredocBody(r Node) string {
 func lookaheadForEsac(value string, start int, caseDepth int) bool {
 	i := start
 	depth := caseDepth
-	quote := &QuoteState{}
+	quote := NewQuoteState()
 	for i < len(value) {
 		c := string(value[i])
 		if c == "\\" && i+1 < len(value) && quote.Double {
@@ -9507,7 +9507,7 @@ func isValidArithmeticStart(value string, start int) bool {
 func findFunsubEnd(value string, start int) int {
 	depth := 1
 	i := start
-	quote := &QuoteState{}
+	quote := NewQuoteState()
 	for i < len(value) && depth > 0 {
 		c := string(value[i])
 		if c == "\\" && i+1 < len(value) && !quote.Single {
@@ -9562,7 +9562,7 @@ func findCmdsubEnd(value string, start int) int {
 			i = skipDoubleQuoted(value, i+1)
 			continue
 		}
-		if c == "#" && arithDepth == 0 && i == start || string(value[i-1]) == " " || string(value[i-1]) == "\t" || string(value[i-1]) == "\n" || string(value[i-1]) == ";" || string(value[i-1]) == "|" || string(value[i-1]) == "&" || string(value[i-1]) == "(" || string(value[i-1]) == ")" {
+		if c == "#" && arithDepth == 0 && (i == start || string(value[i-1]) == " " || string(value[i-1]) == "\t" || string(value[i-1]) == "\n" || string(value[i-1]) == ";" || string(value[i-1]) == "|" || string(value[i-1]) == "&" || string(value[i-1]) == "(" || string(value[i-1]) == ")") {
 			for i < len(value) && string(value[i]) != "\n" {
 				i++
 			}
@@ -9570,7 +9570,7 @@ func findCmdsubEnd(value string, start int) int {
 		}
 		if startsWithAt(value, i, "<<<") {
 			i += 3
-			for i < len(value) && string(value[i]) == " " || string(value[i]) == "\t" {
+			for i < len(value) && (string(value[i]) == " " || string(value[i]) == "\t") {
 				i++
 			}
 			if i < len(value) && string(value[i]) == "\"" {
@@ -9708,7 +9708,7 @@ func findBracedParamEnd(value string, start int) int {
 				continue
 			}
 		}
-		if c == "<" || c == ">" && i+1 < len(value) && string(value[i+1]) == "(" {
+		if (c == "<" || c == ">") && i+1 < len(value) && string(value[i+1]) == "(" {
 			i = findCmdsubEnd(value, i+2)
 			continue
 		}
@@ -9744,7 +9744,7 @@ func skipHeredoc(value string, start int) int {
 	delimStart := i
 	var quoteChar interface{}
 	var delimiter string
-	if i < len(value) && string(value[i]) == "\"" || string(value[i]) == "'" {
+	if i < len(value) && (string(value[i]) == "\"" || string(value[i]) == "'") {
 		quoteChar = string(value[i])
 		i++
 		delimStart = i
@@ -9772,11 +9772,11 @@ func skipHeredoc(value string, start int) int {
 		delimiter = substring(value, delimStart, i)
 	}
 	parenDepth := 0
-	quote := &QuoteState{}
+	quote := NewQuoteState()
 	inBacktick := false
 	for i < len(value) && string(value[i]) != "\n" {
 		c := string(value[i])
-		if c == "\\" && i+1 < len(value) && quote.Double || inBacktick {
+		if c == "\\" && i+1 < len(value) && (quote.Double || inBacktick) {
 			i += 2
 			continue
 		}
@@ -9958,7 +9958,7 @@ func isWordBoundary(s string, pos int, wordLen int) bool {
 		}
 	}
 	end := pos + wordLen
-	if end < len(s) && _strIsAlnum(string(s[end])) || string(s[end]) == "_" {
+	if end < len(s) && (_strIsAlnum(string(s[end])) || string(s[end]) == "_") {
 		return false
 	}
 	return true
@@ -10251,7 +10251,7 @@ func isArrayAssignmentPrefix(chars []string) bool {
 	}
 	s := strings.Join(chars, "")
 	i := 1
-	for i < len(s) && _strIsAlnum(string(s[i])) || string(s[i]) == "_" {
+	for i < len(s) && (_strIsAlnum(string(s[i])) || string(s[i]) == "_") {
 		i++
 	}
 	for i < len(s) {
@@ -10351,6 +10351,76 @@ func isValidIdentifier(name string) bool {
 }
 
 func Parse(source string, extglob bool) []Node {
-	parser := &Parser{Source: source, inProcessSub: false, extglob: extglob}
+	parser := NewParser(source, false, extglob)
 	return parser.Parse()
+}
+
+func NewQuoteState() *QuoteState {
+	self := &QuoteState{}
+	self.Single = false
+	self.Double = false
+	self.stack = []struct {
+		F0 bool
+		F1 bool
+	}{}
+	return self
+}
+
+func NewContextStack() *ContextStack {
+	self := &ContextStack{}
+	self.stack = []*ParseContext{&ParseContext{}}
+	return self
+}
+
+func NewLexer(source string, extglob bool) *Lexer {
+	self := &Lexer{}
+	self.Source = source
+	self.Pos = 0
+	self.Length = len(source)
+	self.Quote = NewQuoteState()
+	self.tokenCache = nil
+	self.parserState = ParserStateFlagsNONE
+	self.dolbraceState = DolbraceStateNONE
+	self.pendingHeredocs = []Node{}
+	self.extglob = extglob
+	self.parser = nil
+	self.eofToken = ""
+	self.lastReadToken = nil
+	self.wordContext = WORDCTXNORMAL
+	self.atCommandStart = false
+	self.inArrayLiteral = false
+	self.inAssignBuiltin = false
+	self.postReadPos = 0
+	self.cachedWordContext = WORDCTXNORMAL
+	self.cachedAtCommandStart = false
+	self.cachedInArrayLiteral = false
+	self.cachedInAssignBuiltin = false
+	return self
+}
+
+func NewParser(source string, inProcessSub bool, extglob bool) *Parser {
+	self := &Parser{}
+	self.Source = source
+	self.Pos = 0
+	self.Length = len(source)
+	self.pendingHeredocs = []*HereDoc{}
+	self.cmdsubHeredocEnd = -1
+	self.sawNewlineInSingleQuote = false
+	self.inProcessSub = inProcessSub
+	self.extglob = extglob
+	self.ctx = NewContextStack()
+	self.lexer = NewLexer(source, extglob)
+	self.lexer.parser = self
+	self.tokenHistory = []*Token{nil, nil, nil, nil}
+	self.parserState = ParserStateFlagsNONE
+	self.dolbraceState = DolbraceStateNONE
+	self.eofToken = ""
+	self.wordContext = WORDCTXNORMAL
+	self.atCommandStart = false
+	self.inArrayLiteral = false
+	self.inAssignBuiltin = false
+	self.arithSrc = ""
+	self.arithPos = 0
+	self.arithLen = 0
+	return self
 }

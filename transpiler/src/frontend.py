@@ -258,6 +258,8 @@ class Frontend:
                 info.init_params.append(arg.arg)
                 if arg.annotation:
                     param_types[arg.arg] = self._annotation_to_str(arg.annotation)
+        # Track whether __init__ has computed initializations
+        has_computed_init = False
         for stmt in ast.walk(init):
             if isinstance(stmt, ast.AnnAssign):
                 if (
@@ -276,6 +278,10 @@ class Frontend:
                         info.fields[field_name] = FieldInfo(
                             name=field_name, typ=typ, py_name=field_name
                         )
+                    # Check if value is computed (not just a param reference)
+                    if stmt.value is not None:
+                        if not (isinstance(stmt.value, ast.Name) and stmt.value.id in info.init_params):
+                            has_computed_init = True
             elif isinstance(stmt, ast.Assign):
                 for target in stmt.targets:
                     if (
@@ -285,8 +291,12 @@ class Frontend:
                     ):
                         field_name = target.attr
                         # Track param-to-field mapping: self.field = param
-                        if isinstance(stmt.value, ast.Name) and stmt.value.id in info.init_params:
+                        is_simple_param = isinstance(stmt.value, ast.Name) and stmt.value.id in info.init_params
+                        if is_simple_param:
                             info.param_to_field[stmt.value.id] = field_name
+                        else:
+                            # Computed initialization - need constructor
+                            has_computed_init = True
                         if field_name not in info.fields:
                             typ = self._infer_type_from_value(stmt.value, param_types)
                             # Apply field type overrides
@@ -296,6 +306,11 @@ class Frontend:
                             info.fields[field_name] = FieldInfo(
                                 name=field_name, typ=typ, py_name=field_name
                             )
+        # Flag if constructor is needed - only for structs that critically need it
+        # (Parser, Lexer need computed Length, nested constructors, back-references)
+        NEEDS_CONSTRUCTOR = {"Parser", "Lexer", "ContextStack", "QuoteState"}
+        if has_computed_init and info.name in NEEDS_CONSTRUCTOR:
+            info.needs_constructor = True
 
     def _collect_constants(self, tree: ast.Module) -> None:
         """Pass 5: Collect module-level and class-level constants."""
@@ -413,27 +428,32 @@ class Frontend:
             ],
         )
         module.interfaces.append(node_interface)
-        # Build structs (with method bodies)
+        # Build structs (with method bodies) and collect constructor functions
+        constructor_funcs: list[Function] = []
         for node in tree.body:
             if isinstance(node, ast.ClassDef):
-                struct = self._build_struct(node, with_body=True)
+                struct, ctor = self._build_struct(node, with_body=True)
                 if struct:
                     module.structs.append(struct)
+                if ctor:
+                    constructor_funcs.append(ctor)
         # Build functions (with bodies)
         for node in tree.body:
             if isinstance(node, ast.FunctionDef):
                 func = self._build_function_shell(node, with_body=True)
                 module.functions.append(func)
+        # Add constructor functions (must come after regular functions for dependency order)
+        module.functions.extend(constructor_funcs)
         return module
 
-    def _build_struct(self, node: ast.ClassDef, with_body: bool = False) -> Struct | None:
-        """Build IR Struct from class definition."""
+    def _build_struct(self, node: ast.ClassDef, with_body: bool = False) -> tuple[Struct | None, Function | None]:
+        """Build IR Struct from class definition. Returns (struct, constructor_func)."""
         # Node is emitted as InterfaceDef, not Struct
         if node.name == "Node":
-            return None
+            return None, None
         info = self.symbols.structs.get(node.name)
         if not info:
-            return None
+            return None, None
         # Build fields
         fields = []
         for name, field_info in info.fields.items():
@@ -446,10 +466,14 @@ class Frontend:
             )
         # Build methods
         methods = []
+        init_ast: ast.FunctionDef | None = None
         for stmt in node.body:
-            if isinstance(stmt, ast.FunctionDef) and stmt.name != "__init__":
-                method = self._build_method_shell(stmt, node.name, with_body=with_body)
-                methods.append(method)
+            if isinstance(stmt, ast.FunctionDef):
+                if stmt.name == "__init__":
+                    init_ast = stmt
+                else:
+                    method = self._build_method_shell(stmt, node.name, with_body=with_body)
+                    methods.append(method)
         implements = []
         if info.is_node:
             implements.append("Node")
@@ -459,7 +483,7 @@ class Frontend:
             base = info.bases[0]
             if base != "Exception" and self._is_exception_subclass(base):
                 embedded_type = base
-        return Struct(
+        struct = Struct(
             name=node.name,
             fields=fields,
             methods=methods,
@@ -467,6 +491,86 @@ class Frontend:
             loc=self._loc_from_node(node),
             is_exception=info.is_exception,
             embedded_type=embedded_type,
+        )
+        # Generate constructor function if needed
+        ctor_func: Function | None = None
+        if with_body and info.needs_constructor and init_ast:
+            ctor_func = self._build_constructor(node.name, init_ast, info)
+        return struct, ctor_func
+
+    def _build_constructor(self, class_name: str, init_ast: ast.FunctionDef, info: StructInfo) -> Function:
+        """Build a NewXxx constructor function from __init__ AST."""
+        from . import ir
+        # Build parameters (same as __init__ excluding self)
+        params: list[Param] = []
+        param_types: dict[str, Type] = {}
+        for arg in init_ast.args.args:
+            if arg.arg == "self":
+                continue
+            py_type = self._annotation_to_str(arg.annotation) if arg.annotation else ""
+            typ = self._py_type_to_ir(py_type) if py_type else Interface("any")
+            # Check for parameter type overrides
+            override_key = (f"New{class_name}", arg.arg)
+            if override_key in PARAM_TYPE_OVERRIDES:
+                typ = PARAM_TYPE_OVERRIDES[override_key]
+            else:
+                # Try __init__ param overrides
+                override_key = ("__init__", arg.arg)
+                if override_key in PARAM_TYPE_OVERRIDES:
+                    typ = PARAM_TYPE_OVERRIDES[override_key]
+            params.append(Param(name=arg.arg, typ=typ, loc=Loc.unknown()))
+            param_types[arg.arg] = typ
+        # Handle default arguments
+        n_params = len(params)
+        n_defaults = len(init_ast.args.defaults) if init_ast.args.defaults else 0
+        for i, default_ast in enumerate(init_ast.args.defaults or []):
+            param_idx = n_params - n_defaults + i
+            if 0 <= param_idx < n_params:
+                params[param_idx].default = self._lower_expr(default_ast)
+        # Set up type context for lowering __init__ body
+        self._current_func_info = None
+        self._current_class_name = class_name
+        var_types, tuple_vars, sentinel_ints = self._collect_var_types(init_ast.body)
+        var_types.update(param_types)
+        var_types["self"] = Pointer(StructRef(class_name))
+        self._type_ctx = TypeContext(
+            return_type=Pointer(StructRef(class_name)),
+            var_types=var_types,
+            tuple_vars=tuple_vars,
+            sentinel_ints=sentinel_ints,
+        )
+        # Build constructor body:
+        # 1. self := &ClassName{}
+        # 2. ... __init__ body statements ...
+        # 3. return self
+        body: list[ir.Stmt] = []
+        # Create self = &ClassName{}
+        self_init = ir.Assign(
+            target=ir.VarLV(name="self", loc=Loc.unknown()),
+            value=ir.StructLit(
+                struct_name=class_name,
+                fields={},
+                typ=Pointer(StructRef(class_name)),
+                loc=Loc.unknown(),
+            ),
+            loc=Loc.unknown(),
+        )
+        self_init.is_declaration = True
+        body.append(self_init)
+        # Lower __init__ body (excluding any "return" statements which are implicit in __init__)
+        init_body = self._lower_stmts(init_ast.body)
+        body.extend(init_body)
+        # Return self
+        body.append(ir.Return(
+            value=ir.Var(name="self", typ=Pointer(StructRef(class_name)), loc=Loc.unknown()),
+            loc=Loc.unknown(),
+        ))
+        return Function(
+            name=f"New{class_name}",
+            params=params,
+            ret=Pointer(StructRef(class_name)),
+            body=body,
+            loc=Loc.unknown(),
         )
 
     def _build_function_shell(self, node: ast.FunctionDef, with_body: bool = False) -> Function:
@@ -728,6 +832,31 @@ class Frontend:
                     return FuncType(params=param_types, ret=ret)
                 return FuncType(params=(), ret=ret)
         return Interface("any")
+
+    def _make_default_value(self, typ: Type, loc: Loc) -> "ir.Expr":
+        """Create a default value expression for a given type."""
+        from . import ir
+        # Pointer and interface types use nil
+        if isinstance(typ, (Pointer, Optional, Interface)):
+            return ir.NilLit(typ=typ, loc=loc)
+        # Primitive types use their zero values
+        if isinstance(typ, Primitive):
+            if typ.kind == "bool":
+                return ir.BoolLit(value=False, typ=BOOL, loc=loc)
+            if typ.kind == "int":
+                return ir.IntLit(value=0, typ=INT, loc=loc)
+            if typ.kind == "string":
+                return ir.StringLit(value="", typ=STRING, loc=loc)
+            if typ.kind == "float":
+                return ir.FloatLit(value=0.0, typ=FLOAT, loc=loc)
+        # Slice/Map/Set use nil (Go zero value)
+        if isinstance(typ, (Slice, Map, Set)):
+            return ir.NilLit(typ=typ, loc=loc)
+        # StructRef uses nil (pointer to struct)
+        if isinstance(typ, StructRef):
+            return ir.NilLit(typ=Pointer(typ), loc=loc)
+        # Fallback to nil
+        return ir.NilLit(typ=typ, loc=loc)
 
     def _infer_type_from_value(
         self, node: ast.expr, param_types: dict[str, str]
@@ -2405,8 +2534,58 @@ class Frontend:
                     return ir.IsType(expr=expr, tested_type=tested_type, typ=BOOL, loc=self._loc_from_node(node))
             # Check for constructor calls (class names)
             if func_name in self.symbols.structs:
-                # Constructor call -> StructLit with fields mapped from positional args
                 struct_info = self.symbols.structs[func_name]
+                # If struct needs constructor, call NewXxx instead of StructLit
+                if struct_info.needs_constructor:
+                    # Build param name -> index map for keyword arg handling
+                    param_indices: dict[str, int] = {}
+                    for i, param_name in enumerate(struct_info.init_params):
+                        param_indices[param_name] = i
+                    # Initialize args list with Nones
+                    n_params = len(struct_info.init_params)
+                    ctor_args: list[ir.Expr | None] = [None] * n_params
+                    # First, place positional args
+                    for i, arg_ast in enumerate(node.args):
+                        if i < n_params:
+                            param_name = struct_info.init_params[i]
+                            field_name = struct_info.param_to_field.get(param_name, param_name)
+                            field_info = struct_info.fields.get(field_name)
+                            expected_type = field_info.typ if field_info else None
+                            if isinstance(expected_type, Pointer) and isinstance(expected_type.target, Slice):
+                                expected_type = expected_type.target
+                            if isinstance(arg_ast, ast.List):
+                                ctor_args[i] = self._lower_expr_List(arg_ast, expected_type)
+                            else:
+                                ctor_args[i] = args[i]
+                    # Then, place keyword args in their proper positions
+                    for kw in node.keywords:
+                        if kw.arg and kw.arg in param_indices:
+                            idx = param_indices[kw.arg]
+                            param_name = struct_info.init_params[idx]
+                            field_name = struct_info.param_to_field.get(param_name, param_name)
+                            field_info = struct_info.fields.get(field_name)
+                            expected_type = field_info.typ if field_info else None
+                            if isinstance(expected_type, Pointer) and isinstance(expected_type.target, Slice):
+                                expected_type = expected_type.target
+                            if isinstance(kw.value, ast.List):
+                                ctor_args[idx] = self._lower_expr_List(kw.value, expected_type)
+                            else:
+                                ctor_args[idx] = self._lower_expr(kw.value)
+                    # Fill in default values for any remaining None slots
+                    for i in range(n_params):
+                        if ctor_args[i] is None:
+                            param_name = struct_info.init_params[i]
+                            field_name = struct_info.param_to_field.get(param_name, param_name)
+                            field_info = struct_info.fields.get(field_name)
+                            field_type = field_info.typ if field_info else Interface("any")
+                            ctor_args[i] = self._make_default_value(field_type, self._loc_from_node(node))
+                    return ir.Call(
+                        func=f"New{func_name}",
+                        args=ctor_args,  # type: ignore
+                        typ=Pointer(StructRef(func_name)),
+                        loc=self._loc_from_node(node),
+                    )
+                # Simple struct: emit StructLit with fields mapped from positional args
                 fields: dict[str, ir.Expr] = {}
                 for i, arg_ast in enumerate(node.args):
                     if i < len(struct_info.init_params):
@@ -2774,11 +2953,27 @@ class Frontend:
                 return ir.VarDecl(name=node.target.id, typ=INT,
                                   value=ir.IntLit(value=-1, typ=INT, loc=self._loc_from_node(node)),
                                   loc=self._loc_from_node(node))
+        # Determine expected type for lowering (use field type for field assignments)
+        expected_type = typ
+        if (isinstance(node.target, ast.Attribute) and
+            isinstance(node.target.value, ast.Name) and
+            node.target.value.id == "self" and
+            self._current_class_name):
+            field_name = node.target.attr
+            struct_info = self.symbols.structs.get(self._current_class_name)
+            if struct_info:
+                field_info = struct_info.fields.get(field_name)
+                if field_info:
+                    expected_type = field_info.typ
         if node.value:
-            value = self._lower_expr(node.value)
-            # Coerce value to annotated type
+            # For list values, pass expected type to get correct element type
+            if isinstance(node.value, ast.List):
+                value = self._lower_expr_List(node.value, expected_type)
+            else:
+                value = self._lower_expr(node.value)
+            # Coerce value to expected type
             from_type = self._synthesize_type(value)
-            value = self._coerce(value, from_type, typ)
+            value = self._coerce(value, from_type, expected_type)
         else:
             value = None
         if isinstance(node.target, ast.Name):
@@ -2788,6 +2983,21 @@ class Frontend:
         # Attribute target - treat as assignment
         lval = self._lower_lvalue(node.target)
         if value:
+            # Handle sentinel ints for field assignments: self.field = None -> self.field = -1
+            if isinstance(value, ir.NilLit) and self._is_sentinel_int(node.target):
+                value = ir.IntLit(value=-1, typ=INT, loc=self._loc_from_node(node))
+            # For field assignments, coerce to the actual field type (from struct info)
+            if (isinstance(node.target, ast.Attribute) and
+                isinstance(node.target.value, ast.Name) and
+                node.target.value.id == "self" and
+                self._current_class_name):
+                field_name = node.target.attr
+                struct_info = self.symbols.structs.get(self._current_class_name)
+                if struct_info:
+                    field_info = struct_info.fields.get(field_name)
+                    if field_info:
+                        from_type = self._synthesize_type(value)
+                        value = self._coerce(value, from_type, field_info.typ)
             return ir.Assign(target=lval, value=value, loc=self._loc_from_node(node))
         return ir.ExprStmt(expr=ir.Var(name="_skip_ann", typ=VOID))
 

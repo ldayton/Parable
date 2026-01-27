@@ -1198,6 +1198,10 @@ func _intToStr(n int) string {
                 parts = [f"strings.HasPrefix({obj}, {self._emit_expr(e)})" for e in arg_node.elements]
                 return " || ".join(parts)
             arg = self._emit_expr(arg_node)
+            # Handle position argument: s.startswith(prefix, pos) -> strings.HasPrefix(s[pos:], prefix)
+            if len(expr.args) >= 2:
+                pos = self._emit_expr(expr.args[1])
+                return f"strings.HasPrefix({obj}[{pos}:], {arg})"
             return f"strings.HasPrefix({obj}, {arg})"
         if method == "endswith" and expr.args:
             # Handle tuple argument: s.endswith((" ", "\n")) -> HasSuffix(s," ")||HasSuffix(s,"\n")

@@ -750,6 +750,7 @@ class StructInfo:
     bases: list[str] = field(default_factory=list)
     init_params: list[str] = field(default_factory=list)  # __init__ param order
     param_to_field: dict[str, str] = field(default_factory=dict)  # Maps param name to field name
+    needs_constructor: bool = False  # True if __init__ has computed initializations
 
 
 @dataclass

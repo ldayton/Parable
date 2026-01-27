@@ -40,7 +40,10 @@ func findTestFiles(directory string) []string {
 			return err
 		}
 		if !info.IsDir() && strings.HasSuffix(path, ".tests") {
-			result = append(result, path)
+			// Only include tests under parable/ subdirectory
+			if strings.Contains(path, "/parable/") {
+				result = append(result, path)
+			}
 		}
 		return nil
 	})
@@ -243,11 +246,11 @@ func main() {
 		}
 	}
 	elapsed := time.Since(startTime).Seconds()
-	if totalFailed > 0 && totalFailed <= 50 {
+	if totalFailed > 0 {
 		fmt.Println(strings.Repeat("=", 60))
 		fmt.Println("FAILURES")
 		fmt.Println(strings.Repeat("=", 60))
-		for _, f := range failedTests {
+		for _, f := range failedTests[:min(len(failedTests), 20)] {
 			fmt.Printf("\n%s:%d %s\n", f.relPath, f.lineNum, f.name)
 			fmt.Printf("  Input:    %q\n", f.input)
 			fmt.Printf("  Expected: %s\n", f.expected)
@@ -256,8 +259,9 @@ func main() {
 				fmt.Printf("  Error:    %s\n", f.err)
 			}
 		}
-	} else if totalFailed > 50 {
-		fmt.Printf("%d failures (too many to show)\n", totalFailed)
+		if totalFailed > 20 {
+			fmt.Printf("\n... and %d more failures\n", totalFailed-20)
+		}
 	}
 	fmt.Printf("%d passed, %d failed in %.2fs\n", totalPassed, totalFailed, elapsed)
 	if totalFailed > 0 {

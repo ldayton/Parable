@@ -1671,6 +1671,20 @@ class Frontend:
             return ir.BoolLit(value=False, typ=BOOL, loc=self._loc_from_node(node))
         if node.id == "None":
             return ir.NilLit(typ=Interface("any"), loc=self._loc_from_node(node))
+        # Handle expanded tuple variables: result -> TupleLit(result0, result1)
+        if node.id in self._type_ctx.tuple_vars:
+            synthetic_names = self._type_ctx.tuple_vars[node.id]
+            elements = []
+            elem_types = []
+            for syn_name in synthetic_names:
+                typ = self._type_ctx.var_types.get(syn_name, Interface("any"))
+                elements.append(ir.Var(name=syn_name, typ=typ, loc=self._loc_from_node(node)))
+                elem_types.append(typ)
+            return ir.TupleLit(
+                elements=elements,
+                typ=Tuple(tuple(elem_types)),
+                loc=self._loc_from_node(node)
+            )
         # Look up variable type from context
         var_type = self._type_ctx.var_types.get(node.id, Interface("any"))
         return ir.Var(name=node.id, typ=var_type, loc=self._loc_from_node(node))
@@ -2226,16 +2240,16 @@ class Frontend:
     def _lower_expr_List(self, node: ast.List, expected_type: Type | None = None) -> "ir.Expr":
         from . import ir
         elements = [self._lower_expr(e) for e in node.elts]
-        # Infer element type from first element if available, or from expected type
+        # Prefer expected type when available (bidirectional type inference)
+        # This ensures [ArithNumber(x), expansion] gets typed as []Node when the target is []Node
         element_type: Type = Interface("any")
-        if node.elts:
-            element_type = self._infer_expr_type_from_ast(node.elts[0])
-        elif expected_type is not None and isinstance(expected_type, Slice):
-            # Empty list with expected type - use the expected element type
+        if expected_type is not None and isinstance(expected_type, Slice):
             element_type = expected_type.element
         elif self._type_ctx.expected is not None and isinstance(self._type_ctx.expected, Slice):
-            # Fall back to context expected type
             element_type = self._type_ctx.expected.element
+        elif node.elts:
+            # Fall back to inferring from first element
+            element_type = self._infer_expr_type_from_ast(node.elts[0])
         return ir.SliceLit(
             element_type=element_type, elements=elements,
             typ=Slice(element_type), loc=self._loc_from_node(node)

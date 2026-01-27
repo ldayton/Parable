@@ -5463,7 +5463,7 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 	return &CommandSubstitution{Command: cmd}, text
 }
 
-func (self *Parser) parseProcessSubstitution() (Node, string) {
+func (self *Parser) parseProcessSubstitution() (result0 Node, result1 string) {
 	if self.AtEnd() || !isRedirectChar(self.Peek()) {
 		return nil, ""
 	}
@@ -5479,46 +5479,45 @@ func (self *Parser) parseProcessSubstitution() (Node, string) {
 	self.inProcessSub = true
 	self.setState(ParserStateFlagsPSTEOFTOKEN)
 	self.eofToken = ")"
-	func() {
-		defer func() {
-			if e := recover(); e != nil {
-				self.restoreParserState(saved)
-				self.inProcessSub = oldInProcessSub
-				contentStartChar := func() string {
-					if start+2 < self.Length {
-						return string(self.Source[start+2])
-					} else {
-						return ""
-					}
-				}()
-				if strings.Contains(" \t\n", contentStartChar) {
-					panic("")
+	defer func() {
+		if e := recover(); e != nil {
+			self.restoreParserState(saved)
+			self.inProcessSub = oldInProcessSub
+			contentStartChar := func() string {
+				if start+2 < self.Length {
+					return string(self.Source[start+2])
+				} else {
+					return ""
 				}
-				self.Pos = start + 2
-				self.lexer.Pos = self.Pos
-				self.lexer.parseMatchedPair("(", ")", 0, false)
-				self.Pos = self.lexer.Pos
-				text := substring(self.Source, start, self.Pos)
-				text = stripLineContinuationsCommentAware(text)
-				return nil, text
+			}()
+			if strings.Contains(" \t\n", contentStartChar) {
+				panic("")
 			}
-		}()
-		cmd := self.ParseList(true)
-		if cmd == nil {
-			cmd = &Empty{}
+			self.Pos = start + 2
+			self.lexer.Pos = self.Pos
+			self.lexer.parseMatchedPair("(", ")", 0, false)
+			self.Pos = self.lexer.Pos
+			text := substring(self.Source, start, self.Pos)
+			text = stripLineContinuationsCommentAware(text)
+			result0 = nil
+			result1 = text
 		}
-		self.SkipWhitespaceAndNewlines()
-		if self.AtEnd() || self.Peek() != ")" {
-			panic(fmt.Sprintf("%s at position %d", "Invalid process substitution", start))
-		}
-		self.Advance()
-		textEnd := self.Pos
-		text := substring(self.Source, start, textEnd)
-		text = stripLineContinuationsCommentAware(text)
-		self.restoreParserState(saved)
-		self.inProcessSub = oldInProcessSub
-		return &ProcessSubstitution{Direction: direction, Command: cmd}, text
 	}()
+	cmd := self.ParseList(true)
+	if cmd == nil {
+		cmd = &Empty{}
+	}
+	self.SkipWhitespaceAndNewlines()
+	if self.AtEnd() || self.Peek() != ")" {
+		panic(fmt.Sprintf("%s at position %d", "Invalid process substitution", start))
+	}
+	self.Advance()
+	textEnd := self.Pos
+	text := substring(self.Source, start, textEnd)
+	text = stripLineContinuationsCommentAware(text)
+	self.restoreParserState(saved)
+	self.inProcessSub = oldInProcessSub
+	return &ProcessSubstitution{Direction: direction, Command: cmd}, text
 }
 
 func (self *Parser) parseArrayLiteral() (Node, string) {
@@ -5558,7 +5557,7 @@ func (self *Parser) parseArrayLiteral() (Node, string) {
 	return &Array{Elements: elements}, text
 }
 
-func (self *Parser) parseArithmeticExpansion() (Node, string) {
+func (self *Parser) parseArithmeticExpansion() (result0 Node, result1 string) {
 	if self.AtEnd() || self.Peek() != "$" {
 		return nil, ""
 	}
@@ -5633,15 +5632,14 @@ func (self *Parser) parseArithmeticExpansion() (Node, string) {
 	self.Advance()
 	text := substring(self.Source, start, self.Pos)
 	var expr Node
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				self.Pos = start
-				return nil, ""
-			}
-		}()
-		expr = self.parseArithExpr(content)
+	defer func() {
+		if r := recover(); r != nil {
+			self.Pos = start
+			result0 = nil
+			result1 = ""
+		}
 	}()
+	expr = self.parseArithExpr(content)
 	return &ArithmeticExpansion{Expression: expr}, text
 }
 
@@ -5655,7 +5653,7 @@ func (self *Parser) parseArithExpr(content string) Node {
 	self.arithPos = 0
 	self.arithLen = len(content)
 	self.arithSkipWs()
-	var result interface{}
+	var result Node
 	if self.arithAtEnd() {
 		result = nil
 	} else {
@@ -5754,14 +5752,14 @@ func (self *Parser) arithParseTernary() Node {
 	self.arithSkipWs()
 	if self.arithConsume("?") {
 		self.arithSkipWs()
-		var ifTrue interface{}
+		var ifTrue Node
 		if self.arithMatch(":") {
 			ifTrue = nil
 		} else {
 			ifTrue = self.arithParseAssign()
 		}
 		self.arithSkipWs()
-		var ifFalse interface{}
+		var ifFalse Node
 		if self.arithConsume(":") {
 			self.arithSkipWs()
 			if self.arithAtEnd() || self.arithPeek(0) == ")" {
@@ -6037,8 +6035,9 @@ func (self *Parser) arithParsePostfix() Node {
 			self.arithConsume("--")
 			left = &ArithPostDecr{Operand: left}
 		} else if self.arithPeek(0) == "[" {
-			switch left := left.(type) {
+			switch left.(type) {
 			case *ArithVar:
+				leftVar := left.(*ArithVar)
 				self.arithAdvance()
 				self.arithSkipWs()
 				index := self.arithParseComma()
@@ -6046,9 +6045,8 @@ func (self *Parser) arithParsePostfix() Node {
 				if !self.arithConsume("]") {
 					panic(fmt.Sprintf("%s at position %d", "Expected ']' in array subscript", self.arithPos))
 				}
-				left = &ArithSubscript{Array: left.Name, Index: index}
+				left = &ArithSubscript{Array: leftVar.Name, Index: index}
 			default:
-				left = left.(*ArithSubscript)
 				break
 			}
 		} else {
@@ -6345,7 +6343,7 @@ func (self *Parser) arithParseNumberOrVar() Node {
 		prefix := strings.Join(chars, "")
 		if !self.arithAtEnd() && self.arithPeek(0) == "$" {
 			expansion := self.arithParseExpansion()
-			return &ArithConcat{Parts: []*ArithNumber{&ArithNumber{Value: prefix}, expansion}}
+			return &ArithConcat{Parts: []Node{&ArithNumber{Value: prefix}, expansion}}
 		}
 		return &ArithNumber{Value: prefix}
 	}
@@ -6382,9 +6380,9 @@ func (self *Parser) parseDeprecatedArithmetic() (Node, string) {
 
 func (self *Parser) parseParamExpansion(inDquote bool) (Node, string) {
 	self.syncLexer()
-	_, _ := self.lexer.readParamExpansion(inDquote)
+	result0, result1 := self.lexer.readParamExpansion(inDquote)
 	self.syncParser()
-	return result
+	return result0, result1
 }
 
 func (self *Parser) ParseRedirect() Node {
@@ -7381,7 +7379,7 @@ func (self *Parser) ParseFor() Node {
 	if self.Peek() == "(" && self.Pos+1 < self.Length && string(self.Source[self.Pos+1]) == "(" {
 		return self.parseForArith()
 	}
-	var varName interface{}
+	var varName string
 	if self.Peek() == "$" {
 		varWord := self.ParseWord(false, false, false)
 		if varWord == nil {

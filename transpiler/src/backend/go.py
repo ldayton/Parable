@@ -116,6 +116,9 @@ class GoBackend:
         self._receiver_name: str = ""  # Current method receiver name
         self._tuple_vars: dict[str, Tuple] = {}  # Track tuple-typed variables
         self._hoisted_in_try: set[str] = set()  # Variables hoisted from try blocks
+        self._type_switch_binding_rename: dict[str, str] = {}  # Maps binding name to narrowed name
+        self._named_returns: list[str] | None = None  # Named return param names (when needed)
+        self._in_catch_body: bool = False  # Whether we're inside a TryCatch catch body
 
     def emit(self, module: Module) -> str:
         """Emit Go code from IR Module."""
@@ -314,10 +317,17 @@ func _intToStr(n int) string {
         self._tuple_vars = {}
         self._hoisted_in_try = set()
         self._current_return_type = func.ret
+        self._named_returns = None
+        self._in_catch_body = False
         params = ", ".join(
             f"{self._to_camel(p.name)} {self._type_to_go(p.typ)}" for p in func.params
         )
-        ret = self._return_type_to_go(func.ret) if func.ret != VOID else ""
+        # Check if we need named return parameters (for TryCatch with catch-body returns)
+        needs_named_returns = getattr(func, 'needs_named_returns', False)
+        if needs_named_returns and func.ret != VOID:
+            ret = self._named_return_type_to_go(func.ret)
+        else:
+            ret = self._return_type_to_go(func.ret) if func.ret != VOID else ""
         if func.receiver:
             # Use the receiver name from IR directly (converted to camelCase)
             recv_name = self._to_camel(func.receiver.name)
@@ -512,6 +522,23 @@ func _intToStr(n int) string {
             self._line(expr)
 
     def _emit_stmt_Return(self, stmt: Return) -> None:
+        # When inside a catch body with named returns, assign to named returns instead of returning
+        # (defer functions can't return values)
+        if self._in_catch_body and self._named_returns:
+            if stmt.value:
+                if isinstance(stmt.value, TupleLit):
+                    # Assign each element to corresponding named return
+                    for i, elem in enumerate(stmt.value.elements):
+                        if i < len(self._named_returns):
+                            val = self._emit_expr(elem)
+                            self._line(f"{self._named_returns[i]} = {val}")
+                else:
+                    # Single return value
+                    val = self._emit_expr(stmt.value)
+                    self._line(f"{self._named_returns[0]} = {val}")
+            # Don't emit 'return' - let the defer finish naturally
+            # The named returns will be used when the outer function returns
+            return
         if stmt.value:
             # For TupleLit, emit as multiple return values, not a struct
             if isinstance(stmt.value, TupleLit):
@@ -703,36 +730,62 @@ func _intToStr(n int) string {
         self._line("}")
 
     def _emit_stmt_TryCatch(self, stmt: TryCatch) -> None:
-        # Emit hoisted variable declarations before the IIFE
+        # Emit hoisted variable declarations before the try/catch
         hoisted_vars = getattr(stmt, 'hoisted_vars', [])
         for name, typ in hoisted_vars:
             type_str = self._type_to_go(typ) if typ else "interface{}"
             go_name = self._to_camel(name)
             self._line(f"var {go_name} {type_str}")
             self._hoisted_in_try.add(name)
-
-        # Go uses defer/recover pattern
-        self._line("func() {")
-        self.indent += 1
-        self._line("defer func() {")
-        self.indent += 1
-        if stmt.catch_var:
-            self._line(f"if {stmt.catch_var} := recover(); {stmt.catch_var} != nil {{")
+        has_returns = getattr(stmt, 'has_returns', False)
+        has_catch_returns = getattr(stmt, 'has_catch_returns', False)
+        if has_returns:
+            # When try/catch contains return statements, don't wrap in IIFE
+            # Return statements will return from the enclosing function
+            self._line("defer func() {")
+            self.indent += 1
+            if stmt.catch_var:
+                self._line(f"if {stmt.catch_var} := recover(); {stmt.catch_var} != nil {{")
+            else:
+                self._line("if r := recover(); r != nil {")
+            self.indent += 1
+            # Track that we're in catch body (for return transformation)
+            if has_catch_returns and self._named_returns:
+                self._in_catch_body = True
+            for s in stmt.catch_body:
+                self._emit_stmt(s)
+            self._in_catch_body = False
+            if stmt.reraise:
+                self._line("panic(r)")
+            self.indent -= 1
+            self._line("}")
+            self.indent -= 1
+            self._line("}()")
+            for s in stmt.body:
+                self._emit_stmt(s)
         else:
-            self._line("if r := recover(); r != nil {")
-        self.indent += 1
-        for s in stmt.catch_body:
-            self._emit_stmt(s)
-        if stmt.reraise:
-            self._line("panic(r)")
-        self.indent -= 1
-        self._line("}")
-        self.indent -= 1
-        self._line("}()")
-        for s in stmt.body:
-            self._emit_stmt(s)
-        self.indent -= 1
-        self._line("}()")
+            # Standard IIFE pattern when no returns
+            self._line("func() {")
+            self.indent += 1
+            self._line("defer func() {")
+            self.indent += 1
+            if stmt.catch_var:
+                self._line(f"if {stmt.catch_var} := recover(); {stmt.catch_var} != nil {{")
+            else:
+                self._line("if r := recover(); r != nil {")
+            self.indent += 1
+            for s in stmt.catch_body:
+                self._emit_stmt(s)
+            if stmt.reraise:
+                self._line("panic(r)")
+            self.indent -= 1
+            self._line("}")
+            self.indent -= 1
+            self._line("}()")
+            for s in stmt.body:
+                self._emit_stmt(s)
+            self.indent -= 1
+            self._line("}()")
         # Keep hoisted vars tracked - they remain in scope for the rest of the function
 
     def _emit_stmt_Raise(self, stmt: Raise) -> None:
@@ -802,9 +855,10 @@ func _intToStr(n int) string {
             self._line(f"var {go_name} {type_str}")
             self._hoisted_in_try.add(name)
         expr = self._emit_expr(stmt.expr)
-        # If binding is unused, emit without binding to avoid Go syntax error
         binding_unused = getattr(stmt, 'binding_unused', False)
-        if binding_unused:
+        binding_reassigned = getattr(stmt, 'binding_reassigned', False)
+        # If binding is unused or reassigned, emit without binding to avoid Go errors
+        if binding_unused or binding_reassigned:
             self._line(f"switch {expr}.(type) {{")
         else:
             binding = self._to_camel(stmt.binding)
@@ -813,15 +867,29 @@ func _intToStr(n int) string {
             go_type = self._type_to_go(case.typ)
             self._line(f"case {go_type}:")
             self.indent += 1
-            for s in case.body:
-                self._emit_stmt(s)
+            # When binding_reassigned, emit explicit type assertion with a different name
+            # so reads use the narrowed type but writes go to the outer variable
+            if binding_reassigned and not binding_unused:
+                binding = self._to_camel(stmt.binding)
+                # Create narrowed name by capitalizing first letter after binding
+                narrowed_name = f"{binding}{self._extract_type_suffix(go_type)}"
+                self._line(f"{narrowed_name} := {expr}.({go_type})")
+                # Set up renaming context for this case body
+                self._type_switch_binding_rename[stmt.binding] = narrowed_name
+                for s in case.body:
+                    self._emit_stmt(s)
+                # Clear renaming context
+                del self._type_switch_binding_rename[stmt.binding]
+            else:
+                for s in case.body:
+                    self._emit_stmt(s)
             self.indent -= 1
         if stmt.default:
             self._line("default:")
             self.indent += 1
             # In default case, binding has type interface{} - assert back to original type
             needs_node_assertion = False
-            if not binding_unused:
+            if not binding_unused and not binding_reassigned:
                 binding = self._to_camel(stmt.binding)
                 expr_typ = getattr(stmt.expr, 'typ', None)
                 if expr_typ:
@@ -847,6 +915,16 @@ func _intToStr(n int) string {
                     self._emit_stmt(s)
             self.indent -= 1
         self._line("}")
+
+    def _extract_type_suffix(self, go_type: str) -> str:
+        """Extract a suffix from a Go type for naming, e.g., '*ArithVar' -> 'Var'."""
+        # Remove pointer prefix
+        name = go_type.lstrip("*")
+        # For types like 'ArithVar', extract 'Var' (after common prefixes)
+        for prefix in ("Arith", "Cond", ""):
+            if name.startswith(prefix) and len(name) > len(prefix):
+                return name[len(prefix):]
+        return name
 
     def _emit_stmt_Match(self, stmt: Match) -> None:
         # Emit hoisted variable declarations before the switch
@@ -909,6 +987,9 @@ func _intToStr(n int) string {
     def _emit_expr_Var(self, expr: Var) -> str:
         if expr.name == "self":
             return self._receiver_name if self._receiver_name else "self"
+        # Check for type switch binding rename (reads use narrowed name)
+        if expr.name in self._type_switch_binding_rename:
+            return self._type_switch_binding_rename[expr.name]
         return self._to_camel(expr.name)
 
     def _emit_expr_FieldAccess(self, expr: FieldAccess) -> str:
@@ -1279,6 +1360,23 @@ func _intToStr(n int) string {
             types = ", ".join(self._type_to_go(e) for e in typ.elements)
             return f"({types})"
         return self._type_to_go(typ)
+
+    def _named_return_type_to_go(self, typ: Type) -> str:
+        """Convert IR Type to Go named return type string (for defer/recover pattern)."""
+        if isinstance(typ, Tuple):
+            # Generate named returns: (result0 Type0, result1 Type1, ...)
+            parts = []
+            names = []
+            for i, e in enumerate(typ.elements):
+                name = f"result{i}"
+                names.append(name)
+                parts.append(f"{name} {self._type_to_go(e)}")
+            self._named_returns = names
+            return f"({', '.join(parts)})"
+        # Single return: (result Type)
+        name = "result"
+        self._named_returns = [name]
+        return f"({name} {self._type_to_go(typ)})"
 
     def _type_to_go(self, typ: Type) -> str:
         """Convert IR Type to Go type string."""

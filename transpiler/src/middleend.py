@@ -24,6 +24,7 @@ from src.ir import (
     Function,
     If,
     IndexLV,
+    Interface,
     Match,
     MethodCall,
     Module,
@@ -46,9 +47,19 @@ from src.ir import (
 def analyze(module: Module) -> None:
     """Run all analysis passes, annotating IR nodes in place."""
     _analyze_reassignments(module)
-    _analyze_initial_value_usage(module)
+    _analyze_initial_value_usage(module)  # Sets has_catch_returns on TryCatch
+    _analyze_named_returns(module)  # Check if functions need named returns (must be after initial_value_usage)
     _analyze_hoisting_all(module)
     _analyze_unused_tuple_targets_all(module)
+
+
+def _analyze_named_returns(module: Module) -> None:
+    """Set needs_named_returns on functions that have TryCatch with catch-body returns."""
+    for func in module.functions:
+        func.needs_named_returns = _function_needs_named_returns(func.body)
+    for struct in module.structs:
+        for method in struct.methods:
+            method.needs_named_returns = _function_needs_named_returns(method.body)
 
 
 def _collect_assigned_vars(stmts: list[Stmt]) -> set[str]:
@@ -416,6 +427,11 @@ def _analyze_initial_value_in_stmts(stmts: list[Stmt]) -> None:
                 stmt.catch_var_unused = stmt.catch_var not in used
             else:
                 stmt.catch_var_unused = True
+            # Check if try or catch body contains Return statements
+            # This affects how the TryCatch should be emitted (IIFE vs defer pattern)
+            stmt.has_returns = _contains_return(stmt.body) or _contains_return(stmt.catch_body)
+            # Track if specifically the catch body has returns (needs named return pattern)
+            stmt.has_catch_returns = _contains_return(stmt.catch_body)
         elif isinstance(stmt, Match):
             for case in stmt.cases:
                 _analyze_initial_value_in_stmts(case.body)
@@ -428,6 +444,10 @@ def _analyze_initial_value_in_stmts(stmts: list[Stmt]) -> None:
             all_stmts.extend(stmt.default)
             used_vars = _collect_used_vars(all_stmts)
             stmt.binding_unused = stmt.binding not in used_vars
+            # Check if the binding is reassigned in any case body
+            # If so, Go's type switch shadowing will cause type errors
+            assigned_vars = _collect_assigned_vars(all_stmts)
+            stmt.binding_reassigned = stmt.binding in assigned_vars
             # Recurse into case bodies
             for case in stmt.cases:
                 _analyze_initial_value_in_stmts(case.body)
@@ -609,9 +629,123 @@ def _lvalue_reads(name: str, lv) -> bool:
     return False
 
 
+def _contains_return(stmts: list[Stmt]) -> bool:
+    """Check if statement list contains any Return statements (recursively)."""
+    for stmt in stmts:
+        if isinstance(stmt, Return):
+            return True
+        # Recurse into nested structures
+        if isinstance(stmt, If):
+            if _contains_return(stmt.then_body) or _contains_return(stmt.else_body):
+                return True
+        elif isinstance(stmt, While):
+            if _contains_return(stmt.body):
+                return True
+        elif isinstance(stmt, ForRange):
+            if _contains_return(stmt.body):
+                return True
+        elif isinstance(stmt, ForClassic):
+            if _contains_return(stmt.body):
+                return True
+        elif isinstance(stmt, Block):
+            if _contains_return(stmt.body):
+                return True
+        elif isinstance(stmt, TryCatch):
+            if _contains_return(stmt.body) or _contains_return(stmt.catch_body):
+                return True
+        elif isinstance(stmt, Match):
+            for case in stmt.cases:
+                if _contains_return(case.body):
+                    return True
+            if _contains_return(stmt.default):
+                return True
+        elif isinstance(stmt, TypeSwitch):
+            for case in stmt.cases:
+                if _contains_return(case.body):
+                    return True
+            if _contains_return(stmt.default):
+                return True
+    return False
+
+
+def _function_needs_named_returns(stmts: list[Stmt]) -> bool:
+    """Check if any TryCatch in the statements has returns in its catch body."""
+    for stmt in stmts:
+        if isinstance(stmt, TryCatch):
+            if getattr(stmt, 'has_catch_returns', False):
+                return True
+            # Also check nested TryCatch
+            if _function_needs_named_returns(stmt.body) or _function_needs_named_returns(stmt.catch_body):
+                return True
+        elif isinstance(stmt, If):
+            if _function_needs_named_returns(stmt.then_body) or _function_needs_named_returns(stmt.else_body):
+                return True
+        elif isinstance(stmt, While):
+            if _function_needs_named_returns(stmt.body):
+                return True
+        elif isinstance(stmt, ForRange):
+            if _function_needs_named_returns(stmt.body):
+                return True
+        elif isinstance(stmt, ForClassic):
+            if _function_needs_named_returns(stmt.body):
+                return True
+        elif isinstance(stmt, Block):
+            if _function_needs_named_returns(stmt.body):
+                return True
+        elif isinstance(stmt, Match):
+            for case in stmt.cases:
+                if _function_needs_named_returns(case.body):
+                    return True
+            if _function_needs_named_returns(stmt.default):
+                return True
+        elif isinstance(stmt, TypeSwitch):
+            for case in stmt.cases:
+                if _function_needs_named_returns(case.body):
+                    return True
+            if _function_needs_named_returns(stmt.default):
+                return True
+    return False
+
+
 # ============================================================
 # VARIABLE HOISTING ANALYSIS
 # ============================================================
+
+
+def _merge_types(t1: Type | None, t2: Type | None) -> Type | None:
+    """Merge two types, preferring concrete interface over Interface("any").
+
+    When hoisting variables assigned in multiple branches:
+    - If one branch assigns nil (Interface("any")) and another assigns Node, use Node
+    - Go interfaces are nil-able, so Interface("Node") can hold nil without widening
+    """
+    if t1 is None:
+        return t2
+    if t2 is None:
+        return t1
+    if t1 == t2:
+        return t1
+    # Prefer named interface over "any" (nil gets typed as Interface("any"))
+    if isinstance(t1, Interface) and t1.name == "any" and isinstance(t2, Interface):
+        return t2
+    if isinstance(t2, Interface) and t2.name == "any" and isinstance(t1, Interface):
+        return t1
+    # Prefer any concrete type over Interface("any")
+    if isinstance(t1, Interface) and t1.name == "any":
+        return t2
+    if isinstance(t2, Interface) and t2.name == "any":
+        return t1
+    # Otherwise keep first type (arbitrary but deterministic)
+    return t1
+
+
+def _merge_var_types(result: dict[str, Type | None], new_vars: dict[str, Type | None]) -> None:
+    """Merge new_vars into result, using type merging for conflicts."""
+    for name, typ in new_vars.items():
+        if name in result:
+            result[name] = _merge_types(result[name], typ)
+        else:
+            result[name] = typ
 
 
 def _vars_first_assigned_in(stmts: list[Stmt], already_declared: set[str]) -> dict[str, Type | None]:
@@ -621,8 +755,12 @@ def _vars_first_assigned_in(stmts: list[Stmt], already_declared: set[str]) -> di
         if isinstance(stmt, Assign) and getattr(stmt, 'is_declaration', False):
             if isinstance(stmt.target, VarLV):
                 name = stmt.target.name
-                if name not in already_declared and name not in result:
-                    result[name] = getattr(stmt.value, 'typ', None)
+                if name not in already_declared:
+                    new_type = getattr(stmt.value, 'typ', None)
+                    if name in result:
+                        result[name] = _merge_types(result[name], new_type)
+                    else:
+                        result[name] = new_type
         elif isinstance(stmt, TupleAssign) and getattr(stmt, 'is_declaration', False):
             for i, target in enumerate(stmt.targets):
                 if isinstance(target, VarLV):
@@ -636,19 +774,24 @@ def _vars_first_assigned_in(stmts: list[Stmt], already_declared: set[str]) -> di
                             result[name] = None
         # Recurse into nested structures
         elif isinstance(stmt, If):
-            result.update(_vars_first_assigned_in(stmt.then_body, already_declared | set(result.keys())))
-            result.update(_vars_first_assigned_in(stmt.else_body, already_declared | set(result.keys())))
+            # For sibling branches, use the SAME already_declared set (before processing either branch)
+            # This allows the same variable to be assigned in both branches with different types
+            branch_declared = already_declared | set(result.keys())
+            _merge_var_types(result, _vars_first_assigned_in(stmt.then_body, branch_declared))
+            _merge_var_types(result, _vars_first_assigned_in(stmt.else_body, branch_declared))
         elif isinstance(stmt, While):
-            result.update(_vars_first_assigned_in(stmt.body, already_declared | set(result.keys())))
+            _merge_var_types(result, _vars_first_assigned_in(stmt.body, already_declared | set(result.keys())))
         elif isinstance(stmt, ForRange):
-            result.update(_vars_first_assigned_in(stmt.body, already_declared | set(result.keys())))
+            _merge_var_types(result, _vars_first_assigned_in(stmt.body, already_declared | set(result.keys())))
         elif isinstance(stmt, ForClassic):
-            result.update(_vars_first_assigned_in(stmt.body, already_declared | set(result.keys())))
+            _merge_var_types(result, _vars_first_assigned_in(stmt.body, already_declared | set(result.keys())))
         elif isinstance(stmt, Block):
-            result.update(_vars_first_assigned_in(stmt.body, already_declared | set(result.keys())))
+            _merge_var_types(result, _vars_first_assigned_in(stmt.body, already_declared | set(result.keys())))
         elif isinstance(stmt, TryCatch):
-            result.update(_vars_first_assigned_in(stmt.body, already_declared | set(result.keys())))
-            result.update(_vars_first_assigned_in(stmt.catch_body, already_declared | set(result.keys())))
+            # For try/catch, use the same pattern as if/else - both branches start fresh
+            branch_declared = already_declared | set(result.keys())
+            _merge_var_types(result, _vars_first_assigned_in(stmt.body, branch_declared))
+            _merge_var_types(result, _vars_first_assigned_in(stmt.catch_body, branch_declared))
     return result
 
 

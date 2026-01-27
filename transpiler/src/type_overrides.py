@@ -211,8 +211,7 @@ KIND_TO_STRUCT: dict[str, str] = {
 # Maps constant_name -> (type, go_value)
 # Used for constants that can't be inferred from simple integer assignment
 MODULE_CONSTANTS: dict[str, tuple[Type, str]] = {
-    # RESERVED_WORDS is a set in Python, emitted as space-delimited string for Go strings.Contains
-    "RESERVED_WORDS": (STRING, '"if then elif else fi while until for select do done case esac in function coproc "'),
+    # Empty - RESERVED_WORDS is now emitted as a proper map[string]struct{} set
 }
 
 # Override local variable types when inference fails

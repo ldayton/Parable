@@ -122,7 +122,6 @@ func _intToStr(n int) string {
 }
 
 const (
-	RESERVEDWORDS                 = "if then elif else fi while until for select do done case esac in function coproc "
 	TokenTypeEOF                  = 0
 	TokenTypeWORD                 = 1
 	TokenTypeNEWLINE              = 2
@@ -217,6 +216,7 @@ const (
 
 var (
 	ANSICESCAPES       = map[string]int{"a": 7, "b": 8, "e": 27, "E": 27, "f": 12, "n": 10, "r": 13, "t": 9, "v": 11, "\\": 92, "\"": 34, "?": 63}
+	RESERVEDWORDS      = map[string]struct{}{"if": {}, "then": {}, "elif": {}, "else": {}, "fi": {}, "while": {}, "until": {}, "for": {}, "select": {}, "do": {}, "done": {}, "case": {}, "esac": {}, "in": {}, "function": {}, "coproc": {}}
 	CONDUNARYOPS       = map[string]struct{}{"-a": {}, "-b": {}, "-c": {}, "-d": {}, "-e": {}, "-f": {}, "-g": {}, "-h": {}, "-k": {}, "-p": {}, "-r": {}, "-s": {}, "-t": {}, "-u": {}, "-w": {}, "-x": {}, "-G": {}, "-L": {}, "-N": {}, "-O": {}, "-S": {}, "-z": {}, "-n": {}, "-o": {}, "-v": {}, "-R": {}}
 	CONDBINARYOPS      = map[string]struct{}{"==": {}, "!=": {}, "=~": {}, "=": {}, "<": {}, ">": {}, "-eq": {}, "-ne": {}, "-lt": {}, "-le": {}, "-gt": {}, "-ge": {}, "-nt": {}, "-ot": {}, "-ef": {}}
 	COMPOUNDKEYWORDS   = map[string]struct{}{"while": {}, "until": {}, "for": {}, "if": {}, "case": {}, "select": {}}
@@ -4751,7 +4751,7 @@ func (self *Parser) lexPeekReservedWord() string {
 	if strings.HasSuffix(word, "\\\n") {
 		word = word[:len(word)-2]
 	}
-	if strings.Contains(RESERVEDWORDS, word) || word == "{" || word == "}" || word == "[[" || word == "]]" || word == "!" || word == "time" {
+	if func() bool { _, ok := RESERVEDWORDS[word]; return ok }() || word == "{" || word == "}" || word == "[[" || word == "]]" || word == "!" || word == "time" {
 		return word
 	}
 	return ""
@@ -7900,7 +7900,7 @@ func (self *Parser) ParseFunction() *Function {
 		return &Function{Name: name, Body: body, Kind: "function"}
 	}
 	name = self.PeekWord()
-	if name == "" || strings.Contains(RESERVEDWORDS, name) {
+	if name == "" || func() bool { _, ok := RESERVEDWORDS[name]; return ok }() {
 		return nil
 	}
 	if looksLikeAssignment(name) {
@@ -8132,7 +8132,7 @@ func (self *Parser) ParseCompoundCommand() Node {
 		word := self.PeekWord()
 		if word != "" && len(word) > 1 && string(word[0]) == "}" {
 			keywordWord := word[1:]
-			if strings.Contains(RESERVEDWORDS, keywordWord) || keywordWord == "{" || keywordWord == "}" || keywordWord == "[[" || keywordWord == "]]" || keywordWord == "!" || keywordWord == "time" {
+			if func() bool { _, ok := RESERVEDWORDS[keywordWord]; return ok }() || keywordWord == "{" || keywordWord == "}" || keywordWord == "[[" || keywordWord == "]]" || keywordWord == "!" || keywordWord == "time" {
 				reserved = keywordWord
 			}
 		}

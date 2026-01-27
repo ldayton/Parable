@@ -5,10 +5,6 @@ description: Run transpiler tests, fix failures, commit only on improvement
 
 Iteratively improve the new IR-based transpiler by fixing test failures.
 
-## ⚠️ WARNING
-
-**Only use `just test-new-go`** from the transpiler directory. Do NOT run any other just targets (like `just go`, `just check`, etc.) as they may have different behaviors or side effects.
-
 ## Paths
 
 All paths are relative to `/Users/lily/source/Parable/`:
@@ -16,38 +12,38 @@ All paths are relative to `/Users/lily/source/Parable/`:
 | Path | Description |
 |------|-------------|
 | `src/parable.py` | Python source being transpiled |
-| `transpiler/parable-old-transpiler.go` | Working Go code from old transpiler (reference only, DO NOT modify) |
+| `transpiler/parable-old-transpiler-output.go` | Working Go code from old transpiler (reference only, DO NOT modify) |
 | `transpiler/dist/parable.go` | Generated Go output from new transpiler |
 | `transpiler/src/` | New transpiler source code to edit |
 | `tools/transpiler/src/transpiler/` | Old transpiler source (reference only) |
 
-The `just test-new-go` target transpiles, writes to `transpiler/dist/`, and runs tests from there.
-
 ## Workflow
 
-### Step 1: Get baseline
+### Step 1: Transpile and get baseline
 
-Run `just test-new-go` from the transpiler directory and capture counts:
 ```bash
-cd /Users/lily/source/Parable/transpiler && just test-new-go 2>&1 | tail -5
+cd /Users/lily/source/Parable/transpiler
+uv run python -m src.cli ../src/parable.py > /tmp/parable-ir.go && gofmt /tmp/parable-ir.go > dist/parable.go
+```
+
+Then run full test suite, saving output to /tmp:
+```bash
+cd /Users/lily/source/Parable/transpiler/dist
+go run ./cmd/run-tests ../../tests > /tmp/test-output.txt 2>&1
+tail -3 /tmp/test-output.txt
 ```
 
 Parse the line: `X passed, Y failed in Z.XXs`
 Store `baseline_passed = X` and `baseline_failed = Y`.
 
-### Step 2: Pick a failure to investigate
+### Step 2: Pick a failure and jump in
 
-Run with verbose output to see specific failures:
+View the first failures:
 ```bash
-cd /Users/lily/source/Parable/transpiler/dist && go run ./cmd/run-tests -v ../../tests 2>&1 | head -100
+head -100 /tmp/test-output.txt
 ```
 
-Pick a failure that looks tractable. Smaller tests (oils/, parable/) are easier than large ones (gnu-bash/).
-
-Get details on a specific test:
-```bash
-cd /Users/lily/source/Parable/transpiler/dist && go run ./cmd/run-tests -v -f "test name" ../../tests 2>&1
-```
+Pick a failure with a small, simple input and start working on it immediately. Skip huge multi-line inputs in favor of small ones.
 
 ### Step 3: Compare generated vs working code
 
@@ -71,9 +67,11 @@ Edit files in `/Users/lily/source/Parable/transpiler/src/`:
 
 ### Step 5: Verify improvement
 
-Run `just test-new-go` again:
+Retranspile and run full suite:
 ```bash
-cd /Users/lily/source/Parable/transpiler && just test-new-go 2>&1 | tail -5
+cd /Users/lily/source/Parable/transpiler
+uv run python -m src.cli ../src/parable.py > /tmp/parable-ir.go && gofmt /tmp/parable-ir.go > dist/parable.go
+cd dist && go run ./cmd/run-tests ../../tests 2>&1 | tail -1
 ```
 
 Parse new counts: `new_passed` and `new_failed`.
@@ -102,6 +100,10 @@ Fix: [what you changed]
 Commit: [hash or "no commit - no improvement"]
 ```
 
+### Step 8: Stop
+
+DO NOT CONTINUE after a commit
+
 ## Common Issues
 
 - **Missing method**: Frontend not emitting IR for a Python method
@@ -111,6 +113,5 @@ Commit: [hash or "no commit - no improvement"]
 
 ## Important
 
-- **Only use `just test-new-go`** - no other just targets
 - Only commit when tests improve
 - Small incremental fixes are better than big risky changes

@@ -135,6 +135,7 @@ class TypeContext:
     narrowed_vars: set[str] = field(default_factory=set)  # Variables narrowed from interface type
     kind_source_vars: dict[str, str] = field(default_factory=dict)  # Maps kind_var -> node_var for kind = node.kind
     union_types: dict[str, list[str]] = field(default_factory=dict)  # Maps param name -> [struct names] for union params
+    list_element_unions: dict[str, list[str]] = field(default_factory=dict)  # Maps list var -> [struct names] for items appended under kind guards
 
 
 class Frontend:
@@ -535,7 +536,7 @@ class Frontend:
         # Set up type context for lowering __init__ body
         self._current_func_info = None
         self._current_class_name = class_name
-        var_types, tuple_vars, sentinel_ints = self._collect_var_types(init_ast.body)
+        var_types, tuple_vars, sentinel_ints, list_element_unions = self._collect_var_types(init_ast.body)
         var_types.update(param_types)
         var_types["self"] = Pointer(StructRef(class_name))
         self._type_ctx = TypeContext(
@@ -543,6 +544,7 @@ class Frontend:
             var_types=var_types,
             tuple_vars=tuple_vars,
             sentinel_ints=sentinel_ints,
+            list_element_unions=list_element_unions,
         )
         # Build constructor body:
         # 1. self := &ClassName{}
@@ -593,7 +595,7 @@ class Frontend:
             self._current_func_info = func_info
             self._current_class_name = ""
             # Collect variable types from body and add parameters
-            var_types, tuple_vars, sentinel_ints = self._collect_var_types(node.body)
+            var_types, tuple_vars, sentinel_ints, list_element_unions = self._collect_var_types(node.body)
             if func_info:
                 for p in func_info.params:
                     var_types[p.name] = p.typ
@@ -612,6 +614,7 @@ class Frontend:
                 tuple_vars=tuple_vars,
                 sentinel_ints=sentinel_ints,
                 union_types=union_types,
+                list_element_unions=list_element_unions,
             )
             body = self._lower_stmts(node.body)
         return Function(
@@ -639,7 +642,7 @@ class Frontend:
             self._current_func_info = func_info
             self._current_class_name = class_name
             # Collect variable types from body and add parameters + self
-            var_types, tuple_vars, sentinel_ints = self._collect_var_types(node.body)
+            var_types, tuple_vars, sentinel_ints, list_element_unions = self._collect_var_types(node.body)
             if func_info:
                 for p in func_info.params:
                     var_types[p.name] = p.typ
@@ -659,6 +662,7 @@ class Frontend:
                 tuple_vars=tuple_vars,
                 sentinel_ints=sentinel_ints,
                 union_types=union_types,
+                list_element_unions=list_element_unions,
             )
             body = self._lower_stmts(node.body)
         return Function(
@@ -1256,6 +1260,28 @@ class Frontend:
                         elem_type = self._infer_element_type_from_append_arg(call.args[0], var_types)
                         if elem_type != Interface("any"):
                             var_types[var_name] = Slice(elem_type)
+        # Third-and-a-half pass: detect kind-guarded appends to track list element union types
+        # Pattern: if/elif p.kind == "something": list_var.append(p)
+        # This records that list_var contains items of struct type for "something"
+        list_element_unions: dict[str, list[str]] = {}
+        for stmt in ast.walk(ast.Module(body=stmts, type_ignores=[])):
+            if isinstance(stmt, ast.If):
+                # Check the test condition for kind checks
+                kind_check = self._is_kind_check(stmt.test)
+                if kind_check:
+                    checked_var, struct_name = kind_check
+                    # Look for append calls in the body
+                    for body_stmt in stmt.body:
+                        if (isinstance(body_stmt, ast.Expr) and isinstance(body_stmt.value, ast.Call)):
+                            call = body_stmt.value
+                            if (isinstance(call.func, ast.Attribute) and call.func.attr == "append" and
+                                isinstance(call.func.value, ast.Name) and call.args and
+                                isinstance(call.args[0], ast.Name) and call.args[0].id == checked_var):
+                                list_var = call.func.value.id
+                                if list_var not in list_element_unions:
+                                    list_element_unions[list_var] = []
+                                if struct_name not in list_element_unions[list_var]:
+                                    list_element_unions[list_var].append(struct_name)
         # Fourth pass: re-run assignment type inference to propagate types through chains
         # This handles cases like: pair = cmds[0]; needs = pair[1]
         # where pair's type depends on cmds, and needs' type depends on pair
@@ -1304,7 +1330,7 @@ class Frontend:
                 else:
                     # Other types -> use Optional (pointer)
                     var_types[var_name] = Optional(concrete_type)
-        return var_types, tuple_vars, sentinel_ints
+        return var_types, tuple_vars, sentinel_ints, list_element_unions
 
     def _infer_iterable_type(self, node: ast.expr, var_types: dict[str, Type]) -> Type:
         """Infer the type of an iterable expression."""
@@ -2986,6 +3012,14 @@ class Frontend:
             if isinstance(target, ast.Name) and isinstance(node.value, ast.Attribute):
                 if node.value.attr == "kind" and isinstance(node.value.value, ast.Name):
                     self._type_ctx.kind_source_vars[target.id] = node.value.value.id
+            # Propagate list element union types: var = list[idx] where list has known element unions
+            if isinstance(target, ast.Name) and isinstance(node.value, ast.Subscript):
+                if isinstance(node.value.value, ast.Name):
+                    list_var = node.value.value.id
+                    if list_var in self._type_ctx.list_element_unions:
+                        self._type_ctx.union_types[target.id] = self._type_ctx.list_element_unions[list_var]
+                        # Also reset var_types to Node so union_types logic is used for field access
+                        self._type_ctx.var_types[target.id] = Interface("Node")
             lval = self._lower_lvalue(target)
             assign = ir.Assign(target=lval, value=value, loc=self._loc_from_node(node))
             # Add declaration type if VAR_TYPE_OVERRIDE applies

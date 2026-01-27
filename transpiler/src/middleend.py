@@ -331,19 +331,23 @@ def _analyze_function(func: Function) -> None:
         elif isinstance(stmt, Match):
             check_expr(stmt.expr)
             for case in stmt.cases:
-                case_assigned: set[str] = set()
+                # Inherit from outer scope so outer declarations are visible
+                case_assigned: set[str] = set(local_assigned)
                 for s in case.body:
                     check_stmt(s, case_assigned)
-            default_assigned: set[str] = set()
+            # Default case also inherits from outer scope
+            default_assigned: set[str] = set(local_assigned)
             for s in stmt.default:
                 check_stmt(s, default_assigned)
         elif isinstance(stmt, TypeSwitch):
             check_expr(stmt.expr)
             for case in stmt.cases:
-                case_assigned: set[str] = set()
+                # Inherit from outer scope so outer declarations are visible
+                case_assigned: set[str] = set(local_assigned)
                 for s in case.body:
                     check_stmt(s, case_assigned)
-            default_assigned: set[str] = set()
+            # Default case also inherits from outer scope
+            default_assigned: set[str] = set(local_assigned)
             for s in stmt.default:
                 check_stmt(s, default_assigned)
 

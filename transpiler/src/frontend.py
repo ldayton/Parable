@@ -26,8 +26,10 @@ from .ir import (
     FuncType,
     Function,
     Interface,
+    InterfaceDef,
     Loc,
     Map,
+    MethodSig,
     Module,
     Optional,
     Param,
@@ -358,6 +360,15 @@ class Frontend:
                                 module.constants.append(
                                     Constant(name=const_name, typ=INT, value=value, loc=self._loc_from_node(stmt))
                                 )
+        # Build Node interface (abstract base for AST nodes)
+        node_interface = InterfaceDef(
+            name="Node",
+            methods=[
+                MethodSig(name="GetKind", params=[], ret=STRING),
+                MethodSig(name="ToSexp", params=[], ret=STRING),
+            ],
+        )
+        module.interfaces.append(node_interface)
         # Build structs (with method bodies)
         for node in tree.body:
             if isinstance(node, ast.ClassDef):
@@ -373,6 +384,9 @@ class Frontend:
 
     def _build_struct(self, node: ast.ClassDef, with_body: bool = False) -> Struct | None:
         """Build IR Struct from class definition."""
+        # Node is emitted as InterfaceDef, not Struct
+        if node.name == "Node":
+            return None
         info = self.symbols.structs.get(node.name)
         if not info:
             return None
@@ -1368,7 +1382,12 @@ class Frontend:
                 obj=obj, low=low, high=high, typ=slice_type, loc=self._loc_from_node(node)
             )
         idx = self._convert_negative_index(node.slice, obj, node)
-        index_expr = ir.Index(obj=obj, index=idx, typ=Interface("any"), loc=self._loc_from_node(node))
+        # Infer element type from slice type
+        elem_type: Type = Interface("any")
+        obj_type = getattr(obj, 'typ', None)
+        if isinstance(obj_type, Slice):
+            elem_type = obj_type.element
+        index_expr = ir.Index(obj=obj, index=idx, typ=elem_type, loc=self._loc_from_node(node))
         # Check if indexing a string - if so, wrap with Cast to string
         # In Go, string[i] returns byte, but Python returns str
         # Check both AST inference and lowered expression type
@@ -1762,7 +1781,8 @@ class Frontend:
         """Lower Python tuple literal to TupleLit IR node."""
         from . import ir
         elements = [self._lower_expr(e) for e in node.elts]
-        return ir.TupleLit(elements=elements, typ=Interface("any"), loc=self._loc_from_node(node))
+        element_types = tuple(e.typ for e in elements)
+        return ir.TupleLit(elements=elements, typ=Tuple(elements=element_types), loc=self._loc_from_node(node))
 
     def _binop_to_str(self, op: ast.operator) -> str:
         return {

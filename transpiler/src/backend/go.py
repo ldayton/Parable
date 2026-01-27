@@ -41,6 +41,7 @@ from src.ir import (
     IndexLV,
     IntLit,
     Interface,
+    InterfaceDef,
     IsNil,
     IsType,
     Len,
@@ -52,6 +53,7 @@ from src.ir import (
     Match,
     MatchCase,
     MethodCall,
+    MethodSig,
     Module,
     NilLit,
     OpAssign,
@@ -120,6 +122,8 @@ class GoBackend:
         self.output = []
         self._emit_header(module)
         self._emit_constants(module.constants)
+        for iface in module.interfaces:
+            self._emit_interface_def(iface)
         for struct in module.structs:
             self._emit_struct(struct)
         for func in module.functions:
@@ -265,17 +269,23 @@ func _parseInt(s string, base int) int {
             self._line_raw(line)
         self._line("")
 
+    def _emit_interface_def(self, iface: InterfaceDef) -> None:
+        """Emit interface definition."""
+        self._line(f"type {iface.name} interface {{")
+        self.indent += 1
+        for method in iface.methods:
+            params = ", ".join(self._type_to_go(p.typ) for p in method.params)
+            ret = self._type_to_go(method.ret) if method.ret != VOID else ""
+            if ret:
+                self._line(f"{method.name}({params}) {ret}")
+            else:
+                self._line(f"{method.name}({params})")
+        self.indent -= 1
+        self._line("}")
+        self._line("")
+
     def _emit_struct(self, struct: Struct) -> None:
         """Emit struct definition."""
-        # Emit Node as an interface (it's the abstract base for AST nodes)
-        if struct.name == "Node":
-            self._line(f"type {struct.name} interface {{")
-            self.indent += 1
-            self._line("isNode()")  # Marker method for type safety
-            self.indent -= 1
-            self._line("}")
-            self._line("")
-            return
         self._line(f"type {struct.name} struct {{")
         self.indent += 1
         for field in struct.fields:
@@ -285,9 +295,10 @@ func _parseInt(s string, base int) int {
         self.indent -= 1
         self._line("}")
         self._line("")
-        # If struct implements Node, emit the marker method
+        # If struct implements Node interface, emit the interface methods
         if "Node" in struct.implements:
-            self._line(f"func (self *{struct.name}) isNode() {{}}")
+            # GetKind getter for the Kind field
+            self._line(f"func (self *{struct.name}) GetKind() string {{ return self.Kind }}")
             self._line("")
         # Emit methods
         for method in struct.methods:
@@ -789,6 +800,11 @@ func _parseInt(s string, base int) int {
     def _emit_expr_FieldAccess(self, expr: FieldAccess) -> str:
         obj = self._emit_expr(expr.obj)
         field = self._to_pascal(expr.field)
+        # Interface fields must be accessed via getter methods
+        obj_type = getattr(expr.obj, 'typ', None)
+        if isinstance(obj_type, Interface) and obj_type.name == "Node":
+            if expr.field == "kind":
+                return f"{obj}.GetKind()"
         return f"{obj}.{field}"
 
     def _emit_expr_Index(self, expr: Index) -> str:
@@ -1073,12 +1089,21 @@ func _parseInt(s string, base int) int {
 
     def _emit_expr_TupleLit(self, expr: TupleLit) -> str:
         """Emit tuple literal as anonymous struct."""
-        # For 2-element tuples commonly used in quoteStackEntry, emit as struct{A, B type}{}
+        # Use typed fields from Tuple type if available
+        if isinstance(expr.typ, Tuple) and expr.typ.elements:
+            # Special case: (bool, bool) tuples are quoteStackEntry in this codebase
+            if expr.typ.elements == (BOOL, BOOL):
+                vals = ", ".join(self._emit_expr(e) for e in expr.elements)
+                return f"quoteStackEntry{{{vals}}}"
+            types = [self._type_to_go(t) for t in expr.typ.elements]
+            # Go anonymous struct fields use semicolons as separators
+            fields = "; ".join(f"F{i} {t}" for i, t in enumerate(types))
+            vals = ", ".join(self._emit_expr(e) for e in expr.elements)
+            return f"struct{{{fields}}}{{{vals}}}"
+        # Fallback: use numbered fields (shouldn't happen with proper frontend)
         elements = ", ".join(self._emit_expr(e) for e in expr.elements)
         if len(expr.elements) == 2:
-            # Common pattern: struct{Single, Double bool}{val1, val2}
-            return f"struct{{Single, Double bool}}{{{elements}}}"
-        # Fallback: use numbered fields
+            return f"struct{{F0 interface{{}}; F1 interface{{}}}}{{{elements}}}"
         fields = ", ".join(f"F{i}: {self._emit_expr(e)}" for i, e in enumerate(expr.elements))
         return f"struct{{}}{{{fields}}}"
 

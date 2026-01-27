@@ -879,6 +879,10 @@ func _isNilInterface(i interface{}) bool {
         # Keep hoisted vars tracked - they remain in scope for the rest of the function
 
     def _emit_stmt_Raise(self, stmt: Raise) -> None:
+        # Re-raise caught exception
+        if stmt.reraise_var:
+            self._line(f"panic({stmt.reraise_var})")
+            return
         msg = self._emit_expr(stmt.message)
         pos = self._emit_expr(stmt.pos)
         if stmt.error_type == "ParseError":

@@ -1885,7 +1885,7 @@ func (self *Lexer) readBracedParam(start int, inDquote bool) (Node, string) {
 		defer func() {
 			if e := recover(); e != nil {
 				self.dolbraceState = savedDolbrace
-				panic("")
+				panic(e)
 			}
 		}()
 		flags := func() int {
@@ -5533,7 +5533,7 @@ func (self *Parser) parseProcessSubstitution() (result0 Node, result1 string) {
 				}
 			}()
 			if strings.Contains(" \t\n", contentStartChar) {
-				panic("")
+				panic(e)
 			}
 			self.Pos = start + 2
 			self.lexer.Pos = self.Pos

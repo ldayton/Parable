@@ -429,6 +429,7 @@ class Raise(Stmt):
     error_type: str  # "ParseError", "MatchedPairError"
     message: Expr
     pos: Expr
+    reraise_var: str | None = None  # re-raise caught exception variable
 
 
 @dataclass

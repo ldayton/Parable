@@ -149,6 +149,7 @@ class Frontend:
         self._current_func_info: FuncInfo | None = None
         self._current_class_name: str = ""
         self._type_ctx: TypeContext = TypeContext()
+        self._current_catch_var: str | None = None  # track catch variable for raise e pattern
 
     def transpile(self, source: str) -> Module:
         """Parse Python source and produce IR Module."""
@@ -3630,6 +3631,15 @@ class Frontend:
     def _lower_stmt_Raise(self, node: ast.Raise) -> "ir.Stmt":
         from . import ir
         if node.exc:
+            # Check if raising the catch variable (re-raise pattern)
+            if isinstance(node.exc, ast.Name) and node.exc.id == self._current_catch_var:
+                return ir.Raise(
+                    error_type="Error",
+                    message=ir.StringLit(value="", typ=STRING),
+                    pos=ir.IntLit(value=0, typ=INT),
+                    reraise_var=self._current_catch_var,
+                    loc=self._loc_from_node(node),
+                )
             # Extract error type and message from exception
             if isinstance(node.exc, ast.Call) and isinstance(node.exc.func, ast.Name):
                 error_type = node.exc.func.id
@@ -3656,8 +3666,12 @@ class Frontend:
         if node.handlers:
             handler = node.handlers[0]
             catch_var = handler.name
+            # Set catch var context so raise e can be detected
+            saved_catch_var = self._current_catch_var
+            self._current_catch_var = catch_var
             catch_body = self._lower_stmts(handler.body)
-            # Check if handler re-raises
+            self._current_catch_var = saved_catch_var
+            # Check if handler re-raises (bare raise)
             for stmt in handler.body:
                 if isinstance(stmt, ast.Raise) and stmt.exc is None:
                     reraise = True

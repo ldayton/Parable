@@ -42,6 +42,7 @@ from src.ir import (
     VarLV,
     While,
 )
+from src.type_overrides import VAR_TYPE_OVERRIDES
 
 
 def analyze(module: Module) -> None:
@@ -60,6 +61,30 @@ def _analyze_named_returns(module: Module) -> None:
     for struct in module.structs:
         for method in struct.methods:
             method.needs_named_returns = _function_needs_named_returns(method.body)
+
+
+def _always_returns(stmts: list[Stmt]) -> bool:
+    """Check if a list of statements always returns (on all paths)."""
+    for stmt in stmts:
+        if isinstance(stmt, Return):
+            return True
+        if isinstance(stmt, If):
+            # Both branches must return
+            if _always_returns(stmt.then_body) and _always_returns(stmt.else_body):
+                return True
+        if isinstance(stmt, (Match, TypeSwitch)):
+            # All cases and default must return
+            all_return = all(_always_returns(case.body) for case in stmt.cases)
+            if all_return and _always_returns(stmt.default):
+                return True
+        if isinstance(stmt, TryCatch):
+            # Both try and catch must return
+            if _always_returns(stmt.body) and _always_returns(stmt.catch_body):
+                return True
+        if isinstance(stmt, Block):
+            if _always_returns(stmt.body):
+                return True
+    return False
 
 
 def _collect_assigned_vars(stmts: list[Stmt]) -> set[str]:
@@ -797,11 +822,23 @@ def _vars_first_assigned_in(stmts: list[Stmt], already_declared: set[str]) -> di
 
 def _analyze_hoisting(func: Function) -> None:
     """Annotate TryCatch and If nodes with variables needing hoisting."""
+    func_name = func.name
     # Collect function-level declared variables
     func_declared = set(p.name for p in func.params)
     for stmt in func.body:
         if isinstance(stmt, VarDecl):
             func_declared.add(stmt.name)
+
+    def apply_type_overrides(hoisted: list[tuple[str, Type | None]]) -> list[tuple[str, Type | None]]:
+        """Apply VAR_TYPE_OVERRIDES to hoisted variables."""
+        result = []
+        for name, typ in hoisted:
+            override_key = (func_name, name)
+            if override_key in VAR_TYPE_OVERRIDES:
+                result.append((name, VAR_TYPE_OVERRIDES[override_key]))
+            else:
+                result.append((name, typ))
+        return result
 
     def analyze_stmts(stmts: list[Stmt], outer_declared: set[str]) -> None:
         """Analyze statements, annotating nodes that need hoisting."""
@@ -822,7 +859,7 @@ def _analyze_hoisting(func: Function) -> None:
                     (name, typ) for name, typ in inner_new.items()
                     if name in used_after
                 ]
-                stmt.hoisted_vars = needs_hoisting
+                stmt.hoisted_vars = apply_type_overrides(needs_hoisting)
 
                 # These are now effectively declared for subsequent analysis
                 declared.update(name for name, _ in needs_hoisting)
@@ -851,7 +888,7 @@ def _analyze_hoisting(func: Function) -> None:
                         needs_hoisting.append((name, typ))
                     elif name in then_new and name in else_used:
                         needs_hoisting.append((name, typ))
-                stmt.hoisted_vars = needs_hoisting
+                stmt.hoisted_vars = apply_type_overrides(needs_hoisting)
 
                 # These are now effectively declared for subsequent analysis
                 declared.update(name for name, _ in needs_hoisting)
@@ -881,7 +918,7 @@ def _analyze_hoisting(func: Function) -> None:
                     (name, typ) for name, typ in inner_new.items()
                     if name in used_after
                 ]
-                stmt.hoisted_vars = needs_hoisting
+                stmt.hoisted_vars = apply_type_overrides(needs_hoisting)
                 # These are now effectively declared for subsequent analysis
                 declared.update(name for name, _ in needs_hoisting)
                 analyze_stmts(stmt.body, declared)
@@ -895,7 +932,7 @@ def _analyze_hoisting(func: Function) -> None:
                     (name, typ) for name, typ in inner_new.items()
                     if name in used_after
                 ]
-                stmt.hoisted_vars = needs_hoisting
+                stmt.hoisted_vars = apply_type_overrides(needs_hoisting)
                 # These are now effectively declared for subsequent analysis
                 declared.update(name for name, _ in needs_hoisting)
                 analyze_stmts(stmt.body, declared)
@@ -906,13 +943,16 @@ def _analyze_hoisting(func: Function) -> None:
             elif isinstance(stmt, Block):
                 analyze_stmts(stmt.body, declared)
             elif isinstance(stmt, (Match, TypeSwitch)):
-                # Collect all case body statements
-                all_case_stmts: list[Stmt] = []
+                # Only collect from cases that DON'T return (vars that might escape)
+                # Cases that return keep their variables local (no need to hoist)
+                non_returning_stmts: list[Stmt] = []
                 for case in stmt.cases:
-                    all_case_stmts.extend(case.body)
-                all_case_stmts.extend(stmt.default)
-                # Find vars first assigned inside any branch
-                inner_new = _vars_first_assigned_in(all_case_stmts, declared)
+                    if not _always_returns(case.body):
+                        non_returning_stmts.extend(case.body)
+                if not _always_returns(stmt.default):
+                    non_returning_stmts.extend(stmt.default)
+                # Find vars first assigned inside non-returning branches
+                inner_new = _vars_first_assigned_in(non_returning_stmts, declared)
                 # Find vars used after this statement
                 used_after = _collect_used_vars(stmts[i + 1:])
                 # Vars needing hoisting = first assigned inside AND used after
@@ -920,7 +960,7 @@ def _analyze_hoisting(func: Function) -> None:
                     (name, typ) for name, typ in inner_new.items()
                     if name in used_after
                 ]
-                stmt.hoisted_vars = needs_hoisting
+                stmt.hoisted_vars = apply_type_overrides(needs_hoisting)
                 # Update declared set
                 declared.update(name for name, _ in needs_hoisting)
                 # Recurse into case bodies

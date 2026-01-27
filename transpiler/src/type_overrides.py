@@ -10,6 +10,7 @@ from .ir import (
     RUNE,
     STRING,
     BYTE,
+    Interface,
     Map,
     Pointer,
     Slice,
@@ -73,6 +74,22 @@ FIELD_TYPE_OVERRIDES: dict[tuple[str, str], Type] = {
     ("Parser", "_cmdsub_heredoc_end"): INT,
     # Token.word is *Word, not Node interface
     ("Token", "word"): Pointer(StructRef("Word")),
+    # Pipeline.commands is []Node
+    ("Pipeline", "commands"): Slice(Interface("Node")),
+    # Command.words is []*Word (Go slices aren't covariant)
+    ("Command", "words"): Slice(Pointer(StructRef("Word"))),
+    # For/Select.words is []*Word | None - use slice (nil is valid)
+    ("For", "words"): Slice(Pointer(StructRef("Word"))),
+    ("Select", "words"): Slice(Pointer(StructRef("Word"))),
+    # Redirects fields are []Node, not *[]Node (nil slice is fine in Go)
+    ("For", "redirects"): Slice(StructRef("Node")),
+    ("Select", "redirects"): Slice(StructRef("Node")),
+    ("Subshell", "redirects"): Slice(StructRef("Node")),
+    ("ArithmeticCommand", "redirects"): Slice(StructRef("Node")),
+    ("Conditional", "redirects"): Slice(StructRef("Node")),
+    ("BraceGroup", "redirects"): Slice(StructRef("Node")),
+    # Redirect.target is Word | None -> *Word in Go
+    ("Redirect", "target"): Pointer(StructRef("Word")),
 }
 
 # Override return types for methods that return generic list
@@ -116,6 +133,25 @@ NODE_FIELD_TYPES: dict[str, list[str]] = {
     # Note: List.parts needs special handling since other structs also have parts
     # value field - on Word (primary), ArithNumber, ConditionalExpr, etc.
     "value": ["Word"],
+    # pipeline field - on Negation, Time
+    "pipeline": ["Negation", "Time"],
+    # words field - on Command (for Node-typed expressions)
+    "words": ["Command"],
+    # redirects field - on Command and other compound commands
+    "redirects": ["Command"],
+    # target field - on Redirect
+    "target": ["Redirect"],
+    # Arithmetic expression fields
+    "operand": ["ArithUnaryOp"],
+    "left": ["ArithBinaryOp"],
+    "right": ["ArithBinaryOp"],
+    # CasePattern fields - for case pattern handling
+    "pattern": ["CasePattern"],
+    "body": ["CasePattern", "For", "ForArith", "While", "Until", "Select", "Conditional"],
+    "terminator": ["CasePattern"],
+    # HereDoc fields accessed on Node-typed expressions
+    "content": ["HereDoc"],
+    "delimiter": ["HereDoc"],
 }
 
 # Methods that exist on specific Node subtypes (not in Node interface)
@@ -158,7 +194,17 @@ KIND_TO_STRUCT: dict[str, str] = {
     "redirect": "Redirect",
     "heredoc": "HereDoc",
     "arith-expr": "ArithExpr",
+    "arith-cmd": "ArithmeticCommand",
     "cond-expr": "ConditionalExpr",
+    # Conditional test nodes
+    "unary-test": "UnaryTest",
+    "binary-test": "BinaryTest",
+    "cond-and": "CondAnd",
+    "cond-or": "CondOr",
+    "cond-not": "CondNot",
+    "cond-paren": "CondParen",
+    "negation": "Negation",
+    "time": "Time",
 }
 
 # Module-level constants that need custom emission
@@ -176,6 +222,35 @@ VAR_TYPE_OVERRIDES: dict[tuple[str, str], Type] = {
     ("_collect_redirects", "redirects"): Slice(StructRef("Node")),
     # Tuple element types inferred incorrectly
     ("_read_heredoc_body", "pending_heredocs"): Slice(Tuple((STRING, BOOL))),
+    # Hoisted variables with wrong type inference (interface{} instead of Node)
+    ("parse_if", "else_body"): Interface("Node"),
+    ("parse_if", "inner_else"): Interface("Node"),
+    ("_parse_elif_chain", "else_body"): Interface("Node"),
+    # Hoisted word lists in for/select parsing (interface{} instead of []*Word)
+    ("parse_for", "words"): Slice(Pointer(StructRef("Word"))),
+    ("parse_select", "words"): Slice(Pointer(StructRef("Word"))),
+    # Hoisted body variable in case parsing (interface{} instead of Node)
+    ("parse_case", "body"): Interface("Node"),
+    # Coproc body can be many different Node types
+    ("parse_coproc", "body"): Interface("Node"),
+    # Compound command result can be many different Node types
+    ("_parse_compound_command", "result"): Interface("Node"),
+    # Function body can be many different Node types
+    ("_parse_function", "body"): Interface("Node"),
+    # Coprocess body can be many different Node types (duplicate in Python, diff in Go naming)
+    ("_parse_coproc", "body"): Interface("Node"),
+    # Public compound command result can be many different Node types
+    ("parse_compound_command", "result"): Interface("Node"),
+    # _format_cmdsub_node hoisted variables
+    ("_format_cmdsub_node", "cmd"): Interface("Node"),
+    ("_format_cmdsub_node", "h"): Interface("Node"),
+    # Empty list variables that need concrete element types
+    ("_format_cmdsub_node", "heredocs"): Slice(Pointer(StructRef("HereDoc"))),
+    ("_format_cmdsub_node", "cmds"): Slice(Tuple((Interface("Node"), BOOL))),
+    # String list variables in _format_cmdsub_node
+    ("_format_cmdsub_node", "word_vals"): Slice(STRING),
+    ("_format_cmdsub_node", "patterns"): Slice(STRING),
+    ("_format_cmdsub_node", "redirect_parts"): Slice(STRING),
 }
 
 # Fields that use -1 sentinel value instead of nil pointer for int | None

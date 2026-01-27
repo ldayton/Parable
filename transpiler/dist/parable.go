@@ -63,6 +63,14 @@ func _strIsLower(s string) bool {
 	return len(s) > 0
 }
 
+// _intPtr converts a sentinel int (-1 = nil) to *int
+func _intPtr(val int) *int {
+	if val == -1 {
+		return nil
+	}
+	return &val
+}
+
 // Range generates a slice of integers similar to Python's range()
 // Range(end) -> [0, 1, ..., end-1]
 // Range(start, end) -> [start, start+1, ..., end-1]
@@ -200,11 +208,19 @@ const (
 	ParseContextARITHMETIC        = 2
 	ParseContextCASEPATTERN       = 3
 	ParseContextBRACEEXPANSION    = 4
-	sMPLITERAL                    = 1
-	sMPPASTOPEN                   = 2
+	SMPLITERAL                    = 1
+	SMPPASTOPEN                   = 2
 	WORDCTXNORMAL                 = 0
 	WORDCTXCOND                   = 1
 	WORDCTXREGEX                  = 2
+)
+
+var (
+	ANSICESCAPES       = map[string]int{"a": 7, "b": 8, "e": 27, "E": 27, "f": 12, "n": 10, "r": 13, "t": 9, "v": 11, "\\": 92, "\"": 34, "?": 63}
+	CONDUNARYOPS       = map[string]struct{}{"-a": {}, "-b": {}, "-c": {}, "-d": {}, "-e": {}, "-f": {}, "-g": {}, "-h": {}, "-k": {}, "-p": {}, "-r": {}, "-s": {}, "-t": {}, "-u": {}, "-w": {}, "-x": {}, "-G": {}, "-L": {}, "-N": {}, "-O": {}, "-S": {}, "-z": {}, "-n": {}, "-o": {}, "-v": {}, "-R": {}}
+	CONDBINARYOPS      = map[string]struct{}{"==": {}, "!=": {}, "=~": {}, "=": {}, "<": {}, ">": {}, "-eq": {}, "-ne": {}, "-lt": {}, "-le": {}, "-gt": {}, "-ge": {}, "-nt": {}, "-ot": {}, "-ef": {}}
+	COMPOUNDKEYWORDS   = map[string]struct{}{"while": {}, "until": {}, "for": {}, "if": {}, "case": {}, "select": {}}
+	ASSIGNMENTBUILTINS = map[string]struct{}{"alias": {}, "declare": {}, "typeset": {}, "local": {}, "export": {}, "readonly": {}, "eval": {}, "let": {}}
 )
 
 type Node interface {
@@ -2767,6 +2783,7 @@ func (self *Word) collectCmdsubs(node Node) []Node {
 				case *CommandSubstitution:
 					result = append(result, p)
 				default:
+					p = p.(Node)
 					result = append(result, self.collectCmdsubs(p)...)
 				}
 			}
@@ -2814,6 +2831,7 @@ func (self *Word) collectProcsubs(node Node) []Node {
 				case *ProcessSubstitution:
 					result = append(result, p)
 				default:
+					p = p.(Node)
 					result = append(result, self.collectProcsubs(p)...)
 				}
 			}
@@ -3355,7 +3373,7 @@ func (self *Word) GetCondFormattedValue() string {
 }
 
 type Command struct {
-	Words     []Node
+	Words     []*Word
 	Redirects []Node
 	Kind      string
 }
@@ -3623,7 +3641,7 @@ func (self *Comment) ToSexp() string {
 
 type Redirect struct {
 	Op     string
-	Target Node
+	Target *Word
 	Fd     *int
 	Kind   string
 }
@@ -3653,11 +3671,11 @@ func (self *Redirect) ToSexp() string {
 			}
 		}
 	}
-	targetVal := self.Target.(*Word).Value
-	targetVal = self.Target.(*Word).expandAllAnsiCQuotes(targetVal)
-	targetVal = self.Target.(*Word).stripLocaleStringDollars(targetVal)
-	targetVal = self.Target.(*Word).formatCommandSubstitutions(targetVal, false)
-	targetVal = self.Target.(*Word).stripArithLineContinuations(targetVal)
+	targetVal := self.Target.Value
+	targetVal = self.Target.expandAllAnsiCQuotes(targetVal)
+	targetVal = self.Target.stripLocaleStringDollars(targetVal)
+	targetVal = self.Target.formatCommandSubstitutions(targetVal, false)
+	targetVal = self.Target.stripArithLineContinuations(targetVal)
 	if strings.HasSuffix(targetVal, "\\") && !strings.HasSuffix(targetVal, "\\\\") {
 		targetVal = targetVal + "\\"
 	}
@@ -3669,10 +3687,10 @@ func (self *Redirect) ToSexp() string {
 		}
 		raw := substring(targetVal, 1, len(targetVal))
 		if _strIsDigit(raw) && _parseInt(raw, 10) <= 2147483647 {
-			return "(redirect \"" + op + "\" " + string(_parseInt(raw, 10)) + ")"
+			return "(redirect \"" + op + "\" " + _intToStr(_parseInt(raw, 10)) + ")"
 		}
 		if strings.HasSuffix(raw, "-") && _strIsDigit(raw[:len(raw)-1]) && _parseInt(raw[:len(raw)-1], 10) <= 2147483647 {
-			return "(redirect \"" + op + "\" " + string(_parseInt(raw[:len(raw)-1], 10)) + ")"
+			return "(redirect \"" + op + "\" " + _intToStr(_parseInt(raw[:len(raw)-1], 10)) + ")"
 		}
 		if targetVal == "&-" {
 			return "(redirect \">&-\" 0)"
@@ -3688,13 +3706,13 @@ func (self *Redirect) ToSexp() string {
 	}
 	if op == ">&" || op == "<&" {
 		if _strIsDigit(targetVal) && _parseInt(targetVal, 10) <= 2147483647 {
-			return "(redirect \"" + op + "\" " + string(_parseInt(targetVal, 10)) + ")"
+			return "(redirect \"" + op + "\" " + _intToStr(_parseInt(targetVal, 10)) + ")"
 		}
 		if targetVal == "-" {
 			return "(redirect \">&-\" 0)"
 		}
 		if strings.HasSuffix(targetVal, "-") && _strIsDigit(targetVal[:len(targetVal)-1]) && _parseInt(targetVal[:len(targetVal)-1], 10) <= 2147483647 {
-			return "(redirect \"" + op + "\" " + string(_parseInt(targetVal[:len(targetVal)-1], 10)) + ")"
+			return "(redirect \"" + op + "\" " + _intToStr(_parseInt(targetVal[:len(targetVal)-1], 10)) + ")"
 		}
 		outVal := func() string {
 			if strings.HasSuffix(targetVal, "-") {
@@ -3738,7 +3756,7 @@ func (self *HereDoc) ToSexp() string {
 
 type Subshell struct {
 	Body      Node
-	Redirects *[]Node
+	Redirects []Node
 	Kind      string
 }
 
@@ -3746,12 +3764,12 @@ func (self *Subshell) GetKind() string { return self.Kind }
 
 func (self *Subshell) ToSexp() string {
 	base := "(subshell " + self.Body.ToSexp() + ")"
-	return appendRedirects(base, *self.Redirects)
+	return appendRedirects(base, self.Redirects)
 }
 
 type BraceGroup struct {
 	Body      Node
-	Redirects *[]Node
+	Redirects []Node
 	Kind      string
 }
 
@@ -3759,7 +3777,7 @@ func (self *BraceGroup) GetKind() string { return self.Kind }
 
 func (self *BraceGroup) ToSexp() string {
 	base := "(brace-group " + self.Body.ToSexp() + ")"
-	return appendRedirects(base, *self.Redirects)
+	return appendRedirects(base, self.Redirects)
 }
 
 type If struct {
@@ -3814,7 +3832,7 @@ func (self *Until) ToSexp() string {
 
 type For struct {
 	Var       string
-	Words     *[]Node
+	Words     []*Word
 	Body      Node
 	Redirects []Node
 	Kind      string
@@ -3836,11 +3854,11 @@ func (self *For) ToSexp() string {
 	varEscaped := strings.ReplaceAll(strings.ReplaceAll(varFormatted, "\\", "\\\\"), "\"", "\\\"")
 	if self.Words == nil {
 		return "(for (word \"" + varEscaped + "\") (in (word \"\\\"$@\\\"\")) " + self.Body.ToSexp() + ")" + suffix
-	} else if len(*self.Words) == 0 {
+	} else if len(self.Words) == 0 {
 		return "(for (word \"" + varEscaped + "\") (in) " + self.Body.ToSexp() + ")" + suffix
 	} else {
 		wordParts := []string{}
-		for _, w := range *self.Words {
+		for _, w := range self.Words {
 			wordParts = append(wordParts, w.ToSexp())
 		}
 		wordStrs := strings.Join(wordParts, " ")
@@ -3898,7 +3916,7 @@ func (self *ForArith) ToSexp() string {
 
 type Select struct {
 	Var       string
-	Words     *[]Node
+	Words     []*Word
 	Body      Node
 	Redirects []Node
 	Kind      string
@@ -3919,11 +3937,11 @@ func (self *Select) ToSexp() string {
 	var inClause string
 	if self.Words != nil {
 		wordParts := []string{}
-		for _, w := range *self.Words {
+		for _, w := range self.Words {
 			wordParts = append(wordParts, w.ToSexp())
 		}
 		wordStrs := strings.Join(wordParts, " ")
-		if self.Words != nil {
+		if len(self.Words) > 0 {
 			inClause = "(in " + wordStrs + ")"
 		} else {
 			inClause = "(in)"
@@ -4562,7 +4580,7 @@ type Parser struct {
 	Source                  string
 	Pos                     int
 	Length                  int
-	pendingHeredocs         []Node
+	pendingHeredocs         []*HereDoc
 	cmdsubHeredocEnd        int
 	sawNewlineInSingleQuote bool
 	inProcessSub            bool
@@ -4892,7 +4910,7 @@ func (self *Parser) atEofToken() bool {
 }
 
 func (self *Parser) collectRedirects() []Node {
-	redirects := []Node{}
+	var redirects []Node = []Node{}
 	for true {
 		self.SkipWhitespace()
 		redirect := self.ParseRedirect()
@@ -6391,8 +6409,8 @@ func (self *Parser) ParseRedirect() Node {
 		return nil
 	}
 	start := self.Pos
-	fd := nil
-	varfd := nil
+	fd := -1
+	varfd := ""
 	var ch string
 	if self.Peek() == "{" {
 		saved := self.Pos
@@ -6429,7 +6447,7 @@ func (self *Parser) ParseRedirect() Node {
 						if base != "" && _strIsAlpha(string(base[0])) || string(base[0]) == "_" {
 							isValidVarfd = true
 							for _, c := range base[1:] {
-								if !(_strIsAlnum(c) || c == '_') {
+								if !(_strIsAlnum(string(c)) || c == '_') {
 									isValidVarfd = false
 									break
 								}
@@ -6439,7 +6457,7 @@ func (self *Parser) ParseRedirect() Node {
 				} else {
 					isValidVarfd = true
 					for _, c := range varname[1:] {
-						if !(_strIsAlnum(c) || c == '_') {
+						if !(_strIsAlnum(string(c)) || c == '_') {
 							isValidVarfd = false
 							break
 						}
@@ -6466,7 +6484,7 @@ func (self *Parser) ParseRedirect() Node {
 	var op string
 	var target *Word
 	if ch == "&" && self.Pos+1 < self.Length && string(self.Source[self.Pos+1]) == ">" {
-		if fd != nil || varfd != "" {
+		if fd != -1 || varfd != "" {
 			self.Pos = start
 			return nil
 		}
@@ -6489,7 +6507,7 @@ func (self *Parser) ParseRedirect() Node {
 		self.Pos = start
 		return nil
 	}
-	if fd == nil && self.Pos+1 < self.Length && string(self.Source[self.Pos+1]) == "(" {
+	if fd == -1 && self.Pos+1 < self.Length && string(self.Source[self.Pos+1]) == "(" {
 		self.Pos = start
 		return nil
 	}
@@ -6518,12 +6536,12 @@ func (self *Parser) ParseRedirect() Node {
 		} else if op == ">" && nextCh == "|" {
 			self.Advance()
 			op = ">|"
-		} else if fd == nil && varfd == "" && op == ">" && nextCh == "&" {
+		} else if fd == -1 && varfd == "" && op == ">" && nextCh == "&" {
 			if self.Pos+1 >= self.Length || !isDigitOrDash(string(self.Source[self.Pos+1])) {
 				self.Advance()
 				op = ">&"
 			}
-		} else if fd == nil && varfd == "" && op == "<" && nextCh == "&" {
+		} else if fd == -1 && varfd == "" && op == "<" && nextCh == "&" {
 			if self.Pos+1 >= self.Length || !isDigitOrDash(string(self.Source[self.Pos+1])) {
 				self.Advance()
 				op = "<&"
@@ -6531,12 +6549,12 @@ func (self *Parser) ParseRedirect() Node {
 		}
 	}
 	if op == "<<" {
-		return self.parseHeredoc(fd, stripTabs)
+		return self.parseHeredoc(_intPtr(fd), stripTabs)
 	}
 	if varfd != "" {
 		op = "{" + varfd + "}" + op
-	} else if fd != nil {
-		op = intToStr(fd) + op
+	} else if fd != -1 {
+		op = _intToStr(fd) + op
 	}
 	if !self.AtEnd() && self.Peek() == "&" {
 		self.Advance()
@@ -6864,7 +6882,7 @@ func (self *Parser) gatherHeredocBodies() {
 			}
 			normalizedCheck := normalizeHeredocDelimiter(checkLine)
 			normalizedDelim := normalizeHeredocDelimiter(heredoc.Delimiter)
-			var tabsStripped interface{}
+			var tabsStripped int
 			if self.eofToken == ")" && strings.HasPrefix(normalizedCheck, normalizedDelim) {
 				tabsStripped = len(line) - len(checkLine)
 				self.Pos = lineStart + tabsStripped + len(heredoc.Delimiter)
@@ -6875,7 +6893,7 @@ func (self *Parser) gatherHeredocBodies() {
 				self.Pos = lineStart + tabsStripped + len(heredoc.Delimiter)
 				break
 			}
-			if heredoc.StripTabs != nil {
+			if heredoc.StripTabs {
 				line = strings.TrimLeft(line, "\t")
 			}
 			if lineEnd < self.Length {
@@ -6883,7 +6901,7 @@ func (self *Parser) gatherHeredocBodies() {
 				self.Pos = lineEnd + 1
 			} else {
 				addNewline := true
-				if !(heredoc.Quoted != nil) && (countTrailingBackslashes(line)%2) == 1 {
+				if !heredoc.Quoted && (countTrailingBackslashes(line)%2) == 1 {
 					addNewline = false
 				}
 				contentLines = append(contentLines, line+func() string {
@@ -6898,7 +6916,7 @@ func (self *Parser) gatherHeredocBodies() {
 		}
 		heredoc.Content = strings.Join(contentLines, "")
 	}
-	self.pendingHeredocs = []interface{}{}
+	self.pendingHeredocs = []*HereDoc{}
 }
 
 func (self *Parser) parseHeredoc(fd *int, stripTabs bool) *HereDoc {
@@ -6944,7 +6962,7 @@ func (self *Parser) ParseCommand() *Command {
 				break
 			}
 		}
-		inAssignBuiltin := len(words) > 0 && strings.Contains(ASSIGNMENTBUILTINS, words[0].Value)
+		inAssignBuiltin := len(words) > 0 && func() bool { _, ok := ASSIGNMENTBUILTINS[words[0].Value]; return ok }()
 		word := self.ParseWord(!(len(words) > 0) || allAssignments && len(redirects) == 0, false, inAssignBuiltin)
 		if word == nil {
 			break
@@ -7150,7 +7168,7 @@ func (self *Parser) parseCondTerm() Node {
 		panic(fmt.Sprintf("%s at position %d", "Expected word in conditional expression", self.Pos))
 	}
 	self.condSkipWhitespace()
-	if strings.Contains(CONDUNARYOPS, word1.Value) {
+	if func() bool { _, ok := CONDUNARYOPS[word1.Value]; return ok }() {
 		operand = self.parseCondWord()
 		if operand == nil {
 			panic(fmt.Sprintf("%s at position %d", "Expected operand after "+word1.Value, self.Pos))
@@ -7170,7 +7188,7 @@ func (self *Parser) parseCondTerm() Node {
 		}
 		savedPos := self.Pos
 		opWord := self.parseCondWord()
-		if opWord != nil && strings.Contains(CONDBINARYOPS, opWord.Value) {
+		if opWord != nil && func() bool { _, ok := CONDBINARYOPS[opWord.Value]; return ok }() {
 			self.condSkipWhitespace()
 			if opWord.Value == "=~" {
 				word2 = self.parseCondRegexWord()
@@ -7253,7 +7271,7 @@ func (self *Parser) ParseIf() *If {
 		panic(fmt.Sprintf("%s at position %d", "Expected commands after 'then'", self.lexPeekToken().Pos))
 	}
 	self.SkipWhitespaceAndNewlines()
-	elseBody := nil
+	var elseBody Node
 	if self.lexIsAtReservedWord("elif") {
 		self.lexConsumeWord("elif")
 		elifCondition := self.ParseListUntil(map[string]struct{}{"then": {}})
@@ -7269,7 +7287,7 @@ func (self *Parser) ParseIf() *If {
 			panic(fmt.Sprintf("%s at position %d", "Expected commands after 'then'", self.lexPeekToken().Pos))
 		}
 		self.SkipWhitespaceAndNewlines()
-		innerElse := nil
+		var innerElse Node
 		if self.lexIsAtReservedWord("elif") {
 			innerElse = self.parseElifChain()
 		} else if self.lexIsAtReservedWord("else") {
@@ -7309,7 +7327,7 @@ func (self *Parser) parseElifChain() *If {
 		panic(fmt.Sprintf("%s at position %d", "Expected commands after 'then'", self.lexPeekToken().Pos))
 	}
 	self.SkipWhitespaceAndNewlines()
-	elseBody := nil
+	var elseBody Node
 	if self.lexIsAtReservedWord("elif") {
 		elseBody = self.parseElifChain()
 	} else if self.lexIsAtReservedWord("else") {
@@ -7398,7 +7416,7 @@ func (self *Parser) ParseFor() Node {
 		self.Advance()
 	}
 	self.SkipWhitespaceAndNewlines()
-	words := nil
+	var words []*Word
 	if self.lexIsAtReservedWord("in") {
 		self.lexConsumeWord("in")
 		self.SkipWhitespace()
@@ -7517,7 +7535,7 @@ func (self *Parser) ParseSelect() *Select {
 		self.Advance()
 	}
 	self.SkipWhitespaceAndNewlines()
-	words := nil
+	var words []*Word
 	if self.lexIsAtReservedWord("in") {
 		self.lexConsumeWord("in")
 		self.SkipWhitespaceAndNewlines()
@@ -7736,7 +7754,7 @@ func (self *Parser) ParseCase() *Case {
 			panic(fmt.Sprintf("%s at position %d", "Expected pattern in case statement", self.lexPeekToken().Pos))
 		}
 		self.SkipWhitespace()
-		body := nil
+		var body Node
 		isEmptyBody := self.lexPeekCaseTerminator() != ""
 		if !isEmptyBody {
 			self.SkipWhitespaceAndNewlines()
@@ -7773,7 +7791,7 @@ func (self *Parser) ParseCoproc() *Coproc {
 	if !self.AtEnd() {
 		ch = self.Peek()
 	}
-	var body *BraceGroup
+	var body Node
 	if ch == "{" {
 		body = self.ParseBraceGroup()
 		if body != nil {
@@ -7793,7 +7811,7 @@ func (self *Parser) ParseCoproc() *Coproc {
 		}
 	}
 	nextWord := self.lexPeekReservedWord()
-	if nextWord != "" && strings.Contains(COMPOUNDKEYWORDS, nextWord) {
+	if nextWord != "" && func() bool { _, ok := COMPOUNDKEYWORDS[nextWord]; return ok }() {
 		body = self.ParseCompoundCommand()
 		if body != nil {
 			return &Coproc{Command: body, Name: name}
@@ -7828,7 +7846,7 @@ func (self *Parser) ParseCoproc() *Coproc {
 				if body != nil {
 					return &Coproc{Command: body, Name: name}
 				}
-			} else if nextWord != "" && strings.Contains(COMPOUNDKEYWORDS, nextWord) {
+			} else if nextWord != "" && func() bool { _, ok := COMPOUNDKEYWORDS[nextWord]; return ok }() {
 				name = potentialName
 				body = self.ParseCompoundCommand()
 				if body != nil {
@@ -7937,7 +7955,7 @@ func (self *Parser) ParseFunction() *Function {
 }
 
 func (self *Parser) parseCompoundCommand() Node {
-	result := self.ParseBraceGroup()
+	var result Node = self.ParseBraceGroup()
 	if result != nil {
 		return result
 	}
@@ -7996,7 +8014,7 @@ func (self *Parser) atListUntilTerminator(stopWords map[string]struct{}) bool {
 		}
 	}
 	reserved := self.lexPeekReservedWord()
-	if reserved != "" && strings.Contains(stopWords, reserved) {
+	if reserved != "" && func() bool { _, ok := stopWords[reserved]; return ok }() {
 		return true
 	}
 	if self.lexPeekCaseTerminator() != "" {
@@ -8008,7 +8026,7 @@ func (self *Parser) atListUntilTerminator(stopWords map[string]struct{}) bool {
 func (self *Parser) ParseListUntil(stopWords map[string]struct{}) Node {
 	self.SkipWhitespaceAndNewlines()
 	reserved := self.lexPeekReservedWord()
-	if reserved != "" && strings.Contains(stopWords, reserved) {
+	if reserved != "" && func() bool { _, ok := stopWords[reserved]; return ok }() {
 		return nil
 	}
 	pipeline := self.ParsePipeline()
@@ -8082,7 +8100,7 @@ func (self *Parser) ParseCompoundCommand() Node {
 		return nil
 	}
 	ch := self.Peek()
-	var result *ArithmeticCommand
+	var result Node
 	if ch == "(" && self.Pos+1 < self.Length && string(self.Source[self.Pos+1]) == "(" {
 		result = self.ParseArithmeticCommand()
 		if result != nil {
@@ -8212,10 +8230,10 @@ func (self *Parser) ParsePipeline() Node {
 			self.SkipWhitespace()
 			inner := self.ParsePipeline()
 			if inner != nil && inner.GetKind() == "negation" {
-				if inner.Pipeline != nil {
-					return inner.Pipeline
+				if inner.(*Negation).Pipeline != nil {
+					return inner.(*Negation).Pipeline
 				} else {
-					return &Command{Words: []Node{}}
+					return &Command{Words: []*Word{}}
 				}
 			}
 			return &Negation{Pipeline: inner}
@@ -8414,7 +8432,7 @@ func (self *Parser) ParseComment() Node {
 func (self *Parser) Parse() []Node {
 	source := strings.TrimSpace(self.Source)
 	if !(source != "") {
-		return []*Empty{&Empty{}}
+		return []Node{&Empty{}}
 	}
 	results := []Node{}
 	for true {
@@ -8452,7 +8470,7 @@ func (self *Parser) Parse() []Node {
 		}
 	}
 	if !(len(results) > 0) {
-		return []*Empty{&Empty{}}
+		return []Node{&Empty{}}
 	}
 	if self.sawNewlineInSingleQuote && self.Source != "" && string(self.Source[len(self.Source)-1]) == "\\" && !(len(self.Source) >= 3 && self.Source[len(self.Source)-3:len(self.Source)-1] == "\\\n") {
 		if !self.lastWordOnOwnLine(results) {
@@ -8474,8 +8492,8 @@ func (self *Parser) stripTrailingBackslashFromLastWord(nodes []Node) {
 	lastWord := self.findLastWord(lastNode)
 	if lastWord != nil && strings.HasSuffix(lastWord.Value, "\\") {
 		lastWord.Value = substring(lastWord.Value, 0, len(lastWord.Value)-1)
-		if !(lastWord.Value != "") && func() bool { _, ok := lastNode.(*Command); return ok }() && lastNode.Words != nil {
-			lastNode.(*Command).Words[len(lastNode.(*Command).Words)-1]
+		if !(lastWord.Value != "") && func() bool { _, ok := lastNode.(*Command); return ok }() && len(lastNode.(*Command).Words) > 0 {
+			lastNode.(*Command).Words = lastNode.(*Command).Words[:len(lastNode.(*Command).Words)-1]
 		}
 	}
 }
@@ -8489,7 +8507,7 @@ func (self *Parser) findLastWord(node Node) *Word {
 	case *Command:
 		if len(node.Words) > 0 {
 			lastWord := node.Words[len(node.Words)-1]
-			if strings.HasSuffix(lastWord.(*Word).Value, "\\") {
+			if strings.HasSuffix(lastWord.Value, "\\") {
 				return lastWord
 			}
 		}
@@ -8528,7 +8546,7 @@ func isOctalDigit(c string) bool {
 }
 
 func getAnsiEscape(c string) int {
-	return ANSICESCAPES.Get(c, -1)
+	return _mapGet(ANSICESCAPES, c, -1)
 }
 
 func isWhitespace(c string) bool {
@@ -8752,25 +8770,25 @@ func consumeBracketClass(s string, start int, depth int) (int, []string, bool) {
 func formatCondBody(node Node) string {
 	kind := node.GetKind()
 	if kind == "unary-test" {
-		operandVal := node.Operand.GetCondFormattedValue()
-		return node.(*Operator).Op + " " + operandVal
+		operandVal := node.(*UnaryTest).Operand.(*Word).GetCondFormattedValue()
+		return node.(*UnaryTest).Op + " " + operandVal
 	}
 	if kind == "binary-test" {
-		leftVal := node.Left.GetCondFormattedValue()
-		rightVal := node.Right.GetCondFormattedValue()
-		return leftVal + " " + node.(*Operator).Op + " " + rightVal
+		leftVal := node.(*BinaryTest).Left.(*Word).GetCondFormattedValue()
+		rightVal := node.(*BinaryTest).Right.(*Word).GetCondFormattedValue()
+		return leftVal + " " + node.(*BinaryTest).Op + " " + rightVal
 	}
 	if kind == "cond-and" {
-		return formatCondBody(node.Left) + " && " + formatCondBody(node.Right)
+		return formatCondBody(node.(*CondAnd).Left) + " && " + formatCondBody(node.(*CondAnd).Right)
 	}
 	if kind == "cond-or" {
-		return formatCondBody(node.Left) + " || " + formatCondBody(node.Right)
+		return formatCondBody(node.(*CondOr).Left) + " || " + formatCondBody(node.(*CondOr).Right)
 	}
 	if kind == "cond-not" {
-		return "! " + formatCondBody(node.Operand)
+		return "! " + formatCondBody(node.(*CondNot).Operand)
 	}
 	if kind == "cond-paren" {
-		return "( " + formatCondBody(node.Inner) + " )"
+		return "( " + formatCondBody(node.(*CondParen).Inner) + " )"
 	}
 	return ""
 }
@@ -8783,7 +8801,7 @@ func startsWithSubshell(node Node) bool {
 	switch node := node.(type) {
 	case *List:
 		for _, p := range node.Parts {
-			if p.Kind != "operator" {
+			if p.GetKind() != "operator" {
 				return startsWithSubshell(p)
 			}
 		}
@@ -8809,8 +8827,6 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 	case *Empty:
 		return ""
 	}
-	var redirectParts []string
-	var result string
 	switch node := node.(type) {
 	case *Command:
 		parts := []string{}
@@ -8818,22 +8834,23 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 			val := w.expandAllAnsiCQuotes(w.Value)
 			val = w.stripLocaleStringDollars(val)
 			val = w.normalizeArrayWhitespace(val)
-			val = w.formatCommandSubstitutions(val)
+			val = w.formatCommandSubstitutions(val, false)
 			parts = append(parts, val)
 		}
-		heredocs := []interface{}{}
+		var heredocs []*HereDoc = []*HereDoc{}
 		for _, r := range node.Redirects {
 			switch r := r.(type) {
-			case Heredoc:
+			case *HereDoc:
 				heredocs = append(heredocs, r)
 			}
 		}
 		for _, r := range node.Redirects {
 			parts = append(parts, formatRedirect(r, false, false))
 		}
+		var result string
 		if compactRedirects && len(node.Words) > 0 && len(node.Redirects) > 0 {
 			wordParts := parts[:len(node.Words)]
-			redirectParts = parts[len(node.Words):]
+			var redirectParts []string = parts[len(node.Words):]
 			result = strings.Join(wordParts, " ") + strings.Join(redirectParts, "")
 		} else {
 			result = strings.Join(parts, " ")
@@ -8843,17 +8860,17 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		}
 		return result
 	}
-	var i int
-	var cmd interface{}
-	var hasHeredoc bool
-	var firstNl int
 	switch node := node.(type) {
 	case *Pipeline:
-		cmds := []struct {
-			F0 interface{}
+		var cmds []struct {
+			F0 Node
+			F1 bool
+		} = []struct {
+			F0 Node
 			F1 bool
 		}{}
-		i = 0
+		i := 0
+		var cmd Node
 		var needsRedirect bool
 		for i < len(node.Commands) {
 			cmd = node.Commands[i]
@@ -8862,7 +8879,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 				i++
 				continue
 			}
-			needsRedirect = i+1 < len(node.Commands) && node.Commands[i+1].Kind == "pipe-both"
+			needsRedirect = i+1 < len(node.Commands) && node.Commands[i+1].GetKind() == "pipe-both"
 			cmds = append(cmds, struct {
 				F0 Node
 				F1 bool
@@ -8872,19 +8889,27 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		resultParts := []string{}
 		idx := 0
 		for idx < len(cmds) {
-			unknownLvalue := cmds[idx]
+			{
+				var entry struct {
+					F0 Node
+					F1 bool
+				} = cmds[idx]
+				cmd = entry.F0
+				needsRedirect = entry.F1
+			}
 			formatted := formatCmdsubNode(cmd, indent, inProcsub, false, procsubFirst && idx == 0)
 			isLast := idx == len(cmds)-1
-			hasHeredoc = false
-			if cmd.GetKind() == "command" && cmd.Redirects != nil {
-				for _, r := range cmd.Redirects {
+			hasHeredoc := false
+			if cmd.GetKind() == "command" && len(cmd.(*Command).Redirects) > 0 {
+				for _, r := range cmd.(*Command).Redirects {
 					switch r.(type) {
-					case Heredoc:
+					case *HereDoc:
 						hasHeredoc = true
 						break
 					}
 				}
 			}
+			var firstNl int
 			if needsRedirect {
 				if hasHeredoc {
 					firstNl = strings.Index(formatted, "\n")
@@ -8908,8 +8933,8 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 			}
 			idx++
 		}
-		compactPipe := inProcsub && len(cmds) > 0 && cmds[0].F0.Kind == "subshell"
-		result = ""
+		compactPipe := inProcsub && len(cmds) > 0 && cmds[0].F0.GetKind() == "subshell"
+		result := ""
 		idx = 0
 		for idx < len(resultParts) {
 			part := resultParts[idx]
@@ -8930,12 +8955,12 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 	}
 	switch node := node.(type) {
 	case *List:
-		hasHeredoc = false
+		hasHeredoc := false
 		for _, p := range node.Parts {
-			if p.Kind == "command" && p.Redirects != nil {
-				for _, r := range p.Redirects {
+			if p.GetKind() == "command" && len(p.(*Command).Redirects) > 0 {
+				for _, r := range p.(*Command).Redirects {
 					switch r.(type) {
-					case Heredoc:
+					case *HereDoc:
 						hasHeredoc = true
 						break
 					}
@@ -8944,10 +8969,10 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 				switch p := p.(type) {
 				case *Pipeline:
 					for _, cmd := range p.Commands {
-						if cmd.GetKind() == "command" && cmd.Redirects != nil {
-							for _, r := range cmd.Redirects {
+						if cmd.GetKind() == "command" && len(cmd.(*Command).Redirects) > 0 {
+							for _, r := range cmd.(*Command).Redirects {
 								switch r.(type) {
-								case Heredoc:
+								case *HereDoc:
 									hasHeredoc = true
 									break
 								}
@@ -8960,7 +8985,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 				}
 			}
 		}
-		result = []string{}
+		result := []string{}
 		skippedSemi := false
 		cmdCount := 0
 		for _, p := range node.Parts {
@@ -9001,7 +9026,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 						if strings.Contains(last, " |") || strings.HasPrefix(last, "|") {
 							result[len(result)-1] = last + " &"
 						} else {
-							firstNl = strings.Index(last, "\n")
+							firstNl := strings.Index(last, "\n")
 							result[len(result)-1] = last[:firstNl] + " &" + last[firstNl:]
 						}
 					} else {
@@ -9009,16 +9034,14 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 					}
 				} else if len(result) > 0 && strings.Contains(result[len(result)-1], "<<") && strings.Contains(result[len(result)-1], "\n") {
 					last := result[len(result)-1]
-					firstNl = strings.Index(last, "\n")
+					firstNl := strings.Index(last, "\n")
 					result[len(result)-1] = last[:firstNl] + " " + p.Op + " " + last[firstNl:]
 				} else {
 					result = append(result, " "+p.Op)
 				}
 			default:
-				if len(result) > 0 && !strings.HasSuffix(result[len(result)-1], struct {
-					F0 string
-					F1 string
-				}{" ", "\n"}) {
+				p = p.(Node)
+				if len(result) > 0 && !strings.HasSuffix(result[len(result)-1], " ") || strings.HasSuffix(result[len(result)-1], "\n") {
 					result = append(result, " ")
 				}
 				formattedCmd := formatCmdsubNode(p, indent, inProcsub, compactRedirects, procsubFirst && cmdCount == 0)
@@ -9050,12 +9073,11 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		}
 		return s
 	}
-	var cond string
 	switch node := node.(type) {
 	case *If:
-		cond = formatCmdsubNode(node.Condition, indent, false, false, false)
+		cond := formatCmdsubNode(node.Condition, indent, false, false, false)
 		thenBody := formatCmdsubNode(node.ThenBody, indent+4, false, false, false)
-		result = "if " + cond + "; then\n" + innerSp + thenBody + ";"
+		result := "if " + cond + "; then\n" + innerSp + thenBody + ";"
 		if node.ElseBody != nil {
 			elseBody := formatCmdsubNode(node.ElseBody, indent+4, false, false, false)
 			result = result + "\n" + sp + "else\n" + innerSp + elseBody + ";"
@@ -9063,12 +9085,11 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		result = result + "\n" + sp + "fi"
 		return result
 	}
-	var body string
 	switch node := node.(type) {
 	case *While:
-		cond = formatCmdsubNode(node.Condition, indent, false, false, false)
-		body = formatCmdsubNode(node.Body, indent+4, false, false, false)
-		result = "while " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done"
+		cond := formatCmdsubNode(node.Condition, indent, false, false, false)
+		body := formatCmdsubNode(node.Body, indent+4, false, false, false)
+		result := "while " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done"
 		if len(node.Redirects) > 0 {
 			for _, r := range node.Redirects {
 				result = result + " " + formatRedirect(r, false, false)
@@ -9078,9 +9099,9 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 	}
 	switch node := node.(type) {
 	case *Until:
-		cond = formatCmdsubNode(node.Condition, indent, false, false, false)
-		body = formatCmdsubNode(node.Body, indent+4, false, false, false)
-		result = "until " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done"
+		cond := formatCmdsubNode(node.Condition, indent, false, false, false)
+		body := formatCmdsubNode(node.Body, indent+4, false, false, false)
+		result := "until " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done"
 		if len(node.Redirects) > 0 {
 			for _, r := range node.Redirects {
 				result = result + " " + formatRedirect(r, false, false)
@@ -9091,10 +9112,11 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 	switch node := node.(type) {
 	case *For:
 		var_ := node.Var
-		body = formatCmdsubNode(node.Body, indent+4, false, false, false)
+		body := formatCmdsubNode(node.Body, indent+4, false, false, false)
+		var result string
 		if node.Words != nil {
-			wordVals := []interface{}{}
-			for _, w := range *node.Words {
+			var wordVals []string = []string{}
+			for _, w := range node.Words {
 				wordVals = append(wordVals, w.Value)
 			}
 			words := strings.Join(wordVals, " ")
@@ -9115,8 +9137,8 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 	}
 	switch node := node.(type) {
 	case *ForArith:
-		body = formatCmdsubNode(node.Body, indent+4, false, false, false)
-		result = "for ((" + node.Init + "; " + node.Cond + "; " + node.Incr + "))\ndo\n" + innerSp + body + ";\n" + sp + "done"
+		body := formatCmdsubNode(node.Body, indent+4, false, false, false)
+		result := "for ((" + node.Init + "; " + node.Cond + "; " + node.Incr + "))\ndo\n" + innerSp + body + ";\n" + sp + "done"
 		if len(node.Redirects) > 0 {
 			for _, r := range node.Redirects {
 				result = result + " " + formatRedirect(r, false, false)
@@ -9124,21 +9146,21 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		}
 		return result
 	}
-	var redirects string
 	switch node := node.(type) {
 	case *Case:
-		word := node.Word.Value
-		patterns := []interface{}{}
-		i = 0
+		word := node.Word.(*Word).Value
+		var patterns []string = []string{}
+		i := 0
 		for i < len(node.Patterns) {
 			p := node.Patterns[i]
-			pat := strings.ReplaceAll(p.Pattern, "|", " | ")
-			if p.Body != nil {
-				body = formatCmdsubNode(p.Body, indent+8, false, false, false)
+			pat := strings.ReplaceAll(p.(*CasePattern).Pattern, "|", " | ")
+			var body string
+			if p.(*CasePattern).Body != nil {
+				body = formatCmdsubNode(p.(*CasePattern).Body, indent+8, false, false, false)
 			} else {
 				body = ""
 			}
-			term := p.Terminator
+			term := p.(*CasePattern).Terminator
 			patIndent := repeatStr(" ", indent+8)
 			termIndent := repeatStr(" ", indent+4)
 			bodyPart := func() string {
@@ -9156,9 +9178,9 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 			i++
 		}
 		patternStr := strings.Join(patterns, "\n"+repeatStr(" ", indent+4))
-		redirects = ""
+		redirects := ""
 		if len(node.Redirects) > 0 {
-			redirectParts = []interface{}{}
+			var redirectParts []string = []string{}
 			for _, r := range node.Redirects {
 				redirectParts = append(redirectParts, formatRedirect(r, false, false))
 			}
@@ -9170,22 +9192,22 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 	case *Function:
 		name := node.Name
 		innerBody := func() Node {
-			if node.Body.Kind == "brace-group" {
-				return node.Body.Body
+			if node.Body.GetKind() == "brace-group" {
+				return node.Body.(*CasePattern).Body
 			} else {
 				return node.Body
 			}
 		}()
-		body = strings.TrimRight(formatCmdsubNode(innerBody, indent+4, false, false, false), ";")
+		body := strings.TrimRight(formatCmdsubNode(innerBody, indent+4, false, false, false), ";")
 		return fmt.Sprintf("function %v () \n{ \n%v%v\n}", name, innerSp, body)
 	}
 	switch node := node.(type) {
 	case *Subshell:
-		body = formatCmdsubNode(node.Body, indent, inProcsub, compactRedirects, false)
-		redirects = ""
-		if node.Redirects != nil {
-			redirectParts = []interface{}{}
-			for _, r := range *node.Redirects {
+		body := formatCmdsubNode(node.Body, indent, inProcsub, compactRedirects, false)
+		redirects := ""
+		if len(node.Redirects) > 0 {
+			var redirectParts []string = []string{}
+			for _, r := range node.Redirects {
 				redirectParts = append(redirectParts, formatRedirect(r, false, false))
 			}
 			redirects = strings.Join(redirectParts, " ")
@@ -9203,7 +9225,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 	}
 	switch node := node.(type) {
 	case *BraceGroup:
-		body = formatCmdsubNode(node.Body, indent, false, false, false)
+		body := formatCmdsubNode(node.Body, indent, false, false, false)
 		body = strings.TrimRight(body, ";")
 		terminator := func() string {
 			if strings.HasSuffix(body, " &") {
@@ -9212,10 +9234,10 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 				return "; }"
 			}
 		}()
-		redirects = ""
-		if node.Redirects != nil {
-			redirectParts = []interface{}{}
-			for _, r := range *node.Redirects {
+		redirects := ""
+		if len(node.Redirects) > 0 {
+			var redirectParts []string = []string{}
+			for _, r := range node.Redirects {
 				redirectParts = append(redirectParts, formatRedirect(r, false, false))
 			}
 			redirects = strings.Join(redirectParts, " ")
@@ -9226,12 +9248,12 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		return "{ " + body + terminator
 	}
 	switch node := node.(type) {
-	case ArithCommand:
+	case *ArithmeticCommand:
 		return "((" + node.RawContent + "))"
 	}
 	switch node := node.(type) {
 	case *ConditionalExpr:
-		body = formatCondBody(node.Body)
+		body := formatCondBody(node.Body.(Node))
 		return "[[ " + body + " ]]"
 	}
 	switch node := node.(type) {
@@ -9259,19 +9281,19 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 }
 
 func formatRedirect(r Node, compact bool, heredocOpOnly bool) string {
-	var op string
 	switch r := r.(type) {
-	case Heredoc:
-		if r.StripTabs != nil {
+	case *HereDoc:
+		var op string
+		if r.StripTabs {
 			op = "<<-"
 		} else {
 			op = "<<"
 		}
-		if r.Fd != nil && r.Fd != 0 {
-			op = string(r.Fd) + op
+		if r.Fd != nil && *r.Fd != 0 {
+			op = _intToStr(*r.Fd) + op
 		}
 		var delim string
-		if r.Quoted != nil {
+		if r.Quoted {
 			delim = "'" + r.Delimiter + "'"
 		} else {
 			delim = r.Delimiter
@@ -9281,16 +9303,16 @@ func formatRedirect(r Node, compact bool, heredocOpOnly bool) string {
 		}
 		return op + delim + "\n" + r.Content + r.Delimiter + "\n"
 	}
-	op = r.(*Operator).Op
+	op := r.(*Operator).Op
 	if op == "1>" {
 		op = ">"
 	} else if op == "0<" {
 		op = "<"
 	}
-	target := r.Target.Value
-	target = r.Target.expandAllAnsiCQuotes(target)
-	target = r.Target.stripLocaleStringDollars(target)
-	target = r.Target.formatCommandSubstitutions(target)
+	target := r.(*Redirect).Target.Value
+	target = r.(*Redirect).Target.expandAllAnsiCQuotes(target)
+	target = r.(*Redirect).Target.stripLocaleStringDollars(target)
+	target = r.(*Redirect).Target.formatCommandSubstitutions(target, false)
 	if strings.HasPrefix(target, "&") {
 		wasInputClose := false
 		if target == "&-" && strings.HasSuffix(op, "<") {
@@ -9328,7 +9350,7 @@ func formatRedirect(r Node, compact bool, heredocOpOnly bool) string {
 }
 
 func formatHeredocBody(r Node) string {
-	return "\n" + r.Content + r.Delimiter + "\n"
+	return "\n" + r.(*HereDoc).Content + r.(*HereDoc).Delimiter + "\n"
 }
 
 func lookaheadForEsac(value string, start int, caseDepth int) bool {
@@ -9406,12 +9428,10 @@ func skipSingleQuoted(s string, start int) int {
 }
 
 func skipDoubleQuoted(s string, start int) int {
-	unknownLvalue := struct {
-		F0 int
-		F1 int
-	}{start, len(s)}
+	i := start
+	n := len(s)
 	passNext := false
-	var i int
+	backq := false
 	for i < n {
 		c := string(s[i])
 		if passNext {
@@ -9426,13 +9446,13 @@ func skipDoubleQuoted(s string, start int) int {
 		}
 		if backq {
 			if c == "`" {
-				backq := false
+				backq = false
 			}
 			i++
 			continue
 		}
 		if c == "`" {
-			backq := true
+			backq = true
 			i++
 			continue
 		}
@@ -9717,7 +9737,7 @@ func skipHeredoc(value string, start int) int {
 		i++
 	}
 	delimStart := i
-	quoteChar := nil
+	var quoteChar interface{}
 	var delimiter string
 	if i < len(value) && string(value[i]) == "\"" || string(value[i]) == "'" {
 		quoteChar = string(value[i])
@@ -9859,7 +9879,9 @@ func findHeredocContentEnd(source string, start int, delimiters []struct {
 	}
 	contentStart := pos
 	pos++
-	for delimiter, stripTabs := range delimiters {
+	for _, item := range delimiters {
+		delimiter := item.F0
+		stripTabs := item.F1
 		for pos < len(source) {
 			lineStart := pos
 			lineEnd := pos
@@ -9888,7 +9910,7 @@ func findHeredocContentEnd(source string, start int, delimiters []struct {
 				line = line + substring(source, nextLineStart, lineEnd)
 			}
 			var lineStripped string
-			if stripTabs != nil {
+			if stripTabs {
 				lineStripped = strings.TrimLeft(line, "\t")
 			} else {
 				lineStripped = line
@@ -10316,7 +10338,7 @@ func isValidIdentifier(name string) bool {
 		return false
 	}
 	for _, c := range name[1:] {
-		if !(_strIsAlnum(c) || c == '_') {
+		if !(_strIsAlnum(string(c)) || c == '_') {
 			return false
 		}
 	}
@@ -10324,6 +10346,6 @@ func isValidIdentifier(name string) bool {
 }
 
 func Parse(source string, extglob bool) []Node {
-	parser := &Parser{Source: source, InProcessSub: false, Extglob: extglob}
+	parser := &Parser{Source: source, inProcessSub: false, extglob: extglob}
 	return parser.Parse()
 }

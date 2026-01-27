@@ -137,15 +137,29 @@ class GoBackend:
         """Emit module-level constants."""
         if not constants:
             return
-        self._line("const (")
-        self.indent += 1
-        for const in constants:
-            name = self._to_pascal(const.name)
-            value = self._emit_expr(const.value)
-            self._line(f"{name} = {value}")
-        self.indent -= 1
-        self._line(")")
-        self._line("")
+        # Separate constants into true constants (int/string/bool) and var constants (sets/maps)
+        true_consts = [c for c in constants if not isinstance(c.typ, (Set, Map))]
+        var_consts = [c for c in constants if isinstance(c.typ, (Set, Map))]
+        if true_consts:
+            self._line("const (")
+            self.indent += 1
+            for const in true_consts:
+                name = self._to_pascal(const.name)
+                value = self._emit_expr(const.value)
+                self._line(f"{name} = {value}")
+            self.indent -= 1
+            self._line(")")
+            self._line("")
+        if var_consts:
+            self._line("var (")
+            self.indent += 1
+            for const in var_consts:
+                name = self._to_pascal(const.name)
+                value = self._emit_expr(const.value)
+                self._line(f"{name} = {value}")
+            self.indent -= 1
+            self._line(")")
+            self._line("")
 
     def _emit_header(self, module: Module) -> None:
         """Emit package declaration and imports."""
@@ -220,6 +234,14 @@ func _strIsLower(s string) bool {
 		}
 	}
 	return len(s) > 0
+}
+
+// _intPtr converts a sentinel int (-1 = nil) to *int
+func _intPtr(val int) *int {
+	if val == -1 {
+		return nil
+	}
+	return &val
 }
 
 // Range generates a slice of integers similar to Python's range()
@@ -378,6 +400,10 @@ func _intToStr(n int) string {
                 self._line(f"var {name} {go_type} = func() {go_type} {{ {tmp_vars} := {call_expr}; return {go_type}{{{field_vals}}} }}()")
                 return
         if stmt.value:
+            # nil assignments need explicit var type (Go's nil is untyped)
+            if isinstance(stmt.value, NilLit):
+                self._line(f"var {name} {go_type}")
+                return
             val = self._emit_expr(stmt.value)
             # Use short declaration for simple types, explicit var for complex types
             if isinstance(stmt.typ, (Tuple, Slice, Map, Set)) and not isinstance(stmt.value, (SliceLit, MapLit, SetLit, MakeSlice, MakeMap)):
@@ -389,14 +415,33 @@ func _intToStr(n int) string {
 
     def _emit_stmt_Assign(self, stmt: Assign) -> None:
         target = self._emit_lvalue(stmt.target)
-        value = self._emit_expr(stmt.value)
         if getattr(stmt, 'is_declaration', False):
             # Check if this var was hoisted - use = instead of :=
-            if isinstance(stmt.target, VarLV) and stmt.target.name in self._hoisted_in_try:
+            is_hoisted = isinstance(stmt.target, VarLV) and stmt.target.name in self._hoisted_in_try
+            # Check if there's a declaration type override
+            decl_typ = getattr(stmt, 'decl_typ', None)
+            # nil assignments need explicit var type (Go's nil is untyped)
+            if isinstance(stmt.value, NilLit):
+                if is_hoisted:
+                    # Variable was hoisted, just assign nil
+                    self._line(f"{target} = nil")
+                    return
+                var_type = decl_typ or getattr(stmt.value, 'typ', None)
+                if var_type:
+                    go_type = self._type_to_go(var_type)
+                    self._line(f"var {target} {go_type}")
+                    return
+            value = self._emit_expr(stmt.value)
+            if is_hoisted:
                 self._line(f"{target} = {value}")
+            elif decl_typ:
+                # Use explicit var declaration with override type
+                go_type = self._type_to_go(decl_typ)
+                self._line(f"var {target} {go_type} = {value}")
             else:
                 self._line(f"{target} := {value}")
         else:
+            value = self._emit_expr(stmt.value)
             self._line(f"{target} = {value}")
 
     def _emit_stmt_TupleAssign(self, stmt: TupleAssign) -> None:
@@ -516,6 +561,20 @@ func _intToStr(n int) string {
             else:
                 self._line(f"{obj} = append({obj}, {arg}...)")
             return
+        # Special handling for pop() as statement - truncates the slice
+        # Only handle if receiver is a slice type (not a struct with a Pop method)
+        if isinstance(stmt.expr, MethodCall) and stmt.expr.method == "pop" and not stmt.expr.args:
+            recv_type = stmt.expr.receiver_type
+            # Check if receiver is a pointer to slice
+            if isinstance(recv_type, Pointer) and isinstance(recv_type.target, Slice):
+                obj = self._emit_expr(stmt.expr.obj)
+                self._line(f"*{obj} = (*{obj})[:len(*{obj})-1]")
+                return
+            elif isinstance(recv_type, Slice):
+                obj = self._emit_expr(stmt.expr.obj)
+                self._line(f"{obj} = {obj}[:len({obj})-1]")
+                return
+            # For other types (like structs with Pop method), fall through to normal handling
         expr = self._emit_expr(stmt.expr)
         # Filter out placeholder expressions (after camelCase conversion)
         if expr and not expr.startswith(("skip", "pass", "localFunc", "unknown")):
@@ -722,12 +781,16 @@ func _intToStr(n int) string {
             self._line("continue")
 
     def _emit_stmt_Block(self, stmt: Block) -> None:
-        self._line("{")
-        self.indent += 1
+        # Check if this block should emit without braces (for statement sequences)
+        no_scope = getattr(stmt, 'no_scope', False)
+        if not no_scope:
+            self._line("{")
+            self.indent += 1
         for s in stmt.body:
             self._emit_stmt(s)
-        self.indent -= 1
-        self._line("}")
+        if not no_scope:
+            self.indent -= 1
+            self._line("}")
 
     def _emit_stmt_TryCatch(self, stmt: TryCatch) -> None:
         # Emit hoisted variable declarations before the try/catch
@@ -867,6 +930,8 @@ func _intToStr(n int) string {
             go_type = self._type_to_go(case.typ)
             self._line(f"case {go_type}:")
             self.indent += 1
+            # Save hoisted vars state - case bodies have their own scope
+            saved_hoisted = set(self._hoisted_in_try)
             # When binding_reassigned, emit explicit type assertion with a different name
             # so reads use the narrowed type but writes go to the outer variable
             if binding_reassigned and not binding_unused:
@@ -883,10 +948,14 @@ func _intToStr(n int) string {
             else:
                 for s in case.body:
                     self._emit_stmt(s)
+            # Restore hoisted vars state - variables hoisted inside case don't leak out
+            self._hoisted_in_try = saved_hoisted
             self.indent -= 1
         if stmt.default:
             self._line("default:")
             self.indent += 1
+            # Save hoisted vars state - default case has its own scope
+            saved_hoisted = set(self._hoisted_in_try)
             # In default case, binding has type interface{} - assert back to original type
             needs_node_assertion = False
             if not binding_unused and not binding_reassigned:
@@ -913,6 +982,8 @@ func _intToStr(n int) string {
             else:
                 for s in stmt.default:
                     self._emit_stmt(s)
+            # Restore hoisted vars state
+            self._hoisted_in_try = saved_hoisted
             self.indent -= 1
         self._line("}")
 
@@ -940,14 +1011,22 @@ func _intToStr(n int) string {
             patterns = ", ".join(self._emit_expr(p) for p in case.patterns)
             self._line(f"case {patterns}:")
             self.indent += 1
+            # Save hoisted vars state - case bodies have their own scope
+            saved_hoisted = set(self._hoisted_in_try)
             for s in case.body:
                 self._emit_stmt(s)
+            # Restore hoisted vars state
+            self._hoisted_in_try = saved_hoisted
             self.indent -= 1
         if stmt.default:
             self._line("default:")
             self.indent += 1
+            # Save hoisted vars state
+            saved_hoisted = set(self._hoisted_in_try)
             for s in stmt.default:
                 self._emit_stmt(s)
+            # Restore hoisted vars state
+            self._hoisted_in_try = saved_hoisted
             self.indent -= 1
         self._line("}")
 
@@ -1033,7 +1112,7 @@ func _intToStr(n int) string {
 
     def _emit_expr_Call(self, expr: Call) -> str:
         # Go builtins and our helpers stay as-is
-        if expr.func in ("append", "cap", "close", "copy", "delete", "panic", "recover", "print", "println", "_parseInt"):
+        if expr.func in ("append", "cap", "close", "copy", "delete", "panic", "recover", "print", "println", "_parseInt", "_intToStr", "_intPtr"):
             func = expr.func
         # Known function parameter names that are called as functions - keep lowercase
         elif expr.func in ("parsefn",):
@@ -1082,24 +1161,37 @@ func _intToStr(n int) string {
                 # Slice copy: append([]T{}, slice...)
                 return f"append({obj}[:0:0], {obj}...)"
         # Handle Python string character classification methods (always, type inference may be imprecise)
+        # If receiver is a rune (from iterating over string), wrap in string()
+        is_rune = isinstance(expr.receiver_type, Primitive) and expr.receiver_type.kind == "rune"
+        str_obj = f"string({obj})" if is_rune else obj
         if method == "isalnum":
-            return f"_strIsAlnum({obj})"
+            return f"_strIsAlnum({str_obj})"
         if method == "isalpha":
-            return f"_strIsAlpha({obj})"
+            return f"_strIsAlpha({str_obj})"
         if method == "isdigit":
-            return f"_strIsDigit({obj})"
+            return f"_strIsDigit({str_obj})"
         if method == "isspace":
-            return f"_strIsSpace({obj})"
+            return f"_strIsSpace({str_obj})"
         if method == "isupper":
-            return f"_strIsUpper({obj})"
+            return f"_strIsUpper({str_obj})"
         if method == "islower":
-            return f"_strIsLower({obj})"
+            return f"_strIsLower({str_obj})"
         # Handle Python string methods that map to strings package
         if method == "startswith" and expr.args:
-            arg = self._emit_expr(expr.args[0])
+            # Handle tuple argument: s.startswith((" ", "\n")) -> HasPrefix(s," ")||HasPrefix(s,"\n")
+            arg_node = expr.args[0]
+            if isinstance(arg_node, TupleLit):
+                parts = [f"strings.HasPrefix({obj}, {self._emit_expr(e)})" for e in arg_node.elements]
+                return " || ".join(parts)
+            arg = self._emit_expr(arg_node)
             return f"strings.HasPrefix({obj}, {arg})"
         if method == "endswith" and expr.args:
-            arg = self._emit_expr(expr.args[0])
+            # Handle tuple argument: s.endswith((" ", "\n")) -> HasSuffix(s," ")||HasSuffix(s,"\n")
+            arg_node = expr.args[0]
+            if isinstance(arg_node, TupleLit):
+                parts = [f"strings.HasSuffix({obj}, {self._emit_expr(e)})" for e in arg_node.elements]
+                return " || ".join(parts)
+            arg = self._emit_expr(arg_node)
             return f"strings.HasSuffix({obj}, {arg})"
         if method == "replace" and len(expr.args) >= 2:
             old = self._emit_expr(expr.args[0])
@@ -1170,8 +1262,14 @@ func _intToStr(n int) string {
         right = self._emit_expr(expr.right)
         # Handle 'in' and 'not in' operators
         if expr.op == "in":
+            right_type = getattr(expr.right, 'typ', None)
+            if isinstance(right_type, Set):
+                return f"func() bool {{ _, ok := {right}[{left}]; return ok }}()"
             return f"strings.Contains({right}, {left})"
         if expr.op == "not in":
+            right_type = getattr(expr.right, 'typ', None)
+            if isinstance(right_type, Set):
+                return f"func() bool {{ _, ok := {right}[{left}]; return !ok }}()"
             return f"!strings.Contains({right}, {left})"
         # Don't wrap comparison, logical, or simple arithmetic in parens
         # Go handles precedence well and parens around conditions look unidiomatic
@@ -1470,6 +1568,9 @@ func _intToStr(n int) string {
         parts = name.split("_")
         # Use upper on first char only (not capitalize which lowercases rest)
         result = "".join((p[0].upper() + p[1:]) if p else "" for p in parts)
+        # All-caps names (constants) stay all-caps even if originally private
+        if name.isupper():
+            return result
         if is_private:
             # Make first letter lowercase for unexported (private) names
             return result[0].lower() + result[1:] if result else result

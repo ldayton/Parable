@@ -746,6 +746,7 @@ class StructInfo:
     is_node: bool = False  # True if implements Node interface
     bases: list[str] = field(default_factory=list)
     init_params: list[str] = field(default_factory=list)  # __init__ param order
+    param_to_field: dict[str, str] = field(default_factory=dict)  # Maps param name to field name
 
 
 @dataclass

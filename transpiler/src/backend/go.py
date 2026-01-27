@@ -67,6 +67,7 @@ from src.ir import (
     Set,
     SetLit,
     Slice,
+    SliceConvert,
     SliceExpr,
     SliceLit,
     SoftFail,
@@ -1140,6 +1141,13 @@ func _isNilInterface(i interface{}) bool {
         low = self._emit_expr(expr.low) if expr.low else ""
         high = self._emit_expr(expr.high) if expr.high else ""
         return f"{obj}[{low}:{high}]"
+
+    def _emit_expr_SliceConvert(self, expr: "SliceConvert") -> str:
+        """Emit slice covariant conversion as IIFE with explicit loop."""
+        source = self._emit_expr(expr.source)
+        target_elem = self._type_to_go(expr.target_element_type)
+        # func() []T { r := make([]T, len(src)); for i, v := range src { r[i] = v }; return r }()
+        return f"func() []{target_elem} {{ _r := make([]{target_elem}, len({source})); for _i, _v := range {source} {{ _r[_i] = _v }}; return _r }}()"
 
     def _emit_expr_Call(self, expr: Call) -> str:
         # Go builtins and our helpers stay as-is

@@ -318,7 +318,7 @@ class Frontend:
                             )
         # Flag if constructor is needed - only for structs that critically need it
         # (Parser, Lexer need computed Length, nested constructors, back-references)
-        NEEDS_CONSTRUCTOR = {"Parser", "Lexer", "ContextStack", "QuoteState"}
+        NEEDS_CONSTRUCTOR = {"Parser", "Lexer", "ContextStack", "QuoteState", "ParseContext"}
         if has_computed_init and info.name in NEEDS_CONSTRUCTOR:
             info.needs_constructor = True
 
@@ -2725,6 +2725,9 @@ class Frontend:
                                 expected_type = expected_type.target
                             if isinstance(arg_ast, ast.List):
                                 ctor_args[i] = self._lower_expr_List(arg_ast, expected_type)
+                            elif (isinstance(arg_ast, ast.Call) and isinstance(arg_ast.func, ast.Name)
+                                  and arg_ast.func.id == "list" and arg_ast.args):
+                                ctor_args[i] = self._lower_list_call_with_expected_type(arg_ast, expected_type)
                             else:
                                 ctor_args[i] = args[i]
                     # Then, place keyword args in their proper positions
@@ -2739,6 +2742,9 @@ class Frontend:
                                 expected_type = expected_type.target
                             if isinstance(kw.value, ast.List):
                                 ctor_args[idx] = self._lower_expr_List(kw.value, expected_type)
+                            elif (isinstance(kw.value, ast.Call) and isinstance(kw.value.func, ast.Name)
+                                  and kw.value.func.id == "list" and kw.value.args):
+                                ctor_args[idx] = self._lower_list_call_with_expected_type(kw.value, expected_type)
                             else:
                                 ctor_args[idx] = self._lower_expr(kw.value)
                     # Fill in default values for any remaining None slots
@@ -2773,9 +2779,8 @@ class Frontend:
                             fields[field_name] = self._lower_expr_List(arg_ast, expected_type)
                         else:
                             fields[field_name] = args[i]
-                # Handle keyword arguments for specific structs that need them
-                # (ArithmeticCommand needs raw_content for proper sexp output)
-                if func_name == "ArithmeticCommand" and node.keywords:
+                # Handle keyword arguments for struct literals
+                if node.keywords:
                     for kw in node.keywords:
                         if kw.arg:
                             # Map param name to field name (handle snake_case to PascalCase)
@@ -2786,6 +2791,9 @@ class Frontend:
                                 expected_type = expected_type.target
                             if isinstance(kw.value, ast.List):
                                 fields[field_name] = self._lower_expr_List(kw.value, expected_type)
+                            elif (isinstance(kw.value, ast.Call) and isinstance(kw.value.func, ast.Name)
+                                  and kw.value.func.id == "list" and kw.value.args):
+                                fields[field_name] = self._lower_list_call_with_expected_type(kw.value, expected_type)
                             else:
                                 fields[field_name] = self._lower_expr(kw.value)
                 # Add constant field initializations from __init__
@@ -2851,6 +2859,39 @@ class Frontend:
         return ir.SliceLit(
             element_type=element_type, elements=elements,
             typ=Slice(element_type), loc=self._loc_from_node(node)
+        )
+
+    def _lower_list_call_with_expected_type(self, node: ast.Call, expected_type: Type | None) -> "ir.Expr":
+        """Handle list(x) call with expected type context for covariant copies."""
+        from . import ir
+        arg = self._lower_expr(node.args[0])
+        source_type = arg.typ
+        # Check if we need covariant conversion: []*Derived -> []Interface
+        if (expected_type is not None and isinstance(expected_type, Slice) and
+            isinstance(source_type, Slice)):
+            source_elem = source_type.element
+            target_elem = expected_type.element
+            # Unwrap pointer for comparison
+            if isinstance(source_elem, Pointer):
+                source_elem_unwrapped = source_elem.target
+            else:
+                source_elem_unwrapped = source_elem
+            # Need conversion if: source is *Struct, target is interface/Node
+            if (source_elem != target_elem and
+                isinstance(source_elem_unwrapped, StructRef) and
+                isinstance(target_elem, (Interface, StructRef))):
+                return ir.SliceConvert(
+                    source=arg,
+                    target_element_type=target_elem,
+                    typ=expected_type,
+                    loc=self._loc_from_node(node)
+                )
+        # Fall through to normal copy
+        return ir.MethodCall(
+            obj=arg, method="copy", args=[],
+            receiver_type=source_type if isinstance(source_type, Slice) else Slice(Interface("any")),
+            typ=source_type if isinstance(source_type, Slice) else Slice(Interface("any")),
+            loc=self._loc_from_node(node)
         )
 
     def _lower_expr_Dict(self, node: ast.Dict) -> "ir.Expr":

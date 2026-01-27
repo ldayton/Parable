@@ -683,6 +683,14 @@ class StringFormat(Expr):
     args: list[Expr]
 
 
+@dataclass
+class SliceConvert(Expr):
+    """Convert slice to different element type (for Go slice covariance)."""
+
+    source: Expr
+    target_element_type: Type
+
+
 # ============================================================
 # LVALUES (Assignment Targets)
 # ============================================================

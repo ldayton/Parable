@@ -364,7 +364,7 @@ type ParseContext struct {
 }
 
 func (self *ParseContext) Copy() *ParseContext {
-	ctx := &ParseContext{Kind: self.Kind}
+	ctx := NewParseContext(self.Kind)
 	ctx.ParenDepth = self.ParenDepth
 	ctx.BraceDepth = self.BraceDepth
 	ctx.BracketDepth = self.BracketDepth
@@ -384,7 +384,7 @@ func (self *ContextStack) GetCurrent() *ParseContext {
 }
 
 func (self *ContextStack) Push(kind int) {
-	self.stack = append(self.stack, &ParseContext{Kind: kind})
+	self.stack = append(self.stack, NewParseContext(kind))
 }
 
 func (self *ContextStack) Pop() *ParseContext {
@@ -4631,7 +4631,13 @@ func (self *Parser) inState(flag int) bool {
 }
 
 func (self *Parser) saveParserState() *SavedParserState {
-	return &SavedParserState{}
+	return &SavedParserState{ParserState: self.parserState, DolbraceState: self.dolbraceState, PendingHeredocs: func() []Node {
+		_r := make([]Node, len(self.pendingHeredocs))
+		for _i, _v := range self.pendingHeredocs {
+			_r[_i] = _v
+		}
+		return _r
+	}(), CtxStack: self.ctx.CopyStack(), EofToken: self.eofToken}
 }
 
 func (self *Parser) restoreParserState(saved *SavedParserState) {
@@ -5182,7 +5188,7 @@ func (self *Parser) parseFunsub(start int) (Node, string) {
 	text := substring(self.Source, start, self.Pos)
 	self.restoreParserState(saved)
 	self.syncLexer()
-	return &CommandSubstitution{Command: cmd, Kind: "cmdsub"}, text
+	return &CommandSubstitution{Command: cmd, Brace: true, Kind: "cmdsub"}, text
 }
 
 func (self *Parser) isAssignmentWord(word Node) bool {
@@ -10391,9 +10397,22 @@ func NewQuoteState() *QuoteState {
 	return self
 }
 
+func NewParseContext(kind int) *ParseContext {
+	self := &ParseContext{}
+	self.Kind = kind
+	self.ParenDepth = 0
+	self.BraceDepth = 0
+	self.BracketDepth = 0
+	self.CaseDepth = 0
+	self.ArithDepth = 0
+	self.ArithParenDepth = 0
+	self.Quote = NewQuoteState()
+	return self
+}
+
 func NewContextStack() *ContextStack {
 	self := &ContextStack{}
-	self.stack = []*ParseContext{&ParseContext{}}
+	self.stack = []*ParseContext{NewParseContext(0)}
 	return self
 }
 

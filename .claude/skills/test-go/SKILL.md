@@ -5,6 +5,23 @@ description: Run transpiler tests, fix failures, commit only on improvement
 
 Iteratively improve the new IR-based transpiler by fixing test failures.
 
+## ⚠️ WARNING
+
+**Only use `just test-new-go`** from the transpiler directory. Do NOT run any other just targets (like `just go`, `just check`, etc.) as they may have different behaviors or side effects.
+
+## Paths
+
+All paths are relative to `/Users/lily/source/Parable/`:
+
+| Path | Description |
+|------|-------------|
+| `src/parable.py` | Python source being transpiled |
+| `src/parable.go` | Working Go code (committed, don't edit directly) |
+| `transpiler/dist/parable.go` | Generated Go output from transpiler |
+| `transpiler/src/` | Transpiler source code to edit |
+
+The transpiler writes to `transpiler/dist/parable.go`. The `just test-new-go` target copies this to `src/parable.go` temporarily to run tests, then you must restore it from git.
+
 ## Workflow
 
 ### Step 1: Get baseline
@@ -33,7 +50,7 @@ cd /Users/lily/source/Parable/src && go run ./cmd/run-tests -f "test name" -v 2>
 
 ### Step 3: Compare generated vs working code
 
-The working Go code is in git history. Compare specific functions:
+The working Go code is in git. Compare specific functions:
 ```bash
 git -C /Users/lily/source/Parable show HEAD:src/parable.go | grep -A 50 "func.*FunctionName"
 ```
@@ -51,8 +68,6 @@ Edit files in `/Users/lily/source/Parable/transpiler/src/`:
 - `middleend.py` - IR analysis
 - `backend/go.py` - IR → Go code
 
-The source being transpiled is `/Users/lily/source/Parable/src/parable.py`.
-
 ### Step 5: Verify improvement
 
 Run `just test-new-go` again:
@@ -66,14 +81,14 @@ Parse new counts: `new_passed` and `new_failed`.
 
 ### Step 6: Commit only if improved
 
-If `new_passed > baseline_passed`:
+If `new_passed > baseline_passed`, commit both the transpiler changes and the new generated output:
 ```bash
 cd /Users/lily/source/Parable/transpiler
 git add src/ dist/parable.go
 git commit -m "transpiler: [description] (X→Y tests passing)"
 ```
 
-Restore src/parable.go after testing:
+**Always restore src/parable.go after testing:**
 ```bash
 git -C /Users/lily/source/Parable checkout src/parable.go
 ```
@@ -91,16 +106,6 @@ Fix: [what you changed]
 Commit: [hash or "no commit - no improvement"]
 ```
 
-## Key Files
-
-| File | Purpose |
-|------|---------|
-| `src/parable.py` | Python source being transpiled |
-| `transpiler/src/frontend.py` | Python AST → IR |
-| `transpiler/src/backend/go.py` | IR → Go code |
-| `transpiler/dist/parable.go` | Generated Go output |
-| `src/parable.go` | Working Go (in git, don't edit) |
-
 ## Common Issues
 
 - **Missing method**: Frontend not emitting IR for a Python method
@@ -110,7 +115,7 @@ Commit: [hash or "no commit - no improvement"]
 
 ## Important
 
+- **Only use `just test-new-go`** - no other just targets
 - Only commit when tests improve
-- Restore `src/parable.go` from git after testing
+- Always restore `src/parable.go` from git after testing
 - Small incremental fixes are better than big risky changes
-- Check `just check` compiles before running full tests

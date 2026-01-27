@@ -1006,6 +1006,16 @@ class Frontend:
                                     idx = stmt.value.slice.value
                                     if 0 <= idx < len(container_type.elements):
                                         var_types[var_name] = container_type.elements[idx]
+        # Fifth pass: unify types from if/else branches
+        for stmt in ast.walk(ast.Module(body=stmts, type_ignores=[])):
+            if isinstance(stmt, ast.If) and stmt.orelse:
+                then_vars = self._collect_branch_var_types(stmt.body, var_types)
+                else_vars = self._collect_branch_var_types(stmt.orelse, var_types)
+                unified = self._unify_branch_types(then_vars, else_vars)
+                for var, typ in unified.items():
+                    # Only update if not already set or currently generic
+                    if var not in var_types or var_types[var] == Interface("any"):
+                        var_types[var] = typ
         return var_types, tuple_vars, sentinel_ints
 
     def _infer_iterable_type(self, node: ast.expr, var_types: dict[str, Type]) -> Type:
@@ -1099,6 +1109,18 @@ class Frontend:
                 if info.is_node:
                     return Interface("Node")
                 return Pointer(StructRef(func_name))
+            # Function return types
+            if func_name in self.symbols.functions:
+                return self.symbols.functions[func_name].return_type
+        # Method calls: obj.method() -> look up method return type
+        if isinstance(arg, ast.Call) and isinstance(arg.func, ast.Attribute):
+            method_name = arg.func.attr
+            obj_type = self._infer_expr_type_from_ast(arg.func.value)
+            struct_name = self._extract_struct_name(obj_type)
+            if struct_name and struct_name in self.symbols.structs:
+                method_info = self.symbols.structs[struct_name].methods.get(method_name)
+                if method_info:
+                    return method_info.return_type
         return Interface("any")
 
     def _infer_container_type_from_ast(self, node: ast.expr, var_types: dict[str, Type]) -> Type:
@@ -1126,6 +1148,81 @@ class Frontend:
                         field_info = self.symbols.structs[struct_name].fields.get(node.attr)
                         if field_info:
                             return field_info.typ
+        return Interface("any")
+
+    def _unify_branch_types(self, then_vars: dict[str, Type], else_vars: dict[str, Type]) -> dict[str, Type]:
+        """Unify variable types from if/else branches."""
+        unified: dict[str, Type] = {}
+        for var in set(then_vars) | set(else_vars):
+            t1, t2 = then_vars.get(var), else_vars.get(var)
+            if t1 == t2 and t1 is not None:
+                unified[var] = t1
+            elif t1 is not None and t2 is None:
+                unified[var] = t1
+            elif t2 is not None and t1 is None:
+                unified[var] = t2
+        return unified
+
+    def _collect_branch_var_types(self, stmts: list[ast.stmt], var_types: dict[str, Type]) -> dict[str, Type]:
+        """Collect variable types assigned in a list of statements (for branch analysis)."""
+        branch_vars: dict[str, Type] = {}
+        # Walk entire subtree to find all assignments (may be nested in for/while/etc)
+        for stmt in ast.walk(ast.Module(body=stmts, type_ignores=[])):
+            if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+                target = stmt.targets[0]
+                if isinstance(target, ast.Name):
+                    var_name = target.id
+                    # Infer type from value
+                    if isinstance(stmt.value, ast.Constant):
+                        if isinstance(stmt.value.value, str):
+                            branch_vars[var_name] = STRING
+                        elif isinstance(stmt.value.value, int) and not isinstance(stmt.value.value, bool):
+                            branch_vars[var_name] = INT
+                        elif isinstance(stmt.value.value, bool):
+                            branch_vars[var_name] = BOOL
+                    elif isinstance(stmt.value, ast.BinOp):
+                        # String concatenation -> STRING
+                        if isinstance(stmt.value.op, ast.Add):
+                            left_type = self._infer_branch_expr_type(stmt.value.left, var_types, branch_vars)
+                            right_type = self._infer_branch_expr_type(stmt.value.right, var_types, branch_vars)
+                            if left_type == STRING or right_type == STRING:
+                                branch_vars[var_name] = STRING
+                            elif left_type == INT or right_type == INT:
+                                branch_vars[var_name] = INT
+                    elif isinstance(stmt.value, ast.Name):
+                        # Assign from another variable
+                        if stmt.value.id in var_types:
+                            branch_vars[var_name] = var_types[stmt.value.id]
+                        elif stmt.value.id in branch_vars:
+                            branch_vars[var_name] = branch_vars[stmt.value.id]
+                    # Method calls (e.g., x.to_sexp() returns STRING)
+                    elif isinstance(stmt.value, ast.Call) and isinstance(stmt.value.func, ast.Attribute):
+                        method = stmt.value.func.attr
+                        if method in ("to_sexp", "format", "strip", "lower", "upper", "replace", "join"):
+                            branch_vars[var_name] = STRING
+        return branch_vars
+
+    def _infer_branch_expr_type(self, node: ast.expr, var_types: dict[str, Type], branch_vars: dict[str, Type]) -> Type:
+        """Infer type of expression during branch analysis."""
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, str):
+                return STRING
+            if isinstance(node.value, int) and not isinstance(node.value, bool):
+                return INT
+            if isinstance(node.value, bool):
+                return BOOL
+        if isinstance(node, ast.Name):
+            if node.id in branch_vars:
+                return branch_vars[node.id]
+            if node.id in var_types:
+                return var_types[node.id]
+        if isinstance(node, ast.BinOp):
+            left = self._infer_branch_expr_type(node.left, var_types, branch_vars)
+            right = self._infer_branch_expr_type(node.right, var_types, branch_vars)
+            if left == STRING or right == STRING:
+                return STRING
+            if left == INT or right == INT:
+                return INT
         return Interface("any")
 
     def _synthesize_type(self, expr: "ir.Expr") -> Type:
@@ -1185,6 +1282,12 @@ class Frontend:
         # String methods that return bool
         if obj_type == STRING and method in ("startswith", "endswith", "isdigit", "isalpha", "isalnum", "isspace"):
             return BOOL
+        # Node interface methods
+        if self._is_node_interface_type(obj_type):
+            if method in ("to_sexp", "ToSexp"):
+                return STRING
+            if method in ("get_kind", "GetKind"):
+                return STRING
         # Extract struct name from various type wrappers
         struct_name = self._extract_struct_name(obj_type)
         if struct_name and struct_name in self.symbols.structs:
@@ -1282,6 +1385,49 @@ class Frontend:
                     result[i] = ir.UnaryOp(op="&", operand=arg, typ=param_type, loc=arg.loc if hasattr(arg, 'loc') else Loc.unknown())
         return result
 
+    def _deref_for_slice_params(self, obj_type: Type, method: str, args: list, orig_args: list[ast.expr]) -> list:
+        """Dereference * when passing pointer-to-slice to slice parameter."""
+        from . import ir
+        struct_name = self._extract_struct_name(obj_type)
+        if not struct_name or struct_name not in self.symbols.structs:
+            return args
+        method_info = self.symbols.structs[struct_name].methods.get(method)
+        if not method_info:
+            return args
+        result = list(args)
+        for i, arg in enumerate(result):
+            if i >= len(method_info.params) or i >= len(orig_args):
+                break
+            param = method_info.params[i]
+            param_type = param.typ
+            # Check if param expects slice but arg is pointer/optional to slice
+            if isinstance(param_type, Slice) and not isinstance(param_type, Pointer):
+                arg_type = self._infer_expr_type_from_ast(orig_args[i])
+                inner_slice = self._get_inner_slice(arg_type)
+                if inner_slice is not None:
+                    result[i] = ir.UnaryOp(op="*", operand=arg, typ=inner_slice, loc=arg.loc if hasattr(arg, 'loc') else Loc.unknown())
+        return result
+
+    def _deref_for_func_slice_params(self, func_name: str, args: list, orig_args: list[ast.expr]) -> list:
+        """Dereference * when passing pointer-to-slice to slice parameter for free functions."""
+        from . import ir
+        if func_name not in self.symbols.functions:
+            return args
+        func_info = self.symbols.functions[func_name]
+        result = list(args)
+        for i, arg in enumerate(result):
+            if i >= len(func_info.params) or i >= len(orig_args):
+                break
+            param = func_info.params[i]
+            param_type = param.typ
+            # Check if param expects slice but arg is pointer/optional to slice
+            if isinstance(param_type, Slice) and not isinstance(param_type, Pointer):
+                arg_type = self._infer_expr_type_from_ast(orig_args[i])
+                inner_slice = self._get_inner_slice(arg_type)
+                if inner_slice is not None:
+                    result[i] = ir.UnaryOp(op="*", operand=arg, typ=inner_slice, loc=arg.loc if hasattr(arg, 'loc') else Loc.unknown())
+        return result
+
     def _extract_struct_name(self, typ: Type) -> str | None:
         """Extract struct name from wrapped types like Pointer, Optional, etc."""
         if isinstance(typ, StructRef):
@@ -1290,6 +1436,22 @@ class Frontend:
             return self._extract_struct_name(typ.target)
         if isinstance(typ, Optional):
             return self._extract_struct_name(typ.inner)
+        return None
+
+    def _is_pointer_to_slice(self, typ: Type) -> bool:
+        """Check if type is pointer-to-slice (Pointer(Slice) or Optional(Slice))."""
+        if isinstance(typ, Pointer) and isinstance(typ.target, Slice):
+            return True
+        if isinstance(typ, Optional) and isinstance(typ.inner, Slice):
+            return True
+        return False
+
+    def _get_inner_slice(self, typ: Type) -> Slice | None:
+        """Get the inner Slice from Pointer(Slice) or Optional(Slice)."""
+        if isinstance(typ, Pointer) and isinstance(typ.target, Slice):
+            return typ.target
+        if isinstance(typ, Optional) and isinstance(typ.inner, Slice):
+            return typ.inner
         return None
 
     def _infer_call_return_type(self, node: ast.Call) -> Type:
@@ -1663,6 +1825,10 @@ class Frontend:
         # Free function call - look up return type
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
             func_name = node.func.id
+            # Constructor calls
+            if func_name in self.symbols.structs:
+                return Pointer(StructRef(func_name))
+            # Regular function calls
             if func_name in self.symbols.functions:
                 return self.symbols.functions[func_name].return_type
         # Subscript - derive element type from container
@@ -1695,10 +1861,12 @@ class Frontend:
         if isinstance(node.op, (ast.BitAnd, ast.BitOr, ast.BitXor, ast.LShift, ast.RShift)):
             result_type = INT
         elif isinstance(node.op, (ast.Add, ast.Sub, ast.Mult, ast.FloorDiv, ast.Mod)):
-            # Check if operands are ints
             left_type = self._infer_expr_type_from_ast(node.left)
             right_type = self._infer_expr_type_from_ast(node.right)
-            if left_type == INT or right_type == INT:
+            # String concatenation
+            if left_type == STRING or right_type == STRING:
+                result_type = STRING
+            elif left_type == INT or right_type == INT:
                 result_type = INT
         return ir.BinaryOp(op=op, left=left, right=right, typ=result_type, loc=self._loc_from_node(node))
 
@@ -1864,6 +2032,8 @@ class Frontend:
             args = self._fill_default_args(obj_type, method, args)
             # Add & for pointer-to-slice params
             args = self._add_address_of_for_ptr_params(obj_type, method, args, node.args)
+            # Dereference * for slice params
+            args = self._deref_for_slice_params(obj_type, method, args, node.args)
             # Infer return type
             ret_type = self._synthesize_method_return_type(obj_type, method)
             return ir.MethodCall(
@@ -1875,7 +2045,13 @@ class Frontend:
             func_name = node.func.id
             # Check for len()
             if func_name == "len" and args:
-                return ir.Len(expr=args[0], typ=INT, loc=self._loc_from_node(node))
+                arg = args[0]
+                arg_type = self._infer_expr_type_from_ast(node.args[0])
+                # Dereference Pointer(Slice) or Optional(Slice) for len()
+                inner_slice = self._get_inner_slice(arg_type)
+                if inner_slice is not None:
+                    arg = ir.UnaryOp(op="*", operand=arg, typ=inner_slice, loc=arg.loc)
+                return ir.Len(expr=arg, typ=INT, loc=self._loc_from_node(node))
             # Check for bool() - convert to comparison
             if func_name == "bool" and args:
                 # bool(x) -> x != 0 for ints, x != "" for strings, x != nil for pointers
@@ -1957,10 +2133,20 @@ class Frontend:
                 # Constructor call -> StructLit with fields mapped from positional args
                 struct_info = self.symbols.structs[func_name]
                 fields: dict[str, ir.Expr] = {}
-                for i, arg_expr in enumerate(args):
+                for i, arg_ast in enumerate(node.args):
                     if i < len(struct_info.init_params):
                         param_name = struct_info.init_params[i]
-                        fields[param_name] = arg_expr
+                        # Look up field type for expected type context
+                        field_info = struct_info.fields.get(param_name)
+                        expected_type = field_info.typ if field_info else None
+                        # Handle pointer-wrapped slice types
+                        if isinstance(expected_type, Pointer) and isinstance(expected_type.target, Slice):
+                            expected_type = expected_type.target
+                        # Re-lower list args with expected type context
+                        if isinstance(arg_ast, ast.List):
+                            fields[param_name] = self._lower_expr_List(arg_ast, expected_type)
+                        else:
+                            fields[param_name] = args[i]
                 return ir.StructLit(
                     struct_name=func_name, fields=fields,
                     typ=Pointer(StructRef(func_name)), loc=self._loc_from_node(node)
@@ -1972,6 +2158,8 @@ class Frontend:
                 ret_type = func_info.return_type
                 # Fill in default arguments
                 args = self._fill_default_args_for_func(func_info, args)
+                # Dereference * for slice params
+                args = self._deref_for_func_slice_params(func_name, args, node.args)
             return ir.Call(func=func_name, args=args, typ=ret_type, loc=self._loc_from_node(node))
         return ir.Var(name="TODO_Call", typ=Interface("any"))
 
@@ -1989,13 +2177,19 @@ class Frontend:
             typ=result_type, loc=self._loc_from_node(node)
         )
 
-    def _lower_expr_List(self, node: ast.List) -> "ir.Expr":
+    def _lower_expr_List(self, node: ast.List, expected_type: Type | None = None) -> "ir.Expr":
         from . import ir
         elements = [self._lower_expr(e) for e in node.elts]
-        # Infer element type from first element if available
+        # Infer element type from first element if available, or from expected type
         element_type: Type = Interface("any")
         if node.elts:
             element_type = self._infer_expr_type_from_ast(node.elts[0])
+        elif expected_type is not None and isinstance(expected_type, Slice):
+            # Empty list with expected type - use the expected element type
+            element_type = expected_type.element
+        elif self._type_ctx.expected is not None and isinstance(self._type_ctx.expected, Slice):
+            # Fall back to context expected type
+            element_type = self._type_ctx.expected.element
         return ir.SliceLit(
             element_type=element_type, elements=elements,
             typ=Slice(element_type), loc=self._loc_from_node(node)
@@ -2337,6 +2531,9 @@ class Frontend:
 
     def _resolve_type_name(self, name: str) -> Type:
         """Resolve a class name to an IR type (for isinstance checks)."""
+        # Handle primitive types
+        if name in TYPE_MAP:
+            return TYPE_MAP[name]
         if name in self.symbols.structs:
             return Pointer(StructRef(name))
         return Interface(name)
@@ -2393,6 +2590,11 @@ class Frontend:
         iterable = self._lower_expr(node.iter)
         # Determine loop variable types based on iterable type
         iterable_type = self._infer_expr_type_from_ast(node.iter)
+        # Dereference Pointer(Slice) or Optional(Slice) for range
+        inner_slice = self._get_inner_slice(iterable_type)
+        if inner_slice is not None:
+            iterable = ir.UnaryOp(op="*", operand=iterable, typ=inner_slice, loc=iterable.loc)
+            iterable_type = inner_slice
         # Determine index and value names
         index = None
         value = None

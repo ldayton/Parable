@@ -61,6 +61,66 @@ TYPE_MAP: dict[str, Type] = {
     "bytearray": Slice(BYTE),
 }
 
+# Mapping from .kind string values to class names (for x.kind == "..." patterns)
+KIND_TO_CLASS: dict[str, str] = {
+    "word": "Word",
+    "command": "Command",
+    "pipeline": "Pipeline",
+    "list": "List",
+    "operator": "Operator",
+    "pipe-both": "PipeBoth",
+    "empty": "Empty",
+    "comment": "Comment",
+    "redirect": "Redirect",
+    "heredoc": "Heredoc",
+    "subshell": "Subshell",
+    "brace-group": "BraceGroup",
+    "if": "If",
+    "while": "While",
+    "until": "Until",
+    "for": "For",
+    "for-arith": "ForArith",
+    "select": "Select",
+    "case": "Case",
+    "pattern": "Pattern",
+    "function": "Function",
+    "param": "Parameter",
+    "param-len": "ParameterLength",
+    "param-indirect": "ParameterIndirect",
+    "cmdsub": "CommandSubstitution",
+    "arith": "ArithmeticExpansion",
+    "arith-cmd": "ArithCommand",
+    "number": "ArithNumber",
+    "var": "ArithVar",
+    "binary-op": "ArithBinaryOp",
+    "unary-op": "ArithUnaryOp",
+    "pre-incr": "ArithPreIncr",
+    "post-incr": "ArithPostIncr",
+    "pre-decr": "ArithPreDecr",
+    "post-decr": "ArithPostDecr",
+    "assign": "ArithAssign",
+    "ternary": "ArithTernary",
+    "comma": "ArithComma",
+    "subscript": "ArithSubscript",
+    "escape": "EscapeSequence",
+    "arith-deprecated": "ArithDeprecatedExpr",
+    "arith-concat": "ArithConcat",
+    "ansi-c": "AnsiCQuote",
+    "locale": "LocaleQuote",
+    "procsub": "ProcessSubstitution",
+    "negation": "Negation",
+    "time": "Time",
+    "cond-expr": "ConditionalExpr",
+    "unary-test": "UnaryTest",
+    "binary-test": "BinaryTest",
+    "cond-and": "CondAnd",
+    "cond-or": "CondOr",
+    "cond-not": "CondNot",
+    "cond-paren": "CondParen",
+    "array": "Array",
+    "coproc": "Coproc",
+}
+
 
 @dataclass
 class TypeContext:
@@ -154,10 +214,15 @@ class Frontend:
         # Collect class-level annotations
         for stmt in node.body:
             if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
+                field_name = stmt.target.id
                 py_type = self._annotation_to_str(stmt.annotation)
                 typ = self._py_type_to_ir(py_type)
-                info.fields[stmt.target.id] = FieldInfo(
-                    name=stmt.target.id, typ=typ, py_name=stmt.target.id
+                # Apply field type overrides
+                override_key = (info.name, field_name)
+                if override_key in FIELD_TYPE_OVERRIDES:
+                    typ = FIELD_TYPE_OVERRIDES[override_key]
+                info.fields[field_name] = FieldInfo(
+                    name=field_name, typ=typ, py_name=field_name
                 )
         # Collect fields from __init__
         for stmt in node.body:
@@ -201,6 +266,10 @@ class Frontend:
                         field_name = target.attr
                         if field_name not in info.fields:
                             typ = self._infer_type_from_value(stmt.value, param_types)
+                            # Apply field type overrides
+                            override_key = (info.name, field_name)
+                            if override_key in FIELD_TYPE_OVERRIDES:
+                                typ = FIELD_TYPE_OVERRIDES[override_key]
                             info.fields[field_name] = FieldInfo(
                                 name=field_name, typ=typ, py_name=field_name
                             )
@@ -687,6 +756,21 @@ class Frontend:
         var_types: dict[str, Type] = {}
         tuple_vars: dict[str, list[str]] = {}
         sentinel_ints: set[str] = set()
+        # First pass: collect For loop variable types (needed for append inference)
+        for stmt in ast.walk(ast.Module(body=stmts, type_ignores=[])):
+            if isinstance(stmt, ast.For):
+                if isinstance(stmt.target, ast.Name):
+                    loop_var = stmt.target.id
+                    iterable_type = self._infer_iterable_type(stmt.iter, var_types)
+                    if isinstance(iterable_type, Slice):
+                        var_types[loop_var] = iterable_type.element
+                elif isinstance(stmt.target, ast.Tuple) and len(stmt.target.elts) == 2:
+                    if isinstance(stmt.target.elts[1], ast.Name):
+                        loop_var = stmt.target.elts[1].id
+                        iterable_type = self._infer_iterable_type(stmt.iter, var_types)
+                        if isinstance(iterable_type, Slice):
+                            var_types[loop_var] = iterable_type.element
+        # Second pass: infer other variable types
         for stmt in ast.walk(ast.Module(body=stmts, type_ignores=[])):
             # Infer from append() calls: var.append(x) -> var is []T where T = type(x)
             if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
@@ -694,7 +778,7 @@ class Frontend:
                 if isinstance(call.func, ast.Attribute) and call.func.attr == "append":
                     if isinstance(call.func.value, ast.Name) and call.args:
                         var_name = call.func.value.id
-                        elem_type = self._infer_element_type_from_append_arg(call.args[0])
+                        elem_type = self._infer_element_type_from_append_arg(call.args[0], var_types)
                         if elem_type != Interface("any"):
                             var_types[var_name] = Slice(elem_type)
             # Infer from annotated assignments
@@ -832,8 +916,28 @@ class Frontend:
                             var_types[target.id] = self.symbols.functions[class_name].return_type
         return var_types, tuple_vars, sentinel_ints
 
-    def _infer_element_type_from_append_arg(self, arg: ast.expr) -> Type:
+    def _infer_iterable_type(self, node: ast.expr, var_types: dict[str, Type]) -> Type:
+        """Infer the type of an iterable expression."""
+        # self.field
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+            if node.value.id == "self" and self._current_class_name:
+                struct_info = self.symbols.structs.get(self._current_class_name)
+                if struct_info:
+                    field_info = struct_info.fields.get(node.attr)
+                    if field_info:
+                        return field_info.typ
+        # Variable reference
+        if isinstance(node, ast.Name):
+            if node.id in var_types:
+                return var_types[node.id]
+        return Interface("any")
+
+    def _infer_element_type_from_append_arg(self, arg: ast.expr, var_types: dict[str, Type]) -> Type:
         """Infer slice element type from what's being appended."""
+        # Variable reference with known type (e.g., loop variable)
+        if isinstance(arg, ast.Name):
+            if arg.id in var_types:
+                return var_types[arg.id]
         # Method call that returns a pointer: .Copy() returns same type
         if isinstance(arg, ast.Call) and isinstance(arg.func, ast.Attribute):
             method = arg.func.attr
@@ -962,6 +1066,23 @@ class Frontend:
         for i, arg in enumerate(result):
             if arg is None and i < n_expected:
                 param = method_info.params[i]
+                if param.has_default and param.default_value is not None:
+                    result[i] = param.default_value
+        return result
+
+    def _fill_default_args_for_func(self, func_info: FuncInfo, args: list) -> list:
+        """Fill in missing arguments with default values for free functions with optional params."""
+        n_expected = len(func_info.params)
+        if len(args) >= n_expected:
+            return args
+        # Extend to full length if needed
+        result = list(args)
+        while len(result) < n_expected:
+            result.append(None)
+        # Fill in None slots with defaults
+        for i, arg in enumerate(result):
+            if arg is None and i < n_expected:
+                param = func_info.params[i]
                 if param.has_default and param.default_value is not None:
                     result[i] = param.default_value
         return result
@@ -1538,12 +1659,19 @@ class Frontend:
                     struct_name=func_name, fields=fields,
                     typ=Pointer(StructRef(func_name)), loc=self._loc_from_node(node)
                 )
-            return ir.Call(func=func_name, args=args, typ=Interface("any"), loc=self._loc_from_node(node))
+            # Look up function return type and fill default args from symbol table
+            ret_type: Type = Interface("any")
+            if func_name in self.symbols.functions:
+                func_info = self.symbols.functions[func_name]
+                ret_type = func_info.return_type
+                # Fill in default arguments
+                args = self._fill_default_args_for_func(func_info, args)
+            return ir.Call(func=func_name, args=args, typ=ret_type, loc=self._loc_from_node(node))
         return ir.Var(name="TODO_Call", typ=Interface("any"))
 
     def _lower_expr_IfExp(self, node: ast.IfExp) -> "ir.Expr":
         from . import ir
-        cond = self._lower_expr(node.test)
+        cond = self._lower_expr_as_bool(node.test)
         then_expr = self._lower_expr(node.body)
         else_expr = self._lower_expr(node.orelse)
         # Infer type from branches - prefer then branch, fall back to else
@@ -1781,20 +1909,48 @@ class Frontend:
             return None
         return (node.args[0].id, node.args[1].id)
 
+    def _is_kind_check(self, node: ast.expr) -> tuple[str, str] | None:
+        """Check if node is x.kind == "typename". Returns (var_name, class_name) or None."""
+        if not isinstance(node, ast.Compare):
+            return None
+        if len(node.ops) != 1 or not isinstance(node.ops[0], ast.Eq):
+            return None
+        if len(node.comparators) != 1:
+            return None
+        # Check for x.kind on left side
+        if not isinstance(node.left, ast.Attribute) or node.left.attr != "kind":
+            return None
+        if not isinstance(node.left.value, ast.Name):
+            return None
+        var_name = node.left.value.id
+        # Check for string constant on right side
+        comparator = node.comparators[0]
+        if not isinstance(comparator, ast.Constant) or not isinstance(comparator.value, str):
+            return None
+        kind_value = comparator.value
+        # Map kind string to class name
+        if kind_value not in KIND_TO_CLASS:
+            return None
+        return (var_name, KIND_TO_CLASS[kind_value])
+
     def _extract_isinstance_or_chain(self, node: ast.expr) -> tuple[str, list[str]] | None:
-        """Extract isinstance checks from 'or' expression. Returns (var_name, [type_names]) or None."""
+        """Extract isinstance/kind checks from expression. Returns (var_name, [type_names]) or None."""
         # Handle simple isinstance call
         simple = self._is_isinstance_call(node)
         if simple:
             return (simple[0], [simple[1]])
+        # Handle x.kind == "typename" pattern
+        kind_check = self._is_kind_check(node)
+        if kind_check:
+            return (kind_check[0], [kind_check[1]])
         # Handle isinstance(x, A) or isinstance(x, B) or ...
         if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.Or):
             var_name: str | None = None
             type_names: list[str] = []
             for value in node.values:
-                check = self._is_isinstance_call(value)
+                check = self._is_isinstance_call(value) or self._is_kind_check(value)
                 if not check:
-                    return None  # Not all are isinstance calls
+                    return None  # Not all are isinstance/kind calls
                 if var_name is None:
                     var_name = check[0]
                 elif var_name != check[0]:

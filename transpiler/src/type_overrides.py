@@ -51,6 +51,8 @@ PARAM_TYPE_OVERRIDES: dict[tuple[str, str], Type] = {
 FIELD_TYPE_OVERRIDES: dict[tuple[str, str], Type] = {
     ("Lexer", "_word_context"): INT,
     ("Parser", "_word_context"): INT,
+    # Array.elements is list[Word] - need concrete type for field access
+    ("Array", "elements"): Slice(Pointer(StructRef("Word"))),
     # Source_runes for rune-based indexing (Unicode support)
     ("Lexer", "source_runes"): Slice(RUNE),
     ("Parser", "source_runes"): Slice(RUNE),

@@ -954,6 +954,9 @@ func _intToStr(n int) string {
         # Go builtins and our helpers stay as-is
         if expr.func in ("append", "cap", "close", "copy", "delete", "panic", "recover", "print", "println", "_parseInt"):
             func = expr.func
+        # Known function parameter names that are called as functions - keep lowercase
+        elif expr.func in ("parsefn",):
+            func = expr.func
         else:
             func = self._to_pascal(expr.func)
         args = ", ".join(self._emit_expr(a) for a in expr.args)

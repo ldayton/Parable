@@ -114,6 +114,7 @@ func _intToStr(n int) string {
 }
 
 const (
+	RESERVEDWORDS                 = "if then elif else fi while until for select do done case esac in function coproc "
 	TokenTypeEOF                  = 0
 	TokenTypeWORD                 = 1
 	TokenTypeNEWLINE              = 2
@@ -237,7 +238,7 @@ type Token struct {
 	Value string
 	Pos   int
 	Parts []Node
-	Word  Node
+	Word  *Word
 }
 
 func (self *Token) repr() string {
@@ -4562,7 +4563,7 @@ type Parser struct {
 	Pos                     int
 	Length                  int
 	pendingHeredocs         []Node
-	cmdsubHeredocEnd        *int
+	cmdsubHeredocEnd        int
 	sawNewlineInSingleQuote bool
 	inProcessSub            bool
 	extglob                 bool
@@ -4837,9 +4838,9 @@ func (self *Parser) SkipWhitespaceAndNewlines() {
 			self.Advance()
 			if ch == "\n" {
 				self.gatherHeredocBodies()
-				if self.cmdsubHeredocEnd != nil && self.cmdsubHeredocEnd > self.Pos {
+				if self.cmdsubHeredocEnd != -1 && self.cmdsubHeredocEnd > self.Pos {
 					self.Pos = self.cmdsubHeredocEnd
-					self.cmdsubHeredocEnd = nil
+					self.cmdsubHeredocEnd = -1
 				}
 			}
 		} else if ch == "#" {
@@ -4891,7 +4892,7 @@ func (self *Parser) atEofToken() bool {
 }
 
 func (self *Parser) collectRedirects() []Node {
-	redirects := []interface{}{}
+	redirects := []Node{}
 	for true {
 		self.SkipWhitespace()
 		redirect := self.ParseRedirect()
@@ -4915,7 +4916,7 @@ func (self *Parser) parseLoopBody(context string) Node {
 		return brace.Body
 	}
 	if self.lexConsumeWord("do") {
-		body := self.ParseListUntil(TODOSet)
+		body := self.ParseListUntil(map[string]struct{}{"done": {}})
 		if body == nil {
 			panic(fmt.Sprintf("%s at position %d", "Expected commands after 'do'", self.lexPeekToken().Pos))
 		}
@@ -5160,7 +5161,10 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 	self.Advance()
 	contentChars := []string{}
 	textChars := []string{"`"}
-	pendingHeredocs := []interface{}{}
+	pendingHeredocs := []struct {
+		F0 string
+		F1 bool
+	}{}
 	inHeredocBody := false
 	currentHeredocDelim := ""
 	currentHeredocStrip := false
@@ -5194,7 +5198,7 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 				if len(pendingHeredocs) > 0 {
 					{
 						var entry struct {
-							F0 bool
+							F0 string
 							F1 bool
 						} = pendingHeredocs[len(pendingHeredocs)-1]
 						pendingHeredocs = pendingHeredocs[:len(pendingHeredocs)-1]
@@ -5215,7 +5219,7 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 				if len(pendingHeredocs) > 0 {
 					{
 						var entry struct {
-							F0 bool
+							F0 string
 							F1 bool
 						} = pendingHeredocs[len(pendingHeredocs)-1]
 						pendingHeredocs = pendingHeredocs[:len(pendingHeredocs)-1]
@@ -5253,8 +5257,8 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 				textChars = append(textChars, escaped)
 			} else {
 				ch = self.Advance()
-				contentChars = append(contentChars, string(ch))
-				textChars = append(textChars, string(ch))
+				contentChars = append(contentChars, ch)
+				textChars = append(textChars, ch)
 			}
 			continue
 		}
@@ -5269,41 +5273,41 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 				textChars = append(textChars, "<")
 				for !self.AtEnd() && isWhitespaceNoNewline(self.Peek()) {
 					ch = self.Advance()
-					contentChars = append(contentChars, string(ch))
-					textChars = append(textChars, string(ch))
+					contentChars = append(contentChars, ch)
+					textChars = append(textChars, ch)
 				}
 				for !self.AtEnd() && !isWhitespace(self.Peek()) && !strings.Contains("()", self.Peek()) {
 					if self.Peek() == "\\" && self.Pos+1 < self.Length {
 						ch = self.Advance()
-						contentChars = append(contentChars, string(ch))
-						textChars = append(textChars, string(ch))
+						contentChars = append(contentChars, ch)
+						textChars = append(textChars, ch)
 						ch = self.Advance()
-						contentChars = append(contentChars, string(ch))
-						textChars = append(textChars, string(ch))
+						contentChars = append(contentChars, ch)
+						textChars = append(textChars, ch)
 					} else if strings.Contains("\"'", self.Peek()) {
 						quote = self.Peek()
 						ch = self.Advance()
-						contentChars = append(contentChars, string(ch))
-						textChars = append(textChars, string(ch))
+						contentChars = append(contentChars, ch)
+						textChars = append(textChars, ch)
 						for !self.AtEnd() && self.Peek() != quote {
 							if quote == "\"" && self.Peek() == "\\" {
 								ch = self.Advance()
-								contentChars = append(contentChars, string(ch))
-								textChars = append(textChars, string(ch))
+								contentChars = append(contentChars, ch)
+								textChars = append(textChars, ch)
 							}
 							ch = self.Advance()
-							contentChars = append(contentChars, string(ch))
-							textChars = append(textChars, string(ch))
+							contentChars = append(contentChars, ch)
+							textChars = append(textChars, ch)
 						}
 						if !self.AtEnd() {
 							ch = self.Advance()
-							contentChars = append(contentChars, string(ch))
-							textChars = append(textChars, string(ch))
+							contentChars = append(contentChars, ch)
+							textChars = append(textChars, ch)
 						}
 					} else {
 						ch = self.Advance()
-						contentChars = append(contentChars, string(ch))
-						textChars = append(textChars, string(ch))
+						contentChars = append(contentChars, ch)
+						textChars = append(textChars, ch)
 					}
 				}
 				continue
@@ -5320,8 +5324,8 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 			}
 			for !self.AtEnd() && isWhitespaceNoNewline(self.Peek()) {
 				ch = self.Advance()
-				contentChars = append(contentChars, string(ch))
-				textChars = append(textChars, string(ch))
+				contentChars = append(contentChars, ch)
+				textChars = append(textChars, ch)
 			}
 			delimiterChars := []string{}
 			if !self.AtEnd() {
@@ -5343,7 +5347,7 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 						contentChars = append(contentChars, closing)
 						textChars = append(textChars, closing)
 					}
-				} else if ch == '\\' {
+				} else if ch == "\\" {
 					esc := self.Advance()
 					contentChars = append(contentChars, esc)
 					textChars = append(textChars, esc)
@@ -5377,7 +5381,7 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 								contentChars = append(contentChars, closing)
 								textChars = append(textChars, closing)
 							}
-						} else if ch == '\\' {
+						} else if ch == "\\" {
 							esc := self.Advance()
 							contentChars = append(contentChars, esc)
 							textChars = append(textChars, esc)
@@ -5407,12 +5411,12 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 		}
 		if c == "\n" {
 			ch = self.Advance()
-			contentChars = append(contentChars, string(ch))
-			textChars = append(textChars, string(ch))
+			contentChars = append(contentChars, ch)
+			textChars = append(textChars, ch)
 			if len(pendingHeredocs) > 0 {
 				{
 					var entry struct {
-						F0 bool
+						F0 string
 						F1 bool
 					} = pendingHeredocs[len(pendingHeredocs)-1]
 					pendingHeredocs = pendingHeredocs[:len(pendingHeredocs)-1]
@@ -5424,8 +5428,8 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 			continue
 		}
 		ch = self.Advance()
-		contentChars = append(contentChars, string(ch))
-		textChars = append(textChars, string(ch))
+		contentChars = append(contentChars, ch)
+		textChars = append(textChars, ch)
 	}
 	if self.AtEnd() {
 		panic(fmt.Sprintf("%s at position %d", "Unterminated backtick", start))
@@ -5438,10 +5442,16 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 		heredocStart, heredocEnd := findHeredocContentEnd(self.Source, self.Pos, pendingHeredocs)
 		if heredocEnd > heredocStart {
 			content = content + substring(self.Source, heredocStart, heredocEnd)
-			if self.cmdsubHeredocEnd == nil {
+			if self.cmdsubHeredocEnd == -1 {
 				self.cmdsubHeredocEnd = heredocEnd
 			} else {
-				self.cmdsubHeredocEnd = Max(self.cmdsubHeredocEnd, heredocEnd)
+				self.cmdsubHeredocEnd = func() int {
+					if self.cmdsubHeredocEnd > heredocEnd {
+						return self.cmdsubHeredocEnd
+					} else {
+						return heredocEnd
+					}
+				}()
 			}
 		}
 	}
@@ -5767,8 +5777,8 @@ func (self *Parser) arithParseTernary() Node {
 	return cond
 }
 
-func (self *Parser) arithParseLeftAssoc(ops []string, parsefn interface{}) Node {
-	left := Parsefn()
+func (self *Parser) arithParseLeftAssoc(ops []string, parsefn func() Node) Node {
+	left := parsefn()
 	for true {
 		self.arithSkipWs()
 		matched := false
@@ -5776,7 +5786,7 @@ func (self *Parser) arithParseLeftAssoc(ops []string, parsefn interface{}) Node 
 			if self.arithMatch(op) {
 				self.arithConsume(op)
 				self.arithSkipWs()
-				left = &ArithBinaryOp{Op: op, Left: left, Right: Parsefn()}
+				left = &ArithBinaryOp{Op: op, Left: left, Right: parsefn()}
 				matched = true
 				break
 			}
@@ -6377,7 +6387,7 @@ func (self *Parser) parseParamExpansion(inDquote bool) (Node, string) {
 	return result
 }
 
-func (self *Parser) ParseRedirect() interface{} {
+func (self *Parser) ParseRedirect() Node {
 	self.SkipWhitespace()
 	if self.AtEnd() {
 		return nil
@@ -6912,7 +6922,7 @@ func (self *Parser) parseHeredoc(fd *int, stripTabs bool) *HereDoc {
 
 func (self *Parser) ParseCommand() *Command {
 	words := []*Word{}
-	redirects := []interface{}{}
+	redirects := []Node{}
 	for true {
 		self.SkipWhitespace()
 		if self.lexIsCommandTerminator() {
@@ -7232,7 +7242,7 @@ func (self *Parser) ParseIf() *If {
 	if !self.lexConsumeWord("if") {
 		return nil
 	}
-	condition := self.ParseListUntil(TODOSet)
+	condition := self.ParseListUntil(map[string]struct{}{"then": {}})
 	if condition == nil {
 		panic(fmt.Sprintf("%s at position %d", "Expected condition after 'if'", self.lexPeekToken().Pos))
 	}
@@ -7240,7 +7250,7 @@ func (self *Parser) ParseIf() *If {
 	if !self.lexConsumeWord("then") {
 		panic(fmt.Sprintf("%s at position %d", "Expected 'then' after if condition", self.lexPeekToken().Pos))
 	}
-	thenBody := self.ParseListUntil(TODOSet)
+	thenBody := self.ParseListUntil(map[string]struct{}{"elif": {}, "else": {}, "fi": {}})
 	if thenBody == nil {
 		panic(fmt.Sprintf("%s at position %d", "Expected commands after 'then'", self.lexPeekToken().Pos))
 	}
@@ -7248,7 +7258,7 @@ func (self *Parser) ParseIf() *If {
 	elseBody := nil
 	if self.lexIsAtReservedWord("elif") {
 		self.lexConsumeWord("elif")
-		elifCondition := self.ParseListUntil(TODOSet)
+		elifCondition := self.ParseListUntil(map[string]struct{}{"then": {}})
 		if elifCondition == nil {
 			panic(fmt.Sprintf("%s at position %d", "Expected condition after 'elif'", self.lexPeekToken().Pos))
 		}
@@ -7256,7 +7266,7 @@ func (self *Parser) ParseIf() *If {
 		if !self.lexConsumeWord("then") {
 			panic(fmt.Sprintf("%s at position %d", "Expected 'then' after elif condition", self.lexPeekToken().Pos))
 		}
-		elifThenBody := self.ParseListUntil(TODOSet)
+		elifThenBody := self.ParseListUntil(map[string]struct{}{"elif": {}, "else": {}, "fi": {}})
 		if elifThenBody == nil {
 			panic(fmt.Sprintf("%s at position %d", "Expected commands after 'then'", self.lexPeekToken().Pos))
 		}
@@ -7266,7 +7276,7 @@ func (self *Parser) ParseIf() *If {
 			innerElse = self.parseElifChain()
 		} else if self.lexIsAtReservedWord("else") {
 			self.lexConsumeWord("else")
-			innerElse = self.ParseListUntil(TODOSet)
+			innerElse = self.ParseListUntil(map[string]struct{}{"fi": {}})
 			if innerElse == nil {
 				panic(fmt.Sprintf("%s at position %d", "Expected commands after 'else'", self.lexPeekToken().Pos))
 			}
@@ -7274,7 +7284,7 @@ func (self *Parser) ParseIf() *If {
 		elseBody = &If{Condition: elifCondition, ThenBody: elifThenBody, ElseBody: innerElse}
 	} else if self.lexIsAtReservedWord("else") {
 		self.lexConsumeWord("else")
-		elseBody = self.ParseListUntil(TODOSet)
+		elseBody = self.ParseListUntil(map[string]struct{}{"fi": {}})
 		if elseBody == nil {
 			panic(fmt.Sprintf("%s at position %d", "Expected commands after 'else'", self.lexPeekToken().Pos))
 		}
@@ -7288,7 +7298,7 @@ func (self *Parser) ParseIf() *If {
 
 func (self *Parser) parseElifChain() *If {
 	self.lexConsumeWord("elif")
-	condition := self.ParseListUntil(TODOSet)
+	condition := self.ParseListUntil(map[string]struct{}{"then": {}})
 	if condition == nil {
 		panic(fmt.Sprintf("%s at position %d", "Expected condition after 'elif'", self.lexPeekToken().Pos))
 	}
@@ -7296,7 +7306,7 @@ func (self *Parser) parseElifChain() *If {
 	if !self.lexConsumeWord("then") {
 		panic(fmt.Sprintf("%s at position %d", "Expected 'then' after elif condition", self.lexPeekToken().Pos))
 	}
-	thenBody := self.ParseListUntil(TODOSet)
+	thenBody := self.ParseListUntil(map[string]struct{}{"elif": {}, "else": {}, "fi": {}})
 	if thenBody == nil {
 		panic(fmt.Sprintf("%s at position %d", "Expected commands after 'then'", self.lexPeekToken().Pos))
 	}
@@ -7306,7 +7316,7 @@ func (self *Parser) parseElifChain() *If {
 		elseBody = self.parseElifChain()
 	} else if self.lexIsAtReservedWord("else") {
 		self.lexConsumeWord("else")
-		elseBody = self.ParseListUntil(TODOSet)
+		elseBody = self.ParseListUntil(map[string]struct{}{"fi": {}})
 		if elseBody == nil {
 			panic(fmt.Sprintf("%s at position %d", "Expected commands after 'else'", self.lexPeekToken().Pos))
 		}
@@ -7319,7 +7329,7 @@ func (self *Parser) ParseWhile() *While {
 	if !self.lexConsumeWord("while") {
 		return nil
 	}
-	condition := self.ParseListUntil(TODOSet)
+	condition := self.ParseListUntil(map[string]struct{}{"do": {}})
 	if condition == nil {
 		panic(fmt.Sprintf("%s at position %d", "Expected condition after 'while'", self.lexPeekToken().Pos))
 	}
@@ -7327,7 +7337,7 @@ func (self *Parser) ParseWhile() *While {
 	if !self.lexConsumeWord("do") {
 		panic(fmt.Sprintf("%s at position %d", "Expected 'do' after while condition", self.lexPeekToken().Pos))
 	}
-	body := self.ParseListUntil(TODOSet)
+	body := self.ParseListUntil(map[string]struct{}{"done": {}})
 	if body == nil {
 		panic(fmt.Sprintf("%s at position %d", "Expected commands after 'do'", self.lexPeekToken().Pos))
 	}
@@ -7343,7 +7353,7 @@ func (self *Parser) ParseUntil() *Until {
 	if !self.lexConsumeWord("until") {
 		return nil
 	}
-	condition := self.ParseListUntil(TODOSet)
+	condition := self.ParseListUntil(map[string]struct{}{"do": {}})
 	if condition == nil {
 		panic(fmt.Sprintf("%s at position %d", "Expected condition after 'until'", self.lexPeekToken().Pos))
 	}
@@ -7351,7 +7361,7 @@ func (self *Parser) ParseUntil() *Until {
 	if !self.lexConsumeWord("do") {
 		panic(fmt.Sprintf("%s at position %d", "Expected 'do' after until condition", self.lexPeekToken().Pos))
 	}
-	body := self.ParseListUntil(TODOSet)
+	body := self.ParseListUntil(map[string]struct{}{"done": {}})
 	if body == nil {
 		panic(fmt.Sprintf("%s at position %d", "Expected commands after 'do'", self.lexPeekToken().Pos))
 	}
@@ -7436,7 +7446,7 @@ func (self *Parser) ParseFor() Node {
 	if !self.lexConsumeWord("do") {
 		panic(fmt.Sprintf("%s at position %d", "Expected 'do' in for loop", self.lexPeekToken().Pos))
 	}
-	body := self.ParseListUntil(TODOSet)
+	body := self.ParseListUntil(map[string]struct{}{"done": {}})
 	if body == nil {
 		panic(fmt.Sprintf("%s at position %d", "Expected commands after 'do'", self.lexPeekToken().Pos))
 	}
@@ -7735,7 +7745,7 @@ func (self *Parser) ParseCase() *Case {
 			if !self.AtEnd() && !self.lexIsAtReservedWord("esac") {
 				isAtTerminator := self.lexPeekCaseTerminator() != ""
 				if !isAtTerminator {
-					body = self.ParseListUntil(TODOSet)
+					body = self.ParseListUntil(map[string]struct{}{"esac": {}})
 					self.SkipWhitespace()
 				}
 			}
@@ -8015,9 +8025,9 @@ func (self *Parser) ParseListUntil(stopWords map[string]struct{}) Node {
 			if !self.AtEnd() && self.Peek() == "\n" {
 				self.Advance()
 				self.gatherHeredocBodies()
-				if self.cmdsubHeredocEnd != nil && self.cmdsubHeredocEnd > self.Pos {
+				if self.cmdsubHeredocEnd != -1 && self.cmdsubHeredocEnd > self.Pos {
 					self.Pos = self.cmdsubHeredocEnd
-					self.cmdsubHeredocEnd = nil
+					self.cmdsubHeredocEnd = -1
 				}
 				self.SkipWhitespaceAndNewlines()
 				if self.atListUntilTerminator(stopWords) {
@@ -8322,9 +8332,9 @@ func (self *Parser) ParseList(newlineAsSeparator bool) Node {
 				}
 				self.Advance()
 				self.gatherHeredocBodies()
-				if self.cmdsubHeredocEnd != nil && self.cmdsubHeredocEnd > self.Pos {
+				if self.cmdsubHeredocEnd != -1 && self.cmdsubHeredocEnd > self.Pos {
 					self.Pos = self.cmdsubHeredocEnd
-					self.cmdsubHeredocEnd = nil
+					self.cmdsubHeredocEnd = -1
 				}
 				self.SkipWhitespaceAndNewlines()
 				if self.AtEnd() || self.atListTerminatingBracket() {
@@ -8433,9 +8443,9 @@ func (self *Parser) Parse() []Node {
 			foundNewline = true
 			self.Advance()
 			self.gatherHeredocBodies()
-			if self.cmdsubHeredocEnd != nil && self.cmdsubHeredocEnd > self.Pos {
+			if self.cmdsubHeredocEnd != -1 && self.cmdsubHeredocEnd > self.Pos {
 				self.Pos = self.cmdsubHeredocEnd
-				self.cmdsubHeredocEnd = nil
+				self.cmdsubHeredocEnd = -1
 			}
 			self.SkipWhitespace()
 		}
@@ -9835,7 +9845,10 @@ func skipHeredoc(value string, start int) int {
 	return i
 }
 
-func findHeredocContentEnd(source string, start int, delimiters []interface{}) (int, int) {
+func findHeredocContentEnd(source string, start int, delimiters []struct {
+	F0 string
+	F1 bool
+}) (int, int) {
 	if !(len(delimiters) > 0) {
 		return start, start
 	}

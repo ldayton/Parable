@@ -10,7 +10,7 @@ import ast
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .type_overrides import FIELD_TYPE_OVERRIDES, NODE_FIELD_TYPES, NODE_METHOD_TYPES, PARAM_TYPE_OVERRIDES, RETURN_TYPE_OVERRIDES
+from .type_overrides import FIELD_TYPE_OVERRIDES, MODULE_CONSTANTS, NODE_FIELD_TYPES, NODE_METHOD_TYPES, PARAM_TYPE_OVERRIDES, RETURN_TYPE_OVERRIDES, SENTINEL_INT_FIELDS, VAR_TYPE_OVERRIDES
 from .ir import (
     BOOL,
     BYTE,
@@ -279,10 +279,16 @@ class Frontend:
 
     def _collect_constants(self, tree: ast.Module) -> None:
         """Pass 5: Collect module-level and class-level constants."""
+        # First, register overridden constants from type_overrides
+        for const_name, (const_type, _) in MODULE_CONSTANTS.items():
+            self.symbols.constants[const_name] = const_type
         for node in tree.body:
             if isinstance(node, ast.Assign) and len(node.targets) == 1:
                 target = node.targets[0]
                 if isinstance(target, ast.Name) and target.id.isupper():
+                    # Skip if already registered via MODULE_CONSTANTS
+                    if target.id in MODULE_CONSTANTS:
+                        continue
                     # All-caps name = constant
                     if isinstance(node.value, ast.Constant) and isinstance(node.value.value, int):
                         self.symbols.constants[target.id] = INT
@@ -339,10 +345,21 @@ class Frontend:
         """Build IR Module from collected symbols."""
         from . import ir
         module = Module(name="parable")
+        # Build constants from MODULE_CONSTANTS overrides
+        for const_name, (const_type, go_value) in MODULE_CONSTANTS.items():
+            # Strip quotes from go_value to get the actual string content
+            str_value = go_value.strip('"')
+            value = ir.StringLit(value=str_value, typ=STRING, loc=Loc.unknown())
+            module.constants.append(
+                Constant(name=const_name, typ=const_type, value=value, loc=Loc.unknown())
+            )
         # Build constants (module-level and class-level)
         for node in tree.body:
             if isinstance(node, ast.Assign) and len(node.targets) == 1:
                 target = node.targets[0]
+                # Skip constants already handled by MODULE_CONSTANTS
+                if isinstance(target, ast.Name) and target.id in MODULE_CONSTANTS:
+                    continue
                 if isinstance(target, ast.Name) and target.id in self.symbols.constants:
                     value = self._lower_expr(node.value)
                     module.constants.append(
@@ -523,6 +540,10 @@ class Frontend:
                 return "None"
             case ast.Constant(value=v):
                 return str(v)
+            case ast.List(elts=elts):
+                # For annotations like Callable[[], T], the first arg is an ast.List
+                args = ", ".join(self._annotation_to_str(e) for e in elts)
+                return f"[{args}]"
             case ast.Subscript(value=val, slice=ast.Tuple(elts=elts)):
                 base = self._annotation_to_str(val)
                 args = ", ".join(self._annotation_to_str(e) for e in elts)
@@ -591,9 +612,13 @@ class Frontend:
         if py_type.startswith("set["):
             inner = py_type[4:-1]
             return Set(self._py_type_to_ir(inner, concrete_nodes))
-        # Handle tuple[...] - in parameters, use interface
+        # Handle tuple[...] - parse element types for typed tuples
         if py_type.startswith("tuple["):
-            return Interface("any")
+            inner = py_type[6:-1]
+            parts = self._split_type_args(inner)
+            from .ir import Tuple
+            elements = tuple(self._py_type_to_ir(p, concrete_nodes) for p in parts)
+            return Tuple(elements)
         # Handle Callable
         if py_type.startswith("Callable["):
             return self._parse_callable_type(py_type, concrete_nodes)
@@ -1870,6 +1895,19 @@ class Frontend:
                 result_type = INT
         return ir.BinaryOp(op=op, left=left, right=right, typ=result_type, loc=self._loc_from_node(node))
 
+    def _is_sentinel_int(self, node: ast.expr) -> bool:
+        """Check if an expression is a sentinel int (uses -1 for None)."""
+        # Local variable sentinel ints
+        if isinstance(node, ast.Name) and node.id in self._type_ctx.sentinel_ints:
+            return True
+        # Field sentinel ints: self.field
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "self":
+            class_name = self._current_class_name
+            field_name = node.attr
+            if (class_name, field_name) in SENTINEL_INT_FIELDS:
+                return True
+        return False
+
     def _lower_expr_Compare(self, node: ast.Compare) -> "ir.Expr":
         from . import ir
         # Handle simple comparisons
@@ -1887,7 +1925,7 @@ class Frontend:
                 if left_type == BOOL:
                     return ir.UnaryOp(op="!", operand=left, typ=BOOL, loc=self._loc_from_node(node))
                 # For sentinel ints (int | None using -1), compare to -1
-                if isinstance(node.left, ast.Name) and node.left.id in self._type_ctx.sentinel_ints:
+                if self._is_sentinel_int(node.left):
                     return ir.BinaryOp(op="==", left=left, right=ir.IntLit(value=-1, typ=INT), typ=BOOL, loc=self._loc_from_node(node))
                 return ir.IsNil(expr=left, negated=False, typ=BOOL, loc=self._loc_from_node(node))
             if isinstance(node.ops[0], ast.IsNot) and isinstance(node.comparators[0], ast.Constant) and node.comparators[0].value is None:
@@ -1899,7 +1937,7 @@ class Frontend:
                 if left_type == BOOL:
                     return left  # bool is its own truthy value
                 # For sentinel ints (int | None using -1), compare to -1
-                if isinstance(node.left, ast.Name) and node.left.id in self._type_ctx.sentinel_ints:
+                if self._is_sentinel_int(node.left):
                     return ir.BinaryOp(op="!=", left=left, right=ir.IntLit(value=-1, typ=INT), typ=BOOL, loc=self._loc_from_node(node))
                 return ir.IsNil(expr=left, negated=True, typ=BOOL, loc=self._loc_from_node(node))
             # Handle "x in (a, b, c)" -> "x == a || x == b || x == c"
@@ -2121,6 +2159,14 @@ class Frontend:
             if func_name == "chr" and len(args) == 1:
                 rune_cast = ir.Cast(expr=args[0], to_type=RUNE, typ=RUNE, loc=self._loc_from_node(node))
                 return ir.Cast(expr=rune_cast, to_type=STRING, typ=STRING, loc=self._loc_from_node(node))
+            # Check for max(a, b) -> a > b ? a : b
+            if func_name == "max" and len(args) == 2:
+                cond = ir.BinaryOp(op=">", left=args[0], right=args[1], typ=BOOL, loc=self._loc_from_node(node))
+                return ir.Ternary(cond=cond, then_expr=args[0], else_expr=args[1], typ=INT, loc=self._loc_from_node(node))
+            # Check for min(a, b) -> a < b ? a : b
+            if func_name == "min" and len(args) == 2:
+                cond = ir.BinaryOp(op="<", left=args[0], right=args[1], typ=BOOL, loc=self._loc_from_node(node))
+                return ir.Ternary(cond=cond, then_expr=args[0], else_expr=args[1], typ=INT, loc=self._loc_from_node(node))
             # Check for isinstance(x, Type) -> IsType expression
             if func_name == "isinstance" and len(node.args) == 2:
                 expr = self._lower_expr(node.args[0])
@@ -2233,6 +2279,14 @@ class Frontend:
         element_types = tuple(e.typ for e in elements)
         return ir.TupleLit(elements=elements, typ=Tuple(elements=element_types), loc=self._loc_from_node(node))
 
+    def _lower_expr_Set(self, node: ast.Set) -> "ir.Expr":
+        """Lower Python set literal to SetLit IR node."""
+        from . import ir
+        elements = [self._lower_expr(e) for e in node.elts]
+        # Infer element type from first element
+        elem_type = getattr(elements[0], 'typ', STRING) if elements else STRING
+        return ir.SetLit(element_type=elem_type, elements=elements, typ=Set(elem_type), loc=self._loc_from_node(node))
+
     def _binop_to_str(self, op: ast.operator) -> str:
         return {
             ast.Add: "+", ast.Sub: "-", ast.Mult: "*", ast.Div: "/",
@@ -2278,7 +2332,16 @@ class Frontend:
     def _lower_stmt_Assign(self, node: ast.Assign) -> "ir.Stmt":
         from . import ir
         from .ir import Tuple as TupleType
+        # Check VAR_TYPE_OVERRIDES to set expected type before lowering
+        if len(node.targets) == 1:
+            target = node.targets[0]
+            if isinstance(target, ast.Name):
+                func_name = self._current_func_info.name if self._current_func_info else ""
+                override_key = (func_name, target.id)
+                if override_key in VAR_TYPE_OVERRIDES:
+                    self._type_ctx.expected = VAR_TYPE_OVERRIDES[override_key]
         value = self._lower_expr(node.value)
+        self._type_ctx.expected = None  # Reset expected type
         if len(node.targets) == 1:
             target = node.targets[0]
             # Handle single var = tuple-returning func: x = func() -> x0, x1 := func()
@@ -2311,14 +2374,23 @@ class Frontend:
                         lval0 = self._lower_lvalue(target.elts[0])
                         lval1 = self._lower_lvalue(target.elts[1])
                         len_minus_1 = ir.BinaryOp(op="-", left=ir.Len(expr=obj, typ=INT), right=ir.IntLit(value=1, typ=INT), typ=INT)
-                        # Use Tuple type for the entry (generic tuple struct with F0, F1 fields)
-                        entry_type = Tuple((BOOL, BOOL))
+                        # Infer tuple element type from the list's type if available
+                        entry_type: Type = Tuple((BOOL, BOOL))  # Default
+                        if isinstance(node.value.func.value, ast.Name):
+                            var_name = node.value.func.value.id
+                            if var_name in self._type_ctx.var_types:
+                                list_type = self._type_ctx.var_types[var_name]
+                                if isinstance(list_type, Slice) and isinstance(list_type.element, Tuple):
+                                    entry_type = list_type.element
+                        # Get field types from entry_type
+                        f0_type = entry_type.elements[0] if isinstance(entry_type, Tuple) and len(entry_type.elements) > 0 else BOOL
+                        f1_type = entry_type.elements[1] if isinstance(entry_type, Tuple) and len(entry_type.elements) > 1 else BOOL
                         entry_var = ir.Var(name="_entry", typ=entry_type)
                         return ir.Block(body=[
                             ir.VarDecl(name="_entry", typ=entry_type, value=ir.Index(obj=obj, index=len_minus_1, typ=entry_type)),
                             ir.Assign(target=obj_lval, value=ir.SliceExpr(obj=obj, high=len_minus_1, typ=Interface("any"))),
-                            ir.Assign(target=lval0, value=ir.FieldAccess(obj=entry_var, field="F0", typ=BOOL)),
-                            ir.Assign(target=lval1, value=ir.FieldAccess(obj=entry_var, field="F1", typ=BOOL)),
+                            ir.Assign(target=lval0, value=ir.FieldAccess(obj=entry_var, field="F0", typ=f0_type)),
+                            ir.Assign(target=lval1, value=ir.FieldAccess(obj=entry_var, field="F1", typ=f1_type)),
                         ], loc=self._loc_from_node(node))
                     else:
                         # General tuple unpacking: a, b = obj.method()
@@ -2339,9 +2411,7 @@ class Frontend:
                         loc=self._loc_from_node(node)
                     )
             # Handle sentinel ints: var = None -> var = -1
-            if (isinstance(target, ast.Name) and
-                target.id in self._type_ctx.sentinel_ints and
-                isinstance(value, ir.NilLit)):
+            if isinstance(value, ir.NilLit) and self._is_sentinel_int(target):
                 value = ir.IntLit(value=-1, typ=INT, loc=self._loc_from_node(node))
             # Coerce value to target type if known
             if isinstance(target, ast.Name) and target.id in self._type_ctx.var_types:
@@ -2349,10 +2419,21 @@ class Frontend:
                 from_type = self._synthesize_type(value)
                 value = self._coerce(value, from_type, expected_type)
             # Track variable type dynamically for later use in nested scopes
-            if isinstance(target, ast.Name) and target.id not in self._type_ctx.var_types:
-                value_type = self._synthesize_type(value)
-                if value_type != Interface("any"):
-                    self._type_ctx.var_types[target.id] = value_type
+            if isinstance(target, ast.Name):
+                # Check VAR_TYPE_OVERRIDES first
+                func_name = self._current_func_info.name if self._current_func_info else ""
+                override_key = (func_name, target.id)
+                if override_key in VAR_TYPE_OVERRIDES:
+                    self._type_ctx.var_types[target.id] = VAR_TYPE_OVERRIDES[override_key]
+                else:
+                    value_type = self._synthesize_type(value)
+                    # Update type if it's concrete (not any) and either:
+                    # - Variable not yet tracked, or
+                    # - Variable was RUNE from for-loop but now assigned STRING (from method call)
+                    current_type = self._type_ctx.var_types.get(target.id)
+                    if value_type != Interface("any"):
+                        if current_type is None or (current_type == RUNE and value_type == STRING):
+                            self._type_ctx.var_types[target.id] = value_type
             # Propagate narrowed status: if assigning from a narrowed var, target is also narrowed
             if isinstance(target, ast.Name) and isinstance(node.value, ast.Name):
                 if node.value.id in self._type_ctx.narrowed_vars:
@@ -2387,6 +2468,8 @@ class Frontend:
         else:
             value = None
         if isinstance(node.target, ast.Name):
+            # Update type context with declared type (overrides any earlier inference)
+            self._type_ctx.var_types[node.target.id] = typ
             return ir.VarDecl(name=node.target.id, typ=typ, value=value, loc=self._loc_from_node(node))
         # Attribute target - treat as assignment
         lval = self._lower_lvalue(node.target)

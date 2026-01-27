@@ -69,6 +69,10 @@ FIELD_TYPE_OVERRIDES: dict[tuple[str, str], Type] = {
     # QuoteState uses tuple stack - use generic tuple struct
     ("QuoteState", "_stack"): Slice(Tuple((BOOL, BOOL))),
     ("Parser", "_arith_len"): INT,
+    # Use -1 sentinel instead of *int for heredoc end position
+    ("Parser", "_cmdsub_heredoc_end"): INT,
+    # Token.word is *Word, not Node interface
+    ("Token", "word"): Pointer(StructRef("Word")),
 }
 
 # Override return types for methods that return generic list
@@ -79,6 +83,7 @@ RETURN_TYPE_OVERRIDES: dict[str, Type] = {
     "_collect_redirects": Slice(StructRef("Node")),
     "copy_stack": Slice(Pointer(StructRef("ParseContext"))),
     "parse_for": StructRef("Node"),  # Returns For | ForArith | None
+    "parse_redirect": StructRef("Node"),  # Returns Redirect | HereDoc | None
 }
 
 # Tuple element types for functions returning tuples with typed elements
@@ -154,4 +159,28 @@ KIND_TO_STRUCT: dict[str, str] = {
     "heredoc": "HereDoc",
     "arith-expr": "ArithExpr",
     "cond-expr": "ConditionalExpr",
+}
+
+# Module-level constants that need custom emission
+# Maps constant_name -> (type, go_value)
+# Used for constants that can't be inferred from simple integer assignment
+MODULE_CONSTANTS: dict[str, tuple[Type, str]] = {
+    # RESERVED_WORDS is a set in Python, emitted as space-delimited string for Go strings.Contains
+    "RESERVED_WORDS": (STRING, '"if then elif else fi while until for select do done case esac in function coproc "'),
+}
+
+# Override local variable types when inference fails
+# Maps (function_name, var_name) -> IR type
+VAR_TYPE_OVERRIDES: dict[tuple[str, str], Type] = {
+    # Empty list assigned then returned - need concrete element type
+    ("_collect_redirects", "redirects"): Slice(StructRef("Node")),
+    # Tuple element types inferred incorrectly
+    ("_read_heredoc_body", "pending_heredocs"): Slice(Tuple((STRING, BOOL))),
+}
+
+# Fields that use -1 sentinel value instead of nil pointer for int | None
+# Maps (class_name, field_name) -> True
+# These fields use `== -1` instead of `== nil` for None comparison
+SENTINEL_INT_FIELDS: set[tuple[str, str]] = {
+    ("Parser", "_cmdsub_heredoc_end"),
 }

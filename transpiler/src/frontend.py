@@ -130,6 +130,7 @@ class TypeContext:
     return_type: Type | None = None  # Current function's return type
     tuple_vars: dict[str, list[str]] = field(default_factory=dict)  # Maps var -> synthetic var names
     sentinel_ints: set[str] = field(default_factory=set)  # Variables that use -1 sentinel for None
+    narrowed_vars: set[str] = field(default_factory=set)  # Variables narrowed from interface type
 
 
 class Frontend:
@@ -1192,9 +1193,30 @@ class Frontend:
             # For BoolOp, recursively lower operands as booleans
             op = "&&" if isinstance(node.op, ast.And) else "||"
             result = self._lower_expr_as_bool(node.values[0])
+            # Track isinstance narrowing for AND chains
+            narrowed_var: str | None = None
+            narrowed_old_type: Type | None = None
+            was_already_narrowed = False
+            if isinstance(node.op, ast.And):
+                isinstance_check = self._is_isinstance_call(node.values[0])
+                if isinstance_check:
+                    var_name, type_name = isinstance_check
+                    narrowed_var = var_name
+                    narrowed_old_type = self._type_ctx.var_types.get(var_name)
+                    was_already_narrowed = var_name in self._type_ctx.narrowed_vars
+                    self._type_ctx.var_types[var_name] = self._resolve_type_name(type_name)
+                    self._type_ctx.narrowed_vars.add(var_name)
             for val in node.values[1:]:
                 right = self._lower_expr_as_bool(val)
                 result = ir.BinaryOp(op=op, left=result, right=right, typ=BOOL, loc=self._loc_from_node(node))
+            # Restore narrowed type and tracking
+            if narrowed_var is not None:
+                if narrowed_old_type is not None:
+                    self._type_ctx.var_types[narrowed_var] = narrowed_old_type
+                else:
+                    self._type_ctx.var_types.pop(narrowed_var, None)
+                if not was_already_narrowed:
+                    self._type_ctx.narrowed_vars.discard(narrowed_var)
             return result
         if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
             operand = self._lower_expr_as_bool(node.operand)
@@ -1302,8 +1324,24 @@ class Frontend:
             if const_name in self.symbols.constants:
                 return ir.Var(name=const_name, typ=INT, loc=self._loc_from_node(node))
         obj = self._lower_expr(node.value)
+        # If accessing field on a narrowed variable, wrap in TypeAssert
+        if isinstance(node.value, ast.Name) and node.value.id in self._type_ctx.narrowed_vars:
+            var_type = self._type_ctx.var_types.get(node.value.id)
+            if var_type and isinstance(var_type, Pointer) and isinstance(var_type.target, StructRef):
+                obj = ir.TypeAssert(
+                    expr=obj, asserted=var_type, safe=True,
+                    typ=var_type, loc=self._loc_from_node(node.value)
+                )
+        # Infer field type for self.field accesses
+        field_type: Type = Interface("any")
+        if isinstance(node.value, ast.Name) and node.value.id == "self":
+            if self._current_class_name in self.symbols.structs:
+                struct_info = self.symbols.structs[self._current_class_name]
+                field_info = struct_info.fields.get(node.attr)
+                if field_info:
+                    field_type = field_info.typ
         return ir.FieldAccess(
-            obj=obj, field=node.attr, typ=Interface("any"), loc=self._loc_from_node(node)
+            obj=obj, field=node.attr, typ=field_type, loc=self._loc_from_node(node)
         )
 
     def _lower_expr_Subscript(self, node: ast.Subscript) -> "ir.Expr":
@@ -1846,6 +1884,14 @@ class Frontend:
                 value_type = self._synthesize_type(value)
                 if value_type != Interface("any"):
                     self._type_ctx.var_types[target.id] = value_type
+            # Propagate narrowed status: if assigning from a narrowed var, target is also narrowed
+            if isinstance(target, ast.Name) and isinstance(node.value, ast.Name):
+                if node.value.id in self._type_ctx.narrowed_vars:
+                    self._type_ctx.narrowed_vars.add(target.id)
+                    # Also set the narrowed type for the target
+                    narrowed_type = self._type_ctx.var_types.get(node.value.id)
+                    if narrowed_type:
+                        self._type_ctx.var_types[target.id] = narrowed_type
             lval = self._lower_lvalue(target)
             return ir.Assign(target=lval, value=value, loc=self._loc_from_node(node))
         # Multiple targets - emit first one (simplification)
@@ -1960,6 +2006,18 @@ class Frontend:
                 return (var_name, type_names)
         return None
 
+    def _extract_isinstance_from_and(self, node: ast.expr) -> tuple[str, str] | None:
+        """Extract isinstance(var, Type) from compound AND expression.
+        Returns (var_name, type_name) or None if no isinstance found."""
+        if not isinstance(node, ast.BoolOp) or not isinstance(node.op, ast.And):
+            return None
+        # Check each value in the AND chain for isinstance
+        for value in node.values:
+            result = self._is_isinstance_call(value)
+            if result:
+                return result
+        return None
+
     def _collect_isinstance_chain(self, node: ast.If, var_name: str) -> tuple[list["ir.TypeCase"], list["ir.Stmt"]]:
         """Collect isinstance checks on same variable into TypeSwitch cases."""
         from . import ir
@@ -1976,6 +2034,8 @@ class Frontend:
             for type_name in type_names:
                 typ = self._resolve_type_name(type_name)
                 # Temporarily narrow the variable type for this branch
+                # Note: Don't add to narrowed_vars here - TypeSwitch already handles
+                # type narrowing in Go via the switch binding
                 old_type = self._type_ctx.var_types.get(var_name)
                 self._type_ctx.var_types[var_name] = typ
                 body = [self._lower_stmt(s) for s in current.body]
@@ -2025,7 +2085,24 @@ class Frontend:
                 )
         # Fall back to regular If emission
         cond = self._lower_expr_as_bool(node.test)
-        then_body = self._lower_stmts(node.body)
+        # Check for isinstance in compound AND condition for type narrowing
+        isinstance_in_and = self._extract_isinstance_from_and(node.test)
+        if isinstance_in_and:
+            var_name, type_name = isinstance_in_and
+            typ = self._resolve_type_name(type_name)
+            old_type = self._type_ctx.var_types.get(var_name)
+            was_already_narrowed = var_name in self._type_ctx.narrowed_vars
+            self._type_ctx.var_types[var_name] = typ
+            self._type_ctx.narrowed_vars.add(var_name)
+            then_body = self._lower_stmts(node.body)
+            if old_type is not None:
+                self._type_ctx.var_types[var_name] = old_type
+            else:
+                self._type_ctx.var_types.pop(var_name, None)
+            if not was_already_narrowed:
+                self._type_ctx.narrowed_vars.discard(var_name)
+        else:
+            then_body = self._lower_stmts(node.body)
         else_body = self._lower_stmts(node.orelse) if node.orelse else []
         return ir.If(cond=cond, then_body=then_body, else_body=else_body, loc=self._loc_from_node(node))
 

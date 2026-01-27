@@ -798,6 +798,7 @@ func (self *Lexer) parseMatchedPair(openChar string, closeChar string, flags int
 			continue
 		}
 		if strings.Contains("'\"`", ch) && openChar != closeChar {
+			var nested string
 			if ch == "'" {
 				chars = append(chars, ch)
 				quoteFlags := func() int {
@@ -807,7 +808,7 @@ func (self *Lexer) parseMatchedPair(openChar string, closeChar string, flags int
 						return flags
 					}
 				}()
-				nested := self.parseMatchedPair("'", "'", quoteFlags, false)
+				nested = self.parseMatchedPair("'", "'", quoteFlags, false)
 				chars = append(chars, nested)
 				chars = append(chars, "'")
 				wasDollar = false
@@ -815,7 +816,7 @@ func (self *Lexer) parseMatchedPair(openChar string, closeChar string, flags int
 				continue
 			} else if ch == "\"" {
 				chars = append(chars, ch)
-				nested := self.parseMatchedPair("\"", "\"", (flags | MatchedPairFlagsDQUOTE), false)
+				nested = self.parseMatchedPair("\"", "\"", (flags | MatchedPairFlagsDQUOTE), false)
 				chars = append(chars, nested)
 				chars = append(chars, "\"")
 				wasDollar = false
@@ -823,7 +824,7 @@ func (self *Lexer) parseMatchedPair(openChar string, closeChar string, flags int
 				continue
 			} else if ch == "`" {
 				chars = append(chars, ch)
-				nested := self.parseMatchedPair("`", "`", flags, false)
+				nested = self.parseMatchedPair("`", "`", flags, false)
 				chars = append(chars, nested)
 				chars = append(chars, "`")
 				wasDollar = false
@@ -867,6 +868,8 @@ func (self *Lexer) parseMatchedPair(openChar string, closeChar string, flags int
 			} else if nextCh == "(" {
 				self.Pos--
 				self.syncToParser()
+				var cmdNode Node
+				var cmdText string
 				if self.Pos+2 < self.Length && string(self.Source[self.Pos+2]) == "(" {
 					arithNode, arithText := self.parser.parseArithmeticExpansion()
 					self.syncFromParser()
@@ -876,7 +879,7 @@ func (self *Lexer) parseMatchedPair(openChar string, closeChar string, flags int
 						wasGtlt = false
 					} else {
 						self.syncToParser()
-						cmdNode, cmdText := self.parser.parseCommandSubstitution()
+						cmdNode, cmdText = self.parser.parseCommandSubstitution()
 						self.syncFromParser()
 						if cmdNode != nil {
 							chars = append(chars, cmdText)
@@ -890,7 +893,7 @@ func (self *Lexer) parseMatchedPair(openChar string, closeChar string, flags int
 						}
 					}
 				} else {
-					cmdNode, cmdText := self.parser.parseCommandSubstitution()
+					cmdNode, cmdText = self.parser.parseCommandSubstitution()
 					self.syncFromParser()
 					if cmdNode != nil {
 						chars = append(chars, cmdText)
@@ -2923,6 +2926,11 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 			i = j
 			continue
 		}
+		var inner string
+		var node interface{}
+		var formatted string
+		var parser *Parser
+		var parsed Node
 		if startsWithAt(value, i, "$(") && !startsWithAt(value, i, "$((") && !isBackslashEscaped(value, i) && !isDollarDollarParen(value, i) {
 			j = findCmdsubEnd(value, i+2)
 			if extglobDepth > 0 {
@@ -2933,10 +2941,9 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 				i = j
 				continue
 			}
-			inner := substring(value, i+2, j-1)
-			var formatted string
+			inner = substring(value, i+2, j-1)
 			if cmdsubIdx < len(cmdsubParts) {
-				node := cmdsubParts[cmdsubIdx]
+				node = cmdsubParts[cmdsubIdx]
 				formatted = formatCmdsubNode(node.Command, 0, false, false, false)
 				cmdsubIdx++
 			} else {
@@ -2946,8 +2953,8 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 							formatted = inner
 						}
 					}()
-					parser := &Parser{Source: inner}
-					parsed := parser.ParseList(true)
+					parser = &Parser{Source: inner}
+					parsed = parser.ParseList(true)
 					formatted = func() string {
 						if parsed != nil {
 							return formatCmdsubNode(parsed, 0, false, false, false)
@@ -2988,9 +2995,9 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 					return nil
 				}
 			}()
-			if func() bool { _, ok := cmdsubNode.(*CommandSubstitution); return ok }() && cmdsubNode.Brace != nil {
-				node := cmdsubNode
-				formatted = formatCmdsubNode(node.Command, 0, false, false, false)
+			if func() bool { _, ok := cmdsubNode.(*CommandSubstitution); return ok }() && cmdsubNode.(*CommandSubstitution).Brace {
+				node = cmdsubNode
+				formatted = formatCmdsubNode(node.(*CommandSubstitution).Command, 0, false, false, false)
 				hasPipe := string(value[i+2]) == "|"
 				prefix := func() string {
 					if hasPipe {
@@ -3034,24 +3041,27 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 				i = j
 				continue
 			}
+			var direction string
+			var compact bool
+			var stripped string
 			if procsubIdx < len(procsubParts) {
-				direction := string(value[i])
+				direction = string(value[i])
 				j = findCmdsubEnd(value, i+2)
-				node := procsubParts[procsubIdx]
-				compact := startsWithSubshell(node.Command)
-				formatted = formatCmdsubNode(node.Command, 0, true, compact, true)
+				node = procsubParts[procsubIdx]
+				compact = startsWithSubshell(node.(*CommandSubstitution).Command)
+				formatted = formatCmdsubNode(node.(*CommandSubstitution).Command, 0, true, compact, true)
 				rawContent := substring(value, i+2, j-1)
-				if node.Command.Kind == "subshell" {
+				if node.(*CommandSubstitution).Command.Kind == "subshell" {
 					leadingWsEnd := 0
 					for leadingWsEnd < len(rawContent) && strings.Contains(" \t\n", string(rawContent[leadingWsEnd])) {
 						leadingWsEnd++
 					}
 					leadingWs := rawContent[:leadingWsEnd]
-					stripped := rawContent[leadingWsEnd:]
+					stripped = rawContent[leadingWsEnd:]
 					if strings.HasPrefix(stripped, "(") {
 						if leadingWs != "" {
 							normalizedWs := strings.ReplaceAll(strings.ReplaceAll(leadingWs, "\n", " "), "\t", " ")
-							spaced := formatCmdsubNode(node.Command, 0, false, false, false)
+							spaced := formatCmdsubNode(node.(*CommandSubstitution).Command, 0, false, false, false)
 							result = append(result, direction+"("+normalizedWs+spaced+")")
 						} else {
 							rawContent = strings.ReplaceAll(rawContent, "\\\n", "")
@@ -3064,7 +3074,7 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 				}
 				rawContent = substring(value, i+2, j-1)
 				rawStripped := strings.ReplaceAll(rawContent, "\\\n", "")
-				if startsWithSubshell(node.Command) && formatted != rawStripped {
+				if startsWithSubshell(node.(*CommandSubstitution).Command) && formatted != rawStripped {
 					result = append(result, direction+"("+rawStripped+")")
 				} else {
 					finalOutput := direction + "(" + formatted + ")"
@@ -3073,25 +3083,24 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 				procsubIdx++
 				i = j
 			} else if isProcsub && len(self.Parts) != 0 {
-				direction := string(value[i])
+				direction = string(value[i])
 				j = findCmdsubEnd(value, i+2)
 				if j > len(value) || j > 0 && j <= len(value) && string(value[j-1]) != ")" {
 					result = append(result, string(value[i]))
 					i++
 					continue
 				}
-				inner := substring(value, i+2, j-1)
-				var formatted string
+				inner = substring(value, i+2, j-1)
 				func() {
 					defer func() {
 						if r := recover(); r != nil {
 							formatted = inner
 						}
 					}()
-					parser := &Parser{Source: inner}
-					parsed := parser.ParseList(true)
+					parser = &Parser{Source: inner}
+					parsed = parser.ParseList(true)
 					if parsed != nil && parser.Pos == len(inner) && !strings.Contains(inner, "\n") {
-						compact := startsWithSubshell(parsed)
+						compact = startsWithSubshell(parsed)
 						formatted = formatCmdsubNode(parsed, 0, true, compact, true)
 					} else {
 						formatted = inner
@@ -3100,18 +3109,18 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 				result = append(result, direction+"("+formatted+")")
 				i = j
 			} else if isProcsub {
-				direction := string(value[i])
+				direction = string(value[i])
 				j = findCmdsubEnd(value, i+2)
 				if j > len(value) || j > 0 && j <= len(value) && string(value[j-1]) != ")" {
 					result = append(result, string(value[i]))
 					i++
 					continue
 				}
-				inner := substring(value, i+2, j-1)
+				inner = substring(value, i+2, j-1)
 				if inArith {
 					result = append(result, direction+"("+inner+")")
 				} else if strings.TrimSpace(inner) != "" {
-					stripped := strings.TrimLeft(inner, " \t")
+					stripped = strings.TrimLeft(inner, " \t")
 					result = append(result, direction+"("+stripped+")")
 				} else {
 					result = append(result, direction+"("+inner+")")
@@ -3133,7 +3142,7 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 				}
 				j++
 			}
-			inner := substring(value, i+2, j-1)
+			inner = substring(value, i+2, j-1)
 			if strings.TrimSpace(inner) == "" {
 				result = append(result, "${ }")
 			} else {
@@ -3143,8 +3152,8 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 							result = append(result, substring(value, i, j))
 						}
 					}()
-					parser := &Parser{Source: strings.TrimLeft(inner, " \t\n|")}
-					parsed := parser.ParseList(true)
+					parser = &Parser{Source: strings.TrimLeft(inner, " \t\n|")}
+					parsed = parser.ParseList(true)
 					if parsed != nil {
 						formatted = formatCmdsubNode(parsed, 0, false, false, false)
 						formatted = strings.TrimRight(formatted, ";")
@@ -3190,7 +3199,6 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 				}
 				j++
 			}
-			var inner string
 			if depth > 0 {
 				inner = substring(value, i+2, j)
 			} else {
@@ -3374,8 +3382,8 @@ func (self *Pipeline) ToSexp() string {
 		cmds = append(cmds, struct{ Single, Double bool }{cmd, needsRedirect})
 		i++
 	}
-	var pair string
-	var needs string
+	var pair interface{}
+	var needs interface{}
 	if len(cmds) == 1 {
 		pair = cmds[0]
 		cmd = pair[0]
@@ -3441,13 +3449,13 @@ func (self *List) ToSexp() string {
 			if parts[i].Kind == "operator" && parts[i].Op == ";" || parts[i].Op == "\n" {
 				left := sublist(parts, 0, i)
 				right := sublist(parts, i+1, len(parts)-1)
-				var leftSexp string
+				var leftSexp interface{}
 				if len(left) > 1 {
 					leftSexp = &List{Parts: left}.ToSexp()
 				} else {
 					leftSexp = left[0].ToSexp()
 				}
-				var rightSexp string
+				var rightSexp interface{}
 				if len(right) > 1 {
 					rightSexp = &List{Parts: right}.ToSexp()
 				} else {
@@ -3878,7 +3886,7 @@ func (self *Select) ToSexp() string {
 		suffix = " " + strings.Join(redirectParts, " ")
 	}
 	varEscaped := strings.ReplaceAll(strings.ReplaceAll(self.Var, "\\", "\\\\"), "\"", "\\\"")
-	var inClause string
+	var inClause interface{}
 	if self.Words != nil {
 		wordParts := []string{}
 		for _, w := range self.Words {
@@ -5279,18 +5287,20 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 			delimiterChars := []string{}
 			if !self.AtEnd() {
 				ch = self.Peek()
+				var dch string
+				var closing string
 				if isQuote(ch) {
 					quote = self.Advance()
 					contentChars = append(contentChars, quote)
 					textChars = append(textChars, quote)
 					for !self.AtEnd() && self.Peek() != quote {
-						dch := self.Advance()
+						dch = self.Advance()
 						contentChars = append(contentChars, dch)
 						textChars = append(textChars, dch)
 						delimiterChars = append(delimiterChars, dch)
 					}
 					if !self.AtEnd() {
-						closing := self.Advance()
+						closing = self.Advance()
 						contentChars = append(contentChars, closing)
 						textChars = append(textChars, closing)
 					}
@@ -5298,7 +5308,6 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 					esc := self.Advance()
 					contentChars = append(contentChars, esc)
 					textChars = append(textChars, esc)
-					var dch string
 					if !self.AtEnd() {
 						dch = self.Advance()
 						contentChars = append(contentChars, dch)
@@ -5325,7 +5334,7 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 								delimiterChars = append(delimiterChars, dch)
 							}
 							if !self.AtEnd() {
-								closing := self.Advance()
+								closing = self.Advance()
 								contentChars = append(contentChars, closing)
 								textChars = append(textChars, closing)
 							}
@@ -5591,7 +5600,7 @@ func (self *Parser) parseArithExpr(content string) Node {
 	self.arithPos = 0
 	self.arithLen = len(content)
 	self.arithSkipWs()
-	var result Node
+	var result interface{}
 	if self.arithAtEnd() {
 		result = nil
 	} else {
@@ -5690,14 +5699,14 @@ func (self *Parser) arithParseTernary() Node {
 	self.arithSkipWs()
 	if self.arithConsume("?") {
 		self.arithSkipWs()
-		var ifTrue Node
+		var ifTrue interface{}
 		if self.arithMatch(":") {
 			ifTrue = nil
 		} else {
 			ifTrue = self.arithParseAssign()
 		}
 		self.arithSkipWs()
-		var ifFalse Node
+		var ifFalse interface{}
 		if self.arithConsume(":") {
 			self.arithSkipWs()
 			if self.arithAtEnd() || self.arithPeek(0) == ")" {
@@ -5798,25 +5807,26 @@ func (self *Parser) arithParseComparison() Node {
 	left := self.arithParseShift()
 	for true {
 		self.arithSkipWs()
+		var right Node
 		if self.arithMatch("<=") {
 			self.arithConsume("<=")
 			self.arithSkipWs()
-			right := self.arithParseShift()
+			right = self.arithParseShift()
 			left = &ArithBinaryOp{Op: "<=", Left: left, Right: right}
 		} else if self.arithMatch(">=") {
 			self.arithConsume(">=")
 			self.arithSkipWs()
-			right := self.arithParseShift()
+			right = self.arithParseShift()
 			left = &ArithBinaryOp{Op: ">=", Left: left, Right: right}
 		} else if self.arithPeek(0) == "<" && self.arithPeek(1) != "<" && self.arithPeek(1) != "=" {
 			self.arithAdvance()
 			self.arithSkipWs()
-			right := self.arithParseShift()
+			right = self.arithParseShift()
 			left = &ArithBinaryOp{Op: "<", Left: left, Right: right}
 		} else if self.arithPeek(0) == ">" && self.arithPeek(1) != ">" && self.arithPeek(1) != "=" {
 			self.arithAdvance()
 			self.arithSkipWs()
-			right := self.arithParseShift()
+			right = self.arithParseShift()
 			left = &ArithBinaryOp{Op: ">", Left: left, Right: right}
 		} else {
 			break
@@ -5835,15 +5845,16 @@ func (self *Parser) arithParseShift() Node {
 		if self.arithMatch(">>=") {
 			break
 		}
+		var right Node
 		if self.arithMatch("<<") {
 			self.arithConsume("<<")
 			self.arithSkipWs()
-			right := self.arithParseAdditive()
+			right = self.arithParseAdditive()
 			left = &ArithBinaryOp{Op: "<<", Left: left, Right: right}
 		} else if self.arithMatch(">>") {
 			self.arithConsume(">>")
 			self.arithSkipWs()
-			right := self.arithParseAdditive()
+			right = self.arithParseAdditive()
 			left = &ArithBinaryOp{Op: ">>", Left: left, Right: right}
 		} else {
 			break
@@ -5858,15 +5869,16 @@ func (self *Parser) arithParseAdditive() Node {
 		self.arithSkipWs()
 		c := self.arithPeek(0)
 		c2 := self.arithPeek(1)
+		var right Node
 		if c == "+" && c2 != "+" && c2 != "=" {
 			self.arithAdvance()
 			self.arithSkipWs()
-			right := self.arithParseMultiplicative()
+			right = self.arithParseMultiplicative()
 			left = &ArithBinaryOp{Op: "+", Left: left, Right: right}
 		} else if c == "-" && c2 != "-" && c2 != "=" {
 			self.arithAdvance()
 			self.arithSkipWs()
-			right := self.arithParseMultiplicative()
+			right = self.arithParseMultiplicative()
 			left = &ArithBinaryOp{Op: "-", Left: left, Right: right}
 		} else {
 			break
@@ -5881,20 +5893,21 @@ func (self *Parser) arithParseMultiplicative() Node {
 		self.arithSkipWs()
 		c := self.arithPeek(0)
 		c2 := self.arithPeek(1)
+		var right Node
 		if c == "*" && c2 != "*" && c2 != "=" {
 			self.arithAdvance()
 			self.arithSkipWs()
-			right := self.arithParseExponentiation()
+			right = self.arithParseExponentiation()
 			left = &ArithBinaryOp{Op: "*", Left: left, Right: right}
 		} else if c == "/" && c2 != "=" {
 			self.arithAdvance()
 			self.arithSkipWs()
-			right := self.arithParseExponentiation()
+			right = self.arithParseExponentiation()
 			left = &ArithBinaryOp{Op: "/", Left: left, Right: right}
 		} else if c == "%" && c2 != "=" {
 			self.arithAdvance()
 			self.arithSkipWs()
-			right := self.arithParseExponentiation()
+			right = self.arithParseExponentiation()
 			left = &ArithBinaryOp{Op: "%", Left: left, Right: right}
 		} else {
 			break
@@ -6064,7 +6077,7 @@ func (self *Parser) arithParseExpansion() Node {
 func (self *Parser) arithParseCmdsub() Node {
 	self.arithAdvance()
 	var depth int
-	var contentStart Node
+	var contentStart int
 	var ch string
 	var content string
 	if self.arithPeek(0) == "(" {
@@ -6484,6 +6497,7 @@ func (self *Parser) ParseRedirect() interface{} {
 			target = nil
 		}
 		if target == nil {
+			var innerWord *Word
 			if !self.AtEnd() && _strIsDigit(self.Peek()) || self.Peek() == "-" {
 				wordStart := self.Pos
 				fdChars = []string{}
@@ -6501,7 +6515,7 @@ func (self *Parser) ParseRedirect() interface{} {
 				}
 				if fdTarget != "-" && !self.AtEnd() && !isMetachar(self.Peek()) {
 					self.Pos = wordStart
-					innerWord := self.ParseWord(false, false, false)
+					innerWord = self.ParseWord(false, false, false)
 					if innerWord != nil {
 						target = &Word{Value: "&" + innerWord.Value}
 						target.Parts = innerWord.Parts
@@ -6512,7 +6526,7 @@ func (self *Parser) ParseRedirect() interface{} {
 					target = &Word{Value: "&" + fdTarget}
 				}
 			} else {
-				innerWord := self.ParseWord(false, false, false)
+				innerWord = self.ParseWord(false, false, false)
 				if innerWord != nil {
 					target = &Word{Value: "&" + innerWord.Value}
 					target.Parts = innerWord.Parts
@@ -7308,7 +7322,7 @@ func (self *Parser) ParseFor() Node {
 	if self.Peek() == "(" && self.Pos+1 < self.Length && string(self.Source[self.Pos+1]) == "(" {
 		return self.parseForArith()
 	}
-	var varName Node
+	var varName interface{}
 	if self.Peek() == "$" {
 		varWord := self.ParseWord(false, false, false)
 		if varWord == nil {
@@ -8085,7 +8099,7 @@ func (self *Parser) ParsePipeline() Node {
 		self.lexConsumeWord("time")
 		prefixOrder = "time"
 		self.SkipWhitespace()
-		var saved Node
+		var saved int
 		if !self.AtEnd() && self.Peek() == "-" {
 			saved = self.Pos
 			self.Advance()
@@ -8404,7 +8418,7 @@ func (self *Parser) stripTrailingBackslashFromLastWord(nodes []Node) {
 	if lastWord != nil && strings.HasSuffix(lastWord.Value, "\\") {
 		lastWord.Value = substring(lastWord.Value, 0, len(lastWord.Value)-1)
 		if !(lastWord.Value != "") && func() bool { _, ok := lastNode.(*Command); return ok }() && lastNode.Words != nil {
-			lastNode.Words.Pop()
+			lastNode.(*Command).Words[len(lastNode.(*Command).Words)-1]
 		}
 	}
 }
@@ -8758,7 +8772,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		for _, r := range node.Redirects {
 			parts = append(parts, formatRedirect(r, false, false))
 		}
-		var result string
+		var result interface{}
 		if compactRedirects && len(node.Words) > 0 && len(node.Redirects) > 0 {
 			wordParts := parts[:len(node.Words)]
 			redirectParts := parts[len(node.Words):]
@@ -9005,7 +9019,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 	case *For:
 		var_ := node.Var
 		body := formatCmdsubNode(node.Body, indent+4, false, false, false)
-		var result string
+		var result interface{}
 		if node.Words != nil {
 			wordVals := []string{}
 			for _, w := range node.Words {
@@ -9184,7 +9198,7 @@ func formatRedirect(r Node, compact bool, heredocOpOnly bool) string {
 		if r.Fd != nil && r.Fd != 0 {
 			op = Str(r.Fd) + op
 		}
-		var delim string
+		var delim interface{}
 		if r.Quoted != nil {
 			delim = "'" + r.Delimiter + "'"
 		} else {
@@ -9883,11 +9897,14 @@ func normalizeHeredocDelimiter(delimiter string) string {
 	result := []string{}
 	i := 0
 	for i < len(delimiter) {
+		var depth int
+		var inner []interface{}
+		var innerStr string
 		if i+1 < len(delimiter) && delimiter[i:i+2] == "$(" {
 			result = append(result, "$(")
 			i += 2
-			depth := 1
-			inner := []string{}
+			depth = 1
+			inner = []string{}
 			for i < len(delimiter) && depth > 0 {
 				if string(delimiter[i]) == "(" {
 					depth++
@@ -9895,7 +9912,7 @@ func normalizeHeredocDelimiter(delimiter string) string {
 				} else if string(delimiter[i]) == ")" {
 					depth--
 					if depth == 0 {
-						innerStr := strings.Join(inner, "")
+						innerStr = strings.Join(inner, "")
 						innerStr = collapseWhitespace(innerStr)
 						result = append(result, innerStr)
 						result = append(result, ")")
@@ -9910,8 +9927,8 @@ func normalizeHeredocDelimiter(delimiter string) string {
 		} else if i+1 < len(delimiter) && delimiter[i:i+2] == "${" {
 			result = append(result, "${")
 			i += 2
-			depth := 1
-			inner := []string{}
+			depth = 1
+			inner = []string{}
 			for i < len(delimiter) && depth > 0 {
 				if string(delimiter[i]) == "{" {
 					depth++
@@ -9919,7 +9936,7 @@ func normalizeHeredocDelimiter(delimiter string) string {
 				} else if string(delimiter[i]) == "}" {
 					depth--
 					if depth == 0 {
-						innerStr := strings.Join(inner, "")
+						innerStr = strings.Join(inner, "")
 						innerStr = collapseWhitespace(innerStr)
 						result = append(result, innerStr)
 						result = append(result, "}")
@@ -9935,8 +9952,8 @@ func normalizeHeredocDelimiter(delimiter string) string {
 			result = append(result, string(delimiter[i]))
 			result = append(result, "(")
 			i += 2
-			depth := 1
-			inner := []string{}
+			depth = 1
+			inner = []string{}
 			for i < len(delimiter) && depth > 0 {
 				if string(delimiter[i]) == "(" {
 					depth++
@@ -9944,7 +9961,7 @@ func normalizeHeredocDelimiter(delimiter string) string {
 				} else if string(delimiter[i]) == ")" {
 					depth--
 					if depth == 0 {
-						innerStr := strings.Join(inner, "")
+						innerStr = strings.Join(inner, "")
 						innerStr = collapseWhitespace(innerStr)
 						result = append(result, innerStr)
 						result = append(result, ")")

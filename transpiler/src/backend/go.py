@@ -528,7 +528,8 @@ func _parseInt(s string, base int) int {
         hoisted_vars = getattr(stmt, 'hoisted_vars', [])
         for name, typ in hoisted_vars:
             type_str = self._type_to_go(typ) if typ else "interface{}"
-            # If type is interface{} but function returns a specific type, try to infer
+            # If type is interface{} but function returns a tuple, try to infer
+            # position-based type (only for tuple returns where vars are in specific positions)
             if type_str == "interface{}" and self._current_return_type:
                 if isinstance(self._current_return_type, Tuple):
                     # For tuple returns, check if variable is returned in a known position
@@ -536,10 +537,8 @@ func _parseInt(s string, base int) int {
                     ret_type = self._infer_tuple_element_type(name, stmt, self._current_return_type)
                     if ret_type:
                         type_str = self._type_to_go(ret_type)
-                else:
-                    ret_str = self._type_to_go(self._current_return_type)
-                    if ret_str and ret_str != "interface{}" and ret_str != "":
-                        type_str = ret_str
+                # Don't override interface{} with non-tuple return type - the var might not
+                # be related to the return value at all
             go_name = self._to_camel(name)
             self._line(f"var {go_name} {type_str}")
             self._hoisted_in_try.add(name)

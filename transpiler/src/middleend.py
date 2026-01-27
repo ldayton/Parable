@@ -680,11 +680,17 @@ def _analyze_hoisting(func: Function) -> None:
                 # Find vars used after this statement
                 used_after = _collect_used_vars(stmts[i + 1:])
 
-                # Vars needing hoisting = first assigned inside AND used after
-                needs_hoisting = [
-                    (name, typ) for name, typ in inner_new.items()
-                    if name in used_after
-                ]
+                # Find vars assigned in then_body but used in else_body (cross-branch)
+                then_new = _vars_first_assigned_in(stmt.then_body, declared)
+                else_used = _collect_used_vars(stmt.else_body)
+
+                # Vars needing hoisting = first assigned inside AND (used after OR cross-branch)
+                needs_hoisting = []
+                for name, typ in inner_new.items():
+                    if name in used_after:
+                        needs_hoisting.append((name, typ))
+                    elif name in then_new and name in else_used:
+                        needs_hoisting.append((name, typ))
                 stmt.hoisted_vars = needs_hoisting
 
                 # These are now effectively declared for subsequent analysis

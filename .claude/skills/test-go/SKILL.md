@@ -16,11 +16,12 @@ All paths are relative to `/Users/lily/source/Parable/`:
 | Path | Description |
 |------|-------------|
 | `src/parable.py` | Python source being transpiled |
-| `src/parable.go` | Working Go code (committed, don't edit directly) |
-| `transpiler/dist/parable.go` | Generated Go output from transpiler |
-| `transpiler/src/` | Transpiler source code to edit |
+| `transpiler/parable-old-transpiler.go` | Working Go code from old transpiler (reference only, DO NOT modify) |
+| `transpiler/dist/parable.go` | Generated Go output from new transpiler |
+| `transpiler/src/` | New transpiler source code to edit |
+| `tools/transpiler/src/transpiler/` | Old transpiler source (reference only) |
 
-The transpiler writes to `transpiler/dist/parable.go`. The `just test-new-go` target copies this to `src/parable.go` temporarily to run tests, then you must restore it from git.
+The `just test-new-go` target transpiles, writes to `transpiler/dist/`, and runs tests from there.
 
 ## Workflow
 
@@ -38,24 +39,24 @@ Store `baseline_passed = X` and `baseline_failed = Y`.
 
 Run with verbose output to see specific failures:
 ```bash
-cd /Users/lily/source/Parable/src && go run ./cmd/run-tests -v 2>&1 | head -100
+cd /Users/lily/source/Parable/transpiler/dist && go run ./cmd/run-tests -v ../../tests 2>&1 | head -100
 ```
 
 Pick a failure that looks tractable. Smaller tests (oils/, parable/) are easier than large ones (gnu-bash/).
 
 Get details on a specific test:
 ```bash
-cd /Users/lily/source/Parable/src && go run ./cmd/run-tests -f "test name" -v 2>&1
+cd /Users/lily/source/Parable/transpiler/dist && go run ./cmd/run-tests -v -f "test name" ../../tests 2>&1
 ```
 
 ### Step 3: Compare generated vs working code
 
-The working Go code is in git. Compare specific functions:
+The working Go code from the old transpiler is at `transpiler/parable-old-transpiler.go`. Compare specific functions:
 ```bash
-git -C /Users/lily/source/Parable show HEAD:src/parable.go | grep -A 50 "func.*FunctionName"
+grep -A 50 "func.*FunctionName" /Users/lily/source/Parable/transpiler/parable-old-transpiler.go
 ```
 
-Compare with generated code:
+Compare with generated code from new transpiler:
 ```bash
 grep -A 50 "func.*FunctionName" /Users/lily/source/Parable/transpiler/dist/parable.go
 ```
@@ -88,11 +89,6 @@ git add src/ dist/parable.go
 git commit -m "transpiler: [description] (X→Y tests passing)"
 ```
 
-**Always restore src/parable.go after testing:**
-```bash
-git -C /Users/lily/source/Parable checkout src/parable.go
-```
-
 If no improvement, revert changes and try a different approach.
 
 ### Step 7: Report
@@ -117,5 +113,4 @@ Commit: [hash or "no commit - no improvement"]
 
 - **Only use `just test-new-go`** - no other just targets
 - Only commit when tests improve
-- Always restore `src/parable.go` from git after testing
 - Small incremental fixes are better than big risky changes

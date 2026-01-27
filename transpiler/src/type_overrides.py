@@ -122,6 +122,7 @@ NODE_METHOD_TYPES: dict[str, str] = {
     "_strip_locale_string_dollars": "Word",
     "_format_command_substitutions": "Word",
     "_strip_arith_line_continuations": "Word",
+    "get_cond_formatted_value": "Word",
 }
 
 # Maps kind string values to struct names

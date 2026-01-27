@@ -100,6 +100,19 @@ func _parseInt(s string, base int) int {
 	return int(n)
 }
 
+// _mapGet returns the value for key from map m, or defaultVal if not found
+func _mapGet[K comparable, V any](m map[K]V, key K, defaultVal V) V {
+	if v, ok := m[key]; ok {
+		return v
+	}
+	return defaultVal
+}
+
+// _intToStr converts an integer to its string representation
+func _intToStr(n int) string {
+	return strconv.Itoa(n)
+}
+
 const (
 	TokenTypeEOF                  = 0
 	TokenTypeWORD                 = 1
@@ -2028,10 +2041,10 @@ func (self *Word) ansiCToBytes(inner string) []byte {
 			c := string(inner[i+1])
 			simple := getAnsiEscape(c)
 			if simple >= 0 {
-				result = append(result, simple)
+				result = append(result, byte(simple))
 				i += 2
 			} else if c == "'" {
-				result = append(result, 39)
+				result = append(result, byte(39))
 				i += 2
 			} else if c == "x" {
 				if i+2 < len(inner) && string(inner[i+2]) == "{" {
@@ -2065,7 +2078,7 @@ func (self *Word) ansiCToBytes(inner string) []byte {
 						self.appendWithCtlesc(&result, byteVal)
 						i = j
 					} else {
-						result = append(result, int(string(inner[i])[0]))
+						result = append(result, byte(int(string(inner[i])[0])))
 						i++
 					}
 				}
@@ -2082,7 +2095,7 @@ func (self *Word) ansiCToBytes(inner string) []byte {
 					result = append(result, []byte(string(rune(codepoint)))...)
 					i = j
 				} else {
-					result = append(result, int(string(inner[i])[0]))
+					result = append(result, byte(int(string(inner[i])[0])))
 					i++
 				}
 			} else if c == "U" {
@@ -2098,7 +2111,7 @@ func (self *Word) ansiCToBytes(inner string) []byte {
 					result = append(result, []byte(string(rune(codepoint)))...)
 					i = j
 				} else {
-					result = append(result, int(string(inner[i])[0]))
+					result = append(result, byte(int(string(inner[i])[0])))
 					i++
 				}
 			} else if c == "c" {
@@ -2115,7 +2128,7 @@ func (self *Word) ansiCToBytes(inner string) []byte {
 					self.appendWithCtlesc(&result, ctrlVal)
 					i += 3 + skipExtra
 				} else {
-					result = append(result, int(string(inner[i])[0]))
+					result = append(result, byte(int(string(inner[i])[0])))
 					i++
 				}
 			} else if c == "0" {
@@ -2145,8 +2158,8 @@ func (self *Word) ansiCToBytes(inner string) []byte {
 				self.appendWithCtlesc(&result, byteVal)
 				i = j
 			} else {
-				result = append(result, 92)
-				result = append(result, int(c[0]))
+				result = append(result, byte(92))
+				result = append(result, byte(int(c[0])))
 				i += 2
 			}
 		} else {
@@ -2821,6 +2834,7 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 		case *ArithmeticExpansion:
 			hasArith = true
 		default:
+			p = p.(Node)
 			cmdsubParts = append(cmdsubParts, self.collectCmdsubs(p)...)
 			procsubParts = append(procsubParts, self.collectProcsubs(p)...)
 		}
@@ -2948,7 +2962,7 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 			inner = substring(value, i+2, j-1)
 			if cmdsubIdx < len(cmdsubParts) {
 				node = cmdsubParts[cmdsubIdx]
-				formatted = formatCmdsubNode(node.Command, 0, false, false, false)
+				formatted = formatCmdsubNode(node.(*CommandSubstitution).Command, 0, false, false, false)
 				cmdsubIdx++
 			} else {
 				func() {
@@ -3055,7 +3069,7 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 				compact = startsWithSubshell(node.(*CommandSubstitution).Command)
 				formatted = formatCmdsubNode(node.(*CommandSubstitution).Command, 0, true, compact, true)
 				rawContent := substring(value, i+2, j-1)
-				if node.(*CommandSubstitution).Command.Kind == "subshell" {
+				if node.(*CommandSubstitution).Command.GetKind() == "subshell" {
 					leadingWsEnd := 0
 					for leadingWsEnd < len(rawContent) && strings.Contains(" \t\n", string(rawContent[leadingWsEnd])) {
 						leadingWsEnd++
@@ -3381,7 +3395,7 @@ func (self *Pipeline) ToSexp() string {
 	var cmd Node
 	for i < len(self.Commands) {
 		cmd = self.Commands[i]
-		switch _ := cmd.(type) {
+		switch cmd.(type) {
 		case *PipeBoth:
 			i++
 			continue
@@ -3413,7 +3427,7 @@ func (self *Pipeline) ToSexp() string {
 		pair = cmds[j]
 		cmd = pair.F0
 		needs = pair.F1
-		if needs != nil && cmd.GetKind() != "command" {
+		if needs && cmd.GetKind() != "command" {
 			result = "(pipe " + cmd.ToSexp() + " (redirect \">&\" 1) " + result + ")"
 		} else {
 			result = "(pipe " + self.cmdSexp(cmd, needs) + " " + result + ")"
@@ -3451,27 +3465,27 @@ func (self *List) GetKind() string { return self.Kind }
 
 func (self *List) ToSexp() string {
 	parts := append(self.Parts[:0:0], self.Parts...)
-	opNames := map[string]interface{}{"&&": "and", "||": "or", ";": "semi", "\n": "semi", "&": "background"}
-	for len(parts) > 1 && parts[len(parts)-1].GetKind() == "operator" && parts[len(parts)-1].Op == ";" || parts[len(parts)-1].Op == "\n" {
+	opNames := map[string]string{"&&": "and", "||": "or", ";": "semi", "\n": "semi", "&": "background"}
+	for len(parts) > 1 && parts[len(parts)-1].GetKind() == "operator" && parts[len(parts)-1].(*Operator).Op == ";" || parts[len(parts)-1].(*Operator).Op == "\n" {
 		parts = sublist(parts, 0, len(parts)-1)
 	}
 	if len(parts) == 1 {
 		return parts[0].ToSexp()
 	}
-	if parts[len(parts)-1].GetKind() == "operator" && parts[len(parts)-1].Op == "&" {
+	if parts[len(parts)-1].GetKind() == "operator" && parts[len(parts)-1].(*Operator).Op == "&" {
 		for _, i := range Range(len(parts)-3, 0, -2) {
-			if parts[i].GetKind() == "operator" && parts[i].Op == ";" || parts[i].Op == "\n" {
+			if parts[i].GetKind() == "operator" && parts[i].(*Operator).Op == ";" || parts[i].(*Operator).Op == "\n" {
 				left := sublist(parts, 0, i)
 				right := sublist(parts, i+1, len(parts)-1)
-				var leftSexp interface{}
+				var leftSexp string
 				if len(left) > 1 {
-					leftSexp = &List{Parts: left}.ToSexp()
+					leftSexp = (&List{Parts: left}).ToSexp()
 				} else {
 					leftSexp = left[0].ToSexp()
 				}
-				var rightSexp interface{}
+				var rightSexp string
 				if len(right) > 1 {
-					rightSexp = &List{Parts: right}.ToSexp()
+					rightSexp = (&List{Parts: right}).ToSexp()
 				} else {
 					rightSexp = right[0].ToSexp()
 				}
@@ -3489,17 +3503,18 @@ func (self *List) ToSexp() string {
 }
 
 func (self *List) toSexpWithPrecedence(parts []Node, opNames map[string]string) string {
-	semiPositions := []interface{}{}
+	semiPositions := []int{}
 	for _, i := range Range(len(parts)) {
-		if parts[i].Kind == "operator" && parts[i].Op == ";" || parts[i].Op == "\n" {
+		if parts[i].GetKind() == "operator" && parts[i].(*Operator).Op == ";" || parts[i].(*Operator).Op == "\n" {
 			semiPositions = append(semiPositions, i)
 		}
 	}
 	if len(semiPositions) > 0 {
 		segments := [][]Node{}
 		start := 0
+		var seg []Node
 		for _, pos := range semiPositions {
-			seg := sublist(parts, start, pos)
+			seg = sublist(parts, start, pos)
 			if len(seg) > 0 && seg[0].GetKind() != "operator" {
 				segments = append(segments, seg)
 			}
@@ -3525,14 +3540,14 @@ func (self *List) toSexpAmpAndHigher(parts []Node, opNames map[string]string) st
 	if len(parts) == 1 {
 		return parts[0].ToSexp()
 	}
-	ampPositions := []interface{}{}
+	ampPositions := []int{}
 	for _, i := range Range(1, len(parts)-1, 2) {
-		if parts[i].Kind == "operator" && parts[i].Op == "&" {
+		if parts[i].GetKind() == "operator" && parts[i].(*Operator).Op == "&" {
 			ampPositions = append(ampPositions, i)
 		}
 	}
 	if len(ampPositions) > 0 {
-		segments := []interface{}{}
+		segments := [][]Node{}
 		start := 0
 		for _, pos := range ampPositions {
 			segments = append(segments, sublist(parts, start, pos))
@@ -3556,7 +3571,7 @@ func (self *List) toSexpAndOr(parts []Node, opNames map[string]string) string {
 	for _, i := range Range(1, len(parts)-1, 2) {
 		op := parts[i]
 		cmd := parts[i+1]
-		opName := opNames.Get(op.Op, op.Op)
+		opName := _mapGet(opNames, op.(*Operator).Op, op.(*Operator).Op)
 		result = "(" + opName + " " + result + " " + cmd.ToSexp() + ")"
 	}
 	return result
@@ -3570,8 +3585,8 @@ type Operator struct {
 func (self *Operator) GetKind() string { return self.Kind }
 
 func (self *Operator) ToSexp() string {
-	names := map[string]interface{}{"&&": "and", "||": "or", ";": "semi", "&": "bg", "|": "pipe"}
-	return "(" + names.Get(self.Op, self.Op) + ")"
+	names := map[string]string{"&&": "and", "||": "or", ";": "semi", "&": "bg", "|": "pipe"}
+	return "(" + _mapGet(names, self.Op, self.Op) + ")"
 }
 
 type PipeBoth struct {
@@ -3637,11 +3652,11 @@ func (self *Redirect) ToSexp() string {
 			}
 		}
 	}
-	targetVal := self.Target.Value
-	targetVal = self.Target.expandAllAnsiCQuotes(targetVal)
-	targetVal = self.Target.stripLocaleStringDollars(targetVal)
-	targetVal = self.Target.formatCommandSubstitutions(targetVal)
-	targetVal = self.Target.stripArithLineContinuations(targetVal)
+	targetVal := self.Target.(*Word).Value
+	targetVal = self.Target.(*Word).expandAllAnsiCQuotes(targetVal)
+	targetVal = self.Target.(*Word).stripLocaleStringDollars(targetVal)
+	targetVal = self.Target.(*Word).formatCommandSubstitutions(targetVal, false)
+	targetVal = self.Target.(*Word).stripArithLineContinuations(targetVal)
 	if strings.HasSuffix(targetVal, "\\") && !strings.HasSuffix(targetVal, "\\\\") {
 		targetVal = targetVal + "\\"
 	}
@@ -3652,11 +3667,11 @@ func (self *Redirect) ToSexp() string {
 			op = "<&"
 		}
 		raw := substring(targetVal, 1, len(targetVal))
-		if _strIsDigit(raw) && Int(raw) <= 2147483647 {
-			return "(redirect \"" + op + "\" " + Str(Int(raw)) + ")"
+		if _strIsDigit(raw) && _parseInt(raw, 10) <= 2147483647 {
+			return "(redirect \"" + op + "\" " + string(_parseInt(raw, 10)) + ")"
 		}
-		if strings.HasSuffix(raw, "-") && _strIsDigit(raw[:len(raw)-1]) && Int(raw[:len(raw)-1]) <= 2147483647 {
-			return "(redirect \"" + op + "\" " + Str(Int(raw[:len(raw)-1])) + ")"
+		if strings.HasSuffix(raw, "-") && _strIsDigit(raw[:len(raw)-1]) && _parseInt(raw[:len(raw)-1], 10) <= 2147483647 {
+			return "(redirect \"" + op + "\" " + string(_parseInt(raw[:len(raw)-1], 10)) + ")"
 		}
 		if targetVal == "&-" {
 			return "(redirect \">&-\" 0)"
@@ -3671,16 +3686,16 @@ func (self *Redirect) ToSexp() string {
 		return "(redirect \"" + op + "\" \"" + fdTarget + "\")"
 	}
 	if op == ">&" || op == "<&" {
-		if _strIsDigit(targetVal) && Int(targetVal) <= 2147483647 {
-			return "(redirect \"" + op + "\" " + Str(Int(targetVal)) + ")"
+		if _strIsDigit(targetVal) && _parseInt(targetVal, 10) <= 2147483647 {
+			return "(redirect \"" + op + "\" " + string(_parseInt(targetVal, 10)) + ")"
 		}
 		if targetVal == "-" {
 			return "(redirect \">&-\" 0)"
 		}
-		if strings.HasSuffix(targetVal, "-") && _strIsDigit(targetVal[:len(targetVal)-1]) && Int(targetVal[:len(targetVal)-1]) <= 2147483647 {
-			return "(redirect \"" + op + "\" " + Str(Int(targetVal[:len(targetVal)-1])) + ")"
+		if strings.HasSuffix(targetVal, "-") && _strIsDigit(targetVal[:len(targetVal)-1]) && _parseInt(targetVal[:len(targetVal)-1], 10) <= 2147483647 {
+			return "(redirect \"" + op + "\" " + string(_parseInt(targetVal[:len(targetVal)-1], 10)) + ")"
 		}
-		outVal := func() interface{} {
+		outVal := func() string {
 			if strings.HasSuffix(targetVal, "-") {
 				return targetVal[:len(targetVal)-1]
 			} else {
@@ -3730,7 +3745,7 @@ func (self *Subshell) GetKind() string { return self.Kind }
 
 func (self *Subshell) ToSexp() string {
 	base := "(subshell " + self.Body.ToSexp() + ")"
-	return appendRedirects(base, self.Redirects)
+	return appendRedirects(base, *self.Redirects)
 }
 
 type BraceGroup struct {
@@ -3743,7 +3758,7 @@ func (self *BraceGroup) GetKind() string { return self.Kind }
 
 func (self *BraceGroup) ToSexp() string {
 	base := "(brace-group " + self.Body.ToSexp() + ")"
-	return appendRedirects(base, self.Redirects)
+	return appendRedirects(base, *self.Redirects)
 }
 
 type If struct {
@@ -3815,16 +3830,16 @@ func (self *For) ToSexp() string {
 		}
 		suffix = " " + strings.Join(redirectParts, " ")
 	}
-	tempWord := &Word{Value: self.Var, Parts: []interface{}{}}
+	tempWord := &Word{Value: self.Var, Parts: []Node{}}
 	varFormatted := tempWord.formatCommandSubstitutions(self.Var, false)
 	varEscaped := strings.ReplaceAll(strings.ReplaceAll(varFormatted, "\\", "\\\\"), "\"", "\\\"")
 	if self.Words == nil {
 		return "(for (word \"" + varEscaped + "\") (in (word \"\\\"$@\\\"\")) " + self.Body.ToSexp() + ")" + suffix
-	} else if len(self.Words) == 0 {
+	} else if len(*self.Words) == 0 {
 		return "(for (word \"" + varEscaped + "\") (in) " + self.Body.ToSexp() + ")" + suffix
 	} else {
 		wordParts := []string{}
-		for _, w := range self.Words {
+		for _, w := range *self.Words {
 			wordParts = append(wordParts, w.ToSexp())
 		}
 		wordStrs := strings.Join(wordParts, " ")
@@ -3900,10 +3915,10 @@ func (self *Select) ToSexp() string {
 		suffix = " " + strings.Join(redirectParts, " ")
 	}
 	varEscaped := strings.ReplaceAll(strings.ReplaceAll(self.Var, "\\", "\\\\"), "\"", "\\\"")
-	var inClause interface{}
+	var inClause string
 	if self.Words != nil {
 		wordParts := []string{}
-		for _, w := range self.Words {
+		for _, w := range *self.Words {
 			wordParts = append(wordParts, w.ToSexp())
 		}
 		wordStrs := strings.Join(wordParts, " ")
@@ -3975,7 +3990,7 @@ func (self *CasePattern) ToSexp() string {
 			depth--
 			i++
 		} else if ch == "[" {
-			result0, result1, result2 := consumeBracketClass(self.Pattern, i, depth)
+			result0, result1, _ := consumeBracketClass(self.Pattern, i, depth)
 			i = result0
 			current = append(current, result1...)
 		} else if ch == "'" && depth == 0 {
@@ -3998,7 +4013,7 @@ func (self *CasePattern) ToSexp() string {
 	alternatives = append(alternatives, strings.Join(current, ""))
 	wordList := []string{}
 	for _, alt := range alternatives {
-		wordList = append(wordList, &Word{Value: alt}.ToSexp())
+		wordList = append(wordList, (&Word{Value: alt}).ToSexp())
 	}
 	patternStr := strings.Join(wordList, " ")
 	parts := []string{"(pattern (" + patternStr + ")"}
@@ -4124,7 +4139,7 @@ type ArithmeticCommand struct {
 func (self *ArithmeticCommand) GetKind() string { return self.Kind }
 
 func (self *ArithmeticCommand) ToSexp() string {
-	formatted := &Word{Value: self.RawContent}.formatCommandSubstitutions(self.RawContent)
+	formatted := (&Word{Value: self.RawContent}).formatCommandSubstitutions(self.RawContent, true)
 	escaped := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(formatted, "\\", "\\\\"), "\"", "\\\""), "\n", "\\n"), "\t", "\\t")
 	result := "(arith (word \"" + escaped + "\"))"
 	if len(self.Redirects) > 0 {
@@ -4409,12 +4424,16 @@ func (self *ConditionalExpr) GetKind() string { return self.Kind }
 
 func (self *ConditionalExpr) ToSexp() string {
 	body := self.Body
+	var result string
 	switch body := body.(type) {
-	case str:
+	case string:
 		escaped := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(body, "\\", "\\\\"), "\"", "\\\""), "\n", "\\n")
-		result := "(cond \"" + escaped + "\")"
+		result = "(cond \"" + escaped + "\")"
 	default:
-		result := "(cond " + body.ToSexp() + ")"
+		{
+			body := body.(Node)
+			result = "(cond " + body.ToSexp() + ")"
+		}
 	}
 	if len(self.Redirects) > 0 {
 		redirectParts := []string{}
@@ -4436,7 +4455,7 @@ type UnaryTest struct {
 func (self *UnaryTest) GetKind() string { return self.Kind }
 
 func (self *UnaryTest) ToSexp() string {
-	operandVal := self.Operand.GetCondFormattedValue()
+	operandVal := self.Operand.(*Word).GetCondFormattedValue()
 	return "(cond-unary \"" + self.Op + "\" (cond-term \"" + operandVal + "\"))"
 }
 
@@ -4450,8 +4469,8 @@ type BinaryTest struct {
 func (self *BinaryTest) GetKind() string { return self.Kind }
 
 func (self *BinaryTest) ToSexp() string {
-	leftVal := self.Left.GetCondFormattedValue()
-	rightVal := self.Right.GetCondFormattedValue()
+	leftVal := self.Left.(*Word).GetCondFormattedValue()
+	rightVal := self.Right.(*Word).GetCondFormattedValue()
 	return "(cond-binary \"" + self.Op + "\" (cond-term \"" + leftVal + "\") (cond-term \"" + rightVal + "\"))"
 }
 
@@ -4567,7 +4586,7 @@ func (self *Parser) setState(flag int) {
 }
 
 func (self *Parser) clearState(flag int) {
-	self.parserState = (self.parserState & ~flag)
+	self.parserState = (self.parserState & ^flag)
 }
 
 func (self *Parser) inState(flag int) bool {
@@ -4916,7 +4935,7 @@ func (self *Parser) PeekWord() string {
 		self.Pos = savedPos
 		return ""
 	}
-	chars := []interface{}{}
+	chars := []string{}
 	for !self.AtEnd() && !isMetachar(self.Peek()) {
 		ch := self.Peek()
 		if isQuote(ch) {
@@ -5130,7 +5149,7 @@ func (self *Parser) parseFunsub(start int) (Node, string) {
 }
 
 func (self *Parser) isAssignmentWord(word Node) bool {
-	return assignment(word.Value, 0) != -1
+	return assignment(word.(*Word).Value, 0) != -1
 }
 
 func (self *Parser) parseBacktickSubstitution() (Node, string) {
@@ -6019,6 +6038,7 @@ func (self *Parser) arithParsePostfix() Node {
 				}
 				left = &ArithSubscript{Array: left.Name, Index: index}
 			default:
+				left = left.(*ArithSubscript)
 				break
 			}
 		} else {
@@ -6082,7 +6102,7 @@ func (self *Parser) arithParseExpansion() Node {
 	if c == "{" {
 		return self.arithParseBracedParam()
 	}
-	nameChars := []interface{}{}
+	nameChars := []string{}
 	for !self.arithAtEnd() {
 		ch := self.arithPeek(0)
 		if _strIsAlnum(ch) || ch == "_" {
@@ -6157,10 +6177,10 @@ func (self *Parser) arithParseCmdsub() Node {
 
 func (self *Parser) arithParseBracedParam() Node {
 	self.arithAdvance()
-	var nameChars []interface{}
+	var nameChars []string
 	if self.arithPeek(0) == "!" {
 		self.arithAdvance()
-		nameChars = []interface{}{}
+		nameChars = []string{}
 		for !self.arithAtEnd() && self.arithPeek(0) != "}" {
 			nameChars = append(nameChars, self.arithAdvance())
 		}
@@ -6169,14 +6189,14 @@ func (self *Parser) arithParseBracedParam() Node {
 	}
 	if self.arithPeek(0) == "#" {
 		self.arithAdvance()
-		nameChars = []interface{}{}
+		nameChars = []string{}
 		for !self.arithAtEnd() && self.arithPeek(0) != "}" {
 			nameChars = append(nameChars, self.arithAdvance())
 		}
 		self.arithConsume("}")
 		return &ParamLength{Param: strings.Join(nameChars, "")}
 	}
-	nameChars = []interface{}{}
+	nameChars = []string{}
 	var ch string
 	for !self.arithAtEnd() {
 		ch = self.arithPeek(0)
@@ -6190,7 +6210,7 @@ func (self *Parser) arithParseBracedParam() Node {
 		nameChars = append(nameChars, self.arithAdvance())
 	}
 	name := strings.Join(nameChars, "")
-	opChars := []interface{}{}
+	opChars := []string{}
 	depth := 1
 	for !self.arithAtEnd() && depth > 0 {
 		ch = self.arithPeek(0)
@@ -6300,7 +6320,7 @@ func (self *Parser) arithParseBacktick() Node {
 
 func (self *Parser) arithParseNumberOrVar() Node {
 	self.arithSkipWs()
-	chars := []interface{}{}
+	chars := []string{}
 	c := self.arithPeek(0)
 	var ch string
 	if _strIsDigit(c) {
@@ -6315,7 +6335,7 @@ func (self *Parser) arithParseNumberOrVar() Node {
 		prefix := strings.Join(chars, "")
 		if !self.arithAtEnd() && self.arithPeek(0) == "$" {
 			expansion := self.arithParseExpansion()
-			return &ArithConcat{Parts: []interface{}{&ArithNumber{Value: prefix}, expansion}}
+			return &ArithConcat{Parts: []*ArithNumber{&ArithNumber{Value: prefix}, expansion}}
 		}
 		return &ArithNumber{Value: prefix}
 	}
@@ -6352,7 +6372,7 @@ func (self *Parser) parseDeprecatedArithmetic() (Node, string) {
 
 func (self *Parser) parseParamExpansion(inDquote bool) (Node, string) {
 	self.syncLexer()
-	result0, result1 := self.lexer.readParamExpansion(inDquote)
+	_, _ := self.lexer.readParamExpansion(inDquote)
 	self.syncParser()
 	return result
 }
@@ -6369,7 +6389,7 @@ func (self *Parser) ParseRedirect() interface{} {
 	if self.Peek() == "{" {
 		saved := self.Pos
 		self.Advance()
-		varnameChars := []interface{}{}
+		varnameChars := []string{}
 		inBracket := false
 		for !self.AtEnd() && !isRedirectChar(self.Peek()) {
 			ch = self.Peek()
@@ -6426,13 +6446,13 @@ func (self *Parser) ParseRedirect() interface{} {
 			self.Pos = saved
 		}
 	}
-	var fdChars []interface{}
+	var fdChars []string
 	if varfd == "" && self.Peek() != "" && _strIsDigit(self.Peek()) {
-		fdChars = []interface{}{}
+		fdChars = []string{}
 		for !self.AtEnd() && _strIsDigit(self.Peek()) {
 			fdChars = append(fdChars, self.Advance())
 		}
-		fd = Int(strings.Join(fdChars, ""))
+		fd = _parseInt(strings.Join(fdChars, ""), 10)
 	}
 	ch = self.Peek()
 	var op string
@@ -6508,7 +6528,7 @@ func (self *Parser) ParseRedirect() interface{} {
 	if varfd != "" {
 		op = "{" + varfd + "}" + op
 	} else if fd != nil {
-		op = Str(fd) + op
+		op = intToStr(fd) + op
 	}
 	if !self.AtEnd() && self.Peek() == "&" {
 		self.Advance()
@@ -6527,7 +6547,7 @@ func (self *Parser) ParseRedirect() interface{} {
 			var innerWord *Word
 			if !self.AtEnd() && _strIsDigit(self.Peek()) || self.Peek() == "-" {
 				wordStart := self.Pos
-				fdChars = []interface{}{}
+				fdChars = []string{}
 				for !self.AtEnd() && _strIsDigit(self.Peek()) {
 					fdChars = append(fdChars, self.Advance())
 				}
@@ -7431,7 +7451,7 @@ func (self *Parser) parseForArith() *ForArith {
 	self.Advance()
 	self.Advance()
 	parts := []string{}
-	current := []interface{}{}
+	current := []string{}
 	parenDepth := 0
 	for !self.AtEnd() {
 		ch := self.Peek()
@@ -7452,7 +7472,7 @@ func (self *Parser) parseForArith() *ForArith {
 			}
 		} else if ch == ";" && parenDepth == 0 {
 			parts = append(parts, strings.TrimLeft(strings.Join(current, ""), " \t"))
-			current = []interface{}{}
+			current = []string{}
 			self.Advance()
 		} else {
 			current = append(current, self.Advance())
@@ -7582,7 +7602,7 @@ func (self *Parser) ParseCase() *Case {
 			self.Advance()
 			self.SkipWhitespaceAndNewlines()
 		}
-		patternChars := []interface{}{}
+		patternChars := []string{}
 		extglobDepth := 0
 		for !self.AtEnd() {
 			ch := self.Peek()
@@ -7740,7 +7760,7 @@ func (self *Parser) ParseCoproc() *Coproc {
 		return nil
 	}
 	self.SkipWhitespace()
-	name := nil
+	name := ""
 	ch := ""
 	if !self.AtEnd() {
 		ch = self.Peek()
@@ -8187,7 +8207,7 @@ func (self *Parser) ParsePipeline() Node {
 				if inner.Pipeline != nil {
 					return inner.Pipeline
 				} else {
-					return &Command{Words: []interface{}{}}
+					return &Command{Words: []Node{}}
 				}
 			}
 			return &Negation{Pipeline: inner}
@@ -8218,7 +8238,7 @@ func (self *Parser) parseSimplePipeline() Node {
 	commands := []Node{cmd}
 	for true {
 		self.SkipWhitespace()
-		tokenType, value := self.lexPeekOperator()
+		tokenType, _ := self.lexPeekOperator()
 		if tokenType == 0 {
 			break
 		}
@@ -8386,7 +8406,7 @@ func (self *Parser) ParseComment() Node {
 func (self *Parser) Parse() []Node {
 	source := strings.TrimSpace(self.Source)
 	if !(source != "") {
-		return []Node{&Empty{}}
+		return []*Empty{&Empty{}}
 	}
 	results := []Node{}
 	for true {
@@ -8424,7 +8444,7 @@ func (self *Parser) Parse() []Node {
 		}
 	}
 	if !(len(results) > 0) {
-		return []Node{&Empty{}}
+		return []*Empty{&Empty{}}
 	}
 	if self.sawNewlineInSingleQuote && self.Source != "" && string(self.Source[len(self.Source)-1]) == "\\" && !(len(self.Source) >= 3 && self.Source[len(self.Source)-3:len(self.Source)-1] == "\\\n") {
 		if !self.lastWordOnOwnLine(results) {
@@ -8461,7 +8481,7 @@ func (self *Parser) findLastWord(node Node) *Word {
 	case *Command:
 		if len(node.Words) > 0 {
 			lastWord := node.Words[len(node.Words)-1]
-			if strings.HasSuffix(lastWord.Value, "\\") {
+			if strings.HasSuffix(lastWord.(*Word).Value, "\\") {
 				return lastWord
 			}
 		}
@@ -8616,7 +8636,7 @@ func appendRedirects(base string, redirects []Node) string {
 }
 
 func formatArithVal(s string) string {
-	w := &Word{Value: s, Parts: []interface{}{}}
+	w := &Word{Value: s, Parts: []Node{}}
 	val := w.expandAllAnsiCQuotes(s)
 	val = w.stripLocaleStringDollars(val)
 	val = w.formatCommandSubstitutions(val, false)
@@ -8725,12 +8745,12 @@ func formatCondBody(node Node) string {
 	kind := node.GetKind()
 	if kind == "unary-test" {
 		operandVal := node.Operand.GetCondFormattedValue()
-		return node.Op + " " + operandVal
+		return node.(*Operator).Op + " " + operandVal
 	}
 	if kind == "binary-test" {
 		leftVal := node.Left.GetCondFormattedValue()
 		rightVal := node.Right.GetCondFormattedValue()
-		return leftVal + " " + node.Op + " " + rightVal
+		return leftVal + " " + node.(*Operator).Op + " " + rightVal
 	}
 	if kind == "cond-and" {
 		return formatCondBody(node.Left) + " && " + formatCondBody(node.Right)
@@ -8748,7 +8768,7 @@ func formatCondBody(node Node) string {
 }
 
 func startsWithSubshell(node Node) bool {
-	switch _ := node.(type) {
+	switch node.(type) {
 	case *Subshell:
 		return true
 	}
@@ -8777,13 +8797,15 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 	}
 	sp := repeatStr(" ", indent)
 	innerSp := repeatStr(" ", indent+4)
-	switch _ := node.(type) {
+	switch node.(type) {
 	case *Empty:
 		return ""
 	}
+	var redirectParts []string
+	var result string
 	switch node := node.(type) {
 	case *Command:
-		parts := []interface{}{}
+		parts := []string{}
 		for _, w := range node.Words {
 			val := w.expandAllAnsiCQuotes(w.Value)
 			val = w.stripLocaleStringDollars(val)
@@ -8801,10 +8823,9 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		for _, r := range node.Redirects {
 			parts = append(parts, formatRedirect(r, false, false))
 		}
-		var result interface{}
 		if compactRedirects && len(node.Words) > 0 && len(node.Redirects) > 0 {
 			wordParts := parts[:len(node.Words)]
-			redirectParts := parts[len(node.Words):]
+			redirectParts = parts[len(node.Words):]
 			result = strings.Join(wordParts, " ") + strings.Join(redirectParts, "")
 		} else {
 			result = strings.Join(parts, " ")
@@ -8814,18 +8835,21 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		}
 		return result
 	}
+	var i int
+	var cmd interface{}
+	var hasHeredoc bool
+	var firstNl int
 	switch node := node.(type) {
 	case *Pipeline:
 		cmds := []struct {
 			F0 interface{}
 			F1 bool
 		}{}
-		i := 0
-		var cmd interface{}
+		i = 0
 		var needsRedirect bool
 		for i < len(node.Commands) {
 			cmd = node.Commands[i]
-			switch _ := cmd.(type) {
+			switch cmd.(type) {
 			case *PipeBoth:
 				i++
 				continue
@@ -8843,17 +8867,16 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 			unknownLvalue := cmds[idx]
 			formatted := formatCmdsubNode(cmd, indent, inProcsub, false, procsubFirst && idx == 0)
 			isLast := idx == len(cmds)-1
-			hasHeredoc := false
+			hasHeredoc = false
 			if cmd.GetKind() == "command" && cmd.Redirects != nil {
 				for _, r := range cmd.Redirects {
-					switch _ := r.(type) {
+					switch r.(type) {
 					case Heredoc:
 						hasHeredoc = true
 						break
 					}
 				}
 			}
-			var firstNl int
 			if needsRedirect {
 				if hasHeredoc {
 					firstNl = strings.Index(formatted, "\n")
@@ -8899,11 +8922,11 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 	}
 	switch node := node.(type) {
 	case *List:
-		hasHeredoc := false
+		hasHeredoc = false
 		for _, p := range node.Parts {
 			if p.Kind == "command" && p.Redirects != nil {
 				for _, r := range p.Redirects {
-					switch _ := r.(type) {
+					switch r.(type) {
 					case Heredoc:
 						hasHeredoc = true
 						break
@@ -8915,7 +8938,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 					for _, cmd := range p.Commands {
 						if cmd.GetKind() == "command" && cmd.Redirects != nil {
 							for _, r := range cmd.Redirects {
-								switch _ := r.(type) {
+								switch r.(type) {
 								case Heredoc:
 									hasHeredoc = true
 									break
@@ -9019,9 +9042,10 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		}
 		return s
 	}
+	var cond string
 	switch node := node.(type) {
 	case *If:
-		cond := formatCmdsubNode(node.Condition, indent, false, false, false)
+		cond = formatCmdsubNode(node.Condition, indent, false, false, false)
 		thenBody := formatCmdsubNode(node.ThenBody, indent+4, false, false, false)
 		result = "if " + cond + "; then\n" + innerSp + thenBody + ";"
 		if node.ElseBody != nil {
@@ -9031,10 +9055,11 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		result = result + "\n" + sp + "fi"
 		return result
 	}
+	var body string
 	switch node := node.(type) {
 	case *While:
-		cond := formatCmdsubNode(node.Condition, indent, false, false, false)
-		body := formatCmdsubNode(node.Body, indent+4, false, false, false)
+		cond = formatCmdsubNode(node.Condition, indent, false, false, false)
+		body = formatCmdsubNode(node.Body, indent+4, false, false, false)
 		result = "while " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done"
 		if len(node.Redirects) > 0 {
 			for _, r := range node.Redirects {
@@ -9045,8 +9070,8 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 	}
 	switch node := node.(type) {
 	case *Until:
-		cond := formatCmdsubNode(node.Condition, indent, false, false, false)
-		body := formatCmdsubNode(node.Body, indent+4, false, false, false)
+		cond = formatCmdsubNode(node.Condition, indent, false, false, false)
+		body = formatCmdsubNode(node.Body, indent+4, false, false, false)
 		result = "until " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done"
 		if len(node.Redirects) > 0 {
 			for _, r := range node.Redirects {
@@ -9058,11 +9083,10 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 	switch node := node.(type) {
 	case *For:
 		var_ := node.Var
-		body := formatCmdsubNode(node.Body, indent+4, false, false, false)
-		var result interface{}
+		body = formatCmdsubNode(node.Body, indent+4, false, false, false)
 		if node.Words != nil {
 			wordVals := []interface{}{}
-			for _, w := range node.Words {
+			for _, w := range *node.Words {
 				wordVals = append(wordVals, w.Value)
 			}
 			words := strings.Join(wordVals, " ")
@@ -9083,7 +9107,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 	}
 	switch node := node.(type) {
 	case *ForArith:
-		body := formatCmdsubNode(node.Body, indent+4, false, false, false)
+		body = formatCmdsubNode(node.Body, indent+4, false, false, false)
 		result = "for ((" + node.Init + "; " + node.Cond + "; " + node.Incr + "))\ndo\n" + innerSp + body + ";\n" + sp + "done"
 		if len(node.Redirects) > 0 {
 			for _, r := range node.Redirects {
@@ -9092,15 +9116,15 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		}
 		return result
 	}
+	var redirects string
 	switch node := node.(type) {
 	case *Case:
 		word := node.Word.Value
 		patterns := []interface{}{}
-		i := 0
+		i = 0
 		for i < len(node.Patterns) {
 			p := node.Patterns[i]
 			pat := strings.ReplaceAll(p.Pattern, "|", " | ")
-			var body string
 			if p.Body != nil {
 				body = formatCmdsubNode(p.Body, indent+8, false, false, false)
 			} else {
@@ -9124,9 +9148,9 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 			i++
 		}
 		patternStr := strings.Join(patterns, "\n"+repeatStr(" ", indent+4))
-		redirects := ""
+		redirects = ""
 		if len(node.Redirects) > 0 {
-			redirectParts := []interface{}{}
+			redirectParts = []interface{}{}
 			for _, r := range node.Redirects {
 				redirectParts = append(redirectParts, formatRedirect(r, false, false))
 			}
@@ -9150,10 +9174,10 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 	switch node := node.(type) {
 	case *Subshell:
 		body = formatCmdsubNode(node.Body, indent, inProcsub, compactRedirects, false)
-		redirects := ""
+		redirects = ""
 		if node.Redirects != nil {
-			redirectParts := []interface{}{}
-			for _, r := range node.Redirects {
+			redirectParts = []interface{}{}
+			for _, r := range *node.Redirects {
 				redirectParts = append(redirectParts, formatRedirect(r, false, false))
 			}
 			redirects = strings.Join(redirectParts, " ")
@@ -9180,10 +9204,10 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 				return "; }"
 			}
 		}()
-		redirects := ""
+		redirects = ""
 		if node.Redirects != nil {
-			redirectParts := []interface{}{}
-			for _, r := range node.Redirects {
+			redirectParts = []interface{}{}
+			for _, r := range *node.Redirects {
 				redirectParts = append(redirectParts, formatRedirect(r, false, false))
 			}
 			redirects = strings.Join(redirectParts, " ")
@@ -9227,18 +9251,18 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 }
 
 func formatRedirect(r Node, compact bool, heredocOpOnly bool) string {
+	var op string
 	switch r := r.(type) {
 	case Heredoc:
-		var op string
 		if r.StripTabs != nil {
 			op = "<<-"
 		} else {
 			op = "<<"
 		}
 		if r.Fd != nil && r.Fd != 0 {
-			op = Str(r.Fd) + op
+			op = string(r.Fd) + op
 		}
-		var delim interface{}
+		var delim string
 		if r.Quoted != nil {
 			delim = "'" + r.Delimiter + "'"
 		} else {
@@ -9249,7 +9273,7 @@ func formatRedirect(r Node, compact bool, heredocOpOnly bool) string {
 		}
 		return op + delim + "\n" + r.Content + r.Delimiter + "\n"
 	}
-	op = r.Op
+	op = r.(*Operator).Op
 	if op == "1>" {
 		op = ">"
 	} else if op == "0<" {

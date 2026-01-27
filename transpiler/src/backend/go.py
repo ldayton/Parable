@@ -392,8 +392,11 @@ func _intToStr(n int) string {
     def _emit_stmt_TupleAssign(self, stmt: TupleAssign) -> None:
         """Emit tuple unpacking: a, b := func()"""
         targets = []
-        for t in stmt.targets:
-            if isinstance(t, VarLV):
+        unused_indices = getattr(stmt, 'unused_indices', [])
+        for i, t in enumerate(stmt.targets):
+            if i in unused_indices:
+                targets.append("_")
+            elif isinstance(t, VarLV):
                 if t.name == "_":
                     targets.append("_")
                 else:
@@ -744,7 +747,60 @@ func _intToStr(n int) string {
     def _emit_stmt_SoftFail(self, stmt: SoftFail) -> None:
         self._line("return nil")
 
+    def _uses_node_methods(self, stmts: list[Stmt], binding: str) -> bool:
+        """Check if binding variable is used with Node interface methods in statements."""
+        NODE_METHODS = {"ToSexp", "GetKind", "to_sexp", "get_kind"}
+        def check_expr(expr) -> bool:
+            if expr is None:
+                return False
+            if isinstance(expr, MethodCall):
+                if isinstance(expr.obj, Var) and expr.obj.name == binding:
+                    if expr.method in NODE_METHODS:
+                        return True
+            # Check BinaryOp (common for string concatenation with method calls)
+            if isinstance(expr, BinaryOp):
+                if check_expr(expr.left) or check_expr(expr.right):
+                    return True
+            # Check other attributes
+            for attr in ('operand', 'cond', 'then_expr', 'else_expr', 'expr', 'index', 'obj', 'value'):
+                if hasattr(expr, attr) and check_expr(getattr(expr, attr)):
+                    return True
+            if hasattr(expr, 'args'):
+                for arg in expr.args:
+                    if check_expr(arg):
+                        return True
+            if hasattr(expr, 'parts'):
+                for part in expr.parts:
+                    if check_expr(part):
+                        return True
+            return False
+        def check_stmt(stmt: Stmt) -> bool:
+            if isinstance(stmt, (Assign, OpAssign)):
+                return check_expr(stmt.value)
+            if isinstance(stmt, ExprStmt):
+                return check_expr(stmt.expr)
+            if isinstance(stmt, Return) and stmt.value:
+                return check_expr(stmt.value)
+            if isinstance(stmt, If):
+                if check_expr(stmt.cond):
+                    return True
+                for s in stmt.then_body + stmt.else_body:
+                    if check_stmt(s):
+                        return True
+            return False
+        for stmt in stmts:
+            if check_stmt(stmt):
+                return True
+        return False
+
     def _emit_stmt_TypeSwitch(self, stmt: TypeSwitch) -> None:
+        # Emit hoisted variable declarations before the switch
+        hoisted_vars = getattr(stmt, 'hoisted_vars', [])
+        for name, typ in hoisted_vars:
+            type_str = self._type_to_go(typ) if typ else "interface{}"
+            go_name = self._to_camel(name)
+            self._line(f"var {go_name} {type_str}")
+            self._hoisted_in_try.add(name)
         expr = self._emit_expr(stmt.expr)
         # If binding is unused, emit without binding to avoid Go syntax error
         binding_unused = getattr(stmt, 'binding_unused', False)
@@ -763,12 +819,43 @@ func _intToStr(n int) string {
         if stmt.default:
             self._line("default:")
             self.indent += 1
-            for s in stmt.default:
-                self._emit_stmt(s)
+            # In default case, binding has type interface{} - assert back to original type
+            needs_node_assertion = False
+            if not binding_unused:
+                binding = self._to_camel(stmt.binding)
+                expr_typ = getattr(stmt.expr, 'typ', None)
+                if expr_typ:
+                    type_str = self._type_to_go(expr_typ)
+                    if type_str not in ("interface{}", "any"):
+                        # Use = not := since binding is already declared by the switch
+                        self._line(f"{binding} = {binding}.({type_str})")
+                    elif self._uses_node_methods(stmt.default, stmt.binding):
+                        # Need to assert to Node, but must use a new scope for shadowing
+                        needs_node_assertion = True
+            if needs_node_assertion:
+                # Wrap in block to allow := shadowing
+                binding = self._to_camel(stmt.binding)
+                self._line("{")
+                self.indent += 1
+                self._line(f"{binding} := {binding}.(Node)")
+                for s in stmt.default:
+                    self._emit_stmt(s)
+                self.indent -= 1
+                self._line("}")
+            else:
+                for s in stmt.default:
+                    self._emit_stmt(s)
             self.indent -= 1
         self._line("}")
 
     def _emit_stmt_Match(self, stmt: Match) -> None:
+        # Emit hoisted variable declarations before the switch
+        hoisted_vars = getattr(stmt, 'hoisted_vars', [])
+        for name, typ in hoisted_vars:
+            type_str = self._type_to_go(typ) if typ else "interface{}"
+            go_name = self._to_camel(name)
+            self._line(f"var {go_name} {type_str}")
+            self._hoisted_in_try.add(name)
         expr = self._emit_expr(stmt.expr)
         self._line(f"switch {expr} {{")
         for case in stmt.cases:
@@ -1029,10 +1116,12 @@ func _intToStr(n int) string {
 
     def _emit_expr_UnaryOp(self, expr: UnaryOp) -> str:
         operand = self._emit_expr(expr.operand)
+        # Map Python's bitwise NOT (~) to Go's XOR (^)
+        op = "^" if expr.op == "~" else expr.op
         # Wrap complex operands in parens for ! operator
-        if expr.op == "!" and isinstance(expr.operand, (BinaryOp, UnaryOp, IsNil)):
-            return f"{expr.op}({operand})"
-        return f"{expr.op}{operand}"
+        if op == "!" and isinstance(expr.operand, (BinaryOp, UnaryOp, IsNil)):
+            return f"{op}({operand})"
+        return f"{op}{operand}"
 
     def _emit_expr_Ternary(self, expr: Ternary) -> str:
         # Go doesn't have ternary, emit as IIFE

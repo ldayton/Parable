@@ -292,8 +292,12 @@ class Frontend:
                         field_name = target.attr
                         # Track param-to-field mapping: self.field = param
                         is_simple_param = isinstance(stmt.value, ast.Name) and stmt.value.id in info.init_params
+                        # Track constant string assignments: self.kind = "operator"
+                        is_const_str = isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, str)
                         if is_simple_param:
                             info.param_to_field[stmt.value.id] = field_name
+                        elif is_const_str:
+                            info.const_fields[field_name] = stmt.value.value
                         else:
                             # Computed initialization - need constructor
                             has_computed_init = True
@@ -2618,6 +2622,10 @@ class Frontend:
                                 fields[field_name] = self._lower_expr_List(kw.value, expected_type)
                             else:
                                 fields[field_name] = self._lower_expr(kw.value)
+                # Add constant field initializations from __init__
+                for const_name, const_value in struct_info.const_fields.items():
+                    if const_name not in fields:
+                        fields[const_name] = ir.StringLit(value=const_value, typ=STRING, loc=self._loc_from_node(node))
                 return ir.StructLit(
                     struct_name=func_name, fields=fields,
                     typ=Pointer(StructRef(func_name)), loc=self._loc_from_node(node)

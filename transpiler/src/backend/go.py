@@ -1289,6 +1289,13 @@ func _intToStr(n int) string {
             if isinstance(right_type, Set):
                 return f"func() bool {{ _, ok := {right}[{left}]; return !ok }}()"
             return f"!strings.Contains({right}, {left})"
+        # Handle operator precedence: && binds tighter than ||
+        # So a || expression nested inside && needs parentheses
+        if expr.op == "&&":
+            if isinstance(expr.left, BinaryOp) and expr.left.op == "||":
+                left = f"({left})"
+            if isinstance(expr.right, BinaryOp) and expr.right.op == "||":
+                right = f"({right})"
         # Don't wrap comparison, logical, or simple arithmetic in parens
         # Go handles precedence well and parens around conditions look unidiomatic
         if expr.op in ("&&", "||", "==", "!=", "<", ">", "<=", ">=", "+", "-", "*"):

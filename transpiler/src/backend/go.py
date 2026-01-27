@@ -255,6 +255,19 @@ func _parseInt(s string, base int) int {
 	n, _ := strconv.ParseInt(s, base, 64)
 	return int(n)
 }
+
+// _mapGet returns the value for key from map m, or defaultVal if not found
+func _mapGet[K comparable, V any](m map[K]V, key K, defaultVal V) V {
+	if v, ok := m[key]; ok {
+		return v
+	}
+	return defaultVal
+}
+
+// _intToStr converts an integer to its string representation
+func _intToStr(n int) string {
+	return strconv.Itoa(n)
+}
 '''
         for line in helpers.strip().split('\n'):
             self._line_raw(line)
@@ -609,6 +622,13 @@ func _parseInt(s string, base int) int {
         self._line("}")
 
     def _emit_stmt_ForRange(self, stmt: ForRange) -> None:
+        # Emit hoisted variable declarations before the for loop
+        hoisted_vars = getattr(stmt, 'hoisted_vars', [])
+        for name, typ in hoisted_vars:
+            type_str = self._type_to_go(typ) if typ else "interface{}"
+            go_name = self._to_camel(name)
+            self._line(f"var {go_name} {type_str}")
+            self._hoisted_in_try.add(name)
         iterable = self._emit_expr(stmt.iterable)
         idx = stmt.index if stmt.index else "_"
         val = stmt.value if stmt.value else "_"
@@ -809,9 +829,12 @@ func _parseInt(s string, base int) int {
         field = self._to_pascal(expr.field)
         # Interface fields must be accessed via getter methods
         obj_type = getattr(expr.obj, 'typ', None)
-        if isinstance(obj_type, Interface) and obj_type.name == "Node":
-            if expr.field == "kind":
-                return f"{obj}.GetKind()"
+        is_node_type = (
+            (isinstance(obj_type, Interface) and obj_type.name == "Node") or
+            (isinstance(obj_type, StructRef) and obj_type.name == "Node")
+        )
+        if is_node_type and expr.field == "kind":
+            return f"{obj}.GetKind()"
         return f"{obj}.{field}"
 
     def _emit_expr_Index(self, expr: Index) -> str:
@@ -851,6 +874,10 @@ func _parseInt(s string, base int) int {
 
     def _emit_expr_MethodCall(self, expr: MethodCall) -> str:
         obj = self._emit_expr(expr.obj)
+        # Wrap pointer struct literals in parentheses for method calls
+        # &StructName{...}.Method() needs to be (&StructName{...}).Method()
+        if isinstance(expr.obj, StructLit) and isinstance(expr.obj.typ, Pointer):
+            obj = f"({obj})"
         method = expr.method  # Keep original for special cases
         # Handle Python string.join() -> strings.Join(seq, sep)
         if method == "join" and expr.args:
@@ -938,6 +965,13 @@ func _parseInt(s string, base int) int {
         if method == "rfind" and expr.args:
             arg = self._emit_expr(expr.args[0])
             return f"strings.LastIndex({obj}, {arg})"
+        # Handle dict.get(key, default) -> _mapGet(dict, key, default) or direct index
+        if method == "get" and isinstance(expr.receiver_type, Map) and len(expr.args) >= 1:
+            key = self._emit_expr(expr.args[0])
+            if len(expr.args) >= 2:
+                default = self._emit_expr(expr.args[1])
+                return f"_mapGet({obj}, {key}, {default})"
+            return f"{obj}[{key}]"
         method = self._to_pascal(method)
         args = ", ".join(self._emit_expr(a) for a in expr.args)
         return f"{obj}.{method}({args})"

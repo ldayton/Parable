@@ -96,3 +96,61 @@ TUPLE_ELEMENT_TYPES: dict[str, dict[int, Type]] = {
 UNION_FIELDS: dict[tuple[str, str], tuple[str, Type, Type]] = {
     ("ConditionalExpr", "body"): ("bodyKind", STRING, StructRef("Node")),
 }
+
+# Fields that exist on specific Node subtypes (not in Node interface)
+# Maps field_name -> list of struct names that have this field
+# Used for type assertions when accessing fields on Node-typed expressions
+NODE_FIELD_TYPES: dict[str, list[str]] = {
+    # command field - on CommandSubstitution, ProcessSubstitution, Coproc
+    "command": ["CommandSubstitution", "ProcessSubstitution", "Coproc"],
+    # op field - only on Operator
+    "op": ["Operator"],
+    # commands field - only on Pipeline
+    "commands": ["Pipeline"],
+    # parts field - on List (not to be confused with Token.parts)
+    # Note: List.parts needs special handling since other structs also have parts
+    # value field - on Word (primary), ArithNumber, ConditionalExpr, etc.
+    "value": ["Word"],
+}
+
+# Methods that exist on specific Node subtypes (not in Node interface)
+# Maps method_name -> struct name that has this method
+# Used for type assertions when calling methods on Node-typed expressions
+NODE_METHOD_TYPES: dict[str, str] = {
+    # Word methods for string manipulation
+    "_expand_all_ansi_c_quotes": "Word",
+    "_strip_locale_string_dollars": "Word",
+    "_format_command_substitutions": "Word",
+    "_strip_arith_line_continuations": "Word",
+}
+
+# Maps kind string values to struct names
+# Used for type narrowing after kind checks like `x.kind == "operator"`
+KIND_TO_STRUCT: dict[str, str] = {
+    "operator": "Operator",
+    "cmdsub": "CommandSubstitution",
+    "procsub": "ProcessSubstitution",
+    "subshell": "Subshell",
+    "pipe-both": "PipeBoth",
+    "pipeline": "Pipeline",
+    "list": "List",
+    "coproc": "Coproc",
+    "simple": "SimpleCommand",
+    "compound": "CompoundCommand",
+    "function": "FunctionDef",
+    "for": "For",
+    "for-arith": "ForArith",
+    "while": "While",
+    "until": "Until",
+    "if": "If",
+    "case": "Case",
+    "select": "Select",
+    "group": "Group",
+    "word": "Word",
+    "array": "Array",
+    "assignment": "Assignment",
+    "redirect": "Redirect",
+    "heredoc": "HereDoc",
+    "arith-expr": "ArithExpr",
+    "cond-expr": "ConditionalExpr",
+}

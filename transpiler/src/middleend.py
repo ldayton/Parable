@@ -742,6 +742,18 @@ def _analyze_hoisting(func: Function) -> None:
                 declared.update(name for name, _ in needs_hoisting)
                 analyze_stmts(stmt.body, declared)
             elif isinstance(stmt, ForRange):
+                # Find vars first assigned inside for body
+                inner_new = _vars_first_assigned_in(stmt.body, declared)
+                # Find vars used after this statement
+                used_after = _collect_used_vars(stmts[i + 1:])
+                # Vars needing hoisting = first assigned inside AND used after
+                needs_hoisting = [
+                    (name, typ) for name, typ in inner_new.items()
+                    if name in used_after
+                ]
+                stmt.hoisted_vars = needs_hoisting
+                # These are now effectively declared for subsequent analysis
+                declared.update(name for name, _ in needs_hoisting)
                 analyze_stmts(stmt.body, declared)
             elif isinstance(stmt, ForClassic):
                 if stmt.init:

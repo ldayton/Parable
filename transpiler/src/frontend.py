@@ -10,7 +10,7 @@ import ast
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .type_overrides import FIELD_TYPE_OVERRIDES, PARAM_TYPE_OVERRIDES, RETURN_TYPE_OVERRIDES
+from .type_overrides import FIELD_TYPE_OVERRIDES, NODE_FIELD_TYPES, NODE_METHOD_TYPES, PARAM_TYPE_OVERRIDES, RETURN_TYPE_OVERRIDES
 from .ir import (
     BOOL,
     BYTE,
@@ -776,9 +776,15 @@ class Frontend:
             if isinstance(stmt, ast.For):
                 if isinstance(stmt.target, ast.Name):
                     loop_var = stmt.target.id
-                    iterable_type = self._infer_iterable_type(stmt.iter, var_types)
-                    if isinstance(iterable_type, Slice):
-                        var_types[loop_var] = iterable_type.element
+                    # Check for range() call - loop variable is INT
+                    if (isinstance(stmt.iter, ast.Call) and
+                        isinstance(stmt.iter.func, ast.Name) and
+                        stmt.iter.func.id == "range"):
+                        var_types[loop_var] = INT
+                    else:
+                        iterable_type = self._infer_iterable_type(stmt.iter, var_types)
+                        if isinstance(iterable_type, Slice):
+                            var_types[loop_var] = iterable_type.element
                 elif isinstance(stmt.target, ast.Tuple) and len(stmt.target.elts) == 2:
                     if isinstance(stmt.target.elts[1], ast.Name):
                         loop_var = stmt.target.elts[1].id
@@ -848,6 +854,11 @@ class Frontend:
                     # Comparisons and bool ops always produce bool
                     elif isinstance(stmt.value, (ast.Compare, ast.BoolOp)):
                         var_types[var_name] = BOOL
+                    # Infer from list/dict literals - element type inferred later from appends
+                    elif isinstance(stmt.value, ast.List):
+                        var_types[var_name] = Slice(Interface("any"))
+                    elif isinstance(stmt.value, ast.Dict):
+                        var_types[var_name] = Map(STRING, Interface("any"))
                     # Infer from field access: var = obj.field -> var has field's type
                     elif isinstance(stmt.value, ast.Attribute):
                         # Look up field type using local var_types (not self._type_ctx)
@@ -949,13 +960,27 @@ class Frontend:
                         # Handle free function calls: var = func()
                         elif class_name in self.symbols.functions:
                             var_types[target.id] = self.symbols.functions[class_name].return_type
+                        # Handle builtin calls: bytearray(), list(), dict(), etc.
+                        elif class_name == "bytearray":
+                            var_types[target.id] = Slice(BYTE)
+                        elif class_name == "list":
+                            var_types[target.id] = Slice(Interface("any"))
+                        elif class_name == "dict":
+                            var_types[target.id] = Map(Interface("any"), Interface("any"))
         # Third pass: infer types from append() calls (after all variable types are collected)
+        # Note: don't overwrite already-known specific slice types (e.g., bytearray -> []byte)
         for stmt in ast.walk(ast.Module(body=stmts, type_ignores=[])):
             if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
                 call = stmt.value
                 if isinstance(call.func, ast.Attribute) and call.func.attr == "append":
                     if isinstance(call.func.value, ast.Name) and call.args:
                         var_name = call.func.value.id
+                        # Don't overwrite already-known specific slice types (e.g., bytearray)
+                        # But DO infer if current type is generic Slice(any)
+                        if var_name in var_types and isinstance(var_types[var_name], Slice):
+                            current_elem = var_types[var_name].element
+                            if current_elem != Interface("any"):
+                                continue  # Skip - already has specific element type
                         elem_type = self._infer_element_type_from_append_arg(call.args[0], var_types)
                         if elem_type != Interface("any"):
                             var_types[var_name] = Slice(elem_type)
@@ -1480,6 +1505,20 @@ class Frontend:
                     expr=obj, asserted=var_type, safe=True,
                     typ=var_type, loc=self._loc_from_node(node.value)
                 )
+        # Check if accessing a field on a Node-typed expression that isn't in the interface
+        # Node interface only has Kind() method, so any other field needs a type assertion
+        obj_type = getattr(obj, 'typ', None)
+        if self._is_node_interface_type(obj_type) and node.attr != "kind":
+            # Look up which struct types have this field
+            if node.attr in NODE_FIELD_TYPES:
+                struct_names = NODE_FIELD_TYPES[node.attr]
+                # Use the first struct type (default assumption)
+                # For command: CommandSubstitution is first (most common case)
+                asserted_type = Pointer(StructRef(struct_names[0]))
+                obj = ir.TypeAssert(
+                    expr=obj, asserted=asserted_type, safe=True,
+                    typ=asserted_type, loc=self._loc_from_node(node.value)
+                )
         # Infer field type for self.field accesses
         field_type: Type = Interface("any")
         if isinstance(node.value, ast.Name) and node.value.id == "self":
@@ -1488,9 +1527,30 @@ class Frontend:
                 field_info = struct_info.fields.get(node.attr)
                 if field_info:
                     field_type = field_info.typ
+        # Also look up field type from the asserted struct type
+        if isinstance(obj, ir.TypeAssert):
+            asserted = obj.asserted
+            if isinstance(asserted, Pointer) and isinstance(asserted.target, StructRef):
+                struct_name = asserted.target.name
+                if struct_name in self.symbols.structs:
+                    field_info = self.symbols.structs[struct_name].fields.get(node.attr)
+                    if field_info:
+                        field_type = field_info.typ
         return ir.FieldAccess(
             obj=obj, field=node.attr, typ=field_type, loc=self._loc_from_node(node)
         )
+
+    def _is_node_interface_type(self, typ: Type | None) -> bool:
+        """Check if a type is the Node interface type."""
+        if typ is None:
+            return False
+        # Interface("Node")
+        if isinstance(typ, Interface) and typ.name == "Node":
+            return True
+        # StructRef("Node")
+        if isinstance(typ, StructRef) and typ.name == "Node":
+            return True
+        return False
 
     def _lower_expr_Subscript(self, node: ast.Subscript) -> "ir.Expr":
         from . import ir
@@ -1759,9 +1819,23 @@ class Frontend:
             if method == "append" and args:
                 # Look up actual type of the object (might be pointer to slice for params)
                 obj_type = self._infer_expr_type_from_ast(node.func.value)
+                # Check if appending to a byte slice - need to cast int to byte
+                elem_type = None
+                if isinstance(obj_type, Slice):
+                    elem_type = obj_type.element
+                elif isinstance(obj_type, Pointer) and isinstance(obj_type.target, Slice):
+                    elem_type = obj_type.target.element
+                # Coerce int to byte for byte slices (Python bytearray.append accepts int)
+                coerced_args = args
+                if elem_type == BYTE and len(args) == 1:
+                    arg = args[0]
+                    # Check if arg is int-typed (via AST inference or lowered type)
+                    arg_ast_type = self._infer_expr_type_from_ast(node.args[0])
+                    if arg_ast_type == INT or (hasattr(arg, 'typ') and arg.typ == INT):
+                        coerced_args = [ir.Cast(expr=arg, to_type=BYTE, typ=BYTE, loc=arg.loc)]
                 # list.append(x) -> append(list, x) in Go (handled via MethodCall for now)
                 return ir.MethodCall(
-                    obj=obj, method="append", args=args,
+                    obj=obj, method="append", args=coerced_args,
                     receiver_type=obj_type if obj_type != Interface("any") else Slice(Interface("any")),
                     typ=VOID, loc=self._loc_from_node(node)
                 )
@@ -1773,6 +1847,17 @@ class Frontend:
                     obj=obj, method="pop", args=[],
                     receiver_type=obj_type, typ=obj_type.element, loc=self._loc_from_node(node)
                 )
+            # Check if calling a method on a Node-typed expression that needs type assertion
+            # Do this early so we can use the asserted type for default arg lookup
+            if self._is_node_interface_type(obj_type) and method in NODE_METHOD_TYPES:
+                struct_name = NODE_METHOD_TYPES[method]
+                asserted_type = Pointer(StructRef(struct_name))
+                obj = ir.TypeAssert(
+                    expr=obj, asserted=asserted_type, safe=True,
+                    typ=asserted_type, loc=self._loc_from_node(node.func.value)
+                )
+                # Use asserted type for subsequent lookups
+                obj_type = asserted_type
             # Merge keyword arguments into args at proper positions
             args = self._merge_keyword_args(obj_type, method, args, node)
             # Fill in default values for any remaining missing parameters
@@ -1820,6 +1905,30 @@ class Frontend:
                     func="_parseInt", args=args,
                     typ=INT, loc=self._loc_from_node(node)
                 )
+            # Check for int(s) - string to int conversion
+            if func_name == "int" and len(args) == 1:
+                arg_type = self._infer_expr_type_from_ast(node.args[0])
+                if arg_type == STRING:
+                    # String to int: use _parseInt with base 10
+                    return ir.Call(
+                        func="_parseInt",
+                        args=[args[0], ir.IntLit(value=10, typ=INT, loc=self._loc_from_node(node))],
+                        typ=INT, loc=self._loc_from_node(node)
+                    )
+                else:
+                    # Already numeric: just cast to int
+                    return ir.Cast(expr=args[0], to_type=INT, typ=INT, loc=self._loc_from_node(node))
+            # Check for str(n) - int to string conversion
+            if func_name == "str" and len(args) == 1:
+                arg_type = self._infer_expr_type_from_ast(node.args[0])
+                if arg_type == INT:
+                    return ir.Call(
+                        func="_intToStr", args=args,
+                        typ=STRING, loc=self._loc_from_node(node)
+                    )
+                else:
+                    # Already string or convert via fmt
+                    return ir.Cast(expr=args[0], to_type=STRING, typ=STRING, loc=self._loc_from_node(node))
             # Check for ord(c) -> int(c[0]) (get Unicode code point)
             if func_name == "ord" and len(args) == 1:
                 # ord(c) -> cast the first character to int
@@ -1898,9 +2007,15 @@ class Frontend:
         for k, v in zip(node.keys, node.values):
             if k is not None:
                 entries.append((self._lower_expr(k), self._lower_expr(v)))
+        # Infer key and value types from first entry if available
+        key_type: Type = STRING
+        value_type: Type = Interface("any")
+        if node.values and node.values[0]:
+            first_val = node.values[0]
+            value_type = self._infer_expr_type_from_ast(first_val)
         return ir.MapLit(
-            key_type=STRING, value_type=Interface("any"), entries=entries,
-            typ=Map(STRING, Interface("any")), loc=self._loc_from_node(node)
+            key_type=key_type, value_type=value_type, entries=entries,
+            typ=Map(key_type, value_type), loc=self._loc_from_node(node)
         )
 
     def _lower_expr_JoinedStr(self, node: ast.JoinedStr) -> "ir.Expr":

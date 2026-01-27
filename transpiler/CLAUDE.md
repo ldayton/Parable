@@ -7,7 +7,7 @@ Transpiles `../src/parable.py` → Go via an intermediate representation.
 ## Architecture
 
 ```
-../src/parable.py  →  frontend.py  →  IR  →  middleend.py  →  backend/go.py  →  ../src/parable.go
+../src/parable.py  →  frontend.py  →  IR  →  middleend.py  →  backend/go.py  →  dist/parable.go
 ```
 
 - `./src/ir.py` - IR node definitions (types, expressions, statements). Does NOT define middleend annotations.
@@ -18,17 +18,18 @@ Transpiles `../src/parable.py` → Go via an intermediate representation.
 
 ## Paths
 
-| Path                   | Description                        |
-| ---------------------- | ---------------------------------- |
-| `../tools/transpiler/` | Old working Go-specific transpiler |
-| `../src/parable.py`    | Python source to transpile         |
-| `../src/parable.go`    | Go output                          |
+| Path                   | Description                                    |
+| ---------------------- | ---------------------------------------------- |
+| `../tools/transpiler/` | Old working Go-specific transpiler             |
+| `../src/parable.py`    | Python source to transpile                     |
+| `../src/parable.go`    | Go output (old transpiler, used in production) |
+| `dist/parable.go`      | Go output (new transpiler, under development)  |
 
 ## Just Targets
 
 ```
 just emit          # transpile to stdout
-just go            # transpile and write to ../src/parable.go
+just go            # transpile and write to dist/parable.go
 just check         # transpile and verify Go compiles
 just test          # transpile, write, run Go tests
 just test-all      # run all backend compilation tests

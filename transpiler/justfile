@@ -4,10 +4,10 @@ set shell := ["bash", "-o", "pipefail", "-cu"]
 emit:
     uv run python -m src.cli ../src/parable.py
 
-# Transpile and write to src/parable.go
+# Transpile and write to dist/parable.go
 go:
     uv run python -m src.cli ../src/parable.py > /tmp/parable-ir.go
-    gofmt /tmp/parable-ir.go > ../src/parable.go
+    gofmt /tmp/parable-ir.go > dist/parable.go
 
 # Transpile and check if Go compiles
 check:

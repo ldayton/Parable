@@ -115,3 +115,5 @@ DO NOT CONTINUE after a commit
 
 - Only commit when tests improve
 - Small incremental fixes are better than big risky changes
+- Backend must remain generic. It's cheating to look for Parable-specific names.
+- Do not directly modify parable.go, it's generated output.

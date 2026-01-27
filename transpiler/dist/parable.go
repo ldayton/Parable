@@ -9058,7 +9058,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 				}
 			default:
 				p = p.(Node)
-				if len(result) > 0 && !strings.HasSuffix(result[len(result)-1], " ") || strings.HasSuffix(result[len(result)-1], "\n") {
+				if len(result) > 0 && !strings.HasSuffix(result[len(result)-1], " ") && !strings.HasSuffix(result[len(result)-1], "\n") {
 					result = append(result, " ")
 				}
 				formattedCmd := formatCmdsubNode(p, indent, inProcsub, compactRedirects, procsubFirst && cmdCount == 0)

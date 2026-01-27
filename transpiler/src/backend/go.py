@@ -1334,9 +1334,20 @@ func _isNilInterface(i interface{}) bool {
         return f"'{char}'"
 
     def _emit_expr_UnaryOp(self, expr: UnaryOp) -> str:
-        operand = self._emit_expr(expr.operand)
         # Map Python's bitwise NOT (~) to Go's XOR (^)
         op = "^" if expr.op == "~" else expr.op
+        # Handle negated endswith/startswith with tuple: apply De Morgan's law
+        # not x.endswith((" ", "\n")) -> !HasSuffix(x," ") && !HasSuffix(x,"\n")
+        if op == "!" and isinstance(expr.operand, MethodCall):
+            method = expr.operand.method
+            if method in ("endswith", "startswith") and expr.operand.args:
+                arg_node = expr.operand.args[0]
+                if isinstance(arg_node, TupleLit):
+                    obj = self._emit_expr(expr.operand.obj)
+                    func = "strings.HasSuffix" if method == "endswith" else "strings.HasPrefix"
+                    parts = [f"!{func}({obj}, {self._emit_expr(e)})" for e in arg_node.elements]
+                    return " && ".join(parts)
+        operand = self._emit_expr(expr.operand)
         # Wrap complex operands in parens for ! operator
         if op == "!" and isinstance(expr.operand, (BinaryOp, UnaryOp, IsNil)):
             return f"{op}({operand})"

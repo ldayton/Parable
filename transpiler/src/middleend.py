@@ -415,7 +415,19 @@ def _analyze_initial_value_in_stmts(stmts: list[Stmt]) -> None:
                 stmt.catch_var_unused = stmt.catch_var not in used
             else:
                 stmt.catch_var_unused = True
-        elif isinstance(stmt, (Match, TypeSwitch)):
+        elif isinstance(stmt, Match):
+            for case in stmt.cases:
+                _analyze_initial_value_in_stmts(case.body)
+            _analyze_initial_value_in_stmts(stmt.default)
+        elif isinstance(stmt, TypeSwitch):
+            # Check if the binding variable is used in any case body
+            all_stmts: list[Stmt] = []
+            for case in stmt.cases:
+                all_stmts.extend(case.body)
+            all_stmts.extend(stmt.default)
+            used_vars = _collect_used_vars(all_stmts)
+            stmt.binding_unused = stmt.binding not in used_vars
+            # Recurse into case bodies
             for case in stmt.cases:
                 _analyze_initial_value_in_stmts(case.body)
             _analyze_initial_value_in_stmts(stmt.default)
@@ -716,6 +728,18 @@ def _analyze_hoisting(func: Function) -> None:
                     if isinstance(target, VarLV):
                         declared.add(target.name)
             elif isinstance(stmt, While):
+                # Find vars first assigned inside while body
+                inner_new = _vars_first_assigned_in(stmt.body, declared)
+                # Find vars used after this statement
+                used_after = _collect_used_vars(stmts[i + 1:])
+                # Vars needing hoisting = first assigned inside AND used after
+                needs_hoisting = [
+                    (name, typ) for name, typ in inner_new.items()
+                    if name in used_after
+                ]
+                stmt.hoisted_vars = needs_hoisting
+                # These are now effectively declared for subsequent analysis
+                declared.update(name for name, _ in needs_hoisting)
                 analyze_stmts(stmt.body, declared)
             elif isinstance(stmt, ForRange):
                 analyze_stmts(stmt.body, declared)

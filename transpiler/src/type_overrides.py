@@ -5,6 +5,7 @@ Used by the frontend when Python annotations are ambiguous (e.g., bare `list`).
 """
 
 from .ir import (
+    BOOL,
     INT,
     RUNE,
     STRING,
@@ -13,6 +14,7 @@ from .ir import (
     Pointer,
     Slice,
     StructRef,
+    Tuple,
     Type,
 )
 
@@ -64,8 +66,8 @@ FIELD_TYPE_OVERRIDES: dict[tuple[str, str], Type] = {
     # Dynamically created fields for arithmetic parsing
     ("Parser", "_arith_src"): STRING,
     ("Parser", "_arith_pos"): INT,
-    # QuoteState uses tuple stack - use custom struct
-    ("QuoteState", "_stack"): Slice(StructRef("quoteStackEntry")),
+    # QuoteState uses tuple stack - use generic tuple struct
+    ("QuoteState", "_stack"): Slice(Tuple((BOOL, BOOL))),
     ("Parser", "_arith_len"): INT,
 }
 

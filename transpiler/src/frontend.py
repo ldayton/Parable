@@ -785,17 +785,8 @@ class Frontend:
                         iterable_type = self._infer_iterable_type(stmt.iter, var_types)
                         if isinstance(iterable_type, Slice):
                             var_types[loop_var] = iterable_type.element
-        # Second pass: infer other variable types
+        # Second pass: infer variable types from assignments (runs first to populate var_types)
         for stmt in ast.walk(ast.Module(body=stmts, type_ignores=[])):
-            # Infer from append() calls: var.append(x) -> var is []T where T = type(x)
-            if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
-                call = stmt.value
-                if isinstance(call.func, ast.Attribute) and call.func.attr == "append":
-                    if isinstance(call.func.value, ast.Name) and call.args:
-                        var_name = call.func.value.id
-                        elem_type = self._infer_element_type_from_append_arg(call.args[0], var_types)
-                        if elem_type != Interface("any"):
-                            var_types[var_name] = Slice(elem_type)
             # Infer from annotated assignments
             if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
                 py_type = self._annotation_to_str(stmt.annotation)
@@ -874,15 +865,44 @@ class Frontend:
                             field_info = self.symbols.structs[struct_name].fields.get(field_name)
                             if field_info:
                                 var_types[var_name] = field_info.typ
-                    # Infer from subscript/slice on strings: var = str[...] -> string
+                    # Infer from subscript/slice: var = container[...] -> element type
                     elif isinstance(stmt.value, ast.Subscript):
                         container_type: Type = Interface("any")
                         if isinstance(stmt.value.value, ast.Name):
                             container_name = stmt.value.value.id
                             if container_name in var_types:
                                 container_type = var_types[container_name]
+                        # Also handle field access: self.field[i]
+                        elif isinstance(stmt.value.value, ast.Attribute):
+                            attr = stmt.value.value
+                            if isinstance(attr.value, ast.Name):
+                                if attr.value.id == "self" and self._current_class_name:
+                                    struct_info = self.symbols.structs.get(self._current_class_name)
+                                    if struct_info:
+                                        field_info = struct_info.fields.get(attr.attr)
+                                        if field_info:
+                                            container_type = field_info.typ
+                                elif attr.value.id in var_types:
+                                    obj_type = var_types[attr.value.id]
+                                    struct_name = self._extract_struct_name(obj_type)
+                                    if struct_name and struct_name in self.symbols.structs:
+                                        field_info = self.symbols.structs[struct_name].fields.get(attr.attr)
+                                        if field_info:
+                                            container_type = field_info.typ
                         if container_type == STRING:
                             var_types[var_name] = STRING
+                        elif isinstance(container_type, Slice):
+                            # Indexing a slice gives the element type
+                            var_types[var_name] = container_type.element
+                        elif isinstance(container_type, Map):
+                            # Indexing a map gives the value type
+                            var_types[var_name] = container_type.value
+                        elif isinstance(container_type, Tuple):
+                            # Indexing a tuple with constant gives element type
+                            if isinstance(stmt.value.slice, ast.Constant) and isinstance(stmt.value.slice.value, int):
+                                idx = stmt.value.slice.value
+                                if 0 <= idx < len(container_type.elements):
+                                    var_types[var_name] = container_type.elements[idx]
                     # Infer from method calls: var = obj.method() -> method return type
                     elif isinstance(stmt.value, ast.Call) and isinstance(stmt.value.func, ast.Attribute):
                         method_name = stmt.value.func.attr
@@ -929,6 +949,38 @@ class Frontend:
                         # Handle free function calls: var = func()
                         elif class_name in self.symbols.functions:
                             var_types[target.id] = self.symbols.functions[class_name].return_type
+        # Third pass: infer types from append() calls (after all variable types are collected)
+        for stmt in ast.walk(ast.Module(body=stmts, type_ignores=[])):
+            if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+                call = stmt.value
+                if isinstance(call.func, ast.Attribute) and call.func.attr == "append":
+                    if isinstance(call.func.value, ast.Name) and call.args:
+                        var_name = call.func.value.id
+                        elem_type = self._infer_element_type_from_append_arg(call.args[0], var_types)
+                        if elem_type != Interface("any"):
+                            var_types[var_name] = Slice(elem_type)
+        # Fourth pass: re-run assignment type inference to propagate types through chains
+        # This handles cases like: pair = cmds[0]; needs = pair[1]
+        # where pair's type depends on cmds, and needs' type depends on pair
+        for _ in range(2):  # Run a couple iterations to handle multi-step chains
+            for stmt in ast.walk(ast.Module(body=stmts, type_ignores=[])):
+                if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+                    target = stmt.targets[0]
+                    if isinstance(target, ast.Name):
+                        var_name = target.id
+                        if isinstance(stmt.value, ast.Subscript):
+                            container_type: Type = Interface("any")
+                            if isinstance(stmt.value.value, ast.Name):
+                                container_name = stmt.value.value.id
+                                if container_name in var_types:
+                                    container_type = var_types[container_name]
+                            if isinstance(container_type, Slice):
+                                var_types[var_name] = container_type.element
+                            elif isinstance(container_type, Tuple):
+                                if isinstance(stmt.value.slice, ast.Constant) and isinstance(stmt.value.slice.value, int):
+                                    idx = stmt.value.slice.value
+                                    if 0 <= idx < len(container_type.elements):
+                                        var_types[var_name] = container_type.elements[idx]
         return var_types, tuple_vars, sentinel_ints
 
     def _infer_iterable_type(self, node: ast.expr, var_types: dict[str, Type]) -> Type:
@@ -949,27 +1001,106 @@ class Frontend:
 
     def _infer_element_type_from_append_arg(self, arg: ast.expr, var_types: dict[str, Type]) -> Type:
         """Infer slice element type from what's being appended."""
+        # Constant literals
+        if isinstance(arg, ast.Constant):
+            if isinstance(arg.value, bool):
+                return BOOL
+            if isinstance(arg.value, int):
+                return INT
+            if isinstance(arg.value, str):
+                return STRING
+            if isinstance(arg.value, float):
+                return FLOAT
         # Variable reference with known type (e.g., loop variable)
         if isinstance(arg, ast.Name):
             if arg.id in var_types:
                 return var_types[arg.id]
-        # Method call that returns a pointer: .Copy() returns same type
+            # Check function parameters
+            if self._current_func_info:
+                for p in self._current_func_info.params:
+                    if p.name == arg.id:
+                        return p.typ
+        # Field access: self.field or obj.field
+        if isinstance(arg, ast.Attribute):
+            if isinstance(arg.value, ast.Name):
+                if arg.value.id == "self" and self._current_class_name:
+                    struct_info = self.symbols.structs.get(self._current_class_name)
+                    if struct_info:
+                        field_info = struct_info.fields.get(arg.attr)
+                        if field_info:
+                            return field_info.typ
+                elif arg.value.id in var_types:
+                    obj_type = var_types[arg.value.id]
+                    struct_name = self._extract_struct_name(obj_type)
+                    if struct_name and struct_name in self.symbols.structs:
+                        field_info = self.symbols.structs[struct_name].fields.get(arg.attr)
+                        if field_info:
+                            return field_info.typ
+        # Subscript: container[i] -> infer element type from container
+        if isinstance(arg, ast.Subscript):
+            container_type = self._infer_container_type_from_ast(arg.value, var_types)
+            if container_type == STRING:
+                return STRING  # string[i] in Python returns a string
+            if isinstance(container_type, Slice):
+                return container_type.element
+        # Tuple literal: (a, b, ...) -> Tuple(type(a), type(b), ...)
+        if isinstance(arg, ast.Tuple):
+            elem_types = []
+            for elt in arg.elts:
+                elem_types.append(self._infer_element_type_from_append_arg(elt, var_types))
+            return Tuple(tuple(elem_types))
+        # Method calls
         if isinstance(arg, ast.Call) and isinstance(arg.func, ast.Attribute):
             method = arg.func.attr
+            # String methods that return string
+            if method in ("strip", "lstrip", "rstrip", "lower", "upper", "replace", "join", "format", "to_sexp"):
+                return STRING
+            # .Copy() returns same type
             if method == "Copy":
                 # x.Copy() where x is ctx -> *ParseContext
                 if isinstance(arg.func.value, ast.Name):
                     var = arg.func.value.id
                     if var == "ctx":
                         return Pointer(StructRef("ParseContext"))
-        # Constructor calls
+        # Function/constructor calls
         if isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name):
-            class_name = arg.func.id
-            if class_name in self.symbols.structs:
-                info = self.symbols.structs[class_name]
+            func_name = arg.func.id
+            # String conversion functions
+            if func_name in ("str", "string", "substring", "chr"):
+                return STRING
+            # Constructor calls
+            if func_name in self.symbols.structs:
+                info = self.symbols.structs[func_name]
                 if info.is_node:
                     return Interface("Node")
-                return Pointer(StructRef(class_name))
+                return Pointer(StructRef(func_name))
+        return Interface("any")
+
+    def _infer_container_type_from_ast(self, node: ast.expr, var_types: dict[str, Type]) -> Type:
+        """Infer the type of a container expression from AST."""
+        if isinstance(node, ast.Name):
+            if node.id in var_types:
+                return var_types[node.id]
+            # Check function parameters
+            if self._current_func_info:
+                for p in self._current_func_info.params:
+                    if p.name == node.id:
+                        return p.typ
+        elif isinstance(node, ast.Attribute):
+            if isinstance(node.value, ast.Name):
+                if node.value.id == "self" and self._current_class_name:
+                    struct_info = self.symbols.structs.get(self._current_class_name)
+                    if struct_info:
+                        field_info = struct_info.fields.get(node.attr)
+                        if field_info:
+                            return field_info.typ
+                elif node.value.id in var_types:
+                    obj_type = var_types[node.value.id]
+                    struct_name = self._extract_struct_name(obj_type)
+                    if struct_name and struct_name in self.symbols.structs:
+                        field_info = self.symbols.structs[struct_name].fields.get(node.attr)
+                        if field_info:
+                            return field_info.typ
         return Interface("any")
 
     def _synthesize_type(self, expr: "ir.Expr") -> Type:
@@ -1272,6 +1403,9 @@ class Frontend:
         # Int truthy check: n != 0
         if expr_type == INT:
             return ir.BinaryOp(op="!=", left=expr, right=ir.IntLit(value=0, typ=INT), typ=BOOL, loc=self._loc_from_node(node))
+        # Bool: already a bool, just return as-is
+        if expr_type == BOOL:
+            return expr
         # Slice/Map/Set truthy check: len(x) > 0
         if isinstance(expr_type, (Slice, Map, Set)):
             return ir.BinaryOp(op=">", left=ir.Len(expr=expr, typ=INT, loc=self._loc_from_node(node)), right=ir.IntLit(value=0, typ=INT), typ=BOOL, loc=self._loc_from_node(node))
@@ -1387,6 +1521,12 @@ class Frontend:
         obj_type = getattr(obj, 'typ', None)
         if isinstance(obj_type, Slice):
             elem_type = obj_type.element
+        # Handle tuple indexing: tuple[0] -> tuple.F0 (as FieldAccess)
+        if isinstance(obj_type, Tuple) and isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, int):
+            field_idx = node.slice.value
+            if 0 <= field_idx < len(obj_type.elements):
+                elem_type = obj_type.elements[field_idx]
+                return ir.FieldAccess(obj=obj, field=f"F{field_idx}", typ=elem_type, loc=self._loc_from_node(node))
         index_expr = ir.Index(obj=obj, index=idx, typ=elem_type, loc=self._loc_from_node(node))
         # Check if indexing a string - if so, wrap with Cast to string
         # In Go, string[i] returns byte, but Python returns str
@@ -1856,20 +1996,20 @@ class Frontend:
                 # Special case for popping from stack with tuple unpacking
                 if isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Attribute):
                     if node.value.func.attr == "pop":
-                        # a, b = stack.pop() -> entry := stack[len(stack)-1]; stack = stack[:len(stack)-1]; a = entry.A; b = entry.B
+                        # a, b = stack.pop() -> entry := stack[len(stack)-1]; stack = stack[:len(stack)-1]; a = entry.F0; b = entry.F1
                         obj = self._lower_expr(node.value.func.value)
                         obj_lval = self._lower_lvalue(node.value.func.value)
                         lval0 = self._lower_lvalue(target.elts[0])
                         lval1 = self._lower_lvalue(target.elts[1])
                         len_minus_1 = ir.BinaryOp(op="-", left=ir.Len(expr=obj, typ=INT), right=ir.IntLit(value=1, typ=INT), typ=INT)
-                        # Use quoteStackEntry type for the entry
-                        entry_type = StructRef("quoteStackEntry")
+                        # Use Tuple type for the entry (generic tuple struct with F0, F1 fields)
+                        entry_type = Tuple((BOOL, BOOL))
                         entry_var = ir.Var(name="_entry", typ=entry_type)
                         return ir.Block(body=[
                             ir.VarDecl(name="_entry", typ=entry_type, value=ir.Index(obj=obj, index=len_minus_1, typ=entry_type)),
                             ir.Assign(target=obj_lval, value=ir.SliceExpr(obj=obj, high=len_minus_1, typ=Interface("any"))),
-                            ir.Assign(target=lval0, value=ir.FieldAccess(obj=entry_var, field="Single", typ=BOOL)),
-                            ir.Assign(target=lval1, value=ir.FieldAccess(obj=entry_var, field="Double", typ=BOOL)),
+                            ir.Assign(target=lval0, value=ir.FieldAccess(obj=entry_var, field="F0", typ=BOOL)),
+                            ir.Assign(target=lval1, value=ir.FieldAccess(obj=entry_var, field="F1", typ=BOOL)),
                         ], loc=self._loc_from_node(node))
                     else:
                         # General tuple unpacking: a, b = obj.method()

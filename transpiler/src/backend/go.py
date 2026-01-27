@@ -159,15 +159,6 @@ class GoBackend:
         self._line("")
         self._line("var _ = strings.Compare // ensure import is used")
         self._line("")
-        # Emit helper type aliases
-        self._line("// quoteStackEntry holds pushed quote state (single, double)")
-        self._line("type quoteStackEntry struct {")
-        self.indent += 1
-        self._line("Single bool")
-        self._line("Double bool")
-        self.indent -= 1
-        self._line("}")
-        self._line("")
         # Emit string character classification helpers
         self._emit_string_helpers()
 
@@ -598,6 +589,17 @@ func _parseInt(s string, base int) int {
             self._line("}")
 
     def _emit_stmt_While(self, stmt: While) -> None:
+        # Emit hoisted variable declarations before the loop
+        hoisted_vars = getattr(stmt, 'hoisted_vars', [])
+        for name, typ in hoisted_vars:
+            go_name = self._to_camel(name)
+            if typ is not None:
+                go_type = self._type_to_go(typ)
+                self._line(f"var {go_name} {go_type}")
+            else:
+                self._line(f"var {go_name} interface{{}}")
+            # Track hoisted variables to use = instead of := for subsequent assignments
+            self._hoisted_in_try.add(name)
         cond = self._emit_expr(stmt.cond)
         self._line(f"for {cond} {{")
         self.indent += 1
@@ -724,8 +726,13 @@ func _parseInt(s string, base int) int {
 
     def _emit_stmt_TypeSwitch(self, stmt: TypeSwitch) -> None:
         expr = self._emit_expr(stmt.expr)
-        binding = self._to_camel(stmt.binding)
-        self._line(f"switch {binding} := {expr}.(type) {{")
+        # If binding is unused, emit without binding to avoid Go syntax error
+        binding_unused = getattr(stmt, 'binding_unused', False)
+        if binding_unused:
+            self._line(f"switch {expr}.(type) {{")
+        else:
+            binding = self._to_camel(stmt.binding)
+            self._line(f"switch {binding} := {expr}.(type) {{")
         for case in stmt.cases:
             go_type = self._type_to_go(case.typ)
             self._line(f"case {go_type}:")
@@ -820,13 +827,6 @@ func _parseInt(s string, base int) int {
             # Check if indexing into a tuple type (struct with F0, F1, etc.)
             if hasattr(expr, 'obj_type') and isinstance(expr.obj_type, Tuple):
                 return f"{obj}.F{expr.index.value}"
-            # Handle stack entry pattern: stack[i][0] -> stack[i].Single
-            if expr.index.value in (0, 1) and isinstance(expr.obj, Index):
-                inner_obj = self._emit_expr(expr.obj.obj)
-                if "stack" in inner_obj.lower() or "Stack" in inner_obj:
-                    inner_idx = self._emit_expr(expr.obj.index)
-                    field = "Single" if expr.index.value == 0 else "Double"
-                    return f"{inner_obj}[{inner_idx}].{field}"
         result = f"{obj}[{idx}]"
         # In Go, indexing a string returns byte, cast to int if needed
         obj_type = getattr(expr.obj, 'typ', None)
@@ -1057,11 +1057,7 @@ func _parseInt(s string, base int) int {
         return f"make(map[{key_type}]{val_type})"
 
     def _emit_expr_SliceLit(self, expr: SliceLit) -> str:
-        elem_type = expr.element_type
-        # Empty slices with any type default to []string (common pattern in string-heavy code)
-        if not expr.elements and isinstance(elem_type, Interface) and elem_type.name == "any":
-            return "[]string{}"
-        go_elem = self._type_to_go(elem_type)
+        go_elem = self._type_to_go(expr.element_type)
         elements = ", ".join(self._emit_expr(e) for e in expr.elements)
         return f"[]{go_elem}{{{elements}}}"
 
@@ -1091,10 +1087,6 @@ func _parseInt(s string, base int) int {
         """Emit tuple literal as anonymous struct."""
         # Use typed fields from Tuple type if available
         if isinstance(expr.typ, Tuple) and expr.typ.elements:
-            # Special case: (bool, bool) tuples are quoteStackEntry in this codebase
-            if expr.typ.elements == (BOOL, BOOL):
-                vals = ", ".join(self._emit_expr(e) for e in expr.elements)
-                return f"quoteStackEntry{{{vals}}}"
             types = [self._type_to_go(t) for t in expr.typ.elements]
             # Go anonymous struct fields use semicolons as separators
             fields = "; ".join(f"F{i} {t}" for i, t in enumerate(types))

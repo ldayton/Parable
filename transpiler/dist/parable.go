@@ -9,12 +9,6 @@ import (
 
 var _ = strings.Compare // ensure import is used
 
-// quoteStackEntry holds pushed quote state (single, double)
-type quoteStackEntry struct {
-	Single bool
-	Double bool
-}
-
 func _strIsAlnum(s string) bool {
 	for _, r := range s {
 		if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
@@ -199,6 +193,11 @@ const (
 	WORDCTXREGEX                  = 2
 )
 
+type Node interface {
+	GetKind() string
+	ToSexp() string
+}
+
 type ParseError struct {
 	Message string
 	Pos     *int
@@ -258,11 +257,17 @@ type SavedParserState struct {
 type QuoteState struct {
 	Single bool
 	Double bool
-	stack  []quoteStackEntry
+	stack  []struct {
+		F0 bool
+		F1 bool
+	}
 }
 
 func (self *QuoteState) Push() {
-	self.stack = append(self.stack, struct{ Single, Double bool }{self.Single, self.Double})
+	self.stack = append(self.stack, struct {
+		F0 bool
+		F1 bool
+	}{self.Single, self.Double})
 	self.Single = false
 	self.Double = false
 }
@@ -270,10 +275,13 @@ func (self *QuoteState) Push() {
 func (self *QuoteState) Pop() {
 	if len(self.stack) > 0 {
 		{
-			entry := self.stack[len(self.stack)-1]
+			var entry struct {
+				F0 bool
+				F1 bool
+			} = self.stack[len(self.stack)-1]
 			self.stack = self.stack[:len(self.stack)-1]
-			self.Single = entry.Single
-			self.Double = entry.Double
+			self.Single = entry.F0
+			self.Double = entry.F1
 		}
 	}
 }
@@ -294,7 +302,7 @@ func (self *QuoteState) OuterDouble() bool {
 	if len(self.stack) == 0 {
 		return false
 	}
-	return self.stack[len(self.stack)-1].Double
+	return self.stack[len(self.stack)-1].F1
 }
 
 type ParseContext struct {
@@ -1866,17 +1874,13 @@ func (self *Lexer) readFunsub(start int) (Node, string) {
 	return self.parser.parseFunsub(start)
 }
 
-type Node interface {
-	isNode()
-}
-
 type Word struct {
 	Value string
 	Parts []Node
 	Kind  string
 }
 
-func (self *Word) isNode() {}
+func (self *Word) GetKind() string { return self.Kind }
 
 func (self *Word) ToSexp() string {
 	value := self.Value
@@ -2024,10 +2028,10 @@ func (self *Word) ansiCToBytes(inner string) []byte {
 			c := string(inner[i+1])
 			simple := getAnsiEscape(c)
 			if simple >= 0 {
-				result = append(result, byte(simple))
+				result = append(result, simple)
 				i += 2
 			} else if c == "'" {
-				result = append(result, byte(39))
+				result = append(result, 39)
 				i += 2
 			} else if c == "x" {
 				if i+2 < len(inner) && string(inner[i+2]) == "{" {
@@ -2061,7 +2065,7 @@ func (self *Word) ansiCToBytes(inner string) []byte {
 						self.appendWithCtlesc(&result, byteVal)
 						i = j
 					} else {
-						result = append(result, byte(int(string(inner[i])[0])))
+						result = append(result, int(string(inner[i])[0]))
 						i++
 					}
 				}
@@ -2078,7 +2082,7 @@ func (self *Word) ansiCToBytes(inner string) []byte {
 					result = append(result, []byte(string(rune(codepoint)))...)
 					i = j
 				} else {
-					result = append(result, byte(int(string(inner[i])[0])))
+					result = append(result, int(string(inner[i])[0]))
 					i++
 				}
 			} else if c == "U" {
@@ -2094,7 +2098,7 @@ func (self *Word) ansiCToBytes(inner string) []byte {
 					result = append(result, []byte(string(rune(codepoint)))...)
 					i = j
 				} else {
-					result = append(result, byte(int(string(inner[i])[0])))
+					result = append(result, int(string(inner[i])[0]))
 					i++
 				}
 			} else if c == "c" {
@@ -2111,7 +2115,7 @@ func (self *Word) ansiCToBytes(inner string) []byte {
 					self.appendWithCtlesc(&result, ctrlVal)
 					i += 3 + skipExtra
 				} else {
-					result = append(result, byte(int(string(inner[i])[0])))
+					result = append(result, int(string(inner[i])[0]))
 					i++
 				}
 			} else if c == "0" {
@@ -2141,8 +2145,8 @@ func (self *Word) ansiCToBytes(inner string) []byte {
 				self.appendWithCtlesc(&result, byteVal)
 				i = j
 			} else {
-				result = append(result, byte(92))
-				result = append(result, byte(int(c[0])))
+				result = append(result, 92)
+				result = append(result, int(c[0]))
 				i += 2
 			}
 		} else {
@@ -2815,7 +2819,7 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 		case *ProcessSubstitution:
 			procsubParts = append(procsubParts, p)
 		case *ArithmeticExpansion:
-			hasArith := true
+			hasArith = true
 		default:
 			cmdsubParts = append(cmdsubParts, self.collectCmdsubs(p)...)
 			procsubParts = append(procsubParts, self.collectProcsubs(p)...)
@@ -2927,7 +2931,7 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 			continue
 		}
 		var inner string
-		var node interface{}
+		var node Node
 		var formatted string
 		var parser *Parser
 		var parsed Node
@@ -3341,7 +3345,7 @@ type Command struct {
 	Kind      string
 }
 
-func (self *Command) isNode() {}
+func (self *Command) GetKind() string { return self.Kind }
 
 func (self *Command) ToSexp() string {
 	parts := []string{}
@@ -3363,43 +3367,53 @@ type Pipeline struct {
 	Kind     string
 }
 
-func (self *Pipeline) isNode() {}
+func (self *Pipeline) GetKind() string { return self.Kind }
 
 func (self *Pipeline) ToSexp() string {
 	if len(self.Commands) == 1 {
 		return self.Commands[0].ToSexp()
 	}
-	cmds := []string{}
+	cmds := []struct {
+		F0 Node
+		F1 bool
+	}{}
 	i := 0
+	var cmd Node
 	for i < len(self.Commands) {
-		cmd := self.Commands[i]
-		switch cmd := cmd.(type) {
+		cmd = self.Commands[i]
+		switch _ := cmd.(type) {
 		case *PipeBoth:
 			i++
 			continue
 		}
-		needsRedirect := i+1 < len(self.Commands) && self.Commands[i+1].Kind == "pipe-both"
-		cmds = append(cmds, struct{ Single, Double bool }{cmd, needsRedirect})
+		needsRedirect := i+1 < len(self.Commands) && self.Commands[i+1].GetKind() == "pipe-both"
+		cmds = append(cmds, struct {
+			F0 Node
+			F1 bool
+		}{cmd, needsRedirect})
 		i++
 	}
-	var pair interface{}
-	var needs interface{}
+	var pair struct {
+		F0 Node
+		F1 bool
+	}
+	var needs bool
 	if len(cmds) == 1 {
 		pair = cmds[0]
-		cmd = pair[0]
-		needs = pair[1]
+		cmd = pair.F0
+		needs = pair.F1
 		return self.cmdSexp(cmd, needs)
 	}
 	lastPair := cmds[len(cmds)-1]
-	lastCmd := lastPair[0]
-	lastNeeds := lastPair[1]
+	lastCmd := lastPair.F0
+	lastNeeds := lastPair.F1
 	result := self.cmdSexp(lastCmd, lastNeeds)
 	j := len(cmds) - 2
 	for j >= 0 {
 		pair = cmds[j]
-		cmd = pair[0]
-		needs = pair[1]
-		if needs != nil && cmd.Kind != "command" {
+		cmd = pair.F0
+		needs = pair.F1
+		if needs != nil && cmd.GetKind() != "command" {
 			result = "(pipe " + cmd.ToSexp() + " (redirect \">&\" 1) " + result + ")"
 		} else {
 			result = "(pipe " + self.cmdSexp(cmd, needs) + " " + result + ")"
@@ -3433,20 +3447,20 @@ type List struct {
 	Kind  string
 }
 
-func (self *List) isNode() {}
+func (self *List) GetKind() string { return self.Kind }
 
 func (self *List) ToSexp() string {
 	parts := append(self.Parts[:0:0], self.Parts...)
 	opNames := map[string]interface{}{"&&": "and", "||": "or", ";": "semi", "\n": "semi", "&": "background"}
-	for len(parts) > 1 && parts[len(parts)-1].Kind == "operator" && parts[len(parts)-1].Op == ";" || parts[len(parts)-1].Op == "\n" {
+	for len(parts) > 1 && parts[len(parts)-1].GetKind() == "operator" && parts[len(parts)-1].Op == ";" || parts[len(parts)-1].Op == "\n" {
 		parts = sublist(parts, 0, len(parts)-1)
 	}
 	if len(parts) == 1 {
 		return parts[0].ToSexp()
 	}
-	if parts[len(parts)-1].Kind == "operator" && parts[len(parts)-1].Op == "&" {
+	if parts[len(parts)-1].GetKind() == "operator" && parts[len(parts)-1].Op == "&" {
 		for _, i := range Range(len(parts)-3, 0, -2) {
-			if parts[i].Kind == "operator" && parts[i].Op == ";" || parts[i].Op == "\n" {
+			if parts[i].GetKind() == "operator" && parts[i].Op == ";" || parts[i].Op == "\n" {
 				left := sublist(parts, 0, i)
 				right := sublist(parts, i+1, len(parts)-1)
 				var leftSexp interface{}
@@ -3475,7 +3489,7 @@ func (self *List) ToSexp() string {
 }
 
 func (self *List) toSexpWithPrecedence(parts []Node, opNames map[string]string) string {
-	semiPositions := []string{}
+	semiPositions := []interface{}{}
 	for _, i := range Range(len(parts)) {
 		if parts[i].Kind == "operator" && parts[i].Op == ";" || parts[i].Op == "\n" {
 			semiPositions = append(semiPositions, i)
@@ -3486,13 +3500,13 @@ func (self *List) toSexpWithPrecedence(parts []Node, opNames map[string]string) 
 		start := 0
 		for _, pos := range semiPositions {
 			seg := sublist(parts, start, pos)
-			if len(seg) > 0 && seg[0].Kind != "operator" {
+			if len(seg) > 0 && seg[0].GetKind() != "operator" {
 				segments = append(segments, seg)
 			}
 			start = pos + 1
 		}
 		seg = sublist(parts, start, len(parts))
-		if len(seg) > 0 && seg[0].Kind != "operator" {
+		if len(seg) > 0 && seg[0].GetKind() != "operator" {
 			segments = append(segments, seg)
 		}
 		if !(len(segments) > 0) {
@@ -3511,14 +3525,14 @@ func (self *List) toSexpAmpAndHigher(parts []Node, opNames map[string]string) st
 	if len(parts) == 1 {
 		return parts[0].ToSexp()
 	}
-	ampPositions := []string{}
+	ampPositions := []interface{}{}
 	for _, i := range Range(1, len(parts)-1, 2) {
 		if parts[i].Kind == "operator" && parts[i].Op == "&" {
 			ampPositions = append(ampPositions, i)
 		}
 	}
 	if len(ampPositions) > 0 {
-		segments := []string{}
+		segments := []interface{}{}
 		start := 0
 		for _, pos := range ampPositions {
 			segments = append(segments, sublist(parts, start, pos))
@@ -3553,7 +3567,7 @@ type Operator struct {
 	Kind string
 }
 
-func (self *Operator) isNode() {}
+func (self *Operator) GetKind() string { return self.Kind }
 
 func (self *Operator) ToSexp() string {
 	names := map[string]interface{}{"&&": "and", "||": "or", ";": "semi", "&": "bg", "|": "pipe"}
@@ -3564,7 +3578,7 @@ type PipeBoth struct {
 	Kind string
 }
 
-func (self *PipeBoth) isNode() {}
+func (self *PipeBoth) GetKind() string { return self.Kind }
 
 func (self *PipeBoth) ToSexp() string {
 	return "(pipe-both)"
@@ -3574,7 +3588,7 @@ type Empty struct {
 	Kind string
 }
 
-func (self *Empty) isNode() {}
+func (self *Empty) GetKind() string { return self.Kind }
 
 func (self *Empty) ToSexp() string {
 	return ""
@@ -3585,7 +3599,7 @@ type Comment struct {
 	Kind string
 }
 
-func (self *Comment) isNode() {}
+func (self *Comment) GetKind() string { return self.Kind }
 
 func (self *Comment) ToSexp() string {
 	return ""
@@ -3598,7 +3612,7 @@ type Redirect struct {
 	Kind   string
 }
 
-func (self *Redirect) isNode() {}
+func (self *Redirect) GetKind() string { return self.Kind }
 
 func (self *Redirect) ToSexp() string {
 	op := strings.TrimLeft(self.Op, "0123456789")
@@ -3689,7 +3703,7 @@ type HereDoc struct {
 	Kind      string
 }
 
-func (self *HereDoc) isNode() {}
+func (self *HereDoc) GetKind() string { return self.Kind }
 
 func (self *HereDoc) ToSexp() string {
 	op := func() string {
@@ -3712,7 +3726,7 @@ type Subshell struct {
 	Kind      string
 }
 
-func (self *Subshell) isNode() {}
+func (self *Subshell) GetKind() string { return self.Kind }
 
 func (self *Subshell) ToSexp() string {
 	base := "(subshell " + self.Body.ToSexp() + ")"
@@ -3725,7 +3739,7 @@ type BraceGroup struct {
 	Kind      string
 }
 
-func (self *BraceGroup) isNode() {}
+func (self *BraceGroup) GetKind() string { return self.Kind }
 
 func (self *BraceGroup) ToSexp() string {
 	base := "(brace-group " + self.Body.ToSexp() + ")"
@@ -3740,7 +3754,7 @@ type If struct {
 	Kind      string
 }
 
-func (self *If) isNode() {}
+func (self *If) GetKind() string { return self.Kind }
 
 func (self *If) ToSexp() string {
 	result := "(if " + self.Condition.ToSexp() + " " + self.ThenBody.ToSexp()
@@ -3761,7 +3775,7 @@ type While struct {
 	Kind      string
 }
 
-func (self *While) isNode() {}
+func (self *While) GetKind() string { return self.Kind }
 
 func (self *While) ToSexp() string {
 	base := "(while " + self.Condition.ToSexp() + " " + self.Body.ToSexp() + ")"
@@ -3775,7 +3789,7 @@ type Until struct {
 	Kind      string
 }
 
-func (self *Until) isNode() {}
+func (self *Until) GetKind() string { return self.Kind }
 
 func (self *Until) ToSexp() string {
 	base := "(until " + self.Condition.ToSexp() + " " + self.Body.ToSexp() + ")"
@@ -3790,7 +3804,7 @@ type For struct {
 	Kind      string
 }
 
-func (self *For) isNode() {}
+func (self *For) GetKind() string { return self.Kind }
 
 func (self *For) ToSexp() string {
 	suffix := ""
@@ -3801,7 +3815,7 @@ func (self *For) ToSexp() string {
 		}
 		suffix = " " + strings.Join(redirectParts, " ")
 	}
-	tempWord := &Word{Value: self.Var, Parts: []string{}}
+	tempWord := &Word{Value: self.Var, Parts: []interface{}{}}
 	varFormatted := tempWord.formatCommandSubstitutions(self.Var, false)
 	varEscaped := strings.ReplaceAll(strings.ReplaceAll(varFormatted, "\\", "\\\\"), "\"", "\\\"")
 	if self.Words == nil {
@@ -3827,7 +3841,7 @@ type ForArith struct {
 	Kind      string
 }
 
-func (self *ForArith) isNode() {}
+func (self *ForArith) GetKind() string { return self.Kind }
 
 func (self *ForArith) ToSexp() string {
 	suffix := ""
@@ -3874,7 +3888,7 @@ type Select struct {
 	Kind      string
 }
 
-func (self *Select) isNode() {}
+func (self *Select) GetKind() string { return self.Kind }
 
 func (self *Select) ToSexp() string {
 	suffix := ""
@@ -3911,7 +3925,7 @@ type Case struct {
 	Kind      string
 }
 
-func (self *Case) isNode() {}
+func (self *Case) GetKind() string { return self.Kind }
 
 func (self *Case) ToSexp() string {
 	parts := []string{}
@@ -3930,7 +3944,7 @@ type CasePattern struct {
 	Kind       string
 }
 
-func (self *CasePattern) isNode() {}
+func (self *CasePattern) GetKind() string { return self.Kind }
 
 func (self *CasePattern) ToSexp() string {
 	alternatives := []string{}
@@ -3987,7 +4001,7 @@ func (self *CasePattern) ToSexp() string {
 		wordList = append(wordList, &Word{Value: alt}.ToSexp())
 	}
 	patternStr := strings.Join(wordList, " ")
-	parts := []interface{}{"(pattern (" + patternStr + ")"}
+	parts := []string{"(pattern (" + patternStr + ")"}
 	if self.Body != nil {
 		parts = append(parts, " "+self.Body.ToSexp())
 	} else {
@@ -4003,7 +4017,7 @@ type Function struct {
 	Kind string
 }
 
-func (self *Function) isNode() {}
+func (self *Function) GetKind() string { return self.Kind }
 
 func (self *Function) ToSexp() string {
 	return "(function \"" + self.Name + "\" " + self.Body.ToSexp() + ")"
@@ -4016,7 +4030,7 @@ type ParamExpansion struct {
 	Kind  string
 }
 
-func (self *ParamExpansion) isNode() {}
+func (self *ParamExpansion) GetKind() string { return self.Kind }
 
 func (self *ParamExpansion) ToSexp() string {
 	escapedParam := strings.ReplaceAll(strings.ReplaceAll(self.Param, "\\", "\\\\"), "\"", "\\\"")
@@ -4039,7 +4053,7 @@ type ParamLength struct {
 	Kind  string
 }
 
-func (self *ParamLength) isNode() {}
+func (self *ParamLength) GetKind() string { return self.Kind }
 
 func (self *ParamLength) ToSexp() string {
 	escaped := strings.ReplaceAll(strings.ReplaceAll(self.Param, "\\", "\\\\"), "\"", "\\\"")
@@ -4053,7 +4067,7 @@ type ParamIndirect struct {
 	Kind  string
 }
 
-func (self *ParamIndirect) isNode() {}
+func (self *ParamIndirect) GetKind() string { return self.Kind }
 
 func (self *ParamIndirect) ToSexp() string {
 	escaped := strings.ReplaceAll(strings.ReplaceAll(self.Param, "\\", "\\\\"), "\"", "\\\"")
@@ -4077,7 +4091,7 @@ type CommandSubstitution struct {
 	Kind    string
 }
 
-func (self *CommandSubstitution) isNode() {}
+func (self *CommandSubstitution) GetKind() string { return self.Kind }
 
 func (self *CommandSubstitution) ToSexp() string {
 	if self.Brace {
@@ -4091,7 +4105,7 @@ type ArithmeticExpansion struct {
 	Kind       string
 }
 
-func (self *ArithmeticExpansion) isNode() {}
+func (self *ArithmeticExpansion) GetKind() string { return self.Kind }
 
 func (self *ArithmeticExpansion) ToSexp() string {
 	if self.Expression == nil {
@@ -4107,7 +4121,7 @@ type ArithmeticCommand struct {
 	Kind       string
 }
 
-func (self *ArithmeticCommand) isNode() {}
+func (self *ArithmeticCommand) GetKind() string { return self.Kind }
 
 func (self *ArithmeticCommand) ToSexp() string {
 	formatted := &Word{Value: self.RawContent}.formatCommandSubstitutions(self.RawContent)
@@ -4129,7 +4143,7 @@ type ArithNumber struct {
 	Kind  string
 }
 
-func (self *ArithNumber) isNode() {}
+func (self *ArithNumber) GetKind() string { return self.Kind }
 
 func (self *ArithNumber) ToSexp() string {
 	return "(number \"" + self.Value + "\")"
@@ -4139,7 +4153,7 @@ type ArithEmpty struct {
 	Kind string
 }
 
-func (self *ArithEmpty) isNode() {}
+func (self *ArithEmpty) GetKind() string { return self.Kind }
 
 func (self *ArithEmpty) ToSexp() string {
 	return "(empty)"
@@ -4150,7 +4164,7 @@ type ArithVar struct {
 	Kind string
 }
 
-func (self *ArithVar) isNode() {}
+func (self *ArithVar) GetKind() string { return self.Kind }
 
 func (self *ArithVar) ToSexp() string {
 	return "(var \"" + self.Name + "\")"
@@ -4163,7 +4177,7 @@ type ArithBinaryOp struct {
 	Kind  string
 }
 
-func (self *ArithBinaryOp) isNode() {}
+func (self *ArithBinaryOp) GetKind() string { return self.Kind }
 
 func (self *ArithBinaryOp) ToSexp() string {
 	return "(binary-op \"" + self.Op + "\" " + self.Left.ToSexp() + " " + self.Right.ToSexp() + ")"
@@ -4175,7 +4189,7 @@ type ArithUnaryOp struct {
 	Kind    string
 }
 
-func (self *ArithUnaryOp) isNode() {}
+func (self *ArithUnaryOp) GetKind() string { return self.Kind }
 
 func (self *ArithUnaryOp) ToSexp() string {
 	return "(unary-op \"" + self.Op + "\" " + self.Operand.ToSexp() + ")"
@@ -4186,7 +4200,7 @@ type ArithPreIncr struct {
 	Kind    string
 }
 
-func (self *ArithPreIncr) isNode() {}
+func (self *ArithPreIncr) GetKind() string { return self.Kind }
 
 func (self *ArithPreIncr) ToSexp() string {
 	return "(pre-incr " + self.Operand.ToSexp() + ")"
@@ -4197,7 +4211,7 @@ type ArithPostIncr struct {
 	Kind    string
 }
 
-func (self *ArithPostIncr) isNode() {}
+func (self *ArithPostIncr) GetKind() string { return self.Kind }
 
 func (self *ArithPostIncr) ToSexp() string {
 	return "(post-incr " + self.Operand.ToSexp() + ")"
@@ -4208,7 +4222,7 @@ type ArithPreDecr struct {
 	Kind    string
 }
 
-func (self *ArithPreDecr) isNode() {}
+func (self *ArithPreDecr) GetKind() string { return self.Kind }
 
 func (self *ArithPreDecr) ToSexp() string {
 	return "(pre-decr " + self.Operand.ToSexp() + ")"
@@ -4219,7 +4233,7 @@ type ArithPostDecr struct {
 	Kind    string
 }
 
-func (self *ArithPostDecr) isNode() {}
+func (self *ArithPostDecr) GetKind() string { return self.Kind }
 
 func (self *ArithPostDecr) ToSexp() string {
 	return "(post-decr " + self.Operand.ToSexp() + ")"
@@ -4232,7 +4246,7 @@ type ArithAssign struct {
 	Kind   string
 }
 
-func (self *ArithAssign) isNode() {}
+func (self *ArithAssign) GetKind() string { return self.Kind }
 
 func (self *ArithAssign) ToSexp() string {
 	return "(assign \"" + self.Op + "\" " + self.Target.ToSexp() + " " + self.Value.ToSexp() + ")"
@@ -4245,7 +4259,7 @@ type ArithTernary struct {
 	Kind      string
 }
 
-func (self *ArithTernary) isNode() {}
+func (self *ArithTernary) GetKind() string { return self.Kind }
 
 func (self *ArithTernary) ToSexp() string {
 	return "(ternary " + self.Condition.ToSexp() + " " + self.IfTrue.ToSexp() + " " + self.IfFalse.ToSexp() + ")"
@@ -4257,7 +4271,7 @@ type ArithComma struct {
 	Kind  string
 }
 
-func (self *ArithComma) isNode() {}
+func (self *ArithComma) GetKind() string { return self.Kind }
 
 func (self *ArithComma) ToSexp() string {
 	return "(comma " + self.Left.ToSexp() + " " + self.Right.ToSexp() + ")"
@@ -4269,7 +4283,7 @@ type ArithSubscript struct {
 	Kind  string
 }
 
-func (self *ArithSubscript) isNode() {}
+func (self *ArithSubscript) GetKind() string { return self.Kind }
 
 func (self *ArithSubscript) ToSexp() string {
 	return "(subscript \"" + self.Array + "\" " + self.Index.ToSexp() + ")"
@@ -4280,7 +4294,7 @@ type ArithEscape struct {
 	Kind string
 }
 
-func (self *ArithEscape) isNode() {}
+func (self *ArithEscape) GetKind() string { return self.Kind }
 
 func (self *ArithEscape) ToSexp() string {
 	return "(escape \"" + self.Char + "\")"
@@ -4291,7 +4305,7 @@ type ArithDeprecated struct {
 	Kind       string
 }
 
-func (self *ArithDeprecated) isNode() {}
+func (self *ArithDeprecated) GetKind() string { return self.Kind }
 
 func (self *ArithDeprecated) ToSexp() string {
 	escaped := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(self.Expression, "\\", "\\\\"), "\"", "\\\""), "\n", "\\n")
@@ -4303,7 +4317,7 @@ type ArithConcat struct {
 	Kind  string
 }
 
-func (self *ArithConcat) isNode() {}
+func (self *ArithConcat) GetKind() string { return self.Kind }
 
 func (self *ArithConcat) ToSexp() string {
 	sexps := []string{}
@@ -4318,7 +4332,7 @@ type AnsiCQuote struct {
 	Kind    string
 }
 
-func (self *AnsiCQuote) isNode() {}
+func (self *AnsiCQuote) GetKind() string { return self.Kind }
 
 func (self *AnsiCQuote) ToSexp() string {
 	escaped := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(self.Content, "\\", "\\\\"), "\"", "\\\""), "\n", "\\n")
@@ -4330,7 +4344,7 @@ type LocaleString struct {
 	Kind    string
 }
 
-func (self *LocaleString) isNode() {}
+func (self *LocaleString) GetKind() string { return self.Kind }
 
 func (self *LocaleString) ToSexp() string {
 	escaped := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(self.Content, "\\", "\\\\"), "\"", "\\\""), "\n", "\\n")
@@ -4343,7 +4357,7 @@ type ProcessSubstitution struct {
 	Kind      string
 }
 
-func (self *ProcessSubstitution) isNode() {}
+func (self *ProcessSubstitution) GetKind() string { return self.Kind }
 
 func (self *ProcessSubstitution) ToSexp() string {
 	return "(procsub \"" + self.Direction + "\" " + self.Command.ToSexp() + ")"
@@ -4354,7 +4368,7 @@ type Negation struct {
 	Kind     string
 }
 
-func (self *Negation) isNode() {}
+func (self *Negation) GetKind() string { return self.Kind }
 
 func (self *Negation) ToSexp() string {
 	if self.Pipeline == nil {
@@ -4369,7 +4383,7 @@ type Time struct {
 	Kind     string
 }
 
-func (self *Time) isNode() {}
+func (self *Time) GetKind() string { return self.Kind }
 
 func (self *Time) ToSexp() string {
 	if self.Pipeline == nil {
@@ -4391,7 +4405,7 @@ type ConditionalExpr struct {
 	Kind      string
 }
 
-func (self *ConditionalExpr) isNode() {}
+func (self *ConditionalExpr) GetKind() string { return self.Kind }
 
 func (self *ConditionalExpr) ToSexp() string {
 	body := self.Body
@@ -4419,7 +4433,7 @@ type UnaryTest struct {
 	Kind    string
 }
 
-func (self *UnaryTest) isNode() {}
+func (self *UnaryTest) GetKind() string { return self.Kind }
 
 func (self *UnaryTest) ToSexp() string {
 	operandVal := self.Operand.GetCondFormattedValue()
@@ -4433,7 +4447,7 @@ type BinaryTest struct {
 	Kind  string
 }
 
-func (self *BinaryTest) isNode() {}
+func (self *BinaryTest) GetKind() string { return self.Kind }
 
 func (self *BinaryTest) ToSexp() string {
 	leftVal := self.Left.GetCondFormattedValue()
@@ -4447,7 +4461,7 @@ type CondAnd struct {
 	Kind  string
 }
 
-func (self *CondAnd) isNode() {}
+func (self *CondAnd) GetKind() string { return self.Kind }
 
 func (self *CondAnd) ToSexp() string {
 	return "(cond-and " + self.Left.ToSexp() + " " + self.Right.ToSexp() + ")"
@@ -4459,7 +4473,7 @@ type CondOr struct {
 	Kind  string
 }
 
-func (self *CondOr) isNode() {}
+func (self *CondOr) GetKind() string { return self.Kind }
 
 func (self *CondOr) ToSexp() string {
 	return "(cond-or " + self.Left.ToSexp() + " " + self.Right.ToSexp() + ")"
@@ -4470,7 +4484,7 @@ type CondNot struct {
 	Kind    string
 }
 
-func (self *CondNot) isNode() {}
+func (self *CondNot) GetKind() string { return self.Kind }
 
 func (self *CondNot) ToSexp() string {
 	return self.Operand.ToSexp()
@@ -4481,7 +4495,7 @@ type CondParen struct {
 	Kind  string
 }
 
-func (self *CondParen) isNode() {}
+func (self *CondParen) GetKind() string { return self.Kind }
 
 func (self *CondParen) ToSexp() string {
 	return "(cond-expr " + self.Inner.ToSexp() + ")"
@@ -4492,7 +4506,7 @@ type Array struct {
 	Kind     string
 }
 
-func (self *Array) isNode() {}
+func (self *Array) GetKind() string { return self.Kind }
 
 func (self *Array) ToSexp() string {
 	if !(len(self.Elements) > 0) {
@@ -4512,7 +4526,7 @@ type Coproc struct {
 	Kind    string
 }
 
-func (self *Coproc) isNode() {}
+func (self *Coproc) GetKind() string { return self.Kind }
 
 func (self *Coproc) ToSexp() string {
 	var name string
@@ -4858,7 +4872,7 @@ func (self *Parser) atEofToken() bool {
 }
 
 func (self *Parser) collectRedirects() []Node {
-	redirects := []string{}
+	redirects := []interface{}{}
 	for true {
 		self.SkipWhitespace()
 		redirect := self.ParseRedirect()
@@ -4902,7 +4916,7 @@ func (self *Parser) PeekWord() string {
 		self.Pos = savedPos
 		return ""
 	}
-	chars := []string{}
+	chars := []interface{}{}
 	for !self.AtEnd() && !isMetachar(self.Peek()) {
 		ch := self.Peek()
 		if isQuote(ch) {
@@ -5127,7 +5141,7 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 	self.Advance()
 	contentChars := []string{}
 	textChars := []string{"`"}
-	pendingHeredocs := []string{}
+	pendingHeredocs := []interface{}{}
 	inHeredocBody := false
 	currentHeredocDelim := ""
 	currentHeredocStrip := false
@@ -5160,10 +5174,13 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 				inHeredocBody = false
 				if len(pendingHeredocs) > 0 {
 					{
-						entry := pendingHeredocs[len(pendingHeredocs)-1]
+						var entry struct {
+							F0 bool
+							F1 bool
+						} = pendingHeredocs[len(pendingHeredocs)-1]
 						pendingHeredocs = pendingHeredocs[:len(pendingHeredocs)-1]
-						currentHeredocDelim = entry.Single
-						currentHeredocStrip = entry.Double
+						currentHeredocDelim = entry.F0
+						currentHeredocStrip = entry.F1
 					}
 					inHeredocBody = true
 				}
@@ -5178,10 +5195,13 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 				inHeredocBody = false
 				if len(pendingHeredocs) > 0 {
 					{
-						entry := pendingHeredocs[len(pendingHeredocs)-1]
+						var entry struct {
+							F0 bool
+							F1 bool
+						} = pendingHeredocs[len(pendingHeredocs)-1]
 						pendingHeredocs = pendingHeredocs[:len(pendingHeredocs)-1]
-						currentHeredocDelim = entry.Single
-						currentHeredocStrip = entry.Double
+						currentHeredocDelim = entry.F0
+						currentHeredocStrip = entry.F1
 					}
 					inHeredocBody = true
 				}
@@ -5359,7 +5379,10 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 			}
 			delimiter := strings.Join(delimiterChars, "")
 			if delimiter != "" {
-				pendingHeredocs = append(pendingHeredocs, struct{ Single, Double bool }{delimiter, stripTabs})
+				pendingHeredocs = append(pendingHeredocs, struct {
+					F0 string
+					F1 bool
+				}{delimiter, stripTabs})
 			}
 			continue
 		}
@@ -5369,10 +5392,13 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 			textChars = append(textChars, string(ch))
 			if len(pendingHeredocs) > 0 {
 				{
-					entry := pendingHeredocs[len(pendingHeredocs)-1]
+					var entry struct {
+						F0 bool
+						F1 bool
+					} = pendingHeredocs[len(pendingHeredocs)-1]
 					pendingHeredocs = pendingHeredocs[:len(pendingHeredocs)-1]
-					currentHeredocDelim = entry.Single
-					currentHeredocStrip = entry.Double
+					currentHeredocDelim = entry.F0
+					currentHeredocStrip = entry.F1
 				}
 				inHeredocBody = true
 			}
@@ -5991,7 +6017,7 @@ func (self *Parser) arithParsePostfix() Node {
 				if !self.arithConsume("]") {
 					panic(fmt.Sprintf("%s at position %d", "Expected ']' in array subscript", self.arithPos))
 				}
-				left := &ArithSubscript{Array: left.Name, Index: index}
+				left = &ArithSubscript{Array: left.Name, Index: index}
 			default:
 				break
 			}
@@ -6056,7 +6082,7 @@ func (self *Parser) arithParseExpansion() Node {
 	if c == "{" {
 		return self.arithParseBracedParam()
 	}
-	nameChars := []string{}
+	nameChars := []interface{}{}
 	for !self.arithAtEnd() {
 		ch := self.arithPeek(0)
 		if _strIsAlnum(ch) || ch == "_" {
@@ -6134,7 +6160,7 @@ func (self *Parser) arithParseBracedParam() Node {
 	var nameChars []interface{}
 	if self.arithPeek(0) == "!" {
 		self.arithAdvance()
-		nameChars = []string{}
+		nameChars = []interface{}{}
 		for !self.arithAtEnd() && self.arithPeek(0) != "}" {
 			nameChars = append(nameChars, self.arithAdvance())
 		}
@@ -6143,16 +6169,17 @@ func (self *Parser) arithParseBracedParam() Node {
 	}
 	if self.arithPeek(0) == "#" {
 		self.arithAdvance()
-		nameChars = []string{}
+		nameChars = []interface{}{}
 		for !self.arithAtEnd() && self.arithPeek(0) != "}" {
 			nameChars = append(nameChars, self.arithAdvance())
 		}
 		self.arithConsume("}")
 		return &ParamLength{Param: strings.Join(nameChars, "")}
 	}
-	nameChars = []string{}
+	nameChars = []interface{}{}
+	var ch string
 	for !self.arithAtEnd() {
-		ch := self.arithPeek(0)
+		ch = self.arithPeek(0)
 		if ch == "}" {
 			self.arithAdvance()
 			return &ParamExpansion{Param: strings.Join(nameChars, "")}
@@ -6163,7 +6190,7 @@ func (self *Parser) arithParseBracedParam() Node {
 		nameChars = append(nameChars, self.arithAdvance())
 	}
 	name := strings.Join(nameChars, "")
-	opChars := []string{}
+	opChars := []interface{}{}
 	depth := 1
 	for !self.arithAtEnd() && depth > 0 {
 		ch = self.arithPeek(0)
@@ -6273,7 +6300,7 @@ func (self *Parser) arithParseBacktick() Node {
 
 func (self *Parser) arithParseNumberOrVar() Node {
 	self.arithSkipWs()
-	chars := []string{}
+	chars := []interface{}{}
 	c := self.arithPeek(0)
 	var ch string
 	if _strIsDigit(c) {
@@ -6342,7 +6369,7 @@ func (self *Parser) ParseRedirect() interface{} {
 	if self.Peek() == "{" {
 		saved := self.Pos
 		self.Advance()
-		varnameChars := []string{}
+		varnameChars := []interface{}{}
 		inBracket := false
 		for !self.AtEnd() && !isRedirectChar(self.Peek()) {
 			ch = self.Peek()
@@ -6401,7 +6428,7 @@ func (self *Parser) ParseRedirect() interface{} {
 	}
 	var fdChars []interface{}
 	if varfd == "" && self.Peek() != "" && _strIsDigit(self.Peek()) {
-		fdChars = []string{}
+		fdChars = []interface{}{}
 		for !self.AtEnd() && _strIsDigit(self.Peek()) {
 			fdChars = append(fdChars, self.Advance())
 		}
@@ -6500,7 +6527,7 @@ func (self *Parser) ParseRedirect() interface{} {
 			var innerWord *Word
 			if !self.AtEnd() && _strIsDigit(self.Peek()) || self.Peek() == "-" {
 				wordStart := self.Pos
-				fdChars = []string{}
+				fdChars = []interface{}{}
 				for !self.AtEnd() && _strIsDigit(self.Peek()) {
 					fdChars = append(fdChars, self.Advance())
 				}
@@ -6559,6 +6586,8 @@ func (self *Parser) parseHeredocDelimiter() (string, bool) {
 	quoted := false
 	delimiterChars := []string{}
 	for true {
+		var c string
+		var depth int
 		for !self.AtEnd() && !isMetachar(self.Peek()) {
 			ch := self.Peek()
 			if ch == "\"" {
@@ -6574,7 +6603,7 @@ func (self *Parser) parseHeredocDelimiter() (string, bool) {
 				quoted = true
 				self.Advance()
 				for !self.AtEnd() && self.Peek() != "'" {
-					c := self.Advance()
+					c = self.Advance()
 					if c == "\n" {
 						self.sawNewlineInSingleQuote = true
 					}
@@ -6599,7 +6628,7 @@ func (self *Parser) parseHeredocDelimiter() (string, bool) {
 				self.Advance()
 				self.Advance()
 				for !self.AtEnd() && self.Peek() != "'" {
-					c := self.Peek()
+					c = self.Peek()
 					if c == "\\" && self.Pos+1 < self.Length {
 						self.Advance()
 						esc := self.Peek()
@@ -6622,9 +6651,9 @@ func (self *Parser) parseHeredocDelimiter() (string, bool) {
 			} else if isExpansionStart(self.Source, self.Pos, "$(") {
 				delimiterChars = append(delimiterChars, self.Advance())
 				delimiterChars = append(delimiterChars, self.Advance())
-				depth := 1
+				depth = 1
 				for !self.AtEnd() && depth > 0 {
-					c := self.Peek()
+					c = self.Peek()
 					if c == "(" {
 						depth++
 					} else if c == ")" {
@@ -6647,9 +6676,9 @@ func (self *Parser) parseHeredocDelimiter() (string, bool) {
 				} else {
 					delimiterChars = append(delimiterChars, self.Advance())
 					delimiterChars = append(delimiterChars, self.Advance())
-					depth := 0
+					depth = 0
 					for !self.AtEnd() {
-						c := self.Peek()
+						c = self.Peek()
 						if c == "{" {
 							depth++
 						} else if c == "}" {
@@ -6681,9 +6710,9 @@ func (self *Parser) parseHeredocDelimiter() (string, bool) {
 				} else {
 					delimiterChars = append(delimiterChars, self.Advance())
 					delimiterChars = append(delimiterChars, self.Advance())
-					depth := 1
+					depth = 1
 					for !self.AtEnd() && depth > 0 {
-						c := self.Peek()
+						c = self.Peek()
 						if c == "[" {
 							depth++
 						} else if c == "]" {
@@ -6695,7 +6724,7 @@ func (self *Parser) parseHeredocDelimiter() (string, bool) {
 			} else if ch == "`" {
 				delimiterChars = append(delimiterChars, self.Advance())
 				for !self.AtEnd() && self.Peek() != "`" {
-					c := self.Peek()
+					c = self.Peek()
 					if c == "'" {
 						delimiterChars = append(delimiterChars, self.Advance())
 						for !self.AtEnd() && self.Peek() != "'" && self.Peek() != "`" {
@@ -6732,9 +6761,9 @@ func (self *Parser) parseHeredocDelimiter() (string, bool) {
 		if !self.AtEnd() && strings.Contains("<>", self.Peek()) && self.Pos+1 < self.Length && string(self.Source[self.Pos+1]) == "(" {
 			delimiterChars = append(delimiterChars, self.Advance())
 			delimiterChars = append(delimiterChars, self.Advance())
-			depth := 1
+			depth = 1
 			for !self.AtEnd() && depth > 0 {
-				c := self.Peek()
+				c = self.Peek()
 				if c == "(" {
 					depth++
 				} else if c == ")" {
@@ -6841,7 +6870,7 @@ func (self *Parser) gatherHeredocBodies() {
 		}
 		heredoc.Content = strings.Join(contentLines, "")
 	}
-	self.pendingHeredocs = []string{}
+	self.pendingHeredocs = []interface{}{}
 }
 
 func (self *Parser) parseHeredoc(fd *int, stripTabs bool) *HereDoc {
@@ -6863,7 +6892,7 @@ func (self *Parser) parseHeredoc(fd *int, stripTabs bool) *HereDoc {
 
 func (self *Parser) ParseCommand() *Command {
 	words := []*Word{}
-	redirects := []string{}
+	redirects := []interface{}{}
 	for true {
 		self.SkipWhitespace()
 		if self.lexIsCommandTerminator() {
@@ -7402,7 +7431,7 @@ func (self *Parser) parseForArith() *ForArith {
 	self.Advance()
 	self.Advance()
 	parts := []string{}
-	current := []string{}
+	current := []interface{}{}
 	parenDepth := 0
 	for !self.AtEnd() {
 		ch := self.Peek()
@@ -7423,7 +7452,7 @@ func (self *Parser) parseForArith() *ForArith {
 			}
 		} else if ch == ";" && parenDepth == 0 {
 			parts = append(parts, strings.TrimLeft(strings.Join(current, ""), " \t"))
-			current = []string{}
+			current = []interface{}{}
 			self.Advance()
 		} else {
 			current = append(current, self.Advance())
@@ -7553,7 +7582,7 @@ func (self *Parser) ParseCase() *Case {
 			self.Advance()
 			self.SkipWhitespaceAndNewlines()
 		}
-		patternChars := []string{}
+		patternChars := []interface{}{}
 		extglobDepth := 0
 		for !self.AtEnd() {
 			ch := self.Peek()
@@ -8154,11 +8183,11 @@ func (self *Parser) ParsePipeline() Node {
 			self.Advance()
 			self.SkipWhitespace()
 			inner := self.ParsePipeline()
-			if inner != nil && inner.Kind == "negation" {
+			if inner != nil && inner.GetKind() == "negation" {
 				if inner.Pipeline != nil {
 					return inner.Pipeline
 				} else {
-					return &Command{Words: []string{}}
+					return &Command{Words: []interface{}{}}
 				}
 			}
 			return &Negation{Pipeline: inner}
@@ -8587,7 +8616,7 @@ func appendRedirects(base string, redirects []Node) string {
 }
 
 func formatArithVal(s string) string {
-	w := &Word{Value: s, Parts: []string{}}
+	w := &Word{Value: s, Parts: []interface{}{}}
 	val := w.expandAllAnsiCQuotes(s)
 	val = w.stripLocaleStringDollars(val)
 	val = w.formatCommandSubstitutions(val, false)
@@ -8693,7 +8722,7 @@ func consumeBracketClass(s string, start int, depth int) (int, []string, bool) {
 }
 
 func formatCondBody(node Node) string {
-	kind := node.Kind
+	kind := node.GetKind()
 	if kind == "unary-test" {
 		operandVal := node.Operand.GetCondFormattedValue()
 		return node.Op + " " + operandVal
@@ -8719,7 +8748,7 @@ func formatCondBody(node Node) string {
 }
 
 func startsWithSubshell(node Node) bool {
-	switch node := node.(type) {
+	switch _ := node.(type) {
 	case *Subshell:
 		return true
 	}
@@ -8748,13 +8777,13 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 	}
 	sp := repeatStr(" ", indent)
 	innerSp := repeatStr(" ", indent+4)
-	switch node := node.(type) {
+	switch _ := node.(type) {
 	case *Empty:
 		return ""
 	}
 	switch node := node.(type) {
 	case *Command:
-		parts := []string{}
+		parts := []interface{}{}
 		for _, w := range node.Words {
 			val := w.expandAllAnsiCQuotes(w.Value)
 			val = w.stripLocaleStringDollars(val)
@@ -8762,7 +8791,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 			val = w.formatCommandSubstitutions(val)
 			parts = append(parts, val)
 		}
-		heredocs := []string{}
+		heredocs := []interface{}{}
 		for _, r := range node.Redirects {
 			switch r := r.(type) {
 			case Heredoc:
@@ -8787,17 +8816,25 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 	}
 	switch node := node.(type) {
 	case *Pipeline:
-		cmds := []string{}
+		cmds := []struct {
+			F0 interface{}
+			F1 bool
+		}{}
 		i := 0
+		var cmd interface{}
+		var needsRedirect bool
 		for i < len(node.Commands) {
-			cmd := node.Commands[i]
-			switch cmd := cmd.(type) {
+			cmd = node.Commands[i]
+			switch _ := cmd.(type) {
 			case *PipeBoth:
 				i++
 				continue
 			}
-			needsRedirect := i+1 < len(node.Commands) && node.Commands[i+1].Kind == "pipe-both"
-			cmds = append(cmds, struct{ Single, Double bool }{cmd, needsRedirect})
+			needsRedirect = i+1 < len(node.Commands) && node.Commands[i+1].Kind == "pipe-both"
+			cmds = append(cmds, struct {
+				F0 Node
+				F1 bool
+			}{cmd, needsRedirect})
 			i++
 		}
 		resultParts := []string{}
@@ -8807,11 +8844,11 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 			formatted := formatCmdsubNode(cmd, indent, inProcsub, false, procsubFirst && idx == 0)
 			isLast := idx == len(cmds)-1
 			hasHeredoc := false
-			if cmd.Kind == "command" && cmd.Redirects != nil {
+			if cmd.GetKind() == "command" && cmd.Redirects != nil {
 				for _, r := range cmd.Redirects {
-					switch r := r.(type) {
+					switch _ := r.(type) {
 					case Heredoc:
-						hasHeredoc := true
+						hasHeredoc = true
 						break
 					}
 				}
@@ -8840,7 +8877,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 			}
 			idx++
 		}
-		compactPipe := inProcsub && len(cmds) > 0 && cmds[0][0].Kind == "subshell"
+		compactPipe := inProcsub && len(cmds) > 0 && cmds[0].F0.Kind == "subshell"
 		result = ""
 		idx = 0
 		for idx < len(resultParts) {
@@ -8866,9 +8903,9 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		for _, p := range node.Parts {
 			if p.Kind == "command" && p.Redirects != nil {
 				for _, r := range p.Redirects {
-					switch r := r.(type) {
+					switch _ := r.(type) {
 					case Heredoc:
-						hasHeredoc := true
+						hasHeredoc = true
 						break
 					}
 				}
@@ -8876,11 +8913,11 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 				switch p := p.(type) {
 				case *Pipeline:
 					for _, cmd := range p.Commands {
-						if cmd.Kind == "command" && cmd.Redirects != nil {
+						if cmd.GetKind() == "command" && cmd.Redirects != nil {
 							for _, r := range cmd.Redirects {
-								switch r := r.(type) {
+								switch _ := r.(type) {
 								case Heredoc:
-									hasHeredoc := true
+									hasHeredoc = true
 									break
 								}
 							}
@@ -8900,18 +8937,18 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 			case *Operator:
 				if p.Op == ";" {
 					if len(result) > 0 && strings.HasSuffix(result[len(result)-1], "\n") {
-						skippedSemi := true
+						skippedSemi = true
 						continue
 					}
 					if len(result) >= 3 && result[len(result)-2] == "\n" && strings.HasSuffix(result[len(result)-3], "\n") {
-						skippedSemi := true
+						skippedSemi = true
 						continue
 					}
 					result = append(result, ";")
-					skippedSemi := false
+					skippedSemi = false
 				} else if p.Op == "\n" {
 					if len(result) > 0 && result[len(result)-1] == ";" {
-						skippedSemi := false
+						skippedSemi = false
 						continue
 					}
 					if len(result) > 0 && strings.HasSuffix(result[len(result)-1], "\n") {
@@ -8922,11 +8959,11 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 								return "\n"
 							}
 						}())
-						skippedSemi := false
+						skippedSemi = false
 						continue
 					}
 					result = append(result, "\n")
-					skippedSemi := false
+					skippedSemi = false
 				} else if p.Op == "&" {
 					if len(result) > 0 && strings.Contains(result[len(result)-1], "<<") && strings.Contains(result[len(result)-1], "\n") {
 						last := result[len(result)-1]
@@ -8947,7 +8984,10 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 					result = append(result, " "+p.Op)
 				}
 			default:
-				if len(result) > 0 && !strings.HasSuffix(result[len(result)-1], struct{ Single, Double bool }{" ", "\n"}) {
+				if len(result) > 0 && !strings.HasSuffix(result[len(result)-1], struct {
+					F0 string
+					F1 string
+				}{" ", "\n"}) {
 					result = append(result, " ")
 				}
 				formattedCmd := formatCmdsubNode(p, indent, inProcsub, compactRedirects, procsubFirst && cmdCount == 0)
@@ -8959,7 +8999,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 				}
 				if skippedSemi {
 					formattedCmd = " " + formattedCmd
-					skippedSemi := false
+					skippedSemi = false
 				}
 				result = append(result, formattedCmd)
 				cmdCount++
@@ -9021,7 +9061,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		body := formatCmdsubNode(node.Body, indent+4, false, false, false)
 		var result interface{}
 		if node.Words != nil {
-			wordVals := []string{}
+			wordVals := []interface{}{}
 			for _, w := range node.Words {
 				wordVals = append(wordVals, w.Value)
 			}
@@ -9055,7 +9095,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 	switch node := node.(type) {
 	case *Case:
 		word := node.Word.Value
-		patterns := []string{}
+		patterns := []interface{}{}
 		i := 0
 		for i < len(node.Patterns) {
 			p := node.Patterns[i]
@@ -9086,7 +9126,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		patternStr := strings.Join(patterns, "\n"+repeatStr(" ", indent+4))
 		redirects := ""
 		if len(node.Redirects) > 0 {
-			redirectParts := []string{}
+			redirectParts := []interface{}{}
 			for _, r := range node.Redirects {
 				redirectParts = append(redirectParts, formatRedirect(r, false, false))
 			}
@@ -9112,7 +9152,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		body = formatCmdsubNode(node.Body, indent, inProcsub, compactRedirects, false)
 		redirects := ""
 		if node.Redirects != nil {
-			redirectParts := []string{}
+			redirectParts := []interface{}{}
 			for _, r := range node.Redirects {
 				redirectParts = append(redirectParts, formatRedirect(r, false, false))
 			}
@@ -9142,7 +9182,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		}()
 		redirects := ""
 		if node.Redirects != nil {
-			redirectParts := []string{}
+			redirectParts := []interface{}{}
 			for _, r := range node.Redirects {
 				redirectParts = append(redirectParts, formatRedirect(r, false, false))
 			}
@@ -9334,8 +9374,12 @@ func skipSingleQuoted(s string, start int) int {
 }
 
 func skipDoubleQuoted(s string, start int) int {
-	unknownLvalue := struct{ Single, Double bool }{start, len(s)}
+	unknownLvalue := struct {
+		F0 int
+		F1 int
+	}{start, len(s)}
 	passNext := false
+	var i int
 	for i < n {
 		c := string(s[i])
 		if passNext {
@@ -9360,7 +9404,6 @@ func skipDoubleQuoted(s string, start int) int {
 			i++
 			continue
 		}
-		var i int
 		if c == "$" && i+1 < n {
 			if string(s[i+1]) == "(" {
 				i = findCmdsubEnd(s, i+2)
@@ -9898,7 +9941,7 @@ func normalizeHeredocDelimiter(delimiter string) string {
 	i := 0
 	for i < len(delimiter) {
 		var depth int
-		var inner []interface{}
+		var inner []string
 		var innerStr string
 		if i+1 < len(delimiter) && delimiter[i:i+2] == "$(" {
 			result = append(result, "$(")

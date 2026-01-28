@@ -6110,9 +6110,7 @@ func (self *Parser) arithParsePostfix() Node {
 			self.arithConsume("--")
 			left = &ArithPostDecr{Operand: left, Kind: "post-decr"}
 		} else if self.arithPeek(0) == "[" {
-			switch left.(type) {
-			case *ArithVar:
-				leftVar := left.(*ArithVar)
+			if leftVar, ok := left.(*ArithVar); ok {
 				self.arithAdvance()
 				self.arithSkipWs()
 				index := self.arithParseComma()
@@ -6121,7 +6119,7 @@ func (self *Parser) arithParsePostfix() Node {
 					panic(NewParseError("Expected ']' in array subscript", self.arithPos, 0))
 				}
 				left = &ArithSubscript{Array: leftVar.Name, Index: index, Kind: "subscript"}
-			default:
+			} else {
 				break
 			}
 		} else {

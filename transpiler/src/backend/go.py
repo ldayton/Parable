@@ -986,6 +986,15 @@ func _Substring(s string, start int, end int) string {
             go_name = self._to_camel(name)
             self._line(f"var {go_name} {type_str}")
             self._hoisted_in_try.add(name)
+        # Special case: single case with default that's just a break.
+        # Emit as type assertion if/else to avoid break-in-switch bug
+        # (break inside switch default only exits switch, not enclosing loop).
+        if (len(stmt.cases) == 1 and
+            len(stmt.default) == 1 and
+            isinstance(stmt.default[0], Break) and
+            stmt.default[0].label is None):
+            self._emit_type_switch_as_assertion(stmt)
+            return
         expr = self._emit_expr(stmt.expr)
         binding_unused = getattr(stmt, 'binding_unused', False)
         binding_reassigned = getattr(stmt, 'binding_reassigned', False)
@@ -1054,6 +1063,31 @@ func _Substring(s string, start int, end int) string {
             # Restore hoisted vars state
             self._hoisted_in_try = saved_hoisted
             self.indent -= 1
+        self._line("}")
+
+    def _emit_type_switch_as_assertion(self, stmt: TypeSwitch) -> None:
+        """Emit a single-case TypeSwitch as if/else with type assertion.
+        Used when default is just a break, to avoid break-in-switch bug."""
+        case = stmt.cases[0]
+        go_type = self._type_to_go(case.typ)
+        expr = self._emit_expr(stmt.expr)
+        binding = self._to_camel(stmt.binding)
+        # Use a different binding name to avoid shadowing issues when the body
+        # reassigns the original variable. Add a type suffix.
+        narrowed_binding = binding + self._extract_type_suffix(go_type)
+        self._line(f"if {narrowed_binding}, ok := {expr}.({go_type}); ok {{")
+        self.indent += 1
+        # Set up renaming context so references to binding use narrowed_binding
+        self._type_switch_binding_rename[stmt.binding] = narrowed_binding
+        for s in case.body:
+            self._emit_stmt(s)
+        del self._type_switch_binding_rename[stmt.binding]
+        self.indent -= 1
+        self._line("} else {")
+        self.indent += 1
+        for s in stmt.default:
+            self._emit_stmt(s)
+        self.indent -= 1
         self._line("}")
 
     def _extract_type_suffix(self, go_type: str) -> str:

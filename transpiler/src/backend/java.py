@@ -573,37 +573,56 @@ class JavaBackend:
         body: list[Stmt],
     ) -> None:
         iter_expr = self._expr(iterable)
+        iter_type = getattr(iterable, 'typ', None)
+        is_string = isinstance(iter_type, Primitive) and iter_type.kind == "string"
         if value is not None and index is not None:
             # Need index - use traditional for loop
             idx = _java_safe_name(index)
             val = _java_safe_name(value)
-            self._line(f"for (int {idx} = 0; {idx} < {iter_expr}.size(); {idx}++) {{")
-            self.indent += 1
-            elem_type = self._element_type(iterable.typ)
-            self._line(f"{elem_type} {val} = {iter_expr}.get({idx});")
+            if is_string:
+                self._line(f"for (int {idx} = 0; {idx} < {iter_expr}.length(); {idx}++) {{")
+                self.indent += 1
+                self._line(f"String {val} = String.valueOf({iter_expr}.charAt({idx}));")
+            else:
+                self._line(f"for (int {idx} = 0; {idx} < {iter_expr}.size(); {idx}++) {{")
+                self.indent += 1
+                elem_type = self._element_type(iter_type)
+                self._line(f"{elem_type} {val} = {iter_expr}.get({idx});")
             for s in body:
                 self._emit_stmt(s)
             self.indent -= 1
             self._line("}")
         elif value is not None:
             val = _java_safe_name(value)
-            elem_type = self._element_type(iterable.typ)
-            self._line(f"for ({elem_type} {val} : {iter_expr}) {{")
-            self.indent += 1
+            if is_string:
+                # String iteration needs index-based loop
+                self._line(f"for (int _i = 0; _i < {iter_expr}.length(); _i++) {{")
+                self.indent += 1
+                self._line(f"String {val} = String.valueOf({iter_expr}.charAt(_i));")
+            else:
+                elem_type = self._element_type(iter_type)
+                self._line(f"for ({elem_type} {val} : {iter_expr}) {{")
+                self.indent += 1
             for s in body:
                 self._emit_stmt(s)
             self.indent -= 1
             self._line("}")
         elif index is not None:
             idx = _java_safe_name(index)
-            self._line(f"for (int {idx} = 0; {idx} < {iter_expr}.size(); {idx}++) {{")
+            if is_string:
+                self._line(f"for (int {idx} = 0; {idx} < {iter_expr}.length(); {idx}++) {{")
+            else:
+                self._line(f"for (int {idx} = 0; {idx} < {iter_expr}.size(); {idx}++) {{")
             self.indent += 1
             for s in body:
                 self._emit_stmt(s)
             self.indent -= 1
             self._line("}")
         else:
-            self._line(f"for (var _item : {iter_expr}) {{")
+            if is_string:
+                self._line(f"for (int _i = 0; _i < {iter_expr}.length(); _i++) {{")
+            else:
+                self._line(f"for (var _item : {iter_expr}) {{")
             self.indent += 1
             for s in body:
                 self._emit_stmt(s)
@@ -796,11 +815,19 @@ class JavaBackend:
                         return f"{inner_str}.isEmpty()"
                 left_str = self._expr(left)
                 right_str = self._expr(right)
-                # String comparison needs .equals()
+                # String comparison needs .equals() or .compareTo()
                 if java_op == "==" and _is_string_type(left.typ):
                     return f"{left_str}.equals({right_str})"
                 if java_op == "!=" and _is_string_type(left.typ):
                     return f"!{left_str}.equals({right_str})"
+                if java_op == "<" and _is_string_type(left.typ):
+                    return f"({left_str}.compareTo({right_str}) < 0)"
+                if java_op == "<=" and _is_string_type(left.typ):
+                    return f"({left_str}.compareTo({right_str}) <= 0)"
+                if java_op == ">" and _is_string_type(left.typ):
+                    return f"({left_str}.compareTo({right_str}) > 0)"
+                if java_op == ">=" and _is_string_type(left.typ):
+                    return f"({left_str}.compareTo({right_str}) >= 0)"
                 # Bitwise operators need parens due to low precedence
                 if java_op in ("&", "|", "^"):
                     return f"({left_str} {java_op} {right_str})"
@@ -817,9 +844,14 @@ class JavaBackend:
                 # Check for bitwise & operand (result is int even if typ not set)
                 if isinstance(operand, BinaryOp) and operand.op == "&":
                     return f"({self._expr(operand)} == 0)"
-                # Check for addition/subtraction (e.g., !pos + 1) - result is int
-                if isinstance(operand, BinaryOp) and operand.op in ("+", "-", "*", "/", "%"):
+                # Check for arithmetic ops (e.g., !pos + 1) - result is int
+                if isinstance(operand, BinaryOp) and operand.op in ("+", "-", "*", "/", "%", "|", "^"):
                     return f"({self._expr(operand)} == 0)"
+                # Check for Var with unknown type but used in numeric context
+                # Heuristic: if operand is Var and type not set/unknown, it might be int
+                if isinstance(operand, Var) and operand_type is None:
+                    # Fall through to generate !expr, hope it's boolean
+                    pass
                 return f"!{self._expr(operand)}"
             case UnaryOp(op=op, operand=operand):
                 return f"{op}{self._expr(operand)}"

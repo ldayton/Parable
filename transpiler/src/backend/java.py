@@ -3,6 +3,39 @@
 from __future__ import annotations
 
 from src.backend.util import escape_string, to_camel, to_pascal, to_screaming_snake
+
+# Java reserved words that need escaping
+_JAVA_RESERVED = frozenset({
+    "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char",
+    "class", "const", "continue", "default", "do", "double", "else", "enum",
+    "extends", "final", "finally", "float", "for", "goto", "if", "implements",
+    "import", "instanceof", "int", "interface", "long", "native", "new",
+    "package", "private", "protected", "public", "return", "short", "static",
+    "strictfp", "super", "switch", "synchronized", "this", "throw", "throws",
+    "transient", "try", "void", "volatile", "while", "true", "false", "null",
+})
+
+# Java standard library classes that conflict with user-defined types
+_JAVA_STDLIB_CLASSES = frozenset({
+    "List", "Map", "Set", "String", "Integer", "Boolean", "Double", "Float",
+    "Long", "Short", "Byte", "Character", "Object", "Class", "System",
+    "Runtime", "Thread", "Exception", "Error", "Throwable", "Optional",
+})
+
+
+def _java_safe_name(name: str) -> str:
+    """Escape Java reserved words by appending underscore."""
+    result = to_camel(name)
+    if result in _JAVA_RESERVED:
+        return result + "_"
+    return result
+
+
+def _java_safe_class(name: str) -> str:
+    """Escape class names that conflict with Java stdlib."""
+    if name in _JAVA_STDLIB_CLASSES:
+        return name + "Node"
+    return name
 from src.ir import (
     Array,
     Assign,
@@ -226,8 +259,9 @@ class JavaBackend:
         self._line("}")
 
     def _emit_struct(self, struct: Struct) -> None:
-        self.current_class = struct.name
-        self._line(f"class {struct.name} {{")
+        class_name = _java_safe_class(struct.name)
+        self.current_class = class_name
+        self._line(f"class {class_name} {{")
         self.indent += 1
         for fld in struct.fields:
             self._emit_field(fld)
@@ -248,20 +282,21 @@ class JavaBackend:
         """Emit a constructor with all fields as parameters."""
         if not struct.fields:
             return
+        class_name = _java_safe_class(struct.name)
         params = ", ".join(
-            f"{self._type(f.typ)} {to_camel(f.name)}" for f in struct.fields
+            f"{self._type(f.typ)} {_java_safe_name(f.name)}" for f in struct.fields
         )
-        self._line(f"{struct.name}({params}) {{")
+        self._line(f"{class_name}({params}) {{")
         self.indent += 1
         for f in struct.fields:
-            name = to_camel(f.name)
+            name = _java_safe_name(f.name)
             self._line(f"this.{name} = {name};")
         self.indent -= 1
         self._line("}")
 
     def _emit_field(self, fld: Field) -> None:
         typ = self._type(fld.typ)
-        self._line(f"{typ} {to_camel(fld.name)};")
+        self._line(f"{typ} {_java_safe_name(fld.name)};")
 
     def _emit_functions_class(self, module: Module) -> None:
         """Emit free functions as static methods in a utility class."""
@@ -309,14 +344,14 @@ class JavaBackend:
         parts = []
         for p in params:
             typ = self._type(p.typ)
-            parts.append(f"{typ} {to_camel(p.name)}")
+            parts.append(f"{typ} {_java_safe_name(p.name)}")
         return ", ".join(parts)
 
     def _emit_stmt(self, stmt: Stmt) -> None:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value, mutable=mutable):
                 java_type = self._type(typ)
-                var_name = to_camel(name)
+                var_name = _java_safe_name(name)
                 if value is not None:
                     val = self._expr(value)
                     self._line(f"{java_type} {var_name} = {val};")
@@ -332,11 +367,25 @@ class JavaBackend:
                     self._line(f"{obj_str}.set({idx_str}, {val});")
                 else:
                     lv = self._lvalue(target)
-                    self._line(f"{lv} = {val};")
+                    if getattr(stmt, 'is_declaration', False):
+                        # First assignment to variable - need type declaration
+                        value_type = getattr(value, 'typ', None)
+                        if value_type:
+                            java_type = self._type(value_type)
+                            self._line(f"{java_type} {lv} = {val};")
+                        else:
+                            # Fallback to Object if type unknown
+                            self._line(f"Object {lv} = {val};")
+                    else:
+                        self._line(f"{lv} = {val};")
             case OpAssign(target=target, op=op, value=value):
                 lv = self._lvalue(target)
                 val = self._expr(value)
                 self._line(f"{lv} {op}= {val};")
+            case ExprStmt(expr=Var(name=name)) if name in (
+                "_skip_docstring", "_pass", "_skip_super_init"
+            ):
+                pass  # Skip marker statements
             case ExprStmt(expr=expr):
                 e = self._expr(expr)
                 self._line(f"{e};")
@@ -415,7 +464,7 @@ class JavaBackend:
         self, expr: Expr, binding: str, cases: list[TypeCase], default: list[Stmt]
     ) -> None:
         var = self._expr(expr)
-        bind_name = to_camel(binding)
+        bind_name = _java_safe_name(binding)
         self._line(f"Object {bind_name} = {var};")
         for i, case in enumerate(cases):
             type_name = self._type_name_for_check(case.typ)
@@ -467,8 +516,8 @@ class JavaBackend:
         iter_expr = self._expr(iterable)
         if value is not None and index is not None:
             # Need index - use traditional for loop
-            idx = to_camel(index)
-            val = to_camel(value)
+            idx = _java_safe_name(index)
+            val = _java_safe_name(value)
             self._line(f"for (int {idx} = 0; {idx} < {iter_expr}.size(); {idx}++) {{")
             self.indent += 1
             elem_type = self._element_type(iterable.typ)
@@ -478,7 +527,7 @@ class JavaBackend:
             self.indent -= 1
             self._line("}")
         elif value is not None:
-            val = to_camel(value)
+            val = _java_safe_name(value)
             elem_type = self._element_type(iterable.typ)
             self._line(f"for ({elem_type} {val} : {iter_expr}) {{")
             self.indent += 1
@@ -487,7 +536,7 @@ class JavaBackend:
             self.indent -= 1
             self._line("}")
         elif index is not None:
-            idx = to_camel(index)
+            idx = _java_safe_name(index)
             self._line(f"for (int {idx} = 0; {idx} < {iter_expr}.size(); {idx}++) {{")
             self.indent += 1
             for s in body:
@@ -523,7 +572,7 @@ class JavaBackend:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value):
                 java_type = self._type(typ)
-                var_name = to_camel(name)
+                var_name = _java_safe_name(name)
                 if value:
                     return f"{java_type} {var_name} = {self._expr(value)}"
                 return f"{java_type} {var_name}"
@@ -533,7 +582,7 @@ class JavaBackend:
                     if isinstance(value.right, IntLit) and value.right.value == 1:
                         if isinstance(target, VarLV) and isinstance(value.left, Var):
                             if target.name == value.left.name:
-                                return f"{to_camel(target.name)}++"
+                                return f"{_java_safe_name(target.name)}++"
                 return f"{self._lvalue(target)} = {self._expr(value)}"
             case OpAssign(target=target, op=op, value=value):
                 return f"{self._lvalue(target)} {op}= {self._expr(value)}"
@@ -552,7 +601,7 @@ class JavaBackend:
         for s in body:
             self._emit_stmt(s)
         self.indent -= 1
-        var = to_camel(catch_var) if catch_var else "e"
+        var = _java_safe_name(catch_var) if catch_var else "e"
         self._line(f"}} catch (Exception {var}) {{")
         self.indent += 1
         for s in catch_body:
@@ -582,9 +631,9 @@ class JavaBackend:
                     return "this"
                 if name.isupper():
                     return f"Constants.{to_screaming_snake(name)}"
-                return to_camel(name)
+                return _java_safe_name(name)
             case FieldAccess(obj=obj, field=field):
-                return f"{self._expr(obj)}.{to_camel(field)}"
+                return f"{self._expr(obj)}.{_java_safe_name(field)}"
             case Index(obj=obj, index=index):
                 obj_str = self._expr(obj)
                 idx_str = self._expr(index)
@@ -613,15 +662,61 @@ class JavaBackend:
                 return self._slice_expr(obj, low, high)
             case Call(func=func, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
+                # Handle built-in functions
+                if func == "int" and len(args) == 2:
+                    # int(s, base) -> Integer.parseInt(s, base)
+                    return f"Integer.parseInt({args_str})"
+                if func == "_parseInt":
+                    # Frontend generates _parseInt for int(s, base)
+                    return f"Integer.parseInt({args_str})"
+                if func == "str":
+                    return f"String.valueOf({args_str})"
+                if func == "len":
+                    arg = self._expr(args[0])
+                    arg_type = getattr(args[0], 'typ', None)
+                    if isinstance(arg_type, Primitive) and arg_type.kind == "string":
+                        return f"{arg}.length()"
+                    return f"{arg}.size()"
+                if func == "range":
+                    # Return an IntStream or List<Integer>
+                    if len(args) == 1:
+                        return f"java.util.stream.IntStream.range(0, {self._expr(args[0])}).boxed().toList()"
+                    elif len(args) == 2:
+                        return f"java.util.stream.IntStream.range({self._expr(args[0])}, {self._expr(args[1])}).boxed().toList()"
+                    else:  # 3 args: start, stop, step
+                        start = self._expr(args[0])
+                        stop = self._expr(args[1])
+                        step = self._expr(args[2])
+                        return f"java.util.stream.IntStream.iterate({start}, i -> i < {stop}, i -> i + {step}).boxed().toList()"
+                if func == "ord":
+                    return f"(int) ({self._expr(args[0])}.charAt(0))"
+                if func == "chr":
+                    return f"String.valueOf((char) ({self._expr(args[0])}))"
+                if func == "abs":
+                    return f"Math.abs({args_str})"
+                if func == "min":
+                    return f"Math.min({args_str})"
+                if func == "max":
+                    return f"Math.max({args_str})"
                 # Module-level functions are in {ModuleName}Functions class
                 func_class = f"{to_pascal(self._module_name)}Functions"
                 return f"{func_class}.{to_camel(func)}({args_str})"
+            case MethodCall(obj=obj, method=method, args=[TupleLit(elements=elements)], receiver_type=_) if method in ("startswith", "endswith"):
+                # Python str.startswith/endswith with tuple → disjunction of checks
+                java_method = "startsWith" if method == "startswith" else "endsWith"
+                obj_str = self._expr(obj)
+                checks = [f"{obj_str}.{java_method}({self._expr(e)})" for e in elements]
+                return f"({' || '.join(checks)})"
             case MethodCall(obj=obj, method=method, args=args, receiver_type=receiver_type):
                 return self._method_call(obj, method, args, receiver_type)
             case StaticCall(on_type=on_type, method=method, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
                 type_name = self._type_name_for_check(on_type)
                 return f"{type_name}.{to_camel(method)}({args_str})"
+            case BinaryOp(op="in", left=left, right=right):
+                return self._containment_check(left, right, negated=False)
+            case BinaryOp(op="not in", left=left, right=right):
+                return self._containment_check(left, right, negated=True)
             case BinaryOp(op=op, left=left, right=right):
                 java_op = _binary_op(op)
                 # Detect len(x) > 0 -> !x.isEmpty(), len(x) == 0 -> x.isEmpty()
@@ -641,6 +736,10 @@ class JavaBackend:
                 if java_op == "!=" and _is_string_type(left.typ):
                     return f"!{left_str}.equals({right_str})"
                 return f"{left_str} {java_op} {right_str}"
+            case UnaryOp(op="&", operand=operand):
+                return self._expr(operand)  # Java passes objects by reference
+            case UnaryOp(op="*", operand=operand):
+                return self._expr(operand)  # Java has no pointer dereference
             case UnaryOp(op=op, operand=operand):
                 return f"{op}{self._expr(operand)}"
             case Ternary(cond=cond, then_expr=then_expr, else_expr=else_expr):
@@ -692,16 +791,20 @@ class JavaBackend:
                 elems = ", ".join(self._expr(e) for e in elements)
                 return f"new HashSet<>(Set.of({elems}))"
             case StructLit(struct_name=struct_name, fields=fields):
+                safe_name = _java_safe_class(struct_name)
                 if not fields:
-                    return f"new {struct_name}()"
+                    return f"new {safe_name}()"
                 # Need to pass fields in constructor order - assume same order as defined
                 args = ", ".join(self._expr(v) for v in fields.values())
-                return f"new {struct_name}({args})"
+                return f"new {safe_name}({args})"
             case TupleLit(elements=elements, typ=typ):
                 if self._is_optional_tuple(typ):
                     return self._emit_optional_tuple(expr)
                 record_name = self._tuple_record_name(typ)
                 elems = ", ".join(self._expr(e) for e in elements)
+                # Fallback to Object[] uses array literal syntax
+                if record_name == "Object[]":
+                    return f"new Object[]{{{elems}}}"
                 return f"new {record_name}({elems})"
             case StringConcat(parts=parts):
                 return " + ".join(self._expr(p) for p in parts)
@@ -729,6 +832,8 @@ class JavaBackend:
                 return f"{obj_str}.endsWith({args_str})"
             if method == "find":
                 return f"{obj_str}.indexOf({args_str})"
+            if method == "rfind":
+                return f"{obj_str}.lastIndexOf({args_str})"
             if method == "replace":
                 return f"{obj_str}.replace({args_str})"
             if method == "split":
@@ -737,10 +842,39 @@ class JavaBackend:
                 return f"String.join({obj_str}, {args_str})"
             if method == "strip" or method == "trim":
                 return f"{obj_str}.trim()"
+            if method == "lstrip":
+                if args:
+                    # lstrip with chars argument - use regex
+                    return f"{obj_str}.replaceFirst(\"^[\" + {args_str} + \"]+\", \"\")"
+                return f"{obj_str}.stripLeading()"
+            if method == "rstrip":
+                if args:
+                    # rstrip with chars argument - use regex
+                    return f"{obj_str}.replaceFirst(\"[\" + {args_str} + \"]+$\", \"\")"
+                return f"{obj_str}.stripTrailing()"
             if method == "lower":
                 return f"{obj_str}.toLowerCase()"
             if method == "upper":
                 return f"{obj_str}.toUpperCase()"
+            if method == "isalpha":
+                return f"{obj_str}.chars().allMatch(Character::isLetter)"
+            if method == "isalnum":
+                return f"{obj_str}.chars().allMatch(Character::isLetterOrDigit)"
+            if method == "isdigit":
+                return f"{obj_str}.chars().allMatch(Character::isDigit)"
+            if method == "isspace":
+                return f"{obj_str}.chars().allMatch(Character::isWhitespace)"
+        # Fallback: convert common Python methods to Java equivalents
+        if method == "append":
+            return f"{obj_str}.add({args_str})"
+        if method == "extend":
+            return f"{obj_str}.addAll({args_str})"
+        if method == "remove":
+            return f"{obj_str}.remove({args_str})"
+        if method == "clear":
+            return f"{obj_str}.clear()"
+        if method == "insert":
+            return f"{obj_str}.add({args_str})"
         return f"{obj_str}.{to_camel(method)}({args_str})"
 
     def _slice_expr(self, obj: Expr, low: Expr | None, high: Expr | None) -> str:
@@ -762,6 +896,25 @@ class JavaBackend:
             return f"new ArrayList<>({obj_str}.subList(0, {self._expr(high)}))"
         return f"new ArrayList<>({obj_str})"
 
+    def _containment_check(self, item: Expr, container: Expr, negated: bool) -> str:
+        """Generate containment check: `x in y` or `x not in y`."""
+        item_str = self._expr(item)
+        container_str = self._expr(container)
+        container_type = getattr(container, 'typ', None)
+        neg = "!" if negated else ""
+        # For sets and maps, use contains/containsKey
+        if isinstance(container_type, Set):
+            return f"{neg}{container_str}.contains({item_str})"
+        if isinstance(container_type, Map):
+            return f"{neg}{container_str}.containsKey({item_str})"
+        # For strings, use indexOf != -1 (or contains for char in string)
+        if isinstance(container_type, Primitive) and container_type.kind == "string":
+            if negated:
+                return f"{container_str}.indexOf({item_str}) == -1"
+            return f"{container_str}.indexOf({item_str}) != -1"
+        # For lists/arrays, use contains
+        return f"{neg}{container_str}.contains({item_str})"
+
     def _cast(self, inner: Expr, to_type: Type) -> str:
         inner_str = self._expr(inner)
         java_type = self._type(to_type)
@@ -781,7 +934,7 @@ class JavaBackend:
         # Convert {0}, {1}, etc. to %s
         result = re.sub(r'\{\d+\}', '%s', template)
         result = result.replace("%v", "%s")
-        escaped = result.replace("\\", "\\\\").replace('"', '\\"')
+        escaped = result.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
         args_str = ", ".join(self._expr(a) for a in args)
         if args_str:
             return f'String.format("{escaped}", {args_str})'
@@ -792,9 +945,9 @@ class JavaBackend:
             case VarLV(name=name):
                 if name == self.receiver_name:
                     return "this"
-                return to_camel(name)
+                return _java_safe_name(name)
             case FieldLV(obj=obj, field=field):
-                return f"{self._expr(obj)}.{to_camel(field)}"
+                return f"{self._expr(obj)}.{_java_safe_name(field)}"
             case IndexLV(obj=obj, index=index):
                 obj_str = self._expr(obj)
                 idx_str = self._expr(index)
@@ -832,14 +985,14 @@ class JavaBackend:
             case Optional(inner=inner):
                 return self._type(inner)
             case StructRef(name=name):
-                return name
+                return _java_safe_class(name)
             case Interface(name=name):
                 if name == "any":
                     return "Object"
-                return name
+                return _java_safe_class(name)
             case Union(name=name, variants=variants):
                 if name:
-                    return name
+                    return _java_safe_class(name)
                 return "Object"
             case FuncType(params=params, ret=ret):
                 # Java functional interfaces are complex - use Object for now
@@ -852,9 +1005,9 @@ class JavaBackend:
     def _type_name_for_check(self, typ: Type) -> str:
         match typ:
             case StructRef(name=name):
-                return name
+                return _java_safe_class(name)
             case Interface(name=name):
-                return name
+                return _java_safe_class(name)
             case Pointer(target=target):
                 return self._type_name_for_check(target)
             case _:

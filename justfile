@@ -47,6 +47,10 @@ backend-transpile backend:
             mkdir -p dist/ts
             uv run --directory transpiler python -m src.cli "$(pwd)/src/parable.py" -b ts > dist/ts/parable.ts
             ;;
+        java)
+            mkdir -p dist/java
+            uv run --directory transpiler python -m src.cli "$(pwd)/src/parable.py" -b java > dist/java/Parable.java
+            ;;
         *)
             echo "Unknown backend: {{backend}}"
             exit 1
@@ -72,6 +76,12 @@ backend-test backend:
             just backend-transpile ts
             tsc --outDir dist/js --lib es2019 --module commonjs --esModuleInterop dist/ts/parable.ts
             node tests/bin/run-js-tests.js dist/js
+            ;;
+        java)
+            just backend-transpile java
+            # Compile Java (test runner not yet implemented)
+            javac -d dist/java/classes dist/java/Parable.java
+            echo "Java compilation succeeded (test runner not yet implemented)"
             ;;
         *)
             echo "No test runner for backend: {{backend}}"

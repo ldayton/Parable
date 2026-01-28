@@ -601,6 +601,9 @@ class JavaBackend:
                 self._line(f"String {val} = String.valueOf({iter_expr}.charAt(_i));")
             else:
                 elem_type = self._element_type(iter_type)
+                # Check if iterating over range() - element type is Integer
+                if isinstance(iterable, Call) and iterable.func == "range":
+                    elem_type = "Integer"
                 self._line(f"for ({elem_type} {val} : {iter_expr}) {{")
                 self.indent += 1
             for s in body:

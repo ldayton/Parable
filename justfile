@@ -99,13 +99,13 @@ test-bounds: test-cpy38 test-cpy314
 
 # Internal: run all parallel checks
 [parallel]
-_check-parallel: test-bounds lint fmt verify-lock check-dump-ast check-style verify-js verify-dts test-js fmt-js fmt-dts test-go
+_check-parallel: test-bounds lint fmt verify-lock check-dump-ast check-style verify-go test-go
 
 # Run all checks (tests, lint, format, lock, style) in parallel
 check: _ensure-biome _check-parallel
 
-# Quick check: test, transpile-js, test-js, transpile-go, test-go
-quick-check: check-style test transpile-js test-js transpile-go test-go
+# Quick check: test, transpile-go, test-go
+quick-check: check-style test transpile-go test-go
 
 # Lint (--fix to apply changes)
 lint *ARGS:
@@ -128,32 +128,7 @@ check-dump-ast:
 
 # Check for banned Python constructions
 check-style:
-    uv run --directory tools/transpiler transpiler --check-style "$(pwd)/src" 2>&1 | sed -u "s/^/[style] /" | tee /tmp/{{project}}-{{run_id}}-style.log
-
-# Transpile Python to JavaScript
-transpile-js output="src/parable.js":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    js_out="{{output}}"
-    [[ "$js_out" = /* ]] || js_out="$(pwd)/$js_out"
-    uv run --directory tools/transpiler transpiler --transpile-js "$(pwd)/src/parable.py" > "$js_out"
-    npx -y @biomejs/biome format --write "$js_out" >/dev/null 2>&1
-    npx -y @biomejs/biome format --write "$js_out" >/dev/null 2>&1
-    npx -y -p typescript tsc --noEmit
-
-# Generate TypeScript definitions from JavaScript
-transpile-dts input="src/parable.js" output="src/parable.d.ts" py_src="src/parable.py":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    js_in="{{input}}"
-    dts_out="{{output}}"
-    py_in="{{py_src}}"
-    [[ "$js_in" = /* ]] || js_in="$(pwd)/$js_in"
-    [[ "$dts_out" = /* ]] || dts_out="$(pwd)/$dts_out"
-    [[ "$py_in" = /* ]] || py_in="$(pwd)/$py_in"
-    uv run --directory tools/transpiler transpiler --transpile-dts "$js_in" "$py_in" > "$dts_out"
-    npx -y @biomejs/biome format --write "$dts_out" >/dev/null 2>&1
-    npx -y -p typescript tsc --noEmit
+    uv run --directory transpiler python -m src.cli --check-style "$(pwd)/src" 2>&1 | sed -u "s/^/[style] /" | tee /tmp/{{project}}-{{run_id}}-style.log
 
 # Transpile Python to Go
 transpile-go output="src/parable.go":
@@ -161,30 +136,9 @@ transpile-go output="src/parable.go":
     set -euo pipefail
     go_out="{{output}}"
     [[ "$go_out" = /* ]] || go_out="$(pwd)/$go_out"
-    uv run --directory tools/transpiler transpiler --transpile-go "$(pwd)/src/parable.py" > "$go_out"
-    gofmt -w "$go_out"
+    uv run --directory transpiler python -m src.cli "$(pwd)/src/parable.py" -b go > /tmp/parable-ir.go
+    gofmt /tmp/parable-ir.go > "$go_out"
     go build -C src -o /dev/null .
-
-# Verify parable.js is up-to-date with transpiler output
-verify-js:
-    @just transpile-js /tmp/{{project}}-{{run_id}}-transpile.js && \
-    if diff -q src/parable.js /tmp/{{project}}-{{run_id}}-transpile.js >/dev/null 2>&1; then \
-        echo "[verify-js] OK"; \
-    else \
-        echo "[verify-js] FAIL: parable.js is out of date, run 'just transpile-js'" >&2; \
-        exit 1; \
-    fi
-
-# Verify parable.d.ts is up-to-date with transpiler output
-verify-dts:
-    @just transpile-js /tmp/{{project}}-{{run_id}}-transpile.js && \
-    just transpile-dts /tmp/{{project}}-{{run_id}}-transpile.js /tmp/{{project}}-{{run_id}}-transpile.d.ts && \
-    if diff -q src/parable.d.ts /tmp/{{project}}-{{run_id}}-transpile.d.ts >/dev/null 2>&1; then \
-        echo "[verify-dts] OK"; \
-    else \
-        echo "[verify-dts] FAIL: parable.d.ts is out of date, run 'just transpile-dts'" >&2; \
-        exit 1; \
-    fi
 
 # Verify parable.go is up-to-date with transpiler output
 verify-go:
@@ -221,20 +175,6 @@ fmt-go *ARGS:
             exit 1
         fi
     fi
-
-# Run JavaScript tests
-test-js *ARGS: verify-js
-    node tests/bin/run-js-tests.js {{ARGS}}
-
-# Format JavaScript (--fix to apply changes)
-# Note: biome format is run twice due to https://github.com/biomejs/biome/issues/4383
-fmt-js *ARGS:
-    npx -y @biomejs/biome format {{ if ARGS == "--fix" { "--write" } else { "" } }} src/parable.js 2>&1 | sed -u "s/^/[fmt-js] /" | tee /tmp/{{project}}-{{run_id}}-fmt-js.log
-    {{ if ARGS == "--fix" { "npx -y @biomejs/biome format --write src/parable.js >/dev/null 2>&1 || true" } else { "" } }}
-
-# Format TypeScript definitions (--fix to apply changes)
-fmt-dts *ARGS:
-    npx -y @biomejs/biome format {{ if ARGS == "--fix" { "--write" } else { "" } }} src/parable.d.ts 2>&1 | sed -u "s/^/[fmt-dts] /" | tee /tmp/{{project}}-{{run_id}}-fmt-dts.log
 
 # Benchmark test suite
 benchmark:

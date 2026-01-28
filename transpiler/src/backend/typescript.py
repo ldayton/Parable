@@ -151,6 +151,15 @@ class TsBackend:
                 self._line()
             self._emit_function(func)
             need_blank = True
+        # Emit CommonJS exports for test runner
+        self._line()
+        self._line("// CommonJS exports")
+        self._line("declare var module: any;")
+        self._line("if (typeof module !== 'undefined') {")
+        self.indent += 1
+        self._line("module.exports = { parse, ParseError };")
+        self.indent -= 1
+        self._line("}")
 
     def _emit_constant(self, const: Constant) -> None:
         typ = self._type(const.typ)

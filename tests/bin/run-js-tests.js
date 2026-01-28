@@ -6,7 +6,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const { parse, ParseError } = require('../../src/parable.js');
+
+// Accept parable module path as first positional argument, default to ../../src
+const parablePath = process.argv[2] || path.join(__dirname, '..', '..', 'src');
+const { parse, ParseError } = require(path.join(parablePath, 'src', 'parable.js'));
 
 function findTestFiles(directory) {
   const result = [];

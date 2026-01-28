@@ -2,18 +2,14 @@ package minilexer
 
 import (
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 var _ = strings.Compare // ensure import is used
-
-// quoteStackEntry holds pushed quote state (single, double)
-type quoteStackEntry struct {
-	Single bool
-	Double bool
-}
 
 func _strIsAlnum(s string) bool {
 	for _, r := range s {
@@ -69,6 +65,14 @@ func _strIsLower(s string) bool {
 	return len(s) > 0
 }
 
+// _intPtr converts a sentinel int (-1 = nil) to *int
+func _intPtr(val int) *int {
+	if val == -1 {
+		return nil
+	}
+	return &val
+}
+
 // Range generates a slice of integers similar to Python's range()
 // Range(end) -> [0, 1, ..., end-1]
 // Range(start, end) -> [start, start+1, ..., end-1]
@@ -106,9 +110,70 @@ func _parseInt(s string, base int) int {
 	return int(n)
 }
 
+// _mapGet returns the value for key from map m, or defaultVal if not found
+func _mapGet[K comparable, V any](m map[K]V, key K, defaultVal V) V {
+	if v, ok := m[key]; ok {
+		return v
+	}
+	return defaultVal
+}
+
+// _intToStr converts an integer to its string representation
+func _intToStr(n int) string {
+	return strconv.Itoa(n)
+}
+
+// _isNilInterface checks if an interface value is nil.
+// In Go, an interface is nil only when both type and value are nil.
+// This handles the case where interface contains a typed nil pointer.
+func _isNilInterface(i interface{}) bool {
+	if i == nil {
+		return true
+	}
+	v := reflect.ValueOf(i)
+	return v.Kind() == reflect.Ptr && v.IsNil()
+}
+
+// _runeAt returns the character (as string) at rune index i in string s.
+// Python s[i] on a string returns the i-th character, not byte.
+func _runeAt(s string, i int) string {
+	runes := []rune(s)
+	if i < 0 || i >= len(runes) {
+		return ""
+	}
+	return string(runes[i])
+}
+
+// _runeLen returns the number of runes (characters) in string s.
+// Python len(s) on a string returns character count, not byte count.
+func _runeLen(s string) int {
+	return utf8.RuneCountInString(s)
+}
+
+// _Substring returns s[start:end] using rune (character) indices.
+// Python s[start:end] uses character indices, not byte indices.
+func _Substring(s string, start int, end int) string {
+	runes := []rune(s)
+	if start < 0 {
+		start = 0
+	}
+	if end > len(runes) {
+		end = len(runes)
+	}
+	if start >= end {
+		return ""
+	}
+	return string(runes[start:end])
+}
+
 const (
 	EOF = -1
 )
+
+type Scanner interface {
+	peek() int
+	advance()
+}
 
 type Token struct {
 	Kind string
@@ -127,10 +192,10 @@ type Lexer struct {
 }
 
 func (lx *Lexer) Peek() int {
-	if lx.Pos >= len(lx.Source) {
+	if lx.Pos >= _runeLen(lx.Source) {
 		return EOF
 	}
-	return int(lx.Source[lx.Pos])
+	return lx.Source[lx.Pos]
 }
 
 func (lx *Lexer) Advance()  {
@@ -145,7 +210,7 @@ func (lx *Lexer) ScanWord() (Token, bool) {
 	if lx.Pos == start {
 		return Token{}, false
 	}
-	text := lx.Source[start:lx.Pos]
+	text := _Substring(lx.Source, start, lx.Pos)
 	return Token{Kind: "word", Text: text, Pos: start}, true
 }
 
@@ -166,7 +231,7 @@ func Tokenize(source string) []Token {
 		tok := result.F0
 		ok := result.F1
 		if !ok {
-			panic(fmt.Sprintf("%s at position %d", "unexpected character", lx.Pos))
+			panic(NewParseError("unexpected character", lx.Pos, 0))
 		}
 		tokens = append(tokens, tok)
 	}

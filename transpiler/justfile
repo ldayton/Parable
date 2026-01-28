@@ -1,113 +1,223 @@
 set shell := ["bash", "-o", "pipefail", "-cu"]
 
-# Transpile parable.py to Go (stdout)
-emit:
-    uv run python -m src.cli ../src/parable.py
+# Configuration
+source := "../src/parable.py"
+tests := "../tests"
+backends := "c csharp go java python ruby rust swift ts zig"
+testable := "go python ts"
 
-# Transpile and write to dist/parable.go
-go:
-    uv run python -m src.cli ../src/parable.py > /tmp/parable-ir.go
-    gofmt /tmp/parable-ir.go > dist/parable.go
+# Transpile source to stdout
+emit backend="go":
+    uv run python -m src.cli {{source}} -b {{backend}}
 
-# Transpile and check if Go compiles
-check: go
-    go build -C dist -o /dev/null .
+# Transpile source and check syntax/compilation
+check backend="go":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{backend}}" in
+        c)
+            uv run python -m src.cli {{source}} -b c > /tmp/transpile.c
+            clang -fsyntax-only /tmp/transpile.c
+            ;;
+        csharp)
+            rm -rf /tmp/transpile-csharp && mkdir -p /tmp/transpile-csharp
+            uv run python -m src.cli {{source}} -b csharp > /tmp/transpile-csharp/Output.cs
+            echo '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Library</OutputType><TargetFramework>net9.0</TargetFramework></PropertyGroup></Project>' > /tmp/transpile-csharp/output.csproj
+            dotnet build /tmp/transpile-csharp -v q
+            ;;
+        go)
+            uv run python -m src.cli {{source}} -b go > /tmp/transpile-ir.go
+            gofmt /tmp/transpile-ir.go > dist/parable.go
+            go build -C dist -o /dev/null .
+            ;;
+        java)
+            uv run python -m src.cli {{source}} -b java > /tmp/Output.java
+            javac /tmp/Output.java -d /tmp
+            ;;
+        python)
+            uv run python -m src.cli {{source}} -b python > /tmp/transpile.py
+            python3 -m py_compile /tmp/transpile.py
+            ;;
+        ruby)
+            uv run python -m src.cli {{source}} -b ruby > /tmp/transpile.rb
+            ruby -c /tmp/transpile.rb
+            ;;
+        rust)
+            uv run python -m src.cli {{source}} -b rust > /tmp/transpile.rs
+            rustc --crate-type=lib --emit=metadata -o /tmp/transpile.rmeta /tmp/transpile.rs
+            ;;
+        swift)
+            uv run python -m src.cli {{source}} -b swift > /tmp/transpile.swift
+            echo "Swift compilation skipped (too slow)"
+            ;;
+        ts)
+            rm -rf /tmp/transpile-ts && mkdir -p /tmp/transpile-ts/src
+            uv run python -m src.cli {{source}} -b ts > /tmp/transpile-ts/src/output.ts
+            tsc --outDir /tmp/transpile-ts/src --lib es2019 --module commonjs --esModuleInterop /tmp/transpile-ts/src/output.ts
+            ;;
+        zig)
+            uv run python -m src.cli {{source}} -b zig > /tmp/transpile.zig
+            zig ast-check /tmp/transpile.zig
+            ;;
+        *)
+            echo "Unknown backend: {{backend}}"
+            exit 1
+            ;;
+    esac
 
-# Transpile with new transpiler, build, and run Go parser tests
-test-new-go: go
-    go run -C dist ./cmd/run-tests ../../tests
+# Run full parser test suite (4574 tests)
+test backend="go":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{backend}}" in
+        go)
+            just check go
+            go run -C dist ./cmd/run-tests ../../tests
+            ;;
+        python)
+            rm -rf /tmp/transpile-test && mkdir /tmp/transpile-test
+            uv run python -m src.cli {{source}} -b python > /tmp/transpile-test/parable.py
+            PYTHONPATH=/tmp/transpile-test python3 {{tests}}/bin/run-tests.py {{tests}}
+            ;;
+        ts)
+            just check ts
+            node {{tests}}/bin/run-js-tests.js /tmp/transpile-ts
+            ;;
+        *)
+            echo "No test runner for backend: {{backend}}"
+            echo "Testable backends: {{testable}}"
+            exit 1
+            ;;
+    esac
 
-# Transpile with new transpiler and run Python parser tests
-test-new-python:
-    rm -rf /tmp/parable-test && mkdir /tmp/parable-test
-    uv run python -m src.cli ../src/parable.py -b python > /tmp/parable-test/parable.py
-    PYTHONPATH=/tmp/parable-test python3 ../tests/bin/run-tests.py ../tests
+# Check all backends compile
+check-all:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for backend in {{backends}}; do
+        echo "=== Checking $backend ==="
+        just check "$backend" || echo "FAILED: $backend"
+    done
 
-# Transpile to TypeScript (WIP - backend incomplete, many errors expected)
-emit-typescript:
-    uv run python -m src.cli ../src/parable.py -b ts
+# Run test suite on all testable backends
+test-all:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for backend in {{testable}}; do
+        echo "=== Testing $backend ==="
+        just test "$backend"
+    done
 
-# Transpile with new transpiler and run TypeScript parser tests
-test-new-typescript:
-    rm -rf /tmp/parable-ts && mkdir -p /tmp/parable-ts/src
-    uv run python -m src.cli ../src/parable.py -b ts > /tmp/parable-ts/src/parable.ts
-    tsc --outDir /tmp/parable-ts/src --lib es2019 --module commonjs --esModuleInterop /tmp/parable-ts/src/parable.ts
-    node ../tests/bin/run-js-tests.js /tmp/parable-ts
+# Show compilation errors for debugging
+errors backend="go":
+    @uv run python -m src.cli {{source}} -b {{backend}} > /tmp/transpile-out 2>&1 || true
+    @echo "=== Transpiler output (first 20 lines) ==="
+    @head -20 /tmp/transpile-out || true
+    @echo "=== Compilation errors ==="
+    @just check {{backend}} 2>&1 | head -50 || true
 
-# Transpile with new transpiler and check Zig syntax
-test-new-zig:
-    rm -rf /tmp/parable-zig && mkdir -p /tmp/parable-zig
-    uv run python -m src.cli ../src/parable.py -b zig > /tmp/parable-zig/parable.zig
-    zig ast-check /tmp/parable-zig/parable.zig
+# --- Minilexer tests (backend validation) ---
 
-# Show Go compilation errors (uses temp copy of src/)
-errors:
-    @rm -rf /tmp/parable-src && cp -r ../src /tmp/parable-src
-    @uv run python -m src.cli ../src/parable.py > /tmp/parable-ir.go 2>&1 || true
-    @gofmt /tmp/parable-ir.go > /tmp/parable-src/parable.go 2>/dev/null || true
-    @go build -C /tmp/parable-src -o /dev/null . 2>&1 | head -50 || true
+# Run minilexer test for a backend
+minilexer backend:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{backend}}" in
+        c)
+            uv run python minilexer.ir -b c > /tmp/minilexer.c
+            diff -u expected/minilexer.c /tmp/minilexer.c
+            clang -fsyntax-only /tmp/minilexer.c
+            ;;
+        csharp)
+            uv run python minilexer.ir -b csharp > /tmp/Minilexer.cs
+            diff -u expected/Minilexer.cs /tmp/Minilexer.cs
+            rm -rf /tmp/minilexer-csharp && mkdir -p /tmp/minilexer-csharp
+            cp /tmp/Minilexer.cs /tmp/minilexer-csharp/
+            echo '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Library</OutputType><TargetFramework>net9.0</TargetFramework></PropertyGroup></Project>' > /tmp/minilexer-csharp/minilexer.csproj
+            dotnet build /tmp/minilexer-csharp -v q
+            ;;
+        go)
+            uv run python minilexer.ir -b go > /tmp/minilexer.go
+            diff -u expected/minilexer.go /tmp/minilexer.go
+            go build -o /dev/null /tmp/minilexer.go
+            ;;
+        java)
+            uv run python minilexer.ir -b java > /tmp/Minilexer.java
+            diff -u expected/Minilexer.java /tmp/Minilexer.java
+            javac /tmp/Minilexer.java -d /tmp
+            ;;
+        python)
+            uv run python minilexer.ir -b python > /tmp/minilexer.py
+            diff -u expected/minilexer.py /tmp/minilexer.py
+            python3 -m py_compile /tmp/minilexer.py
+            ;;
+        ruby)
+            uv run python minilexer.ir -b ruby > /tmp/minilexer.rb
+            diff -u expected/minilexer.rb /tmp/minilexer.rb
+            ruby -c /tmp/minilexer.rb
+            ;;
+        rust)
+            uv run python minilexer.ir -b rust > /tmp/minilexer.rs
+            diff -u expected/minilexer.rs /tmp/minilexer.rs
+            rustc --crate-type=lib --emit=metadata -o /tmp/minilexer.rmeta /tmp/minilexer.rs
+            ;;
+        swift)
+            uv run python minilexer.ir -b swift > /tmp/minilexer.swift
+            diff -u expected/minilexer.swift /tmp/minilexer.swift
+            ;;
+        ts)
+            uv run python minilexer.ir -b ts > /tmp/minilexer.ts
+            diff -u expected/minilexer.ts /tmp/minilexer.ts
+            tsc --noEmit --lib es2015 /tmp/minilexer.ts
+            ;;
+        zig)
+            uv run python minilexer.ir -b zig > /tmp/minilexer.zig
+            diff -u expected/minilexer.zig /tmp/minilexer.zig
+            zig ast-check /tmp/minilexer.zig
+            ;;
+        *)
+            echo "Unknown backend: {{backend}}"
+            exit 1
+            ;;
+    esac
 
-# Run all minilexer backend tests
-test-all: test-c test-csharp test-go test-java test-python test-ruby test-rust test-swift test-ts test-zig
+# Run all minilexer tests
+minilexer-all:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for backend in {{backends}}; do
+        echo "=== Minilexer $backend ==="
+        just minilexer "$backend"
+    done
 
-# Minilexer → Java
-test-java:
-    uv run python minilexer.ir -b java > /tmp/Minilexer.java
-    diff -u expected/Minilexer.java /tmp/Minilexer.java
-    javac /tmp/Minilexer.java -d /tmp
+# Update expected minilexer output for a backend
+update backend:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{backend}}" in
+        c)        uv run python minilexer.ir -b c > expected/minilexer.c ;;
+        csharp)   uv run python minilexer.ir -b csharp > expected/Minilexer.cs ;;
+        go)       uv run python minilexer.ir -b go > expected/minilexer.go ;;
+        java)     uv run python minilexer.ir -b java > expected/Minilexer.java ;;
+        python)   uv run python minilexer.ir -b python > expected/minilexer.py ;;
+        ruby)     uv run python minilexer.ir -b ruby > expected/minilexer.rb ;;
+        rust)     uv run python minilexer.ir -b rust > expected/minilexer.rs ;;
+        swift)    uv run python minilexer.ir -b swift > expected/minilexer.swift ;;
+        ts)       uv run python minilexer.ir -b ts > expected/minilexer.ts ;;
+        zig)      uv run python minilexer.ir -b zig > expected/minilexer.zig ;;
+        *)        echo "Unknown backend: {{backend}}"; exit 1 ;;
+    esac
+    echo "Updated expected/minilexer output for {{backend}}"
 
-# Minilexer → C#
-test-csharp:
-    uv run python minilexer.ir -b csharp > /tmp/Minilexer.cs
-    diff -u expected/Minilexer.cs /tmp/Minilexer.cs
-    @rm -rf /tmp/minilexer-csharp && mkdir -p /tmp/minilexer-csharp
-    @cp /tmp/Minilexer.cs /tmp/minilexer-csharp/
-    @echo '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Library</OutputType><TargetFramework>net9.0</TargetFramework></PropertyGroup></Project>' > /tmp/minilexer-csharp/minilexer.csproj
-    dotnet build /tmp/minilexer-csharp -v q
+# Update all expected minilexer outputs
+update-all:
+    #!/usr/bin/env bash
+    for backend in {{backends}}; do
+        just update "$backend"
+    done
 
-# Minilexer → C
-test-c:
-    uv run python minilexer.ir -b c > /tmp/minilexer.c
-    diff -u expected/minilexer.c /tmp/minilexer.c
-    clang -fsyntax-only /tmp/minilexer.c
+# --- Utilities ---
 
-# Minilexer → Swift (compile skipped - too slow)
-test-swift:
-    uv run python minilexer.ir -b swift > /tmp/minilexer.swift
-    diff -u expected/minilexer.swift /tmp/minilexer.swift
-
-# Minilexer → Ruby
-test-ruby:
-    uv run python minilexer.ir -b ruby > /tmp/minilexer.rb
-    diff -u expected/minilexer.rb /tmp/minilexer.rb
-    ruby -c /tmp/minilexer.rb
-
-# Minilexer → Zig
-test-zig:
-    uv run python minilexer.ir -b zig > /tmp/minilexer.zig
-    diff -u expected/minilexer.zig /tmp/minilexer.zig
-    zig ast-check /tmp/minilexer.zig
-
-# Minilexer → Go
-test-go:
-    uv run python minilexer.ir -b go > /tmp/minilexer.go
-    diff -u expected/minilexer.go /tmp/minilexer.go
-    go build -o /dev/null /tmp/minilexer.go
-
-# Minilexer → Python
-test-python:
-    uv run python minilexer.ir -b python > /tmp/minilexer.py
-    diff -u expected/minilexer.py /tmp/minilexer.py
-    python3 -m py_compile /tmp/minilexer.py
-
-# Minilexer → Rust
-test-rust:
-    uv run python minilexer.ir -b rust > /tmp/minilexer.rs
-    diff -u expected/minilexer.rs /tmp/minilexer.rs
-    rustc --crate-type=lib --emit=metadata -o /tmp/minilexer.rmeta /tmp/minilexer.rs
-
-# Minilexer → TypeScript
-test-ts:
-    uv run python minilexer.ir -b ts > /tmp/minilexer.ts
-    diff -u expected/minilexer.ts /tmp/minilexer.ts
-    tsc --noEmit --lib es2015 /tmp/minilexer.ts
+# Check style constraints on Python source
+style dir="../src":
+    uv run python -m src.cli --check-style "{{dir}}"

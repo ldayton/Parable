@@ -3,11 +3,11 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import tempfile
 
-from transpiler.check_style import check_file
+from src.check_style import check_file
 
 
 def check_code(code: str) -> list[tuple[int, str]]:

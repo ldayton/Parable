@@ -2141,7 +2141,7 @@ var Word = /** @class */ (function () {
                                     if (codepoint === 0) {
                                         return result;
                                     }
-                                    result.push.apply(result, codepoint);
+                                    result.push.apply(result, Array.from(new TextEncoder().encode(codepoint)));
                                     i = j;
                                 }
                                 else {
@@ -2160,7 +2160,7 @@ var Word = /** @class */ (function () {
                                         if (codepoint === 0) {
                                             return result;
                                         }
-                                        result.push.apply(result, codepoint);
+                                        result.push.apply(result, Array.from(new TextEncoder().encode(codepoint)));
                                         i = j;
                                     }
                                     else {
@@ -2233,7 +2233,7 @@ var Word = /** @class */ (function () {
                 }
             }
             else {
-                result.push.apply(result, inner[i]);
+                result.push.apply(result, Array.from(new TextEncoder().encode(inner[i])));
                 i += 1;
             }
         }
@@ -2245,7 +2245,7 @@ var Word = /** @class */ (function () {
         }
         var inner = Substring(value, 1, value.length - 1);
         var literalBytes = this.AnsiCToBytes(inner);
-        var literalStr = literalBytes;
+        var literalStr = new TextDecoder().decode(new Uint8Array(literalBytes));
         return this.ShSingleQuote(literalStr);
     };
     Word.prototype.ExpandAllAnsiCQuotes = function (value) {

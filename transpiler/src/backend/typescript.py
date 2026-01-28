@@ -114,6 +114,9 @@ class TsBackend:
 
     def _emit_preamble(self) -> None:
         """Emit helper functions needed by generated code."""
+        # TextEncoder/TextDecoder are available in Node.js but TypeScript needs declarations
+        self._line("declare var TextEncoder: { new(): { encode(s: string): Uint8Array } };")
+        self._line("declare var TextDecoder: { new(): { decode(b: Uint8Array): string } };")
         self._line("function range(start: number, end?: number, step?: number): number[] {")
         self.indent += 1
         self._line("if (end === undefined) { end = start; start = 0; }")
@@ -656,6 +659,22 @@ class TsBackend:
                 from_type = self._type(inner.typ) if hasattr(inner, 'typ') else None
                 if from_type == ts_type:
                     return self._expr(inner)
+                # string to []byte: use TextEncoder for proper UTF-8 encoding
+                if (isinstance(to_type, Slice) and
+                    isinstance(to_type.element, Primitive) and
+                    to_type.element.kind == "byte" and
+                    hasattr(inner, 'typ') and
+                    isinstance(inner.typ, Primitive) and
+                    inner.typ.kind == "string"):
+                    return f"Array.from(new TextEncoder().encode({self._expr(inner)}))"
+                # []byte to string: use TextDecoder for proper UTF-8 decoding
+                if (isinstance(to_type, Primitive) and
+                    to_type.kind == "string" and
+                    hasattr(inner, 'typ') and
+                    isinstance(inner.typ, Slice) and
+                    isinstance(inner.typ.element, Primitive) and
+                    inner.typ.element.kind == "byte"):
+                    return f"new TextDecoder().decode(new Uint8Array({self._expr(inner)}))"
                 # Use 'as unknown as' to allow any type conversion
                 return f"({self._expr(inner)} as unknown as {ts_type})"
             case TypeAssert(expr=inner, asserted=asserted):

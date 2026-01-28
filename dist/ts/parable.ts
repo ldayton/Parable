@@ -1,3 +1,5 @@
+declare var TextEncoder: { new(): { encode(s: string): Uint8Array } };
+declare var TextDecoder: { new(): { decode(b: Uint8Array): string } };
 function range(start: number, end?: number, step?: number): number[] {
   if (end === undefined) { end = start; start = 0; }
   if (step === undefined) { step = 1; }
@@ -2099,7 +2101,7 @@ class Word implements Node {
                   if (codepoint === 0) {
                     return result;
                   }
-                  result.push(...((codepoint as unknown as string) as unknown as number[]));
+                  result.push(...Array.from(new TextEncoder().encode((codepoint as unknown as string))));
                   i = j;
                 } else {
                   result.push((inner[i] as unknown as string)[0]);
@@ -2116,7 +2118,7 @@ class Word implements Node {
                     if (codepoint === 0) {
                       return result;
                     }
-                    result.push(...((codepoint as unknown as string) as unknown as number[]));
+                    result.push(...Array.from(new TextEncoder().encode((codepoint as unknown as string))));
                     i = j;
                   } else {
                     result.push((inner[i] as unknown as string)[0]);
@@ -2181,7 +2183,7 @@ class Word implements Node {
           }
         }
       } else {
-        result.push(...((inner[i] as unknown as string) as unknown as number[]));
+        result.push(...Array.from(new TextEncoder().encode((inner[i] as unknown as string))));
         i += 1;
       }
     }
@@ -2194,7 +2196,7 @@ class Word implements Node {
     }
     var inner: any = Substring(value, 1, value.length - 1);
     var literalBytes: any = this.AnsiCToBytes(inner);
-    var literalStr: any = (literalBytes as unknown as string);
+    var literalStr: any = new TextDecoder().decode(new Uint8Array(literalBytes));
     return this.ShSingleQuote(literalStr);
   }
 

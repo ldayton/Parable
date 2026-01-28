@@ -16,3 +16,4 @@ tools/bash-oracle/bin/negation-cmdsub.txt
 /bugs.tests
 scalene-profile.html
 src/cmd/debug-test/
+dist/java/classes/

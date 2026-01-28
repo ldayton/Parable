@@ -6836,6 +6836,10 @@ def _is_whitespace(c: str) -> bool:
     return c == " " or c == "\t" or c == "\n"
 
 
+def _string_to_bytes(s: str) -> list[int]:
+    return s.encode("utf-8").copy()
+
+
 def _is_whitespace_no_newline(c: str) -> bool:
     return c == " " or c == "\t"
 

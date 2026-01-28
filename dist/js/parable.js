@@ -9268,6 +9268,9 @@ function GetAnsiEscape(c) {
 function IsWhitespace(c) {
     return c === " " || c === "\t" || c === "\n";
 }
+function StringToBytes(s) {
+    return Array.from(new TextEncoder().encode(s)).slice();
+}
 function IsWhitespaceNoNewline(c) {
     return c === " " || c === "\t";
 }

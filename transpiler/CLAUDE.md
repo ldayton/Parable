@@ -1,42 +1,66 @@
-# New IR-based Transpiler
+# IR-based Transpiler
 
-Converting the existing Go transpiler at `../tools/transpiler/` from a Go-specific transpiler to a generic one with an IR layer. The old transpiler works and is used by `just transpile-go` in the main project.
+Transpiles `../src/parable.py` to multiple target languages via an intermediate representation.
 
-Transpiles `../src/parable.py` → Go via an intermediate representation.
+## Status
 
-## Current Mission
-
-**Get `just test-new-go` to pass.** This transpiles parable.py with the new transpiler, builds the Go code, and runs the parser test suite (4574 tests).
+| Backend    | Status      |
+| ---------- | ----------- |
+| Go         | ✓ Done      |
+| Python     | ✓ Done      |
+| TypeScript | ✓ Done      |
+| Java       | In progress |
 
 ## Architecture
 
 ```
-../src/parable.py  →  frontend.py  →  IR  →  middleend.py  →  backend/go.py  →  dist/parable.go
+../src/parable.py  →  frontend.py  →  IR  →  middleend.py  →  backend/*.py  →  dist/
 ```
 
 - `./src/ir.py` - IR node definitions (types, expressions, statements). Does NOT define middleend annotations.
 - `./src/frontend.py` - Python AST → IR
 - `./src/middleend.py` - IR analysis (scope/flow tracking, dynamic annotations)
-- `./src/backend/go.py` - IR → Go code
+- `./src/backend/go.py` - IR → Go
+- `./src/backend/python.py` - IR → Python
+- `./src/backend/typescript.py` - IR → TypeScript
+- `./src/backend/java.py` - IR → Java
 - `./src/cli.py` - CLI entry point
 
 ## Paths
 
-| Path                   | Description                                    |
-| ---------------------- | ---------------------------------------------- |
-| `../tools/transpiler/` | Old working Go-specific transpiler             |
-| `../src/parable.py`    | Python source to transpile                     |
-| `../src/parable.go`    | Go output (old transpiler, used in production) |
-| `dist/parable.go`      | Go output (new transpiler, under development)  |
+| Path                | Description       |
+| ------------------- | ----------------- |
+| `../src/parable.py` | Python source     |
+| `dist/go/`          | Go output         |
+| `dist/python/`      | Python output     |
+| `dist/ts/`          | TypeScript output |
+| `dist/java/`        | Java output       |
 
 ## Just Targets
 
 ```
-just emit          # transpile to stdout
-just go            # transpile and write to dist/parable.go
-just check         # transpile and verify Go compiles
-just test-new-go   # transpile, build, run parser tests (THE GOAL)
-just errors        # show Go compilation errors
+just backend-transpile <backend>   # transpile to dist/<backend>/
+just backend-test <backend>        # transpile, compile, run tests
+```
+
+Backends: `go`, `python`, `ts`, `java`
+
+## Debugging Test Failures
+
+All test runners support `-f <pattern>` to filter by test name or file path:
+
+```bash
+# Go
+go run -C dist/go ./cmd/run-tests /path/to/tests -f 01_words
+
+# Python
+PYTHONPATH=dist/python python3 tests/bin/run-tests.py -f 01_words
+
+# TypeScript
+node tests/bin/run-js-tests.js dist/js -f 01_words
+
+# Java
+java -cp dist/java/classes Parable --run-tests tests -f 01_words
 ```
 
 ## Phase Responsibilities

@@ -5851,7 +5851,7 @@ func (self *Parser) arithParseTernary() Node {
 }
 
 func (self *Parser) arithParseLeftAssoc(ops []string, parsefn func() Node) Node {
-	left := parsefn()
+	var left Node = parsefn()
 	for true {
 		self.arithSkipWs()
 		matched := false
@@ -8606,6 +8606,10 @@ func getAnsiEscape(c string) int {
 
 func isWhitespace(c string) bool {
 	return c == " " || c == "\t" || c == "\n"
+}
+
+func stringToBytes(s string) []byte {
+	return append([]byte(s)[:0:0], []byte(s)...)
 }
 
 func isWhitespaceNoNewline(c string) bool {

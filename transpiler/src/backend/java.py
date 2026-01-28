@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from src.backend.util import escape_string, to_camel, to_pascal, to_screaming_snake
-from src.type_overrides import VAR_TYPE_OVERRIDES
+from src.type_overrides import FIELD_TYPE_OVERRIDES, VAR_TYPE_OVERRIDES
 
 # Java reserved words that need escaping
 _JAVA_RESERVED = frozenset({
@@ -673,15 +673,21 @@ class JavaBackend:
             self.indent += 1
             # Set up renaming so references to binding use narrowed_name
             self._type_switch_binding_rename[binding] = narrowed_name
+            # Save hoisted_vars - each case is a separate scope, hoisting in one
+            # case shouldn't affect declarations in other cases
+            saved_hoisted = self._hoisted_vars.copy()
             for s in case.body:
                 self._emit_stmt(s)
+            self._hoisted_vars = saved_hoisted
             del self._type_switch_binding_rename[binding]
             self.indent -= 1
         if default:
             self._line("} else {")
             self.indent += 1
+            saved_hoisted = self._hoisted_vars.copy()
             for s in default:
                 self._emit_stmt(s)
+            self._hoisted_vars = saved_hoisted
             self.indent -= 1
         self._line("}")
 
@@ -721,6 +727,11 @@ class JavaBackend:
         self._emit_hoisted_vars(stmt)
         iter_expr = self._expr(iterable)
         iter_type = getattr(iterable, 'typ', None)
+        # Look up field type from FIELD_TYPE_OVERRIDES when iter_type is None
+        if iter_type is None and isinstance(iterable, FieldAccess):
+            field_key = (self.current_class, iterable.field)
+            if field_key in FIELD_TYPE_OVERRIDES:
+                iter_type = FIELD_TYPE_OVERRIDES[field_key]
         is_string = isinstance(iter_type, Primitive) and iter_type.kind == "string"
         if value is not None and index is not None:
             # Need index - use traditional for loop
@@ -734,6 +745,11 @@ class JavaBackend:
                 self._line(f"for (int {idx} = 0; {idx} < {iter_expr}.size(); {idx}++) {{")
                 self.indent += 1
                 elem_type = self._element_type(iter_type)
+                # Check VAR_TYPE_OVERRIDES for loop variable when element type is unknown
+                if elem_type == "Object" and self._current_func and value:
+                    override_key = (self._current_func, value)
+                    if override_key in VAR_TYPE_OVERRIDES:
+                        elem_type = self._type(VAR_TYPE_OVERRIDES[override_key])
                 self._line(f"{elem_type} {val} = {iter_expr}.get({idx});")
             for s in body:
                 self._emit_stmt(s)
@@ -751,6 +767,11 @@ class JavaBackend:
                 # Check if iterating over range() - element type is Integer
                 if isinstance(iterable, Call) and iterable.func == "range":
                     elem_type = "Integer"
+                # Check VAR_TYPE_OVERRIDES for loop variable when element type is unknown
+                if elem_type == "Object" and self._current_func and value:
+                    override_key = (self._current_func, value)
+                    if override_key in VAR_TYPE_OVERRIDES:
+                        elem_type = self._type(VAR_TYPE_OVERRIDES[override_key])
                 self._line(f"for ({elem_type} {val} : {iter_expr}) {{")
                 self.indent += 1
             for s in body:
@@ -935,7 +956,8 @@ class JavaBackend:
                         start = self._expr(args[0])
                         stop = self._expr(args[1])
                         step = self._expr(args[2])
-                        return f"java.util.stream.IntStream.iterate({start}, i -> i < {stop}, i -> i + {step}).boxed().toList()"
+                        # Use _x as lambda param to avoid conflicts with outer variables
+                        return f"java.util.stream.IntStream.iterate({start}, _x -> _x < {stop}, _x -> _x + {step}).boxed().toList()"
                 if func == "ord":
                     return f"(int) ({self._expr(args[0])}.charAt(0))"
                 if func == "chr":
@@ -1195,6 +1217,12 @@ class JavaBackend:
                 return f"{obj_str}.chars().allMatch(Character::isDigit)"
             if method == "isspace":
                 return f"{obj_str}.chars().allMatch(Character::isWhitespace)"
+        # Handle Map.get with default value -> getOrDefault
+        if isinstance(receiver_type, Map):
+            if method == "get" and len(args) == 2:
+                key = self._expr(args[0])
+                default = self._expr(args[1])
+                return f"{obj_str}.getOrDefault({key}, {default})"
         # Fallback: convert common Python methods to Java equivalents
         if method == "append":
             return f"{obj_str}.add({args_str})"
@@ -1219,6 +1247,12 @@ class JavaBackend:
             return f"{obj_str}.endsWith({args_str})"
         if method == "startswith":
             return f"{obj_str}.startsWith({args_str})"
+        # Fallback for join on non-string receiver (e.g., StringConcat)
+        if method == "join":
+            return f"String.join({obj_str}, {args_str})"
+        # Cast to Node for toSexp() - this method only exists on Node interface
+        if method == "to_sexp":
+            return f"((Node) {obj_str}).toSexp()"
         return f"{obj_str}.{to_camel(method)}({args_str})"
 
     def _slice_expr(self, obj: Expr, low: Expr | None, high: Expr | None) -> str:
@@ -1368,6 +1402,8 @@ class JavaBackend:
 
     def _element_type(self, typ: Type) -> str:
         match typ:
+            case Optional(inner=inner):
+                return self._element_type(inner)
             case Slice(element=element):
                 return self._type(element)
             case Array(element=element):

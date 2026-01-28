@@ -169,6 +169,9 @@ VAR_TYPE_OVERRIDES: dict[tuple[str, str], Type] = {
     ("_format_cmdsub_node", "redirect_parts"): Slice(STRING),
     # _parseCompoundCommand returns various Node subtypes
     ("_parse_compound_command", "result"): Interface("Node"),
+    # Arithmetic parsing variables
+    ("_arith_parse_assign", "op"): STRING,
+    ("_arith_parse_left_assoc", "left"): Interface("Node"),
 }
 
 # Fields that use -1 sentinel value instead of nil pointer for int | None

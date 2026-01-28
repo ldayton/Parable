@@ -2654,10 +2654,15 @@ class Frontend:
                 return ir.IsNil(expr=args[0], negated=True, typ=BOOL, loc=self._loc_from_node(node))
             # Check for list() copy
             if func_name == "list" and args:
-                # list(x) is a copy operation
+                # list(x) is a copy operation - preserve element type from source
+                source_type = getattr(args[0], 'typ', None)
+                if isinstance(source_type, Slice):
+                    result_type = source_type
+                else:
+                    result_type = Slice(Interface("any"))
                 return ir.MethodCall(
                     obj=args[0], method="copy", args=[],
-                    receiver_type=Slice(Interface("any")), typ=Slice(Interface("any")), loc=self._loc_from_node(node)
+                    receiver_type=result_type, typ=result_type, loc=self._loc_from_node(node)
                 )
             # Check for bytearray() constructor
             if func_name == "bytearray" and not args:
@@ -2866,10 +2871,12 @@ class Frontend:
         if attr_kind_check:
             del self._type_ctx.narrowed_attr_paths[attr_kind_check[0]]
         else_expr = self._lower_expr(node.orelse)
-        # Infer type from branches - prefer then branch, fall back to else
-        result_type = self._infer_expr_type_from_ast(node.body)
-        if result_type == Interface("any"):
-            result_type = self._infer_expr_type_from_ast(node.orelse)
+        # Use type from lowered expressions (prefer then branch, fall back to else)
+        result_type = getattr(then_expr, 'typ', None)
+        if result_type is None or result_type == Interface("any"):
+            result_type = getattr(else_expr, 'typ', None)
+        if result_type is None:
+            result_type = Interface("any")
         return ir.Ternary(
             cond=cond, then_expr=then_expr, else_expr=else_expr,
             typ=result_type, loc=self._loc_from_node(node)

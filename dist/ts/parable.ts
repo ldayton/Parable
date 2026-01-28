@@ -9135,6 +9135,10 @@ function IsWhitespace(c: string): boolean {
   return c === " " || c === "\t" || c === "\n";
 }
 
+function StringToBytes(s: string): number[] {
+  return Array.from(new TextEncoder().encode(s)).slice();
+}
+
 function IsWhitespaceNoNewline(c: string): boolean {
   return c === " " || c === "\t";
 }

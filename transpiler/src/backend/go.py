@@ -173,6 +173,7 @@ class GoBackend:
         self._line('"strconv"')
         self._line('"strings"')
         self._line('"unicode"')
+        self._line('"unicode/utf8"')
         self.indent -= 1
         self._line(")")
         self._line("")
@@ -305,6 +306,38 @@ func _isNilInterface(i interface{}) bool {
 	}
 	v := reflect.ValueOf(i)
 	return v.Kind() == reflect.Ptr && v.IsNil()
+}
+
+// _runeAt returns the character (as string) at rune index i in string s.
+// Python s[i] on a string returns the i-th character, not byte.
+func _runeAt(s string, i int) string {
+	runes := []rune(s)
+	if i < 0 || i >= len(runes) {
+		return ""
+	}
+	return string(runes[i])
+}
+
+// _runeLen returns the number of runes (characters) in string s.
+// Python len(s) on a string returns character count, not byte count.
+func _runeLen(s string) int {
+	return utf8.RuneCountInString(s)
+}
+
+// _Substring returns s[start:end] using rune (character) indices.
+// Python s[start:end] uses character indices, not byte indices.
+func _Substring(s string, start int, end int) string {
+	runes := []rune(s)
+	if start < 0 {
+		start = 0
+	}
+	if end > len(runes) {
+		end = len(runes)
+	}
+	if start >= end {
+		return ""
+	}
+	return string(runes[start:end])
 }
 '''
         for line in helpers.strip().split('\n'):
@@ -1133,15 +1166,27 @@ func _isNilInterface(i interface{}) bool {
             # Check if indexing into a tuple type (struct with F0, F1, etc.)
             if hasattr(expr, 'obj_type') and isinstance(expr.obj_type, Tuple):
                 return f"{obj}.F{expr.index.value}"
-        result = f"{obj}[{idx}]"
-        # In Go, indexing a string returns byte, cast to int if needed
         obj_type = getattr(expr.obj, 'typ', None)
-        if obj_type == STRING and expr.typ == INT:
-            result = f"int({result})"
-        return result
+        # String indexing: use _runeAt when result is used as character/string,
+        # but keep byte indexing when result is used as byte/int (e.g., for ord())
+        if obj_type == STRING:
+            # If result type is BYTE or expr is being cast to int, use byte indexing
+            result_type = getattr(expr, 'typ', None)
+            if result_type == BYTE or result_type == INT:
+                # Byte-based indexing for byte operations
+                return f"{obj}[{idx}]"
+            # Character-based indexing for string operations
+            return f"_runeAt({obj}, {idx})"
+        return f"{obj}[{idx}]"
 
     def _emit_expr_SliceExpr(self, expr: SliceExpr) -> str:
         obj = self._emit_expr(expr.obj)
+        obj_type = getattr(expr.obj, 'typ', None)
+        # Use rune-based slicing for strings (Python s[a:b] uses character indices)
+        if obj_type == STRING:
+            low = self._emit_expr(expr.low) if expr.low else "0"
+            high = self._emit_expr(expr.high) if expr.high else f"_runeLen({obj})"
+            return f"_Substring({obj}, {low}, {high})"
         low = self._emit_expr(expr.low) if expr.low else ""
         high = self._emit_expr(expr.high) if expr.high else ""
         return f"{obj}[{low}:{high}]"
@@ -1418,6 +1463,10 @@ func _isNilInterface(i interface{}) bool {
 
     def _emit_expr_Len(self, expr: Len) -> str:
         inner = self._emit_expr(expr.expr)
+        # Use rune-based length for strings (Python len() counts characters, not bytes)
+        inner_type = getattr(expr.expr, 'typ', None)
+        if inner_type == STRING:
+            return f"_runeLen({inner})"
         return f"len({inner})"
 
     def _emit_expr_MakeSlice(self, expr: MakeSlice) -> str:

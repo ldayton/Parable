@@ -152,7 +152,7 @@ class Token {
     this.typeName = typeName;
     this.value = value;
     this.pos = pos;
-    this.parts = parts;
+    this.parts = parts ?? [];
     this.word = word;
   }
 
@@ -186,8 +186,8 @@ class SavedParserState {
   constructor(parserState: number = 0, dolbraceState: number = 0, pendingHeredocs: Node[] = [], ctxStack: ParseContext[] = [], eofToken: string = "") {
     this.parserState = parserState;
     this.dolbraceState = dolbraceState;
-    this.pendingHeredocs = pendingHeredocs;
-    this.ctxStack = ctxStack;
+    this.pendingHeredocs = pendingHeredocs ?? [];
+    this.ctxStack = ctxStack ?? [];
     this.eofToken = eofToken;
   }
 }
@@ -200,7 +200,7 @@ class QuoteState {
   constructor(single: boolean = false, double: boolean = false, Stack: [boolean, boolean][] = []) {
     this.single = single;
     this.double = double;
-    this.Stack = Stack;
+    this.Stack = Stack ?? [];
   }
 
   push(): void {
@@ -278,7 +278,7 @@ class ContextStack {
   Stack: ParseContext[];
 
   constructor(Stack: ParseContext[] = []) {
-    this.Stack = Stack;
+    this.Stack = Stack ?? [];
   }
 
   getCurrent(): ParseContext {
@@ -346,7 +346,7 @@ class Lexer {
     this.TokenCache = TokenCache;
     this.ParserState = ParserState;
     this.DolbraceState = DolbraceState;
-    this.PendingHeredocs = PendingHeredocs;
+    this.PendingHeredocs = PendingHeredocs ?? [];
     this.Extglob = Extglob;
     this.Parser = Parser;
     this.EofToken = EofToken;
@@ -400,111 +400,111 @@ class Lexer {
     var three: any = this.lookahead(3);
     if (three === ";;&") {
       this.pos += 3;
-      return new Token(TokenType_SEMI_SEMI_AMP as any, three as any, start as any);
+      return new Token(TokenType_SEMI_SEMI_AMP as any, three as any, start as any, [] as any, [] as any);
     }
     if (three === "<<-") {
       this.pos += 3;
-      return new Token(TokenType_LESS_LESS_MINUS as any, three as any, start as any);
+      return new Token(TokenType_LESS_LESS_MINUS as any, three as any, start as any, [] as any, [] as any);
     }
     if (three === "<<<") {
       this.pos += 3;
-      return new Token(TokenType_LESS_LESS_LESS as any, three as any, start as any);
+      return new Token(TokenType_LESS_LESS_LESS as any, three as any, start as any, [] as any, [] as any);
     }
     if (three === "&>>") {
       this.pos += 3;
-      return new Token(TokenType_AMP_GREATER_GREATER as any, three as any, start as any);
+      return new Token(TokenType_AMP_GREATER_GREATER as any, three as any, start as any, [] as any, [] as any);
     }
     if (two === "&&") {
       this.pos += 2;
-      return new Token(TokenType_AND_AND as any, two as any, start as any);
+      return new Token(TokenType_AND_AND as any, two as any, start as any, [] as any, [] as any);
     }
     if (two === "||") {
       this.pos += 2;
-      return new Token(TokenType_OR_OR as any, two as any, start as any);
+      return new Token(TokenType_OR_OR as any, two as any, start as any, [] as any, [] as any);
     }
     if (two === ";;") {
       this.pos += 2;
-      return new Token(TokenType_SEMI_SEMI as any, two as any, start as any);
+      return new Token(TokenType_SEMI_SEMI as any, two as any, start as any, [] as any, [] as any);
     }
     if (two === ";&") {
       this.pos += 2;
-      return new Token(TokenType_SEMI_AMP as any, two as any, start as any);
+      return new Token(TokenType_SEMI_AMP as any, two as any, start as any, [] as any, [] as any);
     }
     if (two === "<<") {
       this.pos += 2;
-      return new Token(TokenType_LESS_LESS as any, two as any, start as any);
+      return new Token(TokenType_LESS_LESS as any, two as any, start as any, [] as any, [] as any);
     }
     if (two === ">>") {
       this.pos += 2;
-      return new Token(TokenType_GREATER_GREATER as any, two as any, start as any);
+      return new Token(TokenType_GREATER_GREATER as any, two as any, start as any, [] as any, [] as any);
     }
     if (two === "<&") {
       this.pos += 2;
-      return new Token(TokenType_LESS_AMP as any, two as any, start as any);
+      return new Token(TokenType_LESS_AMP as any, two as any, start as any, [] as any, [] as any);
     }
     if (two === ">&") {
       this.pos += 2;
-      return new Token(TokenType_GREATER_AMP as any, two as any, start as any);
+      return new Token(TokenType_GREATER_AMP as any, two as any, start as any, [] as any, [] as any);
     }
     if (two === "<>") {
       this.pos += 2;
-      return new Token(TokenType_LESS_GREATER as any, two as any, start as any);
+      return new Token(TokenType_LESS_GREATER as any, two as any, start as any, [] as any, [] as any);
     }
     if (two === ">|") {
       this.pos += 2;
-      return new Token(TokenType_GREATER_PIPE as any, two as any, start as any);
+      return new Token(TokenType_GREATER_PIPE as any, two as any, start as any, [] as any, [] as any);
     }
     if (two === "&>") {
       this.pos += 2;
-      return new Token(TokenType_AMP_GREATER as any, two as any, start as any);
+      return new Token(TokenType_AMP_GREATER as any, two as any, start as any, [] as any, [] as any);
     }
     if (two === "|&") {
       this.pos += 2;
-      return new Token(TokenType_PIPE_AMP as any, two as any, start as any);
+      return new Token(TokenType_PIPE_AMP as any, two as any, start as any, [] as any, [] as any);
     }
     if (c === ";") {
       this.pos += 1;
-      return new Token(TokenType_SEMI as any, c as any, start as any);
+      return new Token(TokenType_SEMI as any, c as any, start as any, [] as any, [] as any);
     }
     if (c === "|") {
       this.pos += 1;
-      return new Token(TokenType_PIPE as any, c as any, start as any);
+      return new Token(TokenType_PIPE as any, c as any, start as any, [] as any, [] as any);
     }
     if (c === "&") {
       this.pos += 1;
-      return new Token(TokenType_AMP as any, c as any, start as any);
+      return new Token(TokenType_AMP as any, c as any, start as any, [] as any, [] as any);
     }
     if (c === "(") {
       if (this.WordContext === WORD_CTX_REGEX) {
         return null;
       }
       this.pos += 1;
-      return new Token(TokenType_LPAREN as any, c as any, start as any);
+      return new Token(TokenType_LPAREN as any, c as any, start as any, [] as any, [] as any);
     }
     if (c === ")") {
       if (this.WordContext === WORD_CTX_REGEX) {
         return null;
       }
       this.pos += 1;
-      return new Token(TokenType_RPAREN as any, c as any, start as any);
+      return new Token(TokenType_RPAREN as any, c as any, start as any, [] as any, [] as any);
     }
     if (c === "<") {
       if (this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "(") {
         return null;
       }
       this.pos += 1;
-      return new Token(TokenType_LESS as any, c as any, start as any);
+      return new Token(TokenType_LESS as any, c as any, start as any, [] as any, [] as any);
     }
     if (c === ">") {
       if (this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "(") {
         return null;
       }
       this.pos += 1;
-      return new Token(TokenType_GREATER as any, c as any, start as any);
+      return new Token(TokenType_GREATER as any, c as any, start as any, [] as any, [] as any);
     }
     if (c === "\n") {
       this.pos += 1;
-      return new Token(TokenType_NEWLINE as any, c as any, start as any);
+      return new Token(TokenType_NEWLINE as any, c as any, start as any, [] as any, [] as any);
     }
     return null;
   }
@@ -1263,24 +1263,24 @@ class Lexer {
     }
     this.skipBlanks();
     if (this.atEnd()) {
-      var tok: any = new Token(TokenType_EOF as any, "" as any, this.pos as any);
+      var tok: any = new Token(TokenType_EOF as any, "" as any, this.pos as any, [] as any, [] as any);
       this.LastReadToken = tok;
       return tok;
     }
     if (this.EofToken !== "" && this.peek() === this.EofToken && !((this.ParserState & ParserStateFlags_PST_CASEPAT) !== 0) && !((this.ParserState & ParserStateFlags_PST_EOFTOKEN) !== 0)) {
-      var tok: any = new Token(TokenType_EOF as any, "" as any, this.pos as any);
+      var tok: any = new Token(TokenType_EOF as any, "" as any, this.pos as any, [] as any, [] as any);
       this.LastReadToken = tok;
       return tok;
     }
     while (this.SkipComment()) {
       this.skipBlanks();
       if (this.atEnd()) {
-        var tok: any = new Token(TokenType_EOF as any, "" as any, this.pos as any);
+        var tok: any = new Token(TokenType_EOF as any, "" as any, this.pos as any, [] as any, [] as any);
         this.LastReadToken = tok;
         return tok;
       }
       if (this.EofToken !== "" && this.peek() === this.EofToken && !((this.ParserState & ParserStateFlags_PST_CASEPAT) !== 0) && !((this.ParserState & ParserStateFlags_PST_EOFTOKEN) !== 0)) {
-        var tok: any = new Token(TokenType_EOF as any, "" as any, this.pos as any);
+        var tok: any = new Token(TokenType_EOF as any, "" as any, this.pos as any, [] as any, [] as any);
         this.LastReadToken = tok;
         return tok;
       }
@@ -1295,7 +1295,7 @@ class Lexer {
       this.LastReadToken = tok;
       return tok;
     }
-    tok = new Token(TokenType_EOF as any, "" as any, this.pos as any);
+    tok = new Token(TokenType_EOF as any, "" as any, this.pos as any, [] as any, [] as any);
     this.LastReadToken = tok;
     return tok;
   }
@@ -1687,7 +1687,7 @@ class Lexer {
     if (IsSpecialParamUnbraced(ch) || IsDigit(ch) || ch === "#") {
       this.advance();
       var text: any = Substring(this.source, start, this.pos);
-      return [new ParamExpansion(ch as any, "param" as any), text];
+      return [new ParamExpansion(ch as any, [] as any, [] as any, "param" as any), text];
     }
     if (/^[a-zA-Z]$/.test(ch) || ch === "_") {
       var nameStart: any = this.pos;
@@ -1701,7 +1701,7 @@ class Lexer {
       }
       var name: any = Substring(this.source, nameStart, this.pos);
       var text: any = Substring(this.source, start, this.pos);
-      return [new ParamExpansion(name as any, "param" as any), text];
+      return [new ParamExpansion(name as any, [] as any, [] as any, "param" as any), text];
     }
     this.pos = start;
     return [null, ""];
@@ -1743,14 +1743,14 @@ class Lexer {
           this.advance();
           var text: any = Substring(this.source, start, this.pos);
           this.DolbraceState = savedDolbrace;
-          return [new ParamIndirect(param as any, "param-indirect" as any), text];
+          return [new ParamIndirect(param as any, [] as any, [] as any, "param-indirect" as any), text];
         }
         if (!this.atEnd() && IsAtOrStar(this.peek())) {
           var suffix: any = this.advance();
           var trailing: any = this.ParseMatchedPair("{", "}", MatchedPairFlags_DOLBRACE, false);
           var text: any = Substring(this.source, start, this.pos);
           this.DolbraceState = savedDolbrace;
-          return [new ParamIndirect(param + suffix + trailing as any, "param-indirect" as any), text];
+          return [new ParamIndirect(param + suffix + trailing as any, [] as any, [] as any, "param-indirect" as any), text];
         }
         var op: any = this.ConsumeParamOperator();
         if (op === "" && !this.atEnd() && !"}\"'`".includes(this.peek())) {
@@ -1779,7 +1779,7 @@ class Lexer {
         var content: any = this.ParseMatchedPair("{", "}", MatchedPairFlags_DOLBRACE, false);
         var text: any = "${" + content + "}";
         this.DolbraceState = savedDolbrace;
-        return [new ParamExpansion(content as any, "param" as any), text];
+        return [new ParamExpansion(content as any, [] as any, [] as any, "param" as any), text];
       }
     }
     if (this.atEnd()) {
@@ -1790,7 +1790,7 @@ class Lexer {
       this.advance();
       var text: any = Substring(this.source, start, this.pos);
       this.DolbraceState = savedDolbrace;
-      return [new ParamExpansion(param as any, "param" as any), text];
+      return [new ParamExpansion(param as any, [] as any, [] as any, "param" as any), text];
     }
     var op: any = this.ConsumeParamOperator();
     if (op === "") {
@@ -1879,7 +1879,7 @@ class Word implements Node {
 
   constructor(value: string = "", parts: Node[] = [], kind: string = "") {
     this.value = value;
-    this.parts = parts;
+    this.parts = parts ?? [];
     this.kind = kind;
   }
 
@@ -3459,8 +3459,8 @@ class Command implements Node {
   kind: string;
 
   constructor(words: Word[] = [], redirects: Node[] = [], kind: string = "") {
-    this.words = words;
-    this.redirects = redirects;
+    this.words = words ?? [];
+    this.redirects = redirects ?? [];
     this.kind = kind;
   }
 
@@ -3489,7 +3489,7 @@ class Pipeline implements Node {
   kind: string;
 
   constructor(commands: Node[] = [], kind: string = "") {
-    this.commands = commands;
+    this.commands = commands ?? [];
     this.kind = kind;
   }
 
@@ -3562,7 +3562,7 @@ class List implements Node {
   kind: string;
 
   constructor(parts: Node[] = [], kind: string = "") {
-    this.parts = parts;
+    this.parts = parts ?? [];
     this.kind = kind;
   }
 
@@ -3879,7 +3879,7 @@ class Subshell implements Node {
 
   constructor(body: Node = null, redirects: Node[] = [], kind: string = "") {
     this.body = body;
-    this.redirects = redirects;
+    this.redirects = redirects ?? [];
     this.kind = kind;
   }
 
@@ -3900,7 +3900,7 @@ class BraceGroup implements Node {
 
   constructor(body: Node = null, redirects: Node[] = [], kind: string = "") {
     this.body = body;
-    this.redirects = redirects;
+    this.redirects = redirects ?? [];
     this.kind = kind;
   }
 
@@ -3925,7 +3925,7 @@ class If implements Node {
     this.condition = condition;
     this.thenBody = thenBody;
     this.elseBody = elseBody;
-    this.redirects = redirects;
+    this.redirects = redirects ?? [];
     this.kind = kind;
   }
 
@@ -3955,7 +3955,7 @@ class While implements Node {
   constructor(condition: Node = null, body: Node = null, redirects: Node[] = [], kind: string = "") {
     this.condition = condition;
     this.body = body;
-    this.redirects = redirects;
+    this.redirects = redirects ?? [];
     this.kind = kind;
   }
 
@@ -3978,7 +3978,7 @@ class Until implements Node {
   constructor(condition: Node = null, body: Node = null, redirects: Node[] = [], kind: string = "") {
     this.condition = condition;
     this.body = body;
-    this.redirects = redirects;
+    this.redirects = redirects ?? [];
     this.kind = kind;
   }
 
@@ -4001,9 +4001,9 @@ class For implements Node {
 
   constructor(varName: string = "", words: Word[] = [], body: Node = null, redirects: Node[] = [], kind: string = "") {
     this.varName = varName;
-    this.words = words;
+    this.words = words ?? [];
     this.body = body;
-    this.redirects = redirects;
+    this.redirects = redirects ?? [];
     this.kind = kind;
   }
 
@@ -4053,7 +4053,7 @@ class ForArith implements Node {
     this.cond = cond;
     this.incr = incr;
     this.body = body;
-    this.redirects = redirects;
+    this.redirects = redirects ?? [];
     this.kind = kind;
   }
 
@@ -4090,9 +4090,9 @@ class Select implements Node {
 
   constructor(varName: string = "", words: Word[] = [], body: Node = null, redirects: Node[] = [], kind: string = "") {
     this.varName = varName;
-    this.words = words;
+    this.words = words ?? [];
     this.body = body;
-    this.redirects = redirects;
+    this.redirects = redirects ?? [];
     this.kind = kind;
   }
 
@@ -4136,8 +4136,8 @@ class Case implements Node {
 
   constructor(word: Node = null, patterns: Node[] = [], redirects: Node[] = [], kind: string = "") {
     this.word = word;
-    this.patterns = patterns;
-    this.redirects = redirects;
+    this.patterns = patterns ?? [];
+    this.redirects = redirects ?? [];
     this.kind = kind;
   }
 
@@ -4241,7 +4241,7 @@ class CasePattern implements Node {
     alternatives.push(current.join(""));
     var wordList: any = [];
     for (const alt of alternatives) {
-      wordList.push(new Word(alt as any, "word" as any).toSexp());
+      wordList.push(new Word(alt as any, [] as any, "word" as any).toSexp());
     }
     var patternStr: any = wordList.join(" ");
     var parts: any = ["(pattern (" + patternStr + ")"];
@@ -4412,7 +4412,7 @@ class ArithmeticCommand implements Node {
 
   constructor(expression: Node | null = null, redirects: Node[] = [], rawContent: string = "", kind: string = "") {
     this.expression = expression;
-    this.redirects = redirects;
+    this.redirects = redirects ?? [];
     this.rawContent = rawContent;
     this.kind = kind;
   }
@@ -4422,7 +4422,7 @@ class ArithmeticCommand implements Node {
   }
 
   toSexp(): string {
-    var formatted: any = new Word(this.rawContent as any, "word" as any).FormatCommandSubstitutions(this.rawContent, true);
+    var formatted: any = new Word(this.rawContent as any, [] as any, "word" as any).FormatCommandSubstitutions(this.rawContent, true);
     var escaped: any = formatted.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t");
     var result: any = "(arith (word \"" + escaped + "\"))";
     if (this.redirects.length > 0) {
@@ -4729,7 +4729,7 @@ class ArithConcat implements Node {
   kind: string;
 
   constructor(parts: Node[] = [], kind: string = "") {
-    this.parts = parts;
+    this.parts = parts ?? [];
     this.kind = kind;
   }
 
@@ -4862,7 +4862,7 @@ class ConditionalExpr implements Node {
 
   constructor(body: any = null, redirects: Node[] = [], kind: string = "") {
     this.body = body;
-    this.redirects = redirects;
+    this.redirects = redirects ?? [];
     this.kind = kind;
   }
 
@@ -5016,7 +5016,7 @@ class ArrayName implements Node {
   kind: string;
 
   constructor(elements: Word[] = [], kind: string = "") {
-    this.elements = elements;
+    this.elements = elements ?? [];
     this.kind = kind;
   }
 
@@ -5089,14 +5089,14 @@ class Parser {
     this.source = source;
     this.pos = pos;
     this.length = length;
-    this.PendingHeredocs = PendingHeredocs;
+    this.PendingHeredocs = PendingHeredocs ?? [];
     this.CmdsubHeredocEnd = CmdsubHeredocEnd;
     this.SawNewlineInSingleQuote = SawNewlineInSingleQuote;
     this.InProcessSub = InProcessSub;
     this.Extglob = Extglob;
     this.Ctx = Ctx;
     this.Lexer = Lexer;
-    this.TokenHistory = TokenHistory;
+    this.TokenHistory = TokenHistory ?? [];
     this.ParserState = ParserState;
     this.DolbraceState = DolbraceState;
     this.EofToken = EofToken;
@@ -5650,7 +5650,7 @@ class Parser {
     var textEnd: any = this.pos;
     var text: any = Substring(this.source, start, textEnd);
     this.RestoreParserState(saved);
-    return [new CommandSubstitution(cmd as any, "cmdsub" as any), text];
+    return [new CommandSubstitution(cmd as any, [] as any, "cmdsub" as any), text];
   }
 
   ParseFunsub(start: number): [Node, string] {
@@ -5967,7 +5967,7 @@ class Parser {
     if (cmd === null) {
       cmd = new Empty("empty" as any);
     }
-    return [new CommandSubstitution(cmd as any, "cmdsub" as any), text];
+    return [new CommandSubstitution(cmd as any, [] as any, "cmdsub" as any), text];
   }
 
   ParseProcessSubstitution(): [Node, string] {
@@ -6642,7 +6642,7 @@ class Parser {
     if (!(nameChars.length > 0)) {
       throw new Error(`${"Expected variable name after $"} at position ${this.ArithPos}`)
     }
-    return new ParamExpansion(nameChars.join("") as any, "param" as any);
+    return new ParamExpansion(nameChars.join("") as any, [] as any, [] as any, "param" as any);
   }
 
   ArithParseCmdsub(): Node {
@@ -6697,7 +6697,7 @@ class Parser {
     this.ArithAdvance();
     var subParser: any = newParser(content, false, this.Extglob);
     var cmd: any = subParser.parseList(true);
-    return new CommandSubstitution(cmd as any, "cmdsub" as any);
+    return new CommandSubstitution(cmd as any, [] as any, "cmdsub" as any);
   }
 
   ArithParseBracedParam(): Node {
@@ -6709,7 +6709,7 @@ class Parser {
         nameChars.push(this.ArithAdvance());
       }
       this.ArithConsume("}");
-      return new ParamIndirect(nameChars.join("") as any, "param-indirect" as any);
+      return new ParamIndirect(nameChars.join("") as any, [] as any, [] as any, "param-indirect" as any);
     }
     if (this.ArithPeek(0) === "#") {
       this.ArithAdvance();
@@ -6725,7 +6725,7 @@ class Parser {
       var ch: any = this.ArithPeek(0);
       if (ch === "}") {
         this.ArithAdvance();
-        return new ParamExpansion(nameChars.join("") as any, "param" as any);
+        return new ParamExpansion(nameChars.join("") as any, [] as any, [] as any, "param" as any);
       }
       if (IsParamExpansionOp(ch)) {
         break;
@@ -6840,7 +6840,7 @@ class Parser {
     }
     var subParser: any = newParser(content, false, this.Extglob);
     var cmd: any = subParser.parseList(true);
-    return new CommandSubstitution(cmd as any, "cmdsub" as any);
+    return new CommandSubstitution(cmd as any, [] as any, "cmdsub" as any);
   }
 
   ArithParseNumberOrVar(): Node {
@@ -7003,7 +7003,7 @@ class Parser {
       if (target === null) {
         throw new Error(`${"Expected target for redirect " + op} at position ${this.pos}`)
       }
-      return new Redirect(op as any, target as any, "redirect" as any);
+      return new Redirect(op as any, target as any, [] as any, "redirect" as any);
     }
     if (ch === "" || !IsRedirectChar(ch)) {
       this.pos = start;
@@ -7078,7 +7078,7 @@ class Parser {
       if (!this.atEnd() && this.peek() === "-") {
         if (this.pos + 1 < this.length && !IsMetachar((this.source[this.pos + 1] as unknown as string))) {
           this.advance();
-          var target: any = new Word("&-" as any, "word" as any);
+          var target: any = new Word("&-" as any, [] as any, "word" as any);
         } else {
           var target: any = null;
         }
@@ -7104,18 +7104,18 @@ class Parser {
             this.pos = wordStart;
             var innerWord: any = this.parseWord(false, false, false);
             if (innerWord !== null) {
-              var target: any = new Word("&" + innerWord.value as any, "word" as any);
+              var target: any = new Word("&" + innerWord.value as any, [] as any, "word" as any);
               target.parts = innerWord.parts;
             } else {
               throw new Error(`${"Expected target for redirect " + op} at position ${this.pos}`)
             }
           } else {
-            var target: any = new Word("&" + fdTarget as any, "word" as any);
+            var target: any = new Word("&" + fdTarget as any, [] as any, "word" as any);
           }
         } else {
           var innerWord: any = this.parseWord(false, false, false);
           if (innerWord !== null) {
-            var target: any = new Word("&" + innerWord.value as any, "word" as any);
+            var target: any = new Word("&" + innerWord.value as any, [] as any, "word" as any);
             target.parts = innerWord.parts;
           } else {
             throw new Error(`${"Expected target for redirect " + op} at position ${this.pos}`)
@@ -7127,7 +7127,7 @@ class Parser {
       if ((op === ">&" || op === "<&") && !this.atEnd() && this.peek() === "-") {
         if (this.pos + 1 < this.length && !IsMetachar((this.source[this.pos + 1] as unknown as string))) {
           this.advance();
-          var target: any = new Word("&-" as any, "word" as any);
+          var target: any = new Word("&-" as any, [] as any, "word" as any);
         } else {
           var target: any = this.parseWord(false, false, false);
         }
@@ -7138,7 +7138,7 @@ class Parser {
     if (target === null) {
       throw new Error(`${"Expected target for redirect " + op} at position ${this.pos}`)
     }
-    return new Redirect(op as any, target as any, "redirect" as any);
+    return new Redirect(op as any, target as any, [] as any, "redirect" as any);
   }
 
   ParseHeredocDelimiter(): [string, boolean] {
@@ -7450,7 +7450,7 @@ class Parser {
         return existing;
       }
     }
-    var heredoc: any = new HereDoc(delimiter as any, "" as any, stripTabs as any, quoted as any, fd as any, false as any, "heredoc" as any);
+    var heredoc: any = new HereDoc(delimiter as any, "" as any, stripTabs as any, quoted as any, fd as any, false as any, [] as any, "heredoc" as any);
     heredoc.StartPos = startPos;
     this.PendingHeredocs.push(heredoc);
     this.ClearState(ParserStateFlags_PST_HEREDOC);
@@ -7832,7 +7832,7 @@ class Parser {
           }
         }
       }
-      elseBody = new If(elifCondition as any, elifThenBody as any, innerElse as any, "if" as any);
+      elseBody = new If(elifCondition as any, elifThenBody as any, innerElse as any, [] as any, "if" as any);
     } else {
       if (this.LexIsAtReservedWord("else")) {
         this.LexConsumeWord("else");
@@ -7876,7 +7876,7 @@ class Parser {
         }
       }
     }
-    return new If(condition as any, thenBody as any, elseBody as any, "if" as any);
+    return new If(condition as any, thenBody as any, elseBody as any, [] as any, "if" as any);
   }
 
   parseWhile(): While {
@@ -8807,7 +8807,7 @@ class Parser {
             if ((inner as unknown as Negation).pipeline !== null) {
               return (inner as unknown as Negation).pipeline;
             } else {
-              return new Command([] as any, "command" as any);
+              return new Command([] as any, [] as any, "command" as any);
             }
           }
           return new Negation(inner as any, "negation" as any);
@@ -10877,7 +10877,7 @@ function parse(source: string, extglob: boolean): Node[] {
 }
 
 function newParseError(message: string, pos: number, line: number): ParseError {
-  var self: any = new ParseError();
+  var self: any = new ParseError([] as any, [] as any, [] as any);
   self.message = message;
   self.pos = pos;
   self.line = line;
@@ -10889,7 +10889,7 @@ function newMatchedPairError(message: string, pos: number, line: number): Matche
 }
 
 function newQuoteState(): QuoteState {
-  var self: any = new QuoteState();
+  var self: any = new QuoteState([] as any, [] as any, [] as any);
   self.single = false;
   self.double = false;
   self.Stack = [];
@@ -10897,7 +10897,7 @@ function newQuoteState(): QuoteState {
 }
 
 function newParseContext(kind: number): ParseContext {
-  var self: any = new ParseContext();
+  var self: any = new ParseContext([] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any);
   self.kind = kind;
   self.parenDepth = 0;
   self.braceDepth = 0;
@@ -10910,13 +10910,13 @@ function newParseContext(kind: number): ParseContext {
 }
 
 function newContextStack(): ContextStack {
-  var self: any = new ContextStack();
+  var self: any = new ContextStack([] as any);
   self.Stack = [newParseContext(0)];
   return self;
 }
 
 function newLexer(source: string, extglob: boolean): Lexer {
-  var self: any = new Lexer();
+  var self: any = new Lexer([] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any);
   self.source = source;
   self.pos = 0;
   self.length = source.length;
@@ -10942,7 +10942,7 @@ function newLexer(source: string, extglob: boolean): Lexer {
 }
 
 function newParser(source: string, inProcessSub: boolean, extglob: boolean): Parser {
-  var self: any = new Parser();
+  var self: any = new Parser([] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any);
   self.source = source;
   self.pos = 0;
   self.length = source.length;

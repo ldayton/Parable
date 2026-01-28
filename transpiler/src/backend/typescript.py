@@ -93,11 +93,16 @@ class TsBackend:
         self.indent = 0
         self.lines: list[str] = []
         self.receiver_name: str | None = None
+        self.struct_fields: dict[str, list[str]] = {}  # struct name -> field names in order
 
     def emit(self, module: Module) -> str:
         """Emit TypeScript code from IR Module."""
         self.indent = 0
         self.lines = []
+        self.struct_fields = {}
+        # Pre-collect struct field orders for StructLit emission
+        for struct in module.structs:
+            self.struct_fields[struct.name] = [f.name for f in struct.fields]
         self._emit_module(module)
         return "\n".join(self.lines)
 
@@ -223,7 +228,11 @@ class TsBackend:
         self.indent += 1
         for fld in struct.fields:
             name = _camel(fld.name)
-            self._line(f"this.{name} = {name};")
+            # For array/slice fields, convert null to empty array (Python passes None, JS needs [])
+            if isinstance(fld.typ, (Slice, Array)):
+                self._line(f"this.{name} = {name} ?? [];")
+            else:
+                self._line(f"this.{name} = {name};")
         self.indent -= 1
         self._line("}")
 
@@ -677,7 +686,16 @@ class TsBackend:
                 return f"new Set([{elems}])"
             case StructLit(struct_name=struct_name, fields=fields):
                 # Cast args to any to suppress type errors from IR type mismatches
-                args = ", ".join(f"{self._expr(v)} as any" for v in fields.values())
+                # Use struct field order for positional constructor args
+                field_order = self.struct_fields.get(struct_name, [])
+                ordered_args = []
+                for field_name in field_order:
+                    if field_name in fields:
+                        ordered_args.append(f"{self._expr(fields[field_name])} as any")
+                    else:
+                        # Missing field - use default value based on type
+                        ordered_args.append("[] as any")  # Most common default for missing is empty array
+                args = ", ".join(ordered_args)
                 return f"new {_safe_name(struct_name)}({args})"
             case TupleLit(elements=elements):
                 elems = ", ".join(self._expr(e) for e in elements)

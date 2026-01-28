@@ -545,6 +545,12 @@ class PythonBackend:
             case BinaryOp(op="==", left=Len(expr=inner), right=IntLit(value=0)):
                 # Convert len(x) == 0 back to "not x" for Python
                 return f"not {self._expr(inner)}"
+            case BinaryOp(op="!=", left=left, right=StringLit(value="")):
+                # Convert x != "" back to truthy check for Python
+                return self._expr(left)
+            case BinaryOp(op="==", left=left, right=StringLit(value="")):
+                # Convert x == "" back to "not x" for Python
+                return f"not {self._expr(left)}"
             case BinaryOp(op=op, left=left, right=right):
                 py_op = _binary_op(op)
                 left_str = self._maybe_paren(left, op, is_left=True)

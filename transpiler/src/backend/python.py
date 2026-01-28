@@ -282,6 +282,8 @@ class PythonBackend:
                 self._line(f"{lv} {op}= {val}")
             case ExprStmt(expr=Var(name="_skip_docstring")):
                 pass  # Skip docstring markers
+            case ExprStmt(expr=Var(name="_pass")):
+                self._line("pass")
             case ExprStmt(expr=expr):
                 self._line(self._expr(expr))
             case Return(value=value):
@@ -504,7 +506,11 @@ class PythonBackend:
             case MethodCall(obj=obj, method=method, args=args, receiver_type=receiver_type):
                 args_str = ", ".join(self._expr(a) for a in args)
                 py_method = _method_name(method, receiver_type)
-                return f"{self._expr(obj)}.{py_method}({args_str})"
+                obj_str = self._expr(obj)
+                # Wrap receiver in parens for compound expressions (BinaryOp, UnaryOp, etc.)
+                if isinstance(obj, (BinaryOp, UnaryOp, Ternary)):
+                    obj_str = f"({obj_str})"
+                return f"{obj_str}.{py_method}({args_str})"
             case StaticCall(on_type=on_type, method=method, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
                 type_name = self._type_name_for_check(on_type)

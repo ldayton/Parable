@@ -615,6 +615,11 @@ class TsBackend:
             case MethodCall(obj=obj, method="get", args=[key, default], receiver_type=receiver_type) if isinstance(receiver_type, Map):
                 # Python dict.get(key, default) → JS Map.get(key) ?? default
                 return f"{self._expr(obj)}.get({self._expr(key)}) ?? {self._expr(default)}"
+            case MethodCall(obj=obj, method="replace", args=[StringLit(value=old_str), new], receiver_type=_):
+                # Python str.replace replaces ALL occurrences; JS replace only replaces first
+                # Use regex with global flag for all-occurrence replacement
+                escaped = _escape_regex_literal(old_str)
+                return f"{self._expr(obj)}.replace(/{escaped}/g, {self._expr(new)})"
             case MethodCall(obj=obj, method=method, args=args, receiver_type=receiver_type):
                 args_str = ", ".join(self._expr(a) for a in args)
                 ts_method = _method_name(method, receiver_type)
@@ -948,6 +953,24 @@ def _escape_regex_class(chars: str) -> str:
     result = []
     for c in chars:
         if c in r"]\^-":
+            result.append(f"\\{c}")
+        elif c == "\t":
+            result.append("\\t")
+        elif c == "\n":
+            result.append("\\n")
+        elif c == "\r":
+            result.append("\\r")
+        else:
+            result.append(c)
+    return "".join(result)
+
+
+def _escape_regex_literal(s: str) -> str:
+    """Escape a string for use as a literal in a regex pattern."""
+    # Characters that have special meaning in regex: \ ^ $ . * + ? ( ) [ ] { } |
+    result = []
+    for c in s:
+        if c in r"\^$.*+?()[]{}|":
             result.append(f"\\{c}")
         elif c == "\t":
             result.append("\\t")

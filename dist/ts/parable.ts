@@ -1896,12 +1896,12 @@ class Word implements Node {
     value = this.NormalizeParamExpansionNewlines(value);
     value = this.StripArithLineContinuations(value);
     value = this.DoubleCtlescSmart(value);
-    value = value.replace("", "");
-    value = value.replace("\\", "\\\\");
+    value = value.replace(//g, "");
+    value = value.replace(/\\/g, "\\\\");
     if (value.endsWith("\\\\") && !value.endsWith("\\\\\\\\")) {
       value = value + "\\\\";
     }
-    var escaped: any = value.replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t");
+    var escaped: any = value.replace(/"/g, "\\\"").replace(/\n/g, "\\n").replace(/\t/g, "\\t");
     return "(word \"" + escaped + "\")";
   }
 
@@ -3149,11 +3149,11 @@ class Word implements Node {
                   var stripped: any = rawContent.slice(leadingWsEnd);
                   if (stripped.startsWith("(")) {
                     if (leadingWs !== "") {
-                      var normalizedWs: any = leadingWs.replace("\n", " ").replace("\t", " ");
+                      var normalizedWs: any = leadingWs.replace(/\n/g, " ").replace(/\t/g, " ");
                       var spaced: any = FormatCmdsubNode((node as unknown as ProcessSubstitution).command, 0, false, false, false);
                       result.push(direction + "(" + normalizedWs + spaced + ")");
                     } else {
-                      rawContent = rawContent.replace("\\\n", "");
+                      rawContent = rawContent.replace(/\\\n/g, "");
                       result.push(direction + "(" + rawContent + ")");
                     }
                     procsubIdx += 1;
@@ -3162,7 +3162,7 @@ class Word implements Node {
                   }
                 }
                 rawContent = Substring(value, i + 2, j - 1);
-                var rawStripped: any = rawContent.replace("\\\n", "");
+                var rawStripped: any = rawContent.replace(/\\\n/g, "");
                 if (StartsWithSubshell((node as unknown as ProcessSubstitution).command) && formatted !== rawStripped) {
                   result.push(direction + "(" + rawStripped + ")");
                 } else {
@@ -3224,7 +3224,7 @@ class Word implements Node {
               }
             } else {
               if ((IsExpansionStart(value, i, "${ ") || IsExpansionStart(value, i, "${\t") || IsExpansionStart(value, i, "${\n") || IsExpansionStart(value, i, "${|")) && !IsBackslashEscaped(value, i)) {
-                var prefix: any = Substring(value, i, i + 3).replace("\t", " ").replace("\n", " ");
+                var prefix: any = Substring(value, i, i + 3).replace(/\t/g, " ").replace(/\n/g, " ");
                 var j: any = i + 3;
                 var depth: any = 1;
                 while (j < value.length && depth > 0) {
@@ -3448,7 +3448,7 @@ class Word implements Node {
     value = this.StripLocaleStringDollars(value);
     value = this.FormatCommandSubstitutions(value, false);
     value = this.NormalizeExtglobWhitespace(value);
-    value = value.replace("", "");
+    value = value.replace(//g, "");
     return value.replace(/[\n]+$/, '');
   }
 }
@@ -4022,7 +4022,7 @@ class For implements Node {
     }
     var tempWord: any = new Word(this.varName as any, [] as any, "word" as any);
     var varFormatted: any = tempWord.FormatCommandSubstitutions(this.varName, false);
-    var varEscaped: any = varFormatted.replace("\\", "\\\\").replace("\"", "\\\"");
+    var varEscaped: any = varFormatted.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
     if (this.words === null) {
       return "(for (word \"" + varEscaped + "\") (in (word \"\\\"$@\\\"\")) " + this.body.toSexp() + ")" + suffix;
     } else {
@@ -4109,7 +4109,7 @@ class Select implements Node {
       }
       suffix = " " + redirectParts.join(" ");
     }
-    var varEscaped: any = this.varName.replace("\\", "\\\\").replace("\"", "\\\"");
+    var varEscaped: any = this.varName.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
     if (this.words !== null) {
       var wordParts: any = [];
       for (const w of this.words) {
@@ -4293,15 +4293,15 @@ class ParamExpansion implements Node {
   }
 
   toSexp(): string {
-    var escapedParam: any = this.param.replace("\\", "\\\\").replace("\"", "\\\"");
+    var escapedParam: any = this.param.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
     if (this.op !== "") {
-      var escapedOp: any = this.op.replace("\\", "\\\\").replace("\"", "\\\"");
+      var escapedOp: any = this.op.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
       if (this.arg !== "") {
         var argVal: any = this.arg;
       } else {
         var argVal: any = "";
       }
-      var escapedArg: any = argVal.replace("\\", "\\\\").replace("\"", "\\\"");
+      var escapedArg: any = argVal.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
       return "(param \"" + escapedParam + "\" \"" + escapedOp + "\" \"" + escapedArg + "\")";
     }
     return "(param \"" + escapedParam + "\")";
@@ -4322,7 +4322,7 @@ class ParamLength implements Node {
   }
 
   toSexp(): string {
-    var escaped: any = this.param.replace("\\", "\\\\").replace("\"", "\\\"");
+    var escaped: any = this.param.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
     return "(param-len \"" + escaped + "\")";
   }
 }
@@ -4345,15 +4345,15 @@ class ParamIndirect implements Node {
   }
 
   toSexp(): string {
-    var escaped: any = this.param.replace("\\", "\\\\").replace("\"", "\\\"");
+    var escaped: any = this.param.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
     if (this.op !== "") {
-      var escapedOp: any = this.op.replace("\\", "\\\\").replace("\"", "\\\"");
+      var escapedOp: any = this.op.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
       if (this.arg !== "") {
         var argVal: any = this.arg;
       } else {
         var argVal: any = "";
       }
-      var escapedArg: any = argVal.replace("\\", "\\\\").replace("\"", "\\\"");
+      var escapedArg: any = argVal.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
       return "(param-indirect \"" + escaped + "\" \"" + escapedOp + "\" \"" + escapedArg + "\")";
     }
     return "(param-indirect \"" + escaped + "\")";
@@ -4423,7 +4423,7 @@ class ArithmeticCommand implements Node {
 
   toSexp(): string {
     var formatted: any = new Word(this.rawContent as any, [] as any, "word" as any).FormatCommandSubstitutions(this.rawContent, true);
-    var escaped: any = formatted.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t");
+    var escaped: any = formatted.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n").replace(/\t/g, "\\t");
     var result: any = "(arith (word \"" + escaped + "\"))";
     if (this.redirects.length > 0) {
       var redirectParts: any = [];
@@ -4719,7 +4719,7 @@ class ArithDeprecated implements Node {
   }
 
   toSexp(): string {
-    var escaped: any = this.expression.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
+    var escaped: any = this.expression.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n");
     return "(arith-deprecated \"" + escaped + "\")";
   }
 }
@@ -4760,7 +4760,7 @@ class AnsiCQuote implements Node {
   }
 
   toSexp(): string {
-    var escaped: any = this.content.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
+    var escaped: any = this.content.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n");
     return "(ansi-c \"" + escaped + "\")";
   }
 }
@@ -4779,7 +4779,7 @@ class LocaleString implements Node {
   }
 
   toSexp(): string {
-    var escaped: any = this.content.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
+    var escaped: any = this.content.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n");
     return "(locale \"" + escaped + "\")";
   }
 }
@@ -4873,7 +4873,7 @@ class ConditionalExpr implements Node {
   toSexp(): string {
     var body: any = this.body;
     if (typeof body === 'string') {
-      var escaped: any = body.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
+      var escaped: any = body.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n");
       var result: any = "(cond \"" + escaped + "\")";
     } else {
       var result: any = "(cond " + body.toSexp() + ")";
@@ -7589,7 +7589,7 @@ class Parser {
       return null;
     }
     var content: any = Substring(this.source, contentStart, this.pos);
-    content = content.replace("\\\n", "");
+    content = content.replace(/\\\n/g, "");
     this.advance();
     this.advance();
     var expr: any = this.ParseArithExpr(content);
@@ -9250,8 +9250,8 @@ function FormatArithVal(s: string): string {
   var val: any = w.ExpandAllAnsiCQuotes(s);
   val = w.StripLocaleStringDollars(val);
   val = w.FormatCommandSubstitutions(val, false);
-  val = val.replace("\\", "\\\\").replace("\"", "\\\"");
-  val = val.replace("\n", "\\n").replace("\t", "\\t");
+  val = val.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
+  val = val.replace(/\n/g, "\\n").replace(/\t/g, "\\t");
   return val;
 }
 
@@ -9701,7 +9701,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
     var i: any = 0;
     while (i < node.patterns.length) {
       var p: any = node.patterns[i];
-      var pat: any = (p as unknown as CasePattern).pattern.replace("|", " | ");
+      var pat: any = (p as unknown as CasePattern).pattern.replace(/\|/g, " | ");
       if ((p as unknown as CasePattern).body !== null) {
         var body: any = FormatCmdsubNode((p as unknown as CasePattern).body, indent + 8, false, false, false);
       } else {

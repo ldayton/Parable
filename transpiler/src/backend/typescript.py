@@ -94,16 +94,16 @@ class TsBackend:
         self.lines: list[str] = []
         self.receiver_name: str | None = None
         self.current_struct: str | None = None  # Track current struct for method binding
-        self.struct_fields: dict[str, list[str]] = {}  # struct name -> field names in order
+        self.struct_fields: dict[str, list[tuple[str, Type]]] = {}  # struct name -> [(field_name, type)]
 
     def emit(self, module: Module) -> str:
         """Emit TypeScript code from IR Module."""
         self.indent = 0
         self.lines = []
         self.struct_fields = {}
-        # Pre-collect struct field orders for StructLit emission
+        # Pre-collect struct field orders and types for StructLit emission
         for struct in module.structs:
-            self.struct_fields[struct.name] = [f.name for f in struct.fields]
+            self.struct_fields[struct.name] = [(f.name, f.typ) for f in struct.fields]
         self._emit_module(module)
         return "\n".join(self.lines)
 
@@ -581,9 +581,10 @@ class TsBackend:
                 # Check if this is a method reference on 'this' (needs .bind(this))
                 # If accessing 'this.method' where method is not a struct field,
                 # it's a method reference being passed as a callback
+                struct_field_names = [name for name, _ in self.struct_fields.get(self.current_struct, [])]
                 if (obj_str == "this" and
                     self.current_struct is not None and
-                    field not in self.struct_fields.get(self.current_struct, [])):
+                    field not in struct_field_names):
                     return f"{obj_str}.{field_str}.bind(this)"
                 return f"{obj_str}.{field_str}"
             case Index(obj=obj, index=index, typ=typ):
@@ -676,6 +677,16 @@ class TsBackend:
                 return self._expr(operand)  # TypeScript passes objects by reference
             case UnaryOp(op="*", operand=operand):
                 return self._expr(operand)  # TypeScript has no pointer dereference
+            case UnaryOp(op="!", operand=BinaryOp(op="!=", left=left, right=right)):
+                # Simplify !(x != y) → x === y (with precedence handling)
+                left_str = self._expr_with_precedence(left, "===", is_right=False)
+                right_str = self._expr_with_precedence(right, "===", is_right=True)
+                return f"{left_str} === {right_str}"
+            case UnaryOp(op="!", operand=BinaryOp(op="==", left=left, right=right)):
+                # Simplify !(x == y) → x !== y (with precedence handling)
+                left_str = self._expr_with_precedence(left, "!==", is_right=False)
+                right_str = self._expr_with_precedence(right, "!==", is_right=True)
+                return f"{left_str} !== {right_str}"
             case UnaryOp(op=op, operand=operand):
                 inner = self._expr(operand)
                 # Wrap in parentheses if operand is a binary expression (precedence)
@@ -689,6 +700,11 @@ class TsBackend:
                 ts_type = self._type(to_type)
                 from_type = self._type(inner.typ) if hasattr(inner, 'typ') else None
                 if from_type == ts_type:
+                    return self._expr(inner)
+                # String indexing to string is redundant in TypeScript (s[i] returns string)
+                if (isinstance(to_type, Primitive) and to_type.kind == "string" and
+                    isinstance(inner, Index) and
+                    hasattr(inner.obj, 'typ') and inner.obj.typ == STRING):
                     return self._expr(inner)
                 # string to []byte: use TextEncoder for proper UTF-8 encoding
                 if (isinstance(to_type, Slice) and
@@ -749,16 +765,16 @@ class TsBackend:
                 elems = ", ".join(self._expr(e) for e in elements)
                 return f"new Set([{elems}])"
             case StructLit(struct_name=struct_name, fields=fields):
-                # Cast args to any to suppress type errors from IR type mismatches
                 # Use struct field order for positional constructor args
-                field_order = self.struct_fields.get(struct_name, [])
+                # Cast provided values to any to suppress IR type mismatches
+                field_info = self.struct_fields.get(struct_name, [])
                 ordered_args = []
-                for field_name in field_order:
+                for field_name, field_type in field_info:
                     if field_name in fields:
                         ordered_args.append(f"{self._expr(fields[field_name])} as any")
                     else:
-                        # Missing field - use default value based on type
-                        ordered_args.append("[] as any")  # Most common default for missing is empty array
+                        # Missing field - use type-appropriate default value
+                        ordered_args.append(self._default_value(field_type))
                 args = ", ".join(ordered_args)
                 return f"new {_safe_name(struct_name)}({args})"
             case TupleLit(elements=elements):

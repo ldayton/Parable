@@ -368,14 +368,14 @@ class Lexer {
     if (this.pos >= this.length) {
       return "";
     }
-    return (this.source[this.pos] as unknown as string);
+    return this.source[this.pos];
   }
 
   advance(): string {
     if (this.pos >= this.length) {
       return "";
     }
-    var c: any = (this.source[this.pos] as unknown as string);
+    var c: any = this.source[this.pos];
     this.pos += 1;
     return c;
   }
@@ -402,118 +402,118 @@ class Lexer {
     var three: any = this.lookahead(3);
     if (three === ";;&") {
       this.pos += 3;
-      return new Token(TokenType_SEMI_SEMI_AMP as any, three as any, start as any, [] as any, [] as any);
+      return new Token(TokenType_SEMI_SEMI_AMP as any, three as any, start as any, [], null);
     }
     if (three === "<<-") {
       this.pos += 3;
-      return new Token(TokenType_LESS_LESS_MINUS as any, three as any, start as any, [] as any, [] as any);
+      return new Token(TokenType_LESS_LESS_MINUS as any, three as any, start as any, [], null);
     }
     if (three === "<<<") {
       this.pos += 3;
-      return new Token(TokenType_LESS_LESS_LESS as any, three as any, start as any, [] as any, [] as any);
+      return new Token(TokenType_LESS_LESS_LESS as any, three as any, start as any, [], null);
     }
     if (three === "&>>") {
       this.pos += 3;
-      return new Token(TokenType_AMP_GREATER_GREATER as any, three as any, start as any, [] as any, [] as any);
+      return new Token(TokenType_AMP_GREATER_GREATER as any, three as any, start as any, [], null);
     }
     if (two === "&&") {
       this.pos += 2;
-      return new Token(TokenType_AND_AND as any, two as any, start as any, [] as any, [] as any);
+      return new Token(TokenType_AND_AND as any, two as any, start as any, [], null);
     }
     if (two === "||") {
       this.pos += 2;
-      return new Token(TokenType_OR_OR as any, two as any, start as any, [] as any, [] as any);
+      return new Token(TokenType_OR_OR as any, two as any, start as any, [], null);
     }
     if (two === ";;") {
       this.pos += 2;
-      return new Token(TokenType_SEMI_SEMI as any, two as any, start as any, [] as any, [] as any);
+      return new Token(TokenType_SEMI_SEMI as any, two as any, start as any, [], null);
     }
     if (two === ";&") {
       this.pos += 2;
-      return new Token(TokenType_SEMI_AMP as any, two as any, start as any, [] as any, [] as any);
+      return new Token(TokenType_SEMI_AMP as any, two as any, start as any, [], null);
     }
     if (two === "<<") {
       this.pos += 2;
-      return new Token(TokenType_LESS_LESS as any, two as any, start as any, [] as any, [] as any);
+      return new Token(TokenType_LESS_LESS as any, two as any, start as any, [], null);
     }
     if (two === ">>") {
       this.pos += 2;
-      return new Token(TokenType_GREATER_GREATER as any, two as any, start as any, [] as any, [] as any);
+      return new Token(TokenType_GREATER_GREATER as any, two as any, start as any, [], null);
     }
     if (two === "<&") {
       this.pos += 2;
-      return new Token(TokenType_LESS_AMP as any, two as any, start as any, [] as any, [] as any);
+      return new Token(TokenType_LESS_AMP as any, two as any, start as any, [], null);
     }
     if (two === ">&") {
       this.pos += 2;
-      return new Token(TokenType_GREATER_AMP as any, two as any, start as any, [] as any, [] as any);
+      return new Token(TokenType_GREATER_AMP as any, two as any, start as any, [], null);
     }
     if (two === "<>") {
       this.pos += 2;
-      return new Token(TokenType_LESS_GREATER as any, two as any, start as any, [] as any, [] as any);
+      return new Token(TokenType_LESS_GREATER as any, two as any, start as any, [], null);
     }
     if (two === ">|") {
       this.pos += 2;
-      return new Token(TokenType_GREATER_PIPE as any, two as any, start as any, [] as any, [] as any);
+      return new Token(TokenType_GREATER_PIPE as any, two as any, start as any, [], null);
     }
     if (two === "&>") {
       this.pos += 2;
-      return new Token(TokenType_AMP_GREATER as any, two as any, start as any, [] as any, [] as any);
+      return new Token(TokenType_AMP_GREATER as any, two as any, start as any, [], null);
     }
     if (two === "|&") {
       this.pos += 2;
-      return new Token(TokenType_PIPE_AMP as any, two as any, start as any, [] as any, [] as any);
+      return new Token(TokenType_PIPE_AMP as any, two as any, start as any, [], null);
     }
     if (c === ";") {
       this.pos += 1;
-      return new Token(TokenType_SEMI as any, c as any, start as any, [] as any, [] as any);
+      return new Token(TokenType_SEMI as any, c as any, start as any, [], null);
     }
     if (c === "|") {
       this.pos += 1;
-      return new Token(TokenType_PIPE as any, c as any, start as any, [] as any, [] as any);
+      return new Token(TokenType_PIPE as any, c as any, start as any, [], null);
     }
     if (c === "&") {
       this.pos += 1;
-      return new Token(TokenType_AMP as any, c as any, start as any, [] as any, [] as any);
+      return new Token(TokenType_AMP as any, c as any, start as any, [], null);
     }
     if (c === "(") {
       if (this.WordContext === WORD_CTX_REGEX) {
         return null;
       }
       this.pos += 1;
-      return new Token(TokenType_LPAREN as any, c as any, start as any, [] as any, [] as any);
+      return new Token(TokenType_LPAREN as any, c as any, start as any, [], null);
     }
     if (c === ")") {
       if (this.WordContext === WORD_CTX_REGEX) {
         return null;
       }
       this.pos += 1;
-      return new Token(TokenType_RPAREN as any, c as any, start as any, [] as any, [] as any);
+      return new Token(TokenType_RPAREN as any, c as any, start as any, [], null);
     }
     if (c === "<") {
-      if (this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "(") {
+      if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
         return null;
       }
       this.pos += 1;
-      return new Token(TokenType_LESS as any, c as any, start as any, [] as any, [] as any);
+      return new Token(TokenType_LESS as any, c as any, start as any, [], null);
     }
     if (c === ">") {
-      if (this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "(") {
+      if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
         return null;
       }
       this.pos += 1;
-      return new Token(TokenType_GREATER as any, c as any, start as any, [] as any, [] as any);
+      return new Token(TokenType_GREATER as any, c as any, start as any, [], null);
     }
     if (c === "\n") {
       this.pos += 1;
-      return new Token(TokenType_NEWLINE as any, c as any, start as any, [] as any, [] as any);
+      return new Token(TokenType_NEWLINE as any, c as any, start as any, [], null);
     }
     return null;
   }
 
   skipBlanks(): void {
     while (this.pos < this.length) {
-      var c: any = (this.source[this.pos] as unknown as string);
+      var c: any = this.source[this.pos];
       if (c !== " " && c !== "\t") {
         break;
       }
@@ -525,19 +525,19 @@ class Lexer {
     if (this.pos >= this.length) {
       return false;
     }
-    if ((this.source[this.pos] as unknown as string) !== "#") {
+    if (this.source[this.pos] !== "#") {
       return false;
     }
     if (this.quote.inQuotes()) {
       return false;
     }
     if (this.pos > 0) {
-      var prev: any = (this.source[this.pos - 1] as unknown as string);
+      var prev: any = this.source[this.pos - 1];
       if (!" \t\n;|&(){}".includes(prev)) {
         return false;
       }
     }
-    while (this.pos < this.length && (this.source[this.pos] as unknown as string) !== "\n") {
+    while (this.pos < this.length && this.source[this.pos] !== "\n") {
       this.pos += 1;
     }
     return true;
@@ -547,7 +547,7 @@ class Lexer {
     var chars: any = ["'"];
     var sawNewline: any = false;
     while (this.pos < this.length) {
-      var c: any = (this.source[this.pos] as unknown as string);
+      var c: any = this.source[this.pos];
       if (c === "\n") {
         sawNewline = true;
       }
@@ -562,10 +562,10 @@ class Lexer {
 
   IsWordTerminator(ctx: number, ch: string, bracketDepth: number, parenDepth: number): boolean {
     if (ctx === WORD_CTX_REGEX) {
-      if (ch === "]" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "]") {
+      if (ch === "]" && this.pos + 1 < this.length && this.source[this.pos + 1] === "]") {
         return true;
       }
-      if (ch === "&" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "&") {
+      if (ch === "&" && this.pos + 1 < this.length && this.source[this.pos + 1] === "&") {
         return true;
       }
       if (ch === ")" && parenDepth === 0) {
@@ -574,7 +574,7 @@ class Lexer {
       return IsWhitespace(ch) && parenDepth === 0;
     }
     if (ctx === WORD_CTX_COND) {
-      if (ch === "]" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "]") {
+      if (ch === "]" && this.pos + 1 < this.length && this.source[this.pos + 1] === "]") {
         return true;
       }
       if (ch === ")") {
@@ -589,7 +589,7 @@ class Lexer {
       if (ch === ";") {
         return true;
       }
-      if (IsRedirectChar(ch) && !(this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "(")) {
+      if (IsRedirectChar(ch) && !(this.pos + 1 < this.length && this.source[this.pos + 1] === "(")) {
         return true;
       }
       return IsWhitespace(ch);
@@ -597,7 +597,7 @@ class Lexer {
     if ((this.ParserState & ParserStateFlags_PST_EOFTOKEN) !== 0 && this.EofToken !== "" && ch === this.EofToken && bracketDepth === 0) {
       return true;
     }
-    if (IsRedirectChar(ch) && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "(") {
+    if (IsRedirectChar(ch) && this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
       return false;
     }
     return IsMetachar(ch) && bracketDepth === 0;
@@ -606,31 +606,31 @@ class Lexer {
   ReadBracketExpression(chars: string[], parts: Node[], forRegex: boolean, parenDepth: number): boolean {
     if (forRegex) {
       var scan: any = this.pos + 1;
-      if (scan < this.length && (this.source[scan] as unknown as string) === "^") {
+      if (scan < this.length && this.source[scan] === "^") {
         scan += 1;
       }
-      if (scan < this.length && (this.source[scan] as unknown as string) === "]") {
+      if (scan < this.length && this.source[scan] === "]") {
         scan += 1;
       }
       var bracketWillClose: any = false;
       while (scan < this.length) {
-        var sc: any = (this.source[scan] as unknown as string);
-        if (sc === "]" && scan + 1 < this.length && (this.source[scan + 1] as unknown as string) === "]") {
+        var sc: any = this.source[scan];
+        if (sc === "]" && scan + 1 < this.length && this.source[scan + 1] === "]") {
           break;
         }
         if (sc === ")" && parenDepth > 0) {
           break;
         }
-        if (sc === "&" && scan + 1 < this.length && (this.source[scan + 1] as unknown as string) === "&") {
+        if (sc === "&" && scan + 1 < this.length && this.source[scan + 1] === "&") {
           break;
         }
         if (sc === "]") {
           bracketWillClose = true;
           break;
         }
-        if (sc === "[" && scan + 1 < this.length && (this.source[scan + 1] as unknown as string) === ":") {
+        if (sc === "[" && scan + 1 < this.length && this.source[scan + 1] === ":") {
           scan += 2;
-          while (scan < this.length && !((this.source[scan] as unknown as string) === ":" && scan + 1 < this.length && (this.source[scan + 1] as unknown as string) === "]")) {
+          while (scan < this.length && !(this.source[scan] === ":" && scan + 1 < this.length && this.source[scan + 1] === "]")) {
             scan += 1;
           }
           if (scan < this.length) {
@@ -647,7 +647,7 @@ class Lexer {
       if (this.pos + 1 >= this.length) {
         return false;
       }
-      var nextCh: any = (this.source[this.pos + 1] as unknown as string);
+      var nextCh: any = this.source[this.pos + 1];
       if (IsWhitespaceNoNewline(nextCh) || nextCh === "&" || nextCh === "|") {
         return false;
       }
@@ -665,10 +665,10 @@ class Lexer {
         chars.push(this.advance());
         break;
       }
-      if (c === "[" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === ":") {
+      if (c === "[" && this.pos + 1 < this.length && this.source[this.pos + 1] === ":") {
         chars.push(this.advance());
         chars.push(this.advance());
-        while (!this.atEnd() && !(this.peek() === ":" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "]")) {
+        while (!this.atEnd() && !(this.peek() === ":" && this.pos + 1 < this.length && this.source[this.pos + 1] === "]")) {
           chars.push(this.advance());
         }
         if (!this.atEnd()) {
@@ -676,10 +676,10 @@ class Lexer {
           chars.push(this.advance());
         }
       } else {
-        if (!forRegex && c === "[" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "=") {
+        if (!forRegex && c === "[" && this.pos + 1 < this.length && this.source[this.pos + 1] === "=") {
           chars.push(this.advance());
           chars.push(this.advance());
-          while (!this.atEnd() && !(this.peek() === "=" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "]")) {
+          while (!this.atEnd() && !(this.peek() === "=" && this.pos + 1 < this.length && this.source[this.pos + 1] === "]")) {
             chars.push(this.advance());
           }
           if (!this.atEnd()) {
@@ -687,10 +687,10 @@ class Lexer {
             chars.push(this.advance());
           }
         } else {
-          if (!forRegex && c === "[" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === ".") {
+          if (!forRegex && c === "[" && this.pos + 1 < this.length && this.source[this.pos + 1] === ".") {
             chars.push(this.advance());
             chars.push(this.advance());
-            while (!this.atEnd() && !(this.peek() === "." && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "]")) {
+            while (!this.atEnd() && !(this.peek() === "." && this.pos + 1 < this.length && this.source[this.pos + 1] === "]")) {
               chars.push(this.advance());
             }
             if (!this.atEnd()) {
@@ -819,7 +819,7 @@ class Lexer {
           }
         }
       }
-      if (ch === "$" && !this.atEnd() && !((flags & MatchedPairFlags_EXTGLOB) !== 0)) {
+      if (ch === "$" && !this.atEnd() && (flags & MatchedPairFlags_EXTGLOB) === 0) {
         var nextCh: any = this.peek();
         if (wasDollar) {
           chars.push(ch);
@@ -830,7 +830,7 @@ class Lexer {
         if (nextCh === "{") {
           if ((flags & MatchedPairFlags_ARITH) !== 0) {
             var afterBracePos: any = this.pos + 1;
-            if (afterBracePos >= this.length || !IsFunsubChar((this.source[afterBracePos] as unknown as string))) {
+            if (afterBracePos >= this.length || !IsFunsubChar(this.source[afterBracePos])) {
               chars.push(ch);
               wasDollar = true;
               wasGtlt = false;
@@ -856,7 +856,7 @@ class Lexer {
           if (nextCh === "(") {
             this.pos -= 1;
             this.SyncToParser();
-            if (this.pos + 2 < this.length && (this.source[this.pos + 2] as unknown as string) === "(") {
+            if (this.pos + 2 < this.length && this.source[this.pos + 2] === "(") {
               var [arithNode, arithText]: any = this.Parser.ParseArithmeticExpansion();
               this.SyncFromParser();
               if (arithNode !== null) {
@@ -956,7 +956,7 @@ class Lexer {
     while (!this.atEnd()) {
       var ch: any = this.peek();
       if (ctx === WORD_CTX_REGEX) {
-        if (ch === "\\" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "\n") {
+        if (ch === "\\" && this.pos + 1 < this.length && this.source[this.pos + 1] === "\n") {
           this.advance();
           this.advance();
           continue;
@@ -1057,7 +1057,7 @@ class Lexer {
               continue;
             }
             if (c === "\\" && this.pos + 1 < this.length) {
-              var nextC: any = (this.source[this.pos + 1] as unknown as string);
+              var nextC: any = this.source[this.pos + 1];
               if (nextC === "\n") {
                 this.advance();
                 this.advance();
@@ -1104,7 +1104,7 @@ class Lexer {
         continue;
       }
       if (ch === "\\" && this.pos + 1 < this.length) {
-        var nextCh: any = (this.source[this.pos + 1] as unknown as string);
+        var nextCh: any = this.source[this.pos + 1];
         if (ctx !== WORD_CTX_REGEX && nextCh === "\n") {
           this.advance();
           this.advance();
@@ -1114,7 +1114,7 @@ class Lexer {
         }
         continue;
       }
-      if (ctx !== WORD_CTX_REGEX && ch === "$" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "'") {
+      if (ctx !== WORD_CTX_REGEX && ch === "$" && this.pos + 1 < this.length && this.source[this.pos + 1] === "'") {
         var [ansiResult0, ansiResult1]: any = this.ReadAnsiCQuote();
         if (ansiResult0 !== null) {
           parts.push(ansiResult0);
@@ -1124,7 +1124,7 @@ class Lexer {
         }
         continue;
       }
-      if (ctx !== WORD_CTX_REGEX && ch === "$" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "\"") {
+      if (ctx !== WORD_CTX_REGEX && ch === "$" && this.pos + 1 < this.length && this.source[this.pos + 1] === "\"") {
         var [localeResult0, localeResult1, localeResult2]: any = this.ReadLocaleString();
         if (localeResult0 !== null) {
           parts.push(localeResult0);
@@ -1142,7 +1142,7 @@ class Lexer {
           chars.push(this.advance());
         } else {
           this.SyncFromParser();
-          if (this.Extglob && ctx === WORD_CTX_NORMAL && chars.length > 0 && chars[chars.length - 1].length === 2 && (chars[chars.length - 1][0] as unknown as string) === "$" && "?*@".includes((chars[chars.length - 1][1] as unknown as string)) && !this.atEnd() && this.peek() === "(") {
+          if (this.Extglob && ctx === WORD_CTX_NORMAL && chars.length > 0 && chars[chars.length - 1].length === 2 && chars[chars.length - 1][0] === "$" && "?*@".includes(chars[chars.length - 1][1]) && !this.atEnd() && this.peek() === "(") {
             chars.push(this.advance());
             var content: any = this.ParseMatchedPair("(", ")", MatchedPairFlags_EXTGLOB, false);
             chars.push(content);
@@ -1163,7 +1163,7 @@ class Lexer {
         }
         continue;
       }
-      if (ctx !== WORD_CTX_REGEX && IsRedirectChar(ch) && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "(") {
+      if (ctx !== WORD_CTX_REGEX && IsRedirectChar(ch) && this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
         this.SyncToParser();
         var [procsubResult0, procsubResult1]: any = this.Parser.ParseProcessSubstitution();
         this.SyncFromParser();
@@ -1204,7 +1204,7 @@ class Lexer {
           continue;
         }
       }
-      if (this.Extglob && ctx === WORD_CTX_NORMAL && IsExtglobPrefix(ch) && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "(") {
+      if (this.Extglob && ctx === WORD_CTX_NORMAL && IsExtglobPrefix(ch) && this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
         chars.push(this.advance());
         chars.push(this.advance());
         var content: any = this.ParseMatchedPair("(", ")", MatchedPairFlags_EXTGLOB, false);
@@ -1244,7 +1244,7 @@ class Lexer {
     if (c === "") {
       return null;
     }
-    var isProcsub: any = (c === "<" || c === ">") && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "(";
+    var isProcsub: any = (c === "<" || c === ">") && this.pos + 1 < this.length && this.source[this.pos + 1] === "(";
     var isRegexParen: any = this.WordContext === WORD_CTX_REGEX && (c === "(" || c === ")");
     if (this.isMetachar(c) && !isProcsub && !isRegexParen) {
       return null;
@@ -1265,24 +1265,24 @@ class Lexer {
     }
     this.skipBlanks();
     if (this.atEnd()) {
-      var tok: any = new Token(TokenType_EOF as any, "" as any, this.pos as any, [] as any, [] as any);
+      var tok: any = new Token(TokenType_EOF as any, "" as any, this.pos as any, [], null);
       this.LastReadToken = tok;
       return tok;
     }
-    if (this.EofToken !== "" && this.peek() === this.EofToken && !((this.ParserState & ParserStateFlags_PST_CASEPAT) !== 0) && !((this.ParserState & ParserStateFlags_PST_EOFTOKEN) !== 0)) {
-      var tok: any = new Token(TokenType_EOF as any, "" as any, this.pos as any, [] as any, [] as any);
+    if (this.EofToken !== "" && this.peek() === this.EofToken && (this.ParserState & ParserStateFlags_PST_CASEPAT) === 0 && (this.ParserState & ParserStateFlags_PST_EOFTOKEN) === 0) {
+      var tok: any = new Token(TokenType_EOF as any, "" as any, this.pos as any, [], null);
       this.LastReadToken = tok;
       return tok;
     }
     while (this.SkipComment()) {
       this.skipBlanks();
       if (this.atEnd()) {
-        var tok: any = new Token(TokenType_EOF as any, "" as any, this.pos as any, [] as any, [] as any);
+        var tok: any = new Token(TokenType_EOF as any, "" as any, this.pos as any, [], null);
         this.LastReadToken = tok;
         return tok;
       }
-      if (this.EofToken !== "" && this.peek() === this.EofToken && !((this.ParserState & ParserStateFlags_PST_CASEPAT) !== 0) && !((this.ParserState & ParserStateFlags_PST_EOFTOKEN) !== 0)) {
-        var tok: any = new Token(TokenType_EOF as any, "" as any, this.pos as any, [] as any, [] as any);
+      if (this.EofToken !== "" && this.peek() === this.EofToken && (this.ParserState & ParserStateFlags_PST_CASEPAT) === 0 && (this.ParserState & ParserStateFlags_PST_EOFTOKEN) === 0) {
+        var tok: any = new Token(TokenType_EOF as any, "" as any, this.pos as any, [], null);
         this.LastReadToken = tok;
         return tok;
       }
@@ -1297,7 +1297,7 @@ class Lexer {
       this.LastReadToken = tok;
       return tok;
     }
-    tok = new Token(TokenType_EOF as any, "" as any, this.pos as any, [] as any, [] as any);
+    tok = new Token(TokenType_EOF as any, "" as any, this.pos as any, [], null);
     this.LastReadToken = tok;
     return tok;
   }
@@ -1315,7 +1315,7 @@ class Lexer {
     if (this.atEnd() || this.peek() !== "$") {
       return [null, ""];
     }
-    if (this.pos + 1 >= this.length || (this.source[this.pos + 1] as unknown as string) !== "'") {
+    if (this.pos + 1 >= this.length || this.source[this.pos + 1] !== "'") {
       return [null, ""];
     }
     var start: any = this.pos;
@@ -1365,7 +1365,7 @@ class Lexer {
     if (this.atEnd() || this.peek() !== "$") {
       return [null, "", []];
     }
-    if (this.pos + 1 >= this.length || (this.source[this.pos + 1] as unknown as string) !== "\"") {
+    if (this.pos + 1 >= this.length || this.source[this.pos + 1] !== "\"") {
       return [null, "", []];
     }
     var start: any = this.pos;
@@ -1382,7 +1382,7 @@ class Lexer {
         break;
       } else {
         if (ch === "\\" && this.pos + 1 < this.length) {
-          var nextCh: any = (this.source[this.pos + 1] as unknown as string);
+          var nextCh: any = this.source[this.pos + 1];
           if (nextCh === "\n") {
             this.advance();
             this.advance();
@@ -1391,7 +1391,7 @@ class Lexer {
             contentChars.push(this.advance());
           }
         } else {
-          if (ch === "$" && this.pos + 2 < this.length && (this.source[this.pos + 1] as unknown as string) === "(" && (this.source[this.pos + 2] as unknown as string) === "(") {
+          if (ch === "$" && this.pos + 2 < this.length && this.source[this.pos + 1] === "(" && this.source[this.pos + 2] === "(") {
             this.SyncToParser();
             var [arithNode, arithText]: any = this.Parser.ParseArithmeticExpansion();
             this.SyncFromParser();
@@ -1467,7 +1467,7 @@ class Lexer {
     if (op === "" || op.length === 0) {
       return;
     }
-    var firstChar: any = (op[0] as unknown as string);
+    var firstChar: any = op[0];
     if (this.DolbraceState === DolbraceState_PARAM && hasParam) {
       if ("%#^,".includes(firstChar)) {
         this.DolbraceState = DolbraceState_QUOTE;
@@ -1571,7 +1571,7 @@ class Lexer {
     var i: any = startPos + 1;
     var quote: any = newQuoteState();
     while (i < this.length) {
-      var c: any = (this.source[i] as unknown as string);
+      var c: any = this.source[i];
       if (quote.single) {
         if (c === "'") {
           quote.single = false;
@@ -1628,7 +1628,7 @@ class Lexer {
     }
     var ch: any = this.peek();
     if (IsSpecialParam(ch)) {
-      if (ch === "$" && this.pos + 1 < this.length && "{'\"".includes((this.source[this.pos + 1] as unknown as string))) {
+      if (ch === "$" && this.pos + 1 < this.length && "{'\"".includes(this.source[this.pos + 1])) {
         return "";
       }
       this.advance();
@@ -1689,7 +1689,7 @@ class Lexer {
     if (IsSpecialParamUnbraced(ch) || IsDigit(ch) || ch === "#") {
       this.advance();
       var text: any = Substring(this.source, start, this.pos);
-      return [new ParamExpansion(ch as any, [] as any, [] as any, "param" as any), text];
+      return [new ParamExpansion(ch as any, "", "", "param" as any), text];
     }
     if (/^[a-zA-Z]$/.test(ch) || ch === "_") {
       var nameStart: any = this.pos;
@@ -1703,7 +1703,7 @@ class Lexer {
       }
       var name: any = Substring(this.source, nameStart, this.pos);
       var text: any = Substring(this.source, start, this.pos);
-      return [new ParamExpansion(name as any, [] as any, [] as any, "param" as any), text];
+      return [new ParamExpansion(name as any, "", "", "param" as any), text];
     }
     this.pos = start;
     return [null, ""];
@@ -1745,14 +1745,14 @@ class Lexer {
           this.advance();
           var text: any = Substring(this.source, start, this.pos);
           this.DolbraceState = savedDolbrace;
-          return [new ParamIndirect(param as any, [] as any, [] as any, "param-indirect" as any), text];
+          return [new ParamIndirect(param as any, "", "", "param-indirect" as any), text];
         }
         if (!this.atEnd() && IsAtOrStar(this.peek())) {
           var suffix: any = this.advance();
           var trailing: any = this.ParseMatchedPair("{", "}", MatchedPairFlags_DOLBRACE, false);
           var text: any = Substring(this.source, start, this.pos);
           this.DolbraceState = savedDolbrace;
-          return [new ParamIndirect(param + suffix + trailing as any, [] as any, [] as any, "param-indirect" as any), text];
+          return [new ParamIndirect(param + suffix + trailing as any, "", "", "param-indirect" as any), text];
         }
         var op: any = this.ConsumeParamOperator();
         if (op === "" && !this.atEnd() && !"}\"'`".includes(this.peek())) {
@@ -1774,14 +1774,14 @@ class Lexer {
       }
     }
     var param: any = this.ConsumeParamName();
-    if (!(param !== "")) {
-      if (!this.atEnd() && ("-=+?".includes(this.peek()) || this.peek() === ":" && this.pos + 1 < this.length && IsSimpleParamOp((this.source[this.pos + 1] as unknown as string)))) {
+    if (param === "") {
+      if (!this.atEnd() && ("-=+?".includes(this.peek()) || this.peek() === ":" && this.pos + 1 < this.length && IsSimpleParamOp(this.source[this.pos + 1]))) {
         param = "";
       } else {
         var content: any = this.ParseMatchedPair("{", "}", MatchedPairFlags_DOLBRACE, false);
         var text: any = "${" + content + "}";
         this.DolbraceState = savedDolbrace;
-        return [new ParamExpansion(content as any, [] as any, [] as any, "param" as any), text];
+        return [new ParamExpansion(content as any, "", "", "param" as any), text];
       }
     }
     if (this.atEnd()) {
@@ -1792,11 +1792,11 @@ class Lexer {
       this.advance();
       var text: any = Substring(this.source, start, this.pos);
       this.DolbraceState = savedDolbrace;
-      return [new ParamExpansion(param as any, [] as any, [] as any, "param" as any), text];
+      return [new ParamExpansion(param as any, "", "", "param" as any), text];
     }
     var op: any = this.ConsumeParamOperator();
     if (op === "") {
-      if (!this.atEnd() && this.peek() === "$" && this.pos + 1 < this.length && ((this.source[this.pos + 1] as unknown as string) === "\"" || (this.source[this.pos + 1] as unknown as string) === "'")) {
+      if (!this.atEnd() && this.peek() === "$" && this.pos + 1 < this.length && (this.source[this.pos + 1] === "\"" || this.source[this.pos + 1] === "'")) {
         var dollarCount: any = 1 + CountConsecutiveDollarsBefore(this.source, this.pos);
         if (dollarCount % 2 === 1) {
           op = "";
@@ -1810,7 +1810,7 @@ class Lexer {
           while (!this.atEnd() && this.peek() !== "`") {
             var bc: any = this.peek();
             if (bc === "\\" && this.pos + 1 < this.length) {
-              var nextC: any = (this.source[this.pos + 1] as unknown as string);
+              var nextC: any = this.source[this.pos + 1];
               if (IsEscapeCharInBacktick(nextC)) {
                 this.advance();
               }
@@ -1824,7 +1824,7 @@ class Lexer {
           this.advance();
           op = "`";
         } else {
-          if (!this.atEnd() && this.peek() === "$" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "{") {
+          if (!this.atEnd() && this.peek() === "$" && this.pos + 1 < this.length && this.source[this.pos + 1] === "{") {
             op = "";
           } else {
             if (!this.atEnd() && (this.peek() === "'" || this.peek() === "\"")) {
@@ -1949,7 +1949,7 @@ class Word implements Node {
     var i: any = 0;
     var quote: any = newQuoteState();
     while (i < value.length) {
-      var c: any = (value[i] as unknown as string);
+      var c: any = value[i];
       if (c === "'" && !quote.double) {
         quote.single = !quote.single;
         result.push(c);
@@ -1964,21 +1964,21 @@ class Word implements Node {
             result.push("$");
             result.push("{");
             i += 2;
-            var hadLeadingNewline: any = i < value.length && (value[i] as unknown as string) === "\n";
+            var hadLeadingNewline: any = i < value.length && value[i] === "\n";
             if (hadLeadingNewline) {
               result.push(" ");
               i += 1;
             }
             var depth: any = 1;
             while (i < value.length && depth > 0) {
-              var ch: any = (value[i] as unknown as string);
+              var ch: any = value[i];
               if (ch === "\\" && i + 1 < value.length && !quote.single) {
-                if ((value[i + 1] as unknown as string) === "\n") {
+                if (value[i + 1] === "\n") {
                   i += 2;
                   continue;
                 }
                 result.push(ch);
-                result.push((value[i + 1] as unknown as string));
+                result.push(value[i + 1]);
                 i += 2;
                 continue;
               }
@@ -2021,7 +2021,7 @@ class Word implements Node {
   }
 
   ShSingleQuote(s: string): string {
-    if (!(s !== "")) {
+    if (s === "") {
       return "''";
     }
     if (s === "'") {
@@ -2043,8 +2043,8 @@ class Word implements Node {
     var result: any = [];
     var i: any = 0;
     while (i < inner.length) {
-      if ((inner[i] as unknown as string) === "\\" && i + 1 < inner.length) {
-        var c: any = (inner[i + 1] as unknown as string);
+      if (inner[i] === "\\" && i + 1 < inner.length) {
+        var c: any = inner[i + 1];
         var simple: any = GetAnsiEscape(c);
         if (simple >= 0) {
           result.push(simple);
@@ -2055,16 +2055,16 @@ class Word implements Node {
             i += 2;
           } else {
             if (c === "x") {
-              if (i + 2 < inner.length && (inner[i + 2] as unknown as string) === "{") {
+              if (i + 2 < inner.length && inner[i + 2] === "{") {
                 var j: any = i + 3;
-                while (j < inner.length && IsHexDigit((inner[j] as unknown as string))) {
+                while (j < inner.length && IsHexDigit(inner[j])) {
                   j += 1;
                 }
                 var hexStr: any = Substring(inner, i + 3, j);
-                if (j < inner.length && (inner[j] as unknown as string) === "}") {
+                if (j < inner.length && inner[j] === "}") {
                   j += 1;
                 }
-                if (!(hexStr !== "")) {
+                if (hexStr === "") {
                   return result;
                 }
                 var byteVal: any = parseInt(hexStr, 16) & 255;
@@ -2075,7 +2075,7 @@ class Word implements Node {
                 i = j;
               } else {
                 var j: any = i + 2;
-                while (j < inner.length && j < i + 4 && IsHexDigit((inner[j] as unknown as string))) {
+                while (j < inner.length && j < i + 4 && IsHexDigit(inner[j])) {
                   j += 1;
                 }
                 if (j > i + 2) {
@@ -2086,14 +2086,14 @@ class Word implements Node {
                   this.AppendWithCtlesc(result, byteVal);
                   i = j;
                 } else {
-                  result.push((inner[i] as unknown as string).charCodeAt(0));
+                  result.push(inner[i].charCodeAt(0));
                   i += 1;
                 }
               }
             } else {
               if (c === "u") {
                 var j: any = i + 2;
-                while (j < inner.length && j < i + 6 && IsHexDigit((inner[j] as unknown as string))) {
+                while (j < inner.length && j < i + 6 && IsHexDigit(inner[j])) {
                   j += 1;
                 }
                 if (j > i + 2) {
@@ -2104,13 +2104,13 @@ class Word implements Node {
                   result.push(...Array.from(new TextEncoder().encode(String.fromCodePoint(codepoint))));
                   i = j;
                 } else {
-                  result.push((inner[i] as unknown as string).charCodeAt(0));
+                  result.push(inner[i].charCodeAt(0));
                   i += 1;
                 }
               } else {
                 if (c === "U") {
                   var j: any = i + 2;
-                  while (j < inner.length && j < i + 10 && IsHexDigit((inner[j] as unknown as string))) {
+                  while (j < inner.length && j < i + 10 && IsHexDigit(inner[j])) {
                     j += 1;
                   }
                   if (j > i + 2) {
@@ -2121,15 +2121,15 @@ class Word implements Node {
                     result.push(...Array.from(new TextEncoder().encode(String.fromCodePoint(codepoint))));
                     i = j;
                   } else {
-                    result.push((inner[i] as unknown as string).charCodeAt(0));
+                    result.push(inner[i].charCodeAt(0));
                     i += 1;
                   }
                 } else {
                   if (c === "c") {
                     if (i + 3 <= inner.length) {
-                      var ctrlChar: any = (inner[i + 2] as unknown as string);
+                      var ctrlChar: any = inner[i + 2];
                       var skipExtra: any = 0;
-                      if (ctrlChar === "\\" && i + 4 <= inner.length && (inner[i + 3] as unknown as string) === "\\") {
+                      if (ctrlChar === "\\" && i + 4 <= inner.length && inner[i + 3] === "\\") {
                         skipExtra = 1;
                       }
                       var ctrlVal: any = ctrlChar.charCodeAt(0) & 31;
@@ -2139,13 +2139,13 @@ class Word implements Node {
                       this.AppendWithCtlesc(result, ctrlVal);
                       i += 3 + skipExtra;
                     } else {
-                      result.push((inner[i] as unknown as string).charCodeAt(0));
+                      result.push(inner[i].charCodeAt(0));
                       i += 1;
                     }
                   } else {
                     if (c === "0") {
                       var j: any = i + 2;
-                      while (j < inner.length && j < i + 4 && IsOctalDigit((inner[j] as unknown as string))) {
+                      while (j < inner.length && j < i + 4 && IsOctalDigit(inner[j])) {
                         j += 1;
                       }
                       if (j > i + 2) {
@@ -2161,7 +2161,7 @@ class Word implements Node {
                     } else {
                       if (c >= "1" && c <= "7") {
                         var j: any = i + 1;
-                        while (j < inner.length && j < i + 4 && IsOctalDigit((inner[j] as unknown as string))) {
+                        while (j < inner.length && j < i + 4 && IsOctalDigit(inner[j])) {
                           j += 1;
                         }
                         var byteVal: any = parseInt(Substring(inner, i + 1, j), 8) & 255;
@@ -2183,7 +2183,7 @@ class Word implements Node {
           }
         }
       } else {
-        result.push(...Array.from(new TextEncoder().encode((inner[i] as unknown as string))));
+        result.push(...Array.from(new TextEncoder().encode(inner[i])));
         i += 1;
       }
     }
@@ -2207,7 +2207,7 @@ class Word implements Node {
     var inBacktick: any = false;
     var braceDepth: any = 0;
     while (i < value.length) {
-      var ch: any = (value[i] as unknown as string);
+      var ch: any = value[i];
       if (ch === "`" && !quote.single) {
         inBacktick = !inBacktick;
         result.push(ch);
@@ -2217,7 +2217,7 @@ class Word implements Node {
       if (inBacktick) {
         if (ch === "\\" && i + 1 < value.length) {
           result.push(ch);
-          result.push((value[i + 1] as unknown as string));
+          result.push(value[i + 1]);
           i += 2;
         } else {
           result.push(ch);
@@ -2244,7 +2244,7 @@ class Word implements Node {
       }
       var effectiveInDquote: any = quote.double;
       if (ch === "'" && !effectiveInDquote) {
-        var isAnsiC: any = !quote.single && i > 0 && (value[i - 1] as unknown as string) === "$" && CountConsecutiveDollarsBefore(value, i - 1) % 2 === 0;
+        var isAnsiC: any = !quote.single && i > 0 && value[i - 1] === "$" && CountConsecutiveDollarsBefore(value, i - 1) % 2 === 0;
         if (!isAnsiC) {
           quote.single = !quote.single;
         }
@@ -2258,16 +2258,16 @@ class Word implements Node {
         } else {
           if (ch === "\\" && i + 1 < value.length && !quote.single) {
             result.push(ch);
-            result.push((value[i + 1] as unknown as string));
+            result.push(value[i + 1]);
             i += 2;
           } else {
             if (StartsWithAt(value, i, "$'") && !quote.single && !effectiveInDquote && CountConsecutiveDollarsBefore(value, i) % 2 === 0) {
               var j: any = i + 2;
               while (j < value.length) {
-                if ((value[j] as unknown as string) === "\\" && j + 1 < value.length) {
+                if (value[j] === "\\" && j + 1 < value.length) {
                   j += 2;
                 } else {
-                  if ((value[j] as unknown as string) === "'") {
+                  if (value[j] === "'") {
                     j += 1;
                     break;
                   } else {
@@ -2288,12 +2288,12 @@ class Word implements Node {
                     var afterBrace: any = resultStr.slice(lastBraceIdx + 2);
                     var varNameLen: any = 0;
                     if (afterBrace !== "") {
-                      if ("@*#?-$!0123456789_".includes((afterBrace[0] as unknown as string))) {
+                      if ("@*#?-$!0123456789_".includes(afterBrace[0])) {
                         varNameLen = 1;
                       } else {
-                        if (/^[a-zA-Z]$/.test((afterBrace[0] as unknown as string)) || (afterBrace[0] as unknown as string) === "_") {
+                        if (/^[a-zA-Z]$/.test(afterBrace[0]) || afterBrace[0] === "_") {
                           while (varNameLen < afterBrace.length) {
-                            var c: any = (afterBrace[varNameLen] as unknown as string);
+                            var c: any = afterBrace[varNameLen];
                             if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
                               break;
                             }
@@ -2302,7 +2302,7 @@ class Word implements Node {
                         }
                       }
                     }
-                    if (varNameLen > 0 && varNameLen < afterBrace.length && !"#?-".includes((afterBrace[0] as unknown as string))) {
+                    if (varNameLen > 0 && varNameLen < afterBrace.length && !"#?-".includes(afterBrace[0])) {
                       var opStart: any = afterBrace.slice(varNameLen);
                       if (opStart.startsWith("@") && opStart.length > 1) {
                         opStart = opStart.slice(1);
@@ -2313,7 +2313,7 @@ class Word implements Node {
                           break;
                         }
                       }
-                      if (!inPattern && opStart !== "" && !"%#/^,~:+-=?".includes((opStart[0] as unknown as string))) {
+                      if (!inPattern && opStart !== "" && !"%#/^,~:+-=?".includes(opStart[0])) {
                         for (const op of ["//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"]) {
                           if (opStart.includes(op)) {
                             inPattern = true;
@@ -2323,7 +2323,7 @@ class Word implements Node {
                       }
                     } else {
                       if (varNameLen === 0 && afterBrace.length > 1) {
-                        var firstChar: any = (afterBrace[0] as unknown as string);
+                        var firstChar: any = afterBrace[0];
                         if (!"%#/^,".includes(firstChar)) {
                           var rest: any = afterBrace.slice(1);
                           for (const op of ["//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"]) {
@@ -2363,13 +2363,13 @@ class Word implements Node {
     var braceQuote: any = newQuoteState();
     var bracketInDoubleQuote: any = false;
     while (i < value.length) {
-      var ch: any = (value[i] as unknown as string);
+      var ch: any = value[i];
       if (ch === "\\" && i + 1 < value.length && !quote.single && !braceQuote.single) {
         result.push(ch);
-        result.push((value[i + 1] as unknown as string));
+        result.push(value[i + 1]);
         i += 2;
       } else {
-        if (StartsWithAt(value, i, "${") && !quote.single && !braceQuote.single && (i === 0 || (value[i - 1] as unknown as string) !== "$")) {
+        if (StartsWithAt(value, i, "${") && !quote.single && !braceQuote.single && (i === 0 || value[i - 1] !== "$")) {
           braceDepth += 1;
           braceQuote.double = false;
           braceQuote.single = false;
@@ -2456,21 +2456,21 @@ class Word implements Node {
 
   NormalizeArrayWhitespace(value: string): string {
     var i: any = 0;
-    if (!(i < value.length && (/^[a-zA-Z]$/.test((value[i] as unknown as string)) || (value[i] as unknown as string) === "_"))) {
+    if (!(i < value.length && (/^[a-zA-Z]$/.test(value[i]) || value[i] === "_"))) {
       return value;
     }
     i += 1;
-    while (i < value.length && (/^[a-zA-Z0-9]$/.test((value[i] as unknown as string)) || (value[i] as unknown as string) === "_")) {
+    while (i < value.length && (/^[a-zA-Z0-9]$/.test(value[i]) || value[i] === "_")) {
       i += 1;
     }
-    while (i < value.length && (value[i] as unknown as string) === "[") {
+    while (i < value.length && value[i] === "[") {
       var depth: any = 1;
       i += 1;
       while (i < value.length && depth > 0) {
-        if ((value[i] as unknown as string) === "[") {
+        if (value[i] === "[") {
           depth += 1;
         } else {
-          if ((value[i] as unknown as string) === "]") {
+          if (value[i] === "]") {
             depth -= 1;
           }
         }
@@ -2480,10 +2480,10 @@ class Word implements Node {
         return value;
       }
     }
-    if (i < value.length && (value[i] as unknown as string) === "+") {
+    if (i < value.length && value[i] === "+") {
       i += 1;
     }
-    if (!(i + 1 < value.length && (value[i] as unknown as string) === "=" && (value[i + 1] as unknown as string) === "(")) {
+    if (!(i + 1 < value.length && value[i] === "=" && value[i + 1] === "(")) {
       return value;
     }
     var prefix: any = Substring(value, 0, i + 1);
@@ -2503,14 +2503,14 @@ class Word implements Node {
   }
 
   FindMatchingParen(value: string, openPos: number): number {
-    if (openPos >= value.length || (value[openPos] as unknown as string) !== "(") {
+    if (openPos >= value.length || value[openPos] !== "(") {
       return -1;
     }
     var i: any = openPos + 1;
     var depth: any = 1;
     var quote: any = newQuoteState();
     while (i < value.length && depth > 0) {
-      var ch: any = (value[i] as unknown as string);
+      var ch: any = value[i];
       if (ch === "\\" && i + 1 < value.length && !quote.single) {
         i += 2;
         continue;
@@ -2530,7 +2530,7 @@ class Word implements Node {
         continue;
       }
       if (ch === "#") {
-        while (i < value.length && (value[i] as unknown as string) !== "\n") {
+        while (i < value.length && value[i] !== "\n") {
           i += 1;
         }
         continue;
@@ -2557,7 +2557,7 @@ class Word implements Node {
     var braceDepth: any = 0;
     var bracketDepth: any = 0;
     while (i < inner.length) {
-      var ch: any = (inner[i] as unknown as string);
+      var ch: any = inner[i];
       if (IsWhitespace(ch)) {
         if (!inWhitespace && normalized.length > 0 && braceDepth === 0 && bracketDepth === 0) {
           normalized.push(" ");
@@ -2571,7 +2571,7 @@ class Word implements Node {
         if (ch === "'") {
           inWhitespace = false;
           var j: any = i + 1;
-          while (j < inner.length && (inner[j] as unknown as string) !== "'") {
+          while (j < inner.length && inner[j] !== "'") {
             j += 1;
           }
           normalized.push(Substring(inner, i, j + 1));
@@ -2583,12 +2583,12 @@ class Word implements Node {
             var dqContent: any = ["\""];
             var dqBraceDepth: any = 0;
             while (j < inner.length) {
-              if ((inner[j] as unknown as string) === "\\" && j + 1 < inner.length) {
-                if ((inner[j + 1] as unknown as string) === "\n") {
+              if (inner[j] === "\\" && j + 1 < inner.length) {
+                if (inner[j + 1] === "\n") {
                   j += 2;
                 } else {
-                  dqContent.push((inner[j] as unknown as string));
-                  dqContent.push((inner[j + 1] as unknown as string));
+                  dqContent.push(inner[j]);
+                  dqContent.push(inner[j + 1]);
                   j += 2;
                 }
               } else {
@@ -2597,17 +2597,17 @@ class Word implements Node {
                   dqBraceDepth += 1;
                   j += 2;
                 } else {
-                  if ((inner[j] as unknown as string) === "}" && dqBraceDepth > 0) {
+                  if (inner[j] === "}" && dqBraceDepth > 0) {
                     dqContent.push("}");
                     dqBraceDepth -= 1;
                     j += 1;
                   } else {
-                    if ((inner[j] as unknown as string) === "\"" && dqBraceDepth === 0) {
+                    if (inner[j] === "\"" && dqBraceDepth === 0) {
                       dqContent.push("\"");
                       j += 1;
                       break;
                     } else {
-                      dqContent.push((inner[j] as unknown as string));
+                      dqContent.push(inner[j]);
                       j += 1;
                     }
                   }
@@ -2618,7 +2618,7 @@ class Word implements Node {
             i = j;
           } else {
             if (ch === "\\" && i + 1 < inner.length) {
-              if ((inner[i + 1] as unknown as string) === "\n") {
+              if (inner[i + 1] === "\n") {
                 i += 2;
               } else {
                 inWhitespace = false;
@@ -2631,11 +2631,11 @@ class Word implements Node {
                 var j: any = i + 3;
                 var depth: any = 1;
                 while (j < inner.length && depth > 0) {
-                  if (j + 1 < inner.length && (inner[j] as unknown as string) === "(" && (inner[j + 1] as unknown as string) === "(") {
+                  if (j + 1 < inner.length && inner[j] === "(" && inner[j + 1] === "(") {
                     depth += 1;
                     j += 2;
                   } else {
-                    if (j + 1 < inner.length && (inner[j] as unknown as string) === ")" && (inner[j + 1] as unknown as string) === ")") {
+                    if (j + 1 < inner.length && inner[j] === ")" && inner[j + 1] === ")") {
                       depth -= 1;
                       j += 2;
                     } else {
@@ -2651,26 +2651,26 @@ class Word implements Node {
                   var j: any = i + 2;
                   var depth: any = 1;
                   while (j < inner.length && depth > 0) {
-                    if ((inner[j] as unknown as string) === "(" && j > 0 && (inner[j - 1] as unknown as string) === "$") {
+                    if (inner[j] === "(" && j > 0 && inner[j - 1] === "$") {
                       depth += 1;
                     } else {
-                      if ((inner[j] as unknown as string) === ")") {
+                      if (inner[j] === ")") {
                         depth -= 1;
                       } else {
-                        if ((inner[j] as unknown as string) === "'") {
+                        if (inner[j] === "'") {
                           j += 1;
-                          while (j < inner.length && (inner[j] as unknown as string) !== "'") {
+                          while (j < inner.length && inner[j] !== "'") {
                             j += 1;
                           }
                         } else {
-                          if ((inner[j] as unknown as string) === "\"") {
+                          if (inner[j] === "\"") {
                             j += 1;
                             while (j < inner.length) {
-                              if ((inner[j] as unknown as string) === "\\" && j + 1 < inner.length) {
+                              if (inner[j] === "\\" && j + 1 < inner.length) {
                                 j += 2;
                                 continue;
                               }
-                              if ((inner[j] as unknown as string) === "\"") {
+                              if (inner[j] === "\"") {
                                 break;
                               }
                               j += 1;
@@ -2684,31 +2684,31 @@ class Word implements Node {
                   normalized.push(Substring(inner, i, j));
                   i = j;
                 } else {
-                  if ((ch === "<" || ch === ">") && i + 1 < inner.length && (inner[i + 1] as unknown as string) === "(") {
+                  if ((ch === "<" || ch === ">") && i + 1 < inner.length && inner[i + 1] === "(") {
                     inWhitespace = false;
                     var j: any = i + 2;
                     var depth: any = 1;
                     while (j < inner.length && depth > 0) {
-                      if ((inner[j] as unknown as string) === "(") {
+                      if (inner[j] === "(") {
                         depth += 1;
                       } else {
-                        if ((inner[j] as unknown as string) === ")") {
+                        if (inner[j] === ")") {
                           depth -= 1;
                         } else {
-                          if ((inner[j] as unknown as string) === "'") {
+                          if (inner[j] === "'") {
                             j += 1;
-                            while (j < inner.length && (inner[j] as unknown as string) !== "'") {
+                            while (j < inner.length && inner[j] !== "'") {
                               j += 1;
                             }
                           } else {
-                            if ((inner[j] as unknown as string) === "\"") {
+                            if (inner[j] === "\"") {
                               j += 1;
                               while (j < inner.length) {
-                                if ((inner[j] as unknown as string) === "\\" && j + 1 < inner.length) {
+                                if (inner[j] === "\\" && j + 1 < inner.length) {
                                   j += 2;
                                   continue;
                                 }
-                                if ((inner[j] as unknown as string) === "\"") {
+                                if (inner[j] === "\"") {
                                   break;
                                 }
                                 j += 1;
@@ -2739,7 +2739,7 @@ class Word implements Node {
                           i += 1;
                         } else {
                           if (ch === "#" && braceDepth === 0 && inWhitespace) {
-                            while (i < inner.length && (inner[i] as unknown as string) !== "\n") {
+                            while (i < inner.length && inner[i] !== "\n") {
                               i += 1;
                             }
                           } else {
@@ -2787,7 +2787,7 @@ class Word implements Node {
         var arithContent: any = [];
         var firstCloseIdx: any = -1;
         while (i < value.length && depth > 0) {
-          if ((value[i] as unknown as string) === "(") {
+          if (value[i] === "(") {
             arithContent.push("(");
             depth += 1;
             i += 1;
@@ -2795,7 +2795,7 @@ class Word implements Node {
               firstCloseIdx = -1;
             }
           } else {
-            if ((value[i] as unknown as string) === ")") {
+            if (value[i] === ")") {
               if (depth === 2) {
                 firstCloseIdx = arithContent.length;
               }
@@ -2805,7 +2805,7 @@ class Word implements Node {
               }
               i += 1;
             } else {
-              if ((value[i] as unknown as string) === "\\" && i + 1 < value.length && (value[i + 1] as unknown as string) === "\n") {
+              if (value[i] === "\\" && i + 1 < value.length && value[i + 1] === "\n") {
                 var numBackslashes: any = 0;
                 var j: any = arithContent.length - 1;
                 while (j >= 0 && arithContent[j] === "\n") {
@@ -2826,7 +2826,7 @@ class Word implements Node {
                   firstCloseIdx = -1;
                 }
               } else {
-                arithContent.push((value[i] as unknown as string));
+                arithContent.push(value[i]);
                 i += 1;
                 if (depth === 1) {
                   firstCloseIdx = -1;
@@ -2848,7 +2848,7 @@ class Word implements Node {
           result.push(Substring(value, start, i));
         }
       } else {
-        result.push((value[i] as unknown as string));
+        result.push(value[i]);
         i += 1;
       }
     }
@@ -2940,13 +2940,13 @@ class Word implements Node {
     var idx: any = 0;
     var scanQuote: any = newQuoteState();
     while (idx < value.length) {
-      if ((value[idx] as unknown as string) === "\"") {
+      if (value[idx] === "\"") {
         scanQuote.double = !scanQuote.double;
         idx += 1;
       } else {
-        if ((value[idx] as unknown as string) === "'" && !scanQuote.double) {
+        if (value[idx] === "'" && !scanQuote.double) {
           idx += 1;
-          while (idx < value.length && (value[idx] as unknown as string) !== "'") {
+          while (idx < value.length && value[idx] !== "'") {
             idx += 1;
           }
           if (idx < value.length) {
@@ -2958,7 +2958,7 @@ class Word implements Node {
             break;
           } else {
             if ((StartsWithAt(value, idx, "<(") || StartsWithAt(value, idx, ">(")) && !scanQuote.double) {
-              if (idx === 0 || !/^[a-zA-Z0-9]$/.test((value[idx - 1] as unknown as string)) && !"\"'".includes((value[idx - 1] as unknown as string))) {
+              if (idx === 0 || !/^[a-zA-Z0-9]$/.test(value[idx - 1]) && !"\"'".includes(value[idx - 1])) {
                 hasUntrackedProcsub = true;
                 break;
               }
@@ -2984,27 +2984,27 @@ class Word implements Node {
     var arithDepth: any = 0;
     var arithParenDepth: any = 0;
     while (i < value.length) {
-      if (i > 0 && IsExtglobPrefix((value[i - 1] as unknown as string)) && (value[i] as unknown as string) === "(" && !IsBackslashEscaped(value, i - 1)) {
+      if (i > 0 && IsExtglobPrefix(value[i - 1]) && value[i] === "(" && !IsBackslashEscaped(value, i - 1)) {
         extglobDepth += 1;
-        result.push((value[i] as unknown as string));
+        result.push(value[i]);
         i += 1;
         continue;
       }
-      if ((value[i] as unknown as string) === ")" && extglobDepth > 0) {
+      if (value[i] === ")" && extglobDepth > 0) {
         extglobDepth -= 1;
-        result.push((value[i] as unknown as string));
+        result.push(value[i]);
         i += 1;
         continue;
       }
       if (StartsWithAt(value, i, "$[") && !IsBackslashEscaped(value, i)) {
         deprecatedArithDepth += 1;
-        result.push((value[i] as unknown as string));
+        result.push(value[i]);
         i += 1;
         continue;
       }
-      if ((value[i] as unknown as string) === "]" && deprecatedArithDepth > 0) {
+      if (value[i] === "]" && deprecatedArithDepth > 0) {
         deprecatedArithDepth -= 1;
-        result.push((value[i] as unknown as string));
+        result.push(value[i]);
         i += 1;
         continue;
       }
@@ -3023,15 +3023,15 @@ class Word implements Node {
         continue;
       }
       if (arithDepth > 0) {
-        if ((value[i] as unknown as string) === "(") {
+        if (value[i] === "(") {
           arithParenDepth += 1;
-          result.push((value[i] as unknown as string));
+          result.push(value[i]);
           i += 1;
           continue;
         } else {
-          if ((value[i] as unknown as string) === ")") {
+          if (value[i] === ")") {
             arithParenDepth -= 1;
-            result.push((value[i] as unknown as string));
+            result.push(value[i]);
             i += 1;
             continue;
           }
@@ -3077,14 +3077,14 @@ class Word implements Node {
         }
         i = j;
       } else {
-        if ((value[i] as unknown as string) === "`" && cmdsubIdx < cmdsubParts.length) {
+        if (value[i] === "`" && cmdsubIdx < cmdsubParts.length) {
           var j: any = i + 1;
           while (j < value.length) {
-            if ((value[j] as unknown as string) === "\\" && j + 1 < value.length) {
+            if (value[j] === "\\" && j + 1 < value.length) {
               j += 2;
               continue;
             }
-            if ((value[j] as unknown as string) === "`") {
+            if (value[j] === "`") {
               j += 1;
               break;
             }
@@ -3094,17 +3094,17 @@ class Word implements Node {
           cmdsubIdx += 1;
           i = j;
         } else {
-          if (IsExpansionStart(value, i, "${") && i + 2 < value.length && IsFunsubChar((value[i + 2] as unknown as string)) && !IsBackslashEscaped(value, i)) {
+          if (IsExpansionStart(value, i, "${") && i + 2 < value.length && IsFunsubChar(value[i + 2]) && !IsBackslashEscaped(value, i)) {
             var j: any = FindFunsubEnd(value, i + 2);
             var cmdsubNode: any = (cmdsubIdx < cmdsubParts.length ? cmdsubParts[cmdsubIdx] : null);
             if (cmdsubNode instanceof CommandSubstitution && (cmdsubNode as unknown as CommandSubstitution).brace) {
               var node: any = cmdsubNode;
               var formatted: any = FormatCmdsubNode((node as unknown as CommandSubstitution).command, 0, false, false, false);
-              var hasPipe: any = (value[i + 2] as unknown as string) === "|";
+              var hasPipe: any = value[i + 2] === "|";
               var prefix: any = (hasPipe ? "${|" : "${ ");
               var origInner: any = Substring(value, i + 2, j - 1);
               var endsWithNewline: any = origInner.endsWith("\n");
-              if (!(formatted !== "") || /^\s$/.test(formatted)) {
+              if (formatted === "" || /^\s$/.test(formatted)) {
                 var suffix: any = "}";
               } else {
                 if (formatted.endsWith("&") || formatted.endsWith("& ")) {
@@ -3125,7 +3125,7 @@ class Word implements Node {
             i = j;
           } else {
             if ((StartsWithAt(value, i, ">(") || StartsWithAt(value, i, "<(")) && !mainQuote.double && deprecatedArithDepth === 0 && arithDepth === 0) {
-              var isProcsub: any = i === 0 || !/^[a-zA-Z0-9]$/.test((value[i - 1] as unknown as string)) && !"\"'".includes((value[i - 1] as unknown as string));
+              var isProcsub: any = i === 0 || !/^[a-zA-Z0-9]$/.test(value[i - 1]) && !"\"'".includes(value[i - 1]);
               if (extglobDepth > 0) {
                 var j: any = FindCmdsubEnd(value, i + 2);
                 result.push(Substring(value, i, j));
@@ -3136,7 +3136,7 @@ class Word implements Node {
                 continue;
               }
               if (procsubIdx < procsubParts.length) {
-                var direction: any = (value[i] as unknown as string);
+                var direction: any = value[i];
                 var j: any = FindCmdsubEnd(value, i + 2);
                 var node: any = procsubParts[procsubIdx];
                 var compact: any = StartsWithSubshell((node as unknown as ProcessSubstitution).command);
@@ -3144,7 +3144,7 @@ class Word implements Node {
                 var rawContent: any = Substring(value, i + 2, j - 1);
                 if ((node as unknown as ProcessSubstitution).command.kind === "subshell") {
                   var leadingWsEnd: any = 0;
-                  while (leadingWsEnd < rawContent.length && " \t\n".includes((rawContent[leadingWsEnd] as unknown as string))) {
+                  while (leadingWsEnd < rawContent.length && " \t\n".includes(rawContent[leadingWsEnd])) {
                     leadingWsEnd += 1;
                   }
                   var leadingWs: any = rawContent.slice(0, leadingWsEnd);
@@ -3175,10 +3175,10 @@ class Word implements Node {
                 i = j;
               } else {
                 if (isProcsub && this.parts.length !== 0) {
-                  var direction: any = (value[i] as unknown as string);
+                  var direction: any = value[i];
                   var j: any = FindCmdsubEnd(value, i + 2);
-                  if (j > value.length || j > 0 && j <= value.length && (value[j - 1] as unknown as string) !== ")") {
-                    result.push((value[i] as unknown as string));
+                  if (j > value.length || j > 0 && j <= value.length && value[j - 1] !== ")") {
+                    result.push(value[i]);
                     i += 1;
                     continue;
                   }
@@ -3199,10 +3199,10 @@ class Word implements Node {
                   i = j;
                 } else {
                   if (isProcsub) {
-                    var direction: any = (value[i] as unknown as string);
+                    var direction: any = value[i];
                     var j: any = FindCmdsubEnd(value, i + 2);
-                    if (j > value.length || j > 0 && j <= value.length && (value[j - 1] as unknown as string) !== ")") {
-                      result.push((value[i] as unknown as string));
+                    if (j > value.length || j > 0 && j <= value.length && value[j - 1] !== ")") {
+                      result.push(value[i]);
                       i += 1;
                       continue;
                     }
@@ -3219,7 +3219,7 @@ class Word implements Node {
                     }
                     i = j;
                   } else {
-                    result.push((value[i] as unknown as string));
+                    result.push(value[i]);
                     i += 1;
                   }
                 }
@@ -3230,10 +3230,10 @@ class Word implements Node {
                 var j: any = i + 3;
                 var depth: any = 1;
                 while (j < value.length && depth > 0) {
-                  if ((value[j] as unknown as string) === "{") {
+                  if (value[j] === "{") {
                     depth += 1;
                   } else {
-                    if ((value[j] as unknown as string) === "}") {
+                    if (value[j] === "}") {
                       depth -= 1;
                     }
                   }
@@ -3273,7 +3273,7 @@ class Word implements Node {
                   var depth: any = 1;
                   var braceQuote: any = newQuoteState();
                   while (j < value.length && depth > 0) {
-                    var c: any = (value[j] as unknown as string);
+                    var c: any = value[j];
                     if (c === "\\" && j + 1 < value.length && !braceQuote.single) {
                       j += 2;
                       continue;
@@ -3315,14 +3315,14 @@ class Word implements Node {
                   }
                   i = j;
                 } else {
-                  if ((value[i] as unknown as string) === "\"") {
+                  if (value[i] === "\"") {
                     mainQuote.double = !mainQuote.double;
-                    result.push((value[i] as unknown as string));
+                    result.push(value[i]);
                     i += 1;
                   } else {
-                    if ((value[i] as unknown as string) === "'" && !mainQuote.double) {
+                    if (value[i] === "'" && !mainQuote.double) {
                       var j: any = i + 1;
-                      while (j < value.length && (value[j] as unknown as string) !== "'") {
+                      while (j < value.length && value[j] !== "'") {
                         j += 1;
                       }
                       if (j < value.length) {
@@ -3331,7 +3331,7 @@ class Word implements Node {
                       result.push(Substring(value, i, j));
                       i = j;
                     } else {
-                      result.push((value[i] as unknown as string));
+                      result.push(value[i]);
                       i += 1;
                     }
                   }
@@ -3351,26 +3351,26 @@ class Word implements Node {
     var extglobQuote: any = newQuoteState();
     var deprecatedArithDepth: any = 0;
     while (i < value.length) {
-      if ((value[i] as unknown as string) === "\"") {
+      if (value[i] === "\"") {
         extglobQuote.double = !extglobQuote.double;
-        result.push((value[i] as unknown as string));
+        result.push(value[i]);
         i += 1;
         continue;
       }
       if (StartsWithAt(value, i, "$[") && !IsBackslashEscaped(value, i)) {
         deprecatedArithDepth += 1;
-        result.push((value[i] as unknown as string));
+        result.push(value[i]);
         i += 1;
         continue;
       }
-      if ((value[i] as unknown as string) === "]" && deprecatedArithDepth > 0) {
+      if (value[i] === "]" && deprecatedArithDepth > 0) {
         deprecatedArithDepth -= 1;
-        result.push((value[i] as unknown as string));
+        result.push(value[i]);
         i += 1;
         continue;
       }
-      if (i + 1 < value.length && (value[i + 1] as unknown as string) === "(") {
-        var prefixChar: any = (value[i] as unknown as string);
+      if (i + 1 < value.length && value[i + 1] === "(") {
+        var prefixChar: any = value[i];
         if ("><".includes(prefixChar) && !extglobQuote.double && deprecatedArithDepth === 0) {
           result.push(prefixChar);
           result.push("(");
@@ -3380,17 +3380,17 @@ class Word implements Node {
           var currentPart: any = [];
           var hasPipe: any = false;
           while (i < value.length && depth > 0) {
-            if ((value[i] as unknown as string) === "\\" && i + 1 < value.length) {
+            if (value[i] === "\\" && i + 1 < value.length) {
               currentPart.push(value.slice(i, i + 2));
               i += 2;
               continue;
             } else {
-              if ((value[i] as unknown as string) === "(") {
+              if (value[i] === "(") {
                 depth += 1;
-                currentPart.push((value[i] as unknown as string));
+                currentPart.push(value[i]);
                 i += 1;
               } else {
-                if ((value[i] as unknown as string) === ")") {
+                if (value[i] === ")") {
                   depth -= 1;
                   if (depth === 0) {
                     var partContent: any = currentPart.join("");
@@ -3405,11 +3405,11 @@ class Word implements Node {
                     }
                     break;
                   }
-                  currentPart.push((value[i] as unknown as string));
+                  currentPart.push(value[i]);
                   i += 1;
                 } else {
-                  if ((value[i] as unknown as string) === "|" && depth === 1) {
-                    if (i + 1 < value.length && (value[i + 1] as unknown as string) === "|") {
+                  if (value[i] === "|" && depth === 1) {
+                    if (i + 1 < value.length && value[i + 1] === "|") {
                       currentPart.push("||");
                       i += 2;
                     } else {
@@ -3424,7 +3424,7 @@ class Word implements Node {
                       i += 1;
                     }
                   } else {
-                    currentPart.push((value[i] as unknown as string));
+                    currentPart.push(value[i]);
                     i += 1;
                   }
                 }
@@ -3439,7 +3439,7 @@ class Word implements Node {
           continue;
         }
       }
-      result.push((value[i] as unknown as string));
+      result.push(value[i]);
       i += 1;
     }
     return result.join("");
@@ -3479,7 +3479,7 @@ class Command implements Node {
       parts.push(r.toSexp());
     }
     var inner: any = parts.join(" ");
-    if (!(inner !== "")) {
+    if (inner === "") {
       return "(command)";
     }
     return "(command " + inner + ")";
@@ -3774,21 +3774,21 @@ class Redirect implements Node {
     var op: any = this.op.replace(/^[0123456789]+/, '');
     if (op.startsWith("{")) {
       var j: any = 1;
-      if (j < op.length && (/^[a-zA-Z]$/.test((op[j] as unknown as string)) || (op[j] as unknown as string) === "_")) {
+      if (j < op.length && (/^[a-zA-Z]$/.test(op[j]) || op[j] === "_")) {
         j += 1;
-        while (j < op.length && (/^[a-zA-Z0-9]$/.test((op[j] as unknown as string)) || (op[j] as unknown as string) === "_")) {
+        while (j < op.length && (/^[a-zA-Z0-9]$/.test(op[j]) || op[j] === "_")) {
           j += 1;
         }
-        if (j < op.length && (op[j] as unknown as string) === "[") {
+        if (j < op.length && op[j] === "[") {
           j += 1;
-          while (j < op.length && (op[j] as unknown as string) !== "]") {
+          while (j < op.length && op[j] !== "]") {
             j += 1;
           }
-          if (j < op.length && (op[j] as unknown as string) === "]") {
+          if (j < op.length && op[j] === "]") {
             j += 1;
           }
         }
-        if (j < op.length && (op[j] as unknown as string) === "}") {
+        if (j < op.length && op[j] === "}") {
           op = Substring(op, j + 1, op.length);
         }
       }
@@ -4181,12 +4181,12 @@ class CasePattern implements Node {
     var i: any = 0;
     var depth: any = 0;
     while (i < this.pattern.length) {
-      var ch: any = (this.pattern[i] as unknown as string);
+      var ch: any = this.pattern[i];
       if (ch === "\\" && i + 1 < this.pattern.length) {
         current.push(Substring(this.pattern, i, i + 2));
         i += 2;
       } else {
-        if ((ch === "@" || ch === "?" || ch === "*" || ch === "+" || ch === "!") && i + 1 < this.pattern.length && (this.pattern[i + 1] as unknown as string) === "(") {
+        if ((ch === "@" || ch === "?" || ch === "*" || ch === "+" || ch === "!") && i + 1 < this.pattern.length && this.pattern[i + 1] === "(") {
           current.push(ch);
           current.push("(");
           depth += 1;
@@ -4243,7 +4243,7 @@ class CasePattern implements Node {
     alternatives.push(current.join(""));
     var wordList: any = [];
     for (const alt of alternatives) {
-      wordList.push(new Word(alt as any, [] as any, "word" as any).toSexp());
+      wordList.push(new Word(alt as any, [], "word" as any).toSexp());
     }
     var patternStr: any = wordList.join(" ");
     var parts: any = ["(pattern (" + patternStr + ")"];
@@ -4424,7 +4424,7 @@ class ArithmeticCommand implements Node {
   }
 
   toSexp(): string {
-    var formatted: any = new Word(this.rawContent as any, [] as any, "word" as any).FormatCommandSubstitutions(this.rawContent, true);
+    var formatted: any = new Word(this.rawContent as any, [], "word" as any).FormatCommandSubstitutions(this.rawContent, true);
     var escaped: any = formatted.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n").replace(/\t/g, "\\t");
     var result: any = "(arith (word \"" + escaped + "\"))";
     if (this.redirects.length > 0) {
@@ -5145,7 +5145,7 @@ class Parser {
     if (op === "" || op.length === 0) {
       return;
     }
-    var firstChar: any = (op[0] as unknown as string);
+    var firstChar: any = op[0];
     if (this.DolbraceState === DolbraceState_PARAM && hasParam) {
       if ("%#^,".includes(firstChar)) {
         this.DolbraceState = DolbraceState_QUOTE;
@@ -5306,14 +5306,14 @@ class Parser {
     if (this.atEnd()) {
       return "";
     }
-    return (this.source[this.pos] as unknown as string);
+    return this.source[this.pos];
   }
 
   advance(): string {
     if (this.atEnd()) {
       return "";
     }
-    var ch: any = (this.source[this.pos] as unknown as string);
+    var ch: any = this.source[this.pos];
     this.pos += 1;
     return ch;
   }
@@ -5323,7 +5323,7 @@ class Parser {
     if (pos < 0 || pos >= this.length) {
       return "";
     }
-    return (this.source[pos] as unknown as string);
+    return this.source[pos];
   }
 
   lookahead(n: number): string {
@@ -5334,11 +5334,11 @@ class Parser {
     if (this.pos + 2 >= this.length) {
       return false;
     }
-    var nextChar: any = (this.source[this.pos + 1] as unknown as string);
+    var nextChar: any = this.source[this.pos + 1];
     if (nextChar !== ">" && nextChar !== "<") {
       return false;
     }
-    return (this.source[this.pos + 2] as unknown as string) === "(";
+    return this.source[this.pos + 2] === "(";
   }
 
   skipWhitespace(): void {
@@ -5406,7 +5406,7 @@ class Parser {
       if (nextPos >= this.length) {
         return true;
       }
-      return IsWordEndContext((this.source[nextPos] as unknown as string));
+      return IsWordEndContext(this.source[nextPos]);
     }
     return false;
   }
@@ -5473,7 +5473,7 @@ class Parser {
       if (IsQuote(ch)) {
         break;
       }
-      if (ch === "\\" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "\n") {
+      if (ch === "\\" && this.pos + 1 < this.length && this.source[this.pos + 1] === "\n") {
         break;
       }
       if (ch === "\\" && this.pos + 1 < this.length) {
@@ -5498,7 +5498,7 @@ class Parser {
     var word: any = this.peekWord();
     var keywordWord: any = word;
     var hasLeadingBrace: any = false;
-    if (word !== "" && this.InProcessSub && word.length > 1 && (word[0] as unknown as string) === "}") {
+    if (word !== "" && this.InProcessSub && word.length > 1 && word[0] === "}") {
       keywordWord = word.slice(1);
       hasLeadingBrace = true;
     }
@@ -5513,7 +5513,7 @@ class Parser {
     for (const _ of expected) {
       this.advance();
     }
-    while (this.peek() === "\\" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "\n") {
+    while (this.peek() === "\\" && this.pos + 1 < this.length && this.source[this.pos + 1] === "\n") {
       this.advance();
       this.advance();
     }
@@ -5530,7 +5530,7 @@ class Parser {
     while (!this.atEnd() && this.peek() !== "\"") {
       var c: any = this.peek();
       if (c === "\\" && this.pos + 1 < this.length) {
-        var nextC: any = (this.source[this.pos + 1] as unknown as string);
+        var nextC: any = this.source[this.pos + 1];
         if (handleLineContinuation && nextC === "\n") {
           this.advance();
           this.advance();
@@ -5555,7 +5555,7 @@ class Parser {
   }
 
   ParseDollarExpansion(chars: string[], parts: Node[], inDquote: boolean): boolean {
-    if (this.pos + 2 < this.length && (this.source[this.pos + 1] as unknown as string) === "(" && (this.source[this.pos + 2] as unknown as string) === "(") {
+    if (this.pos + 2 < this.length && this.source[this.pos + 1] === "(" && this.source[this.pos + 2] === "(") {
       var [result0, result1]: any = this.ParseArithmeticExpansion();
       if (result0 !== null) {
         parts.push(result0);
@@ -5570,7 +5570,7 @@ class Parser {
       }
       return false;
     }
-    if (this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "[") {
+    if (this.pos + 1 < this.length && this.source[this.pos + 1] === "[") {
       var [result0, result1]: any = this.ParseDeprecatedArithmetic();
       if (result0 !== null) {
         parts.push(result0);
@@ -5579,7 +5579,7 @@ class Parser {
       }
       return false;
     }
-    if (this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "(") {
+    if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
       var [result0, result1]: any = this.ParseCommandSubstitution();
       if (result0 !== null) {
         parts.push(result0);
@@ -5652,7 +5652,7 @@ class Parser {
     var textEnd: any = this.pos;
     var text: any = Substring(this.source, start, textEnd);
     this.RestoreParserState(saved);
-    return [new CommandSubstitution(cmd as any, [] as any, "cmdsub" as any), text];
+    return [new CommandSubstitution(cmd as any, false, "cmdsub" as any), text];
   }
 
   ParseFunsub(start: number): [Node, string] {
@@ -5699,7 +5699,7 @@ class Parser {
       if (inHeredocBody) {
         var lineStart: any = this.pos;
         var lineEnd: any = lineStart;
-        while (lineEnd < this.length && (this.source[lineEnd] as unknown as string) !== "\n") {
+        while (lineEnd < this.length && this.source[lineEnd] !== "\n") {
           lineEnd += 1;
         }
         var line: any = Substring(this.source, lineStart, lineEnd);
@@ -5710,7 +5710,7 @@ class Parser {
             textChars.push(ch);
           }
           this.pos = lineEnd;
-          if (this.pos < this.length && (this.source[this.pos] as unknown as string) === "\n") {
+          if (this.pos < this.length && this.source[this.pos] === "\n") {
             contentChars.push("\n");
             textChars.push("\n");
             this.advance();
@@ -5730,8 +5730,8 @@ class Parser {
             var tabsStripped: any = line.length - checkLine.length;
             var endPos: any = tabsStripped + currentHeredocDelim.length;
             for (const i of range(endPos)) {
-              contentChars.push((line[i] as unknown as string));
-              textChars.push((line[i] as unknown as string));
+              contentChars.push(line[i]);
+              textChars.push(line[i]);
             }
             this.pos = lineStart + endPos;
             inHeredocBody = false;
@@ -5750,7 +5750,7 @@ class Parser {
               textChars.push(ch);
             }
             this.pos = lineEnd;
-            if (this.pos < this.length && (this.source[this.pos] as unknown as string) === "\n") {
+            if (this.pos < this.length && this.source[this.pos] === "\n") {
               contentChars.push("\n");
               textChars.push("\n");
               this.advance();
@@ -5761,7 +5761,7 @@ class Parser {
       }
       var c: any = this.peek();
       if (c === "\\" && this.pos + 1 < this.length) {
-        var nextC: any = (this.source[this.pos + 1] as unknown as string);
+        var nextC: any = this.source[this.pos + 1];
         if (nextC === "\n") {
           this.advance();
           this.advance();
@@ -5780,8 +5780,8 @@ class Parser {
         }
         continue;
       }
-      if (c === "<" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "<") {
-        if (this.pos + 2 < this.length && (this.source[this.pos + 2] as unknown as string) === "<") {
+      if (c === "<" && this.pos + 1 < this.length && this.source[this.pos + 1] === "<") {
+        if (this.pos + 2 < this.length && this.source[this.pos + 2] === "<") {
           contentChars.push(this.advance());
           textChars.push("<");
           contentChars.push(this.advance());
@@ -5969,7 +5969,7 @@ class Parser {
     if (cmd === null) {
       cmd = new Empty("empty" as any);
     }
-    return [new CommandSubstitution(cmd as any, [] as any, "cmdsub" as any), text];
+    return [new CommandSubstitution(cmd as any, false, "cmdsub" as any), text];
   }
 
   ParseProcessSubstitution(): [Node, string] {
@@ -6007,7 +6007,7 @@ class Parser {
     } catch (e) {
       this.RestoreParserState(saved);
       this.InProcessSub = oldInProcessSub;
-      var contentStartChar: any = (start + 2 < this.length ? (this.source[start + 2] as unknown as string) : "");
+      var contentStartChar: any = (start + 2 < this.length ? this.source[start + 2] : "");
       if (" \t\n".includes(contentStartChar)) {
         throw e
       }
@@ -6063,7 +6063,7 @@ class Parser {
       return [null, ""];
     }
     var start: any = this.pos;
-    if (this.pos + 2 >= this.length || (this.source[this.pos + 1] as unknown as string) !== "(" || (this.source[this.pos + 2] as unknown as string) !== "(") {
+    if (this.pos + 2 >= this.length || this.source[this.pos + 1] !== "(" || this.source[this.pos + 2] !== "(") {
       return [null, ""];
     }
     this.advance();
@@ -6183,25 +6183,25 @@ class Parser {
     if (pos >= this.ArithLen) {
       return "";
     }
-    return (this.ArithSrc[pos] as unknown as string);
+    return this.ArithSrc[pos];
   }
 
   ArithAdvance(): string {
     if (this.ArithAtEnd()) {
       return "";
     }
-    var c: any = (this.ArithSrc[this.ArithPos] as unknown as string);
+    var c: any = this.ArithSrc[this.ArithPos];
     this.ArithPos += 1;
     return c;
   }
 
   ArithSkipWs(): void {
     while (!this.ArithAtEnd()) {
-      var c: any = (this.ArithSrc[this.ArithPos] as unknown as string);
+      var c: any = this.ArithSrc[this.ArithPos];
       if (IsWhitespace(c)) {
         this.ArithPos += 1;
       } else {
-        if (c === "\\" && this.ArithPos + 1 < this.ArithLen && (this.ArithSrc[this.ArithPos + 1] as unknown as string) === "\n") {
+        if (c === "\\" && this.ArithPos + 1 < this.ArithLen && this.ArithSrc[this.ArithPos + 1] === "\n") {
           this.ArithPos += 2;
         } else {
           break;
@@ -6644,7 +6644,7 @@ class Parser {
     if (!(nameChars.length > 0)) {
       throw new ParseError(`${"Expected variable name after $"} at position ${this.ArithPos}`, this.ArithPos)
     }
-    return new ParamExpansion(nameChars.join("") as any, [] as any, [] as any, "param" as any);
+    return new ParamExpansion(nameChars.join("") as any, "", "", "param" as any);
   }
 
   ArithParseCmdsub(): Node {
@@ -6699,7 +6699,7 @@ class Parser {
     this.ArithAdvance();
     var subParser: any = newParser(content, false, this.Extglob);
     var cmd: any = subParser.parseList(true);
-    return new CommandSubstitution(cmd as any, [] as any, "cmdsub" as any);
+    return new CommandSubstitution(cmd as any, false, "cmdsub" as any);
   }
 
   ArithParseBracedParam(): Node {
@@ -6711,7 +6711,7 @@ class Parser {
         nameChars.push(this.ArithAdvance());
       }
       this.ArithConsume("}");
-      return new ParamIndirect(nameChars.join("") as any, [] as any, [] as any, "param-indirect" as any);
+      return new ParamIndirect(nameChars.join("") as any, "", "", "param-indirect" as any);
     }
     if (this.ArithPeek(0) === "#") {
       this.ArithAdvance();
@@ -6727,7 +6727,7 @@ class Parser {
       var ch: any = this.ArithPeek(0);
       if (ch === "}") {
         this.ArithAdvance();
-        return new ParamExpansion(nameChars.join("") as any, [] as any, [] as any, "param" as any);
+        return new ParamExpansion(nameChars.join("") as any, "", "", "param" as any);
       }
       if (IsParamExpansionOp(ch)) {
         break;
@@ -6842,7 +6842,7 @@ class Parser {
     }
     var subParser: any = newParser(content, false, this.Extglob);
     var cmd: any = subParser.parseList(true);
-    return new CommandSubstitution(cmd as any, [] as any, "cmdsub" as any);
+    return new CommandSubstitution(cmd as any, false, "cmdsub" as any);
   }
 
   ArithParseNumberOrVar(): Node {
@@ -6884,7 +6884,7 @@ class Parser {
       return [null, ""];
     }
     var start: any = this.pos;
-    if (this.pos + 1 >= this.length || (this.source[this.pos + 1] as unknown as string) !== "[") {
+    if (this.pos + 1 >= this.length || this.source[this.pos + 1] !== "[") {
       return [null, ""];
     }
     this.advance();
@@ -6945,13 +6945,13 @@ class Parser {
       var varname: any = varnameChars.join("");
       var isValidVarfd: any = false;
       if (varname !== "") {
-        if (/^[a-zA-Z]$/.test((varname[0] as unknown as string)) || (varname[0] as unknown as string) === "_") {
+        if (/^[a-zA-Z]$/.test(varname[0]) || varname[0] === "_") {
           if (varname.includes("[") || varname.includes("]")) {
             var left: any = varname.indexOf("[");
             var right: any = varname.lastIndexOf("]");
             if (left !== -1 && right === varname.length - 1 && right > left + 1) {
               var base: any = varname.slice(0, left);
-              if (base !== "" && (/^[a-zA-Z]$/.test((base[0] as unknown as string)) || (base[0] as unknown as string) === "_")) {
+              if (base !== "" && (/^[a-zA-Z]$/.test(base[0]) || base[0] === "_")) {
                 isValidVarfd = true;
                 for (const c of base.slice(1)) {
                   if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
@@ -6987,7 +6987,7 @@ class Parser {
       fd = parseInt(fdChars.join(""), 10);
     }
     var ch: any = this.peek();
-    if (ch === "&" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === ">") {
+    if (ch === "&" && this.pos + 1 < this.length && this.source[this.pos + 1] === ">") {
       if (fd !== -1 || varfd !== "") {
         this.pos = start;
         return null;
@@ -7005,13 +7005,13 @@ class Parser {
       if (target === null) {
         throw new ParseError(`${"Expected target for redirect " + op} at position ${this.pos}`, this.pos)
       }
-      return new Redirect(op as any, target as any, [] as any, "redirect" as any);
+      return new Redirect(op as any, target as any, null, "redirect" as any);
     }
     if (ch === "" || !IsRedirectChar(ch)) {
       this.pos = start;
       return null;
     }
-    if (fd === -1 && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "(") {
+    if (fd === -1 && this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
       this.pos = start;
       return null;
     }
@@ -7047,13 +7047,13 @@ class Parser {
               op = ">|";
             } else {
               if (fd === -1 && varfd === "" && op === ">" && nextCh === "&") {
-                if (this.pos + 1 >= this.length || !IsDigitOrDash((this.source[this.pos + 1] as unknown as string))) {
+                if (this.pos + 1 >= this.length || !IsDigitOrDash(this.source[this.pos + 1])) {
                   this.advance();
                   op = ">&";
                 }
               } else {
                 if (fd === -1 && varfd === "" && op === "<" && nextCh === "&") {
-                  if (this.pos + 1 >= this.length || !IsDigitOrDash((this.source[this.pos + 1] as unknown as string))) {
+                  if (this.pos + 1 >= this.length || !IsDigitOrDash(this.source[this.pos + 1])) {
                     this.advance();
                     op = "<&";
                   }
@@ -7078,9 +7078,9 @@ class Parser {
       this.advance();
       this.skipWhitespace();
       if (!this.atEnd() && this.peek() === "-") {
-        if (this.pos + 1 < this.length && !IsMetachar((this.source[this.pos + 1] as unknown as string))) {
+        if (this.pos + 1 < this.length && !IsMetachar(this.source[this.pos + 1])) {
           this.advance();
-          var target: any = new Word("&-" as any, [] as any, "word" as any);
+          var target: any = new Word("&-" as any, [], "word" as any);
         } else {
           var target: any = null;
         }
@@ -7106,18 +7106,18 @@ class Parser {
             this.pos = wordStart;
             var innerWord: any = this.parseWord(false, false, false);
             if (innerWord !== null) {
-              var target: any = new Word("&" + innerWord.value as any, [] as any, "word" as any);
+              var target: any = new Word("&" + innerWord.value as any, [], "word" as any);
               target.parts = innerWord.parts;
             } else {
               throw new ParseError(`${"Expected target for redirect " + op} at position ${this.pos}`, this.pos)
             }
           } else {
-            var target: any = new Word("&" + fdTarget as any, [] as any, "word" as any);
+            var target: any = new Word("&" + fdTarget as any, [], "word" as any);
           }
         } else {
           var innerWord: any = this.parseWord(false, false, false);
           if (innerWord !== null) {
-            var target: any = new Word("&" + innerWord.value as any, [] as any, "word" as any);
+            var target: any = new Word("&" + innerWord.value as any, [], "word" as any);
             target.parts = innerWord.parts;
           } else {
             throw new ParseError(`${"Expected target for redirect " + op} at position ${this.pos}`, this.pos)
@@ -7127,9 +7127,9 @@ class Parser {
     } else {
       this.skipWhitespace();
       if ((op === ">&" || op === "<&") && !this.atEnd() && this.peek() === "-") {
-        if (this.pos + 1 < this.length && !IsMetachar((this.source[this.pos + 1] as unknown as string))) {
+        if (this.pos + 1 < this.length && !IsMetachar(this.source[this.pos + 1])) {
           this.advance();
-          var target: any = new Word("&-" as any, [] as any, "word" as any);
+          var target: any = new Word("&-" as any, [], "word" as any);
         } else {
           var target: any = this.parseWord(false, false, false);
         }
@@ -7140,7 +7140,7 @@ class Parser {
     if (target === null) {
       throw new ParseError(`${"Expected target for redirect " + op} at position ${this.pos}`, this.pos)
     }
-    return new Redirect(op as any, target as any, [] as any, "redirect" as any);
+    return new Redirect(op as any, target as any, null, "redirect" as any);
   }
 
   ParseHeredocDelimiter(): [string, boolean] {
@@ -7186,7 +7186,7 @@ class Parser {
                 }
               }
             } else {
-              if (ch === "$" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "'") {
+              if (ch === "$" && this.pos + 1 < this.length && this.source[this.pos + 1] === "'") {
                 quoted = true;
                 this.advance();
                 this.advance();
@@ -7230,14 +7230,14 @@ class Parser {
                     delimiterChars.push(this.advance());
                   }
                 } else {
-                  if (ch === "$" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "{") {
+                  if (ch === "$" && this.pos + 1 < this.length && this.source[this.pos + 1] === "{") {
                     var dollarCount: any = 0;
                     var j: any = this.pos - 1;
-                    while (j >= 0 && (this.source[j] as unknown as string) === "$") {
+                    while (j >= 0 && this.source[j] === "$") {
                       dollarCount += 1;
                       j -= 1;
                     }
-                    if (j >= 0 && (this.source[j] as unknown as string) === "\\") {
+                    if (j >= 0 && this.source[j] === "\\") {
                       dollarCount -= 1;
                     }
                     if (dollarCount % 2 === 1) {
@@ -7267,14 +7267,14 @@ class Parser {
                       }
                     }
                   } else {
-                    if (ch === "$" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "[") {
+                    if (ch === "$" && this.pos + 1 < this.length && this.source[this.pos + 1] === "[") {
                       var dollarCount: any = 0;
                       var j: any = this.pos - 1;
-                      while (j >= 0 && (this.source[j] as unknown as string) === "$") {
+                      while (j >= 0 && this.source[j] === "$") {
                         dollarCount += 1;
                         j -= 1;
                       }
-                      if (j >= 0 && (this.source[j] as unknown as string) === "\\") {
+                      if (j >= 0 && this.source[j] === "\\") {
                         dollarCount -= 1;
                       }
                       if (dollarCount % 2 === 1) {
@@ -7344,7 +7344,7 @@ class Parser {
           }
         }
       }
-      if (!this.atEnd() && "<>".includes(this.peek()) && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "(") {
+      if (!this.atEnd() && "<>".includes(this.peek()) && this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
         delimiterChars.push(this.advance());
         delimiterChars.push(this.advance());
         var depth: any = 1;
@@ -7369,7 +7369,7 @@ class Parser {
   ReadHeredocLine(quoted: boolean): [string, number] {
     var lineStart: any = this.pos;
     var lineEnd: any = this.pos;
-    while (lineEnd < this.length && (this.source[lineEnd] as unknown as string) !== "\n") {
+    while (lineEnd < this.length && this.source[lineEnd] !== "\n") {
       lineEnd += 1;
     }
     var line: any = Substring(this.source, lineStart, lineEnd);
@@ -7382,7 +7382,7 @@ class Parser {
         line = Substring(line, 0, line.length - 1);
         lineEnd += 1;
         var nextLineStart: any = lineEnd;
-        while (lineEnd < this.length && (this.source[lineEnd] as unknown as string) !== "\n") {
+        while (lineEnd < this.length && this.source[lineEnd] !== "\n") {
           lineEnd += 1;
         }
         line = line + Substring(this.source, nextLineStart, lineEnd);
@@ -7452,7 +7452,7 @@ class Parser {
         return existing;
       }
     }
-    var heredoc: any = new HereDoc(delimiter as any, "" as any, stripTabs as any, quoted as any, fd as any, false as any, [] as any, "heredoc" as any);
+    var heredoc: any = new HereDoc(delimiter as any, "" as any, stripTabs as any, quoted as any, fd as any, false as any, 0, "heredoc" as any);
     heredoc.StartPos = startPos;
     this.PendingHeredocs.push(heredoc);
     this.ClearState(ParserStateFlags_PST_HEREDOC);
@@ -7522,7 +7522,7 @@ class Parser {
 
   parseArithmeticCommand(): ArithmeticCommand {
     this.skipWhitespace();
-    if (this.atEnd() || this.peek() !== "(" || this.pos + 1 >= this.length || (this.source[this.pos + 1] as unknown as string) !== "(") {
+    if (this.atEnd() || this.peek() !== "(" || this.pos + 1 >= this.length || this.source[this.pos + 1] !== "(") {
       return null;
     }
     var savedPos: any = this.pos;
@@ -7566,7 +7566,7 @@ class Parser {
               this.advance();
             } else {
               if (c === ")") {
-                if (depth === 1 && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === ")") {
+                if (depth === 1 && this.pos + 1 < this.length && this.source[this.pos + 1] === ")") {
                   break;
                 }
                 depth -= 1;
@@ -7600,11 +7600,11 @@ class Parser {
 
   parseConditionalExpr(): ConditionalExpr {
     this.skipWhitespace();
-    if (this.atEnd() || this.peek() !== "[" || this.pos + 1 >= this.length || (this.source[this.pos + 1] as unknown as string) !== "[") {
+    if (this.atEnd() || this.peek() !== "[" || this.pos + 1 >= this.length || this.source[this.pos + 1] !== "[") {
       return null;
     }
     var nextPos: any = this.pos + 2;
-    if (nextPos < this.length && !(IsWhitespace((this.source[nextPos] as unknown as string)) || (this.source[nextPos] as unknown as string) === "\\" && nextPos + 1 < this.length && (this.source[nextPos + 1] as unknown as string) === "\n")) {
+    if (nextPos < this.length && !(IsWhitespace(this.source[nextPos]) || this.source[nextPos] === "\\" && nextPos + 1 < this.length && this.source[nextPos + 1] === "\n")) {
       return null;
     }
     this.advance();
@@ -7615,7 +7615,7 @@ class Parser {
     while (!this.atEnd() && IsWhitespaceNoNewline(this.peek())) {
       this.advance();
     }
-    if (this.atEnd() || this.peek() !== "]" || this.pos + 1 >= this.length || (this.source[this.pos + 1] as unknown as string) !== "]") {
+    if (this.atEnd() || this.peek() !== "]" || this.pos + 1 >= this.length || this.source[this.pos + 1] !== "]") {
       this.ClearState(ParserStateFlags_PST_CONDEXPR);
       this.WordContext = WORD_CTX_NORMAL;
       throw new ParseError(`${"Expected ]] to close conditional expression"} at position ${this.pos}`, this.pos)
@@ -7632,7 +7632,7 @@ class Parser {
       if (IsWhitespaceNoNewline(this.peek())) {
         this.advance();
       } else {
-        if (this.peek() === "\\" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "\n") {
+        if (this.peek() === "\\" && this.pos + 1 < this.length && this.source[this.pos + 1] === "\n") {
           this.advance();
           this.advance();
         } else {
@@ -7647,14 +7647,14 @@ class Parser {
   }
 
   CondAtEnd(): boolean {
-    return this.atEnd() || this.peek() === "]" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "]";
+    return this.atEnd() || this.peek() === "]" && this.pos + 1 < this.length && this.source[this.pos + 1] === "]";
   }
 
   ParseCondOr(): Node {
     this.CondSkipWhitespace();
     var left: any = this.ParseCondAnd();
     this.CondSkipWhitespace();
-    if (!this.CondAtEnd() && this.peek() === "|" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "|") {
+    if (!this.CondAtEnd() && this.peek() === "|" && this.pos + 1 < this.length && this.source[this.pos + 1] === "|") {
       this.advance();
       this.advance();
       var right: any = this.ParseCondOr();
@@ -7667,7 +7667,7 @@ class Parser {
     this.CondSkipWhitespace();
     var left: any = this.ParseCondTerm();
     this.CondSkipWhitespace();
-    if (!this.CondAtEnd() && this.peek() === "&" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "&") {
+    if (!this.CondAtEnd() && this.peek() === "&" && this.pos + 1 < this.length && this.source[this.pos + 1] === "&") {
       this.advance();
       this.advance();
       var right: any = this.ParseCondAnd();
@@ -7682,7 +7682,7 @@ class Parser {
       throw new ParseError(`${"Unexpected end of conditional expression"} at position ${this.pos}`, this.pos)
     }
     if (this.peek() === "!") {
-      if (this.pos + 1 < this.length && !IsWhitespaceNoNewline((this.source[this.pos + 1] as unknown as string))) {
+      if (this.pos + 1 < this.length && !IsWhitespaceNoNewline(this.source[this.pos + 1])) {
       } else {
         this.advance();
         var operand: any = this.ParseCondTerm();
@@ -7712,7 +7712,7 @@ class Parser {
       return new UnaryTest(word1.value as any, operand as any, "unary-test" as any);
     }
     if (!this.CondAtEnd() && (this.peek() !== "&" && this.peek() !== "|" && this.peek() !== ")")) {
-      if (IsRedirectChar(this.peek()) && !(this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "(")) {
+      if (IsRedirectChar(this.peek()) && !(this.pos + 1 < this.length && this.source[this.pos + 1] === "(")) {
         var op: any = this.advance();
         this.CondSkipWhitespace();
         var word2: any = this.ParseCondWord();
@@ -7750,10 +7750,10 @@ class Parser {
     if (IsParen(c)) {
       return null;
     }
-    if (c === "&" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "&") {
+    if (c === "&" && this.pos + 1 < this.length && this.source[this.pos + 1] === "&") {
       return null;
     }
-    if (c === "|" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "|") {
+    if (c === "|" && this.pos + 1 < this.length && this.source[this.pos + 1] === "|") {
       return null;
     }
     return this.ParseWordInternal(WORD_CTX_COND, false, false);
@@ -7834,7 +7834,7 @@ class Parser {
           }
         }
       }
-      elseBody = new If(elifCondition as any, elifThenBody as any, innerElse as any, [] as any, "if" as any);
+      elseBody = new If(elifCondition as any, elifThenBody as any, innerElse as any, [], "if" as any);
     } else {
       if (this.LexIsAtReservedWord("else")) {
         this.LexConsumeWord("else");
@@ -7878,7 +7878,7 @@ class Parser {
         }
       }
     }
-    return new If(condition as any, thenBody as any, elseBody as any, [] as any, "if" as any);
+    return new If(condition as any, thenBody as any, elseBody as any, [], "if" as any);
   }
 
   parseWhile(): While {
@@ -7935,7 +7935,7 @@ class Parser {
       return null;
     }
     this.skipWhitespace();
-    if (this.peek() === "(" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "(") {
+    if (this.peek() === "(" && this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
       return this.ParseForArith();
     }
     if (this.peek() === "$") {
@@ -8030,7 +8030,7 @@ class Parser {
             parenDepth -= 1;
             current.push(this.advance());
           } else {
-            if (this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === ")") {
+            if (this.pos + 1 < this.length && this.source[this.pos + 1] === ")") {
               parts.push(current.join("").replace(/^[ \t]+/, ''));
               this.advance();
               this.advance();
@@ -8190,7 +8190,7 @@ class Parser {
           }
         } else {
           if (ch === "\\") {
-            if (this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "\n") {
+            if (this.pos + 1 < this.length && this.source[this.pos + 1] === "\n") {
               this.advance();
               this.advance();
             } else {
@@ -8225,7 +8225,7 @@ class Parser {
                 patternChars.push(this.advance());
                 extglobDepth += 1;
               } else {
-                if (this.Extglob && IsExtglobPrefix(ch) && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "(") {
+                if (this.Extglob && IsExtglobPrefix(ch) && this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
                   patternChars.push(this.advance());
                   patternChars.push(this.advance());
                   extglobDepth += 1;
@@ -8235,17 +8235,17 @@ class Parser {
                     var scanPos: any = this.pos + 1;
                     var scanDepth: any = 0;
                     var hasFirstBracketLiteral: any = false;
-                    if (scanPos < this.length && IsCaretOrBang((this.source[scanPos] as unknown as string))) {
+                    if (scanPos < this.length && IsCaretOrBang(this.source[scanPos])) {
                       scanPos += 1;
                     }
-                    if (scanPos < this.length && (this.source[scanPos] as unknown as string) === "]") {
+                    if (scanPos < this.length && this.source[scanPos] === "]") {
                       if (this.source.indexOf("]", scanPos + 1) !== -1) {
                         scanPos += 1;
                         hasFirstBracketLiteral = true;
                       }
                     }
                     while (scanPos < this.length) {
-                      var sc: any = (this.source[scanPos] as unknown as string);
+                      var sc: any = this.source[scanPos];
                       if (sc === "]" && scanDepth === 0) {
                         isCharClass = true;
                         break;
@@ -8322,7 +8322,7 @@ class Parser {
         }
       }
       var pattern: any = patternChars.join("");
-      if (!(pattern !== "")) {
+      if (pattern === "") {
         throw new ParseError(`${"Expected pattern in case statement"} at position ${this.LexPeekToken().pos}`, this.LexPeekToken().pos)
       }
       this.skipWhitespace();
@@ -8370,7 +8370,7 @@ class Parser {
       }
     }
     if (ch === "(") {
-      if (this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "(") {
+      if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
         var body: any = this.parseArithmeticCommand();
         if (body !== null) {
           return new Coproc(body as any, name as any, "coproc" as any);
@@ -8410,7 +8410,7 @@ class Parser {
         } else {
           if (ch === "(") {
             name = potentialName;
-            if (this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "(") {
+            if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
               var body: any = this.parseArithmeticCommand();
             } else {
               var body: any = this.parseSubshell();
@@ -8455,7 +8455,7 @@ class Parser {
       this.consumeWord(name);
       this.skipWhitespace();
       if (!this.atEnd() && this.peek() === "(") {
-        if (this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === ")") {
+        if (this.pos + 1 < this.length && this.source[this.pos + 1] === ")") {
           this.advance();
           this.advance();
         }
@@ -8480,7 +8480,7 @@ class Parser {
       this.advance();
     }
     name = Substring(this.source, nameStart, this.pos);
-    if (!(name !== "")) {
+    if (name === "") {
       this.pos = savedPos;
       return null;
     }
@@ -8492,7 +8492,7 @@ class Parser {
         i += 2;
         continue;
       }
-      if ((name[i] as unknown as string) === "}") {
+      if (name[i] === "}") {
         braceDepth -= 1;
       }
       i += 1;
@@ -8504,7 +8504,7 @@ class Parser {
     var posAfterName: any = this.pos;
     this.skipWhitespace();
     var hasWhitespace: any = this.pos > posAfterName;
-    if (!hasWhitespace && name !== "" && "*?@+!$".includes((name[name.length - 1] as unknown as string))) {
+    if (!hasWhitespace && name !== "" && "*?@+!$".includes(name[name.length - 1])) {
       this.pos = savedPos;
       return null;
     }
@@ -8532,7 +8532,7 @@ class Parser {
     if (result !== null) {
       return result;
     }
-    if (!this.atEnd() && this.peek() === "(" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "(") {
+    if (!this.atEnd() && this.peek() === "(" && this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
       result = this.parseArithmeticCommand();
       if (result !== null) {
         return result;
@@ -8582,7 +8582,7 @@ class Parser {
     }
     if (this.peek() === "}") {
       var nextPos: any = this.pos + 1;
-      if (nextPos >= this.length || IsWordEndContext((this.source[nextPos] as unknown as string))) {
+      if (nextPos >= this.length || IsWordEndContext(this.source[nextPos])) {
         return true;
       }
     }
@@ -8677,7 +8677,7 @@ class Parser {
       return null;
     }
     var ch: any = this.peek();
-    if (ch === "(" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "(") {
+    if (ch === "(" && this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
       var result: any = this.parseArithmeticCommand();
       if (result !== null) {
         return result;
@@ -8692,7 +8692,7 @@ class Parser {
         return result;
       }
     }
-    if (ch === "[" && this.pos + 1 < this.length && (this.source[this.pos + 1] as unknown as string) === "[") {
+    if (ch === "[" && this.pos + 1 < this.length && this.source[this.pos + 1] === "[") {
       var result: any = this.parseConditionalExpr();
       if (result !== null) {
         return result;
@@ -8701,7 +8701,7 @@ class Parser {
     var reserved: any = this.LexPeekReservedWord();
     if (reserved === "" && this.InProcessSub) {
       var word: any = this.peekWord();
-      if (word !== "" && word.length > 1 && (word[0] as unknown as string) === "}") {
+      if (word !== "" && word.length > 1 && word[0] === "}") {
         var keywordWord: any = word.slice(1);
         if (RESERVED_WORDS.has(keywordWord) || (keywordWord === "{" || keywordWord === "}" || keywordWord === "[[" || keywordWord === "]]" || keywordWord === "!" || keywordWord === "time")) {
           reserved = keywordWord;
@@ -8766,7 +8766,7 @@ class Parser {
       }
       this.skipWhitespace();
       if (!this.atEnd() && StartsWithAt(this.source, this.pos, "--")) {
-        if (this.pos + 2 >= this.length || IsWhitespace((this.source[this.pos + 2] as unknown as string))) {
+        if (this.pos + 2 >= this.length || IsWhitespace(this.source[this.pos + 2])) {
           this.advance();
           this.advance();
           timePosix = true;
@@ -8793,7 +8793,7 @@ class Parser {
       }
       this.skipWhitespace();
       if (!this.atEnd() && this.peek() === "!") {
-        if ((this.pos + 1 >= this.length || IsNegationBoundary((this.source[this.pos + 1] as unknown as string))) && !this.IsBangFollowedByProcsub()) {
+        if ((this.pos + 1 >= this.length || IsNegationBoundary(this.source[this.pos + 1])) && !this.IsBangFollowedByProcsub()) {
           this.advance();
           prefixOrder = "time_negation";
           this.skipWhitespace();
@@ -8801,7 +8801,7 @@ class Parser {
       }
     } else {
       if (!this.atEnd() && this.peek() === "!") {
-        if ((this.pos + 1 >= this.length || IsNegationBoundary((this.source[this.pos + 1] as unknown as string))) && !this.IsBangFollowedByProcsub()) {
+        if ((this.pos + 1 >= this.length || IsNegationBoundary(this.source[this.pos + 1])) && !this.IsBangFollowedByProcsub()) {
           this.advance();
           this.skipWhitespace();
           var inner: any = this.parsePipeline();
@@ -8809,7 +8809,7 @@ class Parser {
             if ((inner as unknown as Negation).pipeline !== null) {
               return (inner as unknown as Negation).pipeline;
             } else {
-              return new Command([] as any, [] as any, "command" as any);
+              return new Command([] as any, [], "command" as any);
             }
           }
           return new Negation(inner as any, "negation" as any);
@@ -9017,7 +9017,7 @@ class Parser {
 
   parse(): Node[] {
     var source: any = this.source.trim();
-    if (!(source !== "")) {
+    if (source === "") {
       return [new Empty("empty" as any)];
     }
     var results: any = [];
@@ -9058,7 +9058,7 @@ class Parser {
     if (!(results.length > 0)) {
       return [new Empty("empty" as any)];
     }
-    if (this.SawNewlineInSingleQuote && this.source !== "" && (this.source[this.source.length - 1] as unknown as string) === "\\" && !(this.source.length >= 3 && this.source.slice(this.source.length - 3, this.source.length - 1) === "\\\n")) {
+    if (this.SawNewlineInSingleQuote && this.source !== "" && this.source[this.source.length - 1] === "\\" && !(this.source.length >= 3 && this.source.slice(this.source.length - 3, this.source.length - 1) === "\\\n")) {
       if (!this.LastWordOnOwnLine(results)) {
         this.StripTrailingBackslashFromLastWord(results);
       }
@@ -9078,7 +9078,7 @@ class Parser {
     var lastWord: any = this.FindLastWord(lastNode);
     if (lastWord !== null && lastWord.value.endsWith("\\")) {
       lastWord.value = Substring(lastWord.value, 0, lastWord.value.length - 1);
-      if (!(lastWord.value !== "") && lastNode instanceof Command && (lastNode as unknown as Command).words.length > 0) {
+      if (lastWord.value === "" && lastNode instanceof Command && (lastNode as unknown as Command).words.length > 0) {
         (lastNode as unknown as Command).words.pop();
       }
     }
@@ -9157,10 +9157,10 @@ function StartsWithAt(s: string, pos: number, prefix: string): boolean {
 function CountConsecutiveDollarsBefore(s: string, pos: number): number {
   var count: any = 0;
   var k: any = pos - 1;
-  while (k >= 0 && (s[k] as unknown as string) === "$") {
+  while (k >= 0 && s[k] === "$") {
     var bsCount: any = 0;
     var j: any = k - 1;
-    while (j >= 0 && (s[j] as unknown as string) === "\\") {
+    while (j >= 0 && s[j] === "\\") {
       bsCount += 1;
       j -= 1;
     }
@@ -9200,11 +9200,11 @@ function StripLineContinuationsCommentAware(text: string): string {
   var inComment: any = false;
   var quote: any = newQuoteState();
   while (i < text.length) {
-    var c: any = (text[i] as unknown as string);
-    if (c === "\\" && i + 1 < text.length && (text[i + 1] as unknown as string) === "\n") {
+    var c: any = text[i];
+    if (c === "\\" && i + 1 < text.length && text[i + 1] === "\n") {
       var numPrecedingBackslashes: any = 0;
       var j: any = i - 1;
-      while (j >= 0 && (text[j] as unknown as string) === "\\") {
+      while (j >= 0 && text[j] === "\\") {
         numPrecedingBackslashes += 1;
         j -= 1;
       }
@@ -9264,12 +9264,12 @@ function FormatArithVal(s: string): string {
 function ConsumeSingleQuote(s: string, start: number): [number, string[]] {
   var chars: any = ["'"];
   var i: any = start + 1;
-  while (i < s.length && (s[i] as unknown as string) !== "'") {
-    chars.push((s[i] as unknown as string));
+  while (i < s.length && s[i] !== "'") {
+    chars.push(s[i]);
     i += 1;
   }
   if (i < s.length) {
-    chars.push((s[i] as unknown as string));
+    chars.push(s[i]);
     i += 1;
   }
   return [i, chars];
@@ -9278,16 +9278,16 @@ function ConsumeSingleQuote(s: string, start: number): [number, string[]] {
 function ConsumeDoubleQuote(s: string, start: number): [number, string[]] {
   var chars: any = ["\""];
   var i: any = start + 1;
-  while (i < s.length && (s[i] as unknown as string) !== "\"") {
-    if ((s[i] as unknown as string) === "\\" && i + 1 < s.length) {
-      chars.push((s[i] as unknown as string));
+  while (i < s.length && s[i] !== "\"") {
+    if (s[i] === "\\" && i + 1 < s.length) {
+      chars.push(s[i]);
       i += 1;
     }
-    chars.push((s[i] as unknown as string));
+    chars.push(s[i]);
     i += 1;
   }
   if (i < s.length) {
-    chars.push((s[i] as unknown as string));
+    chars.push(s[i]);
     i += 1;
   }
   return [i, chars];
@@ -9296,10 +9296,10 @@ function ConsumeDoubleQuote(s: string, start: number): [number, string[]] {
 function HasBracketClose(s: string, start: number, depth: number): boolean {
   var i: any = start;
   while (i < s.length) {
-    if ((s[i] as unknown as string) === "]") {
+    if (s[i] === "]") {
       return true;
     }
-    if (((s[i] as unknown as string) === "|" || (s[i] as unknown as string) === ")") && depth === 0) {
+    if ((s[i] === "|" || s[i] === ")") && depth === 0) {
       return false;
     }
     i += 1;
@@ -9309,24 +9309,24 @@ function HasBracketClose(s: string, start: number, depth: number): boolean {
 
 function ConsumeBracketClass(s: string, start: number, depth: number): [number, string[], boolean] {
   var scanPos: any = start + 1;
-  if (scanPos < s.length && ((s[scanPos] as unknown as string) === "!" || (s[scanPos] as unknown as string) === "^")) {
+  if (scanPos < s.length && (s[scanPos] === "!" || s[scanPos] === "^")) {
     scanPos += 1;
   }
-  if (scanPos < s.length && (s[scanPos] as unknown as string) === "]") {
+  if (scanPos < s.length && s[scanPos] === "]") {
     if (HasBracketClose(s, scanPos + 1, depth)) {
       scanPos += 1;
     }
   }
   var isBracket: any = false;
   while (scanPos < s.length) {
-    if ((s[scanPos] as unknown as string) === "]") {
+    if (s[scanPos] === "]") {
       isBracket = true;
       break;
     }
-    if ((s[scanPos] as unknown as string) === ")" && depth === 0) {
+    if (s[scanPos] === ")" && depth === 0) {
       break;
     }
-    if ((s[scanPos] as unknown as string) === "|" && depth === 0) {
+    if (s[scanPos] === "|" && depth === 0) {
       break;
     }
     scanPos += 1;
@@ -9336,22 +9336,22 @@ function ConsumeBracketClass(s: string, start: number, depth: number): [number, 
   }
   var chars: any = ["["];
   var i: any = start + 1;
-  if (i < s.length && ((s[i] as unknown as string) === "!" || (s[i] as unknown as string) === "^")) {
-    chars.push((s[i] as unknown as string));
+  if (i < s.length && (s[i] === "!" || s[i] === "^")) {
+    chars.push(s[i]);
     i += 1;
   }
-  if (i < s.length && (s[i] as unknown as string) === "]") {
+  if (i < s.length && s[i] === "]") {
     if (HasBracketClose(s, i + 1, depth)) {
-      chars.push((s[i] as unknown as string));
+      chars.push(s[i]);
       i += 1;
     }
   }
-  while (i < s.length && (s[i] as unknown as string) !== "]") {
-    chars.push((s[i] as unknown as string));
+  while (i < s.length && s[i] !== "]") {
+    chars.push(s[i]);
     i += 1;
   }
   if (i < s.length) {
-    chars.push((s[i] as unknown as string));
+    chars.push(s[i]);
     i += 1;
   }
   return [i, chars, true];
@@ -9844,7 +9844,7 @@ function FormatRedirect(r: Node, compact: boolean, heredocOpOnly: boolean): stri
       op = Substring(op, 0, op.length - 1) + ">";
     }
     var afterAmp: any = Substring(target, 1, target.length);
-    var isLiteralFd: any = afterAmp === "-" || afterAmp.length > 0 && /^[0-9]+$/.test((afterAmp[0] as unknown as string));
+    var isLiteralFd: any = afterAmp === "-" || afterAmp.length > 0 && /^[0-9]+$/.test(afterAmp[0]);
     if (isLiteralFd) {
       if (op === ">" || op === ">&") {
         op = (wasInputClose ? "0>" : "1>");
@@ -9882,7 +9882,7 @@ function LookaheadForEsac(value: string, start: number, caseDepth: number): bool
   var depth: any = caseDepth;
   var quote: any = newQuoteState();
   while (i < value.length) {
-    var c: any = (value[i] as unknown as string);
+    var c: any = value[i];
     if (c === "\\" && i + 1 < value.length && quote.double) {
       i += 2;
       continue;
@@ -9933,8 +9933,8 @@ function LookaheadForEsac(value: string, start: number, caseDepth: number): bool
 
 function SkipBacktick(value: string, start: number): number {
   var i: any = start + 1;
-  while (i < value.length && (value[i] as unknown as string) !== "`") {
-    if ((value[i] as unknown as string) === "\\" && i + 1 < value.length) {
+  while (i < value.length && value[i] !== "`") {
+    if (value[i] === "\\" && i + 1 < value.length) {
       i += 2;
     } else {
       i += 1;
@@ -9948,7 +9948,7 @@ function SkipBacktick(value: string, start: number): number {
 
 function SkipSingleQuoted(s: string, start: number): number {
   var i: any = start;
-  while (i < s.length && (s[i] as unknown as string) !== "'") {
+  while (i < s.length && s[i] !== "'") {
     i += 1;
   }
   return (i < s.length ? i + 1 : i);
@@ -9964,7 +9964,7 @@ function SkipDoubleQuoted(s: string, start: number): number {
     var backq: any = false;
   }
   while (i < n) {
-    var c: any = (s[i] as unknown as string);
+    var c: any = s[i];
     if (passNext) {
       passNext = false;
       i += 1;
@@ -9988,11 +9988,11 @@ function SkipDoubleQuoted(s: string, start: number): number {
       continue;
     }
     if (c === "$" && i + 1 < n) {
-      if ((s[i + 1] as unknown as string) === "(") {
+      if (s[i + 1] === "(") {
         i = FindCmdsubEnd(s, i + 2);
         continue;
       }
-      if ((s[i + 1] as unknown as string) === "{") {
+      if (s[i + 1] === "{") {
         i = FindBracedParamEnd(s, i + 2);
         continue;
       }
@@ -10009,7 +10009,7 @@ function IsValidArithmeticStart(value: string, start: number): boolean {
   var scanParen: any = 0;
   var scanI: any = start + 3;
   while (scanI < value.length) {
-    var scanC: any = (value[scanI] as unknown as string);
+    var scanC: any = value[scanI];
     if (IsExpansionStart(value, scanI, "$(")) {
       scanI = FindCmdsubEnd(value, scanI + 2);
       continue;
@@ -10021,7 +10021,7 @@ function IsValidArithmeticStart(value: string, start: number): boolean {
         if (scanParen > 0) {
           scanParen -= 1;
         } else {
-          if (scanI + 1 < value.length && (value[scanI + 1] as unknown as string) === ")") {
+          if (scanI + 1 < value.length && value[scanI + 1] === ")") {
             return true;
           } else {
             return false;
@@ -10039,7 +10039,7 @@ function FindFunsubEnd(value: string, start: number): number {
   var i: any = start;
   var quote: any = newQuoteState();
   while (i < value.length && depth > 0) {
-    var c: any = (value[i] as unknown as string);
+    var c: any = value[i];
     if (c === "\\" && i + 1 < value.length && !quote.single) {
       i += 2;
       continue;
@@ -10081,7 +10081,7 @@ function FindCmdsubEnd(value: string, start: number): number {
   var arithDepth: any = 0;
   var arithParenDepth: any = 0;
   while (i < value.length && depth > 0) {
-    var c: any = (value[i] as unknown as string);
+    var c: any = value[i];
     if (c === "\\" && i + 1 < value.length) {
       i += 2;
       continue;
@@ -10094,21 +10094,21 @@ function FindCmdsubEnd(value: string, start: number): number {
       i = SkipDoubleQuoted(value, i + 1);
       continue;
     }
-    if (c === "#" && arithDepth === 0 && (i === start || (value[i - 1] as unknown as string) === " " || (value[i - 1] as unknown as string) === "\t" || (value[i - 1] as unknown as string) === "\n" || (value[i - 1] as unknown as string) === ";" || (value[i - 1] as unknown as string) === "|" || (value[i - 1] as unknown as string) === "&" || (value[i - 1] as unknown as string) === "(" || (value[i - 1] as unknown as string) === ")")) {
-      while (i < value.length && (value[i] as unknown as string) !== "\n") {
+    if (c === "#" && arithDepth === 0 && (i === start || value[i - 1] === " " || value[i - 1] === "\t" || value[i - 1] === "\n" || value[i - 1] === ";" || value[i - 1] === "|" || value[i - 1] === "&" || value[i - 1] === "(" || value[i - 1] === ")")) {
+      while (i < value.length && value[i] !== "\n") {
         i += 1;
       }
       continue;
     }
     if (StartsWithAt(value, i, "<<<")) {
       i += 3;
-      while (i < value.length && ((value[i] as unknown as string) === " " || (value[i] as unknown as string) === "\t")) {
+      while (i < value.length && (value[i] === " " || value[i] === "\t")) {
         i += 1;
       }
-      if (i < value.length && (value[i] as unknown as string) === "\"") {
+      if (i < value.length && value[i] === "\"") {
         i += 1;
-        while (i < value.length && (value[i] as unknown as string) !== "\"") {
-          if ((value[i] as unknown as string) === "\\" && i + 1 < value.length) {
+        while (i < value.length && value[i] !== "\"") {
+          if (value[i] === "\\" && i + 1 < value.length) {
             i += 2;
           } else {
             i += 1;
@@ -10118,16 +10118,16 @@ function FindCmdsubEnd(value: string, start: number): number {
           i += 1;
         }
       } else {
-        if (i < value.length && (value[i] as unknown as string) === "'") {
+        if (i < value.length && value[i] === "'") {
           i += 1;
-          while (i < value.length && (value[i] as unknown as string) !== "'") {
+          while (i < value.length && value[i] !== "'") {
             i += 1;
           }
           if (i < value.length) {
             i += 1;
           }
         } else {
-          while (i < value.length && !" \t\n;|&<>()".includes((value[i] as unknown as string))) {
+          while (i < value.length && !" \t\n;|&<>()".includes(value[i])) {
             i += 1;
           }
         }
@@ -10216,7 +10216,7 @@ function FindBracedParamEnd(value: string, start: number): number {
   var inDouble: any = false;
   var dolbraceState: any = DolbraceState_PARAM;
   while (i < value.length && depth > 0) {
-    var c: any = (value[i] as unknown as string);
+    var c: any = value[i];
     if (c === "\\" && i + 1 < value.length) {
       i += 2;
       continue;
@@ -10248,7 +10248,7 @@ function FindBracedParamEnd(value: string, start: number): number {
         continue;
       }
     }
-    if ((c === "<" || c === ">") && i + 1 < value.length && (value[i + 1] as unknown as string) === "(") {
+    if ((c === "<" || c === ">") && i + 1 < value.length && value[i + 1] === "(") {
       i = FindCmdsubEnd(value, i + 2);
       continue;
     }
@@ -10277,19 +10277,19 @@ function FindBracedParamEnd(value: string, start: number): number {
 
 function SkipHeredoc(value: string, start: number): number {
   var i: any = start + 2;
-  if (i < value.length && (value[i] as unknown as string) === "-") {
+  if (i < value.length && value[i] === "-") {
     i += 1;
   }
-  while (i < value.length && IsWhitespaceNoNewline((value[i] as unknown as string))) {
+  while (i < value.length && IsWhitespaceNoNewline(value[i])) {
     i += 1;
   }
   var delimStart: any = i;
   var quoteChar: any = null;
-  if (i < value.length && ((value[i] as unknown as string) === "\"" || (value[i] as unknown as string) === "'")) {
-    quoteChar = (value[i] as unknown as string);
+  if (i < value.length && (value[i] === "\"" || value[i] === "'")) {
+    quoteChar = value[i];
     i += 1;
     delimStart = i;
-    while (i < value.length && (value[i] as unknown as string) !== quoteChar) {
+    while (i < value.length && value[i] !== quoteChar) {
       i += 1;
     }
     var delimiter: any = Substring(value, delimStart, i);
@@ -10297,18 +10297,18 @@ function SkipHeredoc(value: string, start: number): number {
       i += 1;
     }
   } else {
-    if (i < value.length && (value[i] as unknown as string) === "\\") {
+    if (i < value.length && value[i] === "\\") {
       i += 1;
       delimStart = i;
       if (i < value.length) {
         i += 1;
       }
-      while (i < value.length && !IsMetachar((value[i] as unknown as string))) {
+      while (i < value.length && !IsMetachar(value[i])) {
         i += 1;
       }
       var delimiter: any = Substring(value, delimStart, i);
     } else {
-      while (i < value.length && !IsMetachar((value[i] as unknown as string))) {
+      while (i < value.length && !IsMetachar(value[i])) {
         i += 1;
       }
       var delimiter: any = Substring(value, delimStart, i);
@@ -10317,8 +10317,8 @@ function SkipHeredoc(value: string, start: number): number {
   var parenDepth: any = 0;
   var quote: any = newQuoteState();
   var inBacktick: any = false;
-  while (i < value.length && (value[i] as unknown as string) !== "\n") {
-    var c: any = (value[i] as unknown as string);
+  while (i < value.length && value[i] !== "\n") {
+    var c: any = value[i];
     if (c === "\\" && i + 1 < value.length && (quote.double || inBacktick)) {
       i += 2;
       continue;
@@ -10354,23 +10354,23 @@ function SkipHeredoc(value: string, start: number): number {
     }
     i += 1;
   }
-  if (i < value.length && (value[i] as unknown as string) === ")") {
+  if (i < value.length && value[i] === ")") {
     return i;
   }
-  if (i < value.length && (value[i] as unknown as string) === "\n") {
+  if (i < value.length && value[i] === "\n") {
     i += 1;
   }
   while (i < value.length) {
     var lineStart: any = i;
     var lineEnd: any = i;
-    while (lineEnd < value.length && (value[lineEnd] as unknown as string) !== "\n") {
+    while (lineEnd < value.length && value[lineEnd] !== "\n") {
       lineEnd += 1;
     }
     var line: any = Substring(value, lineStart, lineEnd);
     while (lineEnd < value.length) {
       var trailingBs: any = 0;
       for (const j of range(line.length - 1, -1, -1)) {
-        if ((line[j] as unknown as string) === "\\") {
+        if (line[j] === "\\") {
           trailingBs += 1;
         } else {
           break;
@@ -10382,12 +10382,12 @@ function SkipHeredoc(value: string, start: number): number {
       line = line.slice(0, line.length - 1);
       lineEnd += 1;
       var nextLineStart: any = lineEnd;
-      while (lineEnd < value.length && (value[lineEnd] as unknown as string) !== "\n") {
+      while (lineEnd < value.length && value[lineEnd] !== "\n") {
         lineEnd += 1;
       }
       line = line + Substring(value, nextLineStart, lineEnd);
     }
-    if (start + 2 < value.length && (value[start + 2] as unknown as string) === "-") {
+    if (start + 2 < value.length && value[start + 2] === "-") {
       var stripped: any = line.replace(/^[\t]+/, '');
     } else {
       var stripped: any = line;
@@ -10417,7 +10417,7 @@ function FindHeredocContentEnd(source: string, start: number, delimiters: [strin
     return [start, start];
   }
   var pos: any = start;
-  while (pos < source.length && (source[pos] as unknown as string) !== "\n") {
+  while (pos < source.length && source[pos] !== "\n") {
     pos += 1;
   }
   if (pos >= source.length) {
@@ -10431,14 +10431,14 @@ function FindHeredocContentEnd(source: string, start: number, delimiters: [strin
     while (pos < source.length) {
       var lineStart: any = pos;
       var lineEnd: any = pos;
-      while (lineEnd < source.length && (source[lineEnd] as unknown as string) !== "\n") {
+      while (lineEnd < source.length && source[lineEnd] !== "\n") {
         lineEnd += 1;
       }
       var line: any = Substring(source, lineStart, lineEnd);
       while (lineEnd < source.length) {
         var trailingBs: any = 0;
         for (const j of range(line.length - 1, -1, -1)) {
-          if ((line[j] as unknown as string) === "\\") {
+          if (line[j] === "\\") {
             trailingBs += 1;
           } else {
             break;
@@ -10450,7 +10450,7 @@ function FindHeredocContentEnd(source: string, start: number, delimiters: [strin
         line = line.slice(0, line.length - 1);
         lineEnd += 1;
         var nextLineStart: any = lineEnd;
-        while (lineEnd < source.length && (source[lineEnd] as unknown as string) !== "\n") {
+        while (lineEnd < source.length && source[lineEnd] !== "\n") {
           lineEnd += 1;
         }
         line = line + Substring(source, nextLineStart, lineEnd);
@@ -10477,7 +10477,7 @@ function FindHeredocContentEnd(source: string, start: number, delimiters: [strin
 
 function IsWordBoundary(s: string, pos: number, wordLen: number): boolean {
   if (pos > 0) {
-    var prev: any = (s[pos - 1] as unknown as string);
+    var prev: any = s[pos - 1];
     if (/^[a-zA-Z0-9]$/.test(prev) || prev === "_") {
       return false;
     }
@@ -10486,7 +10486,7 @@ function IsWordBoundary(s: string, pos: number, wordLen: number): boolean {
     }
   }
   var end: any = pos + wordLen;
-  if (end < s.length && (/^[a-zA-Z0-9]$/.test((s[end] as unknown as string)) || (s[end] as unknown as string) === "_")) {
+  if (end < s.length && (/^[a-zA-Z0-9]$/.test(s[end]) || s[end] === "_")) {
     return false;
   }
   return true;
@@ -10517,7 +10517,7 @@ function CollapseWhitespace(s: string): string {
 function CountTrailingBackslashes(s: string): number {
   var count: any = 0;
   for (const i of range(s.length - 1, -1, -1)) {
-    if ((s[i] as unknown as string) === "\\") {
+    if (s[i] === "\\") {
       count += 1;
     } else {
       break;
@@ -10536,11 +10536,11 @@ function NormalizeHeredocDelimiter(delimiter: string): string {
       var depth: any = 1;
       var inner: any = [];
       while (i < delimiter.length && depth > 0) {
-        if ((delimiter[i] as unknown as string) === "(") {
+        if (delimiter[i] === "(") {
           depth += 1;
-          inner.push((delimiter[i] as unknown as string));
+          inner.push(delimiter[i]);
         } else {
-          if ((delimiter[i] as unknown as string) === ")") {
+          if (delimiter[i] === ")") {
             depth -= 1;
             if (depth === 0) {
               var innerStr: any = inner.join("");
@@ -10548,10 +10548,10 @@ function NormalizeHeredocDelimiter(delimiter: string): string {
               result.push(innerStr);
               result.push(")");
             } else {
-              inner.push((delimiter[i] as unknown as string));
+              inner.push(delimiter[i]);
             }
           } else {
-            inner.push((delimiter[i] as unknown as string));
+            inner.push(delimiter[i]);
           }
         }
         i += 1;
@@ -10563,11 +10563,11 @@ function NormalizeHeredocDelimiter(delimiter: string): string {
         var depth: any = 1;
         var inner: any = [];
         while (i < delimiter.length && depth > 0) {
-          if ((delimiter[i] as unknown as string) === "{") {
+          if (delimiter[i] === "{") {
             depth += 1;
-            inner.push((delimiter[i] as unknown as string));
+            inner.push(delimiter[i]);
           } else {
-            if ((delimiter[i] as unknown as string) === "}") {
+            if (delimiter[i] === "}") {
               depth -= 1;
               if (depth === 0) {
                 var innerStr: any = inner.join("");
@@ -10575,27 +10575,27 @@ function NormalizeHeredocDelimiter(delimiter: string): string {
                 result.push(innerStr);
                 result.push("}");
               } else {
-                inner.push((delimiter[i] as unknown as string));
+                inner.push(delimiter[i]);
               }
             } else {
-              inner.push((delimiter[i] as unknown as string));
+              inner.push(delimiter[i]);
             }
           }
           i += 1;
         }
       } else {
-        if (i + 1 < delimiter.length && "<>".includes((delimiter[i] as unknown as string)) && (delimiter[i + 1] as unknown as string) === "(") {
-          result.push((delimiter[i] as unknown as string));
+        if (i + 1 < delimiter.length && "<>".includes(delimiter[i]) && delimiter[i + 1] === "(") {
+          result.push(delimiter[i]);
           result.push("(");
           i += 2;
           var depth: any = 1;
           var inner: any = [];
           while (i < delimiter.length && depth > 0) {
-            if ((delimiter[i] as unknown as string) === "(") {
+            if (delimiter[i] === "(") {
               depth += 1;
-              inner.push((delimiter[i] as unknown as string));
+              inner.push(delimiter[i]);
             } else {
-              if ((delimiter[i] as unknown as string) === ")") {
+              if (delimiter[i] === ")") {
                 depth -= 1;
                 if (depth === 0) {
                   var innerStr: any = inner.join("");
@@ -10603,16 +10603,16 @@ function NormalizeHeredocDelimiter(delimiter: string): string {
                   result.push(innerStr);
                   result.push(")");
                 } else {
-                  inner.push((delimiter[i] as unknown as string));
+                  inner.push(delimiter[i]);
                 }
               } else {
-                inner.push((delimiter[i] as unknown as string));
+                inner.push(delimiter[i]);
               }
             }
             i += 1;
           }
         } else {
-          result.push((delimiter[i] as unknown as string));
+          result.push(delimiter[i]);
           i += 1;
         }
       }
@@ -10662,7 +10662,7 @@ function SkipMatchedPair(s: string, start: number, open: string, close: string, 
   if ((flags & _SMP_PAST_OPEN) !== 0) {
     var i: any = start;
   } else {
-    if (start >= n || (s[start] as unknown as string) !== open) {
+    if (start >= n || s[start] !== open) {
       return -1;
     }
     var i: any = start + 1;
@@ -10671,14 +10671,14 @@ function SkipMatchedPair(s: string, start: number, open: string, close: string, 
   var passNext: any = false;
   var backq: any = false;
   while (i < n && depth > 0) {
-    var c: any = (s[i] as unknown as string);
+    var c: any = s[i];
     if (passNext) {
       passNext = false;
       i += 1;
       continue;
     }
     var literal: any = flags & _SMP_LITERAL;
-    if (!(literal !== 0) && c === "\\") {
+    if (literal === 0 && c === "\\") {
       passNext = true;
       i += 1;
       continue;
@@ -10690,28 +10690,28 @@ function SkipMatchedPair(s: string, start: number, open: string, close: string, 
       i += 1;
       continue;
     }
-    if (!(literal !== 0) && c === "`") {
+    if (literal === 0 && c === "`") {
       backq = true;
       i += 1;
       continue;
     }
-    if (!(literal !== 0) && c === "'") {
+    if (literal === 0 && c === "'") {
       var i: any = SkipSingleQuoted(s, i + 1);
       continue;
     }
-    if (!(literal !== 0) && c === "\"") {
+    if (literal === 0 && c === "\"") {
       var i: any = SkipDoubleQuoted(s, i + 1);
       continue;
     }
-    if (!(literal !== 0) && IsExpansionStart(s, i, "$(")) {
+    if (literal === 0 && IsExpansionStart(s, i, "$(")) {
       var i: any = FindCmdsubEnd(s, i + 2);
       continue;
     }
-    if (!(literal !== 0) && IsExpansionStart(s, i, "${")) {
+    if (literal === 0 && IsExpansionStart(s, i, "${")) {
       var i: any = FindBracedParamEnd(s, i + 2);
       continue;
     }
-    if (!(literal !== 0) && c === open) {
+    if (literal === 0 && c === open) {
       depth += 1;
     } else {
       if (c === close) {
@@ -10728,15 +10728,15 @@ function SkipSubscript(s: string, start: number, flags: number): number {
 }
 
 function Assignment(s: string, flags: number): number {
-  if (!(s !== "")) {
+  if (s === "") {
     return -1;
   }
-  if (!(/^[a-zA-Z]$/.test((s[0] as unknown as string)) || (s[0] as unknown as string) === "_")) {
+  if (!(/^[a-zA-Z]$/.test(s[0]) || s[0] === "_")) {
     return -1;
   }
   var i: any = 1;
   while (i < s.length) {
-    var c: any = (s[i] as unknown as string);
+    var c: any = s[i];
     if (c === "=") {
       return i;
     }
@@ -10747,16 +10747,16 @@ function Assignment(s: string, flags: number): number {
         return -1;
       }
       i = end;
-      if (i < s.length && (s[i] as unknown as string) === "+") {
+      if (i < s.length && s[i] === "+") {
         i += 1;
       }
-      if (i < s.length && (s[i] as unknown as string) === "=") {
+      if (i < s.length && s[i] === "=") {
         return i;
       }
       return -1;
     }
     if (c === "+") {
-      if (i + 1 < s.length && (s[i + 1] as unknown as string) === "=") {
+      if (i + 1 < s.length && s[i + 1] === "=") {
         return i + 1;
       }
       return -1;
@@ -10778,11 +10778,11 @@ function IsArrayAssignmentPrefix(chars: string[]): boolean {
   }
   var s: any = chars.join("");
   var i: any = 1;
-  while (i < s.length && (/^[a-zA-Z0-9]$/.test((s[i] as unknown as string)) || (s[i] as unknown as string) === "_")) {
+  while (i < s.length && (/^[a-zA-Z0-9]$/.test(s[i]) || s[i] === "_")) {
     i += 1;
   }
   while (i < s.length) {
-    if ((s[i] as unknown as string) !== "[") {
+    if (s[i] !== "[") {
       return false;
     }
     var end: any = SkipSubscript(s, i, _SMP_LITERAL);
@@ -10817,7 +10817,7 @@ function IsNegationBoundary(c: string): boolean {
 function IsBackslashEscaped(value: string, idx: number): boolean {
   var bsCount: any = 0;
   var j: any = idx - 1;
-  while (j >= 0 && (value[j] as unknown as string) === "\\") {
+  while (j >= 0 && value[j] === "\\") {
     bsCount += 1;
     j -= 1;
   }
@@ -10827,7 +10827,7 @@ function IsBackslashEscaped(value: string, idx: number): boolean {
 function IsDollarDollarParen(value: string, idx: number): boolean {
   var dollarCount: any = 0;
   var j: any = idx - 1;
-  while (j >= 0 && (value[j] as unknown as string) === "$") {
+  while (j >= 0 && value[j] === "$") {
     dollarCount += 1;
     j -= 1;
   }
@@ -10863,10 +10863,10 @@ function LooksLikeAssignment(s: string): boolean {
 }
 
 function IsValidIdentifier(name: string): boolean {
-  if (!(name !== "")) {
+  if (name === "") {
     return false;
   }
-  if (!(/^[a-zA-Z]$/.test((name[0] as unknown as string)) || (name[0] as unknown as string) === "_")) {
+  if (!(/^[a-zA-Z]$/.test(name[0]) || name[0] === "_")) {
     return false;
   }
   for (const c of name.slice(1)) {
@@ -10883,7 +10883,7 @@ function parse(source: string, extglob: boolean): Node[] {
 }
 
 function newParseError(message: string, pos: number, line: number): ParseError {
-  var self: any = new ParseError([] as any, [] as any, [] as any);
+  var self: any = new ParseError("", 0, 0);
   self.message = message;
   self.pos = pos;
   self.line = line;
@@ -10895,7 +10895,7 @@ function newMatchedPairError(message: string, pos: number, line: number): Matche
 }
 
 function newQuoteState(): QuoteState {
-  var self: any = new QuoteState([] as any, [] as any, [] as any);
+  var self: any = new QuoteState(false, false, []);
   self.single = false;
   self.double = false;
   self.Stack = [];
@@ -10903,7 +10903,7 @@ function newQuoteState(): QuoteState {
 }
 
 function newParseContext(kind: number): ParseContext {
-  var self: any = new ParseContext([] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any);
+  var self: any = new ParseContext(0, 0, 0, 0, 0, 0, 0, null);
   self.kind = kind;
   self.parenDepth = 0;
   self.braceDepth = 0;
@@ -10916,13 +10916,13 @@ function newParseContext(kind: number): ParseContext {
 }
 
 function newContextStack(): ContextStack {
-  var self: any = new ContextStack([] as any);
+  var self: any = new ContextStack([]);
   self.Stack = [newParseContext(0)];
   return self;
 }
 
 function newLexer(source: string, extglob: boolean): Lexer {
-  var self: any = new Lexer([] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any);
+  var self: any = new Lexer(new Map(), "", 0, 0, null, null, 0, 0, [], false, null, "", null, 0, false, false, false, 0, 0, false, false, false);
   self.source = source;
   self.pos = 0;
   self.length = source.length;
@@ -10948,7 +10948,7 @@ function newLexer(source: string, extglob: boolean): Lexer {
 }
 
 function newParser(source: string, inProcessSub: boolean, extglob: boolean): Parser {
-  var self: any = new Parser([] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any, [] as any);
+  var self: any = new Parser("", 0, 0, [], 0, false, false, false, null, null, [], 0, 0, "", 0, false, false, false, "", 0, 0);
   self.source = source;
   self.pos = 0;
   self.length = source.length;

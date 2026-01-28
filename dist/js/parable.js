@@ -405,111 +405,111 @@ var Lexer = /** @class */ (function () {
         var three = this.lookahead(3);
         if (three === ";;&") {
             this.pos += 3;
-            return new Token(TokenType_SEMI_SEMI_AMP, three, start, [], []);
+            return new Token(TokenType_SEMI_SEMI_AMP, three, start, [], null);
         }
         if (three === "<<-") {
             this.pos += 3;
-            return new Token(TokenType_LESS_LESS_MINUS, three, start, [], []);
+            return new Token(TokenType_LESS_LESS_MINUS, three, start, [], null);
         }
         if (three === "<<<") {
             this.pos += 3;
-            return new Token(TokenType_LESS_LESS_LESS, three, start, [], []);
+            return new Token(TokenType_LESS_LESS_LESS, three, start, [], null);
         }
         if (three === "&>>") {
             this.pos += 3;
-            return new Token(TokenType_AMP_GREATER_GREATER, three, start, [], []);
+            return new Token(TokenType_AMP_GREATER_GREATER, three, start, [], null);
         }
         if (two === "&&") {
             this.pos += 2;
-            return new Token(TokenType_AND_AND, two, start, [], []);
+            return new Token(TokenType_AND_AND, two, start, [], null);
         }
         if (two === "||") {
             this.pos += 2;
-            return new Token(TokenType_OR_OR, two, start, [], []);
+            return new Token(TokenType_OR_OR, two, start, [], null);
         }
         if (two === ";;") {
             this.pos += 2;
-            return new Token(TokenType_SEMI_SEMI, two, start, [], []);
+            return new Token(TokenType_SEMI_SEMI, two, start, [], null);
         }
         if (two === ";&") {
             this.pos += 2;
-            return new Token(TokenType_SEMI_AMP, two, start, [], []);
+            return new Token(TokenType_SEMI_AMP, two, start, [], null);
         }
         if (two === "<<") {
             this.pos += 2;
-            return new Token(TokenType_LESS_LESS, two, start, [], []);
+            return new Token(TokenType_LESS_LESS, two, start, [], null);
         }
         if (two === ">>") {
             this.pos += 2;
-            return new Token(TokenType_GREATER_GREATER, two, start, [], []);
+            return new Token(TokenType_GREATER_GREATER, two, start, [], null);
         }
         if (two === "<&") {
             this.pos += 2;
-            return new Token(TokenType_LESS_AMP, two, start, [], []);
+            return new Token(TokenType_LESS_AMP, two, start, [], null);
         }
         if (two === ">&") {
             this.pos += 2;
-            return new Token(TokenType_GREATER_AMP, two, start, [], []);
+            return new Token(TokenType_GREATER_AMP, two, start, [], null);
         }
         if (two === "<>") {
             this.pos += 2;
-            return new Token(TokenType_LESS_GREATER, two, start, [], []);
+            return new Token(TokenType_LESS_GREATER, two, start, [], null);
         }
         if (two === ">|") {
             this.pos += 2;
-            return new Token(TokenType_GREATER_PIPE, two, start, [], []);
+            return new Token(TokenType_GREATER_PIPE, two, start, [], null);
         }
         if (two === "&>") {
             this.pos += 2;
-            return new Token(TokenType_AMP_GREATER, two, start, [], []);
+            return new Token(TokenType_AMP_GREATER, two, start, [], null);
         }
         if (two === "|&") {
             this.pos += 2;
-            return new Token(TokenType_PIPE_AMP, two, start, [], []);
+            return new Token(TokenType_PIPE_AMP, two, start, [], null);
         }
         if (c === ";") {
             this.pos += 1;
-            return new Token(TokenType_SEMI, c, start, [], []);
+            return new Token(TokenType_SEMI, c, start, [], null);
         }
         if (c === "|") {
             this.pos += 1;
-            return new Token(TokenType_PIPE, c, start, [], []);
+            return new Token(TokenType_PIPE, c, start, [], null);
         }
         if (c === "&") {
             this.pos += 1;
-            return new Token(TokenType_AMP, c, start, [], []);
+            return new Token(TokenType_AMP, c, start, [], null);
         }
         if (c === "(") {
             if (this.WordContext === WORD_CTX_REGEX) {
                 return null;
             }
             this.pos += 1;
-            return new Token(TokenType_LPAREN, c, start, [], []);
+            return new Token(TokenType_LPAREN, c, start, [], null);
         }
         if (c === ")") {
             if (this.WordContext === WORD_CTX_REGEX) {
                 return null;
             }
             this.pos += 1;
-            return new Token(TokenType_RPAREN, c, start, [], []);
+            return new Token(TokenType_RPAREN, c, start, [], null);
         }
         if (c === "<") {
             if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
                 return null;
             }
             this.pos += 1;
-            return new Token(TokenType_LESS, c, start, [], []);
+            return new Token(TokenType_LESS, c, start, [], null);
         }
         if (c === ">") {
             if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
                 return null;
             }
             this.pos += 1;
-            return new Token(TokenType_GREATER, c, start, [], []);
+            return new Token(TokenType_GREATER, c, start, [], null);
         }
         if (c === "\n") {
             this.pos += 1;
-            return new Token(TokenType_NEWLINE, c, start, [], []);
+            return new Token(TokenType_NEWLINE, c, start, [], null);
         }
         return null;
     };
@@ -824,7 +824,7 @@ var Lexer = /** @class */ (function () {
                     }
                 }
             }
-            if (ch === "$" && !this.atEnd() && !((flags & MatchedPairFlags_EXTGLOB) !== 0)) {
+            if (ch === "$" && !this.atEnd() && (flags & MatchedPairFlags_EXTGLOB) === 0) {
                 var nextCh = this.peek();
                 if (wasDollar) {
                     chars.push(ch);
@@ -1293,24 +1293,24 @@ var Lexer = /** @class */ (function () {
         }
         this.skipBlanks();
         if (this.atEnd()) {
-            var tok = new Token(TokenType_EOF, "", this.pos, [], []);
+            var tok = new Token(TokenType_EOF, "", this.pos, [], null);
             this.LastReadToken = tok;
             return tok;
         }
-        if (this.EofToken !== "" && this.peek() === this.EofToken && !((this.ParserState & ParserStateFlags_PST_CASEPAT) !== 0) && !((this.ParserState & ParserStateFlags_PST_EOFTOKEN) !== 0)) {
-            var tok = new Token(TokenType_EOF, "", this.pos, [], []);
+        if (this.EofToken !== "" && this.peek() === this.EofToken && (this.ParserState & ParserStateFlags_PST_CASEPAT) === 0 && (this.ParserState & ParserStateFlags_PST_EOFTOKEN) === 0) {
+            var tok = new Token(TokenType_EOF, "", this.pos, [], null);
             this.LastReadToken = tok;
             return tok;
         }
         while (this.SkipComment()) {
             this.skipBlanks();
             if (this.atEnd()) {
-                var tok = new Token(TokenType_EOF, "", this.pos, [], []);
+                var tok = new Token(TokenType_EOF, "", this.pos, [], null);
                 this.LastReadToken = tok;
                 return tok;
             }
-            if (this.EofToken !== "" && this.peek() === this.EofToken && !((this.ParserState & ParserStateFlags_PST_CASEPAT) !== 0) && !((this.ParserState & ParserStateFlags_PST_EOFTOKEN) !== 0)) {
-                var tok = new Token(TokenType_EOF, "", this.pos, [], []);
+            if (this.EofToken !== "" && this.peek() === this.EofToken && (this.ParserState & ParserStateFlags_PST_CASEPAT) === 0 && (this.ParserState & ParserStateFlags_PST_EOFTOKEN) === 0) {
+                var tok = new Token(TokenType_EOF, "", this.pos, [], null);
                 this.LastReadToken = tok;
                 return tok;
             }
@@ -1325,7 +1325,7 @@ var Lexer = /** @class */ (function () {
             this.LastReadToken = tok;
             return tok;
         }
-        tok = new Token(TokenType_EOF, "", this.pos, [], []);
+        tok = new Token(TokenType_EOF, "", this.pos, [], null);
         this.LastReadToken = tok;
         return tok;
     };
@@ -1727,7 +1727,7 @@ var Lexer = /** @class */ (function () {
         if (IsSpecialParamUnbraced(ch) || IsDigit(ch) || ch === "#") {
             this.advance();
             var text = Substring(this.source, start, this.pos);
-            return [new ParamExpansion(ch, [], [], "param"), text];
+            return [new ParamExpansion(ch, "", "", "param"), text];
         }
         if (/^[a-zA-Z]$/.test(ch) || ch === "_") {
             var nameStart = this.pos;
@@ -1742,7 +1742,7 @@ var Lexer = /** @class */ (function () {
             }
             var name = Substring(this.source, nameStart, this.pos);
             var text = Substring(this.source, start, this.pos);
-            return [new ParamExpansion(name, [], [], "param"), text];
+            return [new ParamExpansion(name, "", "", "param"), text];
         }
         this.pos = start;
         return [null, ""];
@@ -1783,14 +1783,14 @@ var Lexer = /** @class */ (function () {
                     this.advance();
                     var text = Substring(this.source, start, this.pos);
                     this.DolbraceState = savedDolbrace;
-                    return [new ParamIndirect(param, [], [], "param-indirect"), text];
+                    return [new ParamIndirect(param, "", "", "param-indirect"), text];
                 }
                 if (!this.atEnd() && IsAtOrStar(this.peek())) {
                     var suffix = this.advance();
                     var trailing = this.ParseMatchedPair("{", "}", MatchedPairFlags_DOLBRACE, false);
                     var text = Substring(this.source, start, this.pos);
                     this.DolbraceState = savedDolbrace;
-                    return [new ParamIndirect(param + suffix + trailing, [], [], "param-indirect"), text];
+                    return [new ParamIndirect(param + suffix + trailing, "", "", "param-indirect"), text];
                 }
                 var op = this.ConsumeParamOperator();
                 if (op === "" && !this.atEnd() && !"}\"'`".includes(this.peek())) {
@@ -1813,7 +1813,7 @@ var Lexer = /** @class */ (function () {
             }
         }
         var param = this.ConsumeParamName();
-        if (!(param !== "")) {
+        if (param === "") {
             if (!this.atEnd() && ("-=+?".includes(this.peek()) || this.peek() === ":" && this.pos + 1 < this.length && IsSimpleParamOp(this.source[this.pos + 1]))) {
                 param = "";
             }
@@ -1821,7 +1821,7 @@ var Lexer = /** @class */ (function () {
                 var content = this.ParseMatchedPair("{", "}", MatchedPairFlags_DOLBRACE, false);
                 var text = "${" + content + "}";
                 this.DolbraceState = savedDolbrace;
-                return [new ParamExpansion(content, [], [], "param"), text];
+                return [new ParamExpansion(content, "", "", "param"), text];
             }
         }
         if (this.atEnd()) {
@@ -1832,7 +1832,7 @@ var Lexer = /** @class */ (function () {
             this.advance();
             var text = Substring(this.source, start, this.pos);
             this.DolbraceState = savedDolbrace;
-            return [new ParamExpansion(param, [], [], "param"), text];
+            return [new ParamExpansion(param, "", "", "param"), text];
         }
         var op = this.ConsumeParamOperator();
         if (op === "") {
@@ -2072,7 +2072,7 @@ var Word = /** @class */ (function () {
         return result.join("");
     };
     Word.prototype.ShSingleQuote = function (s) {
-        if (!(s !== "")) {
+        if (s === "") {
             return "''";
         }
         if (s === "'") {
@@ -2118,7 +2118,7 @@ var Word = /** @class */ (function () {
                                 if (j < inner.length && inner[j] === "}") {
                                     j += 1;
                                 }
-                                if (!(hexStr !== "")) {
+                                if (hexStr === "") {
                                     return result;
                                 }
                                 var byteVal = parseInt(hexStr, 16) & 255;
@@ -3257,7 +3257,7 @@ var Word = /** @class */ (function () {
                             var prefix = (hasPipe ? "${|" : "${ ");
                             var origInner = Substring(value, i + 2, j - 1);
                             var endsWithNewline = origInner.endsWith("\n");
-                            if (!(formatted !== "") || /^\s$/.test(formatted)) {
+                            if (formatted === "" || /^\s$/.test(formatted)) {
                                 var suffix = "}";
                             }
                             else {
@@ -3667,7 +3667,7 @@ var Command = /** @class */ (function () {
             parts.push(r.toSexp());
         }
         var inner = parts.join(" ");
-        if (!(inner !== "")) {
+        if (inner === "") {
             return "(command)";
         }
         return "(command " + inner + ")";
@@ -5690,7 +5690,7 @@ var Parser = /** @class */ (function () {
         var textEnd = this.pos;
         var text = Substring(this.source, start, textEnd);
         this.RestoreParserState(saved);
-        return [new CommandSubstitution(cmd, [], "cmdsub"), text];
+        return [new CommandSubstitution(cmd, false, "cmdsub"), text];
     };
     Parser.prototype.ParseFunsub = function (start) {
         this.SyncParser();
@@ -6018,7 +6018,7 @@ var Parser = /** @class */ (function () {
         if (cmd === null) {
             cmd = new Empty("empty");
         }
-        return [new CommandSubstitution(cmd, [], "cmdsub"), text];
+        return [new CommandSubstitution(cmd, false, "cmdsub"), text];
     };
     Parser.prototype.ParseProcessSubstitution = function () {
         if (this.atEnd() || !IsRedirectChar(this.peek())) {
@@ -6703,7 +6703,7 @@ var Parser = /** @class */ (function () {
         if (!(nameChars.length > 0)) {
             throw new ParseError("".concat("Expected variable name after $", " at position ").concat(this.ArithPos), this.ArithPos);
         }
-        return new ParamExpansion(nameChars.join(""), [], [], "param");
+        return new ParamExpansion(nameChars.join(""), "", "", "param");
     };
     Parser.prototype.ArithParseCmdsub = function () {
         this.ArithAdvance();
@@ -6761,7 +6761,7 @@ var Parser = /** @class */ (function () {
         this.ArithAdvance();
         var subParser = newParser(content, false, this.Extglob);
         var cmd = subParser.parseList(true);
-        return new CommandSubstitution(cmd, [], "cmdsub");
+        return new CommandSubstitution(cmd, false, "cmdsub");
     };
     Parser.prototype.ArithParseBracedParam = function () {
         this.ArithAdvance();
@@ -6772,7 +6772,7 @@ var Parser = /** @class */ (function () {
                 nameChars.push(this.ArithAdvance());
             }
             this.ArithConsume("}");
-            return new ParamIndirect(nameChars.join(""), [], [], "param-indirect");
+            return new ParamIndirect(nameChars.join(""), "", "", "param-indirect");
         }
         if (this.ArithPeek(0) === "#") {
             this.ArithAdvance();
@@ -6788,7 +6788,7 @@ var Parser = /** @class */ (function () {
             var ch = this.ArithPeek(0);
             if (ch === "}") {
                 this.ArithAdvance();
-                return new ParamExpansion(nameChars.join(""), [], [], "param");
+                return new ParamExpansion(nameChars.join(""), "", "", "param");
             }
             if (IsParamExpansionOp(ch)) {
                 break;
@@ -6904,7 +6904,7 @@ var Parser = /** @class */ (function () {
         }
         var subParser = newParser(content, false, this.Extglob);
         var cmd = subParser.parseList(true);
-        return new CommandSubstitution(cmd, [], "cmdsub");
+        return new CommandSubstitution(cmd, false, "cmdsub");
     };
     Parser.prototype.ArithParseNumberOrVar = function () {
         this.ArithSkipWs();
@@ -7075,7 +7075,7 @@ var Parser = /** @class */ (function () {
             if (target === null) {
                 throw new ParseError("".concat("Expected target for redirect " + op, " at position ").concat(this.pos), this.pos);
             }
-            return new Redirect(op, target, [], "redirect");
+            return new Redirect(op, target, null, "redirect");
         }
         if (ch === "" || !IsRedirectChar(ch)) {
             this.pos = start;
@@ -7228,7 +7228,7 @@ var Parser = /** @class */ (function () {
         if (target === null) {
             throw new ParseError("".concat("Expected target for redirect " + op, " at position ").concat(this.pos), this.pos);
         }
-        return new Redirect(op, target, [], "redirect");
+        return new Redirect(op, target, null, "redirect");
     };
     Parser.prototype.ParseHeredocDelimiter = function () {
         this.skipWhitespace();
@@ -7559,7 +7559,7 @@ var Parser = /** @class */ (function () {
                 return existing;
             }
         }
-        var heredoc = new HereDoc(delimiter, "", stripTabs, quoted, fd, false, [], "heredoc");
+        var heredoc = new HereDoc(delimiter, "", stripTabs, quoted, fd, false, 0, "heredoc");
         heredoc.StartPos = startPos;
         this.PendingHeredocs.push(heredoc);
         this.ClearState(ParserStateFlags_PST_HEREDOC);
@@ -8451,7 +8451,7 @@ var Parser = /** @class */ (function () {
                 }
             }
             var pattern = patternChars.join("");
-            if (!(pattern !== "")) {
+            if (pattern === "") {
                 throw new ParseError("".concat("Expected pattern in case statement", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
             }
             this.skipWhitespace();
@@ -8610,7 +8610,7 @@ var Parser = /** @class */ (function () {
             this.advance();
         }
         name = Substring(this.source, nameStart, this.pos);
-        if (!(name !== "")) {
+        if (name === "") {
             this.pos = savedPos;
             return null;
         }
@@ -9156,7 +9156,7 @@ var Parser = /** @class */ (function () {
     };
     Parser.prototype.parse = function () {
         var source = this.source.trim();
-        if (!(source !== "")) {
+        if (source === "") {
             return [new Empty("empty")];
         }
         var results = [];
@@ -9215,7 +9215,7 @@ var Parser = /** @class */ (function () {
         var lastWord = this.FindLastWord(lastNode);
         if (lastWord !== null && lastWord.value.endsWith("\\")) {
             lastWord.value = Substring(lastWord.value, 0, lastWord.value.length - 1);
-            if (!(lastWord.value !== "") && lastNode instanceof Command && lastNode.words.length > 0) {
+            if (lastWord.value === "" && lastNode instanceof Command && lastNode.words.length > 0) {
                 lastNode.words.pop();
             }
         }
@@ -10859,7 +10859,7 @@ function SkipMatchedPair(s, start, open, close, flags) {
             continue;
         }
         var literal = flags & _SMP_LITERAL;
-        if (!(literal !== 0) && c === "\\") {
+        if (literal === 0 && c === "\\") {
             passNext = true;
             i += 1;
             continue;
@@ -10871,28 +10871,28 @@ function SkipMatchedPair(s, start, open, close, flags) {
             i += 1;
             continue;
         }
-        if (!(literal !== 0) && c === "`") {
+        if (literal === 0 && c === "`") {
             backq = true;
             i += 1;
             continue;
         }
-        if (!(literal !== 0) && c === "'") {
+        if (literal === 0 && c === "'") {
             var i = SkipSingleQuoted(s, i + 1);
             continue;
         }
-        if (!(literal !== 0) && c === "\"") {
+        if (literal === 0 && c === "\"") {
             var i = SkipDoubleQuoted(s, i + 1);
             continue;
         }
-        if (!(literal !== 0) && IsExpansionStart(s, i, "$(")) {
+        if (literal === 0 && IsExpansionStart(s, i, "$(")) {
             var i = FindCmdsubEnd(s, i + 2);
             continue;
         }
-        if (!(literal !== 0) && IsExpansionStart(s, i, "${")) {
+        if (literal === 0 && IsExpansionStart(s, i, "${")) {
             var i = FindBracedParamEnd(s, i + 2);
             continue;
         }
-        if (!(literal !== 0) && c === open) {
+        if (literal === 0 && c === open) {
             depth += 1;
         }
         else {
@@ -10908,7 +10908,7 @@ function SkipSubscript(s, start, flags) {
     return SkipMatchedPair(s, start, "[", "]", flags);
 }
 function Assignment(s, flags) {
-    if (!(s !== "")) {
+    if (s === "") {
         return -1;
     }
     if (!(/^[a-zA-Z]$/.test(s[0]) || s[0] === "_")) {
@@ -11027,7 +11027,7 @@ function LooksLikeAssignment(s) {
     return Assignment(s, 0) !== -1;
 }
 function IsValidIdentifier(name) {
-    if (!(name !== "")) {
+    if (name === "") {
         return false;
     }
     if (!(/^[a-zA-Z]$/.test(name[0]) || name[0] === "_")) {
@@ -11046,7 +11046,7 @@ function parse(source, extglob) {
     return parser.parse();
 }
 function newParseError(message, pos, line) {
-    var self = new ParseError([], [], []);
+    var self = new ParseError("", 0, 0);
     self.message = message;
     self.pos = pos;
     self.line = line;
@@ -11056,14 +11056,14 @@ function newMatchedPairError(message, pos, line) {
     return new MatchedPairError();
 }
 function newQuoteState() {
-    var self = new QuoteState([], [], []);
+    var self = new QuoteState(false, false, []);
     self.single = false;
     self.double = false;
     self.Stack = [];
     return self;
 }
 function newParseContext(kind) {
-    var self = new ParseContext([], [], [], [], [], [], [], []);
+    var self = new ParseContext(0, 0, 0, 0, 0, 0, 0, null);
     self.kind = kind;
     self.parenDepth = 0;
     self.braceDepth = 0;
@@ -11080,7 +11080,7 @@ function newContextStack() {
     return self;
 }
 function newLexer(source, extglob) {
-    var self = new Lexer([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []);
+    var self = new Lexer(new Map(), "", 0, 0, null, null, 0, 0, [], false, null, "", null, 0, false, false, false, 0, 0, false, false, false);
     self.source = source;
     self.pos = 0;
     self.length = source.length;
@@ -11105,7 +11105,7 @@ function newLexer(source, extglob) {
     return self;
 }
 function newParser(source, inProcessSub, extglob) {
-    var self = new Parser([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []);
+    var self = new Parser("", 0, 0, [], 0, false, false, false, null, null, [], 0, 0, "", 0, false, false, false, "", 0, 0);
     self.source = source;
     self.pos = 0;
     self.length = source.length;

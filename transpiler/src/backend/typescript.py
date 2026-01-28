@@ -297,6 +297,10 @@ class TsBackend:
                     # Use var with any type for function-scoped semantics
                     self._line(f"var [{lvalues}]: any = {val};")
                 else:
+                    # Check for new_targets - variables that need pre-declaration
+                    new_targets = getattr(stmt, 'new_targets', [])
+                    for name in new_targets:
+                        self._line(f"var {_camel(name)}: any;")
                     self._line(f"[{lvalues}] = {val};")
             case OpAssign(target=target, op=op, value=value):
                 lv = self._lvalue(target)

@@ -9727,7 +9727,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
                 }
             }
             else {
-                if (result.length > 0 && !result[result.length - 1].endsWith([" ", "\n"])) {
+                if (result.length > 0 && !(result[result.length - 1].endsWith(" ") || result[result.length - 1].endsWith("\n"))) {
                     result.push(" ");
                 }
                 var formattedCmd = FormatCmdsubNode(p_2, indent, inProcsub, compactRedirects, procsubFirst && cmdCount === 0);

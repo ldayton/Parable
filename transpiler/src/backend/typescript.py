@@ -637,6 +637,13 @@ class TsBackend:
                 # Use regex with global flag for all-occurrence replacement
                 escaped = _escape_regex_literal(old_str)
                 return f"{self._expr(obj)}.replace(/{escaped}/g, {self._expr(new)})"
+            case MethodCall(obj=obj, method=method, args=[TupleLit(elements=elements)], receiver_type=_) if method in ("startswith", "endswith"):
+                # Python str.startswith/endswith with tuple → disjunction of checks
+                # s.endswith((" ", "\n")) → (s.endsWith(" ") || s.endsWith("\n"))
+                ts_method = "startsWith" if method == "startswith" else "endsWith"
+                obj_str = self._expr(obj)
+                checks = [f"{obj_str}.{ts_method}({self._expr(e)})" for e in elements]
+                return f"({' || '.join(checks)})"
             case MethodCall(obj=obj, method=method, args=args, receiver_type=receiver_type):
                 args_str = ", ".join(self._expr(a) for a in args)
                 ts_method = _method_name(method, receiver_type)

@@ -9598,7 +9598,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
           }
         }
       } else {
-        if (result.length > 0 && !result[result.length - 1].endsWith([" ", "\n"])) {
+        if (result.length > 0 && !(result[result.length - 1].endsWith(" ") || result[result.length - 1].endsWith("\n"))) {
           result.push(" ");
         }
         var formattedCmd: any = FormatCmdsubNode(p, indent, inProcsub, compactRedirects, procsubFirst && cmdCount === 0);

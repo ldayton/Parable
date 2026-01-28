@@ -290,6 +290,12 @@ func _mapGet[K comparable, V any](m map[K]V, key K, defaultVal V) V {
 	return defaultVal
 }
 
+// _mapHas returns true if key exists in map m
+func _mapHas[K comparable, V any](m map[K]V, key K) bool {
+	_, ok := m[key]
+	return ok
+}
+
 // _intToStr converts an integer to its string representation
 func _intToStr(n int) string {
 	return strconv.Itoa(n)
@@ -1380,13 +1386,13 @@ func _Substring(s string, start int, end int) string {
         # Handle 'in' and 'not in' operators
         if expr.op == "in":
             right_type = getattr(expr.right, 'typ', None)
-            if isinstance(right_type, Set):
-                return f"func() bool {{ _, ok := {right}[{left}]; return ok }}()"
+            if isinstance(right_type, (Set, Map)):
+                return f"_mapHas({right}, {left})"
             return f"strings.Contains({right}, {left})"
         if expr.op == "not in":
             right_type = getattr(expr.right, 'typ', None)
-            if isinstance(right_type, Set):
-                return f"func() bool {{ _, ok := {right}[{left}]; return !ok }}()"
+            if isinstance(right_type, (Set, Map)):
+                return f"!_mapHas({right}, {left})"
             return f"!strings.Contains({right}, {left})"
         # Handle operator precedence: && binds tighter than ||
         # So a || expression nested inside && needs parentheses
@@ -1434,6 +1440,28 @@ func _Substring(s string, start int, end int) string {
                     func = "strings.HasSuffix" if method == "endswith" else "strings.HasPrefix"
                     parts = [f"!{func}({obj}, {self._emit_expr(e)})" for e in arg_node.elements]
                     return " && ".join(parts)
+        # Simplify negated comparisons to avoid double negatives
+        if op == "!" and isinstance(expr.operand, BinaryOp):
+            inner = expr.operand
+            # !(x != "") -> x == ""
+            if inner.op == "!=" and isinstance(inner.right, StringLit) and inner.right.value == "":
+                return f"{self._emit_expr(inner.left)} == \"\""
+            # !(len(x) > 0) -> len(x) == 0
+            if inner.op == ">" and isinstance(inner.left, Len) and isinstance(inner.right, IntLit) and inner.right.value == 0:
+                return f"len({self._emit_expr(inner.left.expr)}) == 0"
+            # !((x & Y) != 0) -> (x & Y) == 0
+            if inner.op == "!=" and isinstance(inner.right, IntLit) and inner.right.value == 0:
+                return f"({self._emit_expr(inner.left)}) == 0"
+        # Remove double negation: !!x -> x
+        if op == "!" and isinstance(expr.operand, UnaryOp) and expr.operand.op == "!":
+            return self._emit_expr(expr.operand.operand)
+        # Remove double negation with IsNil: !(!_isNilInterface(x)) -> _isNilInterface(x)
+        if op == "!" and isinstance(expr.operand, IsNil) and expr.operand.negated:
+            inner = self._emit_expr(expr.operand.expr)
+            expr_type = getattr(expr.operand.expr, 'typ', None)
+            if isinstance(expr_type, Interface):
+                return f"_isNilInterface({inner})"
+            return f"{inner} == nil"
         operand = self._emit_expr(expr.operand)
         # Wrap complex operands in parens for ! operator
         if op == "!" and isinstance(expr.operand, (BinaryOp, UnaryOp, IsNil)):

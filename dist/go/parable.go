@@ -118,6 +118,12 @@ func _mapGet[K comparable, V any](m map[K]V, key K, defaultVal V) V {
 	return defaultVal
 }
 
+// _mapHas returns true if key exists in map m
+func _mapHas[K comparable, V any](m map[K]V, key K) bool {
+	_, ok := m[key]
+	return ok
+}
+
 // _intToStr converts an integer to its string representation
 func _intToStr(n int) string {
 	return strconv.Itoa(n)
@@ -920,7 +926,7 @@ func (self *Lexer) parseMatchedPair(openChar string, closeChar string, flags int
 				continue
 			}
 		}
-		if ch == "$" && !self.AtEnd() && !((flags & MatchedPairFlagsEXTGLOB) != 0) {
+		if ch == "$" && !self.AtEnd() && (flags&MatchedPairFlagsEXTGLOB) == 0 {
 			nextCh := self.Peek()
 			if wasDollar {
 				chars = append(chars, ch)
@@ -1077,7 +1083,7 @@ func (self *Lexer) readWordInternal(ctx int, atCommandStart bool, inArrayLiteral
 					continue
 				}
 			}
-			if !(len(chars) > 0) && !seenEquals && inArrayLiteral {
+			if len(chars) == 0 && !seenEquals && inArrayLiteral {
 				bracketStartPos = self.Pos
 				bracketDepth++
 				chars = append(chars, self.Advance())
@@ -1304,7 +1310,7 @@ func (self *Lexer) readWordInternal(ctx int, atCommandStart bool, inArrayLiteral
 			continue
 		}
 		if ctx == WORDCTXNORMAL && (self.parserState&ParserStateFlagsPSTEOFTOKEN) != 0 && self.eofToken != "" && ch == self.eofToken && bracketDepth == 0 {
-			if !(len(chars) > 0) {
+			if len(chars) == 0 {
 				chars = append(chars, self.Advance())
 			}
 			break
@@ -1317,7 +1323,7 @@ func (self *Lexer) readWordInternal(ctx int, atCommandStart bool, inArrayLiteral
 	if bracketDepth > 0 && bracketStartPos != -1 && self.AtEnd() {
 		panic(NewMatchedPairError("unexpected EOF looking for `]'", bracketStartPos, 0))
 	}
-	if !(len(chars) > 0) {
+	if len(chars) == 0 {
 		return nil
 	}
 	if len(parts) > 0 {
@@ -1361,7 +1367,7 @@ func (self *Lexer) NextToken() *Token {
 		self.lastReadToken = tok
 		return tok
 	}
-	if self.eofToken != "" && self.Peek() == self.eofToken && !((self.parserState & ParserStateFlagsPSTCASEPAT) != 0) && !((self.parserState & ParserStateFlagsPSTEOFTOKEN) != 0) {
+	if self.eofToken != "" && self.Peek() == self.eofToken && (self.parserState&ParserStateFlagsPSTCASEPAT) == 0 && (self.parserState&ParserStateFlagsPSTEOFTOKEN) == 0 {
 		tok = &Token{Type: TokenTypeEOF, Value: "", Pos: self.Pos}
 		self.lastReadToken = tok
 		return tok
@@ -1373,7 +1379,7 @@ func (self *Lexer) NextToken() *Token {
 			self.lastReadToken = tok
 			return tok
 		}
-		if self.eofToken != "" && self.Peek() == self.eofToken && !((self.parserState & ParserStateFlagsPSTCASEPAT) != 0) && !((self.parserState & ParserStateFlagsPSTEOFTOKEN) != 0) {
+		if self.eofToken != "" && self.Peek() == self.eofToken && (self.parserState&ParserStateFlagsPSTCASEPAT) == 0 && (self.parserState&ParserStateFlagsPSTEOFTOKEN) == 0 {
 			tok = &Token{Type: TokenTypeEOF, Value: "", Pos: self.Pos}
 			self.lastReadToken = tok
 			return tok
@@ -1852,7 +1858,7 @@ func (self *Lexer) readBracedParam(start int, inDquote bool) (Node, string) {
 		}
 	}
 	param = self.consumeParamName()
-	if !(param != "") {
+	if param == "" {
 		if !self.AtEnd() && (strings.Contains("-=+?", self.Peek()) || self.Peek() == ":" && self.Pos+1 < self.Length && isSimpleParamOp(string(_runeAt(self.Source, self.Pos+1)))) {
 			param = ""
 		} else {
@@ -2083,7 +2089,7 @@ func (self *Word) normalizeParamExpansionNewlines(value string) string {
 }
 
 func (self *Word) shSingleQuote(s string) string {
-	if !(s != "") {
+	if s == "" {
 		return "''"
 	}
 	if s == "'" {
@@ -2124,7 +2130,7 @@ func (self *Word) ansiCToBytes(inner string) []byte {
 					if j < _runeLen(inner) && string(_runeAt(inner, j)) == "}" {
 						j++
 					}
-					if !(hexStr != "") {
+					if hexStr == "" {
 						return result
 					}
 					byteVal := (_parseInt(hexStr, 16) & 255)
@@ -2940,7 +2946,7 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 		}
 	}
 	hasParamWithProcsubPattern := strings.Contains(value, "${") && (strings.Contains(value, "<(") || strings.Contains(value, ">("))
-	if !(len(cmdsubParts) > 0) && !(len(procsubParts) > 0) && !hasBraceCmdsub && !hasUntrackedCmdsub && !hasUntrackedProcsub && !hasParamWithProcsubPattern {
+	if len(cmdsubParts) == 0 && len(procsubParts) == 0 && !hasBraceCmdsub && !hasUntrackedCmdsub && !hasUntrackedProcsub && !hasParamWithProcsubPattern {
 		return value
 	}
 	result := []string{}
@@ -3097,7 +3103,7 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 				origInner := substring(value, i+2, j-1)
 				endsWithNewline := strings.HasSuffix(origInner, "\n")
 				var suffix string
-				if !(formatted != "") || _strIsSpace(formatted) {
+				if formatted == "" || _strIsSpace(formatted) {
 					suffix = "}"
 				} else if strings.HasSuffix(formatted, "&") || strings.HasSuffix(formatted, "& ") {
 					suffix = func() string {
@@ -3440,7 +3446,7 @@ func (self *Command) ToSexp() string {
 		parts = append(parts, r.ToSexp())
 	}
 	inner := strings.Join(parts, " ")
-	if !(inner != "") {
+	if inner == "" {
 		return "(command)"
 	}
 	return "(command " + inner + ")"
@@ -3594,7 +3600,7 @@ func (self *List) toSexpWithPrecedence(parts []Node, opNames map[string]string) 
 		if len(seg) > 0 && seg[0].GetKind() != "operator" {
 			segments = append(segments, seg)
 		}
-		if !(len(segments) > 0) {
+		if len(segments) == 0 {
 			return "()"
 		}
 		result := self.toSexpAmpAndHigher(segments[0], opNames)
@@ -4598,7 +4604,7 @@ type Array struct {
 func (self *Array) GetKind() string { return self.Kind }
 
 func (self *Array) ToSexp() string {
-	if !(len(self.Elements) > 0) {
+	if len(self.Elements) == 0 {
 		return "(array)"
 	}
 	parts := []string{}
@@ -4803,7 +4809,7 @@ func (self *Parser) lexPeekReservedWord() string {
 	if strings.HasSuffix(word, "\\\n") {
 		word = _Substring(word, 0, _runeLen(word)-2)
 	}
-	if func() bool { _, ok := RESERVEDWORDS[word]; return ok }() || word == "{" || word == "}" || word == "[[" || word == "]]" || word == "!" || word == "time" {
+	if _mapHas(RESERVEDWORDS, word) || word == "{" || word == "}" || word == "[[" || word == "]]" || word == "!" || word == "time" {
 		return word
 	}
 	return ""
@@ -6188,14 +6194,14 @@ func (self *Parser) arithParseExpansion() Node {
 		ch := self.arithPeek(0)
 		if _strIsAlnum(ch) || ch == "_" {
 			nameChars = append(nameChars, self.arithAdvance())
-		} else if (isSpecialParamOrDigit(ch) || ch == "#") && !(len(nameChars) > 0) {
+		} else if (isSpecialParamOrDigit(ch) || ch == "#") && len(nameChars) == 0 {
 			nameChars = append(nameChars, self.arithAdvance())
 			break
 		} else {
 			break
 		}
 	}
-	if !(len(nameChars) > 0) {
+	if len(nameChars) == 0 {
 		panic(NewParseError("Expected variable name after $", self.arithPos, 0))
 	}
 	return &ParamExpansion{Param: strings.Join(nameChars, ""), Kind: "param"}
@@ -7017,14 +7023,14 @@ func (self *Parser) ParseCommand() *Command {
 				break
 			}
 		}
-		inAssignBuiltin := len(words) > 0 && func() bool { _, ok := ASSIGNMENTBUILTINS[words[0].Value]; return ok }()
-		word := self.ParseWord(!(len(words) > 0) || allAssignments && len(redirects) == 0, false, inAssignBuiltin)
+		inAssignBuiltin := len(words) > 0 && _mapHas(ASSIGNMENTBUILTINS, words[0].Value)
+		word := self.ParseWord(len(words) == 0 || allAssignments && len(redirects) == 0, false, inAssignBuiltin)
 		if word == nil {
 			break
 		}
 		words = append(words, word)
 	}
-	if !(len(words) > 0) && !(len(redirects) > 0) {
+	if len(words) == 0 && len(redirects) == 0 {
 		return nil
 	}
 	return &Command{Words: words, Redirects: redirects, Kind: "command"}
@@ -7223,7 +7229,7 @@ func (self *Parser) parseCondTerm() Node {
 		panic(NewParseError("Expected word in conditional expression", self.Pos, 0))
 	}
 	self.condSkipWhitespace()
-	if func() bool { _, ok := CONDUNARYOPS[word1.Value]; return ok }() {
+	if _mapHas(CONDUNARYOPS, word1.Value) {
 		operand = self.parseCondWord()
 		if _isNilInterface(operand) {
 			panic(NewParseError("Expected operand after "+word1.Value, self.Pos, 0))
@@ -7243,7 +7249,7 @@ func (self *Parser) parseCondTerm() Node {
 		}
 		savedPos := self.Pos
 		opWord := self.parseCondWord()
-		if opWord != nil && func() bool { _, ok := CONDBINARYOPS[opWord.Value]; return ok }() {
+		if opWord != nil && _mapHas(CONDBINARYOPS, opWord.Value) {
 			self.condSkipWhitespace()
 			if opWord.Value == "=~" {
 				word2 = self.parseCondRegexWord()
@@ -7805,7 +7811,7 @@ func (self *Parser) ParseCase() *Case {
 			}
 		}
 		pattern := strings.Join(patternChars, "")
-		if !(pattern != "") {
+		if pattern == "" {
 			panic(NewParseError("Expected pattern in case statement", self.lexPeekToken().Pos, 0))
 		}
 		self.SkipWhitespace()
@@ -7866,7 +7872,7 @@ func (self *Parser) ParseCoproc() *Coproc {
 		}
 	}
 	nextWord := self.lexPeekReservedWord()
-	if nextWord != "" && func() bool { _, ok := COMPOUNDKEYWORDS[nextWord]; return ok }() {
+	if nextWord != "" && _mapHas(COMPOUNDKEYWORDS, nextWord) {
 		body = self.ParseCompoundCommand()
 		if !_isNilInterface(body) {
 			return &Coproc{Command: body, Name: name, Kind: "coproc"}
@@ -7901,7 +7907,7 @@ func (self *Parser) ParseCoproc() *Coproc {
 				if !_isNilInterface(body) {
 					return &Coproc{Command: body, Name: name, Kind: "coproc"}
 				}
-			} else if nextWord != "" && func() bool { _, ok := COMPOUNDKEYWORDS[nextWord]; return ok }() {
+			} else if nextWord != "" && _mapHas(COMPOUNDKEYWORDS, nextWord) {
 				name = potentialName
 				body = self.ParseCompoundCommand()
 				if !_isNilInterface(body) {
@@ -7950,7 +7956,7 @@ func (self *Parser) ParseFunction() *Function {
 		return &Function{Name: name, Body: body, Kind: "function"}
 	}
 	name = self.PeekWord()
-	if name == "" || func() bool { _, ok := RESERVEDWORDS[name]; return ok }() {
+	if name == "" || _mapHas(RESERVEDWORDS, name) {
 		return nil
 	}
 	if looksLikeAssignment(name) {
@@ -7962,7 +7968,7 @@ func (self *Parser) ParseFunction() *Function {
 		self.Advance()
 	}
 	name = substring(self.Source, nameStart, self.Pos)
-	if !(name != "") {
+	if name == "" {
 		self.Pos = savedPos
 		return nil
 	}
@@ -8069,7 +8075,7 @@ func (self *Parser) atListUntilTerminator(stopWords map[string]struct{}) bool {
 		}
 	}
 	reserved := self.lexPeekReservedWord()
-	if reserved != "" && func() bool { _, ok := stopWords[reserved]; return ok }() {
+	if reserved != "" && _mapHas(stopWords, reserved) {
 		return true
 	}
 	if self.lexPeekCaseTerminator() != "" {
@@ -8081,7 +8087,7 @@ func (self *Parser) atListUntilTerminator(stopWords map[string]struct{}) bool {
 func (self *Parser) ParseListUntil(stopWords map[string]struct{}) Node {
 	self.SkipWhitespaceAndNewlines()
 	reserved := self.lexPeekReservedWord()
-	if reserved != "" && func() bool { _, ok := stopWords[reserved]; return ok }() {
+	if reserved != "" && _mapHas(stopWords, reserved) {
 		return nil
 	}
 	pipeline := self.ParsePipeline()
@@ -8182,7 +8188,7 @@ func (self *Parser) ParseCompoundCommand() Node {
 		word := self.PeekWord()
 		if word != "" && _runeLen(word) > 1 && string(_runeAt(word, 0)) == "}" {
 			keywordWord := _Substring(word, 1, _runeLen(word))
-			if func() bool { _, ok := RESERVEDWORDS[keywordWord]; return ok }() || keywordWord == "{" || keywordWord == "}" || keywordWord == "[[" || keywordWord == "]]" || keywordWord == "!" || keywordWord == "time" {
+			if _mapHas(RESERVEDWORDS, keywordWord) || keywordWord == "{" || keywordWord == "}" || keywordWord == "[[" || keywordWord == "]]" || keywordWord == "!" || keywordWord == "time" {
 				reserved = keywordWord
 			}
 		}
@@ -8486,7 +8492,7 @@ func (self *Parser) ParseComment() Node {
 
 func (self *Parser) Parse() []Node {
 	source := strings.TrimSpace(self.Source)
-	if !(source != "") {
+	if source == "" {
 		return []Node{&Empty{Kind: "empty"}}
 	}
 	results := []Node{}
@@ -8499,7 +8505,7 @@ func (self *Parser) Parse() []Node {
 			break
 		}
 		comment := self.ParseComment()
-		if !(!_isNilInterface(comment)) {
+		if _isNilInterface(comment) {
 			break
 		}
 	}
@@ -8524,7 +8530,7 @@ func (self *Parser) Parse() []Node {
 			panic(NewParseError("Syntax error", self.Pos, 0))
 		}
 	}
-	if !(len(results) > 0) {
+	if len(results) == 0 {
 		return []Node{&Empty{Kind: "empty"}}
 	}
 	if self.sawNewlineInSingleQuote && self.Source != "" && string(_runeAt(self.Source, _runeLen(self.Source)-1)) == "\\" && !(_runeLen(self.Source) >= 3 && _Substring(self.Source, _runeLen(self.Source)-3, _runeLen(self.Source)-1) == "\\\n") {
@@ -8540,14 +8546,14 @@ func (self *Parser) lastWordOnOwnLine(nodes []Node) bool {
 }
 
 func (self *Parser) stripTrailingBackslashFromLastWord(nodes []Node) {
-	if !(len(nodes) > 0) {
+	if len(nodes) == 0 {
 		return
 	}
 	lastNode := nodes[len(nodes)-1]
 	lastWord := self.findLastWord(lastNode)
 	if lastWord != nil && strings.HasSuffix(lastWord.Value, "\\") {
 		lastWord.Value = substring(lastWord.Value, 0, _runeLen(lastWord.Value)-1)
-		if !(lastWord.Value != "") && func() bool { _, ok := lastNode.(*Command); return ok }() && len(lastNode.(*Command).Words) > 0 {
+		if lastWord.Value == "" && func() bool { _, ok := lastNode.(*Command); return ok }() && len(lastNode.(*Command).Words) > 0 {
 			lastNode.(*Command).Words = lastNode.(*Command).Words[:len(lastNode.(*Command).Words)-1]
 		}
 	}
@@ -9926,7 +9932,7 @@ func findHeredocContentEnd(source string, start int, delimiters []struct {
 	F0 string
 	F1 bool
 }) (int, int) {
-	if !(len(delimiters) > 0) {
+	if len(delimiters) == 0 {
 		return start, start
 	}
 	pos := start
@@ -10198,7 +10204,7 @@ func skipMatchedPair(s string, start int, open string, close string, flags int) 
 			continue
 		}
 		literal := (flags & SMPLITERAL)
-		if !(literal != 0) && c == "\\" {
+		if (literal) == 0 && c == "\\" {
 			passNext = true
 			i++
 			continue
@@ -10210,28 +10216,28 @@ func skipMatchedPair(s string, start int, open string, close string, flags int) 
 			i++
 			continue
 		}
-		if !(literal != 0) && c == "`" {
+		if (literal) == 0 && c == "`" {
 			backq = true
 			i++
 			continue
 		}
-		if !(literal != 0) && c == "'" {
+		if (literal) == 0 && c == "'" {
 			i = skipSingleQuoted(s, i+1)
 			continue
 		}
-		if !(literal != 0) && c == "\"" {
+		if (literal) == 0 && c == "\"" {
 			i = skipDoubleQuoted(s, i+1)
 			continue
 		}
-		if !(literal != 0) && isExpansionStart(s, i, "$(") {
+		if (literal) == 0 && isExpansionStart(s, i, "$(") {
 			i = findCmdsubEnd(s, i+2)
 			continue
 		}
-		if !(literal != 0) && isExpansionStart(s, i, "${") {
+		if (literal) == 0 && isExpansionStart(s, i, "${") {
 			i = findBracedParamEnd(s, i+2)
 			continue
 		}
-		if !(literal != 0) && c == open {
+		if (literal) == 0 && c == open {
 			depth++
 		} else if c == close {
 			depth--
@@ -10249,7 +10255,7 @@ func skipSubscript(s string, start int, flags int) int {
 }
 
 func assignment(s string, flags int) int {
-	if !(s != "") {
+	if s == "" {
 		return -1
 	}
 	if !(_strIsAlpha(string(_runeAt(s, 0))) || string(_runeAt(s, 0)) == "_") {
@@ -10297,7 +10303,7 @@ func assignment(s string, flags int) int {
 }
 
 func isArrayAssignmentPrefix(chars []string) bool {
-	if !(len(chars) > 0) {
+	if len(chars) == 0 {
 		return false
 	}
 	if !(_strIsAlpha(chars[0]) || chars[0] == "_") {
@@ -10390,7 +10396,7 @@ func looksLikeAssignment(s string) bool {
 }
 
 func isValidIdentifier(name string) bool {
-	if !(name != "") {
+	if name == "" {
 		return false
 	}
 	if !(_strIsAlpha(string(_runeAt(name, 0))) || string(_runeAt(name, 0)) == "_") {

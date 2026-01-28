@@ -16,13 +16,15 @@ def to_snake(name: str) -> str:
 
 
 def to_camel(name: str) -> str:
-    """Convert snake_case to camelCase."""
+    """Convert snake_case to camelCase, preserving leading underscores."""
+    prefix = ""
     if name.startswith("_"):
+        prefix = "_"
         name = name[1:]
     if "_" not in name:
-        return name[0].lower() + name[1:] if name else name
+        return prefix + (name[0].lower() + name[1:] if name else name)
     parts = name.split("_")
-    return parts[0].lower() + "".join(p.capitalize() for p in parts[1:])
+    return prefix + parts[0].lower() + "".join(p.capitalize() for p in parts[1:])
 
 
 def to_pascal(name: str) -> str:

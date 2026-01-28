@@ -101,6 +101,7 @@ from src.ir import (
     Ternary,
     TryCatch,
     Tuple,
+    TupleAssign,
     TupleLit,
     Type,
     TypeAssert,
@@ -126,6 +127,8 @@ class JavaBackend:
         self.tuple_records: dict[tuple, str] = {}  # tuple signature -> record name
         self.tuple_counter = 0
         self.optional_tuples: set[tuple] = set()  # (T, bool) patterns -> use Optional<T>
+        self.struct_fields: dict[str, list[tuple[str, Type]]] = {}  # struct name -> [(field_name, type)]
+        self.temp_counter: int = 0  # for unique temp variable names
 
     def emit(self, module: Module) -> str:
         """Emit Java code from IR Module."""
@@ -134,10 +137,18 @@ class JavaBackend:
         self.tuple_records = {}
         self.tuple_counter = 0
         self.optional_tuples = set()
+        self.struct_fields = {}
+        self.temp_counter = 0
         self._module_name = module.name
+        self._collect_struct_fields(module)
         self._collect_tuple_types(module)
         self._emit_module(module)
         return "\n".join(self.lines)
+
+    def _collect_struct_fields(self, module: Module) -> None:
+        """Collect field information for all structs."""
+        for struct in module.structs:
+            self.struct_fields[struct.name] = [(f.name, f.typ) for f in struct.fields]
 
     def _collect_tuple_types(self, module: Module) -> None:
         """Collect all unique tuple types used in the module."""
@@ -145,9 +156,11 @@ class JavaBackend:
             if isinstance(typ, Tuple):
                 sig = tuple(self._type(t) for t in typ.elements)
                 # Detect (T, bool) pattern - use Optional<T> instead of synthetic record
+                # But NOT for (bool, bool) - that's just a two-bool tuple
                 if (len(typ.elements) == 2
                     and isinstance(typ.elements[1], Primitive)
-                    and typ.elements[1].kind == "bool"):
+                    and typ.elements[1].kind == "bool"
+                    and not (isinstance(typ.elements[0], Primitive) and typ.elements[0].kind == "bool")):
                     self.optional_tuples.add(sig)
                 elif sig not in self.tuple_records:
                     self.tuple_counter += 1
@@ -261,7 +274,11 @@ class JavaBackend:
     def _emit_struct(self, struct: Struct) -> None:
         class_name = _java_safe_class(struct.name)
         self.current_class = class_name
-        self._line(f"class {class_name} {{")
+        implements_clause = ""
+        if struct.implements:
+            impl_names = [_java_safe_class(n) for n in struct.implements]
+            implements_clause = f" implements {', '.join(impl_names)}"
+        self._line(f"class {class_name}{implements_clause} {{")
         self.indent += 1
         for fld in struct.fields:
             self._emit_field(fld)
@@ -270,6 +287,13 @@ class JavaBackend:
         # Default constructor
         self._emit_default_constructor(struct)
         self._line("")
+        # Generate getters for interface methods that map to fields
+        # e.g., if interface requires getKind() and struct has kind field
+        field_names = {f.name for f in struct.fields}
+        method_names = {m.name for m in struct.methods}
+        if "Node" in struct.implements and "kind" in field_names and "GetKind" not in method_names:
+            self._line("public String getKind() { return this.kind; }")
+            self._line("")
         for i, method in enumerate(struct.methods):
             if i > 0:
                 self._line("")
@@ -330,7 +354,8 @@ class JavaBackend:
         name = to_camel(func.name)
         if func.receiver:
             self.receiver_name = func.receiver.name
-        self._line(f"{ret} {name}({params}) {{")
+        # Use public for interface implementation compatibility
+        self._line(f"public {ret} {name}({params}) {{")
         self.indent += 1
         if not func.body:
             self._line('throw new UnsupportedOperationException("todo");')
@@ -382,6 +407,38 @@ class JavaBackend:
                 lv = self._lvalue(target)
                 val = self._expr(value)
                 self._line(f"{lv} {op}= {val};")
+            case TupleAssign(targets=targets, value=value):
+                # Java doesn't have destructuring - emit individual assignments
+                val_str = self._expr(value)
+                value_type = getattr(value, 'typ', None)
+                is_decl = getattr(stmt, 'is_declaration', False)
+                new_targets = getattr(stmt, 'new_targets', [])
+                # For tuple types, access fields with .f0(), .f1(), etc.
+                if isinstance(value_type, Tuple):
+                    # Store tuple in temp variable if it's a complex expression
+                    if not isinstance(value, Var):
+                        self.temp_counter += 1
+                        temp_name = f"_tuple{self.temp_counter}"
+                        record_name = self._tuple_record_name(value_type)
+                        self._line(f"{record_name} {temp_name} = {val_str};")
+                        val_str = temp_name
+                    for i, target in enumerate(targets):
+                        lv = self._lvalue(target)
+                        target_name = target.name if isinstance(target, VarLV) else None
+                        if is_decl or (target_name and target_name in new_targets):
+                            elem_type = self._type(value_type.elements[i]) if i < len(value_type.elements) else "Object"
+                            self._line(f"{elem_type} {lv} = {val_str}.f{i}();")
+                        else:
+                            self._line(f"{lv} = {val_str}.f{i}();")
+                else:
+                    # Fallback: treat as array index
+                    for i, target in enumerate(targets):
+                        lv = self._lvalue(target)
+                        target_name = target.name if isinstance(target, VarLV) else None
+                        if is_decl or (target_name and target_name in new_targets):
+                            self._line(f"Object {lv} = {val_str}[{i}];")
+                        else:
+                            self._line(f"{lv} = {val_str}[{i}];")
             case ExprStmt(expr=Var(name=name)) if name in (
                 "_skip_docstring", "_pass", "_skip_super_init"
             ):
@@ -465,7 +522,9 @@ class JavaBackend:
     ) -> None:
         var = self._expr(expr)
         bind_name = _java_safe_name(binding)
-        self._line(f"Object {bind_name} = {var};")
+        # Don't re-declare if binding to same variable
+        if not (isinstance(expr, Var) and _java_safe_name(expr.name) == bind_name):
+            self._line(f"Object {bind_name} = {var};")
         for i, case in enumerate(cases):
             type_name = self._type_name_for_check(case.typ)
             keyword = "if" if i == 0 else "} else if"
@@ -629,11 +688,18 @@ class JavaBackend:
             case Var(name=name):
                 if name == self.receiver_name:
                     return "this"
-                if name.isupper():
+                # Check if this is a constant (all uppercase, or ClassName_CONSTANT pattern)
+                if name.isupper() or (name[0].isupper() and "_" in name and name.split("_", 1)[1].isupper()):
                     return f"Constants.{to_screaming_snake(name)}"
                 return _java_safe_name(name)
             case FieldAccess(obj=obj, field=field):
-                return f"{self._expr(obj)}.{_java_safe_name(field)}"
+                obj_str = self._expr(obj)
+                # Tuple record fields are accessed as methods in Java records
+                # Field names F0/f0, F1/f1, etc. are tuple field accessors - use method syntax
+                lower_field = field.lower()
+                if lower_field.startswith("f") and len(lower_field) > 1 and lower_field[1:].isdigit():
+                    return f"{obj_str}.{lower_field}()"
+                return f"{obj_str}.{_java_safe_name(field)}"
             case Index(obj=obj, index=index):
                 obj_str = self._expr(obj)
                 idx_str = self._expr(index)
@@ -735,11 +801,26 @@ class JavaBackend:
                     return f"{left_str}.equals({right_str})"
                 if java_op == "!=" and _is_string_type(left.typ):
                     return f"!{left_str}.equals({right_str})"
+                # Bitwise operators need parens due to low precedence
+                if java_op in ("&", "|", "^"):
+                    return f"({left_str} {java_op} {right_str})"
                 return f"{left_str} {java_op} {right_str}"
             case UnaryOp(op="&", operand=operand):
                 return self._expr(operand)  # Java passes objects by reference
             case UnaryOp(op="*", operand=operand):
                 return self._expr(operand)  # Java has no pointer dereference
+            case UnaryOp(op="!", operand=operand):
+                # Java ! only works on booleans; for ints, use == 0
+                operand_type = getattr(operand, 'typ', None)
+                if isinstance(operand_type, Primitive) and operand_type.kind == "int":
+                    return f"({self._expr(operand)} == 0)"
+                # Check for bitwise & operand (result is int even if typ not set)
+                if isinstance(operand, BinaryOp) and operand.op == "&":
+                    return f"({self._expr(operand)} == 0)"
+                # Check for addition/subtraction (e.g., !pos + 1) - result is int
+                if isinstance(operand, BinaryOp) and operand.op in ("+", "-", "*", "/", "%"):
+                    return f"({self._expr(operand)} == 0)"
+                return f"!{self._expr(operand)}"
             case UnaryOp(op=op, operand=operand):
                 return f"{op}{self._expr(operand)}"
             case Ternary(cond=cond, then_expr=then_expr, else_expr=else_expr):
@@ -781,10 +862,17 @@ class JavaBackend:
             case MapLit(entries=entries, key_type=key_type, value_type=value_type):
                 if not entries:
                     return "new HashMap<>()"
-                pairs = ", ".join(
-                    f"{self._expr(k)}, {self._expr(v)}" for k, v in entries
-                )
-                return f"new HashMap<>(Map.of({pairs}))"
+                # Map.of() only supports up to 10 entries; use ofEntries for more
+                if len(entries) <= 10:
+                    pairs = ", ".join(
+                        f"{self._expr(k)}, {self._expr(v)}" for k, v in entries
+                    )
+                    return f"new HashMap<>(Map.of({pairs}))"
+                else:
+                    entries_str = ", ".join(
+                        f"Map.entry({self._expr(k)}, {self._expr(v)})" for k, v in entries
+                    )
+                    return f"new HashMap<>(Map.ofEntries({entries_str}))"
             case SetLit(elements=elements, element_type=element_type):
                 if not elements:
                     return "new HashSet<>()"
@@ -792,11 +880,21 @@ class JavaBackend:
                 return f"new HashSet<>(Set.of({elems}))"
             case StructLit(struct_name=struct_name, fields=fields):
                 safe_name = _java_safe_class(struct_name)
-                if not fields:
+                # Use struct field order, fill in missing fields with defaults
+                field_info = self.struct_fields.get(struct_name, [])
+                if field_info:
+                    ordered_args = []
+                    for field_name, field_type in field_info:
+                        if field_name in fields:
+                            ordered_args.append(self._expr(fields[field_name]))
+                        else:
+                            ordered_args.append(self._default_value(field_type))
+                    return f"new {safe_name}({', '.join(ordered_args)})"
+                elif not fields:
                     return f"new {safe_name}()"
-                # Need to pass fields in constructor order - assume same order as defined
-                args = ", ".join(self._expr(v) for v in fields.values())
-                return f"new {safe_name}({args})"
+                else:
+                    args = ", ".join(self._expr(v) for v in fields.values())
+                    return f"new {safe_name}({args})"
             case TupleLit(elements=elements, typ=typ):
                 if self._is_optional_tuple(typ):
                     return self._emit_optional_tuple(expr)

@@ -213,7 +213,12 @@ class Token:
     """
 
     def __init__(
-        self, type_: int, value: str, pos: int, parts: list[Node] | None = None, word: Word | None = None
+        self,
+        type_: int,
+        value: str,
+        pos: int,
+        parts: list[Node] | None = None,
+        word: Word | None = None,
     ):
         self.type = type_
         self.value = value

@@ -13,11 +13,11 @@ src-test *ARGS:
 
 # Lint (--fix to apply changes)
 src-lint *ARGS:
-    uvx ruff check {{ if ARGS == "--fix" { "--fix" } else { "" } }} 2>&1 | sed -u "s/^/[src-lint] /" | tee /tmp/{{project}}-{{run_id}}-lint.log
+    uvx ruff check {{ if ARGS == "--fix" { "--fix" } else { "" } }} src/ 2>&1 | sed -u "s/^/[src-lint] /" | tee /tmp/{{project}}-{{run_id}}-lint.log
 
 # Format (--fix to apply changes)
 src-fmt *ARGS:
-    uvx ruff format {{ if ARGS == "--fix" { "" } else { "--check" } }} 2>&1 | sed -u "s/^/[src-fmt] /" | tee /tmp/{{project}}-{{run_id}}-fmt.log
+    uvx ruff format {{ if ARGS == "--fix" { "" } else { "--check" } }} src/ 2>&1 | sed -u "s/^/[src-fmt] /" | tee /tmp/{{project}}-{{run_id}}-fmt.log
 
 # Check for banned Python constructions
 src-style:
@@ -53,39 +53,6 @@ backend-transpile backend="go":
             ;;
     esac
 
-# Verify dist/<backend>/ is up-to-date
-backend-verify backend="go":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    case "{{backend}}" in
-        go)
-            just backend-transpile go
-            go build -C dist/go -o /dev/null .
-            echo "[backend-verify go] OK"
-            ;;
-        *)
-            echo "Verify not implemented for backend: {{backend}}"
-            exit 1
-            ;;
-    esac
-
-# Compile transpiled code
-backend-build backend="go":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    case "{{backend}}" in
-        go)
-            go build -C dist/go -o /dev/null .
-            ;;
-        ts)
-            tsc --outDir /tmp/transpile-ts --lib es2019 --module commonjs --esModuleInterop dist/ts/parable.ts
-            ;;
-        *)
-            echo "Build not implemented for backend: {{backend}}"
-            exit 1
-            ;;
-    esac
-
 # Run tests on transpiled backend
 backend-test backend:
     #!/usr/bin/env bash
@@ -103,7 +70,7 @@ backend-test backend:
             ;;
         ts)
             just backend-transpile ts
-            just backend-build ts
+            tsc --outDir /tmp/transpile-ts --lib es2019 --module commonjs --esModuleInterop dist/ts/parable.ts
             node tests/bin/run-js-tests.js /tmp/transpile-ts
             ;;
         *)
@@ -117,7 +84,7 @@ backend-test backend:
 
 # Internal: run all parallel checks
 [parallel]
-_check-parallel: src-test src-lint src-fmt src-verify-lock src-style check-dump-ast (backend-verify "go") (backend-test "go")
+_check-parallel: src-test src-lint src-fmt src-verify-lock src-style check-dump-ast (backend-test "go") (backend-test "python")
 
 # Ensure biome is installed (prevents race condition in parallel JS checks)
 _ensure-biome:

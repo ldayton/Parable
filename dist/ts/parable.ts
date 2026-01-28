@@ -3994,14 +3994,14 @@ class Until implements Node {
 
 class For implements Node {
   varName: string;
-  words: Word[];
+  words: Word[] | null;
   body: Node;
   redirects: Node[];
   kind: string;
 
-  constructor(varName: string = "", words: Word[] = [], body: Node = null, redirects: Node[] = [], kind: string = "") {
+  constructor(varName: string = "", words: Word[] | null = null, body: Node = null, redirects: Node[] = [], kind: string = "") {
     this.varName = varName;
-    this.words = words ?? [];
+    this.words = words;
     this.body = body;
     this.redirects = redirects ?? [];
     this.kind = kind;
@@ -4083,14 +4083,14 @@ class ForArith implements Node {
 
 class Select implements Node {
   varName: string;
-  words: Word[];
+  words: Word[] | null;
   body: Node;
   redirects: Node[];
   kind: string;
 
-  constructor(varName: string = "", words: Word[] = [], body: Node = null, redirects: Node[] = [], kind: string = "") {
+  constructor(varName: string = "", words: Word[] | null = null, body: Node = null, redirects: Node[] = [], kind: string = "") {
     this.varName = varName;
-    this.words = words ?? [];
+    this.words = words;
     this.body = body;
     this.redirects = redirects ?? [];
     this.kind = kind;

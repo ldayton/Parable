@@ -1673,6 +1673,9 @@ func _Substring(s string, start int, end int) string {
             # Interface types can already be nil, don't wrap in pointer
             if isinstance(typ.inner, Interface):
                 return inner
+            # Slice types can already be nil, don't wrap in pointer
+            if isinstance(typ.inner, Slice):
+                return inner
             return f"*{inner}"
         if isinstance(typ, StructRef):
             return typ.name

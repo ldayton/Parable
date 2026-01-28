@@ -9,6 +9,7 @@ from .ir import (
     INT,
     STRING,
     Interface,
+    Optional,
     Pointer,
     Slice,
     StructRef,
@@ -59,9 +60,9 @@ FIELD_TYPE_OVERRIDES: dict[tuple[str, str], Type] = {
     ("Pipeline", "commands"): Slice(Interface("Node")),
     # Command.words is []*Word (Go slices aren't covariant)
     ("Command", "words"): Slice(Pointer(StructRef("Word"))),
-    # For/Select.words is []*Word | None - use slice (nil is valid)
-    ("For", "words"): Slice(Pointer(StructRef("Word"))),
-    ("Select", "words"): Slice(Pointer(StructRef("Word"))),
+    # For/Select.words is []*Word | None - null indicates "no in clause" (iterate $@)
+    ("For", "words"): Optional(Slice(Pointer(StructRef("Word")))),
+    ("Select", "words"): Optional(Slice(Pointer(StructRef("Word")))),
     # Redirects fields are []Node, not *[]Node (nil slice is fine in Go)
     ("For", "redirects"): Slice(StructRef("Node")),
     ("Select", "redirects"): Slice(StructRef("Node")),

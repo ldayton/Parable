@@ -1887,10 +1887,12 @@ class Frontend:
         return result
 
     def _is_pointer_to_slice(self, typ: Type) -> bool:
-        """Check if type is pointer-to-slice (Pointer(Slice) or Optional(Slice))."""
+        """Check if type is pointer-to-slice (Pointer(Slice) only, NOT Optional(Slice)).
+
+        Optional(Slice) represents a nullable slice where null has semantic meaning,
+        but the slice itself doesn't need dereference - slices are already nullable.
+        """
         if isinstance(typ, Pointer) and isinstance(typ.target, Slice):
-            return True
-        if isinstance(typ, Optional) and isinstance(typ.inner, Slice):
             return True
         return False
 
@@ -1901,11 +1903,12 @@ class Frontend:
                 node.func.id == "len")
 
     def _get_inner_slice(self, typ: Type) -> Slice | None:
-        """Get the inner Slice from Pointer(Slice) or Optional(Slice)."""
+        """Get the inner Slice from Pointer(Slice) only, NOT Optional(Slice).
+
+        Optional(Slice) doesn't need dereference - slices are already nullable.
+        """
         if isinstance(typ, Pointer) and isinstance(typ.target, Slice):
             return typ.target
-        if isinstance(typ, Optional) and isinstance(typ.inner, Slice):
-            return typ.inner
         return None
 
     def _coerce_sentinel_to_ptr(self, obj_type: Type, method: str, args: list, orig_args: list) -> list:
@@ -2084,6 +2087,9 @@ class Frontend:
             return expr
         # Slice/Map/Set truthy check: len(x) > 0
         if isinstance(expr_type, (Slice, Map, Set)):
+            return ir.BinaryOp(op=">", left=ir.Len(expr=expr, typ=INT, loc=self._loc_from_node(node)), right=ir.IntLit(value=0, typ=INT), typ=BOOL, loc=self._loc_from_node(node))
+        # Optional(Slice) truthy check: len(x) > 0 (nil slice has len 0)
+        if isinstance(expr_type, Optional) and isinstance(expr_type.inner, (Slice, Map, Set)):
             return ir.BinaryOp(op=">", left=ir.Len(expr=expr, typ=INT, loc=self._loc_from_node(node)), right=ir.IntLit(value=0, typ=INT), typ=BOOL, loc=self._loc_from_node(node))
         # Interface truthy check: x != nil
         if isinstance(expr_type, Interface):

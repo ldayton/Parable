@@ -229,7 +229,9 @@ class TsBackend:
         for fld in struct.fields:
             name = _camel(fld.name)
             # For array/slice fields, convert null to empty array (Python passes None, JS needs [])
-            if isinstance(fld.typ, (Slice, Array)):
+            # But don't do this for Optional(Slice(...)) - null has semantic meaning there
+            is_nullable_slice = isinstance(fld.typ, Optional) and isinstance(fld.typ.inner, (Slice, Array))
+            if isinstance(fld.typ, (Slice, Array)) and not is_nullable_slice:
                 self._line(f"this.{name} = {name} ?? [];")
             else:
                 self._line(f"this.{name} = {name};")

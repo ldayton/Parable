@@ -160,6 +160,9 @@ class TsBackend:
     def _emit_interface(self, iface: InterfaceDef) -> None:
         self._line(f"interface {_safe_name(iface.name)} {{")
         self.indent += 1
+        # Node interface needs a kind property for type discrimination
+        if iface.name == "Node":
+            self._line("kind: string;")
         for method in iface.methods:
             params = self._params(method.params)
             ret = self._type(method.ret)
@@ -271,32 +274,28 @@ class TsBackend:
     def _emit_stmt(self, stmt: Stmt) -> None:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value):
-                # Use var for function-scoped semantics (matches Python/Go)
-                keyword = "var"
+                # Use var with 'any' type for function-scoped semantics (matches Python/Go)
+                # The 'any' type prevents TypeScript errors when same var is re-declared
+                # with a different inferred type in a different branch
                 if value is not None:
                     val = self._expr(value)
-                    if _can_infer_type(value):
-                        self._line(f"{keyword} {_camel(name)} = {val};")
-                    else:
-                        ts_type = self._type(typ)
-                        self._line(f"{keyword} {_camel(name)}: {ts_type} = {val};")
+                    self._line(f"var {_camel(name)}: any = {val};")
                 else:
-                    ts_type = self._type(typ)
-                    self._line(f"{keyword} {_camel(name)}: {ts_type};")
+                    self._line(f"var {_camel(name)}: any;")
             case Assign(target=target, value=value):
                 lv = self._lvalue(target)
                 val = self._expr(value)
                 if getattr(stmt, 'is_declaration', False):
-                    # Use var for function-scoped semantics (matches Python/Go)
-                    self._line(f"var {lv} = {val};")
+                    # Use var with any type for function-scoped semantics
+                    self._line(f"var {lv}: any = {val};")
                 else:
                     self._line(f"{lv} = {val};")
             case TupleAssign(targets=targets, value=value):
                 lvalues = ", ".join(self._lvalue(t) for t in targets)
                 val = self._expr(value)
                 if getattr(stmt, 'is_declaration', False):
-                    # Use var for function-scoped semantics (matches Python/Go)
-                    self._line(f"var [{lvalues}] = {val};")
+                    # Use var with any type for function-scoped semantics
+                    self._line(f"var [{lvalues}]: any = {val};")
                 else:
                     self._line(f"[{lvalues}] = {val};")
             case OpAssign(target=target, op=op, value=value):
@@ -470,23 +469,18 @@ class TsBackend:
     def _stmt_inline(self, stmt: Stmt) -> str:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value):
-                # Use var for function-scoped semantics (matches Python/Go)
+                # Use var with any type for function-scoped semantics
                 if value is not None:
-                    if _can_infer_type(value):
-                        return f"var {_camel(name)} = {self._expr(value)}"
-                    else:
-                        ts_type = self._type(typ)
-                        return f"var {_camel(name)}: {ts_type} = {self._expr(value)}"
-                ts_type = self._type(typ)
-                return f"var {_camel(name)}: {ts_type}"
+                    return f"var {_camel(name)}: any = {self._expr(value)}"
+                return f"var {_camel(name)}: any"
             case Assign(target=VarLV(name=name), value=BinaryOp(op=op, left=Var(name=left_name), right=IntLit(value=1))) if name == left_name and op in ("+", "-"):
                 return f"{_camel(name)}++" if op == "+" else f"{_camel(name)}--"
             case Assign(target=target, value=value):
                 lv = self._lvalue(target)
                 val = self._expr(value)
                 if getattr(stmt, 'is_declaration', False):
-                    # Use var for function-scoped semantics (matches Python/Go)
-                    return f"var {lv} = {val}"
+                    # Use var with any type for function-scoped semantics
+                    return f"var {lv}: any = {val}"
                 return f"{lv} = {val}"
             case OpAssign(target=target, op=op, value=value):
                 return f"{self._lvalue(target)} {op}= {self._expr(value)}"
@@ -573,6 +567,20 @@ class TsBackend:
                 return f"/^[0-9]$/.test({self._expr(obj)})"
             case MethodCall(obj=obj, method="isalpha", args=_, receiver_type=_):
                 return f"/^[a-zA-Z]$/.test({self._expr(obj)})"
+            case MethodCall(obj=obj, method="isspace", args=_, receiver_type=_):
+                return f"/^\\s$/.test({self._expr(obj)})"
+            case MethodCall(obj=obj, method="lstrip", args=[StringLit(value=chars)], receiver_type=_):
+                # Python lstrip with chars → regex replace (JS trimStart takes no args)
+                escaped = _escape_regex_class(chars)
+                return f"{self._expr(obj)}.replace(/^[{escaped}]+/, '')"
+            case MethodCall(obj=obj, method="rstrip", args=[StringLit(value=chars)], receiver_type=_):
+                # Python rstrip with chars → regex replace (JS trimEnd takes no args)
+                escaped = _escape_regex_class(chars)
+                return f"{self._expr(obj)}.replace(/[{escaped}]+$/, '')"
+            case MethodCall(obj=obj, method="strip", args=[StringLit(value=chars)], receiver_type=_):
+                # Python strip with chars → regex replace (JS trim takes no args)
+                escaped = _escape_regex_class(chars)
+                return f"{self._expr(obj)}.replace(/^[{escaped}]+/, '').replace(/[{escaped}]+$/, '')"
             case MethodCall(obj=obj, method=method, args=args, receiver_type=receiver_type):
                 args_str = ", ".join(self._expr(a) for a in args)
                 ts_method = _method_name(method, receiver_type)
@@ -837,9 +845,9 @@ def _method_name(method: str, receiver_type: Type) -> str:
     """Convert method name based on receiver type."""
     if _is_array_type(receiver_type) and method == "append":
         return "push"
-    if isinstance(receiver_type, Primitive) and receiver_type.kind == "string":
-        if method in _STRING_METHOD_MAP:
-            return _STRING_METHOD_MAP[method]
+    # Apply string method mapping unconditionally - these methods only exist on strings
+    if method in _STRING_METHOD_MAP:
+        return _STRING_METHOD_MAP[method]
     return _camel(method)
 
 
@@ -859,6 +867,24 @@ def _binary_op(op: str) -> str:
 
 def _string_literal(value: str) -> str:
     return f'"{escape_string(value)}"'
+
+
+def _escape_regex_class(chars: str) -> str:
+    """Escape characters for use in a regex character class []."""
+    # Characters that need escaping in a character class: ] \ ^ -
+    result = []
+    for c in chars:
+        if c in r"]\^-":
+            result.append(f"\\{c}")
+        elif c == "\t":
+            result.append("\\t")
+        elif c == "\n":
+            result.append("\\n")
+        elif c == "\r":
+            result.append("\\r")
+        else:
+            result.append(c)
+    return "".join(result)
 
 
 def _ends_with_return(body: list[Stmt]) -> bool:

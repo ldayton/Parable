@@ -177,8 +177,7 @@ MODULE_CONSTANTS: dict[str, tuple[Type, str]] = {
 # Override local variable types when inference fails
 # Maps (function_name, var_name) -> IR type
 VAR_TYPE_OVERRIDES: dict[tuple[str, str], Type] = {
-    # Empty list assigned then returned - need concrete element type
-    ("_collect_redirects", "redirects"): Slice(StructRef("Node")),
+    # _collect_redirects.redirects: auto-inferred from self.parse_redirect() return type
     # Tuple element types inferred incorrectly
     ("_read_heredoc_body", "pending_heredocs"): Slice(Tuple((STRING, BOOL))),
     # Hoisted variables with wrong type inference (interface{} instead of Node)

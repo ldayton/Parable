@@ -1472,12 +1472,21 @@ class Frontend:
         # Method calls: obj.method() -> look up method return type
         if isinstance(arg, ast.Call) and isinstance(arg.func, ast.Attribute):
             method_name = arg.func.attr
-            obj_type = self._infer_expr_type_from_ast(arg.func.value)
-            struct_name = self._extract_struct_name(obj_type)
-            if struct_name and struct_name in self.symbols.structs:
-                method_info = self.symbols.structs[struct_name].methods.get(method_name)
-                if method_info:
-                    return method_info.return_type
+            # Handle self.method() calls directly using current class name
+            # (can't use _infer_expr_type_from_ast here - _type_ctx not set yet)
+            if isinstance(arg.func.value, ast.Name) and arg.func.value.id == "self":
+                if self._current_class_name and self._current_class_name in self.symbols.structs:
+                    method_info = self.symbols.structs[self._current_class_name].methods.get(method_name)
+                    if method_info:
+                        return method_info.return_type
+            # Handle other obj.method() calls via var_types lookup
+            elif isinstance(arg.func.value, ast.Name) and arg.func.value.id in var_types:
+                obj_type = var_types[arg.func.value.id]
+                struct_name = self._extract_struct_name(obj_type)
+                if struct_name and struct_name in self.symbols.structs:
+                    method_info = self.symbols.structs[struct_name].methods.get(method_name)
+                    if method_info:
+                        return method_info.return_type
         return Interface("any")
 
     def _infer_container_type_from_ast(self, node: ast.expr, var_types: dict[str, Type]) -> Type:

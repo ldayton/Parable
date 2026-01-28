@@ -4967,7 +4967,7 @@ func (self *Parser) atEofToken() bool {
 }
 
 func (self *Parser) collectRedirects() []Node {
-	var redirects []Node = []Node{}
+	redirects := []Node{}
 	for true {
 		self.SkipWhitespace()
 		redirect := self.ParseRedirect()

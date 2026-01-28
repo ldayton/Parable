@@ -683,7 +683,8 @@ class TsBackend:
                     inner = f"({inner})"
                 return f"{op}{inner}"
             case Ternary(cond=cond, then_expr=then_expr, else_expr=else_expr):
-                return f"{self._expr(cond)} ? {self._expr(then_expr)} : {self._expr(else_expr)}"
+                # Wrap in parens - ternary has very low precedence in JS
+                return f"({self._expr(cond)} ? {self._expr(then_expr)} : {self._expr(else_expr)})"
             case Cast(expr=inner, to_type=to_type):
                 ts_type = self._type(to_type)
                 from_type = self._type(inner.typ) if hasattr(inner, 'typ') else None

@@ -793,7 +793,7 @@ var Lexer = /** @class */ (function () {
             if ("'\"`".includes(ch) && openChar !== closeChar) {
                 if (ch === "'") {
                     chars.push(ch);
-                    var quoteFlags = wasDollar ? flags | MatchedPairFlags_ALLOWESC : flags;
+                    var quoteFlags = (wasDollar ? flags | MatchedPairFlags_ALLOWESC : flags);
                     var nested = this.ParseMatchedPair("'", "'", quoteFlags, false);
                     chars.push(nested);
                     chars.push("'");
@@ -1891,7 +1891,7 @@ var Lexer = /** @class */ (function () {
         }
         this.UpdateDolbraceForOp(op, param.length > 0);
         try {
-            var flags = inDquote ? MatchedPairFlags_DQUOTE : MatchedPairFlags_NONE;
+            var flags = (inDquote ? MatchedPairFlags_DQUOTE : MatchedPairFlags_NONE);
             var paramEndsWithDollar = param !== "" && param.endsWith("$");
             var arg = this.CollectParamArgument(flags, paramEndsWithDollar);
         }
@@ -2960,7 +2960,7 @@ var Word = /** @class */ (function () {
                     var content = arithContent.join("");
                     if (firstCloseIdx !== -1) {
                         content = content.slice(0, firstCloseIdx);
-                        var closing = depth === 0 ? "))" : ")";
+                        var closing = (depth === 0 ? "))" : ")");
                         result.push("$((" + content + closing);
                     }
                     else {
@@ -3214,7 +3214,7 @@ var Word = /** @class */ (function () {
                     try {
                         var parser = newParser(inner, false, false);
                         var parsed = parser.parseList(true);
-                        var formatted = parsed !== null ? FormatCmdsubNode(parsed, 0, false, false, false) : "";
+                        var formatted = (parsed !== null ? FormatCmdsubNode(parsed, 0, false, false, false) : "");
                     }
                     catch (_e) {
                         var formatted = inner;
@@ -3249,12 +3249,12 @@ var Word = /** @class */ (function () {
                 else {
                     if (IsExpansionStart(value, i, "${") && i + 2 < value.length && IsFunsubChar(value[i + 2]) && !IsBackslashEscaped(value, i)) {
                         var j = FindFunsubEnd(value, i + 2);
-                        var cmdsubNode = cmdsubIdx < cmdsubParts.length ? cmdsubParts[cmdsubIdx] : null;
+                        var cmdsubNode = (cmdsubIdx < cmdsubParts.length ? cmdsubParts[cmdsubIdx] : null);
                         if (cmdsubNode instanceof CommandSubstitution && cmdsubNode.brace) {
                             var node = cmdsubNode;
                             var formatted = FormatCmdsubNode(node.command, 0, false, false, false);
                             var hasPipe = value[i + 2] === "|";
-                            var prefix = hasPipe ? "${|" : "${ ";
+                            var prefix = (hasPipe ? "${|" : "${ ");
                             var origInner = Substring(value, i + 2, j - 1);
                             var endsWithNewline = origInner.endsWith("\n");
                             if (!(formatted !== "") || /^\s$/.test(formatted)) {
@@ -3262,7 +3262,7 @@ var Word = /** @class */ (function () {
                             }
                             else {
                                 if (formatted.endsWith("&") || formatted.endsWith("& ")) {
-                                    var suffix = formatted.endsWith("&") ? " }" : "}";
+                                    var suffix = (formatted.endsWith("&") ? " }" : "}");
                                 }
                                 else {
                                     if (endsWithNewline) {
@@ -3998,7 +3998,7 @@ var Redirect = /** @class */ (function () {
             if (targetVal === "&-") {
                 return "(redirect \">&-\" 0)";
             }
-            var fdTarget = raw.endsWith("-") ? raw.slice(0, raw.length - 1) : raw;
+            var fdTarget = (raw.endsWith("-") ? raw.slice(0, raw.length - 1) : raw);
             return "(redirect \"" + op + "\" \"" + fdTarget + "\")";
         }
         if (op === ">&" || op === "<&") {
@@ -4011,7 +4011,7 @@ var Redirect = /** @class */ (function () {
             if (targetVal.endsWith("-") && /^[0-9]+$/.test(targetVal.slice(0, targetVal.length - 1)) && parseInt(targetVal.slice(0, targetVal.length - 1), 10) <= 2147483647) {
                 return "(redirect \"" + op + "\" " + String(parseInt(targetVal.slice(0, targetVal.length - 1), 10)) + ")";
             }
-            var outVal = targetVal.endsWith("-") ? targetVal.slice(0, targetVal.length - 1) : targetVal;
+            var outVal = (targetVal.endsWith("-") ? targetVal.slice(0, targetVal.length - 1) : targetVal);
             return "(redirect \"" + op + "\" \"" + outVal + "\")";
         }
         return "(redirect \"" + op + "\" \"" + targetVal + "\")";
@@ -4041,7 +4041,7 @@ var HereDoc = /** @class */ (function () {
         return this.kind;
     };
     HereDoc.prototype.toSexp = function () {
-        var op = this.stripTabs ? "<<-" : "<<";
+        var op = (this.stripTabs ? "<<-" : "<<");
         var content = this.content;
         if (content.endsWith("\\") && !content.endsWith("\\\\")) {
             content = content + "\\";
@@ -4233,9 +4233,9 @@ var ForArith = /** @class */ (function () {
             }
             suffix = " " + redirectParts.join(" ");
         }
-        var initVal = this.init !== "" ? this.init : "1";
-        var condVal = this.cond !== "" ? this.cond : "1";
-        var incrVal = this.incr !== "" ? this.incr : "1";
+        var initVal = (this.init !== "" ? this.init : "1");
+        var condVal = (this.cond !== "" ? this.cond : "1");
+        var incrVal = (this.incr !== "" ? this.incr : "1");
         var initStr = FormatArithVal(initVal);
         var condStr = FormatArithVal(condVal);
         var incrStr = FormatArithVal(incrVal);
@@ -5476,7 +5476,7 @@ var Parser = /** @class */ (function () {
             }
             redirects.push(redirect);
         }
-        return redirects.length > 0 ? redirects : null;
+        return (redirects.length > 0 ? redirects : null);
     };
     Parser.prototype.ParseLoopBody = function (context) {
         if (this.peek() === "{") {
@@ -5738,7 +5738,7 @@ var Parser = /** @class */ (function () {
                     lineEnd += 1;
                 }
                 var line = Substring(this.source, lineStart, lineEnd);
-                var checkLine = currentHeredocStrip ? line.replace(/^[\t]+/, '') : line;
+                var checkLine = (currentHeredocStrip ? line.replace(/^[\t]+/, '') : line);
                 if (checkLine === currentHeredocDelim) {
                     for (var _i = 0, line_1 = line; _i < line_1.length; _i++) {
                         var ch_1 = line_1[_i];
@@ -6009,7 +6009,7 @@ var Parser = /** @class */ (function () {
                     this.CmdsubHeredocEnd = heredocEnd;
                 }
                 else {
-                    this.CmdsubHeredocEnd = this.CmdsubHeredocEnd > heredocEnd ? this.CmdsubHeredocEnd : heredocEnd;
+                    this.CmdsubHeredocEnd = (this.CmdsubHeredocEnd > heredocEnd ? this.CmdsubHeredocEnd : heredocEnd);
                 }
             }
         }
@@ -6056,7 +6056,7 @@ var Parser = /** @class */ (function () {
         catch (e) {
             this.RestoreParserState(saved);
             this.InProcessSub = oldInProcessSub;
-            var contentStartChar = start + 2 < this.length ? this.source[start + 2] : "";
+            var contentStartChar = (start + 2 < this.length ? this.source[start + 2] : "");
             if (" \t\n".includes(contentStartChar)) {
                 throw e;
             }
@@ -7498,7 +7498,7 @@ var Parser = /** @class */ (function () {
         return [line, lineEnd];
     };
     Parser.prototype.LineMatchesDelimiter = function (line, delimiter, stripTabs) {
-        var checkLine = stripTabs ? line.replace(/^[\t]+/, '') : line;
+        var checkLine = (stripTabs ? line.replace(/^[\t]+/, '') : line);
         var normalizedCheck = NormalizeHeredocDelimiter(checkLine);
         var normalizedDelim = NormalizeHeredocDelimiter(delimiter);
         return [normalizedCheck === normalizedDelim, checkLine];
@@ -7513,7 +7513,7 @@ var Parser = /** @class */ (function () {
                 var _b = this.ReadHeredocLine(heredoc.quoted), line = _b[0], lineEnd = _b[1];
                 var _c = this.LineMatchesDelimiter(line, heredoc.delimiter, heredoc.stripTabs), matches = _c[0], checkLine = _c[1];
                 if (matches) {
-                    this.pos = lineEnd < this.length ? lineEnd + 1 : lineEnd;
+                    this.pos = (lineEnd < this.length ? lineEnd + 1 : lineEnd);
                     break;
                 }
                 var normalizedCheck = NormalizeHeredocDelimiter(checkLine);
@@ -7540,7 +7540,7 @@ var Parser = /** @class */ (function () {
                     if (!heredoc.quoted && CountTrailingBackslashes(line) % 2 === 1) {
                         addNewline = false;
                     }
-                    contentLines.push(line + addNewline ? "\n" : "");
+                    contentLines.push(line + (addNewline ? "\n" : ""));
                     this.pos = this.length;
                 }
             }
@@ -9054,7 +9054,7 @@ var Parser = /** @class */ (function () {
         }
         var parts = [pipeline];
         if (this.InState(ParserStateFlags_PST_EOFTOKEN) && this.AtEofToken()) {
-            return parts.length === 1 ? parts[0] : new List(parts, "list");
+            return (parts.length === 1 ? parts[0] : new List(parts, "list"));
         }
         while (true) {
             this.skipWhitespace();
@@ -9707,7 +9707,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
                             continue;
                         }
                         if (result.length > 0 && result[result.length - 1].endsWith("\n")) {
-                            result.push(skippedSemi ? " " : "\n");
+                            result.push((skippedSemi ? " " : "\n"));
                             skippedSemi = false;
                             continue;
                         }
@@ -9866,7 +9866,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
             var term = p.terminator;
             var patIndent = RepeatStr(" ", indent + 8);
             var termIndent = RepeatStr(" ", indent + 4);
-            var bodyPart = body !== "" ? patIndent + body + "\n" : "\n";
+            var bodyPart = (body !== "" ? patIndent + body + "\n" : "\n");
             if (i === 0) {
                 patterns.push(" " + pat + ")\n" + bodyPart + termIndent + term);
             }
@@ -9889,7 +9889,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
     }
     if (node instanceof FunctionName) {
         var name = node.name;
-        var innerBody = node.body.kind === "brace-group" ? node.body.body : node.body;
+        var innerBody = (node.body.kind === "brace-group" ? node.body.body : node.body);
         var body = FormatCmdsubNode(innerBody, indent + 4, false, false, false).replace(/[;]+$/, '');
         return "function ".concat(name, " () \n{ \n").concat(innerSp).concat(body, "\n}");
     }
@@ -9918,7 +9918,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
     if (node instanceof BraceGroup) {
         var body = FormatCmdsubNode(node.body, indent, false, false, false);
         body = body.replace(/[;]+$/, '');
-        var terminator = body.endsWith(" &") ? " }" : "; }";
+        var terminator = (body.endsWith(" &") ? " }" : "; }");
         var redirects = "";
         if (node.redirects.length > 0) {
             var redirectParts = [];
@@ -9947,7 +9947,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         return "! ";
     }
     if (node instanceof Time) {
-        var prefix = node.posix ? "time -p " : "time ";
+        var prefix = (node.posix ? "time -p " : "time ");
         if (node.pipeline !== null) {
             return prefix + FormatCmdsubNode(node.pipeline, indent, false, false, false);
         }
@@ -10000,7 +10000,7 @@ function FormatRedirect(r, compact, heredocOpOnly) {
         var isLiteralFd = afterAmp === "-" || afterAmp.length > 0 && /^[0-9]+$/.test(afterAmp[0]);
         if (isLiteralFd) {
             if (op === ">" || op === ">&") {
-                op = wasInputClose ? "0>" : "1>";
+                op = (wasInputClose ? "0>" : "1>");
             }
             else {
                 if (op === "<" || op === "<&") {
@@ -10109,7 +10109,7 @@ function SkipSingleQuoted(s, start) {
     while (i < s.length && s[i] !== "'") {
         i += 1;
     }
-    return i < s.length ? i + 1 : i;
+    return (i < s.length ? i + 1 : i);
 }
 function SkipDoubleQuoted(s, start) {
     {
@@ -10637,7 +10637,7 @@ function FindHeredocContentEnd(source, start, delimiters) {
                 var lineStripped = line;
             }
             if (lineStripped === delimiter) {
-                pos = lineEnd < source.length ? lineEnd + 1 : lineEnd;
+                pos = (lineEnd < source.length ? lineEnd + 1 : lineEnd);
                 break;
             }
             if (lineStripped.startsWith(delimiter) && lineStripped.length > delimiter.length) {
@@ -10645,7 +10645,7 @@ function FindHeredocContentEnd(source, start, delimiters) {
                 pos = lineStart + tabsStripped + delimiter.length;
                 break;
             }
-            pos = lineEnd < source.length ? lineEnd + 1 : lineEnd;
+            pos = (lineEnd < source.length ? lineEnd + 1 : lineEnd);
         }
     }
     return [contentStart, pos];
@@ -10899,7 +10899,7 @@ function SkipMatchedPair(s, start, open, close, flags) {
         }
         i += 1;
     }
-    return depth === 0 ? i : -1;
+    return (depth === 0 ? i : -1);
 }
 function SkipSubscript(s, start, flags) {
     return SkipMatchedPair(s, start, "[", "]", flags);
@@ -10918,7 +10918,7 @@ function Assignment(s, flags) {
             return i;
         }
         if (c === "[") {
-            var subFlags = (flags & 2) !== 0 ? _SMP_LITERAL : 0;
+            var subFlags = ((flags & 2) !== 0 ? _SMP_LITERAL : 0);
             var end = SkipSubscript(s, i, subFlags);
             if (end === -1) {
                 return -1;

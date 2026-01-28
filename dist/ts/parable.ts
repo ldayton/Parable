@@ -790,7 +790,7 @@ class Lexer {
       if ("'\"`".includes(ch) && openChar !== closeChar) {
         if (ch === "'") {
           chars.push(ch);
-          var quoteFlags: any = wasDollar ? flags | MatchedPairFlags_ALLOWESC : flags;
+          var quoteFlags: any = (wasDollar ? flags | MatchedPairFlags_ALLOWESC : flags);
           var nested: any = this.ParseMatchedPair("'", "'", quoteFlags, false);
           chars.push(nested);
           chars.push("'");
@@ -1845,7 +1845,7 @@ class Lexer {
     }
     this.UpdateDolbraceForOp(op, param.length > 0);
     try {
-      var flags: any = inDquote ? MatchedPairFlags_DQUOTE : MatchedPairFlags_NONE;
+      var flags: any = (inDquote ? MatchedPairFlags_DQUOTE : MatchedPairFlags_NONE);
       var paramEndsWithDollar: any = param !== "" && param.endsWith("$");
       var arg: any = this.CollectParamArgument(flags, paramEndsWithDollar);
     } catch (e) {
@@ -2839,7 +2839,7 @@ class Word implements Node {
           var content: any = arithContent.join("");
           if (firstCloseIdx !== -1) {
             content = content.slice(0, firstCloseIdx);
-            var closing: any = depth === 0 ? "))" : ")";
+            var closing: any = (depth === 0 ? "))" : ")");
             result.push("$((" + content + closing);
           } else {
             result.push("$((" + content + ")");
@@ -3065,7 +3065,7 @@ class Word implements Node {
           try {
             var parser: any = newParser(inner, false, false);
             var parsed: any = parser.parseList(true);
-            var formatted: any = parsed !== null ? FormatCmdsubNode(parsed, 0, false, false, false) : "";
+            var formatted: any = (parsed !== null ? FormatCmdsubNode(parsed, 0, false, false, false) : "");
           } catch (_e) {
             var formatted: any = inner;
           }
@@ -3096,19 +3096,19 @@ class Word implements Node {
         } else {
           if (IsExpansionStart(value, i, "${") && i + 2 < value.length && IsFunsubChar((value[i + 2] as unknown as string)) && !IsBackslashEscaped(value, i)) {
             var j: any = FindFunsubEnd(value, i + 2);
-            var cmdsubNode: any = cmdsubIdx < cmdsubParts.length ? cmdsubParts[cmdsubIdx] : null;
+            var cmdsubNode: any = (cmdsubIdx < cmdsubParts.length ? cmdsubParts[cmdsubIdx] : null);
             if (cmdsubNode instanceof CommandSubstitution && (cmdsubNode as unknown as CommandSubstitution).brace) {
               var node: any = cmdsubNode;
               var formatted: any = FormatCmdsubNode((node as unknown as CommandSubstitution).command, 0, false, false, false);
               var hasPipe: any = (value[i + 2] as unknown as string) === "|";
-              var prefix: any = hasPipe ? "${|" : "${ ";
+              var prefix: any = (hasPipe ? "${|" : "${ ");
               var origInner: any = Substring(value, i + 2, j - 1);
               var endsWithNewline: any = origInner.endsWith("\n");
               if (!(formatted !== "") || /^\s$/.test(formatted)) {
                 var suffix: any = "}";
               } else {
                 if (formatted.endsWith("&") || formatted.endsWith("& ")) {
-                  var suffix: any = formatted.endsWith("&") ? " }" : "}";
+                  var suffix: any = (formatted.endsWith("&") ? " }" : "}");
                 } else {
                   if (endsWithNewline) {
                     var suffix: any = "\n }";
@@ -3819,7 +3819,7 @@ class Redirect implements Node {
       if (targetVal === "&-") {
         return "(redirect \">&-\" 0)";
       }
-      var fdTarget: any = raw.endsWith("-") ? raw.slice(0, raw.length - 1) : raw;
+      var fdTarget: any = (raw.endsWith("-") ? raw.slice(0, raw.length - 1) : raw);
       return "(redirect \"" + op + "\" \"" + fdTarget + "\")";
     }
     if (op === ">&" || op === "<&") {
@@ -3832,7 +3832,7 @@ class Redirect implements Node {
       if (targetVal.endsWith("-") && /^[0-9]+$/.test(targetVal.slice(0, targetVal.length - 1)) && parseInt(targetVal.slice(0, targetVal.length - 1), 10) <= 2147483647) {
         return "(redirect \"" + op + "\" " + String(parseInt(targetVal.slice(0, targetVal.length - 1), 10)) + ")";
       }
-      var outVal: any = targetVal.endsWith("-") ? targetVal.slice(0, targetVal.length - 1) : targetVal;
+      var outVal: any = (targetVal.endsWith("-") ? targetVal.slice(0, targetVal.length - 1) : targetVal);
       return "(redirect \"" + op + "\" \"" + outVal + "\")";
     }
     return "(redirect \"" + op + "\" \"" + targetVal + "\")";
@@ -3865,7 +3865,7 @@ class HereDoc implements Node {
   }
 
   toSexp(): string {
-    var op: any = this.stripTabs ? "<<-" : "<<";
+    var op: any = (this.stripTabs ? "<<-" : "<<");
     var content: any = this.content;
     if (content.endsWith("\\") && !content.endsWith("\\\\")) {
       content = content + "\\";
@@ -4072,9 +4072,9 @@ class ForArith implements Node {
       }
       suffix = " " + redirectParts.join(" ");
     }
-    var initVal: any = this.init !== "" ? this.init : "1";
-    var condVal: any = this.cond !== "" ? this.cond : "1";
-    var incrVal: any = this.incr !== "" ? this.incr : "1";
+    var initVal: any = (this.init !== "" ? this.init : "1");
+    var condVal: any = (this.cond !== "" ? this.cond : "1");
+    var incrVal: any = (this.incr !== "" ? this.incr : "1");
     var initStr: any = FormatArithVal(initVal);
     var condStr: any = FormatArithVal(condVal);
     var incrStr: any = FormatArithVal(incrVal);
@@ -5435,7 +5435,7 @@ class Parser {
       }
       redirects.push(redirect);
     }
-    return redirects.length > 0 ? redirects : null;
+    return (redirects.length > 0 ? redirects : null);
   }
 
   ParseLoopBody(context: string): Node {
@@ -5703,7 +5703,7 @@ class Parser {
           lineEnd += 1;
         }
         var line: any = Substring(this.source, lineStart, lineEnd);
-        var checkLine: any = currentHeredocStrip ? line.replace(/^[\t]+/, '') : line;
+        var checkLine: any = (currentHeredocStrip ? line.replace(/^[\t]+/, '') : line);
         if (checkLine === currentHeredocDelim) {
           for (const ch of line) {
             contentChars.push(ch);
@@ -5960,7 +5960,7 @@ class Parser {
         if (this.CmdsubHeredocEnd === -1) {
           this.CmdsubHeredocEnd = heredocEnd;
         } else {
-          this.CmdsubHeredocEnd = this.CmdsubHeredocEnd > heredocEnd ? this.CmdsubHeredocEnd : heredocEnd;
+          this.CmdsubHeredocEnd = (this.CmdsubHeredocEnd > heredocEnd ? this.CmdsubHeredocEnd : heredocEnd);
         }
       }
     }
@@ -6007,7 +6007,7 @@ class Parser {
     } catch (e) {
       this.RestoreParserState(saved);
       this.InProcessSub = oldInProcessSub;
-      var contentStartChar: any = start + 2 < this.length ? (this.source[start + 2] as unknown as string) : "";
+      var contentStartChar: any = (start + 2 < this.length ? (this.source[start + 2] as unknown as string) : "");
       if (" \t\n".includes(contentStartChar)) {
         throw e
       }
@@ -7392,7 +7392,7 @@ class Parser {
   }
 
   LineMatchesDelimiter(line: string, delimiter: string, stripTabs: boolean): [boolean, string] {
-    var checkLine: any = stripTabs ? line.replace(/^[\t]+/, '') : line;
+    var checkLine: any = (stripTabs ? line.replace(/^[\t]+/, '') : line);
     var normalizedCheck: any = NormalizeHeredocDelimiter(checkLine);
     var normalizedDelim: any = NormalizeHeredocDelimiter(delimiter);
     return [normalizedCheck === normalizedDelim, checkLine];
@@ -7407,7 +7407,7 @@ class Parser {
         var [line, lineEnd]: any = this.ReadHeredocLine(heredoc.quoted);
         var [matches, checkLine]: any = this.LineMatchesDelimiter(line, heredoc.delimiter, heredoc.stripTabs);
         if (matches) {
-          this.pos = lineEnd < this.length ? lineEnd + 1 : lineEnd;
+          this.pos = (lineEnd < this.length ? lineEnd + 1 : lineEnd);
           break;
         }
         var normalizedCheck: any = NormalizeHeredocDelimiter(checkLine);
@@ -7433,7 +7433,7 @@ class Parser {
           if (!heredoc.quoted && CountTrailingBackslashes(line) % 2 === 1) {
             addNewline = false;
           }
-          contentLines.push(line + addNewline ? "\n" : "");
+          contentLines.push(line + (addNewline ? "\n" : ""));
           this.pos = this.length;
         }
       }
@@ -8918,7 +8918,7 @@ class Parser {
     }
     var parts: any = [pipeline];
     if (this.InState(ParserStateFlags_PST_EOFTOKEN) && this.AtEofToken()) {
-      return parts.length === 1 ? parts[0] : new List(parts as any, "list" as any);
+      return (parts.length === 1 ? parts[0] : new List(parts as any, "list" as any));
     }
     while (true) {
       this.skipWhitespace();
@@ -9567,7 +9567,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
               continue;
             }
             if (result.length > 0 && result[result.length - 1].endsWith("\n")) {
-              result.push(skippedSemi ? " " : "\n");
+              result.push((skippedSemi ? " " : "\n"));
               skippedSemi = false;
               continue;
             }
@@ -9712,7 +9712,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
       var term: any = (p as unknown as CasePattern).terminator;
       var patIndent: any = RepeatStr(" ", indent + 8);
       var termIndent: any = RepeatStr(" ", indent + 4);
-      var bodyPart: any = body !== "" ? patIndent + body + "\n" : "\n";
+      var bodyPart: any = (body !== "" ? patIndent + body + "\n" : "\n");
       if (i === 0) {
         patterns.push(" " + pat + ")\n" + bodyPart + termIndent + term);
       } else {
@@ -9733,7 +9733,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
   }
   if (node instanceof FunctionName) {
     var name: any = node.name;
-    var innerBody: any = node.body.kind === "brace-group" ? (node.body as unknown as BraceGroup).body : node.body;
+    var innerBody: any = (node.body.kind === "brace-group" ? (node.body as unknown as BraceGroup).body : node.body);
     var body: any = FormatCmdsubNode(innerBody, indent + 4, false, false, false).replace(/[;]+$/, '');
     return `function ${name} () 
 { 
@@ -9764,7 +9764,7 @@ ${innerSp}${body}
   if (node instanceof BraceGroup) {
     var body: any = FormatCmdsubNode(node.body, indent, false, false, false);
     body = body.replace(/[;]+$/, '');
-    var terminator: any = body.endsWith(" &") ? " }" : "; }";
+    var terminator: any = (body.endsWith(" &") ? " }" : "; }");
     var redirects: any = "";
     if (node.redirects.length > 0) {
       var redirectParts: any = [];
@@ -9792,7 +9792,7 @@ ${innerSp}${body}
     return "! ";
   }
   if (node instanceof Time) {
-    var prefix: any = node.posix ? "time -p " : "time ";
+    var prefix: any = (node.posix ? "time -p " : "time ");
     if (node.pipeline !== null) {
       return prefix + FormatCmdsubNode(node.pipeline, indent, false, false, false);
     }
@@ -9843,7 +9843,7 @@ function FormatRedirect(r: Node, compact: boolean, heredocOpOnly: boolean): stri
     var isLiteralFd: any = afterAmp === "-" || afterAmp.length > 0 && /^[0-9]+$/.test((afterAmp[0] as unknown as string));
     if (isLiteralFd) {
       if (op === ">" || op === ">&") {
-        op = wasInputClose ? "0>" : "1>";
+        op = (wasInputClose ? "0>" : "1>");
       } else {
         if (op === "<" || op === "<&") {
           op = "0<";
@@ -9947,7 +9947,7 @@ function SkipSingleQuoted(s: string, start: number): number {
   while (i < s.length && (s[i] as unknown as string) !== "'") {
     i += 1;
   }
-  return i < s.length ? i + 1 : i;
+  return (i < s.length ? i + 1 : i);
 }
 
 function SkipDoubleQuoted(s: string, start: number): number {
@@ -10457,7 +10457,7 @@ function FindHeredocContentEnd(source: string, start: number, delimiters: [strin
         var lineStripped: any = line;
       }
       if (lineStripped === delimiter) {
-        pos = lineEnd < source.length ? lineEnd + 1 : lineEnd;
+        pos = (lineEnd < source.length ? lineEnd + 1 : lineEnd);
         break;
       }
       if (lineStripped.startsWith(delimiter) && lineStripped.length > delimiter.length) {
@@ -10465,7 +10465,7 @@ function FindHeredocContentEnd(source: string, start: number, delimiters: [strin
         pos = lineStart + tabsStripped + delimiter.length;
         break;
       }
-      pos = lineEnd < source.length ? lineEnd + 1 : lineEnd;
+      pos = (lineEnd < source.length ? lineEnd + 1 : lineEnd);
     }
   }
   return [contentStart, pos];
@@ -10716,7 +10716,7 @@ function SkipMatchedPair(s: string, start: number, open: string, close: string, 
     }
     i += 1;
   }
-  return depth === 0 ? i : -1;
+  return (depth === 0 ? i : -1);
 }
 
 function SkipSubscript(s: string, start: number, flags: number): number {
@@ -10737,7 +10737,7 @@ function Assignment(s: string, flags: number): number {
       return i;
     }
     if (c === "[") {
-      var subFlags: any = (flags & 2) !== 0 ? _SMP_LITERAL : 0;
+      var subFlags: any = ((flags & 2) !== 0 ? _SMP_LITERAL : 0);
       var end: any = SkipSubscript(s, i, subFlags);
       if (end === -1) {
         return -1;

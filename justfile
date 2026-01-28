@@ -79,9 +79,9 @@ backend-test backend:
             ;;
         java)
             just backend-transpile java
-            # Compile Java (test runner not yet implemented)
-            javac -d dist/java/classes dist/java/Parable.java
-            echo "Java compilation succeeded (test runner not yet implemented)"
+            mkdir -p dist/java/classes
+            javac -d dist/java/classes dist/java/Parable.java dist/java/RunTests.java
+            java -cp dist/java/classes RunTests "$tests_abs"
             ;;
         *)
             echo "No test runner for backend: {{backend}}"

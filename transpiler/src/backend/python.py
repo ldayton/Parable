@@ -521,6 +521,9 @@ class PythonBackend:
                     return f"{self._expr(obj)}[{field[1:]}]"
                 return f"{self._expr(obj)}.{field}"
             case Index(obj=obj, index=index):
+                # Detect len(x) - N pattern for negative indexing
+                if neg_idx := self._negative_index(obj, index):
+                    return f"{self._expr(obj)}[{neg_idx}]"
                 return f"{self._expr(obj)}[{self._expr(index)}]"
             case SliceExpr(obj=obj, low=low, high=high):
                 return self._slice_expr(obj, low, high)
@@ -634,8 +637,23 @@ class PythonBackend:
     def _slice_expr(self, obj: Expr, low: Expr | None, high: Expr | None) -> str:
         obj_str = self._expr(obj)
         low_str = self._expr(low) if low else ""
-        high_str = self._expr(high) if high else ""
+        # Detect len(x) - N pattern for negative slice bound
+        if high and (neg_idx := self._negative_index(obj, high)):
+            high_str = neg_idx
+        else:
+            high_str = self._expr(high) if high else ""
         return f"{obj_str}[{low_str}:{high_str}]"
+
+    def _negative_index(self, obj: Expr, index: Expr) -> str | None:
+        """Detect len(obj) - N and return -N as string, or None if no match."""
+        if not isinstance(index, BinaryOp) or index.op != "-":
+            return None
+        if not isinstance(index.left, Len) or not isinstance(index.right, IntLit):
+            return None
+        # Check if len() argument matches the object being indexed
+        if self._expr(index.left.expr) != self._expr(obj):
+            return None
+        return f"-{index.right.value}"
 
     def _format_string(self, template: str, args: list[Expr]) -> str:
         import re
@@ -677,6 +695,8 @@ class PythonBackend:
             case FieldLV(obj=obj, field=field):
                 return f"{self._expr(obj)}.{field}"
             case IndexLV(obj=obj, index=index):
+                if neg_idx := self._negative_index(obj, index):
+                    return f"{self._expr(obj)}[{neg_idx}]"
                 return f"{self._expr(obj)}[{self._expr(index)}]"
             case DerefLV(ptr=ptr):
                 return self._expr(ptr)

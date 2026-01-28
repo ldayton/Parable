@@ -183,8 +183,8 @@ class QuoteState:
 
     def pop(self) -> None:
         if self._stack:
-            _entry: tuple[bool, bool] = self._stack[len(self._stack) - 1]
-            self._stack = self._stack[:len(self._stack) - 1]
+            _entry: tuple[bool, bool] = self._stack[-1]
+            self._stack = self._stack[:-1]
             self.single = _entry[0]
             self.double = _entry[1]
 
@@ -201,7 +201,7 @@ class QuoteState:
     def outer_double(self) -> bool:
         if not self._stack:
             return False
-        return self._stack[len(self._stack) - 1][1]
+        return self._stack[-1][1]
 
 
 @dataclass
@@ -232,7 +232,7 @@ class ContextStack:
     _stack: list[ParseContext] = field(default_factory=list)
 
     def get_current(self) -> ParseContext:
-        return self._stack[len(self._stack) - 1]
+        return self._stack[-1]
 
     def push(self, kind: int) -> None:
         self._stack.append(NewParseContext(kind))
@@ -697,8 +697,8 @@ class Lexer:
                         was_gtlt = False
                     continue
             if ch == "(" and was_gtlt and (flags & MatchedPairFlags_DOLBRACE | MatchedPairFlags_ARRAYSUB) != 0:
-                direction = chars[len(chars) - 1]
-                chars = chars[:len(chars) - 1]
+                direction = chars[-1]
+                chars = chars[:-1]
                 self.pos -= 1
                 self._sync_to_parser()
                 procsub_node, procsub_text = self._parser._parse_process_substitution()
@@ -744,7 +744,7 @@ class Lexer:
                     chars.append(self.advance())
                     continue
                 if chars and at_command_start and not seen_equals and _is_array_assignment_prefix(chars):
-                    prev_char = chars[len(chars) - 1]
+                    prev_char = chars[-1]
                     if prev_char.isalnum() or prev_char == "_":
                         bracket_start_pos = self.pos
                         bracket_depth += 1
@@ -778,7 +778,7 @@ class Lexer:
                 chars.append(self.advance())
                 continue
             if ctx == WORD_CTX_COND and ch == "(":
-                if self._extglob and chars and _is_extglob_prefix(chars[len(chars) - 1]):
+                if self._extglob and chars and _is_extglob_prefix(chars[-1]):
                     chars.append(self.advance())
                     content = self._parse_matched_pair("(", ")", MatchedPairFlags_EXTGLOB, False)
                     chars.append(content)
@@ -877,7 +877,7 @@ class Lexer:
                     chars.append(self.advance())
                 else:
                     self._sync_from_parser()
-                    if self._extglob and ctx == WORD_CTX_NORMAL and chars and len(chars[len(chars) - 1]) == 2 and chars[len(chars) - 1][0] == "$" and (chars[len(chars) - 1][1] in "?*@") and not self.at_end() and self.peek() == "(":
+                    if self._extglob and ctx == WORD_CTX_NORMAL and chars and len(chars[-1]) == 2 and chars[-1][0] == "$" and (chars[-1][1] in "?*@") and not self.at_end() and self.peek() == "(":
                         chars.append(self.advance())
                         content = self._parse_matched_pair("(", ")", MatchedPairFlags_EXTGLOB, False)
                         chars.append(content)
@@ -909,10 +909,10 @@ class Lexer:
                 continue
             if ctx == WORD_CTX_NORMAL and ch == "(" and chars and bracket_depth == 0:
                 is_array_assign = False
-                if len(chars) >= 3 and chars[len(chars) - 2] == "+" and chars[len(chars) - 1] == "=":
-                    is_array_assign = _is_array_assignment_prefix(chars[:len(chars) - 2])
-                elif chars[len(chars) - 1] == "=" and len(chars) >= 2:
-                    is_array_assign = _is_array_assignment_prefix(chars[:len(chars) - 1])
+                if len(chars) >= 3 and chars[-2] == "+" and chars[-1] == "=":
+                    is_array_assign = _is_array_assignment_prefix(chars[:-2])
+                elif chars[-1] == "=" and len(chars) >= 2:
+                    is_array_assign = _is_array_assignment_prefix(chars[:-1])
                 if is_array_assign and (at_command_start or in_assign_builtin):
                     self._sync_to_parser()
                     array_result0, array_result1 = self._parser._parse_array_literal()
@@ -1412,7 +1412,7 @@ class Lexer:
             self._dolbrace_state = saved_dolbrace
             raise e
         if (op == "<" or op == ">") and arg.startswith("(") and arg.endswith(")"):
-            inner = arg[1:len(arg) - 1]
+            inner = arg[1:-1]
             try:
                 sub_parser = NewParser(inner, True, self._parser._extglob)
                 parsed = sub_parser.parse_list(True)
@@ -2661,7 +2661,7 @@ class Pipeline(Node):
             cmd = pair[0]
             needs = pair[1]
             return self._cmd_sexp(cmd, needs)
-        last_pair = cmds[len(cmds) - 1]
+        last_pair = cmds[-1]
         last_cmd = last_pair[0]
         last_needs = last_pair[1]
         result = self._cmd_sexp(last_cmd, last_needs)
@@ -2700,11 +2700,11 @@ class List(Node):
     def to_sexp(self) -> str:
         parts = self.parts.copy()
         op_names = {"&&": "and", "||": "or", ";": "semi", "\n": "semi", "&": "background"}
-        while len(parts) > 1 and parts[len(parts) - 1].kind == "operator" and (parts[len(parts) - 1].op == ";" or parts[len(parts) - 1].op == "\n"):
+        while len(parts) > 1 and parts[-1].kind == "operator" and (parts[-1].op == ";" or parts[-1].op == "\n"):
             parts = _sublist(parts, 0, len(parts) - 1)
         if len(parts) == 1:
             return parts[0].to_sexp()
-        if parts[len(parts) - 1].kind == "operator" and parts[len(parts) - 1].op == "&":
+        if parts[-1].kind == "operator" and parts[-1].op == "&":
             for i in range(len(parts) - 3, 0, -2):
                 if parts[i].kind == "operator" and (parts[i].op == ";" or parts[i].op == "\n"):
                     left = _sublist(parts, 0, i)
@@ -2854,20 +2854,20 @@ class Redirect(Node):
             raw = _substring(target_val, 1, len(target_val))
             if raw.isdigit() and _parseInt(raw, 10) <= 2147483647:
                 return "(redirect \"" + op + "\" " + _intToStr(_parseInt(raw, 10)) + ")"
-            if raw.endswith("-") and raw[:len(raw) - 1].isdigit() and _parseInt(raw[:len(raw) - 1], 10) <= 2147483647:
-                return "(redirect \"" + op + "\" " + _intToStr(_parseInt(raw[:len(raw) - 1], 10)) + ")"
+            if raw.endswith("-") and raw[:-1].isdigit() and _parseInt(raw[:-1], 10) <= 2147483647:
+                return "(redirect \"" + op + "\" " + _intToStr(_parseInt(raw[:-1], 10)) + ")"
             if target_val == "&-":
                 return "(redirect \">&-\" 0)"
-            fd_target = raw[:len(raw) - 1] if raw.endswith("-") else raw
+            fd_target = raw[:-1] if raw.endswith("-") else raw
             return "(redirect \"" + op + "\" \"" + fd_target + "\")"
         if op == ">&" or op == "<&":
             if target_val.isdigit() and _parseInt(target_val, 10) <= 2147483647:
                 return "(redirect \"" + op + "\" " + _intToStr(_parseInt(target_val, 10)) + ")"
             if target_val == "-":
                 return "(redirect \">&-\" 0)"
-            if target_val.endswith("-") and target_val[:len(target_val) - 1].isdigit() and _parseInt(target_val[:len(target_val) - 1], 10) <= 2147483647:
-                return "(redirect \"" + op + "\" " + _intToStr(_parseInt(target_val[:len(target_val) - 1], 10)) + ")"
-            out_val = target_val[:len(target_val) - 1] if target_val.endswith("-") else target_val
+            if target_val.endswith("-") and target_val[:-1].isdigit() and _parseInt(target_val[:-1], 10) <= 2147483647:
+                return "(redirect \"" + op + "\" " + _intToStr(_parseInt(target_val[:-1], 10)) + ")"
+            out_val = target_val[:-1] if target_val.endswith("-") else target_val
             return "(redirect \"" + op + "\" \"" + out_val + "\")"
         return "(redirect \"" + op + "\" \"" + target_val + "\")"
 
@@ -3694,7 +3694,7 @@ class Parser:
             return ""
         word = tok.value
         if word.endswith("\\\n"):
-            word = word[:len(word) - 2]
+            word = word[:-2]
         if (word in RESERVED_WORDS) or word == "{" or word == "}" or word == "[[" or word == "]]" or word == "!" or word == "time":
             return word
         return ""
@@ -3709,7 +3709,7 @@ class Parser:
             return False
         word = tok.value
         if word.endswith("\\\n"):
-            word = word[:len(word) - 2]
+            word = word[:-2]
         if word == expected:
             self._lex_next_token()
             return True
@@ -4050,8 +4050,8 @@ class Parser:
                         self.advance()
                     in_heredoc_body = False
                     if pending_heredocs:
-                        _entry: tuple[str, bool] = pending_heredocs[len(pending_heredocs) - 1]
-                        pending_heredocs = pending_heredocs[:len(pending_heredocs) - 1]
+                        _entry: tuple[str, bool] = pending_heredocs[-1]
+                        pending_heredocs = pending_heredocs[:-1]
                         current_heredoc_delim = _entry[0]
                         current_heredoc_strip = _entry[1]
                         in_heredoc_body = True
@@ -4064,8 +4064,8 @@ class Parser:
                     self.pos = line_start + end_pos
                     in_heredoc_body = False
                     if pending_heredocs:
-                        _entry: tuple[str, bool] = pending_heredocs[len(pending_heredocs) - 1]
-                        pending_heredocs = pending_heredocs[:len(pending_heredocs) - 1]
+                        _entry: tuple[str, bool] = pending_heredocs[-1]
+                        pending_heredocs = pending_heredocs[:-1]
                         current_heredoc_delim = _entry[0]
                         current_heredoc_strip = _entry[1]
                         in_heredoc_body = True
@@ -4220,8 +4220,8 @@ class Parser:
                 content_chars.append(ch)
                 text_chars.append(ch)
                 if pending_heredocs:
-                    _entry: tuple[str, bool] = pending_heredocs[len(pending_heredocs) - 1]
-                    pending_heredocs = pending_heredocs[:len(pending_heredocs) - 1]
+                    _entry: tuple[str, bool] = pending_heredocs[-1]
+                    pending_heredocs = pending_heredocs[:-1]
                     current_heredoc_delim = _entry[0]
                     current_heredoc_strip = _entry[1]
                     in_heredoc_body = True
@@ -6150,7 +6150,7 @@ class Parser:
         pos_after_name = self.pos
         self.skip_whitespace()
         has_whitespace = self.pos > pos_after_name
-        if not has_whitespace and name and (name[len(name) - 1] in "*?@+!$"):
+        if not has_whitespace and name and (name[-1] in "*?@+!$"):
             self.pos = saved_pos
             return None
         if self.at_end() or self.peek() != "(":
@@ -6554,7 +6554,7 @@ class Parser:
                 raise ParseError("Syntax error", self.pos)
         if not (results):
             return [Empty(kind="empty")]
-        if self._saw_newline_in_single_quote and self.source and self.source[len(self.source) - 1] == "\\" and not (len(self.source) >= 3 and self.source[len(self.source) - 3:len(self.source) - 1] == "\\\n"):
+        if self._saw_newline_in_single_quote and self.source and self.source[-1] == "\\" and not (len(self.source) >= 3 and self.source[len(self.source) - 3:-1] == "\\\n"):
             if not self._last_word_on_own_line(results):
                 self._strip_trailing_backslash_from_last_word(results)
         return results
@@ -6565,7 +6565,7 @@ class Parser:
     def _strip_trailing_backslash_from_last_word(self, nodes: list[Node]) -> None:
         if not (nodes):
             return
-        last_node = nodes[len(nodes) - 1]
+        last_node = nodes[-1]
         last_word = self._find_last_word(last_node)
         if last_word is not None and last_word.value.endswith("\\"):
             last_word.value = _substring(last_word.value, 0, len(last_word.value) - 1)
@@ -6579,24 +6579,24 @@ class Parser:
         if isinstance(node, Command):
             node = node
             if node.words:
-                last_word = node.words[len(node.words) - 1]
+                last_word = node.words[-1]
                 if last_word.value.endswith("\\"):
                     return last_word
             if node.redirects:
-                last_redirect = node.redirects[len(node.redirects) - 1]
+                last_redirect = node.redirects[-1]
                 if isinstance(last_redirect, Redirect):
                     last_redirect = last_redirect
                     return last_redirect.target
             if node.words:
-                return node.words[len(node.words) - 1]
+                return node.words[-1]
         if isinstance(node, Pipeline):
             node = node
             if node.commands:
-                return self._find_last_word(node.commands[len(node.commands) - 1])
+                return self._find_last_word(node.commands[-1])
         if isinstance(node, List):
             node = node
             if node.parts:
-                return self._find_last_word(node.parts[len(node.parts) - 1])
+                return self._find_last_word(node.parts[-1])
         return None
 
 
@@ -6959,46 +6959,46 @@ def _format_cmdsub_node(node: Node, indent: int, in_procsub: bool, compact_redir
             if isinstance(p, Operator):
                 p = p
                 if p.op == ";":
-                    if result and result[len(result) - 1].endswith("\n"):
+                    if result and result[-1].endswith("\n"):
                         skipped_semi = True
                         continue
-                    if len(result) >= 3 and result[len(result) - 2] == "\n" and result[len(result) - 3].endswith("\n"):
+                    if len(result) >= 3 and result[-2] == "\n" and result[-3].endswith("\n"):
                         skipped_semi = True
                         continue
                     result.append(";")
                     skipped_semi = False
                 elif p.op == "\n":
-                    if result and result[len(result) - 1] == ";":
+                    if result and result[-1] == ";":
                         skipped_semi = False
                         continue
-                    if result and result[len(result) - 1].endswith("\n"):
+                    if result and result[-1].endswith("\n"):
                         result.append(" " if skipped_semi else "\n")
                         skipped_semi = False
                         continue
                     result.append("\n")
                     skipped_semi = False
                 elif p.op == "&":
-                    if result and ("<<" in result[len(result) - 1]) and ("\n" in result[len(result) - 1]):
-                        last = result[len(result) - 1]
+                    if result and ("<<" in result[-1]) and ("\n" in result[-1]):
+                        last = result[-1]
                         if (" |" in last) or last.startswith("|"):
-                            result[len(result) - 1] = last + " &"
+                            result[-1] = last + " &"
                         else:
                             first_nl = last.find("\n")
-                            result[len(result) - 1] = last[:first_nl] + " &" + last[first_nl:]
+                            result[-1] = last[:first_nl] + " &" + last[first_nl:]
                     else:
                         result.append(" &")
-                elif result and ("<<" in result[len(result) - 1]) and ("\n" in result[len(result) - 1]):
-                    last = result[len(result) - 1]
+                elif result and ("<<" in result[-1]) and ("\n" in result[-1]):
+                    last = result[-1]
                     first_nl = last.find("\n")
-                    result[len(result) - 1] = last[:first_nl] + " " + p.op + " " + last[first_nl:]
+                    result[-1] = last[:first_nl] + " " + p.op + " " + last[first_nl:]
                 else:
                     result.append(" " + p.op)
             else:
-                if result and not result[len(result) - 1].endswith((" ", "\n")):
+                if result and not result[-1].endswith((" ", "\n")):
                     result.append(" ")
                 formatted_cmd = _format_cmdsub_node(p, indent, in_procsub, compact_redirects, procsub_first and cmd_count == 0)
                 if result:
-                    last = result[len(result) - 1]
+                    last = result[-1]
                     if (" || \n" in last) or (" && \n" in last):
                         formatted_cmd = " " + formatted_cmd
                 if skipped_semi:
@@ -7585,7 +7585,7 @@ def _skip_heredoc(value: str, start: int) -> int:
                     break
             if trailing_bs % 2 == 0:
                 break
-            line = line[:len(line) - 1]
+            line = line[:-1]
             line_end += 1
             next_line_start = line_end
             while line_end < len(value) and value[line_end] != "\n":
@@ -7638,7 +7638,7 @@ def _find_heredoc_content_end(source: str, start: int, delimiters: list[tuple[st
                         break
                 if trailing_bs % 2 == 0:
                     break
-                line = line[:len(line) - 1]
+                line = line[:-1]
                 line_end += 1
                 next_line_start = line_end
                 while line_end < len(source) and source[line_end] != "\n":

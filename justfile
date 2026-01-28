@@ -90,11 +90,17 @@ backend-test backend:
             ;;
     esac
 
+# Compile Java (transpile + javac, no tests)
+backend-compile-java:
+    just backend-transpile java
+    mkdir -p dist/java/classes
+    javac -d dist/java/classes dist/java/Parable.java dist/java/RunTests.java
+
 # --- CI/Check ---
 
 # Internal: run all parallel checks
 [parallel]
-_check-parallel: src-test src-lint src-fmt src-verify-lock src-style check-dump-ast (backend-test "go") (backend-test "python") (backend-test "ts")
+_check-parallel: src-test src-lint src-fmt src-verify-lock src-style check-dump-ast (backend-test "go") (backend-test "python") (backend-test "ts") backend-compile-java
 
 # Ensure biome is installed (prevents race condition in parallel JS checks)
 _ensure-biome:

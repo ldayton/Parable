@@ -337,17 +337,27 @@ func _runeLen(s string) int {
 // _Substring returns s[start:end] using rune (character) indices.
 // Python s[start:end] uses character indices, not byte indices.
 func _Substring(s string, start int, end int) string {
-	runes := []rune(s)
 	if start < 0 {
 		start = 0
 	}
-	if end > len(runes) {
-		end = len(runes)
+	byteStart, byteEnd := -1, len(s)
+	runeIdx := 0
+	for byteOffset := 0; byteOffset < len(s); {
+		if runeIdx == start {
+			byteStart = byteOffset
+		}
+		if runeIdx == end {
+			byteEnd = byteOffset
+			break
+		}
+		_, size := utf8.DecodeRuneInString(s[byteOffset:])
+		byteOffset += size
+		runeIdx++
 	}
-	if start >= end {
+	if byteStart < 0 || byteStart >= byteEnd {
 		return ""
 	}
-	return string(runes[start:end])
+	return s[byteStart:byteEnd]
 }
 '''
         for line in helpers.strip().split('\n'):

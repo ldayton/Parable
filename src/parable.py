@@ -5587,7 +5587,9 @@ def _format_redirect(
             op = "<<-"
         else:
             op = "<<"
-        if r.fd is not None and r.fd != 0:
+        # fd > 0: explicitly specified and non-default (0 is default for heredoc input)
+        # Note: also handles sentinel value -1 used in transpiled code
+        if r.fd is not None and r.fd > 0:
             op = str(r.fd) + op
         if r.quoted:
             delim = "'" + r.delimiter + "'"

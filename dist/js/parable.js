@@ -9946,7 +9946,7 @@ function FormatRedirect(r, compact, heredocOpOnly) {
         else {
             var op = "<<";
         }
-        if (r.fd !== null && r.fd !== 0) {
+        if (r.fd !== null && r.fd > 0) {
             var op = String(r.fd) + op;
         }
         if (r.quoted) {

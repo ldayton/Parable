@@ -171,6 +171,7 @@ VAR_TYPE_OVERRIDES: dict[tuple[str, str], Type] = {
 # These fields use the sentinel value instead of nil for None comparison
 SENTINEL_INT_FIELDS: dict[tuple[str, str], int] = {
     ("Parser", "_cmdsub_heredoc_end"): -1,
+    ("HereDoc", "fd"): -1,
     # ParseError uses 0 for "no value" (matching old transpiler)
     ("ParseError", "pos"): 0,
     ("ParseError", "line"): 0,

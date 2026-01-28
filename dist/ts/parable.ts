@@ -9808,7 +9808,7 @@ function FormatRedirect(r: Node, compact: boolean, heredocOpOnly: boolean): stri
     } else {
       var op: any = "<<";
     }
-    if (r.fd !== null && r.fd !== 0) {
+    if (r.fd !== null && r.fd > 0) {
       var op: any = String(r.fd) + op;
     }
     if (r.quoted) {

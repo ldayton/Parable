@@ -7388,7 +7388,7 @@ def _format_redirect(r: Node, compact: bool, heredoc_op_only: bool) -> str:
             op = "<<-"
         else:
             op = "<<"
-        if r.fd is not None and r.fd != 0:
+        if r.fd is not None and r.fd > 0:
             op = _intToStr(r.fd) + op
         if r.quoted:
             delim = "'" + r.delimiter + "'"

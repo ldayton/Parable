@@ -9344,7 +9344,7 @@ func formatRedirect(r Node, compact bool, heredocOpOnly bool) string {
 		} else {
 			op = "<<"
 		}
-		if r.Fd != nil && *r.Fd != 0 {
+		if r.Fd != nil && *r.Fd > 0 {
 			op = _intToStr(*r.Fd) + op
 		}
 		var delim string

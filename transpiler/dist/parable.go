@@ -707,7 +707,7 @@ func (self *Lexer) isWordTerminator(ctx int, ch string, bracketDepth int, parenD
 	return isMetachar(ch) && bracketDepth == 0
 }
 
-func (self *Lexer) readBracketExpression(chars *[]string, parts *[]Node, forRegex bool, parenDepth int) bool {
+func (self *Lexer) readBracketExpression(chars *[]string, parts []Node, forRegex bool, parenDepth int) bool {
 	if forRegex {
 		scan := self.Pos + 1
 		if scan < self.Length && string(_runeAt(self.Source, scan)) == "^" {
@@ -801,7 +801,7 @@ func (self *Lexer) readBracketExpression(chars *[]string, parts *[]Node, forRege
 			}
 		} else if forRegex && c == "$" {
 			self.syncToParser()
-			if !self.parser.parseDollarExpansion(chars, parts, false) {
+			if !self.parser.parseDollarExpansion(chars, &parts, false) {
 				self.syncFromParser()
 				*chars = append(*chars, self.Advance())
 			} else {
@@ -1107,7 +1107,7 @@ func (self *Lexer) readWordInternal(ctx int, atCommandStart bool, inArrayLiteral
 		}
 		if (ctx == WORDCTXCOND || ctx == WORDCTXREGEX) && ch == "[" {
 			forRegex := ctx == WORDCTXREGEX
-			if self.readBracketExpression(&chars, &parts, forRegex, parenDepth) {
+			if self.readBracketExpression(&chars, parts, forRegex, parenDepth) {
 				continue
 			}
 			chars = append(chars, self.Advance())
@@ -1193,7 +1193,7 @@ func (self *Lexer) readWordInternal(ctx int, atCommandStart bool, inArrayLiteral
 			} else {
 				handleLineContinuation := ctx == WORDCTXCOND
 				self.syncToParser()
-				self.parser.scanDoubleQuote(&chars, &parts, start, handleLineContinuation)
+				self.parser.scanDoubleQuote(&chars, parts, start, handleLineContinuation)
 				self.syncFromParser()
 			}
 			continue
@@ -5070,7 +5070,7 @@ func (self *Parser) isWordTerminator(ctx int, ch string, bracketDepth int, paren
 	return self.lexer.isWordTerminator(ctx, ch, bracketDepth, parenDepth)
 }
 
-func (self *Parser) scanDoubleQuote(chars *[]string, parts *[]Node, start int, handleLineContinuation bool) {
+func (self *Parser) scanDoubleQuote(chars *[]string, parts []Node, start int, handleLineContinuation bool) {
 	*chars = append(*chars, "\"")
 	for !self.AtEnd() && self.Peek() != "\"" {
 		c := self.Peek()
@@ -5084,7 +5084,7 @@ func (self *Parser) scanDoubleQuote(chars *[]string, parts *[]Node, start int, h
 				*chars = append(*chars, self.Advance())
 			}
 		} else if c == "$" {
-			if !self.parseDollarExpansion(chars, parts, true) {
+			if !self.parseDollarExpansion(chars, &parts, true) {
 				*chars = append(*chars, self.Advance())
 			}
 		} else {
@@ -8879,7 +8879,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 	sp := repeatStr(" ", indent)
 	innerSp := repeatStr(" ", indent+4)
 	switch node.(type) {
-	case *Empty:
+	case *ArithEmpty:
 		return ""
 	}
 	switch node := node.(type) {

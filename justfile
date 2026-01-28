@@ -70,8 +70,8 @@ backend-test backend:
             ;;
         ts)
             just backend-transpile ts
-            tsc --outDir /tmp/transpile-ts --lib es2019 --module commonjs --esModuleInterop dist/ts/parable.ts
-            node tests/bin/run-js-tests.js /tmp/transpile-ts
+            tsc --outDir dist/js --lib es2019 --module commonjs --esModuleInterop dist/ts/parable.ts
+            node tests/bin/run-js-tests.js dist/js
             ;;
         *)
             echo "No test runner for backend: {{backend}}"

@@ -124,14 +124,14 @@ var ParseError = /** @class */ (function () {
     }
     ParseError.prototype.FormatMessage = function () {
         if (this.line !== 0 && this.pos !== 0) {
-            return "Parse error at line %v, position %v: %v";
+            return "Parse error at line ".concat(this.line, ", position ").concat(this.pos, ": ").concat(this.message);
         }
         else {
             if (this.pos !== 0) {
-                return "Parse error at position %v: %v";
+                return "Parse error at position ".concat(this.pos, ": ").concat(this.message);
             }
         }
-        return "Parse error: %v";
+        return "Parse error: ".concat(this.message);
     };
     return ParseError;
 }());
@@ -160,12 +160,12 @@ var Token = /** @class */ (function () {
     }
     Token.prototype.Repr = function () {
         if (this.word !== null) {
-            return "Token(%v, %v, %v, word=%v)";
+            return "Token(".concat(this.typeName, ", ").concat(this.value, ", ").concat(this.pos, ", word=").concat(this.word, ")");
         }
         if (this.parts.length > 0) {
-            return "Token(%v, %v, %v, parts=%v)";
+            return "Token(".concat(this.typeName, ", ").concat(this.value, ", ").concat(this.pos, ", parts=").concat(this.parts.length, ")");
         }
-        return "Token(%v, %v, %v)";
+        return "Token(".concat(this.typeName, ", ").concat(this.value, ", ").concat(this.pos, ")");
     };
     return Token;
 }());
@@ -711,7 +711,7 @@ var Lexer = /** @class */ (function () {
         var wasGtlt = false;
         while (count > 0) {
             if (this.atEnd()) {
-                throw new Error("".concat("unexpected EOF while looking for matching `%v'", " at position ").concat(start));
+                throw new Error("".concat("unexpected EOF while looking for matching `".concat(closeChar, "'"), " at position ").concat(start));
             }
             var ch = this.advance();
             if ((flags & MatchedPairFlags_DOLBRACE) !== 0 && this.DolbraceState === DolbraceState_OP) {
@@ -4029,7 +4029,7 @@ var HereDoc = /** @class */ (function () {
         if (content.endsWith("\\") && !content.endsWith("\\\\")) {
             content = content + "\\";
         }
-        return "(redirect \"%v\" \"%v\")";
+        return "(redirect \"".concat(op, "\" \"").concat(content, "\")");
     };
     return HereDoc;
 }());
@@ -4223,7 +4223,7 @@ var ForArith = /** @class */ (function () {
         var condStr = FormatArithVal(condVal);
         var incrStr = FormatArithVal(incrVal);
         var bodyStr = this.body.toSexp();
-        return "(arith-for (init (word \"%v\")) (test (word \"%v\")) (step (word \"%v\")) %v)%v";
+        return "(arith-for (init (word \"".concat(initStr, "\")) (test (word \"").concat(condStr, "\")) (step (word \"").concat(incrStr, "\")) ").concat(bodyStr, ")").concat(suffix);
     };
     return ForArith;
 }());
@@ -5465,7 +5465,7 @@ var Parser = /** @class */ (function () {
         if (this.peek() === "{") {
             var brace = this.parseBraceGroup();
             if (brace === null) {
-                throw new Error("".concat("Expected brace group body in %v", " at position ").concat(this.LexPeekToken().pos));
+                throw new Error("".concat("Expected brace group body in ".concat(context), " at position ").concat(this.LexPeekToken().pos));
             }
             return brace.body;
         }
@@ -5476,11 +5476,11 @@ var Parser = /** @class */ (function () {
             }
             this.skipWhitespaceAndNewlines();
             if (!this.LexConsumeWord("done")) {
-                throw new Error("".concat("Expected 'done' to close %v", " at position ").concat(this.LexPeekToken().pos));
+                throw new Error("".concat("Expected 'done' to close ".concat(context), " at position ").concat(this.LexPeekToken().pos));
             }
             return body;
         }
-        throw new Error("".concat("Expected 'do' or '{' in %v", " at position ").concat(this.LexPeekToken().pos));
+        throw new Error("".concat("Expected 'do' or '{' in ".concat(context), " at position ").concat(this.LexPeekToken().pos));
     };
     Parser.prototype.peekWord = function () {
         var savedPos = this.pos;
@@ -8822,7 +8822,7 @@ var Parser = /** @class */ (function () {
             }
         }
         if (reserved === "fi" || reserved === "then" || reserved === "elif" || reserved === "else" || reserved === "done" || reserved === "esac" || reserved === "do" || reserved === "in") {
-            throw new Error("".concat("Unexpected reserved word '%v'", " at position ").concat(this.LexPeekToken().pos));
+            throw new Error("".concat("Unexpected reserved word '".concat(reserved, "'"), " at position ").concat(this.LexPeekToken().pos));
         }
         if (reserved === "if") {
             return this.parseIf();
@@ -9874,7 +9874,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var name = node.name;
         var innerBody = node.body.kind === "brace-group" ? node.body.body : node.body;
         var body = FormatCmdsubNode(innerBody, indent + 4, false, false, false).replace(/[;]+$/, '');
-        return "function %v () \n{ \n%v%v\n}";
+        return "function ".concat(name, " () \n{ \n").concat(innerSp).concat(body, "\n}");
     }
     if (node instanceof Subshell) {
         var body = FormatCmdsubNode(node.body, indent, inProcsub, compactRedirects, false);

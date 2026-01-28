@@ -796,6 +796,14 @@ class TsBackend:
         # Handle {0}, {1} style placeholders
         for i, arg in enumerate(args):
             result = result.replace(f"{{{i}}}", f"${{{self._expr(arg)}}}", 1)
+        # Handle %v placeholders (sequential)
+        arg_iter = iter(args)
+        while "%v" in result:
+            try:
+                arg = next(arg_iter)
+                result = result.replace("%v", f"${{{self._expr(arg)}}}", 1)
+            except StopIteration:
+                break
         # Escape backticks in the template
         result = result.replace("`", "\\`")
         return f"`{result}`"

@@ -127,13 +127,13 @@ class ParseError {
 
   FormatMessage(): string {
     if (this.line !== 0 && this.pos !== 0) {
-      return `Parse error at line %v, position %v: %v`;
+      return `Parse error at line ${this.line}, position ${this.pos}: ${this.message}`;
     } else {
       if (this.pos !== 0) {
-        return `Parse error at position %v: %v`;
+        return `Parse error at position ${this.pos}: ${this.message}`;
       }
     }
-    return `Parse error: %v`;
+    return `Parse error: ${this.message}`;
   }
 }
 
@@ -160,12 +160,12 @@ class Token {
 
   Repr(): string {
     if (this.word !== null) {
-      return `Token(%v, %v, %v, word=%v)`;
+      return `Token(${this.typeName}, ${this.value}, ${this.pos}, word=${this.word})`;
     }
     if (this.parts.length > 0) {
-      return `Token(%v, %v, %v, parts=%v)`;
+      return `Token(${this.typeName}, ${this.value}, ${this.pos}, parts=${this.parts.length})`;
     }
-    return `Token(%v, %v, %v)`;
+    return `Token(${this.typeName}, ${this.value}, ${this.pos})`;
   }
 }
 
@@ -725,7 +725,7 @@ class Lexer {
     var wasGtlt: any = false;
     while (count > 0) {
       if (this.atEnd()) {
-        throw new Error(`${`unexpected EOF while looking for matching \`%v'`} at position ${start}`)
+        throw new Error(`${`unexpected EOF while looking for matching \`${closeChar}'`} at position ${start}`)
       }
       var ch: any = this.advance();
       if ((flags & MatchedPairFlags_DOLBRACE) !== 0 && this.DolbraceState === DolbraceState_OP) {
@@ -3870,7 +3870,7 @@ class HereDoc implements Node {
     if (content.endsWith("\\") && !content.endsWith("\\\\")) {
       content = content + "\\";
     }
-    return `(redirect "%v" "%v")`;
+    return `(redirect "${op}" "${content}")`;
   }
 }
 
@@ -4079,7 +4079,7 @@ class ForArith implements Node {
     var condStr: any = FormatArithVal(condVal);
     var incrStr: any = FormatArithVal(incrVal);
     var bodyStr: any = this.body.toSexp();
-    return `(arith-for (init (word "%v")) (test (word "%v")) (step (word "%v")) %v)%v`;
+    return `(arith-for (init (word "${initStr}")) (test (word "${condStr}")) (step (word "${incrStr}")) ${bodyStr})${suffix}`;
   }
 }
 
@@ -5442,7 +5442,7 @@ class Parser {
     if (this.peek() === "{") {
       var brace: any = this.parseBraceGroup();
       if (brace === null) {
-        throw new Error(`${`Expected brace group body in %v`} at position ${this.LexPeekToken().pos}`)
+        throw new Error(`${`Expected brace group body in ${context}`} at position ${this.LexPeekToken().pos}`)
       }
       return brace.body;
     }
@@ -5453,11 +5453,11 @@ class Parser {
       }
       this.skipWhitespaceAndNewlines();
       if (!this.LexConsumeWord("done")) {
-        throw new Error(`${`Expected 'done' to close %v`} at position ${this.LexPeekToken().pos}`)
+        throw new Error(`${`Expected 'done' to close ${context}`} at position ${this.LexPeekToken().pos}`)
       }
       return body;
     }
-    throw new Error(`${`Expected 'do' or '{' in %v`} at position ${this.LexPeekToken().pos}`)
+    throw new Error(`${`Expected 'do' or '{' in ${context}`} at position ${this.LexPeekToken().pos}`)
   }
 
   peekWord(): string {
@@ -8709,7 +8709,7 @@ class Parser {
       }
     }
     if (reserved === "fi" || reserved === "then" || reserved === "elif" || reserved === "else" || reserved === "done" || reserved === "esac" || reserved === "do" || reserved === "in") {
-      throw new Error(`${`Unexpected reserved word '%v'`} at position ${this.LexPeekToken().pos}`)
+      throw new Error(`${`Unexpected reserved word '${reserved}'`} at position ${this.LexPeekToken().pos}`)
     }
     if (reserved === "if") {
       return this.parseIf();
@@ -9735,9 +9735,9 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
     var name: any = node.name;
     var innerBody: any = node.body.kind === "brace-group" ? (node.body as unknown as BraceGroup).body : node.body;
     var body: any = FormatCmdsubNode(innerBody, indent + 4, false, false, false).replace(/[;]+$/, '');
-    return `function %v () 
+    return `function ${name} () 
 { 
-%v%v
+${innerSp}${body}
 }`;
   }
   if (node instanceof Subshell) {

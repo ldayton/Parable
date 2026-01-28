@@ -174,48 +174,6 @@ NODE_METHOD_TYPES: dict[str, str] = {
     "get_cond_formatted_value": "Word",
 }
 
-# Maps kind string values to struct names
-# Used for type narrowing after kind checks like `x.kind == "operator"`
-KIND_TO_STRUCT: dict[str, str] = {
-    "operator": "Operator",
-    "cmdsub": "CommandSubstitution",
-    "procsub": "ProcessSubstitution",
-    "subshell": "Subshell",
-    "pipe-both": "PipeBoth",
-    "pipeline": "Pipeline",
-    "list": "List",
-    "coproc": "Coproc",
-    "simple": "SimpleCommand",
-    "compound": "CompoundCommand",
-    "function": "FunctionDef",
-    "for": "For",
-    "for-arith": "ForArith",
-    "while": "While",
-    "until": "Until",
-    "if": "If",
-    "case": "Case",
-    "select": "Select",
-    "group": "Group",
-    "brace-group": "BraceGroup",
-    "word": "Word",
-    "array": "Array",
-    "assignment": "Assignment",
-    "redirect": "Redirect",
-    "heredoc": "HereDoc",
-    "arith-expr": "ArithExpr",
-    "arith-cmd": "ArithmeticCommand",
-    "cond-expr": "ConditionalExpr",
-    # Conditional test nodes
-    "unary-test": "UnaryTest",
-    "binary-test": "BinaryTest",
-    "cond-and": "CondAnd",
-    "cond-or": "CondOr",
-    "cond-not": "CondNot",
-    "cond-paren": "CondParen",
-    "negation": "Negation",
-    "time": "Time",
-}
-
 # Module-level constants that need custom emission
 # Maps constant_name -> (type, go_value)
 # Used for constants that can't be inferred from simple integer assignment

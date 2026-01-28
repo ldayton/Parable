@@ -63,66 +63,6 @@ TYPE_MAP: dict[str, Type] = {
     "bytearray": Slice(BYTE),
 }
 
-# Mapping from .kind string values to class names (for x.kind == "..." patterns)
-KIND_TO_CLASS: dict[str, str] = {
-    "word": "Word",
-    "command": "Command",
-    "pipeline": "Pipeline",
-    "list": "List",
-    "operator": "Operator",
-    "pipe-both": "PipeBoth",
-    "empty": "Empty",
-    "comment": "Comment",
-    "redirect": "Redirect",
-    "heredoc": "HereDoc",
-    "subshell": "Subshell",
-    "brace-group": "BraceGroup",
-    "if": "If",
-    "while": "While",
-    "until": "Until",
-    "for": "For",
-    "for-arith": "ForArith",
-    "select": "Select",
-    "case": "Case",
-    "pattern": "Pattern",
-    "function": "Function",
-    "param": "Parameter",
-    "param-len": "ParameterLength",
-    "param-indirect": "ParameterIndirect",
-    "cmdsub": "CommandSubstitution",
-    "arith": "ArithmeticExpansion",
-    "arith-cmd": "ArithmeticCommand",
-    "number": "ArithNumber",
-    "var": "ArithVar",
-    "binary-op": "ArithBinaryOp",
-    "unary-op": "ArithUnaryOp",
-    "pre-incr": "ArithPreIncr",
-    "post-incr": "ArithPostIncr",
-    "pre-decr": "ArithPreDecr",
-    "post-decr": "ArithPostDecr",
-    "assign": "ArithAssign",
-    "ternary": "ArithTernary",
-    "comma": "ArithComma",
-    "subscript": "ArithSubscript",
-    "escape": "EscapeSequence",
-    "arith-deprecated": "ArithDeprecatedExpr",
-    "arith-concat": "ArithConcat",
-    "ansi-c": "AnsiCQuote",
-    "locale": "LocaleQuote",
-    "procsub": "ProcessSubstitution",
-    "negation": "Negation",
-    "time": "Time",
-    "cond-expr": "ConditionalExpr",
-    "unary-test": "UnaryTest",
-    "binary-test": "BinaryTest",
-    "cond-and": "CondAnd",
-    "cond-or": "CondOr",
-    "cond-not": "CondNot",
-    "cond-paren": "CondParen",
-    "array": "Array",
-    "coproc": "Coproc",
-}
-
 
 @dataclass
 class TypeContext:
@@ -150,6 +90,9 @@ class Frontend:
         self._current_class_name: str = ""
         self._type_ctx: TypeContext = TypeContext()
         self._current_catch_var: str | None = None  # track catch variable for raise e pattern
+        # Auto-generated kind -> struct mappings (built from class const_fields)
+        self._kind_to_struct: dict[str, str] = {}
+        self._kind_to_class: dict[str, str] = {}
 
     def transpile(self, source: str) -> Module:
         """Parse Python source and produce IR Module."""
@@ -164,6 +107,8 @@ class Frontend:
         self._collect_signatures(tree)
         # Pass 4: Collect struct fields
         self._collect_fields(tree)
+        # Pass 4b: Build kind -> struct mapping from const_fields
+        self._build_kind_mapping()
         # Pass 5: Collect module-level constants
         self._collect_constants(tree)
         # Build IR Module
@@ -207,6 +152,14 @@ class Frontend:
         if not info:
             return False
         return any(self._is_exception_subclass(base) for base in info.bases)
+
+    def _build_kind_mapping(self) -> None:
+        """Build kind -> struct/class mappings from const_fields["kind"] values."""
+        for name, info in self.symbols.structs.items():
+            if "kind" in info.const_fields:
+                kind_value = info.const_fields["kind"]
+                self._kind_to_struct[kind_value] = name
+                self._kind_to_class[kind_value] = name
 
     def _collect_signatures(self, tree: ast.Module) -> None:
         """Pass 3: Collect function and method signatures."""
@@ -3334,9 +3287,9 @@ class Frontend:
             return None
         kind_value = comparator.value
         # Map kind string to class name
-        if kind_value not in KIND_TO_CLASS:
+        if kind_value not in self._kind_to_class:
             return None
-        return (var_name, KIND_TO_CLASS[kind_value])
+        return (var_name, self._kind_to_class[kind_value])
 
     def _extract_isinstance_or_chain(self, node: ast.expr) -> tuple[str, list[str]] | None:
         """Extract isinstance/kind checks from expression. Returns (var_name, [type_names]) or None."""
@@ -3380,7 +3333,6 @@ class Frontend:
     def _extract_kind_check(self, node: ast.expr) -> tuple[str, str] | None:
         """Extract kind-based type narrowing from `kind == "value"` or `node.kind == "value"`.
         Returns (node_var_name, struct_name) or None if not a kind check."""
-        from .type_overrides import KIND_TO_STRUCT
         # Match: kind == "value" where kind was previously assigned from node.kind
         if isinstance(node, ast.Compare) and len(node.ops) == 1 and isinstance(node.ops[0], ast.Eq):
             left = node.left
@@ -3389,24 +3341,23 @@ class Frontend:
             if isinstance(left, ast.Name) and isinstance(right, ast.Constant) and isinstance(right.value, str):
                 kind_var = left.id
                 kind_value = right.value
-                if kind_value in KIND_TO_STRUCT:
+                if kind_value in self._kind_to_struct:
                     # Look up which Node-typed variable this kind var came from
                     if kind_var in self._type_ctx.kind_source_vars:
                         node_var = self._type_ctx.kind_source_vars[kind_var]
-                        return (node_var, KIND_TO_STRUCT[kind_value])
+                        return (node_var, self._kind_to_struct[kind_value])
             # Check for node.kind == "value" pattern
             if isinstance(left, ast.Attribute) and left.attr == "kind" and isinstance(left.value, ast.Name):
                 node_var = left.value.id
                 if isinstance(right, ast.Constant) and isinstance(right.value, str):
                     kind_value = right.value
-                    if kind_value in KIND_TO_STRUCT:
-                        return (node_var, KIND_TO_STRUCT[kind_value])
+                    if kind_value in self._kind_to_struct:
+                        return (node_var, self._kind_to_struct[kind_value])
         return None
 
     def _extract_attr_kind_check(self, node: ast.expr) -> tuple[tuple[str, ...], str] | None:
         """Extract kind check for attribute paths like `node.body.kind == "value"`.
         Returns (attr_path_tuple, struct_name) or None."""
-        from .type_overrides import KIND_TO_STRUCT
         if isinstance(node, ast.Compare) and len(node.ops) == 1 and isinstance(node.ops[0], ast.Eq):
             left = node.left
             right = node.comparators[0]
@@ -3414,11 +3365,11 @@ class Frontend:
             if (isinstance(left, ast.Attribute) and left.attr == "kind"
                 and isinstance(right, ast.Constant) and isinstance(right.value, str)):
                 kind_value = right.value
-                if kind_value in KIND_TO_STRUCT:
+                if kind_value in self._kind_to_struct:
                     # Extract the attribute path (e.g., node.body -> ("node", "body"))
                     attr_path = self._get_attr_path(left.value)
                     if attr_path and len(attr_path) > 1:  # Only for chains, not simple vars
-                        return (attr_path, KIND_TO_STRUCT[kind_value])
+                        return (attr_path, self._kind_to_struct[kind_value])
         return None
 
     def _get_attr_path(self, node: ast.expr) -> tuple[str, ...] | None:

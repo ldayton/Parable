@@ -10,7 +10,6 @@ allow ~/source/bash-oracle/bash-oracle *
 
 #---- Bash ----#
 deny bash * "Use `~/source/bash-oracle/bash-oracle -e`"
-deny node tests/* "Use `just test-js`"
 deny-redirect * "Redirects only allowed to /tmp/* or to stdin/stderr"
 allow-redirect /tmp/**
 

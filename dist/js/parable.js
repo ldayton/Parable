@@ -155,7 +155,7 @@ var Token = /** @class */ (function () {
         this.typeName = typeName;
         this.value = value;
         this.pos = pos;
-        this.parts = parts;
+        this.parts = parts !== null && parts !== void 0 ? parts : [];
         this.word = word;
     }
     Token.prototype.Repr = function () {
@@ -193,8 +193,8 @@ var SavedParserState = /** @class */ (function () {
         if (eofToken === void 0) { eofToken = ""; }
         this.parserState = parserState;
         this.dolbraceState = dolbraceState;
-        this.pendingHeredocs = pendingHeredocs;
-        this.ctxStack = ctxStack;
+        this.pendingHeredocs = pendingHeredocs !== null && pendingHeredocs !== void 0 ? pendingHeredocs : [];
+        this.ctxStack = ctxStack !== null && ctxStack !== void 0 ? ctxStack : [];
         this.eofToken = eofToken;
     }
     return SavedParserState;
@@ -206,7 +206,7 @@ var QuoteState = /** @class */ (function () {
         if (Stack === void 0) { Stack = []; }
         this.single = single;
         this.double = double;
-        this.Stack = Stack;
+        this.Stack = Stack !== null && Stack !== void 0 ? Stack : [];
     }
     QuoteState.prototype.push = function () {
         this.Stack.push([this.single, this.double]);
@@ -276,7 +276,7 @@ var ParseContext = /** @class */ (function () {
 var ContextStack = /** @class */ (function () {
     function ContextStack(Stack) {
         if (Stack === void 0) { Stack = []; }
-        this.Stack = Stack;
+        this.Stack = Stack !== null && Stack !== void 0 ? Stack : [];
     }
     ContextStack.prototype.getCurrent = function () {
         return this.Stack[this.Stack.length - 1];
@@ -340,7 +340,7 @@ var Lexer = /** @class */ (function () {
         this.TokenCache = TokenCache;
         this.ParserState = ParserState;
         this.DolbraceState = DolbraceState;
-        this.PendingHeredocs = PendingHeredocs;
+        this.PendingHeredocs = PendingHeredocs !== null && PendingHeredocs !== void 0 ? PendingHeredocs : [];
         this.Extglob = Extglob;
         this.Parser = Parser;
         this.EofToken = EofToken;
@@ -388,111 +388,111 @@ var Lexer = /** @class */ (function () {
         var three = this.lookahead(3);
         if (three === ";;&") {
             this.pos += 3;
-            return new Token(TokenType_SEMI_SEMI_AMP, three, start);
+            return new Token(TokenType_SEMI_SEMI_AMP, three, start, [], []);
         }
         if (three === "<<-") {
             this.pos += 3;
-            return new Token(TokenType_LESS_LESS_MINUS, three, start);
+            return new Token(TokenType_LESS_LESS_MINUS, three, start, [], []);
         }
         if (three === "<<<") {
             this.pos += 3;
-            return new Token(TokenType_LESS_LESS_LESS, three, start);
+            return new Token(TokenType_LESS_LESS_LESS, three, start, [], []);
         }
         if (three === "&>>") {
             this.pos += 3;
-            return new Token(TokenType_AMP_GREATER_GREATER, three, start);
+            return new Token(TokenType_AMP_GREATER_GREATER, three, start, [], []);
         }
         if (two === "&&") {
             this.pos += 2;
-            return new Token(TokenType_AND_AND, two, start);
+            return new Token(TokenType_AND_AND, two, start, [], []);
         }
         if (two === "||") {
             this.pos += 2;
-            return new Token(TokenType_OR_OR, two, start);
+            return new Token(TokenType_OR_OR, two, start, [], []);
         }
         if (two === ";;") {
             this.pos += 2;
-            return new Token(TokenType_SEMI_SEMI, two, start);
+            return new Token(TokenType_SEMI_SEMI, two, start, [], []);
         }
         if (two === ";&") {
             this.pos += 2;
-            return new Token(TokenType_SEMI_AMP, two, start);
+            return new Token(TokenType_SEMI_AMP, two, start, [], []);
         }
         if (two === "<<") {
             this.pos += 2;
-            return new Token(TokenType_LESS_LESS, two, start);
+            return new Token(TokenType_LESS_LESS, two, start, [], []);
         }
         if (two === ">>") {
             this.pos += 2;
-            return new Token(TokenType_GREATER_GREATER, two, start);
+            return new Token(TokenType_GREATER_GREATER, two, start, [], []);
         }
         if (two === "<&") {
             this.pos += 2;
-            return new Token(TokenType_LESS_AMP, two, start);
+            return new Token(TokenType_LESS_AMP, two, start, [], []);
         }
         if (two === ">&") {
             this.pos += 2;
-            return new Token(TokenType_GREATER_AMP, two, start);
+            return new Token(TokenType_GREATER_AMP, two, start, [], []);
         }
         if (two === "<>") {
             this.pos += 2;
-            return new Token(TokenType_LESS_GREATER, two, start);
+            return new Token(TokenType_LESS_GREATER, two, start, [], []);
         }
         if (two === ">|") {
             this.pos += 2;
-            return new Token(TokenType_GREATER_PIPE, two, start);
+            return new Token(TokenType_GREATER_PIPE, two, start, [], []);
         }
         if (two === "&>") {
             this.pos += 2;
-            return new Token(TokenType_AMP_GREATER, two, start);
+            return new Token(TokenType_AMP_GREATER, two, start, [], []);
         }
         if (two === "|&") {
             this.pos += 2;
-            return new Token(TokenType_PIPE_AMP, two, start);
+            return new Token(TokenType_PIPE_AMP, two, start, [], []);
         }
         if (c === ";") {
             this.pos += 1;
-            return new Token(TokenType_SEMI, c, start);
+            return new Token(TokenType_SEMI, c, start, [], []);
         }
         if (c === "|") {
             this.pos += 1;
-            return new Token(TokenType_PIPE, c, start);
+            return new Token(TokenType_PIPE, c, start, [], []);
         }
         if (c === "&") {
             this.pos += 1;
-            return new Token(TokenType_AMP, c, start);
+            return new Token(TokenType_AMP, c, start, [], []);
         }
         if (c === "(") {
             if (this.WordContext === WORD_CTX_REGEX) {
                 return null;
             }
             this.pos += 1;
-            return new Token(TokenType_LPAREN, c, start);
+            return new Token(TokenType_LPAREN, c, start, [], []);
         }
         if (c === ")") {
             if (this.WordContext === WORD_CTX_REGEX) {
                 return null;
             }
             this.pos += 1;
-            return new Token(TokenType_RPAREN, c, start);
+            return new Token(TokenType_RPAREN, c, start, [], []);
         }
         if (c === "<") {
             if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
                 return null;
             }
             this.pos += 1;
-            return new Token(TokenType_LESS, c, start);
+            return new Token(TokenType_LESS, c, start, [], []);
         }
         if (c === ">") {
             if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
                 return null;
             }
             this.pos += 1;
-            return new Token(TokenType_GREATER, c, start);
+            return new Token(TokenType_GREATER, c, start, [], []);
         }
         if (c === "\n") {
             this.pos += 1;
-            return new Token(TokenType_NEWLINE, c, start);
+            return new Token(TokenType_NEWLINE, c, start, [], []);
         }
         return null;
     };
@@ -1276,24 +1276,24 @@ var Lexer = /** @class */ (function () {
         }
         this.skipBlanks();
         if (this.atEnd()) {
-            var tok = new Token(TokenType_EOF, "", this.pos);
+            var tok = new Token(TokenType_EOF, "", this.pos, [], []);
             this.LastReadToken = tok;
             return tok;
         }
         if (this.EofToken !== "" && this.peek() === this.EofToken && !((this.ParserState & ParserStateFlags_PST_CASEPAT) !== 0) && !((this.ParserState & ParserStateFlags_PST_EOFTOKEN) !== 0)) {
-            var tok = new Token(TokenType_EOF, "", this.pos);
+            var tok = new Token(TokenType_EOF, "", this.pos, [], []);
             this.LastReadToken = tok;
             return tok;
         }
         while (this.SkipComment()) {
             this.skipBlanks();
             if (this.atEnd()) {
-                var tok = new Token(TokenType_EOF, "", this.pos);
+                var tok = new Token(TokenType_EOF, "", this.pos, [], []);
                 this.LastReadToken = tok;
                 return tok;
             }
             if (this.EofToken !== "" && this.peek() === this.EofToken && !((this.ParserState & ParserStateFlags_PST_CASEPAT) !== 0) && !((this.ParserState & ParserStateFlags_PST_EOFTOKEN) !== 0)) {
-                var tok = new Token(TokenType_EOF, "", this.pos);
+                var tok = new Token(TokenType_EOF, "", this.pos, [], []);
                 this.LastReadToken = tok;
                 return tok;
             }
@@ -1308,7 +1308,7 @@ var Lexer = /** @class */ (function () {
             this.LastReadToken = tok;
             return tok;
         }
-        tok = new Token(TokenType_EOF, "", this.pos);
+        tok = new Token(TokenType_EOF, "", this.pos, [], []);
         this.LastReadToken = tok;
         return tok;
     };
@@ -1710,7 +1710,7 @@ var Lexer = /** @class */ (function () {
         if (IsSpecialParamUnbraced(ch) || IsDigit(ch) || ch === "#") {
             this.advance();
             var text = Substring(this.source, start, this.pos);
-            return [new ParamExpansion(ch, "param"), text];
+            return [new ParamExpansion(ch, [], [], "param"), text];
         }
         if (/^[a-zA-Z]$/.test(ch) || ch === "_") {
             var nameStart = this.pos;
@@ -1725,7 +1725,7 @@ var Lexer = /** @class */ (function () {
             }
             var name = Substring(this.source, nameStart, this.pos);
             var text = Substring(this.source, start, this.pos);
-            return [new ParamExpansion(name, "param"), text];
+            return [new ParamExpansion(name, [], [], "param"), text];
         }
         this.pos = start;
         return [null, ""];
@@ -1766,14 +1766,14 @@ var Lexer = /** @class */ (function () {
                     this.advance();
                     var text = Substring(this.source, start, this.pos);
                     this.DolbraceState = savedDolbrace;
-                    return [new ParamIndirect(param, "param-indirect"), text];
+                    return [new ParamIndirect(param, [], [], "param-indirect"), text];
                 }
                 if (!this.atEnd() && IsAtOrStar(this.peek())) {
                     var suffix = this.advance();
                     var trailing = this.ParseMatchedPair("{", "}", MatchedPairFlags_DOLBRACE, false);
                     var text = Substring(this.source, start, this.pos);
                     this.DolbraceState = savedDolbrace;
-                    return [new ParamIndirect(param + suffix + trailing, "param-indirect"), text];
+                    return [new ParamIndirect(param + suffix + trailing, [], [], "param-indirect"), text];
                 }
                 var op = this.ConsumeParamOperator();
                 if (op === "" && !this.atEnd() && !"}\"'`".includes(this.peek())) {
@@ -1804,7 +1804,7 @@ var Lexer = /** @class */ (function () {
                 var content = this.ParseMatchedPair("{", "}", MatchedPairFlags_DOLBRACE, false);
                 var text = "${" + content + "}";
                 this.DolbraceState = savedDolbrace;
-                return [new ParamExpansion(content, "param"), text];
+                return [new ParamExpansion(content, [], [], "param"), text];
             }
         }
         if (this.atEnd()) {
@@ -1815,7 +1815,7 @@ var Lexer = /** @class */ (function () {
             this.advance();
             var text = Substring(this.source, start, this.pos);
             this.DolbraceState = savedDolbrace;
-            return [new ParamExpansion(param, "param"), text];
+            return [new ParamExpansion(param, [], [], "param"), text];
         }
         var op = this.ConsumeParamOperator();
         if (op === "") {
@@ -1910,7 +1910,7 @@ var Word = /** @class */ (function () {
         if (parts === void 0) { parts = []; }
         if (kind === void 0) { kind = ""; }
         this.value = value;
-        this.parts = parts;
+        this.parts = parts !== null && parts !== void 0 ? parts : [];
         this.kind = kind;
     }
     Word.prototype.getKind = function () {
@@ -3632,8 +3632,8 @@ var Command = /** @class */ (function () {
         if (words === void 0) { words = []; }
         if (redirects === void 0) { redirects = []; }
         if (kind === void 0) { kind = ""; }
-        this.words = words;
-        this.redirects = redirects;
+        this.words = words !== null && words !== void 0 ? words : [];
+        this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.kind = kind;
     }
     Command.prototype.getKind = function () {
@@ -3661,7 +3661,7 @@ var Pipeline = /** @class */ (function () {
     function Pipeline(commands, kind) {
         if (commands === void 0) { commands = []; }
         if (kind === void 0) { kind = ""; }
-        this.commands = commands;
+        this.commands = commands !== null && commands !== void 0 ? commands : [];
         this.kind = kind;
     }
     Pipeline.prototype.getKind = function () {
@@ -3733,7 +3733,7 @@ var List = /** @class */ (function () {
     function List(parts, kind) {
         if (parts === void 0) { parts = []; }
         if (kind === void 0) { kind = ""; }
-        this.parts = parts;
+        this.parts = parts !== null && parts !== void 0 ? parts : [];
         this.kind = kind;
     }
     List.prototype.getKind = function () {
@@ -4039,7 +4039,7 @@ var Subshell = /** @class */ (function () {
         if (redirects === void 0) { redirects = []; }
         if (kind === void 0) { kind = ""; }
         this.body = body;
-        this.redirects = redirects;
+        this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.kind = kind;
     }
     Subshell.prototype.getKind = function () {
@@ -4057,7 +4057,7 @@ var BraceGroup = /** @class */ (function () {
         if (redirects === void 0) { redirects = []; }
         if (kind === void 0) { kind = ""; }
         this.body = body;
-        this.redirects = redirects;
+        this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.kind = kind;
     }
     BraceGroup.prototype.getKind = function () {
@@ -4079,7 +4079,7 @@ var If = /** @class */ (function () {
         this.condition = condition;
         this.thenBody = thenBody;
         this.elseBody = elseBody;
-        this.redirects = redirects;
+        this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.kind = kind;
     }
     If.prototype.getKind = function () {
@@ -4107,7 +4107,7 @@ var While = /** @class */ (function () {
         if (kind === void 0) { kind = ""; }
         this.condition = condition;
         this.body = body;
-        this.redirects = redirects;
+        this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.kind = kind;
     }
     While.prototype.getKind = function () {
@@ -4127,7 +4127,7 @@ var Until = /** @class */ (function () {
         if (kind === void 0) { kind = ""; }
         this.condition = condition;
         this.body = body;
-        this.redirects = redirects;
+        this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.kind = kind;
     }
     Until.prototype.getKind = function () {
@@ -4147,9 +4147,9 @@ var For = /** @class */ (function () {
         if (redirects === void 0) { redirects = []; }
         if (kind === void 0) { kind = ""; }
         this.varName = varName;
-        this.words = words;
+        this.words = words !== null && words !== void 0 ? words : [];
         this.body = body;
-        this.redirects = redirects;
+        this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.kind = kind;
     }
     For.prototype.getKind = function () {
@@ -4200,7 +4200,7 @@ var ForArith = /** @class */ (function () {
         this.cond = cond;
         this.incr = incr;
         this.body = body;
-        this.redirects = redirects;
+        this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.kind = kind;
     }
     ForArith.prototype.getKind = function () {
@@ -4235,9 +4235,9 @@ var Select = /** @class */ (function () {
         if (redirects === void 0) { redirects = []; }
         if (kind === void 0) { kind = ""; }
         this.varName = varName;
-        this.words = words;
+        this.words = words !== null && words !== void 0 ? words : [];
         this.body = body;
-        this.redirects = redirects;
+        this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.kind = kind;
     }
     Select.prototype.getKind = function () {
@@ -4282,8 +4282,8 @@ var Case = /** @class */ (function () {
         if (redirects === void 0) { redirects = []; }
         if (kind === void 0) { kind = ""; }
         this.word = word;
-        this.patterns = patterns;
-        this.redirects = redirects;
+        this.patterns = patterns !== null && patterns !== void 0 ? patterns : [];
+        this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.kind = kind;
     }
     Case.prototype.getKind = function () {
@@ -4393,7 +4393,7 @@ var CasePattern = /** @class */ (function () {
         var wordList = [];
         for (var _i = 0, alternatives_1 = alternatives; _i < alternatives_1.length; _i++) {
             var alt = alternatives_1[_i];
-            wordList.push(new Word(alt, "word").toSexp());
+            wordList.push(new Word(alt, [], "word").toSexp());
         }
         var patternStr = wordList.join(" ");
         var parts = ["(pattern (" + patternStr + ")"];
@@ -4548,7 +4548,7 @@ var ArithmeticCommand = /** @class */ (function () {
         if (rawContent === void 0) { rawContent = ""; }
         if (kind === void 0) { kind = ""; }
         this.expression = expression;
-        this.redirects = redirects;
+        this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.rawContent = rawContent;
         this.kind = kind;
     }
@@ -4556,7 +4556,7 @@ var ArithmeticCommand = /** @class */ (function () {
         return this.kind;
     };
     ArithmeticCommand.prototype.toSexp = function () {
-        var formatted = new Word(this.rawContent, "word").FormatCommandSubstitutions(this.rawContent, true);
+        var formatted = new Word(this.rawContent, [], "word").FormatCommandSubstitutions(this.rawContent, true);
         var escaped = formatted.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t");
         var result = "(arith (word \"" + escaped + "\"))";
         if (this.redirects.length > 0) {
@@ -4818,7 +4818,7 @@ var ArithConcat = /** @class */ (function () {
     function ArithConcat(parts, kind) {
         if (parts === void 0) { parts = []; }
         if (kind === void 0) { kind = ""; }
-        this.parts = parts;
+        this.parts = parts !== null && parts !== void 0 ? parts : [];
         this.kind = kind;
     }
     ArithConcat.prototype.getKind = function () {
@@ -4935,7 +4935,7 @@ var ConditionalExpr = /** @class */ (function () {
         if (redirects === void 0) { redirects = []; }
         if (kind === void 0) { kind = ""; }
         this.body = body;
-        this.redirects = redirects;
+        this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.kind = kind;
     }
     ConditionalExpr.prototype.getKind = function () {
@@ -5070,7 +5070,7 @@ var ArrayName = /** @class */ (function () {
     function ArrayName(elements, kind) {
         if (elements === void 0) { elements = []; }
         if (kind === void 0) { kind = ""; }
-        this.elements = elements;
+        this.elements = elements !== null && elements !== void 0 ? elements : [];
         this.kind = kind;
     }
     ArrayName.prototype.getKind = function () {
@@ -5139,14 +5139,14 @@ var Parser = /** @class */ (function () {
         this.source = source;
         this.pos = pos;
         this.length = length;
-        this.PendingHeredocs = PendingHeredocs;
+        this.PendingHeredocs = PendingHeredocs !== null && PendingHeredocs !== void 0 ? PendingHeredocs : [];
         this.CmdsubHeredocEnd = CmdsubHeredocEnd;
         this.SawNewlineInSingleQuote = SawNewlineInSingleQuote;
         this.InProcessSub = InProcessSub;
         this.Extglob = Extglob;
         this.Ctx = Ctx;
         this.Lexer = Lexer;
-        this.TokenHistory = TokenHistory;
+        this.TokenHistory = TokenHistory !== null && TokenHistory !== void 0 ? TokenHistory : [];
         this.ParserState = ParserState;
         this.DolbraceState = DolbraceState;
         this.EofToken = EofToken;
@@ -5673,7 +5673,7 @@ var Parser = /** @class */ (function () {
         var textEnd = this.pos;
         var text = Substring(this.source, start, textEnd);
         this.RestoreParserState(saved);
-        return [new CommandSubstitution(cmd, "cmdsub"), text];
+        return [new CommandSubstitution(cmd, [], "cmdsub"), text];
     };
     Parser.prototype.ParseFunsub = function (start) {
         this.SyncParser();
@@ -6001,7 +6001,7 @@ var Parser = /** @class */ (function () {
         if (cmd === null) {
             cmd = new Empty("empty");
         }
-        return [new CommandSubstitution(cmd, "cmdsub"), text];
+        return [new CommandSubstitution(cmd, [], "cmdsub"), text];
     };
     Parser.prototype.ParseProcessSubstitution = function () {
         if (this.atEnd() || !IsRedirectChar(this.peek())) {
@@ -6686,7 +6686,7 @@ var Parser = /** @class */ (function () {
         if (!(nameChars.length > 0)) {
             throw new Error("".concat("Expected variable name after $", " at position ").concat(this.ArithPos));
         }
-        return new ParamExpansion(nameChars.join(""), "param");
+        return new ParamExpansion(nameChars.join(""), [], [], "param");
     };
     Parser.prototype.ArithParseCmdsub = function () {
         this.ArithAdvance();
@@ -6744,7 +6744,7 @@ var Parser = /** @class */ (function () {
         this.ArithAdvance();
         var subParser = newParser(content, false, this.Extglob);
         var cmd = subParser.parseList(true);
-        return new CommandSubstitution(cmd, "cmdsub");
+        return new CommandSubstitution(cmd, [], "cmdsub");
     };
     Parser.prototype.ArithParseBracedParam = function () {
         this.ArithAdvance();
@@ -6755,7 +6755,7 @@ var Parser = /** @class */ (function () {
                 nameChars.push(this.ArithAdvance());
             }
             this.ArithConsume("}");
-            return new ParamIndirect(nameChars.join(""), "param-indirect");
+            return new ParamIndirect(nameChars.join(""), [], [], "param-indirect");
         }
         if (this.ArithPeek(0) === "#") {
             this.ArithAdvance();
@@ -6771,7 +6771,7 @@ var Parser = /** @class */ (function () {
             var ch = this.ArithPeek(0);
             if (ch === "}") {
                 this.ArithAdvance();
-                return new ParamExpansion(nameChars.join(""), "param");
+                return new ParamExpansion(nameChars.join(""), [], [], "param");
             }
             if (IsParamExpansionOp(ch)) {
                 break;
@@ -6887,7 +6887,7 @@ var Parser = /** @class */ (function () {
         }
         var subParser = newParser(content, false, this.Extglob);
         var cmd = subParser.parseList(true);
-        return new CommandSubstitution(cmd, "cmdsub");
+        return new CommandSubstitution(cmd, [], "cmdsub");
     };
     Parser.prototype.ArithParseNumberOrVar = function () {
         this.ArithSkipWs();
@@ -7058,7 +7058,7 @@ var Parser = /** @class */ (function () {
             if (target === null) {
                 throw new Error("".concat("Expected target for redirect " + op, " at position ").concat(this.pos));
             }
-            return new Redirect(op, target, "redirect");
+            return new Redirect(op, target, [], "redirect");
         }
         if (ch === "" || !IsRedirectChar(ch)) {
             this.pos = start;
@@ -7141,7 +7141,7 @@ var Parser = /** @class */ (function () {
             if (!this.atEnd() && this.peek() === "-") {
                 if (this.pos + 1 < this.length && !IsMetachar(this.source[this.pos + 1])) {
                     this.advance();
-                    var target = new Word("&-", "word");
+                    var target = new Word("&-", [], "word");
                 }
                 else {
                     var target = null;
@@ -7170,7 +7170,7 @@ var Parser = /** @class */ (function () {
                         this.pos = wordStart;
                         var innerWord = this.parseWord(false, false, false);
                         if (innerWord !== null) {
-                            var target = new Word("&" + innerWord.value, "word");
+                            var target = new Word("&" + innerWord.value, [], "word");
                             target.parts = innerWord.parts;
                         }
                         else {
@@ -7178,13 +7178,13 @@ var Parser = /** @class */ (function () {
                         }
                     }
                     else {
-                        var target = new Word("&" + fdTarget, "word");
+                        var target = new Word("&" + fdTarget, [], "word");
                     }
                 }
                 else {
                     var innerWord = this.parseWord(false, false, false);
                     if (innerWord !== null) {
-                        var target = new Word("&" + innerWord.value, "word");
+                        var target = new Word("&" + innerWord.value, [], "word");
                         target.parts = innerWord.parts;
                     }
                     else {
@@ -7198,7 +7198,7 @@ var Parser = /** @class */ (function () {
             if ((op === ">&" || op === "<&") && !this.atEnd() && this.peek() === "-") {
                 if (this.pos + 1 < this.length && !IsMetachar(this.source[this.pos + 1])) {
                     this.advance();
-                    var target = new Word("&-", "word");
+                    var target = new Word("&-", [], "word");
                 }
                 else {
                     var target = this.parseWord(false, false, false);
@@ -7211,7 +7211,7 @@ var Parser = /** @class */ (function () {
         if (target === null) {
             throw new Error("".concat("Expected target for redirect " + op, " at position ").concat(this.pos));
         }
-        return new Redirect(op, target, "redirect");
+        return new Redirect(op, target, [], "redirect");
     };
     Parser.prototype.ParseHeredocDelimiter = function () {
         this.skipWhitespace();
@@ -7542,7 +7542,7 @@ var Parser = /** @class */ (function () {
                 return existing;
             }
         }
-        var heredoc = new HereDoc(delimiter, "", stripTabs, quoted, fd, false, "heredoc");
+        var heredoc = new HereDoc(delimiter, "", stripTabs, quoted, fd, false, [], "heredoc");
         heredoc.StartPos = startPos;
         this.PendingHeredocs.push(heredoc);
         this.ClearState(ParserStateFlags_PST_HEREDOC);
@@ -7926,7 +7926,7 @@ var Parser = /** @class */ (function () {
                     }
                 }
             }
-            elseBody = new If(elifCondition, elifThenBody, innerElse, "if");
+            elseBody = new If(elifCondition, elifThenBody, innerElse, [], "if");
         }
         else {
             if (this.LexIsAtReservedWord("else")) {
@@ -7971,7 +7971,7 @@ var Parser = /** @class */ (function () {
                 }
             }
         }
-        return new If(condition, thenBody, elseBody, "if");
+        return new If(condition, thenBody, elseBody, [], "if");
     };
     Parser.prototype.parseWhile = function () {
         this.skipWhitespace();
@@ -8927,7 +8927,7 @@ var Parser = /** @class */ (function () {
                             return inner.pipeline;
                         }
                         else {
-                            return new Command([], "command");
+                            return new Command([], [], "command");
                         }
                     }
                     return new Negation(inner, "negation");
@@ -11026,7 +11026,7 @@ function parse(source, extglob) {
     return parser.parse();
 }
 function newParseError(message, pos, line) {
-    var self = new ParseError();
+    var self = new ParseError([], [], []);
     self.message = message;
     self.pos = pos;
     self.line = line;
@@ -11036,14 +11036,14 @@ function newMatchedPairError(message, pos, line) {
     return new MatchedPairError();
 }
 function newQuoteState() {
-    var self = new QuoteState();
+    var self = new QuoteState([], [], []);
     self.single = false;
     self.double = false;
     self.Stack = [];
     return self;
 }
 function newParseContext(kind) {
-    var self = new ParseContext();
+    var self = new ParseContext([], [], [], [], [], [], [], []);
     self.kind = kind;
     self.parenDepth = 0;
     self.braceDepth = 0;
@@ -11055,12 +11055,12 @@ function newParseContext(kind) {
     return self;
 }
 function newContextStack() {
-    var self = new ContextStack();
+    var self = new ContextStack([]);
     self.Stack = [newParseContext(0)];
     return self;
 }
 function newLexer(source, extglob) {
-    var self = new Lexer();
+    var self = new Lexer([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []);
     self.source = source;
     self.pos = 0;
     self.length = source.length;
@@ -11085,7 +11085,7 @@ function newLexer(source, extglob) {
     return self;
 }
 function newParser(source, inProcessSub, extglob) {
-    var self = new Parser();
+    var self = new Parser([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []);
     self.source = source;
     self.pos = 0;
     self.length = source.length;

@@ -1,17 +1,12 @@
 # Dippy config for Parable
 
-#---- Python ----#
-deny python3 "Use `uv run python` to run in project env"
-deny python "Use `uv run python` to run in project env"
-allow uv run python
-allow uv run python3
-allow rm -rf /**/__pycache__
-deny uv run ruff "Use `just fmt --fix and just lint --fix`"
-deny uv run tests "use `just test`"
-
 #---- Just targets ----#
 allow just
 deny just -C "Don't use -C, run bare targets"
+
+#---- Scripts ----#
+allow bin/parable-dump.py
+allow ~/source/bash-oracle/bash-oracle *
 
 #---- Bash ----#
 deny bash * "Use `~/source/bash-oracle/bash-oracle -e`"
@@ -21,11 +16,6 @@ allow-redirect /tmp/**
 
 #---- Javascript ----#
 allow node -e
-
-#---- Scripts ----#
-allow bin/parable-dump.py
-allow ~/source/bash-oracle/bash-oracle *
-deny tests/bin/run-tests.py *bigtable* "There's no test runner for the bigtable tests, if `just check` passes, you're ready to commit"
 
 #---- Go ----#
 allow go run

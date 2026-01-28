@@ -55,6 +55,7 @@ from src.ir import (
     Set,
     SetLit,
     Slice,
+    SliceConvert,
     SliceExpr,
     SliceLit,
     SoftFail,
@@ -558,6 +559,8 @@ class TsBackend:
                 return " + ".join(self._expr(p) for p in parts)
             case StringFormat(template=template, args=args):
                 return self._format_string(template, args)
+            case SliceConvert(source=source):
+                return self._expr(source)  # TypeScript arrays are covariant
             case _:
                 raise NotImplementedError(f"Unknown expression: {type(expr).__name__}")
 

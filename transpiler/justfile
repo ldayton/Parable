@@ -23,6 +23,10 @@ test-new-python:
     uv run python -m src.cli ../src/parable.py -b python > /tmp/parable-test/parable.py
     PYTHONPATH=/tmp/parable-test python3 ../tests/bin/run-tests.py ../tests
 
+# Transpile to TypeScript (WIP - backend incomplete, many errors expected)
+emit-typescript:
+    uv run python -m src.cli ../src/parable.py -b ts
+
 # Show Go compilation errors (uses temp copy of src/)
 errors:
     @rm -rf /tmp/parable-src && cp -r ../src /tmp/parable-src

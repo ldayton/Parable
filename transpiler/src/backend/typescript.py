@@ -384,9 +384,14 @@ class TsBackend:
         # Check if binding would shadow the expression variable
         shadows = isinstance(expr, Var) and _camel(expr.name) == binding_name
         for i, case in enumerate(cases):
-            type_name = self._type_name_for_check(case.typ)
             keyword = "if" if i == 0 else "} else if"
-            self._line(f"{keyword} ({var} instanceof {type_name}) {{")
+            # Primitive types use typeof, classes use instanceof
+            if isinstance(case.typ, Primitive):
+                ts_typeof = _typeof_check(case.typ.kind)
+                self._line(f"{keyword} (typeof {var} === '{ts_typeof}') {{")
+            else:
+                type_name = self._type_name_for_check(case.typ)
+                self._line(f"{keyword} ({var} instanceof {type_name}) {{")
             self.indent += 1
             # Skip const declaration if it would shadow - TypeScript narrows type automatically
             if not shadows:
@@ -549,6 +554,9 @@ class TsBackend:
             case Call(func="_intToStr", args=[arg]):
                 # _intToStr(n) → String(n)
                 return f"String({self._expr(arg)})"
+            case Call(func="_intPtr", args=[arg]):
+                # _intPtr is a Python type hint, just return the argument
+                return self._expr(arg)
             case Call(func=func, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
                 return f"{_camel(func)}({args_str})"
@@ -581,6 +589,9 @@ class TsBackend:
                 # Python strip with chars → regex replace (JS trim takes no args)
                 escaped = _escape_regex_class(chars)
                 return f"{self._expr(obj)}.replace(/^[{escaped}]+/, '').replace(/[{escaped}]+$/, '')"
+            case MethodCall(obj=obj, method="get", args=[key, default], receiver_type=receiver_type) if isinstance(receiver_type, Map):
+                # Python dict.get(key, default) → JS Map.get(key) ?? default
+                return f"{self._expr(obj)}.get({self._expr(key)}) ?? {self._expr(default)}"
             case MethodCall(obj=obj, method=method, args=args, receiver_type=receiver_type):
                 args_str = ", ".join(self._expr(a) for a in args)
                 ts_method = _method_name(method, receiver_type)
@@ -619,6 +630,10 @@ class TsBackend:
             case TypeAssert(expr=inner, asserted=asserted):
                 return f"({self._expr(inner)} as {self._type(asserted)})"
             case IsType(expr=inner, tested_type=tested_type):
+                # Primitive types use typeof, classes use instanceof
+                if isinstance(tested_type, Primitive):
+                    ts_typeof = _typeof_check(tested_type.kind)
+                    return f"typeof {self._expr(inner)} === '{ts_typeof}'"
                 type_name = self._type_name_for_check(tested_type)
                 return f"{self._expr(inner)} instanceof {type_name}"
             case IsNil(expr=inner, negated=negated):
@@ -777,6 +792,19 @@ def _primitive_type(kind: str) -> str:
             return "void"
         case _:
             raise NotImplementedError(f"Unknown primitive: {kind}")
+
+
+def _typeof_check(kind: str) -> str:
+    """Return the typeof result for a primitive type check."""
+    match kind:
+        case "string":
+            return "string"
+        case "int" | "float" | "byte" | "rune":
+            return "number"
+        case "bool":
+            return "boolean"
+        case _:
+            return "object"
 
 
 def _camel(name: str, is_receiver_ref: bool = False) -> str:

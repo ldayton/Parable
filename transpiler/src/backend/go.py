@@ -5,8 +5,9 @@ Pure syntax emission - no analysis. All type information comes from IR.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import re
 
+from src.backend.util import escape_string
 from src.ir import (
     BOOL,
     BYTE,
@@ -96,9 +97,6 @@ from src.ir import (
     VarLV,
     While,
 )
-
-if TYPE_CHECKING:
-    pass
 
 # Go reserved words that need renaming
 GO_RESERVED = {
@@ -1151,14 +1149,7 @@ func _Substring(s string, start int, end int) string {
         return str(expr.value)
 
     def _emit_expr_StringLit(self, expr: StringLit) -> str:
-        escaped = (
-            expr.value.replace("\\", "\\\\")
-            .replace('"', '\\"')
-            .replace("\n", "\\n")
-            .replace("\t", "\\t")
-            .replace("\r", "\\r")
-        )
-        return f'"{escaped}"'
+        return f'"{escape_string(expr.value)}"'
 
     def _emit_expr_BoolLit(self, expr: BoolLit) -> str:
         return "true" if expr.value else "false"
@@ -1574,17 +1565,8 @@ func _Substring(s string, start int, end int) string {
     def _emit_expr_StringFormat(self, expr: StringFormat) -> str:
         args = ", ".join(self._emit_expr(a) for a in expr.args)
         # Convert Python-style {0}, {1} placeholders to Go-style %v
-        import re
-        template = expr.template
-        template = re.sub(r'\{(\d+)\}', '%v', template)
-        # Escape special characters in template
-        escaped = (
-            template.replace("\\", "\\\\")
-            .replace('"', '\\"')
-            .replace("\n", "\\n")
-            .replace("\t", "\\t")
-            .replace("\r", "\\r")
-        )
+        template = re.sub(r'\{(\d+)\}', '%v', expr.template)
+        escaped = escape_string(template)
         if args:
             return f'fmt.Sprintf("{escaped}", {args})'
         return f'"{escaped}"'

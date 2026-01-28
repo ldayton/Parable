@@ -564,8 +564,9 @@ class TsBackend:
             case Call(func=func, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
                 return f"{_camel(func)}({args_str})"
-            case MethodCall(obj=obj, method="join", args=[arr], receiver_type=receiver_type) if isinstance(receiver_type, Primitive) and receiver_type.kind == "string":
+            case MethodCall(obj=obj, method="join", args=[arr], receiver_type=_):
                 # "sep".join(arr) → arr.join("sep")
+                # Python's join is a string method; always swap receiver and arg for TypeScript
                 return f"{self._expr(arr)}.join({self._expr(obj)})"
             case MethodCall(obj=obj, method="extend", args=[other], receiver_type=receiver_type) if _is_array_type(receiver_type):
                 # arr.extend(other) → arr.push(...other)
@@ -673,7 +674,14 @@ class TsBackend:
                 elems = ", ".join(self._expr(e) for e in elements)
                 return f"[{elems}]"
             case StringConcat(parts=parts):
-                return " + ".join(self._expr(p) for p in parts)
+                # Wrap parts that have lower precedence than + (like ??)
+                def wrap_part(p):
+                    expr_str = self._expr(p)
+                    # ?? has lower precedence than +, needs parens
+                    if " ?? " in expr_str:
+                        return f"({expr_str})"
+                    return expr_str
+                return " + ".join(wrap_part(p) for p in parts)
             case StringFormat(template=template, args=args):
                 return self._format_string(template, args)
             case SliceConvert(source=source):
@@ -706,6 +714,10 @@ class TsBackend:
     def _expr_with_precedence(self, expr: Expr, parent_op: str, is_right: bool) -> str:
         """Wrap expr in parens if needed based on operator precedence."""
         inner = self._expr(expr)
+        # Check for ?? in emitted string - it has lower precedence than + and other ops
+        # This handles cases like Map.get(key) ?? default inside string concatenation
+        if " ?? " in inner and parent_op in ("+", "-", "*", "/", "%"):
+            return f"({inner})"
         if not isinstance(expr, BinaryOp):
             return inner
         child_prec = _op_precedence(expr.op)

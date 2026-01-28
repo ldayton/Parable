@@ -448,7 +448,7 @@ class Lexer:
             if _is_redirect_char(ch) and not (self.pos + 1 < self.length and self.source[self.pos + 1] == "("):
                 return True
             return _is_whitespace(ch)
-        if (self._parser_state & ParserStateFlags_PST_EOFTOKEN) != 0 and self._eof_token and ch == self._eof_token and bracket_depth == 0:
+        if (self._parser_state & ParserStateFlags_PST_EOFTOKEN) and self._eof_token and ch == self._eof_token and bracket_depth == 0:
             return True
         if _is_redirect_char(ch) and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
             return False
@@ -545,7 +545,7 @@ class Lexer:
             if self.at_end():
                 raise MatchedPairError(f"unexpected EOF while looking for matching `{close_char}'", start)
             ch = self.advance()
-            if (flags & MatchedPairFlags_DOLBRACE) != 0 and self._dolbrace_state == DolbraceState_OP:
+            if (flags & MatchedPairFlags_DOLBRACE) and self._dolbrace_state == DolbraceState_OP:
                 if ch not in "#%^,~:-=?+/":
                     self._dolbrace_state = DolbraceState_WORD
             if pass_next:
@@ -559,7 +559,7 @@ class Lexer:
                     count -= 1
                     if count == 0:
                         break
-                if ch == "\\" and (flags & MatchedPairFlags_ALLOWESC) != 0:
+                if ch == "\\" and (flags & MatchedPairFlags_ALLOWESC):
                     pass_next = True
                 chars.append(ch)
                 was_dollar = False
@@ -585,7 +585,7 @@ class Lexer:
                 was_gtlt = ch in "<>"
                 continue
             if ch == open_char and open_char != close_char:
-                if not ((flags & MatchedPairFlags_DOLBRACE) != 0 and open_char == "{"):
+                if not ((flags & MatchedPairFlags_DOLBRACE) and open_char == "{"):
                     count += 1
                 chars.append(ch)
                 was_dollar = False
@@ -617,7 +617,7 @@ class Lexer:
                     was_dollar = False
                     was_gtlt = False
                     continue
-            if ch == "$" and not self.at_end() and not ((flags & MatchedPairFlags_EXTGLOB) != 0):
+            if ch == "$" and not self.at_end() and not ((flags & MatchedPairFlags_EXTGLOB)):
                 next_ch = self.peek()
                 if was_dollar:
                     chars.append(ch)
@@ -625,7 +625,7 @@ class Lexer:
                     was_gtlt = False
                     continue
                 if next_ch == "{":
-                    if (flags & MatchedPairFlags_ARITH) != 0:
+                    if (flags & MatchedPairFlags_ARITH):
                         after_brace_pos = self.pos + 1
                         if after_brace_pos >= self.length or not _is_funsub_char(self.source[after_brace_pos]):
                             chars.append(ch)
@@ -634,7 +634,7 @@ class Lexer:
                             continue
                     self.pos -= 1
                     self._sync_to_parser()
-                    in_dquote = (flags & MatchedPairFlags_DQUOTE) != 0
+                    in_dquote = (flags & MatchedPairFlags_DQUOTE)
                     param_node, param_text = self._parser._parse_param_expansion(in_dquote)
                     self._sync_from_parser()
                     if param_node is not None:
@@ -696,7 +696,7 @@ class Lexer:
                         was_dollar = True
                         was_gtlt = False
                     continue
-            if ch == "(" and was_gtlt and (flags & MatchedPairFlags_DOLBRACE | MatchedPairFlags_ARRAYSUB) != 0:
+            if ch == "(" and was_gtlt and (flags & MatchedPairFlags_DOLBRACE | MatchedPairFlags_ARRAYSUB):
                 direction = chars[-1]
                 chars = chars[:-1]
                 self.pos -= 1
@@ -930,7 +930,7 @@ class Lexer:
                 chars.append(content)
                 chars.append(")")
                 continue
-            if ctx == WORD_CTX_NORMAL and (self._parser_state & ParserStateFlags_PST_EOFTOKEN) != 0 and self._eof_token and ch == self._eof_token and bracket_depth == 0:
+            if ctx == WORD_CTX_NORMAL and (self._parser_state & ParserStateFlags_PST_EOFTOKEN) and self._eof_token and ch == self._eof_token and bracket_depth == 0:
                 if not (chars):
                     chars.append(self.advance())
                 break
@@ -972,7 +972,7 @@ class Lexer:
             tok = Token(type=TokenType_EOF, value="", pos=self.pos)
             self._last_read_token = tok
             return tok
-        if self._eof_token and self.peek() == self._eof_token and not ((self._parser_state & ParserStateFlags_PST_CASEPAT) != 0) and not ((self._parser_state & ParserStateFlags_PST_EOFTOKEN) != 0):
+        if self._eof_token and self.peek() == self._eof_token and not ((self._parser_state & ParserStateFlags_PST_CASEPAT)) and not ((self._parser_state & ParserStateFlags_PST_EOFTOKEN)):
             tok = Token(type=TokenType_EOF, value="", pos=self.pos)
             self._last_read_token = tok
             return tok
@@ -982,7 +982,7 @@ class Lexer:
                 tok = Token(type=TokenType_EOF, value="", pos=self.pos)
                 self._last_read_token = tok
                 return tok
-            if self._eof_token and self.peek() == self._eof_token and not ((self._parser_state & ParserStateFlags_PST_CASEPAT) != 0) and not ((self._parser_state & ParserStateFlags_PST_EOFTOKEN) != 0):
+            if self._eof_token and self.peek() == self._eof_token and not ((self._parser_state & ParserStateFlags_PST_CASEPAT)) and not ((self._parser_state & ParserStateFlags_PST_EOFTOKEN)):
                 tok = Token(type=TokenType_EOF, value="", pos=self.pos)
                 self._last_read_token = tok
                 return tok
@@ -3587,7 +3587,7 @@ class Parser:
         self._parser_state = self._parser_state & ~flag
 
     def _in_state(self, flag: int) -> bool:
-        return (self._parser_state & flag) != 0
+        return (self._parser_state & flag)
 
     def _save_parser_state(self) -> SavedParserState:
         return SavedParserState(parser_state=self._parser_state, dolbrace_state=self._dolbrace_state, pending_heredocs=self._pending_heredocs, ctx_stack=self._ctx.copy_stack(), eof_token=self._eof_token)
@@ -7813,7 +7813,7 @@ def _is_word_end_context(c: str) -> bool:
 
 def _skip_matched_pair(s: str, start: int, open_: str, close: str, flags: int) -> int:
     n = len(s)
-    if (flags & _SMP_PAST_OPEN) != 0:
+    if (flags & _SMP_PAST_OPEN):
         i = start
     else:
         if start >= n or s[start] != open_:
@@ -7877,7 +7877,7 @@ def _assignment(s: str, flags: int) -> int:
         if c == "=":
             return i
         if c == "[":
-            sub_flags = _SMP_LITERAL if (flags & 2) != 0 else 0
+            sub_flags = _SMP_LITERAL if (flags & 2) else 0
             end = _skip_subscript(s, i, sub_flags)
             if end == -1:
                 return -1

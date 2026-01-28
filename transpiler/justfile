@@ -3,7 +3,7 @@ set shell := ["bash", "-o", "pipefail", "-cu"]
 # Configuration
 source := "../src/parable.py"
 tests := "../tests"
-dist := "dist"
+dist := "../dist/go"
 backends := "c csharp go java python ruby rust swift ts zig"
 testable := "go python ts"
 

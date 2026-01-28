@@ -10,7 +10,7 @@ Fix TypeScript backend test failures.
 | Path | Description |
 |------|-------------|
 | `transpiler/src/backend/typescript.py` | TypeScript backend (edit this) |
-| `dist/ts/parable.ts` | Generated output (don't edit directly) |
+| `dist/` | Generated output for all backends (don't edit directly, but commit changes) |
 
 ## Step 1: Get baseline and first failure
 
@@ -45,7 +45,7 @@ just backend-test ts 2>&1 | tail -1
 If `new_passed > baseline_passed`, run `just check` first:
 ```bash
 just -f /Users/lily/source/Parable/justfile check
-git -C /Users/lily/source/Parable add transpiler/src/ dist/ts/
+git -C /Users/lily/source/Parable add transpiler/src/ dist/
 git -C /Users/lily/source/Parable commit -m "transpiler/ts: [fix description] (X→Y passing)"
 ```
 
@@ -66,4 +66,4 @@ DO NOT CONTINUE after a commit.
 - Only commit when tests improve
 - Small incremental fixes are better than big risky changes
 - Backend must remain generic—no Parable-specific names
-- Don't edit dist/ts/parable.ts directly, it's generated
+- Don't edit dist/ directly—it's generated, but do commit the regenerated output

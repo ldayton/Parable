@@ -84,7 +84,7 @@ backend-test backend:
 
 # Internal: run all parallel checks
 [parallel]
-_check-parallel: src-test src-lint src-fmt src-verify-lock src-style check-dump-ast (backend-test "go") (backend-test "python")
+_check-parallel: src-test src-lint src-fmt src-verify-lock src-style check-dump-ast (backend-test "go") (backend-test "python") (backend-test "ts")
 
 # Ensure biome is installed (prevents race condition in parallel JS checks)
 _ensure-biome:

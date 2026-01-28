@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from src.backend.util import escape_string, to_camel, to_pascal, to_screaming_snake
+from src.type_overrides import VAR_TYPE_OVERRIDES
 
 # Java reserved words that need escaping
 _JAVA_RESERVED = frozenset({
@@ -129,6 +130,10 @@ class JavaBackend:
         self.optional_tuples: set[tuple] = set()  # (T, bool) patterns -> use Optional<T>
         self.struct_fields: dict[str, list[tuple[str, Type]]] = {}  # struct name -> [(field_name, type)]
         self.temp_counter: int = 0  # for unique temp variable names
+        self._type_switch_binding_rename: dict[str, str] = {}  # binding -> narrowed name
+        self._hoisted_vars: set[str] = set()  # Variables hoisted from control flow blocks
+        self._current_func: str | None = None  # Current function name for type overrides
+        self._func_params: set[str] = set()  # Function-typed parameter names
 
     def emit(self, module: Module) -> str:
         """Emit Java code from IR Module."""
@@ -140,10 +145,22 @@ class JavaBackend:
         self.struct_fields = {}
         self.temp_counter = 0
         self._module_name = module.name
+        self._hoisted_vars = set()
+        self._type_switch_binding_rename = {}
         self._collect_struct_fields(module)
         self._collect_tuple_types(module)
         self._emit_module(module)
         return "\n".join(self.lines)
+
+    def _emit_hoisted_vars(self, stmt) -> None:
+        """Emit declarations for hoisted variables before a control flow construct."""
+        hoisted_vars = getattr(stmt, 'hoisted_vars', [])
+        for name, typ in hoisted_vars:
+            java_type = self._type(typ) if typ else "Object"
+            var_name = _java_safe_name(name)
+            default = self._default_value(typ) if typ else "null"
+            self._line(f"{java_type} {var_name} = {default};")
+            self._hoisted_vars.add(name)
 
     def _collect_struct_fields(self, module: Module) -> None:
         """Collect field information for all structs."""
@@ -152,69 +169,148 @@ class JavaBackend:
 
     def _collect_tuple_types(self, module: Module) -> None:
         """Collect all unique tuple types used in the module."""
-        def visit_type(typ: Type) -> None:
+        def register_tuple(typ: Tuple) -> None:
+            sig = tuple(self._type(t) for t in typ.elements)
+            # Note: We don't use Optional<T> for (T, bool) in Java because:
+            # 1. Optional doesn't support .f0()/.f1() access pattern
+            # 2. Tuples can be stored in lists and iterated
+            # Instead, use proper tuple records for all tuples
+            if sig not in self.tuple_records:
+                self.tuple_counter += 1
+                self.tuple_records[sig] = f"Tuple{self.tuple_counter}"
+
+        def visit_type(typ: Type | None) -> None:
+            if typ is None:
+                return
             if isinstance(typ, Tuple):
-                sig = tuple(self._type(t) for t in typ.elements)
-                # Detect (T, bool) pattern - use Optional<T> instead of synthetic record
-                # But NOT for (bool, bool) - that's just a two-bool tuple
-                if (len(typ.elements) == 2
-                    and isinstance(typ.elements[1], Primitive)
-                    and typ.elements[1].kind == "bool"
-                    and not (isinstance(typ.elements[0], Primitive) and typ.elements[0].kind == "bool")):
-                    self.optional_tuples.add(sig)
-                elif sig not in self.tuple_records:
-                    self.tuple_counter += 1
-                    self.tuple_records[sig] = f"Tuple{self.tuple_counter}"
-        def visit_func(func: Function) -> None:
-            visit_type(func.ret)
-            for stmt in func.body:
-                visit_stmt(stmt)
+                register_tuple(typ)
+                for elem in typ.elements:
+                    visit_type(elem)
+            elif isinstance(typ, (Slice, Optional, Pointer)):
+                if hasattr(typ, 'element'):
+                    visit_type(typ.element)
+                elif hasattr(typ, 'inner'):
+                    visit_type(typ.inner)
+                elif hasattr(typ, 'target'):
+                    visit_type(typ.target)
+            elif isinstance(typ, Map):
+                visit_type(typ.key)
+                visit_type(typ.value)
+
+        def visit_expr(expr) -> None:
+            if expr is None:
+                return
+            # Visit the expression's type if it has one
+            if hasattr(expr, 'typ') and expr.typ:
+                visit_type(expr.typ)
+            # Visit all child expressions and their types
+            for attr in ('obj', 'left', 'right', 'operand', 'cond', 'then_expr', 'else_expr',
+                         'expr', 'index', 'low', 'high', 'ptr', 'value', 'message', 'pos',
+                         'iterable', 'target', 'inner', 'length', 'capacity'):
+                if hasattr(expr, attr):
+                    child = getattr(expr, attr)
+                    if child is not None:
+                        visit_expr(child)
+            # Visit args, elements, parts
+            if hasattr(expr, 'args'):
+                for arg in expr.args:
+                    visit_expr(arg)
+            if hasattr(expr, 'elements'):
+                for elem in expr.elements:
+                    visit_expr(elem)
+            if hasattr(expr, 'parts'):
+                for part in expr.parts:
+                    visit_expr(part)
+            if hasattr(expr, 'entries'):
+                entries = expr.entries
+                if isinstance(entries, list):
+                    for item in entries:
+                        if isinstance(item, tuple) and len(item) == 2:
+                            visit_expr(item[0])
+                            visit_expr(item[1])
+            if hasattr(expr, 'fields') and isinstance(expr.fields, dict):
+                for v in expr.fields.values():
+                    visit_expr(v)
+
         def visit_stmt(stmt: Stmt) -> None:
-            match stmt:
-                case VarDecl(typ=typ, value=value):
-                    visit_type(typ)
-                    if value:
-                        visit_expr(value)
-                case Return(value=value):
-                    if value:
-                        visit_expr(value)
-                case If(then_body=then_body, else_body=else_body):
-                    for s in then_body:
+            if isinstance(stmt, VarDecl):
+                visit_type(stmt.typ)
+                if stmt.value:
+                    visit_expr(stmt.value)
+            elif isinstance(stmt, (Assign, OpAssign)):
+                visit_expr(stmt.value)
+                # Check decl_typ for hoisted variable types
+                if hasattr(stmt, 'decl_typ'):
+                    visit_type(stmt.decl_typ)
+            elif isinstance(stmt, TupleAssign):
+                visit_expr(stmt.value)
+            elif isinstance(stmt, ExprStmt):
+                visit_expr(stmt.expr)
+            elif isinstance(stmt, Return):
+                if stmt.value:
+                    visit_expr(stmt.value)
+            elif isinstance(stmt, If):
+                visit_expr(stmt.cond)
+                if stmt.init:
+                    visit_stmt(stmt.init)
+                for s in stmt.then_body:
+                    visit_stmt(s)
+                for s in stmt.else_body:
+                    visit_stmt(s)
+            elif isinstance(stmt, While):
+                visit_expr(stmt.cond)
+                for s in stmt.body:
+                    visit_stmt(s)
+            elif isinstance(stmt, ForRange):
+                visit_expr(stmt.iterable)
+                for s in stmt.body:
+                    visit_stmt(s)
+            elif isinstance(stmt, ForClassic):
+                if stmt.init:
+                    visit_stmt(stmt.init)
+                if stmt.cond:
+                    visit_expr(stmt.cond)
+                if stmt.post:
+                    visit_stmt(stmt.post)
+                for s in stmt.body:
+                    visit_stmt(s)
+            elif isinstance(stmt, Block):
+                for s in stmt.body:
+                    visit_stmt(s)
+            elif isinstance(stmt, TryCatch):
+                for s in stmt.body:
+                    visit_stmt(s)
+                for s in stmt.catch_body:
+                    visit_stmt(s)
+            elif isinstance(stmt, Match):
+                visit_expr(stmt.expr)
+                for case in stmt.cases:
+                    for s in case.body:
                         visit_stmt(s)
-                    for s in else_body:
+                for s in stmt.default:
+                    visit_stmt(s)
+            elif isinstance(stmt, TypeSwitch):
+                visit_expr(stmt.expr)
+                for case in stmt.cases:
+                    for s in case.body:
                         visit_stmt(s)
-                case While(body=body):
-                    for s in body:
-                        visit_stmt(s)
-                case ForRange(body=body):
-                    for s in body:
-                        visit_stmt(s)
-                case ForClassic(body=body):
-                    for s in body:
-                        visit_stmt(s)
-                case Block(body=body):
-                    for s in body:
-                        visit_stmt(s)
-                case TryCatch(body=body, catch_body=catch_body):
-                    for s in body:
-                        visit_stmt(s)
-                    for s in catch_body:
-                        visit_stmt(s)
-                case _:
-                    pass
-        def visit_expr(expr: Expr) -> None:
-            match expr:
-                case MethodCall(typ=typ):
-                    visit_type(typ)
-                case TupleLit(typ=typ):
-                    visit_type(typ)
-                case _:
-                    pass
+                for s in stmt.default:
+                    visit_stmt(s)
+
+        # Visit all functions and methods
         for struct in module.structs:
             for method in struct.methods:
-                visit_func(method)
+                visit_type(method.ret)
+                for param in method.params:
+                    visit_type(param.typ)
+                for stmt in method.body:
+                    visit_stmt(stmt)
         for func in module.functions:
-            visit_func(func)
+            visit_type(func.ret)
+            for param in func.params:
+                visit_type(param.typ)
+            for stmt in func.body:
+                visit_stmt(stmt)
 
     def _line(self, text: str = "") -> None:
         if text:
@@ -224,6 +320,10 @@ class JavaBackend:
 
     def _emit_module(self, module: Module) -> None:
         self._line("import java.util.*;")
+        self._line("")
+        # Emit functional interface for () -> Node pattern
+        self._line("@FunctionalInterface")
+        self._line("interface NodeSupplier { Node call(); }")
         self._line("")
         if module.constants:
             self._line("final class Constants {")
@@ -336,6 +436,10 @@ class JavaBackend:
         self._line("}")
 
     def _emit_function(self, func: Function) -> None:
+        self._hoisted_vars = set()  # Reset for new function scope
+        self._current_func = func.name  # Track for VAR_TYPE_OVERRIDES
+        # Track function-typed parameters for proper call emission
+        self._func_params = {p.name for p in func.params if isinstance(p.typ, FuncType)}
         params = self._params(func.params)
         ret = self._type(func.ret)
         name = to_camel(func.name)
@@ -347,8 +451,14 @@ class JavaBackend:
             self._emit_stmt(stmt)
         self.indent -= 1
         self._line("}")
+        self._current_func = None
+        self._func_params = set()
 
     def _emit_method(self, func: Function) -> None:
+        self._hoisted_vars = set()  # Reset for new function scope
+        self._current_func = func.name  # Track for VAR_TYPE_OVERRIDES
+        # Track function-typed parameters for proper call emission
+        self._func_params = {p.name for p in func.params if isinstance(p.typ, FuncType)}
         params = self._params(func.params)
         ret = self._type(func.ret)
         name = to_camel(func.name)
@@ -364,6 +474,8 @@ class JavaBackend:
         self.indent -= 1
         self._line("}")
         self.receiver_name = None
+        self._current_func = None
+        self._func_params = set()
 
     def _params(self, params: list) -> str:
         parts = []
@@ -375,7 +487,12 @@ class JavaBackend:
     def _emit_stmt(self, stmt: Stmt) -> None:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value, mutable=mutable):
-                java_type = self._type(typ)
+                # Check for type override
+                override_key = (self._current_func, name) if self._current_func else None
+                if override_key and override_key in VAR_TYPE_OVERRIDES:
+                    java_type = self._type(VAR_TYPE_OVERRIDES[override_key])
+                else:
+                    java_type = self._type(typ)
                 var_name = _java_safe_name(name)
                 if value is not None:
                     val = self._expr(value)
@@ -392,15 +509,22 @@ class JavaBackend:
                     self._line(f"{obj_str}.set({idx_str}, {val});")
                 else:
                     lv = self._lvalue(target)
-                    if getattr(stmt, 'is_declaration', False):
+                    target_name = target.name if isinstance(target, VarLV) else None
+                    is_hoisted = target_name and target_name in self._hoisted_vars
+                    if getattr(stmt, 'is_declaration', False) and not is_hoisted:
                         # First assignment to variable - need type declaration
-                        value_type = getattr(value, 'typ', None)
-                        if value_type:
-                            java_type = self._type(value_type)
-                            self._line(f"{java_type} {lv} = {val};")
+                        # Check for type override first
+                        override_key = (self._current_func, target_name) if self._current_func and target_name else None
+                        if override_key and override_key in VAR_TYPE_OVERRIDES:
+                            java_type = self._type(VAR_TYPE_OVERRIDES[override_key])
                         else:
-                            # Fallback to Object if type unknown
-                            self._line(f"Object {lv} = {val};")
+                            value_type = getattr(value, 'typ', None)
+                            if value_type:
+                                java_type = self._type(value_type)
+                            else:
+                                # Fallback to Object if type unknown
+                                java_type = "Object"
+                        self._line(f"{java_type} {lv} = {val};")
                     else:
                         self._line(f"{lv} = {val};")
             case OpAssign(target=target, op=op, value=value):
@@ -425,7 +549,8 @@ class JavaBackend:
                     for i, target in enumerate(targets):
                         lv = self._lvalue(target)
                         target_name = target.name if isinstance(target, VarLV) else None
-                        if is_decl or (target_name and target_name in new_targets):
+                        is_hoisted = target_name and target_name in self._hoisted_vars
+                        if (is_decl or (target_name and target_name in new_targets)) and not is_hoisted:
                             elem_type = self._type(value_type.elements[i]) if i < len(value_type.elements) else "Object"
                             self._line(f"{elem_type} {lv} = {val_str}.f{i}();")
                         else:
@@ -435,7 +560,8 @@ class JavaBackend:
                     for i, target in enumerate(targets):
                         lv = self._lvalue(target)
                         target_name = target.name if isinstance(target, VarLV) else None
-                        if is_decl or (target_name and target_name in new_targets):
+                        is_hoisted = target_name and target_name in self._hoisted_vars
+                        if (is_decl or (target_name and target_name in new_targets)) and not is_hoisted:
                             self._line(f"Object {lv} = {val_str}[{i}];")
                         else:
                             self._line(f"{lv} = {val_str}[{i}];")
@@ -461,9 +587,15 @@ class JavaBackend:
                 else:
                     self._line("return;")
             case If(cond=cond, then_body=then_body, else_body=else_body, init=init):
+                self._emit_hoisted_vars(stmt)
                 if init is not None:
                     self._emit_stmt(init)
-                self._line(f"if ({self._expr(cond)}) {{")
+                cond_str = self._expr(cond)
+                # Fix pattern: !x != null -> x == null
+                if cond_str.endswith(" != null") and cond_str.startswith("!"):
+                    inner = cond_str[1:].replace(" != null", "")
+                    cond_str = f"({inner} == null)"
+                self._line(f"if ({cond_str}) {{")
                 self.indent += 1
                 for s in then_body:
                     self._emit_stmt(s)
@@ -476,14 +608,15 @@ class JavaBackend:
                     self.indent -= 1
                 self._line("}")
             case TypeSwitch(expr=expr, binding=binding, cases=cases, default=default):
-                self._emit_type_switch(expr, binding, cases, default)
+                self._emit_type_switch(stmt, expr, binding, cases, default)
             case Match(expr=expr, cases=cases, default=default):
-                self._emit_match(expr, cases, default)
+                self._emit_match(stmt, expr, cases, default)
             case ForRange(index=index, value=value, iterable=iterable, body=body):
-                self._emit_for_range(index, value, iterable, body)
+                self._emit_for_range(stmt, index, value, iterable, body)
             case ForClassic(init=init, cond=cond, post=post, body=body):
                 self._emit_for_classic(init, cond, post, body)
             case While(cond=cond, body=body):
+                self._emit_hoisted_vars(stmt)
                 self._line(f"while ({self._expr(cond)}) {{")
                 self.indent += 1
                 for s in body:
@@ -501,14 +634,18 @@ class JavaBackend:
                 else:
                     self._line("continue;")
             case Block(body=body):
-                self._line("{")
-                self.indent += 1
+                # Check if this block should emit without braces (for statement sequences)
+                no_scope = getattr(stmt, 'no_scope', False)
+                if not no_scope:
+                    self._line("{")
+                    self.indent += 1
                 for s in body:
                     self._emit_stmt(s)
-                self.indent -= 1
-                self._line("}")
+                if not no_scope:
+                    self.indent -= 1
+                    self._line("}")
             case TryCatch(body=body, catch_var=catch_var, catch_body=catch_body, reraise=reraise):
-                self._emit_try_catch(body, catch_var, catch_body, reraise)
+                self._emit_try_catch(stmt, body, catch_var, catch_body, reraise)
             case Raise(error_type=error_type, message=message, pos=pos):
                 msg = self._expr(message)
                 self._line(f"throw new RuntimeException({msg});")
@@ -518,8 +655,9 @@ class JavaBackend:
                 self._line(f"// TODO: {type(stmt).__name__}")
 
     def _emit_type_switch(
-        self, expr: Expr, binding: str, cases: list[TypeCase], default: list[Stmt]
+        self, stmt, expr: Expr, binding: str, cases: list[TypeCase], default: list[Stmt]
     ) -> None:
+        self._emit_hoisted_vars(stmt)
         var = self._expr(expr)
         bind_name = _java_safe_name(binding)
         # Don't re-declare if binding to same variable
@@ -527,11 +665,17 @@ class JavaBackend:
             self._line(f"Object {bind_name} = {var};")
         for i, case in enumerate(cases):
             type_name = self._type_name_for_check(case.typ)
+            # Create a narrowed binding name for pattern matching
+            narrowed_name = f"{bind_name}{type_name.replace('Node', '')}"
             keyword = "if" if i == 0 else "} else if"
-            self._line(f"{keyword} ({bind_name} instanceof {type_name}) {{")
+            # Use Java 16+ pattern matching: instanceof with binding
+            self._line(f"{keyword} ({bind_name} instanceof {type_name} {narrowed_name}) {{")
             self.indent += 1
+            # Set up renaming so references to binding use narrowed_name
+            self._type_switch_binding_rename[binding] = narrowed_name
             for s in case.body:
                 self._emit_stmt(s)
+            del self._type_switch_binding_rename[binding]
             self.indent -= 1
         if default:
             self._line("} else {")
@@ -541,7 +685,8 @@ class JavaBackend:
             self.indent -= 1
         self._line("}")
 
-    def _emit_match(self, expr: Expr, cases: list, default: list[Stmt]) -> None:
+    def _emit_match(self, stmt, expr: Expr, cases: list, default: list[Stmt]) -> None:
+        self._emit_hoisted_vars(stmt)
         expr_str = self._expr(expr)
         # Java switch on strings
         self._line(f"switch ({expr_str}) {{")
@@ -567,11 +712,13 @@ class JavaBackend:
 
     def _emit_for_range(
         self,
+        stmt,
         index: str | None,
         value: str | None,
         iterable: Expr,
         body: list[Stmt],
     ) -> None:
+        self._emit_hoisted_vars(stmt)
         iter_expr = self._expr(iterable)
         iter_type = getattr(iterable, 'typ', None)
         is_string = isinstance(iter_type, Primitive) and iter_type.kind == "string"
@@ -672,11 +819,13 @@ class JavaBackend:
 
     def _emit_try_catch(
         self,
+        stmt,
         body: list[Stmt],
         catch_var: str | None,
         catch_body: list[Stmt],
         reraise: bool,
     ) -> None:
+        self._emit_hoisted_vars(stmt)
         self._line("try {")
         self.indent += 1
         for s in body:
@@ -710,6 +859,9 @@ class JavaBackend:
             case Var(name=name):
                 if name == self.receiver_name:
                     return "this"
+                # Check for type switch binding rename (use narrowed name)
+                if name in self._type_switch_binding_rename:
+                    return self._type_switch_binding_rename[name]
                 # Check if this is a constant (all uppercase, or ClassName_CONSTANT pattern)
                 if name.isupper() or (name[0].isupper() and "_" in name and name.split("_", 1)[1].isupper()):
                     return f"Constants.{to_screaming_snake(name)}"
@@ -721,6 +873,14 @@ class JavaBackend:
                 lower_field = field.lower()
                 if lower_field.startswith("f") and len(lower_field) > 1 and lower_field[1:].isdigit():
                     return f"{obj_str}.{lower_field}()"
+                # For .kind on Node interface, use getKind() method
+                obj_type = getattr(obj, 'typ', None)
+                if field == "kind" and isinstance(obj_type, (Interface, StructRef)):
+                    return f"{obj_str}.getKind()"
+                # Method reference on self: _arith_parse_* -> () -> this._arithParse*()
+                # This handles bound method references in Python that are passed as callbacks
+                if obj_str == "this" and field.startswith("_arith_parse_"):
+                    return f"() -> this.{to_camel(field)}()"
                 return f"{obj_str}.{_java_safe_name(field)}"
             case Index(obj=obj, index=index):
                 obj_str = self._expr(obj)
@@ -786,6 +946,15 @@ class JavaBackend:
                     return f"Math.min({args_str})"
                 if func == "max":
                     return f"Math.max({args_str})"
+                # Helper functions for Go pointer boxing - inline in Java
+                if func == "_intPtr" or func == "_int_ptr":
+                    # Java auto-boxes int to Integer
+                    return f"({self._expr(args[0])})"
+                if func == "_intToStr" or func == "_int_to_str":
+                    return f"String.valueOf({self._expr(args[0])})"
+                # Check if calling a function-typed parameter
+                if func in self._func_params:
+                    return f"{func}.call()"
                 # Module-level functions are in {ModuleName}Functions class
                 func_class = f"{to_pascal(self._module_name)}Functions"
                 return f"{func_class}.{to_camel(func)}({args_str})"
@@ -807,6 +976,17 @@ class JavaBackend:
                 return self._containment_check(left, right, negated=True)
             case BinaryOp(op=op, left=left, right=right):
                 java_op = _binary_op(op)
+                right_str = self._expr(right)
+                # Pattern: !x != null (from Python's "not x" on nullable)
+                # Convert to: x == null
+                if java_op == "!=" and right_str == "null":
+                    if isinstance(left, UnaryOp) and left.op == "!":
+                        return f"({self._expr(left.operand)} == null)"
+                    # Also check the generated string as a fallback
+                    left_str_tmp = self._expr(left)
+                    if left_str_tmp.startswith("!"):
+                        # Strip the leading ! and use == null
+                        return f"({left_str_tmp[1:]} == null)"
                 # Detect len(x) > 0 -> !x.isEmpty(), len(x) == 0 -> x.isEmpty()
                 if isinstance(left, Len) and isinstance(right, IntLit) and right.value == 0:
                     inner_str = self._expr(left.expr)
@@ -844,22 +1024,29 @@ class JavaBackend:
                 operand_type = getattr(operand, 'typ', None)
                 if isinstance(operand_type, Primitive) and operand_type.kind == "int":
                     return f"({self._expr(operand)} == 0)"
+                # For object types (not primitive bool), Python "not x" means "x is falsy/null"
+                if isinstance(operand_type, (Interface, StructRef, Pointer)):
+                    return f"({self._expr(operand)} == null)"
                 # Check for bitwise & operand (result is int even if typ not set)
                 if isinstance(operand, BinaryOp) and operand.op == "&":
                     return f"({self._expr(operand)} == 0)"
                 # Check for arithmetic ops (e.g., !pos + 1) - result is int
                 if isinstance(operand, BinaryOp) and operand.op in ("+", "-", "*", "/", "%", "|", "^"):
                     return f"({self._expr(operand)} == 0)"
-                # Check for Var with unknown type but used in numeric context
-                # Heuristic: if operand is Var and type not set/unknown, it might be int
+                # Check for Var with unknown type - if name looks like an object var, use null check
                 if isinstance(operand, Var) and operand_type is None:
-                    # Fall through to generate !expr, hope it's boolean
-                    pass
+                    # Heuristic: lowercase names are typically objects, not booleans
+                    return f"({self._expr(operand)} == null)"
+                # For complex operands (BinaryOp), wrap in parens to avoid precedence issues
+                # e.g., Python's `not (a < b)` should be `!(a < b)` not `!a < b`
+                if isinstance(operand, BinaryOp):
+                    return f"!({self._expr(operand)})"
                 return f"!{self._expr(operand)}"
             case UnaryOp(op=op, operand=operand):
                 return f"{op}{self._expr(operand)}"
             case Ternary(cond=cond, then_expr=then_expr, else_expr=else_expr):
-                return f"{self._expr(cond)} ? {self._expr(then_expr)} : {self._expr(else_expr)}"
+                # Wrap in parens to avoid precedence issues (?: has very low precedence in Java)
+                return f"({self._expr(cond)} ? {self._expr(then_expr)} : {self._expr(else_expr)})"
             case Cast(expr=inner, to_type=to_type):
                 return self._cast(inner, to_type)
             case TypeAssert(expr=inner, asserted=asserted, safe=safe):
@@ -869,6 +1056,12 @@ class JavaBackend:
                 type_name = self._type_name_for_check(tested_type)
                 return f"({self._expr(inner)} instanceof {type_name})"
             case IsNil(expr=inner, negated=negated):
+                # Special case: !x != null (where x is an object) should be just x == null
+                # This handles Python's "not x" being translated to IsNil(UnaryOp("!", x), negated=True)
+                if negated and isinstance(inner, UnaryOp) and inner.op == "!":
+                    inner_type = getattr(inner.operand, 'typ', None)
+                    if isinstance(inner_type, (Interface, StructRef, Pointer)) or inner_type is None:
+                        return f"({self._expr(inner.operand)} == null)"
                 if negated:
                     return f"{self._expr(inner)} != null"
                 return f"{self._expr(inner)} == null"
@@ -921,7 +1114,12 @@ class JavaBackend:
                     ordered_args = []
                     for field_name, field_type in field_info:
                         if field_name in fields:
-                            ordered_args.append(self._expr(fields[field_name]))
+                            field_val = fields[field_name]
+                            # Handle null for int fields - use -1 sentinel
+                            if isinstance(field_val, NilLit) and isinstance(field_type, Primitive) and field_type.kind == "int":
+                                ordered_args.append("-1")
+                            else:
+                                ordered_args.append(self._expr(field_val))
                         else:
                             ordered_args.append(self._default_value(field_type))
                     return f"new {safe_name}({', '.join(ordered_args)})"
@@ -1008,6 +1206,19 @@ class JavaBackend:
             return f"{obj_str}.clear()"
         if method == "insert":
             return f"{obj_str}.add({args_str})"
+        # Fallback for string methods when receiver_type is unknown
+        if method == "isalnum":
+            return f"{obj_str}.chars().allMatch(Character::isLetterOrDigit)"
+        if method == "isalpha":
+            return f"{obj_str}.chars().allMatch(Character::isLetter)"
+        if method == "isdigit":
+            return f"{obj_str}.chars().allMatch(Character::isDigit)"
+        if method == "isspace":
+            return f"{obj_str}.chars().allMatch(Character::isWhitespace)"
+        if method == "endswith":
+            return f"{obj_str}.endsWith({args_str})"
+        if method == "startswith":
+            return f"{obj_str}.startsWith({args_str})"
         return f"{obj_str}.{to_camel(method)}({args_str})"
 
     def _slice_expr(self, obj: Expr, low: Expr | None, high: Expr | None) -> str:
@@ -1060,6 +1271,12 @@ class JavaBackend:
                 return f"(byte) ({inner_str})"
             if to_type.kind == "string":
                 return f"String.valueOf({inner_str})"
+        # Handle String -> List<Byte> (encoding)
+        if isinstance(to_type, Slice):
+            inner_type = getattr(inner, 'typ', None)
+            if isinstance(inner_type, Primitive) and inner_type.kind == "string":
+                if isinstance(to_type.element, Primitive) and to_type.element.kind == "byte":
+                    return f"ParableFunctions._stringToBytes({inner_str})"
         return f"(({java_type}) {inner_str})"
 
     def _format_string(self, template: str, args: list[Expr]) -> str:
@@ -1116,7 +1333,8 @@ class JavaBackend:
             case Pointer(target=target):
                 return self._type(target)
             case Optional(inner=inner):
-                return self._type(inner)
+                # Use boxed type to allow null
+                return _box_type(self._type(inner))
             case StructRef(name=name):
                 return _java_safe_class(name)
             case Interface(name=name):
@@ -1128,7 +1346,9 @@ class JavaBackend:
                     return _java_safe_class(name)
                 return "Object"
             case FuncType(params=params, ret=ret):
-                # Java functional interfaces are complex - use Object for now
+                # Use NodeSupplier for () -> Node pattern
+                if not params and isinstance(ret, (Interface, StructRef)):
+                    return "NodeSupplier"
                 return "Object"
             case StringSlice():
                 return "String"

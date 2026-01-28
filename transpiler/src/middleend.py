@@ -748,6 +748,7 @@ def _merge_types(t1: Type | None, t2: Type | None) -> Type | None:
     When hoisting variables assigned in multiple branches:
     - If one branch assigns nil (Interface("any")) and another assigns Node, use Node
     - Go interfaces are nil-able, so Interface("Node") can hold nil without widening
+    - If both are different Node subtypes, use Interface("Node") as the common type
     """
     if t1 is None:
         return t2
@@ -765,6 +766,16 @@ def _merge_types(t1: Type | None, t2: Type | None) -> Type | None:
         return t2
     if isinstance(t2, Interface) and t2.name == "any":
         return t1
+    # If one is Interface("Node") and other is StructRef, use Interface("Node")
+    if isinstance(t1, Interface) and t1.name == "Node":
+        return t1
+    if isinstance(t2, Interface) and t2.name == "Node":
+        return t2
+    # If both are different StructRefs, they're likely Node subtypes - use Interface("Node")
+    # This handles cases like BraceGroup vs ArithmeticCommand assigned to same variable
+    from .ir import StructRef
+    if isinstance(t1, StructRef) and isinstance(t2, StructRef) and t1.name != t2.name:
+        return Interface("Node")
     # Otherwise keep first type (arbitrary but deterministic)
     return t1
 

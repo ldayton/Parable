@@ -6,6 +6,7 @@ Used by the frontend when Python annotations are ambiguous (e.g., bare `list`).
 
 from .ir import (
     BOOL,
+    BYTE,
     INT,
     STRING,
     Interface,
@@ -81,7 +82,9 @@ FIELD_TYPE_OVERRIDES: dict[tuple[str, str], Type] = {
 # Maps method_name -> IR return type
 # Most methods now use proper annotations: _collect_cmdsubs, _collect_procsubs,
 # _collect_redirects, copy_stack. Others auto-detected as Node.
-RETURN_TYPE_OVERRIDES: dict[str, Type] = {}
+RETURN_TYPE_OVERRIDES: dict[str, Type] = {
+    "_string_to_bytes": Slice(BYTE),
+}
 
 # Union field discriminators for Node | str union types
 # Maps (receiver_type, field_name) -> (discriminator_var, nil_type, non_nil_type)
@@ -164,6 +167,8 @@ VAR_TYPE_OVERRIDES: dict[tuple[str, str], Type] = {
     ("_format_cmdsub_node", "word_vals"): Slice(STRING),
     ("_format_cmdsub_node", "patterns"): Slice(STRING),
     ("_format_cmdsub_node", "redirect_parts"): Slice(STRING),
+    # _parseCompoundCommand returns various Node subtypes
+    ("_parse_compound_command", "result"): Interface("Node"),
 }
 
 # Fields that use -1 sentinel value instead of nil pointer for int | None

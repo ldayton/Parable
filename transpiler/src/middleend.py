@@ -293,8 +293,13 @@ def _analyze_function(func: Function) -> None:
             stmt.is_declaration = is_new_declaration(stmt.target, local_assigned)
             if isinstance(stmt.target, VarLV) and stmt.is_declaration:
                 local_assigned.add(stmt.target.name)
+                # Track this declaration for reassignment detection
+                stmt.is_reassigned = False
+                stmt.assignment_count = 0
+                declared[stmt.target.name] = stmt
                 # Note: Don't add to outer 'assigned' - if-else branches need separate scopes
-            check_lvalue(stmt.target)
+            else:
+                check_lvalue(stmt.target)
             check_expr(stmt.value)
         elif isinstance(stmt, OpAssign):
             check_lvalue(stmt.target)

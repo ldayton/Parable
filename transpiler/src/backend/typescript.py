@@ -137,7 +137,7 @@ class TsBackend:
         self._line(f"const {const.name}: {typ} = {val};")
 
     def _emit_interface(self, iface: InterfaceDef) -> None:
-        self._line(f"interface {iface.name} {{")
+        self._line(f"interface {_safe_name(iface.name)} {{")
         self.indent += 1
         for method in iface.methods:
             params = self._params(method.params)
@@ -151,8 +151,8 @@ class TsBackend:
             self._line(f"/** {struct.doc} */")
         implements = ""
         if struct.implements:
-            implements = f" implements {', '.join(struct.implements)}"
-        self._line(f"class {struct.name}{implements} {{")
+            implements = f" implements {', '.join(_safe_name(i) for i in struct.implements)}"
+        self._line(f"class {_safe_name(struct.name)}{implements} {{")
         self.indent += 1
         for fld in struct.fields:
             self._emit_field(fld)
@@ -254,7 +254,11 @@ class TsBackend:
             case Assign(target=target, value=value):
                 lv = self._lvalue(target)
                 val = self._expr(value)
-                self._line(f"{lv} = {val};")
+                if getattr(stmt, 'is_declaration', False):
+                    keyword = "let" if getattr(stmt, 'is_reassigned', False) else "const"
+                    self._line(f"{keyword} {lv} = {val};")
+                else:
+                    self._line(f"{lv} = {val};")
             case TupleAssign(targets=targets, value=value):
                 lvalues = ", ".join(self._lvalue(t) for t in targets)
                 val = self._expr(value)
@@ -266,6 +270,10 @@ class TsBackend:
                 lv = self._lvalue(target)
                 val = self._expr(value)
                 self._line(f"{lv} {op}= {val};")
+            case ExprStmt(expr=Var(name=name)) if name in (
+                "_skip_docstring", "_pass", "_skip_super_init"
+            ):
+                pass  # Skip marker statements
             case ExprStmt(expr=expr):
                 self._line(f"{self._expr(expr)};")
             case Return(value=value):
@@ -436,7 +444,12 @@ class TsBackend:
             case Assign(target=VarLV(name=name), value=BinaryOp(op=op, left=Var(name=left_name), right=IntLit(value=1))) if name == left_name and op in ("+", "-"):
                 return f"{_camel(name)}++" if op == "+" else f"{_camel(name)}--"
             case Assign(target=target, value=value):
-                return f"{self._lvalue(target)} = {self._expr(value)}"
+                lv = self._lvalue(target)
+                val = self._expr(value)
+                if getattr(stmt, 'is_declaration', False):
+                    keyword = "let" if getattr(stmt, 'is_reassigned', False) else "const"
+                    return f"{keyword} {lv} = {val}"
+                return f"{lv} = {val}"
             case OpAssign(target=target, op=op, value=value):
                 return f"{self._lvalue(target)} {op}= {self._expr(value)}"
             case ExprStmt(expr=expr):
@@ -497,6 +510,15 @@ class TsBackend:
             case Call(func=func, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
                 return f"{_camel(func)}({args_str})"
+            case MethodCall(obj=obj, method="join", args=[arr], receiver_type=receiver_type) if isinstance(receiver_type, Primitive) and receiver_type.kind == "string":
+                # "sep".join(arr) → arr.join("sep")
+                return f"{self._expr(arr)}.join({self._expr(obj)})"
+            case MethodCall(obj=obj, method="isalnum", args=_, receiver_type=_):
+                return f"/^[a-zA-Z0-9]$/.test({self._expr(obj)})"
+            case MethodCall(obj=obj, method="isdigit", args=_, receiver_type=_):
+                return f"/^[0-9]$/.test({self._expr(obj)})"
+            case MethodCall(obj=obj, method="isalpha", args=_, receiver_type=_):
+                return f"/^[a-zA-Z]$/.test({self._expr(obj)})"
             case MethodCall(obj=obj, method=method, args=args, receiver_type=receiver_type):
                 args_str = ", ".join(self._expr(a) for a in args)
                 ts_method = _method_name(method, receiver_type)
@@ -505,11 +527,19 @@ class TsBackend:
                 args_str = ", ".join(self._expr(a) for a in args)
                 type_name = self._type_name_for_check(on_type)
                 return f"{type_name}.{_camel(method)}({args_str})"
+            case BinaryOp(op="in", left=left, right=right):
+                return self._containment_check(left, right, negated=False)
+            case BinaryOp(op="not in", left=left, right=right):
+                return self._containment_check(left, right, negated=True)
             case BinaryOp(op=op, left=left, right=right):
                 ts_op = _binary_op(op)
                 left_str = self._expr_with_precedence(left, op, is_right=False)
                 right_str = self._expr_with_precedence(right, op, is_right=True)
                 return f"{left_str} {ts_op} {right_str}"
+            case UnaryOp(op="&", operand=operand):
+                return self._expr(operand)  # TypeScript passes objects by reference
+            case UnaryOp(op="*", operand=operand):
+                return self._expr(operand)  # TypeScript has no pointer dereference
             case UnaryOp(op=op, operand=operand):
                 return f"{op}{self._expr(operand)}"
             case Ternary(cond=cond, then_expr=then_expr, else_expr=else_expr):
@@ -551,7 +581,7 @@ class TsBackend:
                 return f"new Set([{elems}])"
             case StructLit(struct_name=struct_name, fields=fields):
                 args = ", ".join(self._expr(v) for v in fields.values())
-                return f"new {struct_name}({args})"
+                return f"new {_safe_name(struct_name)}({args})"
             case TupleLit(elements=elements):
                 elems = ", ".join(self._expr(e) for e in elements)
                 return f"[{elems}]"
@@ -563,6 +593,17 @@ class TsBackend:
                 return self._expr(source)  # TypeScript arrays are covariant
             case _:
                 raise NotImplementedError(f"Unknown expression: {type(expr).__name__}")
+
+    def _containment_check(self, item: Expr, container: Expr, negated: bool) -> str:
+        """Generate containment check: `x in y` or `x not in y`."""
+        item_str = self._expr(item)
+        container_str = self._expr(container)
+        container_type = getattr(container, 'typ', None)
+        neg = "!" if negated else ""
+        if isinstance(container_type, (Set, Map)):
+            return f"{neg}{container_str}.has({item_str})"
+        # For strings and arrays, use includes
+        return f"{neg}{container_str}.includes({item_str})"
 
     def _slice_expr(self, obj: Expr, low: Expr | None, high: Expr | None) -> str:
         obj_str = self._expr(obj)
@@ -588,8 +629,11 @@ class TsBackend:
 
     def _format_string(self, template: str, args: list[Expr]) -> str:
         result = template
+        # Handle {0}, {1} style placeholders
         for i, arg in enumerate(args):
             result = result.replace(f"{{{i}}}", f"${{{self._expr(arg)}}}", 1)
+        # Escape backticks in the template
+        result = result.replace("`", "\\`")
         return f"`{result}`"
 
     def _lvalue(self, lv: LValue) -> str:
@@ -627,9 +671,9 @@ class TsBackend:
             case Optional(inner=inner):
                 return f"{self._type(inner)} | null"
             case StructRef(name=name):
-                return name
+                return _safe_name(name)
             case Interface(name=name):
-                return name
+                return _safe_name(name)
             case Union(name=name, variants=variants):
                 if name:
                     return name
@@ -648,9 +692,9 @@ class TsBackend:
     def _type_name_for_check(self, typ: Type) -> str:
         match typ:
             case StructRef(name=name):
-                return name
+                return _safe_name(name)
             case Interface(name=name):
-                return name
+                return _safe_name(name)
             case _:
                 return self._type(typ)
 
@@ -669,19 +713,61 @@ def _primitive_type(kind: str) -> str:
             raise NotImplementedError(f"Unknown primitive: {kind}")
 
 
-def _camel(name: str) -> str:
-    if name in ("this", "self"):
+def _camel(name: str, is_receiver_ref: bool = False) -> str:
+    """Convert snake_case to camelCase.
+
+    Args:
+        name: The identifier name
+        is_receiver_ref: True if this is a reference to the method receiver
+                        (should become 'this'), False otherwise
+    """
+    if name in ("this", "self") and is_receiver_ref:
         return "this"
     if "_" not in name:
-        return name
+        return _safe_name(name)
+    # Don't convert SCREAMING_SNAKE_CASE constants - preserve underscores
+    # These have uppercase letters after the first underscore
     parts = name.split("_")
-    return parts[0] + "".join(p.capitalize() for p in parts[1:])
+    if len(parts) > 1 and any(p.isupper() for p in parts[1:]):
+        return _safe_name(name)
+    result = parts[0] + "".join(p.capitalize() for p in parts[1:])
+    return _safe_name(result)
+
+
+# TypeScript reserved words and built-in type names that may be used as identifiers in source
+_TS_RESERVED = {
+    "var", "let", "const", "function", "class", "interface", "type", "enum",
+    "Array", "Function", "Object", "String", "Number", "Boolean", "Symbol",
+    "Map", "Set", "Promise", "Error",
+}
+
+
+def _safe_name(name: str) -> str:
+    """Rename TypeScript reserved words to safe alternatives."""
+    if name in _TS_RESERVED:
+        return f"{name}Name"
+    return name
+
+
+# Python string method → TypeScript string method
+_STRING_METHOD_MAP = {
+    "startswith": "startsWith",
+    "endswith": "endsWith",
+    "rstrip": "trimEnd",
+    "lstrip": "trimStart",
+    "strip": "trim",
+    "lower": "toLowerCase",
+    "upper": "toUpperCase",
+}
 
 
 def _method_name(method: str, receiver_type: Type) -> str:
     """Convert method name based on receiver type."""
     if isinstance(receiver_type, Slice) and method == "append":
         return "push"
+    if isinstance(receiver_type, Primitive) and receiver_type.kind == "string":
+        if method in _STRING_METHOD_MAP:
+            return _STRING_METHOD_MAP[method]
     return _camel(method)
 
 
@@ -709,22 +795,35 @@ def _ends_with_return(body: list[Stmt]) -> bool:
 
 
 def _op_precedence(op: str) -> int:
-    """Return precedence level for binary operator (higher = binds tighter)."""
+    """Return precedence level for binary operator (higher = binds tighter).
+
+    TypeScript precedence (lower number = lower precedence):
+    - Bitwise OR/XOR/AND have LOWER precedence than comparison operators
+    - This differs from Python, so we must wrap bitwise ops in parens when compared
+    """
     match op:
         case "||":
             return 1
         case "&&":
             return 2
-        case "==" | "!=" | "===" | "!==":
+        case "|":
             return 3
-        case "<" | ">" | "<=" | ">=":
+        case "^":
             return 4
-        case "+" | "-":
+        case "&":
             return 5
-        case "*" | "/" | "%":
+        case "==" | "!=" | "===" | "!==":
             return 6
-        case _:
+        case "<" | ">" | "<=" | ">=":
+            return 7
+        case "<<" | ">>":
+            return 8
+        case "+" | "-":
+            return 9
+        case "*" | "/" | "%":
             return 10
+        case _:
+            return 11
 
 
 def _can_infer_type(value: Expr) -> bool:

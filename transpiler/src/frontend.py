@@ -308,10 +308,31 @@ class Frontend:
                                 const_name = f"{node.name}_{target.id}"
                                 self.symbols.constants[const_name] = INT
 
+    def _detect_mutated_params(self, node: ast.FunctionDef) -> set[str]:
+        """Detect which parameters are mutated in the function body."""
+        mutated = set()
+        param_names = {a.arg for a in node.args.args if a.arg != "self"}
+        for stmt in ast.walk(node):
+            # param.append(...), param.extend(...), param.clear(), param.pop()
+            if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+                call = stmt.value
+                if isinstance(call.func, ast.Attribute):
+                    if call.func.attr in ("append", "extend", "clear", "pop"):
+                        if isinstance(call.func.value, ast.Name) and call.func.value.id in param_names:
+                            mutated.add(call.func.value.id)
+            # param[i] = ...
+            if isinstance(stmt, ast.Assign):
+                for target in stmt.targets:
+                    if isinstance(target, ast.Subscript):
+                        if isinstance(target.value, ast.Name) and target.value.id in param_names:
+                            mutated.add(target.value.id)
+        return mutated
+
     def _extract_func_info(
         self, node: ast.FunctionDef, is_method: bool = False
     ) -> FuncInfo:
         """Extract function signature information."""
+        mutated_params = self._detect_mutated_params(node)
         params = []
         non_self_args = [a for a in node.args.args if a.arg != "self"]
         n_params = len(non_self_args)
@@ -319,10 +340,13 @@ class Frontend:
         for i, arg in enumerate(non_self_args):
             py_type = self._annotation_to_str(arg.annotation) if arg.annotation else ""
             typ = self._py_type_to_ir(py_type) if py_type else Interface("any")
-            # Check for overrides
+            # Check for overrides first (takes precedence)
             override_key = (node.name, arg.arg)
             if override_key in PARAM_TYPE_OVERRIDES:
                 typ = PARAM_TYPE_OVERRIDES[override_key]
+            # Auto-wrap mutated slice params with Pointer
+            elif arg.arg in mutated_params and isinstance(typ, Slice):
+                typ = Pointer(typ)
             has_default = False
             default_value = None
             # Check if this param has a default

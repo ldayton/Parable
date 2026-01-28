@@ -23,12 +23,7 @@ from .ir import (
 # Maps (method_name, param_name) -> IR type
 # Use Pointer(Slice(...)) for parameters that are mutated by the callee
 PARAM_TYPE_OVERRIDES: dict[tuple[str, str], Type] = {
-    ("_read_bracket_expression", "chars"): Pointer(Slice(STRING)),
-    ("_read_bracket_expression", "parts"): Pointer(Slice(StructRef("Node"))),
-    ("_parse_dollar_expansion", "chars"): Pointer(Slice(STRING)),
-    ("_parse_dollar_expansion", "parts"): Pointer(Slice(StructRef("Node"))),
-    ("_scan_double_quote", "chars"): Pointer(Slice(STRING)),
-    ("_scan_double_quote", "parts"): Pointer(Slice(StructRef("Node"))),
+    # _read_bracket_expression, _parse_dollar_expansion, _scan_double_quote: auto-detected
     ("restore_from", "saved_stack"): Slice(Pointer(StructRef("ParseContext"))),
     ("copy_stack", "_result"): Slice(Pointer(StructRef("ParseContext"))),  # return type hint
     # SavedParserState constructor parameters
@@ -45,8 +40,7 @@ PARAM_TYPE_OVERRIDES: dict[tuple[str, str], Type] = {
     ("_to_sexp_and_or", "op_names"): Map(STRING, STRING),
     # Redirect handling - only reads, no mutation
     ("_append_redirects", "redirects"): Slice(StructRef("Node")),
-    # Bytearray mutation - needs pointer to avoid losing appends
-    ("_append_with_ctlesc", "result"): Pointer(Slice(BYTE)),
+    # _append_with_ctlesc: auto-detected (bytearray mutation)
     # ParseError/MatchedPairError constructor uses int, not *int
     ("NewParseError", "pos"): INT,
     ("NewParseError", "line"): INT,

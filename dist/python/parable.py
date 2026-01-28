@@ -6554,7 +6554,7 @@ class Parser:
                 raise ParseError("Syntax error", self.pos)
         if not results:
             return [Empty(kind="empty")]
-        if self._saw_newline_in_single_quote and self.source and self.source[-1] == "\\" and not (len(self.source) >= 3 and self.source[len(self.source) - 3:-1] == "\\\n"):
+        if self._saw_newline_in_single_quote and self.source and self.source[-1] == "\\" and not (len(self.source) >= 3 and self.source[-3:-1] == "\\\n"):
             if not self._last_word_on_own_line(results):
                 self._strip_trailing_backslash_from_last_word(results)
         return results

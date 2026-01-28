@@ -648,8 +648,11 @@ class PythonBackend:
 
     def _slice_expr(self, obj: Expr, low: Expr | None, high: Expr | None) -> str:
         obj_str = self._expr(obj)
-        low_str = self._expr(low) if low else ""
-        # Detect len(x) - N pattern for negative slice bound
+        # Detect len(x) - N pattern for negative slice bounds
+        if low and (neg_idx := self._negative_index(obj, low)):
+            low_str = neg_idx
+        else:
+            low_str = self._expr(low) if low else ""
         if high and (neg_idx := self._negative_index(obj, high)):
             high_str = neg_idx
         else:

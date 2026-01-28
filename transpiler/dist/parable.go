@@ -3489,7 +3489,7 @@ func (self *Pipeline) ToSexp() string {
 		return self.cmdSexp(cmd, needs)
 	}
 	lastPair := cmds[len(cmds)-1]
-	lastCmd := lastPair.F0
+	var lastCmd Node = lastPair.F0
 	lastNeeds := lastPair.F1
 	result := self.cmdSexp(lastCmd, lastNeeds)
 	j := len(cmds) - 2
@@ -5184,7 +5184,7 @@ func (self *Parser) parseCommandSubstitution() (Node, string) {
 	self.setState((ParserStateFlagsPSTCMDSUBST | ParserStateFlagsPSTEOFTOKEN))
 	self.eofToken = ")"
 	cmd := self.ParseList(true)
-	if cmd == nil {
+	if _isNilInterface(cmd) {
 		cmd = &Empty{Kind: "empty"}
 	}
 	self.SkipWhitespaceAndNewlines()
@@ -5209,7 +5209,7 @@ func (self *Parser) parseFunsub(start int) (Node, string) {
 	self.setState((ParserStateFlagsPSTCMDSUBST | ParserStateFlagsPSTEOFTOKEN))
 	self.eofToken = "}"
 	cmd := self.ParseList(true)
-	if cmd == nil {
+	if _isNilInterface(cmd) {
 		cmd = &Empty{Kind: "empty"}
 	}
 	self.SkipWhitespaceAndNewlines()
@@ -5579,7 +5579,7 @@ func (self *Parser) parseProcessSubstitution() (result0 Node, result1 string) {
 		}
 	}()
 	cmd := self.ParseList(true)
-	if cmd == nil {
+	if _isNilInterface(cmd) {
 		cmd = &Empty{Kind: "empty"}
 	}
 	self.SkipWhitespaceAndNewlines()
@@ -8305,7 +8305,7 @@ func (self *Parser) ParsePipeline() Node {
 	} else if prefixOrder == "negation_time" {
 		result = &Time{Pipeline: result, Posix: timePosix, Kind: "time"}
 		result = &Negation{Pipeline: result, Kind: "negation"}
-	} else if result == nil {
+	} else if _isNilInterface(result) {
 		return nil
 	}
 	return result

@@ -781,7 +781,8 @@ def _vars_first_assigned_in(stmts: list[Stmt], already_declared: set[str]) -> di
             if isinstance(stmt.target, VarLV):
                 name = stmt.target.name
                 if name not in already_declared:
-                    new_type = getattr(stmt.value, 'typ', None)
+                    # Prefer decl_typ (unified type from frontend) over value.typ
+                    new_type = getattr(stmt, 'decl_typ', None) or getattr(stmt.value, 'typ', None)
                     if name in result:
                         result[name] = _merge_types(result[name], new_type)
                     else:

@@ -180,25 +180,13 @@ VAR_TYPE_OVERRIDES: dict[tuple[str, str], Type] = {
     # _collect_redirects.redirects: auto-inferred from self.parse_redirect() return type
     # Tuple element types inferred incorrectly
     ("_read_heredoc_body", "pending_heredocs"): Slice(Tuple((STRING, BOOL))),
-    # Hoisted variables with wrong type inference (interface{} instead of Node)
-    ("parse_if", "else_body"): Interface("Node"),
-    ("parse_if", "inner_else"): Interface("Node"),
-    ("_parse_elif_chain", "else_body"): Interface("Node"),
+    # parse_if.else_body, parse_if.inner_else, _parse_elif_chain.else_body: auto-inferred from self.method() return types
     # Hoisted word lists in for/select parsing (interface{} instead of []*Word)
     ("parse_for", "words"): Slice(Pointer(StructRef("Word"))),
     ("parse_select", "words"): Slice(Pointer(StructRef("Word"))),
-    # Hoisted body variable in case parsing (interface{} instead of Node)
-    ("parse_case", "body"): Interface("Node"),
-    # Coproc body can be many different Node types
-    ("parse_coproc", "body"): Interface("Node"),
-    # Compound command result can be many different Node types
-    ("_parse_compound_command", "result"): Interface("Node"),
-    # Function body can be many different Node types
-    ("_parse_function", "body"): Interface("Node"),
-    # Coprocess body can be many different Node types (duplicate in Python, diff in Go naming)
-    ("_parse_coproc", "body"): Interface("Node"),
-    # Public compound command result can be many different Node types
-    ("parse_compound_command", "result"): Interface("Node"),
+    # parse_case.body, parse_coproc.body, _parse_compound_command.result,
+    # _parse_function.body, _parse_coproc.body, parse_compound_command.result:
+    # auto-inferred from multiple Node-subtype assignments
     # _format_cmdsub_node hoisted variables
     ("_format_cmdsub_node", "cmd"): Interface("Node"),
     ("_format_cmdsub_node", "h"): Interface("Node"),

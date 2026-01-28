@@ -1051,37 +1051,64 @@ class Frontend:
         sentinel_ints: set[str] = set()
         # Track variables assigned None and their concrete types (for Optional inference)
         vars_assigned_none: set[str] = set()
-        vars_concrete_type: dict[str, Type] = {}
+        vars_all_types: dict[str, list[Type]] = {}  # Track all types assigned to each var
         # Preliminary pass: find variables assigned both None and typed values
         for stmt in ast.walk(ast.Module(body=stmts, type_ignores=[])):
             if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
                 target = stmt.targets[0]
                 if isinstance(target, ast.Name):
                     var_name = target.id
+                    if var_name not in vars_all_types:
+                        vars_all_types[var_name] = []
                     # Check if assigning None
                     if isinstance(stmt.value, ast.Constant) and stmt.value.value is None:
                         vars_assigned_none.add(var_name)
                     # Check if assigning typed value
                     elif isinstance(stmt.value, ast.Constant):
                         if isinstance(stmt.value.value, int) and not isinstance(stmt.value.value, bool):
-                            vars_concrete_type[var_name] = INT
+                            vars_all_types[var_name].append(INT)
                         elif isinstance(stmt.value.value, str):
-                            vars_concrete_type[var_name] = STRING
+                            vars_all_types[var_name].append(STRING)
                     elif isinstance(stmt.value, ast.Call) and isinstance(stmt.value.func, ast.Name):
                         # int(...) call
                         if stmt.value.func.id == "int":
-                            vars_concrete_type[var_name] = INT
+                            vars_all_types[var_name].append(INT)
                         elif stmt.value.func.id == "str":
-                            vars_concrete_type[var_name] = STRING
+                            vars_all_types[var_name].append(STRING)
                     # String method calls: x = "".join(...), etc.
                     elif isinstance(stmt.value, ast.Call) and isinstance(stmt.value.func, ast.Attribute):
                         method = stmt.value.func.attr
                         if method in ("join", "strip", "lstrip", "rstrip", "lower", "upper", "replace", "format"):
-                            vars_concrete_type[var_name] = STRING
+                            vars_all_types[var_name].append(STRING)
+                        # self.method() calls - check return type
+                        elif isinstance(stmt.value.func.value, ast.Name) and stmt.value.func.value.id == "self":
+                            if self._current_class_name and self._current_class_name in self.symbols.structs:
+                                method_info = self.symbols.structs[self._current_class_name].methods.get(method)
+                                if method_info:
+                                    vars_all_types[var_name].append(method_info.return_type)
                     # Assignment from known variable: varfd = varname
                     elif isinstance(stmt.value, ast.Name):
-                        if stmt.value.id in vars_concrete_type:
-                            vars_concrete_type[var_name] = vars_concrete_type[stmt.value.id]
+                        if stmt.value.id in vars_all_types and vars_all_types[stmt.value.id]:
+                            vars_all_types[var_name].extend(vars_all_types[stmt.value.id])
+        # Unify types for each variable
+        vars_concrete_type: dict[str, Type] = {}
+        for var_name, types in vars_all_types.items():
+            if not types:
+                continue
+            # Deduplicate types
+            unique_types = list(set(types))
+            if len(unique_types) == 1:
+                vars_concrete_type[var_name] = unique_types[0]
+            else:
+                # Multiple types - check if all are Node-related
+                all_node = all(
+                    t == Interface("Node") or t == StructRef("Node") or
+                    (isinstance(t, Pointer) and isinstance(t.target, StructRef) and t.target.name in self._node_types)
+                    for t in unique_types
+                )
+                if all_node:
+                    vars_concrete_type[var_name] = Interface("Node")
+                # Otherwise, no unified type (will fall back to default inference)
         # First pass: collect For loop variable types (needed for append inference)
         for stmt in ast.walk(ast.Module(body=stmts, type_ignores=[])):
             if isinstance(stmt, ast.For):
@@ -1370,9 +1397,18 @@ class Frontend:
                     # Int with None -> use sentinel (-1 = None)
                     var_types[var_name] = INT
                     sentinel_ints.add(var_name)
+                elif concrete_type == Interface("Node"):
+                    # Node with None -> use Node interface (nilable in Go)
+                    var_types[var_name] = Interface("Node")
                 else:
                     # Other types -> use Optional (pointer)
                     var_types[var_name] = Optional(concrete_type)
+        # Seventh pass: variables with multiple Node types (not assigned None)
+        # These are variables assigned different Node subtypes in branches or sequentially
+        # The unified Node type takes precedence over any single assignment's type
+        for var_name, concrete_type in vars_concrete_type.items():
+            if var_name not in vars_assigned_none and concrete_type == Interface("Node"):
+                var_types[var_name] = Interface("Node")
         return var_types, tuple_vars, sentinel_ints, list_element_unions
 
     def _infer_iterable_type(self, node: ast.expr, var_types: dict[str, Type]) -> Type:
@@ -3190,12 +3226,19 @@ class Frontend:
                         self._type_ctx.var_types[target.id] = Interface("Node")
             lval = self._lower_lvalue(target)
             assign = ir.Assign(target=lval, value=value, loc=self._loc_from_node(node))
-            # Add declaration type if VAR_TYPE_OVERRIDE applies
+            # Add declaration type if VAR_TYPE_OVERRIDE applies or if var_types has a unified Node type
             if isinstance(target, ast.Name):
                 func_name = self._current_func_info.name if self._current_func_info else ""
                 override_key = (func_name, target.id)
                 if override_key in VAR_TYPE_OVERRIDES:
                     assign.decl_typ = VAR_TYPE_OVERRIDES[override_key]
+                elif target.id in self._type_ctx.var_types:
+                    # Use unified Node type from var_types for hoisted variables
+                    unified_type = self._type_ctx.var_types[target.id]
+                    if unified_type == Interface("Node"):
+                        expr_type = self._synthesize_type(value)
+                        if unified_type != expr_type:
+                            assign.decl_typ = unified_type
             return assign
         # Multiple targets: a = b = val -> emit assignment for each target
         stmts: list[ir.Stmt] = []

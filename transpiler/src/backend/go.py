@@ -315,11 +315,17 @@ func _isNilInterface(i interface{}) bool {
 // _runeAt returns the character (as string) at rune index i in string s.
 // Python s[i] on a string returns the i-th character, not byte.
 func _runeAt(s string, i int) string {
-	runes := []rune(s)
-	if i < 0 || i >= len(runes) {
+	if i < 0 {
 		return ""
 	}
-	return string(runes[i])
+	for byteOffset, runeIdx := 0, 0; byteOffset < len(s); runeIdx++ {
+		r, size := utf8.DecodeRuneInString(s[byteOffset:])
+		if runeIdx == i {
+			return string(r)
+		}
+		byteOffset += size
+	}
+	return ""
 }
 
 // _runeLen returns the number of runes (characters) in string s.

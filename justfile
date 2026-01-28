@@ -5,32 +5,32 @@ project := "parable"
 run_id := `head -c 16 /dev/urandom | xxd -p`
 backends := "go python ts"  # Testable transpiled backends
 
-# --- Base (src/parable.py) ---
+# --- Source (src/parable.py) ---
 
-# Run parser tests against base
-test *ARGS:
-    uv run tests/bin/run-tests.py {{ARGS}} 2>&1 | sed -u "s/^/[test] /" | tee /tmp/{{project}}-{{run_id}}-test.log
+# Run parser tests against source
+src-test *ARGS:
+    uv run tests/bin/run-tests.py {{ARGS}} 2>&1 | sed -u "s/^/[src-test] /" | tee /tmp/{{project}}-{{run_id}}-test.log
 
 # Lint (--fix to apply changes)
-lint *ARGS:
-    uvx ruff check {{ if ARGS == "--fix" { "--fix" } else { "" } }} 2>&1 | sed -u "s/^/[lint] /" | tee /tmp/{{project}}-{{run_id}}-lint.log
+src-lint *ARGS:
+    uvx ruff check {{ if ARGS == "--fix" { "--fix" } else { "" } }} 2>&1 | sed -u "s/^/[src-lint] /" | tee /tmp/{{project}}-{{run_id}}-lint.log
 
 # Format (--fix to apply changes)
-fmt *ARGS:
-    uvx ruff format {{ if ARGS == "--fix" { "" } else { "--check" } }} 2>&1 | sed -u "s/^/[fmt] /" | tee /tmp/{{project}}-{{run_id}}-fmt.log
+src-fmt *ARGS:
+    uvx ruff format {{ if ARGS == "--fix" { "" } else { "--check" } }} 2>&1 | sed -u "s/^/[src-fmt] /" | tee /tmp/{{project}}-{{run_id}}-fmt.log
 
 # Check for banned Python constructions
-check-style:
-    uv run --directory transpiler python -m src.cli --check-style "$(pwd)/src" 2>&1 | sed -u "s/^/[style] /" | tee /tmp/{{project}}-{{run_id}}-style.log
+src-style:
+    uv run --directory transpiler python -m src.cli --check-style "$(pwd)/src" 2>&1 | sed -u "s/^/[src-style] /" | tee /tmp/{{project}}-{{run_id}}-style.log
 
 # Verify lock file is up to date
-verify-lock:
-    uv lock --check 2>&1 | sed -u "s/^/[verify-lock] /" | tee /tmp/{{project}}-{{run_id}}-verify-lock.log
+src-verify-lock:
+    uv lock --check 2>&1 | sed -u "s/^/[src-verify-lock] /" | tee /tmp/{{project}}-{{run_id}}-verify-lock.log
 
-# --- Transpiler ---
+# --- Backends (transpiled output in dist/) ---
 
 # Transpile base to dist/<backend>/
-transpile backend="go":
+backend-transpile backend="go":
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{backend}}" in
@@ -54,15 +54,14 @@ transpile backend="go":
     esac
 
 # Verify dist/<backend>/ is up-to-date
-verify backend="go":
+backend-verify backend="go":
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{backend}}" in
         go)
-            just transpile go
-            # transpile already writes to dist/go/parable.go, so just verify it compiles
+            just backend-transpile go
             go build -C dist/go -o /dev/null .
-            echo "[verify-go] OK"
+            echo "[backend-verify go] OK"
             ;;
         *)
             echo "Verify not implemented for backend: {{backend}}"
@@ -71,7 +70,7 @@ verify backend="go":
     esac
 
 # Compile transpiled code
-build backend="go":
+backend-build backend="go":
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{backend}}" in
@@ -88,23 +87,23 @@ build backend="go":
     esac
 
 # Run tests on transpiled backend
-test-backend backend:
+backend-test backend:
     #!/usr/bin/env bash
     set -euo pipefail
     tests_abs="$(pwd)/tests"
     case "{{backend}}" in
         go)
-            just transpile go
+            just backend-transpile go
             go build -C dist/go -o /dev/null .
             go run -C dist/go ./cmd/run-tests "$tests_abs"
             ;;
         python)
-            just transpile python
+            just backend-transpile python
             PYTHONPATH=dist/python python3 tests/bin/run-tests.py
             ;;
         ts)
-            just transpile ts
-            just build ts
+            just backend-transpile ts
+            just backend-build ts
             node tests/bin/run-js-tests.js /tmp/transpile-ts
             ;;
         *)
@@ -118,7 +117,7 @@ test-backend backend:
 
 # Internal: run all parallel checks
 [parallel]
-_check-parallel: test lint fmt verify-lock check-dump-ast check-style (verify "go") (test-backend "go")
+_check-parallel: src-test src-lint src-fmt src-verify-lock src-style check-dump-ast (backend-verify "go") (backend-test "go")
 
 # Ensure biome is installed (prevents race condition in parallel JS checks)
 _ensure-biome:
@@ -127,8 +126,8 @@ _ensure-biome:
 # Run all checks (parallel)
 check: _ensure-biome _check-parallel
 
-# Quick check: test base, transpile and test Go
-quick-check: check-style test (test-backend "go")
+# Quick check: test source, transpile and test Go
+check-quick: src-style src-test (backend-test "go")
 
 # --- Tools ---
 
@@ -140,12 +139,12 @@ fuzz *ARGS:
 fuzzer-agent *ARGS:
     uv run --directory tools/fuzzer-agent fuzzer-agent {{ARGS}}
 
-# Run Parable against the bigtable-bash corpus
-run-corpus *ARGS:
-    tests/bin/run-corpus.py {{ARGS}}
+# Run source against the bigtable-bash corpus
+src-run-corpus *ARGS:
+    uv run tests/bin/run-corpus.py {{ARGS}}
 
 # Verify test expectations match bash-oracle
-verify-tests:
+check-tests:
     #!/usr/bin/env bash
     set -e
     check_binary() {
@@ -194,8 +193,8 @@ check-dump-ast:
 
 # --- Profiling ---
 
-# Run coverage analysis on base test suite
-coverage:
+# Run coverage analysis on source test suite
+src-coverage:
     #!/usr/bin/env bash
     set -euo pipefail
     uv run --with coverage coverage run tests/bin/run-tests.py
@@ -208,14 +207,14 @@ coverage:
     open /tmp/parable-coverage/index.html 2>/dev/null || true
 
 # Run coverage analysis on backend test suite
-coverage-backend backend:
+backend-coverage backend:
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{backend}}" in
         go)
             rm -rf /tmp/parable-coverage-go-raw
             mkdir -p /tmp/parable-coverage-go-raw
-            just transpile go
+            just backend-transpile go
             GOCOVERDIR=/tmp/parable-coverage-go-raw go run -C dist/go -cover ./cmd/run-tests "$(pwd)/tests"
             go tool covdata textfmt -i=/tmp/parable-coverage-go-raw -o=/tmp/parable-coverage-go.txt
             cd dist/go && go tool cover -html=/tmp/parable-coverage-go.txt -o=/tmp/parable-coverage-go.html
@@ -231,6 +230,6 @@ coverage-backend backend:
             ;;
     esac
 
-# Benchmark test suite
-benchmark:
+# Benchmark source test suite
+src-benchmark:
     hyperfine --warmup 2 --runs ${RUNS:-5} 'uv run tests/bin/run-tests.py 2>&1'

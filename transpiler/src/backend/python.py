@@ -186,6 +186,10 @@ class PythonBackend:
         self.indent -= 1
 
     def _emit_struct(self, struct: Struct) -> None:
+        # Skip empty shell classes (constants are already module-level)
+        is_empty = not struct.fields and not struct.methods and not struct.doc
+        if is_empty and not struct.is_exception and not struct.implements:
+            return
         base_list = list(struct.implements) if struct.implements else []
         if struct.is_exception:
             exc_base = struct.embedded_type if struct.embedded_type else "Exception"
@@ -301,12 +305,7 @@ class PythonBackend:
                 for s in then_body:
                     self._emit_stmt(s)
                 self.indent -= 1
-                if else_body:
-                    self._line("else:")
-                    self.indent += 1
-                    for s in else_body:
-                        self._emit_stmt(s)
-                    self.indent -= 1
+                self._emit_else_body(else_body)
             case TypeSwitch(
                 expr=expr, binding=binding, cases=cases, default=default
             ):
@@ -474,6 +473,31 @@ class PythonBackend:
         if reraise:
             self._line("raise")
         self.indent -= 1
+
+    def _emit_else_body(self, else_body: list[Stmt]) -> None:
+        """Emit else body, converting single-If else to elif chains."""
+        if not else_body:
+            return
+        # Check for elif pattern: else body is single If statement
+        if len(else_body) == 1 and isinstance(else_body[0], If):
+            elif_stmt = else_body[0]
+            if elif_stmt.init is not None:
+                self._emit_stmt(elif_stmt.init)
+            self._line(f"elif {self._expr(elif_stmt.cond)}:")
+            self.indent += 1
+            if not elif_stmt.then_body:
+                self._line("pass")
+            for s in elif_stmt.then_body:
+                self._emit_stmt(s)
+            self.indent -= 1
+            # Recurse for more elif/else
+            self._emit_else_body(elif_stmt.else_body)
+        else:
+            self._line("else:")
+            self.indent += 1
+            for s in else_body:
+                self._emit_stmt(s)
+            self.indent -= 1
 
     def _expr(self, expr: Expr) -> str:
         match expr:

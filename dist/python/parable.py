@@ -128,9 +128,8 @@ class ParseError(Exception):
     def _format_message(self) -> str:
         if self.line != 0 and self.pos != 0:
             return f"Parse error at line {self.line}, position {self.pos}: {self.message}"
-        else:
-            if self.pos != 0:
-                return f"Parse error at position {self.pos}: {self.message}"
+        elif self.pos != 0:
+            return f"Parse error at position {self.pos}: {self.message}"
         return f"Parse error: {self.message}"
 
 
@@ -138,9 +137,6 @@ class MatchedPairError(ParseError):
     pass
 
 
-@dataclass
-class TokenType:
-    pass
 
 
 @dataclass
@@ -159,19 +155,10 @@ class Token:
         return f"Token({self.type}, {self.value}, {self.pos})"
 
 
-@dataclass
-class ParserStateFlags:
-    pass
 
 
-@dataclass
-class DolbraceState:
-    pass
 
 
-@dataclass
-class MatchedPairFlags:
-    pass
 
 
 @dataclass
@@ -520,34 +507,31 @@ class Lexer:
                 if not self.at_end():
                     chars.append(self.advance())
                     chars.append(self.advance())
-            else:
-                if not for_regex and c == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == "=":
+            elif not for_regex and c == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == "=":
+                chars.append(self.advance())
+                chars.append(self.advance())
+                while not self.at_end() and not (self.peek() == "=" and self.pos + 1 < self.length and self.source[self.pos + 1] == "]"):
+                    chars.append(self.advance())
+                if not self.at_end():
                     chars.append(self.advance())
                     chars.append(self.advance())
-                    while not self.at_end() and not (self.peek() == "=" and self.pos + 1 < self.length and self.source[self.pos + 1] == "]"):
-                        chars.append(self.advance())
-                    if not self.at_end():
-                        chars.append(self.advance())
-                        chars.append(self.advance())
+            elif not for_regex and c == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == ".":
+                chars.append(self.advance())
+                chars.append(self.advance())
+                while not self.at_end() and not (self.peek() == "." and self.pos + 1 < self.length and self.source[self.pos + 1] == "]"):
+                    chars.append(self.advance())
+                if not self.at_end():
+                    chars.append(self.advance())
+                    chars.append(self.advance())
+            elif for_regex and c == "$":
+                self._sync_to_parser()
+                if not self._parser._parse_dollar_expansion(chars, parts, False):
+                    self._sync_from_parser()
+                    chars.append(self.advance())
                 else:
-                    if not for_regex and c == "[" and self.pos + 1 < self.length and self.source[self.pos + 1] == ".":
-                        chars.append(self.advance())
-                        chars.append(self.advance())
-                        while not self.at_end() and not (self.peek() == "." and self.pos + 1 < self.length and self.source[self.pos + 1] == "]"):
-                            chars.append(self.advance())
-                        if not self.at_end():
-                            chars.append(self.advance())
-                            chars.append(self.advance())
-                    else:
-                        if for_regex and c == "$":
-                            self._sync_to_parser()
-                            if not self._parser._parse_dollar_expansion(chars, parts, False):
-                                self._sync_from_parser()
-                                chars.append(self.advance())
-                            else:
-                                self._sync_from_parser()
-                        else:
-                            chars.append(self.advance())
+                    self._sync_from_parser()
+            else:
+                chars.append(self.advance())
         return True
 
     def _parse_matched_pair(self, open_char: str, close_char: str, flags: int, initial_was_dollar: bool) -> str:
@@ -617,24 +601,22 @@ class Lexer:
                     was_dollar = False
                     was_gtlt = False
                     continue
-                else:
-                    if ch == "\"":
-                        chars.append(ch)
-                        nested = self._parse_matched_pair("\"", "\"", flags | MatchedPairFlags_DQUOTE, False)
-                        chars.append(nested)
-                        chars.append("\"")
-                        was_dollar = False
-                        was_gtlt = False
-                        continue
-                    else:
-                        if ch == "`":
-                            chars.append(ch)
-                            nested = self._parse_matched_pair("`", "`", flags, False)
-                            chars.append(nested)
-                            chars.append("`")
-                            was_dollar = False
-                            was_gtlt = False
-                            continue
+                elif ch == "\"":
+                    chars.append(ch)
+                    nested = self._parse_matched_pair("\"", "\"", flags | MatchedPairFlags_DQUOTE, False)
+                    chars.append(nested)
+                    chars.append("\"")
+                    was_dollar = False
+                    was_gtlt = False
+                    continue
+                elif ch == "`":
+                    chars.append(ch)
+                    nested = self._parse_matched_pair("`", "`", flags, False)
+                    chars.append(nested)
+                    chars.append("`")
+                    was_dollar = False
+                    was_gtlt = False
+                    continue
             if ch == "$" and not self.at_end() and not ((flags & MatchedPairFlags_EXTGLOB) != 0):
                 next_ch = self.peek()
                 if was_dollar:
@@ -664,31 +646,18 @@ class Lexer:
                         was_dollar = True
                         was_gtlt = False
                     continue
-                else:
-                    if next_ch == "(":
-                        self.pos -= 1
-                        self._sync_to_parser()
-                        if self.pos + 2 < self.length and self.source[self.pos + 2] == "(":
-                            arith_node, arith_text = self._parser._parse_arithmetic_expansion()
-                            self._sync_from_parser()
-                            if arith_node is not None:
-                                chars.append(arith_text)
-                                was_dollar = False
-                                was_gtlt = False
-                            else:
-                                self._sync_to_parser()
-                                cmd_node, cmd_text = self._parser._parse_command_substitution()
-                                self._sync_from_parser()
-                                if cmd_node is not None:
-                                    chars.append(cmd_text)
-                                    was_dollar = False
-                                    was_gtlt = False
-                                else:
-                                    chars.append(self.advance())
-                                    chars.append(self.advance())
-                                    was_dollar = False
-                                    was_gtlt = False
+                elif next_ch == "(":
+                    self.pos -= 1
+                    self._sync_to_parser()
+                    if self.pos + 2 < self.length and self.source[self.pos + 2] == "(":
+                        arith_node, arith_text = self._parser._parse_arithmetic_expansion()
+                        self._sync_from_parser()
+                        if arith_node is not None:
+                            chars.append(arith_text)
+                            was_dollar = False
+                            was_gtlt = False
                         else:
+                            self._sync_to_parser()
                             cmd_node, cmd_text = self._parser._parse_command_substitution()
                             self._sync_from_parser()
                             if cmd_node is not None:
@@ -700,22 +669,33 @@ class Lexer:
                                 chars.append(self.advance())
                                 was_dollar = False
                                 was_gtlt = False
-                        continue
                     else:
-                        if next_ch == "[":
-                            self.pos -= 1
-                            self._sync_to_parser()
-                            arith_node, arith_text = self._parser._parse_deprecated_arithmetic()
-                            self._sync_from_parser()
-                            if arith_node is not None:
-                                chars.append(arith_text)
-                                was_dollar = False
-                                was_gtlt = False
-                            else:
-                                chars.append(self.advance())
-                                was_dollar = True
-                                was_gtlt = False
-                            continue
+                        cmd_node, cmd_text = self._parser._parse_command_substitution()
+                        self._sync_from_parser()
+                        if cmd_node is not None:
+                            chars.append(cmd_text)
+                            was_dollar = False
+                            was_gtlt = False
+                        else:
+                            chars.append(self.advance())
+                            chars.append(self.advance())
+                            was_dollar = False
+                            was_gtlt = False
+                    continue
+                elif next_ch == "[":
+                    self.pos -= 1
+                    self._sync_to_parser()
+                    arith_node, arith_text = self._parser._parse_deprecated_arithmetic()
+                    self._sync_from_parser()
+                    if arith_node is not None:
+                        chars.append(arith_text)
+                        was_dollar = False
+                        was_gtlt = False
+                    else:
+                        chars.append(self.advance())
+                        was_dollar = True
+                        was_gtlt = False
+                    continue
             if ch == "(" and was_gtlt and (flags & MatchedPairFlags_DOLBRACE | MatchedPairFlags_ARRAYSUB) != 0:
                 direction = chars[len(chars) - 1]
                 chars = chars[:len(chars) - 1]
@@ -837,26 +817,24 @@ class Lexer:
                             else:
                                 chars.append(self.advance())
                                 chars.append(self.advance())
-                        else:
-                            if c == "$":
-                                self._sync_to_parser()
-                                if not self._parser._parse_dollar_expansion(chars, parts, True):
-                                    self._sync_from_parser()
-                                    chars.append(self.advance())
-                                else:
-                                    self._sync_from_parser()
+                        elif c == "$":
+                            self._sync_to_parser()
+                            if not self._parser._parse_dollar_expansion(chars, parts, True):
+                                self._sync_from_parser()
+                                chars.append(self.advance())
                             else:
-                                if c == "`":
-                                    self._sync_to_parser()
-                                    cmdsub_result0, cmdsub_result1 = self._parser._parse_backtick_substitution()
-                                    self._sync_from_parser()
-                                    if cmdsub_result0 is not None:
-                                        parts.append(cmdsub_result0)
-                                        chars.append(cmdsub_result1)
-                                    else:
-                                        chars.append(self.advance())
-                                else:
-                                    chars.append(self.advance())
+                                self._sync_from_parser()
+                        elif c == "`":
+                            self._sync_to_parser()
+                            cmdsub_result0, cmdsub_result1 = self._parser._parse_backtick_substitution()
+                            self._sync_from_parser()
+                            if cmdsub_result0 is not None:
+                                parts.append(cmdsub_result0)
+                                chars.append(cmdsub_result1)
+                            else:
+                                chars.append(self.advance())
+                        else:
+                            chars.append(self.advance())
                     if self.at_end():
                         raise ParseError("Unterminated double quote", start)
                     chars.append(self.advance())
@@ -922,21 +900,19 @@ class Lexer:
                 if procsub_result0 is not None:
                     parts.append(procsub_result0)
                     chars.append(procsub_result1)
+                elif procsub_result1 != "":
+                    chars.append(procsub_result1)
                 else:
-                    if procsub_result1 != "":
-                        chars.append(procsub_result1)
-                    else:
+                    chars.append(self.advance())
+                    if ctx == WORD_CTX_NORMAL:
                         chars.append(self.advance())
-                        if ctx == WORD_CTX_NORMAL:
-                            chars.append(self.advance())
                 continue
             if ctx == WORD_CTX_NORMAL and ch == "(" and chars and bracket_depth == 0:
                 is_array_assign = False
                 if len(chars) >= 3 and chars[len(chars) - 2] == "+" and chars[len(chars) - 1] == "=":
                     is_array_assign = _is_array_assignment_prefix(chars[:len(chars) - 2])
-                else:
-                    if chars[len(chars) - 1] == "=" and len(chars) >= 2:
-                        is_array_assign = _is_array_assignment_prefix(chars[:len(chars) - 1])
+                elif chars[len(chars) - 1] == "=" and len(chars) >= 2:
+                    is_array_assign = _is_array_assignment_prefix(chars[:len(chars) - 1])
                 if is_array_assign and (at_command_start or in_assign_builtin):
                     self._sync_to_parser()
                     array_result0, array_result1 = self._parser._parse_array_literal()
@@ -1045,13 +1021,12 @@ class Lexer:
                 self.advance()
                 found_close = True
                 break
+            elif ch == "\\":
+                content_chars.append(self.advance())
+                if not self.at_end():
+                    content_chars.append(self.advance())
             else:
-                if ch == "\\":
-                    content_chars.append(self.advance())
-                    if not self.at_end():
-                        content_chars.append(self.advance())
-                else:
-                    content_chars.append(self.advance())
+                content_chars.append(self.advance())
         if not found_close:
             raise MatchedPairError("unexpected EOF while looking for matching `''", start)
         text = _substring(self.source, start, self.pos)
@@ -1084,64 +1059,59 @@ class Lexer:
                 self.advance()
                 found_close = True
                 break
-            else:
-                if ch == "\\" and self.pos + 1 < self.length:
-                    next_ch = self.source[self.pos + 1]
-                    if next_ch == "\n":
-                        self.advance()
-                        self.advance()
-                    else:
-                        content_chars.append(self.advance())
-                        content_chars.append(self.advance())
+            elif ch == "\\" and self.pos + 1 < self.length:
+                next_ch = self.source[self.pos + 1]
+                if next_ch == "\n":
+                    self.advance()
+                    self.advance()
                 else:
-                    if ch == "$" and self.pos + 2 < self.length and self.source[self.pos + 1] == "(" and self.source[self.pos + 2] == "(":
-                        self._sync_to_parser()
-                        arith_node, arith_text = self._parser._parse_arithmetic_expansion()
-                        self._sync_from_parser()
-                        if arith_node is not None:
-                            inner_parts.append(arith_node)
-                            content_chars.append(arith_text)
-                        else:
-                            self._sync_to_parser()
-                            cmdsub_node, cmdsub_text = self._parser._parse_command_substitution()
-                            self._sync_from_parser()
-                            if cmdsub_node is not None:
-                                inner_parts.append(cmdsub_node)
-                                content_chars.append(cmdsub_text)
-                            else:
-                                content_chars.append(self.advance())
+                    content_chars.append(self.advance())
+                    content_chars.append(self.advance())
+            elif ch == "$" and self.pos + 2 < self.length and self.source[self.pos + 1] == "(" and self.source[self.pos + 2] == "(":
+                self._sync_to_parser()
+                arith_node, arith_text = self._parser._parse_arithmetic_expansion()
+                self._sync_from_parser()
+                if arith_node is not None:
+                    inner_parts.append(arith_node)
+                    content_chars.append(arith_text)
+                else:
+                    self._sync_to_parser()
+                    cmdsub_node, cmdsub_text = self._parser._parse_command_substitution()
+                    self._sync_from_parser()
+                    if cmdsub_node is not None:
+                        inner_parts.append(cmdsub_node)
+                        content_chars.append(cmdsub_text)
                     else:
-                        if _is_expansion_start(self.source, self.pos, "$("):
-                            self._sync_to_parser()
-                            cmdsub_node, cmdsub_text = self._parser._parse_command_substitution()
-                            self._sync_from_parser()
-                            if cmdsub_node is not None:
-                                inner_parts.append(cmdsub_node)
-                                content_chars.append(cmdsub_text)
-                            else:
-                                content_chars.append(self.advance())
-                        else:
-                            if ch == "$":
-                                self._sync_to_parser()
-                                param_node, param_text = self._parser._parse_param_expansion(False)
-                                self._sync_from_parser()
-                                if param_node is not None:
-                                    inner_parts.append(param_node)
-                                    content_chars.append(param_text)
-                                else:
-                                    content_chars.append(self.advance())
-                            else:
-                                if ch == "`":
-                                    self._sync_to_parser()
-                                    cmdsub_node, cmdsub_text = self._parser._parse_backtick_substitution()
-                                    self._sync_from_parser()
-                                    if cmdsub_node is not None:
-                                        inner_parts.append(cmdsub_node)
-                                        content_chars.append(cmdsub_text)
-                                    else:
-                                        content_chars.append(self.advance())
-                                else:
-                                    content_chars.append(self.advance())
+                        content_chars.append(self.advance())
+            elif _is_expansion_start(self.source, self.pos, "$("):
+                self._sync_to_parser()
+                cmdsub_node, cmdsub_text = self._parser._parse_command_substitution()
+                self._sync_from_parser()
+                if cmdsub_node is not None:
+                    inner_parts.append(cmdsub_node)
+                    content_chars.append(cmdsub_text)
+                else:
+                    content_chars.append(self.advance())
+            elif ch == "$":
+                self._sync_to_parser()
+                param_node, param_text = self._parser._parse_param_expansion(False)
+                self._sync_from_parser()
+                if param_node is not None:
+                    inner_parts.append(param_node)
+                    content_chars.append(param_text)
+                else:
+                    content_chars.append(self.advance())
+            elif ch == "`":
+                self._sync_to_parser()
+                cmdsub_node, cmdsub_text = self._parser._parse_backtick_substitution()
+                self._sync_from_parser()
+                if cmdsub_node is not None:
+                    inner_parts.append(cmdsub_node)
+                    content_chars.append(cmdsub_text)
+                else:
+                    content_chars.append(self.advance())
+            else:
+                content_chars.append(self.advance())
         if not found_close:
             self.pos = start
             return (None, "", [])
@@ -1201,14 +1171,12 @@ class Lexer:
                 if next_ch == "/":
                     self.advance()
                     return "//"
-                else:
-                    if next_ch == "#":
-                        self.advance()
-                        return "/#"
-                    else:
-                        if next_ch == "%":
-                            self.advance()
-                            return "/%"
+                elif next_ch == "#":
+                    self.advance()
+                    return "/#"
+                elif next_ch == "%":
+                    self.advance()
+                    return "/%"
             return "/"
         if ch == "^":
             self.advance()
@@ -1261,11 +1229,10 @@ class Lexer:
                 return False
             if c == "[":
                 depth += 1
-            else:
-                if c == "]":
-                    depth -= 1
-                    if depth == 0:
-                        return True
+            elif c == "]":
+                depth -= 1
+                if depth == 0:
+                    return True
             i += 1
         return False
 
@@ -1289,17 +1256,16 @@ class Lexer:
                 c = self.peek()
                 if c.isalnum() or c == "_":
                     name_chars.append(self.advance())
+                elif c == "[":
+                    if not self._param_subscript_has_close(self.pos):
+                        break
+                    name_chars.append(self.advance())
+                    content = self._parse_matched_pair("[", "]", MatchedPairFlags_ARRAYSUB, False)
+                    name_chars.append(content)
+                    name_chars.append("]")
+                    break
                 else:
-                    if c == "[":
-                        if not self._param_subscript_has_close(self.pos):
-                            break
-                        name_chars.append(self.advance())
-                        content = self._parse_matched_pair("[", "]", MatchedPairFlags_ARRAYSUB, False)
-                        name_chars.append(content)
-                        name_chars.append("]")
-                        break
-                    else:
-                        break
+                    break
             if name_chars:
                 return "".join(name_chars)
             else:
@@ -1412,35 +1378,31 @@ class Lexer:
                     op = ""
                 else:
                     op = self.advance()
+            elif not self.at_end() and self.peek() == "`":
+                backtick_pos = self.pos
+                self.advance()
+                while not self.at_end() and self.peek() != "`":
+                    bc = self.peek()
+                    if bc == "\\" and self.pos + 1 < self.length:
+                        next_c = self.source[self.pos + 1]
+                        if _is_escape_char_in_backtick(next_c):
+                            self.advance()
+                    self.advance()
+                if self.at_end():
+                    self._dolbrace_state = saved_dolbrace
+                    raise ParseError("Unterminated backtick", backtick_pos)
+                self.advance()
+                op = "`"
+            elif not self.at_end() and self.peek() == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
+                op = ""
+            elif not self.at_end() and (self.peek() == "'" or self.peek() == "\""):
+                op = ""
+            elif not self.at_end() and self.peek() == "\\":
+                op = self.advance()
+                if not self.at_end():
+                    op += self.advance()
             else:
-                if not self.at_end() and self.peek() == "`":
-                    backtick_pos = self.pos
-                    self.advance()
-                    while not self.at_end() and self.peek() != "`":
-                        bc = self.peek()
-                        if bc == "\\" and self.pos + 1 < self.length:
-                            next_c = self.source[self.pos + 1]
-                            if _is_escape_char_in_backtick(next_c):
-                                self.advance()
-                        self.advance()
-                    if self.at_end():
-                        self._dolbrace_state = saved_dolbrace
-                        raise ParseError("Unterminated backtick", backtick_pos)
-                    self.advance()
-                    op = "`"
-                else:
-                    if not self.at_end() and self.peek() == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
-                        op = ""
-                    else:
-                        if not self.at_end() and (self.peek() == "'" or self.peek() == "\""):
-                            op = ""
-                        else:
-                            if not self.at_end() and self.peek() == "\\":
-                                op = self.advance()
-                                if not self.at_end():
-                                    op += self.advance()
-                            else:
-                                op = self.advance()
+                op = self.advance()
         self._update_dolbrace_for_op(op, param)
         try:
             flags = MatchedPairFlags_DQUOTE if in_dquote else MatchedPairFlags_NONE
@@ -1498,9 +1460,8 @@ class Word(Node):
         for c in value:
             if c == "'" and not quote.double:
                 quote.single = not quote.single
-            else:
-                if c == "\"" and not quote.single:
-                    quote.double = not quote.double
+            elif c == "\"" and not quote.single:
+                quote.double = not quote.double
             result.append(c)
             if c == "":
                 if quote.double:
@@ -1526,54 +1487,49 @@ class Word(Node):
                 quote.single = not quote.single
                 result.append(c)
                 i += 1
-            else:
-                if c == "\"" and not quote.single:
-                    quote.double = not quote.double
-                    result.append(c)
+            elif c == "\"" and not quote.single:
+                quote.double = not quote.double
+                result.append(c)
+                i += 1
+            elif _is_expansion_start(value, i, "${") and not quote.single:
+                result.append("$")
+                result.append("{")
+                i += 2
+                had_leading_newline = i < len(value) and value[i] == "\n"
+                if had_leading_newline:
+                    result.append(" ")
                     i += 1
-                else:
-                    if _is_expansion_start(value, i, "${") and not quote.single:
-                        result.append("$")
-                        result.append("{")
+                depth = 1
+                while i < len(value) and depth > 0:
+                    ch = value[i]
+                    if ch == "\\" and i + 1 < len(value) and not quote.single:
+                        if value[i + 1] == "\n":
+                            i += 2
+                            continue
+                        result.append(ch)
+                        result.append(value[i + 1])
                         i += 2
-                        had_leading_newline = i < len(value) and value[i] == "\n"
-                        if had_leading_newline:
-                            result.append(" ")
-                            i += 1
-                        depth = 1
-                        while i < len(value) and depth > 0:
-                            ch = value[i]
-                            if ch == "\\" and i + 1 < len(value) and not quote.single:
-                                if value[i + 1] == "\n":
-                                    i += 2
-                                    continue
+                        continue
+                    if ch == "'" and not quote.double:
+                        quote.single = not quote.single
+                    elif ch == "\"" and not quote.single:
+                        quote.double = not quote.double
+                    elif not quote.in_quotes():
+                        if ch == "{":
+                            depth += 1
+                        elif ch == "}":
+                            depth -= 1
+                            if depth == 0:
+                                if had_leading_newline:
+                                    result.append(" ")
                                 result.append(ch)
-                                result.append(value[i + 1])
-                                i += 2
-                                continue
-                            if ch == "'" and not quote.double:
-                                quote.single = not quote.single
-                            else:
-                                if ch == "\"" and not quote.single:
-                                    quote.double = not quote.double
-                                else:
-                                    if not quote.in_quotes():
-                                        if ch == "{":
-                                            depth += 1
-                                        else:
-                                            if ch == "}":
-                                                depth -= 1
-                                                if depth == 0:
-                                                    if had_leading_newline:
-                                                        result.append(" ")
-                                                    result.append(ch)
-                                                    i += 1
-                                                    break
-                            result.append(ch)
-                            i += 1
-                    else:
-                        result.append(c)
-                        i += 1
+                                i += 1
+                                break
+                    result.append(ch)
+                    i += 1
+            else:
+                result.append(c)
+                i += 1
         return "".join(result)
 
     def _sh_single_quote(self, s: str) -> str:
@@ -1600,109 +1556,102 @@ class Word(Node):
                 if simple >= 0:
                     result.append(simple)
                     i += 2
-                else:
-                    if c == "'":
-                        result.append(39)
-                        i += 2
+                elif c == "'":
+                    result.append(39)
+                    i += 2
+                elif c == "x":
+                    if i + 2 < len(inner) and inner[i + 2] == "{":
+                        j = i + 3
+                        while j < len(inner) and _is_hex_digit(inner[j]):
+                            j += 1
+                        hex_str = _substring(inner, i + 3, j)
+                        if j < len(inner) and inner[j] == "}":
+                            j += 1
+                        if not (hex_str != ""):
+                            return result
+                        byte_val = _parseInt(hex_str, 16) & 255
+                        if byte_val == 0:
+                            return result
+                        self._append_with_ctlesc(result, byte_val)
+                        i = j
                     else:
-                        if c == "x":
-                            if i + 2 < len(inner) and inner[i + 2] == "{":
-                                j = i + 3
-                                while j < len(inner) and _is_hex_digit(inner[j]):
-                                    j += 1
-                                hex_str = _substring(inner, i + 3, j)
-                                if j < len(inner) and inner[j] == "}":
-                                    j += 1
-                                if not (hex_str != ""):
-                                    return result
-                                byte_val = _parseInt(hex_str, 16) & 255
-                                if byte_val == 0:
-                                    return result
-                                self._append_with_ctlesc(result, byte_val)
-                                i = j
-                            else:
-                                j = i + 2
-                                while j < len(inner) and j < i + 4 and _is_hex_digit(inner[j]):
-                                    j += 1
-                                if j > i + 2:
-                                    byte_val = _parseInt(_substring(inner, i + 2, j), 16)
-                                    if byte_val == 0:
-                                        return result
-                                    self._append_with_ctlesc(result, byte_val)
-                                    i = j
-                                else:
-                                    result.append(ord(inner[i][0]))
-                                    i += 1
+                        j = i + 2
+                        while j < len(inner) and j < i + 4 and _is_hex_digit(inner[j]):
+                            j += 1
+                        if j > i + 2:
+                            byte_val = _parseInt(_substring(inner, i + 2, j), 16)
+                            if byte_val == 0:
+                                return result
+                            self._append_with_ctlesc(result, byte_val)
+                            i = j
                         else:
-                            if c == "u":
-                                j = i + 2
-                                while j < len(inner) and j < i + 6 and _is_hex_digit(inner[j]):
-                                    j += 1
-                                if j > i + 2:
-                                    codepoint = _parseInt(_substring(inner, i + 2, j), 16)
-                                    if codepoint == 0:
-                                        return result
-                                    result.extend(chr(codepoint).encode("utf-8"))
-                                    i = j
-                                else:
-                                    result.append(ord(inner[i][0]))
-                                    i += 1
-                            else:
-                                if c == "U":
-                                    j = i + 2
-                                    while j < len(inner) and j < i + 10 and _is_hex_digit(inner[j]):
-                                        j += 1
-                                    if j > i + 2:
-                                        codepoint = _parseInt(_substring(inner, i + 2, j), 16)
-                                        if codepoint == 0:
-                                            return result
-                                        result.extend(chr(codepoint).encode("utf-8"))
-                                        i = j
-                                    else:
-                                        result.append(ord(inner[i][0]))
-                                        i += 1
-                                else:
-                                    if c == "c":
-                                        if i + 3 <= len(inner):
-                                            ctrl_char = inner[i + 2]
-                                            skip_extra = 0
-                                            if ctrl_char == "\\" and i + 4 <= len(inner) and inner[i + 3] == "\\":
-                                                skip_extra = 1
-                                            ctrl_val = ord(ctrl_char[0]) & 31
-                                            if ctrl_val == 0:
-                                                return result
-                                            self._append_with_ctlesc(result, ctrl_val)
-                                            i += 3 + skip_extra
-                                        else:
-                                            result.append(ord(inner[i][0]))
-                                            i += 1
-                                    else:
-                                        if c == "0":
-                                            j = i + 2
-                                            while j < len(inner) and j < i + 4 and _is_octal_digit(inner[j]):
-                                                j += 1
-                                            if j > i + 2:
-                                                byte_val = _parseInt(_substring(inner, i + 1, j), 8) & 255
-                                                if byte_val == 0:
-                                                    return result
-                                                self._append_with_ctlesc(result, byte_val)
-                                                i = j
-                                            else:
-                                                return result
-                                        else:
-                                            if c >= "1" and c <= "7":
-                                                j = i + 1
-                                                while j < len(inner) and j < i + 4 and _is_octal_digit(inner[j]):
-                                                    j += 1
-                                                byte_val = _parseInt(_substring(inner, i + 1, j), 8) & 255
-                                                if byte_val == 0:
-                                                    return result
-                                                self._append_with_ctlesc(result, byte_val)
-                                                i = j
-                                            else:
-                                                result.append(92)
-                                                result.append(ord(c[0]))
-                                                i += 2
+                            result.append(ord(inner[i][0]))
+                            i += 1
+                elif c == "u":
+                    j = i + 2
+                    while j < len(inner) and j < i + 6 and _is_hex_digit(inner[j]):
+                        j += 1
+                    if j > i + 2:
+                        codepoint = _parseInt(_substring(inner, i + 2, j), 16)
+                        if codepoint == 0:
+                            return result
+                        result.extend(chr(codepoint).encode("utf-8"))
+                        i = j
+                    else:
+                        result.append(ord(inner[i][0]))
+                        i += 1
+                elif c == "U":
+                    j = i + 2
+                    while j < len(inner) and j < i + 10 and _is_hex_digit(inner[j]):
+                        j += 1
+                    if j > i + 2:
+                        codepoint = _parseInt(_substring(inner, i + 2, j), 16)
+                        if codepoint == 0:
+                            return result
+                        result.extend(chr(codepoint).encode("utf-8"))
+                        i = j
+                    else:
+                        result.append(ord(inner[i][0]))
+                        i += 1
+                elif c == "c":
+                    if i + 3 <= len(inner):
+                        ctrl_char = inner[i + 2]
+                        skip_extra = 0
+                        if ctrl_char == "\\" and i + 4 <= len(inner) and inner[i + 3] == "\\":
+                            skip_extra = 1
+                        ctrl_val = ord(ctrl_char[0]) & 31
+                        if ctrl_val == 0:
+                            return result
+                        self._append_with_ctlesc(result, ctrl_val)
+                        i += 3 + skip_extra
+                    else:
+                        result.append(ord(inner[i][0]))
+                        i += 1
+                elif c == "0":
+                    j = i + 2
+                    while j < len(inner) and j < i + 4 and _is_octal_digit(inner[j]):
+                        j += 1
+                    if j > i + 2:
+                        byte_val = _parseInt(_substring(inner, i + 1, j), 8) & 255
+                        if byte_val == 0:
+                            return result
+                        self._append_with_ctlesc(result, byte_val)
+                        i = j
+                    else:
+                        return result
+                elif c >= "1" and c <= "7":
+                    j = i + 1
+                    while j < len(inner) and j < i + 4 and _is_octal_digit(inner[j]):
+                        j += 1
+                    byte_val = _parseInt(_substring(inner, i + 1, j), 8) & 255
+                    if byte_val == 0:
+                        return result
+                    self._append_with_ctlesc(result, byte_val)
+                    i = j
+                else:
+                    result.append(92)
+                    result.append(ord(c[0]))
+                    i += 2
             else:
                 result.extend(inner[i].encode("utf-8"))
                 i += 1
@@ -1745,13 +1694,12 @@ class Word(Node):
                     result.append("${")
                     i += 2
                     continue
-                else:
-                    if ch == "}" and brace_depth > 0 and not quote.double:
-                        brace_depth -= 1
-                        result.append(ch)
-                        quote.pop()
-                        i += 1
-                        continue
+                elif ch == "}" and brace_depth > 0 and not quote.double:
+                    brace_depth -= 1
+                    result.append(ch)
+                    quote.pop()
+                    i += 1
+                    continue
             effective_in_dquote = quote.double
             if ch == "'" and not effective_in_dquote:
                 is_ansi_c = not quote.single and i > 0 and value[i - 1] == "$" and _count_consecutive_dollars_before(value, i - 1) % 2 == 0
@@ -1759,79 +1707,73 @@ class Word(Node):
                     quote.single = not quote.single
                 result.append(ch)
                 i += 1
-            else:
-                if ch == "\"" and not quote.single:
-                    quote.double = not quote.double
-                    result.append(ch)
-                    i += 1
-                else:
-                    if ch == "\\" and i + 1 < len(value) and not quote.single:
-                        result.append(ch)
-                        result.append(value[i + 1])
-                        i += 2
+            elif ch == "\"" and not quote.single:
+                quote.double = not quote.double
+                result.append(ch)
+                i += 1
+            elif ch == "\\" and i + 1 < len(value) and not quote.single:
+                result.append(ch)
+                result.append(value[i + 1])
+                i += 2
+            elif _starts_with_at(value, i, "$'") and not quote.single and not effective_in_dquote and _count_consecutive_dollars_before(value, i) % 2 == 0:
+                j = i + 2
+                while j < len(value):
+                    if value[j] == "\\" and j + 1 < len(value):
+                        j += 2
+                    elif value[j] == "'":
+                        j += 1
+                        break
                     else:
-                        if _starts_with_at(value, i, "$'") and not quote.single and not effective_in_dquote and _count_consecutive_dollars_before(value, i) % 2 == 0:
-                            j = i + 2
-                            while j < len(value):
-                                if value[j] == "\\" and j + 1 < len(value):
-                                    j += 2
-                                else:
-                                    if value[j] == "'":
-                                        j += 1
+                        j += 1
+                ansi_str = _substring(value, i, j)
+                expanded = self._expand_ansi_c_escapes(_substring(ansi_str, 1, len(ansi_str)))
+                outer_in_dquote = quote.outer_double()
+                if brace_depth > 0 and outer_in_dquote and expanded.startswith("'") and expanded.endswith("'"):
+                    inner = _substring(expanded, 1, len(expanded) - 1)
+                    if inner.find("") == -1:
+                        result_str = "".join(result)
+                        in_pattern = False
+                        last_brace_idx = result_str.rfind("${")
+                        if last_brace_idx >= 0:
+                            after_brace = result_str[last_brace_idx + 2:]
+                            var_name_len = 0
+                            if after_brace != "":
+                                if after_brace[0] in "@*#?-$!0123456789_":
+                                    var_name_len = 1
+                                elif after_brace[0].isalpha() or after_brace[0] == "_":
+                                    while var_name_len < len(after_brace):
+                                        c = after_brace[var_name_len]
+                                        if not (c.isalnum() or c == "_"):
+                                            break
+                                        var_name_len += 1
+                            if var_name_len > 0 and var_name_len < len(after_brace) and (after_brace[0] not in "#?-"):
+                                op_start = after_brace[var_name_len:]
+                                if op_start.startswith("@") and len(op_start) > 1:
+                                    op_start = op_start[1:]
+                                for op in ["//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"]:
+                                    if op_start.startswith(op):
+                                        in_pattern = True
                                         break
-                                    else:
-                                        j += 1
-                            ansi_str = _substring(value, i, j)
-                            expanded = self._expand_ansi_c_escapes(_substring(ansi_str, 1, len(ansi_str)))
-                            outer_in_dquote = quote.outer_double()
-                            if brace_depth > 0 and outer_in_dquote and expanded.startswith("'") and expanded.endswith("'"):
-                                inner = _substring(expanded, 1, len(expanded) - 1)
-                                if inner.find("") == -1:
-                                    result_str = "".join(result)
-                                    in_pattern = False
-                                    last_brace_idx = result_str.rfind("${")
-                                    if last_brace_idx >= 0:
-                                        after_brace = result_str[last_brace_idx + 2:]
-                                        var_name_len = 0
-                                        if after_brace != "":
-                                            if after_brace[0] in "@*#?-$!0123456789_":
-                                                var_name_len = 1
-                                            else:
-                                                if after_brace[0].isalpha() or after_brace[0] == "_":
-                                                    while var_name_len < len(after_brace):
-                                                        c = after_brace[var_name_len]
-                                                        if not (c.isalnum() or c == "_"):
-                                                            break
-                                                        var_name_len += 1
-                                        if var_name_len > 0 and var_name_len < len(after_brace) and (after_brace[0] not in "#?-"):
-                                            op_start = after_brace[var_name_len:]
-                                            if op_start.startswith("@") and len(op_start) > 1:
-                                                op_start = op_start[1:]
-                                            for op in ["//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"]:
-                                                if op_start.startswith(op):
-                                                    in_pattern = True
-                                                    break
-                                            if not in_pattern and op_start != "" and (op_start[0] not in "%#/^,~:+-=?"):
-                                                for op in ["//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"]:
-                                                    if op in op_start:
-                                                        in_pattern = True
-                                                        break
-                                        else:
-                                            if var_name_len == 0 and len(after_brace) > 1:
-                                                first_char = after_brace[0]
-                                                if first_char not in "%#/^,":
-                                                    rest = after_brace[1:]
-                                                    for op in ["//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"]:
-                                                        if op in rest:
-                                                            in_pattern = True
-                                                            break
-                                    if not in_pattern:
-                                        expanded = inner
-                            result.append(expanded)
-                            i = j
-                        else:
-                            result.append(ch)
-                            i += 1
+                                if not in_pattern and op_start != "" and (op_start[0] not in "%#/^,~:+-=?"):
+                                    for op in ["//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"]:
+                                        if op in op_start:
+                                            in_pattern = True
+                                            break
+                            elif var_name_len == 0 and len(after_brace) > 1:
+                                first_char = after_brace[0]
+                                if first_char not in "%#/^,":
+                                    rest = after_brace[1:]
+                                    for op in ["//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"]:
+                                        if op in rest:
+                                            in_pattern = True
+                                            break
+                        if not in_pattern:
+                            expanded = inner
+                result.append(expanded)
+                i = j
+            else:
+                result.append(ch)
+                i += 1
         return "".join(result)
 
     def _strip_locale_string_dollars(self, value: str) -> str:
@@ -1848,74 +1790,63 @@ class Word(Node):
                 result.append(ch)
                 result.append(value[i + 1])
                 i += 2
-            else:
-                if _starts_with_at(value, i, "${") and not quote.single and not brace_quote.single and (i == 0 or value[i - 1] != "$"):
-                    brace_depth += 1
-                    brace_quote.double = False
-                    brace_quote.single = False
-                    result.append("$")
-                    result.append("{")
+            elif _starts_with_at(value, i, "${") and not quote.single and not brace_quote.single and (i == 0 or value[i - 1] != "$"):
+                brace_depth += 1
+                brace_quote.double = False
+                brace_quote.single = False
+                result.append("$")
+                result.append("{")
+                i += 2
+            elif ch == "}" and brace_depth > 0 and not quote.single and not brace_quote.double and not brace_quote.single:
+                brace_depth -= 1
+                result.append(ch)
+                i += 1
+            elif ch == "[" and brace_depth > 0 and not quote.single and not brace_quote.double:
+                bracket_depth += 1
+                bracket_in_double_quote = False
+                result.append(ch)
+                i += 1
+            elif ch == "]" and bracket_depth > 0 and not quote.single and not bracket_in_double_quote:
+                bracket_depth -= 1
+                result.append(ch)
+                i += 1
+            elif ch == "'" and not quote.double and brace_depth == 0:
+                quote.single = not quote.single
+                result.append(ch)
+                i += 1
+            elif ch == "\"" and not quote.single and brace_depth == 0:
+                quote.double = not quote.double
+                result.append(ch)
+                i += 1
+            elif ch == "\"" and not quote.single and bracket_depth > 0:
+                bracket_in_double_quote = not bracket_in_double_quote
+                result.append(ch)
+                i += 1
+            elif ch == "\"" and not quote.single and not brace_quote.single and brace_depth > 0:
+                brace_quote.double = not brace_quote.double
+                result.append(ch)
+                i += 1
+            elif ch == "'" and not quote.double and not brace_quote.double and brace_depth > 0:
+                brace_quote.single = not brace_quote.single
+                result.append(ch)
+                i += 1
+            elif _starts_with_at(value, i, "$\"") and not quote.single and not brace_quote.single and (brace_depth > 0 or bracket_depth > 0 or not quote.double) and not brace_quote.double and not bracket_in_double_quote:
+                dollar_count = 1 + _count_consecutive_dollars_before(value, i)
+                if dollar_count % 2 == 1:
+                    result.append("\"")
+                    if bracket_depth > 0:
+                        bracket_in_double_quote = True
+                    elif brace_depth > 0:
+                        brace_quote.double = True
+                    else:
+                        quote.double = True
                     i += 2
                 else:
-                    if ch == "}" and brace_depth > 0 and not quote.single and not brace_quote.double and not brace_quote.single:
-                        brace_depth -= 1
-                        result.append(ch)
-                        i += 1
-                    else:
-                        if ch == "[" and brace_depth > 0 and not quote.single and not brace_quote.double:
-                            bracket_depth += 1
-                            bracket_in_double_quote = False
-                            result.append(ch)
-                            i += 1
-                        else:
-                            if ch == "]" and bracket_depth > 0 and not quote.single and not bracket_in_double_quote:
-                                bracket_depth -= 1
-                                result.append(ch)
-                                i += 1
-                            else:
-                                if ch == "'" and not quote.double and brace_depth == 0:
-                                    quote.single = not quote.single
-                                    result.append(ch)
-                                    i += 1
-                                else:
-                                    if ch == "\"" and not quote.single and brace_depth == 0:
-                                        quote.double = not quote.double
-                                        result.append(ch)
-                                        i += 1
-                                    else:
-                                        if ch == "\"" and not quote.single and bracket_depth > 0:
-                                            bracket_in_double_quote = not bracket_in_double_quote
-                                            result.append(ch)
-                                            i += 1
-                                        else:
-                                            if ch == "\"" and not quote.single and not brace_quote.single and brace_depth > 0:
-                                                brace_quote.double = not brace_quote.double
-                                                result.append(ch)
-                                                i += 1
-                                            else:
-                                                if ch == "'" and not quote.double and not brace_quote.double and brace_depth > 0:
-                                                    brace_quote.single = not brace_quote.single
-                                                    result.append(ch)
-                                                    i += 1
-                                                else:
-                                                    if _starts_with_at(value, i, "$\"") and not quote.single and not brace_quote.single and (brace_depth > 0 or bracket_depth > 0 or not quote.double) and not brace_quote.double and not bracket_in_double_quote:
-                                                        dollar_count = 1 + _count_consecutive_dollars_before(value, i)
-                                                        if dollar_count % 2 == 1:
-                                                            result.append("\"")
-                                                            if bracket_depth > 0:
-                                                                bracket_in_double_quote = True
-                                                            else:
-                                                                if brace_depth > 0:
-                                                                    brace_quote.double = True
-                                                                else:
-                                                                    quote.double = True
-                                                            i += 2
-                                                        else:
-                                                            result.append(ch)
-                                                            i += 1
-                                                    else:
-                                                        result.append(ch)
-                                                        i += 1
+                    result.append(ch)
+                    i += 1
+            else:
+                result.append(ch)
+                i += 1
         return "".join(result)
 
     def _normalize_array_whitespace(self, value: str) -> str:
@@ -1931,9 +1862,8 @@ class Word(Node):
             while i < len(value) and depth > 0:
                 if value[i] == "[":
                     depth += 1
-                else:
-                    if value[i] == "]":
-                        depth -= 1
+                elif value[i] == "]":
+                    depth -= 1
                 i += 1
             if depth != 0:
                 return value
@@ -1982,11 +1912,10 @@ class Word(Node):
                 continue
             if ch == "(":
                 depth += 1
-            else:
-                if ch == ")":
-                    depth -= 1
-                    if depth == 0:
-                        return i
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    return i
             i += 1
         return -1
 
@@ -2005,167 +1934,145 @@ class Word(Node):
                 if brace_depth > 0 or bracket_depth > 0:
                     normalized.append(ch)
                 i += 1
-            else:
-                if ch == "'":
-                    in_whitespace = False
-                    j = i + 1
-                    while j < len(inner) and inner[j] != "'":
+            elif ch == "'":
+                in_whitespace = False
+                j = i + 1
+                while j < len(inner) and inner[j] != "'":
+                    j += 1
+                normalized.append(_substring(inner, i, j + 1))
+                i = j + 1
+            elif ch == "\"":
+                in_whitespace = False
+                j = i + 1
+                dq_content = ["\""]
+                dq_brace_depth = 0
+                while j < len(inner):
+                    if inner[j] == "\\" and j + 1 < len(inner):
+                        if inner[j + 1] == "\n":
+                            j += 2
+                        else:
+                            dq_content.append(inner[j])
+                            dq_content.append(inner[j + 1])
+                            j += 2
+                    elif _is_expansion_start(inner, j, "${"):
+                        dq_content.append("${")
+                        dq_brace_depth += 1
+                        j += 2
+                    elif inner[j] == "}" and dq_brace_depth > 0:
+                        dq_content.append("}")
+                        dq_brace_depth -= 1
                         j += 1
-                    normalized.append(_substring(inner, i, j + 1))
-                    i = j + 1
+                    elif inner[j] == "\"" and dq_brace_depth == 0:
+                        dq_content.append("\"")
+                        j += 1
+                        break
+                    else:
+                        dq_content.append(inner[j])
+                        j += 1
+                normalized.append("".join(dq_content))
+                i = j
+            elif ch == "\\" and i + 1 < len(inner):
+                if inner[i + 1] == "\n":
+                    i += 2
                 else:
-                    if ch == "\"":
-                        in_whitespace = False
-                        j = i + 1
-                        dq_content = ["\""]
-                        dq_brace_depth = 0
+                    in_whitespace = False
+                    normalized.append(_substring(inner, i, i + 2))
+                    i += 2
+            elif _is_expansion_start(inner, i, "$(("):
+                in_whitespace = False
+                j = i + 3
+                depth = 1
+                while j < len(inner) and depth > 0:
+                    if j + 1 < len(inner) and inner[j] == "(" and inner[j + 1] == "(":
+                        depth += 1
+                        j += 2
+                    elif j + 1 < len(inner) and inner[j] == ")" and inner[j + 1] == ")":
+                        depth -= 1
+                        j += 2
+                    else:
+                        j += 1
+                normalized.append(_substring(inner, i, j))
+                i = j
+            elif _is_expansion_start(inner, i, "$("):
+                in_whitespace = False
+                j = i + 2
+                depth = 1
+                while j < len(inner) and depth > 0:
+                    if inner[j] == "(" and j > 0 and inner[j - 1] == "$":
+                        depth += 1
+                    elif inner[j] == ")":
+                        depth -= 1
+                    elif inner[j] == "'":
+                        j += 1
+                        while j < len(inner) and inner[j] != "'":
+                            j += 1
+                    elif inner[j] == "\"":
+                        j += 1
                         while j < len(inner):
                             if inner[j] == "\\" and j + 1 < len(inner):
-                                if inner[j + 1] == "\n":
-                                    j += 2
-                                else:
-                                    dq_content.append(inner[j])
-                                    dq_content.append(inner[j + 1])
-                                    j += 2
-                            else:
-                                if _is_expansion_start(inner, j, "${"):
-                                    dq_content.append("${")
-                                    dq_brace_depth += 1
-                                    j += 2
-                                else:
-                                    if inner[j] == "}" and dq_brace_depth > 0:
-                                        dq_content.append("}")
-                                        dq_brace_depth -= 1
-                                        j += 1
-                                    else:
-                                        if inner[j] == "\"" and dq_brace_depth == 0:
-                                            dq_content.append("\"")
-                                            j += 1
-                                            break
-                                        else:
-                                            dq_content.append(inner[j])
-                                            j += 1
-                        normalized.append("".join(dq_content))
-                        i = j
-                    else:
-                        if ch == "\\" and i + 1 < len(inner):
-                            if inner[i + 1] == "\n":
-                                i += 2
-                            else:
-                                in_whitespace = False
-                                normalized.append(_substring(inner, i, i + 2))
-                                i += 2
-                        else:
-                            if _is_expansion_start(inner, i, "$(("):
-                                in_whitespace = False
-                                j = i + 3
-                                depth = 1
-                                while j < len(inner) and depth > 0:
-                                    if j + 1 < len(inner) and inner[j] == "(" and inner[j + 1] == "(":
-                                        depth += 1
-                                        j += 2
-                                    else:
-                                        if j + 1 < len(inner) and inner[j] == ")" and inner[j + 1] == ")":
-                                            depth -= 1
-                                            j += 2
-                                        else:
-                                            j += 1
-                                normalized.append(_substring(inner, i, j))
-                                i = j
-                            else:
-                                if _is_expansion_start(inner, i, "$("):
-                                    in_whitespace = False
-                                    j = i + 2
-                                    depth = 1
-                                    while j < len(inner) and depth > 0:
-                                        if inner[j] == "(" and j > 0 and inner[j - 1] == "$":
-                                            depth += 1
-                                        else:
-                                            if inner[j] == ")":
-                                                depth -= 1
-                                            else:
-                                                if inner[j] == "'":
-                                                    j += 1
-                                                    while j < len(inner) and inner[j] != "'":
-                                                        j += 1
-                                                else:
-                                                    if inner[j] == "\"":
-                                                        j += 1
-                                                        while j < len(inner):
-                                                            if inner[j] == "\\" and j + 1 < len(inner):
-                                                                j += 2
-                                                                continue
-                                                            if inner[j] == "\"":
-                                                                break
-                                                            j += 1
-                                        j += 1
-                                    normalized.append(_substring(inner, i, j))
-                                    i = j
-                                else:
-                                    if (ch == "<" or ch == ">") and i + 1 < len(inner) and inner[i + 1] == "(":
-                                        in_whitespace = False
-                                        j = i + 2
-                                        depth = 1
-                                        while j < len(inner) and depth > 0:
-                                            if inner[j] == "(":
-                                                depth += 1
-                                            else:
-                                                if inner[j] == ")":
-                                                    depth -= 1
-                                                else:
-                                                    if inner[j] == "'":
-                                                        j += 1
-                                                        while j < len(inner) and inner[j] != "'":
-                                                            j += 1
-                                                    else:
-                                                        if inner[j] == "\"":
-                                                            j += 1
-                                                            while j < len(inner):
-                                                                if inner[j] == "\\" and j + 1 < len(inner):
-                                                                    j += 2
-                                                                    continue
-                                                                if inner[j] == "\"":
-                                                                    break
-                                                                j += 1
-                                            j += 1
-                                        normalized.append(_substring(inner, i, j))
-                                        i = j
-                                    else:
-                                        if _is_expansion_start(inner, i, "${"):
-                                            in_whitespace = False
-                                            normalized.append("${")
-                                            brace_depth += 1
-                                            i += 2
-                                        else:
-                                            if ch == "{" and brace_depth > 0:
-                                                normalized.append(ch)
-                                                brace_depth += 1
-                                                i += 1
-                                            else:
-                                                if ch == "}" and brace_depth > 0:
-                                                    normalized.append(ch)
-                                                    brace_depth -= 1
-                                                    i += 1
-                                                else:
-                                                    if ch == "#" and brace_depth == 0 and in_whitespace:
-                                                        while i < len(inner) and inner[i] != "\n":
-                                                            i += 1
-                                                    else:
-                                                        if ch == "[":
-                                                            if in_whitespace or bracket_depth > 0:
-                                                                bracket_depth += 1
-                                                            in_whitespace = False
-                                                            normalized.append(ch)
-                                                            i += 1
-                                                        else:
-                                                            if ch == "]" and bracket_depth > 0:
-                                                                normalized.append(ch)
-                                                                bracket_depth -= 1
-                                                                i += 1
-                                                            else:
-                                                                in_whitespace = False
-                                                                normalized.append(ch)
-                                                                i += 1
+                                j += 2
+                                continue
+                            if inner[j] == "\"":
+                                break
+                            j += 1
+                    j += 1
+                normalized.append(_substring(inner, i, j))
+                i = j
+            elif (ch == "<" or ch == ">") and i + 1 < len(inner) and inner[i + 1] == "(":
+                in_whitespace = False
+                j = i + 2
+                depth = 1
+                while j < len(inner) and depth > 0:
+                    if inner[j] == "(":
+                        depth += 1
+                    elif inner[j] == ")":
+                        depth -= 1
+                    elif inner[j] == "'":
+                        j += 1
+                        while j < len(inner) and inner[j] != "'":
+                            j += 1
+                    elif inner[j] == "\"":
+                        j += 1
+                        while j < len(inner):
+                            if inner[j] == "\\" and j + 1 < len(inner):
+                                j += 2
+                                continue
+                            if inner[j] == "\"":
+                                break
+                            j += 1
+                    j += 1
+                normalized.append(_substring(inner, i, j))
+                i = j
+            elif _is_expansion_start(inner, i, "${"):
+                in_whitespace = False
+                normalized.append("${")
+                brace_depth += 1
+                i += 2
+            elif ch == "{" and brace_depth > 0:
+                normalized.append(ch)
+                brace_depth += 1
+                i += 1
+            elif ch == "}" and brace_depth > 0:
+                normalized.append(ch)
+                brace_depth -= 1
+                i += 1
+            elif ch == "#" and brace_depth == 0 and in_whitespace:
+                while i < len(inner) and inner[i] != "\n":
+                    i += 1
+            elif ch == "[":
+                if in_whitespace or bracket_depth > 0:
+                    bracket_depth += 1
+                in_whitespace = False
+                normalized.append(ch)
+                i += 1
+            elif ch == "]" and bracket_depth > 0:
+                normalized.append(ch)
+                bracket_depth -= 1
+                i += 1
+            else:
+                in_whitespace = False
+                normalized.append(ch)
+                i += 1
         return "".join(normalized).rstrip()
 
     def _strip_arith_line_continuations(self, value: str) -> str:
@@ -2185,36 +2092,34 @@ class Word(Node):
                         i += 1
                         if depth > 1:
                             first_close_idx = -1
-                    else:
-                        if value[i] == ")":
-                            if depth == 2:
-                                first_close_idx = len(arith_content)
-                            depth -= 1
-                            if depth > 0:
-                                arith_content.append(")")
-                            i += 1
+                    elif value[i] == ")":
+                        if depth == 2:
+                            first_close_idx = len(arith_content)
+                        depth -= 1
+                        if depth > 0:
+                            arith_content.append(")")
+                        i += 1
+                    elif value[i] == "\\" and i + 1 < len(value) and value[i + 1] == "\n":
+                        num_backslashes = 0
+                        j = len(arith_content) - 1
+                        while j >= 0 and arith_content[j] == "\n":
+                            j -= 1
+                        while j >= 0 and arith_content[j] == "\\":
+                            num_backslashes += 1
+                            j -= 1
+                        if num_backslashes % 2 == 1:
+                            arith_content.append("\\")
+                            arith_content.append("\n")
+                            i += 2
                         else:
-                            if value[i] == "\\" and i + 1 < len(value) and value[i + 1] == "\n":
-                                num_backslashes = 0
-                                j = len(arith_content) - 1
-                                while j >= 0 and arith_content[j] == "\n":
-                                    j -= 1
-                                while j >= 0 and arith_content[j] == "\\":
-                                    num_backslashes += 1
-                                    j -= 1
-                                if num_backslashes % 2 == 1:
-                                    arith_content.append("\\")
-                                    arith_content.append("\n")
-                                    i += 2
-                                else:
-                                    i += 2
-                                if depth == 1:
-                                    first_close_idx = -1
-                            else:
-                                arith_content.append(value[i])
-                                i += 1
-                                if depth == 1:
-                                    first_close_idx = -1
+                            i += 2
+                        if depth == 1:
+                            first_close_idx = -1
+                    else:
+                        arith_content.append(value[i])
+                        i += 1
+                        if depth == 1:
+                            first_close_idx = -1
                 if depth == 0 or depth == 1 and first_close_idx != -1:
                     content = "".join(arith_content)
                     if first_close_idx != -1:
@@ -2324,25 +2229,22 @@ class Word(Node):
             if value[idx] == "\"":
                 scan_quote.double = not scan_quote.double
                 idx += 1
-            else:
-                if value[idx] == "'" and not scan_quote.double:
+            elif value[idx] == "'" and not scan_quote.double:
+                idx += 1
+                while idx < len(value) and value[idx] != "'":
                     idx += 1
-                    while idx < len(value) and value[idx] != "'":
-                        idx += 1
-                    if idx < len(value):
-                        idx += 1
-                else:
-                    if _starts_with_at(value, idx, "$(") and not _starts_with_at(value, idx, "$((") and not _is_backslash_escaped(value, idx) and not _is_dollar_dollar_paren(value, idx):
-                        has_untracked_cmdsub = True
-                        break
-                    else:
-                        if (_starts_with_at(value, idx, "<(") or _starts_with_at(value, idx, ">(")) and not scan_quote.double:
-                            if idx == 0 or not value[idx - 1].isalnum() and (value[idx - 1] not in "\"'"):
-                                has_untracked_procsub = True
-                                break
-                            idx += 1
-                        else:
-                            idx += 1
+                if idx < len(value):
+                    idx += 1
+            elif _starts_with_at(value, idx, "$(") and not _starts_with_at(value, idx, "$((") and not _is_backslash_escaped(value, idx) and not _is_dollar_dollar_paren(value, idx):
+                has_untracked_cmdsub = True
+                break
+            elif (_starts_with_at(value, idx, "<(") or _starts_with_at(value, idx, ">(")) and not scan_quote.double:
+                if idx == 0 or not value[idx - 1].isalnum() and (value[idx - 1] not in "\"'"):
+                    has_untracked_procsub = True
+                    break
+                idx += 1
+            else:
+                idx += 1
         has_param_with_procsub_pattern = ("${" in value) and (("<(" in value) or (">(" in value))
         if not (cmdsub_parts) and not (procsub_parts) and not has_brace_cmdsub and not has_untracked_cmdsub and not has_untracked_procsub and not has_param_with_procsub_pattern:
             return value
@@ -2394,12 +2296,11 @@ class Word(Node):
                     result.append(value[i])
                     i += 1
                     continue
-                else:
-                    if value[i] == ")":
-                        arith_paren_depth -= 1
-                        result.append(value[i])
-                        i += 1
-                        continue
+                elif value[i] == ")":
+                    arith_paren_depth -= 1
+                    result.append(value[i])
+                    i += 1
+                    continue
             if _is_expansion_start(value, i, "$((") and not has_arith:
                 j = _find_cmdsub_end(value, i + 2)
                 result.append(_substring(value, i, j))
@@ -2432,220 +2333,203 @@ class Word(Node):
                 else:
                     result.append("$(" + formatted + ")")
                 i = j
-            else:
-                if value[i] == "`" and cmdsub_idx < len(cmdsub_parts):
-                    j = i + 1
-                    while j < len(value):
-                        if value[j] == "\\" and j + 1 < len(value):
-                            j += 2
-                            continue
-                        if value[j] == "`":
-                            j += 1
-                            break
+            elif value[i] == "`" and cmdsub_idx < len(cmdsub_parts):
+                j = i + 1
+                while j < len(value):
+                    if value[j] == "\\" and j + 1 < len(value):
+                        j += 2
+                        continue
+                    if value[j] == "`":
                         j += 1
-                    result.append(_substring(value, i, j))
+                        break
+                    j += 1
+                result.append(_substring(value, i, j))
+                cmdsub_idx += 1
+                i = j
+            elif _is_expansion_start(value, i, "${") and i + 2 < len(value) and _is_funsub_char(value[i + 2]) and not _is_backslash_escaped(value, i):
+                j = _find_funsub_end(value, i + 2)
+                cmdsub_node = cmdsub_parts[cmdsub_idx] if cmdsub_idx < len(cmdsub_parts) else None
+                if isinstance(cmdsub_node, CommandSubstitution) and cmdsub_node.brace:
+                    node = cmdsub_node
+                    formatted = _format_cmdsub_node(node.command, 0, False, False, False)
+                    has_pipe = value[i + 2] == "|"
+                    prefix = "${|" if has_pipe else "${ "
+                    orig_inner = _substring(value, i + 2, j - 1)
+                    ends_with_newline = orig_inner.endswith("\n")
+                    if not (formatted != "") or formatted.isspace():
+                        suffix = "}"
+                    elif formatted.endswith("&") or formatted.endswith("& "):
+                        suffix = " }" if formatted.endswith("&") else "}"
+                    elif ends_with_newline:
+                        suffix = "\n }"
+                    else:
+                        suffix = "; }"
+                    result.append(prefix + formatted + suffix)
                     cmdsub_idx += 1
+                else:
+                    result.append(_substring(value, i, j))
+                i = j
+            elif (_starts_with_at(value, i, ">(") or _starts_with_at(value, i, "<(")) and not main_quote.double and deprecated_arith_depth == 0 and arith_depth == 0:
+                is_procsub = i == 0 or not value[i - 1].isalnum() and (value[i - 1] not in "\"'")
+                if extglob_depth > 0:
+                    j = _find_cmdsub_end(value, i + 2)
+                    result.append(_substring(value, i, j))
+                    if procsub_idx < len(procsub_parts):
+                        procsub_idx += 1
+                    i = j
+                    continue
+                if procsub_idx < len(procsub_parts):
+                    direction = value[i]
+                    j = _find_cmdsub_end(value, i + 2)
+                    node = procsub_parts[procsub_idx]
+                    compact = _starts_with_subshell(node.command)
+                    formatted = _format_cmdsub_node(node.command, 0, True, compact, True)
+                    raw_content = _substring(value, i + 2, j - 1)
+                    if node.command.kind == "subshell":
+                        leading_ws_end = 0
+                        while leading_ws_end < len(raw_content) and (raw_content[leading_ws_end] in " \t\n"):
+                            leading_ws_end += 1
+                        leading_ws = raw_content[:leading_ws_end]
+                        stripped = raw_content[leading_ws_end:]
+                        if stripped.startswith("("):
+                            if leading_ws != "":
+                                normalized_ws = leading_ws.replace("\n", " ").replace("\t", " ")
+                                spaced = _format_cmdsub_node(node.command, 0, False, False, False)
+                                result.append(direction + "(" + normalized_ws + spaced + ")")
+                            else:
+                                raw_content = raw_content.replace("\\\n", "")
+                                result.append(direction + "(" + raw_content + ")")
+                            procsub_idx += 1
+                            i = j
+                            continue
+                    raw_content = _substring(value, i + 2, j - 1)
+                    raw_stripped = raw_content.replace("\\\n", "")
+                    if _starts_with_subshell(node.command) and formatted != raw_stripped:
+                        result.append(direction + "(" + raw_stripped + ")")
+                    else:
+                        final_output = direction + "(" + formatted + ")"
+                        result.append(final_output)
+                    procsub_idx += 1
+                    i = j
+                elif is_procsub and len(self.parts) != 0:
+                    direction = value[i]
+                    j = _find_cmdsub_end(value, i + 2)
+                    if j > len(value) or j > 0 and j <= len(value) and value[j - 1] != ")":
+                        result.append(value[i])
+                        i += 1
+                        continue
+                    inner = _substring(value, i + 2, j - 1)
+                    try:
+                        parser = NewParser(inner, False, False)
+                        parsed = parser.parse_list(True)
+                        if parsed is not None and parser.pos == len(inner) and ("\n" not in inner):
+                            compact = _starts_with_subshell(parsed)
+                            formatted = _format_cmdsub_node(parsed, 0, True, compact, True)
+                        else:
+                            formatted = inner
+                    except Exception as _e:
+                        formatted = inner
+                    result.append(direction + "(" + formatted + ")")
+                    i = j
+                elif is_procsub:
+                    direction = value[i]
+                    j = _find_cmdsub_end(value, i + 2)
+                    if j > len(value) or j > 0 and j <= len(value) and value[j - 1] != ")":
+                        result.append(value[i])
+                        i += 1
+                        continue
+                    inner = _substring(value, i + 2, j - 1)
+                    if in_arith:
+                        result.append(direction + "(" + inner + ")")
+                    elif inner.strip() != "":
+                        stripped = inner.lstrip(" \t")
+                        result.append(direction + "(" + stripped + ")")
+                    else:
+                        result.append(direction + "(" + inner + ")")
                     i = j
                 else:
-                    if _is_expansion_start(value, i, "${") and i + 2 < len(value) and _is_funsub_char(value[i + 2]) and not _is_backslash_escaped(value, i):
-                        j = _find_funsub_end(value, i + 2)
-                        cmdsub_node = cmdsub_parts[cmdsub_idx] if cmdsub_idx < len(cmdsub_parts) else None
-                        if isinstance(cmdsub_node, CommandSubstitution) and cmdsub_node.brace:
-                            node = cmdsub_node
-                            formatted = _format_cmdsub_node(node.command, 0, False, False, False)
-                            has_pipe = value[i + 2] == "|"
-                            prefix = "${|" if has_pipe else "${ "
-                            orig_inner = _substring(value, i + 2, j - 1)
-                            ends_with_newline = orig_inner.endswith("\n")
-                            if not (formatted != "") or formatted.isspace():
-                                suffix = "}"
+                    result.append(value[i])
+                    i += 1
+            elif (_is_expansion_start(value, i, "${ ") or _is_expansion_start(value, i, "${\t") or _is_expansion_start(value, i, "${\n") or _is_expansion_start(value, i, "${|")) and not _is_backslash_escaped(value, i):
+                prefix = _substring(value, i, i + 3).replace("\t", " ").replace("\n", " ")
+                j = i + 3
+                depth = 1
+                while j < len(value) and depth > 0:
+                    if value[j] == "{":
+                        depth += 1
+                    elif value[j] == "}":
+                        depth -= 1
+                    j += 1
+                inner = _substring(value, i + 2, j - 1)
+                if inner.strip() == "":
+                    result.append("${ }")
+                else:
+                    try:
+                        parser = NewParser(inner.lstrip(" \t\n|"), False, False)
+                        parsed = parser.parse_list(True)
+                        if parsed is not None:
+                            formatted = _format_cmdsub_node(parsed, 0, False, False, False)
+                            formatted = formatted.rstrip(";")
+                            if inner.rstrip(" \t").endswith("\n"):
+                                terminator = "\n }"
+                            elif formatted.endswith(" &"):
+                                terminator = " }"
                             else:
-                                if formatted.endswith("&") or formatted.endswith("& "):
-                                    suffix = " }" if formatted.endswith("&") else "}"
-                                else:
-                                    if ends_with_newline:
-                                        suffix = "\n }"
-                                    else:
-                                        suffix = "; }"
-                            result.append(prefix + formatted + suffix)
-                            cmdsub_idx += 1
+                                terminator = "; }"
+                            result.append(prefix + formatted + terminator)
                         else:
-                            result.append(_substring(value, i, j))
-                        i = j
-                    else:
-                        if (_starts_with_at(value, i, ">(") or _starts_with_at(value, i, "<(")) and not main_quote.double and deprecated_arith_depth == 0 and arith_depth == 0:
-                            is_procsub = i == 0 or not value[i - 1].isalnum() and (value[i - 1] not in "\"'")
-                            if extglob_depth > 0:
-                                j = _find_cmdsub_end(value, i + 2)
-                                result.append(_substring(value, i, j))
-                                if procsub_idx < len(procsub_parts):
-                                    procsub_idx += 1
-                                i = j
-                                continue
-                            if procsub_idx < len(procsub_parts):
-                                direction = value[i]
-                                j = _find_cmdsub_end(value, i + 2)
-                                node = procsub_parts[procsub_idx]
-                                compact = _starts_with_subshell(node.command)
-                                formatted = _format_cmdsub_node(node.command, 0, True, compact, True)
-                                raw_content = _substring(value, i + 2, j - 1)
-                                if node.command.kind == "subshell":
-                                    leading_ws_end = 0
-                                    while leading_ws_end < len(raw_content) and (raw_content[leading_ws_end] in " \t\n"):
-                                        leading_ws_end += 1
-                                    leading_ws = raw_content[:leading_ws_end]
-                                    stripped = raw_content[leading_ws_end:]
-                                    if stripped.startswith("("):
-                                        if leading_ws != "":
-                                            normalized_ws = leading_ws.replace("\n", " ").replace("\t", " ")
-                                            spaced = _format_cmdsub_node(node.command, 0, False, False, False)
-                                            result.append(direction + "(" + normalized_ws + spaced + ")")
-                                        else:
-                                            raw_content = raw_content.replace("\\\n", "")
-                                            result.append(direction + "(" + raw_content + ")")
-                                        procsub_idx += 1
-                                        i = j
-                                        continue
-                                raw_content = _substring(value, i + 2, j - 1)
-                                raw_stripped = raw_content.replace("\\\n", "")
-                                if _starts_with_subshell(node.command) and formatted != raw_stripped:
-                                    result.append(direction + "(" + raw_stripped + ")")
-                                else:
-                                    final_output = direction + "(" + formatted + ")"
-                                    result.append(final_output)
-                                procsub_idx += 1
-                                i = j
-                            else:
-                                if is_procsub and len(self.parts) != 0:
-                                    direction = value[i]
-                                    j = _find_cmdsub_end(value, i + 2)
-                                    if j > len(value) or j > 0 and j <= len(value) and value[j - 1] != ")":
-                                        result.append(value[i])
-                                        i += 1
-                                        continue
-                                    inner = _substring(value, i + 2, j - 1)
-                                    try:
-                                        parser = NewParser(inner, False, False)
-                                        parsed = parser.parse_list(True)
-                                        if parsed is not None and parser.pos == len(inner) and ("\n" not in inner):
-                                            compact = _starts_with_subshell(parsed)
-                                            formatted = _format_cmdsub_node(parsed, 0, True, compact, True)
-                                        else:
-                                            formatted = inner
-                                    except Exception as _e:
-                                        formatted = inner
-                                    result.append(direction + "(" + formatted + ")")
-                                    i = j
-                                else:
-                                    if is_procsub:
-                                        direction = value[i]
-                                        j = _find_cmdsub_end(value, i + 2)
-                                        if j > len(value) or j > 0 and j <= len(value) and value[j - 1] != ")":
-                                            result.append(value[i])
-                                            i += 1
-                                            continue
-                                        inner = _substring(value, i + 2, j - 1)
-                                        if in_arith:
-                                            result.append(direction + "(" + inner + ")")
-                                        else:
-                                            if inner.strip() != "":
-                                                stripped = inner.lstrip(" \t")
-                                                result.append(direction + "(" + stripped + ")")
-                                            else:
-                                                result.append(direction + "(" + inner + ")")
-                                        i = j
-                                    else:
-                                        result.append(value[i])
-                                        i += 1
-                        else:
-                            if (_is_expansion_start(value, i, "${ ") or _is_expansion_start(value, i, "${\t") or _is_expansion_start(value, i, "${\n") or _is_expansion_start(value, i, "${|")) and not _is_backslash_escaped(value, i):
-                                prefix = _substring(value, i, i + 3).replace("\t", " ").replace("\n", " ")
-                                j = i + 3
-                                depth = 1
-                                while j < len(value) and depth > 0:
-                                    if value[j] == "{":
-                                        depth += 1
-                                    else:
-                                        if value[j] == "}":
-                                            depth -= 1
-                                    j += 1
-                                inner = _substring(value, i + 2, j - 1)
-                                if inner.strip() == "":
-                                    result.append("${ }")
-                                else:
-                                    try:
-                                        parser = NewParser(inner.lstrip(" \t\n|"), False, False)
-                                        parsed = parser.parse_list(True)
-                                        if parsed is not None:
-                                            formatted = _format_cmdsub_node(parsed, 0, False, False, False)
-                                            formatted = formatted.rstrip(";")
-                                            if inner.rstrip(" \t").endswith("\n"):
-                                                terminator = "\n }"
-                                            else:
-                                                if formatted.endswith(" &"):
-                                                    terminator = " }"
-                                                else:
-                                                    terminator = "; }"
-                                            result.append(prefix + formatted + terminator)
-                                        else:
-                                            result.append("${ }")
-                                    except Exception as _e:
-                                        result.append(_substring(value, i, j))
-                                i = j
-                            else:
-                                if _is_expansion_start(value, i, "${") and not _is_backslash_escaped(value, i):
-                                    j = i + 2
-                                    depth = 1
-                                    brace_quote = NewQuoteState()
-                                    while j < len(value) and depth > 0:
-                                        c = value[j]
-                                        if c == "\\" and j + 1 < len(value) and not brace_quote.single:
-                                            j += 2
-                                            continue
-                                        if c == "'" and not brace_quote.double:
-                                            brace_quote.single = not brace_quote.single
-                                        else:
-                                            if c == "\"" and not brace_quote.single:
-                                                brace_quote.double = not brace_quote.double
-                                            else:
-                                                if not brace_quote.in_quotes():
-                                                    if _is_expansion_start(value, j, "$(") and not _starts_with_at(value, j, "$(("):
-                                                        j = _find_cmdsub_end(value, j + 2)
-                                                        continue
-                                                    if c == "{":
-                                                        depth += 1
-                                                    else:
-                                                        if c == "}":
-                                                            depth -= 1
-                                        j += 1
-                                    if depth > 0:
-                                        inner = _substring(value, i + 2, j)
-                                    else:
-                                        inner = _substring(value, i + 2, j - 1)
-                                    formatted_inner = self._format_command_substitutions(inner, False)
-                                    formatted_inner = self._normalize_extglob_whitespace(formatted_inner)
-                                    if depth == 0:
-                                        result.append("${" + formatted_inner + "}")
-                                    else:
-                                        result.append("${" + formatted_inner)
-                                    i = j
-                                else:
-                                    if value[i] == "\"":
-                                        main_quote.double = not main_quote.double
-                                        result.append(value[i])
-                                        i += 1
-                                    else:
-                                        if value[i] == "'" and not main_quote.double:
-                                            j = i + 1
-                                            while j < len(value) and value[j] != "'":
-                                                j += 1
-                                            if j < len(value):
-                                                j += 1
-                                            result.append(_substring(value, i, j))
-                                            i = j
-                                        else:
-                                            result.append(value[i])
-                                            i += 1
+                            result.append("${ }")
+                    except Exception as _e:
+                        result.append(_substring(value, i, j))
+                i = j
+            elif _is_expansion_start(value, i, "${") and not _is_backslash_escaped(value, i):
+                j = i + 2
+                depth = 1
+                brace_quote = NewQuoteState()
+                while j < len(value) and depth > 0:
+                    c = value[j]
+                    if c == "\\" and j + 1 < len(value) and not brace_quote.single:
+                        j += 2
+                        continue
+                    if c == "'" and not brace_quote.double:
+                        brace_quote.single = not brace_quote.single
+                    elif c == "\"" and not brace_quote.single:
+                        brace_quote.double = not brace_quote.double
+                    elif not brace_quote.in_quotes():
+                        if _is_expansion_start(value, j, "$(") and not _starts_with_at(value, j, "$(("):
+                            j = _find_cmdsub_end(value, j + 2)
+                            continue
+                        if c == "{":
+                            depth += 1
+                        elif c == "}":
+                            depth -= 1
+                    j += 1
+                if depth > 0:
+                    inner = _substring(value, i + 2, j)
+                else:
+                    inner = _substring(value, i + 2, j - 1)
+                formatted_inner = self._format_command_substitutions(inner, False)
+                formatted_inner = self._normalize_extglob_whitespace(formatted_inner)
+                if depth == 0:
+                    result.append("${" + formatted_inner + "}")
+                else:
+                    result.append("${" + formatted_inner)
+                i = j
+            elif value[i] == "\"":
+                main_quote.double = not main_quote.double
+                result.append(value[i])
+                i += 1
+            elif value[i] == "'" and not main_quote.double:
+                j = i + 1
+                while j < len(value) and value[j] != "'":
+                    j += 1
+                if j < len(value):
+                    j += 1
+                result.append(_substring(value, i, j))
+                i = j
+            else:
+                result.append(value[i])
+                i += 1
         return "".join(result)
 
     def _normalize_extglob_whitespace(self, value: str) -> str:
@@ -2684,43 +2568,39 @@ class Word(Node):
                             current_part.append(value[i:i + 2])
                             i += 2
                             continue
-                        else:
-                            if value[i] == "(":
-                                depth += 1
-                                current_part.append(value[i])
-                                i += 1
-                            else:
-                                if value[i] == ")":
-                                    depth -= 1
-                                    if depth == 0:
-                                        part_content = "".join(current_part)
-                                        if "<<" in part_content:
-                                            pattern_parts.append(part_content)
-                                        else:
-                                            if has_pipe:
-                                                pattern_parts.append(part_content.strip())
-                                            else:
-                                                pattern_parts.append(part_content)
-                                        break
-                                    current_part.append(value[i])
-                                    i += 1
+                        elif value[i] == "(":
+                            depth += 1
+                            current_part.append(value[i])
+                            i += 1
+                        elif value[i] == ")":
+                            depth -= 1
+                            if depth == 0:
+                                part_content = "".join(current_part)
+                                if "<<" in part_content:
+                                    pattern_parts.append(part_content)
+                                elif has_pipe:
+                                    pattern_parts.append(part_content.strip())
                                 else:
-                                    if value[i] == "|" and depth == 1:
-                                        if i + 1 < len(value) and value[i + 1] == "|":
-                                            current_part.append("||")
-                                            i += 2
-                                        else:
-                                            has_pipe = True
-                                            part_content = "".join(current_part)
-                                            if "<<" in part_content:
-                                                pattern_parts.append(part_content)
-                                            else:
-                                                pattern_parts.append(part_content.strip())
-                                            current_part = []
-                                            i += 1
-                                    else:
-                                        current_part.append(value[i])
-                                        i += 1
+                                    pattern_parts.append(part_content)
+                                break
+                            current_part.append(value[i])
+                            i += 1
+                        elif value[i] == "|" and depth == 1:
+                            if i + 1 < len(value) and value[i + 1] == "|":
+                                current_part.append("||")
+                                i += 2
+                            else:
+                                has_pipe = True
+                                part_content = "".join(current_part)
+                                if "<<" in part_content:
+                                    pattern_parts.append(part_content)
+                                else:
+                                    pattern_parts.append(part_content.strip())
+                                current_part = []
+                                i += 1
+                        else:
+                            current_part.append(value[i])
+                            i += 1
                     result.append(" | ".join(pattern_parts))
                     if depth == 0:
                         result.append(")")
@@ -2969,9 +2849,8 @@ class Redirect(Node):
         if target_val.startswith("&"):
             if op == ">":
                 op = ">&"
-            else:
-                if op == "<":
-                    op = "<&"
+            elif op == "<":
+                op = "<&"
             raw = _substring(target_val, 1, len(target_val))
             if raw.isdigit() and _parseInt(raw, 10) <= 2147483647:
                 return "(redirect \"" + op + "\" " + _intToStr(_parseInt(raw, 10)) + ")"
@@ -3096,15 +2975,14 @@ class For(Node):
         var_escaped = var_formatted.replace("\\", "\\\\").replace("\"", "\\\"")
         if self.words is None:
             return "(for (word \"" + var_escaped + "\") (in (word \"\\\"$@\\\"\")) " + self.body.to_sexp() + ")" + suffix
+        elif not self.words:
+            return "(for (word \"" + var_escaped + "\") (in) " + self.body.to_sexp() + ")" + suffix
         else:
-            if not self.words:
-                return "(for (word \"" + var_escaped + "\") (in) " + self.body.to_sexp() + ")" + suffix
-            else:
-                word_parts = []
-                for w in (self.words or []):
-                    word_parts.append(w.to_sexp())
-                word_strs = " ".join(word_parts)
-                return "(for (word \"" + var_escaped + "\") (in " + word_strs + ") " + self.body.to_sexp() + ")" + suffix
+            word_parts = []
+            for w in (self.words or []):
+                word_parts.append(w.to_sexp())
+            word_strs = " ".join(word_parts)
+            return "(for (word \"" + var_escaped + "\") (in " + word_strs + ") " + self.body.to_sexp() + ")" + suffix
 
 
 @dataclass
@@ -3196,51 +3074,43 @@ class CasePattern(Node):
             if ch == "\\" and i + 1 < len(self.pattern):
                 current.append(_substring(self.pattern, i, i + 2))
                 i += 2
+            elif (ch == "@" or ch == "?" or ch == "*" or ch == "+" or ch == "!") and i + 1 < len(self.pattern) and self.pattern[i + 1] == "(":
+                current.append(ch)
+                current.append("(")
+                depth += 1
+                i += 2
+            elif _is_expansion_start(self.pattern, i, "$("):
+                current.append(ch)
+                current.append("(")
+                depth += 1
+                i += 2
+            elif ch == "(" and depth > 0:
+                current.append(ch)
+                depth += 1
+                i += 1
+            elif ch == ")" and depth > 0:
+                current.append(ch)
+                depth -= 1
+                i += 1
+            elif ch == "[":
+                result0, result1, result2 = _consume_bracket_class(self.pattern, i, depth)
+                i = result0
+                current.extend(result1)
+            elif ch == "'" and depth == 0:
+                result0, result1 = _consume_single_quote(self.pattern, i)
+                i = result0
+                current.extend(result1)
+            elif ch == "\"" and depth == 0:
+                result0, result1 = _consume_double_quote(self.pattern, i)
+                i = result0
+                current.extend(result1)
+            elif ch == "|" and depth == 0:
+                alternatives.append("".join(current))
+                current = []
+                i += 1
             else:
-                if (ch == "@" or ch == "?" or ch == "*" or ch == "+" or ch == "!") and i + 1 < len(self.pattern) and self.pattern[i + 1] == "(":
-                    current.append(ch)
-                    current.append("(")
-                    depth += 1
-                    i += 2
-                else:
-                    if _is_expansion_start(self.pattern, i, "$("):
-                        current.append(ch)
-                        current.append("(")
-                        depth += 1
-                        i += 2
-                    else:
-                        if ch == "(" and depth > 0:
-                            current.append(ch)
-                            depth += 1
-                            i += 1
-                        else:
-                            if ch == ")" and depth > 0:
-                                current.append(ch)
-                                depth -= 1
-                                i += 1
-                            else:
-                                if ch == "[":
-                                    result0, result1, result2 = _consume_bracket_class(self.pattern, i, depth)
-                                    i = result0
-                                    current.extend(result1)
-                                else:
-                                    if ch == "'" and depth == 0:
-                                        result0, result1 = _consume_single_quote(self.pattern, i)
-                                        i = result0
-                                        current.extend(result1)
-                                    else:
-                                        if ch == "\"" and depth == 0:
-                                            result0, result1 = _consume_double_quote(self.pattern, i)
-                                            i = result0
-                                            current.extend(result1)
-                                        else:
-                                            if ch == "|" and depth == 0:
-                                                alternatives.append("".join(current))
-                                                current = []
-                                                i += 1
-                                            else:
-                                                current.append(ch)
-                                                i += 1
+                current.append(ch)
+                i += 1
         alternatives.append("".join(current))
         word_list = []
         for alt in alternatives:
@@ -3896,12 +3766,11 @@ class Parser:
             ch = self.peek()
             if ch == "#":
                 self._lex_skip_comment()
+            elif ch == "\\" and self.peek_at(1) == "\n":
+                self.advance()
+                self.advance()
             else:
-                if ch == "\\" and self.peek_at(1) == "\n":
-                    self.advance()
-                    self.advance()
-                else:
-                    break
+                break
 
     def skip_whitespace_and_newlines(self) -> None:
         while not self.at_end():
@@ -3913,16 +3782,14 @@ class Parser:
                     if self._cmdsub_heredoc_end != -1 and self._cmdsub_heredoc_end > self.pos:
                         self.pos = self._cmdsub_heredoc_end
                         self._cmdsub_heredoc_end = -1
+            elif ch == "#":
+                while not self.at_end() and self.peek() != "\n":
+                    self.advance()
+            elif ch == "\\" and self.peek_at(1) == "\n":
+                self.advance()
+                self.advance()
             else:
-                if ch == "#":
-                    while not self.at_end() and self.peek() != "\n":
-                        self.advance()
-                else:
-                    if ch == "\\" and self.peek_at(1) == "\n":
-                        self.advance()
-                        self.advance()
-                    else:
-                        break
+                break
 
     def _at_list_terminating_bracket(self) -> bool:
         if self.at_end():
@@ -4038,12 +3905,11 @@ class Parser:
                 else:
                     chars.append(self.advance())
                     chars.append(self.advance())
-            else:
-                if c == "$":
-                    if not self._parse_dollar_expansion(chars, parts, True):
-                        chars.append(self.advance())
-                else:
+            elif c == "$":
+                if not self._parse_dollar_expansion(chars, parts, True):
                     chars.append(self.advance())
+            else:
+                chars.append(self.advance())
         if self.at_end():
             raise ParseError("Unterminated double quote", start)
         chars.append(self.advance())
@@ -4189,30 +4055,29 @@ class Parser:
                         current_heredoc_delim = _entry[0]
                         current_heredoc_strip = _entry[1]
                         in_heredoc_body = True
+                elif check_line.startswith(current_heredoc_delim) and len(check_line) > len(current_heredoc_delim):
+                    tabs_stripped = len(line) - len(check_line)
+                    end_pos = tabs_stripped + len(current_heredoc_delim)
+                    for i in range(end_pos):
+                        content_chars.append(line[i])
+                        text_chars.append(line[i])
+                    self.pos = line_start + end_pos
+                    in_heredoc_body = False
+                    if pending_heredocs:
+                        _entry: tuple[str, bool] = pending_heredocs[len(pending_heredocs) - 1]
+                        pending_heredocs = pending_heredocs[:len(pending_heredocs) - 1]
+                        current_heredoc_delim = _entry[0]
+                        current_heredoc_strip = _entry[1]
+                        in_heredoc_body = True
                 else:
-                    if check_line.startswith(current_heredoc_delim) and len(check_line) > len(current_heredoc_delim):
-                        tabs_stripped = len(line) - len(check_line)
-                        end_pos = tabs_stripped + len(current_heredoc_delim)
-                        for i in range(end_pos):
-                            content_chars.append(line[i])
-                            text_chars.append(line[i])
-                        self.pos = line_start + end_pos
-                        in_heredoc_body = False
-                        if pending_heredocs:
-                            _entry: tuple[str, bool] = pending_heredocs[len(pending_heredocs) - 1]
-                            pending_heredocs = pending_heredocs[:len(pending_heredocs) - 1]
-                            current_heredoc_delim = _entry[0]
-                            current_heredoc_strip = _entry[1]
-                            in_heredoc_body = True
-                    else:
-                        for ch in line:
-                            content_chars.append(ch)
-                            text_chars.append(ch)
-                        self.pos = line_end
-                        if self.pos < self.length and self.source[self.pos] == "\n":
-                            content_chars.append("\n")
-                            text_chars.append("\n")
-                            self.advance()
+                    for ch in line:
+                        content_chars.append(ch)
+                        text_chars.append(ch)
+                    self.pos = line_end
+                    if self.pos < self.length and self.source[self.pos] == "\n":
+                        content_chars.append("\n")
+                        text_chars.append("\n")
+                        self.advance()
                 continue
             c = self.peek()
             if c == "\\" and self.pos + 1 < self.length:
@@ -4220,17 +4085,16 @@ class Parser:
                 if next_c == "\n":
                     self.advance()
                     self.advance()
+                elif _is_escape_char_in_backtick(next_c):
+                    self.advance()
+                    escaped = self.advance()
+                    content_chars.append(escaped)
+                    text_chars.append("\\")
+                    text_chars.append(escaped)
                 else:
-                    if _is_escape_char_in_backtick(next_c):
-                        self.advance()
-                        escaped = self.advance()
-                        content_chars.append(escaped)
-                        text_chars.append("\\")
-                        text_chars.append(escaped)
-                    else:
-                        ch = self.advance()
-                        content_chars.append(ch)
-                        text_chars.append(ch)
+                    ch = self.advance()
+                    content_chars.append(ch)
+                    text_chars.append(ch)
                 continue
             if c == "<" and self.pos + 1 < self.length and self.source[self.pos + 1] == "<":
                 if self.pos + 2 < self.length and self.source[self.pos + 2] == "<":
@@ -4252,28 +4116,27 @@ class Parser:
                             ch = self.advance()
                             content_chars.append(ch)
                             text_chars.append(ch)
+                        elif self.peek() in "\"'":
+                            quote = self.peek()
+                            ch = self.advance()
+                            content_chars.append(ch)
+                            text_chars.append(ch)
+                            while not self.at_end() and self.peek() != quote:
+                                if quote == "\"" and self.peek() == "\\":
+                                    ch = self.advance()
+                                    content_chars.append(ch)
+                                    text_chars.append(ch)
+                                ch = self.advance()
+                                content_chars.append(ch)
+                                text_chars.append(ch)
+                            if not self.at_end():
+                                ch = self.advance()
+                                content_chars.append(ch)
+                                text_chars.append(ch)
                         else:
-                            if self.peek() in "\"'":
-                                quote = self.peek()
-                                ch = self.advance()
-                                content_chars.append(ch)
-                                text_chars.append(ch)
-                                while not self.at_end() and self.peek() != quote:
-                                    if quote == "\"" and self.peek() == "\\":
-                                        ch = self.advance()
-                                        content_chars.append(ch)
-                                        text_chars.append(ch)
-                                    ch = self.advance()
-                                    content_chars.append(ch)
-                                    text_chars.append(ch)
-                                if not self.at_end():
-                                    ch = self.advance()
-                                    content_chars.append(ch)
-                                    text_chars.append(ch)
-                            else:
-                                ch = self.advance()
-                                content_chars.append(ch)
-                                text_chars.append(ch)
+                            ch = self.advance()
+                            content_chars.append(ch)
+                            text_chars.append(ch)
                     continue
                 content_chars.append(self.advance())
                 text_chars.append("<")
@@ -4304,52 +4167,50 @@ class Parser:
                             closing = self.advance()
                             content_chars.append(closing)
                             text_chars.append(closing)
+                    elif ch == "\\":
+                        esc = self.advance()
+                        content_chars.append(esc)
+                        text_chars.append(esc)
+                        if not self.at_end():
+                            dch = self.advance()
+                            content_chars.append(dch)
+                            text_chars.append(dch)
+                            delimiter_chars.append(dch)
+                        while not self.at_end() and not _is_metachar(self.peek()):
+                            dch = self.advance()
+                            content_chars.append(dch)
+                            text_chars.append(dch)
+                            delimiter_chars.append(dch)
                     else:
-                        if ch == "\\":
-                            esc = self.advance()
-                            content_chars.append(esc)
-                            text_chars.append(esc)
-                            if not self.at_end():
+                        while not self.at_end() and not _is_metachar(self.peek()) and self.peek() != "`":
+                            ch = self.peek()
+                            if _is_quote(ch):
+                                quote = self.advance()
+                                content_chars.append(quote)
+                                text_chars.append(quote)
+                                while not self.at_end() and self.peek() != quote:
+                                    dch = self.advance()
+                                    content_chars.append(dch)
+                                    text_chars.append(dch)
+                                    delimiter_chars.append(dch)
+                                if not self.at_end():
+                                    closing = self.advance()
+                                    content_chars.append(closing)
+                                    text_chars.append(closing)
+                            elif ch == "\\":
+                                esc = self.advance()
+                                content_chars.append(esc)
+                                text_chars.append(esc)
+                                if not self.at_end():
+                                    dch = self.advance()
+                                    content_chars.append(dch)
+                                    text_chars.append(dch)
+                                    delimiter_chars.append(dch)
+                            else:
                                 dch = self.advance()
                                 content_chars.append(dch)
                                 text_chars.append(dch)
                                 delimiter_chars.append(dch)
-                            while not self.at_end() and not _is_metachar(self.peek()):
-                                dch = self.advance()
-                                content_chars.append(dch)
-                                text_chars.append(dch)
-                                delimiter_chars.append(dch)
-                        else:
-                            while not self.at_end() and not _is_metachar(self.peek()) and self.peek() != "`":
-                                ch = self.peek()
-                                if _is_quote(ch):
-                                    quote = self.advance()
-                                    content_chars.append(quote)
-                                    text_chars.append(quote)
-                                    while not self.at_end() and self.peek() != quote:
-                                        dch = self.advance()
-                                        content_chars.append(dch)
-                                        text_chars.append(dch)
-                                        delimiter_chars.append(dch)
-                                    if not self.at_end():
-                                        closing = self.advance()
-                                        content_chars.append(closing)
-                                        text_chars.append(closing)
-                                else:
-                                    if ch == "\\":
-                                        esc = self.advance()
-                                        content_chars.append(esc)
-                                        text_chars.append(esc)
-                                        if not self.at_end():
-                                            dch = self.advance()
-                                            content_chars.append(dch)
-                                            text_chars.append(dch)
-                                            delimiter_chars.append(dch)
-                                    else:
-                                        dch = self.advance()
-                                        content_chars.append(dch)
-                                        text_chars.append(dch)
-                                        delimiter_chars.append(dch)
                 delimiter = "".join(delimiter_chars)
                 if delimiter != "":
                     pending_heredocs.append((delimiter, strip_tabs))
@@ -4479,39 +4340,34 @@ class Parser:
                     self.advance()
                 if not self.at_end():
                     self.advance()
-            else:
-                if c == "\"":
-                    self.advance()
-                    while not self.at_end():
-                        if self.peek() == "\\" and self.pos + 1 < self.length:
-                            self.advance()
-                            self.advance()
-                        else:
-                            if self.peek() == "\"":
-                                self.advance()
-                                break
-                            else:
-                                self.advance()
-                else:
-                    if c == "\\" and self.pos + 1 < self.length:
+            elif c == "\"":
+                self.advance()
+                while not self.at_end():
+                    if self.peek() == "\\" and self.pos + 1 < self.length:
                         self.advance()
                         self.advance()
+                    elif self.peek() == "\"":
+                        self.advance()
+                        break
                     else:
-                        if c == "(":
-                            depth += 1
-                            self.advance()
-                        else:
-                            if c == ")":
-                                if depth == 2:
-                                    first_close_pos = self.pos
-                                depth -= 1
-                                if depth == 0:
-                                    break
-                                self.advance()
-                            else:
-                                if depth == 1:
-                                    first_close_pos = -1
-                                self.advance()
+                        self.advance()
+            elif c == "\\" and self.pos + 1 < self.length:
+                self.advance()
+                self.advance()
+            elif c == "(":
+                depth += 1
+                self.advance()
+            elif c == ")":
+                if depth == 2:
+                    first_close_pos = self.pos
+                depth -= 1
+                if depth == 0:
+                    break
+                self.advance()
+            else:
+                if depth == 1:
+                    first_close_pos = -1
+                self.advance()
         if depth != 0:
             if self.at_end():
                 raise MatchedPairError("unexpected EOF looking for `))'", start)
@@ -4572,11 +4428,10 @@ class Parser:
             c = self._arith_src[self._arith_pos]
             if _is_whitespace(c):
                 self._arith_pos += 1
+            elif c == "\\" and self._arith_pos + 1 < self._arith_len and self._arith_src[self._arith_pos + 1] == "\n":
+                self._arith_pos += 2
             else:
-                if c == "\\" and self._arith_pos + 1 < self._arith_len and self._arith_src[self._arith_pos + 1] == "\n":
-                    self._arith_pos += 2
-                else:
-                    break
+                break
 
     def _arith_match(self, s: str) -> bool:
         return _starts_with_at(self._arith_src, self._arith_pos, s)
@@ -4707,26 +4562,23 @@ class Parser:
                 self._arith_skip_ws()
                 right = self._arith_parse_shift()
                 left = ArithBinaryOp(op="<=", left=left, right=right, kind="binary-op")
+            elif self._arith_match(">="):
+                self._arith_consume(">=")
+                self._arith_skip_ws()
+                right = self._arith_parse_shift()
+                left = ArithBinaryOp(op=">=", left=left, right=right, kind="binary-op")
+            elif self._arith_peek(0) == "<" and self._arith_peek(1) != "<" and self._arith_peek(1) != "=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_shift()
+                left = ArithBinaryOp(op="<", left=left, right=right, kind="binary-op")
+            elif self._arith_peek(0) == ">" and self._arith_peek(1) != ">" and self._arith_peek(1) != "=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_shift()
+                left = ArithBinaryOp(op=">", left=left, right=right, kind="binary-op")
             else:
-                if self._arith_match(">="):
-                    self._arith_consume(">=")
-                    self._arith_skip_ws()
-                    right = self._arith_parse_shift()
-                    left = ArithBinaryOp(op=">=", left=left, right=right, kind="binary-op")
-                else:
-                    if self._arith_peek(0) == "<" and self._arith_peek(1) != "<" and self._arith_peek(1) != "=":
-                        self._arith_advance()
-                        self._arith_skip_ws()
-                        right = self._arith_parse_shift()
-                        left = ArithBinaryOp(op="<", left=left, right=right, kind="binary-op")
-                    else:
-                        if self._arith_peek(0) == ">" and self._arith_peek(1) != ">" and self._arith_peek(1) != "=":
-                            self._arith_advance()
-                            self._arith_skip_ws()
-                            right = self._arith_parse_shift()
-                            left = ArithBinaryOp(op=">", left=left, right=right, kind="binary-op")
-                        else:
-                            break
+                break
         return left
 
     def _arith_parse_shift(self) -> Node:
@@ -4742,14 +4594,13 @@ class Parser:
                 self._arith_skip_ws()
                 right = self._arith_parse_additive()
                 left = ArithBinaryOp(op="<<", left=left, right=right, kind="binary-op")
+            elif self._arith_match(">>"):
+                self._arith_consume(">>")
+                self._arith_skip_ws()
+                right = self._arith_parse_additive()
+                left = ArithBinaryOp(op=">>", left=left, right=right, kind="binary-op")
             else:
-                if self._arith_match(">>"):
-                    self._arith_consume(">>")
-                    self._arith_skip_ws()
-                    right = self._arith_parse_additive()
-                    left = ArithBinaryOp(op=">>", left=left, right=right, kind="binary-op")
-                else:
-                    break
+                break
         return left
 
     def _arith_parse_additive(self) -> Node:
@@ -4763,14 +4614,13 @@ class Parser:
                 self._arith_skip_ws()
                 right = self._arith_parse_multiplicative()
                 left = ArithBinaryOp(op="+", left=left, right=right, kind="binary-op")
+            elif c == "-" and c2 != "-" and c2 != "=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_multiplicative()
+                left = ArithBinaryOp(op="-", left=left, right=right, kind="binary-op")
             else:
-                if c == "-" and c2 != "-" and c2 != "=":
-                    self._arith_advance()
-                    self._arith_skip_ws()
-                    right = self._arith_parse_multiplicative()
-                    left = ArithBinaryOp(op="-", left=left, right=right, kind="binary-op")
-                else:
-                    break
+                break
         return left
 
     def _arith_parse_multiplicative(self) -> Node:
@@ -4784,20 +4634,18 @@ class Parser:
                 self._arith_skip_ws()
                 right = self._arith_parse_exponentiation()
                 left = ArithBinaryOp(op="*", left=left, right=right, kind="binary-op")
+            elif c == "/" and c2 != "=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_exponentiation()
+                left = ArithBinaryOp(op="/", left=left, right=right, kind="binary-op")
+            elif c == "%" and c2 != "=":
+                self._arith_advance()
+                self._arith_skip_ws()
+                right = self._arith_parse_exponentiation()
+                left = ArithBinaryOp(op="%", left=left, right=right, kind="binary-op")
             else:
-                if c == "/" and c2 != "=":
-                    self._arith_advance()
-                    self._arith_skip_ws()
-                    right = self._arith_parse_exponentiation()
-                    left = ArithBinaryOp(op="/", left=left, right=right, kind="binary-op")
-                else:
-                    if c == "%" and c2 != "=":
-                        self._arith_advance()
-                        self._arith_skip_ws()
-                        right = self._arith_parse_exponentiation()
-                        left = ArithBinaryOp(op="%", left=left, right=right, kind="binary-op")
-                    else:
-                        break
+                break
         return left
 
     def _arith_parse_exponentiation(self) -> Node:
@@ -4852,25 +4700,23 @@ class Parser:
             if self._arith_match("++"):
                 self._arith_consume("++")
                 left = ArithPostIncr(operand=left, kind="post-incr")
-            else:
-                if self._arith_match("--"):
-                    self._arith_consume("--")
-                    left = ArithPostDecr(operand=left, kind="post-decr")
+            elif self._arith_match("--"):
+                self._arith_consume("--")
+                left = ArithPostDecr(operand=left, kind="post-decr")
+            elif self._arith_peek(0) == "[":
+                if isinstance(left, ArithVar):
+                    left = left
+                    self._arith_advance()
+                    self._arith_skip_ws()
+                    index = self._arith_parse_comma()
+                    self._arith_skip_ws()
+                    if not self._arith_consume("]"):
+                        raise ParseError("Expected ']' in array subscript", self._arith_pos)
+                    left = ArithSubscript(array=left.name, index=index, kind="subscript")
                 else:
-                    if self._arith_peek(0) == "[":
-                        if isinstance(left, ArithVar):
-                            left = left
-                            self._arith_advance()
-                            self._arith_skip_ws()
-                            index = self._arith_parse_comma()
-                            self._arith_skip_ws()
-                            if not self._arith_consume("]"):
-                                raise ParseError("Expected ']' in array subscript", self._arith_pos)
-                            left = ArithSubscript(array=left.name, index=index, kind="subscript")
-                        else:
-                            break
-                    else:
-                        break
+                    break
+            else:
+                break
         return left
 
     def _arith_parse_primary(self) -> Node:
@@ -4918,12 +4764,11 @@ class Parser:
             ch = self._arith_peek(0)
             if ch.isalnum() or ch == "_":
                 name_chars.append(self._arith_advance())
+            elif (_is_special_param_or_digit(ch) or ch == "#") and not (name_chars):
+                name_chars.append(self._arith_advance())
+                break
             else:
-                if (_is_special_param_or_digit(ch) or ch == "#") and not (name_chars):
-                    name_chars.append(self._arith_advance())
-                    break
-                else:
-                    break
+                break
         if not (name_chars):
             raise ParseError("Expected variable name after $", self._arith_pos)
         return ParamExpansion(param="".join(name_chars), kind="param")
@@ -4939,14 +4784,13 @@ class Parser:
                 if ch == "(":
                     depth += 1
                     self._arith_advance()
+                elif ch == ")":
+                    if depth == 1 and self._arith_peek(1) == ")":
+                        break
+                    depth -= 1
+                    self._arith_advance()
                 else:
-                    if ch == ")":
-                        if depth == 1 and self._arith_peek(1) == ")":
-                            break
-                        depth -= 1
-                        self._arith_advance()
-                    else:
-                        self._arith_advance()
+                    self._arith_advance()
             content = _substring(self._arith_src, content_start, self._arith_pos)
             self._arith_advance()
             self._arith_advance()
@@ -4959,14 +4803,13 @@ class Parser:
             if ch == "(":
                 depth += 1
                 self._arith_advance()
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+                self._arith_advance()
             else:
-                if ch == ")":
-                    depth -= 1
-                    if depth == 0:
-                        break
-                    self._arith_advance()
-                else:
-                    self._arith_advance()
+                self._arith_advance()
         content = _substring(self._arith_src, content_start, self._arith_pos)
         self._arith_advance()
         sub_parser = NewParser(content, False, self._extglob)
@@ -5006,14 +4849,13 @@ class Parser:
             if ch == "{":
                 depth += 1
                 op_chars.append(self._arith_advance())
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+                op_chars.append(self._arith_advance())
             else:
-                if ch == "}":
-                    depth -= 1
-                    if depth == 0:
-                        break
-                    op_chars.append(self._arith_advance())
-                else:
-                    op_chars.append(self._arith_advance())
+                op_chars.append(self._arith_advance())
         self._arith_consume("}")
         op_str = "".join(op_chars)
         if op_str.startswith(":-"):
@@ -5144,22 +4986,18 @@ class Parser:
                 ch = self.peek()
                 if ch == "}" and not in_bracket:
                     break
+                elif ch == "[":
+                    in_bracket = True
+                    varname_chars.append(self.advance())
+                elif ch == "]":
+                    in_bracket = False
+                    varname_chars.append(self.advance())
+                elif ch.isalnum() or ch == "_":
+                    varname_chars.append(self.advance())
+                elif in_bracket and not _is_metachar(ch):
+                    varname_chars.append(self.advance())
                 else:
-                    if ch == "[":
-                        in_bracket = True
-                        varname_chars.append(self.advance())
-                    else:
-                        if ch == "]":
-                            in_bracket = False
-                            varname_chars.append(self.advance())
-                        else:
-                            if ch.isalnum() or ch == "_":
-                                varname_chars.append(self.advance())
-                            else:
-                                if in_bracket and not _is_metachar(ch):
-                                    varname_chars.append(self.advance())
-                                else:
-                                    break
+                    break
             varname = "".join(varname_chars)
             is_valid_varfd = False
             if varname != "":
@@ -5221,44 +5059,37 @@ class Parser:
             if op == ">" and next_ch == ">":
                 self.advance()
                 op = ">>"
-            else:
-                if op == "<" and next_ch == "<":
+            elif op == "<" and next_ch == "<":
+                self.advance()
+                if not self.at_end() and self.peek() == "<":
                     self.advance()
-                    if not self.at_end() and self.peek() == "<":
-                        self.advance()
-                        op = "<<<"
-                    else:
-                        if not self.at_end() and self.peek() == "-":
-                            self.advance()
-                            op = "<<"
-                            strip_tabs = True
-                        else:
-                            op = "<<"
+                    op = "<<<"
+                elif not self.at_end() and self.peek() == "-":
+                    self.advance()
+                    op = "<<"
+                    strip_tabs = True
                 else:
-                    if op == "<" and next_ch == ">":
-                        self.advance()
-                        op = "<>"
-                    else:
-                        if op == ">" and next_ch == "|":
-                            self.advance()
-                            op = ">|"
-                        else:
-                            if fd == -1 and varfd == "" and op == ">" and next_ch == "&":
-                                if self.pos + 1 >= self.length or not _is_digit_or_dash(self.source[self.pos + 1]):
-                                    self.advance()
-                                    op = ">&"
-                            else:
-                                if fd == -1 and varfd == "" and op == "<" and next_ch == "&":
-                                    if self.pos + 1 >= self.length or not _is_digit_or_dash(self.source[self.pos + 1]):
-                                        self.advance()
-                                        op = "<&"
+                    op = "<<"
+            elif op == "<" and next_ch == ">":
+                self.advance()
+                op = "<>"
+            elif op == ">" and next_ch == "|":
+                self.advance()
+                op = ">|"
+            elif fd == -1 and varfd == "" and op == ">" and next_ch == "&":
+                if self.pos + 1 >= self.length or not _is_digit_or_dash(self.source[self.pos + 1]):
+                    self.advance()
+                    op = ">&"
+            elif fd == -1 and varfd == "" and op == "<" and next_ch == "&":
+                if self.pos + 1 >= self.length or not _is_digit_or_dash(self.source[self.pos + 1]):
+                    self.advance()
+                    op = "<&"
         if op == "<<":
             return self._parse_heredoc(_intPtr(fd), strip_tabs)
         if varfd != "":
             op = "{" + varfd + "}" + op
-        else:
-            if fd != -1:
-                op = _intToStr(fd) + op
+        elif fd != -1:
+            op = _intToStr(fd) + op
         if not self.at_end() and self.peek() == "&":
             self.advance()
             self.skip_whitespace()
@@ -5327,145 +5158,132 @@ class Parser:
                         delimiter_chars.append(self.advance())
                     if not self.at_end():
                         self.advance()
-                else:
-                    if ch == "'":
-                        quoted = True
+                elif ch == "'":
+                    quoted = True
+                    self.advance()
+                    while not self.at_end() and self.peek() != "'":
+                        c = self.advance()
+                        if c == "\n":
+                            self._saw_newline_in_single_quote = True
+                        delimiter_chars.append(c)
+                    if not self.at_end():
                         self.advance()
-                        while not self.at_end() and self.peek() != "'":
-                            c = self.advance()
-                            if c == "\n":
-                                self._saw_newline_in_single_quote = True
-                            delimiter_chars.append(c)
-                        if not self.at_end():
+                elif ch == "\\":
+                    self.advance()
+                    if not self.at_end():
+                        next_ch = self.peek()
+                        if next_ch == "\n":
                             self.advance()
-                    else:
-                        if ch == "\\":
-                            self.advance()
-                            if not self.at_end():
-                                next_ch = self.peek()
-                                if next_ch == "\n":
-                                    self.advance()
-                                else:
-                                    quoted = True
-                                    delimiter_chars.append(self.advance())
                         else:
-                            if ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "'":
-                                quoted = True
+                            quoted = True
+                            delimiter_chars.append(self.advance())
+                elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "'":
+                    quoted = True
+                    self.advance()
+                    self.advance()
+                    while not self.at_end() and self.peek() != "'":
+                        c = self.peek()
+                        if c == "\\" and self.pos + 1 < self.length:
+                            self.advance()
+                            esc = self.peek()
+                            esc_val = _get_ansi_escape(esc)
+                            if esc_val >= 0:
+                                delimiter_chars.append(chr(esc_val))
                                 self.advance()
-                                self.advance()
-                                while not self.at_end() and self.peek() != "'":
-                                    c = self.peek()
-                                    if c == "\\" and self.pos + 1 < self.length:
-                                        self.advance()
-                                        esc = self.peek()
-                                        esc_val = _get_ansi_escape(esc)
-                                        if esc_val >= 0:
-                                            delimiter_chars.append(chr(esc_val))
-                                            self.advance()
-                                        else:
-                                            if esc == "'":
-                                                delimiter_chars.append(self.advance())
-                                            else:
-                                                delimiter_chars.append(self.advance())
-                                    else:
-                                        delimiter_chars.append(self.advance())
-                                if not self.at_end():
-                                    self.advance()
+                            elif esc == "'":
+                                delimiter_chars.append(self.advance())
                             else:
-                                if _is_expansion_start(self.source, self.pos, "$("):
+                                delimiter_chars.append(self.advance())
+                        else:
+                            delimiter_chars.append(self.advance())
+                    if not self.at_end():
+                        self.advance()
+                elif _is_expansion_start(self.source, self.pos, "$("):
+                    delimiter_chars.append(self.advance())
+                    delimiter_chars.append(self.advance())
+                    depth = 1
+                    while not self.at_end() and depth > 0:
+                        c = self.peek()
+                        if c == "(":
+                            depth += 1
+                        elif c == ")":
+                            depth -= 1
+                        delimiter_chars.append(self.advance())
+                elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
+                    dollar_count = 0
+                    j = self.pos - 1
+                    while j >= 0 and self.source[j] == "$":
+                        dollar_count += 1
+                        j -= 1
+                    if j >= 0 and self.source[j] == "\\":
+                        dollar_count -= 1
+                    if dollar_count % 2 == 1:
+                        delimiter_chars.append(self.advance())
+                    else:
+                        delimiter_chars.append(self.advance())
+                        delimiter_chars.append(self.advance())
+                        depth = 0
+                        while not self.at_end():
+                            c = self.peek()
+                            if c == "{":
+                                depth += 1
+                            elif c == "}":
+                                delimiter_chars.append(self.advance())
+                                if depth == 0:
+                                    break
+                                depth -= 1
+                                if depth == 0 and not self.at_end() and _is_metachar(self.peek()):
+                                    break
+                                continue
+                            delimiter_chars.append(self.advance())
+                elif ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "[":
+                    dollar_count = 0
+                    j = self.pos - 1
+                    while j >= 0 and self.source[j] == "$":
+                        dollar_count += 1
+                        j -= 1
+                    if j >= 0 and self.source[j] == "\\":
+                        dollar_count -= 1
+                    if dollar_count % 2 == 1:
+                        delimiter_chars.append(self.advance())
+                    else:
+                        delimiter_chars.append(self.advance())
+                        delimiter_chars.append(self.advance())
+                        depth = 1
+                        while not self.at_end() and depth > 0:
+                            c = self.peek()
+                            if c == "[":
+                                depth += 1
+                            elif c == "]":
+                                depth -= 1
+                            delimiter_chars.append(self.advance())
+                elif ch == "`":
+                    delimiter_chars.append(self.advance())
+                    while not self.at_end() and self.peek() != "`":
+                        c = self.peek()
+                        if c == "'":
+                            delimiter_chars.append(self.advance())
+                            while not self.at_end() and self.peek() != "'" and self.peek() != "`":
+                                delimiter_chars.append(self.advance())
+                            if not self.at_end() and self.peek() == "'":
+                                delimiter_chars.append(self.advance())
+                        elif c == "\"":
+                            delimiter_chars.append(self.advance())
+                            while not self.at_end() and self.peek() != "\"" and self.peek() != "`":
+                                if self.peek() == "\\" and self.pos + 1 < self.length:
                                     delimiter_chars.append(self.advance())
-                                    delimiter_chars.append(self.advance())
-                                    depth = 1
-                                    while not self.at_end() and depth > 0:
-                                        c = self.peek()
-                                        if c == "(":
-                                            depth += 1
-                                        else:
-                                            if c == ")":
-                                                depth -= 1
-                                        delimiter_chars.append(self.advance())
-                                else:
-                                    if ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "{":
-                                        dollar_count = 0
-                                        j = self.pos - 1
-                                        while j >= 0 and self.source[j] == "$":
-                                            dollar_count += 1
-                                            j -= 1
-                                        if j >= 0 and self.source[j] == "\\":
-                                            dollar_count -= 1
-                                        if dollar_count % 2 == 1:
-                                            delimiter_chars.append(self.advance())
-                                        else:
-                                            delimiter_chars.append(self.advance())
-                                            delimiter_chars.append(self.advance())
-                                            depth = 0
-                                            while not self.at_end():
-                                                c = self.peek()
-                                                if c == "{":
-                                                    depth += 1
-                                                else:
-                                                    if c == "}":
-                                                        delimiter_chars.append(self.advance())
-                                                        if depth == 0:
-                                                            break
-                                                        depth -= 1
-                                                        if depth == 0 and not self.at_end() and _is_metachar(self.peek()):
-                                                            break
-                                                        continue
-                                                delimiter_chars.append(self.advance())
-                                    else:
-                                        if ch == "$" and self.pos + 1 < self.length and self.source[self.pos + 1] == "[":
-                                            dollar_count = 0
-                                            j = self.pos - 1
-                                            while j >= 0 and self.source[j] == "$":
-                                                dollar_count += 1
-                                                j -= 1
-                                            if j >= 0 and self.source[j] == "\\":
-                                                dollar_count -= 1
-                                            if dollar_count % 2 == 1:
-                                                delimiter_chars.append(self.advance())
-                                            else:
-                                                delimiter_chars.append(self.advance())
-                                                delimiter_chars.append(self.advance())
-                                                depth = 1
-                                                while not self.at_end() and depth > 0:
-                                                    c = self.peek()
-                                                    if c == "[":
-                                                        depth += 1
-                                                    else:
-                                                        if c == "]":
-                                                            depth -= 1
-                                                    delimiter_chars.append(self.advance())
-                                        else:
-                                            if ch == "`":
-                                                delimiter_chars.append(self.advance())
-                                                while not self.at_end() and self.peek() != "`":
-                                                    c = self.peek()
-                                                    if c == "'":
-                                                        delimiter_chars.append(self.advance())
-                                                        while not self.at_end() and self.peek() != "'" and self.peek() != "`":
-                                                            delimiter_chars.append(self.advance())
-                                                        if not self.at_end() and self.peek() == "'":
-                                                            delimiter_chars.append(self.advance())
-                                                    else:
-                                                        if c == "\"":
-                                                            delimiter_chars.append(self.advance())
-                                                            while not self.at_end() and self.peek() != "\"" and self.peek() != "`":
-                                                                if self.peek() == "\\" and self.pos + 1 < self.length:
-                                                                    delimiter_chars.append(self.advance())
-                                                                delimiter_chars.append(self.advance())
-                                                            if not self.at_end() and self.peek() == "\"":
-                                                                delimiter_chars.append(self.advance())
-                                                        else:
-                                                            if c == "\\" and self.pos + 1 < self.length:
-                                                                delimiter_chars.append(self.advance())
-                                                                delimiter_chars.append(self.advance())
-                                                            else:
-                                                                delimiter_chars.append(self.advance())
-                                                if not self.at_end():
-                                                    delimiter_chars.append(self.advance())
-                                            else:
-                                                delimiter_chars.append(self.advance())
+                                delimiter_chars.append(self.advance())
+                            if not self.at_end() and self.peek() == "\"":
+                                delimiter_chars.append(self.advance())
+                        elif c == "\\" and self.pos + 1 < self.length:
+                            delimiter_chars.append(self.advance())
+                            delimiter_chars.append(self.advance())
+                        else:
+                            delimiter_chars.append(self.advance())
+                    if not self.at_end():
+                        delimiter_chars.append(self.advance())
+                else:
+                    delimiter_chars.append(self.advance())
             if not self.at_end() and (self.peek() in "<>") and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
                 delimiter_chars.append(self.advance())
                 delimiter_chars.append(self.advance())
@@ -5474,9 +5292,8 @@ class Parser:
                     c = self.peek()
                     if c == "(":
                         depth += 1
-                    else:
-                        if c == ")":
-                            depth -= 1
+                    elif c == ")":
+                        depth -= 1
                     delimiter_chars.append(self.advance())
                 continue
             break
@@ -5620,38 +5437,33 @@ class Parser:
                     self.advance()
                 if not self.at_end():
                     self.advance()
-            else:
-                if c == "\"":
-                    self.advance()
-                    while not self.at_end():
-                        if self.peek() == "\\" and self.pos + 1 < self.length:
-                            self.advance()
-                            self.advance()
-                        else:
-                            if self.peek() == "\"":
-                                self.advance()
-                                break
-                            else:
-                                self.advance()
-                else:
-                    if c == "\\" and self.pos + 1 < self.length:
+            elif c == "\"":
+                self.advance()
+                while not self.at_end():
+                    if self.peek() == "\\" and self.pos + 1 < self.length:
                         self.advance()
                         self.advance()
+                    elif self.peek() == "\"":
+                        self.advance()
+                        break
                     else:
-                        if c == "(":
-                            depth += 1
-                            self.advance()
-                        else:
-                            if c == ")":
-                                if depth == 1 and self.pos + 1 < self.length and self.source[self.pos + 1] == ")":
-                                    break
-                                depth -= 1
-                                if depth == 0:
-                                    self.pos = saved_pos
-                                    return None
-                                self.advance()
-                            else:
-                                self.advance()
+                        self.advance()
+            elif c == "\\" and self.pos + 1 < self.length:
+                self.advance()
+                self.advance()
+            elif c == "(":
+                depth += 1
+                self.advance()
+            elif c == ")":
+                if depth == 1 and self.pos + 1 < self.length and self.source[self.pos + 1] == ")":
+                    break
+                depth -= 1
+                if depth == 0:
+                    self.pos = saved_pos
+                    return None
+                self.advance()
+            else:
+                self.advance()
         if self.at_end():
             raise MatchedPairError("unexpected EOF looking for `))'", saved_pos)
         if depth != 1:
@@ -5692,15 +5504,13 @@ class Parser:
         while not self.at_end():
             if _is_whitespace_no_newline(self.peek()):
                 self.advance()
+            elif self.peek() == "\\" and self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
+                self.advance()
+                self.advance()
+            elif self.peek() == "\n":
+                self.advance()
             else:
-                if self.peek() == "\\" and self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
-                    self.advance()
-                    self.advance()
-                else:
-                    if self.peek() == "\n":
-                        self.advance()
-                    else:
-                        break
+                break
 
     def _cond_at_end(self) -> bool:
         return self.at_end() or self.peek() == "]" and self.pos + 1 < self.length and self.source[self.pos + 1] == "]"
@@ -5844,19 +5654,17 @@ class Parser:
             inner_else = None
             if self._lex_is_at_reserved_word("elif"):
                 inner_else = self._parse_elif_chain()
-            else:
-                if self._lex_is_at_reserved_word("else"):
-                    self._lex_consume_word("else")
-                    inner_else = self.parse_list_until({"fi"})
-                    if inner_else is None:
-                        raise ParseError("Expected commands after 'else'", self._lex_peek_token().pos)
-            else_body = If(condition=elif_condition, then_body=elif_then_body, else_body=inner_else, kind="if")
-        else:
-            if self._lex_is_at_reserved_word("else"):
+            elif self._lex_is_at_reserved_word("else"):
                 self._lex_consume_word("else")
-                else_body = self.parse_list_until({"fi"})
-                if else_body is None:
+                inner_else = self.parse_list_until({"fi"})
+                if inner_else is None:
                     raise ParseError("Expected commands after 'else'", self._lex_peek_token().pos)
+            else_body = If(condition=elif_condition, then_body=elif_then_body, else_body=inner_else, kind="if")
+        elif self._lex_is_at_reserved_word("else"):
+            self._lex_consume_word("else")
+            else_body = self.parse_list_until({"fi"})
+            if else_body is None:
+                raise ParseError("Expected commands after 'else'", self._lex_peek_token().pos)
         self.skip_whitespace_and_newlines()
         if not self._lex_consume_word("fi"):
             raise ParseError("Expected 'fi' to close if statement", self._lex_peek_token().pos)
@@ -5877,12 +5685,11 @@ class Parser:
         else_body = None
         if self._lex_is_at_reserved_word("elif"):
             else_body = self._parse_elif_chain()
-        else:
-            if self._lex_is_at_reserved_word("else"):
-                self._lex_consume_word("else")
-                else_body = self.parse_list_until({"fi"})
-                if else_body is None:
-                    raise ParseError("Expected commands after 'else'", self._lex_peek_token().pos)
+        elif self._lex_is_at_reserved_word("else"):
+            self._lex_consume_word("else")
+            else_body = self.parse_list_until({"fi"})
+            if else_body is None:
+                raise ParseError("Expected commands after 'else'", self._lex_peek_token().pos)
         return If(condition=condition, then_body=then_body, else_body=else_body, kind="if")
 
     def parse_while(self) -> While:
@@ -5995,26 +5802,23 @@ class Parser:
             if ch == "(":
                 paren_depth += 1
                 current.append(self.advance())
-            else:
-                if ch == ")":
-                    if paren_depth > 0:
-                        paren_depth -= 1
-                        current.append(self.advance())
-                    else:
-                        if self.pos + 1 < self.length and self.source[self.pos + 1] == ")":
-                            parts.append("".join(current).lstrip(" \t"))
-                            self.advance()
-                            self.advance()
-                            break
-                        else:
-                            current.append(self.advance())
+            elif ch == ")":
+                if paren_depth > 0:
+                    paren_depth -= 1
+                    current.append(self.advance())
+                elif self.pos + 1 < self.length and self.source[self.pos + 1] == ")":
+                    parts.append("".join(current).lstrip(" \t"))
+                    self.advance()
+                    self.advance()
+                    break
                 else:
-                    if ch == ";" and paren_depth == 0:
-                        parts.append("".join(current).lstrip(" \t"))
-                        current = []
-                        self.advance()
-                    else:
-                        current.append(self.advance())
+                    current.append(self.advance())
+            elif ch == ";" and paren_depth == 0:
+                parts.append("".join(current).lstrip(" \t"))
+                current = []
+                self.advance()
+            else:
+                current.append(self.advance())
         if len(parts) != 3:
             raise ParseError("Expected three expressions in for ((;;))", self.pos)
         init = parts[0]
@@ -6103,9 +5907,8 @@ class Parser:
                             next_ch = self.peek()
                             if next_ch == ";":
                                 is_pattern = True
-                            else:
-                                if not _is_newline_or_right_paren(next_ch):
-                                    is_pattern = True
+                            elif not _is_newline_or_right_paren(next_ch):
+                                is_pattern = True
                 self.pos = saved
                 if not is_pattern:
                     break
@@ -6124,104 +5927,92 @@ class Parser:
                     else:
                         self.advance()
                         break
-                else:
-                    if ch == "\\":
-                        if self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
-                            self.advance()
-                            self.advance()
-                        else:
-                            pattern_chars.append(self.advance())
-                            if not self.at_end():
-                                pattern_chars.append(self.advance())
+                elif ch == "\\":
+                    if self.pos + 1 < self.length and self.source[self.pos + 1] == "\n":
+                        self.advance()
+                        self.advance()
                     else:
-                        if _is_expansion_start(self.source, self.pos, "$("):
+                        pattern_chars.append(self.advance())
+                        if not self.at_end():
                             pattern_chars.append(self.advance())
+                elif _is_expansion_start(self.source, self.pos, "$("):
+                    pattern_chars.append(self.advance())
+                    pattern_chars.append(self.advance())
+                    if not self.at_end() and self.peek() == "(":
+                        pattern_chars.append(self.advance())
+                        paren_depth = 2
+                        while not self.at_end() and paren_depth > 0:
+                            c = self.peek()
+                            if c == "(":
+                                paren_depth += 1
+                            elif c == ")":
+                                paren_depth -= 1
                             pattern_chars.append(self.advance())
-                            if not self.at_end() and self.peek() == "(":
-                                pattern_chars.append(self.advance())
-                                paren_depth = 2
-                                while not self.at_end() and paren_depth > 0:
-                                    c = self.peek()
-                                    if c == "(":
-                                        paren_depth += 1
-                                    else:
-                                        if c == ")":
-                                            paren_depth -= 1
-                                    pattern_chars.append(self.advance())
-                            else:
-                                extglob_depth += 1
-                        else:
-                            if ch == "(" and extglob_depth > 0:
-                                pattern_chars.append(self.advance())
-                                extglob_depth += 1
-                            else:
-                                if self._extglob and _is_extglob_prefix(ch) and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
-                                    pattern_chars.append(self.advance())
-                                    pattern_chars.append(self.advance())
-                                    extglob_depth += 1
-                                else:
-                                    if ch == "[":
-                                        is_char_class = False
-                                        scan_pos = self.pos + 1
-                                        scan_depth = 0
-                                        has_first_bracket_literal = False
-                                        if scan_pos < self.length and _is_caret_or_bang(self.source[scan_pos]):
-                                            scan_pos += 1
-                                        if scan_pos < self.length and self.source[scan_pos] == "]":
-                                            if self.source.find("]", scan_pos + 1) != -1:
-                                                scan_pos += 1
-                                                has_first_bracket_literal = True
-                                        while scan_pos < self.length:
-                                            sc = self.source[scan_pos]
-                                            if sc == "]" and scan_depth == 0:
-                                                is_char_class = True
-                                                break
-                                            else:
-                                                if sc == "[":
-                                                    scan_depth += 1
-                                                else:
-                                                    if sc == ")" and scan_depth == 0:
-                                                        break
-                                                    else:
-                                                        if sc == "|" and scan_depth == 0:
-                                                            break
-                                            scan_pos += 1
-                                        if is_char_class:
-                                            pattern_chars.append(self.advance())
-                                            if not self.at_end() and _is_caret_or_bang(self.peek()):
-                                                pattern_chars.append(self.advance())
-                                            if has_first_bracket_literal and not self.at_end() and self.peek() == "]":
-                                                pattern_chars.append(self.advance())
-                                            while not self.at_end() and self.peek() != "]":
-                                                pattern_chars.append(self.advance())
-                                            if not self.at_end():
-                                                pattern_chars.append(self.advance())
-                                        else:
-                                            pattern_chars.append(self.advance())
-                                    else:
-                                        if ch == "'":
-                                            pattern_chars.append(self.advance())
-                                            while not self.at_end() and self.peek() != "'":
-                                                pattern_chars.append(self.advance())
-                                            if not self.at_end():
-                                                pattern_chars.append(self.advance())
-                                        else:
-                                            if ch == "\"":
-                                                pattern_chars.append(self.advance())
-                                                while not self.at_end() and self.peek() != "\"":
-                                                    if self.peek() == "\\" and self.pos + 1 < self.length:
-                                                        pattern_chars.append(self.advance())
-                                                    pattern_chars.append(self.advance())
-                                                if not self.at_end():
-                                                    pattern_chars.append(self.advance())
-                                            else:
-                                                if _is_whitespace(ch):
-                                                    if extglob_depth > 0:
-                                                        pattern_chars.append(self.advance())
-                                                    else:
-                                                        self.advance()
-                                                else:
-                                                    pattern_chars.append(self.advance())
+                    else:
+                        extglob_depth += 1
+                elif ch == "(" and extglob_depth > 0:
+                    pattern_chars.append(self.advance())
+                    extglob_depth += 1
+                elif self._extglob and _is_extglob_prefix(ch) and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                    pattern_chars.append(self.advance())
+                    pattern_chars.append(self.advance())
+                    extglob_depth += 1
+                elif ch == "[":
+                    is_char_class = False
+                    scan_pos = self.pos + 1
+                    scan_depth = 0
+                    has_first_bracket_literal = False
+                    if scan_pos < self.length and _is_caret_or_bang(self.source[scan_pos]):
+                        scan_pos += 1
+                    if scan_pos < self.length and self.source[scan_pos] == "]":
+                        if self.source.find("]", scan_pos + 1) != -1:
+                            scan_pos += 1
+                            has_first_bracket_literal = True
+                    while scan_pos < self.length:
+                        sc = self.source[scan_pos]
+                        if sc == "]" and scan_depth == 0:
+                            is_char_class = True
+                            break
+                        elif sc == "[":
+                            scan_depth += 1
+                        elif sc == ")" and scan_depth == 0:
+                            break
+                        elif sc == "|" and scan_depth == 0:
+                            break
+                        scan_pos += 1
+                    if is_char_class:
+                        pattern_chars.append(self.advance())
+                        if not self.at_end() and _is_caret_or_bang(self.peek()):
+                            pattern_chars.append(self.advance())
+                        if has_first_bracket_literal and not self.at_end() and self.peek() == "]":
+                            pattern_chars.append(self.advance())
+                        while not self.at_end() and self.peek() != "]":
+                            pattern_chars.append(self.advance())
+                        if not self.at_end():
+                            pattern_chars.append(self.advance())
+                    else:
+                        pattern_chars.append(self.advance())
+                elif ch == "'":
+                    pattern_chars.append(self.advance())
+                    while not self.at_end() and self.peek() != "'":
+                        pattern_chars.append(self.advance())
+                    if not self.at_end():
+                        pattern_chars.append(self.advance())
+                elif ch == "\"":
+                    pattern_chars.append(self.advance())
+                    while not self.at_end() and self.peek() != "\"":
+                        if self.peek() == "\\" and self.pos + 1 < self.length:
+                            pattern_chars.append(self.advance())
+                        pattern_chars.append(self.advance())
+                    if not self.at_end():
+                        pattern_chars.append(self.advance())
+                elif _is_whitespace(ch):
+                    if extglob_depth > 0:
+                        pattern_chars.append(self.advance())
+                    else:
+                        self.advance()
+                else:
+                    pattern_chars.append(self.advance())
             pattern = "".join(pattern_chars)
             if not (pattern != ""):
                 raise ParseError("Expected pattern in case statement", self._lex_peek_token().pos)
@@ -6288,21 +6079,19 @@ class Parser:
                     body = self.parse_brace_group()
                     if body is not None:
                         return Coproc(command=body, name=name, kind="coproc")
-                else:
-                    if ch == "(":
-                        name = potential_name
-                        if self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
-                            body = self.parse_arithmetic_command()
-                        else:
-                            body = self.parse_subshell()
-                        if body is not None:
-                            return Coproc(command=body, name=name, kind="coproc")
+                elif ch == "(":
+                    name = potential_name
+                    if self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+                        body = self.parse_arithmetic_command()
                     else:
-                        if next_word != "" and (next_word in COMPOUND_KEYWORDS):
-                            name = potential_name
-                            body = self.parse_compound_command()
-                            if body is not None:
-                                return Coproc(command=body, name=name, kind="coproc")
+                        body = self.parse_subshell()
+                    if body is not None:
+                        return Coproc(command=body, name=name, kind="coproc")
+                elif next_word != "" and (next_word in COMPOUND_KEYWORDS):
+                    name = potential_name
+                    body = self.parse_compound_command()
+                    if body is not None:
+                        return Coproc(command=body, name=name, kind="coproc")
             self.pos = word_start
         body = self.parse_command()
         if body is not None:
@@ -6464,18 +6253,16 @@ class Parser:
                 if self._at_list_until_terminator(stop_words):
                     break
                 parts.append(Operator(op=op, kind="operator"))
+            elif op == "&":
+                parts.append(Operator(op=op, kind="operator"))
+                self.skip_whitespace_and_newlines()
+                if self._at_list_until_terminator(stop_words):
+                    break
+            elif op == "&&" or op == "||":
+                parts.append(Operator(op=op, kind="operator"))
+                self.skip_whitespace_and_newlines()
             else:
-                if op == "&":
-                    parts.append(Operator(op=op, kind="operator"))
-                    self.skip_whitespace_and_newlines()
-                    if self._at_list_until_terminator(stop_words):
-                        break
-                else:
-                    if op == "&&" or op == "||":
-                        parts.append(Operator(op=op, kind="operator"))
-                        self.skip_whitespace_and_newlines()
-                    else:
-                        parts.append(Operator(op=op, kind="operator"))
+                parts.append(Operator(op=op, kind="operator"))
             if self._at_list_until_terminator(stop_words):
                 break
             pipeline = self.parse_pipeline()
@@ -6581,35 +6368,30 @@ class Parser:
                     self.advance()
                     prefix_order = "time_negation"
                     self.skip_whitespace()
-        else:
-            if not self.at_end() and self.peek() == "!":
-                if (self.pos + 1 >= self.length or _is_negation_boundary(self.source[self.pos + 1])) and not self._is_bang_followed_by_procsub():
-                    self.advance()
-                    self.skip_whitespace()
-                    inner = self.parse_pipeline()
-                    if inner is not None and inner.kind == "negation":
-                        if inner.pipeline is not None:
-                            return inner.pipeline
-                        else:
-                            return Command(words=[], kind="command")
-                    return Negation(pipeline=inner, kind="negation")
+        elif not self.at_end() and self.peek() == "!":
+            if (self.pos + 1 >= self.length or _is_negation_boundary(self.source[self.pos + 1])) and not self._is_bang_followed_by_procsub():
+                self.advance()
+                self.skip_whitespace()
+                inner = self.parse_pipeline()
+                if inner is not None and inner.kind == "negation":
+                    if inner.pipeline is not None:
+                        return inner.pipeline
+                    else:
+                        return Command(words=[], kind="command")
+                return Negation(pipeline=inner, kind="negation")
         result = self._parse_simple_pipeline()
         if prefix_order == "time":
             result = Time(pipeline=result, posix=time_posix, kind="time")
-        else:
-            if prefix_order == "negation":
-                result = Negation(pipeline=result, kind="negation")
-            else:
-                if prefix_order == "time_negation":
-                    result = Time(pipeline=result, posix=time_posix, kind="time")
-                    result = Negation(pipeline=result, kind="negation")
-                else:
-                    if prefix_order == "negation_time":
-                        result = Time(pipeline=result, posix=time_posix, kind="time")
-                        result = Negation(pipeline=result, kind="negation")
-                    else:
-                        if result is None:
-                            return None
+        elif prefix_order == "negation":
+            result = Negation(pipeline=result, kind="negation")
+        elif prefix_order == "time_negation":
+            result = Time(pipeline=result, posix=time_posix, kind="time")
+            result = Negation(pipeline=result, kind="negation")
+        elif prefix_order == "negation_time":
+            result = Time(pipeline=result, posix=time_posix, kind="time")
+            result = Negation(pipeline=result, kind="negation")
+        elif result is None:
+            return None
         return result
 
     def _parse_simple_pipeline(self) -> Node:
@@ -6699,30 +6481,28 @@ class Parser:
             parts.append(Operator(op=op, kind="operator"))
             if op == "&&" or op == "||":
                 self.skip_whitespace_and_newlines()
-            else:
-                if op == "&":
-                    self.skip_whitespace()
-                    if self.at_end() or self._at_list_terminating_bracket():
-                        break
-                    if self.peek() == "\n":
-                        if newline_as_separator:
-                            self.skip_whitespace_and_newlines()
-                            if self.at_end() or self._at_list_terminating_bracket():
-                                break
-                        else:
-                            break
-                else:
-                    if op == ";":
-                        self.skip_whitespace()
+            elif op == "&":
+                self.skip_whitespace()
+                if self.at_end() or self._at_list_terminating_bracket():
+                    break
+                if self.peek() == "\n":
+                    if newline_as_separator:
+                        self.skip_whitespace_and_newlines()
                         if self.at_end() or self._at_list_terminating_bracket():
                             break
-                        if self.peek() == "\n":
-                            if newline_as_separator:
-                                self.skip_whitespace_and_newlines()
-                                if self.at_end() or self._at_list_terminating_bracket():
-                                    break
-                            else:
-                                break
+                    else:
+                        break
+            elif op == ";":
+                self.skip_whitespace()
+                if self.at_end() or self._at_list_terminating_bracket():
+                    break
+                if self.peek() == "\n":
+                    if newline_as_separator:
+                        self.skip_whitespace_and_newlines()
+                        if self.at_end() or self._at_list_terminating_bracket():
+                            break
+                    else:
+                        break
             pipeline = self.parse_pipeline()
             if pipeline is None:
                 raise ParseError("Expected command after " + op, self.pos)
@@ -6915,12 +6695,10 @@ def _strip_line_continuations_comment_aware(text: str) -> str:
             continue
         if c == "'" and not quote.double and not in_comment:
             quote.single = not quote.single
-        else:
-            if c == "\"" and not quote.single and not in_comment:
-                quote.double = not quote.double
-            else:
-                if c == "#" and not quote.single and not in_comment:
-                    in_comment = True
+        elif c == "\"" and not quote.single and not in_comment:
+            quote.double = not quote.double
+        elif c == "#" and not quote.single and not in_comment:
+            in_comment = True
         result.append(c)
         i += 1
     return "".join(result)
@@ -7144,11 +6922,10 @@ def _format_cmdsub_node(node: Node, indent: int, in_procsub: bool, compact_redir
             if idx > 0:
                 if result.endswith("\n"):
                     result = result + "  " + part
+                elif compact_pipe:
+                    result = result + "|" + part
                 else:
-                    if compact_pipe:
-                        result = result + "|" + part
-                    else:
-                        result = result + " | " + part
+                    result = result + " | " + part
             else:
                 result = part
             idx += 1
@@ -7190,35 +6967,32 @@ def _format_cmdsub_node(node: Node, indent: int, in_procsub: bool, compact_redir
                         continue
                     result.append(";")
                     skipped_semi = False
-                else:
-                    if p.op == "\n":
-                        if result and result[len(result) - 1] == ";":
-                            skipped_semi = False
-                            continue
-                        if result and result[len(result) - 1].endswith("\n"):
-                            result.append(" " if skipped_semi else "\n")
-                            skipped_semi = False
-                            continue
-                        result.append("\n")
+                elif p.op == "\n":
+                    if result and result[len(result) - 1] == ";":
                         skipped_semi = False
-                    else:
-                        if p.op == "&":
-                            if result and ("<<" in result[len(result) - 1]) and ("\n" in result[len(result) - 1]):
-                                last = result[len(result) - 1]
-                                if (" |" in last) or last.startswith("|"):
-                                    result[len(result) - 1] = last + " &"
-                                else:
-                                    first_nl = last.find("\n")
-                                    result[len(result) - 1] = last[:first_nl] + " &" + last[first_nl:]
-                            else:
-                                result.append(" &")
+                        continue
+                    if result and result[len(result) - 1].endswith("\n"):
+                        result.append(" " if skipped_semi else "\n")
+                        skipped_semi = False
+                        continue
+                    result.append("\n")
+                    skipped_semi = False
+                elif p.op == "&":
+                    if result and ("<<" in result[len(result) - 1]) and ("\n" in result[len(result) - 1]):
+                        last = result[len(result) - 1]
+                        if (" |" in last) or last.startswith("|"):
+                            result[len(result) - 1] = last + " &"
                         else:
-                            if result and ("<<" in result[len(result) - 1]) and ("\n" in result[len(result) - 1]):
-                                last = result[len(result) - 1]
-                                first_nl = last.find("\n")
-                                result[len(result) - 1] = last[:first_nl] + " " + p.op + " " + last[first_nl:]
-                            else:
-                                result.append(" " + p.op)
+                            first_nl = last.find("\n")
+                            result[len(result) - 1] = last[:first_nl] + " &" + last[first_nl:]
+                    else:
+                        result.append(" &")
+                elif result and ("<<" in result[len(result) - 1]) and ("\n" in result[len(result) - 1]):
+                    last = result[len(result) - 1]
+                    first_nl = last.find("\n")
+                    result[len(result) - 1] = last[:first_nl] + " " + p.op + " " + last[first_nl:]
+                else:
+                    result.append(" " + p.op)
             else:
                 if result and not result[len(result) - 1].endswith((" ", "\n")):
                     result.append(" ")
@@ -7404,9 +7178,8 @@ def _format_redirect(r: Node, compact: bool, heredoc_op_only: bool) -> str:
     op = r.op
     if op == "1>":
         op = ">"
-    else:
-        if op == "0<":
-            op = "<"
+    elif op == "0<":
+        op = "<"
     target = r.target.value
     target = r.target._expand_all_ansi_c_quotes(target)
     target = r.target._strip_locale_string_dollars(target)
@@ -7421,15 +7194,12 @@ def _format_redirect(r: Node, compact: bool, heredoc_op_only: bool) -> str:
         if is_literal_fd:
             if op == ">" or op == ">&":
                 op = "0>" if was_input_close else "1>"
-            else:
-                if op == "<" or op == "<&":
-                    op = "0<"
-        else:
-            if op == "1>":
-                op = ">"
-            else:
-                if op == "0<":
-                    op = "<"
+            elif op == "<" or op == "<&":
+                op = "0<"
+        elif op == "1>":
+            op = ">"
+        elif op == "0<":
+            op = "<"
         return op + target
     if op.endswith("&"):
         return op + target
@@ -7465,23 +7235,20 @@ def _lookahead_for_esac(value: str, start: int, case_depth: int) -> bool:
         if _starts_with_at(value, i, "case") and _is_word_boundary(value, i, 4):
             depth += 1
             i += 4
-        else:
-            if _starts_with_at(value, i, "esac") and _is_word_boundary(value, i, 4):
-                depth -= 1
-                if depth == 0:
-                    return True
-                i += 4
+        elif _starts_with_at(value, i, "esac") and _is_word_boundary(value, i, 4):
+            depth -= 1
+            if depth == 0:
+                return True
+            i += 4
+        elif c == "(":
+            i += 1
+        elif c == ")":
+            if depth > 0:
+                i += 1
             else:
-                if c == "(":
-                    i += 1
-                else:
-                    if c == ")":
-                        if depth > 0:
-                            i += 1
-                        else:
-                            break
-                    else:
-                        i += 1
+                break
+        else:
+            i += 1
     return False
 
 
@@ -7551,15 +7318,13 @@ def _is_valid_arithmetic_start(value: str, start: int) -> bool:
             continue
         if scan_c == "(":
             scan_paren += 1
-        else:
-            if scan_c == ")":
-                if scan_paren > 0:
-                    scan_paren -= 1
-                else:
-                    if scan_i + 1 < len(value) and value[scan_i + 1] == ")":
-                        return True
-                    else:
-                        return False
+        elif scan_c == ")":
+            if scan_paren > 0:
+                scan_paren -= 1
+            elif scan_i + 1 < len(value) and value[scan_i + 1] == ")":
+                return True
+            else:
+                return False
         scan_i += 1
     return False
 
@@ -7586,11 +7351,10 @@ def _find_funsub_end(value: str, start: int) -> int:
             continue
         if c == "{":
             depth += 1
-        else:
-            if c == "}":
-                depth -= 1
-                if depth == 0:
-                    return i + 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return i + 1
         i += 1
     return len(value)
 
@@ -7630,16 +7394,15 @@ def _find_cmdsub_end(value: str, start: int) -> int:
                         i += 1
                 if i < len(value):
                     i += 1
-            else:
-                if i < len(value) and value[i] == "'":
+            elif i < len(value) and value[i] == "'":
+                i += 1
+                while i < len(value) and value[i] != "'":
                     i += 1
-                    while i < len(value) and value[i] != "'":
-                        i += 1
-                    if i < len(value):
-                        i += 1
-                else:
-                    while i < len(value) and (value[i] not in " \t\n;|&<>()"):
-                        i += 1
+                if i < len(value):
+                    i += 1
+            else:
+                while i < len(value) and (value[i] not in " \t\n;|&<>()"):
+                    i += 1
             continue
         if _is_expansion_start(value, i, "$(("):
             if _is_valid_arithmetic_start(value, i):
@@ -7683,17 +7446,15 @@ def _find_cmdsub_end(value: str, start: int) -> int:
                     arith_paren_depth += 1
                 else:
                     depth += 1
-        else:
-            if c == ")":
-                if in_case_patterns and case_depth > 0:
-                    if not _lookahead_for_esac(value, i + 1, case_depth):
-                        depth -= 1
-                else:
-                    if arith_depth > 0:
-                        if arith_paren_depth > 0:
-                            arith_paren_depth -= 1
-                    else:
-                        depth -= 1
+        elif c == ")":
+            if in_case_patterns and case_depth > 0:
+                if not _lookahead_for_esac(value, i + 1, case_depth):
+                    depth -= 1
+            elif arith_depth > 0:
+                if arith_paren_depth > 0:
+                    arith_paren_depth -= 1
+            else:
+                depth -= 1
         i += 1
     return i
 
@@ -7720,9 +7481,8 @@ def _find_braced_param_end(value: str, start: int) -> int:
             continue
         if dolbrace_state == DolbraceState_PARAM and (c in "%#^,"):
             dolbrace_state = DolbraceState_QUOTE
-        else:
-            if dolbrace_state == DolbraceState_PARAM and (c in ":-=?+/"):
-                dolbrace_state = DolbraceState_WORD
+        elif dolbrace_state == DolbraceState_PARAM and (c in ":-=?+/"):
+            dolbrace_state = DolbraceState_WORD
         if c == "[" and dolbrace_state == DolbraceState_PARAM and not in_double:
             end = _skip_subscript(value, i, 0)
             if end != -1:
@@ -7733,11 +7493,10 @@ def _find_braced_param_end(value: str, start: int) -> int:
             continue
         if c == "{":
             depth += 1
-        else:
-            if c == "}":
-                depth -= 1
-                if depth == 0:
-                    return i + 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return i + 1
         if _is_expansion_start(value, i, "$("):
             i = _find_cmdsub_end(value, i + 2)
             continue
@@ -7765,19 +7524,18 @@ def _skip_heredoc(value: str, start: int) -> int:
         delimiter = _substring(value, delim_start, i)
         if i < len(value):
             i += 1
-    else:
-        if i < len(value) and value[i] == "\\":
+    elif i < len(value) and value[i] == "\\":
+        i += 1
+        delim_start = i
+        if i < len(value):
             i += 1
-            delim_start = i
-            if i < len(value):
-                i += 1
-            while i < len(value) and not _is_metachar(value[i]):
-                i += 1
-            delimiter = _substring(value, delim_start, i)
-        else:
-            while i < len(value) and not _is_metachar(value[i]):
-                i += 1
-            delimiter = _substring(value, delim_start, i)
+        while i < len(value) and not _is_metachar(value[i]):
+            i += 1
+        delimiter = _substring(value, delim_start, i)
+    else:
+        while i < len(value) and not _is_metachar(value[i]):
+            i += 1
+        delimiter = _substring(value, delim_start, i)
     paren_depth = 0
     quote = NewQuoteState()
     in_backtick = False
@@ -7803,11 +7561,10 @@ def _skip_heredoc(value: str, start: int) -> int:
             continue
         if c == "(":
             paren_depth += 1
-        else:
-            if c == ")":
-                if paren_depth == 0:
-                    break
-                paren_depth -= 1
+        elif c == ")":
+            if paren_depth == 0:
+                break
+            paren_depth -= 1
         i += 1
     if i < len(value) and value[i] == ")":
         return i
@@ -7957,69 +7714,64 @@ def _normalize_heredoc_delimiter(delimiter: str) -> str:
                 if delimiter[i] == "(":
                     depth += 1
                     inner.append(delimiter[i])
-                else:
-                    if delimiter[i] == ")":
-                        depth -= 1
-                        if depth == 0:
-                            inner_str = "".join(inner)
-                            inner_str = _collapse_whitespace(inner_str)
-                            result.append(inner_str)
-                            result.append(")")
-                        else:
-                            inner.append(delimiter[i])
+                elif delimiter[i] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        inner_str = "".join(inner)
+                        inner_str = _collapse_whitespace(inner_str)
+                        result.append(inner_str)
+                        result.append(")")
                     else:
                         inner.append(delimiter[i])
+                else:
+                    inner.append(delimiter[i])
+                i += 1
+        elif i + 1 < len(delimiter) and delimiter[i:i + 2] == "${":
+            result.append("${")
+            i += 2
+            depth = 1
+            inner = []
+            while i < len(delimiter) and depth > 0:
+                if delimiter[i] == "{":
+                    depth += 1
+                    inner.append(delimiter[i])
+                elif delimiter[i] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        inner_str = "".join(inner)
+                        inner_str = _collapse_whitespace(inner_str)
+                        result.append(inner_str)
+                        result.append("}")
+                    else:
+                        inner.append(delimiter[i])
+                else:
+                    inner.append(delimiter[i])
+                i += 1
+        elif i + 1 < len(delimiter) and (delimiter[i] in "<>") and delimiter[i + 1] == "(":
+            result.append(delimiter[i])
+            result.append("(")
+            i += 2
+            depth = 1
+            inner = []
+            while i < len(delimiter) and depth > 0:
+                if delimiter[i] == "(":
+                    depth += 1
+                    inner.append(delimiter[i])
+                elif delimiter[i] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        inner_str = "".join(inner)
+                        inner_str = _collapse_whitespace(inner_str)
+                        result.append(inner_str)
+                        result.append(")")
+                    else:
+                        inner.append(delimiter[i])
+                else:
+                    inner.append(delimiter[i])
                 i += 1
         else:
-            if i + 1 < len(delimiter) and delimiter[i:i + 2] == "${":
-                result.append("${")
-                i += 2
-                depth = 1
-                inner = []
-                while i < len(delimiter) and depth > 0:
-                    if delimiter[i] == "{":
-                        depth += 1
-                        inner.append(delimiter[i])
-                    else:
-                        if delimiter[i] == "}":
-                            depth -= 1
-                            if depth == 0:
-                                inner_str = "".join(inner)
-                                inner_str = _collapse_whitespace(inner_str)
-                                result.append(inner_str)
-                                result.append("}")
-                            else:
-                                inner.append(delimiter[i])
-                        else:
-                            inner.append(delimiter[i])
-                    i += 1
-            else:
-                if i + 1 < len(delimiter) and (delimiter[i] in "<>") and delimiter[i + 1] == "(":
-                    result.append(delimiter[i])
-                    result.append("(")
-                    i += 2
-                    depth = 1
-                    inner = []
-                    while i < len(delimiter) and depth > 0:
-                        if delimiter[i] == "(":
-                            depth += 1
-                            inner.append(delimiter[i])
-                        else:
-                            if delimiter[i] == ")":
-                                depth -= 1
-                                if depth == 0:
-                                    inner_str = "".join(inner)
-                                    inner_str = _collapse_whitespace(inner_str)
-                                    result.append(inner_str)
-                                    result.append(")")
-                                else:
-                                    inner.append(delimiter[i])
-                            else:
-                                inner.append(delimiter[i])
-                        i += 1
-                else:
-                    result.append(delimiter[i])
-                    i += 1
+            result.append(delimiter[i])
+            i += 1
     return "".join(result)
 
 
@@ -8104,9 +7856,8 @@ def _skip_matched_pair(s: str, start: int, open_: str, close: str, flags: int) -
             continue
         if not (literal != 0) and c == open_:
             depth += 1
-        else:
-            if c == close:
-                depth -= 1
+        elif c == close:
+            depth -= 1
         i += 1
     return i if depth == 0 else -1
 

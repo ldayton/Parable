@@ -2125,7 +2125,7 @@ var Word = /** @class */ (function () {
                                     i = j;
                                 }
                                 else {
-                                    result.push(inner[i][0]);
+                                    result.push(inner[i].charCodeAt(0));
                                     i += 1;
                                 }
                             }
@@ -2145,7 +2145,7 @@ var Word = /** @class */ (function () {
                                     i = j;
                                 }
                                 else {
-                                    result.push(inner[i][0]);
+                                    result.push(inner[i].charCodeAt(0));
                                     i += 1;
                                 }
                             }
@@ -2164,7 +2164,7 @@ var Word = /** @class */ (function () {
                                         i = j;
                                     }
                                     else {
-                                        result.push(inner[i][0]);
+                                        result.push(inner[i].charCodeAt(0));
                                         i += 1;
                                     }
                                 }
@@ -2176,7 +2176,7 @@ var Word = /** @class */ (function () {
                                             if (ctrlChar === "\\" && i + 4 <= inner.length && inner[i + 3] === "\\") {
                                                 skipExtra = 1;
                                             }
-                                            var ctrlVal = ctrlChar[0] & 31;
+                                            var ctrlVal = ctrlChar.charCodeAt(0) & 31;
                                             if (ctrlVal === 0) {
                                                 return result;
                                             }
@@ -2184,7 +2184,7 @@ var Word = /** @class */ (function () {
                                             i += 3 + skipExtra;
                                         }
                                         else {
-                                            result.push(inner[i][0]);
+                                            result.push(inner[i].charCodeAt(0));
                                             i += 1;
                                         }
                                     }
@@ -2221,7 +2221,7 @@ var Word = /** @class */ (function () {
                                             }
                                             else {
                                                 result.push(92);
-                                                result.push(c[0]);
+                                                result.push(c.charCodeAt(0));
                                                 i += 2;
                                             }
                                         }

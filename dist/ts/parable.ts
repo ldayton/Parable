@@ -2086,7 +2086,7 @@ class Word implements Node {
                   this.AppendWithCtlesc(result, byteVal);
                   i = j;
                 } else {
-                  result.push((inner[i] as unknown as string)[0]);
+                  result.push((inner[i] as unknown as string).charCodeAt(0));
                   i += 1;
                 }
               }
@@ -2104,7 +2104,7 @@ class Word implements Node {
                   result.push(...Array.from(new TextEncoder().encode(String.fromCodePoint(codepoint))));
                   i = j;
                 } else {
-                  result.push((inner[i] as unknown as string)[0]);
+                  result.push((inner[i] as unknown as string).charCodeAt(0));
                   i += 1;
                 }
               } else {
@@ -2121,7 +2121,7 @@ class Word implements Node {
                     result.push(...Array.from(new TextEncoder().encode(String.fromCodePoint(codepoint))));
                     i = j;
                   } else {
-                    result.push((inner[i] as unknown as string)[0]);
+                    result.push((inner[i] as unknown as string).charCodeAt(0));
                     i += 1;
                   }
                 } else {
@@ -2132,14 +2132,14 @@ class Word implements Node {
                       if (ctrlChar === "\\" && i + 4 <= inner.length && (inner[i + 3] as unknown as string) === "\\") {
                         skipExtra = 1;
                       }
-                      var ctrlVal: any = ctrlChar[0] & 31;
+                      var ctrlVal: any = ctrlChar.charCodeAt(0) & 31;
                       if (ctrlVal === 0) {
                         return result;
                       }
                       this.AppendWithCtlesc(result, ctrlVal);
                       i += 3 + skipExtra;
                     } else {
-                      result.push((inner[i] as unknown as string)[0]);
+                      result.push((inner[i] as unknown as string).charCodeAt(0));
                       i += 1;
                     }
                   } else {
@@ -2172,7 +2172,7 @@ class Word implements Node {
                         i = j;
                       } else {
                         result.push(92);
-                        result.push(c[0]);
+                        result.push(c.charCodeAt(0));
                         i += 2;
                       }
                     }

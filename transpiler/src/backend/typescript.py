@@ -580,8 +580,9 @@ class TsBackend:
                 obj_str = self._expr(obj)
                 idx_str = self._expr(index)
                 # String indexing returns char code (number) in our IR
+                # Check for byte/rune/int result type since ord() produces BYTE
                 obj_type = getattr(obj, 'typ', None)
-                if obj_type == STRING and typ == INT:
+                if obj_type == STRING and isinstance(typ, Primitive) and typ.kind in ("int", "byte", "rune"):
                     return f"{obj_str}.charCodeAt({idx_str})"
                 return f"{obj_str}[{idx_str}]"
             case SliceExpr(obj=obj, low=low, high=high):

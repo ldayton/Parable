@@ -17,6 +17,12 @@ check: go
 test-new-go: go
     go run -C dist ./cmd/run-tests ../../tests
 
+# Transpile with new transpiler and run Python parser tests
+test-new-python:
+    rm -rf /tmp/parable-test && mkdir /tmp/parable-test
+    uv run python -m src.cli ../src/parable.py -b python > /tmp/parable-test/parable.py
+    PYTHONPATH=/tmp/parable-test python3 ../tests/bin/run-tests.py ../tests
+
 # Show Go compilation errors (uses temp copy of src/)
 errors:
     @rm -rf /tmp/parable-src && cp -r ../src /tmp/parable-src

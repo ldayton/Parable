@@ -53,6 +53,7 @@ from src.ir import (
     Set,
     SetLit,
     Slice,
+    SliceConvert,
     SliceExpr,
     SliceLit,
     SoftFail,
@@ -130,8 +131,20 @@ class PythonBackend:
         self._line()
         self._line("from __future__ import annotations")
         self._line()
-        self._line("from dataclasses import dataclass")
+        self._line("from dataclasses import dataclass, field")
         self._line("from typing import Protocol")
+        self._line()
+        self._line()
+        self._line("def _intPtr(val: int) -> int | None:")
+        self._line("    return None if val == -1 else val")
+        self._line()
+        self._line()
+        self._line("def _parseInt(s: str, base: int) -> int:")
+        self._line("    return int(s, base)")
+        self._line()
+        self._line()
+        self._line("def _intToStr(n: int) -> str:")
+        self._line("    return str(n)")
         need_blank = True
         if module.constants:
             self._line()
@@ -173,8 +186,13 @@ class PythonBackend:
         self.indent -= 1
 
     def _emit_struct(self, struct: Struct) -> None:
-        self._line("@dataclass")
-        bases = ", ".join(struct.implements) if struct.implements else ""
+        base_list = list(struct.implements) if struct.implements else []
+        if struct.is_exception:
+            exc_base = struct.embedded_type if struct.embedded_type else "Exception"
+            base_list.insert(0, exc_base)
+        else:
+            self._line("@dataclass")
+        bases = ", ".join(base_list)
         if bases:
             self._line(f"class {struct.name}({bases}):")
         else:
@@ -196,9 +214,9 @@ class PythonBackend:
         typ = self._type(fld.typ)
         if fld.default is not None:
             default = self._expr(fld.default)
-            self._line(f"{fld.name}: {typ} = {default}")
         else:
-            self._line(f"{fld.name}: {typ}")
+            default = self._field_default(fld.typ)
+        self._line(f"{fld.name}: {typ} = {default}")
 
     def _emit_function(self, func: Function) -> None:
         if func.doc:
@@ -237,7 +255,7 @@ class PythonBackend:
             parts.append("self")
         for p in params:
             typ = self._type(p.typ)
-            parts.append(f"{p.name}: {typ}")
+            parts.append(f"{_safe_name(p.name)}: {typ}")
         return ", ".join(parts)
 
     def _emit_stmt(self, stmt: Stmt) -> None:
@@ -262,6 +280,8 @@ class PythonBackend:
                 lv = self._lvalue(target)
                 val = self._expr(value)
                 self._line(f"{lv} {op}= {val}")
+            case ExprStmt(expr=Var(name="_skip_docstring")):
+                pass  # Skip docstring markers
             case ExprStmt(expr=expr):
                 self._line(self._expr(expr))
             case Return(value=value):
@@ -314,10 +334,13 @@ class PythonBackend:
                 body=body, catch_var=catch_var, catch_body=catch_body, reraise=reraise
             ):
                 self._emit_try_catch(body, catch_var, catch_body, reraise)
-            case Raise(error_type=error_type, message=message, pos=pos):
-                msg = self._expr(message)
-                p = self._expr(pos)
-                self._line(f"raise {error_type}({msg}, {p})")
+            case Raise(error_type=error_type, message=message, pos=pos, reraise_var=reraise_var):
+                if reraise_var:
+                    self._line(f"raise {reraise_var}")
+                else:
+                    msg = self._expr(message)
+                    p = self._expr(pos)
+                    self._line(f"raise {error_type}({msg}, {p})")
             case SoftFail():
                 self._line("return None")
             case _:
@@ -464,6 +487,9 @@ class PythonBackend:
                     return "self"
                 return _safe_name(name)
             case FieldAccess(obj=obj, field=field):
+                # Convert tuple field access (F0, F1, etc.) to index access
+                if field.startswith("F") and field[1:].isdigit():
+                    return f"{self._expr(obj)}[{field[1:]}]"
                 return f"{self._expr(obj)}.{field}"
             case Index(obj=obj, index=index):
                 return f"{self._expr(obj)}[{self._expr(index)}]"
@@ -480,6 +506,12 @@ class PythonBackend:
                 args_str = ", ".join(self._expr(a) for a in args)
                 type_name = self._type_name_for_check(on_type)
                 return f"{type_name}.{method}({args_str})"
+            case BinaryOp(op=">", left=Len(expr=inner), right=IntLit(value=0)):
+                # Convert len(x) > 0 back to truthy check for Python
+                return self._expr(inner)
+            case BinaryOp(op="==", left=Len(expr=inner), right=IntLit(value=0)):
+                # Convert len(x) == 0 back to "not x" for Python
+                return f"not {self._expr(inner)}"
             case BinaryOp(op=op, left=left, right=right):
                 py_op = _binary_op(op)
                 left_str = self._maybe_paren(left, op, is_left=True)
@@ -487,11 +519,17 @@ class PythonBackend:
                 return f"{left_str} {py_op} {right_str}"
             case UnaryOp(op=op, operand=operand):
                 py_op = _unary_op(op)
+                # For 'not', wrap compound expressions in parens for correct precedence
+                if op == "!" and isinstance(operand, BinaryOp):
+                    return f"{py_op}({self._expr(operand)})"
                 return f"{py_op}{self._expr(operand)}"
             case Ternary(cond=cond, then_expr=then_expr, else_expr=else_expr):
                 return f"{self._expr(then_expr)} if {self._cond_expr(cond)} else {self._expr(else_expr)}"
-            case Cast(expr=inner):
-                # Python doesn't have casts, just return the expression
+            case Cast(expr=inner, to_type=to_type):
+                # Cast from list[int] (bytearray) to string needs bytes().decode()
+                if to_type == Primitive(kind="string") and isinstance(inner.typ, Slice):
+                    return f'bytes({self._expr(inner)}).decode("utf-8", errors="replace")'
+                # Most casts in Python are no-ops
                 return self._expr(inner)
             case TypeAssert(expr=inner):
                 # Python doesn't have type assertions at runtime
@@ -527,7 +565,9 @@ class PythonBackend:
                 elems = ", ".join(self._expr(e) for e in elements)
                 return f"{{{elems}}}"
             case StructLit(struct_name=struct_name, fields=fields):
-                args = ", ".join(f"{k}={self._expr(v)}" for k, v in fields.items())
+                # Skip None fields to use dataclass defaults
+                non_none = [(k, v) for k, v in fields.items() if not isinstance(v, NilLit)]
+                args = ", ".join(f"{k}={self._expr(v)}" for k, v in non_none)
                 return f"{struct_name}({args})"
             case TupleLit(elements=elements):
                 elems = ", ".join(self._expr(e) for e in elements)
@@ -538,6 +578,8 @@ class PythonBackend:
                 return " + ".join(self._expr(p) for p in parts)
             case StringFormat(template=template, args=args):
                 return self._format_string(template, args)
+            case SliceConvert(source=source):
+                return self._expr(source)
             case _:
                 raise NotImplementedError(f"Unknown expression: {type(expr).__name__}")
 
@@ -653,6 +695,18 @@ class PythonBackend:
             case _:
                 return "None"
 
+    def _field_default(self, typ: Type) -> str:
+        """Generate default value for dataclass field."""
+        match typ:
+            case Slice() | Array():
+                return "field(default_factory=list)"
+            case Map():
+                return "field(default_factory=dict)"
+            case Set():
+                return "field(default_factory=set)"
+            case _:
+                return self._zero_value(typ)
+
     def _cond_expr(self, expr: Expr) -> str:
         """Emit a condition expression, wrapping in parens only if needed for ternary."""
         match expr:
@@ -713,8 +767,8 @@ def _unary_op(op: str) -> str:
     match op:
         case "!":
             return "not "
-        case "&":
-            return ""  # Python has no address-of operator; objects are references
+        case "&" | "*":
+            return ""  # Python has no address-of/deref; objects are references
         case _:
             return op
 

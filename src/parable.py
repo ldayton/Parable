@@ -213,7 +213,7 @@ class Token:
     """
 
     def __init__(
-        self, type_: int, value: str, pos: int, parts: list | None = None, word: Word | None = None
+        self, type_: int, value: str, pos: int, parts: list[Node] | None = None, word: Word | None = None
     ):
         self.type = type_
         self.value = value
@@ -2070,7 +2070,7 @@ def _strip_line_continuations_comment_aware(text: str) -> str:
     return "".join(result)
 
 
-def _append_redirects(base: str, redirects: list | None) -> str:
+def _append_redirects(base: str, redirects: list[Node]) -> str:
     """Append redirect sexp strings to a base sexp string."""
     if redirects:
         parts = []
@@ -7111,7 +7111,7 @@ class Parser:
             return tok.type == TokenType.WORD and tok.value == "}"
         return False
 
-    def _collect_redirects(self) -> list | None:
+    def _collect_redirects(self) -> list[Node] | None:
         """Collect trailing redirects after a compound command."""
         redirects = []
         while True:

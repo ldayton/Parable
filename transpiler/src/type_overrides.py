@@ -7,11 +7,8 @@ Used by the frontend when Python annotations are ambiguous (e.g., bare `list`).
 from .ir import (
     BOOL,
     INT,
-    RUNE,
     STRING,
-    BYTE,
     Interface,
-    Map,
     Pointer,
     Slice,
     StructRef,
@@ -24,22 +21,10 @@ from .ir import (
 # Use Pointer(Slice(...)) for parameters that are mutated by the callee
 PARAM_TYPE_OVERRIDES: dict[tuple[str, str], Type] = {
     # _read_bracket_expression, _parse_dollar_expansion, _scan_double_quote: auto-detected
-    ("restore_from", "saved_stack"): Slice(Pointer(StructRef("ParseContext"))),
-    ("copy_stack", "_result"): Slice(Pointer(StructRef("ParseContext"))),  # return type hint
-    # SavedParserState constructor parameters
-    ("__init__", "pending_heredocs"): Slice(StructRef("Node")),
-    # Token constructor parameters
-    ("__init__", "parts"): Slice(StructRef("Node")),
-    ("__init__", "ctx_stack"): Slice(Pointer(StructRef("ParseContext"))),
-    # List class methods - parts is always []Node, op_names is map[string]string
-    ("_to_sexp_with_precedence", "parts"): Slice(StructRef("Node")),
-    ("_to_sexp_with_precedence", "op_names"): Map(STRING, STRING),
-    ("_to_sexp_amp_and_higher", "parts"): Slice(StructRef("Node")),
-    ("_to_sexp_amp_and_higher", "op_names"): Map(STRING, STRING),
-    ("_to_sexp_and_or", "parts"): Slice(StructRef("Node")),
-    ("_to_sexp_and_or", "op_names"): Map(STRING, STRING),
-    # Redirect handling - only reads, no mutation
-    ("_append_redirects", "redirects"): Slice(StructRef("Node")),
+    # restore_from, copy_stack: annotated in parable.py
+    # SavedParserState constructor parameters: annotated in parable.py
+    # Token constructor parts: annotated in parable.py
+    # _append_redirects: annotated in parable.py
     # _append_with_ctlesc: auto-detected (bytearray mutation)
     # ParseError/MatchedPairError constructor uses int, not *int
     ("NewParseError", "pos"): INT,
@@ -55,9 +40,6 @@ FIELD_TYPE_OVERRIDES: dict[tuple[str, str], Type] = {
     ("Parser", "_word_context"): INT,
     # Array.elements is list[Word] - need concrete type for field access
     ("Array", "elements"): Slice(Pointer(StructRef("Word"))),
-    # Source_runes for rune-based indexing (Unicode support)
-    ("Lexer", "source_runes"): Slice(RUNE),
-    ("Parser", "source_runes"): Slice(RUNE),
     # Untyped list fields that need concrete slice types
     ("SavedParserState", "pending_heredocs"): Slice(StructRef("Node")),
     ("SavedParserState", "ctx_stack"): Slice(Pointer(StructRef("ParseContext"))),
@@ -96,21 +78,9 @@ FIELD_TYPE_OVERRIDES: dict[tuple[str, str], Type] = {
 
 # Override return types for methods that return generic list
 # Maps method_name -> IR return type
-RETURN_TYPE_OVERRIDES: dict[str, Type] = {
-    "_collect_cmdsubs": Slice(StructRef("Node")),
-    "_collect_procsubs": Slice(StructRef("Node")),
-    "_collect_redirects": Slice(StructRef("Node")),
-    "copy_stack": Slice(Pointer(StructRef("ParseContext"))),
-    # parse_for, parse_redirect: auto-detected as Node (union of Node subclasses)
-}
-
-# Tuple element types for functions returning tuples with typed elements
-# Maps function_name -> {element_index -> IR type}
-TUPLE_ELEMENT_TYPES: dict[str, dict[int, Type]] = {
-    "_ConsumeSingleQuote": {0: INT, 1: Slice(STRING)},
-    "_ConsumeDoubleQuote": {0: INT, 1: Slice(STRING)},
-    "_ConsumeBracketClass": {0: INT, 1: Slice(STRING)},
-}
+# Most methods now use proper annotations: _collect_cmdsubs, _collect_procsubs,
+# _collect_redirects, copy_stack. Others auto-detected as Node.
+RETURN_TYPE_OVERRIDES: dict[str, Type] = {}
 
 # Union field discriminators for Node | str union types
 # Maps (receiver_type, field_name) -> (discriminator_var, nil_type, non_nil_type)
@@ -167,12 +137,8 @@ NODE_METHOD_TYPES: dict[str, str] = {
     "get_cond_formatted_value": "Word",
 }
 
-# Module-level constants that need custom emission
-# Maps constant_name -> (type, go_value)
-# Used for constants that can't be inferred from simple integer assignment
-MODULE_CONSTANTS: dict[str, tuple[Type, str]] = {
-    # Empty - RESERVED_WORDS is now emitted as a proper map[string]struct{} set
-}
+# Module-level constants that need custom emission (empty - all constants auto-detected)
+MODULE_CONSTANTS: dict[str, tuple[Type, str]] = {}
 
 # Override local variable types when inference fails
 # Maps (function_name, var_name) -> IR type

@@ -529,6 +529,15 @@ class PythonBackend:
                 # Cast from list[int] (bytearray) to string needs bytes().decode()
                 if to_type == Primitive(kind="string") and isinstance(inner.typ, Slice):
                     return f'bytes({self._expr(inner)}).decode("utf-8", errors="replace")'
+                # Cast from rune to string is chr() in Python
+                if to_type == Primitive(kind="string") and inner.typ == Primitive(kind="rune"):
+                    return f"chr({self._expr(inner)})"
+                # Cast from string to []byte is .encode() in Python
+                if isinstance(to_type, Slice) and to_type.element == Primitive(kind="byte"):
+                    return f'{self._expr(inner)}.encode("utf-8")'
+                # Cast from string/char/byte to int is ord() in Python
+                if to_type == Primitive(kind="int") and inner.typ in (Primitive(kind="string"), Primitive(kind="byte"), Primitive(kind="rune")):
+                    return f"ord({self._expr(inner)})"
                 # Most casts in Python are no-ops
                 return self._expr(inner)
             case TypeAssert(expr=inner):

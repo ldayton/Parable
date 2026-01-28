@@ -84,9 +84,7 @@ def _is_whitespace_no_newline(c: str) -> bool:
 
 
 def _substring(s: str, start: int, end: int) -> str:
-    """Extract substring from start to end (exclusive), clamped to string length."""
-    if end > len(s):
-        end = len(s)
+    """Extract substring from start to end (exclusive)."""
     return s[start:end]
 
 

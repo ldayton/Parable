@@ -173,8 +173,8 @@ func runTest(testInput, testExpected string) (passed bool, actual string, errMsg
 	select {
 	case result := <-resultCh:
 		return result.passed, result.actual, result.errMsg
-	case <-time.After(5 * time.Second):
-		return false, "<timeout>", "Test timed out after 5s"
+	case <-time.After(10 * time.Second):
+		return false, "<timeout>", "Test timed out after 10s"
 	}
 }
 

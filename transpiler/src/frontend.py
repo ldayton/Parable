@@ -868,6 +868,9 @@ class Frontend:
                 parts = [p for p in parts if p != "None"]
                 if len(parts) == 1:
                     return self._py_return_type_to_ir(parts[0])
+                # Check if all parts are Node subclasses -> return Node interface
+                if all(p in self._node_types for p in parts):
+                    return StructRef("Node")
                 return Interface("any")
         # Handle tuple[...] specially for return types
         if py_type.startswith("tuple["):

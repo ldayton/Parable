@@ -101,8 +101,7 @@ RETURN_TYPE_OVERRIDES: dict[str, Type] = {
     "_collect_procsubs": Slice(StructRef("Node")),
     "_collect_redirects": Slice(StructRef("Node")),
     "copy_stack": Slice(Pointer(StructRef("ParseContext"))),
-    "parse_for": StructRef("Node"),  # Returns For | ForArith | None
-    "parse_redirect": StructRef("Node"),  # Returns Redirect | HereDoc | None
+    # parse_for, parse_redirect: auto-detected as Node (union of Node subclasses)
 }
 
 # Tuple element types for functions returning tuples with typed elements

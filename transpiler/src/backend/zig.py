@@ -53,6 +53,7 @@ from src.ir import (
     Set,
     SetLit,
     Slice,
+    SliceConvert,
     SliceExpr,
     SliceLit,
     SoftFail,
@@ -68,6 +69,7 @@ from src.ir import (
     Ternary,
     TryCatch,
     Tuple,
+    TupleAssign,
     TupleLit,
     Type,
     TypeAssert,
@@ -91,6 +93,7 @@ class ZigBackend:
         self.receiver_name: str | None = None
         self.current_struct: str = ""
         self.var_types: dict[str, Type] = {}  # Track declared variable types
+        self.temp_counter = 0  # For unique temp variable names
 
     def emit(self, module: Module) -> str:
         """Emit Zig code from IR Module."""
@@ -147,7 +150,8 @@ class ZigBackend:
 
     def _emit_field(self, fld: Field) -> None:
         typ = self._type(fld.typ)
-        self._line(f"{to_snake(fld.name)}: {typ},")
+        name = _safe_zig_name(to_snake(fld.name))
+        self._line(f"{name}: {typ},")
 
     def _emit_function(self, func: Function) -> None:
         self.var_types = {}  # Reset variable tracking for each function
@@ -231,8 +235,10 @@ class ZigBackend:
                     self._line(f"{keyword} {to_snake(name)}: {zig_type} = {default};")
             case Assign(target=target, value=value):
                 lv = self._lvalue(target)
-                # Detect x = x + 1 -> x += 1 or x = x - 1 -> x -= 1
-                if isinstance(target, VarLV) and isinstance(value, BinaryOp):
+                is_decl = getattr(stmt, 'is_declaration', False)
+                is_reassigned = getattr(stmt, 'is_reassigned', False)
+                # Detect x = x + 1 -> x += 1 or x = x - 1 -> x -= 1 (only for reassignments)
+                if not is_decl and isinstance(target, VarLV) and isinstance(value, BinaryOp):
                     if isinstance(value.left, Var) and value.left.name == target.name:
                         if value.op == "+" and isinstance(value.right, IntLit) and value.right.value == 1:
                             self._line(f"{lv} += 1;")
@@ -245,11 +251,39 @@ class ZigBackend:
                             self._line(f"{lv} {value.op}= {self._expr(value.right)};")
                             return
                 val = self._expr(value)
-                self._line(f"{lv} = {val};")
+                if is_decl:
+                    keyword = "var" if is_reassigned else "const"
+                    self._line(f"{keyword} {lv} = {val};")
+                else:
+                    self._line(f"{lv} = {val};")
             case OpAssign(target=target, op=op, value=value):
                 lv = self._lvalue(target)
                 val = self._expr(value)
                 self._line(f"{lv} {op}= {val};")
+            case TupleAssign(targets=targets, value=value):
+                # Zig doesn't have tuple destructuring, so we assign to a temp
+                # and then extract each field
+                is_decl = getattr(stmt, 'is_declaration', False)
+                temp_name = f"_tuple_tmp_{self.temp_counter}"
+                self.temp_counter += 1
+                val = self._expr(value)
+                self._line(f"const {temp_name} = {val};")
+                for i, t in enumerate(targets):
+                    lv = self._lvalue(t)
+                    if isinstance(t, VarLV) and t.name == "_":
+                        continue  # Skip discarded values
+                    if is_decl:
+                        is_reassigned = getattr(stmt, 'is_reassigned', False)
+                        keyword = "var" if is_reassigned else "const"
+                        self._line(f"{keyword} {lv} = {temp_name}.f{i};")
+                    else:
+                        self._line(f"{lv} = {temp_name}.f{i};")
+            case ExprStmt(expr=Var(name="_skip_docstring")):
+                pass  # Skip docstring markers
+            case ExprStmt(expr=Var(name="_pass")):
+                pass  # Skip pass statements (no equivalent in Zig)
+            case ExprStmt(expr=Var(name="_skip_super_init")):
+                pass  # Skip super init markers
             case ExprStmt(expr=expr):
                 e = self._expr(expr)
                 # Zig requires discarding unused values, but not for void
@@ -399,6 +433,10 @@ class ZigBackend:
         iterable: Expr,
         body: list[Stmt],
     ) -> None:
+        # Handle range() calls specially
+        if isinstance(iterable, Call) and iterable.func == "range":
+            self._emit_range_loop(index, value, iterable.args, body)
+            return
         iter_expr = self._expr(iterable)
         # ArrayList needs .items to iterate
         if isinstance(iterable.typ, Slice):
@@ -412,6 +450,44 @@ class ZigBackend:
             self._line(f"for ({iter_expr}, 0..) |_, {to_snake(index)}| {{")
         else:
             self._line(f"for ({iter_expr}) |_| {{")
+        self.indent += 1
+        for s in body:
+            self._emit_stmt(s)
+        self.indent -= 1
+        self._line("}")
+
+    def _emit_range_loop(
+        self,
+        index: str | None,
+        value: str | None,
+        args: list[Expr],
+        body: list[Stmt],
+    ) -> None:
+        """Emit a loop over range(). Uses while loop for step != 1."""
+        loop_var = to_snake(value) if value else to_snake(index) if index else "_i"
+        if len(args) == 1:
+            # range(n) -> 0..n
+            end = self._expr(args[0])
+            self._line(f"var {loop_var}: usize = 0;")
+            self._line(f"while ({loop_var} < @as(usize, @intCast({end}))) : ({loop_var} += 1) {{")
+        elif len(args) == 2:
+            # range(start, stop) -> start..stop
+            start, end = self._expr(args[0]), self._expr(args[1])
+            self._line(f"var {loop_var}: i64 = {start};")
+            self._line(f"while ({loop_var} < {end}) : ({loop_var} += 1) {{")
+        elif len(args) >= 3:
+            # range(start, stop, step)
+            start, end, step = self._expr(args[0]), self._expr(args[1]), self._expr(args[2])
+            self._line(f"var {loop_var}: i64 = {start};")
+            # Handle negative step
+            if isinstance(args[2], IntLit) and args[2].value < 0:
+                self._line(f"while ({loop_var} > {end}) : ({loop_var} += {step}) {{")
+            else:
+                self._line(f"while ({loop_var} < {end}) : ({loop_var} += {step}) {{")
+        else:
+            # Fallback
+            self._line(f"var {loop_var}: usize = 0;")
+            self._line("while (false) {")
         self.indent += 1
         for s in body:
             self._emit_stmt(s)
@@ -483,7 +559,7 @@ class ZigBackend:
                     return "self"
                 if name.isupper():
                     return name
-                return to_snake(name)
+                return _safe_zig_name(to_snake(name))
             case FieldAccess(obj=obj, field=field):
                 obj_str = self._expr(obj)
                 # Unwrap optional with .? before field access
@@ -493,7 +569,8 @@ class ZigBackend:
                     is_optional = isinstance(self.var_types[obj.name], Optional)
                 if is_optional:
                     obj_str = f"{obj_str}.?"
-                return f"{obj_str}.{to_snake(field)}"
+                field_name = _safe_zig_name(to_snake(field))
+                return f"{obj_str}.{field_name}"
             case Index(obj=obj, index=index):
                 # Check if indexing a tuple - use field access instead
                 if isinstance(obj.typ, Tuple) and isinstance(index, IntLit):
@@ -518,13 +595,42 @@ class ZigBackend:
                 args_str = ", ".join(self._expr(a) for a in args)
                 type_name = self._type_name_for_check(on_type)
                 return f"{type_name}.{to_snake(method)}({args_str})"
+            case BinaryOp(op="in", left=left, right=right):
+                # Containment check: char in string or item in set
+                right_type = getattr(right, 'typ', None)
+                if isinstance(right_type, Set):
+                    return f"{self._expr(right)}.contains({self._expr(left)})"
+                # String containment: check if char is in string
+                return f"(std.mem.indexOfScalar(u8, {self._expr(right)}, {self._expr(left)}[0]) != null)"
+            case BinaryOp(op="not in", left=left, right=right):
+                # Negated containment check
+                right_type = getattr(right, 'typ', None)
+                if isinstance(right_type, Set):
+                    return f"!{self._expr(right)}.contains({self._expr(left)})"
+                return f"(std.mem.indexOfScalar(u8, {self._expr(right)}, {self._expr(left)}[0]) == null)"
             case BinaryOp(op=op, left=left, right=right):
                 zig_op = _binary_op(op)
                 # String comparison needs mem.eql
-                if zig_op == "==" and _is_string_type(left.typ):
-                    return f"mem.eql(u8, {self._expr(left)}, {self._expr(right)})"
-                if zig_op == "!=" and _is_string_type(left.typ):
-                    return f"!mem.eql(u8, {self._expr(left)}, {self._expr(right)})"
+                left_is_str = _is_string_type(left.typ)
+                right_is_str = _is_string_type(right.typ)
+                left_is_byte = isinstance(left.typ, Primitive) and left.typ.kind == "byte"
+                right_is_byte = isinstance(right.typ, Primitive) and right.typ.kind == "byte"
+                if zig_op in ("==", "!="):
+                    # Both strings: use mem.eql
+                    if left_is_str and right_is_str:
+                        cmp = f"mem.eql(u8, {self._expr(left)}, {self._expr(right)})"
+                        return cmp if zig_op == "==" else f"!{cmp}"
+                    # Byte vs single-char string: convert string to char
+                    if left_is_byte and isinstance(right, StringLit) and len(right.value) == 1:
+                        char_val = ord(right.value)
+                        return f"{self._expr(left)} {zig_op} {char_val}"
+                    if right_is_byte and isinstance(left, StringLit) and len(left.value) == 1:
+                        char_val = ord(left.value)
+                        return f"{char_val} {zig_op} {self._expr(right)}"
+                    # String vs something else: still use mem.eql
+                    if left_is_str or right_is_str:
+                        cmp = f"mem.eql(u8, {self._expr(left)}, {self._expr(right)})"
+                        return cmp if zig_op == "==" else f"!{cmp}"
                 # Add parens only for compound expressions or low-precedence ops
                 left_str = self._expr(left)
                 right_str = self._expr(right)
@@ -608,7 +714,7 @@ class ZigBackend:
             case StructLit(struct_name=struct_name, fields=fields):
                 if not fields:
                     return f"{struct_name}{{}}"
-                args = ", ".join(f".{to_snake(k)} = {self._expr(v)}" for k, v in fields.items())
+                args = ", ".join(f".{_safe_zig_name(to_snake(k))} = {self._expr(v)}" for k, v in fields.items())
                 return f"{struct_name}{{ {args} }}"
             case TupleLit(elements=elements):
                 # Use named fields f0, f1, etc. to match the struct type
@@ -621,12 +727,18 @@ class ZigBackend:
                 return " ++ ".join(self._expr(p) for p in parts)
             case StringFormat(template=template, args=args):
                 return self._format_string(template, args)
+            case SliceConvert(source=source):
+                # Zig slices don't have the same covariance issues as Go
+                return self._expr(source)
             case _:
-                return f"undefined // TODO: {type(expr).__name__}"
+                return f"undefined /* TODO: {type(expr).__name__} */"
 
     def _method_call(self, obj: Expr, method: str, args: list[Expr], receiver_type: Type) -> str:
         args_str = ", ".join(self._expr(a) for a in args)
         obj_str = self._expr(obj)
+        # Zig doesn't allow method calls on struct literals - wrap in parens
+        if isinstance(obj, StructLit):
+            obj_str = f"({obj_str})"
         # Handle ArrayList methods
         if isinstance(receiver_type, Slice):
             if method == "append" and args:
@@ -666,7 +778,13 @@ class ZigBackend:
         import re
         result = re.sub(r'\{\d+\}', '{}', template)
         result = result.replace("%v", "{}").replace("%%", "%")
-        escaped = result.replace("\\", "\\\\").replace('"', '\\"')
+        # Escape for Zig string literals (preserve {} placeholders)
+        escaped = (result
+            .replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("\n", "\\n")
+            .replace("\t", "\\t")
+            .replace("\r", "\\r"))
         args_str = ", ".join(self._expr(a) for a in args)
         if args_str:
             return f'std.fmt.allocPrint(allocator, "{escaped}", .{{ {args_str} }}) catch unreachable'
@@ -677,9 +795,9 @@ class ZigBackend:
             case VarLV(name=name):
                 if name == self.receiver_name:
                     return "self"
-                return to_snake(name)
+                return _safe_zig_name(to_snake(name))
             case FieldLV(obj=obj, field=field):
-                return f"{self._expr(obj)}.{to_snake(field)}"
+                return f"{self._expr(obj)}.{_safe_zig_name(to_snake(field))}"
             case IndexLV(obj=obj, index=index):
                 obj_str = self._expr(obj)
                 # ArrayList needs .items for indexing
@@ -725,12 +843,12 @@ class ZigBackend:
             case StructRef(name=name):
                 return name
             case Interface(name=name):
-                if name == "any":
-                    return "*anyopaque"
-                return name
+                # All interfaces map to opaque pointers in Zig
+                return "*anyopaque"
             case Union(name=name, variants=variants):
                 if name:
-                    return name
+                    # Named unions (like Node) map to opaque pointers
+                    return "*anyopaque"
                 if variants:
                     # Generate anonymous tagged union
                     fields = ", ".join(f"v{i}: {self._type(v)}" for i, v in enumerate(variants))
@@ -817,7 +935,49 @@ def _is_string_type(typ: Type) -> bool:
 
 
 def _string_literal(value: str) -> str:
-    return f'"{escape_string(value)}"'
+    return f'"{_escape_zig_string(value)}"'
+
+
+# Zig reserved keywords that need escaping with @""
+_ZIG_KEYWORDS = {
+    "align", "allowzero", "and", "anyframe", "anytype", "asm", "async",
+    "await", "break", "catch", "comptime", "const", "continue", "defer",
+    "else", "enum", "errdefer", "error", "export", "extern", "false", "fn",
+    "for", "if", "inline", "noalias", "nosuspend", "null", "opaque", "or",
+    "orelse", "packed", "pub", "resume", "return", "struct", "suspend",
+    "switch", "test", "threadlocal", "true", "try", "type", "undefined",
+    "union", "unreachable", "usingnamespace", "var", "void", "volatile",
+    "while",
+}
+
+
+def _safe_zig_name(name: str) -> str:
+    """Escape Zig reserved keywords using @"" syntax."""
+    if name in _ZIG_KEYWORDS:
+        return f'@"{name}"'
+    return name
+
+
+def _escape_zig_string(value: str) -> str:
+    """Escape a string for Zig, including non-printable characters."""
+    result = []
+    for c in value:
+        if c == '\\':
+            result.append('\\\\')
+        elif c == '"':
+            result.append('\\"')
+        elif c == '\n':
+            result.append('\\n')
+        elif c == '\t':
+            result.append('\\t')
+        elif c == '\r':
+            result.append('\\r')
+        elif ord(c) < 32 or ord(c) >= 127:
+            # Non-printable ASCII - use hex escape
+            result.append(f'\\x{ord(c):02x}')
+        else:
+            result.append(c)
+    return ''.join(result)
 
 
 def _is_void_expr(expr: Expr) -> bool:
@@ -833,7 +993,12 @@ def _needs_parens(expr: Expr) -> bool:
     """Check if expression needs parentheses when used as operand."""
     # Compound binary ops with lower precedence need parens
     if isinstance(expr, BinaryOp):
-        return expr.op in ("&&", "||", "and", "or")
+        # Logical ops need parens
+        if expr.op in ("&&", "||", "and", "or"):
+            return True
+        # Bitwise ops need parens when used with comparison
+        if expr.op in ("&", "|", "^"):
+            return True
     return False
 
 

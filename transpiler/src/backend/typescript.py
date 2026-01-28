@@ -612,7 +612,7 @@ class TsBackend:
             case MethodCall(obj=obj, method="isalnum", args=_, receiver_type=_):
                 return f"/^[a-zA-Z0-9]$/.test({self._expr(obj)})"
             case MethodCall(obj=obj, method="isdigit", args=_, receiver_type=_):
-                return f"/^[0-9]$/.test({self._expr(obj)})"
+                return f"/^[0-9]+$/.test({self._expr(obj)})"
             case MethodCall(obj=obj, method="isalpha", args=_, receiver_type=_):
                 return f"/^[a-zA-Z]$/.test({self._expr(obj)})"
             case MethodCall(obj=obj, method="isspace", args=_, receiver_type=_):

@@ -1653,9 +1653,9 @@ var Lexer = /** @class */ (function () {
             this.advance();
             return ch;
         }
-        if (/^[0-9]$/.test(ch)) {
+        if (/^[0-9]+$/.test(ch)) {
             var nameChars = [];
-            while (!this.atEnd() && /^[0-9]$/.test(this.peek())) {
+            while (!this.atEnd() && /^[0-9]+$/.test(this.peek())) {
                 nameChars.push(this.advance());
             }
             return nameChars.join("");
@@ -3972,10 +3972,10 @@ var Redirect = /** @class */ (function () {
                 }
             }
             var raw = Substring(targetVal, 1, targetVal.length);
-            if (/^[0-9]$/.test(raw) && parseInt(raw, 10) <= 2147483647) {
+            if (/^[0-9]+$/.test(raw) && parseInt(raw, 10) <= 2147483647) {
                 return "(redirect \"" + op + "\" " + String(parseInt(raw, 10)) + ")";
             }
-            if (raw.endsWith("-") && /^[0-9]$/.test(raw.slice(0, raw.length - 1)) && parseInt(raw.slice(0, raw.length - 1), 10) <= 2147483647) {
+            if (raw.endsWith("-") && /^[0-9]+$/.test(raw.slice(0, raw.length - 1)) && parseInt(raw.slice(0, raw.length - 1), 10) <= 2147483647) {
                 return "(redirect \"" + op + "\" " + String(parseInt(raw.slice(0, raw.length - 1), 10)) + ")";
             }
             if (targetVal === "&-") {
@@ -3985,13 +3985,13 @@ var Redirect = /** @class */ (function () {
             return "(redirect \"" + op + "\" \"" + fdTarget + "\")";
         }
         if (op === ">&" || op === "<&") {
-            if (/^[0-9]$/.test(targetVal) && parseInt(targetVal, 10) <= 2147483647) {
+            if (/^[0-9]+$/.test(targetVal) && parseInt(targetVal, 10) <= 2147483647) {
                 return "(redirect \"" + op + "\" " + String(parseInt(targetVal, 10)) + ")";
             }
             if (targetVal === "-") {
                 return "(redirect \">&-\" 0)";
             }
-            if (targetVal.endsWith("-") && /^[0-9]$/.test(targetVal.slice(0, targetVal.length - 1)) && parseInt(targetVal.slice(0, targetVal.length - 1), 10) <= 2147483647) {
+            if (targetVal.endsWith("-") && /^[0-9]+$/.test(targetVal.slice(0, targetVal.length - 1)) && parseInt(targetVal.slice(0, targetVal.length - 1), 10) <= 2147483647) {
                 return "(redirect \"" + op + "\" " + String(parseInt(targetVal.slice(0, targetVal.length - 1), 10)) + ")";
             }
             var outVal = targetVal.endsWith("-") ? targetVal.slice(0, targetVal.length - 1) : targetVal;
@@ -6893,7 +6893,7 @@ var Parser = /** @class */ (function () {
         this.ArithSkipWs();
         var chars = [];
         var c = this.ArithPeek(0);
-        if (/^[0-9]$/.test(c)) {
+        if (/^[0-9]+$/.test(c)) {
             while (!this.ArithAtEnd()) {
                 var ch = this.ArithPeek(0);
                 if (/^[a-zA-Z0-9]$/.test(ch) || (ch === "#" || ch === "_")) {
@@ -7031,9 +7031,9 @@ var Parser = /** @class */ (function () {
                 this.pos = saved;
             }
         }
-        if (varfd === "" && this.peek() !== "" && /^[0-9]$/.test(this.peek())) {
+        if (varfd === "" && this.peek() !== "" && /^[0-9]+$/.test(this.peek())) {
             var fdChars = [];
-            while (!this.atEnd() && /^[0-9]$/.test(this.peek())) {
+            while (!this.atEnd() && /^[0-9]+$/.test(this.peek())) {
                 fdChars.push(this.advance());
             }
             fd = parseInt(fdChars.join(""), 10);
@@ -7151,10 +7151,10 @@ var Parser = /** @class */ (function () {
                 var target = null;
             }
             if (target === null) {
-                if (!this.atEnd() && (/^[0-9]$/.test(this.peek()) || this.peek() === "-")) {
+                if (!this.atEnd() && (/^[0-9]+$/.test(this.peek()) || this.peek() === "-")) {
                     var wordStart = this.pos;
                     var fdChars = [];
-                    while (!this.atEnd() && /^[0-9]$/.test(this.peek())) {
+                    while (!this.atEnd() && /^[0-9]+$/.test(this.peek())) {
                         fdChars.push(this.advance());
                     }
                     if (fdChars.length > 0) {
@@ -9980,7 +9980,7 @@ function FormatRedirect(r, compact, heredocOpOnly) {
             op = Substring(op, 0, op.length - 1) + ">";
         }
         var afterAmp = Substring(target, 1, target.length);
-        var isLiteralFd = afterAmp === "-" || afterAmp.length > 0 && /^[0-9]$/.test(afterAmp[0]);
+        var isLiteralFd = afterAmp === "-" || afterAmp.length > 0 && /^[0-9]+$/.test(afterAmp[0]);
         if (isLiteralFd) {
             if (op === ">" || op === ">&") {
                 op = wasInputClose ? "0>" : "1>";

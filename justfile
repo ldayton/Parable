@@ -30,7 +30,7 @@ src-verify-lock:
 # --- Backends (transpiled output in dist/) ---
 
 # Transpile base to dist/<backend>/
-backend-transpile backend="go":
+backend-transpile backend:
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{backend}}" in

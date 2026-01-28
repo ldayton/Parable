@@ -687,6 +687,13 @@ class TsBackend:
                     isinstance(inner.typ.element, Primitive) and
                     inner.typ.element.kind == "byte"):
                     return f"new TextDecoder().decode(new Uint8Array({self._expr(inner)}))"
+                # rune/int to string: use String.fromCodePoint for proper Unicode handling
+                if (isinstance(to_type, Primitive) and
+                    to_type.kind == "string" and
+                    hasattr(inner, 'typ') and
+                    isinstance(inner.typ, Primitive) and
+                    inner.typ.kind in ("rune", "int")):
+                    return f"String.fromCodePoint({self._expr(inner)})"
                 # Use 'as unknown as' to allow any type conversion
                 return f"({self._expr(inner)} as unknown as {ts_type})"
             case TypeAssert(expr=inner, asserted=asserted):

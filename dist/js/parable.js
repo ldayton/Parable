@@ -2141,7 +2141,7 @@ var Word = /** @class */ (function () {
                                     if (codepoint === 0) {
                                         return result;
                                     }
-                                    result.push.apply(result, Array.from(new TextEncoder().encode(codepoint)));
+                                    result.push.apply(result, Array.from(new TextEncoder().encode(String.fromCodePoint(codepoint))));
                                     i = j;
                                 }
                                 else {
@@ -2160,7 +2160,7 @@ var Word = /** @class */ (function () {
                                         if (codepoint === 0) {
                                             return result;
                                         }
-                                        result.push.apply(result, Array.from(new TextEncoder().encode(codepoint)));
+                                        result.push.apply(result, Array.from(new TextEncoder().encode(String.fromCodePoint(codepoint))));
                                         i = j;
                                     }
                                     else {
@@ -7271,7 +7271,7 @@ var Parser = /** @class */ (function () {
                                         var esc = this.peek();
                                         var escVal = GetAnsiEscape(esc);
                                         if (escVal >= 0) {
-                                            delimiterChars.push(escVal);
+                                            delimiterChars.push(String.fromCodePoint(escVal));
                                             this.advance();
                                         }
                                         else {

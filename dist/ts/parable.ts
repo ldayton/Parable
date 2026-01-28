@@ -2101,7 +2101,7 @@ class Word implements Node {
                   if (codepoint === 0) {
                     return result;
                   }
-                  result.push(...Array.from(new TextEncoder().encode((codepoint as unknown as string))));
+                  result.push(...Array.from(new TextEncoder().encode(String.fromCodePoint(codepoint))));
                   i = j;
                 } else {
                   result.push((inner[i] as unknown as string)[0]);
@@ -2118,7 +2118,7 @@ class Word implements Node {
                     if (codepoint === 0) {
                       return result;
                     }
-                    result.push(...Array.from(new TextEncoder().encode((codepoint as unknown as string))));
+                    result.push(...Array.from(new TextEncoder().encode(String.fromCodePoint(codepoint))));
                     i = j;
                   } else {
                     result.push((inner[i] as unknown as string)[0]);
@@ -7197,7 +7197,7 @@ class Parser {
                     var esc: any = this.peek();
                     var escVal: any = GetAnsiEscape(esc);
                     if (escVal >= 0) {
-                      delimiterChars.push((escVal as unknown as string));
+                      delimiterChars.push(String.fromCodePoint(escVal));
                       this.advance();
                     } else {
                       if (esc === "'") {

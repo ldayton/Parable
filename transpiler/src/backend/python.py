@@ -396,6 +396,9 @@ class PythonBackend:
         body: list[Stmt],
     ) -> None:
         iter_expr = self._expr(iterable)
+        # Wrap with (... or []) if iterable might be None (Optional type or field access)
+        if isinstance(iterable.typ, Optional) or isinstance(iterable, FieldAccess):
+            iter_expr = f"({iter_expr} or [])"
         idx = _safe_name(index) if index else None
         val = _safe_name(value) if value else None
         if idx is not None and val is not None:

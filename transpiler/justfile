@@ -3,6 +3,7 @@ set shell := ["bash", "-o", "pipefail", "-cu"]
 # Configuration
 source := "../src/parable.py"
 tests := "../tests"
+dist := "dist"
 backends := "c csharp go java python ruby rust swift ts zig"
 testable := "go python ts"
 
@@ -27,8 +28,8 @@ check backend="go":
             ;;
         go)
             uv run python -m src.cli {{source}} -b go > /tmp/transpile-ir.go
-            gofmt /tmp/transpile-ir.go > dist/parable.go
-            go build -C dist -o /dev/null .
+            gofmt /tmp/transpile-ir.go > {{dist}}/parable.go
+            go build -C {{dist}} -o /dev/null .
             ;;
         java)
             uv run python -m src.cli {{source}} -b java > /tmp/Output.java
@@ -69,10 +70,12 @@ check backend="go":
 test backend="go":
     #!/usr/bin/env bash
     set -euo pipefail
+    # Convert relative paths to absolute for subprocesses
+    tests_abs=$(cd "$(dirname "{{tests}}")" && pwd)/$(basename "{{tests}}")
     case "{{backend}}" in
         go)
             just check go
-            go run -C dist ./cmd/run-tests ../../tests
+            go run -C {{dist}} ./cmd/run-tests "$tests_abs"
             ;;
         python)
             rm -rf /tmp/transpile-test && mkdir /tmp/transpile-test

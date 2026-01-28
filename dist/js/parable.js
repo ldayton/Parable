@@ -1925,12 +1925,12 @@ var Word = /** @class */ (function () {
         value = this.NormalizeParamExpansionNewlines(value);
         value = this.StripArithLineContinuations(value);
         value = this.DoubleCtlescSmart(value);
-        value = value.replace("", "");
-        value = value.replace("\\", "\\\\");
+        value = value.replace(//g, "");
+        value = value.replace(/\\/g, "\\\\");
         if (value.endsWith("\\\\") && !value.endsWith("\\\\\\\\")) {
             value = value + "\\\\";
         }
-        var escaped = value.replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t");
+        var escaped = value.replace(/"/g, "\\\"").replace(/\n/g, "\\n").replace(/\t/g, "\\t");
         return "(word \"" + escaped + "\")";
     };
     Word.prototype.AppendWithCtlesc = function (result, byteVal) {
@@ -3292,12 +3292,12 @@ var Word = /** @class */ (function () {
                                     var stripped = rawContent.slice(leadingWsEnd);
                                     if (stripped.startsWith("(")) {
                                         if (leadingWs !== "") {
-                                            var normalizedWs = leadingWs.replace("\n", " ").replace("\t", " ");
+                                            var normalizedWs = leadingWs.replace(/\n/g, " ").replace(/\t/g, " ");
                                             var spaced = FormatCmdsubNode(node.command, 0, false, false, false);
                                             result.push(direction + "(" + normalizedWs + spaced + ")");
                                         }
                                         else {
-                                            rawContent = rawContent.replace("\\\n", "");
+                                            rawContent = rawContent.replace(/\\\n/g, "");
                                             result.push(direction + "(" + rawContent + ")");
                                         }
                                         procsubIdx += 1;
@@ -3306,7 +3306,7 @@ var Word = /** @class */ (function () {
                                     }
                                 }
                                 rawContent = Substring(value, i + 2, j - 1);
-                                var rawStripped = rawContent.replace("\\\n", "");
+                                var rawStripped = rawContent.replace(/\\\n/g, "");
                                 if (StartsWithSubshell(node.command) && formatted !== rawStripped) {
                                     result.push(direction + "(" + rawStripped + ")");
                                 }
@@ -3377,7 +3377,7 @@ var Word = /** @class */ (function () {
                         }
                         else {
                             if ((IsExpansionStart(value, i, "${ ") || IsExpansionStart(value, i, "${\t") || IsExpansionStart(value, i, "${\n") || IsExpansionStart(value, i, "${|")) && !IsBackslashEscaped(value, i)) {
-                                var prefix = Substring(value, i, i + 3).replace("\t", " ").replace("\n", " ");
+                                var prefix = Substring(value, i, i + 3).replace(/\t/g, " ").replace(/\n/g, " ");
                                 var j = i + 3;
                                 var depth = 1;
                                 while (j < value.length && depth > 0) {
@@ -3622,7 +3622,7 @@ var Word = /** @class */ (function () {
         value = this.StripLocaleStringDollars(value);
         value = this.FormatCommandSubstitutions(value, false);
         value = this.NormalizeExtglobWhitespace(value);
-        value = value.replace("", "");
+        value = value.replace(//g, "");
         return value.replace(/[\n]+$/, '');
     };
     return Word;
@@ -4142,12 +4142,12 @@ var Until = /** @class */ (function () {
 var For = /** @class */ (function () {
     function For(varName, words, body, redirects, kind) {
         if (varName === void 0) { varName = ""; }
-        if (words === void 0) { words = []; }
+        if (words === void 0) { words = null; }
         if (body === void 0) { body = null; }
         if (redirects === void 0) { redirects = []; }
         if (kind === void 0) { kind = ""; }
         this.varName = varName;
-        this.words = words !== null && words !== void 0 ? words : [];
+        this.words = words;
         this.body = body;
         this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.kind = kind;
@@ -4167,7 +4167,7 @@ var For = /** @class */ (function () {
         }
         var tempWord = new Word(this.varName, [], "word");
         var varFormatted = tempWord.FormatCommandSubstitutions(this.varName, false);
-        var varEscaped = varFormatted.replace("\\", "\\\\").replace("\"", "\\\"");
+        var varEscaped = varFormatted.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
         if (this.words === null) {
             return "(for (word \"" + varEscaped + "\") (in (word \"\\\"$@\\\"\")) " + this.body.toSexp() + ")" + suffix;
         }
@@ -4230,12 +4230,12 @@ var ForArith = /** @class */ (function () {
 var Select = /** @class */ (function () {
     function Select(varName, words, body, redirects, kind) {
         if (varName === void 0) { varName = ""; }
-        if (words === void 0) { words = []; }
+        if (words === void 0) { words = null; }
         if (body === void 0) { body = null; }
         if (redirects === void 0) { redirects = []; }
         if (kind === void 0) { kind = ""; }
         this.varName = varName;
-        this.words = words !== null && words !== void 0 ? words : [];
+        this.words = words;
         this.body = body;
         this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.kind = kind;
@@ -4253,7 +4253,7 @@ var Select = /** @class */ (function () {
             }
             suffix = " " + redirectParts.join(" ");
         }
-        var varEscaped = this.varName.replace("\\", "\\\\").replace("\"", "\\\"");
+        var varEscaped = this.varName.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
         if (this.words !== null) {
             var wordParts = [];
             for (var _b = 0, _c = this.words; _b < _c.length; _b++) {
@@ -4440,16 +4440,16 @@ var ParamExpansion = /** @class */ (function () {
         return this.kind;
     };
     ParamExpansion.prototype.toSexp = function () {
-        var escapedParam = this.param.replace("\\", "\\\\").replace("\"", "\\\"");
+        var escapedParam = this.param.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
         if (this.op !== "") {
-            var escapedOp = this.op.replace("\\", "\\\\").replace("\"", "\\\"");
+            var escapedOp = this.op.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
             if (this.arg !== "") {
                 var argVal = this.arg;
             }
             else {
                 var argVal = "";
             }
-            var escapedArg = argVal.replace("\\", "\\\\").replace("\"", "\\\"");
+            var escapedArg = argVal.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
             return "(param \"" + escapedParam + "\" \"" + escapedOp + "\" \"" + escapedArg + "\")";
         }
         return "(param \"" + escapedParam + "\")";
@@ -4467,7 +4467,7 @@ var ParamLength = /** @class */ (function () {
         return this.kind;
     };
     ParamLength.prototype.toSexp = function () {
-        var escaped = this.param.replace("\\", "\\\\").replace("\"", "\\\"");
+        var escaped = this.param.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
         return "(param-len \"" + escaped + "\")";
     };
     return ParamLength;
@@ -4487,16 +4487,16 @@ var ParamIndirect = /** @class */ (function () {
         return this.kind;
     };
     ParamIndirect.prototype.toSexp = function () {
-        var escaped = this.param.replace("\\", "\\\\").replace("\"", "\\\"");
+        var escaped = this.param.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
         if (this.op !== "") {
-            var escapedOp = this.op.replace("\\", "\\\\").replace("\"", "\\\"");
+            var escapedOp = this.op.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
             if (this.arg !== "") {
                 var argVal = this.arg;
             }
             else {
                 var argVal = "";
             }
-            var escapedArg = argVal.replace("\\", "\\\\").replace("\"", "\\\"");
+            var escapedArg = argVal.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
             return "(param-indirect \"" + escaped + "\" \"" + escapedOp + "\" \"" + escapedArg + "\")";
         }
         return "(param-indirect \"" + escaped + "\")";
@@ -4557,7 +4557,7 @@ var ArithmeticCommand = /** @class */ (function () {
     };
     ArithmeticCommand.prototype.toSexp = function () {
         var formatted = new Word(this.rawContent, [], "word").FormatCommandSubstitutions(this.rawContent, true);
-        var escaped = formatted.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t");
+        var escaped = formatted.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n").replace(/\t/g, "\\t");
         var result = "(arith (word \"" + escaped + "\"))";
         if (this.redirects.length > 0) {
             var redirectParts = [];
@@ -4809,7 +4809,7 @@ var ArithDeprecated = /** @class */ (function () {
         return this.kind;
     };
     ArithDeprecated.prototype.toSexp = function () {
-        var escaped = this.expression.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
+        var escaped = this.expression.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n");
         return "(arith-deprecated \"" + escaped + "\")";
     };
     return ArithDeprecated;
@@ -4845,7 +4845,7 @@ var AnsiCQuote = /** @class */ (function () {
         return this.kind;
     };
     AnsiCQuote.prototype.toSexp = function () {
-        var escaped = this.content.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
+        var escaped = this.content.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n");
         return "(ansi-c \"" + escaped + "\")";
     };
     return AnsiCQuote;
@@ -4861,7 +4861,7 @@ var LocaleString = /** @class */ (function () {
         return this.kind;
     };
     LocaleString.prototype.toSexp = function () {
-        var escaped = this.content.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
+        var escaped = this.content.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n");
         return "(locale \"" + escaped + "\")";
     };
     return LocaleString;
@@ -4944,7 +4944,7 @@ var ConditionalExpr = /** @class */ (function () {
     ConditionalExpr.prototype.toSexp = function () {
         var body = this.body;
         if (typeof body === 'string') {
-            var escaped = body.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
+            var escaped = body.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n");
             var result = "(cond \"" + escaped + "\")";
         }
         else {
@@ -7686,7 +7686,7 @@ var Parser = /** @class */ (function () {
             return null;
         }
         var content = Substring(this.source, contentStart, this.pos);
-        content = content.replace("\\\n", "");
+        content = content.replace(/\\\n/g, "");
         this.advance();
         this.advance();
         var expr = this.ParseArithExpr(content);
@@ -9362,8 +9362,8 @@ function FormatArithVal(s) {
     var val = w.ExpandAllAnsiCQuotes(s);
     val = w.StripLocaleStringDollars(val);
     val = w.FormatCommandSubstitutions(val, false);
-    val = val.replace("\\", "\\\\").replace("\"", "\\\"");
-    val = val.replace("\n", "\\n").replace("\t", "\\t");
+    val = val.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
+    val = val.replace(/\n/g, "\\n").replace(/\t/g, "\\t");
     return val;
 }
 function ConsumeSingleQuote(s, start) {
@@ -9839,7 +9839,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var i = 0;
         while (i < node.patterns.length) {
             var p = node.patterns[i];
-            var pat = p.pattern.replace("|", " | ");
+            var pat = p.pattern.replace(/\|/g, " | ");
             if (p.body !== null) {
                 var body = FormatCmdsubNode(p.body, indent + 8, false, false, false);
             }

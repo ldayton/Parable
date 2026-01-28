@@ -3079,7 +3079,7 @@ class Until(Node):
 @dataclass
 class For(Node):
     var: str = ""
-    words: list[Word] = field(default_factory=list)
+    words: list[Word] | None = None
     body: Node = None
     redirects: list[Node] = field(default_factory=list)
     kind: str = ""
@@ -3136,7 +3136,7 @@ class ForArith(Node):
 @dataclass
 class Select(Node):
     var: str = ""
-    words: list[Word] = field(default_factory=list)
+    words: list[Word] | None = None
     body: Node = None
     redirects: list[Node] = field(default_factory=list)
     kind: str = ""

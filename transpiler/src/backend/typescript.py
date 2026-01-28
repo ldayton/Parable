@@ -191,10 +191,13 @@ class TsBackend:
     def _emit_struct(self, struct: Struct) -> None:
         if struct.doc:
             self._line(f"/** {struct.doc} */")
+        extends = ""
+        if struct.embedded_type:
+            extends = f" extends {struct.embedded_type}"
         implements = ""
         if struct.implements:
             implements = f" implements {', '.join(_safe_name(i) for i in struct.implements)}"
-        self._line(f"class {_safe_name(struct.name)}{implements} {{")
+        self._line(f"class {_safe_name(struct.name)}{extends}{implements} {{")
         self.indent += 1
         for fld in struct.fields:
             self._emit_field(fld)
@@ -396,11 +399,18 @@ class TsBackend:
                 body=body, catch_var=catch_var, catch_body=catch_body, reraise=reraise
             ):
                 self._emit_try_catch(body, catch_var, catch_body, reraise)
-            case Raise(error_type=error_type, message=message, pos=pos):
-                msg = self._expr(message)
-                p = self._expr(pos)
-                # Use standard Error since custom error types aren't defined
-                self._line(f"throw new Error(`${{{msg}}} at position ${{{p}}}`)")
+            case Raise(error_type=error_type, message=message, pos=pos, reraise_var=reraise_var):
+                if reraise_var:
+                    # Re-throw the caught exception
+                    self._line(f"throw {_camel(reraise_var)}")
+                elif error_type == "MatchedPairError":
+                    # MatchedPairError is a sentinel with no args
+                    self._line(f"throw new {error_type}()")
+                else:
+                    # ParseError has message/pos
+                    msg = self._expr(message)
+                    p = self._expr(pos)
+                    self._line(f"throw new {error_type}(`${{{msg}}} at position ${{{p}}}`, {p})")
             case SoftFail():
                 self._line("return null;")
             case _:

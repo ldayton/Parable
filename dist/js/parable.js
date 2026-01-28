@@ -1,3 +1,18 @@
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = function (d, b) {
+        extendStatics = Object.setPrototypeOf ||
+            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+            function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
+        return extendStatics(d, b);
+    };
+    return function (d, b) {
+        if (typeof b !== "function" && b !== null)
+            throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 function range(start, end, step) {
     if (end === undefined) {
         end = start;
@@ -135,11 +150,13 @@ var ParseError = /** @class */ (function () {
     };
     return ParseError;
 }());
-var MatchedPairError = /** @class */ (function () {
+var MatchedPairError = /** @class */ (function (_super) {
+    __extends(MatchedPairError, _super);
     function MatchedPairError() {
+        return _super !== null && _super.apply(this, arguments) || this;
     }
     return MatchedPairError;
-}());
+}(ParseError));
 var TokenType = /** @class */ (function () {
     function TokenType() {
     }
@@ -540,7 +557,7 @@ var Lexer = /** @class */ (function () {
                 return [chars.join(""), sawNewline];
             }
         }
-        throw new Error("".concat("Unterminated single quote", " at position ").concat(start));
+        throw new ParseError("".concat("Unterminated single quote", " at position ").concat(start), start);
     };
     Lexer.prototype.IsWordTerminator = function (ctx, ch, bracketDepth, parenDepth) {
         if (ctx === WORD_CTX_REGEX) {
@@ -711,7 +728,7 @@ var Lexer = /** @class */ (function () {
         var wasGtlt = false;
         while (count > 0) {
             if (this.atEnd()) {
-                throw new Error("".concat("unexpected EOF while looking for matching `".concat(closeChar, "'"), " at position ").concat(start));
+                throw new MatchedPairError();
             }
             var ch = this.advance();
             if ((flags & MatchedPairFlags_DOLBRACE) !== 0 && this.DolbraceState === DolbraceState_OP) {
@@ -1095,7 +1112,7 @@ var Lexer = /** @class */ (function () {
                         }
                     }
                     if (this.atEnd()) {
-                        throw new Error("".concat("Unterminated double quote", " at position ").concat(start));
+                        throw new ParseError("".concat("Unterminated double quote", " at position ").concat(start), start);
                     }
                     chars.push(this.advance());
                 }
@@ -1237,7 +1254,7 @@ var Lexer = /** @class */ (function () {
             chars.push(this.advance());
         }
         if (bracketDepth > 0 && bracketStartPos !== -1 && this.atEnd()) {
-            throw new Error("".concat("unexpected EOF looking for `]'", " at position ").concat(bracketStartPos));
+            throw new MatchedPairError();
         }
         if (!(chars.length > 0)) {
             return null;
@@ -1352,7 +1369,7 @@ var Lexer = /** @class */ (function () {
             }
         }
         if (!foundClose) {
-            throw new Error("".concat("unexpected EOF while looking for matching `''", " at position ").concat(start));
+            throw new MatchedPairError();
         }
         var text = Substring(this.source, start, this.pos);
         var content = contentChars.join("");
@@ -1732,7 +1749,7 @@ var Lexer = /** @class */ (function () {
     };
     Lexer.prototype.ReadBracedParam = function (start, inDquote) {
         if (this.atEnd()) {
-            throw new Error("".concat("unexpected EOF looking for `}'", " at position ").concat(start));
+            throw new MatchedPairError();
         }
         var savedDolbrace = this.DolbraceState;
         this.DolbraceState = DolbraceState_PARAM;
@@ -1787,7 +1804,7 @@ var Lexer = /** @class */ (function () {
                 }
                 if (this.atEnd()) {
                     this.DolbraceState = savedDolbrace;
-                    throw new Error("".concat("unexpected EOF looking for `}'", " at position ").concat(start));
+                    throw new MatchedPairError();
                 }
                 this.pos = start + 2;
             }
@@ -1809,7 +1826,7 @@ var Lexer = /** @class */ (function () {
         }
         if (this.atEnd()) {
             this.DolbraceState = savedDolbrace;
-            throw new Error("".concat("unexpected EOF looking for `}'", " at position ").concat(start));
+            throw new MatchedPairError();
         }
         if (this.peek() === "}") {
             this.advance();
@@ -1844,7 +1861,7 @@ var Lexer = /** @class */ (function () {
                     }
                     if (this.atEnd()) {
                         this.DolbraceState = savedDolbrace;
-                        throw new Error("".concat("Unterminated backtick", " at position ").concat(backtickPos));
+                        throw new ParseError("".concat("Unterminated backtick", " at position ").concat(backtickPos), backtickPos);
                     }
                     this.advance();
                     op = "`";
@@ -1880,7 +1897,7 @@ var Lexer = /** @class */ (function () {
         }
         catch (e) {
             this.DolbraceState = savedDolbrace;
-            throw new Error("".concat("", " at position ").concat(0));
+            throw e;
         }
         if ((op === "<" || op === ">") && arg.startsWith("(") && arg.endsWith(")")) {
             var inner = arg.slice(1, arg.length - 1);
@@ -5465,22 +5482,22 @@ var Parser = /** @class */ (function () {
         if (this.peek() === "{") {
             var brace = this.parseBraceGroup();
             if (brace === null) {
-                throw new Error("".concat("Expected brace group body in ".concat(context), " at position ").concat(this.LexPeekToken().pos));
+                throw new ParseError("".concat("Expected brace group body in ".concat(context), " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
             }
             return brace.body;
         }
         if (this.LexConsumeWord("do")) {
             var body = this.parseListUntil(new Set(["done"]));
             if (body === null) {
-                throw new Error("".concat("Expected commands after 'do'", " at position ").concat(this.LexPeekToken().pos));
+                throw new ParseError("".concat("Expected commands after 'do'", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
             }
             this.skipWhitespaceAndNewlines();
             if (!this.LexConsumeWord("done")) {
-                throw new Error("".concat("Expected 'done' to close ".concat(context), " at position ").concat(this.LexPeekToken().pos));
+                throw new ParseError("".concat("Expected 'done' to close ".concat(context), " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
             }
             return body;
         }
-        throw new Error("".concat("Expected 'do' or '{' in ".concat(context), " at position ").concat(this.LexPeekToken().pos));
+        throw new ParseError("".concat("Expected 'do' or '{' in ".concat(context), " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
     };
     Parser.prototype.peekWord = function () {
         var savedPos = this.pos;
@@ -5573,7 +5590,7 @@ var Parser = /** @class */ (function () {
             }
         }
         if (this.atEnd()) {
-            throw new Error("".concat("Unterminated double quote", " at position ").concat(start));
+            throw new ParseError("".concat("Unterminated double quote", " at position ").concat(start), start);
         }
         chars.push(this.advance());
     };
@@ -5690,7 +5707,7 @@ var Parser = /** @class */ (function () {
         this.skipWhitespaceAndNewlines();
         if (this.atEnd() || this.peek() !== "}") {
             this.RestoreParserState(saved);
-            throw new Error("".concat("unexpected EOF looking for `}'", " at position ").concat(start));
+            throw new MatchedPairError();
         }
         this.advance();
         var text = Substring(this.source, start, this.pos);
@@ -5978,7 +5995,7 @@ var Parser = /** @class */ (function () {
             textChars.push(ch);
         }
         if (this.atEnd()) {
-            throw new Error("".concat("Unterminated backtick", " at position ").concat(start));
+            throw new ParseError("".concat("Unterminated backtick", " at position ").concat(start), start);
         }
         this.advance();
         textChars.push("`");
@@ -6026,7 +6043,7 @@ var Parser = /** @class */ (function () {
             }
             this.skipWhitespaceAndNewlines();
             if (this.atEnd() || this.peek() !== ")") {
-                throw new Error("".concat("Invalid process substitution", " at position ").concat(start));
+                throw new ParseError("".concat("Invalid process substitution", " at position ").concat(start), start);
             }
             this.advance();
             var textEnd = this.pos;
@@ -6041,7 +6058,7 @@ var Parser = /** @class */ (function () {
             this.InProcessSub = oldInProcessSub;
             var contentStartChar = start + 2 < this.length ? this.source[start + 2] : "";
             if (" \t\n".includes(contentStartChar)) {
-                throw new Error("".concat("", " at position ").concat(0));
+                throw e;
             }
             this.pos = start + 2;
             this.Lexer.pos = this.pos;
@@ -6064,7 +6081,7 @@ var Parser = /** @class */ (function () {
             this.skipWhitespaceAndNewlines();
             if (this.atEnd()) {
                 this.ClearState(ParserStateFlags_PST_COMPASSIGN);
-                throw new Error("".concat("Unterminated array literal", " at position ").concat(start));
+                throw new ParseError("".concat("Unterminated array literal", " at position ").concat(start), start);
             }
             if (this.peek() === ")") {
                 break;
@@ -6075,13 +6092,13 @@ var Parser = /** @class */ (function () {
                     break;
                 }
                 this.ClearState(ParserStateFlags_PST_COMPASSIGN);
-                throw new Error("".concat("Expected word in array literal", " at position ").concat(this.pos));
+                throw new ParseError("".concat("Expected word in array literal", " at position ").concat(this.pos), this.pos);
             }
             elements.push(word);
         }
         if (this.atEnd() || this.peek() !== ")") {
             this.ClearState(ParserStateFlags_PST_COMPASSIGN);
-            throw new Error("".concat("Expected ) to close array literal", " at position ").concat(this.pos));
+            throw new ParseError("".concat("Expected ) to close array literal", " at position ").concat(this.pos), this.pos);
         }
         this.advance();
         var text = Substring(this.source, start, this.pos);
@@ -6166,7 +6183,7 @@ var Parser = /** @class */ (function () {
         }
         if (depth !== 0) {
             if (this.atEnd()) {
-                throw new Error("".concat("unexpected EOF looking for `))'", " at position ").concat(start));
+                throw new MatchedPairError();
             }
             this.pos = start;
             return [null, ""];
@@ -6598,7 +6615,7 @@ var Parser = /** @class */ (function () {
                             var index = this.ArithParseComma();
                             this.ArithSkipWs();
                             if (!this.ArithConsume("]")) {
-                                throw new Error("".concat("Expected ']' in array subscript", " at position ").concat(this.ArithPos));
+                                throw new ParseError("".concat("Expected ']' in array subscript", " at position ").concat(this.ArithPos), this.ArithPos);
                             }
                             left = new ArithSubscript(left.name, index, "subscript");
                         }
@@ -6623,7 +6640,7 @@ var Parser = /** @class */ (function () {
             var expr = this.ArithParseComma();
             this.ArithSkipWs();
             if (!this.ArithConsume(")")) {
-                throw new Error("".concat("Expected ')' in arithmetic expression", " at position ").concat(this.ArithPos));
+                throw new ParseError("".concat("Expected ')' in arithmetic expression", " at position ").concat(this.ArithPos), this.ArithPos);
             }
             return expr;
         }
@@ -6646,7 +6663,7 @@ var Parser = /** @class */ (function () {
         if (c === "\\") {
             this.ArithAdvance();
             if (this.ArithAtEnd()) {
-                throw new Error("".concat("Unexpected end after backslash in arithmetic", " at position ").concat(this.ArithPos));
+                throw new ParseError("".concat("Unexpected end after backslash in arithmetic", " at position ").concat(this.ArithPos), this.ArithPos);
             }
             var escapedChar = this.ArithAdvance();
             return new ArithEscape(escapedChar, "escape");
@@ -6658,7 +6675,7 @@ var Parser = /** @class */ (function () {
     };
     Parser.prototype.ArithParseExpansion = function () {
         if (!this.ArithConsume("$")) {
-            throw new Error("".concat("Expected '$'", " at position ").concat(this.ArithPos));
+            throw new ParseError("".concat("Expected '$'", " at position ").concat(this.ArithPos), this.ArithPos);
         }
         var c = this.ArithPeek(0);
         if (c === "(") {
@@ -6684,7 +6701,7 @@ var Parser = /** @class */ (function () {
             }
         }
         if (!(nameChars.length > 0)) {
-            throw new Error("".concat("Expected variable name after $", " at position ").concat(this.ArithPos));
+            throw new ParseError("".concat("Expected variable name after $", " at position ").concat(this.ArithPos), this.ArithPos);
         }
         return new ParamExpansion(nameChars.join(""), [], [], "param");
     };
@@ -6845,7 +6862,7 @@ var Parser = /** @class */ (function () {
         }
         var content = Substring(this.ArithSrc, contentStart, this.ArithPos);
         if (!this.ArithConsume("'")) {
-            throw new Error("".concat("Unterminated single quote in arithmetic", " at position ").concat(this.ArithPos));
+            throw new ParseError("".concat("Unterminated single quote in arithmetic", " at position ").concat(this.ArithPos), this.ArithPos);
         }
         return new ArithNumber(content, "number");
     };
@@ -6864,7 +6881,7 @@ var Parser = /** @class */ (function () {
         }
         var content = Substring(this.ArithSrc, contentStart, this.ArithPos);
         if (!this.ArithConsume("\"")) {
-            throw new Error("".concat("Unterminated double quote in arithmetic", " at position ").concat(this.ArithPos));
+            throw new ParseError("".concat("Unterminated double quote in arithmetic", " at position ").concat(this.ArithPos), this.ArithPos);
         }
         return new ArithNumber(content, "number");
     };
@@ -6883,7 +6900,7 @@ var Parser = /** @class */ (function () {
         }
         var content = Substring(this.ArithSrc, contentStart, this.ArithPos);
         if (!this.ArithConsume("`")) {
-            throw new Error("".concat("Unterminated backtick in arithmetic", " at position ").concat(this.ArithPos));
+            throw new ParseError("".concat("Unterminated backtick in arithmetic", " at position ").concat(this.ArithPos), this.ArithPos);
         }
         var subParser = newParser(content, false, this.Extglob);
         var cmd = subParser.parseList(true);
@@ -6922,7 +6939,7 @@ var Parser = /** @class */ (function () {
             }
             return new ArithVar(chars.join(""), "var");
         }
-        throw new Error("".concat("Unexpected character '" + c + "' in arithmetic expression", " at position ").concat(this.ArithPos));
+        throw new ParseError("".concat("Unexpected character '" + c + "' in arithmetic expression", " at position ").concat(this.ArithPos), this.ArithPos);
     };
     Parser.prototype.ParseDeprecatedArithmetic = function () {
         if (this.atEnd() || this.peek() !== "$") {
@@ -7056,7 +7073,7 @@ var Parser = /** @class */ (function () {
             this.skipWhitespace();
             var target = this.parseWord(false, false, false);
             if (target === null) {
-                throw new Error("".concat("Expected target for redirect " + op, " at position ").concat(this.pos));
+                throw new ParseError("".concat("Expected target for redirect " + op, " at position ").concat(this.pos), this.pos);
             }
             return new Redirect(op, target, [], "redirect");
         }
@@ -7174,7 +7191,7 @@ var Parser = /** @class */ (function () {
                             target.parts = innerWord.parts;
                         }
                         else {
-                            throw new Error("".concat("Expected target for redirect " + op, " at position ").concat(this.pos));
+                            throw new ParseError("".concat("Expected target for redirect " + op, " at position ").concat(this.pos), this.pos);
                         }
                     }
                     else {
@@ -7188,7 +7205,7 @@ var Parser = /** @class */ (function () {
                         target.parts = innerWord.parts;
                     }
                     else {
-                        throw new Error("".concat("Expected target for redirect " + op, " at position ").concat(this.pos));
+                        throw new ParseError("".concat("Expected target for redirect " + op, " at position ").concat(this.pos), this.pos);
                     }
                 }
             }
@@ -7209,7 +7226,7 @@ var Parser = /** @class */ (function () {
             }
         }
         if (target === null) {
-            throw new Error("".concat("Expected target for redirect " + op, " at position ").concat(this.pos));
+            throw new ParseError("".concat("Expected target for redirect " + op, " at position ").concat(this.pos), this.pos);
         }
         return new Redirect(op, target, [], "redirect");
     };
@@ -7597,12 +7614,12 @@ var Parser = /** @class */ (function () {
         var body = this.parseList(true);
         if (body === null) {
             this.ClearState(ParserStateFlags_PST_SUBSHELL);
-            throw new Error("".concat("Expected command in subshell", " at position ").concat(this.pos));
+            throw new ParseError("".concat("Expected command in subshell", " at position ").concat(this.pos), this.pos);
         }
         this.skipWhitespace();
         if (this.atEnd() || this.peek() !== ")") {
             this.ClearState(ParserStateFlags_PST_SUBSHELL);
-            throw new Error("".concat("Expected ) to close subshell", " at position ").concat(this.pos));
+            throw new ParseError("".concat("Expected ) to close subshell", " at position ").concat(this.pos), this.pos);
         }
         this.advance();
         this.ClearState(ParserStateFlags_PST_SUBSHELL);
@@ -7679,7 +7696,7 @@ var Parser = /** @class */ (function () {
             }
         }
         if (this.atEnd()) {
-            throw new Error("".concat("unexpected EOF looking for `))'", " at position ").concat(savedPos));
+            throw new MatchedPairError();
         }
         if (depth !== 1) {
             this.pos = savedPos;
@@ -7712,7 +7729,7 @@ var Parser = /** @class */ (function () {
         if (this.atEnd() || this.peek() !== "]" || this.pos + 1 >= this.length || this.source[this.pos + 1] !== "]") {
             this.ClearState(ParserStateFlags_PST_CONDEXPR);
             this.WordContext = WORD_CTX_NORMAL;
-            throw new Error("".concat("Expected ]] to close conditional expression", " at position ").concat(this.pos));
+            throw new ParseError("".concat("Expected ]] to close conditional expression", " at position ").concat(this.pos), this.pos);
         }
         this.advance();
         this.advance();
@@ -7771,7 +7788,7 @@ var Parser = /** @class */ (function () {
     Parser.prototype.ParseCondTerm = function () {
         this.CondSkipWhitespace();
         if (this.CondAtEnd()) {
-            throw new Error("".concat("Unexpected end of conditional expression", " at position ").concat(this.pos));
+            throw new ParseError("".concat("Unexpected end of conditional expression", " at position ").concat(this.pos), this.pos);
         }
         if (this.peek() === "!") {
             if (this.pos + 1 < this.length && !IsWhitespaceNoNewline(this.source[this.pos + 1])) {
@@ -7787,20 +7804,20 @@ var Parser = /** @class */ (function () {
             var inner = this.ParseCondOr();
             this.CondSkipWhitespace();
             if (this.atEnd() || this.peek() !== ")") {
-                throw new Error("".concat("Expected ) in conditional expression", " at position ").concat(this.pos));
+                throw new ParseError("".concat("Expected ) in conditional expression", " at position ").concat(this.pos), this.pos);
             }
             this.advance();
             return new CondParen(inner, "cond-paren");
         }
         var word1 = this.ParseCondWord();
         if (word1 === null) {
-            throw new Error("".concat("Expected word in conditional expression", " at position ").concat(this.pos));
+            throw new ParseError("".concat("Expected word in conditional expression", " at position ").concat(this.pos), this.pos);
         }
         this.CondSkipWhitespace();
         if (COND_UNARY_OPS.has(word1.value)) {
             var operand = this.ParseCondWord();
             if (operand === null) {
-                throw new Error("".concat("Expected operand after " + word1.value, " at position ").concat(this.pos));
+                throw new ParseError("".concat("Expected operand after " + word1.value, " at position ").concat(this.pos), this.pos);
             }
             return new UnaryTest(word1.value, operand, "unary-test");
         }
@@ -7810,7 +7827,7 @@ var Parser = /** @class */ (function () {
                 this.CondSkipWhitespace();
                 var word2 = this.ParseCondWord();
                 if (word2 === null) {
-                    throw new Error("".concat("Expected operand after " + op, " at position ").concat(this.pos));
+                    throw new ParseError("".concat("Expected operand after " + op, " at position ").concat(this.pos), this.pos);
                 }
                 return new BinaryTest(op, word1, word2, "binary-test");
             }
@@ -7825,7 +7842,7 @@ var Parser = /** @class */ (function () {
                     var word2 = this.ParseCondWord();
                 }
                 if (word2 === null) {
-                    throw new Error("".concat("Expected operand after " + opWord.value, " at position ").concat(this.pos));
+                    throw new ParseError("".concat("Expected operand after " + opWord.value, " at position ").concat(this.pos), this.pos);
                 }
                 return new BinaryTest(opWord.value, word1, word2, "binary-test");
             }
@@ -7871,11 +7888,11 @@ var Parser = /** @class */ (function () {
         this.skipWhitespaceAndNewlines();
         var body = this.parseList(true);
         if (body === null) {
-            throw new Error("".concat("Expected command in brace group", " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Expected command in brace group", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         this.skipWhitespace();
         if (!this.LexConsumeWord("}")) {
-            throw new Error("".concat("Expected } to close brace group", " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Expected } to close brace group", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         return new BraceGroup(body, this.CollectRedirects(), "brace-group");
     };
@@ -7886,15 +7903,15 @@ var Parser = /** @class */ (function () {
         }
         var condition = this.parseListUntil(new Set(["then"]));
         if (condition === null) {
-            throw new Error("".concat("Expected condition after 'if'", " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Expected condition after 'if'", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         this.skipWhitespaceAndNewlines();
         if (!this.LexConsumeWord("then")) {
-            throw new Error("".concat("Expected 'then' after if condition", " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Expected 'then' after if condition", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         var thenBody = this.parseListUntil(new Set(["elif", "else", "fi"]));
         if (thenBody === null) {
-            throw new Error("".concat("Expected commands after 'then'", " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Expected commands after 'then'", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         this.skipWhitespaceAndNewlines();
         var elseBody = null;
@@ -7902,15 +7919,15 @@ var Parser = /** @class */ (function () {
             this.LexConsumeWord("elif");
             var elifCondition = this.parseListUntil(new Set(["then"]));
             if (elifCondition === null) {
-                throw new Error("".concat("Expected condition after 'elif'", " at position ").concat(this.LexPeekToken().pos));
+                throw new ParseError("".concat("Expected condition after 'elif'", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
             }
             this.skipWhitespaceAndNewlines();
             if (!this.LexConsumeWord("then")) {
-                throw new Error("".concat("Expected 'then' after elif condition", " at position ").concat(this.LexPeekToken().pos));
+                throw new ParseError("".concat("Expected 'then' after elif condition", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
             }
             var elifThenBody = this.parseListUntil(new Set(["elif", "else", "fi"]));
             if (elifThenBody === null) {
-                throw new Error("".concat("Expected commands after 'then'", " at position ").concat(this.LexPeekToken().pos));
+                throw new ParseError("".concat("Expected commands after 'then'", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
             }
             this.skipWhitespaceAndNewlines();
             var innerElse = null;
@@ -7922,7 +7939,7 @@ var Parser = /** @class */ (function () {
                     this.LexConsumeWord("else");
                     innerElse = this.parseListUntil(new Set(["fi"]));
                     if (innerElse === null) {
-                        throw new Error("".concat("Expected commands after 'else'", " at position ").concat(this.LexPeekToken().pos));
+                        throw new ParseError("".concat("Expected commands after 'else'", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
                     }
                 }
             }
@@ -7933,13 +7950,13 @@ var Parser = /** @class */ (function () {
                 this.LexConsumeWord("else");
                 elseBody = this.parseListUntil(new Set(["fi"]));
                 if (elseBody === null) {
-                    throw new Error("".concat("Expected commands after 'else'", " at position ").concat(this.LexPeekToken().pos));
+                    throw new ParseError("".concat("Expected commands after 'else'", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
                 }
             }
         }
         this.skipWhitespaceAndNewlines();
         if (!this.LexConsumeWord("fi")) {
-            throw new Error("".concat("Expected 'fi' to close if statement", " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Expected 'fi' to close if statement", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         return new If(condition, thenBody, elseBody, this.CollectRedirects(), "if");
     };
@@ -7947,15 +7964,15 @@ var Parser = /** @class */ (function () {
         this.LexConsumeWord("elif");
         var condition = this.parseListUntil(new Set(["then"]));
         if (condition === null) {
-            throw new Error("".concat("Expected condition after 'elif'", " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Expected condition after 'elif'", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         this.skipWhitespaceAndNewlines();
         if (!this.LexConsumeWord("then")) {
-            throw new Error("".concat("Expected 'then' after elif condition", " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Expected 'then' after elif condition", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         var thenBody = this.parseListUntil(new Set(["elif", "else", "fi"]));
         if (thenBody === null) {
-            throw new Error("".concat("Expected commands after 'then'", " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Expected commands after 'then'", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         this.skipWhitespaceAndNewlines();
         var elseBody = null;
@@ -7967,7 +7984,7 @@ var Parser = /** @class */ (function () {
                 this.LexConsumeWord("else");
                 elseBody = this.parseListUntil(new Set(["fi"]));
                 if (elseBody === null) {
-                    throw new Error("".concat("Expected commands after 'else'", " at position ").concat(this.LexPeekToken().pos));
+                    throw new ParseError("".concat("Expected commands after 'else'", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
                 }
             }
         }
@@ -7980,19 +7997,19 @@ var Parser = /** @class */ (function () {
         }
         var condition = this.parseListUntil(new Set(["do"]));
         if (condition === null) {
-            throw new Error("".concat("Expected condition after 'while'", " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Expected condition after 'while'", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         this.skipWhitespaceAndNewlines();
         if (!this.LexConsumeWord("do")) {
-            throw new Error("".concat("Expected 'do' after while condition", " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Expected 'do' after while condition", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         var body = this.parseListUntil(new Set(["done"]));
         if (body === null) {
-            throw new Error("".concat("Expected commands after 'do'", " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Expected commands after 'do'", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         this.skipWhitespaceAndNewlines();
         if (!this.LexConsumeWord("done")) {
-            throw new Error("".concat("Expected 'done' to close while loop", " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Expected 'done' to close while loop", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         return new While(condition, body, this.CollectRedirects(), "while");
     };
@@ -8003,19 +8020,19 @@ var Parser = /** @class */ (function () {
         }
         var condition = this.parseListUntil(new Set(["do"]));
         if (condition === null) {
-            throw new Error("".concat("Expected condition after 'until'", " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Expected condition after 'until'", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         this.skipWhitespaceAndNewlines();
         if (!this.LexConsumeWord("do")) {
-            throw new Error("".concat("Expected 'do' after until condition", " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Expected 'do' after until condition", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         var body = this.parseListUntil(new Set(["done"]));
         if (body === null) {
-            throw new Error("".concat("Expected commands after 'do'", " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Expected commands after 'do'", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         this.skipWhitespaceAndNewlines();
         if (!this.LexConsumeWord("done")) {
-            throw new Error("".concat("Expected 'done' to close until loop", " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Expected 'done' to close until loop", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         return new Until(condition, body, this.CollectRedirects(), "until");
     };
@@ -8031,14 +8048,14 @@ var Parser = /** @class */ (function () {
         if (this.peek() === "$") {
             var varWord = this.parseWord(false, false, false);
             if (varWord === null) {
-                throw new Error("".concat("Expected variable name after 'for'", " at position ").concat(this.LexPeekToken().pos));
+                throw new ParseError("".concat("Expected variable name after 'for'", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
             }
             var varName = varWord.value;
         }
         else {
             var varName = this.peekWord();
             if (varName === "") {
-                throw new Error("".concat("Expected variable name after 'for'", " at position ").concat(this.LexPeekToken().pos));
+                throw new ParseError("".concat("Expected variable name after 'for'", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
             }
             this.consumeWord(varName);
         }
@@ -8073,7 +8090,7 @@ var Parser = /** @class */ (function () {
                     if (sawDelimiter) {
                         break;
                     }
-                    throw new Error("".concat("Expected ';' or newline before 'do'", " at position ").concat(this.LexPeekToken().pos));
+                    throw new ParseError("".concat("Expected ';' or newline before 'do'", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
                 }
                 var word = this.parseWord(false, false, false);
                 if (word === null) {
@@ -8086,20 +8103,20 @@ var Parser = /** @class */ (function () {
         if (this.peek() === "{") {
             var braceGroup = this.parseBraceGroup();
             if (braceGroup === null) {
-                throw new Error("".concat("Expected brace group in for loop", " at position ").concat(this.LexPeekToken().pos));
+                throw new ParseError("".concat("Expected brace group in for loop", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
             }
             return new For(varName, words, braceGroup.body, this.CollectRedirects(), "for");
         }
         if (!this.LexConsumeWord("do")) {
-            throw new Error("".concat("Expected 'do' in for loop", " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Expected 'do' in for loop", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         var body = this.parseListUntil(new Set(["done"]));
         if (body === null) {
-            throw new Error("".concat("Expected commands after 'do'", " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Expected commands after 'do'", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         this.skipWhitespaceAndNewlines();
         if (!this.LexConsumeWord("done")) {
-            throw new Error("".concat("Expected 'done' to close for loop", " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Expected 'done' to close for loop", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         return new For(varName, words, body, this.CollectRedirects(), "for");
     };
@@ -8146,7 +8163,7 @@ var Parser = /** @class */ (function () {
             }
         }
         if (parts.length !== 3) {
-            throw new Error("".concat("Expected three expressions in for ((;;))", " at position ").concat(this.pos));
+            throw new ParseError("".concat("Expected three expressions in for ((;;))", " at position ").concat(this.pos), this.pos);
         }
         var init = parts[0];
         var cond = parts[1];
@@ -8167,7 +8184,7 @@ var Parser = /** @class */ (function () {
         this.skipWhitespace();
         var varName = this.peekWord();
         if (varName === "") {
-            throw new Error("".concat("Expected variable name after 'select'", " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Expected variable name after 'select'", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         this.consumeWord(varName);
         this.skipWhitespace();
@@ -8221,11 +8238,11 @@ var Parser = /** @class */ (function () {
         this.skipWhitespace();
         var word = this.parseWord(false, false, false);
         if (word === null) {
-            throw new Error("".concat("Expected word after 'case'", " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Expected word after 'case'", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         this.skipWhitespaceAndNewlines();
         if (!this.LexConsumeWord("in")) {
-            throw new Error("".concat("Expected 'in' after case word", " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Expected 'in' after case word", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         this.skipWhitespaceAndNewlines();
         var patterns = [];
@@ -8435,7 +8452,7 @@ var Parser = /** @class */ (function () {
             }
             var pattern = patternChars.join("");
             if (!(pattern !== "")) {
-                throw new Error("".concat("Expected pattern in case statement", " at position ").concat(this.LexPeekToken().pos));
+                throw new ParseError("".concat("Expected pattern in case statement", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
             }
             this.skipWhitespace();
             var body = null;
@@ -8458,7 +8475,7 @@ var Parser = /** @class */ (function () {
         this.skipWhitespaceAndNewlines();
         if (!this.LexConsumeWord("esac")) {
             this.ClearState(ParserStateFlags_PST_CASESTMT);
-            throw new Error("".concat("Expected 'esac' to close case statement", " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Expected 'esac' to close case statement", " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         this.ClearState(ParserStateFlags_PST_CASESTMT);
         return new Case(word, patterns, this.CollectRedirects(), "case");
@@ -8549,7 +8566,7 @@ var Parser = /** @class */ (function () {
         if (body !== null) {
             return new Coproc(body, name, "coproc");
         }
-        throw new Error("".concat("Expected command after coproc", " at position ").concat(this.pos));
+        throw new ParseError("".concat("Expected command after coproc", " at position ").concat(this.pos), this.pos);
     };
     Parser.prototype.parseFunction = function () {
         this.skipWhitespace();
@@ -8576,7 +8593,7 @@ var Parser = /** @class */ (function () {
             this.skipWhitespaceAndNewlines();
             var body = this.ParseCompoundCommand();
             if (body === null) {
-                throw new Error("".concat("Expected function body", " at position ").concat(this.pos));
+                throw new ParseError("".concat("Expected function body", " at position ").concat(this.pos), this.pos);
             }
             return new FunctionName(name, body, "function");
         }
@@ -8635,7 +8652,7 @@ var Parser = /** @class */ (function () {
         this.skipWhitespaceAndNewlines();
         var body = this.ParseCompoundCommand();
         if (body === null) {
-            throw new Error("".concat("Expected function body", " at position ").concat(this.pos));
+            throw new ParseError("".concat("Expected function body", " at position ").concat(this.pos), this.pos);
         }
         return new FunctionName(name, body, "function");
     };
@@ -8775,7 +8792,7 @@ var Parser = /** @class */ (function () {
             }
             pipeline = this.parsePipeline();
             if (pipeline === null) {
-                throw new Error("".concat("Expected command after " + op, " at position ").concat(this.pos));
+                throw new ParseError("".concat("Expected command after " + op, " at position ").concat(this.pos), this.pos);
             }
             parts.push(pipeline);
         }
@@ -8822,7 +8839,7 @@ var Parser = /** @class */ (function () {
             }
         }
         if (reserved === "fi" || reserved === "then" || reserved === "elif" || reserved === "else" || reserved === "done" || reserved === "esac" || reserved === "do" || reserved === "in") {
-            throw new Error("".concat("Unexpected reserved word '".concat(reserved, "'"), " at position ").concat(this.LexPeekToken().pos));
+            throw new ParseError("".concat("Unexpected reserved word '".concat(reserved, "'"), " at position ").concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
         }
         if (reserved === "if") {
             return this.parseIf();
@@ -8985,7 +9002,7 @@ var Parser = /** @class */ (function () {
             }
             cmd = this.parseCompoundCommand();
             if (cmd === null) {
-                throw new Error("".concat("Expected command after |", " at position ").concat(this.pos));
+                throw new ParseError("".concat("Expected command after |", " at position ").concat(this.pos), this.pos);
             }
             commands.push(cmd);
         }
@@ -9114,7 +9131,7 @@ var Parser = /** @class */ (function () {
             }
             pipeline = this.parsePipeline();
             if (pipeline === null) {
-                throw new Error("".concat("Expected command after " + op, " at position ").concat(this.pos));
+                throw new ParseError("".concat("Expected command after " + op, " at position ").concat(this.pos), this.pos);
             }
             parts.push(pipeline);
             if (this.InState(ParserStateFlags_PST_EOFTOKEN) && this.AtEofToken()) {
@@ -9174,7 +9191,7 @@ var Parser = /** @class */ (function () {
                 this.skipWhitespace();
             }
             if (!foundNewline && !this.atEnd()) {
-                throw new Error("".concat("Syntax error", " at position ").concat(this.pos));
+                throw new ParseError("".concat("Syntax error", " at position ").concat(this.pos), this.pos);
             }
         }
         if (!(results.length > 0)) {

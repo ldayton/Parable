@@ -6339,10 +6339,10 @@ var Parser = /** @class */ (function () {
         return left;
     };
     Parser.prototype.ArithParseLogicalOr = function () {
-        return this.ArithParseLeftAssoc(["||"], this.ArithParseLogicalAnd);
+        return this.ArithParseLeftAssoc(["||"], this.ArithParseLogicalAnd.bind(this));
     };
     Parser.prototype.ArithParseLogicalAnd = function () {
-        return this.ArithParseLeftAssoc(["&&"], this.ArithParseBitwiseOr);
+        return this.ArithParseLeftAssoc(["&&"], this.ArithParseBitwiseOr.bind(this));
     };
     Parser.prototype.ArithParseBitwiseOr = function () {
         var left = this.ArithParseBitwiseXor();
@@ -6393,7 +6393,7 @@ var Parser = /** @class */ (function () {
         return left;
     };
     Parser.prototype.ArithParseEquality = function () {
-        return this.ArithParseLeftAssoc(["==", "!="], this.ArithParseComparison);
+        return this.ArithParseLeftAssoc(["==", "!="], this.ArithParseComparison.bind(this));
     };
     Parser.prototype.ArithParseComparison = function () {
         var left = this.ArithParseShift();

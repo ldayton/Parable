@@ -93,6 +93,7 @@ class TsBackend:
         self.indent = 0
         self.lines: list[str] = []
         self.receiver_name: str | None = None
+        self.current_struct: str | None = None  # Track current struct for method binding
         self.struct_fields: dict[str, list[str]] = {}  # struct name -> field names in order
 
     def emit(self, module: Module) -> str:
@@ -210,10 +211,12 @@ class TsBackend:
             self._line("return this.kind;")
             self.indent -= 1
             self._line("}")
+        self.current_struct = struct.name
         for i, method in enumerate(struct.methods):
             if i > 0 or struct.fields:
                 self._line()
             self._emit_method(method)
+        self.current_struct = None
         self.indent -= 1
         self._line("}")
 
@@ -563,7 +566,16 @@ class TsBackend:
                 # Tuple field access: F0, F1, etc. → [0], [1], etc.
                 if field.startswith("F") and field[1:].isdigit():
                     return f"{self._expr(obj)}[{field[1:]}]"
-                return f"{self._expr(obj)}.{_camel(field)}"
+                obj_str = self._expr(obj)
+                field_str = _camel(field)
+                # Check if this is a method reference on 'this' (needs .bind(this))
+                # If accessing 'this.method' where method is not a struct field,
+                # it's a method reference being passed as a callback
+                if (obj_str == "this" and
+                    self.current_struct is not None and
+                    field not in self.struct_fields.get(self.current_struct, [])):
+                    return f"{obj_str}.{field_str}.bind(this)"
+                return f"{obj_str}.{field_str}"
             case Index(obj=obj, index=index, typ=typ):
                 obj_str = self._expr(obj)
                 idx_str = self._expr(index)

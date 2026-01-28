@@ -6303,11 +6303,11 @@ class Parser {
   }
 
   ArithParseLogicalOr(): Node {
-    return this.ArithParseLeftAssoc(["||"], this.ArithParseLogicalAnd);
+    return this.ArithParseLeftAssoc(["||"], this.ArithParseLogicalAnd.bind(this));
   }
 
   ArithParseLogicalAnd(): Node {
-    return this.ArithParseLeftAssoc(["&&"], this.ArithParseBitwiseOr);
+    return this.ArithParseLeftAssoc(["&&"], this.ArithParseBitwiseOr.bind(this));
   }
 
   ArithParseBitwiseOr(): Node {
@@ -6359,7 +6359,7 @@ class Parser {
   }
 
   ArithParseEquality(): Node {
-    return this.ArithParseLeftAssoc(["==", "!="], this.ArithParseComparison);
+    return this.ArithParseLeftAssoc(["==", "!="], this.ArithParseComparison.bind(this));
   }
 
   ArithParseComparison(): Node {

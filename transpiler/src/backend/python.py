@@ -565,6 +565,12 @@ class PythonBackend:
                 left_str = self._maybe_paren(left, op, is_left=True)
                 right_str = self._maybe_paren(right, op, is_left=False)
                 return f"{left_str} {py_op} {right_str}"
+            case UnaryOp(op="!", operand=BinaryOp(op=">", left=Len(expr=inner), right=IntLit(value=0))):
+                # Convert !(len(x) > 0) back to "not x" for Python
+                return f"not {self._expr(inner)}"
+            case UnaryOp(op="!", operand=BinaryOp(op="!=", left=left, right=StringLit(value=""))):
+                # Convert !(x != "") back to "not x" for Python
+                return f"not {self._expr(left)}"
             case UnaryOp(op=op, operand=operand):
                 py_op = _unary_op(op)
                 # For 'not', wrap compound expressions in parens for correct precedence

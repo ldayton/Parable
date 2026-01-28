@@ -750,7 +750,7 @@ class Lexer:
                         bracket_depth += 1
                         chars.append(self.advance())
                         continue
-                if not (chars) and not seen_equals and in_array_literal:
+                if not chars and not seen_equals and in_array_literal:
                     bracket_start_pos = self.pos
                     bracket_depth += 1
                     chars.append(self.advance())
@@ -931,7 +931,7 @@ class Lexer:
                 chars.append(")")
                 continue
             if ctx == WORD_CTX_NORMAL and (self._parser_state & ParserStateFlags_PST_EOFTOKEN) and self._eof_token and ch == self._eof_token and bracket_depth == 0:
-                if not (chars):
+                if not chars:
                     chars.append(self.advance())
                 break
             if ctx == WORD_CTX_NORMAL and _is_metachar(ch) and bracket_depth == 0:
@@ -939,7 +939,7 @@ class Lexer:
             chars.append(self.advance())
         if bracket_depth > 0 and bracket_start_pos != -1 and self.at_end():
             raise MatchedPairError("unexpected EOF looking for `]'", bracket_start_pos)
-        if not (chars):
+        if not chars:
             return None
         if parts:
             return Word(value="".join(chars), parts=parts, kind="word")
@@ -1354,7 +1354,7 @@ class Lexer:
             else:
                 self.pos = start + 2
         param = self._consume_param_name()
-        if not (param):
+        if not param:
             if not self.at_end() and ((self.peek() in "-=+?") or self.peek() == ":" and self.pos + 1 < self.length and _is_simple_param_op(self.source[self.pos + 1])):
                 param = ""
             else:
@@ -1533,7 +1533,7 @@ class Word(Node):
         return "".join(result)
 
     def _sh_single_quote(self, s: str) -> str:
-        if not (s):
+        if not s:
             return "''"
         if s == "'":
             return "\\'"
@@ -1567,7 +1567,7 @@ class Word(Node):
                         hex_str = _substring(inner, i + 3, j)
                         if j < len(inner) and inner[j] == "}":
                             j += 1
-                        if not (hex_str):
+                        if not hex_str:
                             return result
                         byte_val = _parseInt(hex_str, 16) & 255
                         if byte_val == 0:
@@ -2246,7 +2246,7 @@ class Word(Node):
             else:
                 idx += 1
         has_param_with_procsub_pattern = ("${" in value) and (("<(" in value) or (">(" in value))
-        if not (cmdsub_parts) and not (procsub_parts) and not has_brace_cmdsub and not has_untracked_cmdsub and not has_untracked_procsub and not has_param_with_procsub_pattern:
+        if not cmdsub_parts and not procsub_parts and not has_brace_cmdsub and not has_untracked_cmdsub and not has_untracked_procsub and not has_param_with_procsub_pattern:
             return value
         result = []
         i = 0
@@ -2356,7 +2356,7 @@ class Word(Node):
                     prefix = "${|" if has_pipe else "${ "
                     orig_inner = _substring(value, i + 2, j - 1)
                     ends_with_newline = orig_inner.endswith("\n")
-                    if not (formatted) or formatted.isspace():
+                    if not formatted or formatted.isspace():
                         suffix = "}"
                     elif formatted.endswith("&") or formatted.endswith("& "):
                         suffix = " }" if formatted.endswith("&") else "}"
@@ -2632,7 +2632,7 @@ class Command(Node):
         for r in (self.redirects or []):
             parts.append(r.to_sexp())
         inner = " ".join(parts)
-        if not (inner):
+        if not inner:
             return "(command)"
         return "(command " + inner + ")"
 
@@ -2741,7 +2741,7 @@ class List(Node):
             seg = _sublist(parts, start, len(parts))
             if seg and seg[0].kind != "operator":
                 segments.append(seg)
-            if not (segments):
+            if not segments:
                 return "()"
             result = self._to_sexp_amp_and_higher(segments[0], op_names)
             for i in range(1, len(segments)):
@@ -3533,7 +3533,7 @@ class Array(Node):
     kind: str = ""
 
     def to_sexp(self) -> str:
-        if not (self.elements):
+        if not self.elements:
             return "(array)"
         parts = []
         for e in (self.elements or []):
@@ -4764,12 +4764,12 @@ class Parser:
             ch = self._arith_peek(0)
             if ch.isalnum() or ch == "_":
                 name_chars.append(self._arith_advance())
-            elif (_is_special_param_or_digit(ch) or ch == "#") and not (name_chars):
+            elif (_is_special_param_or_digit(ch) or ch == "#") and not name_chars:
                 name_chars.append(self._arith_advance())
                 break
             else:
                 break
-        if not (name_chars):
+        if not name_chars:
             raise ParseError("Expected variable name after $", self._arith_pos)
         return ParamExpansion(param="".join(name_chars), kind="param")
 
@@ -5394,11 +5394,11 @@ class Parser:
                     all_assignments = False
                     break
             in_assign_builtin = words and (words[0].value in ASSIGNMENT_BUILTINS)
-            word = self.parse_word(not (words) or all_assignments and not redirects, False, in_assign_builtin)
+            word = self.parse_word(not words or all_assignments and not redirects, False, in_assign_builtin)
             if word is None:
                 break
             words.append(word)
-        if not (words) and not (redirects):
+        if not words and not redirects:
             return None
         return Command(words=words, redirects=redirects, kind="command")
 
@@ -6014,7 +6014,7 @@ class Parser:
                 else:
                     pattern_chars.append(self.advance())
             pattern = "".join(pattern_chars)
-            if not (pattern):
+            if not pattern:
                 raise ParseError("Expected pattern in case statement", self._lex_peek_token().pos)
             self.skip_whitespace()
             body = None
@@ -6131,7 +6131,7 @@ class Parser:
         while not self.at_end() and not _is_metachar(self.peek()) and not _is_quote(self.peek()) and not _is_paren(self.peek()):
             self.advance()
         name = _substring(self.source, name_start, self.pos)
-        if not (name):
+        if not name:
             self.pos = saved_pos
             return None
         brace_depth = 0
@@ -6524,7 +6524,7 @@ class Parser:
 
     def parse(self) -> list[Node]:
         source = self.source.strip()
-        if not (source):
+        if not source:
             return [Empty(kind="empty")]
         results = []
         while True:
@@ -6552,7 +6552,7 @@ class Parser:
                 self.skip_whitespace()
             if not found_newline and not self.at_end():
                 raise ParseError("Syntax error", self.pos)
-        if not (results):
+        if not results:
             return [Empty(kind="empty")]
         if self._saw_newline_in_single_quote and self.source and self.source[-1] == "\\" and not (len(self.source) >= 3 and self.source[len(self.source) - 3:-1] == "\\\n"):
             if not self._last_word_on_own_line(results):
@@ -6563,13 +6563,13 @@ class Parser:
         return len(nodes) >= 2
 
     def _strip_trailing_backslash_from_last_word(self, nodes: list[Node]) -> None:
-        if not (nodes):
+        if not nodes:
             return
         last_node = nodes[-1]
         last_word = self._find_last_word(last_node)
         if last_word is not None and last_word.value.endswith("\\"):
             last_word.value = _substring(last_word.value, 0, len(last_word.value) - 1)
-            if not (last_word.value) and isinstance(last_node, Command) and last_node.words:
+            if not last_word.value and isinstance(last_node, Command) and last_node.words:
                 last_node.words.pop()
 
     def _find_last_word(self, node: Node) -> Word:
@@ -7611,7 +7611,7 @@ def _skip_heredoc(value: str, start: int) -> int:
 
 
 def _find_heredoc_content_end(source: str, start: int, delimiters: list[tuple[str, bool]]) -> tuple[int, int]:
-    if not (delimiters):
+    if not delimiters:
         return (start, start)
     pos = start
     while pos < len(source) and source[pos] != "\n":
@@ -7867,7 +7867,7 @@ def _skip_subscript(s: str, start: int, flags: int) -> int:
 
 
 def _assignment(s: str, flags: int) -> int:
-    if not (s):
+    if not s:
         return -1
     if not (s[0].isalpha() or s[0] == "_"):
         return -1
@@ -7898,7 +7898,7 @@ def _assignment(s: str, flags: int) -> int:
 
 
 def _is_array_assignment_prefix(chars: list[str]) -> bool:
-    if not (chars):
+    if not chars:
         return False
     if not (chars[0].isalpha() or chars[0] == "_"):
         return False
@@ -7983,7 +7983,7 @@ def _looks_like_assignment(s: str) -> bool:
 
 
 def _is_valid_identifier(name: str) -> bool:
-    if not (name):
+    if not name:
         return False
     if not (name[0].isalpha() or name[0] == "_"):
         return False

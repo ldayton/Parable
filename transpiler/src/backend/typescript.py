@@ -303,9 +303,10 @@ class TsBackend:
     def _emit_stmt(self, stmt: Stmt) -> None:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value):
-                # Use var with 'any' type for function-scoped semantics (matches Python/Go)
-                # The 'any' type prevents TypeScript errors when same var is re-declared
-                # with a different inferred type in a different branch
+                # Use var for function-scoped semantics (matches Python/Go)
+                # Use any type because same variable may be re-declared with a
+                # different inferred type in another branch (TypeScript var
+                # requires all declarations to have the same type)
                 if value is not None:
                     val = self._expr(value)
                     self._line(f"var {_camel(name)}: any = {val};")
@@ -315,20 +316,29 @@ class TsBackend:
                 lv = self._lvalue(target)
                 val = self._expr(value)
                 if getattr(stmt, 'is_declaration', False):
-                    # Use var with any type for function-scoped semantics
+                    # Use var for function-scoped semantics; use 'any' type because
+                    # the same variable may be re-assigned with different types in
+                    # different branches (TypeScript var requires consistent types)
                     self._line(f"var {lv}: any = {val};")
                 else:
                     self._line(f"{lv} = {val};")
             case TupleAssign(targets=targets, value=value):
                 lvalues = ", ".join(self._lvalue(t) for t in targets)
                 val = self._expr(value)
+                value_type = getattr(value, 'typ', None)
                 if getattr(stmt, 'is_declaration', False):
-                    # Use var with any type for function-scoped semantics
-                    self._line(f"var [{lvalues}]: any = {val};")
+                    # Use var for function-scoped semantics, with tuple element types
+                    # This is safe because tuple destructuring assigns all at once
+                    if isinstance(value_type, Tuple) and value_type.elements:
+                        elem_types = ", ".join(self._type(t) for t in value_type.elements)
+                        self._line(f"var [{lvalues}]: [{elem_types}] = {val};")
+                    else:
+                        self._line(f"var [{lvalues}] = {val};")
                 else:
                     # Check for new_targets - variables that need pre-declaration
                     new_targets = getattr(stmt, 'new_targets', [])
                     for name in new_targets:
+                        # Use any - variable may have different types in different branches
                         self._line(f"var {_camel(name)}: any;")
                     self._line(f"[{lvalues}] = {val};")
             case OpAssign(target=target, op=op, value=value):
@@ -476,12 +486,19 @@ class TsBackend:
         body: list[Stmt],
     ) -> None:
         iter_expr = self._expr(iterable)
+        iter_type = getattr(iterable, 'typ', None)
+        elem_type = self._element_type(iter_type)
+        is_string = isinstance(iter_type, Primitive) and iter_type.kind == "string"
         if index is not None and value is not None:
             self._line(f"for (let {_camel(index)} = 0; {_camel(index)} < {iter_expr}.length; {_camel(index)}++) {{")
             self.indent += 1
-            self._line(f"const {_camel(value)} = {iter_expr}[{_camel(index)}];")
+            self._line(f"const {_camel(value)}: {elem_type} = {iter_expr}[{_camel(index)}];")
         elif value is not None:
-            self._line(f"for (const {_camel(value)} of {iter_expr}) {{")
+            # Don't cast strings - they already iterate correctly in TypeScript
+            if is_string or elem_type == "any":
+                self._line(f"for (const {_camel(value)} of {iter_expr}) {{")
+            else:
+                self._line(f"for (const {_camel(value)} of {iter_expr} as {elem_type}[]) {{")
             self.indent += 1
         elif index is not None:
             self._line(f"for (let {_camel(index)} = 0; {_camel(index)} < {iter_expr}.length; {_camel(index)}++) {{")
@@ -514,7 +531,6 @@ class TsBackend:
     def _stmt_inline(self, stmt: Stmt) -> str:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value):
-                # Use var with any type for function-scoped semantics
                 if value is not None:
                     return f"var {_camel(name)}: any = {self._expr(value)}"
                 return f"var {_camel(name)}: any"
@@ -524,7 +540,7 @@ class TsBackend:
                 lv = self._lvalue(target)
                 val = self._expr(value)
                 if getattr(stmt, 'is_declaration', False):
-                    # Use var with any type for function-scoped semantics
+                    # Use any - same variable may have different types in different branches
                     return f"var {lv}: any = {val}"
                 return f"{lv} = {val}"
             case OpAssign(target=target, op=op, value=value):
@@ -911,6 +927,22 @@ class TsBackend:
                 return _safe_name(name)
             case _:
                 return self._type(typ)
+
+    def _element_type(self, typ: Type | None) -> str:
+        """Get element type for arrays/slices, returning 'any' if unknown."""
+        if typ is None:
+            return "any"
+        match typ:
+            case Optional(inner=inner):
+                return self._element_type(inner)
+            case Slice(element=element):
+                return self._type(element)
+            case Array(element=element):
+                return self._type(element)
+            case Primitive(kind="string"):
+                return "string"  # Iterating over string yields characters
+            case _:
+                return "any"
 
 
 def _primitive_type(kind: str) -> str:

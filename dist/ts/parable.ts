@@ -300,7 +300,7 @@ class ContextStack {
 
   copyStack(): ParseContext[] {
     var result: any = [];
-    for (const ctx of this.Stack) {
+    for (const ctx of this.Stack as ParseContext[]) {
       result.push(ctx.copy());
     }
     return result;
@@ -308,7 +308,7 @@ class ContextStack {
 
   restoreFrom(savedStack: ParseContext[]): void {
     var result: any = [];
-    for (const ctx of savedStack) {
+    for (const ctx of savedStack as ParseContext[]) {
       result.push(ctx.copy());
     }
     this.Stack = result;
@@ -840,7 +840,7 @@ class Lexer {
           this.pos -= 1;
           this.SyncToParser();
           var inDquote: any = (flags & MatchedPairFlags_DQUOTE) !== 0;
-          var [paramNode, paramText]: any = this.Parser.ParseParamExpansion(inDquote);
+          var [paramNode, paramText]: [Node, string] = this.Parser.ParseParamExpansion(inDquote);
           this.SyncFromParser();
           if (paramNode !== null) {
             chars.push(paramText);
@@ -857,7 +857,7 @@ class Lexer {
             this.pos -= 1;
             this.SyncToParser();
             if (this.pos + 2 < this.length && this.source[this.pos + 2] === "(") {
-              var [arithNode, arithText]: any = this.Parser.ParseArithmeticExpansion();
+              var [arithNode, arithText]: [Node, string] = this.Parser.ParseArithmeticExpansion();
               this.SyncFromParser();
               if (arithNode !== null) {
                 chars.push(arithText);
@@ -865,7 +865,7 @@ class Lexer {
                 wasGtlt = false;
               } else {
                 this.SyncToParser();
-                var [cmdNode, cmdText]: any = this.Parser.ParseCommandSubstitution();
+                var [cmdNode, cmdText]: [Node, string] = this.Parser.ParseCommandSubstitution();
                 this.SyncFromParser();
                 if (cmdNode !== null) {
                   chars.push(cmdText);
@@ -879,7 +879,7 @@ class Lexer {
                 }
               }
             } else {
-              var [cmdNode, cmdText]: any = this.Parser.ParseCommandSubstitution();
+              var [cmdNode, cmdText]: [Node, string] = this.Parser.ParseCommandSubstitution();
               this.SyncFromParser();
               if (cmdNode !== null) {
                 chars.push(cmdText);
@@ -897,7 +897,7 @@ class Lexer {
             if (nextCh === "[") {
               this.pos -= 1;
               this.SyncToParser();
-              var [arithNode, arithText]: any = this.Parser.ParseDeprecatedArithmetic();
+              var [arithNode, arithText]: [Node, string] = this.Parser.ParseDeprecatedArithmetic();
               this.SyncFromParser();
               if (arithNode !== null) {
                 chars.push(arithText);
@@ -920,7 +920,7 @@ class Lexer {
         }
         this.pos -= 1;
         this.SyncToParser();
-        var [procsubNode, procsubText]: any = this.Parser.ParseProcessSubstitution();
+        var [procsubNode, procsubText]: [Node, string] = this.Parser.ParseProcessSubstitution();
         this.SyncFromParser();
         if (procsubNode !== null) {
           chars.push(procsubText);
@@ -1077,7 +1077,7 @@ class Lexer {
               } else {
                 if (c === "`") {
                   this.SyncToParser();
-                  var [cmdsubResult0, cmdsubResult1]: any = this.Parser.ParseBacktickSubstitution();
+                  var [cmdsubResult0, cmdsubResult1]: [Node, string] = this.Parser.ParseBacktickSubstitution();
                   this.SyncFromParser();
                   if (cmdsubResult0 !== null) {
                     parts.push(cmdsubResult0);
@@ -1115,7 +1115,7 @@ class Lexer {
         continue;
       }
       if (ctx !== WORD_CTX_REGEX && ch === "$" && this.pos + 1 < this.length && this.source[this.pos + 1] === "'") {
-        var [ansiResult0, ansiResult1]: any = this.ReadAnsiCQuote();
+        var [ansiResult0, ansiResult1]: [Node, string] = this.ReadAnsiCQuote();
         if (ansiResult0 !== null) {
           parts.push(ansiResult0);
           chars.push(ansiResult1);
@@ -1125,7 +1125,7 @@ class Lexer {
         continue;
       }
       if (ctx !== WORD_CTX_REGEX && ch === "$" && this.pos + 1 < this.length && this.source[this.pos + 1] === "\"") {
-        var [localeResult0, localeResult1, localeResult2]: any = this.ReadLocaleString();
+        var [localeResult0, localeResult1, localeResult2]: [Node, string, Node[]] = this.ReadLocaleString();
         if (localeResult0 !== null) {
           parts.push(localeResult0);
           parts.push(...localeResult2);
@@ -1153,7 +1153,7 @@ class Lexer {
       }
       if (ctx !== WORD_CTX_REGEX && ch === "`") {
         this.SyncToParser();
-        var [cmdsubResult0, cmdsubResult1]: any = this.Parser.ParseBacktickSubstitution();
+        var [cmdsubResult0, cmdsubResult1]: [Node, string] = this.Parser.ParseBacktickSubstitution();
         this.SyncFromParser();
         if (cmdsubResult0 !== null) {
           parts.push(cmdsubResult0);
@@ -1165,7 +1165,7 @@ class Lexer {
       }
       if (ctx !== WORD_CTX_REGEX && IsRedirectChar(ch) && this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
         this.SyncToParser();
-        var [procsubResult0, procsubResult1]: any = this.Parser.ParseProcessSubstitution();
+        var [procsubResult0, procsubResult1]: [Node, string] = this.Parser.ParseProcessSubstitution();
         this.SyncFromParser();
         if (procsubResult0 !== null) {
           parts.push(procsubResult0);
@@ -1193,7 +1193,7 @@ class Lexer {
         }
         if (isArrayAssign && (atCommandStart || inAssignBuiltin)) {
           this.SyncToParser();
-          var [arrayResult0, arrayResult1]: any = this.Parser.ParseArrayLiteral();
+          var [arrayResult0, arrayResult1]: [Node, string] = this.Parser.ParseArrayLiteral();
           this.SyncFromParser();
           if (arrayResult0 !== null) {
             parts.push(arrayResult0);
@@ -1393,14 +1393,14 @@ class Lexer {
         } else {
           if (ch === "$" && this.pos + 2 < this.length && this.source[this.pos + 1] === "(" && this.source[this.pos + 2] === "(") {
             this.SyncToParser();
-            var [arithNode, arithText]: any = this.Parser.ParseArithmeticExpansion();
+            var [arithNode, arithText]: [Node, string] = this.Parser.ParseArithmeticExpansion();
             this.SyncFromParser();
             if (arithNode !== null) {
               innerParts.push(arithNode);
               contentChars.push(arithText);
             } else {
               this.SyncToParser();
-              var [cmdsubNode, cmdsubText]: any = this.Parser.ParseCommandSubstitution();
+              var [cmdsubNode, cmdsubText]: [Node, string] = this.Parser.ParseCommandSubstitution();
               this.SyncFromParser();
               if (cmdsubNode !== null) {
                 innerParts.push(cmdsubNode);
@@ -1412,7 +1412,7 @@ class Lexer {
           } else {
             if (IsExpansionStart(this.source, this.pos, "$(")) {
               this.SyncToParser();
-              var [cmdsubNode, cmdsubText]: any = this.Parser.ParseCommandSubstitution();
+              var [cmdsubNode, cmdsubText]: [Node, string] = this.Parser.ParseCommandSubstitution();
               this.SyncFromParser();
               if (cmdsubNode !== null) {
                 innerParts.push(cmdsubNode);
@@ -1423,7 +1423,7 @@ class Lexer {
             } else {
               if (ch === "$") {
                 this.SyncToParser();
-                var [paramNode, paramText]: any = this.Parser.ParseParamExpansion(false);
+                var [paramNode, paramText]: [Node, string] = this.Parser.ParseParamExpansion(false);
                 this.SyncFromParser();
                 if (paramNode !== null) {
                   innerParts.push(paramNode);
@@ -1434,7 +1434,7 @@ class Lexer {
               } else {
                 if (ch === "`") {
                   this.SyncToParser();
-                  var [cmdsubNode, cmdsubText]: any = this.Parser.ParseBacktickSubstitution();
+                  var [cmdsubNode, cmdsubText]: [Node, string] = this.Parser.ParseBacktickSubstitution();
                   this.SyncFromParser();
                   if (cmdsubNode !== null) {
                     innerParts.push(cmdsubNode);
@@ -2307,14 +2307,14 @@ class Word implements Node {
                       if (opStart.startsWith("@") && opStart.length > 1) {
                         opStart = opStart.slice(1);
                       }
-                      for (const op of ["//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"]) {
+                      for (const op of ["//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"] as string[]) {
                         if (opStart.startsWith(op)) {
                           inPattern = true;
                           break;
                         }
                       }
                       if (!inPattern && opStart !== "" && !"%#/^,~:+-=?".includes(opStart[0])) {
-                        for (const op of ["//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"]) {
+                        for (const op of ["//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"] as string[]) {
                           if (opStart.includes(op)) {
                             inPattern = true;
                             break;
@@ -2326,7 +2326,7 @@ class Word implements Node {
                         var firstChar: any = afterBrace[0];
                         if (!"%#/^,".includes(firstChar)) {
                           var rest: any = afterBrace.slice(1);
-                          for (const op of ["//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"]) {
+                          for (const op of ["//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"] as string[]) {
                             if (rest.includes(op)) {
                               inPattern = true;
                               break;
@@ -2860,8 +2860,8 @@ class Word implements Node {
     if (node instanceof CommandSubstitution) {
       result.push(node);
     } else if (node instanceof ArrayName) {
-      for (const elem of node.elements) {
-        for (const p of elem.parts) {
+      for (const elem of node.elements as Word[]) {
+        for (const p of elem.parts as Node[]) {
           if (p instanceof CommandSubstitution) {
             result.push(p);
           } else {
@@ -2905,8 +2905,8 @@ class Word implements Node {
     if (node instanceof ProcessSubstitution) {
       result.push(node);
     } else if (node instanceof ArrayName) {
-      for (const elem of node.elements) {
-        for (const p of elem.parts) {
+      for (const elem of node.elements as Word[]) {
+        for (const p of elem.parts as Node[]) {
           if (p instanceof ProcessSubstitution) {
             result.push(p);
           } else {
@@ -2922,7 +2922,7 @@ class Word implements Node {
     var cmdsubParts: any = [];
     var procsubParts: any = [];
     var hasArith: any = false;
-    for (const p of this.parts) {
+    for (const p of this.parts as Node[]) {
       if (p instanceof CommandSubstitution) {
         cmdsubParts.push(p);
       } else if (p instanceof ProcessSubstitution) {
@@ -3472,10 +3472,10 @@ class Command implements Node {
 
   toSexp(): string {
     var parts: any = [];
-    for (const w of this.words) {
+    for (const w of this.words as Word[]) {
       parts.push(w.toSexp());
     }
-    for (const r of this.redirects) {
+    for (const r of this.redirects as Node[]) {
       parts.push(r.toSexp());
     }
     var inner: any = parts.join(" ");
@@ -3546,10 +3546,10 @@ class Pipeline implements Node {
     }
     if (cmd instanceof Command) {
       var parts: any = [];
-      for (const w of cmd.words) {
+      for (const w of cmd.words as Word[]) {
         parts.push(w.toSexp());
       }
-      for (const r of cmd.redirects) {
+      for (const r of cmd.redirects as Node[]) {
         parts.push(r.toSexp());
       }
       parts.push("(redirect \">&\" 1)");
@@ -3619,7 +3619,7 @@ class List implements Node {
     if (semiPositions.length > 0) {
       var segments: any = [];
       var start: any = 0;
-      for (const pos of semiPositions) {
+      for (const pos of semiPositions as number[]) {
         var seg: any = Sublist(parts, start, pos);
         if (seg.length > 0 && seg[0].kind !== "operator") {
           segments.push(seg);
@@ -3655,7 +3655,7 @@ class List implements Node {
     if (ampPositions.length > 0) {
       var segments: any = [];
       var start: any = 0;
-      for (const pos of ampPositions) {
+      for (const pos of ampPositions as number[]) {
         segments.push(Sublist(parts, start, pos));
         start = pos + 1;
       }
@@ -3941,7 +3941,7 @@ class If implements Node {
       result = result + " " + this.elseBody.toSexp();
     }
     result = result + ")";
-    for (const r of this.redirects) {
+    for (const r of this.redirects as Node[]) {
       result = result + " " + r.toSexp();
     }
     return result;
@@ -4017,7 +4017,7 @@ class For implements Node {
     var suffix: any = "";
     if (this.redirects.length > 0) {
       var redirectParts: any = [];
-      for (const r of this.redirects) {
+      for (const r of this.redirects as Node[]) {
         redirectParts.push(r.toSexp());
       }
       suffix = " " + redirectParts.join(" ");
@@ -4032,7 +4032,7 @@ class For implements Node {
         return "(for (word \"" + varEscaped + "\") (in) " + this.body.toSexp() + ")" + suffix;
       } else {
         var wordParts: any = [];
-        for (const w of this.words) {
+        for (const w of this.words as Word[]) {
           wordParts.push(w.toSexp());
         }
         var wordStrs: any = wordParts.join(" ");
@@ -4067,7 +4067,7 @@ class ForArith implements Node {
     var suffix: any = "";
     if (this.redirects.length > 0) {
       var redirectParts: any = [];
-      for (const r of this.redirects) {
+      for (const r of this.redirects as Node[]) {
         redirectParts.push(r.toSexp());
       }
       suffix = " " + redirectParts.join(" ");
@@ -4106,7 +4106,7 @@ class Select implements Node {
     var suffix: any = "";
     if (this.redirects.length > 0) {
       var redirectParts: any = [];
-      for (const r of this.redirects) {
+      for (const r of this.redirects as Node[]) {
         redirectParts.push(r.toSexp());
       }
       suffix = " " + redirectParts.join(" ");
@@ -4114,7 +4114,7 @@ class Select implements Node {
     var varEscaped: any = this.varName.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
     if (this.words !== null) {
       var wordParts: any = [];
-      for (const w of this.words) {
+      for (const w of this.words as Word[]) {
         wordParts.push(w.toSexp());
       }
       var wordStrs: any = wordParts.join(" ");
@@ -4150,7 +4150,7 @@ class Case implements Node {
   toSexp(): string {
     var parts: any = [];
     parts.push("(case " + this.word.toSexp());
-    for (const p of this.patterns) {
+    for (const p of this.patterns as Node[]) {
       parts.push(p.toSexp());
     }
     var base: any = parts.join(" ") + ")";
@@ -4209,17 +4209,17 @@ class CasePattern implements Node {
                 i += 1;
               } else {
                 if (ch === "[") {
-                  var [result0, result1, result2]: any = ConsumeBracketClass(this.pattern, i, depth);
+                  var [result0, result1, result2]: [number, string[], boolean] = ConsumeBracketClass(this.pattern, i, depth);
                   i = result0;
                   current.push(...result1);
                 } else {
                   if (ch === "'" && depth === 0) {
-                    var [result0, result1]: any = ConsumeSingleQuote(this.pattern, i);
+                    var [result0, result1]: [number, string[]] = ConsumeSingleQuote(this.pattern, i);
                     i = result0;
                     current.push(...result1);
                   } else {
                     if (ch === "\"" && depth === 0) {
-                      var [result0, result1]: any = ConsumeDoubleQuote(this.pattern, i);
+                      var [result0, result1]: [number, string[]] = ConsumeDoubleQuote(this.pattern, i);
                       i = result0;
                       current.push(...result1);
                     } else {
@@ -4242,7 +4242,7 @@ class CasePattern implements Node {
     }
     alternatives.push(current.join(""));
     var wordList: any = [];
-    for (const alt of alternatives) {
+    for (const alt of alternatives as string[]) {
       wordList.push(new Word(alt as any, [], "word" as any).toSexp());
     }
     var patternStr: any = wordList.join(" ");
@@ -4429,7 +4429,7 @@ class ArithmeticCommand implements Node {
     var result: any = "(arith (word \"" + escaped + "\"))";
     if (this.redirects.length > 0) {
       var redirectParts: any = [];
-      for (const r of this.redirects) {
+      for (const r of this.redirects as Node[]) {
         redirectParts.push(r.toSexp());
       }
       var redirectSexps: any = redirectParts.join(" ");
@@ -4741,7 +4741,7 @@ class ArithConcat implements Node {
 
   toSexp(): string {
     var sexps: any = [];
-    for (const p of this.parts) {
+    for (const p of this.parts as Node[]) {
       sexps.push(p.toSexp());
     }
     return "(arith-concat " + sexps.join(" ") + ")";
@@ -4882,7 +4882,7 @@ class ConditionalExpr implements Node {
     }
     if (this.redirects.length > 0) {
       var redirectParts: any = [];
-      for (const r of this.redirects) {
+      for (const r of this.redirects as Node[]) {
         redirectParts.push(r.toSexp());
       }
       var redirectSexps: any = redirectParts.join(" ");
@@ -5031,7 +5031,7 @@ class ArrayName implements Node {
       return "(array)";
     }
     var parts: any = [];
-    for (const e of this.elements) {
+    for (const e of this.elements as Word[]) {
       parts.push(e.toSexp());
     }
     var inner: any = parts.join(" ");
@@ -5556,7 +5556,7 @@ class Parser {
 
   ParseDollarExpansion(chars: string[], parts: Node[], inDquote: boolean): boolean {
     if (this.pos + 2 < this.length && this.source[this.pos + 1] === "(" && this.source[this.pos + 2] === "(") {
-      var [result0, result1]: any = this.ParseArithmeticExpansion();
+      var [result0, result1]: [Node, string] = this.ParseArithmeticExpansion();
       if (result0 !== null) {
         parts.push(result0);
         chars.push(result1);
@@ -5571,7 +5571,7 @@ class Parser {
       return false;
     }
     if (this.pos + 1 < this.length && this.source[this.pos + 1] === "[") {
-      var [result0, result1]: any = this.ParseDeprecatedArithmetic();
+      var [result0, result1]: [Node, string] = this.ParseDeprecatedArithmetic();
       if (result0 !== null) {
         parts.push(result0);
         chars.push(result1);
@@ -5580,7 +5580,7 @@ class Parser {
       return false;
     }
     if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
-      var [result0, result1]: any = this.ParseCommandSubstitution();
+      var [result0, result1]: [Node, string] = this.ParseCommandSubstitution();
       if (result0 !== null) {
         parts.push(result0);
         chars.push(result1);
@@ -5588,7 +5588,7 @@ class Parser {
       }
       return false;
     }
-    var [result0, result1]: any = this.ParseParamExpansion(inDquote);
+    var [result0, result1]: [Node, string] = this.ParseParamExpansion(inDquote);
     if (result0 !== null) {
       parts.push(result0);
       chars.push(result1);
@@ -5954,7 +5954,7 @@ class Parser {
     var text: any = textChars.join("");
     var content: any = contentChars.join("");
     if (pendingHeredocs.length > 0) {
-      var [heredocStart, heredocEnd]: any = FindHeredocContentEnd(this.source, this.pos, pendingHeredocs);
+      var [heredocStart, heredocEnd]: [number, number] = FindHeredocContentEnd(this.source, this.pos, pendingHeredocs);
       if (heredocEnd > heredocStart) {
         content = content + Substring(this.source, heredocStart, heredocEnd);
         if (this.CmdsubHeredocEnd === -1) {
@@ -6286,7 +6286,7 @@ class Parser {
     while (true) {
       this.ArithSkipWs();
       var matched: any = false;
-      for (const op of ops) {
+      for (const op of ops as string[]) {
         if (this.ArithMatch(op)) {
           this.ArithConsume(op);
           this.ArithSkipWs();
@@ -6898,7 +6898,7 @@ class Parser {
 
   ParseParamExpansion(inDquote: boolean): [Node, string] {
     this.SyncLexer();
-    var [result0, result1]: any = this.Lexer.ReadParamExpansion(inDquote);
+    var [result0, result1]: [Node, string] = this.Lexer.ReadParamExpansion(inDquote);
     this.SyncParser();
     return [result0, result1];
   }
@@ -7399,13 +7399,13 @@ class Parser {
   }
 
   GatherHeredocBodies(): void {
-    for (const heredoc of this.PendingHeredocs) {
+    for (const heredoc of this.PendingHeredocs as HereDoc[]) {
       var contentLines: any = [];
       var lineStart: any = this.pos;
       while (this.pos < this.length) {
         lineStart = this.pos;
-        var [line, lineEnd]: any = this.ReadHeredocLine(heredoc.quoted);
-        var [matches, checkLine]: any = this.LineMatchesDelimiter(line, heredoc.delimiter, heredoc.stripTabs);
+        var [line, lineEnd]: [string, number] = this.ReadHeredocLine(heredoc.quoted);
+        var [matches, checkLine]: [boolean, string] = this.LineMatchesDelimiter(line, heredoc.delimiter, heredoc.stripTabs);
         if (matches) {
           this.pos = (lineEnd < this.length ? lineEnd + 1 : lineEnd);
           break;
@@ -7445,8 +7445,8 @@ class Parser {
   ParseHeredoc(fd: number | null, stripTabs: boolean): HereDoc {
     var startPos: any = this.pos;
     this.SetState(ParserStateFlags_PST_HEREDOC);
-    var [delimiter, quoted]: any = this.ParseHeredocDelimiter();
-    for (const existing of this.PendingHeredocs) {
+    var [delimiter, quoted]: [string, boolean] = this.ParseHeredocDelimiter();
+    for (const existing of this.PendingHeredocs as HereDoc[]) {
       if (existing.StartPos === startPos && existing.delimiter === delimiter) {
         this.ClearState(ParserStateFlags_PST_HEREDOC);
         return existing;
@@ -7479,7 +7479,7 @@ class Parser {
         continue;
       }
       var allAssignments: any = true;
-      for (const w of words) {
+      for (const w of words as Word[]) {
         if (!this.IsAssignmentWord(w)) {
           allAssignments = false;
           break;
@@ -8849,7 +8849,7 @@ class Parser {
     var commands: any = [cmd];
     while (true) {
       this.skipWhitespace();
-      var [tokenType, value]: any = this.LexPeekOperator();
+      var [tokenType, value]: [number, string] = this.LexPeekOperator();
       if (tokenType === 0) {
         break;
       }
@@ -8876,7 +8876,7 @@ class Parser {
 
   parseListOperator(): string {
     this.skipWhitespace();
-    var [tokenType, ]: any = this.LexPeekOperator();
+    var [tokenType, ]: [number, string] = this.LexPeekOperator();
     if (tokenType === 0) {
       return "";
     }
@@ -9243,7 +9243,7 @@ function StripLineContinuationsCommentAware(text: string): string {
 function AppendRedirects(base: string, redirects: Node[]): string {
   if (redirects.length > 0) {
     var parts: any = [];
-    for (const r of redirects) {
+    for (const r of redirects as Node[]) {
       parts.push(r.toSexp());
     }
     return base + " " + parts.join(" ");
@@ -9388,7 +9388,7 @@ function StartsWithSubshell(node: Node): boolean {
     return true;
   }
   if (node instanceof List) {
-    for (const p of node.parts) {
+    for (const p of node.parts as Node[]) {
       if (p.kind !== "operator") {
         return StartsWithSubshell(p);
       }
@@ -9415,7 +9415,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
   }
   if (node instanceof Command) {
     var parts: any = [];
-    for (const w of node.words) {
+    for (const w of node.words as Word[]) {
       var val: any = w.ExpandAllAnsiCQuotes(w.value);
       val = w.StripLocaleStringDollars(val);
       val = w.NormalizeArrayWhitespace(val);
@@ -9423,12 +9423,12 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
       parts.push(val);
     }
     var heredocs: any = [];
-    for (const r of node.redirects) {
+    for (const r of node.redirects as Node[]) {
       if (r instanceof HereDoc) {
         heredocs.push(r);
       }
     }
-    for (const r of node.redirects) {
+    for (const r of node.redirects as Node[]) {
       parts.push(FormatRedirect(r, compactRedirects, true));
     }
     if (compactRedirects && node.words.length > 0 && node.redirects.length > 0) {
@@ -9438,7 +9438,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
     } else {
       var result: any = parts.join(" ");
     }
-    for (const h of heredocs) {
+    for (const h of heredocs as HereDoc[]) {
       var result: any = result + FormatHeredocBody(h);
     }
     return result;
@@ -9468,7 +9468,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
       var isLast: any = idx === cmds.length - 1;
       var hasHeredoc: any = false;
       if (cmd.kind === "command" && (cmd as unknown as Command).redirects.length > 0) {
-        for (const r of (cmd as unknown as Command).redirects) {
+        for (const r of (cmd as unknown as Command).redirects as Node[]) {
           if (r instanceof HereDoc) {
             hasHeredoc = true;
             break;
@@ -9522,9 +9522,9 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
   }
   if (node instanceof List) {
     var hasHeredoc: any = false;
-    for (const p of node.parts) {
+    for (const p of node.parts as Node[]) {
       if (p.kind === "command" && (p as unknown as Command).redirects.length > 0) {
-        for (const r of (p as unknown as Command).redirects) {
+        for (const r of (p as unknown as Command).redirects as Node[]) {
           if (r instanceof HereDoc) {
             hasHeredoc = true;
             break;
@@ -9532,9 +9532,9 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
         }
       } else {
         if (p instanceof Pipeline) {
-          for (const cmd of p.commands) {
+          for (const cmd of p.commands as Node[]) {
             if (cmd.kind === "command" && (cmd as unknown as Command).redirects.length > 0) {
-              for (const r of (cmd as unknown as Command).redirects) {
+              for (const r of (cmd as unknown as Command).redirects as Node[]) {
                 if (r instanceof HereDoc) {
                   hasHeredoc = true;
                   break;
@@ -9551,7 +9551,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
     var result: any = [];
     var skippedSemi: any = false;
     var cmdCount: any = 0;
-    for (const p of node.parts) {
+    for (const p of node.parts as Node[]) {
       if (p instanceof Operator) {
         if (p.op === ";") {
           if (result.length > 0 && result[result.length - 1].endsWith("\n")) {
@@ -9650,7 +9650,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
     var body: any = FormatCmdsubNode(node.body, indent + 4, false, false, false);
     var result: any = "while " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done";
     if (node.redirects.length > 0) {
-      for (const r of node.redirects) {
+      for (const r of node.redirects as Node[]) {
         result = result + " " + FormatRedirect(r, false, false);
       }
     }
@@ -9661,7 +9661,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
     var body: any = FormatCmdsubNode(node.body, indent + 4, false, false, false);
     var result: any = "until " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done";
     if (node.redirects.length > 0) {
-      for (const r of node.redirects) {
+      for (const r of node.redirects as Node[]) {
         result = result + " " + FormatRedirect(r, false, false);
       }
     }
@@ -9672,7 +9672,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
     var body: any = FormatCmdsubNode(node.body, indent + 4, false, false, false);
     if (node.words !== null) {
       var wordVals: any = [];
-      for (const w of node.words) {
+      for (const w of node.words as Word[]) {
         wordVals.push(w.value);
       }
       var words: any = wordVals.join(" ");
@@ -9685,7 +9685,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
       var result: any = "for " + varName + " in \"$@\";\n" + sp + "do\n" + innerSp + body + ";\n" + sp + "done";
     }
     if (node.redirects.length > 0) {
-      for (const r of node.redirects) {
+      for (const r of node.redirects as Node[]) {
         var result: any = result + " " + FormatRedirect(r, false, false);
       }
     }
@@ -9695,7 +9695,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
     var body: any = FormatCmdsubNode(node.body, indent + 4, false, false, false);
     var result: any = "for ((" + node.init + "; " + node.cond + "; " + node.incr + "))\ndo\n" + innerSp + body + ";\n" + sp + "done";
     if (node.redirects.length > 0) {
-      for (const r of node.redirects) {
+      for (const r of node.redirects as Node[]) {
         result = result + " " + FormatRedirect(r, false, false);
       }
     }
@@ -9728,7 +9728,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
     var redirects: any = "";
     if (node.redirects.length > 0) {
       var redirectParts: any = [];
-      for (const r of node.redirects) {
+      for (const r of node.redirects as Node[]) {
         redirectParts.push(FormatRedirect(r, false, false));
       }
       redirects = " " + redirectParts.join(" ");
@@ -9749,7 +9749,7 @@ ${innerSp}${body}
     var redirects: any = "";
     if (node.redirects.length > 0) {
       var redirectParts: any = [];
-      for (const r of node.redirects) {
+      for (const r of node.redirects as Node[]) {
         redirectParts.push(FormatRedirect(r, false, false));
       }
       redirects = redirectParts.join(" ");
@@ -9772,7 +9772,7 @@ ${innerSp}${body}
     var redirects: any = "";
     if (node.redirects.length > 0) {
       var redirectParts: any = [];
-      for (const r of node.redirects) {
+      for (const r of node.redirects as Node[]) {
         redirectParts.push(FormatRedirect(r, false, false));
       }
       redirects = redirectParts.join(" ");
@@ -10425,7 +10425,7 @@ function FindHeredocContentEnd(source: string, start: number, delimiters: [strin
   }
   var contentStart: any = pos;
   pos += 1;
-  for (const Item of delimiters) {
+  for (const Item of delimiters as [string, boolean][]) {
     var delimiter: any = Item[0];
     var stripTabs: any = Item[1];
     while (pos < source.length) {

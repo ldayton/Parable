@@ -317,8 +317,8 @@ var ContextStack = /** @class */ (function () {
     };
     ContextStack.prototype.restoreFrom = function (savedStack) {
         var result = [];
-        for (var _i = 0, savedStack_1 = savedStack; _i < savedStack_1.length; _i++) {
-            var ctx = savedStack_1[_i];
+        for (var _i = 0, _a = savedStack; _i < _a.length; _i++) {
+            var ctx = _a[_i];
             result.push(ctx.copy());
         }
         this.Stack = result;
@@ -3806,8 +3806,8 @@ var List = /** @class */ (function () {
         if (semiPositions.length > 0) {
             var segments = [];
             var start = 0;
-            for (var _b = 0, semiPositions_1 = semiPositions; _b < semiPositions_1.length; _b++) {
-                var pos = semiPositions_1[_b];
+            for (var _b = 0, _c = semiPositions; _b < _c.length; _b++) {
+                var pos = _c[_b];
                 var seg = Sublist(parts, start, pos);
                 if (seg.length > 0 && seg[0].kind !== "operator") {
                     segments.push(seg);
@@ -3822,8 +3822,8 @@ var List = /** @class */ (function () {
                 return "()";
             }
             var result = this.ToSexpAmpAndHigher(segments[0], opNames);
-            for (var _c = 0, _d = range(1, segments.length); _c < _d.length; _c++) {
-                var i = _d[_c];
+            for (var _d = 0, _f = range(1, segments.length); _d < _f.length; _d++) {
+                var i = _f[_d];
                 result = "(semi " + result + " " + this.ToSexpAmpAndHigher(segments[i], opNames) + ")";
             }
             return result;
@@ -3844,15 +3844,15 @@ var List = /** @class */ (function () {
         if (ampPositions.length > 0) {
             var segments = [];
             var start = 0;
-            for (var _b = 0, ampPositions_1 = ampPositions; _b < ampPositions_1.length; _b++) {
-                var pos = ampPositions_1[_b];
+            for (var _b = 0, _c = ampPositions; _b < _c.length; _b++) {
+                var pos = _c[_b];
                 segments.push(Sublist(parts, start, pos));
                 start = pos + 1;
             }
             segments.push(Sublist(parts, start, parts.length));
             var result = this.ToSexpAndOr(segments[0], opNames);
-            for (var _c = 0, _d = range(1, segments.length); _c < _d.length; _c++) {
-                var i = _d[_c];
+            for (var _d = 0, _f = range(1, segments.length); _d < _f.length; _d++) {
+                var i = _f[_d];
                 result = "(background " + result + " " + this.ToSexpAndOr(segments[i], opNames) + ")";
             }
             return result;
@@ -4408,8 +4408,8 @@ var CasePattern = /** @class */ (function () {
         }
         alternatives.push(current.join(""));
         var wordList = [];
-        for (var _i = 0, alternatives_1 = alternatives; _i < alternatives_1.length; _i++) {
-            var alt = alternatives_1[_i];
+        for (var _i = 0, _d = alternatives; _i < _d.length; _i++) {
+            var alt = _d[_i];
             wordList.push(new Word(alt, [], "word").toSexp());
         }
         var patternStr = wordList.join(" ");
@@ -6339,8 +6339,8 @@ var Parser = /** @class */ (function () {
         while (true) {
             this.ArithSkipWs();
             var matched = false;
-            for (var _i = 0, ops_1 = ops; _i < ops_1.length; _i++) {
-                var op = ops_1[_i];
+            for (var _i = 0, _a = ops; _i < _a.length; _i++) {
+                var op = _a[_i];
                 if (this.ArithMatch(op)) {
                     this.ArithConsume(op);
                     this.ArithSkipWs();
@@ -7585,8 +7585,8 @@ var Parser = /** @class */ (function () {
                 continue;
             }
             var allAssignments = true;
-            for (var _i = 0, words_1 = words; _i < words_1.length; _i++) {
-                var w = words_1[_i];
+            for (var _i = 0, _a = words; _i < _a.length; _i++) {
+                var w = _a[_i];
                 if (!this.IsAssignmentWord(w)) {
                     allAssignments = false;
                     break;
@@ -9369,8 +9369,8 @@ function StripLineContinuationsCommentAware(text) {
 function AppendRedirects(base, redirects) {
     if (redirects.length > 0) {
         var parts = [];
-        for (var _i = 0, redirects_1 = redirects; _i < redirects_1.length; _i++) {
-            var r = redirects_1[_i];
+        for (var _i = 0, _a = redirects; _i < _a.length; _i++) {
+            var r = _a[_i];
             parts.push(r.toSexp());
         }
         return base + " " + parts.join(" ");
@@ -9562,8 +9562,8 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         else {
             var result = parts.join(" ");
         }
-        for (var _g = 0, heredocs_1 = heredocs; _g < heredocs_1.length; _g++) {
-            var h = heredocs_1[_g];
+        for (var _g = 0, _h = heredocs; _g < _h.length; _g++) {
+            var h = _h[_g];
             var result = result + FormatHeredocBody(h);
         }
         return result;
@@ -9593,8 +9593,8 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
             var isLast = idx === cmds.length - 1;
             var hasHeredoc = false;
             if (cmd.kind === "command" && cmd.redirects.length > 0) {
-                for (var _h = 0, _j = cmd.redirects; _h < _j.length; _h++) {
-                    var r = _j[_h];
+                for (var _j = 0, _k = cmd.redirects; _j < _k.length; _j++) {
+                    var r = _k[_j];
                     if (r instanceof HereDoc) {
                         hasHeredoc = true;
                         break;
@@ -9654,11 +9654,11 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
     }
     if (node instanceof List) {
         var hasHeredoc = false;
-        for (var _k = 0, _l = node.parts; _k < _l.length; _k++) {
-            var p_1 = _l[_k];
+        for (var _l = 0, _m = node.parts; _l < _m.length; _l++) {
+            var p_1 = _m[_l];
             if (p_1.kind === "command" && p_1.redirects.length > 0) {
-                for (var _m = 0, _o = p_1.redirects; _m < _o.length; _m++) {
-                    var r = _o[_m];
+                for (var _o = 0, _p = p_1.redirects; _o < _p.length; _o++) {
+                    var r = _p[_o];
                     if (r instanceof HereDoc) {
                         hasHeredoc = true;
                         break;
@@ -9667,11 +9667,11 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
             }
             else {
                 if (p_1 instanceof Pipeline) {
-                    for (var _p = 0, _q = p_1.commands; _p < _q.length; _p++) {
-                        var cmd_1 = _q[_p];
+                    for (var _q = 0, _r = p_1.commands; _q < _r.length; _q++) {
+                        var cmd_1 = _r[_q];
                         if (cmd_1.kind === "command" && cmd_1.redirects.length > 0) {
-                            for (var _r = 0, _s = cmd_1.redirects; _r < _s.length; _r++) {
-                                var r = _s[_r];
+                            for (var _s = 0, _t = cmd_1.redirects; _s < _t.length; _s++) {
+                                var r = _t[_s];
                                 if (r instanceof HereDoc) {
                                     hasHeredoc = true;
                                     break;
@@ -9688,8 +9688,8 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var result = [];
         var skippedSemi = false;
         var cmdCount = 0;
-        for (var _t = 0, _u = node.parts; _t < _u.length; _t++) {
-            var p_2 = _u[_t];
+        for (var _u = 0, _v = node.parts; _u < _v.length; _u++) {
+            var p_2 = _v[_u];
             if (p_2 instanceof Operator) {
                 if (p_2.op === ";") {
                     if (result.length > 0 && result[result.length - 1].endsWith("\n")) {
@@ -9795,8 +9795,8 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var body = FormatCmdsubNode(node.body, indent + 4, false, false, false);
         var result = "while " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done";
         if (node.redirects.length > 0) {
-            for (var _v = 0, _w = node.redirects; _v < _w.length; _v++) {
-                var r = _w[_v];
+            for (var _w = 0, _x = node.redirects; _w < _x.length; _w++) {
+                var r = _x[_w];
                 result = result + " " + FormatRedirect(r, false, false);
             }
         }
@@ -9807,8 +9807,8 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var body = FormatCmdsubNode(node.body, indent + 4, false, false, false);
         var result = "until " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done";
         if (node.redirects.length > 0) {
-            for (var _x = 0, _y = node.redirects; _x < _y.length; _x++) {
-                var r = _y[_x];
+            for (var _y = 0, _z = node.redirects; _y < _z.length; _y++) {
+                var r = _z[_y];
                 result = result + " " + FormatRedirect(r, false, false);
             }
         }
@@ -9819,8 +9819,8 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var body = FormatCmdsubNode(node.body, indent + 4, false, false, false);
         if (node.words !== null) {
             var wordVals = [];
-            for (var _z = 0, _0 = node.words; _z < _0.length; _z++) {
-                var w = _0[_z];
+            for (var _0 = 0, _1 = node.words; _0 < _1.length; _0++) {
+                var w = _1[_0];
                 wordVals.push(w.value);
             }
             var words = wordVals.join(" ");
@@ -9835,8 +9835,8 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
             var result = "for " + varName + " in \"$@\";\n" + sp + "do\n" + innerSp + body + ";\n" + sp + "done";
         }
         if (node.redirects.length > 0) {
-            for (var _1 = 0, _2 = node.redirects; _1 < _2.length; _1++) {
-                var r = _2[_1];
+            for (var _2 = 0, _3 = node.redirects; _2 < _3.length; _2++) {
+                var r = _3[_2];
                 var result = result + " " + FormatRedirect(r, false, false);
             }
         }
@@ -9846,8 +9846,8 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var body = FormatCmdsubNode(node.body, indent + 4, false, false, false);
         var result = "for ((" + node.init + "; " + node.cond + "; " + node.incr + "))\ndo\n" + innerSp + body + ";\n" + sp + "done";
         if (node.redirects.length > 0) {
-            for (var _3 = 0, _4 = node.redirects; _3 < _4.length; _3++) {
-                var r = _4[_3];
+            for (var _4 = 0, _5 = node.redirects; _4 < _5.length; _4++) {
+                var r = _5[_4];
                 result = result + " " + FormatRedirect(r, false, false);
             }
         }
@@ -9882,8 +9882,8 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var redirects = "";
         if (node.redirects.length > 0) {
             var redirectParts = [];
-            for (var _5 = 0, _6 = node.redirects; _5 < _6.length; _5++) {
-                var r = _6[_5];
+            for (var _6 = 0, _7 = node.redirects; _6 < _7.length; _6++) {
+                var r = _7[_6];
                 redirectParts.push(FormatRedirect(r, false, false));
             }
             redirects = " " + redirectParts.join(" ");
@@ -9901,8 +9901,8 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var redirects = "";
         if (node.redirects.length > 0) {
             var redirectParts = [];
-            for (var _7 = 0, _8 = node.redirects; _7 < _8.length; _7++) {
-                var r = _8[_7];
+            for (var _8 = 0, _9 = node.redirects; _8 < _9.length; _8++) {
+                var r = _9[_8];
                 redirectParts.push(FormatRedirect(r, false, false));
             }
             redirects = redirectParts.join(" ");
@@ -9925,8 +9925,8 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var redirects = "";
         if (node.redirects.length > 0) {
             var redirectParts = [];
-            for (var _9 = 0, _10 = node.redirects; _9 < _10.length; _9++) {
-                var r = _10[_9];
+            for (var _10 = 0, _11 = node.redirects; _10 < _11.length; _10++) {
+                var r = _11[_10];
                 redirectParts.push(FormatRedirect(r, false, false));
             }
             redirects = redirectParts.join(" ");
@@ -10600,8 +10600,8 @@ function FindHeredocContentEnd(source, start, delimiters) {
     }
     var contentStart = pos;
     pos += 1;
-    for (var _i = 0, delimiters_1 = delimiters; _i < delimiters_1.length; _i++) {
-        var Item = delimiters_1[_i];
+    for (var _i = 0, _a = delimiters; _i < _a.length; _i++) {
+        var Item = _a[_i];
         var delimiter = Item[0];
         var stripTabs = Item[1];
         while (pos < source.length) {
@@ -10613,8 +10613,8 @@ function FindHeredocContentEnd(source, start, delimiters) {
             var line = Substring(source, lineStart, lineEnd);
             while (lineEnd < source.length) {
                 var trailingBs = 0;
-                for (var _a = 0, _b = range(line.length - 1, -1, -1); _a < _b.length; _a++) {
-                    var j = _b[_a];
+                for (var _b = 0, _c = range(line.length - 1, -1, -1); _b < _c.length; _b++) {
+                    var j = _c[_b];
                     if (line[j] === "\\") {
                         trailingBs += 1;
                     }

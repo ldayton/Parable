@@ -27,6 +27,13 @@ test-new-python:
 emit-typescript:
     uv run python -m src.cli ../src/parable.py -b ts
 
+# Transpile with new transpiler and run TypeScript parser tests
+test-new-typescript:
+    rm -rf /tmp/parable-ts && mkdir -p /tmp/parable-ts/src
+    uv run python -m src.cli ../src/parable.py -b ts > /tmp/parable-ts/src/parable.ts
+    tsc --outDir /tmp/parable-ts/src --lib es2019 --module commonjs --esModuleInterop /tmp/parable-ts/src/parable.ts
+    node ../tests/bin/run-js-tests.js /tmp/parable-ts
+
 # Show Go compilation errors (uses temp copy of src/)
 errors:
     @rm -rf /tmp/parable-src && cp -r ../src /tmp/parable-src

@@ -107,10 +107,31 @@ class TsBackend:
         else:
             self.lines.append("")
 
+    def _emit_preamble(self) -> None:
+        """Emit helper functions needed by generated code."""
+        self._line("function range(start: number, end?: number, step?: number): number[] {")
+        self.indent += 1
+        self._line("if (end === undefined) { end = start; start = 0; }")
+        self._line("if (step === undefined) { step = 1; }")
+        self._line("const result: number[] = [];")
+        self._line("if (step > 0) {")
+        self.indent += 1
+        self._line("for (let i = start; i < end; i += step) result.push(i);")
+        self.indent -= 1
+        self._line("} else {")
+        self.indent += 1
+        self._line("for (let i = start; i > end; i += step) result.push(i);")
+        self.indent -= 1
+        self._line("}")
+        self._line("return result;")
+        self.indent -= 1
+        self._line("}")
+
     def _emit_module(self, module: Module) -> None:
         if module.doc:
             self._line(f"/** {module.doc} */")
-        need_blank = False
+        self._emit_preamble()
+        need_blank = True
         if module.constants:
             for const in module.constants:
                 self._emit_constant(const)
@@ -159,6 +180,16 @@ class TsBackend:
         if struct.fields:
             self._line()
             self._emit_constructor(struct)
+        # Add getKind() method for Node implementations that have a kind field
+        has_kind_field = any(f.name == "kind" for f in struct.fields)
+        has_getkind_method = any(m.name in ("GetKind", "get_kind") for m in struct.methods)
+        if "Node" in struct.implements and has_kind_field and not has_getkind_method:
+            self._line()
+            self._line("getKind(): string {")
+            self.indent += 1
+            self._line("return this.kind;")
+            self.indent -= 1
+            self._line("}")
         for i, method in enumerate(struct.methods):
             if i > 0 or struct.fields:
                 self._line()
@@ -240,7 +271,8 @@ class TsBackend:
     def _emit_stmt(self, stmt: Stmt) -> None:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value):
-                keyword = "let" if getattr(stmt, 'is_reassigned', False) else "const"
+                # Use var for function-scoped semantics (matches Python/Go)
+                keyword = "var"
                 if value is not None:
                     val = self._expr(value)
                     if _can_infer_type(value):
@@ -255,15 +287,16 @@ class TsBackend:
                 lv = self._lvalue(target)
                 val = self._expr(value)
                 if getattr(stmt, 'is_declaration', False):
-                    keyword = "let" if getattr(stmt, 'is_reassigned', False) else "const"
-                    self._line(f"{keyword} {lv} = {val};")
+                    # Use var for function-scoped semantics (matches Python/Go)
+                    self._line(f"var {lv} = {val};")
                 else:
                     self._line(f"{lv} = {val};")
             case TupleAssign(targets=targets, value=value):
                 lvalues = ", ".join(self._lvalue(t) for t in targets)
                 val = self._expr(value)
                 if getattr(stmt, 'is_declaration', False):
-                    self._line(f"const [{lvalues}] = {val};")
+                    # Use var for function-scoped semantics (matches Python/Go)
+                    self._line(f"var [{lvalues}] = {val};")
                 else:
                     self._line(f"[{lvalues}] = {val};")
             case OpAssign(target=target, op=op, value=value):
@@ -348,12 +381,17 @@ class TsBackend:
         self, expr: Expr, binding: str, cases: list[TypeCase], default: list[Stmt]
     ) -> None:
         var = self._expr(expr)
+        binding_name = _camel(binding)
+        # Check if binding would shadow the expression variable
+        shadows = isinstance(expr, Var) and _camel(expr.name) == binding_name
         for i, case in enumerate(cases):
             type_name = self._type_name_for_check(case.typ)
             keyword = "if" if i == 0 else "} else if"
             self._line(f"{keyword} ({var} instanceof {type_name}) {{")
             self.indent += 1
-            self._line(f"const {_camel(binding)} = {var} as {self._type(case.typ)};")
+            # Skip const declaration if it would shadow - TypeScript narrows type automatically
+            if not shadows:
+                self._line(f"const {binding_name} = {var} as {self._type(case.typ)};")
             for s in case.body:
                 self._emit_stmt(s)
             self.indent -= 1
@@ -432,23 +470,23 @@ class TsBackend:
     def _stmt_inline(self, stmt: Stmt) -> str:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value):
-                keyword = "let" if getattr(stmt, 'is_reassigned', False) else "const"
+                # Use var for function-scoped semantics (matches Python/Go)
                 if value is not None:
                     if _can_infer_type(value):
-                        return f"{keyword} {_camel(name)} = {self._expr(value)}"
+                        return f"var {_camel(name)} = {self._expr(value)}"
                     else:
                         ts_type = self._type(typ)
-                        return f"{keyword} {_camel(name)}: {ts_type} = {self._expr(value)}"
+                        return f"var {_camel(name)}: {ts_type} = {self._expr(value)}"
                 ts_type = self._type(typ)
-                return f"{keyword} {_camel(name)}: {ts_type}"
+                return f"var {_camel(name)}: {ts_type}"
             case Assign(target=VarLV(name=name), value=BinaryOp(op=op, left=Var(name=left_name), right=IntLit(value=1))) if name == left_name and op in ("+", "-"):
                 return f"{_camel(name)}++" if op == "+" else f"{_camel(name)}--"
             case Assign(target=target, value=value):
                 lv = self._lvalue(target)
                 val = self._expr(value)
                 if getattr(stmt, 'is_declaration', False):
-                    keyword = "let" if getattr(stmt, 'is_reassigned', False) else "const"
-                    return f"{keyword} {lv} = {val}"
+                    # Use var for function-scoped semantics (matches Python/Go)
+                    return f"var {lv} = {val}"
                 return f"{lv} = {val}"
             case OpAssign(target=target, op=op, value=value):
                 return f"{self._lvalue(target)} {op}= {self._expr(value)}"
@@ -496,6 +534,9 @@ class TsBackend:
                     return "this"
                 return _camel(name)
             case FieldAccess(obj=obj, field=field):
+                # Tuple field access: F0, F1, etc. → [0], [1], etc.
+                if field.startswith("F") and field[1:].isdigit():
+                    return f"{self._expr(obj)}[{field[1:]}]"
                 return f"{self._expr(obj)}.{_camel(field)}"
             case Index(obj=obj, index=index, typ=typ):
                 obj_str = self._expr(obj)
@@ -507,12 +548,25 @@ class TsBackend:
                 return f"{obj_str}[{idx_str}]"
             case SliceExpr(obj=obj, low=low, high=high):
                 return self._slice_expr(obj, low, high)
+            case Call(func="_parseInt", args=args):
+                # _parseInt(s, base) → parseInt(s, base)
+                args_str = ", ".join(self._expr(a) for a in args)
+                return f"parseInt({args_str})"
+            case Call(func="_intToStr", args=[arg]):
+                # _intToStr(n) → String(n)
+                return f"String({self._expr(arg)})"
             case Call(func=func, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
                 return f"{_camel(func)}({args_str})"
             case MethodCall(obj=obj, method="join", args=[arr], receiver_type=receiver_type) if isinstance(receiver_type, Primitive) and receiver_type.kind == "string":
                 # "sep".join(arr) → arr.join("sep")
                 return f"{self._expr(arr)}.join({self._expr(obj)})"
+            case MethodCall(obj=obj, method="extend", args=[other], receiver_type=receiver_type) if _is_array_type(receiver_type):
+                # arr.extend(other) → arr.push(...other)
+                return f"{self._expr(obj)}.push(...{self._expr(other)})"
+            case MethodCall(obj=obj, method="copy", args=[], receiver_type=receiver_type) if _is_array_type(receiver_type):
+                # arr.copy() → arr.slice()
+                return f"{self._expr(obj)}.slice()"
             case MethodCall(obj=obj, method="isalnum", args=_, receiver_type=_):
                 return f"/^[a-zA-Z0-9]$/.test({self._expr(obj)})"
             case MethodCall(obj=obj, method="isdigit", args=_, receiver_type=_):
@@ -541,7 +595,11 @@ class TsBackend:
             case UnaryOp(op="*", operand=operand):
                 return self._expr(operand)  # TypeScript has no pointer dereference
             case UnaryOp(op=op, operand=operand):
-                return f"{op}{self._expr(operand)}"
+                inner = self._expr(operand)
+                # Wrap in parentheses if operand is a binary expression (precedence)
+                if isinstance(operand, BinaryOp):
+                    inner = f"({inner})"
+                return f"{op}{inner}"
             case Ternary(cond=cond, then_expr=then_expr, else_expr=else_expr):
                 return f"{self._expr(cond)} ? {self._expr(then_expr)} : {self._expr(else_expr)}"
             case Cast(expr=inner, to_type=to_type):
@@ -714,7 +772,7 @@ def _primitive_type(kind: str) -> str:
 
 
 def _camel(name: str, is_receiver_ref: bool = False) -> str:
-    """Convert snake_case to camelCase.
+    """Convert snake_case or PascalCase to camelCase.
 
     Args:
         name: The identifier name
@@ -724,6 +782,9 @@ def _camel(name: str, is_receiver_ref: bool = False) -> str:
     if name in ("this", "self") and is_receiver_ref:
         return "this"
     if "_" not in name:
+        # Convert PascalCase to camelCase (lowercase first letter)
+        if name and name[0].isupper():
+            name = name[0].lower() + name[1:]
         return _safe_name(name)
     # Don't convert SCREAMING_SNAKE_CASE constants - preserve underscores
     # These have uppercase letters after the first underscore
@@ -758,12 +819,23 @@ _STRING_METHOD_MAP = {
     "strip": "trim",
     "lower": "toLowerCase",
     "upper": "toUpperCase",
+    "find": "indexOf",
+    "rfind": "lastIndexOf",
 }
+
+
+def _is_array_type(typ: Type) -> bool:
+    """Check if type is an array/slice type, possibly wrapped in Pointer."""
+    if isinstance(typ, (Slice, Array)):
+        return True
+    if isinstance(typ, Pointer) and isinstance(typ.target, (Slice, Array)):
+        return True
+    return False
 
 
 def _method_name(method: str, receiver_type: Type) -> str:
     """Convert method name based on receiver type."""
-    if isinstance(receiver_type, Slice) and method == "append":
+    if _is_array_type(receiver_type) and method == "append":
         return "push"
     if isinstance(receiver_type, Primitive) and receiver_type.kind == "string":
         if method in _STRING_METHOD_MAP:

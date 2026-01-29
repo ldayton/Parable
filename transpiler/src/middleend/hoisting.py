@@ -7,11 +7,9 @@ from src.ir import (
     ForRange,
     Function,
     If,
-    Interface,
     Match,
     Module,
     Stmt,
-    StructRef,
     TryCatch,
     Tuple,
     TupleAssign,
@@ -25,6 +23,7 @@ from src.type_overrides import VAR_TYPE_OVERRIDES
 
 from .returns import always_returns
 from .scope import _collect_used_vars
+from .type_flow import join_types
 
 
 def analyze_hoisting(module: Module) -> None:
@@ -36,48 +35,11 @@ def analyze_hoisting(module: Module) -> None:
             _analyze_hoisting(method)
 
 
-def _merge_types(t1: Type | None, t2: Type | None) -> Type | None:
-    """Merge two types, preferring concrete interface over Interface("any").
-
-    When hoisting variables assigned in multiple branches:
-    - If one branch assigns nil (Interface("any")) and another assigns Node, use Node
-    - Go interfaces are nil-able, so Interface("Node") can hold nil without widening
-    - If both are different Node subtypes, use Interface("Node") as the common type
-    """
-    if t1 is None:
-        return t2
-    if t2 is None:
-        return t1
-    if t1 == t2:
-        return t1
-    # Prefer named interface over "any" (nil gets typed as Interface("any"))
-    if isinstance(t1, Interface) and t1.name == "any" and isinstance(t2, Interface):
-        return t2
-    if isinstance(t2, Interface) and t2.name == "any" and isinstance(t1, Interface):
-        return t1
-    # Prefer any concrete type over Interface("any")
-    if isinstance(t1, Interface) and t1.name == "any":
-        return t2
-    if isinstance(t2, Interface) and t2.name == "any":
-        return t1
-    # If one is Interface("Node") and other is StructRef, use Interface("Node")
-    if isinstance(t1, Interface) and t1.name == "Node":
-        return t1
-    if isinstance(t2, Interface) and t2.name == "Node":
-        return t2
-    # If both are different StructRefs, they're likely Node subtypes - use Interface("Node")
-    # This handles cases like BraceGroup vs ArithmeticCommand assigned to same variable
-    if isinstance(t1, StructRef) and isinstance(t2, StructRef) and t1.name != t2.name:
-        return Interface("Node")
-    # Otherwise keep first type (arbitrary but deterministic)
-    return t1
-
-
 def _merge_var_types(result: dict[str, Type | None], new_vars: dict[str, Type | None]) -> None:
-    """Merge new_vars into result, using type merging for conflicts."""
+    """Merge new_vars into result, using type joining for conflicts."""
     for name, typ in new_vars.items():
         if name in result:
-            result[name] = _merge_types(result[name], typ)
+            result[name] = join_types(result[name], typ)
         else:
             result[name] = typ
 
@@ -93,7 +55,7 @@ def _vars_first_assigned_in(stmts: list[Stmt], already_declared: set[str]) -> di
                     # Prefer decl_typ (unified type from frontend) over value.typ
                     new_type = getattr(stmt, 'decl_typ', None) or getattr(stmt.value, 'typ', None)
                     if name in result:
-                        result[name] = _merge_types(result[name], new_type)
+                        result[name] = join_types(result[name], new_type)
                     else:
                         result[name] = new_type
         elif isinstance(stmt, TupleAssign) and getattr(stmt, 'is_declaration', False):

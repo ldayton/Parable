@@ -5,7 +5,7 @@ import ast
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
-from ..ir import INT, Function, Interface, Loc, Param, Pointer, StructRef
+from ..ir import INT, Function, Interface, Loc, Param, Pointer, Receiver, StructRef, VOID
 from ..type_overrides import PARAM_TYPE_OVERRIDES
 
 if TYPE_CHECKING:
@@ -26,6 +26,8 @@ class BuilderCallbacks:
     is_exception_subclass: Callable[[str], bool]
     extract_union_struct_names: Callable[[str], list[str]]
     loc_from_node: Callable[[ast.AST], "Loc"]
+    # Set up class context before collect_var_types (sets _current_class_name, _current_func_info)
+    setup_context: Callable[[str, "FuncInfo | None"], None]
     # Combined callback: set up type context then lower statements
     setup_and_lower_stmts: Callable[[str, "FuncInfo | None", "TypeContext", list[ast.stmt]], list["ir.Stmt"]]
 
@@ -123,6 +125,8 @@ def build_constructor(
         param_idx = n_params - n_defaults + i
         if 0 <= param_idx < n_params:
             params[param_idx].default = callbacks.lower_expr(default_ast)
+    # Set up context first (needed by collect_var_types)
+    callbacks.setup_context(class_name, None)
     # Collect variable types and build type context
     var_types, tuple_vars, sentinel_ints, list_element_unions = callbacks.collect_var_types(init_ast.body)
     var_types.update(param_types)
@@ -166,4 +170,63 @@ def build_constructor(
         ret=Pointer(StructRef(class_name)),
         body=body,
         loc=Loc.unknown(),
+    )
+
+
+def build_method_shell(
+    node: ast.FunctionDef,
+    class_name: str,
+    symbols: "SymbolTable",
+    callbacks: BuilderCallbacks,
+    with_body: bool = False,
+) -> Function:
+    """Build IR Function for a method. Set with_body=True to lower statements."""
+    from .context import TypeContext
+    info = symbols.structs.get(class_name)
+    func_info = info.methods.get(node.name) if info else None
+    params = []
+    if func_info:
+        for p in func_info.params:
+            params.append(
+                Param(name=p.name, typ=p.typ, default=p.default_value, loc=Loc.unknown())
+            )
+    body: list["ir.Stmt"] = []
+    if with_body:
+        # Set up context first (needed by collect_var_types)
+        callbacks.setup_context(class_name, func_info)
+        # Collect variable types from body and add parameters + self
+        var_types, tuple_vars, sentinel_ints, list_element_unions = callbacks.collect_var_types(node.body)
+        if func_info:
+            for p in func_info.params:
+                var_types[p.name] = p.typ
+        var_types["self"] = Pointer(StructRef(class_name))
+        # Extract union types from parameter annotations
+        union_types: dict[str, list[str]] = {}
+        non_self_args = [a for a in node.args.args if a.arg != "self"]
+        for arg in non_self_args:
+            if arg.annotation:
+                py_type = callbacks.annotation_to_str(arg.annotation)
+                structs = callbacks.extract_union_struct_names(py_type)
+                if structs:
+                    union_types[arg.arg] = structs
+        type_ctx = TypeContext(
+            return_type=func_info.return_type if func_info else VOID,
+            var_types=var_types,
+            tuple_vars=tuple_vars,
+            sentinel_ints=sentinel_ints,
+            union_types=union_types,
+            list_element_unions=list_element_unions,
+        )
+        body = callbacks.setup_and_lower_stmts(class_name, func_info, type_ctx, node.body)
+    return Function(
+        name=node.name,
+        params=params,
+        ret=func_info.return_type if func_info else VOID,
+        body=body,
+        receiver=Receiver(
+            name="self",
+            typ=StructRef(class_name),
+            pointer=True,
+        ),
+        loc=callbacks.loc_from_node(node),
     )

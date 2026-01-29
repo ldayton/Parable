@@ -51,6 +51,7 @@ from ..ir import (
 from .context import TypeContext
 from . import type_inference
 from . import lowering
+from . import collection
 
 if TYPE_CHECKING:
     pass
@@ -128,12 +129,7 @@ class Frontend:
 
     def _is_exception_subclass(self, name: str) -> bool:
         """Check if a class is an Exception subclass (directly or transitively)."""
-        if name == "Exception":
-            return True
-        info = self.symbols.structs.get(name)
-        if not info:
-            return False
-        return any(self._is_exception_subclass(base) for base in info.bases)
+        return collection.is_exception_subclass(name, self.symbols)
 
     def _build_kind_mapping(self) -> None:
         """Build kind -> struct/class mappings from const_fields["kind"] values."""
@@ -292,23 +288,7 @@ class Frontend:
 
     def _detect_mutated_params(self, node: ast.FunctionDef) -> set[str]:
         """Detect which parameters are mutated in the function body."""
-        mutated = set()
-        param_names = {a.arg for a in node.args.args if a.arg != "self"}
-        for stmt in ast.walk(node):
-            # param.append(...), param.extend(...), param.clear(), param.pop()
-            if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
-                call = stmt.value
-                if isinstance(call.func, ast.Attribute):
-                    if call.func.attr in ("append", "extend", "clear", "pop"):
-                        if isinstance(call.func.value, ast.Name) and call.func.value.id in param_names:
-                            mutated.add(call.func.value.id)
-            # param[i] = ...
-            if isinstance(stmt, ast.Assign):
-                for target in stmt.targets:
-                    if isinstance(target, ast.Subscript):
-                        if isinstance(target.value, ast.Name) and target.value.id in param_names:
-                            mutated.add(target.value.id)
-        return mutated
+        return collection.detect_mutated_params(node)
 
     def _extract_func_info(
         self, node: ast.FunctionDef, is_method: bool = False

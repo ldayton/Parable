@@ -150,33 +150,25 @@ class Frontend:
 
     def _collect_fields(self, tree: ast.Module) -> None:
         """Pass 4: Collect struct fields from class definitions."""
-        for node in tree.body:
-            if isinstance(node, ast.ClassDef):
-                self._collect_class_fields(node)
+        callbacks = collection.CollectionCallbacks(
+            annotation_to_str=self._annotation_to_str,
+            py_type_to_ir=self._py_type_to_ir,
+            py_return_type_to_ir=self._py_return_type_to_ir,
+            lower_expr=self._lower_expr,
+            infer_type_from_value=self._infer_type_from_value,
+        )
+        collection.collect_fields(tree, self.symbols, callbacks)
 
     def _collect_class_fields(self, node: ast.ClassDef) -> None:
         """Collect fields from class body and __init__."""
-        info = self.symbols.structs[node.name]
-        # Collect class-level annotations
-        for stmt in node.body:
-            if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
-                field_name = stmt.target.id
-                py_type = self._annotation_to_str(stmt.annotation)
-                typ = self._py_type_to_ir(py_type)
-                # Apply field type overrides
-                override_key = (info.name, field_name)
-                if override_key in FIELD_TYPE_OVERRIDES:
-                    typ = FIELD_TYPE_OVERRIDES[override_key]
-                info.fields[field_name] = FieldInfo(
-                    name=field_name, typ=typ, py_name=field_name
-                )
-        # Collect fields from __init__
-        for stmt in node.body:
-            if isinstance(stmt, ast.FunctionDef) and stmt.name == "__init__":
-                self._collect_init_fields(stmt, info)
-        # Exception classes always need constructors for panic(NewXxx(...)) pattern
-        if info.is_exception:
-            info.needs_constructor = True
+        callbacks = collection.CollectionCallbacks(
+            annotation_to_str=self._annotation_to_str,
+            py_type_to_ir=self._py_type_to_ir,
+            py_return_type_to_ir=self._py_return_type_to_ir,
+            lower_expr=self._lower_expr,
+            infer_type_from_value=self._infer_type_from_value,
+        )
+        collection.collect_class_fields(node, self.symbols, callbacks)
 
     def _collect_init_fields(self, init: ast.FunctionDef, info: StructInfo) -> None:
         """Collect fields assigned in __init__."""

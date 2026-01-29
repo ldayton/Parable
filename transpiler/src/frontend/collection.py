@@ -276,3 +276,43 @@ def collect_init_fields(
     NEEDS_CONSTRUCTOR = {"Parser", "Lexer", "ContextStack", "QuoteState", "ParseContext"}
     if has_computed_init and info.name in NEEDS_CONSTRUCTOR:
         info.needs_constructor = True
+
+
+def collect_class_fields(
+    node: ast.ClassDef,
+    symbols: SymbolTable,
+    callbacks: CollectionCallbacks,
+) -> None:
+    """Collect fields from class body and __init__."""
+    info = symbols.structs[node.name]
+    # Collect class-level annotations
+    for stmt in node.body:
+        if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
+            field_name = stmt.target.id
+            py_type = callbacks.annotation_to_str(stmt.annotation)
+            typ = callbacks.py_type_to_ir(py_type, False)
+            # Apply field type overrides
+            override_key = (info.name, field_name)
+            if override_key in FIELD_TYPE_OVERRIDES:
+                typ = FIELD_TYPE_OVERRIDES[override_key]
+            info.fields[field_name] = FieldInfo(
+                name=field_name, typ=typ, py_name=field_name
+            )
+    # Collect fields from __init__
+    for stmt in node.body:
+        if isinstance(stmt, ast.FunctionDef) and stmt.name == "__init__":
+            collect_init_fields(stmt, info, callbacks)
+    # Exception classes always need constructors for panic(NewXxx(...)) pattern
+    if info.is_exception:
+        info.needs_constructor = True
+
+
+def collect_fields(
+    tree: ast.Module,
+    symbols: SymbolTable,
+    callbacks: CollectionCallbacks,
+) -> None:
+    """Pass 4: Collect struct fields from class definitions."""
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            collect_class_fields(node, symbols, callbacks)

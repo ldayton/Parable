@@ -325,6 +325,12 @@ class Verifier:
             self.visit_FormattedValue(node)
         elif node_type == "GeneratorExp":
             self.visit_GeneratorExp(node)
+        elif node_type == "ListComp":
+            self.visit_ListComp(node)
+        elif node_type == "SetComp":
+            self.visit_SetComp(node)
+        elif node_type == "DictComp":
+            self.visit_DictComp(node)
         elif node_type == "Match":
             pass
         else:
@@ -558,9 +564,9 @@ class Verifier:
         # Check banned builtins
         if func_name is not None and func_name in BANNED_BUILTINS:
             self.error(node, "builtin", func_name + "() is not allowed")
-        # Check enumerate/zip only allowed in for-loop iter
-        if func_name in ("enumerate", "zip") and not self.in_for_iter:
-            self.error(node, "builtin", func_name + "() only allowed in for-loop header")
+        # Check enumerate/zip only allowed in for-loop iter or eager consumer
+        if func_name in ("enumerate", "zip") and not self.in_for_iter and not self.in_eager_consumer:
+            self.error(node, "builtin", func_name + "() only allowed in for-loop header or eager consumer")
         # Check if this is an eager consumer (for generator expressions)
         is_eager = func_name is not None and func_name in EAGER_CONSUMERS
         # Also check for str.join method call
@@ -896,6 +902,87 @@ class Verifier:
                     self.visit(ifs[j])
                     j += 1
             i += 1
+
+    def visit_ListComp(self, node: ASTNode) -> None:
+        """List comprehensions are eager - set context for enumerate/zip in generators."""
+        old_in_eager = self.in_eager_consumer
+        self.in_eager_consumer = True
+        elt = node.get("elt")
+        if elt is not None:
+            self.visit(elt)
+        generators = node.get("generators", [])
+        i = 0
+        while i < len(generators):
+            gen = generators[i]
+            if isinstance(gen, dict):
+                target = gen.get("target")
+                if target is not None:
+                    self.visit(target)
+                iter_node = gen.get("iter")
+                if iter_node is not None:
+                    self.visit(iter_node)
+                ifs = gen.get("ifs", [])
+                j = 0
+                while j < len(ifs):
+                    self.visit(ifs[j])
+                    j += 1
+            i += 1
+        self.in_eager_consumer = old_in_eager
+
+    def visit_SetComp(self, node: ASTNode) -> None:
+        """Set comprehensions are eager - set context for enumerate/zip in generators."""
+        old_in_eager = self.in_eager_consumer
+        self.in_eager_consumer = True
+        elt = node.get("elt")
+        if elt is not None:
+            self.visit(elt)
+        generators = node.get("generators", [])
+        i = 0
+        while i < len(generators):
+            gen = generators[i]
+            if isinstance(gen, dict):
+                target = gen.get("target")
+                if target is not None:
+                    self.visit(target)
+                iter_node = gen.get("iter")
+                if iter_node is not None:
+                    self.visit(iter_node)
+                ifs = gen.get("ifs", [])
+                j = 0
+                while j < len(ifs):
+                    self.visit(ifs[j])
+                    j += 1
+            i += 1
+        self.in_eager_consumer = old_in_eager
+
+    def visit_DictComp(self, node: ASTNode) -> None:
+        """Dict comprehensions are eager - set context for enumerate/zip in generators."""
+        old_in_eager = self.in_eager_consumer
+        self.in_eager_consumer = True
+        key = node.get("key")
+        if key is not None:
+            self.visit(key)
+        value = node.get("value")
+        if value is not None:
+            self.visit(value)
+        generators = node.get("generators", [])
+        i = 0
+        while i < len(generators):
+            gen = generators[i]
+            if isinstance(gen, dict):
+                target = gen.get("target")
+                if target is not None:
+                    self.visit(target)
+                iter_node = gen.get("iter")
+                if iter_node is not None:
+                    self.visit(iter_node)
+                ifs = gen.get("ifs", [])
+                j = 0
+                while j < len(ifs):
+                    self.visit(ifs[j])
+                    j += 1
+            i += 1
+        self.in_eager_consumer = old_in_eager
 
 
 def verify(ast_dict: ASTNode) -> VerifyResult:

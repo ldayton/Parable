@@ -36,7 +36,7 @@ from src.ir import (
 )
 from src.type_overrides import VAR_TYPE_OVERRIDES
 
-from .liveness import analyze_liveness
+from .liveness import analyze_liveness, iter_all_stmts
 from .returns import analyze_returns, always_returns, contains_return
 from .scope import analyze_scope, _collect_assigned_vars, _collect_used_vars
 
@@ -47,7 +47,6 @@ def analyze(module: Module) -> None:
     analyze_liveness(module)  # Sets has_catch_returns on TryCatch
     analyze_returns(module)  # Check if functions need named returns (must be after initial_value_usage)
     _analyze_hoisting_all(module)
-    _analyze_unused_tuple_targets_all(module)
 
 
 # ============================================================
@@ -310,47 +309,3 @@ def _analyze_hoisting_all(module: Module) -> None:
             _analyze_hoisting(method)
 
 
-def _iter_all_stmts(stmts: list[Stmt]):
-    """Iterate over all statements recursively."""
-    for stmt in stmts:
-        yield stmt
-        if isinstance(stmt, If):
-            yield from _iter_all_stmts(stmt.then_body)
-            yield from _iter_all_stmts(stmt.else_body)
-        elif isinstance(stmt, While):
-            yield from _iter_all_stmts(stmt.body)
-        elif isinstance(stmt, ForRange):
-            yield from _iter_all_stmts(stmt.body)
-        elif isinstance(stmt, ForClassic):
-            yield from _iter_all_stmts(stmt.body)
-        elif isinstance(stmt, Block):
-            yield from _iter_all_stmts(stmt.body)
-        elif isinstance(stmt, TryCatch):
-            yield from _iter_all_stmts(stmt.body)
-            yield from _iter_all_stmts(stmt.catch_body)
-        elif isinstance(stmt, (Match, TypeSwitch)):
-            for case in stmt.cases:
-                yield from _iter_all_stmts(case.body)
-            yield from _iter_all_stmts(stmt.default)
-
-
-def _analyze_unused_tuple_targets(func: Function) -> None:
-    """Mark indices of unused tuple targets for emitting _ in Go."""
-    used_vars = _collect_used_vars(func.body)
-    for stmt in _iter_all_stmts(func.body):
-        if isinstance(stmt, TupleAssign):
-            unused = []
-            for i, t in enumerate(stmt.targets):
-                if isinstance(t, VarLV) and t.name != "_" and t.name not in used_vars:
-                    unused.append(i)
-            if unused:
-                stmt.unused_indices = unused
-
-
-def _analyze_unused_tuple_targets_all(module: Module) -> None:
-    """Run unused tuple target analysis on all functions."""
-    for func in module.functions:
-        _analyze_unused_tuple_targets(func)
-    for struct in module.structs:
-        for method in struct.methods:
-            _analyze_unused_tuple_targets(method)

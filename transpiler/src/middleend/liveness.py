@@ -32,9 +32,11 @@ def analyze_liveness(module: Module) -> None:
     """Run liveness analysis: unused initial values, catch vars, bindings, tuple targets."""
     for func in module.functions:
         _analyze_initial_value_in_function(func)
+        _analyze_unused_tuple_targets(func)
     for struct in module.structs:
         for method in struct.methods:
             _analyze_initial_value_in_function(method)
+            _analyze_unused_tuple_targets(method)
 
 
 def _analyze_initial_value_in_function(func: Function) -> None:
@@ -268,3 +270,40 @@ def _lvalue_reads(name: str, lv) -> bool:
     elif isinstance(lv, DerefLV):
         return _expr_reads(name, lv.ptr)
     return False
+
+
+def iter_all_stmts(stmts: list[Stmt]):
+    """Iterate over all statements recursively."""
+    for stmt in stmts:
+        yield stmt
+        if isinstance(stmt, If):
+            yield from iter_all_stmts(stmt.then_body)
+            yield from iter_all_stmts(stmt.else_body)
+        elif isinstance(stmt, While):
+            yield from iter_all_stmts(stmt.body)
+        elif isinstance(stmt, ForRange):
+            yield from iter_all_stmts(stmt.body)
+        elif isinstance(stmt, ForClassic):
+            yield from iter_all_stmts(stmt.body)
+        elif isinstance(stmt, Block):
+            yield from iter_all_stmts(stmt.body)
+        elif isinstance(stmt, TryCatch):
+            yield from iter_all_stmts(stmt.body)
+            yield from iter_all_stmts(stmt.catch_body)
+        elif isinstance(stmt, (Match, TypeSwitch)):
+            for case in stmt.cases:
+                yield from iter_all_stmts(case.body)
+            yield from iter_all_stmts(stmt.default)
+
+
+def _analyze_unused_tuple_targets(func: Function) -> None:
+    """Mark indices of unused tuple targets for emitting _ in Go."""
+    used_vars = _collect_used_vars(func.body)
+    for stmt in iter_all_stmts(func.body):
+        if isinstance(stmt, TupleAssign):
+            unused = []
+            for i, t in enumerate(stmt.targets):
+                if isinstance(t, VarLV) and t.name != "_" and t.name not in used_vars:
+                    unused.append(i)
+            if unused:
+                stmt.unused_indices = unused

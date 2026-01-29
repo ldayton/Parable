@@ -25,6 +25,34 @@ Frontend deficiencies (should be fixed in frontend.py):
 Middleend deficiencies (should be fixed in middleend.py):
 - None identified. Middleend correctly passes through type information; the gaps
   originate in frontend's inability to infer types from Python source.
+
+UNCOMPENSATED DEFICIENCIES (non-idiomatic output)
+=================================================
+
+Frontend deficiencies (should be fixed in frontend.py):
+- Helper function indirection: `ParableFunctions._substring(s, a, b)` instead of
+  `s.substring(a, b)`, `_isWhitespace(c)` instead of `Character.isWhitespace()`.
+  Frontend should emit generic IR that backends map to stdlib. (~356 call sites)
+- Character/string conflation: `String.valueOf(s.charAt(i)).equals("(")` instead
+  of `s.charAt(i) == '('`. Frontend should track char vs string types so backend
+  can emit `==` for characters. (~556 single-char comparisons, ~394 String.valueOf)
+- Factory field overwrites: `ParseError self = new ParseError("", 0, 0);` then
+  assigns each field. Frontend should emit constructor calls or StructLit. (~7 factories)
+- Nullable fields without Optional: fields used with null but declared as bare
+  types. Frontend should emit Optional wrapper for nullable fields. (~47 fields)
+- Complex iteration patterns: `IntStream.iterate(n-1, _x -> _x < -1, _x -> _x + -1)`
+  instead of `for (int i = n-1; i >= 0; i--)`. Frontend should emit ForClassic. (~7 sites)
+- Exception types not in IR: TryCatch catches generic `Exception` instead of
+  specific types like `ParseError`. Frontend should include exception type. (~7 sites)
+- Last-element access: `list.get(list.size() - 1)` instead of `list.getLast()`.
+  Frontend could emit Index with -1 sentinel that backend maps to getLast(). (~19 sites)
+
+Middleend deficiencies (should be fixed in middleend.py):
+- Unnecessary casts: `((Node) w).toSexp()` when w's type is already known to
+  implement Node. Middleend should track precise types. (~70 casts)
+
+Backend deficiencies (Java-specific, fixable in java.py):
+- None identified yet. Current issues stem from frontend/middleend gaps.
 """
 
 from __future__ import annotations

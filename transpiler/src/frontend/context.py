@@ -60,11 +60,9 @@ class LoweringDispatch:
     merge_keyword_args: Callable[["Type", str, list, ast.Call], list]
     fill_default_args: Callable[["Type", str, list], list]
     merge_keyword_args_for_func: Callable[["FuncInfo", list, ast.Call], list]
-    fill_default_args_for_func: Callable[["FuncInfo", list], list]
     add_address_of_for_ptr_params: Callable[["Type", str, list, list[ast.expr]], list]
     deref_for_slice_params: Callable[["Type", str, list, list[ast.expr]], list]
     deref_for_func_slice_params: Callable[[str, list, list[ast.expr]], list]
     coerce_sentinel_to_ptr: Callable[["Type", str, list, list], list]
-    coerce_args_to_node: Callable[["FuncInfo", list], list]
     # Exception handling
     set_catch_var: Callable[[str | None], str | None]

@@ -471,10 +471,6 @@ class Frontend:
         """Merge keyword arguments into positional args at their proper positions for free functions."""
         return lowering.merge_keyword_args_for_func(func_info, args, node, self._lower_expr)
 
-    def _fill_default_args_for_func(self, func_info: FuncInfo, args: list) -> list:
-        """Fill in missing arguments with default values for free functions with optional params."""
-        return lowering.fill_default_args_for_func(func_info, args)
-
     def _add_address_of_for_ptr_params(self, obj_type: Type, method: str, args: list, orig_args: list[ast.expr]) -> list:
         """Add & when passing slice to pointer-to-slice parameter."""
         return lowering.add_address_of_for_ptr_params(
@@ -496,10 +492,6 @@ class Frontend:
     def _extract_struct_name(self, typ: Type) -> str | None:
         """Extract struct name from wrapped types like Pointer, Optional, etc."""
         return type_inference.extract_struct_name(typ)
-
-    def _coerce_args_to_node(self, func_info: "FuncInfo", args: list) -> list:
-        """Add type assertions when passing interface{} to Node parameter."""
-        return lowering.coerce_args_to_node(func_info, args)
 
     def _is_len_call(self, node: ast.expr) -> bool:
         """Check if node is a len() call."""
@@ -549,12 +541,10 @@ class Frontend:
             merge_keyword_args=self._merge_keyword_args,
             fill_default_args=self._fill_default_args,
             merge_keyword_args_for_func=self._merge_keyword_args_for_func,
-            fill_default_args_for_func=self._fill_default_args_for_func,
             add_address_of_for_ptr_params=self._add_address_of_for_ptr_params,
             deref_for_slice_params=self._deref_for_slice_params,
             deref_for_func_slice_params=self._deref_for_func_slice_params,
             coerce_sentinel_to_ptr=self._coerce_sentinel_to_ptr,
-            coerce_args_to_node=self._coerce_args_to_node,
             set_catch_var=self._set_catch_var,
         )
         return ctx, dispatch

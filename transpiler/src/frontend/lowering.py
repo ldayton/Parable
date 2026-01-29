@@ -1631,11 +1631,11 @@ def lower_expr_Call(
             # Merge keyword arguments into positional args
             args = dispatch.merge_keyword_args_for_func(func_info, args, node)
             # Fill in default arguments
-            args = dispatch.fill_default_args_for_func(func_info, args)
+            args = fill_default_args_for_func(func_info, args)
             # Dereference * for slice params
             args = dispatch.deref_for_func_slice_params(func_name, args, node.args)
             # Add type assertions for interface{} -> Node coercion
-            args = dispatch.coerce_args_to_node(func_info, args)
+            args = coerce_args_to_node(func_info, args)
         return ir.Call(func=func_name, args=args, typ=ret_type, loc=loc_from_node(node))
     return ir.Var(name="TODO_Call", typ=InterfaceRef("any"))
 

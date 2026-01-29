@@ -121,7 +121,6 @@ BANNED_NODES: set[str] = {
     "Global", "Nonlocal",
     "NamedExpr",
     "TypeAlias", "TryStar",
-    "JoinedStr", "FormattedValue",
 }
 
 # Allowed imports
@@ -311,6 +310,10 @@ class Verifier:
             self.visit_BinOp(node)
         elif node_type == "Delete":
             self.visit_Delete(node)
+        elif node_type == "JoinedStr":
+            self.visit_JoinedStr(node)
+        elif node_type == "FormattedValue":
+            self.visit_FormattedValue(node)
         elif node_type == "Match":
             pass
         else:
@@ -331,7 +334,7 @@ class Verifier:
             "AugAssign", "For", "While", "If", "Raise", "Try", "ExceptHandler",
             "Import", "ImportFrom", "Pass", "Break", "Continue", "Expr",
             "BoolOp", "BinOp", "UnaryOp", "IfExp", "Dict", "Set", "ListComp",
-            "SetComp", "DictComp", "Compare", "Call", "FormattedValue",
+            "SetComp", "DictComp", "Compare", "Call", "JoinedStr", "FormattedValue",
             "Constant", "Attribute", "Subscript", "Starred", "Name", "List",
             "Tuple", "Slice", "And", "Or", "Add", "Sub", "Mult", "Div",
             "Mod", "Pow", "LShift", "RShift", "BitOr", "BitXor", "BitAnd",
@@ -365,9 +368,6 @@ class Verifier:
         elif node_type == "NamedExpr":
             category = "expression"
             message = "walrus operator (:=) is not allowed"
-        elif node_type in ("JoinedStr", "FormattedValue"):
-            category = "syntax"
-            message = "f-strings are not allowed"
         self.error(node, category, message)
 
     def visit_Module(self, node: ASTNode) -> None:
@@ -801,6 +801,26 @@ class Verifier:
     def visit_Delete(self, node: ASTNode) -> None:
         """Check delete statement - banned."""
         self.error(node, "syntax", "del: reassign or let variable go out of scope")
+
+    def visit_JoinedStr(self, node: ASTNode) -> None:
+        """Visit f-string, check children."""
+        values = node.get("values", [])
+        i = 0
+        while i < len(values):
+            self.visit(values[i])
+            i += 1
+
+    def visit_FormattedValue(self, node: ASTNode) -> None:
+        """Check f-string replacement field: {expr} only, no !conv or :spec."""
+        conversion = node.get("conversion", -1)
+        if conversion != -1:
+            self.error(node, "syntax", "f-string !conversion not supported")
+        format_spec = node.get("format_spec")
+        if format_spec is not None:
+            self.error(node, "syntax", "f-string :format_spec not supported")
+        value = node.get("value")
+        if value is not None:
+            self.visit(value)
 
 
 def verify(ast_dict: ASTNode) -> VerifyResult:

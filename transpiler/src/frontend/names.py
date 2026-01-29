@@ -18,7 +18,7 @@ ALLOWED_BUILTINS: set[str] = {
     # Math
     "abs", "min", "max", "sum", "round", "divmod", "pow",
     # Conversion
-    "int", "float", "str", "bool", "bytes", "chr", "ord",
+    "int", "float", "str", "bool", "bytes", "bytearray", "chr", "ord",
     # Collections
     "list", "dict", "set", "tuple", "frozenset", "len", "sorted",
     # Type check
@@ -30,7 +30,7 @@ ALLOWED_BUILTINS: set[str] = {
     # Boolean
     "all", "any",
     # Other
-    "slice", "super", "object", "Exception", "BaseException",
+    "slice", "super", "object", "Exception", "BaseException", "NotImplementedError",
     # print is handled specially
     "print",
 }
@@ -415,8 +415,10 @@ class NameResolver:
             arg_name = arg.get("arg", "")
             lineno = arg.get("lineno", 0)
             col = arg.get("col_offset", 0)
-            # Skip self/cls
+            # Add self/cls without shadowing warning
             if i == 0 and arg_name in ("self", "cls"):
+                info = NameInfo(arg_name, "parameter", "local", lineno, col, class_name, func_name)
+                self.result.table.add_local(class_name, func_name, info)
                 i += 1
                 continue
             # Warn if parameter shadows a builtin
@@ -463,6 +465,15 @@ class NameResolver:
             elif node_type == "For":
                 target = node.get("target", {})
                 self.collect_assign_target(target, class_name, func_name, node)
+            elif node_type == "ExceptHandler":
+                exc_name = node.get("name")
+                if exc_name is not None:
+                    existing = self.result.table.get_local(class_name, func_name, exc_name)
+                    if existing is None:
+                        lineno = node.get("lineno", 0)
+                        col = node.get("col_offset", 0)
+                        info = NameInfo(exc_name, "variable", "local", lineno, col, class_name, func_name)
+                        self.result.table.add_local(class_name, func_name, info)
             # Add children (skip nested FunctionDef - shouldn't exist per Phase 3)
             children = get_children(node)
             m = 0

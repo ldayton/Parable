@@ -21,7 +21,7 @@ src-fmt *ARGS:
 
 # Check for banned Python constructions
 src-style:
-    uv run --directory transpiler python -m src.cli --check-style "$(pwd)/src" 2>&1 | sed -u "s/^/[src-style] /" | tee /tmp/{{project}}-{{run_id}}-style.log
+    just -f transpiler/justfile style "$(pwd)/src" 2>&1 | sed -u "s/^/[src-style] /" | tee /tmp/{{project}}-{{run_id}}-style.log
 
 # Verify lock file is up to date
 src-verify-lock:
@@ -36,20 +36,20 @@ backend-transpile backend:
     case "{{backend}}" in
         go)
             out="dist/go/parable.go"
-            uv run --directory transpiler python -m src.cli "$(pwd)/src/parable.py" -b go > /tmp/parable-ir.go
+            uv run --directory transpiler python -m src.cli --target go < "$(pwd)/src/parable.py" > /tmp/parable-ir.go
             gofmt /tmp/parable-ir.go > "$out"
             ;;
         python)
             mkdir -p dist/python
-            uv run --directory transpiler python -m src.cli "$(pwd)/src/parable.py" -b python > dist/python/parable.py
+            uv run --directory transpiler python -m src.cli --target py < "$(pwd)/src/parable.py" > dist/python/parable.py
             ;;
         ts)
             mkdir -p dist/ts
-            uv run --directory transpiler python -m src.cli "$(pwd)/src/parable.py" -b ts > dist/ts/parable.ts
+            uv run --directory transpiler python -m src.cli --target ts < "$(pwd)/src/parable.py" > dist/ts/parable.ts
             ;;
         java)
             mkdir -p dist/java
-            uv run --directory transpiler python -m src.cli "$(pwd)/src/parable.py" -b java > dist/java/Parable.java
+            uv run --directory transpiler python -m src.cli --target java < "$(pwd)/src/parable.py" > dist/java/Parable.java
             ;;
         *)
             echo "Unknown backend: {{backend}}"

@@ -122,7 +122,7 @@ The restricted subset eliminates major parsing pain points:
 
 | Constraint             | Simplification                                     |
 | ---------------------- | -------------------------------------------------- |
-| No f-strings           | Tokenizer is straightforward string handling       |
+| f-strings: `{expr}` only | No `!conversion`, no `:format_spec`              |
 | No generators          | Tokenizer returns `list[Token]`, not lazy iterator |
 | No nested functions    | No closure/scope tracking during parse             |
 | No walrus operator     | No `:=` ambiguity in expressions                   |

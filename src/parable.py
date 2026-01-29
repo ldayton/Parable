@@ -231,10 +231,10 @@ class Token:
 
     def __repr__(self) -> str:
         if self.word:
-            return f"Token({self.type}, {self.value!r}, {self.pos}, word={self.word!r})"
+            return f"Token({self.type}, {self.value}, {self.pos}, word={self.word})"
         if self.parts:
-            return f"Token({self.type}, {self.value!r}, {self.pos}, parts={len(self.parts)})"
-        return f"Token({self.type}, {self.value!r}, {self.pos})"
+            return f"Token({self.type}, {self.value}, {self.pos}, parts={len(self.parts)})"
+        return f"Token({self.type}, {self.value}, {self.pos})"
 
 
 class ParserStateFlags:

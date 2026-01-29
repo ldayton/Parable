@@ -52,9 +52,10 @@ class Frontend:
         self._kind_to_struct: dict[str, str] = {}
         self._kind_to_class: dict[str, str] = {}
 
-    def transpile(self, source: str) -> Module:
+    def transpile(self, source: str, tree: ast.Module | None = None) -> Module:
         """Parse Python source and produce IR Module."""
-        tree = ast.parse(source)
+        if tree is None:
+            tree = ast.parse(source)
         # Pass 1: Collect class names and inheritance
         collection.collect_class_names(tree, self.symbols)
         # Pass 2: Mark Node subclasses

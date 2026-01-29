@@ -4,6 +4,7 @@ from src.ir import (
     Assign,
     Block,
     DerefLV,
+    Expr,
     ExprStmt,
     FieldLV,
     ForClassic,
@@ -11,6 +12,7 @@ from src.ir import (
     Function,
     If,
     IndexLV,
+    LValue,
     Match,
     Module,
     OpAssign,
@@ -217,7 +219,7 @@ def _first_access_in_stmts(name: str, stmts: list[Stmt]) -> str | None:
     return None
 
 
-def _expr_reads(name: str, expr) -> bool:
+def _expr_reads(name: str, expr: Expr | None) -> bool:
     """Check if expression reads the variable."""
     if expr is None:
         return False
@@ -279,7 +281,7 @@ def _expr_reads(name: str, expr) -> bool:
     return False
 
 
-def _lvalue_reads(name: str, lv) -> bool:
+def _lvalue_reads(name: str, lv: LValue) -> bool:
     """Check if lvalue reads the variable (e.g., arr[i] reads arr and i)."""
     if isinstance(lv, VarLV):
         return False  # Simple var assignment doesn't read
@@ -292,7 +294,7 @@ def _lvalue_reads(name: str, lv) -> bool:
     return False
 
 
-def iter_all_stmts(stmts: list[Stmt]):
+def iter_all_stmts(stmts: list[Stmt]) -> list[Stmt]:
     """Iterate over all statements recursively."""
     for stmt in stmts:
         yield stmt

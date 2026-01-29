@@ -12,24 +12,46 @@ Annotations added:
 
 from src.ir import (
     Assign,
+    BinaryOp,
     Block,
+    Call,
+    Cast,
     DerefLV,
+    Expr,
     ExprStmt,
+    FieldAccess,
     FieldLV,
     ForClassic,
     ForRange,
     Function,
+    Index,
     IndexLV,
+    IsNil,
+    IsType,
+    Len,
+    MakeSlice,
+    MapLit,
     Match,
     MethodCall,
     Module,
     OpAssign,
     Param,
     Return,
+    SetLit,
+    SliceExpr,
+    SliceLit,
+    StaticCall,
     Stmt,
+    StringConcat,
+    StringFormat,
+    StructLit,
+    Ternary,
     TryCatch,
     TupleAssign,
+    TupleLit,
+    TypeAssert,
     TypeSwitch,
+    UnaryOp,
     Var,
     VarDecl,
     VarLV,
@@ -74,317 +96,347 @@ def _collect_assigned_vars(stmts: list[Stmt]) -> set[str]:
     return result
 
 
+def _scope_visit_expr(result: set[str], expr: Expr | None) -> None:
+    """Visit an expression and collect variable names into result."""
+    if expr is None:
+        return
+    if isinstance(expr, Var):
+        result.add(expr.name)
+    # Visit children based on expression type
+    if isinstance(expr, FieldAccess):
+        _scope_visit_expr(result, expr.obj)
+    elif isinstance(expr, Index):
+        _scope_visit_expr(result, expr.obj)
+        _scope_visit_expr(result, expr.index)
+    elif isinstance(expr, SliceExpr):
+        _scope_visit_expr(result, expr.obj)
+        _scope_visit_expr(result, expr.low)
+        _scope_visit_expr(result, expr.high)
+    elif isinstance(expr, BinaryOp):
+        _scope_visit_expr(result, expr.left)
+        _scope_visit_expr(result, expr.right)
+    elif isinstance(expr, UnaryOp):
+        _scope_visit_expr(result, expr.operand)
+    elif isinstance(expr, Ternary):
+        _scope_visit_expr(result, expr.cond)
+        _scope_visit_expr(result, expr.then_expr)
+        _scope_visit_expr(result, expr.else_expr)
+    elif isinstance(expr, Call):
+        for arg in expr.args:
+            _scope_visit_expr(result, arg)
+    elif isinstance(expr, MethodCall):
+        _scope_visit_expr(result, expr.obj)
+        for arg in expr.args:
+            _scope_visit_expr(result, arg)
+    elif isinstance(expr, StaticCall):
+        for arg in expr.args:
+            _scope_visit_expr(result, arg)
+    elif isinstance(expr, Cast):
+        _scope_visit_expr(result, expr.expr)
+    elif isinstance(expr, TypeAssert):
+        _scope_visit_expr(result, expr.expr)
+    elif isinstance(expr, IsType):
+        _scope_visit_expr(result, expr.expr)
+    elif isinstance(expr, IsNil):
+        _scope_visit_expr(result, expr.expr)
+    elif isinstance(expr, Len):
+        _scope_visit_expr(result, expr.expr)
+    elif isinstance(expr, MakeSlice):
+        _scope_visit_expr(result, expr.length)
+        _scope_visit_expr(result, expr.capacity)
+    elif isinstance(expr, SliceLit):
+        for elem in expr.elements:
+            _scope_visit_expr(result, elem)
+    elif isinstance(expr, MapLit):
+        for k, v in expr.entries:
+            _scope_visit_expr(result, k)
+            _scope_visit_expr(result, v)
+    elif isinstance(expr, SetLit):
+        for elem in expr.elements:
+            _scope_visit_expr(result, elem)
+    elif isinstance(expr, StructLit):
+        for v in expr.fields.values():
+            _scope_visit_expr(result, v)
+    elif isinstance(expr, TupleLit):
+        for elem in expr.elements:
+            _scope_visit_expr(result, elem)
+    elif isinstance(expr, StringConcat):
+        for part in expr.parts:
+            _scope_visit_expr(result, part)
+    elif isinstance(expr, StringFormat):
+        for arg in expr.args:
+            _scope_visit_expr(result, arg)
+
+
+def _scope_visit_stmt(result: set[str], stmt: Stmt) -> None:
+    """Visit a statement and collect variable names into result."""
+    if isinstance(stmt, VarDecl):
+        if stmt.value:
+            _scope_visit_expr(result, stmt.value)
+    elif isinstance(stmt, Assign):
+        _scope_visit_expr(result, stmt.value)
+        if isinstance(stmt.target, IndexLV):
+            _scope_visit_expr(result, stmt.target.obj)
+            _scope_visit_expr(result, stmt.target.index)
+        elif isinstance(stmt.target, FieldLV):
+            _scope_visit_expr(result, stmt.target.obj)
+        elif isinstance(stmt.target, DerefLV):
+            _scope_visit_expr(result, stmt.target.ptr)
+    elif isinstance(stmt, OpAssign):
+        _scope_visit_expr(result, stmt.value)
+        if isinstance(stmt.target, IndexLV):
+            _scope_visit_expr(result, stmt.target.obj)
+            _scope_visit_expr(result, stmt.target.index)
+        elif isinstance(stmt.target, FieldLV):
+            _scope_visit_expr(result, stmt.target.obj)
+        elif isinstance(stmt.target, DerefLV):
+            _scope_visit_expr(result, stmt.target.ptr)
+    elif isinstance(stmt, TupleAssign):
+        _scope_visit_expr(result, stmt.value)
+    elif isinstance(stmt, ExprStmt):
+        _scope_visit_expr(result, stmt.expr)
+    elif isinstance(stmt, Return):
+        if stmt.value:
+            _scope_visit_expr(result, stmt.value)
+    elif isinstance(stmt, If):
+        _scope_visit_expr(result, stmt.cond)
+        if stmt.init:
+            _scope_visit_stmt(result, stmt.init)
+        for s in stmt.then_body:
+            _scope_visit_stmt(result, s)
+        for s in stmt.else_body:
+            _scope_visit_stmt(result, s)
+    elif isinstance(stmt, While):
+        _scope_visit_expr(result, stmt.cond)
+        for s in stmt.body:
+            _scope_visit_stmt(result, s)
+    elif isinstance(stmt, ForRange):
+        _scope_visit_expr(result, stmt.iterable)
+        for s in stmt.body:
+            _scope_visit_stmt(result, s)
+    elif isinstance(stmt, ForClassic):
+        if stmt.init:
+            _scope_visit_stmt(result, stmt.init)
+        if stmt.cond:
+            _scope_visit_expr(result, stmt.cond)
+        if stmt.post:
+            _scope_visit_stmt(result, stmt.post)
+        for s in stmt.body:
+            _scope_visit_stmt(result, s)
+    elif isinstance(stmt, Block):
+        for s in stmt.body:
+            _scope_visit_stmt(result, s)
+    elif isinstance(stmt, TryCatch):
+        for s in stmt.body:
+            _scope_visit_stmt(result, s)
+        for s in stmt.catch_body:
+            _scope_visit_stmt(result, s)
+    elif isinstance(stmt, Match):
+        _scope_visit_expr(result, stmt.expr)
+        for case in stmt.cases:
+            for s in case.body:
+                _scope_visit_stmt(result, s)
+        for s in stmt.default:
+            _scope_visit_stmt(result, s)
+    elif isinstance(stmt, TypeSwitch):
+        _scope_visit_expr(result, stmt.expr)
+        for case in stmt.cases:
+            for s in case.body:
+                _scope_visit_stmt(result, s)
+        for s in stmt.default:
+            _scope_visit_stmt(result, s)
+
+
 def _collect_used_vars(stmts: list[Stmt]) -> set[str]:
     """Collect all variable names referenced in statements and expressions."""
     result: set[str] = set()
-
-    def visit_expr(expr) -> None:
-        if expr is None:
-            return
-        if isinstance(expr, Var):
-            result.add(expr.name)
-        # Recursively visit all expression attributes
-        for attr in (
-            "obj",
-            "left",
-            "right",
-            "operand",
-            "cond",
-            "then_expr",
-            "else_expr",
-            "expr",
-            "index",
-            "low",
-            "high",
-            "ptr",
-            "value",
-            "message",
-            "pos",
-            "iterable",
-            "target",
-            "inner",
-            "on_type",
-            "length",
-            "capacity",
-        ):
-            if hasattr(expr, attr):
-                visit_expr(getattr(expr, attr))
-        if hasattr(expr, "args"):
-            for arg in expr.args:
-                visit_expr(arg)
-        if hasattr(expr, "elements"):
-            for elem in expr.elements:
-                visit_expr(elem)
-        if hasattr(expr, "parts"):
-            for part in expr.parts:
-                visit_expr(part)
-        if hasattr(expr, "entries"):
-            entries = expr.entries
-            if isinstance(entries, dict):
-                for v in entries.values():
-                    visit_expr(v)
-            else:
-                for item in entries:
-                    if isinstance(item, tuple) and len(item) == 2:
-                        visit_expr(item[1])
-        if hasattr(expr, "fields") and isinstance(expr.fields, dict):
-            for v in expr.fields.values():
-                visit_expr(v)
-
-    def visit_stmt(stmt: Stmt) -> None:
-        if isinstance(stmt, VarDecl):
-            if stmt.value:
-                visit_expr(stmt.value)
-        elif isinstance(stmt, (Assign, OpAssign)):
-            visit_expr(stmt.value)
-            # Also check lvalue targets for variable usage
-            target = stmt.target
-            if hasattr(target, "obj"):
-                visit_expr(target.obj)
-            if hasattr(target, "index"):
-                visit_expr(target.index)
-            if hasattr(target, "ptr"):
-                visit_expr(target.ptr)
-        elif isinstance(stmt, TupleAssign):
-            visit_expr(stmt.value)
-        elif isinstance(stmt, ExprStmt):
-            visit_expr(stmt.expr)
-        elif isinstance(stmt, Return):
-            if stmt.value:
-                visit_expr(stmt.value)
-        elif isinstance(stmt, If):
-            visit_expr(stmt.cond)
-            if stmt.init:
-                visit_stmt(stmt.init)
-            for s in stmt.then_body:
-                visit_stmt(s)
-            for s in stmt.else_body:
-                visit_stmt(s)
-        elif isinstance(stmt, While):
-            visit_expr(stmt.cond)
-            for s in stmt.body:
-                visit_stmt(s)
-        elif isinstance(stmt, ForRange):
-            visit_expr(stmt.iterable)
-            for s in stmt.body:
-                visit_stmt(s)
-        elif isinstance(stmt, ForClassic):
-            if stmt.init:
-                visit_stmt(stmt.init)
-            if stmt.cond:
-                visit_expr(stmt.cond)
-            if stmt.post:
-                visit_stmt(stmt.post)
-            for s in stmt.body:
-                visit_stmt(s)
-        elif isinstance(stmt, Block):
-            for s in stmt.body:
-                visit_stmt(s)
-        elif isinstance(stmt, TryCatch):
-            for s in stmt.body:
-                visit_stmt(s)
-            for s in stmt.catch_body:
-                visit_stmt(s)
-        elif isinstance(stmt, Match):
-            visit_expr(stmt.expr)
-            for case in stmt.cases:
-                for s in case.body:
-                    visit_stmt(s)
-            for s in stmt.default:
-                visit_stmt(s)
-        elif isinstance(stmt, TypeSwitch):
-            visit_expr(stmt.expr)
-            for case in stmt.cases:
-                for s in case.body:
-                    visit_stmt(s)
-            for s in stmt.default:
-                visit_stmt(s)
-
     for stmt in stmts:
-        visit_stmt(stmt)
+        _scope_visit_stmt(result, stmt)
     return result
+
+
+class _ScopeContext:
+    """Context for scope analysis, holding shared state."""
+
+    def __init__(self, params: dict[str, Param], assigned: set[str]) -> None:
+        self.declared: dict[str, VarDecl | Assign] = {}
+        self.params: dict[str, Param] = params
+        self.assigned: set[str] = assigned
+
+
+def _scope_mark_reassigned(ctx: _ScopeContext, name: str) -> None:
+    """Mark a variable as reassigned."""
+    if name in ctx.declared:
+        decl = ctx.declared[name]
+        decl.is_reassigned = True
+        decl.assignment_count += 1
+    elif name in ctx.params:
+        ctx.params[name].is_modified = True
+
+
+def _scope_is_new_declaration(
+    ctx: _ScopeContext, lv: VarLV | IndexLV | FieldLV | DerefLV, local_assigned: set[str]
+) -> bool:
+    """Check if this lvalue represents a first assignment to a variable."""
+    if isinstance(lv, VarLV):
+        return lv.name not in ctx.params and lv.name not in local_assigned
+    return False
+
+
+def _scope_check_lvalue(
+    ctx: _ScopeContext, lv: VarLV | IndexLV | FieldLV | DerefLV
+) -> None:
+    """Mark the base variable of an lvalue as modified."""
+    if isinstance(lv, VarLV):
+        _scope_mark_reassigned(ctx, lv.name)
+    elif isinstance(lv, IndexLV):
+        if isinstance(lv.obj, Var):
+            _scope_mark_reassigned(ctx, lv.obj.name)
+    elif isinstance(lv, FieldLV):
+        if isinstance(lv.obj, Var):
+            _scope_mark_reassigned(ctx, lv.obj.name)
+    elif isinstance(lv, DerefLV):
+        if isinstance(lv.ptr, Var):
+            _scope_mark_reassigned(ctx, lv.ptr.name)
+
+
+def _scope_check_expr(ctx: _ScopeContext, expr: Expr | None) -> None:
+    """Check for mutating method calls on declared variables."""
+    if expr is None:
+        return
+    if isinstance(expr, MethodCall):
+        if isinstance(expr.obj, Var):
+            _scope_mark_reassigned(ctx, expr.obj.name)
+        _scope_check_expr(ctx, expr.obj)
+        for arg in expr.args:
+            _scope_check_expr(ctx, arg)
+
+
+def _scope_check_stmt(ctx: _ScopeContext, stmt: Stmt, local_assigned: set[str]) -> None:
+    """Check a statement for declarations and reassignments."""
+    if isinstance(stmt, VarDecl):
+        stmt.is_reassigned = False
+        stmt.assignment_count = 0
+        ctx.declared[stmt.name] = stmt
+        local_assigned.add(stmt.name)
+        if stmt.value:
+            _scope_check_expr(ctx, stmt.value)
+    elif isinstance(stmt, Assign):
+        stmt.is_declaration = _scope_is_new_declaration(ctx, stmt.target, local_assigned)
+        if isinstance(stmt.target, VarLV) and stmt.is_declaration:
+            local_assigned.add(stmt.target.name)
+            stmt.is_reassigned = False
+            stmt.assignment_count = 0
+            ctx.declared[stmt.target.name] = stmt
+        else:
+            _scope_check_lvalue(ctx, stmt.target)
+        _scope_check_expr(ctx, stmt.value)
+    elif isinstance(stmt, OpAssign):
+        _scope_check_lvalue(ctx, stmt.target)
+        _scope_check_expr(ctx, stmt.value)
+    elif isinstance(stmt, TupleAssign):
+        all_new = True
+        new_targets: list[str] = []
+        for target in stmt.targets:
+            if isinstance(target, VarLV):
+                if (
+                    target.name in ctx.assigned
+                    or target.name in ctx.declared
+                    or target.name in ctx.params
+                    or target.name in local_assigned
+                ):
+                    all_new = False
+                else:
+                    new_targets.append(target.name)
+                    local_assigned.add(target.name)
+            else:
+                all_new = False
+        stmt.is_declaration = all_new
+        stmt.new_targets = new_targets
+        for target in stmt.targets:
+            if isinstance(target, VarLV) and not stmt.is_declaration:
+                _scope_mark_reassigned(ctx, target.name)
+        _scope_check_expr(ctx, stmt.value)
+    elif isinstance(stmt, ExprStmt):
+        _scope_check_expr(ctx, stmt.expr)
+    elif isinstance(stmt, Return):
+        if stmt.value:
+            _scope_check_expr(ctx, stmt.value)
+    elif isinstance(stmt, If):
+        _scope_check_expr(ctx, stmt.cond)
+        if stmt.init:
+            _scope_check_stmt(ctx, stmt.init, local_assigned)
+        then_assigned: set[str] = set(local_assigned)
+        for s in stmt.then_body:
+            _scope_check_stmt(ctx, s, then_assigned)
+        else_assigned: set[str] = set(local_assigned)
+        for s in stmt.else_body:
+            _scope_check_stmt(ctx, s, else_assigned)
+    elif isinstance(stmt, While):
+        _scope_check_expr(ctx, stmt.cond)
+        for s in stmt.body:
+            _scope_check_stmt(ctx, s, local_assigned)
+    elif isinstance(stmt, ForRange):
+        for s in stmt.body:
+            _scope_check_stmt(ctx, s, local_assigned)
+    elif isinstance(stmt, ForClassic):
+        if stmt.init:
+            _scope_check_stmt(ctx, stmt.init, local_assigned)
+        if stmt.cond:
+            _scope_check_expr(ctx, stmt.cond)
+        if stmt.post:
+            _scope_check_stmt(ctx, stmt.post, local_assigned)
+        for s in stmt.body:
+            _scope_check_stmt(ctx, s, local_assigned)
+    elif isinstance(stmt, Block):
+        for s in stmt.body:
+            _scope_check_stmt(ctx, s, local_assigned)
+    elif isinstance(stmt, TryCatch):
+        try_assigned: set[str] = set(local_assigned)
+        for s in stmt.body:
+            _scope_check_stmt(ctx, s, try_assigned)
+        catch_assigned: set[str] = set(local_assigned)
+        for s in stmt.catch_body:
+            _scope_check_stmt(ctx, s, catch_assigned)
+    elif isinstance(stmt, Match):
+        _scope_check_expr(ctx, stmt.expr)
+        for case in stmt.cases:
+            case_assigned: set[str] = set(local_assigned)
+            for s in case.body:
+                _scope_check_stmt(ctx, s, case_assigned)
+        default_assigned: set[str] = set(local_assigned)
+        for s in stmt.default:
+            _scope_check_stmt(ctx, s, default_assigned)
+    elif isinstance(stmt, TypeSwitch):
+        _scope_check_expr(ctx, stmt.expr)
+        for case in stmt.cases:
+            case_assigned: set[str] = set(local_assigned)
+            for s in case.body:
+                _scope_check_stmt(ctx, s, case_assigned)
+        default_assigned: set[str] = set(local_assigned)
+        for s in stmt.default:
+            _scope_check_stmt(ctx, s, default_assigned)
 
 
 def _analyze_function(func: Function) -> None:
     """Analyze a single function for reassignments."""
-    declared: dict[str, VarDecl] = {}
-    assigned: set[str] = set()  # Variables already assigned (for is_declaration)
-    params: dict[str, Param] = {p.name: p for p in func.params}
-
-    # Initialize annotations
+    params: dict[str, Param] = {}
+    for p in func.params:
+        params[p.name] = p
+    assigned: set[str] = set()
     for p in func.params:
         p.is_modified = False
         p.is_unused = False
-        assigned.add(p.name)  # Parameters are already "assigned"
-
-    # Collect all referenced variable names
+        assigned.add(p.name)
     used_vars: set[str] = _collect_used_vars(func.body)
-
-    def mark_reassigned(name: str) -> None:
-        if name in declared:
-            declared[name].is_reassigned = True
-            declared[name].assignment_count += 1
-        elif name in params:
-            params[name].is_modified = True
-
-    def is_new_declaration(lv, local_assigned: set[str]) -> bool:
-        """Check if this lvalue represents a first assignment to a variable."""
-        if isinstance(lv, VarLV):
-            # Check against parameters and local_assigned (which includes VarDecls in current branch)
-            return lv.name not in params and lv.name not in local_assigned
-        return False
-
-    def check_lvalue(lv) -> None:
-        """Mark the base variable of an lvalue as modified."""
-        if isinstance(lv, VarLV):
-            mark_reassigned(lv.name)
-        elif isinstance(lv, IndexLV):
-            if isinstance(lv.obj, Var):
-                mark_reassigned(lv.obj.name)
-        elif isinstance(lv, FieldLV):
-            if isinstance(lv.obj, Var):
-                mark_reassigned(lv.obj.name)
-        elif isinstance(lv, DerefLV):
-            if isinstance(lv.ptr, Var):
-                mark_reassigned(lv.ptr.name)
-
-    def check_stmt(stmt: Stmt, local_assigned: set[str] | None = None) -> None:
-        if local_assigned is None:
-            local_assigned = set()
-        if isinstance(stmt, VarDecl):
-            stmt.is_reassigned = False
-            stmt.assignment_count = 0
-            declared[stmt.name] = stmt
-            local_assigned.add(stmt.name)  # Add to branch-local, not global
-            if stmt.value:
-                check_expr(stmt.value)
-        elif isinstance(stmt, Assign):
-            # Determine if this is a declaration (first assignment to new variable)
-            stmt.is_declaration = is_new_declaration(stmt.target, local_assigned)
-            if isinstance(stmt.target, VarLV) and stmt.is_declaration:
-                local_assigned.add(stmt.target.name)
-                # Track this declaration for reassignment detection
-                stmt.is_reassigned = False
-                stmt.assignment_count = 0
-                declared[stmt.target.name] = stmt
-                # Note: Don't add to outer 'assigned' - if-else branches need separate scopes
-            else:
-                check_lvalue(stmt.target)
-            check_expr(stmt.value)
-        elif isinstance(stmt, OpAssign):
-            check_lvalue(stmt.target)
-            check_expr(stmt.value)
-        elif isinstance(stmt, TupleAssign):
-            # Check if all targets are new declarations
-            all_new = True
-            new_targets: list[str] = []
-            for target in stmt.targets:
-                if isinstance(target, VarLV):
-                    if (
-                        target.name in assigned
-                        or target.name in declared
-                        or target.name in params
-                        or target.name in local_assigned
-                    ):
-                        all_new = False
-                    else:
-                        new_targets.append(target.name)
-                        local_assigned.add(target.name)
-                else:
-                    all_new = False
-            stmt.is_declaration = all_new
-            stmt.new_targets = new_targets  # Track which specific targets are new
-            for target in stmt.targets:
-                if isinstance(target, VarLV) and not stmt.is_declaration:
-                    mark_reassigned(target.name)
-            check_expr(stmt.value)
-        elif isinstance(stmt, ExprStmt):
-            check_expr(stmt.expr)
-        elif isinstance(stmt, Return):
-            if stmt.value:
-                check_expr(stmt.value)
-        elif isinstance(stmt, If):
-            check_expr(stmt.cond)
-            if stmt.init:
-                check_stmt(stmt.init, local_assigned)
-            # Each branch inherits parent's assignments so they can see outer declarations
-            # But siblings don't see each other's declarations
-            then_assigned: set[str] = set(local_assigned)
-            for s in stmt.then_body:
-                check_stmt(s, then_assigned)
-            else_assigned: set[str] = set(local_assigned)
-            for s in stmt.else_body:
-                check_stmt(s, else_assigned)
-        elif isinstance(stmt, While):
-            check_expr(stmt.cond)
-            for s in stmt.body:
-                check_stmt(s, local_assigned)
-        elif isinstance(stmt, ForRange):
-            for s in stmt.body:
-                check_stmt(s, local_assigned)
-        elif isinstance(stmt, ForClassic):
-            if stmt.init:
-                check_stmt(stmt.init, local_assigned)
-            if stmt.cond:
-                check_expr(stmt.cond)
-            if stmt.post:
-                check_stmt(stmt.post, local_assigned)
-            for s in stmt.body:
-                check_stmt(s, local_assigned)
-        elif isinstance(stmt, Block):
-            for s in stmt.body:
-                check_stmt(s, local_assigned)
-        elif isinstance(stmt, TryCatch):
-            # TryCatch body is wrapped in a closure in Go
-            # Closures CAN access outer variables, so inherit parent's assignments
-            # But new declarations inside the closure can't escape
-            try_assigned: set[str] = set(local_assigned)
-            for s in stmt.body:
-                check_stmt(s, try_assigned)
-            catch_assigned: set[str] = set(local_assigned)
-            for s in stmt.catch_body:
-                check_stmt(s, catch_assigned)
-        elif isinstance(stmt, Match):
-            check_expr(stmt.expr)
-            for case in stmt.cases:
-                # Inherit from outer scope so outer declarations are visible
-                case_assigned: set[str] = set(local_assigned)
-                for s in case.body:
-                    check_stmt(s, case_assigned)
-            # Default case also inherits from outer scope
-            default_assigned: set[str] = set(local_assigned)
-            for s in stmt.default:
-                check_stmt(s, default_assigned)
-        elif isinstance(stmt, TypeSwitch):
-            check_expr(stmt.expr)
-            for case in stmt.cases:
-                # Inherit from outer scope so outer declarations are visible
-                case_assigned: set[str] = set(local_assigned)
-                for s in case.body:
-                    check_stmt(s, case_assigned)
-            # Default case also inherits from outer scope
-            default_assigned: set[str] = set(local_assigned)
-            for s in stmt.default:
-                check_stmt(s, default_assigned)
-
-    def check_expr(expr) -> None:
-        """Check for mutating method calls on declared variables."""
-        if isinstance(expr, MethodCall):
-            if isinstance(expr.obj, Var):
-                mark_reassigned(expr.obj.name)
-            check_expr(expr.obj)
-            for arg in expr.args:
-                check_expr(arg)
-
+    ctx = _ScopeContext(params, assigned)
     func_assigned: set[str] = set()
     for stmt in func.body:
-        check_stmt(stmt, func_assigned)
-
-    # Mark unused parameters
+        _scope_check_stmt(ctx, stmt, func_assigned)
     for p in func.params:
         if p.name not in used_vars:
             p.is_unused = True
 
 
 # Import If here to avoid circular import at module level
-from src.ir import If
+from src.ir import If  # noqa: E402

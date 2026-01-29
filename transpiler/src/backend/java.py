@@ -252,6 +252,175 @@ from src.ir import (
 )
 
 
+def _java_register_tuple(backend: "JavaBackend", typ: Tuple) -> None:
+    """Register a tuple type in the backend's tuple records."""
+    sig = tuple(backend._type(t) for t in typ.elements)
+    if sig not in backend.tuple_records:
+        backend.tuple_counter += 1
+        backend.tuple_records[sig] = f"Tuple{backend.tuple_counter}"
+
+
+def _java_visit_type(backend: "JavaBackend", typ: Type | None) -> None:
+    """Visit a type and register any tuples found."""
+    if typ is None:
+        return
+    if isinstance(typ, Tuple):
+        _java_register_tuple(backend, typ)
+        for elem in typ.elements:
+            _java_visit_type(backend, elem)
+    elif isinstance(typ, Slice):
+        _java_visit_type(backend, typ.element)
+    elif isinstance(typ, Optional):
+        _java_visit_type(backend, typ.inner)
+    elif isinstance(typ, Pointer):
+        _java_visit_type(backend, typ.target)
+    elif isinstance(typ, Map):
+        _java_visit_type(backend, typ.key)
+        _java_visit_type(backend, typ.value)
+
+
+def _java_visit_expr(backend: "JavaBackend", expr: Expr | None) -> None:
+    """Visit an expression and collect tuple types."""
+    if expr is None:
+        return
+    expr_typ = expr.typ if isinstance(expr, (Var, Call, MethodCall, StaticCall, FieldAccess, Index, SliceExpr, BinaryOp, UnaryOp, Ternary, Cast, TypeAssert, Len, MakeSlice, MakeMap, SliceLit, MapLit, SetLit, StructLit, TupleLit, StringConcat, StringFormat, IsType, IsNil)) else None
+    if expr_typ is not None:
+        _java_visit_type(backend, expr_typ)
+    if isinstance(expr, (FieldAccess, Index, SliceExpr, UnaryOp, Cast, TypeAssert, Len, IsType, IsNil)):
+        if isinstance(expr, FieldAccess):
+            _java_visit_expr(backend, expr.obj)
+        elif isinstance(expr, Index):
+            _java_visit_expr(backend, expr.obj)
+            _java_visit_expr(backend, expr.index)
+        elif isinstance(expr, SliceExpr):
+            _java_visit_expr(backend, expr.obj)
+            _java_visit_expr(backend, expr.low)
+            _java_visit_expr(backend, expr.high)
+        elif isinstance(expr, UnaryOp):
+            _java_visit_expr(backend, expr.operand)
+        elif isinstance(expr, Cast):
+            _java_visit_expr(backend, expr.expr)
+        elif isinstance(expr, TypeAssert):
+            _java_visit_expr(backend, expr.expr)
+        elif isinstance(expr, Len):
+            _java_visit_expr(backend, expr.expr)
+        elif isinstance(expr, IsType):
+            _java_visit_expr(backend, expr.expr)
+        elif isinstance(expr, IsNil):
+            _java_visit_expr(backend, expr.expr)
+    elif isinstance(expr, BinaryOp):
+        _java_visit_expr(backend, expr.left)
+        _java_visit_expr(backend, expr.right)
+    elif isinstance(expr, Ternary):
+        _java_visit_expr(backend, expr.cond)
+        _java_visit_expr(backend, expr.then_expr)
+        _java_visit_expr(backend, expr.else_expr)
+    elif isinstance(expr, (Call, MethodCall, StaticCall)):
+        if isinstance(expr, MethodCall):
+            _java_visit_expr(backend, expr.obj)
+        for arg in expr.args:
+            _java_visit_expr(backend, arg)
+    elif isinstance(expr, MakeSlice):
+        _java_visit_type(backend, expr.element_type)
+        _java_visit_expr(backend, expr.length)
+        _java_visit_expr(backend, expr.capacity)
+    elif isinstance(expr, MakeMap):
+        _java_visit_type(backend, expr.key_type)
+        _java_visit_type(backend, expr.value_type)
+    elif isinstance(expr, SliceLit):
+        _java_visit_type(backend, expr.element_type)
+        for elem in expr.elements:
+            _java_visit_expr(backend, elem)
+    elif isinstance(expr, MapLit):
+        _java_visit_type(backend, expr.key_type)
+        _java_visit_type(backend, expr.value_type)
+        for k, v in expr.entries:
+            _java_visit_expr(backend, k)
+            _java_visit_expr(backend, v)
+    elif isinstance(expr, SetLit):
+        _java_visit_type(backend, expr.element_type)
+        for elem in expr.elements:
+            _java_visit_expr(backend, elem)
+    elif isinstance(expr, StructLit):
+        for v in expr.fields.values():
+            _java_visit_expr(backend, v)
+    elif isinstance(expr, TupleLit):
+        for elem in expr.elements:
+            _java_visit_expr(backend, elem)
+    elif isinstance(expr, StringConcat):
+        for part in expr.parts:
+            _java_visit_expr(backend, part)
+    elif isinstance(expr, StringFormat):
+        for arg in expr.args:
+            _java_visit_expr(backend, arg)
+
+
+def _java_visit_stmt(backend: "JavaBackend", stmt: Stmt) -> None:
+    """Visit a statement and collect tuple types."""
+    if isinstance(stmt, VarDecl):
+        _java_visit_type(backend, stmt.typ)
+        if stmt.value:
+            _java_visit_expr(backend, stmt.value)
+    elif isinstance(stmt, Assign):
+        _java_visit_expr(backend, stmt.value)
+    elif isinstance(stmt, OpAssign):
+        _java_visit_expr(backend, stmt.value)
+    elif isinstance(stmt, TupleAssign):
+        _java_visit_expr(backend, stmt.value)
+    elif isinstance(stmt, ExprStmt):
+        _java_visit_expr(backend, stmt.expr)
+    elif isinstance(stmt, Return):
+        if stmt.value:
+            _java_visit_expr(backend, stmt.value)
+    elif isinstance(stmt, If):
+        _java_visit_expr(backend, stmt.cond)
+        if stmt.init:
+            _java_visit_stmt(backend, stmt.init)
+        for s in stmt.then_body:
+            _java_visit_stmt(backend, s)
+        for s in stmt.else_body:
+            _java_visit_stmt(backend, s)
+    elif isinstance(stmt, While):
+        _java_visit_expr(backend, stmt.cond)
+        for s in stmt.body:
+            _java_visit_stmt(backend, s)
+    elif isinstance(stmt, ForRange):
+        _java_visit_expr(backend, stmt.iterable)
+        for s in stmt.body:
+            _java_visit_stmt(backend, s)
+    elif isinstance(stmt, ForClassic):
+        if stmt.init:
+            _java_visit_stmt(backend, stmt.init)
+        if stmt.cond:
+            _java_visit_expr(backend, stmt.cond)
+        if stmt.post:
+            _java_visit_stmt(backend, stmt.post)
+        for s in stmt.body:
+            _java_visit_stmt(backend, s)
+    elif isinstance(stmt, Block):
+        for s in stmt.body:
+            _java_visit_stmt(backend, s)
+    elif isinstance(stmt, TryCatch):
+        for s in stmt.body:
+            _java_visit_stmt(backend, s)
+        for s in stmt.catch_body:
+            _java_visit_stmt(backend, s)
+    elif isinstance(stmt, Match):
+        _java_visit_expr(backend, stmt.expr)
+        for case in stmt.cases:
+            for s in case.body:
+                _java_visit_stmt(backend, s)
+        for s in stmt.default:
+            _java_visit_stmt(backend, s)
+    elif isinstance(stmt, TypeSwitch):
+        _java_visit_expr(backend, stmt.expr)
+        for case in stmt.cases:
+            for s in case.body:
+                _java_visit_stmt(backend, s)
+        for s in stmt.default:
+            _java_visit_stmt(backend, s)
+
+
 class JavaBackend:
     """Emit Java code from IR."""
 
@@ -290,7 +459,7 @@ class JavaBackend:
         self._emit_module(module)
         return "\n".join(self.lines)
 
-    def _emit_hoisted_vars(self, stmt) -> None:
+    def _emit_hoisted_vars(self, stmt: Stmt) -> None:
         """Emit declarations for hoisted variables before a control flow construct."""
         hoisted_vars = getattr(stmt, "hoisted_vars", [])
         for name, typ in hoisted_vars:
@@ -307,168 +476,20 @@ class JavaBackend:
 
     def _collect_tuple_types(self, module: Module) -> None:
         """Collect all unique tuple types used in the module."""
-
-        def register_tuple(typ: Tuple) -> None:
-            sig = tuple(self._type(t) for t in typ.elements)
-            # Note: We don't use Optional<T> for (T, bool) in Java because:
-            # 1. Optional doesn't support .f0()/.f1() access pattern
-            # 2. Tuples can be stored in lists and iterated
-            # Instead, use proper tuple records for all tuples
-            if sig not in self.tuple_records:
-                self.tuple_counter += 1
-                self.tuple_records[sig] = f"Tuple{self.tuple_counter}"
-
-        def visit_type(typ: Type | None) -> None:
-            if typ is None:
-                return
-            if isinstance(typ, Tuple):
-                register_tuple(typ)
-                for elem in typ.elements:
-                    visit_type(elem)
-            elif isinstance(typ, (Slice, Optional, Pointer)):
-                if hasattr(typ, "element"):
-                    visit_type(typ.element)
-                elif hasattr(typ, "inner"):
-                    visit_type(typ.inner)
-                elif hasattr(typ, "target"):
-                    visit_type(typ.target)
-            elif isinstance(typ, Map):
-                visit_type(typ.key)
-                visit_type(typ.value)
-
-        def visit_expr(expr) -> None:
-            if expr is None:
-                return
-            # Visit the expression's type if it has one
-            if hasattr(expr, "typ") and expr.typ:
-                visit_type(expr.typ)
-            # Visit all child expressions and their types
-            for attr in (
-                "obj",
-                "left",
-                "right",
-                "operand",
-                "cond",
-                "then_expr",
-                "else_expr",
-                "expr",
-                "index",
-                "low",
-                "high",
-                "ptr",
-                "value",
-                "message",
-                "pos",
-                "iterable",
-                "target",
-                "inner",
-                "length",
-                "capacity",
-            ):
-                if hasattr(expr, attr):
-                    child = getattr(expr, attr)
-                    if child is not None:
-                        visit_expr(child)
-            # Visit args, elements, parts
-            if hasattr(expr, "args"):
-                for arg in expr.args:
-                    visit_expr(arg)
-            if hasattr(expr, "elements"):
-                for elem in expr.elements:
-                    visit_expr(elem)
-            if hasattr(expr, "parts"):
-                for part in expr.parts:
-                    visit_expr(part)
-            if hasattr(expr, "entries"):
-                entries = expr.entries
-                if isinstance(entries, list):
-                    for item in entries:
-                        if isinstance(item, tuple) and len(item) == 2:
-                            visit_expr(item[0])
-                            visit_expr(item[1])
-            if hasattr(expr, "fields") and isinstance(expr.fields, dict):
-                for v in expr.fields.values():
-                    visit_expr(v)
-
-        def visit_stmt(stmt: Stmt) -> None:
-            if isinstance(stmt, VarDecl):
-                visit_type(stmt.typ)
-                if stmt.value:
-                    visit_expr(stmt.value)
-            elif isinstance(stmt, (Assign, OpAssign)):
-                visit_expr(stmt.value)
-                # Check decl_typ for hoisted variable types
-                if hasattr(stmt, "decl_typ"):
-                    visit_type(stmt.decl_typ)
-            elif isinstance(stmt, TupleAssign):
-                visit_expr(stmt.value)
-            elif isinstance(stmt, ExprStmt):
-                visit_expr(stmt.expr)
-            elif isinstance(stmt, Return):
-                if stmt.value:
-                    visit_expr(stmt.value)
-            elif isinstance(stmt, If):
-                visit_expr(stmt.cond)
-                if stmt.init:
-                    visit_stmt(stmt.init)
-                for s in stmt.then_body:
-                    visit_stmt(s)
-                for s in stmt.else_body:
-                    visit_stmt(s)
-            elif isinstance(stmt, While):
-                visit_expr(stmt.cond)
-                for s in stmt.body:
-                    visit_stmt(s)
-            elif isinstance(stmt, ForRange):
-                visit_expr(stmt.iterable)
-                for s in stmt.body:
-                    visit_stmt(s)
-            elif isinstance(stmt, ForClassic):
-                if stmt.init:
-                    visit_stmt(stmt.init)
-                if stmt.cond:
-                    visit_expr(stmt.cond)
-                if stmt.post:
-                    visit_stmt(stmt.post)
-                for s in stmt.body:
-                    visit_stmt(s)
-            elif isinstance(stmt, Block):
-                for s in stmt.body:
-                    visit_stmt(s)
-            elif isinstance(stmt, TryCatch):
-                for s in stmt.body:
-                    visit_stmt(s)
-                for s in stmt.catch_body:
-                    visit_stmt(s)
-            elif isinstance(stmt, Match):
-                visit_expr(stmt.expr)
-                for case in stmt.cases:
-                    for s in case.body:
-                        visit_stmt(s)
-                for s in stmt.default:
-                    visit_stmt(s)
-            elif isinstance(stmt, TypeSwitch):
-                visit_expr(stmt.expr)
-                for case in stmt.cases:
-                    for s in case.body:
-                        visit_stmt(s)
-                for s in stmt.default:
-                    visit_stmt(s)
-
         # Visit all functions and methods
         for struct in module.structs:
             for method in struct.methods:
-                visit_type(method.ret)
+                _java_visit_type(self, method.ret)
                 for param in method.params:
-                    visit_type(param.typ)
+                    _java_visit_type(self, param.typ)
                 for stmt in method.body:
-                    visit_stmt(stmt)
+                    _java_visit_stmt(self, stmt)
         for func in module.functions:
-            visit_type(func.ret)
+            _java_visit_type(self, func.ret)
             for param in func.params:
-                visit_type(param.typ)
+                _java_visit_type(self, param.typ)
             for stmt in func.body:
-                visit_stmt(stmt)
+                _java_visit_stmt(self, stmt)
 
     def _line(self, text: str = "") -> None:
         if text:
@@ -825,7 +846,7 @@ class JavaBackend:
                 self._line(f"// TODO: {type(stmt).__name__}")
 
     def _emit_type_switch(
-        self, stmt, expr: Expr, binding: str, cases: list[TypeCase], default: list[Stmt]
+        self, stmt: Stmt, expr: Expr, binding: str, cases: list[TypeCase], default: list[Stmt]
     ) -> None:
         self._emit_hoisted_vars(stmt)
         var = self._expr(expr)
@@ -861,7 +882,7 @@ class JavaBackend:
             self.indent -= 1
         self._line("}")
 
-    def _emit_match(self, stmt, expr: Expr, cases: list[MatchCase], default: list[Stmt]) -> None:
+    def _emit_match(self, stmt: Stmt, expr: Expr, cases: list[MatchCase], default: list[Stmt]) -> None:
         self._emit_hoisted_vars(stmt)
         expr_str = self._expr(expr)
         # Java switch on strings
@@ -888,7 +909,7 @@ class JavaBackend:
 
     def _emit_for_range(
         self,
-        stmt,
+        stmt: Stmt,
         index: str | None,
         value: str | None,
         iterable: Expr,
@@ -1010,7 +1031,7 @@ class JavaBackend:
 
     def _emit_try_catch(
         self,
-        stmt,
+        stmt: Stmt,
         body: list[Stmt],
         catch_var: str | None,
         catch_body: list[Stmt],

@@ -236,9 +236,23 @@ class BuilderCallbacks:
 
 Depends on: context.py, type_inference.py, lowering.py, collection.py
 
-### 5. Slim `frontend.py` ← NEXT
+### 5. Slim `frontend.py` ✅ (partial)
 
 Goal: Reduce frontend.py from ~1567 lines to ~200 lines of orchestration.
+
+**Completed:** 1567 → 852 lines (45% reduction)
+- ✅ 5.1: Created `FrontendContext` and `LoweringDispatch` in context.py
+- ✅ 5.2: Extracted `lower_expr_Call` to lowering.py
+- ✅ 5.3: Extracted `lower_stmt_Assign` to lowering.py
+- ✅ 5.4: Extracted `lower_stmt_AnnAssign` to lowering.py
+- ✅ 5.5: Extracted `lower_stmt_If` + `collect_isinstance_chain` to lowering.py
+- ✅ 5.6: Extracted `lower_stmt_For` and `lower_stmt_Try` to lowering.py
+- ✅ 5.7: Added `_make_ctx_and_dispatch` helper to reduce boilerplate
+- ⏳ 5.8: Thin wrapper removal (requires dispatcher refactor, deferred)
+
+**Remaining work (deferred):**
+- Remove thin wrappers by switching from dynamic method dispatch to dictionary lookup
+- This would require changing `_lower_expr` and `_lower_stmt` dispatchers significantly
 
 What remains after completion:
 - `Frontend` class with `__init__` and `transpile`

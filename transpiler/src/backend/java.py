@@ -1083,6 +1083,21 @@ class JavaBackend:
                         return f"{inner_str}.isEmpty()"
                     if java_op == "<=":
                         return f"{inner_str}.isEmpty()"
+                # Char comparison: s.charAt(i) == 'c' instead of String.valueOf(...).equals(...)
+                # Pattern: Index(string, i) == StringLit(single_char) or Cast(Index(...)) == StringLit
+                if java_op in ("==", "!=") and isinstance(right, StringLit) and len(right.value) == 1:
+                    # Unwrap Cast if present (frontend wraps string indexing in Cast)
+                    inner_left = left.expr if isinstance(left, Cast) else left
+                    if isinstance(inner_left, Index):
+                        obj_type = getattr(inner_left.obj, 'typ', None)
+                        if isinstance(obj_type, Primitive) and obj_type.kind == "string":
+                            obj_str = self._expr(inner_left.obj)
+                            idx_str = self._expr(inner_left.index)
+                            char_lit = _char_literal(right.value)
+                            if java_op == "==":
+                                return f"{obj_str}.charAt({idx_str}) == {char_lit}"
+                            else:
+                                return f"{obj_str}.charAt({idx_str}) != {char_lit}"
                 left_str = self._expr(left)
                 right_str = self._expr(right)
                 # String comparison needs .equals() or .compareTo()
@@ -1588,3 +1603,18 @@ def _is_string_type(typ: Type) -> bool:
 
 def _string_literal(value: str) -> str:
     return f'"{escape_string(value)}"'
+
+
+def _char_literal(c: str) -> str:
+    """Emit a Java char literal with proper escaping."""
+    if c == "'":
+        return "'\\''"
+    if c == "\\":
+        return "'\\\\'"
+    if c == "\n":
+        return "'\\n'"
+    if c == "\r":
+        return "'\\r'"
+    if c == "\t":
+        return "'\\t'"
+    return f"'{c}'"

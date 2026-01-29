@@ -514,14 +514,14 @@ class Lexer {
             return new Token(Constants.TOKENTYPE_RPAREN, c, start, new ArrayList<>(), null);
         }
         if (c.equals("<")) {
-            if (this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("(")) {
+            if (this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '(') {
                 return null;
             }
             this.pos += 1;
             return new Token(Constants.TOKENTYPE_LESS, c, start, new ArrayList<>(), null);
         }
         if (c.equals(">")) {
-            if (this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("(")) {
+            if (this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '(') {
                 return null;
             }
             this.pos += 1;
@@ -548,7 +548,7 @@ class Lexer {
         if (this.pos >= this.length) {
             return false;
         }
-        if (!String.valueOf(this.source.charAt(this.pos)).equals("#")) {
+        if (this.source.charAt(this.pos) != '#') {
             return false;
         }
         if (this.quote.inQuotes()) {
@@ -560,7 +560,7 @@ class Lexer {
                 return false;
             }
         }
-        while (this.pos < this.length && !String.valueOf(this.source.charAt(this.pos)).equals("\n")) {
+        while (this.pos < this.length && this.source.charAt(this.pos) != '\n') {
             this.pos += 1;
         }
         return true;
@@ -585,10 +585,10 @@ class Lexer {
 
     public boolean _isWordTerminator(int ctx, String ch, int bracketDepth, int parenDepth) {
         if (ctx == Constants.WORD_CTX_REGEX) {
-            if (ch.equals("]") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("]")) {
+            if (ch.equals("]") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == ']') {
                 return true;
             }
-            if (ch.equals("&") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("&")) {
+            if (ch.equals("&") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '&') {
                 return true;
             }
             if (ch.equals(")") && parenDepth == 0) {
@@ -597,7 +597,7 @@ class Lexer {
             return ParableFunctions._isWhitespace(ch) && parenDepth == 0;
         }
         if (ctx == Constants.WORD_CTX_COND) {
-            if (ch.equals("]") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("]")) {
+            if (ch.equals("]") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == ']') {
                 return true;
             }
             if (ch.equals(")")) {
@@ -612,7 +612,7 @@ class Lexer {
             if (ch.equals(";")) {
                 return true;
             }
-            if (ParableFunctions._isRedirectChar(ch) && !(this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("("))) {
+            if (ParableFunctions._isRedirectChar(ch) && !(this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '(')) {
                 return true;
             }
             return ParableFunctions._isWhitespace(ch);
@@ -620,7 +620,7 @@ class Lexer {
         if ((this._parserState & Constants.PARSERSTATEFLAGS_PST_EOFTOKEN) != 0 && !this._eofToken.equals("") && ch.equals(this._eofToken) && bracketDepth == 0) {
             return true;
         }
-        if (ParableFunctions._isRedirectChar(ch) && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("(")) {
+        if (ParableFunctions._isRedirectChar(ch) && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '(') {
             return false;
         }
         return ParableFunctions._isMetachar(ch) && bracketDepth == 0;
@@ -629,31 +629,31 @@ class Lexer {
     public boolean _readBracketExpression(List<String> chars, List<Node> parts, boolean forRegex, int parenDepth) {
         if (forRegex) {
             int scan = this.pos + 1;
-            if (scan < this.length && String.valueOf(this.source.charAt(scan)).equals("^")) {
+            if (scan < this.length && this.source.charAt(scan) == '^') {
                 scan += 1;
             }
-            if (scan < this.length && String.valueOf(this.source.charAt(scan)).equals("]")) {
+            if (scan < this.length && this.source.charAt(scan) == ']') {
                 scan += 1;
             }
             boolean bracketWillClose = false;
             while (scan < this.length) {
                 String sc = String.valueOf(this.source.charAt(scan));
-                if (sc.equals("]") && scan + 1 < this.length && String.valueOf(this.source.charAt(scan + 1)).equals("]")) {
+                if (sc.equals("]") && scan + 1 < this.length && this.source.charAt(scan + 1) == ']') {
                     break;
                 }
                 if (sc.equals(")") && parenDepth > 0) {
                     break;
                 }
-                if (sc.equals("&") && scan + 1 < this.length && String.valueOf(this.source.charAt(scan + 1)).equals("&")) {
+                if (sc.equals("&") && scan + 1 < this.length && this.source.charAt(scan + 1) == '&') {
                     break;
                 }
                 if (sc.equals("]")) {
                     bracketWillClose = true;
                     break;
                 }
-                if (sc.equals("[") && scan + 1 < this.length && String.valueOf(this.source.charAt(scan + 1)).equals(":")) {
+                if (sc.equals("[") && scan + 1 < this.length && this.source.charAt(scan + 1) == ':') {
                     scan += 2;
-                    while (scan < this.length && !(String.valueOf(this.source.charAt(scan)).equals(":") && scan + 1 < this.length && String.valueOf(this.source.charAt(scan + 1)).equals("]"))) {
+                    while (scan < this.length && !(this.source.charAt(scan) == ':' && scan + 1 < this.length && this.source.charAt(scan + 1) == ']')) {
                         scan += 1;
                     }
                     if (scan < this.length) {
@@ -688,10 +688,10 @@ class Lexer {
                 chars.add(this.advance());
                 break;
             }
-            if (c.equals("[") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals(":")) {
+            if (c.equals("[") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == ':') {
                 chars.add(this.advance());
                 chars.add(this.advance());
-                while (!this.atEnd() && !(this.peek().equals(":") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("]"))) {
+                while (!this.atEnd() && !(this.peek().equals(":") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == ']')) {
                     chars.add(this.advance());
                 }
                 if (!this.atEnd()) {
@@ -699,10 +699,10 @@ class Lexer {
                     chars.add(this.advance());
                 }
             } else {
-                if (!forRegex && c.equals("[") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("=")) {
+                if (!forRegex && c.equals("[") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '=') {
                     chars.add(this.advance());
                     chars.add(this.advance());
-                    while (!this.atEnd() && !(this.peek().equals("=") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("]"))) {
+                    while (!this.atEnd() && !(this.peek().equals("=") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == ']')) {
                         chars.add(this.advance());
                     }
                     if (!this.atEnd()) {
@@ -710,10 +710,10 @@ class Lexer {
                         chars.add(this.advance());
                     }
                 } else {
-                    if (!forRegex && c.equals("[") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals(".")) {
+                    if (!forRegex && c.equals("[") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '.') {
                         chars.add(this.advance());
                         chars.add(this.advance());
-                        while (!this.atEnd() && !(this.peek().equals(".") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("]"))) {
+                        while (!this.atEnd() && !(this.peek().equals(".") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == ']')) {
                             chars.add(this.advance());
                         }
                         if (!this.atEnd()) {
@@ -886,7 +886,7 @@ class Lexer {
                         this._syncToParser();
                         Node cmdNode = null;
                         String cmdText = "";
-                        if (this.pos + 2 < this.length && String.valueOf(this.source.charAt(this.pos + 2)).equals("(")) {
+                        if (this.pos + 2 < this.length && this.source.charAt(this.pos + 2) == '(') {
                             Tuple3 _tuple2 = this._parser._parseArithmeticExpansion();
                             arithNode = _tuple2.f0();
                             arithText = _tuple2.f1();
@@ -994,7 +994,7 @@ class Lexer {
         while (!this.atEnd()) {
             String ch = this.peek();
             if (ctx == Constants.WORD_CTX_REGEX) {
-                if (ch.equals("\\") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("\n")) {
+                if (ch.equals("\\") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '\n') {
                     this.advance();
                     this.advance();
                     continue;
@@ -1158,7 +1158,7 @@ class Lexer {
                 }
                 continue;
             }
-            if (ctx != Constants.WORD_CTX_REGEX && ch.equals("$") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("'")) {
+            if (ctx != Constants.WORD_CTX_REGEX && ch.equals("$") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '\'') {
                 Tuple3 _tuple9 = this._readAnsiCQuote();
                 Node ansiResult0 = _tuple9.f0();
                 String ansiResult1 = _tuple9.f1();
@@ -1170,7 +1170,7 @@ class Lexer {
                 }
                 continue;
             }
-            if (ctx != Constants.WORD_CTX_REGEX && ch.equals("$") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("\"")) {
+            if (ctx != Constants.WORD_CTX_REGEX && ch.equals("$") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '"') {
                 Tuple4 _tuple10 = this._readLocaleString();
                 Node localeResult0 = _tuple10.f0();
                 String localeResult1 = _tuple10.f1();
@@ -1191,7 +1191,7 @@ class Lexer {
                     chars.add(this.advance());
                 } else {
                     this._syncFromParser();
-                    if (this._extglob && ctx == Constants.WORD_CTX_NORMAL && !chars.isEmpty() && chars.get(chars.size() - 1).length() == 2 && String.valueOf(chars.get(chars.size() - 1).charAt(0)).equals("$") && "?*@".indexOf(String.valueOf(chars.get(chars.size() - 1).charAt(1))) != -1 && !this.atEnd() && this.peek().equals("(")) {
+                    if (this._extglob && ctx == Constants.WORD_CTX_NORMAL && !chars.isEmpty() && chars.get(chars.size() - 1).length() == 2 && chars.get(chars.size() - 1).charAt(0) == '$' && "?*@".indexOf(String.valueOf(chars.get(chars.size() - 1).charAt(1))) != -1 && !this.atEnd() && this.peek().equals("(")) {
                         chars.add(this.advance());
                         content = this._parseMatchedPair("(", ")", Constants.MATCHEDPAIRFLAGS_EXTGLOB, false);
                         chars.add(content);
@@ -1214,7 +1214,7 @@ class Lexer {
                 }
                 continue;
             }
-            if (ctx != Constants.WORD_CTX_REGEX && ParableFunctions._isRedirectChar(ch) && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("(")) {
+            if (ctx != Constants.WORD_CTX_REGEX && ParableFunctions._isRedirectChar(ch) && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '(') {
                 this._syncToParser();
                 Tuple3 _tuple12 = this._parser._parseProcessSubstitution();
                 Node procsubResult0 = _tuple12.f0();
@@ -1259,7 +1259,7 @@ class Lexer {
                     continue;
                 }
             }
-            if (this._extglob && ctx == Constants.WORD_CTX_NORMAL && ParableFunctions._isExtglobPrefix(ch) && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("(")) {
+            if (this._extglob && ctx == Constants.WORD_CTX_NORMAL && ParableFunctions._isExtglobPrefix(ch) && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '(') {
                 chars.add(this.advance());
                 chars.add(this.advance());
                 content = this._parseMatchedPair("(", ")", Constants.MATCHEDPAIRFLAGS_EXTGLOB, false);
@@ -1299,7 +1299,7 @@ class Lexer {
         if (c.equals("")) {
             return null;
         }
-        boolean isProcsub = c.equals("<") || c.equals(">") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("(");
+        boolean isProcsub = c.equals("<") || c.equals(">") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '(';
         boolean isRegexParen = this._wordContext == Constants.WORD_CTX_REGEX && c.equals("(") || c.equals(")");
         if (this.isMetachar(c) && !isProcsub && !isRegexParen) {
             return null;
@@ -1371,7 +1371,7 @@ class Lexer {
         if (this.atEnd() || !this.peek().equals("$")) {
             return new Tuple3(null, "");
         }
-        if (this.pos + 1 >= this.length || !String.valueOf(this.source.charAt(this.pos + 1)).equals("'")) {
+        if (this.pos + 1 >= this.length || this.source.charAt(this.pos + 1) != '\'') {
             return new Tuple3(null, "");
         }
         int start = this.pos;
@@ -1421,7 +1421,7 @@ class Lexer {
         if (this.atEnd() || !this.peek().equals("$")) {
             return new Tuple4(null, "", new ArrayList<>());
         }
-        if (this.pos + 1 >= this.length || !String.valueOf(this.source.charAt(this.pos + 1)).equals("\"")) {
+        if (this.pos + 1 >= this.length || this.source.charAt(this.pos + 1) != '"') {
             return new Tuple4(null, "", new ArrayList<>());
         }
         int start = this.pos;
@@ -1449,7 +1449,7 @@ class Lexer {
                 } else {
                     Node cmdsubNode = null;
                     String cmdsubText = "";
-                    if (ch.equals("$") && this.pos + 2 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("(") && String.valueOf(this.source.charAt(this.pos + 2)).equals("(")) {
+                    if (ch.equals("$") && this.pos + 2 < this.length && this.source.charAt(this.pos + 1) == '(' && this.source.charAt(this.pos + 2) == '(') {
                         this._syncToParser();
                         Tuple3 _tuple14 = this._parser._parseArithmeticExpansion();
                         Node arithNode = _tuple14.f0();
@@ -1870,7 +1870,7 @@ class Lexer {
         }
         op = this._consumeParamOperator();
         if (op.equals("")) {
-            if (!this.atEnd() && this.peek().equals("$") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("\"") || String.valueOf(this.source.charAt(this.pos + 1)).equals("'")) {
+            if (!this.atEnd() && this.peek().equals("$") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '"' || this.source.charAt(this.pos + 1) == '\'') {
                 int dollarCount = 1 + ParableFunctions._countConsecutiveDollarsBefore(this.source, this.pos);
                 if (dollarCount % 2 == 1) {
                     op = "";
@@ -1898,7 +1898,7 @@ class Lexer {
                     this.advance();
                     op = "`";
                 } else {
-                    if (!this.atEnd() && this.peek().equals("$") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("{")) {
+                    if (!this.atEnd() && this.peek().equals("$") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '{') {
                         op = "";
                     } else {
                         if (!this.atEnd() && this.peek().equals("'") || this.peek().equals("\"")) {
@@ -2037,7 +2037,7 @@ class Word implements Node {
                         result.add("$");
                         result.add("{");
                         i += 2;
-                        boolean hadLeadingNewline = i < value.length() && String.valueOf(value.charAt(i)).equals("\n");
+                        boolean hadLeadingNewline = i < value.length() && value.charAt(i) == '\n';
                         if (hadLeadingNewline) {
                             result.add(" ");
                             i += 1;
@@ -2046,7 +2046,7 @@ class Word implements Node {
                         while (i < value.length() && depth > 0) {
                             String ch = String.valueOf(value.charAt(i));
                             if (ch.equals("\\") && i + 1 < value.length() && !quote.single) {
-                                if (String.valueOf(value.charAt(i + 1)).equals("\n")) {
+                                if (value.charAt(i + 1) == '\n') {
                                     i += 2;
                                     continue;
                                 }
@@ -2117,7 +2117,7 @@ class Word implements Node {
         List<Byte> result = new ArrayList<>();
         int i = 0;
         while (i < inner.length()) {
-            if (String.valueOf(inner.charAt(i)).equals("\\") && i + 1 < inner.length()) {
+            if (inner.charAt(i) == '\\' && i + 1 < inner.length()) {
                 String c = String.valueOf(inner.charAt(i + 1));
                 int simple = ParableFunctions._getAnsiEscape(c);
                 if (simple >= 0) {
@@ -2131,13 +2131,13 @@ class Word implements Node {
                         int j = 0;
                         int byteVal = 0;
                         if (c.equals("x")) {
-                            if (i + 2 < inner.length() && String.valueOf(inner.charAt(i + 2)).equals("{")) {
+                            if (i + 2 < inner.length() && inner.charAt(i + 2) == '{') {
                                 j = i + 3;
                                 while (j < inner.length() && ParableFunctions._isHexDigit(String.valueOf(inner.charAt(j)))) {
                                     j += 1;
                                 }
                                 String hexStr = ParableFunctions._substring(inner, i + 3, j);
-                                if (j < inner.length() && String.valueOf(inner.charAt(j)).equals("}")) {
+                                if (j < inner.length() && inner.charAt(j) == '}') {
                                     j += 1;
                                 }
                                 if (!(!hexStr.equals(""))) {
@@ -2206,7 +2206,7 @@ class Word implements Node {
                                         if (i + 3 <= inner.length()) {
                                             String ctrlChar = String.valueOf(inner.charAt(i + 2));
                                             int skipExtra = 0;
-                                            if (ctrlChar.equals("\\") && i + 4 <= inner.length() && String.valueOf(inner.charAt(i + 3)).equals("\\")) {
+                                            if (ctrlChar.equals("\\") && i + 4 <= inner.length() && inner.charAt(i + 3) == '\\') {
                                                 skipExtra = 1;
                                             }
                                             int ctrlVal = ((int) (ctrlChar.charAt(0)) & 31);
@@ -2321,7 +2321,7 @@ class Word implements Node {
             }
             boolean effectiveInDquote = quote.double_;
             if (ch.equals("'") && !effectiveInDquote) {
-                boolean isAnsiC = !quote.single && i > 0 && String.valueOf(value.charAt(i - 1)).equals("$") && ParableFunctions._countConsecutiveDollarsBefore(value, i - 1) % 2 == 0;
+                boolean isAnsiC = !quote.single && i > 0 && value.charAt(i - 1) == '$' && ParableFunctions._countConsecutiveDollarsBefore(value, i - 1) % 2 == 0;
                 if (!isAnsiC) {
                     quote.single = !quote.single;
                 }
@@ -2341,10 +2341,10 @@ class Word implements Node {
                         if (ParableFunctions._startsWithAt(value, i, "$'") && !quote.single && !effectiveInDquote && ParableFunctions._countConsecutiveDollarsBefore(value, i) % 2 == 0) {
                             int j = i + 2;
                             while (j < value.length()) {
-                                if (String.valueOf(value.charAt(j)).equals("\\") && j + 1 < value.length()) {
+                                if (value.charAt(j) == '\\' && j + 1 < value.length()) {
                                     j += 2;
                                 } else {
-                                    if (String.valueOf(value.charAt(j)).equals("'")) {
+                                    if (value.charAt(j) == '\'') {
                                         j += 1;
                                         break;
                                     } else {
@@ -2368,7 +2368,7 @@ class Word implements Node {
                                             if ("@*#?-$!0123456789_".indexOf(String.valueOf(afterBrace.charAt(0))) != -1) {
                                                 varNameLen = 1;
                                             } else {
-                                                if (String.valueOf(afterBrace.charAt(0)).chars().allMatch(Character::isLetter) || String.valueOf(afterBrace.charAt(0)).equals("_")) {
+                                                if (String.valueOf(afterBrace.charAt(0)).chars().allMatch(Character::isLetter) || afterBrace.charAt(0) == '_') {
                                                     while (varNameLen < afterBrace.length()) {
                                                         String c = String.valueOf(afterBrace.charAt(varNameLen));
                                                         if (!(c.chars().allMatch(Character::isLetterOrDigit) || c.equals("_"))) {
@@ -2446,7 +2446,7 @@ class Word implements Node {
                 result.add(String.valueOf(value.charAt(i + 1)));
                 i += 2;
             } else {
-                if (ParableFunctions._startsWithAt(value, i, "${") && !quote.single && !braceQuote.single && i == 0 || !String.valueOf(value.charAt(i - 1)).equals("$")) {
+                if (ParableFunctions._startsWithAt(value, i, "${") && !quote.single && !braceQuote.single && i == 0 || value.charAt(i - 1) != '$') {
                     braceDepth += 1;
                     braceQuote.double_ = false;
                     braceQuote.single = false;
@@ -2533,21 +2533,21 @@ class Word implements Node {
 
     public String _normalizeArrayWhitespace(String value) {
         int i = 0;
-        if (!(i < value.length() && String.valueOf(value.charAt(i)).chars().allMatch(Character::isLetter) || String.valueOf(value.charAt(i)).equals("_"))) {
+        if (!(i < value.length() && String.valueOf(value.charAt(i)).chars().allMatch(Character::isLetter) || value.charAt(i) == '_')) {
             return value;
         }
         i += 1;
-        while (i < value.length() && String.valueOf(value.charAt(i)).chars().allMatch(Character::isLetterOrDigit) || String.valueOf(value.charAt(i)).equals("_")) {
+        while (i < value.length() && String.valueOf(value.charAt(i)).chars().allMatch(Character::isLetterOrDigit) || value.charAt(i) == '_') {
             i += 1;
         }
-        while (i < value.length() && String.valueOf(value.charAt(i)).equals("[")) {
+        while (i < value.length() && value.charAt(i) == '[') {
             int depth = 1;
             i += 1;
             while (i < value.length() && depth > 0) {
-                if (String.valueOf(value.charAt(i)).equals("[")) {
+                if (value.charAt(i) == '[') {
                     depth += 1;
                 } else {
-                    if (String.valueOf(value.charAt(i)).equals("]")) {
+                    if (value.charAt(i) == ']') {
                         depth -= 1;
                     }
                 }
@@ -2557,10 +2557,10 @@ class Word implements Node {
                 return value;
             }
         }
-        if (i < value.length() && String.valueOf(value.charAt(i)).equals("+")) {
+        if (i < value.length() && value.charAt(i) == '+') {
             i += 1;
         }
-        if (!(i + 1 < value.length() && String.valueOf(value.charAt(i)).equals("=") && String.valueOf(value.charAt(i + 1)).equals("("))) {
+        if (!(i + 1 < value.length() && value.charAt(i) == '=' && value.charAt(i + 1) == '(')) {
             return value;
         }
         String prefix = ParableFunctions._substring(value, 0, i + 1);
@@ -2581,7 +2581,7 @@ class Word implements Node {
     }
 
     public int _findMatchingParen(String value, int openPos) {
-        if (openPos >= value.length() || !String.valueOf(value.charAt(openPos)).equals("(")) {
+        if (openPos >= value.length() || value.charAt(openPos) != '(') {
             return -1;
         }
         int i = openPos + 1;
@@ -2608,7 +2608,7 @@ class Word implements Node {
                 continue;
             }
             if (ch.equals("#")) {
-                while (i < value.length() && !String.valueOf(value.charAt(i)).equals("\n")) {
+                while (i < value.length() && value.charAt(i) != '\n') {
                     i += 1;
                 }
                 continue;
@@ -2650,7 +2650,7 @@ class Word implements Node {
                 if (ch.equals("'")) {
                     inWhitespace = false;
                     j = i + 1;
-                    while (j < inner.length() && !String.valueOf(inner.charAt(j)).equals("'")) {
+                    while (j < inner.length() && inner.charAt(j) != '\'') {
                         j += 1;
                     }
                     normalized.add(ParableFunctions._substring(inner, i, j + 1));
@@ -2662,8 +2662,8 @@ class Word implements Node {
                         List<String> dqContent = new ArrayList<>(List.of("\""));
                         int dqBraceDepth = 0;
                         while (j < inner.length()) {
-                            if (String.valueOf(inner.charAt(j)).equals("\\") && j + 1 < inner.length()) {
-                                if (String.valueOf(inner.charAt(j + 1)).equals("\n")) {
+                            if (inner.charAt(j) == '\\' && j + 1 < inner.length()) {
+                                if (inner.charAt(j + 1) == '\n') {
                                     j += 2;
                                 } else {
                                     dqContent.add(String.valueOf(inner.charAt(j)));
@@ -2676,12 +2676,12 @@ class Word implements Node {
                                     dqBraceDepth += 1;
                                     j += 2;
                                 } else {
-                                    if (String.valueOf(inner.charAt(j)).equals("}") && dqBraceDepth > 0) {
+                                    if (inner.charAt(j) == '}' && dqBraceDepth > 0) {
                                         dqContent.add("}");
                                         dqBraceDepth -= 1;
                                         j += 1;
                                     } else {
-                                        if (String.valueOf(inner.charAt(j)).equals("\"") && dqBraceDepth == 0) {
+                                        if (inner.charAt(j) == '"' && dqBraceDepth == 0) {
                                             dqContent.add("\"");
                                             j += 1;
                                             break;
@@ -2697,7 +2697,7 @@ class Word implements Node {
                         i = j;
                     } else {
                         if (ch.equals("\\") && i + 1 < inner.length()) {
-                            if (String.valueOf(inner.charAt(i + 1)).equals("\n")) {
+                            if (inner.charAt(i + 1) == '\n') {
                                 i += 2;
                             } else {
                                 inWhitespace = false;
@@ -2711,11 +2711,11 @@ class Word implements Node {
                                 j = i + 3;
                                 depth = 1;
                                 while (j < inner.length() && depth > 0) {
-                                    if (j + 1 < inner.length() && String.valueOf(inner.charAt(j)).equals("(") && String.valueOf(inner.charAt(j + 1)).equals("(")) {
+                                    if (j + 1 < inner.length() && inner.charAt(j) == '(' && inner.charAt(j + 1) == '(') {
                                         depth += 1;
                                         j += 2;
                                     } else {
-                                        if (j + 1 < inner.length() && String.valueOf(inner.charAt(j)).equals(")") && String.valueOf(inner.charAt(j + 1)).equals(")")) {
+                                        if (j + 1 < inner.length() && inner.charAt(j) == ')' && inner.charAt(j + 1) == ')') {
                                             depth -= 1;
                                             j += 2;
                                         } else {
@@ -2731,26 +2731,26 @@ class Word implements Node {
                                     j = i + 2;
                                     depth = 1;
                                     while (j < inner.length() && depth > 0) {
-                                        if (String.valueOf(inner.charAt(j)).equals("(") && j > 0 && String.valueOf(inner.charAt(j - 1)).equals("$")) {
+                                        if (inner.charAt(j) == '(' && j > 0 && inner.charAt(j - 1) == '$') {
                                             depth += 1;
                                         } else {
-                                            if (String.valueOf(inner.charAt(j)).equals(")")) {
+                                            if (inner.charAt(j) == ')') {
                                                 depth -= 1;
                                             } else {
-                                                if (String.valueOf(inner.charAt(j)).equals("'")) {
+                                                if (inner.charAt(j) == '\'') {
                                                     j += 1;
-                                                    while (j < inner.length() && !String.valueOf(inner.charAt(j)).equals("'")) {
+                                                    while (j < inner.length() && inner.charAt(j) != '\'') {
                                                         j += 1;
                                                     }
                                                 } else {
-                                                    if (String.valueOf(inner.charAt(j)).equals("\"")) {
+                                                    if (inner.charAt(j) == '"') {
                                                         j += 1;
                                                         while (j < inner.length()) {
-                                                            if (String.valueOf(inner.charAt(j)).equals("\\") && j + 1 < inner.length()) {
+                                                            if (inner.charAt(j) == '\\' && j + 1 < inner.length()) {
                                                                 j += 2;
                                                                 continue;
                                                             }
-                                                            if (String.valueOf(inner.charAt(j)).equals("\"")) {
+                                                            if (inner.charAt(j) == '"') {
                                                                 break;
                                                             }
                                                             j += 1;
@@ -2764,31 +2764,31 @@ class Word implements Node {
                                     normalized.add(ParableFunctions._substring(inner, i, j));
                                     i = j;
                                 } else {
-                                    if (ch.equals("<") || ch.equals(">") && i + 1 < inner.length() && String.valueOf(inner.charAt(i + 1)).equals("(")) {
+                                    if (ch.equals("<") || ch.equals(">") && i + 1 < inner.length() && inner.charAt(i + 1) == '(') {
                                         inWhitespace = false;
                                         j = i + 2;
                                         depth = 1;
                                         while (j < inner.length() && depth > 0) {
-                                            if (String.valueOf(inner.charAt(j)).equals("(")) {
+                                            if (inner.charAt(j) == '(') {
                                                 depth += 1;
                                             } else {
-                                                if (String.valueOf(inner.charAt(j)).equals(")")) {
+                                                if (inner.charAt(j) == ')') {
                                                     depth -= 1;
                                                 } else {
-                                                    if (String.valueOf(inner.charAt(j)).equals("'")) {
+                                                    if (inner.charAt(j) == '\'') {
                                                         j += 1;
-                                                        while (j < inner.length() && !String.valueOf(inner.charAt(j)).equals("'")) {
+                                                        while (j < inner.length() && inner.charAt(j) != '\'') {
                                                             j += 1;
                                                         }
                                                     } else {
-                                                        if (String.valueOf(inner.charAt(j)).equals("\"")) {
+                                                        if (inner.charAt(j) == '"') {
                                                             j += 1;
                                                             while (j < inner.length()) {
-                                                                if (String.valueOf(inner.charAt(j)).equals("\\") && j + 1 < inner.length()) {
+                                                                if (inner.charAt(j) == '\\' && j + 1 < inner.length()) {
                                                                     j += 2;
                                                                     continue;
                                                                 }
-                                                                if (String.valueOf(inner.charAt(j)).equals("\"")) {
+                                                                if (inner.charAt(j) == '"') {
                                                                     break;
                                                                 }
                                                                 j += 1;
@@ -2819,7 +2819,7 @@ class Word implements Node {
                                                     i += 1;
                                                 } else {
                                                     if (ch.equals("#") && braceDepth == 0 && inWhitespace) {
-                                                        while (i < inner.length() && !String.valueOf(inner.charAt(i)).equals("\n")) {
+                                                        while (i < inner.length() && inner.charAt(i) != '\n') {
                                                             i += 1;
                                                         }
                                                     } else {
@@ -2867,7 +2867,7 @@ class Word implements Node {
                 List<String> arithContent = new ArrayList<>();
                 int firstCloseIdx = -1;
                 while (i < value.length() && depth > 0) {
-                    if (String.valueOf(value.charAt(i)).equals("(")) {
+                    if (value.charAt(i) == '(') {
                         arithContent.add("(");
                         depth += 1;
                         i += 1;
@@ -2875,7 +2875,7 @@ class Word implements Node {
                             firstCloseIdx = -1;
                         }
                     } else {
-                        if (String.valueOf(value.charAt(i)).equals(")")) {
+                        if (value.charAt(i) == ')') {
                             if (depth == 2) {
                                 firstCloseIdx = arithContent.size();
                             }
@@ -2885,7 +2885,7 @@ class Word implements Node {
                             }
                             i += 1;
                         } else {
-                            if (String.valueOf(value.charAt(i)).equals("\\") && i + 1 < value.length() && String.valueOf(value.charAt(i + 1)).equals("\n")) {
+                            if (value.charAt(i) == '\\' && i + 1 < value.length() && value.charAt(i + 1) == '\n') {
                                 int numBackslashes = 0;
                                 int j = arithContent.size() - 1;
                                 while (j >= 0 && arithContent.get(j).equals("\n")) {
@@ -3020,13 +3020,13 @@ class Word implements Node {
         int idx = 0;
         QuoteState scanQuote = ParableFunctions.newQuoteState();
         while (idx < value.length()) {
-            if (String.valueOf(value.charAt(idx)).equals("\"")) {
+            if (value.charAt(idx) == '"') {
                 scanQuote.double_ = !scanQuote.double_;
                 idx += 1;
             } else {
-                if (String.valueOf(value.charAt(idx)).equals("'") && !scanQuote.double_) {
+                if (value.charAt(idx) == '\'' && !scanQuote.double_) {
                     idx += 1;
-                    while (idx < value.length() && !String.valueOf(value.charAt(idx)).equals("'")) {
+                    while (idx < value.length() && value.charAt(idx) != '\'') {
                         idx += 1;
                     }
                     if (idx < value.length()) {
@@ -3064,13 +3064,13 @@ class Word implements Node {
         int arithDepth = 0;
         int arithParenDepth = 0;
         while (i < value.length()) {
-            if (i > 0 && ParableFunctions._isExtglobPrefix(String.valueOf(value.charAt(i - 1))) && String.valueOf(value.charAt(i)).equals("(") && !ParableFunctions._isBackslashEscaped(value, i - 1)) {
+            if (i > 0 && ParableFunctions._isExtglobPrefix(String.valueOf(value.charAt(i - 1))) && value.charAt(i) == '(' && !ParableFunctions._isBackslashEscaped(value, i - 1)) {
                 extglobDepth += 1;
                 result.add(String.valueOf(value.charAt(i)));
                 i += 1;
                 continue;
             }
-            if (String.valueOf(value.charAt(i)).equals(")") && extglobDepth > 0) {
+            if (value.charAt(i) == ')' && extglobDepth > 0) {
                 extglobDepth -= 1;
                 result.add(String.valueOf(value.charAt(i)));
                 i += 1;
@@ -3082,7 +3082,7 @@ class Word implements Node {
                 i += 1;
                 continue;
             }
-            if (String.valueOf(value.charAt(i)).equals("]") && deprecatedArithDepth > 0) {
+            if (value.charAt(i) == ']' && deprecatedArithDepth > 0) {
                 deprecatedArithDepth -= 1;
                 result.add(String.valueOf(value.charAt(i)));
                 i += 1;
@@ -3103,13 +3103,13 @@ class Word implements Node {
                 continue;
             }
             if (arithDepth > 0) {
-                if (String.valueOf(value.charAt(i)).equals("(")) {
+                if (value.charAt(i) == '(') {
                     arithParenDepth += 1;
                     result.add(String.valueOf(value.charAt(i)));
                     i += 1;
                     continue;
                 } else {
-                    if (String.valueOf(value.charAt(i)).equals(")")) {
+                    if (value.charAt(i) == ')') {
                         arithParenDepth -= 1;
                         result.add(String.valueOf(value.charAt(i)));
                         i += 1;
@@ -3163,14 +3163,14 @@ class Word implements Node {
                 }
                 i = j;
             } else {
-                if (String.valueOf(value.charAt(i)).equals("`") && cmdsubIdx < cmdsubParts.size()) {
+                if (value.charAt(i) == '`' && cmdsubIdx < cmdsubParts.size()) {
                     j = i + 1;
                     while (j < value.length()) {
-                        if (String.valueOf(value.charAt(j)).equals("\\") && j + 1 < value.length()) {
+                        if (value.charAt(j) == '\\' && j + 1 < value.length()) {
                             j += 2;
                             continue;
                         }
-                        if (String.valueOf(value.charAt(j)).equals("`")) {
+                        if (value.charAt(j) == '`') {
                             j += 1;
                             break;
                         }
@@ -3187,7 +3187,7 @@ class Word implements Node {
                         if ((cmdsubNode instanceof CommandSubstitution) && ((CommandSubstitution) cmdsubNode).brace) {
                             node = cmdsubNode;
                             formatted = ParableFunctions._formatCmdsubNode(((CommandSubstitution) node).command, 0, false, false, false);
-                            boolean hasPipe = String.valueOf(value.charAt(i + 2)).equals("|");
+                            boolean hasPipe = value.charAt(i + 2) == '|';
                             prefix = (hasPipe ? "${|" : "${ ");
                             String origInner = ParableFunctions._substring(value, i + 2, j - 1);
                             boolean endsWithNewline = origInner.endsWith("\n");
@@ -3268,7 +3268,7 @@ class Word implements Node {
                                 if (isProcsub && !this.parts.isEmpty()) {
                                     direction = String.valueOf(value.charAt(i));
                                     j = ParableFunctions._findCmdsubEnd(value, i + 2);
-                                    if (j > value.length() || j > 0 && j <= value.length() && !String.valueOf(value.charAt(j - 1)).equals(")")) {
+                                    if (j > value.length() || j > 0 && j <= value.length() && value.charAt(j - 1) != ')') {
                                         result.add(String.valueOf(value.charAt(i)));
                                         i += 1;
                                         continue;
@@ -3292,7 +3292,7 @@ class Word implements Node {
                                     if (isProcsub) {
                                         direction = String.valueOf(value.charAt(i));
                                         j = ParableFunctions._findCmdsubEnd(value, i + 2);
-                                        if (j > value.length() || j > 0 && j <= value.length() && !String.valueOf(value.charAt(j - 1)).equals(")")) {
+                                        if (j > value.length() || j > 0 && j <= value.length() && value.charAt(j - 1) != ')') {
                                             result.add(String.valueOf(value.charAt(i)));
                                             i += 1;
                                             continue;
@@ -3322,10 +3322,10 @@ class Word implements Node {
                                 j = i + 3;
                                 depth = 1;
                                 while (j < value.length() && depth > 0) {
-                                    if (String.valueOf(value.charAt(j)).equals("{")) {
+                                    if (value.charAt(j) == '{') {
                                         depth += 1;
                                     } else {
-                                        if (String.valueOf(value.charAt(j)).equals("}")) {
+                                        if (value.charAt(j) == '}') {
                                             depth -= 1;
                                         }
                                     }
@@ -3408,14 +3408,14 @@ class Word implements Node {
                                     }
                                     i = j;
                                 } else {
-                                    if (String.valueOf(value.charAt(i)).equals("\"")) {
+                                    if (value.charAt(i) == '"') {
                                         mainQuote.double_ = !mainQuote.double_;
                                         result.add(String.valueOf(value.charAt(i)));
                                         i += 1;
                                     } else {
-                                        if (String.valueOf(value.charAt(i)).equals("'") && !mainQuote.double_) {
+                                        if (value.charAt(i) == '\'' && !mainQuote.double_) {
                                             j = i + 1;
-                                            while (j < value.length() && !String.valueOf(value.charAt(j)).equals("'")) {
+                                            while (j < value.length() && value.charAt(j) != '\'') {
                                                 j += 1;
                                             }
                                             if (j < value.length()) {
@@ -3444,7 +3444,7 @@ class Word implements Node {
         QuoteState extglobQuote = ParableFunctions.newQuoteState();
         int deprecatedArithDepth = 0;
         while (i < value.length()) {
-            if (String.valueOf(value.charAt(i)).equals("\"")) {
+            if (value.charAt(i) == '"') {
                 extglobQuote.double_ = !extglobQuote.double_;
                 result.add(String.valueOf(value.charAt(i)));
                 i += 1;
@@ -3456,13 +3456,13 @@ class Word implements Node {
                 i += 1;
                 continue;
             }
-            if (String.valueOf(value.charAt(i)).equals("]") && deprecatedArithDepth > 0) {
+            if (value.charAt(i) == ']' && deprecatedArithDepth > 0) {
                 deprecatedArithDepth -= 1;
                 result.add(String.valueOf(value.charAt(i)));
                 i += 1;
                 continue;
             }
-            if (i + 1 < value.length() && String.valueOf(value.charAt(i + 1)).equals("(")) {
+            if (i + 1 < value.length() && value.charAt(i + 1) == '(') {
                 String prefixChar = String.valueOf(value.charAt(i));
                 if ("><".indexOf(prefixChar) != -1 && !extglobQuote.double_ && deprecatedArithDepth == 0) {
                     result.add(prefixChar);
@@ -3473,18 +3473,18 @@ class Word implements Node {
                     List<String> currentPart = new ArrayList<>();
                     boolean hasPipe = false;
                     while (i < value.length() && depth > 0) {
-                        if (String.valueOf(value.charAt(i)).equals("\\") && i + 1 < value.length()) {
+                        if (value.charAt(i) == '\\' && i + 1 < value.length()) {
                             currentPart.add(value.substring(i, i + 2));
                             i += 2;
                             continue;
                         } else {
-                            if (String.valueOf(value.charAt(i)).equals("(")) {
+                            if (value.charAt(i) == '(') {
                                 depth += 1;
                                 currentPart.add(String.valueOf(value.charAt(i)));
                                 i += 1;
                             } else {
                                 String partContent = "";
-                                if (String.valueOf(value.charAt(i)).equals(")")) {
+                                if (value.charAt(i) == ')') {
                                     depth -= 1;
                                     if (depth == 0) {
                                         partContent = String.join("", currentPart);
@@ -3502,8 +3502,8 @@ class Word implements Node {
                                     currentPart.add(String.valueOf(value.charAt(i)));
                                     i += 1;
                                 } else {
-                                    if (String.valueOf(value.charAt(i)).equals("|") && depth == 1) {
-                                        if (i + 1 < value.length() && String.valueOf(value.charAt(i + 1)).equals("|")) {
+                                    if (value.charAt(i) == '|' && depth == 1) {
+                                        if (i + 1 < value.length() && value.charAt(i + 1) == '|') {
                                             currentPart.add("||");
                                             i += 2;
                                         } else {
@@ -3858,21 +3858,21 @@ class Redirect implements Node {
         String op = this.op.replaceFirst("^[" + "0123456789" + "]+", "");
         if (op.startsWith("{")) {
             int j = 1;
-            if (j < op.length() && String.valueOf(op.charAt(j)).chars().allMatch(Character::isLetter) || String.valueOf(op.charAt(j)).equals("_")) {
+            if (j < op.length() && String.valueOf(op.charAt(j)).chars().allMatch(Character::isLetter) || op.charAt(j) == '_') {
                 j += 1;
-                while (j < op.length() && String.valueOf(op.charAt(j)).chars().allMatch(Character::isLetterOrDigit) || String.valueOf(op.charAt(j)).equals("_")) {
+                while (j < op.length() && String.valueOf(op.charAt(j)).chars().allMatch(Character::isLetterOrDigit) || op.charAt(j) == '_') {
                     j += 1;
                 }
-                if (j < op.length() && String.valueOf(op.charAt(j)).equals("[")) {
+                if (j < op.length() && op.charAt(j) == '[') {
                     j += 1;
-                    while (j < op.length() && !String.valueOf(op.charAt(j)).equals("]")) {
+                    while (j < op.length() && op.charAt(j) != ']') {
                         j += 1;
                     }
-                    if (j < op.length() && String.valueOf(op.charAt(j)).equals("]")) {
+                    if (j < op.length() && op.charAt(j) == ']') {
                         j += 1;
                     }
                 }
-                if (j < op.length() && String.valueOf(op.charAt(j)).equals("}")) {
+                if (j < op.length() && op.charAt(j) == '}') {
                     op = ParableFunctions._substring(op, j + 1, op.length());
                 }
             }
@@ -4249,7 +4249,7 @@ class CasePattern implements Node {
                 current.add(ParableFunctions._substring(this.pattern, i, i + 2));
                 i += 2;
             } else {
-                if (ch.equals("@") || ch.equals("?") || ch.equals("*") || ch.equals("+") || ch.equals("!") && i + 1 < this.pattern.length() && String.valueOf(this.pattern.charAt(i + 1)).equals("(")) {
+                if (ch.equals("@") || ch.equals("?") || ch.equals("*") || ch.equals("+") || ch.equals("!") && i + 1 < this.pattern.length() && this.pattern.charAt(i + 1) == '(') {
                     current.add(ch);
                     current.add("(");
                     depth += 1;
@@ -5341,7 +5341,7 @@ class Parser {
         if (!nextChar.equals(">") && !nextChar.equals("<")) {
             return false;
         }
-        return String.valueOf(this.source.charAt(this.pos + 2)).equals("(");
+        return this.source.charAt(this.pos + 2) == '(';
     }
 
     public void skipWhitespace() {
@@ -5476,7 +5476,7 @@ class Parser {
             if (ParableFunctions._isQuote(ch)) {
                 break;
             }
-            if (ch.equals("\\") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("\n")) {
+            if (ch.equals("\\") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '\n') {
                 break;
             }
             if (ch.equals("\\") && this.pos + 1 < this.length) {
@@ -5502,7 +5502,7 @@ class Parser {
         String word = this.peekWord();
         String keywordWord = word;
         boolean hasLeadingBrace = false;
-        if (!word.equals("") && this._inProcessSub && word.length() > 1 && String.valueOf(word.charAt(0)).equals("}")) {
+        if (!word.equals("") && this._inProcessSub && word.length() > 1 && word.charAt(0) == '}') {
             keywordWord = word.substring(1);
             hasLeadingBrace = true;
         }
@@ -5517,7 +5517,7 @@ class Parser {
         for (int _i = 0; _i < expected.length(); _i++) {
             this.advance();
         }
-        while (this.peek().equals("\\") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("\n")) {
+        while (this.peek().equals("\\") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '\n') {
             this.advance();
             this.advance();
         }
@@ -5561,7 +5561,7 @@ class Parser {
     public boolean _parseDollarExpansion(List<String> chars, List<Node> parts, boolean inDquote) {
         Node result0 = null;
         String result1 = "";
-        if (this.pos + 2 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("(") && String.valueOf(this.source.charAt(this.pos + 2)).equals("(")) {
+        if (this.pos + 2 < this.length && this.source.charAt(this.pos + 1) == '(' && this.source.charAt(this.pos + 2) == '(') {
             Tuple3 _tuple22 = this._parseArithmeticExpansion();
             result0 = _tuple22.f0();
             result1 = _tuple22.f1();
@@ -5580,7 +5580,7 @@ class Parser {
             }
             return false;
         }
-        if (this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("[")) {
+        if (this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '[') {
             Tuple3 _tuple24 = this._parseDeprecatedArithmetic();
             result0 = _tuple24.f0();
             result1 = _tuple24.f1();
@@ -5591,7 +5591,7 @@ class Parser {
             }
             return false;
         }
-        if (this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("(")) {
+        if (this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '(') {
             Tuple3 _tuple25 = this._parseCommandSubstitution();
             result0 = _tuple25.f0();
             result1 = _tuple25.f1();
@@ -5715,7 +5715,7 @@ class Parser {
             if (inHeredocBody) {
                 int lineStart = this.pos;
                 int lineEnd = lineStart;
-                while (lineEnd < this.length && !String.valueOf(this.source.charAt(lineEnd)).equals("\n")) {
+                while (lineEnd < this.length && this.source.charAt(lineEnd) != '\n') {
                     lineEnd += 1;
                 }
                 String line = ParableFunctions._substring(this.source, lineStart, lineEnd);
@@ -5727,7 +5727,7 @@ class Parser {
                         textChars.add(ch);
                     }
                     this.pos = lineEnd;
-                    if (this.pos < this.length && String.valueOf(this.source.charAt(this.pos)).equals("\n")) {
+                    if (this.pos < this.length && this.source.charAt(this.pos) == '\n') {
                         contentChars.add("\n");
                         textChars.add("\n");
                         this.advance();
@@ -5768,7 +5768,7 @@ class Parser {
                             textChars.add(ch);
                         }
                         this.pos = lineEnd;
-                        if (this.pos < this.length && String.valueOf(this.source.charAt(this.pos)).equals("\n")) {
+                        if (this.pos < this.length && this.source.charAt(this.pos) == '\n') {
                             contentChars.add("\n");
                             textChars.add("\n");
                             this.advance();
@@ -5799,9 +5799,9 @@ class Parser {
                 }
                 continue;
             }
-            if (c.equals("<") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("<")) {
+            if (c.equals("<") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '<') {
                 String quote = "";
-                if (this.pos + 2 < this.length && String.valueOf(this.source.charAt(this.pos + 2)).equals("<")) {
+                if (this.pos + 2 < this.length && this.source.charAt(this.pos + 2) == '<') {
                     contentChars.add(this.advance());
                     textChars.add("<");
                     contentChars.add(this.advance());
@@ -6088,7 +6088,7 @@ class Parser {
             return new Tuple3(null, "");
         }
         int start = this.pos;
-        if (this.pos + 2 >= this.length || !String.valueOf(this.source.charAt(this.pos + 1)).equals("(") || !String.valueOf(this.source.charAt(this.pos + 2)).equals("(")) {
+        if (this.pos + 2 >= this.length || this.source.charAt(this.pos + 1) != '(' || this.source.charAt(this.pos + 2) != '(') {
             return new Tuple3(null, "");
         }
         this.advance();
@@ -6229,7 +6229,7 @@ class Parser {
             if (ParableFunctions._isWhitespace(c)) {
                 this._arithPos += 1;
             } else {
-                if (c.equals("\\") && this._arithPos + 1 < this._arithLen && String.valueOf(this._arithSrc.charAt(this._arithPos + 1)).equals("\n")) {
+                if (c.equals("\\") && this._arithPos + 1 < this._arithLen && this._arithSrc.charAt(this._arithPos + 1) == '\n') {
                     this._arithPos += 2;
                 } else {
                     break;
@@ -6926,7 +6926,7 @@ class Parser {
             return new Tuple3(null, "");
         }
         int start = this.pos;
-        if (this.pos + 1 >= this.length || !String.valueOf(this.source.charAt(this.pos + 1)).equals("[")) {
+        if (this.pos + 1 >= this.length || this.source.charAt(this.pos + 1) != '[') {
             return new Tuple3(null, "");
         }
         this.advance();
@@ -6990,13 +6990,13 @@ class Parser {
             String varname = String.join("", varnameChars);
             boolean isValidVarfd = false;
             if (!varname.equals("")) {
-                if (String.valueOf(varname.charAt(0)).chars().allMatch(Character::isLetter) || String.valueOf(varname.charAt(0)).equals("_")) {
+                if (String.valueOf(varname.charAt(0)).chars().allMatch(Character::isLetter) || varname.charAt(0) == '_') {
                     if (varname.indexOf("[") != -1 || varname.indexOf("]") != -1) {
                         int left = varname.indexOf("[");
                         int right = varname.lastIndexOf("]");
                         if (left != -1 && right == varname.length() - 1 && right > left + 1) {
                             String base = varname.substring(0, left);
-                            if (!base.equals("") && String.valueOf(base.charAt(0)).chars().allMatch(Character::isLetter) || String.valueOf(base.charAt(0)).equals("_")) {
+                            if (!base.equals("") && String.valueOf(base.charAt(0)).chars().allMatch(Character::isLetter) || base.charAt(0) == '_') {
                                 isValidVarfd = true;
                                 for (int _i = 0; _i < base.substring(1).length(); _i++) {
                                     String c = String.valueOf(base.substring(1).charAt(_i));
@@ -7037,7 +7037,7 @@ class Parser {
         ch = this.peek();
         String op = "";
         Word target = null;
-        if (ch.equals("&") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals(">")) {
+        if (ch.equals("&") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '>') {
             if (fd != -1 || !varfd.equals("")) {
                 this.pos = start;
                 return null;
@@ -7061,7 +7061,7 @@ class Parser {
             this.pos = start;
             return null;
         }
-        if (fd == -1 && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("(")) {
+        if (fd == -1 && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '(') {
             this.pos = start;
             return null;
         }
@@ -7240,7 +7240,7 @@ class Parser {
                                 }
                             }
                         } else {
-                            if (ch.equals("$") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("'")) {
+                            if (ch.equals("$") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '\'') {
                                 quoted = true;
                                 this.advance();
                                 this.advance();
@@ -7286,14 +7286,14 @@ class Parser {
                                 } else {
                                     int dollarCount = 0;
                                     int j = 0;
-                                    if (ch.equals("$") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("{")) {
+                                    if (ch.equals("$") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '{') {
                                         dollarCount = 0;
                                         j = this.pos - 1;
-                                        while (j >= 0 && String.valueOf(this.source.charAt(j)).equals("$")) {
+                                        while (j >= 0 && this.source.charAt(j) == '$') {
                                             dollarCount += 1;
                                             j -= 1;
                                         }
-                                        if (j >= 0 && String.valueOf(this.source.charAt(j)).equals("\\")) {
+                                        if (j >= 0 && this.source.charAt(j) == '\\') {
                                             dollarCount -= 1;
                                         }
                                         if (dollarCount % 2 == 1) {
@@ -7323,14 +7323,14 @@ class Parser {
                                             }
                                         }
                                     } else {
-                                        if (ch.equals("$") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("[")) {
+                                        if (ch.equals("$") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '[') {
                                             dollarCount = 0;
                                             j = this.pos - 1;
-                                            while (j >= 0 && String.valueOf(this.source.charAt(j)).equals("$")) {
+                                            while (j >= 0 && this.source.charAt(j) == '$') {
                                                 dollarCount += 1;
                                                 j -= 1;
                                             }
-                                            if (j >= 0 && String.valueOf(this.source.charAt(j)).equals("\\")) {
+                                            if (j >= 0 && this.source.charAt(j) == '\\') {
                                                 dollarCount -= 1;
                                             }
                                             if (dollarCount % 2 == 1) {
@@ -7400,7 +7400,7 @@ class Parser {
                     }
                 }
             }
-            if (!this.atEnd() && "<>".indexOf(this.peek()) != -1 && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("(")) {
+            if (!this.atEnd() && "<>".indexOf(this.peek()) != -1 && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '(') {
                 delimiterChars.add(this.advance());
                 delimiterChars.add(this.advance());
                 depth = 1;
@@ -7425,7 +7425,7 @@ class Parser {
     public Tuple10 _readHeredocLine(boolean quoted) {
         int lineStart = this.pos;
         int lineEnd = this.pos;
-        while (lineEnd < this.length && !String.valueOf(this.source.charAt(lineEnd)).equals("\n")) {
+        while (lineEnd < this.length && this.source.charAt(lineEnd) != '\n') {
             lineEnd += 1;
         }
         String line = ParableFunctions._substring(this.source, lineStart, lineEnd);
@@ -7438,7 +7438,7 @@ class Parser {
                 line = ParableFunctions._substring(line, 0, line.length() - 1);
                 lineEnd += 1;
                 int nextLineStart = lineEnd;
-                while (lineEnd < this.length && !String.valueOf(this.source.charAt(lineEnd)).equals("\n")) {
+                while (lineEnd < this.length && this.source.charAt(lineEnd) != '\n') {
                     lineEnd += 1;
                 }
                 line = line + ParableFunctions._substring(this.source, nextLineStart, lineEnd);
@@ -7585,7 +7585,7 @@ class Parser {
 
     public ArithmeticCommand parseArithmeticCommand() {
         this.skipWhitespace();
-        if (this.atEnd() || !this.peek().equals("(") || this.pos + 1 >= this.length || !String.valueOf(this.source.charAt(this.pos + 1)).equals("(")) {
+        if (this.atEnd() || !this.peek().equals("(") || this.pos + 1 >= this.length || this.source.charAt(this.pos + 1) != '(') {
             return null;
         }
         int savedPos = this.pos;
@@ -7629,7 +7629,7 @@ class Parser {
                             this.advance();
                         } else {
                             if (c.equals(")")) {
-                                if (depth == 1 && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals(")")) {
+                                if (depth == 1 && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == ')') {
                                     break;
                                 }
                                 depth -= 1;
@@ -7663,11 +7663,11 @@ class Parser {
 
     public ConditionalExpr parseConditionalExpr() {
         this.skipWhitespace();
-        if (this.atEnd() || !this.peek().equals("[") || this.pos + 1 >= this.length || !String.valueOf(this.source.charAt(this.pos + 1)).equals("[")) {
+        if (this.atEnd() || !this.peek().equals("[") || this.pos + 1 >= this.length || this.source.charAt(this.pos + 1) != '[') {
             return null;
         }
         int nextPos = this.pos + 2;
-        if (nextPos < this.length && !(ParableFunctions._isWhitespace(String.valueOf(this.source.charAt(nextPos))) || String.valueOf(this.source.charAt(nextPos)).equals("\\") && nextPos + 1 < this.length && String.valueOf(this.source.charAt(nextPos + 1)).equals("\n"))) {
+        if (nextPos < this.length && !(ParableFunctions._isWhitespace(String.valueOf(this.source.charAt(nextPos))) || this.source.charAt(nextPos) == '\\' && nextPos + 1 < this.length && this.source.charAt(nextPos + 1) == '\n')) {
             return null;
         }
         this.advance();
@@ -7678,7 +7678,7 @@ class Parser {
         while (!this.atEnd() && ParableFunctions._isWhitespaceNoNewline(this.peek())) {
             this.advance();
         }
-        if (this.atEnd() || !this.peek().equals("]") || this.pos + 1 >= this.length || !String.valueOf(this.source.charAt(this.pos + 1)).equals("]")) {
+        if (this.atEnd() || !this.peek().equals("]") || this.pos + 1 >= this.length || this.source.charAt(this.pos + 1) != ']') {
             this._clearState(Constants.PARSERSTATEFLAGS_PST_CONDEXPR);
             this._wordContext = Constants.WORD_CTX_NORMAL;
             throw new RuntimeException("Expected ]] to close conditional expression");
@@ -7695,7 +7695,7 @@ class Parser {
             if (ParableFunctions._isWhitespaceNoNewline(this.peek())) {
                 this.advance();
             } else {
-                if (this.peek().equals("\\") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("\n")) {
+                if (this.peek().equals("\\") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '\n') {
                     this.advance();
                     this.advance();
                 } else {
@@ -7710,14 +7710,14 @@ class Parser {
     }
 
     public boolean _condAtEnd() {
-        return this.atEnd() || this.peek().equals("]") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("]");
+        return this.atEnd() || this.peek().equals("]") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == ']';
     }
 
     public Node _parseCondOr() {
         this._condSkipWhitespace();
         Node left = this._parseCondAnd();
         this._condSkipWhitespace();
-        if (!this._condAtEnd() && this.peek().equals("|") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("|")) {
+        if (!this._condAtEnd() && this.peek().equals("|") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '|') {
             this.advance();
             this.advance();
             Node right = this._parseCondOr();
@@ -7730,7 +7730,7 @@ class Parser {
         this._condSkipWhitespace();
         Node left = this._parseCondTerm();
         this._condSkipWhitespace();
-        if (!this._condAtEnd() && this.peek().equals("&") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("&")) {
+        if (!this._condAtEnd() && this.peek().equals("&") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '&') {
             this.advance();
             this.advance();
             Node right = this._parseCondAnd();
@@ -7777,7 +7777,7 @@ class Parser {
         }
         if (!this._condAtEnd() && !this.peek().equals("&") && !this.peek().equals("|") && !this.peek().equals(")")) {
             Word word2 = null;
-            if (ParableFunctions._isRedirectChar(this.peek()) && !(this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("("))) {
+            if (ParableFunctions._isRedirectChar(this.peek()) && !(this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '(')) {
                 String op = this.advance();
                 this._condSkipWhitespace();
                 word2 = this._parseCondWord();
@@ -7815,10 +7815,10 @@ class Parser {
         if (ParableFunctions._isParen(c)) {
             return null;
         }
-        if (c.equals("&") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("&")) {
+        if (c.equals("&") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '&') {
             return null;
         }
-        if (c.equals("|") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("|")) {
+        if (c.equals("|") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '|') {
             return null;
         }
         return this._parseWordInternal(Constants.WORD_CTX_COND, false, false);
@@ -8000,7 +8000,7 @@ class Parser {
             return null;
         }
         this.skipWhitespace();
-        if (this.peek().equals("(") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("(")) {
+        if (this.peek().equals("(") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '(') {
             return this._parseForArith();
         }
         String varName = "";
@@ -8096,7 +8096,7 @@ class Parser {
                         parenDepth -= 1;
                         current.add(this.advance());
                     } else {
-                        if (this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals(")")) {
+                        if (this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == ')') {
                             parts.add(String.join("", current).replaceFirst("^[" + " \t" + "]+", ""));
                             this.advance();
                             this.advance();
@@ -8256,7 +8256,7 @@ class Parser {
                     }
                 } else {
                     if (ch.equals("\\")) {
-                        if (this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("\n")) {
+                        if (this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '\n') {
                             this.advance();
                             this.advance();
                         } else {
@@ -8291,7 +8291,7 @@ class Parser {
                                 patternChars.add(this.advance());
                                 extglobDepth += 1;
                             } else {
-                                if (this._extglob && ParableFunctions._isExtglobPrefix(ch) && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("(")) {
+                                if (this._extglob && ParableFunctions._isExtglobPrefix(ch) && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '(') {
                                     patternChars.add(this.advance());
                                     patternChars.add(this.advance());
                                     extglobDepth += 1;
@@ -8304,7 +8304,7 @@ class Parser {
                                         if (scanPos < this.length && ParableFunctions._isCaretOrBang(String.valueOf(this.source.charAt(scanPos)))) {
                                             scanPos += 1;
                                         }
-                                        if (scanPos < this.length && String.valueOf(this.source.charAt(scanPos)).equals("]")) {
+                                        if (scanPos < this.length && this.source.charAt(scanPos) == ']') {
                                             if (this.source.indexOf("]", scanPos + 1) != -1) {
                                                 scanPos += 1;
                                                 hasFirstBracketLiteral = true;
@@ -8437,7 +8437,7 @@ class Parser {
             }
         }
         if (ch.equals("(")) {
-            if (this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("(")) {
+            if (this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '(') {
                 body = this.parseArithmeticCommand();
                 if (body != null) {
                     return new Coproc(body, name, "coproc");
@@ -8477,7 +8477,7 @@ class Parser {
                 } else {
                     if (ch.equals("(")) {
                         name = potentialName;
-                        if (this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("(")) {
+                        if (this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '(') {
                             body = this.parseArithmeticCommand();
                         } else {
                             body = this.parseSubshell();
@@ -8524,7 +8524,7 @@ class Parser {
             this.consumeWord(name);
             this.skipWhitespace();
             if (!this.atEnd() && this.peek().equals("(")) {
-                if (this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals(")")) {
+                if (this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == ')') {
                     this.advance();
                     this.advance();
                 }
@@ -8561,7 +8561,7 @@ class Parser {
                 i += 2;
                 continue;
             }
-            if (String.valueOf(name.charAt(i)).equals("}")) {
+            if (name.charAt(i) == '}') {
                 braceDepth -= 1;
             }
             i += 1;
@@ -8601,7 +8601,7 @@ class Parser {
         if (result != null) {
             return result;
         }
-        if (!this.atEnd() && this.peek().equals("(") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("(")) {
+        if (!this.atEnd() && this.peek().equals("(") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '(') {
             result = this.parseArithmeticCommand();
             if (result != null) {
                 return result;
@@ -8747,7 +8747,7 @@ class Parser {
         }
         String ch = this.peek();
         Node result = null;
-        if (ch.equals("(") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("(")) {
+        if (ch.equals("(") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '(') {
             result = this.parseArithmeticCommand();
             if (result != null) {
                 return result;
@@ -8762,7 +8762,7 @@ class Parser {
                 return result;
             }
         }
-        if (ch.equals("[") && this.pos + 1 < this.length && String.valueOf(this.source.charAt(this.pos + 1)).equals("[")) {
+        if (ch.equals("[") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '[') {
             result = this.parseConditionalExpr();
             if (result != null) {
                 return result;
@@ -8771,7 +8771,7 @@ class Parser {
         String reserved = this._lexPeekReservedWord();
         if (reserved.equals("") && this._inProcessSub) {
             String word = this.peekWord();
-            if (!word.equals("") && word.length() > 1 && String.valueOf(word.charAt(0)).equals("}")) {
+            if (!word.equals("") && word.length() > 1 && word.charAt(0) == '}') {
                 String keywordWord = word.substring(1);
                 if (Constants.RESERVED_WORDS.contains(keywordWord) || keywordWord.equals("{") || keywordWord.equals("}") || keywordWord.equals("[[") || keywordWord.equals("]]") || keywordWord.equals("!") || keywordWord.equals("time")) {
                     reserved = keywordWord;
@@ -9133,7 +9133,7 @@ class Parser {
         if (!(!results.isEmpty())) {
             return new ArrayList<>(List.of(new Empty("empty")));
         }
-        if (this._sawNewlineInSingleQuote && !this.source.equals("") && String.valueOf(this.source.charAt(this.source.length() - 1)).equals("\\") && !(this.source.length() >= 3 && this.source.substring(this.source.length() - 3, this.source.length() - 1).equals("\\\n"))) {
+        if (this._sawNewlineInSingleQuote && !this.source.equals("") && this.source.charAt(this.source.length() - 1) == '\\' && !(this.source.length() >= 3 && this.source.substring(this.source.length() - 3, this.source.length() - 1).equals("\\\n"))) {
             if (!this._lastWordOnOwnLine(results)) {
                 this._stripTrailingBackslashFromLastWord(results);
             }
@@ -9232,10 +9232,10 @@ final class ParableFunctions {
     static int _countConsecutiveDollarsBefore(String s, int pos) {
         int count = 0;
         int k = pos - 1;
-        while (k >= 0 && String.valueOf(s.charAt(k)).equals("$")) {
+        while (k >= 0 && s.charAt(k) == '$') {
             int bsCount = 0;
             int j = k - 1;
-            while (j >= 0 && String.valueOf(s.charAt(j)).equals("\\")) {
+            while (j >= 0 && s.charAt(j) == '\\') {
                 bsCount += 1;
                 j -= 1;
             }
@@ -9276,10 +9276,10 @@ final class ParableFunctions {
         QuoteState quote = ParableFunctions.newQuoteState();
         while (i < text.length()) {
             String c = String.valueOf(text.charAt(i));
-            if (c.equals("\\") && i + 1 < text.length() && String.valueOf(text.charAt(i + 1)).equals("\n")) {
+            if (c.equals("\\") && i + 1 < text.length() && text.charAt(i + 1) == '\n') {
                 int numPrecedingBackslashes = 0;
                 int j = i - 1;
-                while (j >= 0 && String.valueOf(text.charAt(j)).equals("\\")) {
+                while (j >= 0 && text.charAt(j) == '\\') {
                     numPrecedingBackslashes += 1;
                     j -= 1;
                 }
@@ -9339,7 +9339,7 @@ final class ParableFunctions {
     static Tuple7 _consumeSingleQuote(String s, int start) {
         List<String> chars = new ArrayList<>(List.of("'"));
         int i = start + 1;
-        while (i < s.length() && !String.valueOf(s.charAt(i)).equals("'")) {
+        while (i < s.length() && s.charAt(i) != '\'') {
             chars.add(String.valueOf(s.charAt(i)));
             i += 1;
         }
@@ -9353,8 +9353,8 @@ final class ParableFunctions {
     static Tuple7 _consumeDoubleQuote(String s, int start) {
         List<String> chars = new ArrayList<>(List.of("\""));
         int i = start + 1;
-        while (i < s.length() && !String.valueOf(s.charAt(i)).equals("\"")) {
-            if (String.valueOf(s.charAt(i)).equals("\\") && i + 1 < s.length()) {
+        while (i < s.length() && s.charAt(i) != '"') {
+            if (s.charAt(i) == '\\' && i + 1 < s.length()) {
                 chars.add(String.valueOf(s.charAt(i)));
                 i += 1;
             }
@@ -9371,10 +9371,10 @@ final class ParableFunctions {
     static boolean _hasBracketClose(String s, int start, int depth) {
         int i = start;
         while (i < s.length()) {
-            if (String.valueOf(s.charAt(i)).equals("]")) {
+            if (s.charAt(i) == ']') {
                 return true;
             }
-            if (String.valueOf(s.charAt(i)).equals("|") || String.valueOf(s.charAt(i)).equals(")") && depth == 0) {
+            if (s.charAt(i) == '|' || s.charAt(i) == ')' && depth == 0) {
                 return false;
             }
             i += 1;
@@ -9384,24 +9384,24 @@ final class ParableFunctions {
 
     static Tuple6 _consumeBracketClass(String s, int start, int depth) {
         int scanPos = start + 1;
-        if (scanPos < s.length() && String.valueOf(s.charAt(scanPos)).equals("!") || String.valueOf(s.charAt(scanPos)).equals("^")) {
+        if (scanPos < s.length() && s.charAt(scanPos) == '!' || s.charAt(scanPos) == '^') {
             scanPos += 1;
         }
-        if (scanPos < s.length() && String.valueOf(s.charAt(scanPos)).equals("]")) {
+        if (scanPos < s.length() && s.charAt(scanPos) == ']') {
             if (ParableFunctions._hasBracketClose(s, scanPos + 1, depth)) {
                 scanPos += 1;
             }
         }
         boolean isBracket = false;
         while (scanPos < s.length()) {
-            if (String.valueOf(s.charAt(scanPos)).equals("]")) {
+            if (s.charAt(scanPos) == ']') {
                 isBracket = true;
                 break;
             }
-            if (String.valueOf(s.charAt(scanPos)).equals(")") && depth == 0) {
+            if (s.charAt(scanPos) == ')' && depth == 0) {
                 break;
             }
-            if (String.valueOf(s.charAt(scanPos)).equals("|") && depth == 0) {
+            if (s.charAt(scanPos) == '|' && depth == 0) {
                 break;
             }
             scanPos += 1;
@@ -9411,17 +9411,17 @@ final class ParableFunctions {
         }
         List<String> chars = new ArrayList<>(List.of("["));
         int i = start + 1;
-        if (i < s.length() && String.valueOf(s.charAt(i)).equals("!") || String.valueOf(s.charAt(i)).equals("^")) {
+        if (i < s.length() && s.charAt(i) == '!' || s.charAt(i) == '^') {
             chars.add(String.valueOf(s.charAt(i)));
             i += 1;
         }
-        if (i < s.length() && String.valueOf(s.charAt(i)).equals("]")) {
+        if (i < s.length() && s.charAt(i) == ']') {
             if (ParableFunctions._hasBracketClose(s, i + 1, depth)) {
                 chars.add(String.valueOf(s.charAt(i)));
                 i += 1;
             }
         }
-        while (i < s.length() && !String.valueOf(s.charAt(i)).equals("]")) {
+        while (i < s.length() && s.charAt(i) != ']') {
             chars.add(String.valueOf(s.charAt(i)));
             i += 1;
         }
@@ -10015,8 +10015,8 @@ final class ParableFunctions {
 
     static int _skipBacktick(String value, int start) {
         int i = start + 1;
-        while (i < value.length() && !String.valueOf(value.charAt(i)).equals("`")) {
-            if (String.valueOf(value.charAt(i)).equals("\\") && i + 1 < value.length()) {
+        while (i < value.length() && value.charAt(i) != '`') {
+            if (value.charAt(i) == '\\' && i + 1 < value.length()) {
                 i += 2;
             } else {
                 i += 1;
@@ -10030,7 +10030,7 @@ final class ParableFunctions {
 
     static int _skipSingleQuoted(String s, int start) {
         int i = start;
-        while (i < s.length() && !String.valueOf(s.charAt(i)).equals("'")) {
+        while (i < s.length() && s.charAt(i) != '\'') {
             i += 1;
         }
         return (i < s.length() ? i + 1 : i);
@@ -10066,11 +10066,11 @@ final class ParableFunctions {
                 continue;
             }
             if (c.equals("$") && i + 1 < n) {
-                if (String.valueOf(s.charAt(i + 1)).equals("(")) {
+                if (s.charAt(i + 1) == '(') {
                     i = ParableFunctions._findCmdsubEnd(s, i + 2);
                     continue;
                 }
-                if (String.valueOf(s.charAt(i + 1)).equals("{")) {
+                if (s.charAt(i + 1) == '{') {
                     i = ParableFunctions._findBracedParamEnd(s, i + 2);
                     continue;
                 }
@@ -10099,7 +10099,7 @@ final class ParableFunctions {
                     if (scanParen > 0) {
                         scanParen -= 1;
                     } else {
-                        if (scanI + 1 < value.length() && String.valueOf(value.charAt(scanI + 1)).equals(")")) {
+                        if (scanI + 1 < value.length() && value.charAt(scanI + 1) == ')') {
                             return true;
                         } else {
                             return false;
@@ -10172,21 +10172,21 @@ final class ParableFunctions {
                 i = ParableFunctions._skipDoubleQuoted(value, i + 1);
                 continue;
             }
-            if (c.equals("#") && arithDepth == 0 && i == start || String.valueOf(value.charAt(i - 1)).equals(" ") || String.valueOf(value.charAt(i - 1)).equals("\t") || String.valueOf(value.charAt(i - 1)).equals("\n") || String.valueOf(value.charAt(i - 1)).equals(";") || String.valueOf(value.charAt(i - 1)).equals("|") || String.valueOf(value.charAt(i - 1)).equals("&") || String.valueOf(value.charAt(i - 1)).equals("(") || String.valueOf(value.charAt(i - 1)).equals(")")) {
-                while (i < value.length() && !String.valueOf(value.charAt(i)).equals("\n")) {
+            if (c.equals("#") && arithDepth == 0 && i == start || value.charAt(i - 1) == ' ' || value.charAt(i - 1) == '\t' || value.charAt(i - 1) == '\n' || value.charAt(i - 1) == ';' || value.charAt(i - 1) == '|' || value.charAt(i - 1) == '&' || value.charAt(i - 1) == '(' || value.charAt(i - 1) == ')') {
+                while (i < value.length() && value.charAt(i) != '\n') {
                     i += 1;
                 }
                 continue;
             }
             if (ParableFunctions._startsWithAt(value, i, "<<<")) {
                 i += 3;
-                while (i < value.length() && String.valueOf(value.charAt(i)).equals(" ") || String.valueOf(value.charAt(i)).equals("\t")) {
+                while (i < value.length() && value.charAt(i) == ' ' || value.charAt(i) == '\t') {
                     i += 1;
                 }
-                if (i < value.length() && String.valueOf(value.charAt(i)).equals("\"")) {
+                if (i < value.length() && value.charAt(i) == '"') {
                     i += 1;
-                    while (i < value.length() && !String.valueOf(value.charAt(i)).equals("\"")) {
-                        if (String.valueOf(value.charAt(i)).equals("\\") && i + 1 < value.length()) {
+                    while (i < value.length() && value.charAt(i) != '"') {
+                        if (value.charAt(i) == '\\' && i + 1 < value.length()) {
                             i += 2;
                         } else {
                             i += 1;
@@ -10196,9 +10196,9 @@ final class ParableFunctions {
                         i += 1;
                     }
                 } else {
-                    if (i < value.length() && String.valueOf(value.charAt(i)).equals("'")) {
+                    if (i < value.length() && value.charAt(i) == '\'') {
                         i += 1;
-                        while (i < value.length() && !String.valueOf(value.charAt(i)).equals("'")) {
+                        while (i < value.length() && value.charAt(i) != '\'') {
                             i += 1;
                         }
                         if (i < value.length()) {
@@ -10326,7 +10326,7 @@ final class ParableFunctions {
                     continue;
                 }
             }
-            if (c.equals("<") || c.equals(">") && i + 1 < value.length() && String.valueOf(value.charAt(i + 1)).equals("(")) {
+            if (c.equals("<") || c.equals(">") && i + 1 < value.length() && value.charAt(i + 1) == '(') {
                 i = ParableFunctions._findCmdsubEnd(value, i + 2);
                 continue;
             }
@@ -10355,7 +10355,7 @@ final class ParableFunctions {
 
     static int _skipHeredoc(String value, int start) {
         int i = start + 2;
-        if (i < value.length() && String.valueOf(value.charAt(i)).equals("-")) {
+        if (i < value.length() && value.charAt(i) == '-') {
             i += 1;
         }
         while (i < value.length() && ParableFunctions._isWhitespaceNoNewline(String.valueOf(value.charAt(i)))) {
@@ -10364,7 +10364,7 @@ final class ParableFunctions {
         int delimStart = i;
         Object quoteChar = null;
         String delimiter = "";
-        if (i < value.length() && String.valueOf(value.charAt(i)).equals("\"") || String.valueOf(value.charAt(i)).equals("'")) {
+        if (i < value.length() && value.charAt(i) == '"' || value.charAt(i) == '\'') {
             quoteChar = String.valueOf(value.charAt(i));
             i += 1;
             delimStart = i;
@@ -10376,7 +10376,7 @@ final class ParableFunctions {
                 i += 1;
             }
         } else {
-            if (i < value.length() && String.valueOf(value.charAt(i)).equals("\\")) {
+            if (i < value.length() && value.charAt(i) == '\\') {
                 i += 1;
                 delimStart = i;
                 if (i < value.length()) {
@@ -10396,7 +10396,7 @@ final class ParableFunctions {
         int parenDepth = 0;
         QuoteState quote = ParableFunctions.newQuoteState();
         boolean inBacktick = false;
-        while (i < value.length() && !String.valueOf(value.charAt(i)).equals("\n")) {
+        while (i < value.length() && value.charAt(i) != '\n') {
             String c = String.valueOf(value.charAt(i));
             if (c.equals("\\") && i + 1 < value.length() && quote.double_ || inBacktick) {
                 i += 2;
@@ -10433,23 +10433,23 @@ final class ParableFunctions {
             }
             i += 1;
         }
-        if (i < value.length() && String.valueOf(value.charAt(i)).equals(")")) {
+        if (i < value.length() && value.charAt(i) == ')') {
             return i;
         }
-        if (i < value.length() && String.valueOf(value.charAt(i)).equals("\n")) {
+        if (i < value.length() && value.charAt(i) == '\n') {
             i += 1;
         }
         while (i < value.length()) {
             int lineStart = i;
             int lineEnd = i;
-            while (lineEnd < value.length() && !String.valueOf(value.charAt(lineEnd)).equals("\n")) {
+            while (lineEnd < value.length() && value.charAt(lineEnd) != '\n') {
                 lineEnd += 1;
             }
             String line = ParableFunctions._substring(value, lineStart, lineEnd);
             while (lineEnd < value.length()) {
                 int trailingBs = 0;
                 for (Integer j : java.util.stream.IntStream.iterate(line.length() - 1, _x -> _x < -1, _x -> _x + -1).boxed().toList()) {
-                    if (String.valueOf(line.charAt(j)).equals("\\")) {
+                    if (line.charAt(j) == '\\') {
                         trailingBs += 1;
                     } else {
                         break;
@@ -10461,13 +10461,13 @@ final class ParableFunctions {
                 line = line.substring(0, line.length() - 1);
                 lineEnd += 1;
                 int nextLineStart = lineEnd;
-                while (lineEnd < value.length() && !String.valueOf(value.charAt(lineEnd)).equals("\n")) {
+                while (lineEnd < value.length() && value.charAt(lineEnd) != '\n') {
                     lineEnd += 1;
                 }
                 line = line + ParableFunctions._substring(value, nextLineStart, lineEnd);
             }
             String stripped = "";
-            if (start + 2 < value.length() && String.valueOf(value.charAt(start + 2)).equals("-")) {
+            if (start + 2 < value.length() && value.charAt(start + 2) == '-') {
                 stripped = line.replaceFirst("^[" + "\t" + "]+", "");
             } else {
                 stripped = line;
@@ -10497,7 +10497,7 @@ final class ParableFunctions {
             return new Tuple9(start, start);
         }
         int pos = start;
-        while (pos < source.length() && !String.valueOf(source.charAt(pos)).equals("\n")) {
+        while (pos < source.length() && source.charAt(pos) != '\n') {
             pos += 1;
         }
         if (pos >= source.length()) {
@@ -10511,14 +10511,14 @@ final class ParableFunctions {
             while (pos < source.length()) {
                 int lineStart = pos;
                 int lineEnd = pos;
-                while (lineEnd < source.length() && !String.valueOf(source.charAt(lineEnd)).equals("\n")) {
+                while (lineEnd < source.length() && source.charAt(lineEnd) != '\n') {
                     lineEnd += 1;
                 }
                 String line = ParableFunctions._substring(source, lineStart, lineEnd);
                 while (lineEnd < source.length()) {
                     int trailingBs = 0;
                     for (Integer j : java.util.stream.IntStream.iterate(line.length() - 1, _x -> _x < -1, _x -> _x + -1).boxed().toList()) {
-                        if (String.valueOf(line.charAt(j)).equals("\\")) {
+                        if (line.charAt(j) == '\\') {
                             trailingBs += 1;
                         } else {
                             break;
@@ -10530,7 +10530,7 @@ final class ParableFunctions {
                     line = line.substring(0, line.length() - 1);
                     lineEnd += 1;
                     int nextLineStart = lineEnd;
-                    while (lineEnd < source.length() && !String.valueOf(source.charAt(lineEnd)).equals("\n")) {
+                    while (lineEnd < source.length() && source.charAt(lineEnd) != '\n') {
                         lineEnd += 1;
                     }
                     line = line + ParableFunctions._substring(source, nextLineStart, lineEnd);
@@ -10567,7 +10567,7 @@ final class ParableFunctions {
             }
         }
         int end = pos + wordLen;
-        if (end < s.length() && String.valueOf(s.charAt(end)).chars().allMatch(Character::isLetterOrDigit) || String.valueOf(s.charAt(end)).equals("_")) {
+        if (end < s.length() && String.valueOf(s.charAt(end)).chars().allMatch(Character::isLetterOrDigit) || s.charAt(end) == '_') {
             return false;
         }
         return true;
@@ -10599,7 +10599,7 @@ final class ParableFunctions {
     static int _countTrailingBackslashes(String s) {
         int count = 0;
         for (Integer i : java.util.stream.IntStream.iterate(s.length() - 1, _x -> _x < -1, _x -> _x + -1).boxed().toList()) {
-            if (String.valueOf(s.charAt(i)).equals("\\")) {
+            if (s.charAt(i) == '\\') {
                 count += 1;
             } else {
                 break;
@@ -10621,11 +10621,11 @@ final class ParableFunctions {
                 depth = 1;
                 inner = new ArrayList<>();
                 while (i < delimiter.length() && depth > 0) {
-                    if (String.valueOf(delimiter.charAt(i)).equals("(")) {
+                    if (delimiter.charAt(i) == '(') {
                         depth += 1;
                         inner.add(String.valueOf(delimiter.charAt(i)));
                     } else {
-                        if (String.valueOf(delimiter.charAt(i)).equals(")")) {
+                        if (delimiter.charAt(i) == ')') {
                             depth -= 1;
                             if (depth == 0) {
                                 innerStr = String.join("", inner);
@@ -10648,11 +10648,11 @@ final class ParableFunctions {
                     depth = 1;
                     inner = new ArrayList<>();
                     while (i < delimiter.length() && depth > 0) {
-                        if (String.valueOf(delimiter.charAt(i)).equals("{")) {
+                        if (delimiter.charAt(i) == '{') {
                             depth += 1;
                             inner.add(String.valueOf(delimiter.charAt(i)));
                         } else {
-                            if (String.valueOf(delimiter.charAt(i)).equals("}")) {
+                            if (delimiter.charAt(i) == '}') {
                                 depth -= 1;
                                 if (depth == 0) {
                                     innerStr = String.join("", inner);
@@ -10669,18 +10669,18 @@ final class ParableFunctions {
                         i += 1;
                     }
                 } else {
-                    if (i + 1 < delimiter.length() && "<>".indexOf(String.valueOf(delimiter.charAt(i))) != -1 && String.valueOf(delimiter.charAt(i + 1)).equals("(")) {
+                    if (i + 1 < delimiter.length() && "<>".indexOf(String.valueOf(delimiter.charAt(i))) != -1 && delimiter.charAt(i + 1) == '(') {
                         result.add(String.valueOf(delimiter.charAt(i)));
                         result.add("(");
                         i += 2;
                         depth = 1;
                         inner = new ArrayList<>();
                         while (i < delimiter.length() && depth > 0) {
-                            if (String.valueOf(delimiter.charAt(i)).equals("(")) {
+                            if (delimiter.charAt(i) == '(') {
                                 depth += 1;
                                 inner.add(String.valueOf(delimiter.charAt(i)));
                             } else {
-                                if (String.valueOf(delimiter.charAt(i)).equals(")")) {
+                                if (delimiter.charAt(i) == ')') {
                                     depth -= 1;
                                     if (depth == 0) {
                                         innerStr = String.join("", inner);
@@ -10817,7 +10817,7 @@ final class ParableFunctions {
         if (!(!s.equals(""))) {
             return -1;
         }
-        if (!(String.valueOf(s.charAt(0)).chars().allMatch(Character::isLetter) || String.valueOf(s.charAt(0)).equals("_"))) {
+        if (!(String.valueOf(s.charAt(0)).chars().allMatch(Character::isLetter) || s.charAt(0) == '_')) {
             return -1;
         }
         int i = 1;
@@ -10833,16 +10833,16 @@ final class ParableFunctions {
                     return -1;
                 }
                 i = end;
-                if (i < s.length() && String.valueOf(s.charAt(i)).equals("+")) {
+                if (i < s.length() && s.charAt(i) == '+') {
                     i += 1;
                 }
-                if (i < s.length() && String.valueOf(s.charAt(i)).equals("=")) {
+                if (i < s.length() && s.charAt(i) == '=') {
                     return i;
                 }
                 return -1;
             }
             if (c.equals("+")) {
-                if (i + 1 < s.length() && String.valueOf(s.charAt(i + 1)).equals("=")) {
+                if (i + 1 < s.length() && s.charAt(i + 1) == '=') {
                     return i + 1;
                 }
                 return -1;
@@ -10864,11 +10864,11 @@ final class ParableFunctions {
         }
         String s = String.join("", chars);
         int i = 1;
-        while (i < s.length() && String.valueOf(s.charAt(i)).chars().allMatch(Character::isLetterOrDigit) || String.valueOf(s.charAt(i)).equals("_")) {
+        while (i < s.length() && String.valueOf(s.charAt(i)).chars().allMatch(Character::isLetterOrDigit) || s.charAt(i) == '_') {
             i += 1;
         }
         while (i < s.length()) {
-            if (!String.valueOf(s.charAt(i)).equals("[")) {
+            if (s.charAt(i) != '[') {
                 return false;
             }
             int end = ParableFunctions._skipSubscript(s, i, Constants.SMP_LITERAL);
@@ -10903,7 +10903,7 @@ final class ParableFunctions {
     static boolean _isBackslashEscaped(String value, int idx) {
         int bsCount = 0;
         int j = idx - 1;
-        while (j >= 0 && String.valueOf(value.charAt(j)).equals("\\")) {
+        while (j >= 0 && value.charAt(j) == '\\') {
             bsCount += 1;
             j -= 1;
         }
@@ -10913,7 +10913,7 @@ final class ParableFunctions {
     static boolean _isDollarDollarParen(String value, int idx) {
         int dollarCount = 0;
         int j = idx - 1;
-        while (j >= 0 && String.valueOf(value.charAt(j)).equals("$")) {
+        while (j >= 0 && value.charAt(j) == '$') {
             dollarCount += 1;
             j -= 1;
         }
@@ -10952,7 +10952,7 @@ final class ParableFunctions {
         if (!(!name.equals(""))) {
             return false;
         }
-        if (!(String.valueOf(name.charAt(0)).chars().allMatch(Character::isLetter) || String.valueOf(name.charAt(0)).equals("_"))) {
+        if (!(String.valueOf(name.charAt(0)).chars().allMatch(Character::isLetter) || name.charAt(0) == '_')) {
             return false;
         }
         for (int _i = 0; _i < name.substring(1).length(); _i++) {

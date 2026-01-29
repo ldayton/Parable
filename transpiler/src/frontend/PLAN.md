@@ -68,21 +68,38 @@ Functions (take explicit params, return values):
 
 Depends on: symbols, type_ctx, IR types
 
-### 2. Extract `lowering.py` ← NEXT
+### 2. Extract `lowering.py` ✅
 
 Functions for lowering Python AST to IR.
 
-Functions:
-- `lower_expr(node, ctx: FrontendContext) -> ir.Expr`
-- `lower_stmt(node, ctx: FrontendContext) -> ir.Stmt`
-- `lower_stmts(stmts, ctx) -> list[ir.Stmt]`
-- `lower_lvalue(node, ctx) -> ir.LValue`
-- `lower_expr_as_bool(node, ctx) -> ir.Expr`
-- Dispatch helpers for each node type (can be internal)
+**Extracted:**
+- ✅ Operator/location helpers: `loc_from_node`, `binop_to_str`, `cmpop_to_str`, `unaryop_to_str`
+- ✅ Type narrowing helpers: `is_isinstance_call`, `is_kind_check`, `extract_isinstance_or_chain`, `extract_isinstance_from_and`, `extract_kind_check`, `extract_attr_kind_check`, `get_attr_path`, `resolve_type_name`
+- ✅ Argument helpers: `convert_negative_index`, `merge_keyword_args`, `fill_default_args`, `add_address_of_for_ptr_params`, `deref_for_slice_params`, `coerce_args_to_node`, `coerce_sentinel_to_ptr`, `is_sentinel_int`, `get_sentinel_value`, `is_pointer_to_slice`, `is_len_call`, `get_inner_slice`
+- ✅ Simple expression lowering: `lower_expr_Constant`, `lower_expr_Name`
+- ✅ Attribute/Subscript lowering: `lower_expr_Attribute`, `lower_expr_Subscript`
+- ✅ Operator expression lowering: `lower_expr_BinOp`, `lower_expr_Compare`, `lower_expr_BoolOp`, `lower_expr_UnaryOp`
+- ✅ Collection expression lowering: `lower_expr_List`, `lower_expr_Dict`, `lower_expr_JoinedStr`, `lower_expr_Tuple`, `lower_expr_Set`, `lower_list_call_with_expected_type`
+- ✅ Expression dispatcher: `lower_expr_as_bool`, `lower_expr_IfExp`
+- ✅ Simple statement lowering: `lower_stmt_Expr`, `lower_stmt_AugAssign`, `lower_stmt_While`, `lower_stmt_Break`, `lower_stmt_Continue`, `lower_stmt_Pass`, `lower_stmt_FunctionDef`, `is_super_init_call`
+- ✅ Control flow: `lower_stmt_Return`
+- ✅ Exception handling: `lower_stmt_Raise`
+- ✅ LValue: `lower_lvalue`
+
+**Skipped (too complex, kept in frontend.py):**
+- `lower_expr_Call` (~300 lines, many special cases)
+- `lower_stmt_Assign` (~230 lines, tuple unpacking, type tracking)
+- `lower_stmt_AnnAssign` (~60 lines, annotation handling)
+- `lower_stmt_If` (~55 lines, isinstance chain → TypeSwitch)
+- `lower_stmt_For` (~80 lines, tuple unpacking in iteration)
+- `lower_stmt_Try` (~20 lines, mutates catch var context)
+- `collect_isinstance_chain` (mutates type context)
+
+**Completed:** commits `3cc3c81` through `6fd5d78`
 
 Depends on: context.py, type_inference.py
 
-### 3. Extract `collection.py`
+### 3. Extract `collection.py` ← NEXT
 
 Functions for multi-pass symbol/type collection.
 

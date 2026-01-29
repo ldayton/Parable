@@ -260,9 +260,9 @@ class JavaBackend:
         self.lines: list[str] = []
         self.receiver_name: str | None = None
         self.current_class: str = ""
-        self.tuple_records: dict[tuple, str] = {}  # tuple signature -> record name
+        self.tuple_records: dict[tuple[str, ...], str] = {}  # tuple signature -> record name
         self.tuple_counter = 0
-        self.optional_tuples: set[tuple] = set()  # (T, bool) patterns -> use Optional<T>
+        self.optional_tuples: set[tuple[str, ...]] = set()  # (T, bool) patterns -> use Optional<T>
         self.struct_fields: dict[
             str, list[tuple[str, Type]]
         ] = {}  # struct name -> [(field_name, type)]
@@ -271,6 +271,7 @@ class JavaBackend:
         self._hoisted_vars: set[str] = set()  # Variables hoisted from control flow blocks
         self._current_func: str | None = None  # Current function name for type overrides
         self._func_params: set[str] = set()  # Function-typed parameter names
+        self._module_name: str = ""  # Current module name
 
     def emit(self, module: Module) -> str:
         """Emit Java code from IR Module."""
@@ -506,7 +507,7 @@ class JavaBackend:
         if module.functions:
             self._emit_functions_class(module)
 
-    def _emit_tuple_record(self, name: str, sig: tuple) -> None:
+    def _emit_tuple_record(self, name: str, sig: tuple[str, ...]) -> None:
         """Emit a record definition for a tuple type."""
         fields = ", ".join(f"{typ} f{i}" for i, typ in enumerate(sig))
         self._line(f"record {name}({fields}) {{}}")

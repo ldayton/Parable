@@ -167,6 +167,7 @@ class GoBackend:
         self._type_switch_binding_rename: dict[str, str] = {}  # Maps binding name to narrowed name
         self._named_returns: list[str] | None = None  # Named return param names (when needed)
         self._in_catch_body: bool = False  # Whether we're inside a TryCatch catch body
+        self._current_return_type: Type = VOID  # Current function's return type
 
     def emit(self, module: Module) -> str:
         """Emit Go code from IR Module."""

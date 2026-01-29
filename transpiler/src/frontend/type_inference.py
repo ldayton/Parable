@@ -24,6 +24,7 @@ from ..ir import (
     Tuple,
     Type,
 )
+from .ast_compat import ASTNode
 
 if TYPE_CHECKING:
     from .. import ir
@@ -301,7 +302,7 @@ def py_return_type_to_ir(
 
 
 def infer_type_from_value(
-    node: dict,
+    node: ASTNode,
     param_types: dict[str, str],
     symbols: SymbolTable,
     node_types: set[str],
@@ -373,7 +374,7 @@ def infer_type_from_value(
 
 
 def infer_iterable_type(
-    node: dict,
+    node: ASTNode,
     var_types: dict[str, Type],
     current_class_name: str,
     symbols: SymbolTable,
@@ -400,7 +401,7 @@ def infer_iterable_type(
 
 
 def infer_container_type_from_ast(
-    node: dict,
+    node: ASTNode,
     symbols: SymbolTable,
     current_class_name: str,
     current_func_info: FuncInfo | None,
@@ -556,7 +557,7 @@ def synthesize_type(
 
 
 def infer_expr_type_from_ast(
-    node: dict,
+    node: ASTNode,
     type_ctx: "TypeContext",
     symbols: SymbolTable,
     current_func_info: FuncInfo | None,
@@ -667,7 +668,7 @@ def infer_expr_type_from_ast(
 
 
 def infer_call_return_type(
-    node: dict,
+    node: ASTNode,
     symbols: SymbolTable,
     type_ctx: "TypeContext",
     current_func_info: FuncInfo | None,

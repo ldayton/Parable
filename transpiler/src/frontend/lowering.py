@@ -345,12 +345,12 @@ def convert_negative_index(
 def merge_keyword_args(
     obj_type: "Type",
     method: str,
-    args: list,
+    args: list["ir.Expr"],
     node: ASTNode,
     symbols: "SymbolTable",
     lower_expr: Callable[[ASTNode], "ir.Expr"],
     extract_struct_name: Callable[["Type"], str | None],
-) -> list:
+) -> list["ir.Expr"]:
     """Merge keyword arguments into positional args at their proper positions."""
     keywords = node.get("keywords", [])
     if not keywords:
@@ -381,10 +381,10 @@ def merge_keyword_args(
 def fill_default_args(
     obj_type: "Type",
     method: str,
-    args: list,
+    args: list["ir.Expr"],
     symbols: "SymbolTable",
     extract_struct_name: Callable[["Type"], str | None],
-) -> list:
+) -> list["ir.Expr"]:
     """Fill in missing arguments with default values for methods with optional params."""
     struct_name = extract_struct_name(obj_type)
     method_info = None
@@ -414,10 +414,10 @@ def fill_default_args(
 
 def merge_keyword_args_for_func(
     func_info: "FuncInfo",
-    args: list,
+    args: list["ir.Expr"],
     node: ASTNode,
     lower_expr: Callable[[ASTNode], "ir.Expr"],
-) -> list:
+) -> list["ir.Expr"]:
     """Merge keyword arguments into positional args at their proper positions for free functions."""
     keywords = node.get("keywords", [])
     if not keywords:
@@ -439,7 +439,7 @@ def merge_keyword_args_for_func(
     return result
 
 
-def fill_default_args_for_func(func_info: "FuncInfo", args: list) -> list:
+def fill_default_args_for_func(func_info: "FuncInfo", args: list["ir.Expr"]) -> list["ir.Expr"]:
     """Fill in missing arguments with default values for free functions with optional params."""
     n_expected = len(func_info.params)
     if len(args) >= n_expected:
@@ -460,12 +460,12 @@ def fill_default_args_for_func(func_info: "FuncInfo", args: list) -> list:
 def add_address_of_for_ptr_params(
     obj_type: "Type",
     method: str,
-    args: list,
+    args: list["ir.Expr"],
     orig_args: list[ASTNode],
     symbols: "SymbolTable",
     extract_struct_name: Callable[["Type"], str | None],
     infer_expr_type_from_ast: Callable[[ASTNode], "Type"],
-) -> list:
+) -> list["ir.Expr"]:
     """Add & when passing slice to pointer-to-slice parameter."""
     from .. import ir
 
@@ -499,12 +499,12 @@ def add_address_of_for_ptr_params(
 def deref_for_slice_params(
     obj_type: "Type",
     method: str,
-    args: list,
+    args: list["ir.Expr"],
     orig_args: list[ASTNode],
     symbols: "SymbolTable",
     extract_struct_name: Callable[["Type"], str | None],
     infer_expr_type_from_ast: Callable[[ASTNode], "Type"],
-) -> list:
+) -> list["ir.Expr"]:
     """Dereference * when passing pointer-to-slice to slice parameter."""
     from .. import ir
 
@@ -536,11 +536,11 @@ def deref_for_slice_params(
 
 def deref_for_func_slice_params(
     func_name: str,
-    args: list,
+    args: list["ir.Expr"],
     orig_args: list[ASTNode],
     symbols: "SymbolTable",
     infer_expr_type_from_ast: Callable[[ASTNode], "Type"],
-) -> list:
+) -> list["ir.Expr"]:
     """Dereference * when passing pointer-to-slice to slice parameter for free functions."""
     from .. import ir
 
@@ -567,7 +567,7 @@ def deref_for_func_slice_params(
     return result
 
 
-def coerce_args_to_node(func_info: "FuncInfo", args: list) -> list:
+def coerce_args_to_node(func_info: "FuncInfo", args: list["ir.Expr"]) -> list["ir.Expr"]:
     """Add type assertions when passing interface{} to Node parameter."""
     from .. import ir
 
@@ -617,12 +617,12 @@ def get_inner_slice(typ: "Type") -> Slice | None:
 def coerce_sentinel_to_ptr(
     obj_type: "Type",
     method: str,
-    args: list,
-    orig_args: list,
+    args: list["ir.Expr"],
+    orig_args: list[ASTNode],
     symbols: "SymbolTable",
     sentinel_ints: set[str],
     extract_struct_name: Callable[["Type"], str | None],
-) -> list:
+) -> list["ir.Expr"]:
     """Wrap sentinel ints with _intPtr() when passing to Optional(int) params."""
     from .. import ir
 

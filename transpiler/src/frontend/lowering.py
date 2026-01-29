@@ -2,25 +2,15 @@
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
-from ..ir import BOOL, FLOAT, INT, STRING, VOID, Interface, Loc, Map, Optional, Pointer, Set, Slice, StringFormat, StructRef, Tuple
+from ..ir import BOOL, BYTE, FLOAT, INT, RUNE, STRING, VOID, Interface, Loc, Map, Optional, Pointer, Set, Slice, StringFormat, StructRef, Tuple
+from ..type_overrides import NODE_METHOD_TYPES
 
 if TYPE_CHECKING:
     from .. import ir
     from ..ir import FuncInfo, SymbolTable, Type
-    from .context import TypeContext
-
-
-@dataclass
-class LoweringDispatch:
-    """Callbacks for mutual recursion during lowering."""
-    lower_expr: Callable[[ast.expr], "ir.Expr"]
-    lower_stmt: Callable[[ast.stmt], "ir.Stmt"]
-    lower_stmts: Callable[[list[ast.stmt]], list["ir.Stmt"]]
-    lower_lvalue: Callable[[ast.expr], "ir.LValue"]
-    lower_expr_as_bool: Callable[[ast.expr], "ir.Expr"]
+    from .context import FrontendContext, LoweringDispatch, TypeContext
 
 
 def loc_from_node(node: ast.AST) -> Loc:
@@ -1321,6 +1311,334 @@ def lower_stmt_Raise(
                         break
             return ir.Raise(error_type=error_type, message=msg, pos=pos, loc=loc_from_node(node))
     return ir.Raise(error_type="Error", message=ir.StringLit(value="", typ=STRING), pos=ir.IntLit(value=0, typ=INT), loc=loc_from_node(node))
+
+
+# ============================================================
+# COMPLEX EXPRESSION LOWERING (requires full context)
+# ============================================================
+
+
+def lower_expr_Call(
+    node: ast.Call,
+    ctx: "FrontendContext",
+    dispatch: "LoweringDispatch",
+) -> "ir.Expr":
+    """Lower a Python function/method call to IR.
+
+    Handles:
+    - Method calls (encode, decode, append, pop, and general methods)
+    - Free function calls (len, bool, list, int, str, ord, chr, max, min, isinstance)
+    - Constructor calls (struct construction)
+    - Regular function calls
+    """
+    from .. import ir
+    args = [dispatch.lower_expr(a) for a in node.args]
+    # Method call
+    if isinstance(node.func, ast.Attribute):
+        method = node.func.attr
+        # Handle chr(n).encode("utf-8") -> []byte(string(rune(n)))
+        if method == "encode" and isinstance(node.func.value, ast.Call):
+            inner_call = node.func.value
+            if isinstance(inner_call.func, ast.Name) and inner_call.func.id == "chr":
+                # chr(n).encode("utf-8") -> cast to []byte
+                chr_arg = dispatch.lower_expr(inner_call.args[0])
+                rune_cast = ir.Cast(expr=chr_arg, to_type=RUNE, typ=RUNE, loc=loc_from_node(node))
+                str_cast = ir.Cast(expr=rune_cast, to_type=STRING, typ=STRING, loc=loc_from_node(node))
+                return ir.Cast(expr=str_cast, to_type=Slice(BYTE), typ=Slice(BYTE), loc=loc_from_node(node))
+        # Handle str.encode("utf-8") -> []byte(str)
+        if method == "encode":
+            obj = dispatch.lower_expr(node.func.value)
+            return ir.Cast(expr=obj, to_type=Slice(BYTE), typ=Slice(BYTE), loc=loc_from_node(node))
+        # Handle bytes.decode("utf-8") -> string(bytes)
+        if method == "decode":
+            obj = dispatch.lower_expr(node.func.value)
+            return ir.Cast(expr=obj, to_type=STRING, typ=STRING, loc=loc_from_node(node))
+        obj = dispatch.lower_expr(node.func.value)
+        # Handle Python list methods that need special Go treatment
+        if method == "append" and args:
+            # Look up actual type of the object (might be pointer to slice for params)
+            obj_type = dispatch.infer_expr_type_from_ast(node.func.value)
+            # Check if appending to a byte slice - need to cast int to byte
+            elem_type = None
+            if isinstance(obj_type, Slice):
+                elem_type = obj_type.element
+            elif isinstance(obj_type, Pointer) and isinstance(obj_type.target, Slice):
+                elem_type = obj_type.target.element
+            # Coerce int to byte for byte slices (Python bytearray.append accepts int)
+            coerced_args = args
+            if elem_type == BYTE and len(args) == 1:
+                arg = args[0]
+                # Check if arg is int-typed (via AST inference or lowered type)
+                arg_ast_type = dispatch.infer_expr_type_from_ast(node.args[0])
+                if arg_ast_type == INT or (hasattr(arg, 'typ') and arg.typ == INT):
+                    coerced_args = [ir.Cast(expr=arg, to_type=BYTE, typ=BYTE, loc=arg.loc)]
+            # list.append(x) -> append(list, x) in Go (handled via MethodCall for now)
+            return ir.MethodCall(
+                obj=obj, method="append", args=coerced_args,
+                receiver_type=obj_type if obj_type != Interface("any") else Slice(Interface("any")),
+                typ=VOID, loc=loc_from_node(node)
+            )
+        # Infer receiver type for proper method lookup
+        obj_type = dispatch.infer_expr_type_from_ast(node.func.value)
+        if method == "pop" and not args and isinstance(obj_type, Slice):
+            # list.pop() -> return last element and shrink slice (only for slices)
+            return ir.MethodCall(
+                obj=obj, method="pop", args=[],
+                receiver_type=obj_type, typ=obj_type.element, loc=loc_from_node(node)
+            )
+        # Check if calling a method on a Node-typed expression that needs type assertion
+        # Do this early so we can use the asserted type for default arg lookup
+        if dispatch.is_node_interface_type(obj_type) and method in NODE_METHOD_TYPES:
+            struct_name = NODE_METHOD_TYPES[method]
+            asserted_type = Pointer(StructRef(struct_name))
+            obj = ir.TypeAssert(
+                expr=obj, asserted=asserted_type, safe=True,
+                typ=asserted_type, loc=loc_from_node(node.func.value)
+            )
+            # Use asserted type for subsequent lookups
+            obj_type = asserted_type
+        # Merge keyword arguments into args at proper positions
+        args = dispatch.merge_keyword_args(obj_type, method, args, node)
+        # Fill in default values for any remaining missing parameters
+        args = dispatch.fill_default_args(obj_type, method, args)
+        # Coerce sentinel ints to pointers for *int params
+        args = dispatch.coerce_sentinel_to_ptr(obj_type, method, args, node.args)
+        # Add & for pointer-to-slice params
+        args = dispatch.add_address_of_for_ptr_params(obj_type, method, args, node.args)
+        # Dereference * for slice params
+        args = dispatch.deref_for_slice_params(obj_type, method, args, node.args)
+        # Infer return type
+        ret_type = dispatch.synthesize_method_return_type(obj_type, method)
+        return ir.MethodCall(
+            obj=obj, method=method, args=args,
+            receiver_type=obj_type, typ=ret_type, loc=loc_from_node(node)
+        )
+    # Free function call
+    if isinstance(node.func, ast.Name):
+        func_name = node.func.id
+        # Check for len()
+        if func_name == "len" and args:
+            arg = args[0]
+            arg_type = dispatch.infer_expr_type_from_ast(node.args[0])
+            # Dereference Pointer(Slice) or Optional(Slice) for len()
+            inner_slice = dispatch.get_inner_slice(arg_type)
+            if inner_slice is not None:
+                arg = ir.UnaryOp(op="*", operand=arg, typ=inner_slice, loc=arg.loc)
+            return ir.Len(expr=arg, typ=INT, loc=loc_from_node(node))
+        # Check for bool() - convert to comparison
+        if func_name == "bool" and args:
+            # bool(x) -> x != 0 for ints, x != "" for strings, x != nil for pointers
+            arg_type = dispatch.infer_expr_type_from_ast(node.args[0])
+            if arg_type == INT:
+                return ir.BinaryOp(op="!=", left=args[0], right=ir.IntLit(value=0, typ=INT), typ=BOOL, loc=loc_from_node(node))
+            if arg_type == STRING:
+                return ir.BinaryOp(op="!=", left=args[0], right=ir.StringLit(value="", typ=STRING), typ=BOOL, loc=loc_from_node(node))
+            # Default: assume pointer/optional, check != nil
+            return ir.IsNil(expr=args[0], negated=True, typ=BOOL, loc=loc_from_node(node))
+        # Check for list() copy
+        if func_name == "list" and args:
+            # list(x) is a copy operation - preserve element type from source
+            source_type = getattr(args[0], 'typ', None)
+            if isinstance(source_type, Slice):
+                result_type = source_type
+            else:
+                result_type = Slice(Interface("any"))
+            return ir.MethodCall(
+                obj=args[0], method="copy", args=[],
+                receiver_type=result_type, typ=result_type, loc=loc_from_node(node)
+            )
+        # Check for bytearray() constructor
+        if func_name == "bytearray" and not args:
+            return ir.MakeSlice(
+                element_type=BYTE, length=None, capacity=None,
+                typ=Slice(BYTE), loc=loc_from_node(node)
+            )
+        # Check for int(s, base) conversion
+        if func_name == "int" and len(args) == 2:
+            return ir.Call(
+                func="_parseInt", args=args,
+                typ=INT, loc=loc_from_node(node)
+            )
+        # Check for int(s) - string to int conversion
+        if func_name == "int" and len(args) == 1:
+            arg_type = dispatch.infer_expr_type_from_ast(node.args[0])
+            if arg_type == STRING:
+                # String to int: use _parseInt with base 10
+                return ir.Call(
+                    func="_parseInt",
+                    args=[args[0], ir.IntLit(value=10, typ=INT, loc=loc_from_node(node))],
+                    typ=INT, loc=loc_from_node(node)
+                )
+            else:
+                # Already numeric: just cast to int
+                return ir.Cast(expr=args[0], to_type=INT, typ=INT, loc=loc_from_node(node))
+        # Check for str(n) - int to string conversion
+        if func_name == "str" and len(args) == 1:
+            arg_type = dispatch.infer_expr_type_from_ast(node.args[0])
+            if arg_type == INT:
+                return ir.Call(
+                    func="_intToStr", args=args,
+                    typ=STRING, loc=loc_from_node(node)
+                )
+            # Handle *int or Optional[int] - dereference first
+            if isinstance(arg_type, (Optional, Pointer)):
+                inner = arg_type.inner if isinstance(arg_type, Optional) else arg_type.target
+                if inner == INT:
+                    deref_arg = ir.UnaryOp(op="*", operand=args[0], typ=INT, loc=loc_from_node(node))
+                    return ir.Call(
+                        func="_intToStr", args=[deref_arg],
+                        typ=STRING, loc=loc_from_node(node)
+                    )
+            # Already string or convert via fmt
+            return ir.Cast(expr=args[0], to_type=STRING, typ=STRING, loc=loc_from_node(node))
+        # Check for ord(c) -> int(c[0]) (get Unicode code point)
+        if func_name == "ord" and len(args) == 1:
+            # ord(c) -> cast the first character to int
+            # In Go: int(c[0]) for strings, int(c) for bytes/runes
+            arg_type = dispatch.infer_expr_type_from_ast(node.args[0])
+            if arg_type in (BYTE, RUNE):
+                # Already a byte/rune: just cast to int
+                return ir.Cast(expr=args[0], to_type=INT, typ=INT, loc=loc_from_node(node))
+            else:
+                # String or unknown: index to get first byte, then cast to int
+                indexed = ir.Index(obj=args[0], index=ir.IntLit(value=0, typ=INT), typ=BYTE)
+                return ir.Cast(expr=indexed, to_type=INT, typ=INT, loc=loc_from_node(node))
+        # Check for chr(n) -> string(rune(n))
+        if func_name == "chr" and len(args) == 1:
+            rune_cast = ir.Cast(expr=args[0], to_type=RUNE, typ=RUNE, loc=loc_from_node(node))
+            return ir.Cast(expr=rune_cast, to_type=STRING, typ=STRING, loc=loc_from_node(node))
+        # Check for max(a, b) -> a > b ? a : b
+        if func_name == "max" and len(args) == 2:
+            cond = ir.BinaryOp(op=">", left=args[0], right=args[1], typ=BOOL, loc=loc_from_node(node))
+            return ir.Ternary(cond=cond, then_expr=args[0], else_expr=args[1], typ=INT, loc=loc_from_node(node))
+        # Check for min(a, b) -> a < b ? a : b
+        if func_name == "min" and len(args) == 2:
+            cond = ir.BinaryOp(op="<", left=args[0], right=args[1], typ=BOOL, loc=loc_from_node(node))
+            return ir.Ternary(cond=cond, then_expr=args[0], else_expr=args[1], typ=INT, loc=loc_from_node(node))
+        # Check for isinstance(x, Type) -> IsType expression
+        if func_name == "isinstance" and len(node.args) == 2:
+            expr = dispatch.lower_expr(node.args[0])
+            if isinstance(node.args[1], ast.Name):
+                type_name = node.args[1].id
+                tested_type = dispatch.resolve_type_name(type_name)
+                return ir.IsType(expr=expr, tested_type=tested_type, typ=BOOL, loc=loc_from_node(node))
+        # Check for constructor calls (class names)
+        if func_name in ctx.symbols.structs:
+            struct_info = ctx.symbols.structs[func_name]
+            # If struct needs constructor, call NewXxx instead of StructLit
+            if struct_info.needs_constructor:
+                # Build param name -> index map for keyword arg handling
+                param_indices: dict[str, int] = {}
+                for i, param_name in enumerate(struct_info.init_params):
+                    param_indices[param_name] = i
+                # Initialize args list with Nones
+                n_params = len(struct_info.init_params)
+                ctor_args: list[ir.Expr | None] = [None] * n_params
+                # First, place positional args
+                for i, arg_ast in enumerate(node.args):
+                    if i < n_params:
+                        param_name = struct_info.init_params[i]
+                        field_name = struct_info.param_to_field.get(param_name, param_name)
+                        field_info = struct_info.fields.get(field_name)
+                        expected_type = field_info.typ if field_info else None
+                        if isinstance(expected_type, Pointer) and isinstance(expected_type.target, Slice):
+                            expected_type = expected_type.target
+                        if isinstance(arg_ast, ast.List):
+                            ctor_args[i] = dispatch.lower_expr_List(arg_ast, expected_type)
+                        elif (isinstance(arg_ast, ast.Call) and isinstance(arg_ast.func, ast.Name)
+                              and arg_ast.func.id == "list" and arg_ast.args):
+                            ctor_args[i] = lower_list_call_with_expected_type(arg_ast, dispatch.lower_expr, expected_type)
+                        else:
+                            ctor_args[i] = args[i]
+                # Then, place keyword args in their proper positions
+                for kw in node.keywords:
+                    if kw.arg and kw.arg in param_indices:
+                        idx = param_indices[kw.arg]
+                        param_name = struct_info.init_params[idx]
+                        field_name = struct_info.param_to_field.get(param_name, param_name)
+                        field_info = struct_info.fields.get(field_name)
+                        expected_type = field_info.typ if field_info else None
+                        if isinstance(expected_type, Pointer) and isinstance(expected_type.target, Slice):
+                            expected_type = expected_type.target
+                        if isinstance(kw.value, ast.List):
+                            ctor_args[idx] = dispatch.lower_expr_List(kw.value, expected_type)
+                        elif (isinstance(kw.value, ast.Call) and isinstance(kw.value.func, ast.Name)
+                              and kw.value.func.id == "list" and kw.value.args):
+                            ctor_args[idx] = lower_list_call_with_expected_type(kw.value, dispatch.lower_expr, expected_type)
+                        else:
+                            ctor_args[idx] = dispatch.lower_expr(kw.value)
+                # Fill in default values for any remaining None slots
+                for i in range(n_params):
+                    if ctor_args[i] is None:
+                        param_name = struct_info.init_params[i]
+                        field_name = struct_info.param_to_field.get(param_name, param_name)
+                        field_info = struct_info.fields.get(field_name)
+                        field_type = field_info.typ if field_info else Interface("any")
+                        ctor_args[i] = dispatch.make_default_value(field_type, loc_from_node(node))
+                return ir.Call(
+                    func=f"New{func_name}",
+                    args=ctor_args,  # type: ignore
+                    typ=Pointer(StructRef(func_name)),
+                    loc=loc_from_node(node),
+                )
+            # Simple struct: emit StructLit with fields mapped from positional and keyword args
+            fields: dict[str, ir.Expr] = {}
+            for i, arg_ast in enumerate(node.args):
+                if i < len(struct_info.init_params):
+                    param_name = struct_info.init_params[i]
+                    # Map param name to actual field name (e.g., in_process_sub -> _in_process_sub)
+                    field_name = struct_info.param_to_field.get(param_name, param_name)
+                    # Look up field type for expected type context
+                    field_info = struct_info.fields.get(field_name)
+                    expected_type = field_info.typ if field_info else None
+                    # Handle pointer-wrapped slice types
+                    if isinstance(expected_type, Pointer) and isinstance(expected_type.target, Slice):
+                        expected_type = expected_type.target
+                    # Re-lower list args with expected type context
+                    if isinstance(arg_ast, ast.List):
+                        fields[field_name] = dispatch.lower_expr_List(arg_ast, expected_type)
+                    else:
+                        fields[field_name] = args[i]
+            # Handle keyword arguments for struct literals
+            if node.keywords:
+                for kw in node.keywords:
+                    if kw.arg:
+                        # Map param name to field name (handle snake_case to PascalCase)
+                        field_name = struct_info.param_to_field.get(kw.arg, kw.arg)
+                        field_info = struct_info.fields.get(field_name)
+                        expected_type = field_info.typ if field_info else None
+                        if isinstance(expected_type, Pointer) and isinstance(expected_type.target, Slice):
+                            expected_type = expected_type.target
+                        if isinstance(kw.value, ast.List):
+                            fields[field_name] = dispatch.lower_expr_List(kw.value, expected_type)
+                        elif (isinstance(kw.value, ast.Call) and isinstance(kw.value.func, ast.Name)
+                              and kw.value.func.id == "list" and kw.value.args):
+                            fields[field_name] = lower_list_call_with_expected_type(kw.value, dispatch.lower_expr, expected_type)
+                        else:
+                            fields[field_name] = dispatch.lower_expr(kw.value)
+            # Add constant field initializations from __init__
+            for const_name, const_value in struct_info.const_fields.items():
+                if const_name not in fields:
+                    fields[const_name] = ir.StringLit(value=const_value, typ=STRING, loc=loc_from_node(node))
+            return ir.StructLit(
+                struct_name=func_name, fields=fields,
+                typ=Pointer(StructRef(func_name)), loc=loc_from_node(node)
+            )
+        # Look up function return type and fill default args from symbol table
+        ret_type: "Type" = Interface("any")
+        if func_name in ctx.symbols.functions:
+            func_info = ctx.symbols.functions[func_name]
+            ret_type = func_info.return_type
+            # Merge keyword arguments into positional args
+            args = dispatch.merge_keyword_args_for_func(func_info, args, node)
+            # Fill in default arguments
+            args = dispatch.fill_default_args_for_func(func_info, args)
+            # Dereference * for slice params
+            args = dispatch.deref_for_func_slice_params(func_name, args, node.args)
+            # Add type assertions for interface{} -> Node coercion
+            args = dispatch.coerce_args_to_node(func_info, args)
+        return ir.Call(func=func_name, args=args, typ=ret_type, loc=loc_from_node(node))
+    return ir.Var(name="TODO_Call", typ=Interface("any"))
 
 
 # ============================================================

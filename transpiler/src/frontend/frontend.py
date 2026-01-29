@@ -1900,28 +1900,11 @@ class Frontend:
         return [self._lower_stmt(s) for s in stmts]
 
     def _lower_stmt_Expr(self, node: ast.Expr) -> "ir.Stmt":
-        from .. import ir
-        # Skip docstrings
-        if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
-            return ir.ExprStmt(expr=ir.Var(name="_skip_docstring", typ=VOID))
-        # Skip super().__init__() calls - handled by Go embedding
-        if self._is_super_init_call(node.value):
-            return ir.ExprStmt(expr=ir.Var(name="_skip_super_init", typ=VOID))
-        return ir.ExprStmt(expr=self._lower_expr(node.value), loc=self._loc_from_node(node))
+        return lowering.lower_stmt_Expr(node, self._lower_expr)
 
     def _is_super_init_call(self, node: ast.expr) -> bool:
         """Check if expression is super().__init__(...)."""
-        if not isinstance(node, ast.Call):
-            return False
-        if not isinstance(node.func, ast.Attribute):
-            return False
-        if node.func.attr != "__init__":
-            return False
-        if not isinstance(node.func.value, ast.Call):
-            return False
-        if not isinstance(node.func.value.func, ast.Name):
-            return False
-        return node.func.value.func.id == "super"
+        return lowering.is_super_init_call(node)
 
     def _lower_stmt_Assign(self, node: ast.Assign) -> "ir.Stmt":
         from .. import ir
@@ -2215,11 +2198,7 @@ class Frontend:
         return ir.ExprStmt(expr=ir.Var(name="_skip_ann", typ=VOID))
 
     def _lower_stmt_AugAssign(self, node: ast.AugAssign) -> "ir.Stmt":
-        from .. import ir
-        lval = self._lower_lvalue(node.target)
-        value = self._lower_expr(node.value)
-        op = self._binop_to_str(node.op)
-        return ir.OpAssign(target=lval, op=op, value=value, loc=self._loc_from_node(node))
+        return lowering.lower_stmt_AugAssign(node, self._lower_lvalue, self._lower_expr)
 
     def _lower_stmt_Return(self, node: ast.Return) -> "ir.Stmt":
         from .. import ir
@@ -2362,10 +2341,7 @@ class Frontend:
         return ir.If(cond=cond, then_body=then_body, else_body=else_body, loc=self._loc_from_node(node))
 
     def _lower_stmt_While(self, node: ast.While) -> "ir.Stmt":
-        from .. import ir
-        cond = self._lower_expr_as_bool(node.test)
-        body = self._lower_stmts(node.body)
-        return ir.While(cond=cond, body=body, loc=self._loc_from_node(node))
+        return lowering.lower_stmt_While(node, self._lower_expr_as_bool, self._lower_stmts)
 
     def _lower_stmt_For(self, node: ast.For) -> "ir.Stmt":
         from .. import ir
@@ -2442,16 +2418,13 @@ class Frontend:
         return ir.ForRange(index=index, value=value, iterable=iterable, body=body, loc=self._loc_from_node(node))
 
     def _lower_stmt_Break(self, node: ast.Break) -> "ir.Stmt":
-        from .. import ir
-        return ir.Break(loc=self._loc_from_node(node))
+        return lowering.lower_stmt_Break(node)
 
     def _lower_stmt_Continue(self, node: ast.Continue) -> "ir.Stmt":
-        from .. import ir
-        return ir.Continue(loc=self._loc_from_node(node))
+        return lowering.lower_stmt_Continue(node)
 
     def _lower_stmt_Pass(self, node: ast.Pass) -> "ir.Stmt":
-        from .. import ir
-        return ir.ExprStmt(expr=ir.Var(name="_pass", typ=VOID), loc=self._loc_from_node(node))
+        return lowering.lower_stmt_Pass(node)
 
     def _lower_stmt_Raise(self, node: ast.Raise) -> "ir.Stmt":
         from .. import ir
@@ -2503,9 +2476,7 @@ class Frontend:
         return ir.TryCatch(body=body, catch_var=catch_var, catch_body=catch_body, reraise=reraise, loc=self._loc_from_node(node))
 
     def _lower_stmt_FunctionDef(self, node: ast.FunctionDef) -> "ir.Stmt":
-        from .. import ir
-        # Skip local function definitions for now
-        return ir.ExprStmt(expr=ir.Var(name=f"_local_func_{node.name}", typ=VOID))
+        return lowering.lower_stmt_FunctionDef(node)
 
     def _lower_lvalue(self, node: ast.expr) -> "ir.LValue":
         """Lower an expression to an LValue."""

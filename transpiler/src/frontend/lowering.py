@@ -5,7 +5,7 @@ import ast
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
-from ..ir import BOOL, FLOAT, INT, STRING, Interface, Loc, Map, Optional, Pointer, Set, Slice, StringFormat, StructRef, Tuple
+from ..ir import BOOL, FLOAT, INT, STRING, VOID, Interface, Loc, Map, Optional, Pointer, Set, Slice, StringFormat, StructRef, Tuple
 
 if TYPE_CHECKING:
     from .. import ir
@@ -1180,3 +1180,87 @@ def lower_expr_IfExp(
         cond=cond, then_expr=then_expr, else_expr=else_expr,
         typ=result_type, loc=loc_from_node(node)
     )
+
+
+# ============================================================
+# SIMPLE STATEMENT LOWERING
+# ============================================================
+
+
+def is_super_init_call(node: ast.expr) -> bool:
+    """Check if expression is super().__init__(...)."""
+    if not isinstance(node, ast.Call):
+        return False
+    if not isinstance(node.func, ast.Attribute):
+        return False
+    if node.func.attr != "__init__":
+        return False
+    if not isinstance(node.func.value, ast.Call):
+        return False
+    if not isinstance(node.func.value.func, ast.Name):
+        return False
+    return node.func.value.func.id == "super"
+
+
+def lower_stmt_Expr(
+    node: ast.Expr,
+    lower_expr: Callable[[ast.expr], "ir.Expr"],
+) -> "ir.Stmt":
+    """Lower expression statement."""
+    from .. import ir
+    # Skip docstrings
+    if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+        return ir.ExprStmt(expr=ir.Var(name="_skip_docstring", typ=VOID))
+    # Skip super().__init__() calls - handled by Go embedding
+    if is_super_init_call(node.value):
+        return ir.ExprStmt(expr=ir.Var(name="_skip_super_init", typ=VOID))
+    return ir.ExprStmt(expr=lower_expr(node.value), loc=loc_from_node(node))
+
+
+def lower_stmt_AugAssign(
+    node: ast.AugAssign,
+    lower_lvalue: Callable[[ast.expr], "ir.LValue"],
+    lower_expr: Callable[[ast.expr], "ir.Expr"],
+) -> "ir.Stmt":
+    """Lower augmented assignment (+=, -=, etc.)."""
+    from .. import ir
+    lval = lower_lvalue(node.target)
+    value = lower_expr(node.value)
+    op = binop_to_str(node.op)
+    return ir.OpAssign(target=lval, op=op, value=value, loc=loc_from_node(node))
+
+
+def lower_stmt_While(
+    node: ast.While,
+    lower_expr_as_bool: Callable[[ast.expr], "ir.Expr"],
+    lower_stmts: Callable[[list[ast.stmt]], list["ir.Stmt"]],
+) -> "ir.Stmt":
+    """Lower while loop."""
+    from .. import ir
+    cond = lower_expr_as_bool(node.test)
+    body = lower_stmts(node.body)
+    return ir.While(cond=cond, body=body, loc=loc_from_node(node))
+
+
+def lower_stmt_Break(node: ast.Break) -> "ir.Stmt":
+    """Lower break statement."""
+    from .. import ir
+    return ir.Break(loc=loc_from_node(node))
+
+
+def lower_stmt_Continue(node: ast.Continue) -> "ir.Stmt":
+    """Lower continue statement."""
+    from .. import ir
+    return ir.Continue(loc=loc_from_node(node))
+
+
+def lower_stmt_Pass(node: ast.Pass) -> "ir.Stmt":
+    """Lower pass statement."""
+    from .. import ir
+    return ir.ExprStmt(expr=ir.Var(name="_pass", typ=VOID), loc=loc_from_node(node))
+
+
+def lower_stmt_FunctionDef(node: ast.FunctionDef) -> "ir.Stmt":
+    """Lower local function definition (placeholder)."""
+    from .. import ir
+    return ir.ExprStmt(expr=ir.Var(name=f"_local_func_{node.name}", typ=VOID))

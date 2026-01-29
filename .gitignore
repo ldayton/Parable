@@ -18,4 +18,3 @@ scalene-profile.html
 src/cmd/debug-test/
 dist/java/classes/
 dist/go/parable-profile
-dist/go/cmd/run-tests/main_profile.go

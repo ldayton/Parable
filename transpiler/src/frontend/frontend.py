@@ -457,16 +457,6 @@ class Frontend:
             node, self.symbols, self._current_class_name, self._current_func_info, var_types
         )
 
-    def _synthesize_type(self, expr: "ir.Expr") -> Type:
-        """Bottom-up type synthesis: compute type from expression structure."""
-        return type_inference.synthesize_type(
-            expr, self._type_ctx, self._current_func_info, self.symbols, self._node_types
-        )
-
-    def _synthesize_method_return_type(self, obj_type: Type, method: str) -> Type:
-        """Look up method return type from struct info."""
-        return type_inference.synthesize_method_return_type(obj_type, method, self.symbols, self._node_types)
-
     def _merge_keyword_args(self, obj_type: Type, method: str, args: list, node: ast.Call) -> list:
         """Merge keyword arguments into positional args at their proper positions."""
         return lowering.merge_keyword_args(
@@ -527,12 +517,6 @@ class Frontend:
             node, self.symbols, self._type_ctx, self._current_func_info, self._current_class_name, self._node_types
         )
 
-    def _coerce(self, expr: "ir.Expr", from_type: Type, to_type: Type) -> "ir.Expr":
-        """Apply type coercions when synthesized type doesn't match expected."""
-        return type_inference.coerce(
-            expr, from_type, to_type, self._type_ctx, self._current_func_info, self.symbols, self._node_types
-        )
-
     # ============================================================
     # EXPRESSION LOWERING (Phase 3)
     # ============================================================
@@ -560,11 +544,7 @@ class Frontend:
             lower_lvalue=self._lower_lvalue,
             lower_expr_List=self._lower_expr_List,
             infer_expr_type_from_ast=self._infer_expr_type_from_ast,
-            infer_call_return_type=self._infer_call_return_type,
-            synthesize_type=self._synthesize_type,
-            coerce=self._coerce,
             annotation_to_str=self._annotation_to_str,
-            py_type_to_ir=self._py_type_to_ir,
             make_default_value=self._make_default_value,
             is_sentinel_int=self._is_sentinel_int,
             get_sentinel_value=self._get_sentinel_value,
@@ -578,7 +558,6 @@ class Frontend:
             deref_for_func_slice_params=self._deref_for_func_slice_params,
             coerce_sentinel_to_ptr=self._coerce_sentinel_to_ptr,
             coerce_args_to_node=self._coerce_args_to_node,
-            synthesize_method_return_type=self._synthesize_method_return_type,
             set_catch_var=self._set_catch_var,
         )
         return ctx, dispatch

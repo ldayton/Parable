@@ -53,12 +53,8 @@ class LoweringDispatch:
     lower_expr_List: Callable[[ast.List, "Type | None"], "ir.Expr"]
     # Type inference callbacks
     infer_expr_type_from_ast: Callable[[ast.expr], "Type"]
-    infer_call_return_type: Callable[[ast.Call], "Type"]
-    synthesize_type: Callable[["ir.Expr"], "Type"]
-    coerce: Callable[["ir.Expr", "Type", "Type"], "ir.Expr"]
     # Helper callbacks
     annotation_to_str: Callable[[ast.expr | None], str]
-    py_type_to_ir: Callable[[str, bool], "Type"]
     make_default_value: Callable[["Type", "Loc"], "ir.Expr"]
     is_sentinel_int: Callable[[ast.expr], bool]
     get_sentinel_value: Callable[[ast.expr], int | None]
@@ -73,7 +69,5 @@ class LoweringDispatch:
     deref_for_func_slice_params: Callable[[str, list, list[ast.expr]], list]
     coerce_sentinel_to_ptr: Callable[["Type", str, list, list], list]
     coerce_args_to_node: Callable[["FuncInfo", list], list]
-    # Type predicates
-    synthesize_method_return_type: Callable[["Type", str], "Type"]
     # Exception handling
     set_catch_var: Callable[[str | None], str | None]

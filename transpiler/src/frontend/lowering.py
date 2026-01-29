@@ -1258,18 +1258,17 @@ def lower_stmt_FunctionDef(node: ast.FunctionDef) -> "ir.Stmt":
 
 def lower_stmt_Return(
     node: ast.Return,
+    ctx: "FrontendContext",
     lower_expr: Callable[[ast.expr], "ir.Expr"],
-    synthesize_type: Callable[["ir.Expr"], "Type"],
-    coerce: Callable[["ir.Expr", "Type", "Type"], "ir.Expr"],
-    return_type: "Type | None",
 ) -> "ir.Stmt":
     """Lower return statement."""
     from .. import ir
     value = lower_expr(node.value) if node.value else None
     # Apply type coercion based on function return type
+    return_type = ctx.type_ctx.return_type
     if value and return_type:
-        from_type = synthesize_type(value)
-        value = coerce(value, from_type, return_type)
+        from_type = type_inference.synthesize_type(value, ctx.type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types)
+        value = type_inference.coerce(value, from_type, return_type, ctx.type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types)
     return ir.Return(value=value, loc=loc_from_node(node))
 
 
@@ -1408,7 +1407,7 @@ def lower_expr_Call(
         # Dereference * for slice params
         args = dispatch.deref_for_slice_params(obj_type, method, args, node.args)
         # Infer return type
-        ret_type = dispatch.synthesize_method_return_type(obj_type, method)
+        ret_type = type_inference.synthesize_method_return_type(obj_type, method, ctx.symbols, ctx.node_types)
         return ir.MethodCall(
             obj=obj, method=method, args=args,
             receiver_type=obj_type, typ=ret_type, loc=loc_from_node(node)
@@ -1681,7 +1680,7 @@ def lower_stmt_Assign(
         target = node.targets[0]
         # Handle single var = tuple-returning func: x = func() -> x0, x1 := func()
         if isinstance(target, ast.Name) and isinstance(node.value, ast.Call):
-            ret_type = dispatch.infer_call_return_type(node.value)
+            ret_type = type_inference.infer_call_return_type(node.value, ctx.symbols, ctx.type_ctx, ctx.current_func_info, ctx.current_class_name, ctx.node_types)
             if isinstance(ret_type, TupleType) and len(ret_type.elements) > 1:
                 # Generate synthetic variable names and track for later index access
                 base_name = target.id
@@ -1795,9 +1794,9 @@ def lower_stmt_Assign(
                 val1 = dispatch.lower_expr(node.value.elts[1])
                 # Update var_types
                 if isinstance(target.elts[0], ast.Name):
-                    type_ctx.var_types[target.elts[0].id] = dispatch.synthesize_type(val0)
+                    type_ctx.var_types[target.elts[0].id] = type_inference.synthesize_type(val0, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types)
                 if isinstance(target.elts[1], ast.Name):
-                    type_ctx.var_types[target.elts[1].id] = dispatch.synthesize_type(val1)
+                    type_ctx.var_types[target.elts[1].id] = type_inference.synthesize_type(val1, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types)
                 block = ir.Block(body=[
                     ir.Assign(target=lval0, value=val0),
                     ir.Assign(target=lval1, value=val1),
@@ -1817,8 +1816,8 @@ def lower_stmt_Assign(
         # Coerce value to target type if known
         if isinstance(target, ast.Name) and target.id in type_ctx.var_types:
             expected_type = type_ctx.var_types[target.id]
-            from_type = dispatch.synthesize_type(value)
-            value = dispatch.coerce(value, from_type, expected_type)
+            from_type = type_inference.synthesize_type(value, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types)
+            value = type_inference.coerce(value, from_type, expected_type, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types)
         # Track variable type dynamically for later use in nested scopes
         if isinstance(target, ast.Name):
             # Check VAR_TYPE_OVERRIDES first
@@ -1827,7 +1826,7 @@ def lower_stmt_Assign(
             if override_key in VAR_TYPE_OVERRIDES:
                 pass  # Already set above
             else:
-                value_type = dispatch.synthesize_type(value)
+                value_type = type_inference.synthesize_type(value, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types)
                 # Update type if it's concrete (not any) and either:
                 # - Variable not yet tracked, or
                 # - Variable was RUNE from for-loop but now assigned STRING (from method call)
@@ -1867,7 +1866,7 @@ def lower_stmt_Assign(
                 # Use unified Node type from var_types for hoisted variables
                 unified_type = type_ctx.var_types[target.id]
                 if unified_type == InterfaceRef("Node"):
-                    expr_type = dispatch.synthesize_type(value)
+                    expr_type = type_inference.synthesize_type(value, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types)
                     if unified_type != expr_type:
                         assign.decl_typ = unified_type
         return assign
@@ -1878,7 +1877,7 @@ def lower_stmt_Assign(
         stmts.append(ir.Assign(target=lval, value=value, loc=loc_from_node(node)))
         # Track variable type
         if isinstance(target, ast.Name):
-            value_type = dispatch.synthesize_type(value)
+            value_type = type_inference.synthesize_type(value, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types)
             if value_type != InterfaceRef("any"):
                 type_ctx.var_types[target.id] = value_type
     if len(stmts) == 1:
@@ -1896,7 +1895,7 @@ def lower_stmt_AnnAssign(
     """Lower a Python annotated assignment to IR."""
     from .. import ir
     py_type = dispatch.annotation_to_str(node.annotation)
-    typ = dispatch.py_type_to_ir(py_type, False)
+    typ = type_inference.py_type_to_ir(py_type, ctx.symbols, ctx.node_types, False)
     type_ctx = ctx.type_ctx
     # Handle int | None = None -> use -1 as sentinel
     if (isinstance(typ, Optional) and typ.inner == INT and
@@ -1925,8 +1924,8 @@ def lower_stmt_AnnAssign(
         else:
             value = dispatch.lower_expr(node.value)
         # Coerce value to expected type
-        from_type = dispatch.synthesize_type(value)
-        value = dispatch.coerce(value, from_type, expected_type)
+        from_type = type_inference.synthesize_type(value, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types)
+        value = type_inference.coerce(value, from_type, expected_type, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types)
     else:
         value = None
     if isinstance(node.target, ast.Name):
@@ -1949,8 +1948,8 @@ def lower_stmt_AnnAssign(
             if struct_info:
                 field_info = struct_info.fields.get(field_name)
                 if field_info:
-                    from_type = dispatch.synthesize_type(value)
-                    value = dispatch.coerce(value, from_type, field_info.typ)
+                    from_type = type_inference.synthesize_type(value, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types)
+                    value = type_inference.coerce(value, from_type, field_info.typ, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types)
         return ir.Assign(target=lval, value=value, loc=loc_from_node(node))
     return ir.ExprStmt(expr=ir.Var(name="_skip_ann", typ=VOID))
 
@@ -2313,9 +2312,7 @@ def _lower_stmt_AugAssign_dispatch(node: ast.AugAssign, ctx: "FrontendContext", 
 
 
 def _lower_stmt_Return_dispatch(node: ast.Return, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Stmt":
-    return lower_stmt_Return(
-        node, d.lower_expr, d.synthesize_type, d.coerce, ctx.type_ctx.return_type
-    )
+    return lower_stmt_Return(node, ctx, d.lower_expr)
 
 
 def _lower_stmt_While_dispatch(node: ast.While, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Stmt":

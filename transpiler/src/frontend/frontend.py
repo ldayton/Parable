@@ -183,23 +183,17 @@ class Frontend:
 
     def _collect_var_types(self, stmts: list[ast.stmt]) -> tuple[dict[str, Type], dict[str, list[str]], set[str], dict[str, list[str]]]:
         """Pre-scan function body to collect variable types, tuple var mappings, and sentinel ints."""
-        callbacks = collection.CollectionCallbacks(
-            annotation_to_str=self._annotation_to_str,
-            py_type_to_ir=self._py_type_to_ir,
-            py_return_type_to_ir=self._py_return_type_to_ir,
-            lower_expr=self._lower_expr,
-            infer_type_from_value=self._infer_type_from_value,
-            extract_struct_name=type_inference.extract_struct_name,
-            infer_container_type_from_ast=self._infer_container_type_from_ast,
-            is_len_call=lowering.is_len_call,
-            is_kind_check=self._is_kind_check,
-            infer_call_return_type=self._infer_call_return_type,
-            infer_iterable_type=self._infer_iterable_type,
-            infer_element_type_from_append_arg=self._infer_element_type_from_append_arg,
-        )
+        cb = self._make_collection_callbacks_with_inference()
+        cb.extract_struct_name = type_inference.extract_struct_name
+        cb.infer_container_type_from_ast = self._infer_container_type_from_ast
+        cb.is_len_call = lowering.is_len_call
+        cb.is_kind_check = self._is_kind_check
+        cb.infer_call_return_type = self._infer_call_return_type
+        cb.infer_iterable_type = self._infer_iterable_type
+        cb.infer_element_type_from_append_arg = self._infer_element_type_from_append_arg
         return collection.collect_var_types(
             stmts, self.symbols, self._current_class_name,
-            self._current_func_info, self._node_types, callbacks
+            self._current_func_info, self._node_types, cb
         )
 
     def _infer_iterable_type(self, node: ast.expr, var_types: dict[str, Type]) -> Type:

@@ -2201,13 +2201,9 @@ class Frontend:
         return lowering.lower_stmt_AugAssign(node, self._lower_lvalue, self._lower_expr)
 
     def _lower_stmt_Return(self, node: ast.Return) -> "ir.Stmt":
-        from .. import ir
-        value = self._lower_expr(node.value) if node.value else None
-        # Apply type coercion based on function return type
-        if value and self._type_ctx.return_type:
-            from_type = self._synthesize_type(value)
-            value = self._coerce(value, from_type, self._type_ctx.return_type)
-        return ir.Return(value=value, loc=self._loc_from_node(node))
+        return lowering.lower_stmt_Return(
+            node, self._lower_expr, self._synthesize_type, self._coerce, self._type_ctx.return_type
+        )
 
     def _is_isinstance_call(self, node: ast.expr) -> tuple[str, str] | None:
         """Check if node is isinstance(var, Type). Returns (var_name, type_name) or None."""

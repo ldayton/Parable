@@ -1264,3 +1264,20 @@ def lower_stmt_FunctionDef(node: ast.FunctionDef) -> "ir.Stmt":
     """Lower local function definition (placeholder)."""
     from .. import ir
     return ir.ExprStmt(expr=ir.Var(name=f"_local_func_{node.name}", typ=VOID))
+
+
+def lower_stmt_Return(
+    node: ast.Return,
+    lower_expr: Callable[[ast.expr], "ir.Expr"],
+    synthesize_type: Callable[["ir.Expr"], "Type"],
+    coerce: Callable[["ir.Expr", "Type", "Type"], "ir.Expr"],
+    return_type: "Type | None",
+) -> "ir.Stmt":
+    """Lower return statement."""
+    from .. import ir
+    value = lower_expr(node.value) if node.value else None
+    # Apply type coercion based on function return type
+    if value and return_type:
+        from_type = synthesize_type(value)
+        value = coerce(value, from_type, return_type)
+    return ir.Return(value=value, loc=loc_from_node(node))

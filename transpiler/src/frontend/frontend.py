@@ -15,7 +15,6 @@ from ..ir import (
     INT,
     STRING,
     FuncInfo,
-    Loc,
     Module,
     Slice,
     SymbolTable,
@@ -73,10 +72,6 @@ class Frontend:
         # Build IR Module
         return self._build_module(tree)
 
-    def _is_node_subclass(self, name: str) -> bool:
-        """Check if a class is a Node subclass (directly or transitively)."""
-        return type_inference.is_node_subclass(name, self.symbols)
-
     def _is_exception_subclass(self, name: str) -> bool:
         """Check if a class is an Exception subclass (directly or transitively)."""
         return collection.is_exception_subclass(name, self.symbols)
@@ -115,7 +110,7 @@ class Frontend:
             collect_var_types=self._collect_var_types,
             is_exception_subclass=self._is_exception_subclass,
             extract_union_struct_names=lambda py_type: type_inference.extract_union_struct_names(py_type, self._node_types),
-            loc_from_node=self._loc_from_node,
+            loc_from_node=lowering.loc_from_node,
             setup_context=self._setup_context,
             setup_and_lower_stmts=self._setup_and_lower_stmts,
         )
@@ -138,10 +133,6 @@ class Frontend:
         self._current_func_info = func_info
         self._type_ctx = type_ctx
         return self._lower_stmts(stmts)
-
-    def _loc_from_node(self, node: ast.AST) -> Loc:
-        """Create Loc from AST node."""
-        return lowering.loc_from_node(node)
 
     def _annotation_to_str(self, node: ast.expr | None) -> str:
         """Convert type annotation AST to string."""
@@ -198,9 +189,9 @@ class Frontend:
             py_return_type_to_ir=self._py_return_type_to_ir,
             lower_expr=self._lower_expr,
             infer_type_from_value=self._infer_type_from_value,
-            extract_struct_name=self._extract_struct_name,
+            extract_struct_name=type_inference.extract_struct_name,
             infer_container_type_from_ast=self._infer_container_type_from_ast,
-            is_len_call=self._is_len_call,
+            is_len_call=lowering.is_len_call,
             is_kind_check=self._is_kind_check,
             infer_call_return_type=self._infer_call_return_type,
             infer_iterable_type=self._infer_iterable_type,
@@ -223,7 +214,7 @@ class Frontend:
             py_return_type_to_ir=self._py_return_type_to_ir,
             lower_expr=self._lower_expr,
             infer_type_from_value=self._infer_type_from_value,
-            extract_struct_name=self._extract_struct_name,
+            extract_struct_name=type_inference.extract_struct_name,
             infer_container_type_from_ast=self._infer_container_type_from_ast,
         )
         return collection.infer_element_type_from_append_arg(
@@ -240,12 +231,12 @@ class Frontend:
     def _merge_keyword_args(self, obj_type: Type, method: str, args: list, node: ast.Call) -> list:
         """Merge keyword arguments into positional args at their proper positions."""
         return lowering.merge_keyword_args(
-            obj_type, method, args, node, self.symbols, self._lower_expr, self._extract_struct_name
+            obj_type, method, args, node, self.symbols, self._lower_expr, type_inference.extract_struct_name
         )
 
     def _fill_default_args(self, obj_type: Type, method: str, args: list) -> list:
         """Fill in missing arguments with default values for methods with optional params."""
-        return lowering.fill_default_args(obj_type, method, args, self.symbols, self._extract_struct_name)
+        return lowering.fill_default_args(obj_type, method, args, self.symbols, type_inference.extract_struct_name)
 
     def _merge_keyword_args_for_func(self, func_info: FuncInfo, args: list, node: ast.Call) -> list:
         """Merge keyword arguments into positional args at their proper positions for free functions."""
@@ -254,13 +245,13 @@ class Frontend:
     def _add_address_of_for_ptr_params(self, obj_type: Type, method: str, args: list, orig_args: list[ast.expr]) -> list:
         """Add & when passing slice to pointer-to-slice parameter."""
         return lowering.add_address_of_for_ptr_params(
-            obj_type, method, args, orig_args, self.symbols, self._extract_struct_name, self._infer_expr_type_from_ast
+            obj_type, method, args, orig_args, self.symbols, type_inference.extract_struct_name, self._infer_expr_type_from_ast
         )
 
     def _deref_for_slice_params(self, obj_type: Type, method: str, args: list, orig_args: list[ast.expr]) -> list:
         """Dereference * when passing pointer-to-slice to slice parameter."""
         return lowering.deref_for_slice_params(
-            obj_type, method, args, orig_args, self.symbols, self._extract_struct_name, self._infer_expr_type_from_ast
+            obj_type, method, args, orig_args, self.symbols, type_inference.extract_struct_name, self._infer_expr_type_from_ast
         )
 
     def _deref_for_func_slice_params(self, func_name: str, args: list, orig_args: list[ast.expr]) -> list:
@@ -269,18 +260,10 @@ class Frontend:
             func_name, args, orig_args, self.symbols, self._infer_expr_type_from_ast
         )
 
-    def _extract_struct_name(self, typ: Type) -> str | None:
-        """Extract struct name from wrapped types like Pointer, Optional, etc."""
-        return type_inference.extract_struct_name(typ)
-
-    def _is_len_call(self, node: ast.expr) -> bool:
-        """Check if node is a len() call."""
-        return lowering.is_len_call(node)
-
     def _coerce_sentinel_to_ptr(self, obj_type: Type, method: str, args: list, orig_args: list) -> list:
         """Wrap sentinel ints with _intPtr() when passing to Optional(int) params."""
         return lowering.coerce_sentinel_to_ptr(
-            obj_type, method, args, orig_args, self.symbols, self._type_ctx.sentinel_ints, self._extract_struct_name
+            obj_type, method, args, orig_args, self.symbols, self._type_ctx.sentinel_ints, type_inference.extract_struct_name
         )
 
     def _infer_call_return_type(self, node: ast.Call) -> Type:

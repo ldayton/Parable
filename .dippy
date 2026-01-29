@@ -13,8 +13,8 @@ deny bash * "Use `~/source/bash-oracle/bash-oracle -e`"
 deny-redirect * "Redirects only allowed to /tmp/* or to stdin/stderr"
 allow-redirect /tmp/**
 
-#---- Javascript ----#
-allow node -e
-
-#---- Go ----#
-allow go run
+#---- Langs ----#
+allow node
+allow go
+allow python
+allow python3

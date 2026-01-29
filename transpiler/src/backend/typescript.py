@@ -481,9 +481,14 @@ class TsBackend:
                     self._line(f"throw new {error_type}()")
                 else:
                     # ParseError has message/pos
-                    msg = self._expr(message)
                     p = self._expr(pos)
-                    self._line(f"throw new {error_type}(`${{{msg}}} at position ${{{p}}}`, {p})")
+                    if isinstance(message, StringLit):
+                        # Inline string literals directly (escape for template literal)
+                        msg_val = message.value.replace("\\", "\\\\").replace("`", "\\`").replace("$", "\\$")
+                        self._line(f"throw new {error_type}(`{msg_val} at position ${{{p}}}`, {p})")
+                    else:
+                        msg = self._expr(message)
+                        self._line(f"throw new {error_type}(`${{{msg}}} at position ${{{p}}}`, {p})")
             case SoftFail():
                 self._line("return null;")
             case _:
@@ -916,13 +921,22 @@ class TsBackend:
         result = template
         # Handle {0}, {1} style placeholders
         for i, arg in enumerate(args):
-            result = result.replace(f"{{{i}}}", f"${{{self._expr(arg)}}}", 1)
+            if isinstance(arg, StringLit):
+                # Inline string literals directly (escape for template literal)
+                val = arg.value.replace("\\", "\\\\").replace("`", "\\`").replace("$", "\\$")
+                result = result.replace(f"{{{i}}}", val, 1)
+            else:
+                result = result.replace(f"{{{i}}}", f"${{{self._expr(arg)}}}", 1)
         # Handle %v placeholders (sequential)
         arg_iter = iter(args)
         while "%v" in result:
             try:
                 arg = next(arg_iter)
-                result = result.replace("%v", f"${{{self._expr(arg)}}}", 1)
+                if isinstance(arg, StringLit):
+                    val = arg.value.replace("\\", "\\\\").replace("`", "\\`").replace("$", "\\$")
+                    result = result.replace("%v", val, 1)
+                else:
+                    result = result.replace("%v", f"${{{self._expr(arg)}}}", 1)
             except StopIteration:
                 break
         # Escape backticks in the template

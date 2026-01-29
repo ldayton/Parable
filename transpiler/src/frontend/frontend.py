@@ -81,26 +81,28 @@ class Frontend:
         """Check if a class is an Exception subclass (directly or transitively)."""
         return collection.is_exception_subclass(name, self.symbols)
 
-    def _collect_signatures(self, tree: ast.Module) -> None:
-        """Pass 3: Collect function and method signatures."""
-        callbacks = collection.CollectionCallbacks(
+    def _make_collection_callbacks_basic(self) -> collection.CollectionCallbacks:
+        """Create basic CollectionCallbacks with core type/expr callbacks."""
+        return collection.CollectionCallbacks(
             annotation_to_str=self._annotation_to_str,
             py_type_to_ir=self._py_type_to_ir,
             py_return_type_to_ir=self._py_return_type_to_ir,
             lower_expr=self._lower_expr,
         )
-        collection.collect_signatures(tree, self.symbols, callbacks)
+
+    def _make_collection_callbacks_with_inference(self) -> collection.CollectionCallbacks:
+        """Create CollectionCallbacks with type inference support."""
+        cb = self._make_collection_callbacks_basic()
+        cb.infer_type_from_value = self._infer_type_from_value
+        return cb
+
+    def _collect_signatures(self, tree: ast.Module) -> None:
+        """Pass 3: Collect function and method signatures."""
+        collection.collect_signatures(tree, self.symbols, self._make_collection_callbacks_basic())
 
     def _collect_fields(self, tree: ast.Module) -> None:
         """Pass 4: Collect struct fields from class definitions."""
-        callbacks = collection.CollectionCallbacks(
-            annotation_to_str=self._annotation_to_str,
-            py_type_to_ir=self._py_type_to_ir,
-            py_return_type_to_ir=self._py_return_type_to_ir,
-            lower_expr=self._lower_expr,
-            infer_type_from_value=self._infer_type_from_value,
-        )
-        collection.collect_fields(tree, self.symbols, callbacks)
+        collection.collect_fields(tree, self.symbols, self._make_collection_callbacks_with_inference())
 
     def _build_module(self, tree: ast.Module) -> Module:
         """Build IR Module from collected symbols."""

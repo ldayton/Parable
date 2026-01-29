@@ -7,11 +7,10 @@ All analysis happens here; backends just emit syntax.
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .type_overrides import FIELD_TYPE_OVERRIDES, MODULE_CONSTANTS, NODE_FIELD_TYPES, NODE_METHOD_TYPES, PARAM_TYPE_OVERRIDES, RETURN_TYPE_OVERRIDES, SENTINEL_INT_FIELDS, VAR_TYPE_OVERRIDES
-from .ir import (
+from ..type_overrides import FIELD_TYPE_OVERRIDES, MODULE_CONSTANTS, NODE_FIELD_TYPES, NODE_METHOD_TYPES, PARAM_TYPE_OVERRIDES, RETURN_TYPE_OVERRIDES, SENTINEL_INT_FIELDS, VAR_TYPE_OVERRIDES
+from ..ir import (
     BOOL,
     BYTE,
     FLOAT,
@@ -49,6 +48,7 @@ from .ir import (
     TypeCase,
     TypeSwitch,
 )
+from .context import TypeContext
 
 if TYPE_CHECKING:
     pass
@@ -62,21 +62,6 @@ TYPE_MAP: dict[str, Type] = {
     "bytes": Slice(BYTE),
     "bytearray": Slice(BYTE),
 }
-
-
-@dataclass
-class TypeContext:
-    """Context for bidirectional type inference (Pierce & Turner style)."""
-    expected: Type | None = None  # Top-down expected type from parent
-    var_types: dict[str, Type] = field(default_factory=dict)  # Variable types in scope
-    return_type: Type | None = None  # Current function's return type
-    tuple_vars: dict[str, list[str]] = field(default_factory=dict)  # Maps var -> synthetic var names
-    sentinel_ints: set[str] = field(default_factory=set)  # Variables that use -1 sentinel for None
-    narrowed_vars: set[str] = field(default_factory=set)  # Variables narrowed from interface type
-    kind_source_vars: dict[str, str] = field(default_factory=dict)  # Maps kind_var -> node_var for kind = node.kind
-    union_types: dict[str, list[str]] = field(default_factory=dict)  # Maps param name -> [struct names] for union params
-    list_element_unions: dict[str, list[str]] = field(default_factory=dict)  # Maps list var -> [struct names] for items appended under kind guards
-    narrowed_attr_paths: dict[tuple[str, ...], str] = field(default_factory=dict)  # Maps attr path tuple -> struct name
 
 
 class Frontend:
@@ -372,7 +357,7 @@ class Frontend:
 
     def _build_module(self, tree: ast.Module) -> Module:
         """Build IR Module from collected symbols."""
-        from . import ir
+        from .. import ir
         module = Module(name="parable")
         # Build constants from MODULE_CONSTANTS overrides
         for const_name, (const_type, go_value) in MODULE_CONSTANTS.items():
@@ -491,7 +476,7 @@ class Frontend:
 
     def _build_forwarding_constructor(self, class_name: str, parent_class: str) -> Function:
         """Build a forwarding constructor for exception subclasses with no __init__."""
-        from . import ir
+        from .. import ir
         # Get parent class info to copy its parameters
         parent_info = self.symbols.structs.get(parent_class)
         if not parent_info:
@@ -546,7 +531,7 @@ class Frontend:
 
     def _build_constructor(self, class_name: str, init_ast: ast.FunctionDef, info: StructInfo) -> Function:
         """Build a NewXxx constructor function from __init__ AST."""
-        from . import ir
+        from .. import ir
         # Build parameters (same as __init__ excluding self)
         params: list[Param] = []
         param_types: dict[str, Type] = {}
@@ -675,7 +660,7 @@ class Frontend:
                 params.append(
                     Param(name=p.name, typ=p.typ, default=p.default_value, loc=Loc.unknown())
                 )
-        from .ir import Receiver
+        from ..ir import Receiver
         body = []
         if with_body:
             # Set up type context for this method
@@ -824,7 +809,7 @@ class Frontend:
         if py_type.startswith("tuple["):
             inner = py_type[6:-1]
             parts = self._split_type_args(inner)
-            from .ir import Tuple
+            from ..ir import Tuple
             elements = tuple(self._py_type_to_ir(p, concrete_nodes) for p in parts)
             return Tuple(elements)
         # Handle Callable
@@ -876,7 +861,7 @@ class Frontend:
         if py_type.startswith("tuple["):
             inner = py_type[6:-1]
             parts = self._split_type_args(inner)
-            from .ir import Tuple
+            from ..ir import Tuple
             elements = tuple(self._py_type_to_ir(p, concrete_nodes=True) for p in parts)
             return Tuple(elements)
         # For non-tuples, use standard conversion with concrete node types
@@ -924,7 +909,7 @@ class Frontend:
 
     def _make_default_value(self, typ: Type, loc: Loc) -> "ir.Expr":
         """Create a default value expression for a given type."""
-        from . import ir
+        from .. import ir
         # Pointer and interface types use nil
         if isinstance(typ, (Pointer, Optional, Interface)):
             return ir.NilLit(typ=typ, loc=loc)
@@ -1629,7 +1614,7 @@ class Frontend:
 
     def _synthesize_type(self, expr: "ir.Expr") -> Type:
         """Bottom-up type synthesis: compute type from expression structure."""
-        from . import ir
+        from .. import ir
         # Literals have known types
         if isinstance(expr, (ir.IntLit, ir.FloatLit, ir.StringLit, ir.BoolLit)):
             return expr.typ
@@ -1700,7 +1685,7 @@ class Frontend:
 
     def _merge_keyword_args(self, obj_type: Type, method: str, args: list, node: ast.Call) -> list:
         """Merge keyword arguments into positional args at their proper positions."""
-        from . import ir
+        from .. import ir
         if not node.keywords:
             return args
         struct_name = self._extract_struct_name(obj_type)
@@ -1726,7 +1711,7 @@ class Frontend:
 
     def _fill_default_args(self, obj_type: Type, method: str, args: list) -> list:
         """Fill in missing arguments with default values for methods with optional params."""
-        from . import ir
+        from .. import ir
         struct_name = self._extract_struct_name(obj_type)
         method_info = None
         if struct_name and struct_name in self.symbols.structs:
@@ -1790,7 +1775,7 @@ class Frontend:
 
     def _add_address_of_for_ptr_params(self, obj_type: Type, method: str, args: list, orig_args: list[ast.expr]) -> list:
         """Add & when passing slice to pointer-to-slice parameter."""
-        from . import ir
+        from .. import ir
         struct_name = self._extract_struct_name(obj_type)
         if not struct_name or struct_name not in self.symbols.structs:
             return args
@@ -1814,7 +1799,7 @@ class Frontend:
 
     def _deref_for_slice_params(self, obj_type: Type, method: str, args: list, orig_args: list[ast.expr]) -> list:
         """Dereference * when passing pointer-to-slice to slice parameter."""
-        from . import ir
+        from .. import ir
         struct_name = self._extract_struct_name(obj_type)
         if not struct_name or struct_name not in self.symbols.structs:
             return args
@@ -1837,7 +1822,7 @@ class Frontend:
 
     def _deref_for_func_slice_params(self, func_name: str, args: list, orig_args: list[ast.expr]) -> list:
         """Dereference * when passing pointer-to-slice to slice parameter for free functions."""
-        from . import ir
+        from .. import ir
         if func_name not in self.symbols.functions:
             return args
         func_info = self.symbols.functions[func_name]
@@ -1867,8 +1852,8 @@ class Frontend:
 
     def _coerce_args_to_node(self, func_info: "FuncInfo", args: list) -> list:
         """Add type assertions when passing interface{} to Node parameter."""
-        from . import ir
-        from .ir import FuncInfo
+        from .. import ir
+        from ..ir import FuncInfo
         result = list(args)
         for i, arg in enumerate(result):
             if i >= len(func_info.params):
@@ -1913,7 +1898,7 @@ class Frontend:
 
     def _coerce_sentinel_to_ptr(self, obj_type: Type, method: str, args: list, orig_args: list) -> list:
         """Wrap sentinel ints with _intPtr() when passing to Optional(int) params."""
-        from . import ir
+        from .. import ir
         struct_name = self._extract_struct_name(obj_type)
         if not struct_name or struct_name not in self.symbols.structs:
             return args
@@ -1935,7 +1920,7 @@ class Frontend:
 
     def _infer_call_return_type(self, node: ast.Call) -> Type:
         """Infer the return type of a function or method call."""
-        from .ir import Tuple
+        from ..ir import Tuple
         if isinstance(node.func, ast.Attribute):
             # Method call - look up return type
             obj_type = self._infer_expr_type_from_ast(node.func.value)
@@ -1963,7 +1948,7 @@ class Frontend:
 
     def _coerce(self, expr: "ir.Expr", from_type: Type, to_type: Type) -> "ir.Expr":
         """Apply type coercions when synthesized type doesn't match expected."""
-        from . import ir
+        from .. import ir
         # byte → string: wrap with string() cast
         if from_type == BYTE and to_type == STRING:
             return ir.Cast(expr=expr, to_type=STRING, typ=STRING, loc=expr.loc)
@@ -2009,7 +1994,7 @@ class Frontend:
 
     def _lower_expr_as_bool(self, node: ast.expr) -> "ir.Expr":
         """Lower expression used in boolean context, adding truthy checks as needed."""
-        from . import ir
+        from .. import ir
         # Already boolean expressions - lower directly
         if isinstance(node, ast.Compare):
             return self._lower_expr(node)
@@ -2112,7 +2097,7 @@ class Frontend:
 
     def _lower_expr(self, node: ast.expr) -> "ir.Expr":
         """Lower a Python expression to IR."""
-        from . import ir
+        from .. import ir
         method = f"_lower_expr_{node.__class__.__name__}"
         if hasattr(self, method):
             return getattr(self, method)(node)
@@ -2120,7 +2105,7 @@ class Frontend:
         return ir.Var(name=f"TODO_{node.__class__.__name__}", typ=Interface("any"))
 
     def _lower_expr_Constant(self, node: ast.Constant) -> "ir.Expr":
-        from . import ir
+        from .. import ir
         if isinstance(node.value, bool):
             return ir.BoolLit(value=node.value, typ=BOOL, loc=self._loc_from_node(node))
         if isinstance(node.value, int):
@@ -2134,7 +2119,7 @@ class Frontend:
         return ir.Var(name=f"TODO_Constant_{type(node.value)}", typ=Interface("any"))
 
     def _lower_expr_Name(self, node: ast.Name) -> "ir.Expr":
-        from . import ir
+        from .. import ir
         if node.id == "True":
             return ir.BoolLit(value=True, typ=BOOL, loc=self._loc_from_node(node))
         if node.id == "False":
@@ -2162,7 +2147,7 @@ class Frontend:
         return ir.Var(name=node.id, typ=var_type, loc=self._loc_from_node(node))
 
     def _lower_expr_Attribute(self, node: ast.Attribute) -> "ir.Expr":
-        from . import ir
+        from .. import ir
         # Check for class constant access (e.g., TokenType.EOF -> TokenType_EOF)
         if isinstance(node.value, ast.Name):
             class_name = node.value.id
@@ -2263,7 +2248,7 @@ class Frontend:
         return False
 
     def _lower_expr_Subscript(self, node: ast.Subscript) -> "ir.Expr":
-        from . import ir
+        from .. import ir
         # Check for tuple var indexing: cmdsub_result[0] -> cmdsub_result0
         if isinstance(node.value, ast.Name) and isinstance(node.slice, ast.Constant):
             var_name = node.value.id
@@ -2310,7 +2295,7 @@ class Frontend:
 
     def _convert_negative_index(self, idx_node: ast.expr, obj: "ir.Expr", parent: ast.AST) -> "ir.Expr":
         """Convert negative index -N to len(obj) - N."""
-        from . import ir
+        from .. import ir
         # Check for -N pattern (UnaryOp with USub on positive int constant)
         if isinstance(idx_node, ast.UnaryOp) and isinstance(idx_node.op, ast.USub):
             if isinstance(idx_node.operand, ast.Constant) and isinstance(idx_node.operand.value, int):
@@ -2412,7 +2397,7 @@ class Frontend:
         return Interface("any")
 
     def _lower_expr_BinOp(self, node: ast.BinOp) -> "ir.Expr":
-        from . import ir
+        from .. import ir
         left = self._lower_expr(node.left)
         right = self._lower_expr(node.right)
         op = self._binop_to_str(node.op)
@@ -2448,7 +2433,7 @@ class Frontend:
         return None
 
     def _lower_expr_Compare(self, node: ast.Compare) -> "ir.Expr":
-        from . import ir
+        from .. import ir
         # Handle simple comparisons
         if len(node.ops) == 1 and len(node.comparators) == 1:
             left = self._lower_expr(node.left)
@@ -2529,7 +2514,7 @@ class Frontend:
         return result or ir.BoolLit(value=True, typ=BOOL)
 
     def _lower_expr_BoolOp(self, node: ast.BoolOp) -> "ir.Expr":
-        from . import ir
+        from .. import ir
         op = "&&" if isinstance(node.op, ast.And) else "||"
         result = self._lower_expr_as_bool(node.values[0])
         for val in node.values[1:]:
@@ -2538,7 +2523,7 @@ class Frontend:
         return result
 
     def _lower_expr_UnaryOp(self, node: ast.UnaryOp) -> "ir.Expr":
-        from . import ir
+        from .. import ir
         # For 'not' operator, convert operand to boolean first
         if isinstance(node.op, ast.Not):
             operand = self._lower_expr_as_bool(node.operand)
@@ -2548,7 +2533,7 @@ class Frontend:
         return ir.UnaryOp(op=op, operand=operand, typ=Interface("any"), loc=self._loc_from_node(node))
 
     def _lower_expr_Call(self, node: ast.Call) -> "ir.Expr":
-        from . import ir
+        from .. import ir
         args = [self._lower_expr(a) for a in node.args]
         # Method call
         if isinstance(node.func, ast.Attribute):
@@ -2858,7 +2843,7 @@ class Frontend:
         return ir.Var(name="TODO_Call", typ=Interface("any"))
 
     def _lower_expr_IfExp(self, node: ast.IfExp) -> "ir.Expr":
-        from . import ir
+        from .. import ir
         cond = self._lower_expr_as_bool(node.test)
         # Check for attribute path kind narrowing in the condition
         # e.g., node.body.kind == "brace-group" narrows node.body to BraceGroup
@@ -2883,7 +2868,7 @@ class Frontend:
         )
 
     def _lower_expr_List(self, node: ast.List, expected_type: Type | None = None) -> "ir.Expr":
-        from . import ir
+        from .. import ir
         elements = [self._lower_expr(e) for e in node.elts]
         # Prefer expected type when available (bidirectional type inference)
         # This ensures [ArithNumber(x), expansion] gets typed as []Node when the target is []Node
@@ -2902,7 +2887,7 @@ class Frontend:
 
     def _lower_list_call_with_expected_type(self, node: ast.Call, expected_type: Type | None) -> "ir.Expr":
         """Handle list(x) call with expected type context for covariant copies."""
-        from . import ir
+        from .. import ir
         arg = self._lower_expr(node.args[0])
         source_type = arg.typ
         # Check if we need covariant conversion: []*Derived -> []Interface
@@ -2934,7 +2919,7 @@ class Frontend:
         )
 
     def _lower_expr_Dict(self, node: ast.Dict) -> "ir.Expr":
-        from . import ir
+        from .. import ir
         entries = []
         for k, v in zip(node.keys, node.values):
             if k is not None:
@@ -2966,14 +2951,14 @@ class Frontend:
 
     def _lower_expr_Tuple(self, node: ast.Tuple) -> "ir.Expr":
         """Lower Python tuple literal to TupleLit IR node."""
-        from . import ir
+        from .. import ir
         elements = [self._lower_expr(e) for e in node.elts]
         element_types = tuple(e.typ for e in elements)
         return ir.TupleLit(elements=elements, typ=Tuple(elements=element_types), loc=self._loc_from_node(node))
 
     def _lower_expr_Set(self, node: ast.Set) -> "ir.Expr":
         """Lower Python set literal to SetLit IR node."""
-        from . import ir
+        from .. import ir
         elements = [self._lower_expr(e) for e in node.elts]
         # Infer element type from first element
         elem_type = getattr(elements[0], 'typ', STRING) if elements else STRING
@@ -3003,7 +2988,7 @@ class Frontend:
 
     def _lower_stmt(self, node: ast.stmt) -> "ir.Stmt":
         """Lower a Python statement to IR."""
-        from . import ir
+        from .. import ir
         method = f"_lower_stmt_{node.__class__.__name__}"
         if hasattr(self, method):
             return getattr(self, method)(node)
@@ -3015,7 +3000,7 @@ class Frontend:
         return [self._lower_stmt(s) for s in stmts]
 
     def _lower_stmt_Expr(self, node: ast.Expr) -> "ir.Stmt":
-        from . import ir
+        from .. import ir
         # Skip docstrings
         if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
             return ir.ExprStmt(expr=ir.Var(name="_skip_docstring", typ=VOID))
@@ -3039,8 +3024,8 @@ class Frontend:
         return node.func.value.func.id == "super"
 
     def _lower_stmt_Assign(self, node: ast.Assign) -> "ir.Stmt":
-        from . import ir
-        from .ir import Tuple as TupleType
+        from .. import ir
+        from ..ir import Tuple as TupleType
         # Check VAR_TYPE_OVERRIDES to set expected type before lowering
         if len(node.targets) == 1:
             target = node.targets[0]
@@ -3270,7 +3255,7 @@ class Frontend:
         return block
 
     def _lower_stmt_AnnAssign(self, node: ast.AnnAssign) -> "ir.Stmt":
-        from . import ir
+        from .. import ir
         py_type = self._annotation_to_str(node.annotation)
         typ = self._py_type_to_ir(py_type)
         # Handle int | None = None -> use -1 as sentinel
@@ -3330,14 +3315,14 @@ class Frontend:
         return ir.ExprStmt(expr=ir.Var(name="_skip_ann", typ=VOID))
 
     def _lower_stmt_AugAssign(self, node: ast.AugAssign) -> "ir.Stmt":
-        from . import ir
+        from .. import ir
         lval = self._lower_lvalue(node.target)
         value = self._lower_expr(node.value)
         op = self._binop_to_str(node.op)
         return ir.OpAssign(target=lval, op=op, value=value, loc=self._loc_from_node(node))
 
     def _lower_stmt_Return(self, node: ast.Return) -> "ir.Stmt":
-        from . import ir
+        from .. import ir
         value = self._lower_expr(node.value) if node.value else None
         # Apply type coercion based on function return type
         if value and self._type_ctx.return_type:
@@ -3476,7 +3461,7 @@ class Frontend:
 
     def _collect_isinstance_chain(self, node: ast.If, var_name: str) -> tuple[list["ir.TypeCase"], list["ir.Stmt"]]:
         """Collect isinstance checks on same variable into TypeSwitch cases."""
-        from . import ir
+        from .. import ir
         cases: list[ir.TypeCase] = []
         current = node
         while True:
@@ -3526,7 +3511,7 @@ class Frontend:
         return Interface(name)
 
     def _lower_stmt_If(self, node: ast.If) -> "ir.Stmt":
-        from . import ir
+        from .. import ir
         # Check for isinstance chain pattern (including 'or' patterns)
         isinstance_check = self._extract_isinstance_or_chain(node.test)
         if isinstance_check:
@@ -3580,14 +3565,14 @@ class Frontend:
         return ir.If(cond=cond, then_body=then_body, else_body=else_body, loc=self._loc_from_node(node))
 
     def _lower_stmt_While(self, node: ast.While) -> "ir.Stmt":
-        from . import ir
+        from .. import ir
         cond = self._lower_expr_as_bool(node.test)
         body = self._lower_stmts(node.body)
         return ir.While(cond=cond, body=body, loc=self._loc_from_node(node))
 
     def _lower_stmt_For(self, node: ast.For) -> "ir.Stmt":
-        from . import ir
-        from .ir import RUNE
+        from .. import ir
+        from ..ir import RUNE
         iterable = self._lower_expr(node.iter)
         # Determine loop variable types based on iterable type
         iterable_type = self._infer_expr_type_from_ast(node.iter)
@@ -3660,19 +3645,19 @@ class Frontend:
         return ir.ForRange(index=index, value=value, iterable=iterable, body=body, loc=self._loc_from_node(node))
 
     def _lower_stmt_Break(self, node: ast.Break) -> "ir.Stmt":
-        from . import ir
+        from .. import ir
         return ir.Break(loc=self._loc_from_node(node))
 
     def _lower_stmt_Continue(self, node: ast.Continue) -> "ir.Stmt":
-        from . import ir
+        from .. import ir
         return ir.Continue(loc=self._loc_from_node(node))
 
     def _lower_stmt_Pass(self, node: ast.Pass) -> "ir.Stmt":
-        from . import ir
+        from .. import ir
         return ir.ExprStmt(expr=ir.Var(name="_pass", typ=VOID), loc=self._loc_from_node(node))
 
     def _lower_stmt_Raise(self, node: ast.Raise) -> "ir.Stmt":
-        from . import ir
+        from .. import ir
         if node.exc:
             # Check if raising the catch variable (re-raise pattern)
             if isinstance(node.exc, ast.Name) and node.exc.id == self._current_catch_var:
@@ -3701,7 +3686,7 @@ class Frontend:
         return ir.Raise(error_type="Error", message=ir.StringLit(value="", typ=STRING), pos=ir.IntLit(value=0, typ=INT), loc=self._loc_from_node(node))
 
     def _lower_stmt_Try(self, node: ast.Try) -> "ir.Stmt":
-        from . import ir
+        from .. import ir
         body = self._lower_stmts(node.body)
         catch_var = None
         catch_body: list[ir.Stmt] = []
@@ -3721,13 +3706,13 @@ class Frontend:
         return ir.TryCatch(body=body, catch_var=catch_var, catch_body=catch_body, reraise=reraise, loc=self._loc_from_node(node))
 
     def _lower_stmt_FunctionDef(self, node: ast.FunctionDef) -> "ir.Stmt":
-        from . import ir
+        from .. import ir
         # Skip local function definitions for now
         return ir.ExprStmt(expr=ir.Var(name=f"_local_func_{node.name}", typ=VOID))
 
     def _lower_lvalue(self, node: ast.expr) -> "ir.LValue":
         """Lower an expression to an LValue."""
-        from . import ir
+        from .. import ir
         if isinstance(node, ast.Name):
             return ir.VarLV(name=node.id, loc=self._loc_from_node(node))
         if isinstance(node, ast.Attribute):

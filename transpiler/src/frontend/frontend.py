@@ -573,6 +573,52 @@ class Frontend:
     # EXPRESSION LOWERING (Phase 3)
     # ============================================================
 
+    def _make_ctx_and_dispatch(self) -> tuple[FrontendContext, LoweringDispatch]:
+        """Build FrontendContext and LoweringDispatch for lowering functions."""
+        ctx = FrontendContext(
+            symbols=self.symbols,
+            type_ctx=self._type_ctx,
+            current_func_info=self._current_func_info,
+            current_class_name=self._current_class_name,
+            node_types=self._node_types,
+            kind_to_struct=self._kind_to_struct,
+            kind_to_class=self._kind_to_class,
+            current_catch_var=self._current_catch_var,
+        )
+        dispatch = LoweringDispatch(
+            lower_expr=self._lower_expr,
+            lower_expr_as_bool=self._lower_expr_as_bool,
+            lower_stmts=self._lower_stmts,
+            lower_lvalue=self._lower_lvalue,
+            lower_expr_List=self._lower_expr_List,
+            infer_expr_type_from_ast=self._infer_expr_type_from_ast,
+            infer_call_return_type=self._infer_call_return_type,
+            synthesize_type=self._synthesize_type,
+            coerce=self._coerce,
+            annotation_to_str=self._annotation_to_str,
+            py_type_to_ir=self._py_type_to_ir,
+            make_default_value=self._make_default_value,
+            extract_struct_name=self._extract_struct_name,
+            is_exception_subclass=self._is_exception_subclass,
+            is_node_subclass=self._is_node_subclass,
+            is_sentinel_int=self._is_sentinel_int,
+            get_sentinel_value=self._get_sentinel_value,
+            resolve_type_name=self._resolve_type_name,
+            get_inner_slice=self._get_inner_slice,
+            merge_keyword_args=self._merge_keyword_args,
+            fill_default_args=self._fill_default_args,
+            merge_keyword_args_for_func=self._merge_keyword_args_for_func,
+            fill_default_args_for_func=self._fill_default_args_for_func,
+            add_address_of_for_ptr_params=self._add_address_of_for_ptr_params,
+            deref_for_slice_params=self._deref_for_slice_params,
+            deref_for_func_slice_params=self._deref_for_func_slice_params,
+            coerce_sentinel_to_ptr=self._coerce_sentinel_to_ptr,
+            coerce_args_to_node=self._coerce_args_to_node,
+            is_node_interface_type=self._is_node_interface_type,
+            synthesize_method_return_type=self._synthesize_method_return_type,
+        )
+        return ctx, dispatch
+
     def _lower_expr_as_bool(self, node: ast.expr) -> "ir.Expr":
         """Lower expression used in boolean context, adding truthy checks as needed."""
         return lowering.lower_expr_as_bool(
@@ -648,49 +694,7 @@ class Frontend:
         return lowering.lower_expr_UnaryOp(node, self._lower_expr, self._lower_expr_as_bool)
 
     def _lower_expr_Call(self, node: ast.Call) -> "ir.Expr":
-        """Lower a Python function/method call to IR."""
-        ctx = FrontendContext(
-            symbols=self.symbols,
-            type_ctx=self._type_ctx,
-            current_func_info=self._current_func_info,
-            current_class_name=self._current_class_name,
-            node_types=self._node_types,
-            kind_to_struct=self._kind_to_struct,
-            kind_to_class=self._kind_to_class,
-            current_catch_var=self._current_catch_var,
-        )
-        dispatch = LoweringDispatch(
-            lower_expr=self._lower_expr,
-            lower_expr_as_bool=self._lower_expr_as_bool,
-            lower_stmts=self._lower_stmts,
-            lower_lvalue=self._lower_lvalue,
-            lower_expr_List=self._lower_expr_List,
-            infer_expr_type_from_ast=self._infer_expr_type_from_ast,
-            infer_call_return_type=self._infer_call_return_type,
-            synthesize_type=self._synthesize_type,
-            coerce=self._coerce,
-            annotation_to_str=self._annotation_to_str,
-            py_type_to_ir=self._py_type_to_ir,
-            make_default_value=self._make_default_value,
-            extract_struct_name=self._extract_struct_name,
-            is_exception_subclass=self._is_exception_subclass,
-            is_node_subclass=self._is_node_subclass,
-            is_sentinel_int=self._is_sentinel_int,
-            get_sentinel_value=self._get_sentinel_value,
-            resolve_type_name=self._resolve_type_name,
-            get_inner_slice=self._get_inner_slice,
-            merge_keyword_args=self._merge_keyword_args,
-            fill_default_args=self._fill_default_args,
-            merge_keyword_args_for_func=self._merge_keyword_args_for_func,
-            fill_default_args_for_func=self._fill_default_args_for_func,
-            add_address_of_for_ptr_params=self._add_address_of_for_ptr_params,
-            deref_for_slice_params=self._deref_for_slice_params,
-            deref_for_func_slice_params=self._deref_for_func_slice_params,
-            coerce_sentinel_to_ptr=self._coerce_sentinel_to_ptr,
-            coerce_args_to_node=self._coerce_args_to_node,
-            is_node_interface_type=self._is_node_interface_type,
-            synthesize_method_return_type=self._synthesize_method_return_type,
-        )
+        ctx, dispatch = self._make_ctx_and_dispatch()
         return lowering.lower_expr_Call(node, ctx, dispatch)
 
     def _lower_expr_IfExp(self, node: ast.IfExp) -> "ir.Expr":
@@ -757,95 +761,11 @@ class Frontend:
         return lowering.is_super_init_call(node)
 
     def _lower_stmt_Assign(self, node: ast.Assign) -> "ir.Stmt":
-        """Lower a Python assignment statement to IR."""
-        ctx = FrontendContext(
-            symbols=self.symbols,
-            type_ctx=self._type_ctx,
-            current_func_info=self._current_func_info,
-            current_class_name=self._current_class_name,
-            node_types=self._node_types,
-            kind_to_struct=self._kind_to_struct,
-            kind_to_class=self._kind_to_class,
-            current_catch_var=self._current_catch_var,
-        )
-        dispatch = LoweringDispatch(
-            lower_expr=self._lower_expr,
-            lower_expr_as_bool=self._lower_expr_as_bool,
-            lower_stmts=self._lower_stmts,
-            lower_lvalue=self._lower_lvalue,
-            lower_expr_List=self._lower_expr_List,
-            infer_expr_type_from_ast=self._infer_expr_type_from_ast,
-            infer_call_return_type=self._infer_call_return_type,
-            synthesize_type=self._synthesize_type,
-            coerce=self._coerce,
-            annotation_to_str=self._annotation_to_str,
-            py_type_to_ir=self._py_type_to_ir,
-            make_default_value=self._make_default_value,
-            extract_struct_name=self._extract_struct_name,
-            is_exception_subclass=self._is_exception_subclass,
-            is_node_subclass=self._is_node_subclass,
-            is_sentinel_int=self._is_sentinel_int,
-            get_sentinel_value=self._get_sentinel_value,
-            resolve_type_name=self._resolve_type_name,
-            get_inner_slice=self._get_inner_slice,
-            merge_keyword_args=self._merge_keyword_args,
-            fill_default_args=self._fill_default_args,
-            merge_keyword_args_for_func=self._merge_keyword_args_for_func,
-            fill_default_args_for_func=self._fill_default_args_for_func,
-            add_address_of_for_ptr_params=self._add_address_of_for_ptr_params,
-            deref_for_slice_params=self._deref_for_slice_params,
-            deref_for_func_slice_params=self._deref_for_func_slice_params,
-            coerce_sentinel_to_ptr=self._coerce_sentinel_to_ptr,
-            coerce_args_to_node=self._coerce_args_to_node,
-            is_node_interface_type=self._is_node_interface_type,
-            synthesize_method_return_type=self._synthesize_method_return_type,
-        )
+        ctx, dispatch = self._make_ctx_and_dispatch()
         return lowering.lower_stmt_Assign(node, ctx, dispatch)
 
     def _lower_stmt_AnnAssign(self, node: ast.AnnAssign) -> "ir.Stmt":
-        """Lower a Python annotated assignment to IR."""
-        ctx = FrontendContext(
-            symbols=self.symbols,
-            type_ctx=self._type_ctx,
-            current_func_info=self._current_func_info,
-            current_class_name=self._current_class_name,
-            node_types=self._node_types,
-            kind_to_struct=self._kind_to_struct,
-            kind_to_class=self._kind_to_class,
-            current_catch_var=self._current_catch_var,
-        )
-        dispatch = LoweringDispatch(
-            lower_expr=self._lower_expr,
-            lower_expr_as_bool=self._lower_expr_as_bool,
-            lower_stmts=self._lower_stmts,
-            lower_lvalue=self._lower_lvalue,
-            lower_expr_List=self._lower_expr_List,
-            infer_expr_type_from_ast=self._infer_expr_type_from_ast,
-            infer_call_return_type=self._infer_call_return_type,
-            synthesize_type=self._synthesize_type,
-            coerce=self._coerce,
-            annotation_to_str=self._annotation_to_str,
-            py_type_to_ir=self._py_type_to_ir,
-            make_default_value=self._make_default_value,
-            extract_struct_name=self._extract_struct_name,
-            is_exception_subclass=self._is_exception_subclass,
-            is_node_subclass=self._is_node_subclass,
-            is_sentinel_int=self._is_sentinel_int,
-            get_sentinel_value=self._get_sentinel_value,
-            resolve_type_name=self._resolve_type_name,
-            get_inner_slice=self._get_inner_slice,
-            merge_keyword_args=self._merge_keyword_args,
-            fill_default_args=self._fill_default_args,
-            merge_keyword_args_for_func=self._merge_keyword_args_for_func,
-            fill_default_args_for_func=self._fill_default_args_for_func,
-            add_address_of_for_ptr_params=self._add_address_of_for_ptr_params,
-            deref_for_slice_params=self._deref_for_slice_params,
-            deref_for_func_slice_params=self._deref_for_func_slice_params,
-            coerce_sentinel_to_ptr=self._coerce_sentinel_to_ptr,
-            coerce_args_to_node=self._coerce_args_to_node,
-            is_node_interface_type=self._is_node_interface_type,
-            synthesize_method_return_type=self._synthesize_method_return_type,
-        )
+        ctx, dispatch = self._make_ctx_and_dispatch()
         return lowering.lower_stmt_AnnAssign(node, ctx, dispatch)
 
     def _lower_stmt_AugAssign(self, node: ast.AugAssign) -> "ir.Stmt":
@@ -892,98 +812,14 @@ class Frontend:
         return lowering.resolve_type_name(name, TYPE_MAP, self.symbols)
 
     def _lower_stmt_If(self, node: ast.If) -> "ir.Stmt":
-        """Lower a Python if statement to IR."""
-        ctx = FrontendContext(
-            symbols=self.symbols,
-            type_ctx=self._type_ctx,
-            current_func_info=self._current_func_info,
-            current_class_name=self._current_class_name,
-            node_types=self._node_types,
-            kind_to_struct=self._kind_to_struct,
-            kind_to_class=self._kind_to_class,
-            current_catch_var=self._current_catch_var,
-        )
-        dispatch = LoweringDispatch(
-            lower_expr=self._lower_expr,
-            lower_expr_as_bool=self._lower_expr_as_bool,
-            lower_stmts=self._lower_stmts,
-            lower_lvalue=self._lower_lvalue,
-            lower_expr_List=self._lower_expr_List,
-            infer_expr_type_from_ast=self._infer_expr_type_from_ast,
-            infer_call_return_type=self._infer_call_return_type,
-            synthesize_type=self._synthesize_type,
-            coerce=self._coerce,
-            annotation_to_str=self._annotation_to_str,
-            py_type_to_ir=self._py_type_to_ir,
-            make_default_value=self._make_default_value,
-            extract_struct_name=self._extract_struct_name,
-            is_exception_subclass=self._is_exception_subclass,
-            is_node_subclass=self._is_node_subclass,
-            is_sentinel_int=self._is_sentinel_int,
-            get_sentinel_value=self._get_sentinel_value,
-            resolve_type_name=self._resolve_type_name,
-            get_inner_slice=self._get_inner_slice,
-            merge_keyword_args=self._merge_keyword_args,
-            fill_default_args=self._fill_default_args,
-            merge_keyword_args_for_func=self._merge_keyword_args_for_func,
-            fill_default_args_for_func=self._fill_default_args_for_func,
-            add_address_of_for_ptr_params=self._add_address_of_for_ptr_params,
-            deref_for_slice_params=self._deref_for_slice_params,
-            deref_for_func_slice_params=self._deref_for_func_slice_params,
-            coerce_sentinel_to_ptr=self._coerce_sentinel_to_ptr,
-            coerce_args_to_node=self._coerce_args_to_node,
-            is_node_interface_type=self._is_node_interface_type,
-            synthesize_method_return_type=self._synthesize_method_return_type,
-        )
+        ctx, dispatch = self._make_ctx_and_dispatch()
         return lowering.lower_stmt_If(node, ctx, dispatch)
 
     def _lower_stmt_While(self, node: ast.While) -> "ir.Stmt":
         return lowering.lower_stmt_While(node, self._lower_expr_as_bool, self._lower_stmts)
 
     def _lower_stmt_For(self, node: ast.For) -> "ir.Stmt":
-        """Lower a Python for loop to IR."""
-        ctx = FrontendContext(
-            symbols=self.symbols,
-            type_ctx=self._type_ctx,
-            current_func_info=self._current_func_info,
-            current_class_name=self._current_class_name,
-            node_types=self._node_types,
-            kind_to_struct=self._kind_to_struct,
-            kind_to_class=self._kind_to_class,
-            current_catch_var=self._current_catch_var,
-        )
-        dispatch = LoweringDispatch(
-            lower_expr=self._lower_expr,
-            lower_expr_as_bool=self._lower_expr_as_bool,
-            lower_stmts=self._lower_stmts,
-            lower_lvalue=self._lower_lvalue,
-            lower_expr_List=self._lower_expr_List,
-            infer_expr_type_from_ast=self._infer_expr_type_from_ast,
-            infer_call_return_type=self._infer_call_return_type,
-            synthesize_type=self._synthesize_type,
-            coerce=self._coerce,
-            annotation_to_str=self._annotation_to_str,
-            py_type_to_ir=self._py_type_to_ir,
-            make_default_value=self._make_default_value,
-            extract_struct_name=self._extract_struct_name,
-            is_exception_subclass=self._is_exception_subclass,
-            is_node_subclass=self._is_node_subclass,
-            is_sentinel_int=self._is_sentinel_int,
-            get_sentinel_value=self._get_sentinel_value,
-            resolve_type_name=self._resolve_type_name,
-            get_inner_slice=self._get_inner_slice,
-            merge_keyword_args=self._merge_keyword_args,
-            fill_default_args=self._fill_default_args,
-            merge_keyword_args_for_func=self._merge_keyword_args_for_func,
-            fill_default_args_for_func=self._fill_default_args_for_func,
-            add_address_of_for_ptr_params=self._add_address_of_for_ptr_params,
-            deref_for_slice_params=self._deref_for_slice_params,
-            deref_for_func_slice_params=self._deref_for_func_slice_params,
-            coerce_sentinel_to_ptr=self._coerce_sentinel_to_ptr,
-            coerce_args_to_node=self._coerce_args_to_node,
-            is_node_interface_type=self._is_node_interface_type,
-            synthesize_method_return_type=self._synthesize_method_return_type,
-        )
+        ctx, dispatch = self._make_ctx_and_dispatch()
         return lowering.lower_stmt_For(node, ctx, dispatch)
 
     def _lower_stmt_Break(self, node: ast.Break) -> "ir.Stmt":
@@ -1005,49 +841,7 @@ class Frontend:
         return saved
 
     def _lower_stmt_Try(self, node: ast.Try) -> "ir.Stmt":
-        """Lower a Python try statement to IR."""
-        ctx = FrontendContext(
-            symbols=self.symbols,
-            type_ctx=self._type_ctx,
-            current_func_info=self._current_func_info,
-            current_class_name=self._current_class_name,
-            node_types=self._node_types,
-            kind_to_struct=self._kind_to_struct,
-            kind_to_class=self._kind_to_class,
-            current_catch_var=self._current_catch_var,
-        )
-        dispatch = LoweringDispatch(
-            lower_expr=self._lower_expr,
-            lower_expr_as_bool=self._lower_expr_as_bool,
-            lower_stmts=self._lower_stmts,
-            lower_lvalue=self._lower_lvalue,
-            lower_expr_List=self._lower_expr_List,
-            infer_expr_type_from_ast=self._infer_expr_type_from_ast,
-            infer_call_return_type=self._infer_call_return_type,
-            synthesize_type=self._synthesize_type,
-            coerce=self._coerce,
-            annotation_to_str=self._annotation_to_str,
-            py_type_to_ir=self._py_type_to_ir,
-            make_default_value=self._make_default_value,
-            extract_struct_name=self._extract_struct_name,
-            is_exception_subclass=self._is_exception_subclass,
-            is_node_subclass=self._is_node_subclass,
-            is_sentinel_int=self._is_sentinel_int,
-            get_sentinel_value=self._get_sentinel_value,
-            resolve_type_name=self._resolve_type_name,
-            get_inner_slice=self._get_inner_slice,
-            merge_keyword_args=self._merge_keyword_args,
-            fill_default_args=self._fill_default_args,
-            merge_keyword_args_for_func=self._merge_keyword_args_for_func,
-            fill_default_args_for_func=self._fill_default_args_for_func,
-            add_address_of_for_ptr_params=self._add_address_of_for_ptr_params,
-            deref_for_slice_params=self._deref_for_slice_params,
-            deref_for_func_slice_params=self._deref_for_func_slice_params,
-            coerce_sentinel_to_ptr=self._coerce_sentinel_to_ptr,
-            coerce_args_to_node=self._coerce_args_to_node,
-            is_node_interface_type=self._is_node_interface_type,
-            synthesize_method_return_type=self._synthesize_method_return_type,
-        )
+        ctx, dispatch = self._make_ctx_and_dispatch()
         return lowering.lower_stmt_Try(node, ctx, dispatch, self._set_catch_var)
 
     def _lower_stmt_FunctionDef(self, node: ast.FunctionDef) -> "ir.Stmt":

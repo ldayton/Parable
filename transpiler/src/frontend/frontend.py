@@ -177,10 +177,6 @@ class Frontend:
         """Infer IR type from an expression."""
         return type_inference.infer_type_from_value(node, param_types, self.symbols, self._node_types)
 
-    # ============================================================
-    # LOCAL TYPE INFERENCE (Pierce & Turner style)
-    # ============================================================
-
     def _collect_var_types(self, stmts: list[ast.stmt]) -> tuple[dict[str, Type], dict[str, list[str]], set[str], dict[str, list[str]]]:
         """Pre-scan function body to collect variable types, tuple var mappings, and sentinel ints."""
         cb = self._make_collection_callbacks_with_inference()
@@ -245,10 +241,6 @@ class Frontend:
         return type_inference.infer_call_return_type(
             node, self.symbols, self._type_ctx, self._current_func_info, self._current_class_name, self._node_types)
 
-    # ============================================================
-    # EXPRESSION LOWERING (Phase 3)
-    # ============================================================
-
     def _make_ctx_and_dispatch(self) -> tuple[FrontendContext, LoweringDispatch]:
         """Build FrontendContext and LoweringDispatch for lowering functions."""
         exception_subclasses = {
@@ -306,10 +298,6 @@ class Frontend:
         return lowering.lower_expr_List(
             node, self._lower_expr, self._infer_expr_type_from_ast, self._type_ctx.expected, expected_type
         )
-
-    # ============================================================
-    # STATEMENT LOWERING (Phase 3)
-    # ============================================================
 
     def _lower_stmt(self, node: ast.stmt) -> "ir.Stmt":
         """Lower a Python statement to IR."""

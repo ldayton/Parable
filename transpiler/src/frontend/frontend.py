@@ -803,64 +803,50 @@ class Frontend:
         return lowering.lower_stmt_Assign(node, ctx, dispatch)
 
     def _lower_stmt_AnnAssign(self, node: ast.AnnAssign) -> "ir.Stmt":
-        from .. import ir
-        py_type = self._annotation_to_str(node.annotation)
-        typ = self._py_type_to_ir(py_type)
-        # Handle int | None = None -> use -1 as sentinel
-        if (isinstance(typ, Optional) and typ.inner == INT and
-            node.value and isinstance(node.value, ast.Constant) and node.value.value is None):
-            if isinstance(node.target, ast.Name):
-                # Store as plain int with -1 sentinel
-                return ir.VarDecl(name=node.target.id, typ=INT,
-                                  value=ir.IntLit(value=-1, typ=INT, loc=self._loc_from_node(node)),
-                                  loc=self._loc_from_node(node))
-        # Determine expected type for lowering (use field type for field assignments)
-        expected_type = typ
-        if (isinstance(node.target, ast.Attribute) and
-            isinstance(node.target.value, ast.Name) and
-            node.target.value.id == "self" and
-            self._current_class_name):
-            field_name = node.target.attr
-            struct_info = self.symbols.structs.get(self._current_class_name)
-            if struct_info:
-                field_info = struct_info.fields.get(field_name)
-                if field_info:
-                    expected_type = field_info.typ
-        if node.value:
-            # For list values, pass expected type to get correct element type
-            if isinstance(node.value, ast.List):
-                value = self._lower_expr_List(node.value, expected_type)
-            else:
-                value = self._lower_expr(node.value)
-            # Coerce value to expected type
-            from_type = self._synthesize_type(value)
-            value = self._coerce(value, from_type, expected_type)
-        else:
-            value = None
-        if isinstance(node.target, ast.Name):
-            # Update type context with declared type (overrides any earlier inference)
-            self._type_ctx.var_types[node.target.id] = typ
-            return ir.VarDecl(name=node.target.id, typ=typ, value=value, loc=self._loc_from_node(node))
-        # Attribute target - treat as assignment
-        lval = self._lower_lvalue(node.target)
-        if value:
-            # Handle sentinel ints for field assignments: self.field = None -> self.field = -1
-            if isinstance(value, ir.NilLit) and self._is_sentinel_int(node.target):
-                value = ir.IntLit(value=-1, typ=INT, loc=self._loc_from_node(node))
-            # For field assignments, coerce to the actual field type (from struct info)
-            if (isinstance(node.target, ast.Attribute) and
-                isinstance(node.target.value, ast.Name) and
-                node.target.value.id == "self" and
-                self._current_class_name):
-                field_name = node.target.attr
-                struct_info = self.symbols.structs.get(self._current_class_name)
-                if struct_info:
-                    field_info = struct_info.fields.get(field_name)
-                    if field_info:
-                        from_type = self._synthesize_type(value)
-                        value = self._coerce(value, from_type, field_info.typ)
-            return ir.Assign(target=lval, value=value, loc=self._loc_from_node(node))
-        return ir.ExprStmt(expr=ir.Var(name="_skip_ann", typ=VOID))
+        """Lower a Python annotated assignment to IR."""
+        ctx = FrontendContext(
+            symbols=self.symbols,
+            type_ctx=self._type_ctx,
+            current_func_info=self._current_func_info,
+            current_class_name=self._current_class_name,
+            node_types=self._node_types,
+            kind_to_struct=self._kind_to_struct,
+            kind_to_class=self._kind_to_class,
+            current_catch_var=self._current_catch_var,
+        )
+        dispatch = LoweringDispatch(
+            lower_expr=self._lower_expr,
+            lower_expr_as_bool=self._lower_expr_as_bool,
+            lower_stmts=self._lower_stmts,
+            lower_lvalue=self._lower_lvalue,
+            lower_expr_List=self._lower_expr_List,
+            infer_expr_type_from_ast=self._infer_expr_type_from_ast,
+            infer_call_return_type=self._infer_call_return_type,
+            synthesize_type=self._synthesize_type,
+            coerce=self._coerce,
+            annotation_to_str=self._annotation_to_str,
+            py_type_to_ir=self._py_type_to_ir,
+            make_default_value=self._make_default_value,
+            extract_struct_name=self._extract_struct_name,
+            is_exception_subclass=self._is_exception_subclass,
+            is_node_subclass=self._is_node_subclass,
+            is_sentinel_int=self._is_sentinel_int,
+            get_sentinel_value=self._get_sentinel_value,
+            resolve_type_name=self._resolve_type_name,
+            get_inner_slice=self._get_inner_slice,
+            merge_keyword_args=self._merge_keyword_args,
+            fill_default_args=self._fill_default_args,
+            merge_keyword_args_for_func=self._merge_keyword_args_for_func,
+            fill_default_args_for_func=self._fill_default_args_for_func,
+            add_address_of_for_ptr_params=self._add_address_of_for_ptr_params,
+            deref_for_slice_params=self._deref_for_slice_params,
+            deref_for_func_slice_params=self._deref_for_func_slice_params,
+            coerce_sentinel_to_ptr=self._coerce_sentinel_to_ptr,
+            coerce_args_to_node=self._coerce_args_to_node,
+            is_node_interface_type=self._is_node_interface_type,
+            synthesize_method_return_type=self._synthesize_method_return_type,
+        )
+        return lowering.lower_stmt_AnnAssign(node, ctx, dispatch)
 
     def _lower_stmt_AugAssign(self, node: ast.AugAssign) -> "ir.Stmt":
         return lowering.lower_stmt_AugAssign(node, self._lower_lvalue, self._lower_expr)

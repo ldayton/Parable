@@ -1888,6 +1888,73 @@ def lower_stmt_Assign(
     return block
 
 
+def lower_stmt_AnnAssign(
+    node: ast.AnnAssign,
+    ctx: "FrontendContext",
+    dispatch: "LoweringDispatch",
+) -> "ir.Stmt":
+    """Lower a Python annotated assignment to IR."""
+    from .. import ir
+    py_type = dispatch.annotation_to_str(node.annotation)
+    typ = dispatch.py_type_to_ir(py_type, False)
+    type_ctx = ctx.type_ctx
+    # Handle int | None = None -> use -1 as sentinel
+    if (isinstance(typ, Optional) and typ.inner == INT and
+        node.value and isinstance(node.value, ast.Constant) and node.value.value is None):
+        if isinstance(node.target, ast.Name):
+            # Store as plain int with -1 sentinel
+            return ir.VarDecl(name=node.target.id, typ=INT,
+                              value=ir.IntLit(value=-1, typ=INT, loc=loc_from_node(node)),
+                              loc=loc_from_node(node))
+    # Determine expected type for lowering (use field type for field assignments)
+    expected_type = typ
+    if (isinstance(node.target, ast.Attribute) and
+        isinstance(node.target.value, ast.Name) and
+        node.target.value.id == "self" and
+        ctx.current_class_name):
+        field_name = node.target.attr
+        struct_info = ctx.symbols.structs.get(ctx.current_class_name)
+        if struct_info:
+            field_info = struct_info.fields.get(field_name)
+            if field_info:
+                expected_type = field_info.typ
+    if node.value:
+        # For list values, pass expected type to get correct element type
+        if isinstance(node.value, ast.List):
+            value = dispatch.lower_expr_List(node.value, expected_type)
+        else:
+            value = dispatch.lower_expr(node.value)
+        # Coerce value to expected type
+        from_type = dispatch.synthesize_type(value)
+        value = dispatch.coerce(value, from_type, expected_type)
+    else:
+        value = None
+    if isinstance(node.target, ast.Name):
+        # Update type context with declared type (overrides any earlier inference)
+        type_ctx.var_types[node.target.id] = typ
+        return ir.VarDecl(name=node.target.id, typ=typ, value=value, loc=loc_from_node(node))
+    # Attribute target - treat as assignment
+    lval = dispatch.lower_lvalue(node.target)
+    if value:
+        # Handle sentinel ints for field assignments: self.field = None -> self.field = -1
+        if isinstance(value, ir.NilLit) and dispatch.is_sentinel_int(node.target):
+            value = ir.IntLit(value=-1, typ=INT, loc=loc_from_node(node))
+        # For field assignments, coerce to the actual field type (from struct info)
+        if (isinstance(node.target, ast.Attribute) and
+            isinstance(node.target.value, ast.Name) and
+            node.target.value.id == "self" and
+            ctx.current_class_name):
+            field_name = node.target.attr
+            struct_info = ctx.symbols.structs.get(ctx.current_class_name)
+            if struct_info:
+                field_info = struct_info.fields.get(field_name)
+                if field_info:
+                    from_type = dispatch.synthesize_type(value)
+                    value = dispatch.coerce(value, from_type, field_info.typ)
+        return ir.Assign(target=lval, value=value, loc=loc_from_node(node))
+    return ir.ExprStmt(expr=ir.Var(name="_skip_ann", typ=VOID))
+
+
 # ============================================================
 # LVALUE LOWERING
 # ============================================================

@@ -49,6 +49,7 @@ from ..ir import (
     TypeSwitch,
 )
 from .context import TypeContext
+from . import type_inference
 
 if TYPE_CHECKING:
     pass
@@ -985,45 +986,11 @@ class Frontend:
 
     def _split_union_types(self, s: str) -> list[str]:
         """Split union types on | respecting nested brackets."""
-        parts = []
-        current: list[str] = []
-        depth = 0
-        for c in s:
-            if c == "[":
-                depth += 1
-                current.append(c)
-            elif c == "]":
-                depth -= 1
-                current.append(c)
-            elif c == "|" and depth == 0:
-                parts.append("".join(current).strip())
-                current = []
-            else:
-                current.append(c)
-        if current:
-            parts.append("".join(current).strip())
-        return parts
+        return type_inference.split_union_types(s)
 
     def _split_type_args(self, s: str) -> list[str]:
         """Split type arguments like 'K, V' respecting nested brackets."""
-        parts = []
-        current: list[str] = []
-        depth = 0
-        for c in s:
-            if c == "[":
-                depth += 1
-                current.append(c)
-            elif c == "]":
-                depth -= 1
-                current.append(c)
-            elif c == "," and depth == 0:
-                parts.append("".join(current).strip())
-                current = []
-            else:
-                current.append(c)
-        if current:
-            parts.append("".join(current).strip())
-        return parts
+        return type_inference.split_type_args(s)
 
     # ============================================================
     # LOCAL TYPE INFERENCE (Pierce & Turner style)
@@ -1842,13 +1809,7 @@ class Frontend:
 
     def _extract_struct_name(self, typ: Type) -> str | None:
         """Extract struct name from wrapped types like Pointer, Optional, etc."""
-        if isinstance(typ, StructRef):
-            return typ.name
-        if isinstance(typ, Pointer):
-            return self._extract_struct_name(typ.target)
-        if isinstance(typ, Optional):
-            return self._extract_struct_name(typ.inner)
-        return None
+        return type_inference.extract_struct_name(typ)
 
     def _coerce_args_to_node(self, func_info: "FuncInfo", args: list) -> list:
         """Add type assertions when passing interface{} to Node parameter."""
@@ -2226,15 +2187,7 @@ class Frontend:
 
     def _is_node_interface_type(self, typ: Type | None) -> bool:
         """Check if a type is the Node interface type."""
-        if typ is None:
-            return False
-        # Interface("Node")
-        if isinstance(typ, Interface) and typ.name == "Node":
-            return True
-        # StructRef("Node")
-        if isinstance(typ, StructRef) and typ.name == "Node":
-            return True
-        return False
+        return type_inference.is_node_interface_type(typ)
 
     def _is_node_subtype(self, typ: Type | None) -> bool:
         """Check if a type is a Node subtype (pointer to struct implementing Node)."""

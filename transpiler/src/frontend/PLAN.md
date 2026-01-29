@@ -184,7 +184,7 @@ class CollectionCallbacks:
 
 Depends on: symbols, type_inference.py (for field type inference)
 
-### 4. Extract `builders.py` ← NEXT
+### 4. Extract `builders.py` ✓ COMPLETE
 
 Functions for constructing IR nodes (Module, Struct, Function).
 
@@ -236,7 +236,7 @@ class BuilderCallbacks:
 
 Depends on: context.py, type_inference.py, lowering.py, collection.py
 
-### 5. Slim `frontend.py`
+### 5. Slim `frontend.py` ← NEXT
 
 What remains:
 

@@ -62,6 +62,22 @@ def split_union_types(s: str) -> list[str]:
     return parts
 
 
+def extract_union_struct_names(py_type: str, node_types: set[str]) -> list[str] | None:
+    """Extract struct names from a union type like 'Redirect | HereDoc'.
+    Returns None if not a union of Node subclasses."""
+    if " | " not in py_type:
+        return None
+    parts = split_union_types(py_type)
+    if len(parts) <= 1:
+        return None
+    parts = [p for p in parts if p != "None"]
+    if len(parts) <= 1:
+        return None
+    if not all(p in node_types for p in parts):
+        return None
+    return parts
+
+
 def split_type_args(s: str) -> list[str]:
     """Split type arguments like 'K, V' respecting nested brackets."""
     parts = []

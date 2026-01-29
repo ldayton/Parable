@@ -190,7 +190,7 @@ class Frontend:
             lower_stmts=self._lower_stmts,
             collect_var_types=self._collect_var_types,
             is_exception_subclass=self._is_exception_subclass,
-            extract_union_struct_names=self._extract_union_struct_names,
+            extract_union_struct_names=lambda py_type: type_inference.extract_union_struct_names(py_type, self._node_types),
             loc_from_node=self._loc_from_node,
             setup_context=self._setup_context,
             setup_and_lower_stmts=self._setup_and_lower_stmts,
@@ -207,7 +207,7 @@ class Frontend:
             lower_stmts=self._lower_stmts,
             collect_var_types=self._collect_var_types,
             is_exception_subclass=self._is_exception_subclass,
-            extract_union_struct_names=self._extract_union_struct_names,
+            extract_union_struct_names=lambda py_type: type_inference.extract_union_struct_names(py_type, self._node_types),
             loc_from_node=self._loc_from_node,
             setup_context=self._setup_context,
             setup_and_lower_stmts=self._setup_and_lower_stmts,
@@ -228,7 +228,7 @@ class Frontend:
             lower_stmts=self._lower_stmts,
             collect_var_types=self._collect_var_types,
             is_exception_subclass=self._is_exception_subclass,
-            extract_union_struct_names=self._extract_union_struct_names,
+            extract_union_struct_names=lambda py_type: type_inference.extract_union_struct_names(py_type, self._node_types),
             loc_from_node=self._loc_from_node,
             setup_context=self._setup_context,
             setup_and_lower_stmts=self._setup_and_lower_stmts,
@@ -263,7 +263,7 @@ class Frontend:
             lower_stmts=self._lower_stmts,
             collect_var_types=self._collect_var_types,
             is_exception_subclass=self._is_exception_subclass,
-            extract_union_struct_names=self._extract_union_struct_names,
+            extract_union_struct_names=lambda py_type: type_inference.extract_union_struct_names(py_type, self._node_types),
             loc_from_node=self._loc_from_node,
             setup_context=self._setup_context,
             setup_and_lower_stmts=self._setup_and_lower_stmts,
@@ -280,7 +280,7 @@ class Frontend:
             lower_stmts=self._lower_stmts,
             collect_var_types=self._collect_var_types,
             is_exception_subclass=self._is_exception_subclass,
-            extract_union_struct_names=self._extract_union_struct_names,
+            extract_union_struct_names=lambda py_type: type_inference.extract_union_struct_names(py_type, self._node_types),
             loc_from_node=self._loc_from_node,
             setup_context=self._setup_context,
             setup_and_lower_stmts=self._setup_and_lower_stmts,
@@ -327,23 +327,6 @@ class Frontend:
     def _py_return_type_to_ir(self, py_type: str) -> Type:
         """Convert Python return type to IR, handling tuples as multiple returns."""
         return type_inference.py_return_type_to_ir(py_type, self.symbols, self._node_types)
-
-    def _extract_union_struct_names(self, py_type: str) -> list[str] | None:
-        """Extract struct names from a union type like 'Redirect | HereDoc'.
-        Returns None if not a union of Node subclasses."""
-        if " | " not in py_type:
-            return None
-        parts = type_inference.split_union_types(py_type)
-        if len(parts) <= 1:
-            return None
-        # Filter out None
-        parts = [p for p in parts if p != "None"]
-        if len(parts) <= 1:
-            return None
-        # Check if all parts are Node subclasses
-        if not all(self._is_node_subclass(p) for p in parts):
-            return None
-        return parts
 
     def _infer_type_from_value(
         self, node: ast.expr, param_types: dict[str, str]

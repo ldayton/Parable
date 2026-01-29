@@ -104,11 +104,13 @@ from src.ir import (
     Map,
     MapLit,
     Match,
+    MatchCase,
     MethodCall,
     Module,
     NilLit,
     OpAssign,
     Optional,
+    Param,
     Pointer,
     Primitive,
     Raise,
@@ -359,7 +361,7 @@ class TsBackend:
         self.indent -= 1
         self._line("}")
 
-    def _params(self, params: list) -> str:
+    def _params(self, params: list[Param]) -> str:
         parts = []
         for p in params:
             typ = self._type(p.typ)
@@ -532,7 +534,7 @@ class TsBackend:
             self.indent -= 1
         self._line("}")
 
-    def _emit_match(self, expr: Expr, cases: list, default: list[Stmt]) -> None:
+    def _emit_match(self, expr: Expr, cases: list[MatchCase], default: list[Stmt]) -> None:
         self._line(f"switch ({self._expr(expr)}) {{")
         self.indent += 1
         for case in cases:

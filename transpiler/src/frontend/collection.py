@@ -881,7 +881,7 @@ def collect_var_types(
                             slice_node.get("value"), int
                         ):
                             idx = slice_node.get("value")
-                            if 0 <= idx < len(container_type.elements):
+                            if 0 <= idx and idx < len(container_type.elements):
                                 var_types[var_name] = container_type.elements[idx]
                 # Infer from method calls: var = obj.method() -> method return type
                 elif is_type(value, ["Call"]) and is_type(value.get("func"), ["Attribute"]):
@@ -1028,7 +1028,7 @@ def collect_var_types(
                                 slice_node.get("value"), int
                             ):
                                 idx = slice_node.get("value")
-                                if 0 <= idx < len(container_type.elements):
+                                if 0 <= idx and idx < len(container_type.elements):
                                     var_types[var_name] = container_type.elements[idx]
     # Fifth pass: unify types from if/else branches
     for stmt in dict_walk({"_type": "Module", "body": stmts}):

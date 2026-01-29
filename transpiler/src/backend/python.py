@@ -74,11 +74,13 @@ from src.ir import (
     Map,
     MapLit,
     Match,
+    MatchCase,
     MethodCall,
     Module,
     NilLit,
     OpAssign,
     Optional,
+    Param,
     Pointer,
     Primitive,
     Raise,
@@ -348,7 +350,7 @@ class PythonBackend:
         self.receiver_name = None
         self.indent -= 1
 
-    def _params(self, params: list, with_self: bool) -> str:
+    def _params(self, params: list[Param], with_self: bool) -> str:
         parts = []
         if with_self:
             parts.append("self")
@@ -460,7 +462,7 @@ class PythonBackend:
                 self._emit_stmt(s)
             self.indent -= 1
 
-    def _emit_match(self, expr: Expr, cases: list, default: list[Stmt]) -> None:
+    def _emit_match(self, expr: Expr, cases: list[MatchCase], default: list[Stmt]) -> None:
         self._line(f"match {self._expr(expr)}:")
         self.indent += 1
         for case in cases:

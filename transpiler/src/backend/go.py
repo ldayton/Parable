@@ -1115,7 +1115,7 @@ func _Substring(s string, start int, end int) string {
                 for s in case.body:
                     self._emit_stmt(s)
                 # Clear renaming context
-                del self._type_switch_binding_rename[stmt.binding]
+                self._type_switch_binding_rename.pop(stmt.binding)
             else:
                 for s in case.body:
                     self._emit_stmt(s)
@@ -1174,7 +1174,7 @@ func _Substring(s string, start int, end int) string {
         self._type_switch_binding_rename[stmt.binding] = narrowed_binding
         for s in case.body:
             self._emit_stmt(s)
-        del self._type_switch_binding_rename[stmt.binding]
+        self._type_switch_binding_rename.pop(stmt.binding)
         self.indent -= 1
         self._line("} else {")
         self.indent += 1
@@ -1840,7 +1840,7 @@ func _Substring(s string, start int, end int) string {
         """Infer which tuple element a variable corresponds to by scanning returns."""
         from src.ir import Return, TupleLit, Var
 
-        def scan_for_return_position(stmts: list) -> int | None:
+        def scan_for_return_position(stmts: list[Stmt]) -> int | None:
             for s in stmts:
                 if isinstance(s, Return) and s.value and isinstance(s.value, TupleLit):
                     for i, elem in enumerate(s.value.elements):

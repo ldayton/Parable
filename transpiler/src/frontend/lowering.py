@@ -811,7 +811,7 @@ def lower_expr_Subscript(
         if var_name in type_ctx.tuple_vars and isinstance(slice_value, int):
             idx = slice_value
             synthetic_names = type_ctx.tuple_vars[var_name]
-            if 0 <= idx < len(synthetic_names):
+            if 0 <= idx and idx < len(synthetic_names):
                 syn_name = synthetic_names[idx]
                 typ = type_ctx.var_types.get(syn_name, InterfaceRef("any"))
                 return ir.Var(name=syn_name, typ=typ, loc=loc_from_node(node))
@@ -839,7 +839,7 @@ def lower_expr_Subscript(
         and isinstance(node_slice.get("value"), int)
     ):
         field_idx = node_slice.get("value")
-        if 0 <= field_idx < len(obj_type.elements):
+        if 0 <= field_idx and field_idx < len(obj_type.elements):
             elem_type = obj_type.elements[field_idx]
             return ir.FieldAccess(
                 obj=obj, field=f"F{field_idx}", typ=elem_type, loc=loc_from_node(node)
@@ -1430,7 +1430,7 @@ def lower_expr_IfExp(
     then_expr = lower_expr(node.get("body"))
     # Clean up the narrowing after processing then branch
     if attr_kind_check:
-        del type_ctx.narrowed_attr_paths[attr_kind_check[0]]
+        type_ctx.narrowed_attr_paths.pop(attr_kind_check[0])
     else_expr = lower_expr(node.get("orelse"))
     # Use type from lowered expressions (prefer then branch, fall back to else)
     result_type = getattr(then_expr, "typ", None)

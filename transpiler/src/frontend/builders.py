@@ -155,7 +155,7 @@ def build_constructor(
     n_defaults = len(init_defaults)
     for i, default_ast in enumerate(init_defaults):
         param_idx = n_params - n_defaults + i
-        if 0 <= param_idx < n_params:
+        if 0 <= param_idx and param_idx < n_params:
             params[param_idx].default = callbacks.lower_expr(default_ast)
     # Set up context first (needed by collect_var_types)
     callbacks.setup_context(class_name, None)

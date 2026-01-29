@@ -208,11 +208,13 @@ from src.ir import (
     Map,
     MapLit,
     Match,
+    MatchCase,
     MethodCall,
     Module,
     NilLit,
     OpAssign,
     Optional,
+    Param,
     Pointer,
     Primitive,
     Raise,
@@ -630,7 +632,7 @@ class JavaBackend:
         self._current_func = None
         self._func_params = set()
 
-    def _params(self, params: list) -> str:
+    def _params(self, params: list[Param]) -> str:
         parts = []
         for p in params:
             typ = self._type(p.typ)
@@ -846,7 +848,7 @@ class JavaBackend:
             for s in case.body:
                 self._emit_stmt(s)
             self._hoisted_vars = saved_hoisted
-            del self._type_switch_binding_rename[binding]
+            self._type_switch_binding_rename.pop(binding)
             self.indent -= 1
         if default:
             self._line("} else {")
@@ -858,7 +860,7 @@ class JavaBackend:
             self.indent -= 1
         self._line("}")
 
-    def _emit_match(self, stmt, expr: Expr, cases: list, default: list[Stmt]) -> None:
+    def _emit_match(self, stmt, expr: Expr, cases: list[MatchCase], default: list[Stmt]) -> None:
         self._emit_hoisted_vars(stmt)
         expr_str = self._expr(expr)
         # Java switch on strings

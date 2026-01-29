@@ -1281,3 +1281,43 @@ def lower_stmt_Return(
         from_type = synthesize_type(value)
         value = coerce(value, from_type, return_type)
     return ir.Return(value=value, loc=loc_from_node(node))
+
+
+# ============================================================
+# EXCEPTION STATEMENT LOWERING
+# ============================================================
+
+
+def lower_stmt_Raise(
+    node: ast.Raise,
+    lower_expr: Callable[[ast.expr], "ir.Expr"],
+    current_catch_var: str | None,
+) -> "ir.Stmt":
+    """Lower raise statement."""
+    from .. import ir
+    if node.exc:
+        # Check if raising the catch variable (re-raise pattern)
+        if isinstance(node.exc, ast.Name) and node.exc.id == current_catch_var:
+            return ir.Raise(
+                error_type="Error",
+                message=ir.StringLit(value="", typ=STRING),
+                pos=ir.IntLit(value=0, typ=INT),
+                reraise_var=current_catch_var,
+                loc=loc_from_node(node),
+            )
+        # Extract error type and message from exception
+        if isinstance(node.exc, ast.Call) and isinstance(node.exc.func, ast.Name):
+            error_type = node.exc.func.id
+            msg = lower_expr(node.exc.args[0]) if node.exc.args else ir.StringLit(value="", typ=STRING)
+            # Check for pos kwarg
+            pos = ir.IntLit(value=0, typ=INT)
+            if len(node.exc.args) > 1:
+                pos = lower_expr(node.exc.args[1])
+            else:
+                # Check kwargs for pos
+                for kw in node.exc.keywords:
+                    if kw.arg == "pos":
+                        pos = lower_expr(kw.value)
+                        break
+            return ir.Raise(error_type=error_type, message=msg, pos=pos, loc=loc_from_node(node))
+    return ir.Raise(error_type="Error", message=ir.StringLit(value="", typ=STRING), pos=ir.IntLit(value=0, typ=INT), loc=loc_from_node(node))

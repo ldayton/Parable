@@ -2423,33 +2423,7 @@ class Frontend:
         return lowering.lower_stmt_Pass(node)
 
     def _lower_stmt_Raise(self, node: ast.Raise) -> "ir.Stmt":
-        from .. import ir
-        if node.exc:
-            # Check if raising the catch variable (re-raise pattern)
-            if isinstance(node.exc, ast.Name) and node.exc.id == self._current_catch_var:
-                return ir.Raise(
-                    error_type="Error",
-                    message=ir.StringLit(value="", typ=STRING),
-                    pos=ir.IntLit(value=0, typ=INT),
-                    reraise_var=self._current_catch_var,
-                    loc=self._loc_from_node(node),
-                )
-            # Extract error type and message from exception
-            if isinstance(node.exc, ast.Call) and isinstance(node.exc.func, ast.Name):
-                error_type = node.exc.func.id
-                msg = self._lower_expr(node.exc.args[0]) if node.exc.args else ir.StringLit(value="", typ=STRING)
-                # Check for pos kwarg
-                pos = ir.IntLit(value=0, typ=INT)
-                if len(node.exc.args) > 1:
-                    pos = self._lower_expr(node.exc.args[1])
-                else:
-                    # Check kwargs for pos
-                    for kw in node.exc.keywords:
-                        if kw.arg == "pos":
-                            pos = self._lower_expr(kw.value)
-                            break
-                return ir.Raise(error_type=error_type, message=msg, pos=pos, loc=self._loc_from_node(node))
-        return ir.Raise(error_type="Error", message=ir.StringLit(value="", typ=STRING), pos=ir.IntLit(value=0, typ=INT), loc=self._loc_from_node(node))
+        return lowering.lower_stmt_Raise(node, self._lower_expr, self._current_catch_var)
 
     def _lower_stmt_Try(self, node: ast.Try) -> "ir.Stmt":
         from .. import ir

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import ast
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
+
+from .ast_compat import ASTNode, is_type
 
 from ..ir import (
     INT,
@@ -36,20 +37,20 @@ if TYPE_CHECKING:
 class BuilderCallbacks:
     """Callbacks for builder phase that need lowering/type conversion."""
 
-    annotation_to_str: Callable[[ast.expr | None], str]
+    annotation_to_str: Callable[[ASTNode | None], str]
     py_type_to_ir: Callable[[str, bool], "Type"]
     py_return_type_to_ir: Callable[[str], "Type"]
-    lower_expr: Callable[[ast.expr], "ir.Expr"]
-    lower_stmts: Callable[[list[ast.stmt]], list["ir.Stmt"]]
-    collect_var_types: Callable[[list[ast.stmt]], tuple[dict, dict, set, dict]]
+    lower_expr: Callable[[ASTNode], "ir.Expr"]
+    lower_stmts: Callable[[list[ASTNode]], list["ir.Stmt"]]
+    collect_var_types: Callable[[list[ASTNode]], tuple[dict, dict, set, dict]]
     is_exception_subclass: Callable[[str], bool]
     extract_union_struct_names: Callable[[str], list[str]]
-    loc_from_node: Callable[[ast.AST], "Loc"]
+    loc_from_node: Callable[[ASTNode], "Loc"]
     # Set up class context before collect_var_types (sets _current_class_name, _current_func_info)
     setup_context: Callable[[str, "FuncInfo | None"], None]
     # Combined callback: set up type context then lower statements
     setup_and_lower_stmts: Callable[
-        [str, "FuncInfo | None", "TypeContext", list[ast.stmt]], list["ir.Stmt"]
+        [str, "FuncInfo | None", "TypeContext", list[ASTNode]], list["ir.Stmt"]
     ]
 
 
@@ -117,7 +118,7 @@ def build_forwarding_constructor(
 
 def build_constructor(
     class_name: str,
-    init_ast: ast.FunctionDef,
+    init_ast: ASTNode,
     info: "StructInfo",
     callbacks: BuilderCallbacks,
 ) -> Function:
@@ -128,34 +129,40 @@ def build_constructor(
     # Build parameters (same as __init__ excluding self)
     params: list[Param] = []
     param_types: dict[str, "Type"] = {}
-    for arg in init_ast.args.args:
-        if arg.arg == "self":
+    init_args = init_ast.get("args", {})
+    init_args_args = init_args.get("args", []) if isinstance(init_args, dict) else []
+    for arg in init_args_args:
+        arg_name = arg.get("arg")
+        if arg_name == "self":
             continue
-        py_type = callbacks.annotation_to_str(arg.annotation) if arg.annotation else ""
+        arg_annotation = arg.get("annotation")
+        py_type = callbacks.annotation_to_str(arg_annotation) if arg_annotation else ""
         typ = callbacks.py_type_to_ir(py_type, False) if py_type else InterfaceRef("any")
         # Check for parameter type overrides
-        override_key = (f"New{class_name}", arg.arg)
+        override_key = (f"New{class_name}", arg_name)
         if override_key in PARAM_TYPE_OVERRIDES:
             typ = PARAM_TYPE_OVERRIDES[override_key]
         else:
             # Try __init__ param overrides
-            override_key = ("__init__", arg.arg)
+            override_key = ("__init__", arg_name)
             if override_key in PARAM_TYPE_OVERRIDES:
                 typ = PARAM_TYPE_OVERRIDES[override_key]
-        params.append(Param(name=arg.arg, typ=typ, loc=Loc.unknown()))
-        param_types[arg.arg] = typ
+        params.append(Param(name=arg_name, typ=typ, loc=Loc.unknown()))
+        param_types[arg_name] = typ
     # Handle default arguments
     n_params = len(params)
-    n_defaults = len(init_ast.args.defaults) if init_ast.args.defaults else 0
-    for i, default_ast in enumerate(init_ast.args.defaults or []):
+    init_defaults = init_args.get("defaults", []) if isinstance(init_args, dict) else []
+    n_defaults = len(init_defaults)
+    for i, default_ast in enumerate(init_defaults):
         param_idx = n_params - n_defaults + i
         if 0 <= param_idx < n_params:
             params[param_idx].default = callbacks.lower_expr(default_ast)
     # Set up context first (needed by collect_var_types)
     callbacks.setup_context(class_name, None)
     # Collect variable types and build type context
+    init_body = init_ast.get("body", [])
     var_types, tuple_vars, sentinel_ints, list_element_unions = callbacks.collect_var_types(
-        init_ast.body
+        init_body
     )
     var_types.update(param_types)
     var_types["self"] = Pointer(StructRef(class_name))
@@ -185,8 +192,8 @@ def build_constructor(
     self_init.is_declaration = True
     body.append(self_init)
     # Lower __init__ body with type context (excluding any "return" statements which are implicit in __init__)
-    init_body = callbacks.setup_and_lower_stmts(class_name, None, type_ctx, init_ast.body)
-    body.extend(init_body)
+    init_body_lowered = callbacks.setup_and_lower_stmts(class_name, None, type_ctx, init_body)
+    body.extend(init_body_lowered)
     # Return self
     body.append(
         ir.Return(
@@ -204,7 +211,7 @@ def build_constructor(
 
 
 def build_method_shell(
-    node: ast.FunctionDef,
+    node: ASTNode,
     class_name: str,
     symbols: "SymbolTable",
     callbacks: BuilderCallbacks,
@@ -213,8 +220,9 @@ def build_method_shell(
     """Build IR Function for a method. Set with_body=True to lower statements."""
     from .context import TypeContext
 
+    node_name = node.get("name")
     info = symbols.structs.get(class_name)
-    func_info = info.methods.get(node.name) if info else None
+    func_info = info.methods.get(node_name) if info else None
     params = []
     if func_info:
         for p in func_info.params:
@@ -224,8 +232,9 @@ def build_method_shell(
         # Set up context first (needed by collect_var_types)
         callbacks.setup_context(class_name, func_info)
         # Collect variable types from body and add parameters + self
+        node_body = node.get("body", [])
         var_types, tuple_vars, sentinel_ints, list_element_unions = callbacks.collect_var_types(
-            node.body
+            node_body
         )
         if func_info:
             for p in func_info.params:
@@ -233,13 +242,16 @@ def build_method_shell(
         var_types["self"] = Pointer(StructRef(class_name))
         # Extract union types from parameter annotations
         union_types: dict[str, list[str]] = {}
-        non_self_args = [a for a in node.args.args if a.arg != "self"]
+        node_args = node.get("args", {})
+        all_args = node_args.get("args", []) if isinstance(node_args, dict) else []
+        non_self_args = [a for a in all_args if a.get("arg") != "self"]
         for arg in non_self_args:
-            if arg.annotation:
-                py_type = callbacks.annotation_to_str(arg.annotation)
+            arg_annotation = arg.get("annotation")
+            if arg_annotation:
+                py_type = callbacks.annotation_to_str(arg_annotation)
                 structs = callbacks.extract_union_struct_names(py_type)
                 if structs:
-                    union_types[arg.arg] = structs
+                    union_types[arg.get("arg")] = structs
         type_ctx = TypeContext(
             return_type=func_info.return_type if func_info else VOID,
             var_types=var_types,
@@ -248,9 +260,9 @@ def build_method_shell(
             union_types=union_types,
             list_element_unions=list_element_unions,
         )
-        body = callbacks.setup_and_lower_stmts(class_name, func_info, type_ctx, node.body)
+        body = callbacks.setup_and_lower_stmts(class_name, func_info, type_ctx, node_body)
     return Function(
-        name=node.name,
+        name=node_name,
         params=params,
         ret=func_info.return_type if func_info else VOID,
         body=body,
@@ -264,7 +276,7 @@ def build_method_shell(
 
 
 def build_function_shell(
-    node: ast.FunctionDef,
+    node: ASTNode,
     symbols: "SymbolTable",
     callbacks: BuilderCallbacks,
     with_body: bool = False,
@@ -272,7 +284,8 @@ def build_function_shell(
     """Build IR Function from AST. Set with_body=True to lower statements."""
     from .context import TypeContext
 
-    func_info = symbols.functions.get(node.name)
+    node_name = node.get("name")
+    func_info = symbols.functions.get(node_name)
     params = []
     if func_info:
         for p in func_info.params:
@@ -283,20 +296,23 @@ def build_function_shell(
         callbacks.setup_context("", func_info)
         # Collect variable types from body and add parameters
         var_types, tuple_vars, sentinel_ints, list_element_unions = callbacks.collect_var_types(
-            node.body
+            node.get("body", [])
         )
         if func_info:
             for p in func_info.params:
                 var_types[p.name] = p.typ
         # Extract union types from parameter annotations
         union_types: dict[str, list[str]] = {}
-        non_self_args = [a for a in node.args.args if a.arg != "self"]
+        args = node.get("args", {})
+        args_list = args.get("args", [])
+        non_self_args = [a for a in args_list if a.get("arg") != "self"]
         for arg in non_self_args:
-            if arg.annotation:
-                py_type = callbacks.annotation_to_str(arg.annotation)
+            annotation = arg.get("annotation")
+            if annotation:
+                py_type = callbacks.annotation_to_str(annotation)
                 structs = callbacks.extract_union_struct_names(py_type)
                 if structs:
-                    union_types[arg.arg] = structs
+                    union_types[arg.get("arg")] = structs
         type_ctx = TypeContext(
             return_type=func_info.return_type if func_info else VOID,
             var_types=var_types,
@@ -305,9 +321,9 @@ def build_function_shell(
             union_types=union_types,
             list_element_unions=list_element_unions,
         )
-        body = callbacks.setup_and_lower_stmts("", func_info, type_ctx, node.body)
+        body = callbacks.setup_and_lower_stmts("", func_info, type_ctx, node.get("body", []))
     return Function(
-        name=node.name,
+        name=node_name,
         params=params,
         ret=func_info.return_type if func_info else VOID,
         body=body,
@@ -316,16 +332,17 @@ def build_function_shell(
 
 
 def build_struct(
-    node: ast.ClassDef,
+    node: ASTNode,
     symbols: "SymbolTable",
     callbacks: BuilderCallbacks,
     with_body: bool = False,
 ) -> tuple[Struct | None, Function | None]:
     """Build IR Struct from class definition. Returns (struct, constructor_func)."""
     # Node is emitted as InterfaceDef, not Struct
-    if node.name == "Node":
+    node_name = node.get("name")
+    if node_name == "Node":
         return None, None
-    info = symbols.structs.get(node.name)
+    info = symbols.structs.get(node_name)
     if not info:
         return None, None
     # Build fields
@@ -340,14 +357,14 @@ def build_struct(
         )
     # Build methods
     methods = []
-    init_ast: ast.FunctionDef | None = None
-    for stmt in node.body:
-        if isinstance(stmt, ast.FunctionDef):
-            if stmt.name == "__init__":
+    init_ast: ASTNode | None = None
+    for stmt in node.get("body", []):
+        if is_type(stmt, "FunctionDef"):
+            if stmt.get("name") == "__init__":
                 init_ast = stmt
             else:
                 method = build_method_shell(
-                    stmt, node.name, symbols, callbacks, with_body=with_body
+                    stmt, node_name, symbols, callbacks, with_body=with_body
                 )
                 methods.append(method)
     implements = []
@@ -360,7 +377,7 @@ def build_struct(
         if base != "Exception" and callbacks.is_exception_subclass(base):
             embedded_type = base
     struct = Struct(
-        name=node.name,
+        name=node_name,
         fields=fields,
         methods=methods,
         implements=implements,
@@ -371,15 +388,15 @@ def build_struct(
     # Generate constructor function if needed
     ctor_func: Function | None = None
     if with_body and info.needs_constructor and init_ast:
-        ctor_func = build_constructor(node.name, init_ast, info, callbacks)
+        ctor_func = build_constructor(node_name, init_ast, info, callbacks)
     elif with_body and info.needs_constructor and embedded_type and not init_ast:
         # Exception subclass with no __init__ - forward to parent constructor
-        ctor_func = build_forwarding_constructor(node.name, embedded_type, symbols)
+        ctor_func = build_forwarding_constructor(node_name, embedded_type, symbols)
     return struct, ctor_func
 
 
 def build_module(
-    tree: ast.Module,
+    tree: ASTNode,
     symbols: "SymbolTable",
     callbacks: BuilderCallbacks,
 ) -> Module:
@@ -396,32 +413,32 @@ def build_module(
             Constant(name=const_name, typ=const_type, value=value, loc=Loc.unknown())
         )
     # Build constants (module-level and class-level)
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and len(node.targets) == 1:
-            target = node.targets[0]
+    for node in tree.get("body", []):
+        if is_type(node, "Assign") and len(node.get("targets", [])) == 1:
+            target = node.get("targets", [])[0]
             # Skip constants already handled by MODULE_CONSTANTS
-            if isinstance(target, ast.Name) and target.id in MODULE_CONSTANTS:
+            if is_type(target, "Name") and target.get("id") in MODULE_CONSTANTS:
                 continue
-            if isinstance(target, ast.Name) and target.id in symbols.constants:
-                value = callbacks.lower_expr(node.value)
-                const_type = symbols.constants[target.id]
+            if is_type(target, "Name") and target.get("id") in symbols.constants:
+                value = callbacks.lower_expr(node.get("value"))
+                const_type = symbols.constants[target.get("id")]
                 module.constants.append(
                     Constant(
-                        name=target.id,
+                        name=target.get("id"),
                         typ=const_type,
                         value=value,
                         loc=callbacks.loc_from_node(node),
                     )
                 )
-        elif isinstance(node, ast.ClassDef):
+        elif is_type(node, "ClassDef"):
             # Build class-level constants
-            for stmt in node.body:
-                if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
-                    target = stmt.targets[0]
-                    if isinstance(target, ast.Name) and target.id.isupper():
-                        const_name = f"{node.name}_{target.id}"
+            for stmt in node.get("body", []):
+                if is_type(stmt, "Assign") and len(stmt.get("targets", [])) == 1:
+                    target = stmt.get("targets", [])[0]
+                    if is_type(target, "Name") and target.get("id", "").isupper():
+                        const_name = f"{node.get('name')}_{target.get('id')}"
                         if const_name in symbols.constants:
-                            value = callbacks.lower_expr(stmt.value)
+                            value = callbacks.lower_expr(stmt.get("value"))
                             module.constants.append(
                                 Constant(
                                     name=const_name,
@@ -441,16 +458,16 @@ def build_module(
     module.interfaces.append(node_interface)
     # Build structs (with method bodies) and collect constructor functions
     constructor_funcs: list[Function] = []
-    for node in tree.body:
-        if isinstance(node, ast.ClassDef):
+    for node in tree.get("body", []):
+        if is_type(node, "ClassDef"):
             struct, ctor = build_struct(node, symbols, callbacks, with_body=True)
             if struct:
                 module.structs.append(struct)
             if ctor:
                 constructor_funcs.append(ctor)
     # Build functions (with bodies)
-    for node in tree.body:
-        if isinstance(node, ast.FunctionDef):
+    for node in tree.get("body", []):
+        if is_type(node, "FunctionDef"):
             func = build_function_shell(node, symbols, callbacks, with_body=True)
             module.functions.append(func)
     # Add constructor functions (must come after regular functions for dependency order)

@@ -2379,7 +2379,8 @@ def parse_fstring(token_value: str, lineno: int, col: int) -> list[ASTNode]:
         if c == "{":
             # Flush current string
             if len(current_str) > 0:
-                values.append(make_node("Constant", lineno, col, value=current_str))
+                processed = process_escapes(current_str, False)
+                values.append(make_node("Constant", lineno, col, value=processed))
                 current_str = ""
             # Find matching }
             brace_depth = 1
@@ -2415,7 +2416,8 @@ def parse_fstring(token_value: str, lineno: int, col: int) -> list[ASTNode]:
         i += 1
     # Flush remaining string
     if len(current_str) > 0:
-        values.append(make_node("Constant", lineno, col, value=current_str))
+        processed = process_escapes(current_str, False)
+        values.append(make_node("Constant", lineno, col, value=processed))
     return values
 
 

@@ -8,8 +8,6 @@ from .subset import VerifyResult, Violation, verify
 
 def compile(source: str) -> "Module":
     """Frontend pipeline: source → IR Module. Orchestrates phases 2-9."""
-    import ast
-
     # Phase 2: Parse to dict-based AST
     ast_dict = parse(source)  # validates syntax
 
@@ -29,12 +27,9 @@ def compile(source: str) -> "Module":
             first = errors[0]
             raise ParseError(first.message, first.lineno, first.col)
 
-    # Parse once with ast module for phases 5-9
-    tree = ast.parse(source)
-
-    # Phases 5-9: Use existing Frontend
+    # Phases 5-9: Use existing Frontend with dict AST
     fe = Frontend()
-    return fe.transpile(source, tree)
+    return fe.transpile(source, ast_dict)
 
 
 __all__ = [

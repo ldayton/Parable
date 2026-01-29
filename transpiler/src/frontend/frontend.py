@@ -6,7 +6,8 @@ All analysis happens here; backends just emit syntax.
 
 from __future__ import annotations
 
-import ast
+from .ast_compat import ASTNode
+from .parse import parse
 
 from ..ir import (
     BOOL,
@@ -52,10 +53,10 @@ class Frontend:
         self._kind_to_struct: dict[str, str] = {}
         self._kind_to_class: dict[str, str] = {}
 
-    def transpile(self, source: str, tree: ast.Module | None = None) -> Module:
+    def transpile(self, source: str, tree: ASTNode | None = None) -> Module:
         """Parse Python source and produce IR Module."""
         if tree is None:
-            tree = ast.parse(source)
+            tree = parse(source)
         # Pass 1: Collect class names and inheritance
         collection.collect_class_names(tree, self.symbols)
         # Pass 2: Mark Node subclasses
@@ -92,17 +93,17 @@ class Frontend:
         cb.infer_type_from_value = self._infer_type_from_value
         return cb
 
-    def _collect_signatures(self, tree: ast.Module) -> None:
+    def _collect_signatures(self, tree: ASTNode) -> None:
         """Pass 3: Collect function and method signatures."""
         collection.collect_signatures(tree, self.symbols, self._make_collection_callbacks_basic())
 
-    def _collect_fields(self, tree: ast.Module) -> None:
+    def _collect_fields(self, tree: ASTNode) -> None:
         """Pass 4: Collect struct fields from class definitions."""
         collection.collect_fields(
             tree, self.symbols, self._make_collection_callbacks_with_inference()
         )
 
-    def _build_module(self, tree: ast.Module) -> Module:
+    def _build_module(self, tree: ASTNode) -> Module:
         """Build IR Module from collected symbols."""
         callbacks = builders.BuilderCallbacks(
             annotation_to_str=self._annotation_to_str,
@@ -131,7 +132,7 @@ class Frontend:
         class_name: str,
         func_info: FuncInfo | None,
         type_ctx: TypeContext,
-        stmts: list[ast.stmt],
+        stmts: list[ASTNode],
     ) -> list:
         """Set up type context and lower statements."""
         self._current_class_name = class_name
@@ -139,34 +140,42 @@ class Frontend:
         self._type_ctx = type_ctx
         return self._lower_stmts(stmts)
 
-    def _annotation_to_str(self, node: ast.expr | None) -> str:
+    def _annotation_to_str(self, node: ASTNode | None) -> str:
         """Convert type annotation AST to string."""
-        match node:
-            case None:
-                return ""
-            case ast.Name(id=name):
-                return name
-            case ast.Constant(value=None):
+        if node is None:
+            return ""
+        if not isinstance(node, dict):
+            return ""
+        node_t = node.get("_type")
+        if node_t == "Name":
+            return node.get("id", "")
+        if node_t == "Constant":
+            v = node.get("value")
+            if v is None:
                 return "None"
-            case ast.Constant(value=v):
-                return str(v)
-            case ast.List(elts=elts):
-                # For annotations like Callable[[], T], the first arg is an ast.List
-                args = ", ".join(self._annotation_to_str(e) for e in elts)
-                return f"[{args}]"
-            case ast.Subscript(value=val, slice=ast.Tuple(elts=elts)):
-                base = self._annotation_to_str(val)
+            return str(v)
+        if node_t == "List":
+            # For annotations like Callable[[], T], the first arg is an ast.List
+            elts = node.get("elts", [])
+            args = ", ".join(self._annotation_to_str(e) for e in elts)
+            return f"[{args}]"
+        if node_t == "Subscript":
+            base = self._annotation_to_str(node.get("value"))
+            slc = node.get("slice", {})
+            if slc.get("_type") == "Tuple":
+                elts = slc.get("elts", [])
                 args = ", ".join(self._annotation_to_str(e) for e in elts)
                 return f"{base}[{args}]"
-            case ast.Subscript(value=val, slice=slc):
-                base = self._annotation_to_str(val)
-                return f"{base}[{self._annotation_to_str(slc)}]"
-            case ast.BinOp(left=left, right=right, op=ast.BitOr()):
-                return f"{self._annotation_to_str(left)} | {self._annotation_to_str(right)}"
-            case ast.Attribute(attr=attr):
-                return attr
-            case _:
-                return ""
+            return f"{base}[{self._annotation_to_str(slc)}]"
+        if node_t == "BinOp":
+            op = node.get("op", {})
+            if op.get("_type") == "BitOr":
+                left = self._annotation_to_str(node.get("left"))
+                right = self._annotation_to_str(node.get("right"))
+                return f"{left} | {right}"
+        if node_t == "Attribute":
+            return node.get("attr", "")
+        return ""
 
     def _py_type_to_ir(self, py_type: str, concrete_nodes: bool = False) -> Type:
         """Convert Python type string to IR Type."""
@@ -176,14 +185,14 @@ class Frontend:
         """Convert Python return type to IR, handling tuples as multiple returns."""
         return type_inference.py_return_type_to_ir(py_type, self.symbols, self._node_types)
 
-    def _infer_type_from_value(self, node: ast.expr, param_types: dict[str, str]) -> Type:
+    def _infer_type_from_value(self, node: ASTNode, param_types: dict[str, str]) -> Type:
         """Infer IR type from an expression."""
         return type_inference.infer_type_from_value(
             node, param_types, self.symbols, self._node_types
         )
 
     def _collect_var_types(
-        self, stmts: list[ast.stmt]
+        self, stmts: list[ASTNode]
     ) -> tuple[dict[str, Type], dict[str, list[str]], set[str], dict[str, list[str]]]:
         """Pre-scan function body to collect variable types, tuple var mappings, and sentinel ints."""
         cb = self._make_collection_callbacks_with_inference()
@@ -203,14 +212,14 @@ class Frontend:
             cb,
         )
 
-    def _infer_iterable_type(self, node: ast.expr, var_types: dict[str, Type]) -> Type:
+    def _infer_iterable_type(self, node: ASTNode, var_types: dict[str, Type]) -> Type:
         """Infer the type of an iterable expression."""
         return type_inference.infer_iterable_type(
             node, var_types, self._current_class_name, self.symbols
         )
 
     def _infer_element_type_from_append_arg(
-        self, arg: ast.expr, var_types: dict[str, Type]
+        self, arg: ASTNode, var_types: dict[str, Type]
     ) -> Type:
         """Infer slice element type from what's being appended."""
         cb = self._make_collection_callbacks_with_inference()
@@ -220,13 +229,13 @@ class Frontend:
             arg, var_types, self.symbols, self._current_class_name, self._current_func_info, cb
         )
 
-    def _infer_container_type_from_ast(self, node: ast.expr, var_types: dict[str, Type]) -> Type:
+    def _infer_container_type_from_ast(self, node: ASTNode, var_types: dict[str, Type]) -> Type:
         """Infer the type of a container expression from AST."""
         return type_inference.infer_container_type_from_ast(
             node, self.symbols, self._current_class_name, self._current_func_info, var_types
         )
 
-    def _merge_keyword_args(self, obj_type: Type, method: str, args: list, node: ast.Call) -> list:
+    def _merge_keyword_args(self, obj_type: Type, method: str, args: list, node: ASTNode) -> list:
         return lowering.merge_keyword_args(
             obj_type,
             method,
@@ -242,11 +251,11 @@ class Frontend:
             obj_type, method, args, self.symbols, type_inference.extract_struct_name
         )
 
-    def _merge_keyword_args_for_func(self, func_info: FuncInfo, args: list, node: ast.Call) -> list:
+    def _merge_keyword_args_for_func(self, func_info: FuncInfo, args: list, node: ASTNode) -> list:
         return lowering.merge_keyword_args_for_func(func_info, args, node, self._lower_expr)
 
     def _add_address_of_for_ptr_params(
-        self, obj_type: Type, method: str, args: list, orig_args: list[ast.expr]
+        self, obj_type: Type, method: str, args: list, orig_args: list[ASTNode]
     ) -> list:
         return lowering.add_address_of_for_ptr_params(
             obj_type,
@@ -259,7 +268,7 @@ class Frontend:
         )
 
     def _deref_for_slice_params(
-        self, obj_type: Type, method: str, args: list, orig_args: list[ast.expr]
+        self, obj_type: Type, method: str, args: list, orig_args: list[ASTNode]
     ) -> list:
         return lowering.deref_for_slice_params(
             obj_type,
@@ -272,7 +281,7 @@ class Frontend:
         )
 
     def _deref_for_func_slice_params(
-        self, func_name: str, args: list, orig_args: list[ast.expr]
+        self, func_name: str, args: list, orig_args: list[ASTNode]
     ) -> list:
         return lowering.deref_for_func_slice_params(
             func_name, args, orig_args, self.symbols, self._infer_expr_type_from_ast
@@ -291,7 +300,7 @@ class Frontend:
             type_inference.extract_struct_name,
         )
 
-    def _infer_call_return_type(self, node: ast.Call) -> Type:
+    def _infer_call_return_type(self, node: ASTNode) -> Type:
         return type_inference.infer_call_return_type(
             node,
             self.symbols,
@@ -336,7 +345,7 @@ class Frontend:
         )
         return ctx, dispatch
 
-    def _lower_expr_as_bool(self, node: ast.expr) -> "ir.Expr":
+    def _lower_expr_as_bool(self, node: ASTNode) -> "ir.Expr":
         """Lower expression used in boolean context, adding truthy checks as needed."""
         return lowering.lower_expr_as_bool(
             node,
@@ -349,12 +358,12 @@ class Frontend:
             self.symbols,
         )
 
-    def _lower_expr(self, node: ast.expr) -> "ir.Expr":
+    def _lower_expr(self, node: ASTNode) -> "ir.Expr":
         """Lower a Python expression to IR."""
         ctx, dispatch = self._make_ctx_and_dispatch()
         return lowering.lower_expr(node, ctx, dispatch)
 
-    def _infer_expr_type_from_ast(self, node: ast.expr) -> Type:
+    def _infer_expr_type_from_ast(self, node: ASTNode) -> Type:
         """Infer the type of a Python AST expression without lowering it."""
         return type_inference.infer_expr_type_from_ast(
             node,
@@ -365,7 +374,7 @@ class Frontend:
             self._node_types,
         )
 
-    def _lower_expr_List(self, node: ast.List, expected_type: Type | None = None) -> "ir.Expr":
+    def _lower_expr_List(self, node: ASTNode, expected_type: Type | None = None) -> "ir.Expr":
         return lowering.lower_expr_List(
             node,
             self._lower_expr,
@@ -374,20 +383,20 @@ class Frontend:
             expected_type,
         )
 
-    def _lower_stmt(self, node: ast.stmt) -> "ir.Stmt":
+    def _lower_stmt(self, node: ASTNode) -> "ir.Stmt":
         """Lower a Python statement to IR."""
         ctx, dispatch = self._make_ctx_and_dispatch()
         return lowering.lower_stmt(node, ctx, dispatch)
 
-    def _lower_stmts(self, stmts: list[ast.stmt]) -> list["ir.Stmt"]:
+    def _lower_stmts(self, stmts: list[ASTNode]) -> list["ir.Stmt"]:
         """Lower a list of statements."""
         return [self._lower_stmt(s) for s in stmts]
 
-    def _is_isinstance_call(self, node: ast.expr) -> tuple[str, str] | None:
+    def _is_isinstance_call(self, node: ASTNode) -> tuple[str, str] | None:
         """Check if node is isinstance(var, Type). Returns (var_name, type_name) or None."""
         return lowering.is_isinstance_call(node)
 
-    def _is_kind_check(self, node: ast.expr) -> tuple[str, str] | None:
+    def _is_kind_check(self, node: ASTNode) -> tuple[str, str] | None:
         """Check if node is x.kind == "typename". Returns (var_name, class_name) or None."""
         return lowering.is_kind_check(node, self._kind_to_class)
 
@@ -401,6 +410,6 @@ class Frontend:
         self._current_catch_var = var
         return saved
 
-    def _lower_lvalue(self, node: ast.expr) -> "ir.LValue":
+    def _lower_lvalue(self, node: ASTNode) -> "ir.LValue":
         """Lower an expression to an LValue."""
         return lowering.lower_lvalue(node, self._lower_expr)

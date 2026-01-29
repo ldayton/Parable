@@ -5,34 +5,47 @@ project := "parable"
 run_id := `head -c 16 /dev/urandom | xxd -p`
 backends := "go python ts"  # Testable transpiled backends
 
+# --- Helpers ---
+
+[private]
+_banner label:
+    @printf '{{BOLD}}{{CYAN}}==> %s{{NORMAL}}\n' '{{label}}'
+
 # --- Source (src/parable.py) ---
 
 # Run parser tests against source
-src-test *ARGS:
-    uv run tests/bin/run-tests.py {{ARGS}} 2>&1 | sed -u "s/^/[src-test] /" | tee /tmp/{{project}}-{{run_id}}-test.log
+[group: 'source']
+src-test *ARGS: (_banner "src-test")
+    uv run tests/bin/run-tests.py {{ARGS}}
 
 # Lint (--fix to apply changes)
-src-lint *ARGS:
-    uvx ruff check {{ if ARGS == "--fix" { "--fix" } else { "" } }} src/ 2>&1 | sed -u "s/^/[src-lint] /" | tee /tmp/{{project}}-{{run_id}}-lint.log
+[group: 'source']
+src-lint *ARGS: (_banner "src-lint")
+    uvx ruff check {{ if ARGS == "--fix" { "--fix" } else { "" } }} src/
 
 # Format (--fix to apply changes)
-src-fmt *ARGS:
-    uvx ruff format {{ if ARGS == "--fix" { "" } else { "--check" } }} src/ 2>&1 | sed -u "s/^/[src-fmt] /" | tee /tmp/{{project}}-{{run_id}}-fmt.log
+[group: 'source']
+src-fmt *ARGS: (_banner "src-fmt")
+    uvx ruff format {{ if ARGS == "--fix" { "" } else { "--check" } }} src/
 
 # Check for banned Python constructions
-src-style:
-    just -f transpiler/justfile style "$(pwd)/src" 2>&1 | sed -u "s/^/[src-style] /" | tee /tmp/{{project}}-{{run_id}}-style.log
+[group: 'source']
+src-style: (_banner "src-style")
+    just -f transpiler/justfile style "$(pwd)/src"
 
 # Verify lock file is up to date
-src-verify-lock:
-    uv lock --check 2>&1 | sed -u "s/^/[src-verify-lock] /" | tee /tmp/{{project}}-{{run_id}}-verify-lock.log
+[group: 'source']
+src-verify-lock: (_banner "src-verify-lock")
+    uv lock --check
 
 # --- Backends (transpiled output in dist/) ---
 
 # Transpile base to dist/<backend>/
+[group: 'backends']
 backend-transpile backend:
     #!/usr/bin/env bash
     set -euo pipefail
+    printf '{{BOLD}}{{CYAN}}==> backend-transpile %s{{NORMAL}}\n' '{{backend}}'
     case "{{backend}}" in
         go)
             out="dist/go/parable.go"
@@ -58,9 +71,11 @@ backend-transpile backend:
     esac
 
 # Run tests on transpiled backend
+[group: 'backends']
 backend-test backend:
     #!/usr/bin/env bash
     set -euo pipefail
+    printf '{{BOLD}}{{CYAN}}==> backend-test %s{{NORMAL}}\n' '{{backend}}'
     tests_abs="$(pwd)/tests"
     case "{{backend}}" in
         go)
@@ -91,7 +106,8 @@ backend-test backend:
     esac
 
 # Compile Java (transpile + javac, no tests)
-backend-compile-java:
+[group: 'backends']
+backend-compile-java: (_banner "backend-compile-java")
     just backend-transpile java
     mkdir -p dist/java/classes
     javac -d dist/java/classes dist/java/Parable.java dist/java/RunTests.java
@@ -99,35 +115,43 @@ backend-compile-java:
 # --- CI/Check ---
 
 # Internal: run all parallel checks
+[private]
 [parallel]
 _check-parallel: src-test src-lint src-fmt src-verify-lock src-style check-dump-ast (backend-test "go") (backend-test "python") (backend-test "ts") backend-compile-java
 
 # Ensure biome is installed (prevents race condition in parallel JS checks)
+[private]
 _ensure-biome:
     @npx -y @biomejs/biome --version >/dev/null 2>&1
 
 # Run all checks (parallel)
+[group: 'ci']
 check: _ensure-biome _check-parallel
 
 # Quick check: test source, transpile and test Go
+[group: 'ci']
 check-quick: src-style src-test (backend-test "go")
 
 # --- Tools ---
 
 # Run the fuzzer (e.g., just fuzz char --stop-after 10)
+[group: 'tools']
 fuzz *ARGS:
     FUZZER_ORIG_CWD="{{invocation_directory()}}" uv run --directory tools/fuzzer fuzzer {{ARGS}}
 
 # Run the fuzzer agent
+[group: 'tools']
 fuzzer-agent *ARGS:
     uv run --directory tools/fuzzer-agent fuzzer-agent {{ARGS}}
 
 # Run source against the bigtable-bash corpus
+[group: 'tools']
 src-run-corpus *ARGS:
     uv run tests/bin/run-corpus.py {{ARGS}}
 
 # Verify test expectations match bash-oracle
-check-tests:
+[group: 'ci']
+check-tests: (_banner "check-tests")
     #!/usr/bin/env bash
     set -e
     check_binary() {
@@ -164,20 +188,22 @@ check-tests:
     BASH_ORACLE="$ORACLE_PATH" exec tests/bin/verify-tests.py
 
 # Verify parable-dump.py works
-check-dump-ast:
+[group: 'ci']
+check-dump-ast: (_banner "check-dump-ast")
     @output=$(uv run bin/parable-dump.py 'echo hello') && \
     expected='(command (word "echo") (word "hello"))' && \
     if [ "$output" = "$expected" ]; then \
-        echo "[dump-ast] OK"; \
+        echo "OK"; \
     else \
-        echo "[dump-ast] FAIL: expected '$expected', got '$output'" >&2; \
+        echo "FAIL: expected '$expected', got '$output'" >&2; \
         exit 1; \
     fi
 
 # --- Profiling ---
 
 # Run coverage analysis on source test suite
-src-coverage:
+[group: 'profiling']
+src-coverage: (_banner "src-coverage")
     #!/usr/bin/env bash
     set -euo pipefail
     uv run --with coverage coverage run tests/bin/run-tests.py
@@ -190,9 +216,11 @@ src-coverage:
     open /tmp/parable-coverage/index.html 2>/dev/null || true
 
 # Run coverage analysis on backend test suite
+[group: 'profiling']
 backend-coverage backend:
     #!/usr/bin/env bash
     set -euo pipefail
+    printf '{{BOLD}}{{CYAN}}==> backend-coverage %s{{NORMAL}}\n' '{{backend}}'
     case "{{backend}}" in
         go)
             rm -rf /tmp/parable-coverage-go-raw
@@ -214,5 +242,6 @@ backend-coverage backend:
     esac
 
 # Benchmark source test suite
-src-benchmark:
+[group: 'profiling']
+src-benchmark: (_banner "src-benchmark")
     hyperfine --warmup 2 --runs ${RUNS:-5} 'uv run tests/bin/run-tests.py 2>&1'

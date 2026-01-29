@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import ast
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable
+
+from .ast_compat import ASTNode
 
 if TYPE_CHECKING:
     from .. import ir
@@ -59,23 +60,23 @@ class LoweringDispatch:
     """
 
     # Recursive lowering (MUST STAY - recursive)
-    lower_expr: Callable[[ast.expr], "ir.Expr"]
-    lower_expr_as_bool: Callable[[ast.expr], "ir.Expr"]
-    lower_stmts: Callable[[list[ast.stmt]], list["ir.Stmt"]]
-    lower_lvalue: Callable[[ast.expr], "ir.LValue"]
+    lower_expr: Callable[[ASTNode], "ir.Expr"]
+    lower_expr_as_bool: Callable[[ASTNode], "ir.Expr"]
+    lower_stmts: Callable[[list[ASTNode]], list["ir.Stmt"]]
+    lower_lvalue: Callable[[ASTNode], "ir.LValue"]
     # Bidirectional type inference (MUST STAY - uses expected type context)
-    lower_expr_List: Callable[[ast.List, "Type | None"], "ir.Expr"]
+    lower_expr_List: Callable[[ASTNode, "Type | None"], "ir.Expr"]
     # Type inference (MUST STAY - uses mutable _type_ctx)
-    infer_expr_type_from_ast: Callable[[ast.expr], "Type"]
+    infer_expr_type_from_ast: Callable[[ASTNode], "Type"]
     # Helper (MUST STAY - recursive AST traversal)
-    annotation_to_str: Callable[[ast.expr | None], str]
+    annotation_to_str: Callable[[ASTNode | None], str]
     # Argument handling (MUST STAY - pass lower_expr/infer callbacks internally)
-    merge_keyword_args: Callable[["Type", str, list, ast.Call], list]
+    merge_keyword_args: Callable[["Type", str, list, ASTNode], list]
     fill_default_args: Callable[["Type", str, list], list]
-    merge_keyword_args_for_func: Callable[["FuncInfo", list, ast.Call], list]
-    add_address_of_for_ptr_params: Callable[["Type", str, list, list[ast.expr]], list]
-    deref_for_slice_params: Callable[["Type", str, list, list[ast.expr]], list]
-    deref_for_func_slice_params: Callable[[str, list, list[ast.expr]], list]
+    merge_keyword_args_for_func: Callable[["FuncInfo", list, ASTNode], list]
+    add_address_of_for_ptr_params: Callable[["Type", str, list, list[ASTNode]], list]
+    deref_for_slice_params: Callable[["Type", str, list, list[ASTNode]], list]
+    deref_for_func_slice_params: Callable[[str, list, list[ASTNode]], list]
     coerce_sentinel_to_ptr: Callable[["Type", str, list, list], list]
     # Exception handling (MUST STAY - mutates instance state)
     set_catch_var: Callable[[str | None], str | None]

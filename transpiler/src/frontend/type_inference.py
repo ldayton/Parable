@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ast
 from typing import TYPE_CHECKING
 
 from ..ir import (
@@ -302,111 +301,138 @@ def py_return_type_to_ir(
 
 
 def infer_type_from_value(
-    node: ast.expr,
+    node: dict,
     param_types: dict[str, str],
     symbols: SymbolTable,
     node_types: set[str],
 ) -> Type:
     """Infer IR type from an expression."""
-    match node:
-        case ast.Constant(value=bool()):
+    from .ast_compat import is_type
+
+    node_t = node.get("_type")
+    if node_t == "Constant":
+        value = node.get("value")
+        if isinstance(value, bool):
             return BOOL
-        case ast.Constant(value=int()):
+        if isinstance(value, int):
             return INT
-        case ast.Constant(value=str()):
+        if isinstance(value, str):
             return STRING
-        case ast.Constant(value=None):
+        if value is None:
             return InterfaceRef("any")
-        case ast.List(elts=[first, *_]):
-            return Slice(infer_type_from_value(first, param_types, symbols, node_types))
-        case ast.List():
-            return Slice(InterfaceRef("any"))
-        case ast.Dict(values=values) if values and all(
-            isinstance(v, ast.Constant) and isinstance(v.value, str) for v in values
+    elif node_t == "List":
+        elts = node.get("elts", [])
+        if elts:
+            return Slice(infer_type_from_value(elts[0], param_types, symbols, node_types))
+        return Slice(InterfaceRef("any"))
+    elif node_t == "Dict":
+        values = node.get("values", [])
+        if values and all(
+            isinstance(v, dict) and v.get("_type") == "Constant" and isinstance(v.get("value"), str)
+            for v in values
         ):
             return Map(STRING, STRING)
-        case ast.Dict():
-            return Map(STRING, InterfaceRef("any"))
-        case ast.Name(id=name) if name in param_types:
+        return Map(STRING, InterfaceRef("any"))
+    elif node_t == "Name":
+        name = node.get("id")
+        if name in param_types:
             return py_type_to_ir(param_types[name], symbols, node_types)
-        case ast.Name(id="True" | "False"):
+        if name in ("True", "False"):
             return BOOL
-        case ast.Name(id="None"):
+        if name == "None":
             return InterfaceRef("any")
-        case ast.Call(func=ast.Name(id="len")):
-            return INT
-        case ast.Call(func=ast.Name(id=func_name)) if func_name in symbols.structs:
-            info = symbols.structs[func_name]
-            if info.is_node:
-                return InterfaceRef("Node")
-            return Pointer(StructRef(func_name))
-        case ast.Call(func=ast.Name(id="QuoteState")):
-            return Pointer(StructRef("QuoteState"))
-        case ast.Call(func=ast.Name(id="ContextStack")):
-            return Pointer(StructRef("ContextStack"))
-        case ast.Attribute(value=ast.Name(id=class_name)) if class_name in (
-            "ParserStateFlags",
-            "DolbraceState",
-            "TokenType",
-            "MatchedPairFlags",
-            "WordCtx",
-            "ParseContext",
-        ):
-            return INT
+    elif node_t == "Call":
+        func = node.get("func")
+        if is_type(func, "Name"):
+            func_name = func.get("id")
+            if func_name == "len":
+                return INT
+            if func_name in symbols.structs:
+                info = symbols.structs[func_name]
+                if info.is_node:
+                    return InterfaceRef("Node")
+                return Pointer(StructRef(func_name))
+            if func_name == "QuoteState":
+                return Pointer(StructRef("QuoteState"))
+            if func_name == "ContextStack":
+                return Pointer(StructRef("ContextStack"))
+    elif node_t == "Attribute":
+        value = node.get("value")
+        if is_type(value, "Name"):
+            class_name = value.get("id")
+            if class_name in (
+                "ParserStateFlags",
+                "DolbraceState",
+                "TokenType",
+                "MatchedPairFlags",
+                "WordCtx",
+                "ParseContext",
+            ):
+                return INT
     return InterfaceRef("any")
 
 
 def infer_iterable_type(
-    node: ast.expr,
+    node: dict,
     var_types: dict[str, Type],
     current_class_name: str,
     symbols: SymbolTable,
 ) -> Type:
     """Infer the type of an iterable expression."""
+    from .ast_compat import is_type
+
     # self.field
-    if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
-        if node.value.id == "self" and current_class_name:
-            struct_info = symbols.structs.get(current_class_name)
-            if struct_info:
-                field_info = struct_info.fields.get(node.attr)
-                if field_info:
-                    return field_info.typ
+    if is_type(node, "Attribute"):
+        value = node.get("value")
+        if is_type(value, "Name"):
+            if value.get("id") == "self" and current_class_name:
+                struct_info = symbols.structs.get(current_class_name)
+                if struct_info:
+                    field_info = struct_info.fields.get(node.get("attr"))
+                    if field_info:
+                        return field_info.typ
     # Variable reference
-    if isinstance(node, ast.Name):
-        if node.id in var_types:
-            return var_types[node.id]
+    if is_type(node, "Name"):
+        name_id = node.get("id")
+        if name_id in var_types:
+            return var_types[name_id]
     return InterfaceRef("any")
 
 
 def infer_container_type_from_ast(
-    node: ast.expr,
+    node: dict,
     symbols: SymbolTable,
     current_class_name: str,
     current_func_info: FuncInfo | None,
     var_types: dict[str, Type],
 ) -> Type:
     """Infer the type of a container expression from AST."""
-    if isinstance(node, ast.Name):
-        if node.id in var_types:
-            return var_types[node.id]
+    from .ast_compat import is_type
+
+    if is_type(node, "Name"):
+        name_id = node.get("id")
+        if name_id in var_types:
+            return var_types[name_id]
         # Check function parameters
         if current_func_info:
             for p in current_func_info.params:
-                if p.name == node.id:
+                if p.name == name_id:
                     return p.typ
-    elif isinstance(node, ast.Attribute):
-        if isinstance(node.value, ast.Name):
-            if node.value.id == "self" and current_class_name:
+    elif is_type(node, "Attribute"):
+        value = node.get("value")
+        if is_type(value, "Name"):
+            value_id = value.get("id")
+            if value_id == "self" and current_class_name:
                 struct_info = symbols.structs.get(current_class_name)
                 if struct_info:
-                    field_info = struct_info.fields.get(node.attr)
+                    field_info = struct_info.fields.get(node.get("attr"))
                     if field_info:
                         return field_info.typ
-            elif node.value.id in var_types:
-                obj_type = var_types[node.value.id]
+            elif value_id in var_types:
+                obj_type = var_types[value_id]
                 struct_name = extract_struct_name(obj_type)
                 if struct_name and struct_name in symbols.structs:
-                    field_info = symbols.structs[struct_name].fields.get(node.attr)
+                    field_info = symbols.structs[struct_name].fields.get(node.get("attr"))
                     if field_info:
                         return field_info.typ
     return InterfaceRef("any")
@@ -530,7 +556,7 @@ def synthesize_type(
 
 
 def infer_expr_type_from_ast(
-    node: ast.expr,
+    node: dict,
     type_ctx: "TypeContext",
     symbols: SymbolTable,
     current_func_info: FuncInfo | None,
@@ -538,32 +564,38 @@ def infer_expr_type_from_ast(
     node_types: set[str],
 ) -> Type:
     """Infer the type of a Python AST expression without lowering it."""
+    from .ast_compat import is_type, op_type
+
+    node_t = node.get("_type")
     # Constant literals
-    if isinstance(node, ast.Constant):
-        if isinstance(node.value, bool):
+    if node_t == "Constant":
+        value = node.get("value")
+        if isinstance(value, bool):
             return BOOL
-        if isinstance(node.value, int):
+        if isinstance(value, int):
             return INT
-        if isinstance(node.value, str):
+        if isinstance(value, str):
             return STRING
-        if isinstance(node.value, float):
+        if isinstance(value, float):
             return FLOAT
     # Variable lookup
-    if isinstance(node, ast.Name):
-        if node.id in type_ctx.var_types:
-            return type_ctx.var_types[node.id]
+    if node_t == "Name":
+        name_id = node.get("id")
+        if name_id in type_ctx.var_types:
+            return type_ctx.var_types[name_id]
         # Check constants
-        if node.id in symbols.constants:
-            return symbols.constants[node.id]
+        if name_id in symbols.constants:
+            return symbols.constants[name_id]
         # Check function parameters
         if current_func_info:
             for p in current_func_info.params:
-                if p.name == node.id:
+                if p.name == name_id:
                     return p.typ
     # Field access
-    if isinstance(node, ast.Attribute):
-        if isinstance(node.value, ast.Name) and node.value.id == "self":
-            field = node.attr
+    if node_t == "Attribute":
+        value = node.get("value")
+        if is_type(value, "Name") and value.get("id") == "self":
+            field = node.get("attr")
             if current_class_name in symbols.structs:
                 struct_info = symbols.structs[current_class_name]
                 field_info = struct_info.fields.get(field)
@@ -572,42 +604,44 @@ def infer_expr_type_from_ast(
         else:
             # Field access on other objects - infer object type then look up field
             obj_type = infer_expr_type_from_ast(
-                node.value, type_ctx, symbols, current_func_info, current_class_name, node_types
+                value, type_ctx, symbols, current_func_info, current_class_name, node_types
             )
             struct_name = extract_struct_name(obj_type)
             if struct_name and struct_name in symbols.structs:
                 struct_info = symbols.structs[struct_name]
-                field_info = struct_info.fields.get(node.attr)
+                field_info = struct_info.fields.get(node.get("attr"))
                 if field_info:
                     return field_info.typ
     # Method call - look up return type
-    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-        obj_type = infer_expr_type_from_ast(
-            node.func.value, type_ctx, symbols, current_func_info, current_class_name, node_types
-        )
-        return synthesize_method_return_type(obj_type, node.func.attr, symbols, node_types)
-    # Free function call - look up return type
-    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-        func_name = node.func.id
-        # Built-in functions
-        if func_name == "len":
-            return INT
-        if func_name in ("int", "ord"):
-            return INT
-        if func_name in ("str", "chr"):
-            return STRING
-        if func_name == "bool":
-            return BOOL
-        # Constructor calls
-        if func_name in symbols.structs:
-            return Pointer(StructRef(func_name))
-        # Regular function calls
-        if func_name in symbols.functions:
-            return symbols.functions[func_name].return_type
+    if node_t == "Call":
+        func = node.get("func")
+        if is_type(func, "Attribute"):
+            obj_type = infer_expr_type_from_ast(
+                func.get("value"), type_ctx, symbols, current_func_info, current_class_name, node_types
+            )
+            return synthesize_method_return_type(obj_type, func.get("attr"), symbols, node_types)
+        # Free function call - look up return type
+        if is_type(func, "Name"):
+            func_name = func.get("id")
+            # Built-in functions
+            if func_name == "len":
+                return INT
+            if func_name in ("int", "ord"):
+                return INT
+            if func_name in ("str", "chr"):
+                return STRING
+            if func_name == "bool":
+                return BOOL
+            # Constructor calls
+            if func_name in symbols.structs:
+                return Pointer(StructRef(func_name))
+            # Regular function calls
+            if func_name in symbols.functions:
+                return symbols.functions[func_name].return_type
     # Subscript - derive element type from container
-    if isinstance(node, ast.Subscript):
+    if node_t == "Subscript":
         val_type = infer_expr_type_from_ast(
-            node.value, type_ctx, symbols, current_func_info, current_class_name, node_types
+            node.get("value"), type_ctx, symbols, current_func_info, current_class_name, node_types
         )
         if val_type == STRING:
             return STRING  # string indexing returns string (after Cast)
@@ -616,15 +650,16 @@ def infer_expr_type_from_ast(
         if isinstance(val_type, Map):
             return val_type.value
     # BinOp - infer type based on operator
-    if isinstance(node, ast.BinOp):
-        if isinstance(node.op, (ast.BitAnd, ast.BitOr, ast.BitXor, ast.LShift, ast.RShift)):
+    if node_t == "BinOp":
+        op = op_type(node.get("op"))
+        if op in ("BitAnd", "BitOr", "BitXor", "LShift", "RShift"):
             return INT
-        if isinstance(node.op, (ast.Add, ast.Sub, ast.Mult, ast.FloorDiv, ast.Mod)):
+        if op in ("Add", "Sub", "Mult", "FloorDiv", "Mod"):
             left_type = infer_expr_type_from_ast(
-                node.left, type_ctx, symbols, current_func_info, current_class_name, node_types
+                node.get("left"), type_ctx, symbols, current_func_info, current_class_name, node_types
             )
             right_type = infer_expr_type_from_ast(
-                node.right, type_ctx, symbols, current_func_info, current_class_name, node_types
+                node.get("right"), type_ctx, symbols, current_func_info, current_class_name, node_types
             )
             if left_type == INT or right_type == INT:
                 return INT
@@ -632,7 +667,7 @@ def infer_expr_type_from_ast(
 
 
 def infer_call_return_type(
-    node: ast.Call,
+    node: dict,
     symbols: SymbolTable,
     type_ctx: "TypeContext",
     current_func_info: FuncInfo | None,
@@ -640,19 +675,22 @@ def infer_call_return_type(
     node_types: set[str],
 ) -> Type:
     """Infer the return type of a function or method call."""
-    if isinstance(node.func, ast.Attribute):
+    from .ast_compat import is_type
+
+    func = node.get("func")
+    if is_type(func, "Attribute"):
         # Method call - look up return type
         obj_type = infer_expr_type_from_ast(
-            node.func.value, type_ctx, symbols, current_func_info, current_class_name, node_types
+            func.get("value"), type_ctx, symbols, current_func_info, current_class_name, node_types
         )
         struct_name = extract_struct_name(obj_type)
         if struct_name and struct_name in symbols.structs:
-            method_info = symbols.structs[struct_name].methods.get(node.func.attr)
+            method_info = symbols.structs[struct_name].methods.get(func.get("attr"))
             if method_info:
                 return method_info.return_type
-    elif isinstance(node.func, ast.Name):
+    elif is_type(func, "Name"):
         # Free function call
-        func_name = node.func.id
+        func_name = func.get("id")
         if func_name in symbols.functions:
             return symbols.functions[func_name].return_type
     return InterfaceRef("any")

@@ -230,3 +230,54 @@ def build_method_shell(
         ),
         loc=callbacks.loc_from_node(node),
     )
+
+
+def build_function_shell(
+    node: ast.FunctionDef,
+    symbols: "SymbolTable",
+    callbacks: BuilderCallbacks,
+    with_body: bool = False,
+) -> Function:
+    """Build IR Function from AST. Set with_body=True to lower statements."""
+    from .context import TypeContext
+    func_info = symbols.functions.get(node.name)
+    params = []
+    if func_info:
+        for p in func_info.params:
+            params.append(
+                Param(name=p.name, typ=p.typ, default=p.default_value, loc=Loc.unknown())
+            )
+    body: list["ir.Stmt"] = []
+    if with_body:
+        # Set up context first (needed by collect_var_types) - empty class name for functions
+        callbacks.setup_context("", func_info)
+        # Collect variable types from body and add parameters
+        var_types, tuple_vars, sentinel_ints, list_element_unions = callbacks.collect_var_types(node.body)
+        if func_info:
+            for p in func_info.params:
+                var_types[p.name] = p.typ
+        # Extract union types from parameter annotations
+        union_types: dict[str, list[str]] = {}
+        non_self_args = [a for a in node.args.args if a.arg != "self"]
+        for arg in non_self_args:
+            if arg.annotation:
+                py_type = callbacks.annotation_to_str(arg.annotation)
+                structs = callbacks.extract_union_struct_names(py_type)
+                if structs:
+                    union_types[arg.arg] = structs
+        type_ctx = TypeContext(
+            return_type=func_info.return_type if func_info else VOID,
+            var_types=var_types,
+            tuple_vars=tuple_vars,
+            sentinel_ints=sentinel_ints,
+            union_types=union_types,
+            list_element_unions=list_element_unions,
+        )
+        body = callbacks.setup_and_lower_stmts("", func_info, type_ctx, node.body)
+    return Function(
+        name=node.name,
+        params=params,
+        ret=func_info.return_type if func_info else VOID,
+        body=body,
+        loc=callbacks.loc_from_node(node),
+    )

@@ -362,48 +362,20 @@ class Frontend:
 
     def _build_function_shell(self, node: ast.FunctionDef, with_body: bool = False) -> Function:
         """Build IR Function from AST. Set with_body=True to lower statements."""
-        func_info = self.symbols.functions.get(node.name)
-        params = []
-        if func_info:
-            for p in func_info.params:
-                params.append(
-                    Param(name=p.name, typ=p.typ, default=p.default_value, loc=Loc.unknown())
-                )
-        body = []
-        if with_body:
-            # Set up type context for this function
-            self._current_func_info = func_info
-            self._current_class_name = ""
-            # Collect variable types from body and add parameters
-            var_types, tuple_vars, sentinel_ints, list_element_unions = self._collect_var_types(node.body)
-            if func_info:
-                for p in func_info.params:
-                    var_types[p.name] = p.typ
-            # Extract union types from parameter annotations
-            union_types: dict[str, list[str]] = {}
-            non_self_args = [a for a in node.args.args if a.arg != "self"]
-            for arg in non_self_args:
-                if arg.annotation:
-                    py_type = self._annotation_to_str(arg.annotation)
-                    structs = self._extract_union_struct_names(py_type)
-                    if structs:
-                        union_types[arg.arg] = structs
-            self._type_ctx = TypeContext(
-                return_type=func_info.return_type if func_info else VOID,
-                var_types=var_types,
-                tuple_vars=tuple_vars,
-                sentinel_ints=sentinel_ints,
-                union_types=union_types,
-                list_element_unions=list_element_unions,
-            )
-            body = self._lower_stmts(node.body)
-        return Function(
-            name=node.name,
-            params=params,
-            ret=func_info.return_type if func_info else VOID,
-            body=body,
-            loc=self._loc_from_node(node),
+        callbacks = builders.BuilderCallbacks(
+            annotation_to_str=self._annotation_to_str,
+            py_type_to_ir=self._py_type_to_ir,
+            py_return_type_to_ir=self._py_return_type_to_ir,
+            lower_expr=self._lower_expr,
+            lower_stmts=self._lower_stmts,
+            collect_var_types=self._collect_var_types,
+            is_exception_subclass=self._is_exception_subclass,
+            extract_union_struct_names=self._extract_union_struct_names,
+            loc_from_node=self._loc_from_node,
+            setup_context=self._setup_context,
+            setup_and_lower_stmts=self._setup_and_lower_stmts,
         )
+        return builders.build_function_shell(node, self.symbols, callbacks, with_body)
 
     def _build_method_shell(self, node: ast.FunctionDef, class_name: str, with_body: bool = False) -> Function:
         """Build IR Function for a method. Set with_body=True to lower statements."""

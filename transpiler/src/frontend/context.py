@@ -45,17 +45,27 @@ class LoweringDispatch:
 
     These callbacks allow extracted lowering functions to call back into
     the Frontend instance for recursive lowering and type inference.
+
+    Why these callbacks must stay (cannot be inlined):
+    - lower_expr/lower_expr_as_bool/lower_stmts/lower_lvalue: Recursive calls
+    - lower_expr_List: Bidirectional type inference for constructors
+    - infer_expr_type_from_ast: Uses mutable _type_ctx state
+    - annotation_to_str: Recursive AST traversal with self reference
+    - merge_keyword_args/fill_default_args/etc: Pass lower_expr/infer callbacks
+    - set_catch_var: Mutates Frontend instance state
     """
+    # Recursive lowering (MUST STAY - recursive)
     lower_expr: Callable[[ast.expr], "ir.Expr"]
     lower_expr_as_bool: Callable[[ast.expr], "ir.Expr"]
     lower_stmts: Callable[[list[ast.stmt]], list["ir.Stmt"]]
     lower_lvalue: Callable[[ast.expr], "ir.LValue"]
+    # Bidirectional type inference (MUST STAY - uses expected type context)
     lower_expr_List: Callable[[ast.List, "Type | None"], "ir.Expr"]
-    # Type inference callbacks
+    # Type inference (MUST STAY - uses mutable _type_ctx)
     infer_expr_type_from_ast: Callable[[ast.expr], "Type"]
-    # Helper callbacks
+    # Helper (MUST STAY - recursive AST traversal)
     annotation_to_str: Callable[[ast.expr | None], str]
-    # Method/function argument handling
+    # Argument handling (MUST STAY - pass lower_expr/infer callbacks internally)
     merge_keyword_args: Callable[["Type", str, list, ast.Call], list]
     fill_default_args: Callable[["Type", str, list], list]
     merge_keyword_args_for_func: Callable[["FuncInfo", list, ast.Call], list]
@@ -63,5 +73,5 @@ class LoweringDispatch:
     deref_for_slice_params: Callable[["Type", str, list, list[ast.expr]], list]
     deref_for_func_slice_params: Callable[[str, list, list[ast.expr]], list]
     coerce_sentinel_to_ptr: Callable[["Type", str, list, list], list]
-    # Exception handling
+    # Exception handling (MUST STAY - mutates instance state)
     set_catch_var: Callable[[str | None], str | None]

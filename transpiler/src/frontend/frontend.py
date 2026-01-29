@@ -7,9 +7,7 @@ All analysis happens here; backends just emit syntax.
 from __future__ import annotations
 
 import ast
-from typing import TYPE_CHECKING
 
-from ..type_overrides import FIELD_TYPE_OVERRIDES, MODULE_CONSTANTS, NODE_METHOD_TYPES, PARAM_TYPE_OVERRIDES, RETURN_TYPE_OVERRIDES, SENTINEL_INT_FIELDS, VAR_TYPE_OVERRIDES
 from ..ir import (
     BOOL,
     BYTE,
@@ -18,44 +16,21 @@ from ..ir import (
     RUNE,
     STRING,
     VOID,
-    Constant,
-    Field,
-    FieldInfo,
     FuncInfo,
-    FuncType,
     Function,
-    InterfaceDef,
-    InterfaceRef,
     Loc,
-    Map,
-    MethodSig,
     Module,
-    Optional,
-    Param,
-    ParamInfo,
-    Pointer,
-    Primitive,
-    Set,
     Slice,
-    StringFormat,
     StructInfo,
-    StructRef,
     Struct,
     SymbolTable,
-    Tuple,
-    TupleAssign,
     Type,
-    TypeCase,
-    TypeSwitch,
 )
 from .context import FrontendContext, LoweringDispatch, TypeContext
 from . import type_inference
 from . import lowering
 from . import collection
 from . import builders
-
-if TYPE_CHECKING:
-    pass
 
 # Python type -> IR type mapping for primitives
 TYPE_MAP: dict[str, Type] = {

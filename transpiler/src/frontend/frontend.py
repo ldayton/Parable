@@ -1371,74 +1371,17 @@ class Frontend:
 
     def _synthesize_type(self, expr: "ir.Expr") -> Type:
         """Bottom-up type synthesis: compute type from expression structure."""
-        from .. import ir
-        # Literals have known types
-        if isinstance(expr, (ir.IntLit, ir.FloatLit, ir.StringLit, ir.BoolLit)):
-            return expr.typ
-        # Variable lookup
-        if isinstance(expr, ir.Var):
-            if expr.name in self._type_ctx.var_types:
-                return self._type_ctx.var_types[expr.name]
-            # Check function parameters
-            if self._current_func_info:
-                for p in self._current_func_info.params:
-                    if p.name == expr.name:
-                        return p.typ
-        # Field access - look up field type
-        if isinstance(expr, ir.FieldAccess):
-            obj_type = self._synthesize_type(expr.obj)
-            return self._synthesize_field_type(obj_type, expr.field)
-        # Method call - look up return type
-        if isinstance(expr, ir.MethodCall):
-            obj_type = self._synthesize_type(expr.obj)
-            return self._synthesize_method_return_type(obj_type, expr.method)
-        # Index - derive element type
-        if isinstance(expr, ir.Index):
-            obj_type = self._synthesize_type(expr.obj)
-            return self._synthesize_index_type(obj_type)
-        return expr.typ
+        return type_inference.synthesize_type(
+            expr, self._type_ctx, self._current_func_info, self.symbols, self._node_types
+        )
 
     def _synthesize_field_type(self, obj_type: Type, field: str) -> Type:
         """Look up field type from struct info."""
-        # Handle Pointer(StructRef(...))
-        if isinstance(obj_type, Pointer) and isinstance(obj_type.target, StructRef):
-            struct_name = obj_type.target.name
-            if struct_name in self.symbols.structs:
-                field_info = self.symbols.structs[struct_name].fields.get(field)
-                if field_info:
-                    return field_info.typ
-        # Handle direct StructRef
-        if isinstance(obj_type, StructRef):
-            if obj_type.name in self.symbols.structs:
-                field_info = self.symbols.structs[obj_type.name].fields.get(field)
-                if field_info:
-                    return field_info.typ
-        return Interface("any")
+        return type_inference.synthesize_field_type(obj_type, field, self.symbols)
 
     def _synthesize_method_return_type(self, obj_type: Type, method: str) -> Type:
         """Look up method return type from struct info."""
-        # String methods that return string
-        if obj_type == STRING and method in ("join", "replace", "lower", "upper", "strip", "lstrip", "rstrip", "format"):
-            return STRING
-        # String methods that return int
-        if obj_type == STRING and method in ("find", "rfind", "index", "rindex", "count"):
-            return INT
-        # String methods that return bool
-        if obj_type == STRING and method in ("startswith", "endswith", "isdigit", "isalpha", "isalnum", "isspace"):
-            return BOOL
-        # Node interface methods
-        if self._is_node_interface_type(obj_type):
-            if method in ("to_sexp", "ToSexp"):
-                return STRING
-            if method in ("get_kind", "GetKind"):
-                return STRING
-        # Extract struct name from various type wrappers
-        struct_name = self._extract_struct_name(obj_type)
-        if struct_name and struct_name in self.symbols.structs:
-            method_info = self.symbols.structs[struct_name].methods.get(method)
-            if method_info:
-                return method_info.return_type
-        return Interface("any")
+        return type_inference.synthesize_method_return_type(obj_type, method, self.symbols, self._node_types)
 
     def _merge_keyword_args(self, obj_type: Type, method: str, args: list, node: ast.Call) -> list:
         """Merge keyword arguments into positional args at their proper positions."""
@@ -1689,13 +1632,7 @@ class Frontend:
 
     def _synthesize_index_type(self, obj_type: Type) -> Type:
         """Derive element type from indexing a container."""
-        if isinstance(obj_type, Slice):
-            return obj_type.element
-        if isinstance(obj_type, Map):
-            return obj_type.value
-        if obj_type == STRING:
-            return BYTE  # string[i] returns byte in Go
-        return Interface("any")
+        return type_inference.synthesize_index_type(obj_type)
 
     def _coerce(self, expr: "ir.Expr", from_type: Type, to_type: Type) -> "ir.Expr":
         """Apply type coercions when synthesized type doesn't match expected."""

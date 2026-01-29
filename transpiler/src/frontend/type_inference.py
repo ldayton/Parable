@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+from typing import TYPE_CHECKING
 
 from ..ir import (
     BOOL,
@@ -23,6 +24,10 @@ from ..ir import (
     Tuple,
     Type,
 )
+
+if TYPE_CHECKING:
+    from .. import ir
+    from .context import TypeContext
 
 # Python type -> IR type mapping for primitives
 TYPE_MAP: dict[str, Type] = {
@@ -388,3 +393,103 @@ def infer_container_type_from_ast(
                     if field_info:
                         return field_info.typ
     return Interface("any")
+
+
+def synthesize_field_type(
+    obj_type: Type,
+    field: str,
+    symbols: SymbolTable,
+) -> Type:
+    """Look up field type from struct info."""
+    # Handle Pointer(StructRef(...))
+    if isinstance(obj_type, Pointer) and isinstance(obj_type.target, StructRef):
+        struct_name = obj_type.target.name
+        if struct_name in symbols.structs:
+            field_info = symbols.structs[struct_name].fields.get(field)
+            if field_info:
+                return field_info.typ
+    # Handle direct StructRef
+    if isinstance(obj_type, StructRef):
+        if obj_type.name in symbols.structs:
+            field_info = symbols.structs[obj_type.name].fields.get(field)
+            if field_info:
+                return field_info.typ
+    return Interface("any")
+
+
+def synthesize_method_return_type(
+    obj_type: Type,
+    method: str,
+    symbols: SymbolTable,
+    node_types: set[str],
+) -> Type:
+    """Look up method return type from struct info."""
+    # String methods that return string
+    if obj_type == STRING and method in ("join", "replace", "lower", "upper", "strip", "lstrip", "rstrip", "format"):
+        return STRING
+    # String methods that return int
+    if obj_type == STRING and method in ("find", "rfind", "index", "rindex", "count"):
+        return INT
+    # String methods that return bool
+    if obj_type == STRING and method in ("startswith", "endswith", "isdigit", "isalpha", "isalnum", "isspace"):
+        return BOOL
+    # Node interface methods
+    if is_node_interface_type(obj_type):
+        if method in ("to_sexp", "ToSexp"):
+            return STRING
+        if method in ("get_kind", "GetKind"):
+            return STRING
+    # Extract struct name from various type wrappers
+    struct_name = extract_struct_name(obj_type)
+    if struct_name and struct_name in symbols.structs:
+        method_info = symbols.structs[struct_name].methods.get(method)
+        if method_info:
+            return method_info.return_type
+    return Interface("any")
+
+
+def synthesize_index_type(obj_type: Type) -> Type:
+    """Derive element type from indexing a container."""
+    if isinstance(obj_type, Slice):
+        return obj_type.element
+    if isinstance(obj_type, Map):
+        return obj_type.value
+    if obj_type == STRING:
+        return BYTE  # string[i] returns byte in Go
+    return Interface("any")
+
+
+def synthesize_type(
+    expr: "ir.Expr",
+    type_ctx: "TypeContext",
+    current_func_info: FuncInfo | None,
+    symbols: SymbolTable,
+    node_types: set[str],
+) -> Type:
+    """Bottom-up type synthesis: compute type from expression structure."""
+    from .. import ir
+    # Literals have known types
+    if isinstance(expr, (ir.IntLit, ir.FloatLit, ir.StringLit, ir.BoolLit)):
+        return expr.typ
+    # Variable lookup
+    if isinstance(expr, ir.Var):
+        if expr.name in type_ctx.var_types:
+            return type_ctx.var_types[expr.name]
+        # Check function parameters
+        if current_func_info:
+            for p in current_func_info.params:
+                if p.name == expr.name:
+                    return p.typ
+    # Field access - look up field type
+    if isinstance(expr, ir.FieldAccess):
+        obj_type = synthesize_type(expr.obj, type_ctx, current_func_info, symbols, node_types)
+        return synthesize_field_type(obj_type, expr.field, symbols)
+    # Method call - look up return type
+    if isinstance(expr, ir.MethodCall):
+        obj_type = synthesize_type(expr.obj, type_ctx, current_func_info, symbols, node_types)
+        return synthesize_method_return_type(obj_type, expr.method, symbols, node_types)
+    # Index - derive element type
+    if isinstance(expr, ir.Index):
+        obj_type = synthesize_type(expr.obj, type_ctx, current_func_info, symbols, node_types)
+        return synthesize_index_type(obj_type)
+    return expr.typ

@@ -4,41 +4,33 @@ set shell := ["bash", "-o", "pipefail", "-cu"]
 source := "../src/parable.py"
 tests := "../tests"
 dist := "../dist/go"
-backends := "c go java python rust ts"
-testable := "go python ts"
+backends := "go java py ts"
+testable := "go py ts"
 
 # Transpile source to stdout
 emit backend="go":
-    uv run python -m src.cli {{source}} -b {{backend}}
+    uv run python -m src.cli --target {{backend}} < {{source}}
 
 # Transpile source and check syntax/compilation
 check backend="go":
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{backend}}" in
-        c)
-            uv run python -m src.cli {{source}} -b c > /tmp/transpile.c
-            clang -fsyntax-only /tmp/transpile.c
-            ;;
         go)
-            uv run python -m src.cli {{source}} -b go > /tmp/transpile-ir.go
+            uv run python -m src.cli --target go < {{source}} > /tmp/transpile-ir.go
             gofmt /tmp/transpile-ir.go > {{dist}}/parable.go
             go build -C {{dist}} -o /dev/null .
             ;;
         java)
-            uv run python -m src.cli {{source}} -b java > /tmp/Output.java
+            uv run python -m src.cli --target java < {{source}} > /tmp/Output.java
             javac /tmp/Output.java -d /tmp
             ;;
-        python)
-            uv run python -m src.cli {{source}} -b python > /tmp/transpile.py
+        py|python)
+            uv run python -m src.cli --target py < {{source}} > /tmp/transpile.py
             ;;
-        rust)
-            uv run python -m src.cli {{source}} -b rust > /tmp/transpile.rs
-            rustc --crate-type=lib --emit=metadata -o /tmp/transpile.rmeta /tmp/transpile.rs
-            ;;
-        ts)
+        ts|typescript)
             rm -rf /tmp/transpile-ts && mkdir -p /tmp/transpile-ts/src
-            uv run python -m src.cli {{source}} -b ts > /tmp/transpile-ts/src/output.ts
+            uv run python -m src.cli --target ts < {{source}} > /tmp/transpile-ts/src/output.ts
             tsc --outDir /tmp/transpile-ts/src --lib es2019 --module commonjs --esModuleInterop /tmp/transpile-ts/src/output.ts
             ;;
         *)
@@ -58,12 +50,12 @@ test backend="go":
             just check go
             go run -C {{dist}} ./cmd/run-tests "$tests_abs"
             ;;
-        python)
+        py|python)
             rm -rf /tmp/transpile-test && mkdir /tmp/transpile-test
-            uv run python -m src.cli {{source}} -b python > /tmp/transpile-test/parable.py
+            uv run python -m src.cli --target py < {{source}} > /tmp/transpile-test/parable.py
             PYTHONPATH=/tmp/transpile-test python3 {{tests}}/bin/run-tests.py {{tests}}
             ;;
-        ts)
+        ts|typescript)
             just check ts
             node {{tests}}/bin/run-js-tests.js /tmp/transpile-ts
             ;;
@@ -94,7 +86,7 @@ test-all:
 
 # Show compilation errors for debugging
 errors backend="go":
-    @uv run python -m src.cli {{source}} -b {{backend}} > /tmp/transpile-out 2>&1 || true
+    @uv run python -m src.cli --target {{backend}} < {{source}} > /tmp/transpile-out 2>&1 || true
     @echo "=== Transpiler output (first 20 lines) ==="
     @head -20 /tmp/transpile-out || true
     @echo "=== Compilation errors ==="
@@ -102,4 +94,4 @@ errors backend="go":
 
 # Check style constraints on Python source
 style dir="../src":
-    uv run python -m src.cli --check-style "{{dir}}"
+    uv run python -m src.check_style "{{dir}}"

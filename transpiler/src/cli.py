@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import argparse
 import sys
-from pathlib import Path
 
 from .frontend import Frontend
 from .middleend import analyze
@@ -13,64 +11,68 @@ from .backend.java import JavaBackend
 from .backend.python import PythonBackend
 from .backend.typescript import TsBackend
 
-
 BACKENDS = {
     "go": GoBackend,
     "java": JavaBackend,
-    "python": PythonBackend,
+    "py": PythonBackend,
     "ts": TsBackend,
 }
 
+USAGE = """\
+tongues [OPTIONS] < input.py > output.go
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Transpile Python to other languages")
-    parser.add_argument("input", nargs="?", help="Input Python file")
-    parser.add_argument(
-        "-b", "--backend", choices=BACKENDS.keys(), default="go", help="Target backend"
-    )
-    parser.add_argument(
-        "--check-style", metavar="DIR", help="Check style constraints on Python files in DIR"
-    )
-    args = parser.parse_args()
+Options:
+  --target TARGET   Output language: go, java, py, ts (default: go)
+  --verify          Check subset compliance only, no codegen
+  --help            Show this help message
+"""
 
-    if args.check_style:
-        from .check_style import find_python_files, check_file
 
-        src_dir = args.check_style
-        if not Path(src_dir).is_dir():
-            print("Directory not found: " + src_dir)
-            sys.exit(1)
-        files = find_python_files(src_dir)
-        if not files:
-            print("No Python files found in: " + src_dir)
-            sys.exit(1)
-        all_errors = []
-        for filepath in files:
-            try:
-                errors = check_file(filepath)
-                for lineno, description in errors:
-                    all_errors.append((filepath, lineno, description))
-            except SyntaxError as e:
-                print("Syntax error in " + filepath + ": " + str(e))
-                sys.exit(1)
-        if not all_errors:
-            sys.exit(0)
-        print("Found " + str(len(all_errors)) + " banned construction(s):")
-        for filepath, lineno, description in sorted(all_errors):
-            print("  " + filepath + ":" + str(lineno) + ": " + description)
-        sys.exit(1)
-
-    if not args.input:
-        parser.error("input is required for transpilation")
-
-    source = Path(args.input).read_text()
+def main() -> int:
+    args = sys.argv[1:]
+    target = "go"
+    verify = False
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "--help" or arg == "-h":
+            print(USAGE, end="")
+            return 0
+        elif arg == "--target":
+            if i + 1 >= len(args):
+                print("error: --target requires an argument", file=sys.stderr)
+                return 1
+            target = args[i + 1]
+            i += 2
+        elif arg == "--verify":
+            verify = True
+            i += 1
+        else:
+            print("error: unknown option: " + arg, file=sys.stderr)
+            return 1
+    # Normalize aliases
+    if target == "python":
+        target = "py"
+    if target == "typescript":
+        target = "ts"
+    # Validate target
+    if target in ("rust", "c"):
+        print("error: backend '" + target + "' is not yet implemented", file=sys.stderr)
+        return 1
+    if target not in BACKENDS:
+        print("error: unknown target: " + target, file=sys.stderr)
+        return 1
+    source = sys.stdin.read()
     fe = Frontend()
     module = fe.transpile(source)
+    if verify:
+        return 0
     analyze(module)
-    be = BACKENDS[args.backend]()
+    be = BACKENDS[target]()
     code = be.emit(module)
     print(code)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

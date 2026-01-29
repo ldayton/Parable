@@ -291,10 +291,6 @@ class Frontend:
         """Create Loc from AST node."""
         return lowering.loc_from_node(node)
 
-    def _get_base_name(self, base: ast.expr) -> str:
-        """Extract base class name from AST node."""
-        return collection.get_base_name(base)
-
     def _annotation_to_str(self, node: ast.expr | None) -> str:
         """Convert type annotation AST to string."""
         match node:
@@ -337,7 +333,7 @@ class Frontend:
         Returns None if not a union of Node subclasses."""
         if " | " not in py_type:
             return None
-        parts = self._split_union_types(py_type)
+        parts = type_inference.split_union_types(py_type)
         if len(parts) <= 1:
             return None
         # Filter out None
@@ -354,10 +350,6 @@ class Frontend:
     ) -> Type:
         """Infer IR type from an expression."""
         return type_inference.infer_type_from_value(node, param_types, self.symbols, self._node_types)
-
-    def _split_union_types(self, s: str) -> list[str]:
-        """Split union types on | respecting nested brackets."""
-        return type_inference.split_union_types(s)
 
     # ============================================================
     # LOCAL TYPE INFERENCE (Pierce & Turner style)

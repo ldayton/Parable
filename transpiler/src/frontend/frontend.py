@@ -757,235 +757,50 @@ class Frontend:
         return lowering.is_super_init_call(node)
 
     def _lower_stmt_Assign(self, node: ast.Assign) -> "ir.Stmt":
-        from .. import ir
-        from ..ir import Tuple as TupleType
-        # Check VAR_TYPE_OVERRIDES to set expected type before lowering
-        if len(node.targets) == 1:
-            target = node.targets[0]
-            if isinstance(target, ast.Name):
-                func_name = self._current_func_info.name if self._current_func_info else ""
-                override_key = (func_name, target.id)
-                if override_key in VAR_TYPE_OVERRIDES:
-                    self._type_ctx.expected = VAR_TYPE_OVERRIDES[override_key]
-            # For field assignments (self.field = value), use field type as expected
-            elif isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name):
-                if target.value.id == "self" and self._current_class_name:
-                    struct_info = self.symbols.structs.get(self._current_class_name)
-                    if struct_info:
-                        field_info = struct_info.fields.get(target.attr)
-                        if field_info:
-                            self._type_ctx.expected = field_info.typ
-        value = self._lower_expr(node.value)
-        self._type_ctx.expected = None  # Reset expected type
-        if len(node.targets) == 1:
-            target = node.targets[0]
-            # Handle single var = tuple-returning func: x = func() -> x0, x1 := func()
-            if isinstance(target, ast.Name) and isinstance(node.value, ast.Call):
-                ret_type = self._infer_call_return_type(node.value)
-                if isinstance(ret_type, TupleType) and len(ret_type.elements) > 1:
-                    # Generate synthetic variable names and track for later index access
-                    base_name = target.id
-                    synthetic_names = [f"{base_name}{i}" for i in range(len(ret_type.elements))]
-                    self._type_ctx.tuple_vars[base_name] = synthetic_names
-                    # Also track types of synthetic vars
-                    for i, syn_name in enumerate(synthetic_names):
-                        self._type_ctx.var_types[syn_name] = ret_type.elements[i]
-                    targets = []
-                    for i in range(len(ret_type.elements)):
-                        targets.append(ir.VarLV(name=f"{base_name}{i}", loc=self._loc_from_node(target)))
-                    return ir.TupleAssign(
-                        targets=targets,
-                        value=value,
-                        loc=self._loc_from_node(node)
-                    )
-            # Handle simple pop: var = list.pop() -> var = list[len(list)-1]; list = list[:len(list)-1]
-            if isinstance(target, ast.Name) and isinstance(node.value, ast.Call):
-                if isinstance(node.value.func, ast.Attribute) and node.value.func.attr == "pop" and not node.value.args:
-                    obj = self._lower_expr(node.value.func.value)
-                    obj_type = self._infer_expr_type_from_ast(node.value.func.value)
-                    if isinstance(obj_type, Slice):
-                        obj_lval = self._lower_lvalue(node.value.func.value)
-                        lval = self._lower_lvalue(target)
-                        elem_type = obj_type.element
-                        len_minus_1 = ir.BinaryOp(op="-", left=ir.Len(expr=obj, typ=INT), right=ir.IntLit(value=1, typ=INT), typ=INT)
-                        block = ir.Block(body=[
-                            ir.Assign(target=lval, value=ir.Index(obj=obj, index=len_minus_1, typ=elem_type)),
-                            ir.Assign(target=obj_lval, value=ir.SliceExpr(obj=obj, high=len_minus_1, typ=obj_type)),
-                        ], loc=self._loc_from_node(node))
-                        block.no_scope = True  # Emit without braces
-                        return block
-            # Handle tuple unpacking: a, b = func() where func returns tuple
-            if isinstance(target, ast.Tuple) and len(target.elts) == 2:
-                # Special case for popping from stack with tuple unpacking
-                if isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Attribute):
-                    if node.value.func.attr == "pop":
-                        # a, b = stack.pop() -> entry := stack[len(stack)-1]; stack = stack[:len(stack)-1]; a = entry.F0; b = entry.F1
-                        obj = self._lower_expr(node.value.func.value)
-                        obj_lval = self._lower_lvalue(node.value.func.value)
-                        lval0 = self._lower_lvalue(target.elts[0])
-                        lval1 = self._lower_lvalue(target.elts[1])
-                        len_minus_1 = ir.BinaryOp(op="-", left=ir.Len(expr=obj, typ=INT), right=ir.IntLit(value=1, typ=INT), typ=INT)
-                        # Infer tuple element type from the list's type if available
-                        entry_type: Type = Tuple((BOOL, BOOL))  # Default
-                        if isinstance(node.value.func.value, ast.Name):
-                            var_name = node.value.func.value.id
-                            if var_name in self._type_ctx.var_types:
-                                list_type = self._type_ctx.var_types[var_name]
-                                if isinstance(list_type, Slice) and isinstance(list_type.element, Tuple):
-                                    entry_type = list_type.element
-                        # Get field types from entry_type
-                        f0_type = entry_type.elements[0] if isinstance(entry_type, Tuple) and len(entry_type.elements) > 0 else BOOL
-                        f1_type = entry_type.elements[1] if isinstance(entry_type, Tuple) and len(entry_type.elements) > 1 else BOOL
-                        entry_var = ir.Var(name="_entry", typ=entry_type)
-                        return ir.Block(body=[
-                            ir.VarDecl(name="_entry", typ=entry_type, value=ir.Index(obj=obj, index=len_minus_1, typ=entry_type)),
-                            ir.Assign(target=obj_lval, value=ir.SliceExpr(obj=obj, high=len_minus_1, typ=Interface("any"))),
-                            ir.Assign(target=lval0, value=ir.FieldAccess(obj=entry_var, field="F0", typ=f0_type)),
-                            ir.Assign(target=lval1, value=ir.FieldAccess(obj=entry_var, field="F1", typ=f1_type)),
-                        ], loc=self._loc_from_node(node))
-                    else:
-                        # General tuple unpacking: a, b = obj.method()
-                        lval0 = self._lower_lvalue(target.elts[0])
-                        lval1 = self._lower_lvalue(target.elts[1])
-                        return ir.TupleAssign(
-                            targets=[lval0, lval1],
-                            value=value,
-                            loc=self._loc_from_node(node)
-                        )
-                # General tuple unpacking for function calls: a, b = func()
-                if isinstance(node.value, ast.Call):
-                    lval0 = self._lower_lvalue(target.elts[0])
-                    lval1 = self._lower_lvalue(target.elts[1])
-                    return ir.TupleAssign(
-                        targets=[lval0, lval1],
-                        value=value,
-                        loc=self._loc_from_node(node)
-                    )
-                # Tuple unpacking from index: a, b = list[idx] where list is []Tuple
-                if isinstance(node.value, ast.Subscript):
-                    # Infer tuple element type from the list's type
-                    entry_type: Type = Tuple((Interface("any"), Interface("any")))  # Default
-                    if isinstance(node.value.value, ast.Name):
-                        var_name = node.value.value.id
-                        if var_name in self._type_ctx.var_types:
-                            list_type = self._type_ctx.var_types[var_name]
-                            if isinstance(list_type, Slice) and isinstance(list_type.element, Tuple):
-                                entry_type = list_type.element
-                    # Get field types from entry_type
-                    f0_type = entry_type.elements[0] if isinstance(entry_type, Tuple) and len(entry_type.elements) > 0 else Interface("any")
-                    f1_type = entry_type.elements[1] if isinstance(entry_type, Tuple) and len(entry_type.elements) > 1 else Interface("any")
-                    lval0 = self._lower_lvalue(target.elts[0])
-                    lval1 = self._lower_lvalue(target.elts[1])
-                    entry_var = ir.Var(name="_entry", typ=entry_type)
-                    # Update var_types for the targets
-                    if isinstance(target.elts[0], ast.Name):
-                        self._type_ctx.var_types[target.elts[0].id] = f0_type
-                    if isinstance(target.elts[1], ast.Name):
-                        self._type_ctx.var_types[target.elts[1].id] = f1_type
-                    return ir.Block(body=[
-                        ir.VarDecl(name="_entry", typ=entry_type, value=value),
-                        ir.Assign(target=lval0, value=ir.FieldAccess(obj=entry_var, field="F0", typ=f0_type)),
-                        ir.Assign(target=lval1, value=ir.FieldAccess(obj=entry_var, field="F1", typ=f1_type)),
-                    ], loc=self._loc_from_node(node))
-                # Tuple unpacking from tuple literal: a, b = x, y
-                if isinstance(node.value, ast.Tuple) and len(node.value.elts) == 2:
-                    lval0 = self._lower_lvalue(target.elts[0])
-                    lval1 = self._lower_lvalue(target.elts[1])
-                    val0 = self._lower_expr(node.value.elts[0])
-                    val1 = self._lower_expr(node.value.elts[1])
-                    # Update var_types
-                    if isinstance(target.elts[0], ast.Name):
-                        self._type_ctx.var_types[target.elts[0].id] = self._synthesize_type(val0)
-                    if isinstance(target.elts[1], ast.Name):
-                        self._type_ctx.var_types[target.elts[1].id] = self._synthesize_type(val1)
-                    block = ir.Block(body=[
-                        ir.Assign(target=lval0, value=val0),
-                        ir.Assign(target=lval1, value=val1),
-                    ], loc=self._loc_from_node(node))
-                    block.no_scope = True  # Don't emit braces
-                    return block
-            # Handle sentinel ints: var = None -> var = -1
-            if isinstance(value, ir.NilLit) and self._is_sentinel_int(target):
-                value = ir.IntLit(value=-1, typ=INT, loc=self._loc_from_node(node))
-            # Track variable type dynamically for later use in nested scopes
-            # Apply VAR_TYPE_OVERRIDES first, then coerce
-            if isinstance(target, ast.Name):
-                func_name = self._current_func_info.name if self._current_func_info else ""
-                override_key = (func_name, target.id)
-                if override_key in VAR_TYPE_OVERRIDES:
-                    self._type_ctx.var_types[target.id] = VAR_TYPE_OVERRIDES[override_key]
-            # Coerce value to target type if known
-            if isinstance(target, ast.Name) and target.id in self._type_ctx.var_types:
-                expected_type = self._type_ctx.var_types[target.id]
-                from_type = self._synthesize_type(value)
-                value = self._coerce(value, from_type, expected_type)
-            # Track variable type dynamically for later use in nested scopes
-            if isinstance(target, ast.Name):
-                # Check VAR_TYPE_OVERRIDES first
-                func_name = self._current_func_info.name if self._current_func_info else ""
-                override_key = (func_name, target.id)
-                if override_key in VAR_TYPE_OVERRIDES:
-                    pass  # Already set above
-                else:
-                    value_type = self._synthesize_type(value)
-                    # Update type if it's concrete (not any) and either:
-                    # - Variable not yet tracked, or
-                    # - Variable was RUNE from for-loop but now assigned STRING (from method call)
-                    current_type = self._type_ctx.var_types.get(target.id)
-                    if value_type != Interface("any"):
-                        if current_type is None or (current_type == RUNE and value_type == STRING):
-                            self._type_ctx.var_types[target.id] = value_type
-            # Propagate narrowed status: if assigning from a narrowed var, target is also narrowed
-            if isinstance(target, ast.Name) and isinstance(node.value, ast.Name):
-                if node.value.id in self._type_ctx.narrowed_vars:
-                    self._type_ctx.narrowed_vars.add(target.id)
-                    # Also set the narrowed type for the target
-                    narrowed_type = self._type_ctx.var_types.get(node.value.id)
-                    if narrowed_type:
-                        self._type_ctx.var_types[target.id] = narrowed_type
-            # Track kind = node.kind assignments for kind-based type narrowing
-            if isinstance(target, ast.Name) and isinstance(node.value, ast.Attribute):
-                if node.value.attr == "kind" and isinstance(node.value.value, ast.Name):
-                    self._type_ctx.kind_source_vars[target.id] = node.value.value.id
-            # Propagate list element union types: var = list[idx] where list has known element unions
-            if isinstance(target, ast.Name) and isinstance(node.value, ast.Subscript):
-                if isinstance(node.value.value, ast.Name):
-                    list_var = node.value.value.id
-                    if list_var in self._type_ctx.list_element_unions:
-                        self._type_ctx.union_types[target.id] = self._type_ctx.list_element_unions[list_var]
-                        # Also reset var_types to Node so union_types logic is used for field access
-                        self._type_ctx.var_types[target.id] = Interface("Node")
-            lval = self._lower_lvalue(target)
-            assign = ir.Assign(target=lval, value=value, loc=self._loc_from_node(node))
-            # Add declaration type if VAR_TYPE_OVERRIDE applies or if var_types has a unified Node type
-            if isinstance(target, ast.Name):
-                func_name = self._current_func_info.name if self._current_func_info else ""
-                override_key = (func_name, target.id)
-                if override_key in VAR_TYPE_OVERRIDES:
-                    assign.decl_typ = VAR_TYPE_OVERRIDES[override_key]
-                elif target.id in self._type_ctx.var_types:
-                    # Use unified Node type from var_types for hoisted variables
-                    unified_type = self._type_ctx.var_types[target.id]
-                    if unified_type == Interface("Node"):
-                        expr_type = self._synthesize_type(value)
-                        if unified_type != expr_type:
-                            assign.decl_typ = unified_type
-            return assign
-        # Multiple targets: a = b = val -> emit assignment for each target
-        stmts: list[ir.Stmt] = []
-        for target in node.targets:
-            lval = self._lower_lvalue(target)
-            stmts.append(ir.Assign(target=lval, value=value, loc=self._loc_from_node(node)))
-            # Track variable type
-            if isinstance(target, ast.Name):
-                value_type = self._synthesize_type(value)
-                if value_type != Interface("any"):
-                    self._type_ctx.var_types[target.id] = value_type
-        if len(stmts) == 1:
-            return stmts[0]
-        block = ir.Block(body=stmts, loc=self._loc_from_node(node))
-        block.no_scope = True  # Don't emit braces
-        return block
+        """Lower a Python assignment statement to IR."""
+        ctx = FrontendContext(
+            symbols=self.symbols,
+            type_ctx=self._type_ctx,
+            current_func_info=self._current_func_info,
+            current_class_name=self._current_class_name,
+            node_types=self._node_types,
+            kind_to_struct=self._kind_to_struct,
+            kind_to_class=self._kind_to_class,
+            current_catch_var=self._current_catch_var,
+        )
+        dispatch = LoweringDispatch(
+            lower_expr=self._lower_expr,
+            lower_expr_as_bool=self._lower_expr_as_bool,
+            lower_stmts=self._lower_stmts,
+            lower_lvalue=self._lower_lvalue,
+            lower_expr_List=self._lower_expr_List,
+            infer_expr_type_from_ast=self._infer_expr_type_from_ast,
+            infer_call_return_type=self._infer_call_return_type,
+            synthesize_type=self._synthesize_type,
+            coerce=self._coerce,
+            annotation_to_str=self._annotation_to_str,
+            py_type_to_ir=self._py_type_to_ir,
+            make_default_value=self._make_default_value,
+            extract_struct_name=self._extract_struct_name,
+            is_exception_subclass=self._is_exception_subclass,
+            is_node_subclass=self._is_node_subclass,
+            is_sentinel_int=self._is_sentinel_int,
+            get_sentinel_value=self._get_sentinel_value,
+            resolve_type_name=self._resolve_type_name,
+            get_inner_slice=self._get_inner_slice,
+            merge_keyword_args=self._merge_keyword_args,
+            fill_default_args=self._fill_default_args,
+            merge_keyword_args_for_func=self._merge_keyword_args_for_func,
+            fill_default_args_for_func=self._fill_default_args_for_func,
+            add_address_of_for_ptr_params=self._add_address_of_for_ptr_params,
+            deref_for_slice_params=self._deref_for_slice_params,
+            deref_for_func_slice_params=self._deref_for_func_slice_params,
+            coerce_sentinel_to_ptr=self._coerce_sentinel_to_ptr,
+            coerce_args_to_node=self._coerce_args_to_node,
+            is_node_interface_type=self._is_node_interface_type,
+            synthesize_method_return_type=self._synthesize_method_return_type,
+        )
+        return lowering.lower_stmt_Assign(node, ctx, dispatch)
 
     def _lower_stmt_AnnAssign(self, node: ast.AnnAssign) -> "ir.Stmt":
         from .. import ir

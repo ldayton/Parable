@@ -174,3 +174,31 @@ def extract_func_info(
         return_type=return_type,
         is_method=is_method,
     )
+
+
+def collect_class_methods(
+    node: ast.ClassDef,
+    symbols: SymbolTable,
+    callbacks: CollectionCallbacks,
+) -> None:
+    """Collect method signatures for a class."""
+    info = symbols.structs[node.name]
+    for stmt in node.body:
+        if isinstance(stmt, ast.FunctionDef):
+            func_info = extract_func_info(stmt, callbacks, is_method=True)
+            func_info.is_method = True
+            func_info.receiver_type = node.name
+            info.methods[stmt.name] = func_info
+
+
+def collect_signatures(
+    tree: ast.Module,
+    symbols: SymbolTable,
+    callbacks: CollectionCallbacks,
+) -> None:
+    """Pass 3: Collect function and method signatures."""
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef):
+            symbols.functions[node.name] = extract_func_info(node, callbacks)
+        elif isinstance(node, ast.ClassDef):
+            collect_class_methods(node, symbols, callbacks)

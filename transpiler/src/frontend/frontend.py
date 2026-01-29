@@ -130,21 +130,23 @@ class Frontend:
 
     def _collect_signatures(self, tree: ast.Module) -> None:
         """Pass 3: Collect function and method signatures."""
-        for node in tree.body:
-            if isinstance(node, ast.FunctionDef):
-                self.symbols.functions[node.name] = self._extract_func_info(node)
-            elif isinstance(node, ast.ClassDef):
-                self._collect_class_methods(node)
+        callbacks = collection.CollectionCallbacks(
+            annotation_to_str=self._annotation_to_str,
+            py_type_to_ir=self._py_type_to_ir,
+            py_return_type_to_ir=self._py_return_type_to_ir,
+            lower_expr=self._lower_expr,
+        )
+        collection.collect_signatures(tree, self.symbols, callbacks)
 
     def _collect_class_methods(self, node: ast.ClassDef) -> None:
         """Collect method signatures for a class."""
-        info = self.symbols.structs[node.name]
-        for stmt in node.body:
-            if isinstance(stmt, ast.FunctionDef):
-                func_info = self._extract_func_info(stmt, is_method=True)
-                func_info.is_method = True
-                func_info.receiver_type = node.name
-                info.methods[stmt.name] = func_info
+        callbacks = collection.CollectionCallbacks(
+            annotation_to_str=self._annotation_to_str,
+            py_type_to_ir=self._py_type_to_ir,
+            py_return_type_to_ir=self._py_return_type_to_ir,
+            lower_expr=self._lower_expr,
+        )
+        collection.collect_class_methods(node, self.symbols, callbacks)
 
     def _collect_fields(self, tree: ast.Module) -> None:
         """Pass 4: Collect struct fields from class definitions."""

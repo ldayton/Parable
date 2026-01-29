@@ -10,6 +10,7 @@ Annotations added (see scope.py for scope-related annotations):
 from src.ir import (
     Assign,
     Block,
+    DerefLV,
     ExprStmt,
     FieldLV,
     ForClassic,
@@ -35,6 +36,7 @@ from src.ir import (
 )
 from src.type_overrides import VAR_TYPE_OVERRIDES
 
+from .returns import analyze_returns, always_returns, contains_return
 from .scope import analyze_scope, _collect_assigned_vars, _collect_used_vars
 
 
@@ -42,42 +44,9 @@ def analyze(module: Module) -> None:
     """Run all analysis passes, annotating IR nodes in place."""
     analyze_scope(module)
     _analyze_initial_value_usage(module)  # Sets has_catch_returns on TryCatch
-    _analyze_named_returns(module)  # Check if functions need named returns (must be after initial_value_usage)
+    analyze_returns(module)  # Check if functions need named returns (must be after initial_value_usage)
     _analyze_hoisting_all(module)
     _analyze_unused_tuple_targets_all(module)
-
-
-def _analyze_named_returns(module: Module) -> None:
-    """Set needs_named_returns on functions that have TryCatch with catch-body returns."""
-    for func in module.functions:
-        func.needs_named_returns = _function_needs_named_returns(func.body)
-    for struct in module.structs:
-        for method in struct.methods:
-            method.needs_named_returns = _function_needs_named_returns(method.body)
-
-
-def _always_returns(stmts: list[Stmt]) -> bool:
-    """Check if a list of statements always returns (on all paths)."""
-    for stmt in stmts:
-        if isinstance(stmt, Return):
-            return True
-        if isinstance(stmt, If):
-            # Both branches must return
-            if _always_returns(stmt.then_body) and _always_returns(stmt.else_body):
-                return True
-        if isinstance(stmt, (Match, TypeSwitch)):
-            # All cases and default must return
-            all_return = all(_always_returns(case.body) for case in stmt.cases)
-            if all_return and _always_returns(stmt.default):
-                return True
-        if isinstance(stmt, TryCatch):
-            # Both try and catch must return
-            if _always_returns(stmt.body) and _always_returns(stmt.catch_body):
-                return True
-        if isinstance(stmt, Block):
-            if _always_returns(stmt.body):
-                return True
-    return False
 
 
 # ============================================================
@@ -127,9 +96,9 @@ def _analyze_initial_value_in_stmts(stmts: list[Stmt]) -> None:
                 stmt.catch_var_unused = True
             # Check if try or catch body contains Return statements
             # This affects how the TryCatch should be emitted (IIFE vs defer pattern)
-            stmt.has_returns = _contains_return(stmt.body) or _contains_return(stmt.catch_body)
+            stmt.has_returns = contains_return(stmt.body) or contains_return(stmt.catch_body)
             # Track if specifically the catch body has returns (needs named return pattern)
-            stmt.has_catch_returns = _contains_return(stmt.catch_body)
+            stmt.has_catch_returns = contains_return(stmt.catch_body)
         elif isinstance(stmt, Match):
             for case in stmt.cases:
                 _analyze_initial_value_in_stmts(case.body)
@@ -324,84 +293,6 @@ def _lvalue_reads(name: str, lv) -> bool:
         return _expr_reads(name, lv.obj)
     elif isinstance(lv, DerefLV):
         return _expr_reads(name, lv.ptr)
-    return False
-
-
-def _contains_return(stmts: list[Stmt]) -> bool:
-    """Check if statement list contains any Return statements (recursively)."""
-    for stmt in stmts:
-        if isinstance(stmt, Return):
-            return True
-        # Recurse into nested structures
-        if isinstance(stmt, If):
-            if _contains_return(stmt.then_body) or _contains_return(stmt.else_body):
-                return True
-        elif isinstance(stmt, While):
-            if _contains_return(stmt.body):
-                return True
-        elif isinstance(stmt, ForRange):
-            if _contains_return(stmt.body):
-                return True
-        elif isinstance(stmt, ForClassic):
-            if _contains_return(stmt.body):
-                return True
-        elif isinstance(stmt, Block):
-            if _contains_return(stmt.body):
-                return True
-        elif isinstance(stmt, TryCatch):
-            if _contains_return(stmt.body) or _contains_return(stmt.catch_body):
-                return True
-        elif isinstance(stmt, Match):
-            for case in stmt.cases:
-                if _contains_return(case.body):
-                    return True
-            if _contains_return(stmt.default):
-                return True
-        elif isinstance(stmt, TypeSwitch):
-            for case in stmt.cases:
-                if _contains_return(case.body):
-                    return True
-            if _contains_return(stmt.default):
-                return True
-    return False
-
-
-def _function_needs_named_returns(stmts: list[Stmt]) -> bool:
-    """Check if any TryCatch in the statements has returns in its catch body."""
-    for stmt in stmts:
-        if isinstance(stmt, TryCatch):
-            if getattr(stmt, 'has_catch_returns', False):
-                return True
-            # Also check nested TryCatch
-            if _function_needs_named_returns(stmt.body) or _function_needs_named_returns(stmt.catch_body):
-                return True
-        elif isinstance(stmt, If):
-            if _function_needs_named_returns(stmt.then_body) or _function_needs_named_returns(stmt.else_body):
-                return True
-        elif isinstance(stmt, While):
-            if _function_needs_named_returns(stmt.body):
-                return True
-        elif isinstance(stmt, ForRange):
-            if _function_needs_named_returns(stmt.body):
-                return True
-        elif isinstance(stmt, ForClassic):
-            if _function_needs_named_returns(stmt.body):
-                return True
-        elif isinstance(stmt, Block):
-            if _function_needs_named_returns(stmt.body):
-                return True
-        elif isinstance(stmt, Match):
-            for case in stmt.cases:
-                if _function_needs_named_returns(case.body):
-                    return True
-            if _function_needs_named_returns(stmt.default):
-                return True
-        elif isinstance(stmt, TypeSwitch):
-            for case in stmt.cases:
-                if _function_needs_named_returns(case.body):
-                    return True
-            if _function_needs_named_returns(stmt.default):
-                return True
     return False
 
 
@@ -632,9 +523,9 @@ def _analyze_hoisting(func: Function) -> None:
                 # Cases that return keep their variables local (no need to hoist)
                 non_returning_stmts: list[Stmt] = []
                 for case in stmt.cases:
-                    if not _always_returns(case.body):
+                    if not always_returns(case.body):
                         non_returning_stmts.extend(case.body)
-                if not _always_returns(stmt.default):
+                if not always_returns(stmt.default):
                     non_returning_stmts.extend(stmt.default)
                 # Find vars first assigned inside non-returning branches
                 inner_new = _vars_first_assigned_in(non_returning_stmts, declared)

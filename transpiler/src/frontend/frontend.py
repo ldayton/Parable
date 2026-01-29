@@ -1965,101 +1965,28 @@ class Frontend:
         )
 
     def _lower_expr_List(self, node: ast.List, expected_type: Type | None = None) -> "ir.Expr":
-        from .. import ir
-        elements = [self._lower_expr(e) for e in node.elts]
-        # Prefer expected type when available (bidirectional type inference)
-        # This ensures [ArithNumber(x), expansion] gets typed as []Node when the target is []Node
-        element_type: Type = Interface("any")
-        if expected_type is not None and isinstance(expected_type, Slice):
-            element_type = expected_type.element
-        elif self._type_ctx.expected is not None and isinstance(self._type_ctx.expected, Slice):
-            element_type = self._type_ctx.expected.element
-        elif node.elts:
-            # Fall back to inferring from first element
-            element_type = self._infer_expr_type_from_ast(node.elts[0])
-        return ir.SliceLit(
-            element_type=element_type, elements=elements,
-            typ=Slice(element_type), loc=self._loc_from_node(node)
+        return lowering.lower_expr_List(
+            node, self._lower_expr, self._infer_expr_type_from_ast, self._type_ctx.expected, expected_type
         )
 
     def _lower_list_call_with_expected_type(self, node: ast.Call, expected_type: Type | None) -> "ir.Expr":
         """Handle list(x) call with expected type context for covariant copies."""
-        from .. import ir
-        arg = self._lower_expr(node.args[0])
-        source_type = arg.typ
-        # Check if we need covariant conversion: []*Derived -> []Interface
-        if (expected_type is not None and isinstance(expected_type, Slice) and
-            isinstance(source_type, Slice)):
-            source_elem = source_type.element
-            target_elem = expected_type.element
-            # Unwrap pointer for comparison
-            if isinstance(source_elem, Pointer):
-                source_elem_unwrapped = source_elem.target
-            else:
-                source_elem_unwrapped = source_elem
-            # Need conversion if: source is *Struct, target is interface/Node
-            if (source_elem != target_elem and
-                isinstance(source_elem_unwrapped, StructRef) and
-                isinstance(target_elem, (Interface, StructRef))):
-                return ir.SliceConvert(
-                    source=arg,
-                    target_element_type=target_elem,
-                    typ=expected_type,
-                    loc=self._loc_from_node(node)
-                )
-        # Fall through to normal copy
-        return ir.MethodCall(
-            obj=arg, method="copy", args=[],
-            receiver_type=source_type if isinstance(source_type, Slice) else Slice(Interface("any")),
-            typ=source_type if isinstance(source_type, Slice) else Slice(Interface("any")),
-            loc=self._loc_from_node(node)
-        )
+        return lowering.lower_list_call_with_expected_type(node, self._lower_expr, expected_type)
 
     def _lower_expr_Dict(self, node: ast.Dict) -> "ir.Expr":
-        from .. import ir
-        entries = []
-        for k, v in zip(node.keys, node.values):
-            if k is not None:
-                entries.append((self._lower_expr(k), self._lower_expr(v)))
-        # Infer key and value types from first entry if available
-        key_type: Type = STRING
-        value_type: Type = Interface("any")
-        if node.values and node.values[0]:
-            first_val = node.values[0]
-            value_type = self._infer_expr_type_from_ast(first_val)
-        return ir.MapLit(
-            key_type=key_type, value_type=value_type, entries=entries,
-            typ=Map(key_type, value_type), loc=self._loc_from_node(node)
-        )
+        return lowering.lower_expr_Dict(node, self._lower_expr, self._infer_expr_type_from_ast)
 
     def _lower_expr_JoinedStr(self, node: ast.JoinedStr) -> "ir.Expr":
         """Lower Python f-string to StringFormat IR node."""
-        template_parts: list[str] = []
-        args: list["ir.Expr"] = []
-        for part in node.values:
-            if isinstance(part, ast.Constant):
-                # Escape % signs in literal parts for fmt.Sprintf
-                template_parts.append(str(part.value).replace("%", "%%"))
-            elif isinstance(part, ast.FormattedValue):
-                template_parts.append("%v")
-                args.append(self._lower_expr(part.value))
-        template = "".join(template_parts)
-        return StringFormat(template=template, args=args, typ=STRING, loc=self._loc_from_node(node))
+        return lowering.lower_expr_JoinedStr(node, self._lower_expr)
 
     def _lower_expr_Tuple(self, node: ast.Tuple) -> "ir.Expr":
         """Lower Python tuple literal to TupleLit IR node."""
-        from .. import ir
-        elements = [self._lower_expr(e) for e in node.elts]
-        element_types = tuple(e.typ for e in elements)
-        return ir.TupleLit(elements=elements, typ=Tuple(elements=element_types), loc=self._loc_from_node(node))
+        return lowering.lower_expr_Tuple(node, self._lower_expr)
 
     def _lower_expr_Set(self, node: ast.Set) -> "ir.Expr":
         """Lower Python set literal to SetLit IR node."""
-        from .. import ir
-        elements = [self._lower_expr(e) for e in node.elts]
-        # Infer element type from first element
-        elem_type = getattr(elements[0], 'typ', STRING) if elements else STRING
-        return ir.SetLit(element_type=elem_type, elements=elements, typ=Set(elem_type), loc=self._loc_from_node(node))
+        return lowering.lower_expr_Set(node, self._lower_expr)
 
     def _binop_to_str(self, op: ast.operator) -> str:
         return lowering.binop_to_str(op)

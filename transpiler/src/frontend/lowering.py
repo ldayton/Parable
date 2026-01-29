@@ -1032,3 +1032,151 @@ def lower_expr_Set(
     # Infer element type from first element
     elem_type = getattr(elements[0], 'typ', STRING) if elements else STRING
     return ir.SetLit(element_type=elem_type, elements=elements, typ=Set(elem_type), loc=loc_from_node(node))
+
+
+# ============================================================
+# EXPRESSION DISPATCHER
+# ============================================================
+
+
+def lower_expr_as_bool(
+    node: ast.expr,
+    lower_expr: Callable[[ast.expr], "ir.Expr"],
+    lower_expr_as_bool_self: Callable[[ast.expr], "ir.Expr"],
+    infer_expr_type_from_ast: Callable[[ast.expr], "Type"],
+    is_isinstance_call: Callable[[ast.expr], tuple[str, str] | None],
+    resolve_type_name: Callable[[str], "Type"],
+    type_ctx: "TypeContext",
+    symbols: "SymbolTable",
+) -> "ir.Expr":
+    """Lower expression used in boolean context, adding truthy checks as needed."""
+    from .. import ir
+    # Already boolean expressions - lower directly
+    if isinstance(node, ast.Compare):
+        return lower_expr(node)
+    if isinstance(node, ast.BoolOp):
+        # For BoolOp, recursively lower operands as booleans
+        op = "&&" if isinstance(node.op, ast.And) else "||"
+        result = lower_expr_as_bool_self(node.values[0])
+        # Track isinstance narrowing for AND chains
+        narrowed_var: str | None = None
+        narrowed_old_type: Type | None = None
+        was_already_narrowed = False
+        if isinstance(node.op, ast.And):
+            isinstance_check = is_isinstance_call(node.values[0])
+            if isinstance_check:
+                var_name, type_name = isinstance_check
+                narrowed_var = var_name
+                narrowed_old_type = type_ctx.var_types.get(var_name)
+                was_already_narrowed = var_name in type_ctx.narrowed_vars
+                type_ctx.var_types[var_name] = resolve_type_name(type_name)
+                type_ctx.narrowed_vars.add(var_name)
+        for val in node.values[1:]:
+            right = lower_expr_as_bool_self(val)
+            result = ir.BinaryOp(op=op, left=result, right=right, typ=BOOL, loc=loc_from_node(node))
+        # Restore narrowed type and tracking
+        if narrowed_var is not None:
+            if narrowed_old_type is not None:
+                type_ctx.var_types[narrowed_var] = narrowed_old_type
+            else:
+                type_ctx.var_types.pop(narrowed_var, None)
+            if not was_already_narrowed:
+                type_ctx.narrowed_vars.discard(narrowed_var)
+        return result
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        operand = lower_expr_as_bool_self(node.operand)
+        return ir.UnaryOp(op="!", operand=operand, typ=BOOL, loc=loc_from_node(node))
+    if isinstance(node, ast.Constant):
+        if isinstance(node.value, bool):
+            return lower_expr(node)
+    if isinstance(node, ast.Name) and node.id in ("True", "False"):
+        return lower_expr(node)
+    if isinstance(node, ast.Call):
+        # Calls that return bool are fine
+        if isinstance(node.func, ast.Attribute):
+            # Methods like .startswith(), .endswith(), .isdigit() return bool
+            if node.func.attr in ("startswith", "endswith", "isdigit", "isalpha", "isalnum", "isspace"):
+                return lower_expr(node)
+            # Check if the method returns bool by looking up its return type
+            method_return_type = infer_expr_type_from_ast(node)
+            if method_return_type == BOOL:
+                return lower_expr(node)
+        elif isinstance(node.func, ast.Name):
+            if node.func.id in ("isinstance", "hasattr", "callable", "bool"):
+                return lower_expr(node)
+            # Check if the function returns bool by looking up its return type
+            func_name = node.func.id
+            if func_name in symbols.functions:
+                func_info = symbols.functions[func_name]
+                if func_info.return_type == BOOL:
+                    return lower_expr(node)
+    # Non-boolean expression - needs truthy check
+    expr = lower_expr(node)
+    # Use the IR expression's type if available, otherwise infer from AST
+    expr_type = expr.typ if hasattr(expr, 'typ') and expr.typ != Interface("any") else infer_expr_type_from_ast(node)
+    # Bool expressions don't need nil check
+    if expr_type == BOOL:
+        return expr
+    # String truthy check: s != ""
+    if expr_type == STRING:
+        return ir.BinaryOp(op="!=", left=expr, right=ir.StringLit(value="", typ=STRING), typ=BOOL, loc=loc_from_node(node))
+    # Int truthy check: n != 0
+    if expr_type == INT:
+        return ir.BinaryOp(op="!=", left=expr, right=ir.IntLit(value=0, typ=INT), typ=BOOL, loc=loc_from_node(node))
+    # Slice/Map/Set truthy check: len(x) > 0
+    if isinstance(expr_type, (Slice, Map, Set)):
+        return ir.BinaryOp(op=">", left=ir.Len(expr=expr, typ=INT, loc=loc_from_node(node)), right=ir.IntLit(value=0, typ=INT), typ=BOOL, loc=loc_from_node(node))
+    # Optional(Slice) truthy check: len(x) > 0 (nil slice has len 0)
+    if isinstance(expr_type, Optional) and isinstance(expr_type.inner, (Slice, Map, Set)):
+        return ir.BinaryOp(op=">", left=ir.Len(expr=expr, typ=INT, loc=loc_from_node(node)), right=ir.IntLit(value=0, typ=INT), typ=BOOL, loc=loc_from_node(node))
+    # Interface truthy check: x != nil
+    if isinstance(expr_type, Interface):
+        return ir.IsNil(expr=expr, negated=True, typ=BOOL, loc=loc_from_node(node))
+    # Pointer/Optional truthy check: x != nil
+    if isinstance(expr_type, (Pointer, Optional)):
+        return ir.IsNil(expr=expr, negated=True, typ=BOOL, loc=loc_from_node(node))
+    # Check name that might be pointer or interface - use nil check
+    if isinstance(node, ast.Name):
+        # If type is interface, use nil check (interfaces are nilable)
+        if isinstance(expr_type, Interface):
+            return ir.IsNil(expr=expr, negated=True, typ=BOOL, loc=loc_from_node(node))
+        # If type is a pointer, use nil check
+        if isinstance(expr_type, (Pointer, Optional)):
+            return ir.IsNil(expr=expr, negated=True, typ=BOOL, loc=loc_from_node(node))
+        # Otherwise just return the expression (shouldn't reach here for valid types)
+        return expr
+    # For other expressions, assume it's a pointer check
+    return ir.IsNil(expr=expr, negated=True, typ=BOOL, loc=loc_from_node(node))
+
+
+def lower_expr_IfExp(
+    node: ast.IfExp,
+    lower_expr: Callable[[ast.expr], "ir.Expr"],
+    lower_expr_as_bool: Callable[[ast.expr], "ir.Expr"],
+    extract_attr_kind_check: Callable[[ast.expr], tuple[str, str] | None],
+    type_ctx: "TypeContext",
+) -> "ir.Expr":
+    """Lower Python ternary (if-else expression) to Ternary IR node."""
+    from .. import ir
+    cond = lower_expr_as_bool(node.test)
+    # Check for attribute path kind narrowing in the condition
+    # e.g., node.body.kind == "brace-group" narrows node.body to BraceGroup
+    attr_kind_check = extract_attr_kind_check(node.test)
+    if attr_kind_check:
+        attr_path, struct_name = attr_kind_check
+        type_ctx.narrowed_attr_paths[attr_path] = struct_name
+    then_expr = lower_expr(node.body)
+    # Clean up the narrowing after processing then branch
+    if attr_kind_check:
+        del type_ctx.narrowed_attr_paths[attr_kind_check[0]]
+    else_expr = lower_expr(node.orelse)
+    # Use type from lowered expressions (prefer then branch, fall back to else)
+    result_type = getattr(then_expr, 'typ', None)
+    if result_type is None or result_type == Interface("any"):
+        result_type = getattr(else_expr, 'typ', None)
+    if result_type is None:
+        result_type = Interface("any")
+    return ir.Ternary(
+        cond=cond, then_expr=then_expr, else_expr=else_expr,
+        typ=result_type, loc=loc_from_node(node)
+    )

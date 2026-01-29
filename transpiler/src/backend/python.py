@@ -14,6 +14,24 @@ Frontend deficiencies (should be fixed in frontend.py):
 
 Middleend deficiencies (should be fixed in middleend.py):
 - None identified. Python backend is cleanest because source language matches.
+
+UNCOMPENSATED DEFICIENCIES (non-idiomatic output)
+=================================================
+
+Frontend deficiencies (should be fixed in frontend.py):
+- Helper function indirection: frontend emits Call(_parseInt, ...) instead of
+  native int(). Result: `_parseInt(x, 10)` instead of `int(x, 10)`. Same for
+  `_intToStr(n)` → `str(n)` and `_intPtr(fd)` → inline ternary. (~18 call sites)
+- Pointer/Optional conflation: Pointer(StructRef("X")) renders as `X` but should
+  be `X | None` when field is nullable. Example: `word: Word = None` should be
+  `word: Word | None = None`. (~50 fields affected)
+- Exception type not in IR: TryCatch doesn't carry exception type, so backend
+  emits `except Exception` instead of specific types like `except ParseError`.
+
+Middleend deficiencies (should be fixed in middleend.py):
+- None. The while loops and accumulator patterns in the output faithfully reflect
+  the source Python. Making them more idiomatic (comprehensions, enumerate, etc.)
+  would be an IR transformation pass, not fixing missing analysis.
 """
 
 from __future__ import annotations

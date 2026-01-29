@@ -9,7 +9,7 @@ from __future__ import annotations
 import ast
 from typing import TYPE_CHECKING
 
-from ..type_overrides import FIELD_TYPE_OVERRIDES, MODULE_CONSTANTS, NODE_FIELD_TYPES, NODE_METHOD_TYPES, PARAM_TYPE_OVERRIDES, RETURN_TYPE_OVERRIDES, SENTINEL_INT_FIELDS, VAR_TYPE_OVERRIDES
+from ..type_overrides import FIELD_TYPE_OVERRIDES, MODULE_CONSTANTS, NODE_METHOD_TYPES, PARAM_TYPE_OVERRIDES, RETURN_TYPE_OVERRIDES, SENTINEL_INT_FIELDS, VAR_TYPE_OVERRIDES
 from ..ir import (
     BOOL,
     BYTE,
@@ -354,10 +354,6 @@ class Frontend:
         """Convert Python return type to IR, handling tuples as multiple returns."""
         return type_inference.py_return_type_to_ir(py_type, self.symbols, self._node_types)
 
-    def _parse_callable_type(self, py_type: str, concrete_nodes: bool) -> Type:
-        """Parse Callable[[], ReturnType] -> FuncType."""
-        return type_inference.parse_callable_type(py_type, concrete_nodes, self.symbols, self._node_types)
-
     def _extract_union_struct_names(self, py_type: str) -> list[str] | None:
         """Extract struct names from a union type like 'Redirect | HereDoc'.
         Returns None if not a union of Node subclasses."""
@@ -410,10 +406,6 @@ class Frontend:
         """Split union types on | respecting nested brackets."""
         return type_inference.split_union_types(s)
 
-    def _split_type_args(self, s: str) -> list[str]:
-        """Split type arguments like 'K, V' respecting nested brackets."""
-        return type_inference.split_type_args(s)
-
     # ============================================================
     # LOCAL TYPE INFERENCE (Pierce & Turner style)
     # ============================================================
@@ -465,27 +457,11 @@ class Frontend:
             node, self.symbols, self._current_class_name, self._current_func_info, var_types
         )
 
-    def _unify_branch_types(self, then_vars: dict[str, Type], else_vars: dict[str, Type]) -> dict[str, Type]:
-        """Unify variable types from if/else branches."""
-        return collection.unify_branch_types(then_vars, else_vars)
-
-    def _collect_branch_var_types(self, stmts: list[ast.stmt], var_types: dict[str, Type]) -> dict[str, Type]:
-        """Collect variable types assigned in a list of statements (for branch analysis)."""
-        return collection.collect_branch_var_types(stmts, var_types)
-
-    def _infer_branch_expr_type(self, node: ast.expr, var_types: dict[str, Type], branch_vars: dict[str, Type]) -> Type:
-        """Infer type of expression during branch analysis."""
-        return collection.infer_branch_expr_type(node, var_types, branch_vars)
-
     def _synthesize_type(self, expr: "ir.Expr") -> Type:
         """Bottom-up type synthesis: compute type from expression structure."""
         return type_inference.synthesize_type(
             expr, self._type_ctx, self._current_func_info, self.symbols, self._node_types
         )
-
-    def _synthesize_field_type(self, obj_type: Type, field: str) -> Type:
-        """Look up field type from struct info."""
-        return type_inference.synthesize_field_type(obj_type, field, self.symbols)
 
     def _synthesize_method_return_type(self, obj_type: Type, method: str) -> Type:
         """Look up method return type from struct info."""
@@ -535,10 +511,6 @@ class Frontend:
         """Add type assertions when passing interface{} to Node parameter."""
         return lowering.coerce_args_to_node(func_info, args)
 
-    def _is_pointer_to_slice(self, typ: Type) -> bool:
-        """Check if type is pointer-to-slice (Pointer(Slice) only, NOT Optional(Slice))."""
-        return lowering.is_pointer_to_slice(typ)
-
     def _is_len_call(self, node: ast.expr) -> bool:
         """Check if node is a len() call."""
         return lowering.is_len_call(node)
@@ -558,10 +530,6 @@ class Frontend:
         return type_inference.infer_call_return_type(
             node, self.symbols, self._type_ctx, self._current_func_info, self._current_class_name, self._node_types
         )
-
-    def _synthesize_index_type(self, obj_type: Type) -> Type:
-        """Derive element type from indexing a container."""
-        return type_inference.synthesize_index_type(obj_type)
 
     def _coerce(self, expr: "ir.Expr", from_type: Type, to_type: Type) -> "ir.Expr":
         """Apply type coercions when synthesized type doesn't match expected."""
@@ -616,6 +584,7 @@ class Frontend:
             coerce_args_to_node=self._coerce_args_to_node,
             is_node_interface_type=self._is_node_interface_type,
             synthesize_method_return_type=self._synthesize_method_return_type,
+            set_catch_var=self._set_catch_var,
         )
         return ctx, dispatch
 
@@ -628,50 +597,18 @@ class Frontend:
 
     def _lower_expr(self, node: ast.expr) -> "ir.Expr":
         """Lower a Python expression to IR."""
-        from .. import ir
-        method = f"_lower_expr_{node.__class__.__name__}"
-        if hasattr(self, method):
-            return getattr(self, method)(node)
-        # Fallback for unimplemented expressions
-        return ir.Var(name=f"TODO_{node.__class__.__name__}", typ=Interface("any"))
-
-    def _lower_expr_Constant(self, node: ast.Constant) -> "ir.Expr":
-        return lowering.lower_expr_Constant(node)
-
-    def _lower_expr_Name(self, node: ast.Name) -> "ir.Expr":
-        return lowering.lower_expr_Name(node, self._type_ctx, self.symbols)
-
-    def _lower_expr_Attribute(self, node: ast.Attribute) -> "ir.Expr":
-        return lowering.lower_expr_Attribute(
-            node, self.symbols, self._type_ctx, self._current_class_name,
-            NODE_FIELD_TYPES, self._lower_expr, self._is_node_interface_type
-        )
+        ctx, dispatch = self._make_ctx_and_dispatch()
+        return lowering.lower_expr(node, ctx, dispatch)
 
     def _is_node_interface_type(self, typ: Type | None) -> bool:
         """Check if a type is the Node interface type."""
         return type_inference.is_node_interface_type(typ)
-
-    def _is_node_subtype(self, typ: Type | None) -> bool:
-        """Check if a type is a Node subtype (pointer to struct implementing Node)."""
-        return type_inference.is_node_subtype(typ, self._node_types)
-
-    def _lower_expr_Subscript(self, node: ast.Subscript) -> "ir.Expr":
-        return lowering.lower_expr_Subscript(
-            node, self._type_ctx, self._lower_expr, self._convert_negative_index, self._infer_expr_type_from_ast
-        )
-
-    def _convert_negative_index(self, idx_node: ast.expr, obj: "ir.Expr", parent: ast.AST) -> "ir.Expr":
-        """Convert negative index -N to len(obj) - N."""
-        return lowering.convert_negative_index(idx_node, obj, parent, self._lower_expr)
 
     def _infer_expr_type_from_ast(self, node: ast.expr) -> Type:
         """Infer the type of a Python AST expression without lowering it."""
         return type_inference.infer_expr_type_from_ast(
             node, self._type_ctx, self.symbols, self._current_func_info, self._current_class_name, self._node_types
         )
-
-    def _lower_expr_BinOp(self, node: ast.BinOp) -> "ir.Expr":
-        return lowering.lower_expr_BinOp(node, self._lower_expr, self._infer_expr_type_from_ast)
 
     def _is_sentinel_int(self, node: ast.expr) -> bool:
         """Check if an expression is a sentinel int (uses a sentinel value for None)."""
@@ -681,60 +618,10 @@ class Frontend:
         """Get the sentinel value for a sentinel int expression, or None if not a sentinel int."""
         return lowering.get_sentinel_value(node, self._type_ctx, self._current_class_name, SENTINEL_INT_FIELDS)
 
-    def _lower_expr_Compare(self, node: ast.Compare) -> "ir.Expr":
-        return lowering.lower_expr_Compare(
-            node, self._lower_expr, self._infer_expr_type_from_ast,
-            self._type_ctx, self._current_class_name, SENTINEL_INT_FIELDS
-        )
-
-    def _lower_expr_BoolOp(self, node: ast.BoolOp) -> "ir.Expr":
-        return lowering.lower_expr_BoolOp(node, self._lower_expr_as_bool)
-
-    def _lower_expr_UnaryOp(self, node: ast.UnaryOp) -> "ir.Expr":
-        return lowering.lower_expr_UnaryOp(node, self._lower_expr, self._lower_expr_as_bool)
-
-    def _lower_expr_Call(self, node: ast.Call) -> "ir.Expr":
-        ctx, dispatch = self._make_ctx_and_dispatch()
-        return lowering.lower_expr_Call(node, ctx, dispatch)
-
-    def _lower_expr_IfExp(self, node: ast.IfExp) -> "ir.Expr":
-        return lowering.lower_expr_IfExp(
-            node, self._lower_expr, self._lower_expr_as_bool,
-            self._extract_attr_kind_check, self._type_ctx
-        )
-
     def _lower_expr_List(self, node: ast.List, expected_type: Type | None = None) -> "ir.Expr":
         return lowering.lower_expr_List(
             node, self._lower_expr, self._infer_expr_type_from_ast, self._type_ctx.expected, expected_type
         )
-
-    def _lower_list_call_with_expected_type(self, node: ast.Call, expected_type: Type | None) -> "ir.Expr":
-        """Handle list(x) call with expected type context for covariant copies."""
-        return lowering.lower_list_call_with_expected_type(node, self._lower_expr, expected_type)
-
-    def _lower_expr_Dict(self, node: ast.Dict) -> "ir.Expr":
-        return lowering.lower_expr_Dict(node, self._lower_expr, self._infer_expr_type_from_ast)
-
-    def _lower_expr_JoinedStr(self, node: ast.JoinedStr) -> "ir.Expr":
-        """Lower Python f-string to StringFormat IR node."""
-        return lowering.lower_expr_JoinedStr(node, self._lower_expr)
-
-    def _lower_expr_Tuple(self, node: ast.Tuple) -> "ir.Expr":
-        """Lower Python tuple literal to TupleLit IR node."""
-        return lowering.lower_expr_Tuple(node, self._lower_expr)
-
-    def _lower_expr_Set(self, node: ast.Set) -> "ir.Expr":
-        """Lower Python set literal to SetLit IR node."""
-        return lowering.lower_expr_Set(node, self._lower_expr)
-
-    def _binop_to_str(self, op: ast.operator) -> str:
-        return lowering.binop_to_str(op)
-
-    def _cmpop_to_str(self, op: ast.cmpop) -> str:
-        return lowering.cmpop_to_str(op)
-
-    def _unaryop_to_str(self, op: ast.unaryop) -> str:
-        return lowering.unaryop_to_str(op)
 
     # ============================================================
     # STATEMENT LOWERING (Phase 3)
@@ -742,39 +629,12 @@ class Frontend:
 
     def _lower_stmt(self, node: ast.stmt) -> "ir.Stmt":
         """Lower a Python statement to IR."""
-        from .. import ir
-        method = f"_lower_stmt_{node.__class__.__name__}"
-        if hasattr(self, method):
-            return getattr(self, method)(node)
-        # Fallback for unimplemented statements
-        return ir.ExprStmt(expr=ir.Var(name=f"TODO_{node.__class__.__name__}", typ=Interface("any")))
+        ctx, dispatch = self._make_ctx_and_dispatch()
+        return lowering.lower_stmt(node, ctx, dispatch)
 
     def _lower_stmts(self, stmts: list[ast.stmt]) -> list["ir.Stmt"]:
         """Lower a list of statements."""
         return [self._lower_stmt(s) for s in stmts]
-
-    def _lower_stmt_Expr(self, node: ast.Expr) -> "ir.Stmt":
-        return lowering.lower_stmt_Expr(node, self._lower_expr)
-
-    def _is_super_init_call(self, node: ast.expr) -> bool:
-        """Check if expression is super().__init__(...)."""
-        return lowering.is_super_init_call(node)
-
-    def _lower_stmt_Assign(self, node: ast.Assign) -> "ir.Stmt":
-        ctx, dispatch = self._make_ctx_and_dispatch()
-        return lowering.lower_stmt_Assign(node, ctx, dispatch)
-
-    def _lower_stmt_AnnAssign(self, node: ast.AnnAssign) -> "ir.Stmt":
-        ctx, dispatch = self._make_ctx_and_dispatch()
-        return lowering.lower_stmt_AnnAssign(node, ctx, dispatch)
-
-    def _lower_stmt_AugAssign(self, node: ast.AugAssign) -> "ir.Stmt":
-        return lowering.lower_stmt_AugAssign(node, self._lower_lvalue, self._lower_expr)
-
-    def _lower_stmt_Return(self, node: ast.Return) -> "ir.Stmt":
-        return lowering.lower_stmt_Return(
-            node, self._lower_expr, self._synthesize_type, self._coerce, self._type_ctx.return_type
-        )
 
     def _is_isinstance_call(self, node: ast.expr) -> tuple[str, str] | None:
         """Check if node is isinstance(var, Type). Returns (var_name, type_name) or None."""
@@ -784,68 +644,15 @@ class Frontend:
         """Check if node is x.kind == "typename". Returns (var_name, class_name) or None."""
         return lowering.is_kind_check(node, self._kind_to_class)
 
-    def _extract_isinstance_or_chain(self, node: ast.expr) -> tuple[str, list[str]] | None:
-        """Extract isinstance/kind checks from expression. Returns (var_name, [type_names]) or None."""
-        return lowering.extract_isinstance_or_chain(node, self._kind_to_class)
-
-    def _extract_isinstance_from_and(self, node: ast.expr) -> tuple[str, str] | None:
-        """Extract isinstance(var, Type) from compound AND expression.
-        Returns (var_name, type_name) or None if no isinstance found."""
-        return lowering.extract_isinstance_from_and(node)
-
-    def _extract_kind_check(self, node: ast.expr) -> tuple[str, str] | None:
-        """Extract kind-based type narrowing from `kind == "value"` or `node.kind == "value"`.
-        Returns (node_var_name, struct_name) or None if not a kind check."""
-        return lowering.extract_kind_check(node, self._kind_to_struct, self._type_ctx.kind_source_vars)
-
-    def _extract_attr_kind_check(self, node: ast.expr) -> tuple[tuple[str, ...], str] | None:
-        """Extract kind check for attribute paths like `node.body.kind == "value"`.
-        Returns (attr_path_tuple, struct_name) or None."""
-        return lowering.extract_attr_kind_check(node, self._kind_to_struct)
-
-    def _get_attr_path(self, node: ast.expr) -> tuple[str, ...] | None:
-        """Extract attribute path as tuple (e.g., node.body -> ("node", "body"))."""
-        return lowering.get_attr_path(node)
-
     def _resolve_type_name(self, name: str) -> Type:
         """Resolve a class name to an IR type (for isinstance checks)."""
         return lowering.resolve_type_name(name, TYPE_MAP, self.symbols)
-
-    def _lower_stmt_If(self, node: ast.If) -> "ir.Stmt":
-        ctx, dispatch = self._make_ctx_and_dispatch()
-        return lowering.lower_stmt_If(node, ctx, dispatch)
-
-    def _lower_stmt_While(self, node: ast.While) -> "ir.Stmt":
-        return lowering.lower_stmt_While(node, self._lower_expr_as_bool, self._lower_stmts)
-
-    def _lower_stmt_For(self, node: ast.For) -> "ir.Stmt":
-        ctx, dispatch = self._make_ctx_and_dispatch()
-        return lowering.lower_stmt_For(node, ctx, dispatch)
-
-    def _lower_stmt_Break(self, node: ast.Break) -> "ir.Stmt":
-        return lowering.lower_stmt_Break(node)
-
-    def _lower_stmt_Continue(self, node: ast.Continue) -> "ir.Stmt":
-        return lowering.lower_stmt_Continue(node)
-
-    def _lower_stmt_Pass(self, node: ast.Pass) -> "ir.Stmt":
-        return lowering.lower_stmt_Pass(node)
-
-    def _lower_stmt_Raise(self, node: ast.Raise) -> "ir.Stmt":
-        return lowering.lower_stmt_Raise(node, self._lower_expr, self._current_catch_var)
 
     def _set_catch_var(self, var: str | None) -> str | None:
         """Set the current catch variable and return the previous value."""
         saved = self._current_catch_var
         self._current_catch_var = var
         return saved
-
-    def _lower_stmt_Try(self, node: ast.Try) -> "ir.Stmt":
-        ctx, dispatch = self._make_ctx_and_dispatch()
-        return lowering.lower_stmt_Try(node, ctx, dispatch, self._set_catch_var)
-
-    def _lower_stmt_FunctionDef(self, node: ast.FunctionDef) -> "ir.Stmt":
-        return lowering.lower_stmt_FunctionDef(node)
 
     def _lower_lvalue(self, node: ast.expr) -> "ir.LValue":
         """Lower an expression to an LValue."""

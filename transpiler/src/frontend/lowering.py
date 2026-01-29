@@ -2197,3 +2197,182 @@ def lower_lvalue(
         idx = lower_expr(node.slice)
         return ir.IndexLV(obj=obj, index=idx, loc=loc_from_node(node))
     return ir.VarLV(name="_unknown_lvalue", loc=loc_from_node(node))
+
+
+# ============================================================
+# DISPATCH TABLES
+# ============================================================
+
+
+def _lower_expr_Constant_dispatch(node: ast.Constant, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Expr":
+    return lower_expr_Constant(node)
+
+
+def _lower_expr_Name_dispatch(node: ast.Name, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Expr":
+    return lower_expr_Name(node, ctx.type_ctx, ctx.symbols)
+
+
+def _lower_expr_Attribute_dispatch(node: ast.Attribute, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Expr":
+    from ..type_overrides import NODE_FIELD_TYPES
+    return lower_expr_Attribute(
+        node, ctx.symbols, ctx.type_ctx, ctx.current_class_name,
+        NODE_FIELD_TYPES, d.lower_expr, d.is_node_interface_type
+    )
+
+
+def _lower_expr_Subscript_dispatch(node: ast.Subscript, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Expr":
+    return lower_expr_Subscript(
+        node, ctx.type_ctx, d.lower_expr,
+        lambda idx, obj, parent: convert_negative_index(idx, obj, parent, d.lower_expr),
+        d.infer_expr_type_from_ast
+    )
+
+
+def _lower_expr_BinOp_dispatch(node: ast.BinOp, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Expr":
+    return lower_expr_BinOp(node, d.lower_expr, d.infer_expr_type_from_ast)
+
+
+def _lower_expr_Compare_dispatch(node: ast.Compare, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Expr":
+    from ..type_overrides import SENTINEL_INT_FIELDS
+    return lower_expr_Compare(
+        node, d.lower_expr, d.infer_expr_type_from_ast,
+        ctx.type_ctx, ctx.current_class_name, SENTINEL_INT_FIELDS
+    )
+
+
+def _lower_expr_BoolOp_dispatch(node: ast.BoolOp, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Expr":
+    return lower_expr_BoolOp(node, d.lower_expr_as_bool)
+
+
+def _lower_expr_UnaryOp_dispatch(node: ast.UnaryOp, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Expr":
+    return lower_expr_UnaryOp(node, d.lower_expr, d.lower_expr_as_bool)
+
+
+def _lower_expr_IfExp_dispatch(node: ast.IfExp, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Expr":
+    return lower_expr_IfExp(
+        node, d.lower_expr, d.lower_expr_as_bool,
+        lambda n: extract_attr_kind_check(n, ctx.kind_to_struct),
+        ctx.type_ctx
+    )
+
+
+def _lower_expr_List_dispatch(node: ast.List, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Expr":
+    return lower_expr_List(node, d.lower_expr, d.infer_expr_type_from_ast, ctx.type_ctx.expected, None)
+
+
+def _lower_expr_Dict_dispatch(node: ast.Dict, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Expr":
+    return lower_expr_Dict(node, d.lower_expr, d.infer_expr_type_from_ast)
+
+
+def _lower_expr_JoinedStr_dispatch(node: ast.JoinedStr, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Expr":
+    return lower_expr_JoinedStr(node, d.lower_expr)
+
+
+def _lower_expr_Tuple_dispatch(node: ast.Tuple, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Expr":
+    return lower_expr_Tuple(node, d.lower_expr)
+
+
+def _lower_expr_Set_dispatch(node: ast.Set, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Expr":
+    return lower_expr_Set(node, d.lower_expr)
+
+
+EXPR_HANDLERS: dict[type, Callable[[ast.expr, "FrontendContext", "LoweringDispatch"], "ir.Expr"]] = {
+    ast.Constant: _lower_expr_Constant_dispatch,
+    ast.Name: _lower_expr_Name_dispatch,
+    ast.Attribute: _lower_expr_Attribute_dispatch,
+    ast.Subscript: _lower_expr_Subscript_dispatch,
+    ast.BinOp: _lower_expr_BinOp_dispatch,
+    ast.Compare: _lower_expr_Compare_dispatch,
+    ast.BoolOp: _lower_expr_BoolOp_dispatch,
+    ast.UnaryOp: _lower_expr_UnaryOp_dispatch,
+    ast.Call: lower_expr_Call,  # Already has (node, ctx, dispatch) signature
+    ast.IfExp: _lower_expr_IfExp_dispatch,
+    ast.List: _lower_expr_List_dispatch,
+    ast.Dict: _lower_expr_Dict_dispatch,
+    ast.JoinedStr: _lower_expr_JoinedStr_dispatch,
+    ast.Tuple: _lower_expr_Tuple_dispatch,
+    ast.Set: _lower_expr_Set_dispatch,
+}
+
+
+def lower_expr(node: ast.expr, ctx: "FrontendContext", dispatch: "LoweringDispatch") -> "ir.Expr":
+    """Lower a Python expression to IR using dispatch table."""
+    from .. import ir
+    handler = EXPR_HANDLERS.get(type(node))
+    if handler:
+        return handler(node, ctx, dispatch)
+    return ir.Var(name=f"TODO_{node.__class__.__name__}", typ=Interface("any"))
+
+
+def _lower_stmt_Expr_dispatch(node: ast.Expr, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Stmt":
+    return lower_stmt_Expr(node, d.lower_expr)
+
+
+def _lower_stmt_AugAssign_dispatch(node: ast.AugAssign, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Stmt":
+    return lower_stmt_AugAssign(node, d.lower_lvalue, d.lower_expr)
+
+
+def _lower_stmt_Return_dispatch(node: ast.Return, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Stmt":
+    return lower_stmt_Return(
+        node, d.lower_expr, d.synthesize_type, d.coerce, ctx.type_ctx.return_type
+    )
+
+
+def _lower_stmt_While_dispatch(node: ast.While, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Stmt":
+    return lower_stmt_While(node, d.lower_expr_as_bool, d.lower_stmts)
+
+
+def _lower_stmt_Break_dispatch(node: ast.Break, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Stmt":
+    return lower_stmt_Break(node)
+
+
+def _lower_stmt_Continue_dispatch(node: ast.Continue, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Stmt":
+    return lower_stmt_Continue(node)
+
+
+def _lower_stmt_Pass_dispatch(node: ast.Pass, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Stmt":
+    return lower_stmt_Pass(node)
+
+
+def _lower_stmt_Raise_dispatch(node: ast.Raise, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Stmt":
+    return lower_stmt_Raise(node, d.lower_expr, ctx.current_catch_var)
+
+
+def _lower_stmt_FunctionDef_dispatch(node: ast.FunctionDef, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Stmt":
+    return lower_stmt_FunctionDef(node)
+
+
+def _lower_stmt_Try_dispatch(node: ast.Try, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Stmt":
+    return lower_stmt_Try(node, ctx, d, d.set_catch_var)
+
+
+STMT_HANDLERS: dict[type, Callable[[ast.stmt, "FrontendContext", "LoweringDispatch"], "ir.Stmt"]] = {
+    ast.Expr: _lower_stmt_Expr_dispatch,
+    ast.Assign: lower_stmt_Assign,  # Already has (node, ctx, dispatch) signature
+    ast.AnnAssign: lower_stmt_AnnAssign,  # Already has (node, ctx, dispatch) signature
+    ast.AugAssign: _lower_stmt_AugAssign_dispatch,
+    ast.Return: _lower_stmt_Return_dispatch,
+    ast.If: lower_stmt_If,  # Already has (node, ctx, dispatch) signature
+    ast.While: _lower_stmt_While_dispatch,
+    ast.For: lower_stmt_For,  # Already has (node, ctx, dispatch) signature
+    ast.Break: _lower_stmt_Break_dispatch,
+    ast.Continue: _lower_stmt_Continue_dispatch,
+    ast.Pass: _lower_stmt_Pass_dispatch,
+    ast.Raise: _lower_stmt_Raise_dispatch,
+    ast.Try: _lower_stmt_Try_dispatch,
+    ast.FunctionDef: _lower_stmt_FunctionDef_dispatch,
+}
+
+
+def lower_stmt(node: ast.stmt, ctx: "FrontendContext", dispatch: "LoweringDispatch") -> "ir.Stmt":
+    """Lower a Python statement to IR using dispatch table."""
+    from .. import ir
+    handler = STMT_HANDLERS.get(type(node))
+    if handler:
+        return handler(node, ctx, dispatch)
+    return ir.ExprStmt(expr=ir.Var(name=f"TODO_{node.__class__.__name__}", typ=Interface("any")))
+
+
+def lower_stmts(stmts: list[ast.stmt], ctx: "FrontendContext", dispatch: "LoweringDispatch") -> list["ir.Stmt"]:
+    """Lower a list of Python statements to IR."""
+    return [lower_stmt(s, ctx, dispatch) for s in stmts]

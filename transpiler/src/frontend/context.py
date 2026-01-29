@@ -79,3 +79,5 @@ class LoweringDispatch:
     # Type predicates
     is_node_interface_type: Callable[["Type | None"], bool]
     synthesize_method_return_type: Callable[["Type", str], "Type"]
+    # Exception handling
+    set_catch_var: Callable[[str | None], str | None]

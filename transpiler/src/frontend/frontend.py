@@ -180,70 +180,14 @@ class Frontend:
 
     def _collect_init_fields(self, init: ast.FunctionDef, info: StructInfo) -> None:
         """Collect fields assigned in __init__."""
-        param_types: dict[str, str] = {}
-        # Record __init__ parameter order (excluding self) for constructor calls
-        for arg in init.args.args:
-            if arg.arg != "self":
-                info.init_params.append(arg.arg)
-                if arg.annotation:
-                    param_types[arg.arg] = self._annotation_to_str(arg.annotation)
-        # Track whether __init__ has computed initializations
-        has_computed_init = False
-        for stmt in ast.walk(init):
-            if isinstance(stmt, ast.AnnAssign):
-                if (
-                    isinstance(stmt.target, ast.Attribute)
-                    and isinstance(stmt.target.value, ast.Name)
-                    and stmt.target.value.id == "self"
-                ):
-                    field_name = stmt.target.attr
-                    if field_name not in info.fields:
-                        py_type = self._annotation_to_str(stmt.annotation)
-                        typ = self._py_type_to_ir(py_type, concrete_nodes=True)
-                        # Apply field type overrides (keep for compatibility)
-                        override_key = (info.name, field_name)
-                        if override_key in FIELD_TYPE_OVERRIDES:
-                            typ = FIELD_TYPE_OVERRIDES[override_key]
-                        info.fields[field_name] = FieldInfo(
-                            name=field_name, typ=typ, py_name=field_name
-                        )
-                    # Check if value is computed (not just a param reference)
-                    if stmt.value is not None:
-                        if not (isinstance(stmt.value, ast.Name) and stmt.value.id in info.init_params):
-                            has_computed_init = True
-            elif isinstance(stmt, ast.Assign):
-                for target in stmt.targets:
-                    if (
-                        isinstance(target, ast.Attribute)
-                        and isinstance(target.value, ast.Name)
-                        and target.value.id == "self"
-                    ):
-                        field_name = target.attr
-                        # Track param-to-field mapping: self.field = param
-                        is_simple_param = isinstance(stmt.value, ast.Name) and stmt.value.id in info.init_params
-                        # Track constant string assignments: self.kind = "operator"
-                        is_const_str = isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, str)
-                        if is_simple_param:
-                            info.param_to_field[stmt.value.id] = field_name
-                        elif is_const_str:
-                            info.const_fields[field_name] = stmt.value.value
-                        else:
-                            # Computed initialization - need constructor
-                            has_computed_init = True
-                        if field_name not in info.fields:
-                            typ = self._infer_type_from_value(stmt.value, param_types)
-                            # Apply field type overrides
-                            override_key = (info.name, field_name)
-                            if override_key in FIELD_TYPE_OVERRIDES:
-                                typ = FIELD_TYPE_OVERRIDES[override_key]
-                            info.fields[field_name] = FieldInfo(
-                                name=field_name, typ=typ, py_name=field_name
-                            )
-        # Flag if constructor is needed - only for structs that critically need it
-        # (Parser, Lexer need computed Length, nested constructors, back-references)
-        NEEDS_CONSTRUCTOR = {"Parser", "Lexer", "ContextStack", "QuoteState", "ParseContext"}
-        if has_computed_init and info.name in NEEDS_CONSTRUCTOR:
-            info.needs_constructor = True
+        callbacks = collection.CollectionCallbacks(
+            annotation_to_str=self._annotation_to_str,
+            py_type_to_ir=self._py_type_to_ir,
+            py_return_type_to_ir=self._py_return_type_to_ir,
+            lower_expr=self._lower_expr,
+            infer_type_from_value=self._infer_type_from_value,
+        )
+        collection.collect_init_fields(init, info, callbacks)
 
     def _collect_constants(self, tree: ast.Module) -> None:
         """Pass 5: Collect module-level and class-level constants."""

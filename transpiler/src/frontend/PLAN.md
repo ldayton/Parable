@@ -44,25 +44,31 @@ Create context dataclasses that bundle related state.
 
 **Completed:** `1e85cae frontend: extract context.py with TypeContext and FrontendContext`
 
-### 1. Extract `type_inference.py` ← NEXT
+### 1. Extract `type_inference.py` ✅
 
 Pure functions for type inference and coercion.
 
 Functions (take explicit params, return values):
-- `infer_type_from_value(node, symbols, param_types) -> Type`
-- `infer_expr_type_from_ast(node, symbols, type_ctx) -> Type`
-- `infer_iterable_type(node, var_types) -> Type`
-- `infer_call_return_type(node, symbols, type_ctx) -> Type`
-- `synthesize_type(expr) -> Type`
-- `synthesize_field_type(obj_type, field, symbols) -> Type`
-- `synthesize_method_return_type(obj_type, method, symbols) -> Type`
-- `coerce(expr, from_type, to_type) -> ir.Expr`
-- `py_type_to_ir(py_type, symbols, concrete_nodes) -> Type`
-- Type parsing helpers: `split_union_types`, `split_type_args`, `parse_callable_type`
+- ✅ `infer_type_from_value(node, symbols, param_types) -> Type`
+- ✅ `infer_expr_type_from_ast(node, symbols, type_ctx) -> Type`
+- ✅ `infer_iterable_type(node, var_types) -> Type`
+- ✅ `infer_call_return_type(node, symbols, type_ctx) -> Type`
+- ✅ `infer_container_type_from_ast(node, symbols, ...) -> Type`
+- ✅ `synthesize_type(expr) -> Type`
+- ✅ `synthesize_field_type(obj_type, field, symbols) -> Type`
+- ✅ `synthesize_method_return_type(obj_type, method, symbols) -> Type`
+- ✅ `synthesize_index_type(obj_type) -> Type`
+- ✅ `coerce(expr, from_type, to_type) -> ir.Expr`
+- ✅ `py_type_to_ir(py_type, symbols, concrete_nodes) -> Type`
+- ✅ `py_return_type_to_ir(py_type, symbols, node_types) -> Type`
+- ✅ Type parsing helpers: `split_union_types`, `split_type_args`, `parse_callable_type`
+- ✅ Node type helpers: `extract_struct_name`, `is_node_interface_type`, `is_node_subtype`, `is_node_subclass`
+
+**Completed:** commits `13a4782` through `c8948ed`
 
 Depends on: symbols, type_ctx, IR types
 
-### 2. Extract `lowering.py`
+### 2. Extract `lowering.py` ← NEXT
 
 Functions for lowering Python AST to IR.
 

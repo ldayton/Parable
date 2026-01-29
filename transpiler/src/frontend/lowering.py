@@ -796,7 +796,6 @@ def lower_expr_Subscript(
     node: ASTNode,
     type_ctx: "TypeContext",
     lower_expr: Callable[[ASTNode], "ir.Expr"],
-    convert_negative_index: Callable[[ASTNode, "ir.Expr", ASTNode], "ir.Expr"],
     infer_expr_type_from_ast: Callable[[ASTNode], "Type"],
 ) -> "ir.Expr":
     """Lower Python subscript access to IR index or slice expression."""
@@ -819,14 +818,14 @@ def lower_expr_Subscript(
     if is_type(node_slice, ["Slice"]):
         slice_lower = node_slice.get("lower")
         slice_upper = node_slice.get("upper")
-        low = convert_negative_index(slice_lower, obj, node) if slice_lower else None
-        high = convert_negative_index(slice_upper, obj, node) if slice_upper else None
+        low = convert_negative_index(slice_lower, obj, node, lower_expr) if slice_lower else None
+        high = convert_negative_index(slice_upper, obj, node, lower_expr) if slice_upper else None
         # Slicing preserves type - string slice is still string, slice of slice is still slice
         slice_type: "Type" = infer_expr_type_from_ast(node_value)
         if slice_type == InterfaceRef("any"):
             slice_type = obj.typ if hasattr(obj, "typ") else InterfaceRef("any")
         return ir.SliceExpr(obj=obj, low=low, high=high, typ=slice_type, loc=loc_from_node(node))
-    idx = convert_negative_index(node_slice, obj, node)
+    idx = convert_negative_index(node_slice, obj, node, lower_expr)
     # Infer element type from slice type
     elem_type: "Type" = InterfaceRef("any")
     obj_type = getattr(obj, "typ", None)
@@ -1414,7 +1413,7 @@ def lower_expr_IfExp(
     node: ASTNode,
     lower_expr: Callable[[ASTNode], "ir.Expr"],
     lower_expr_as_bool: Callable[[ASTNode], "ir.Expr"],
-    extract_attr_kind_check: Callable[[ASTNode], tuple[str, str] | None],
+    kind_to_struct: dict[str, str],
     type_ctx: "TypeContext",
 ) -> "ir.Expr":
     """Lower Python ternary (if-else expression) to Ternary IR node."""
@@ -1423,7 +1422,7 @@ def lower_expr_IfExp(
     cond = lower_expr_as_bool(node.get("test"))
     # Check for attribute path kind narrowing in the condition
     # e.g., node.body.kind == "brace-group" narrows node.body to BraceGroup
-    attr_kind_check = extract_attr_kind_check(node.get("test"))
+    attr_kind_check = extract_attr_kind_check(node.get("test"), kind_to_struct)
     if attr_kind_check:
         attr_path, struct_name = attr_kind_check
         type_ctx.narrowed_attr_paths[attr_path] = struct_name
@@ -2819,7 +2818,6 @@ def _lower_expr_Subscript_dispatch(
         node,
         ctx.type_ctx,
         d.lower_expr,
-        lambda idx, obj, parent: convert_negative_index(idx, obj, parent, d.lower_expr),
         d.infer_expr_type_from_ast,
     )
 
@@ -2864,7 +2862,7 @@ def _lower_expr_IfExp_dispatch(
         node,
         d.lower_expr,
         d.lower_expr_as_bool,
-        lambda n: extract_attr_kind_check(n, ctx.kind_to_struct),
+        ctx.kind_to_struct,
         ctx.type_ctx,
     )
 

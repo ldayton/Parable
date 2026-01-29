@@ -155,6 +155,100 @@ from src.ir import (
 )
 
 
+def _needs_deref(arg_type: Type, elem_type: Type) -> bool:
+    """Check if pointer arg needs dereference when appending to slice."""
+    if not isinstance(arg_type, Pointer) or not isinstance(arg_type.target, StructRef):
+        return False
+    if isinstance(elem_type, StructRef) and arg_type.target.name == elem_type.name:
+        return True
+    if isinstance(elem_type, InterfaceRef) and arg_type.target.name == elem_type.name:
+        return True
+    return False
+
+
+def _needs_byte_cast(arg_type: Type, elem_type: Type) -> bool:
+    """Check if int arg needs cast to byte when appending to []byte."""
+    return arg_type == INT and elem_type == BYTE
+
+
+def _needs_string_cast(arg_type: Type, elem_type: Type) -> bool:
+    """Check if rune arg needs cast to string when appending to []string or []any."""
+    if arg_type != RUNE:
+        return False
+    if elem_type == STRING:
+        return True
+    # Rune appended to []interface{} also needs conversion (common pattern)
+    if isinstance(elem_type, InterfaceRef) and elem_type.name == "any":
+        return True
+    return False
+
+
+_NODE_METHODS: set[str] = {"ToSexp", "GetKind", "to_sexp", "get_kind"}
+
+
+def _check_uses_node_methods_expr(expr: Expr | None, binding: str) -> bool:
+    """Check if expr uses Node interface methods on the binding variable."""
+    if expr is None:
+        return False
+    if isinstance(expr, MethodCall):
+        if isinstance(expr.obj, Var) and expr.obj.name == binding:
+            if expr.method in _NODE_METHODS:
+                return True
+    # Check BinaryOp (common for string concatenation with method calls)
+    if isinstance(expr, BinaryOp):
+        if _check_uses_node_methods_expr(expr.left, binding):
+            return True
+        if _check_uses_node_methods_expr(expr.right, binding):
+            return True
+    # Check other attributes
+    for attr in ("operand", "cond", "then_expr", "else_expr", "expr", "index", "obj", "value"):
+        if hasattr(expr, attr) and _check_uses_node_methods_expr(getattr(expr, attr), binding):
+            return True
+    if hasattr(expr, "args"):
+        for arg in expr.args:
+            if _check_uses_node_methods_expr(arg, binding):
+                return True
+    if hasattr(expr, "parts"):
+        for part in expr.parts:
+            if _check_uses_node_methods_expr(part, binding):
+                return True
+    return False
+
+
+def _check_uses_node_methods_stmt(stmt: Stmt, binding: str) -> bool:
+    """Check if stmt uses Node interface methods on the binding variable."""
+    if isinstance(stmt, (Assign, OpAssign)):
+        return _check_uses_node_methods_expr(stmt.value, binding)
+    if isinstance(stmt, ExprStmt):
+        return _check_uses_node_methods_expr(stmt.expr, binding)
+    if isinstance(stmt, Return) and stmt.value:
+        return _check_uses_node_methods_expr(stmt.value, binding)
+    if isinstance(stmt, If):
+        if _check_uses_node_methods_expr(stmt.cond, binding):
+            return True
+        for s in stmt.then_body + stmt.else_body:
+            if _check_uses_node_methods_stmt(s, binding):
+                return True
+    return False
+
+
+def _scan_for_return_position(stmts: list[Stmt], var_name: str) -> int | None:
+    """Scan statements for return position of a variable in a tuple literal."""
+    for s in stmts:
+        if isinstance(s, Return) and s.value and isinstance(s.value, TupleLit):
+            for i, elem in enumerate(s.value.elements):
+                if isinstance(elem, Var) and elem.name == var_name:
+                    return i
+        elif isinstance(s, If):
+            pos = _scan_for_return_position(s.then_body, var_name)
+            if pos is not None:
+                return pos
+            pos = _scan_for_return_position(s.else_body, var_name)
+            if pos is not None:
+                return pos
+    return None
+
+
 class GoBackend:
     """Emit Go code from IR Module."""
 
@@ -635,51 +729,25 @@ func _Substring(s string, start int, end int) string {
             arg = self._emit_expr(stmt.expr.args[0])
             arg_type = stmt.expr.args[0].typ if hasattr(stmt.expr.args[0], "typ") else None
             recv_type = stmt.expr.receiver_type
-
-            def needs_deref(arg_type, elem_type):
-                """Check if pointer arg needs dereference when appending to slice."""
-                if not isinstance(arg_type, Pointer) or not isinstance(arg_type.target, StructRef):
-                    return False
-                if isinstance(elem_type, StructRef) and arg_type.target.name == elem_type.name:
-                    return True
-                if isinstance(elem_type, InterfaceRef) and arg_type.target.name == elem_type.name:
-                    return True
-                return False
-
-            def needs_byte_cast(arg_type, elem_type):
-                """Check if int arg needs cast to byte when appending to []byte."""
-                return arg_type == INT and elem_type == BYTE
-
-            def needs_string_cast(arg_type, elem_type):
-                """Check if rune arg needs cast to string when appending to []string or []any."""
-                if arg_type != RUNE:
-                    return False
-                if elem_type == STRING:
-                    return True
-                # Rune appended to []interface{} also needs conversion (common pattern)
-                if isinstance(elem_type, InterfaceRef) and elem_type.name == "any":
-                    return True
-                return False
-
             # Handle pointer-to-slice receiver
             if isinstance(recv_type, Pointer) and isinstance(recv_type.target, Slice):
                 elem_type = recv_type.target.element
-                if needs_deref(arg_type, elem_type):
+                if _needs_deref(arg_type, elem_type):
                     self._line(f"*{obj} = append(*{obj}, *{arg})")
-                elif needs_byte_cast(arg_type, elem_type):
+                elif _needs_byte_cast(arg_type, elem_type):
                     self._line(f"*{obj} = append(*{obj}, byte({arg}))")
-                elif needs_string_cast(arg_type, elem_type):
+                elif _needs_string_cast(arg_type, elem_type):
                     self._line(f"*{obj} = append(*{obj}, string({arg}))")
                 else:
                     self._line(f"*{obj} = append(*{obj}, {arg})")
             # Handle regular slice receiver
             elif isinstance(recv_type, Slice):
                 elem_type = recv_type.element
-                if needs_deref(arg_type, elem_type):
+                if _needs_deref(arg_type, elem_type):
                     self._line(f"{obj} = append({obj}, *{arg})")
-                elif needs_byte_cast(arg_type, elem_type):
+                elif _needs_byte_cast(arg_type, elem_type):
                     self._line(f"{obj} = append({obj}, byte({arg}))")
-                elif needs_string_cast(arg_type, elem_type):
+                elif _needs_string_cast(arg_type, elem_type):
                     self._line(f"{obj} = append({obj}, string({arg}))")
                 else:
                     self._line(f"{obj} = append({obj}, {arg})")
@@ -1014,59 +1082,8 @@ func _Substring(s string, start int, end int) string {
 
     def _uses_node_methods(self, stmts: list[Stmt], binding: str) -> bool:
         """Check if binding variable is used with Node interface methods in statements."""
-        NODE_METHODS = {"ToSexp", "GetKind", "to_sexp", "get_kind"}
-
-        def check_expr(expr) -> bool:
-            if expr is None:
-                return False
-            if isinstance(expr, MethodCall):
-                if isinstance(expr.obj, Var) and expr.obj.name == binding:
-                    if expr.method in NODE_METHODS:
-                        return True
-            # Check BinaryOp (common for string concatenation with method calls)
-            if isinstance(expr, BinaryOp):
-                if check_expr(expr.left) or check_expr(expr.right):
-                    return True
-            # Check other attributes
-            for attr in (
-                "operand",
-                "cond",
-                "then_expr",
-                "else_expr",
-                "expr",
-                "index",
-                "obj",
-                "value",
-            ):
-                if hasattr(expr, attr) and check_expr(getattr(expr, attr)):
-                    return True
-            if hasattr(expr, "args"):
-                for arg in expr.args:
-                    if check_expr(arg):
-                        return True
-            if hasattr(expr, "parts"):
-                for part in expr.parts:
-                    if check_expr(part):
-                        return True
-            return False
-
-        def check_stmt(stmt: Stmt) -> bool:
-            if isinstance(stmt, (Assign, OpAssign)):
-                return check_expr(stmt.value)
-            if isinstance(stmt, ExprStmt):
-                return check_expr(stmt.expr)
-            if isinstance(stmt, Return) and stmt.value:
-                return check_expr(stmt.value)
-            if isinstance(stmt, If):
-                if check_expr(stmt.cond):
-                    return True
-                for s in stmt.then_body + stmt.else_body:
-                    if check_stmt(s):
-                        return True
-            return False
-
         for stmt in stmts:
-            if check_stmt(stmt):
+            if _check_uses_node_methods_stmt(stmt, binding):
                 return True
         return False
 
@@ -1839,26 +1856,9 @@ func _Substring(s string, start int, end int) string {
 
     def _infer_tuple_element_type(self, var_name: str, stmt: If, ret_type: Tuple) -> Type | None:
         """Infer which tuple element a variable corresponds to by scanning returns."""
-        from src.ir import Return, TupleLit, Var
-
-        def scan_for_return_position(stmts: list[Stmt]) -> int | None:
-            for s in stmts:
-                if isinstance(s, Return) and s.value and isinstance(s.value, TupleLit):
-                    for i, elem in enumerate(s.value.elements):
-                        if isinstance(elem, Var) and elem.name == var_name:
-                            return i
-                elif isinstance(s, If):
-                    pos = scan_for_return_position(s.then_body)
-                    if pos is not None:
-                        return pos
-                    pos = scan_for_return_position(s.else_body)
-                    if pos is not None:
-                        return pos
-            return None
-
-        pos = scan_for_return_position(stmt.then_body)
+        pos = _scan_for_return_position(stmt.then_body, var_name)
         if pos is None:
-            pos = scan_for_return_position(stmt.else_body)
+            pos = _scan_for_return_position(stmt.else_body, var_name)
         if pos is not None and pos < len(ret_type.elements):
             return ret_type.elements[pos]
         return None

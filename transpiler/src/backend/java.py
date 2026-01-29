@@ -1,4 +1,31 @@
-"""Java backend: IR → Java code."""
+"""Java backend: IR → Java code.
+
+COMPENSATIONS FOR EARLIER STAGE DEFICIENCIES
+============================================
+
+Frontend deficiencies (should be fixed in frontend.py):
+- FieldAccess for "this._arith_parse_*" is special-cased to emit lambda syntax
+  "() -> this.method()" - frontend should emit FuncRef IR for bound method
+  references instead of FieldAccess.
+- String character classification methods (isalnum, isdigit, etc.) are translated
+  inline to Java streams - frontend should emit generic IR that backends map to
+  stdlib, not Python method names that each backend must recognize.
+- SliceConvert IR node is not handled - either frontend shouldn't emit it for
+  Java-targeted code, or this backend needs to implement covariant conversion.
+- VAR_TYPE_OVERRIDES and FIELD_TYPE_OVERRIDES imported from src/type_overrides
+  are workarounds for Python's weak/missing type annotations. Frontend should
+  infer types from usage patterns rather than requiring manual override tables.
+  Backend shouldn't need to consult these - IR should have complete types.
+- Loop variable types in ForRange sometimes fall back to "Object" when element
+  type is unknown - frontend should infer element types from iterable types and
+  include them in the IR.
+- Marker variables "_skip_docstring", "_pass", "_skip_super_init" require filtering.
+  Frontend should use a dedicated NoOp IR node or not emit these.
+
+Middleend deficiencies (should be fixed in middleend.py):
+- None identified. Middleend correctly passes through type information; the gaps
+  originate in frontend's inability to infer types from Python source.
+"""
 
 from __future__ import annotations
 

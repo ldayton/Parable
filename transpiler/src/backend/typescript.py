@@ -1,4 +1,29 @@
-"""TypeScript backend: IR → TypeScript code."""
+"""TypeScript backend: IR → TypeScript code.
+
+COMPENSATIONS FOR EARLIER STAGE DEFICIENCIES
+============================================
+
+Frontend deficiencies (should be fixed in frontend.py):
+- CommonJS exports hardcode "parse" and "ParseError" - this is Parable-specific
+  knowledge. Frontend should emit Export IR nodes that backend renders.
+- Node interface special-cases "Node" to add "kind: string" property - Parable-
+  specific. Frontend should emit interface fields explicitly.
+- Auto-generated getKind() for Node implementations - backend has Parable-specific
+  knowledge about Node interface contract.
+- String methods (isalnum, isdigit, isalpha, isspace) translated to regex patterns
+  inline - frontend should emit generic IR; backend shouldn't know Python method names.
+- lstrip/rstrip/strip with char arguments require regex - frontend emits Python
+  semantics that don't map cleanly to JS trimStart/trimEnd.
+- FieldAccess for "this.method" emits ".bind(this)" - frontend should emit FuncRef
+  IR for method references, not FieldAccess that backend must detect and fix.
+- Marker variables "_skip_docstring", "_pass", "_skip_super_init" require filtering.
+  Frontend should use a dedicated NoOp IR node or not emit these.
+
+Middleend deficiencies (should be fixed in middleend.py):
+- VarDecl and Assign use "any" type because middleend doesn't track that the same
+  variable may have different types in different branches. Middleend could compute
+  union types or mark variables that need dynamic typing.
+"""
 
 from __future__ import annotations
 

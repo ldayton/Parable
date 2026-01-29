@@ -1,6 +1,26 @@
 """GoBackend: IR -> Go code.
 
 Pure syntax emission - no analysis. All type information comes from IR.
+
+COMPENSATIONS FOR EARLIER STAGE DEFICIENCIES
+============================================
+
+Frontend deficiencies (should be fixed in frontend.py):
+- _extract_type_suffix checks hardcoded prefixes "Arith", "Cond" for type switch
+  binding names - frontend should emit type-agnostic IR for narrowed bindings
+- String character classification helpers (_strIsAlnum, _strIsDigit, etc.) are
+  emitted because frontend doesn't translate Python string methods to generic IR
+  calls that backends could map to stdlib. Instead, backend must provide runtime.
+- _runeAt, _runeLen, _Substring helpers exist because frontend emits string
+  indexing as Index nodes without distinguishing byte vs character semantics.
+  Frontend should emit distinct IR for character-based string operations.
+- ExprStmt filters expressions starting with "skip", "pass", "localFunc" -
+  frontend emits these markers that should be handled before backend.
+
+Middleend deficiencies (should be fixed in middleend.py):
+- _infer_tuple_element_type scans return statements to infer hoisted variable
+  types - middleend should annotate hoisted_vars with complete type information
+  instead of leaving typ=None for some variables.
 """
 
 from __future__ import annotations

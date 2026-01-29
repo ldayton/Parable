@@ -1,4 +1,20 @@
-"""Python backend: IR → Python code."""
+"""Python backend: IR → Python code.
+
+COMPENSATIONS FOR EARLIER STAGE DEFICIENCIES
+============================================
+
+Frontend deficiencies (should be fixed in frontend.py):
+- BinaryOp patterns like "len(x) > 0" and "x != ''" are converted back to Python
+  truthy checks. Frontend creates these explicit comparisons for other backends,
+  but Python backend must undo them. Frontend could emit a "Truthy" IR node that
+  each backend renders appropriately.
+- UnaryOp "!(len(x) > 0)" similarly converted back to "not x" - same issue.
+- Marker variables "_skip_docstring" and "_pass" require special-case filtering.
+  Frontend should either not emit these or use a dedicated NoOp IR node.
+
+Middleend deficiencies (should be fixed in middleend.py):
+- None identified. Python backend is cleanest because source language matches.
+"""
 
 from __future__ import annotations
 

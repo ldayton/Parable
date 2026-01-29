@@ -493,3 +493,132 @@ def synthesize_type(
         obj_type = synthesize_type(expr.obj, type_ctx, current_func_info, symbols, node_types)
         return synthesize_index_type(obj_type)
     return expr.typ
+
+
+def infer_expr_type_from_ast(
+    node: ast.expr,
+    type_ctx: "TypeContext",
+    symbols: SymbolTable,
+    current_func_info: FuncInfo | None,
+    current_class_name: str,
+    node_types: set[str],
+) -> Type:
+    """Infer the type of a Python AST expression without lowering it."""
+    # Constant literals
+    if isinstance(node, ast.Constant):
+        if isinstance(node.value, bool):
+            return BOOL
+        if isinstance(node.value, int):
+            return INT
+        if isinstance(node.value, str):
+            return STRING
+        if isinstance(node.value, float):
+            return FLOAT
+    # Variable lookup
+    if isinstance(node, ast.Name):
+        if node.id in type_ctx.var_types:
+            return type_ctx.var_types[node.id]
+        # Check constants
+        if node.id in symbols.constants:
+            return symbols.constants[node.id]
+        # Check function parameters
+        if current_func_info:
+            for p in current_func_info.params:
+                if p.name == node.id:
+                    return p.typ
+    # Field access
+    if isinstance(node, ast.Attribute):
+        if isinstance(node.value, ast.Name) and node.value.id == "self":
+            field = node.attr
+            if current_class_name in symbols.structs:
+                struct_info = symbols.structs[current_class_name]
+                field_info = struct_info.fields.get(field)
+                if field_info:
+                    return field_info.typ
+        else:
+            # Field access on other objects - infer object type then look up field
+            obj_type = infer_expr_type_from_ast(
+                node.value, type_ctx, symbols, current_func_info, current_class_name, node_types
+            )
+            struct_name = extract_struct_name(obj_type)
+            if struct_name and struct_name in symbols.structs:
+                struct_info = symbols.structs[struct_name]
+                field_info = struct_info.fields.get(node.attr)
+                if field_info:
+                    return field_info.typ
+    # Method call - look up return type
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+        obj_type = infer_expr_type_from_ast(
+            node.func.value, type_ctx, symbols, current_func_info, current_class_name, node_types
+        )
+        return synthesize_method_return_type(obj_type, node.func.attr, symbols, node_types)
+    # Free function call - look up return type
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+        func_name = node.func.id
+        # Built-in functions
+        if func_name == "len":
+            return INT
+        if func_name in ("int", "ord"):
+            return INT
+        if func_name in ("str", "chr"):
+            return STRING
+        if func_name == "bool":
+            return BOOL
+        # Constructor calls
+        if func_name in symbols.structs:
+            return Pointer(StructRef(func_name))
+        # Regular function calls
+        if func_name in symbols.functions:
+            return symbols.functions[func_name].return_type
+    # Subscript - derive element type from container
+    if isinstance(node, ast.Subscript):
+        val_type = infer_expr_type_from_ast(
+            node.value, type_ctx, symbols, current_func_info, current_class_name, node_types
+        )
+        if val_type == STRING:
+            return STRING  # string indexing returns string (after Cast)
+        if isinstance(val_type, Slice):
+            return val_type.element
+        if isinstance(val_type, Map):
+            return val_type.value
+    # BinOp - infer type based on operator
+    if isinstance(node, ast.BinOp):
+        if isinstance(node.op, (ast.BitAnd, ast.BitOr, ast.BitXor, ast.LShift, ast.RShift)):
+            return INT
+        if isinstance(node.op, (ast.Add, ast.Sub, ast.Mult, ast.FloorDiv, ast.Mod)):
+            left_type = infer_expr_type_from_ast(
+                node.left, type_ctx, symbols, current_func_info, current_class_name, node_types
+            )
+            right_type = infer_expr_type_from_ast(
+                node.right, type_ctx, symbols, current_func_info, current_class_name, node_types
+            )
+            if left_type == INT or right_type == INT:
+                return INT
+    return Interface("any")
+
+
+def infer_call_return_type(
+    node: ast.Call,
+    symbols: SymbolTable,
+    type_ctx: "TypeContext",
+    current_func_info: FuncInfo | None,
+    current_class_name: str,
+    node_types: set[str],
+) -> Type:
+    """Infer the return type of a function or method call."""
+    if isinstance(node.func, ast.Attribute):
+        # Method call - look up return type
+        obj_type = infer_expr_type_from_ast(
+            node.func.value, type_ctx, symbols, current_func_info, current_class_name, node_types
+        )
+        struct_name = extract_struct_name(obj_type)
+        if struct_name and struct_name in symbols.structs:
+            method_info = symbols.structs[struct_name].methods.get(node.func.attr)
+            if method_info:
+                return method_info.return_type
+    elif isinstance(node.func, ast.Name):
+        # Free function call
+        func_name = node.func.id
+        if func_name in symbols.functions:
+            return symbols.functions[func_name].return_type
+    return Interface("any")

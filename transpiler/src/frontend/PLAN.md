@@ -186,16 +186,53 @@ Depends on: symbols, type_inference.py (for field type inference)
 
 ### 4. Extract `builders.py` ← NEXT
 
-Functions for constructing IR nodes.
+Functions for constructing IR nodes (Module, Struct, Function).
 
-Functions:
-- `build_module(tree, ctx) -> Module`
-- `build_struct(node, ctx, with_body) -> tuple[Struct | None, Function | None]`
-- `build_constructor(class_name, init_ast, info, ctx) -> Function`
-- `build_forwarding_constructor(class_name, parent_class, ctx) -> Function`
-- `build_function_shell(node, ctx, with_body) -> Function`
-- `build_method_shell(node, class_name, ctx, with_body) -> Function`
-- `make_default_value(typ, loc) -> ir.Expr`
+**Detailed extraction plan (7 iterations):**
+
+#### Iteration 4.1: Create `builders.py` skeleton + `BuilderCallbacks`
+Create module with imports. Define callback dataclass:
+- `BuilderCallbacks` - bundles callbacks for annotation_to_str, py_type_to_ir, lower_expr, lower_stmts, collect_var_types, etc.
+
+#### Iteration 4.2: Extract `build_forwarding_constructor`
+Simplest builder - creates forwarding constructor for exception subclasses with no __init__:
+- `build_forwarding_constructor(class_name, parent_class, symbols, callbacks) -> Function`
+
+#### Iteration 4.3: Extract `build_constructor`
+Constructor builder from __init__ AST:
+- `build_constructor(class_name, init_ast, info, symbols, node_types, callbacks) -> Function`
+
+#### Iteration 4.4: Extract `build_method_shell`
+Method builder - sets up type context and lowers body:
+- `build_method_shell(node, class_name, symbols, node_types, callbacks, with_body) -> Function`
+
+#### Iteration 4.5: Extract `build_function_shell`
+Function builder - similar to method_shell but without receiver:
+- `build_function_shell(node, symbols, node_types, callbacks, with_body) -> Function`
+
+#### Iteration 4.6: Extract `build_struct`
+Struct builder - orchestrates method/constructor building:
+- `build_struct(node, symbols, node_types, kind_to_struct, callbacks, with_body) -> tuple[Struct | None, Function | None]`
+
+#### Iteration 4.7: Extract `build_module`
+Module builder - orchestrates building all constants, structs, functions:
+- `build_module(tree, symbols, node_types, kind_to_struct, kind_to_class, callbacks) -> Module`
+
+**Callback strategy:**
+Define in builders.py:
+```python
+@dataclass
+class BuilderCallbacks:
+    """Callbacks for builder phase that need lowering/type conversion."""
+    annotation_to_str: Callable[[ast.expr | None], str]
+    py_type_to_ir: Callable[[str, bool], Type]
+    py_return_type_to_ir: Callable[[str], Type]
+    lower_expr: Callable[[ast.expr], ir.Expr]
+    lower_stmts: Callable[[list[ast.stmt]], list[ir.Stmt]]
+    collect_var_types: Callable[[list[ast.stmt]], tuple[dict, dict, set, dict]]
+    is_exception_subclass: Callable[[str], bool]
+    extract_union_struct_names: Callable[[str], list[str]]
+```
 
 Depends on: context.py, type_inference.py, lowering.py, collection.py
 
